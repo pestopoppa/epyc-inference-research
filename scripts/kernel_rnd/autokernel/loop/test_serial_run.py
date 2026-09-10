@@ -2,6 +2,7 @@
 import hashlib
 import json
 import os
+from contextlib import nullcontext
 from pathlib import Path
 from unittest import mock
 
@@ -524,7 +525,8 @@ def test_actual_cpu_post_keep_resume_rebinds_original_launch_without_recalibrati
     assert len(resumed) == 1
 
 
-def test_actual_cpu_keep_cross_target_then_older_history_uses_latest_source():
+@pytest.mark.parametrize("validation_failure", [False, True])
+def test_actual_cpu_keep_cross_target_then_older_history_uses_latest_source(validation_failure):
     original_main = run.main
     observed = []
 
@@ -533,24 +535,131 @@ def test_actual_cpu_keep_cross_target_then_older_history_uses_latest_source():
         first = Path(sr.option(argv, "--out"))
         first_row, first_sha = sr.load_completed(first / "loop-continuation.json")
         assert first_row["selected_target"]["selected_id"] == "target-a"
+        origin_receipt = run.surface_fold.reopen_reference(
+            first_row["experimental_source_keeps"][0])
+        origin_capture_id = origin_receipt.comparison["belief_capture"]["capture_id"]
+        origin_export = (Path(sr.option(argv, "--store")) / "serving-beliefs"
+                         / f"{origin_capture_id}.json")
+        assert origin_export.is_file()
+        origin_export_bytes = origin_export.read_bytes()
 
         second = first.parent / "target-b"
         target_b = list(argv)
         target_b[target_b.index("--target-id") + 1] = "target-b"
         target_b[target_b.index("--store") + 1] = str(first.parent / "store-b")
         target_b += ["--source-anchor-continuation", str(first / "loop-continuation.json"),
-                     "--source-anchor-sha256", first_sha, "--out", str(second)]
-        assert original_main(target_b) == 0
+                     "--source-anchor-sha256", first_sha, "--validate-source-continuation",
+                     "--iterations", "1", "--out", str(second)]
+        scheduler_manifest = sr._derived_scheduler_manifest(
+            (target_b,), Path(sr.option(target_b, "--resolved-campaign")), 1)
+        scheduler_state = scheduling.initial_state(
+            scheduler_manifest.config, scheduler_manifest.scheduler_id)
+        _state, validation_selection, _index = ss.select_target(
+            scheduler_manifest, scheduler_state, ("target-b",), now=1,
+            stage_number=0, validation_ids=frozenset({"target-b"}))
+        selection_path = first.parent / "target-b-validation-selection.json"
+        selection_path.write_text(json.dumps(validation_selection.to_dict()))
+        assert original_main([*target_b, "--scheduler-selection", str(selection_path),
+                              "--out", str(first.parent / "target-b-dry"), "--dry-run"]) == 0
+        observer = run.serving._measure_once
+        observer_state = dict(zip(observer.__code__.co_freevars,
+                                  (cell.cell_contents for cell in observer.__closure__)))
+        held_rows = observer_state["held"]
+        @cpu_fixture.contextmanager
+        def validation_hold(cpu_list):
+            assert cpu_list == "0-95"
+            assert held_rows[-1] is False
+            held_rows[-1] = True
+            try:
+                yield {"device_id": "cpu", "regions": ["q0", "q1", "q2", "q3"]}
+            finally:
+                held_rows[-1] = False
+
+        if not validation_failure:
+            origin = first.parent / "target-a-origin-validation"
+            origin_argv = [*argv, "--resume-run", str(first / "loop-continuation.json"),
+                "--source-anchor-continuation", str(first / "loop-continuation.json"),
+                "--source-anchor-sha256", first_sha, "--validate-source-continuation",
+                "--iterations", "1", "--out", str(origin)]
+            replayed_exports = []
+            with mock.patch.object(run.claim, "hold_cpu", validation_hold), \
+                    mock.patch.object(run.serving, "compare",
+                                      side_effect=AssertionError("exact keep must be reused")), \
+                    mock.patch.object(run.serving, "calibrate_floor",
+                                      side_effect=AssertionError("exact keep must not recalibrate")), \
+                    mock.patch.object(run.serving_beliefs.PlannerFeedback, "exported",
+                                      lambda _self, path: replayed_exports.append(Path(path))):
+                assert original_main(origin_argv) == 0
+            assert replayed_exports == [origin_export]
+            assert origin_export.read_bytes() == origin_export_bytes
+            origin_row, _sha = sr.load_completed(origin / "loop-continuation.json")
+            origin_validation = run.surface_validation.reopen_reference(
+                origin_row["source_validation"])
+            assert origin_validation["intended_target"] is True
+            assert origin_validation["disposition"] == "passed"
+
+        validation_result = (mock.patch.object(
+            run.serving, "compare", side_effect=run.loop.MeasurementInvalid(
+                "synthetic invalid target comparison", {"status": "measurement_invalid"}))
+            if validation_failure else nullcontext())
+        validation_exports = []
+        with mock.patch.object(run.claim, "hold_cpu", validation_hold), validation_result, \
+                mock.patch.object(run.serving_beliefs.PlannerFeedback, "exported",
+                                  lambda _self, path: validation_exports.append(Path(path))):
+            assert original_main(target_b) == 0
         second_row, second_sha = sr.load_completed(second / "loop-continuation.json")
         assert second_row["selected_target"]["selected_id"] == "target-b"
-        assert second_row["current_anchor"] != first_row["current_anchor"]
+        # A validation stage consumes the propagated source without authoring
+        # another candidate; ordinary research can continue in later stages.
+        assert second_row["current_anchor"] == first_row["current_anchor"]
+        validation = run.surface_validation.reopen_reference(second_row["source_validation"])
+        assert validation["target"]["selected_id"] == "target-b"
+        assert validation["candidate_anchor"] == first_row["current_anchor"]
+        assert validation["original_anchor"]["commit"] != validation["source_commit"]
+        assert validation["disposition"] == ("pending" if validation_failure else "passed")
+        assert validation["source_keep_ids"]
+        if validation_failure:
+            assert validation_exports == []
+        else:
+            assert len(validation_exports) == 1
+            assert validation_exports[0].is_file()
+            assert validation_exports[0] != origin_export
+        if validation_failure:
+            retry = first.parent / "target-b-validation-retry"
+            target_b_retry = list(argv)
+            target_b_retry[target_b_retry.index("--target-id") + 1] = "target-b"
+            target_b_retry[target_b_retry.index("--store") + 1] = str(first.parent / "store-b")
+            target_b_retry += ["--resume-run", str(second / "loop-continuation.json"),
+                "--source-anchor-continuation", str(second / "loop-continuation.json"),
+                "--source-anchor-sha256", second_sha, "--validate-source-continuation",
+                "--iterations", "1", "--out", str(retry)]
+            with mock.patch.object(run.claim, "hold_cpu", validation_hold):
+                assert original_main(target_b_retry) == 0
+            retry_row, retry_sha = sr.load_completed(retry / "loop-continuation.json")
+            retry_validation = run.surface_validation.reopen_reference(
+                retry_row["source_validation"])
+            assert retry_validation["disposition"] == "passed"
+            assert retry_validation["original_anchor"] == validation["original_anchor"]
+            second, second_row, second_sha = retry, retry_row, retry_sha
+
+        # A completed validation verdict does not turn the target into a blocked
+        # validation worker.  Its next ordinary child can continue source research.
+        research = first.parent / "target-b-research"
+        target_b_research = list(argv)
+        target_b_research[target_b_research.index("--target-id") + 1] = "target-b"
+        target_b_research[target_b_research.index("--store") + 1] = str(first.parent / "store-b")
+        target_b_research += ["--resume-run", str(second / "loop-continuation.json"),
+                              "--out", str(research)]
+        assert original_main(target_b_research) == 0
+        research_row, research_sha = sr.load_completed(research / "loop-continuation.json")
+        assert research_row["current_anchor"] != second_row["current_anchor"]
 
         # A keeps its own request/history receipt while consuming B's newer exact
         # source/build.  Dry-run proves startup/rebinding without another proposal.
         third = first.parent / "target-a-resumed"
         target_a = [*argv, "--resume-run", str(first / "loop-continuation.json"),
-                    "--source-anchor-continuation", str(second / "loop-continuation.json"),
-                    "--source-anchor-sha256", second_sha, "--out", str(third), "--dry-run"]
+                    "--source-anchor-continuation", str(research / "loop-continuation.json"),
+                    "--source-anchor-sha256", research_sha, "--out", str(third), "--dry-run"]
         starts = []
         real_startup = run.champion.verify_startup
 
@@ -560,7 +669,7 @@ def test_actual_cpu_keep_cross_target_then_older_history_uses_latest_source():
 
         with mock.patch.object(run.champion, "verify_startup", startup):
             assert original_main(target_a) == 0
-        assert starts == [Path(second_row["current_anchor"]["path"])]
+        assert starts == [Path(research_row["current_anchor"]["path"])]
         observed.append((first_row, second_row))
         return 0
 
@@ -568,3 +677,14 @@ def test_actual_cpu_keep_cross_target_then_older_history_uses_latest_source():
         cpu_fixture.test_existing_main_cpu_five_iterations_preserves_canonical_champion(
             False, enrolled_pair=True)
     assert len(observed) == 1
+
+
+def test_pending_validation_requires_ordinary_search_before_retry_for_each_target():
+    for selected_id in ("only-target", "cpu", "gpu"):
+        entry = {"latest_reference": {"path": f"/{selected_id}", "sha256": "a" * 64},
+                 "disposition": "pending", "retry_after_search_count": 1,
+                 "attempts": 1, "history_digest": "b" * 64}
+        assert not sr._validation_retry_due(entry, 0)
+        assert sr._validation_retry_due(entry, 1)
+    assert not sr._validation_retry_due(
+        dict(entry, disposition="failed", retry_after_search_count=0), 99)

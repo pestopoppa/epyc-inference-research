@@ -29,7 +29,8 @@ _CHANGING_FLAGS = frozenset({"--out", "--iterations", "--resume-run", "--anchor-
                             "--scheduler-selection", "--dry-run", "--cpu-screen-scope",
                             "--cpu-confirm-from", "--source-anchor-continuation",
                             "--source-anchor-sha256", "--runtime-recipe-reference",
-                            "--runtime-recovery-reference"})
+                            "--runtime-recovery-reference", "--validate-source-continuation"})
+_BOOLEAN_FLAGS = frozenset({"--dry-run", "--validate-source-continuation"})
 _CONTINUATION_FIELDS = {"schema", "terminal", "input_argv", "input_argv_sha256", "binding",
                         "worktree", "branch", "model", "selected_target", "current_anchor", "cor_anchor",
                         "iterations_requested", "iterations_completed", "outcome_counts", "result_file"}
@@ -84,7 +85,7 @@ def _without(argv, names):
     for arg in iterator:
         flag, equals, _value = arg.partition("=")
         if flag in names:
-            if not equals and flag != "--dry-run":
+            if not equals and flag not in _BOOLEAN_FLAGS:
                 next(iterator, None)
         else:
             out.append(arg)
@@ -146,7 +147,8 @@ def _runtime_recipe_reference(value):
 def continuation(*, argv, binding, terminal, worktree, branch, model, selected_target,
                  anchor_build, anchor_commit, iterations_requested, outcomes,
                  cor_build=None, cor_commit=None, held_claim_evidence=None, cpu_screen=None,
-                 runtime_recipe_reference=None) -> dict:
+                 runtime_recipe_reference=None, experimental_source_keeps=None,
+                 source_validation=None, source_lineage_keeps=None) -> dict:
     counts = {}
     for outcome in outcomes:
         counts[outcome.status] = counts.get(outcome.status, 0) + 1
@@ -168,6 +170,36 @@ def continuation(*, argv, binding, terminal, worktree, branch, model, selected_t
     if runtime_recipe_reference is not None:
         row["runtime_recipe_reference"] = _runtime_recipe_reference(
             runtime_recipe_reference)
+    if experimental_source_keeps:
+        refs = list(experimental_source_keeps)
+        if len(refs) > iterations_requested:
+            raise SerialRefused("source keep references exceed completed iteration budget")
+        from . import surface_fold
+        for reference in refs:
+            surface_fold.reopen_reference(reference)
+        row["experimental_source_keeps"] = refs
+    if source_validation is not None:
+        from . import surface_validation as validation
+        checked = validation.reopen_reference(source_validation)
+        if checked["target"] != selected_target:
+            raise SerialRefused("whole-source validation differs from continuation")
+        row["source_validation"] = dict(source_validation)
+    if source_lineage_keeps:
+        from . import surface_fold
+        refs = list(source_lineage_keeps)
+        if len(refs) > 64:
+            raise SerialRefused("source lineage keep membership exceeds its bound")
+        receipts = [surface_fold.reopen_reference(reference) for reference in refs]
+        if (not receipts or receipts[-1].kept_commit != row["current_anchor"]["commit"]
+                or any(receipt.branch != row["branch"]
+                       or Path(receipt.repo).resolve() != Path(row["worktree"]).resolve()
+                       for receipt in receipts)):
+            raise SerialRefused("source lineage differs from continuation source")
+        if (source_validation is not None
+                and checked["candidate_anchor"]["commit"]
+                not in {receipt.kept_commit for receipt in receipts}):
+            raise SerialRefused("validation candidate is outside retained source lineage")
+        row["source_lineage_keeps"] = refs
     return row
 
 
@@ -183,6 +215,12 @@ def load_completed(path: Path, *, expected_argv=None, expected_binding=None):
         expected_fields = expected_fields | {"cpu_screen"}
     if isinstance(row, dict) and "runtime_recipe_reference" in row:
         expected_fields = expected_fields | {"runtime_recipe_reference"}
+    if isinstance(row, dict) and "experimental_source_keeps" in row:
+        expected_fields = expected_fields | {"experimental_source_keeps"}
+    if isinstance(row, dict) and "source_validation" in row:
+        expected_fields = expected_fields | {"source_validation"}
+    if isinstance(row, dict) and "source_lineage_keeps" in row:
+        expected_fields = expected_fields | {"source_lineage_keeps"}
     if not isinstance(row, dict) or set(row) != expected_fields \
             or row["schema"] not in {CONTINUATION_SCHEMA, CONTINUATION_SCHEMA_V2} \
             or row["terminal"] not in {"complete", "stopped"}:
@@ -206,6 +244,37 @@ def load_completed(path: Path, *, expected_argv=None, expected_binding=None):
     if "runtime_recipe_reference" in row:
         row["runtime_recipe_reference"] = _runtime_recipe_reference(
             row["runtime_recipe_reference"])
+    if "experimental_source_keeps" in row:
+        from . import surface_fold
+        refs = row["experimental_source_keeps"]
+        if not isinstance(refs, list) or len(refs) > row["iterations_completed"]:
+            raise SerialRefused("source keep reference count differs from completed iterations")
+        for reference in refs:
+            receipt = surface_fold.reopen_reference(reference)
+            if (receipt.selected_target != row["selected_target"]
+                    or receipt.branch != row["branch"]
+                    or Path(receipt.repo).resolve() != Path(row["worktree"]).resolve()):
+                raise SerialRefused("source keep reference differs from original child identity")
+    if "source_validation" in row:
+        from . import surface_validation as validation
+        checked = validation.reopen_reference(row["source_validation"])
+        if checked["target"] != row["selected_target"]:
+            raise SerialRefused("whole-source validation differs from original child identity")
+    if "source_lineage_keeps" in row:
+        from . import surface_fold
+        refs = row["source_lineage_keeps"]
+        if not isinstance(refs, list) or not refs or len(refs) > 64:
+            raise SerialRefused("source lineage keep membership is malformed")
+        receipts = [surface_fold.reopen_reference(reference) for reference in refs]
+        if (receipts[-1].kept_commit != row["current_anchor"]["commit"]
+                or any(receipt.branch != row["branch"]
+                       or Path(receipt.repo).resolve() != Path(row["worktree"]).resolve()
+                       for receipt in receipts)):
+            raise SerialRefused("source lineage keep membership differs")
+        if ("source_validation" in row
+                and checked["candidate_anchor"]["commit"]
+                not in {receipt.kept_commit for receipt in receipts}):
+            raise SerialRefused("validation candidate is outside source lineage")
     if not isinstance(row["binding"], dict) or set(row["binding"]) != {"argv", "documents"}:
         raise SerialRefused("invalid original input binding")
     if row["binding"] != input_binding(argv):
@@ -305,6 +374,7 @@ def _validate_target_args(argv, *, owner_anchor_waiver=False) -> list[str]:
                 "--calibrate-surface",
                 "--source-anchor-continuation", "--source-anchor-sha256",
                 "--runtime-recipe-reference", "--runtime-recovery-reference",
+                "--validate-source-continuation",
                 "--allow-unverified-anchor", "--help", "-h"}
     if owner_anchor_waiver:
         reserved.remove("--allow-unverified-anchor")
@@ -532,9 +602,93 @@ def _source_owner_key(argv):
                                      champion.CANONICAL_BRANCH)})
 
 
+def _validation_subject(state, target, index, source_commit):
+    prior_reference = state["last_results"].get(str(index))
+    runtime_recipe = None
+    if prior_reference is not None:
+        prior, sha = load_completed(Path(prior_reference["path"]))
+        if sha != prior_reference["sha256"]:
+            raise SerialRefused("retained target continuation changed")
+        runtime_recipe = prior.get("runtime_recipe_reference")
+    return _digest({"source_commit": source_commit,
+                    "target": _selected_identity(target),
+                    "original_binding": input_binding(target),
+                    "runtime_recipe_reference": runtime_recipe})
+
+
+def _remember_source_validation(state, body, target, index, target_count):
+    reference = body.get("source_validation")
+    if reference is None:
+        return
+    from . import surface_validation
+    row = surface_validation.reopen_reference(reference)
+    if row["target"] != _selected_identity(target):
+        raise SerialRefused("source validation target differs from original enrollment")
+    key = _validation_subject(state, target, index, row["source_commit"])
+    entry = state["source_validations"].setdefault(
+        key, {"latest_reference": None, "disposition": None,
+              "retry_after_search_count": 0,
+              "attempts": 0, "history_digest": _digest([])})
+    if (not isinstance(entry, dict)
+            or set(entry) != {"latest_reference", "disposition",
+                              "retry_after_search_count",
+                              "attempts", "history_digest"}
+            or type(entry["attempts"]) is not int or entry["attempts"] < 0):
+        raise SerialRefused("source validation attempt history is malformed")
+    if entry["latest_reference"] == reference:
+        return
+    entry["attempts"] += 1
+    entry["history_digest"] = _digest({"prior": entry["history_digest"],
+        "attempt": entry["attempts"], "reference": reference,
+        "disposition": row["disposition"]})
+    entry["latest_reference"] = dict(reference)
+    entry["disposition"] = row["disposition"]
+    search_count = state["source_search_counts"].get(str(index), 0)
+    entry["retry_after_search_count"] = (
+        search_count + 1 if row["disposition"] == "pending" else 0)
+
+
+def _record_completed_stage(state, body, target, index, target_count):
+    if body.get("source_validation") is not None:
+        _remember_source_validation(state, body, target, index, target_count)
+    else:
+        key = str(index)
+        state["source_search_counts"][key] = state["source_search_counts"].get(key, 0) + 1
+
+
+def _validation_retry_due(entry, search_count):
+    return (entry is None or
+            (entry.get("disposition") == "pending"
+             and search_count >= entry.get("retry_after_search_count", 0)))
+
+
+def _pending_source_validations(state, targets):
+    """Return exact target indexes due for an initial or bounded retry verdict."""
+    pending = {}
+    for index, target in enumerate(targets):
+        reference = state["source_results"].get(_source_owner_key(target))
+        if reference is None:
+            continue
+        body, sha = load_completed(Path(reference["path"]))
+        if sha != reference["sha256"]:
+            raise SerialRefused("retained shared-source continuation changed")
+        lineage = body.get("source_lineage_keeps") or body.get("experimental_source_keeps")
+        if not lineage:
+            continue
+        commit = body["current_anchor"]["commit"]
+        subject = _validation_subject(state, target, index, commit)
+        entry = state["source_validations"].get(subject)
+        if _validation_retry_due(
+                entry, state["source_search_counts"].get(str(index), 0)):
+            pending[index] = subject
+    return pending
+
+
 def _batch_argv(original, prior, batch_iterations, directory, *, scheduler_selection=None,
-                scope_preview=None, source_prior=None, recovery_reference=None):
+                scope_preview=None, source_prior=None, recovery_reference=None,
+                validate_source=False):
     child_argv = list(original)
+    prior_body = None
     if prior is not None:
         prior_body, sha = load_resume(Path(prior["path"]), original)
         if sha != prior["sha256"]:
@@ -558,6 +712,11 @@ def _batch_argv(original, prior, batch_iterations, directory, *, scheduler_selec
             raise SerialRefused("retained shared-source continuation changed")
         child_argv += ["--source-anchor-continuation", source_prior["path"],
                        "--source-anchor-sha256", source_sha]
+        if (validate_source or ((_source_body.get("source_lineage_keeps")
+                or _source_body.get("experimental_source_keeps"))
+                and (prior_body is None or prior_body["current_anchor"]
+                     != _source_body["current_anchor"]))):
+            child_argv.append("--validate-source-continuation")
     # Prospective common-scope selection remains inside these original child
     # arguments. Scheduler selection/claims must agree before this child launches.
     from . import cpu_screen
@@ -796,6 +955,8 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
     else:
         state = {"schema": SERIAL_SCHEMA, "config_digest": config, "next_batch": 0,
                  "active": None, "last_results": {}, "source_results": {},
+                 "source_validations": {},
+                 "source_search_counts": {},
                  "failed_targets": {}}
         if scheduler_manifest is not None:
             from . import scheduling
@@ -803,6 +964,8 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                 scheduler_manifest.config, scheduler_manifest.scheduler_id).to_dict()
     state.setdefault("source_results", {})
     state.setdefault("runtime_recovery", {})
+    state.setdefault("source_validations", {})
+    state.setdefault("source_search_counts", {})
     if scheduler_manifest is not None:
         from . import scheduling
         scheduling.SchedulerState.from_dict(state.get("scheduler_state"))
@@ -895,6 +1058,9 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                 recovery_reference=state["runtime_recovery"].get(str(recovered["target_index"])),
                 source_prior=state["source_results"].get(
                     _source_owner_key(targets[recovered["target_index"]])),
+                validate_source=(scheduler_manifest is not None and
+                                 recovered["target_index"] in
+                                 _pending_source_validations(state, targets)),
                 scheduler_selection=(recovered_dir / "scheduler-selection.json"
                                      if scheduler_manifest is not None else None))
             if recovered["result"] is None:
@@ -910,6 +1076,8 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                     state["scheduler_state"] = _scheduled_account(
                         state, scheduler_manifest, recovered_active, body,
                         recovered_dir).to_dict()
+                _record_completed_stage(state, body,
+                    targets[recovered["target_index"]], recovered["target_index"], len(targets))
                 state["last_results"][str(recovered["target_index"])] = recovered["result"]
                 state["source_results"][_source_owner_key(
                     targets[recovered["target_index"]])] = recovered["result"]
@@ -941,6 +1109,8 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
             number = state["next_batch"]
             selection = None
             previews = None
+            validation_targets = (_pending_source_validations(state, targets)
+                                  if scheduler_manifest is not None else {})
             if scheduler_manifest is not None:
                 from . import cpu_screen, scheduling, serial_scheduling
                 available = tuple((i, target) for i, target in enumerate(targets)
@@ -953,8 +1123,11 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                     if i in collisions:
                         scope_debt[selected_id] = collisions[i]
                         continue
-                    preview = cpu_screen.preview_batch(target, state["last_results"].get(str(i)),
-                                                       batch_iterations=batch_iterations)
+                    preview = ({"scope": "full", "candidate": None,
+                                "reason": "whole-source validation uses the full enrolled target"}
+                               if i in validation_targets else cpu_screen.preview_batch(
+                                   target, state["last_results"].get(str(i)),
+                                   batch_iterations=batch_iterations))
                     recovery_ref = state["runtime_recovery"].get(str(i))
                     if recovery_ref is not None:
                         from . import runtime_recovery
@@ -985,6 +1158,8 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                     source_state,
                     tuple(option(target, "--target-id") for _i, target in available),
                     now=time.time(), stage_number=number, scope_previews=previews,
+                    validation_ids=frozenset(option(target, "--target-id")
+                        for i, target in available if i in validation_targets),
                     duration_forecasts=_cost_forecasts(
                         state, scheduler_manifest, source_state, available, previews))
                 if available_index < 0:
@@ -1016,7 +1191,9 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                                      scope_preview=(previews[option(original, "--target-id")]
                                                     if previews is not None else None),
                                      source_prior=state["source_results"].get(
-                                         _source_owner_key(original)))
+                                         _source_owner_key(original)),
+                                     validate_source=(scheduler_manifest is not None
+                                                      and index in validation_targets))
             expected_binding = input_binding(child_argv)
             active = {"target_index": index, "selected_id": option(original, "--target-id"),
                       "store": option(original, "--store"), "batch_dir": str(directory),
@@ -1070,6 +1247,7 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                 identity = body["selected_target"]
                 if not isinstance(identity, dict) or identity.get("selected_id") != active["selected_id"]:
                     raise SerialRefused("child terminal belongs to another selected target")
+                _record_completed_stage(state, body, original, index, len(targets))
                 state["last_results"][key] = {"path": str(result_path), "sha256": sha}
                 state["source_results"][_source_owner_key(original)] = {
                     "path": str(result_path), "sha256": sha}

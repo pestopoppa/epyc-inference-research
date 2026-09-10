@@ -47,6 +47,25 @@ def test_closed_manifest_binds_roster_and_selects_with_owning_pure_scheduler():
     assert ss.SerialSchedulerManifest.from_dict(source.to_dict()).digest == source.digest
 
 
+def test_validation_is_an_explicit_reserved_stage_with_distinct_identity():
+    source = manifest()
+    state = scheduling.initial_state(source.config, source.scheduler_id)
+    _state, selected, _index = ss.select_target(
+        source, state, ("cpu", "gpu"), now=1, stage_number=0,
+        validation_ids=frozenset({"cpu"}))
+    assert selected.proposal.stage_class == "validation"
+    assert selected.proposal.reservation_kind == "validation"
+    assert selected.proposal.proposal_id == ss._digest({
+        "manifest": source.digest, "selected_id": "cpu", "stage_number": 0,
+        "source_validation": True})
+
+    _state, ordinary, _index = ss.select_target(
+        source, scheduling.initial_state(source.config, source.scheduler_id),
+        ("cpu", "gpu"), now=1, stage_number=0)
+    assert ordinary.proposal.stage_class == "search"
+    assert ordinary.proposal.proposal_id != selected.proposal.proposal_id
+
+
 def test_manifest_refuses_unknown_fields_duplicate_proposals_and_crossed_target():
     row = manifest().to_dict()
     with pytest.raises(ss.SerialSchedulingRefused, match="shape"):
