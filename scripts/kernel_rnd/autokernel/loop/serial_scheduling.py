@@ -12,10 +12,12 @@ from typing import Any, Mapping, Sequence
 from . import scheduling
 
 MANIFEST_SCHEMA = "epyc.autokernel.serial_scheduler_manifest.v1"
-VALID_COMPARISONS = frozenset({"kept", "keep_candidate", "measured_null"})
+VALID_COMPARISONS = frozenset({"kept", "keep_candidate", "measured_null",
+                               "source_validation_passed"})
 INVALID_OUTCOMES = frozenset({
     "measurement_invalid", "runtime_observed", "runtime_refused", "refused_at_formation",
     "stopped_before_reschedule", "stopped_mid_formation", "superseded",
+    "source_validation_failed", "source_validation_pending",
 })
 FAILED_OUTCOMES = frozenset({"bench_failed", "planner_transient"})
 INTERVAL_SCHEMA = "epyc.autokernel.direct_held_intervals.v1"
@@ -99,12 +101,15 @@ def validate_target_bindings(manifest: SerialSchedulerManifest,
 def select_target(manifest: SerialSchedulerManifest, state: scheduling.SchedulerState,
                   selected_ids: Sequence[str], *, now: float, stage_number: int,
                   scope_previews: Mapping[str, dict] | None = None,
+                  validation_ids: frozenset[str] = frozenset(),
                   duration_forecasts: Mapping[str, dict] | None = None
                   ) -> tuple[scheduling.SchedulerState, scheduling.Selection, int]:
     if type(stage_number) is not int or stage_number < 0:
         raise SerialSchedulingRefused("serial stage number must be nonnegative")
     if scope_previews is not None and set(scope_previews) != set(selected_ids):
         raise SerialSchedulingRefused("CPU scope previews differ from available selected targets")
+    if not validation_ids <= set(selected_ids):
+        raise SerialSchedulingRefused("validation targets differ from available selected targets")
     indexed = []
     for index, selected_id in enumerate(selected_ids):
         proposal = manifest.proposals[selected_id]
@@ -115,6 +120,10 @@ def select_target(manifest: SerialSchedulerManifest, state: scheduling.Scheduler
             preview = scope_previews[selected_id]
             proposal = scoped_proposal(proposal, preview)
             identity["cpu_scope"] = _digest(preview)
+        if selected_id in validation_ids:
+            proposal = replace(proposal, stage_class="validation",
+                               reservation_kind="validation")
+            identity["source_validation"] = True
         forecast = (duration_forecasts or {}).get(selected_id)
         if forecast is not None:
             # A serial-owner estimate, never a new bound, grant, weight or grade.

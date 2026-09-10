@@ -33,7 +33,7 @@ HEARTBEAT_STOP_TIMEOUT_S = 10
 
 from . import (accumulate, actors, anchor, archive, bench, champion, claim, gates,
                heartbeat, hotspots, loop, serving, serving_beliefs,
-               pipeline, pool, production, status)
+               pipeline, pool, production, status, surface_fold, surface_validation)
 
 
 @dataclass(frozen=True)
@@ -291,6 +291,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="serial-owned latest anchor for another target sharing this source")
     parser.add_argument("--source-anchor-sha256",
                         help="exact retained digest for --source-anchor-continuation")
+    parser.add_argument("--validate-source-continuation", action="store_true",
+                        help="serial-owned regression A/B for a propagated source lineage")
     # THE single champion branch; the worktree must have it checked out at its tip or
     # the loop refuses to start (`champion.verify_startup`).
     parser.add_argument("--champion-branch", default=champion.CANONICAL_BRANCH)
@@ -443,6 +445,9 @@ def main(argv: list[str] | None = None) -> int:
             args.gpu_calibrate_serving = None
         except (OSError, ValueError) as exc:
             parser.error(f"continuation refused: {exc}")
+    pre_source_anchor_build = Path(args.anchor_build)
+    pre_source_anchor_commit = (resumed["current_anchor"]["commit"]
+                                if resumed is not None else None)
 
     selected_target = None
     selected_identity = None
@@ -494,6 +499,14 @@ def main(argv: list[str] | None = None) -> int:
             args.anchor_build = Path(source_resumed["current_anchor"]["path"])
         except (OSError, ValueError) as exc:
             parser.error(f"shared-source continuation refused: {exc}")
+    source_lineage_references = (list(source_resumed.get("source_lineage_keeps",
+                                      source_resumed.get("experimental_source_keeps", ())))
+                                 if source_resumed is not None else [])
+    if args.validate_source_continuation and (
+            source_resumed is None or not source_lineage_references):
+        parser.error("source validation requires an original retained source lineage")
+    if args.validate_source_continuation and args.iterations != 1:
+        parser.error("source validation is one scheduled target stage (--iterations 1)")
 
     direct_launch = None
     frozen_requests = None
@@ -605,6 +618,8 @@ def main(argv: list[str] | None = None) -> int:
             scheduler_selection = scheduling.Selection.from_dict(
                 _read_cpu_document(args.scheduler_selection))
             proposal = scheduler_selection.proposal
+            expected_stage_class = ("validation" if args.validate_source_continuation
+                                    else "search")
             expected_claims = scheduling.ResourceVector(
                 len(cpu_list_to_regions(owned_cpu_list)) / len(ATOMIC_REGIONS),
                 () if cpu_launch else (claim.DEVICE_ID,), 0)
@@ -612,7 +627,9 @@ def main(argv: list[str] | None = None) -> int:
                     or proposal.target_revision != unified_planner._target_digest(selected_target)
                     or proposal.alias_identity != selected_target.workload_signature
                     or proposal.backend != selected_target.execution.backend
-                    or proposal.stage_class != "search"
+                    or proposal.stage_class != expected_stage_class
+                    or (args.validate_source_continuation
+                        and proposal.reservation_kind != "validation")
                     or proposal.estimated_claims != expected_claims):
                 raise ValueError("selected accounting target/backend/resources differ from the actual run")
         except ValueError as exc:
@@ -790,6 +807,7 @@ def main(argv: list[str] | None = None) -> int:
     source_floor_refresh = [False]
     runtime_recipe_reference = [None]
     runtime_status = [None]
+    source_validation_reference = None
     feedback = serving_beliefs.PlannerFeedback(args.store, args.belief_root_repo)
     shared_history = archive.SharedHistory(args.shared_history_root, current_store=args.store,
                                            batch_directory=args.out)
@@ -1569,6 +1587,7 @@ def main(argv: list[str] | None = None) -> int:
             actor_health=actor_health(outcomes))
 
     latest: list = []
+    original_source_keeps: list[dict] = []
 
     # R23-52b (operator 2026-09-08: "the ENTIRE point of the dashboard is up-to-date visibility").
     # Stage-boundary writes left the dashboard blind for 30-47 min during builds and long gates.
@@ -1709,10 +1728,28 @@ def main(argv: list[str] | None = None) -> int:
                                        confirm_measure(worker))
                 if not verdict["promoted"]:
                     raise loop.ConfirmVetoed(verdict["reason"])
+            source_fold_candidate = experimental and cpu_launch \
+                and selected_identity is not None
+            patch_path = keep_the_diff(worker, hypothesis) if source_fold_candidate else None
+            parent = (_git(worker.worktree, "rev-parse", "HEAD")
+                      if source_fold_candidate else None)
             head = pool.advance_champion(worker, hypothesis, paths, comparison,
                                          champion_tree=args.worktree,
                                          branch=args.champion_branch)
             promote_anchor()
+            if source_fold_candidate and patch_path is not None and parent is not None:
+                original_source_keeps.append({
+                    "surface": args.surface, "mechanism_id": hypothesis.mechanism_id,
+                    "request_id": selected_identity["request_id"],
+                    "repo": str(args.worktree.resolve()), "branch": args.champion_branch,
+                    "parent_commit": parent, "kept_commit": head,
+                    "patch_path": str(patch_path.resolve()),
+                    "patch_metadata_path": str(patch_path.with_suffix(".json").resolve()),
+                    "selected_target": selected_identity,
+                    "launch_snapshot_digest": direct_launch.snapshot_digest,
+                    "floor_request_digest": floor_request_digest,
+                    "floor_unit": "process", "comparison": comparison.to_dict(),
+                })
             # The accumulator advanced; batch this keep and, if the bundle now clears the
             # serving floor, spend the one serving gate that can advance the champion of record.
             accumulate_after_keep(hypothesis.mechanism_id)
@@ -1905,17 +1942,81 @@ def main(argv: list[str] | None = None) -> int:
                     runtime_preparation.update(calibration=reference.to_dict(),
                         status="numeric_calibration_accepted" if solved.accepted else "calibration_failed")
                     solved.require_accepted()
-            if screen_confirmation is None:
+            if screen_confirmation is None and not args.validate_source_continuation:
                 reprofile()
-            else:
+            elif screen_confirmation is not None:
                 cpu_profile_observation.update(status="not_collected",
                     reason="confirm original retained source/build; no new proposal or profiling requested")
 
-            if direct_launch and calibration_samples:
+            validation_original_commit = pre_source_anchor_commit
+            validation_identity_error = None
+            validation_anchor_build = pre_source_anchor_build
+            validation_receipts = []
+            validation_intended = False
+            validation_reused_comparison = None
+            if args.validate_source_continuation:
+                validation_receipts = [surface_fold.reopen_reference(reference)
+                                       for reference in source_lineage_references]
+                prior_validation = (surface_validation.reopen_reference(
+                    resumed["source_validation"])
+                    if resumed is not None and resumed.get("source_validation") is not None
+                    else None)
+                if (prior_validation is not None
+                        and prior_validation["source_commit"]
+                        == source_resumed["current_anchor"]["commit"]
+                        and prior_validation["target"] == selected_identity):
+                    validation_anchor_build = Path(
+                        prior_validation["original_anchor"]["path"])
+                    validation_original_commit = prior_validation["original_anchor"]["commit"]
+                    if validation_original_commit is None:
+                        validation_identity_error = prior_validation.get(
+                            "reason", "original anchor source identity is unavailable")
+                origins = [receipt for receipt in validation_receipts
+                           if receipt.selected_target == selected_identity]
+                validation_intended = bool(origins)
+                if origins and prior_validation is None:
+                    first_origin = origins[0]
+                    belief = first_origin.comparison.get("belief_capture")
+                    inputs = belief.get("inputs") if isinstance(belief, dict) else None
+                    paths = inputs.get("build_paths") if isinstance(inputs, dict) else None
+                    original_path = paths.get("anchor") if isinstance(paths, dict) else None
+                    if not isinstance(original_path, str) or not Path(original_path).is_absolute():
+                        validation_identity_error = (
+                            "intended source keep omitted its original anchor build")
+                    else:
+                        validation_anchor_build = Path(original_path)
+                        validation_original_commit = first_origin.parent_commit
+                        candidate_execution = _cpu_arm(
+                            direct_launch, args.anchor_build).execution_digest
+                        for origin in origins[:1] if len(validation_receipts) == 1 else ():
+                            comparison = origin.comparison
+                            belief = comparison.get("belief_capture")
+                            inputs = belief.get("inputs") if isinstance(belief, dict) else None
+                            arms = inputs.get("resolved_arms") if isinstance(inputs, dict) else None
+                            candidate = arms.get("candidate") if isinstance(arms, dict) else None
+                            if (origin.kept_commit == source_resumed["current_anchor"]["commit"]
+                                    and comparison.get("request_digest") == serving.request_digest(
+                                        serving_recipe, frozen_requests)
+                                    and isinstance(candidate, dict)
+                                    and candidate.get("execution_digest") == candidate_execution):
+                                validation_reused_comparison = comparison
+                                break
+                elif validation_original_commit is None and prior_validation is None:
+                    try:
+                        validation_original_commit = surface_validation.original_anchor_commit(
+                            pre_source_anchor_build, args.worktree)
+                    except surface_validation.SurfaceValidationRefused as exc:
+                        validation_identity_error = str(exc)
+
+            if (direct_launch and calibration_samples and validation_identity_error is None
+                    and validation_reused_comparison is None):
                 publish("running", step=f"{direct_launch.backend.upper()} serving: request-bound original calibration")
+                calibration_anchor = (validation_anchor_build
+                                      if args.validate_source_continuation else args.anchor_build)
                 calibration = serving.calibrate_floor(
-                    serving_recipe, args.anchor_build, samples=calibration_samples,
-                    port=direct_launch.port, resolved_recipe=_cpu_arm(direct_launch, args.anchor_build),
+                    serving_recipe, calibration_anchor, samples=calibration_samples,
+                    port=direct_launch.port,
+                    resolved_recipe=_cpu_arm(direct_launch, calibration_anchor),
                     frozen_requests=frozen_requests)
                 serving.write_floor(args.store, serving_recipe, calibration,
                                     frozen_requests=frozen_requests)
@@ -1926,14 +2027,142 @@ def main(argv: list[str] | None = None) -> int:
                 serving_floor_provenance = floor_reading.provenance
                 floor_request_digest = floor_reading.request_digest
 
+            if args.validate_source_continuation and direct_launch is not None:
+                candidate_commit = source_resumed["current_anchor"]["commit"]
+                original_commit = validation_original_commit
+                source_receipts = validation_receipts
+                if not source_receipts:
+                    raise surface_validation.SurfaceValidationRefused(
+                        "propagated source has no original keep membership")
+                source_tree = _git(args.worktree, "rev-parse", f"{candidate_commit}^{{tree}}")
+                original_anchor_identity = {
+                    "path": str(validation_anchor_build.resolve()), "commit": original_commit}
+                candidate_anchor_identity = dict(source_resumed["current_anchor"])
+                candidate_launch = _cpu_arm(direct_launch, args.anchor_build)
+                common = {"source_commit": candidate_commit, "source_tree": source_tree,
+                    "source_keep_ids": [receipt.keep_id for receipt in source_receipts],
+                    "target": selected_identity, "original_anchor": original_anchor_identity,
+                    "candidate_anchor": candidate_anchor_identity,
+                    "request_digest": serving.request_digest(serving_recipe, frozen_requests),
+                    "recipe_execution_digest": candidate_launch.execution_digest}
+                if validation_identity_error is not None or original_commit == candidate_commit:
+                    reason = (validation_identity_error or
+                              "original target anchor equals propagated candidate; no A/B baseline")
+                    validation_row = surface_validation.debt(
+                        **common, reason=reason,
+                        failure={"type": "original_anchor_identity_unavailable",
+                                 "message": reason})
+                elif validation_reused_comparison is not None:
+                    validation_row = surface_validation.row(
+                        **common, comparison=validation_reused_comparison,
+                        intended_target=True)
+                else:
+                    if serving_floor_pct is None:
+                        publish("running", step=(f"{direct_launch.backend.upper()} whole-source "
+                                                "validation: original request-bound calibration"))
+                        calibration = serving.calibrate_floor(
+                            serving_recipe, validation_anchor_build,
+                            samples=max(2, args.serving_pairs), port=direct_launch.port,
+                            resolved_recipe=_cpu_arm(direct_launch, validation_anchor_build),
+                            frozen_requests=frozen_requests)
+                        serving.write_floor(args.store, serving_recipe, calibration,
+                                            frozen_requests=frozen_requests)
+                        floor_reading = serving.load_floor(
+                            args.store, serving_recipe, frozen_requests=frozen_requests)
+                        floor = serving_floor_pct = floor_reading.floor_pct
+                        calibrated = floor is not None
+                        serving_floor_provenance = floor_reading.provenance
+                        floor_request_digest = floor_reading.request_digest
+                    publish("running", step=(f"{direct_launch.backend.upper()} whole-source "
+                                             "validation: original anchor vs propagated source"))
+                    original_launch = _cpu_arm(direct_launch, validation_anchor_build)
+                    try:
+                        validation_comparison = serving.compare(
+                            serving_recipe, validation_anchor_build, args.anchor_build,
+                            pairs=args.serving_pairs, floor_pct=serving_floor_pct,
+                            port=direct_launch.port,
+                            anchor_resolved_recipe=original_launch,
+                            candidate_resolved_recipe=candidate_launch,
+                            frozen_requests=frozen_requests,
+                            floor_request_digest=floor_request_digest)
+                    except (loop.MeasurementInvalid, serving.ServerDied) as exc:
+                        failure = (dict(exc.record) if isinstance(exc, loop.MeasurementInvalid)
+                                   and isinstance(exc.record, dict) else
+                                   {"type": type(exc).__name__, "message": str(exc)[:1024]})
+                        validation_row = surface_validation.debt(
+                            **common, reason=f"{type(exc).__name__}: {exc}"[:1024],
+                            failure=failure)
+                    else:
+                        validation_row = surface_validation.row(
+                            **common, comparison=validation_comparison,
+                            intended_target=validation_intended)
+                source_validation_reference = surface_validation.retain(args.out, validation_row)
+
             publish("running", hotspot_rows=hotspot_rows)
-            pooled = run_pooled()
-            outcomes = pooled.outcomes
+            if args.validate_source_continuation:
+                validation_body = surface_validation.reopen_reference(
+                    source_validation_reference)
+                validation_status = "source_validation_" + validation_body["disposition"]
+                validation_comparison_view = (ServingComparison(
+                    validation_body["comparison"], "whole_source_regression_guard")
+                    if validation_body["schema"] == surface_validation.SCHEMA else None)
+                outcomes = [loop.Outcome(validation_status,
+                    reasons=[validation_body.get("reason", "existing serving non-regression rule")],
+                    comparison=validation_comparison_view)]
+                pooled = pool.PoolResult(outcomes=outcomes,
+                    wall_seconds=time.time() - started)
+                if validation_comparison_view is not None:
+                    capture = validation_body["comparison"].get("belief_capture")
+                    if validation_reused_comparison is not None:
+                        # This is the original keep's exact observation.  Its native
+                        # export already owns the original recorded_at/campaign
+                        # facts; replay that receipt to feedback without minting a
+                        # second archive row for the same capture identity.
+                        capture_id = capture.get("capture_id") if isinstance(capture, dict) else None
+                        original_export = (args.store / "serving-beliefs" / f"{capture_id}.json"
+                                           if isinstance(capture_id, str) else None)
+                        if original_export is not None and original_export.is_file():
+                            feedback.exported(original_export)
+                        else:
+                            print("warning: reused source validation has no original serving "
+                                  "belief export to replay", file=sys.stderr)
+                    else:
+                        # Fresh validation is still an original serving observation.
+                        # Use the ordinary durable archive/export callback; neither
+                        # this routing nor the validation wrapper grades it anew.
+                        attempt = outcomes[0].to_attempt()
+                        attempt["research_scope"] = archive.original_research_scope(
+                            attempt, model=args.model, quant=census.dominant_quant,
+                            backend="cpu" if cpu_launch else "gpu",
+                            build_recipe=recipe.to_dict(),
+                            surface=validation_comparison_view.surface)
+                        archive.record(args.store, attempt, epoch=epoch,
+                            recorded_at=loop._now(), campaign_id="ak-loop",
+                            on_serving_export=feedback.exported)
+            else:
+                pooled = run_pooled()
+                outcomes = pooled.outcomes
 
         publish_held_claims()
         elapsed = time.time() - started
         if args.out:
             args.out.mkdir(parents=True, exist_ok=True)
+            keep_references = []
+            for original in original_source_keeps:
+                patch = Path(original["patch_path"])
+                metadata = Path(original["patch_metadata_path"])
+                comparison = original["comparison"]
+                receipt = surface_fold.ExperimentalKeepReceipt.from_dict({
+                    "schema": surface_fold.KEEP_RECEIPT_SCHEMA, **original,
+                    "patch_sha256": hashlib.sha256(surface_fold.bounded_regular_bytes(
+                        patch, surface_fold.MAX_PATCH_BYTES)).hexdigest(),
+                    "patch_metadata_sha256": hashlib.sha256(surface_fold.bounded_regular_bytes(
+                        metadata, surface_fold.MAX_RECEIPT_BYTES)).hexdigest(),
+                    "comparison_digest": hashlib.sha256(
+                        surface_fold.canonical_bytes(comparison)).hexdigest(),
+                })
+                retained = surface_fold.retain_receipt(args.store, receipt)
+                keep_references.append(surface_fold.receipt_reference(retained))
             # `phase_seconds` are LANE-seconds (`pool.PhaseClock`): with N lanes they can
             # legitimately sum to more than the wall clock, and the flag beside them says
             # so to any reader that predates the pooled accounting.
@@ -1962,6 +2191,12 @@ def main(argv: list[str] | None = None) -> int:
                     cor_commit=serial_run.full_commit(args.worktree, cor_commit[0])
                     if not experimental else None,
                     **({"cpu_screen": screen_state} if screen_state is not None else {}),
+                    **({"experimental_source_keeps": keep_references}
+                       if keep_references else {}),
+                    **({"source_lineage_keeps": source_lineage_references + keep_references}
+                       if source_lineage_references else {}),
+                    **({"source_validation": source_validation_reference}
+                       if source_validation_reference is not None else {}),
                     **({"runtime_recipe_reference": runtime_recipe_reference[0]}
                        if runtime_recipe_reference[0] is not None else {}),
                     **({"held_claim_evidence": held_claim_evidence}
