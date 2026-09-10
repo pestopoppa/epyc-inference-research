@@ -1,4 +1,5 @@
 """Enrolled inputs reach the existing CLI; no hardware, models or providers run."""
+from contextlib import nullcontext
 from dataclasses import replace
 import json
 from pathlib import Path
@@ -25,6 +26,7 @@ def _resolved(*, backend="cpu", seed=False, changes=None, missing=False):
     if missing:
         del registry["model"]["model-a"]
     declaration = _manifest(**{"seeds" if seed else "production": [row]})
+    declaration["resources"]["cpu_logical"] = list(range(96))
     resolved = campaign.resolve_manifest(campaign.CampaignManifest.from_dict(declaration),
                                          registry_snapshot=registry)
     return resolved, launch
@@ -202,6 +204,10 @@ def test_selected_identity_survives_existing_pool_context_status_output_and_epoc
                                   "--out", str(fixture.root / "result")])
 
         with mock.patch.object(run, "main", selected_main), \
+                mock.patch.object(run.claim, "hold_cpu", lambda _cpus: nullcontext(
+                    {"device_id": "synthetic-host-claim"})), \
+                mock.patch.object(run.os, "sched_getaffinity", return_value={0, 1}), \
+                mock.patch.object(run.os, "sched_setaffinity"), \
                 mock.patch.object(run.archive, "epoch_for", wraps=run.archive.epoch_for) as epoch:
             rc, _calls, planners, _scratch, log = fixture._run_one_keep()
         assert rc == 0, log
