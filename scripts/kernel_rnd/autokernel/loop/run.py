@@ -287,6 +287,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="original champion-of-record build when it differs from the current anchor")
     parser.add_argument("--resume-run", type=Path,
                         help="terminal result from the preceding finite batch of these exact inputs")
+    parser.add_argument("--source-anchor-continuation", type=Path,
+                        help="serial-owned latest anchor for another target sharing this source")
+    parser.add_argument("--source-anchor-sha256",
+                        help="exact retained digest for --source-anchor-continuation")
     # THE single champion branch; the worktree must have it checked out at its tip or
     # the loop refuses to start (`champion.verify_startup`).
     parser.add_argument("--champion-branch", default=champion.CANONICAL_BRANCH)
@@ -405,7 +409,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.gpu_serving_launch and not args.resolved_campaign:
         parser.error("--gpu-serving-launch requires an explicitly enrolled target")
     from . import serial_run
-    original_binding = serial_run.input_binding(original_argv) if args.out or args.resume_run else None
+    original_binding = serial_run.input_binding(original_argv) \
+        if args.out or args.resume_run or args.source_anchor_continuation else None
     resumed = None
     if args.resume_run is not None:
         try:
@@ -454,6 +459,29 @@ def main(argv: list[str] | None = None) -> int:
     elif args.model is None:
         parser.error("--model is required without --resolved-campaign and --target-id")
 
+    source_resumed = None
+    if (args.source_anchor_continuation is None) != (args.source_anchor_sha256 is None):
+        parser.error("shared-source continuation path and digest must be supplied together")
+    if args.source_anchor_continuation is not None:
+        try:
+            source_resumed, source_sha = serial_run.load_completed(
+                args.source_anchor_continuation)
+            if source_sha != args.source_anchor_sha256:
+                raise ValueError("shared-source continuation digest differs")
+            expected_branch = args.experimental_branch or champion.CANONICAL_BRANCH
+            source_target = source_resumed.get("selected_target")
+            if (source_resumed["terminal"] != "complete"
+                    or Path(source_resumed["worktree"]).resolve() != args.worktree.resolve()
+                    or source_resumed["branch"] != expected_branch
+                    or not isinstance(source_target, dict)
+                    or selected_identity is None
+                    or source_target.get("campaign_id") != selected_identity["campaign_id"]
+                    or source_target.get("manifest_digest") != selected_identity["manifest_digest"]):
+                raise ValueError("shared-source continuation differs from this source owner")
+            args.anchor_build = Path(source_resumed["current_anchor"]["path"])
+        except (OSError, ValueError) as exc:
+            parser.error(f"shared-source continuation refused: {exc}")
+
     direct_launch = None
     frozen_requests = None
     launch_path = args.cpu_serving_launch or args.gpu_serving_launch
@@ -490,7 +518,8 @@ def main(argv: list[str] | None = None) -> int:
                 parser.error(f"CPU inherited affinity refused: {exc}")
         if Path(direct_launch.model.path).resolve() != args.model.resolve():
             parser.error("serving launch model differs from selected --model")
-        if resumed is not None and Path(direct_launch.build_dir).resolve() != args.anchor_build.resolve():
+        if (resumed is not None or source_resumed is not None) \
+                and Path(direct_launch.build_dir).resolve() != args.anchor_build.resolve():
             direct_launch = _cpu_arm(direct_launch, args.anchor_build)
         if Path(direct_launch.build_dir).resolve() != args.anchor_build.resolve():
             parser.error("serving launch build differs from selected --anchor-build")
@@ -586,8 +615,9 @@ def main(argv: list[str] | None = None) -> int:
         anchor_build=args.anchor_build,
         allow_unverified_anchor=args.allow_unverified_anchor,
         experimental_identity=experimental)
-    if resumed is not None:
-        if resumed["current_anchor"]["commit"] != verified_head:
+    if resumed is not None or source_resumed is not None:
+        anchor_source = source_resumed if source_resumed is not None else resumed
+        if anchor_source["current_anchor"]["commit"] != verified_head:
             parser.error("continuation current anchor differs from current source head")
         serial_run.verify_exact_anchor(args.anchor_build, args.worktree, verified_head,
                                        experimental=experimental)

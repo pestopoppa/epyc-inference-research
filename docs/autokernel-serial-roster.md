@@ -1,15 +1,17 @@
 # Existing-loop enrolled roster
 
 `loop.serial_run` can derive its targets from an existing resolved campaign. It
-uses the same serial child owner, finite batches, STOP and original continuation
-checks as `--target-args`; that existing CLI remains supported.
+uses the same serial child owner, durable STOP/recovery, held-resource accounting,
+and original continuation checks as `--target-args`; that existing CLI remains
+supported.
 
 ```bash
+cd /mnt/raid0/llm/worktrees/mains/autokernel-unified-research-20260908
 PYTHONPATH=. python3 -m scripts.kernel_rnd.autokernel.loop.serial_run \
   --resolved-campaign /absolute/resolved-campaign.json \
   --owned-targets /absolute/owned-targets.json \
   --state-dir /absolute/serial-state \
-  --batch-iterations 5 --rounds 1 --dry-run
+  --batch-iterations 1 --rounds 1 --dry-run
 ```
 
 Remove `--dry-run` to execute at the owning session's authorized boundary. The
@@ -58,10 +60,21 @@ for aliases refuses. Production and candidate enrollment provenance remains in
 the original target and every child continuation. No source tree/branch is created,
 no missing model is fetched, and no canonical promotion is inferred.
 
-Scheduling remains finite round-robin, not evidence-ranked or concurrent. Selected
-CPU and GPU entries use their exact serving launch/request, not an implicit cheap
-GPU screen. GPU serving requires the matching installed direct-serving owner;
-legacy `--target-args` screens remain explicitly distinct. This does not implement
-mechanism-aware partition search, arbitrary GPU mapping, automatic actor fallback,
-or interrupted-active-child recovery. Those semantics are not invented from a
-resolved manifest or a successful dry-run.
+Owned-roster scheduling derives proposal templates and resource vectors from the
+resolved campaign. It reserves production-frontier coverage, then uses the
+existing cost/seed policy; one selected stage runs one research iteration. With
+`--rounds 0`, the derived campaign is continuous until STOP, a declared budget is
+exhausted, or the recorded default cap of 1000 attempts is reached. CPU stages can
+screen an evidence-supported quarter/half-machine scope, but a reduced keep is
+provisional and must complete its recorded full-target confirmation before it can
+become full-surface evidence. Selected CPU and GPU entries always retain their
+exact serving launch/request and original held-resource receipts.
+
+Targets may share one exact owned source worktree and branch: execution stays
+serial, each target retains its own store/request/history, and the next child may
+consume a digest-bound completed source continuation without treating another
+target's measurement as its own. Shared-candidate folding is a separate consumer;
+this continuation path does not stage keeps or move the canonical champion.
+GPU serving still requires its installed direct-serving owner, and legacy
+`--target-args` screens remain explicitly distinct. A dry-run proves this wiring,
+not scientific validity or canonical admission.

@@ -9,15 +9,16 @@ from unittest import mock
 
 import pytest
 
-from . import claim, cpu_profile, gates, pool, resolved_recipe as rr, run, serving
+from . import campaign, campaign_cli, claim, cpu_profile, gates, pool, resolved_recipe as rr, run, serving
 from .test_glm_frozen_requests import _canonical_launch, _manifest, _request
+from .test_campaign import _manifest as _campaign_manifest, _registry, _target
 from . import test_promotion_targets as promotion_fixture
 
 
 @pytest.mark.parametrize("dry_run", [True, False])
 def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
         dry_run, feedback_root=None, profile_observer=None, profile_contexts=None, runtime_only=False,
-        invalid_once=False):
+        invalid_once=False, enrolled_pair=False):
     fixture = promotion_fixture.TheKeepBuildsAProductionCompleteAnchor()
     fixture.setUp()
     try:
@@ -61,6 +62,25 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
         launch_file, prompt_file = fixture.root / "launch.json", fixture.root / "prompts.json"
         launch_file.write_text(json.dumps(selected.to_dict()))
         prompt_file.write_text(json.dumps(manifest.to_dict()))
+        resolved_file = fixture.root / "resolved.json"
+        if enrolled_pair:
+            targets = []
+            for target_id in ("target-a", "target-b"):
+                target = _target(target_id, backend="cpu", context=template.ctx,
+                                 concurrency=template.np)
+                target.update(speculation=selected.capability.speculation,
+                              env={key: value for key, value in selected.launch_env
+                                   if key != "LD_LIBRARY_PATH"})
+                targets.append(target)
+            registry = _registry()
+            registry["model"]["model-a"].update(
+                path=str(model), sha256=hashlib.sha256(model.read_bytes()).hexdigest())
+            declaration = _campaign_manifest(seeds=targets)
+            declaration["resources"]["cpu_logical"] = list(range(96))
+            resolved = campaign.resolve_manifest(
+                campaign.CampaignManifest.from_dict(declaration), registry_snapshot=registry)
+            resolved_file.write_text(json.dumps(campaign_cli.build_output(
+                resolved, verify_artifacts=False)))
         expected_requests = manifest.requests(("glm-fixed2029",), template)
         held, issued, measured, builds, oracles = [], [], [], [], []
         invalidated = []
@@ -110,7 +130,8 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
                 evidence.append({"backend": "cpu", "status": serving.RESIDENCY_NOT_APPLICABLE,
                                  "window_start": now, "window_end": now})
             if Path(build).name == "lane0-build":
-                return 9.9 if len(issued) == 4 else 8.1 if len(issued) == 5 else 9.0
+                position = (len(issued) - 1) % 5 + 1
+                return 9.9 if position == 4 else 8.1 if position == 5 else 9.0
             return 9.0
 
         def cpu_main(argv):
@@ -171,6 +192,8 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
             argv += ["--cpu-serving-launch", str(launch_file), "--frozen-prompts", str(prompt_file),
                      "--experimental-branch", branch, "--iterations", "5", "--serving-pairs", "2",
                      "--cpu-calibrate-serving", "3", "--out", str(fixture.root / "result")]
+            if enrolled_pair:
+                argv += ["--resolved-campaign", str(resolved_file), "--target-id", "target-a"]
             if dry_run:
                 argv.append("--dry-run")
             if feedback_root is not None:
@@ -199,9 +222,13 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
             assert not any((held, issued, measured, builds, oracles))
             assert "DRY RUN" in log
         else:
-            assert len(issued) == (4 if invalid_once else 5)
+            assert len(issued) == (4 if invalid_once else 10 if enrolled_pair else 5)
             assert len(oracles) == len(issued)
-            assert held == [True, False]
+            assert held == ([True, False, True, False] if enrolled_pair else [True, False])
+            if enrolled_pair:
+                # The caller owns the A -> B -> A identity/history assertions.
+                # This fixture only establishes both original source/build keeps.
+                return
             result = json.loads((fixture.root / "result/loop-run.json").read_text())
             epoch_inputs = {"cpu_execution_digest": selected.execution_digest,
                             "frozen_prompt_digest": manifest.digest}
