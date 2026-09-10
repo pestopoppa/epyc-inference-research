@@ -109,6 +109,35 @@ def _campaign_config(backend: str = "cpu") -> dict:
             "metric": "aggregate_tok_s", "metric_direction": "higher"}
 
 
+@pytest.mark.parametrize("extra", [[], ["--draft-p-min", "0.0", "--threads-draft", "16"],
+                                   ["--log-colors", "off"]])
+def test_production_optional_flags_and_implicit_ubatch(tmp_path: Path, extra):
+    export = _export(tmp_path)
+    target = export["targets"][0]
+    command = target["command_argv"]
+    index = command.index("-ub")
+    del command[index:index + 2]
+    command.extend(extra)
+    target["argv"] = target["topology"]["argv_prefix"] + command
+    export = _seal_recipe_artifacts(export, tmp_path)
+    row = resolve_exported_recipes(export, environment_policy=_policy())["targets"][0]
+    assert row["status"] == "resolved"
+    resolved = CanonicalResolvedRecipe.from_dict(row["resolved_recipe"])
+    assert resolved.template.ubatch == 512
+    assert list(resolved.command_argv) == command
+    assert all(flag in resolved.template.extra_flags for flag in extra[::2])
+
+
+@pytest.mark.parametrize("extra", [["--draft-p-min", "nan"],
+    ["--draft-p-min", "0", "--spec-draft-p-min", "0"],
+    ["--threads-draft", "bad"], ["--log-colors", "unknown"]])
+def test_production_optional_flags_reject_invalid_values(tmp_path: Path, extra):
+    command = _export(tmp_path)["targets"][0]["command_argv"] + extra
+    with pytest.raises(rr.ResolutionError):
+        rr.canonical_recipe_projection(name="invalid", command_argv=command,
+                                       topology_prefix=["taskset", "-c", "0-3"])
+
+
 def test_split_model_entry_is_not_overwritten_by_last_shard(tmp_path: Path):
     export = _export(tmp_path)
     target = export["targets"][0]

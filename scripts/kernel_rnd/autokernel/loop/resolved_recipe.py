@@ -485,6 +485,7 @@ _CANONICAL_VALUE_FLAGS = frozenset({
     "--flash-attn", "-fa", "-ctk", "-ctv", "--chat-template-file", "--spec-type",
     "--spec-draft-n-max", "--spec-draft-p-min", "--reasoning", "--slot-save-path", "--device", "-lv",
     "--device-draft", "-ngl", "-md", "-ngld",
+    "--draft-p-min", "--threads-draft", "--log-colors",
 })
 _CANONICAL_SWITCH_FLAGS = frozenset({
     "--jinja", "--mlock", "--no-mmap", "--kv-unified", "--no-kv-unified",
@@ -520,15 +521,23 @@ def _canonical_command(command: tuple[str, ...]) -> tuple[str, dict[str, str | b
             raise ResolutionError(f"canonical command omits required {required}")
     if parsed["--host"] != "127.0.0.1":
         raise ResolutionError("canonical command must use the loopback host")
-    if "--spec-draft-p-min" in parsed:
+    if "--spec-draft-p-min" in parsed and "--draft-p-min" in parsed:
+        raise ResolutionError("canonical command repeats draft probability through aliases")
+    probability_flag = next((flag for flag in ("--spec-draft-p-min", "--draft-p-min")
+                             if flag in parsed), None)
+    if probability_flag is not None:
         try:
-            probability = float(parsed["--spec-draft-p-min"])
+            probability = float(parsed[probability_flag])
         except (TypeError, ValueError) as exc:
             raise ResolutionError("canonical draft probability must be finite in [0,1]") from exc
         if not math.isfinite(probability) or not 0 <= probability <= 1:
             raise ResolutionError("canonical draft probability must be finite in [0,1]")
     if "-lv" in parsed:
         _canonical_int(parsed, "-lv")
+    if "--threads-draft" in parsed:
+        _canonical_int(parsed, "--threads-draft")
+    if "--log-colors" in parsed and parsed["--log-colors"] not in {"on", "off", "auto"}:
+        raise ResolutionError("canonical log colors must be on, off or auto")
     return executable, parsed
 
 
@@ -585,6 +594,9 @@ def canonical_recipe_projection(*, name: str, command_argv: Sequence[str],
     extra: tuple[str, ...] = ()
     if "--device-draft" in parsed:
         extra = ("--device-draft", str(parsed["--device-draft"]))
+    for flag in ("--draft-p-min", "--threads-draft", "--log-colors"):
+        if flag in parsed:
+            extra += (flag, str(parsed[flag]))
     if "-tb" in parsed and _canonical_int(parsed, "-tb") != _canonical_int(parsed, "-t"):
         raise ResolutionError("canonical -tb differs from -t")
     if "--flash-attn" in parsed and "-fa" in parsed:
@@ -596,7 +608,7 @@ def canonical_recipe_projection(*, name: str, command_argv: Sequence[str],
         name=_text(name, "canonical recipe name"), model=str(parsed["-m"]),
         device=device, ngl=ngl, spec_decode=spec, np=_canonical_int(parsed, "-np"),
         ctx=_canonical_int(parsed, "-c"), threads=_canonical_int(parsed, "-t"),
-        batch=_canonical_int(parsed, "-b", 2048), ubatch=_canonical_int(parsed, "-ub", 2048),
+        batch=_canonical_int(parsed, "-b", 2048), ubatch=_canonical_int(parsed, "-ub", 512),
         ctk=str(parsed.get("-ctk", "f16")), ctv=str(parsed.get("-ctv", "f16")),
         fa=str(parsed.get("--flash-attn", parsed.get("-fa", "off"))),
         kv_unified=kv_unified, extra_flags=extra, cpu_list=cpu_list,
@@ -1121,7 +1133,7 @@ def _validate_canonical_consistency(resolved: CanonicalResolvedRecipe,
         raise ResolutionError("canonical port differs from snapshot")
     for flag, expected in (("-np", template.np), ("-c", template.ctx),
                            ("-t", template.threads), ("-ub", template.ubatch)):
-        if _canonical_int(parsed, flag) != expected:
+        if _canonical_int(parsed, flag, 512 if flag == "-ub" else None) != expected:
             raise ResolutionError(f"canonical {flag} differs from template")
     if "-b" in parsed and _canonical_int(parsed, "-b") != template.batch:
         raise ResolutionError("canonical batch differs from template")
