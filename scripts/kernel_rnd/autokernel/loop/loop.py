@@ -321,7 +321,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
         # and the tail gate still rechecks ownership and correctness before launch.
         pair = hypothesis.runtime_pair
         prevalidated_runtime = (
-            pair is not None and pair.anchor.backend == "cpu"
+            pair is not None and pair.anchor.backend in {"cpu", "gpu"}
             and pair.anchor.to_dict() == working.get("runtime_anchor")
             and pair.dimension.kind in {"threads", "cpu_list", "numa_policy", "env"}
             and (pair.dimension.kind != "env" or pair.dimension.candidate["key"]

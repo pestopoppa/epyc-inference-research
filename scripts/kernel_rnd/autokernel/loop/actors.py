@@ -427,8 +427,8 @@ def _runtime_pair(treatment, context, mechanism_id):
     from .resolved_recipe import resolved_recipe_from_dict
     from .unified_planner import RuntimeDimension, enumerate_runtime_dimensions
 
-    if not _cpu_target(context) or context.get("runtime_anchor") is None:
-        raise ProviderTransient("runtime treatment requires an installed original CPU launch")
+    if context.get("runtime_anchor") is None:
+        raise ProviderTransient("runtime treatment requires an installed original serving launch")
     if not isinstance(treatment, dict) or set(treatment) != {"kind", "candidate"}:
         raise ProviderTransient("runtime treatment must name one kind and candidate value")
     anchor = resolved_recipe_from_dict(context["runtime_anchor"])
@@ -449,7 +449,7 @@ def _runtime_pair(treatment, context, mechanism_id):
             raise ProviderTransient("environment treatment is outside installed runtime keys")
         value = {"key": candidate["key"], "value": dict(anchor.launch_env).get(candidate["key"])}
     else:
-        raise ProviderTransient("runtime treatment is not an installed CPU dimension")
+        raise ProviderTransient("runtime treatment is not an installed dimension")
     try:
         dimension = RuntimeDimension(mechanism_id, kind, value, candidate,
                                      "original-hypothesis:" + mechanism_id)
@@ -479,8 +479,8 @@ class AgentPlanner:
             profile_rule=("use the original CPU launch/model and inspect its source route; "
                           "if the CPU profile is unavailable, state that limit and do not invent timing evidence"
                           if cpu else "attack a route near the top of the profile"))
-        if cpu and context.get("runtime_anchor") is not None:
-            prompt += ("\nAlternatively propose ONE runtime treatment of the original CPU launch, "
+        if context.get("runtime_anchor") is not None:
+            prompt += ("\nAlternatively propose ONE runtime treatment of the original serving launch, "
                        "without source edits or rebuilding. Add runtime_treatment={kind: threads|"
                        "cpu_list|numa_policy|env, candidate: <exact value>}. For env, candidate is "
                        "{key: <one listed runtime_env_keys key>, value: <string or null>}. "

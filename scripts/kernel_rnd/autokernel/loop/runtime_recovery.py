@@ -38,7 +38,8 @@ def _verify(body):
     if not isinstance(argv, list) or not all(type(value) is str for value in argv):
         raise sr.SerialRefused("runtime recovery original arguments are malformed")
     target = sr._selected_identity(argv)
-    if (target != body["target"] or target["scope"] != "cpu_serving_selected_workload"
+    if (target != body["target"] or target["scope"] not in {
+            "cpu_serving_selected_workload", "gpu_serving_selected_workload"}
             or body["binding"] != sr.input_binding(argv)
             or active.get("input_argv_sha256") != sr._digest(argv)
             or active.get("selected_id") != target["selected_id"]
@@ -59,6 +60,12 @@ def _verify(body):
     finally:
         store.close()
     cpu = next(row for row in intervals["components"] if row["device_id"] == "cpu")
+    gpu = None
+    if target["scope"] == "gpu_serving_selected_workload":
+        from .claim import DEVICE_ID
+        gpu = next((row for row in intervals["components"] if row["device_id"] == DEVICE_ID), None)
+        if gpu is None or gpu["domain"] != cpu["domain"]:
+            raise sr.SerialRefused("GPU runtime recovery lacks both original component contexts")
     identity = {"pid": cpu["domain"]["pid"],
         "start_ticks": cpu["domain"]["process_start_ticks"], "boot_id": cpu["domain"]["boot_id"]}
     if active.get("process_identity") != identity:
@@ -74,7 +81,10 @@ def _verify(body):
                 or interruption.get("holder") != {"context_id": cpu["context_id"], "domain": cpu["domain"]}
                 or interruption.get("reason") not in {"between_launch_budget", "terminal_invalid_arm"}):
             raise sr.SerialRefused("original runtime interruption/holder differs")
-    return cpu
+        if gpu is not None and interruption.get("gpu_holder") != {
+                "context_id": gpu["context_id"], "domain": gpu["domain"]}:
+            raise sr.SerialRefused("original runtime interruption/GPU holder differs")
+    return {**cpu, **({"gpu_component": gpu} if gpu is not None else {})}
 
 
 def retain(directory, active, argv):
@@ -160,6 +170,18 @@ def replace_window(window, reference):
     declaration = _plain(window.store.read(window.declaration.locator, window.declaration.sha256))
     binding = replacement(reference=reference, original_holder=declaration.get("holder"),
                           new_holder=window.held_claim)
+    if window.pair.anchor.backend == "gpu":
+        old = reopen(reference).get("gpu_component")
+        original = declaration.get("gpu_holder")
+        new_gpu = window.gpu_claim
+        if (old is None or original != {"context_id": old["context_id"], "domain": old["domain"]}
+                or new_gpu is None or holder_identity(new_gpu) == original
+                or new_gpu.observe()["status"] != "held"
+                or new_gpu._domain != window.held_claim._domain
+                or (new_gpu._domain["boot_id"] == old["domain"]["boot_id"]
+                    and new_gpu._started_at < old["ended_at"])):
+            raise sr.SerialRefused("GPU replacement needs its released old and actual new component contexts")
+        binding["gpu_holder"] = holder_identity(new_gpu)
     state, _sha = sr._json(window.store.root / window.state_name,
                           limit=16_384 + 4096 * (3 * window.maximum))
     checkpoint = window.store.write("interrupted-direct-pair-window", state)

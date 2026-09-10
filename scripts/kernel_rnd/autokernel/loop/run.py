@@ -570,12 +570,12 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("serving options require --cpu-serving-launch or --gpu-serving-launch")
     cpu_launch = direct_launch if args.cpu_serving_launch else None
     runtime_campaign_id = resolved_campaign.campaign_id if selected_target is not None else "ak-loop"
-    runtime_enabled = bool(cpu_launch and runtime_campaign_id.startswith("ak-")
+    runtime_enabled = bool(direct_launch and runtime_campaign_id.startswith("ak-")
                            and not (args.cpu_screen_scope or args.cpu_confirm_from))
     if (args.calibrate_runtime or args.runtime_statistics is not None
             or args.runtime_recipe_reference is not None) and not runtime_enabled:
-        parser.error("prospective CPU runtime campaigns require campaign_id beginning 'ak-'; "
-                     "and a full CPU target; source-only aku-* campaigns remain supported unchanged")
+        parser.error("prospective runtime campaigns require campaign_id beginning 'ak-' and "
+                     "an original full serving target; source-only aku-* campaigns remain supported unchanged")
     experimental = direct_launch is not None and args.experimental_branch is not None
     owned_cpu_list = None
     build_cpu_list = cpu_launch.template.cpu_list if cpu_launch else "96-183"
@@ -811,20 +811,24 @@ def main(argv: list[str] | None = None) -> int:
         if args.runtime_statistics is not None:
             from .serving_preparation import ServingStatisticsDeclaration
             ServingStatisticsDeclaration.from_dict(_read_cpu_document(args.runtime_statistics))
-        if (args.calibrate_runtime or args.runtime_statistics is not None) and not cpu_launch:
-            parser.error("direct runtime calibration requires the original CPU serving launch")
+        if (args.calibrate_runtime or args.runtime_statistics is not None) and not direct_launch:
+            parser.error("direct runtime calibration requires the original serving launch")
         print("\nDRY RUN — wiring proven, nothing spent.")
         return 0
 
-    if (args.calibrate_runtime or args.runtime_statistics is not None) and not cpu_launch:
-        parser.error("direct runtime calibration requires the original CPU serving launch")
+    if (args.calibrate_runtime or args.runtime_statistics is not None) and not direct_launch:
+        parser.error("direct runtime calibration requires the original serving launch")
     runtime_preparation = ({} if runtime_enabled else {"status": "unavailable",
-        "reason": "strict runtime needs a prospective ak-* full CPU frame; source research is unchanged"})
+        "reason": "strict runtime needs a prospective ak-* full serving frame; source research is unchanged"})
     runtime_owner = [None]
     source_floor_refresh = [False]
     runtime_recipe_reference = [None]
     runtime_status = [None]
     source_validation_reference = None
+    runtime_env_keys = (set(direct_launch.environment_policy.measurement_keys) &
+        ({"GGML_IQK", "OMP_NUM_THREADS", "OMP_PROC_BIND", "OMP_PLACES", "OMP_WAIT_POLICY"}
+         if cpu_launch else {"OMP_NUM_THREADS", "OMP_PROC_BIND", "OMP_PLACES", "OMP_WAIT_POLICY"})
+        if direct_launch else set())
     feedback = serving_beliefs.PlannerFeedback(args.store, args.belief_root_repo)
     shared_history = archive.SharedHistory(args.shared_history_root, current_store=args.store,
                                            batch_directory=args.out)
@@ -892,10 +896,8 @@ def main(argv: list[str] | None = None) -> int:
             "inbox": inbox.read_inbox(args.store / "inbox"),
             **({"runtime_anchor": feedback_anchor[0].to_dict(),
                 "runtime_preparation": dict(runtime_preparation),
-                "runtime_env_keys": sorted(set(direct_launch.environment_policy.measurement_keys)
-                                           & {"GGML_IQK", "OMP_NUM_THREADS", "OMP_PROC_BIND",
-                                              "OMP_PLACES", "OMP_WAIT_POLICY"})}
-               if cpu_launch and screen_state is None and runtime_enabled else {}),
+                "runtime_env_keys": sorted(runtime_env_keys)}
+               if direct_launch and screen_state is None and runtime_enabled else {}),
             **({"target": {"scope": "experimental candidate, NOT canonical champion",
                             "recipe": feedback_anchor[0].to_dict(),
                             "requests": str(args.frozen_prompts),
@@ -907,7 +909,7 @@ def main(argv: list[str] | None = None) -> int:
                                if screen_state is not None else {}),
                             **({"enrollment": selected_identity} if selected_identity else {})}}
                if cpu_launch else {"target": {"scope": "selected GPU serving workload",
-                                             "recipe": direct_launch.to_dict(),
+                                             "recipe": feedback_anchor[0].to_dict(),
                                              "requests": str(args.frozen_prompts),
                                              "build_recipe": recipe.to_dict(),
                                              "hotspot_status": "selected GPU serving profile unavailable",
@@ -946,16 +948,15 @@ def main(argv: list[str] | None = None) -> int:
                     return False, [gates.Verdict("runtime_preparation", False,
                         runtime_preparation.get("reason", "strict runtime frame is unavailable"))]
                 pair = hypothesis.runtime_pair
-                if not cpu_launch or paths:
+                if not direct_launch or paths:
                     return False, [gates.Verdict("runtime_treatment", False,
-                                                "runtime treatment requires the owned CPU route and no patch")]
-                allowed_env = set(direct_launch.environment_policy.measurement_keys) & {
-                    "GGML_IQK", "OMP_NUM_THREADS", "OMP_PROC_BIND", "OMP_PLACES", "OMP_WAIT_POLICY"}
+                                                "runtime treatment requires the owned serving route and no patch")]
+                allowed_env = runtime_env_keys
                 if pair.dimension.kind not in {"threads", "cpu_list", "numa_policy", "env"} \
                         or (pair.dimension.kind == "env"
                             and pair.dimension.candidate["key"] not in allowed_env):
                     return False, [gates.Verdict("runtime_treatment", False,
-                                                "treatment is outside installed CPU runtime fields")]
+                                                "treatment is outside installed runtime fields")]
                 current = _cpu_arm(direct_launch, anchor_build[0])
                 if pair.anchor.execution_digest != current.execution_digest:
                     raise loop.TailRefused("runtime treatment was proposed against a different anchor recipe")
@@ -965,7 +966,8 @@ def main(argv: list[str] | None = None) -> int:
                     return False, [gates.Verdict("runtime_treatment", False,
                                                 "runtime treatment exceeds the owned CPU allocation")]
                 return gates.run_all(lambda: gates.op_correctness(
-                    anchor_build[0], backend="CPU", resolved_recipe=pair.candidate))
+                    anchor_build[0], backend="CPU" if cpu_launch else direct_launch.template.device,
+                    resolved_recipe=pair.candidate))
             # The diff first: a build that fails still leaves a patch worth reading,
             # and this is the last moment it exists on disk.
             keep_the_diff(worker, hypothesis)
@@ -1723,7 +1725,8 @@ def main(argv: list[str] | None = None) -> int:
             if hypothesis.runtime_pair is not None:
                 nonlocal direct_launch, cpu_launch, serving_recipe, floor, floor_request_digest
                 selected = runtime_owner[0].retain(comparison.row, feedback_anchor[0])
-                direct_launch = cpu_launch = selected
+                direct_launch = selected
+                cpu_launch = selected if selected.backend == "cpu" else None
                 serving_recipe = selected.template
                 feedback_anchor[0] = selected
                 # The old source-comparison floor belongs to the old recipe.
@@ -1849,6 +1852,7 @@ def main(argv: list[str] | None = None) -> int:
                 recovery = None
         runtime_owner[0] = runtime_admission.RuntimeAdmission(store=runtime_store,
             held_claim=original_claims[0], campaign_id=campaign_id, epoch=epoch,
+            **({"gpu_claim": original_claims[-1]} if not cpu_launch else {}),
             original=original, prompts=manifest, statistical=statistical,
             host_state={**epoch_inputs, "nominal_khz": args.runtime_nominal_khz},
             worktree=args.worktree, source_commit=current_anchor_commit[0], escalation=escalation,
@@ -1857,7 +1861,8 @@ def main(argv: list[str] | None = None) -> int:
         selected = runtime_owner[0].selected()
         feedback_anchor[0] = selected
         if selected.to_dict() != original.to_dict():
-            direct_launch = cpu_launch = selected
+            direct_launch = selected
+            cpu_launch = selected if selected.backend == "cpu" else None
             serving_recipe = selected.template
             floor = floor_request_digest = None
             source_floor_refresh[0] = True
@@ -1907,7 +1912,7 @@ def main(argv: list[str] | None = None) -> int:
             if original_store is not None:
                 original_store.close()
 
-    if cpu_launch:
+    if direct_launch:
         report_runtime_progress()
     try:
         publish("starting")
@@ -1952,23 +1957,33 @@ def main(argv: list[str] | None = None) -> int:
                     from .runtime_admission import restore_selection
                     reference = _read_cpu_document(args.runtime_recipe_reference)
                     selected = restore_selection(store=runtime_store, held_claim=original_claims[0],
+                        **({"gpu_claim": original_claims[-1]} if not cpu_launch else {}),
                         reference=reference, worktree=args.worktree,
                         source_commit=current_anchor_commit[0], build=anchor_build[0], prompts=manifest,
                         source_anchor=(source_resumed["current_anchor"] if source_resumed is not None
                                        else None))
-                    direct_launch = cpu_launch = selected
+                    direct_launch = selected
+                    cpu_launch = selected if selected.backend == "cpu" else None
                     serving_recipe = selected.template
                     floor = floor_request_digest = None
                     source_floor_refresh[0] = True
                     runtime_recipe_reference[0] = reference
                 install_runtime_owner()
                 if args.calibrate_runtime:
-                    publish("running", step="CPU runtime: original anchor A/A and neutral calibration")
-                    preparation, reference = runtime_owner[0].calibration(feedback_anchor[0])
-                    solved = preparation.reopen(reference)
-                    runtime_preparation.update(calibration=reference.to_dict(),
-                        status="numeric_calibration_accepted" if solved.accepted else "calibration_failed")
-                    solved.require_accepted()
+                    from .runtime_calibration import RuntimeCalibrationRefused
+                    try:
+                        runtime_owner[0].require_control_supplier(feedback_anchor[0])
+                    except RuntimeCalibrationRefused as exc:
+                        runtime_preparation.update(status="observed_not_admitted", reason=str(exc))
+                        report_runtime_progress()
+                        print(f"runtime calibration not started: {exc}")
+                    else:
+                        publish("running", step=f"{direct_launch.backend.upper()} runtime: original anchor A/A and neutral calibration")
+                        preparation, reference = runtime_owner[0].calibration(feedback_anchor[0])
+                        solved = preparation.reopen(reference)
+                        runtime_preparation.update(calibration=reference.to_dict(),
+                            status="numeric_calibration_accepted" if solved.accepted else "calibration_failed")
+                        solved.require_accepted()
             if screen_confirmation is None and not args.validate_source_continuation:
                 reprofile()
             elif screen_confirmation is not None:
@@ -2204,7 +2219,7 @@ def main(argv: list[str] | None = None) -> int:
             body = {
                 "schema": "epyc.autokernel.loop_run.v1",
                 "epoch": epoch, "anchor_commit": anchor_commit,
-                **({"runtime_preparation": dict(runtime_preparation)} if cpu_launch else {}),
+                **({"runtime_preparation": dict(runtime_preparation)} if direct_launch else {}),
                 **({"runtime_recipe_reference": runtime_recipe_reference[0]}
                    if runtime_recipe_reference[0] is not None else {}),
                 "surface": args.surface, "pairs": args.serving_pairs if direct_launch else args.pairs,

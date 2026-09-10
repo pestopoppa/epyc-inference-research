@@ -267,7 +267,8 @@ class DirectCalibration:
     """
 
     def __init__(self, *, store, held_claim, campaign_id, epoch, anchor, neutral,
-                 prompts, statistical, host_state, deadline_monotonic_s=None, on_progress=None):
+                 prompts, statistical, host_state, deadline_monotonic_s=None, on_progress=None,
+                 gpu_claim=None):
         if type(store) is not mc.ArtifactStore or type(held_claim) is not claim.HeldCpuClaim:
             raise RuntimeCalibrationRefused("direct calibration requires original store and acquired CPU context")
         if type(statistical) is not ServingStatisticsDeclaration:
@@ -285,8 +286,12 @@ class DirectCalibration:
         if type(neutral) is not PreparationArmPair or neutral.kind != "neutral":
             raise RuntimeCalibrationRefused("explicit byte-identical neutral material is required")
         neutral = PreparationArmPair.from_dict(neutral.to_dict())
-        if neutral.anchor.to_dict() != anchor.to_dict() or anchor.backend != "cpu":
-            raise RuntimeCalibrationRefused("neutral and direct CPU anchor identities differ")
+        if neutral.anchor.to_dict() != anchor.to_dict():
+            raise RuntimeCalibrationRefused("neutral and direct anchor identities differ")
+        try:
+            runtime_window.validate_gpu_claim(held_claim, gpu_claim, anchor)
+        except (TypeError, ValueError) as exc:
+            raise RuntimeCalibrationRefused(str(exc)) from exc
         if anchor.template.metric != "aggregate_tok_s":
             raise RuntimeCalibrationRefused("direct calibration does not own this metric")
         requests = prompts.requests(tuple(row.prompt_id for row in prompts.prompts), anchor.template)
@@ -297,6 +302,7 @@ class DirectCalibration:
         if not host_state or not isinstance(host_state, dict):
             raise RuntimeCalibrationRefused("original host-state frame is required")
         self.store, self.held_claim = store, held_claim
+        self.gpu_claim = gpu_claim
         self.deadline_monotonic_s = deadline_monotonic_s
         self._on_progress = on_progress
         self.window_config = runtime_window.configuration(store, held_claim,
@@ -305,7 +311,7 @@ class DirectCalibration:
         self.statistical, self.prompts, self.requests = statistical, prompts, requests
         self.pairs = {"aa": aa, "neutral": neutral}
         self.frame = ob._freeze({"campaign_id": campaign_id, "epoch": epoch,
-            "backend": "llama_cpu", "phase": "decode", "cell_class": "serving",
+            "backend": "llama_" + anchor.backend, "phase": "decode", "cell_class": "serving",
             "metric": anchor.template.metric, "metric_direction": "higher_better",
             "anchor": anchor.to_dict(), "prompt_manifest": prompts.to_dict(),
             "statistical": statistical.to_dict(), "host_state": host_state,
@@ -313,6 +319,8 @@ class DirectCalibration:
             # might later reopen its completed records. Per-launch original
             # holder identities remain in the immutable launch evidence.
             "claim_footprint": {key: held_claim[key] for key in ("device_id", "cpu_list", "regions")},
+            **({"gpu_claim_footprint": {key: gpu_claim[key] for key in ("device_id", "lock_path")}}
+               if gpu_claim is not None else {}),
             "neutral": neutral.to_dict(),
             "host_window_configuration": self.window_config.to_dict(),
             "host_window_source": ob._plain(runtime_window.source_identity()),
@@ -419,10 +427,15 @@ class DirectCalibration:
         opened = self.held_claim.observe()
         if opened["status"] != "held":
             raise RuntimeCalibrationRefused("original CPU claim is not held before launch")
-        self.pending = {"membership": list(membership), "context": context, "claim_open": opened}
+        gpu_open = None if self.gpu_claim is None else self.gpu_claim.observe()
+        if gpu_open is not None and gpu_open["status"] != "held":
+            raise RuntimeCalibrationRefused("original GPU claim is not held before launch")
+        self.pending = {"membership": list(membership), "context": context, "claim_open": opened,
+            **({"gpu_claim_open": gpu_open} if gpu_open is not None else {})}
         self._checkpoint()
         observations = []
-        observer = runtime_window.DuringWork(self.window_config, recipe)
+        observer_type = runtime_window.DuringWork if recipe.backend == "cpu" else runtime_window.GpuDuringWork
+        observer = observer_type(self.window_config, recipe)
         failure, value, operational_error = None, None, None
         try:
             value = serving._measure_once(recipe.template, Path(recipe.build_dir), recipe.port,
@@ -432,7 +445,7 @@ class DirectCalibration:
             contradictions = cpu_lifecycle_invalidity(observer.body()["cpu_lifecycle"], recipe.template.cpu_list)
             if contradictions:
                 from .loop import MeasurementInvalid
-                raise MeasurementInvalid("direct CPU measurement has observed placement contradictions", {
+                raise MeasurementInvalid("direct measurement has observed CPU placement contradictions", {
                     "failed_conditions": contradictions, "context": context,
                     "recipe": recipe.to_dict(), "observations": observations})
             rows = response.reopen_direct_unit(observations[0]["server_responses"], store=self.store,
@@ -442,8 +455,14 @@ class DirectCalibration:
                 max_gap_s=self.window_config.limits.max_gap_s)
             if health.outcome != schemas.PASS:
                 from .loop import MeasurementInvalid
-                raise MeasurementInvalid("direct CPU launch host validity is " + health.outcome, {
+                raise MeasurementInvalid("direct launch host/device validity is " + health.outcome, {
                     "health": {"outcome": health.outcome, "reasons": list(health.reasons)},
+                    "context": context, "recipe": recipe.to_dict(), "observations": observations})
+            if self.gpu_claim is not None and (
+                    not runtime_window.same_claim(opened, self.held_claim.observe())
+                    or not runtime_window.same_claim(gpu_open, self.gpu_claim.observe())):
+                from .loop import MeasurementInvalid
+                raise MeasurementInvalid("original CPU/GPU claim continuity lost during launch", {
                     "context": context, "recipe": recipe.to_dict(), "observations": observations})
         except BaseException as exc:
             operational_error = exc
@@ -452,10 +471,13 @@ class DirectCalibration:
         finally:
             try:
                 closed = self.held_claim.observe()
+                gpu_close = None if self.gpu_claim is None else self.gpu_claim.observe()
                 body = {"schema": SCHEMA, "declaration": self.declaration.to_dict(),
                     "membership": list(membership), "context": context,
                     "recipe": recipe.to_dict(), "value": value, "observations": observations,
                     "claim_open": opened, "claim_close": closed,
+                    **({"gpu_claim_open": gpu_open, "gpu_claim_close": gpu_close}
+                       if gpu_open is not None else {}),
                     "during_work": observer.body(),
                     "ended_at": _now(), "failure": failure}
                 original = self.store.write("direct-calibration-launch", body)
@@ -534,6 +556,13 @@ class DirectCalibration:
         if not (opened["ended_monotonic_s"] <= receipt["request_started_monotonic_s"]
                 <= receipt["retention_ended_monotonic_s"] <= closed["started_monotonic_s"]):
             raise RuntimeCalibrationRefused("original held observations do not enclose HTTP capture")
+        if recipe.backend == "gpu":
+            gpu_open, gpu_close = body["gpu_claim_open"], body["gpu_claim_close"]
+            if (not runtime_window.same_claim(gpu_open, gpu_close)
+                    or not (gpu_open["ended_monotonic_s"] <= receipt["request_started_monotonic_s"]
+                        <= receipt["retention_ended_monotonic_s"] <= gpu_close["started_monotonic_s"])):
+                raise RuntimeCalibrationRefused("original GPU claim continuity does not enclose HTTP capture")
+            runtime_window.gpu_device_state(body["during_work"], rows)
         rates = []
         for row in rows:
             if row["raw"]["phase"] != "measurement":
@@ -635,6 +664,7 @@ class DirectPairWindow:
         solve = calibration.reopen(calibration_reference)
         outputs = solve.require_accepted()
         self.store, self.held_claim = calibration.store, calibration.held_claim
+        self.gpu_claim = calibration.gpu_claim
         self.deadline_monotonic_s = calibration.deadline_monotonic_s
         self._on_progress = calibration._on_progress
         self.window_config = calibration.window_config
@@ -706,7 +736,9 @@ class DirectPairWindow:
                 raise RuntimeCalibrationRefused("replacement was selected for another original holder")
             self.declaration = self.store.write("direct-pair-window", {
                 "schema": SCHEMA, "frame": ob._plain(self.frame),
-                "holder": runtime_recovery.holder_identity(self.held_claim)})
+                "holder": runtime_recovery.holder_identity(self.held_claim),
+                **({"gpu_holder": runtime_recovery.holder_identity(self.gpu_claim)}
+                   if self.gpu_claim is not None else {})})
             self._checkpoint()
 
     def _context(self, kind, index, arm):
@@ -728,7 +760,8 @@ class DirectPairWindow:
                 raise RuntimeCalibrationRefused("original pair window has no original close receipt")
             self.boundaries["close"] = self.store.write("direct-window-boundary",
                 {"window": self.identity, **runtime_window.boundary(
-                    self.window_config, self.held_claim, marker="close"),
+                    self.window_config, self.held_claim, marker="close",
+                    **({"gpu_claim": self.gpu_claim} if self.gpu_claim is not None else {})),
                  "artifacts": runtime_window.artifacts(self.pair)}).to_dict()
             self._checkpoint()
 
@@ -746,7 +779,8 @@ class DirectPairWindow:
         if self.boundaries["open"] is None:
             self.boundaries["open"] = self.store.write("direct-window-boundary",
                 {"window": self.identity, **runtime_window.boundary(
-                    self.window_config, self.held_claim, marker="open"),
+                    self.window_config, self.held_claim, marker="open",
+                    **({"gpu_claim": self.gpu_claim} if self.gpu_claim is not None else {})),
                  "artifacts": runtime_window.artifacts(self.pair)}).to_dict()
             self._checkpoint()
         for index in range(self.outputs.b_min_blocks):
