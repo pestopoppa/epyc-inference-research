@@ -144,6 +144,153 @@ def _runtime_recipe_reference(value):
     return {"locator": value["locator"], "sha256": value["sha256"], "verified": True}
 
 
+def last_outcome_reference(outcomes, *, store):
+    """Point to the last completed outcome's EXISTING artifacts, not the batch."""
+    if not outcomes or outcomes[-1].comparison is None:
+        return None
+    outcome = outcomes[-1]
+    comparison = outcome.comparison.to_dict()
+    native = comparison.get("belief_capture")
+    path = comparison.get("belief_export_receipt")
+    if path is None and isinstance(native, dict):
+        path = Path(store) / "serving-beliefs" / f"{native['capture_id']}.json"
+    receipt = None
+    if path is not None:
+        try:
+            path = Path(path).absolute()
+            if path.parent.resolve() != (Path(store) / "serving-beliefs").resolve():
+                raise SerialRefused("last outcome receipt is outside its original store")
+            receipt = {"path": str(path), "sha256": hashlib.sha256(_read(path, limit=16384)).hexdigest()}
+        except (OSError, ValueError) as exc:
+            print(f"warning: last outcome serving reference unavailable: {exc}", file=sys.stderr)
+    runtime = comparison.get("runtime_admission")
+    try:
+        runtime = None if runtime is None else _runtime_recipe_reference(runtime)
+    except (TypeError, ValueError) as exc:
+        print(f"warning: last outcome runtime reference unavailable: {exc}", file=sys.stderr)
+        runtime = None
+    if receipt is None and runtime is None:
+        return None
+    return {"iteration_index": len(outcomes) - 1, "status": outcome.status,
+            "mechanism_id": (None if outcome.hypothesis is None else outcome.hypothesis.mechanism_id),
+            "serving_receipt": receipt,
+            "runtime_result": runtime}
+
+
+def read_last_outcome_reference(row):
+    """Original-reader diagnostic. Never admits work, regrades, or needs a claim.
+
+    A missing/corrupt optional source does not invalidate the owning continuation.
+    Runtime verification below is stored-byte/namespace identity, not re-admission.
+    """
+    result = {"status": "absent", "serving": None, "runtime": None, "errors": [],
+              "scope": "last completed outcome only; not full batch evidence",
+              "scientific_eligibility": False}
+    value = row.get("last_outcome_reference")
+    if value is None:
+        return result
+    result["status"] = "unavailable"
+    try:
+        if (not isinstance(value, dict) or set(value) != {"iteration_index", "status", "mechanism_id",
+                "serving_receipt", "runtime_result"}
+                or len(json.dumps(value).encode()) > 12 * 1024
+                or type(value["iteration_index"]) is not int
+                or value["iteration_index"] != row["iterations_completed"] - 1
+                or value["iteration_index"] < 0
+                or not isinstance(value["status"], str) or len(value["status"]) > 512
+                or row["outcome_counts"].get(value["status"], 0) < 1
+                or (value["mechanism_id"] is not None and (
+                    not isinstance(value["mechanism_id"], str) or len(value["mechanism_id"]) > 512))
+                or value["serving_receipt"] is None and value["runtime_result"] is None):
+            raise SerialRefused("last outcome reference shape or completed index differs")
+        argv = row["input_argv"]
+        store = Path(option(argv, "--store")).resolve()
+        prompts = None
+        if option(argv, "--frozen-prompts") is not None:
+            from .planned_serving import FrozenPromptManifest
+            prompts = FrozenPromptManifest.from_dict(_json(Path(option(argv, "--frozen-prompts")))[0])
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        result["errors"].append(str(exc)[:512])
+        return result
+    if value["serving_receipt"] is not None:
+        try:
+            import importlib
+            reference = value["serving_receipt"]
+            if (not isinstance(reference, dict) or set(reference) != {"path", "sha256"}
+                    or not isinstance(reference["path"], str) or len(reference["path"]) > 4096):
+                raise SerialRefused("last outcome serving reference shape differs")
+            path = Path(reference["path"])
+            if (not path.is_absolute() or path.parent.resolve() != store / "serving-beliefs"
+                    or path.suffix != ".json" or len(path.stem) != 64
+                    or any(char not in "0123456789abcdef" for char in path.stem)):
+                raise SerialRefused("last outcome serving reference is not its original local capture")
+            raw = _read(path, limit=16384)
+            if hashlib.sha256(raw).hexdigest() != reference["sha256"]:
+                raise SerialRefused("last outcome serving receipt bytes differ")
+            root = Path(option(argv, "--belief-root-repo") or os.environ.get("EPYC_ROOT_REPO", "/workspace"))
+            expected = (root / "scripts/vidya/adapters/autokernel_legacy_serving.py").resolve()
+            python_path = str(root / "scripts/vidya")
+            if python_path not in sys.path:
+                sys.path.insert(0, python_path)
+            reader = importlib.import_module("adapters.autokernel_legacy_serving")
+            if Path(reader.__file__).resolve() != expected:
+                raise SerialRefused("last outcome reader differs from the selected ROOT")
+            receipt = json.loads(raw)
+            if receipt.get("capture_id") != path.stem:
+                raise SerialRefused("last outcome serving path/capture ID differs")
+            source = reader._source(receipt, f"autokernel:{path}")
+            reader._rows(source, receipt)  # Original capture/reducer, no new parser or grade.
+            if source.get("mechanism_id") != value["mechanism_id"]:
+                raise SerialRefused("last outcome serving mechanism differs")
+            comparison = source["comparison"]
+            inputs = comparison["belief_capture"]["inputs"]
+            if Path(inputs["recipe"]["model"]).resolve() != Path(row["model"]).resolve():
+                raise SerialRefused("last outcome serving model differs")
+            if prompts is not None:
+                from . import serving
+                template = serving.Recipe.from_dict(inputs["recipe"])
+                requests = prompts.requests(tuple(prompt.prompt_id for prompt in prompts.prompts), template)
+                if serving.request_digest(template, requests) != comparison.get("request_digest"):
+                    raise SerialRefused("last outcome serving original requests differ")
+            result["serving"] = {"capture_id": receipt["capture_id"],
+                "source_sha256": receipt["native_reference"]["sha256"],
+                "epoch": source["epoch"], "recipe_hash": comparison["recipe_hash"],
+                "request_digest": comparison.get("request_digest"),
+                "verification": "original_observation_capture; not scientific qualification"}
+        except Exception as exc:
+            result["errors"].append(f"serving: {type(exc).__name__}: {exc}"[:512])
+    if value["runtime_result"] is not None:
+        try:
+            from . import runtime_admission
+            from .measurement_capture import ArtifactStore
+            reference = _runtime_recipe_reference(value["runtime_result"])
+            root = store / "runtime-preparation"
+            if not root.is_dir():
+                raise SerialRefused("original runtime artifact store is missing")
+            artifacts = ArtifactStore(root)
+            try:
+                native = runtime_admission._read(artifacts, "direct-runtime-admission", reference)
+            finally:
+                artifacts.close()
+            if (native["schema"] != runtime_admission.SCHEMA
+                    or native["pair"]["dimension"]["dimension_id"] != value["mechanism_id"]
+                    or any(Path(arm["model"]["path"]).resolve() != Path(row["model"]).resolve()
+                           for arm in (native["pair"]["anchor"], native["pair"]["candidate"]))):
+                raise SerialRefused("last outcome original runtime subject differs")
+            if (prompts is not None and native["prompt_manifest_digest"] != prompts.digest
+                    or native["source_commit"] != row["current_anchor"]["commit"]):
+                raise SerialRefused("last outcome runtime original requests/source differ")
+            result["runtime"] = {"reference": reference, "source_commit": native["source_commit"],
+                "prompt_manifest_digest": native["prompt_manifest_digest"],
+                "recorded_admitted": native["admitted"],
+                "verification": "original artifact bytes/namespace only; not scientific re-admission"}
+        except Exception as exc:
+            result["errors"].append(f"runtime: {type(exc).__name__}: {exc}"[:512])
+    result["status"] = ("partial" if result["errors"] else "available") if (
+        result["serving"] is not None or result["runtime"] is not None) else "unavailable"
+    return result
+
+
 def _source_lineage_matches(row, receipts, validation_body=None):
     exact_local = (receipts and
         receipts[-1].kept_commit == row["current_anchor"]["commit"] and
@@ -172,7 +319,8 @@ def continuation(*, argv, binding, terminal, worktree, branch, model, selected_t
                  anchor_build, anchor_commit, iterations_requested, outcomes,
                  cor_build=None, cor_commit=None, held_claim_evidence=None, cpu_screen=None,
                  runtime_recipe_reference=None, experimental_source_keeps=None,
-                 source_validation=None, source_lineage_keeps=None) -> dict:
+                 source_validation=None, source_lineage_keeps=None,
+                 last_outcome_reference=None) -> dict:
     counts = {}
     for outcome in outcomes:
         counts[outcome.status] = counts.get(outcome.status, 0) + 1
@@ -194,6 +342,12 @@ def continuation(*, argv, binding, terminal, worktree, branch, model, selected_t
     if runtime_recipe_reference is not None:
         row["runtime_recipe_reference"] = _runtime_recipe_reference(
             runtime_recipe_reference)
+    if last_outcome_reference is not None:
+        encoded = json.dumps(last_outcome_reference)
+        if len(encoded.encode()) <= 12 * 1024:
+            row["last_outcome_reference"] = json.loads(encoded)
+        else:
+            print("warning: last outcome reference exceeds its 12KiB transport bound", file=sys.stderr)
     if experimental_source_keeps:
         refs = list(experimental_source_keeps)
         if len(refs) > iterations_requested:
@@ -243,6 +397,8 @@ def load_completed(path: Path, *, expected_argv=None, expected_binding=None):
         expected_fields = expected_fields | {"source_validation"}
     if isinstance(row, dict) and "source_lineage_keeps" in row:
         expected_fields = expected_fields | {"source_lineage_keeps"}
+    if isinstance(row, dict) and "last_outcome_reference" in row:
+        expected_fields = expected_fields | {"last_outcome_reference"}
     if not isinstance(row, dict) or set(row) != expected_fields \
             or row["schema"] not in {CONTINUATION_SCHEMA, CONTINUATION_SCHEMA_V2} \
             or row["terminal"] not in {"complete", "stopped"}:
