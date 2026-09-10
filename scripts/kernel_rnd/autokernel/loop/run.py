@@ -2305,6 +2305,7 @@ def main(argv: list[str] | None = None) -> int:
                        if source_validation_reference is not None else {}),
                     **({"runtime_recipe_reference": runtime_recipe_reference[0]}
                        if runtime_recipe_reference[0] is not None else {}),
+                    last_outcome_reference=serial_run.last_outcome_reference(outcomes, store=args.store),
                     **({"held_claim_evidence": held_claim_evidence}
                        if held_claim_evidence is not None else {})),
                 **({"held_claim_evidence": held_claim_evidence}
