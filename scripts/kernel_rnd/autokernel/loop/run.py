@@ -232,7 +232,11 @@ def main(argv: list[str] | None = None) -> int:
     # Proceed (loudly) on a hand-built anchor that carries no provenance.json;
     # anchor-gen-* dirs never need or honour this.
     parser.add_argument("--allow-unverified-anchor", action="store_true")
-    parser.add_argument("--model", type=Path, required=True)
+    parser.add_argument("--model", type=Path,
+                        help="required unless derived from an explicitly selected enrolled target")
+    parser.add_argument("--resolved-campaign", type=Path,
+                        help="existing resolved campaign or campaign_cli output; selects inputs only")
+    parser.add_argument("--target-id", help="exact enrolled target ID/alias; requires --resolved-campaign")
     parser.add_argument("--store", type=Path, required=True)
     parser.add_argument("--iterations", type=int, default=10,
                         help="0 means run CONTINUOUSLY until stopped: drop a STOP "
@@ -314,6 +318,33 @@ def main(argv: list[str] | None = None) -> int:
                         help="parent of the per-lane candidate build directories")
     args = parser.parse_args(argv)
 
+    selected_target = None
+    selected_identity = None
+    if (args.resolved_campaign is None) != (args.target_id is None):
+        parser.error("--resolved-campaign and --target-id must be supplied together")
+    if args.resolved_campaign is not None:
+        from . import campaign_cli, legacy_targets
+        try:
+            resolved_campaign = campaign_cli.load_previous(args.resolved_campaign)
+            selected_target = legacy_targets.select_target(
+                resolved_campaign, args.target_id,
+                cpu_serving=args.cpu_serving_launch is not None, model=args.model)
+        except (OSError, ValueError) as exc:
+            parser.error(f"target selection refused: {exc}")
+        args.model = Path(selected_target.execution.model.path)
+        scope = "cpu_serving_selected_workload" if args.cpu_serving_launch else "legacy_gpu_screen"
+        selected_identity = {
+            "campaign_id": resolved_campaign.campaign_id,
+            "request_id": resolved_campaign.request_id,
+            "manifest_digest": resolved_campaign.manifest_digest,
+            "selected_id": args.target_id, "scope": scope,
+            "original_target": selected_target.to_dict(),
+        }
+        print(f"target    {args.target_id} revision {selected_target.revision} — {scope}; "
+              "selection is not artifact verification or admission")
+    elif args.model is None:
+        parser.error("--model is required without --resolved-campaign and --target-id")
+
     cpu_launch = None
     frozen_requests = None
     if args.cpu_serving_launch is not None:
@@ -341,6 +372,11 @@ def main(argv: list[str] | None = None) -> int:
                                            cpu_launch.template)
         if len(frozen_requests) != cpu_launch.template.np:
             parser.error("frozen requests must describe exactly the selected serving concurrency")
+        if selected_target is not None:
+            try:
+                legacy_targets.validate_cpu_workload(selected_target, cpu_launch)
+            except legacy_targets.TargetSelectionRefused as exc:
+                parser.error(f"target selection refused: {exc}")
         args.champion_branch = args.experimental_branch
     elif args.frozen_prompts or args.experimental_branch or args.cpu_calibrate_serving:
         parser.error("CPU options require --cpu-serving-launch")
@@ -366,12 +402,17 @@ def main(argv: list[str] | None = None) -> int:
           f"divergences={[f.name for f in recipe.divergences()] or 'none'}")
 
     anchor_commit = _git(args.worktree, "rev-parse", "HEAD")
+    epoch_inputs = ({"cpu_execution_digest": cpu_launch.execution_digest,
+                     "frozen_prompt_digest": manifest.digest} if cpu_launch else {})
+    if selected_identity is not None:
+        epoch_inputs.update(
+            enrolled_manifest_digest=resolved_campaign.manifest_digest,
+            enrolled_target_digest=hashlib.sha256(json.dumps(
+                selected_target.to_dict(), sort_keys=True, separators=(",", ":"),
+                allow_nan=False).encode()).hexdigest())
     epoch = archive.epoch_for(anchor_commit=anchor_commit,
                               build_recipe=recipe.to_dict(),
-                              **({"host_state": {
-                                  "cpu_execution_digest": cpu_launch.execution_digest,
-                                  "frozen_prompt_digest": manifest.digest}}
-                                 if cpu_launch else {}))
+                              **({"host_state": epoch_inputs} if epoch_inputs else {}))
     print(f"anchor    {anchor_commit[:12]}   epoch {epoch[:12]}")
 
     pp, tg, ubatch = bench.SURFACES[args.surface]
@@ -477,8 +518,11 @@ def main(argv: list[str] | None = None) -> int:
                             "recipe": cpu_launch.to_dict(),
                             "requests": str(args.frozen_prompts),
                             "build_recipe": recipe.to_dict(),
-                            "hotspot_status": "CPU profile unavailable; do not infer GPU hotspots"}}
-               if cpu_launch else {}),
+                            "hotspot_status": "CPU profile unavailable; do not infer GPU hotspots",
+                            **({"enrollment": selected_identity} if selected_identity else {})}}
+               if cpu_launch else {"target": {"scope": "legacy GPU screen, NOT enrolled serving recipe",
+                                             "enrollment": selected_identity}}
+               if selected_identity else {}),
         }
 
     def keep_the_diff(worker, hypothesis) -> Path | None:
@@ -1019,6 +1063,7 @@ def main(argv: list[str] | None = None) -> int:
             outcomes=[o.to_attempt() for o in outcomes],
             iterations_planned=args.iterations, step=step,
             champion_head=_git(args.worktree, "rev-parse", "HEAD"),
+            **({"target": selected_identity} if selected_identity is not None else {}),
             **({"baseline_scope": "experimental_candidate_not_champion"} if cpu_launch else {}),
             anchor_guard=anchor_guard_seen[-1] if anchor_guard_seen else None,
             accumulator=accumulator_state(),
@@ -1190,6 +1235,7 @@ def main(argv: list[str] | None = None) -> int:
                 "phase_seconds": pooled_body.pop("phase_lane_seconds"),
                 "phase_seconds_are_lane_seconds": True,
                 "pool": pooled_body,
+                **({"target": selected_identity} if selected_identity is not None else {}),
                 **({"baseline_scope": "experimental_candidate_not_champion",
                     "experimental_branch": args.experimental_branch,
                     "launch_snapshot": cpu_launch.snapshot_digest,
