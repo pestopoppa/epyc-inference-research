@@ -1481,6 +1481,23 @@ def main(argv: list[str] | None = None) -> int:
              "bundled_keeps": list(bundle[0].keeps),
              "planner_evidence": plan.get("planner_evidence"), **sv_row}, prefix=".sv-")
         print(f"serving   [trigger={trigger}] {plan['reason']}")
+        # This is a whole-bundle observation, not another source keep. Export the
+        # original capture on BOTH dispositions before COR/bundle state advances.
+        # Preserve the established divergence fields for historical recall.
+        promoted = plan["outcome"] is accumulate.Outcome.PROMOTE
+        archive.record(
+            args.store,
+            {"schema": "epyc.autokernel.attempt.v1", "campaign_id": "ak-loop",
+             "mechanism_id": f"serving-{'gate' if promoted else 'divergence'}-{head[:12]}",
+             "status": "measured_serving_gate" if promoted else "measured_divergence",
+             "hypothesis": plan["reason"], "planner_evidence": plan.get("planner_evidence"),
+             "trigger": trigger, "floor_provenance": serving_floor_provenance,
+             "gate_outcome": plan["outcome"].value,
+             "bundled_keeps": list(bundle[0].keeps),
+             "champion_of_record": cor_commit[0], "at_commit": head,
+             "comparison": sv_row, "serving": sv_row},
+            epoch=epoch, recorded_at=last_gate[0]["at"], campaign_id="ak-loop",
+            on_serving_export=feedback.exported)
         if plan["outcome"] is accumulate.Outcome.PROMOTE:
             # The champion of record advances to the accumulator tip. Snapshot its build into
             # the protected slot, publish the headline against it, and start a fresh bundle.
@@ -1496,14 +1513,6 @@ def main(argv: list[str] | None = None) -> int:
         else:
             # DIVERGED + HOLD: hand the divergence to the planner as journal evidence so it can
             # revert/revise a bundled keep or re-aim; the champion of record and the bundle hold.
-            archive.record(
-                args.store,
-                {"schema": "epyc.autokernel.attempt.v1", "campaign_id": "ak-loop",
-                 "mechanism_id": f"serving-divergence-{head[:12]}", "status": "measured_divergence",
-                 "hypothesis": plan["reason"], "planner_evidence": plan["planner_evidence"],
-                 "trigger": trigger, "floor_provenance": serving_floor_provenance,
-                 "serving": sv_row},
-                epoch=epoch, recorded_at=loop._now(), campaign_id="ak-loop")
             # R23-54: the gate RAN, so the cadence counter resets even though the bundle
             # HOLDS. It counts readings taken, not verdicts won — without this a diverged
             # bundle would re-fire the expensive gate on every single subsequent keep.
