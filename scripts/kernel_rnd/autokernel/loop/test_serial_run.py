@@ -851,3 +851,44 @@ def test_shared_source_routes_authoring_only_to_original_owner(tmp_path):
     assert sr.option(other, "--source-anchor-continuation") is None
     assert sr.option(validation, "--source-anchor-continuation") == "/retained/source"
     assert "--validate-source-continuation" in validation
+
+
+def test_required_source_validation_uses_production_and_every_keep_author():
+    targets = [["--target-id", value] for value in ("a", "b", "prod", "optional")]
+    identities = {value: {"selected_id": value,
+        "original_target": {"enrolled_as": ["production"] if value == "prod" else ["seed"]}}
+        for value in ("a", "b", "prod", "optional")}
+    source_reference = {"path": "/source", "sha256": "a" * 64}
+    source = {"current_anchor": {"commit": "3" * 40},
+              "source_lineage_keeps": [{"locator": "a"}, {"locator": "b"}]}
+    receipts = [mock.Mock(selected_target=identities["a"], kept_commit="2" * 40),
+                mock.Mock(selected_target=identities["b"], kept_commit="3" * 40)]
+    rows = {}
+    validations = {}
+    for value, intended in (("a", False), ("b", True), ("prod", False)):
+        reference = {"locator": value, "sha256": value.encode().hex().ljust(64, "0")}
+        validations["subject-" + value] = {
+            "latest_reference": reference, "disposition": "passed"}
+        rows[value] = {"source_commit": "3" * 40, "target": identities[value],
+                       "intended_target": intended, "disposition": "passed"}
+    state = {"source_results": {}, "source_validations": validations,
+             "last_results": {}}
+    with mock.patch.object(sr, "_source_result", return_value=source_reference), \
+            mock.patch.object(sr, "load_completed", return_value=(source, "a" * 64)), \
+            mock.patch.object(sr, "_selected_identity",
+                side_effect=lambda argv: identities[sr.option(argv, "--target-id")]), \
+            mock.patch.object(sr, "_validation_subject",
+                side_effect=lambda _state, argv, _index, _commit:
+                    "subject-" + sr.option(argv, "--target-id")), \
+            mock.patch.object(run.surface_fold, "reopen_reference", side_effect=receipts), \
+            mock.patch.object(run.surface_validation, "reopen_reference",
+                side_effect=lambda reference: rows[reference["locator"]]):
+        aggregate = sr._required_source_validation(state, targets)
+    assert aggregate["required_target_ids"] == ["a", "b", "prod"]
+    assert aggregate["intended_target_id"] == "b"
+    assert aggregate["disposition"] == "passed"
+    assert aggregate["missing_target_ids"] == []
+    state["required_source_validation"] = aggregate
+    with mock.patch.object(sr, "_required_source_validation", return_value=None):
+        sr._refresh_required_source_validation(state, targets)
+    assert state["required_source_validation"] is None

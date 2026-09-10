@@ -954,6 +954,74 @@ def _pending_source_validations(state, targets):
     return pending
 
 
+def _required_source_validation(state, targets):
+    """Fold exact current-tip rows for production and retained keep authors."""
+    if not targets:
+        return None
+    source_reference = None
+    for target in targets:
+        source_reference = _source_result(state, target)
+        if source_reference is not None:
+            break
+    if source_reference is None:
+        return None
+    source, sha = load_completed(Path(source_reference["path"]))
+    if sha != source_reference["sha256"]:
+        raise SerialRefused("retained shared-source continuation changed")
+    references = (source.get("source_lineage_keeps")
+                  or source.get("experimental_source_keeps") or ())
+    if not references:
+        return None
+    from . import surface_fold, surface_validation
+    receipts = [surface_fold.reopen_reference(reference) for reference in references]
+    commit = source["current_anchor"]["commit"]
+    if receipts[-1].kept_commit != commit:
+        raise SerialRefused("required validation lineage is not the current source tip")
+    authored = {receipt.selected_target["selected_id"] for receipt in receipts}
+    intended = receipts[-1].selected_target["selected_id"]
+    required = []
+    for index, target in enumerate(targets):
+        identity = _selected_identity(target)
+        enrolled = identity["original_target"].get("enrolled_as", ())
+        if "production" in enrolled or identity["selected_id"] in authored:
+            required.append((index, target, identity))
+    missing_authors = authored - {identity["selected_id"] for _, _, identity in required}
+    if missing_authors:
+        raise SerialRefused("retained keep author is absent from the owned target roster")
+    rows, missing = [], []
+    for index, target, identity in required:
+        subject = _validation_subject(state, target, index, commit)
+        entry = state["source_validations"].get(subject)
+        reference = entry.get("latest_reference") if isinstance(entry, dict) else None
+        if reference is None:
+            missing.append(identity["selected_id"])
+            continue
+        row = surface_validation.reopen_reference(reference)
+        expected_intended = identity["selected_id"] == intended
+        if (row["source_commit"] != commit or row["target"] != identity
+                or row.get("intended_target") is not expected_intended
+                or row["disposition"] != entry.get("disposition")):
+            raise SerialRefused("required source validation identity changed")
+        rows.append({"selected_id": identity["selected_id"], "subject": subject,
+                     "reference": dict(reference), "disposition": row["disposition"],
+                     "intended_target": expected_intended})
+    dispositions = {row["disposition"] for row in rows}
+    disposition = ("pending" if missing or "pending" in dispositions else
+                   "failed" if "failed" in dispositions else "passed")
+    body = {"schema": "epyc.autokernel.required_source_validation.v1",
+            "source_reference": dict(source_reference), "source_commit": commit,
+            "required_target_ids": [identity["selected_id"]
+                                    for _, _, identity in required],
+            "intended_target_id": intended, "rows": rows,
+            "missing_target_ids": missing, "disposition": disposition}
+    body["aggregate_digest"] = _digest(body)
+    return body
+
+
+def _refresh_required_source_validation(state, targets):
+    state["required_source_validation"] = _required_source_validation(state, targets)
+
+
 def _batch_argv(original, prior, batch_iterations, directory, *, scheduler_selection=None,
                 scope_preview=None, source_prior=None, recovery_reference=None,
                 validate_source=False):
@@ -1241,6 +1309,7 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
         state = {"schema": SERIAL_SCHEMA, "config_digest": config, "next_batch": 0,
                  "active": None, "last_results": {}, "source_results": {},
                  "source_validations": {},
+                 "required_source_validation": None,
                  "source_search_counts": {},
                  "failed_targets": {}}
         if scheduler_manifest is not None:
@@ -1250,6 +1319,7 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
     state.setdefault("source_results", {})
     state.setdefault("runtime_recovery", {})
     state.setdefault("source_validations", {})
+    state.setdefault("required_source_validation", None)
     state.setdefault("source_search_counts", {})
     instruments = {option(row, "--target-id"): option(row, "--serving-instrument", "legacy_v1")
                    for row in targets}
@@ -1371,6 +1441,7 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                 state["last_results"][str(recovered["target_index"])] = recovered["result"]
                 _remember_source_result(state, body,
                     targets[recovered["target_index"]], recovered["result"])
+                _refresh_required_source_validation(state, targets)
                 retain_recovery(recovered_active, expected_recovered_argv, recovered_dir)
             state["last_reconciliation"] = recovered
             state["active"] = None
@@ -1540,6 +1611,7 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                 state["last_results"][key] = {"path": str(result_path), "sha256": sha}
                 _remember_source_result(state, body, original,
                     {"path": str(result_path), "sha256": sha})
+                _refresh_required_source_validation(state, targets)
                 if scheduler_manifest is not None:
                     state["scheduler_state"] = _scheduled_account(
                         state, scheduler_manifest, active, body, directory).to_dict()
