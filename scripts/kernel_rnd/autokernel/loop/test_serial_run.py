@@ -80,6 +80,12 @@ elif selection_path:
     from scripts.kernel_rnd.autokernel.loop import scheduling, serial_scheduling as ss
     from scripts.kernel_rnd.autokernel.loop.measurement_capture import ArtifactStore
     selection = scheduling.Selection.from_dict(json.loads(Path(selection_path).read_text()))
+    if mode == "fail_preclaim":
+        (out / "loop-preclaim-failure.json").write_text(json.dumps({
+            "schema": "epyc.autokernel.preclaim_failure.v1",
+            "selection_digest": selection.digest, "target": identity,
+            "error_type": "ClaimRefused"}))
+        sys.exit(3)
     proposal = selection.proposal
     def observation(pid, suffix):
         inode = sum(map(ord, suffix))
@@ -123,6 +129,8 @@ elif selection_path:
         store.close()
     held = {"schema": ss.REFERENCE_SCHEMA, "selection_digest": selection.digest,
             "evidence": artifact}
+    if mode == "fail_postclaim_publish":
+        sys.exit(3)
     if mode == "fail_held":
         (out / "loop-held-claims.json").write_text(json.dumps(held))
         sys.exit(3)
@@ -257,6 +265,39 @@ def test_scheduled_failed_child_accounts_only_original_released_claim(tmp_path, 
     assert {record.outcome for record in scheduler_state.accounted_receipts} == {"failed"}
     assert len(saved["failed_targets"]) == 2
     assert "cost_forecast" not in saved  # released failed prefixes are charged, not successful forecasts
+
+
+def test_scheduled_preclaim_failures_settle_each_selection_without_held_evidence(
+        tmp_path, monkeypatch):
+    state, argv = _inputs(tmp_path, monkeypatch, mode="fail_preclaim", rounds=1)
+    argv = _scheduled(tmp_path, argv)
+    assert sr.main(argv) == 1
+    saved = json.loads((state / "serial-state.json").read_text())
+    scheduler_state = scheduling.SchedulerState.from_dict(saved["scheduler_state"])
+    assert scheduler_state.campaign_attempts == 0
+    assert scheduler_state.issued_selection_digests == ()
+    assert scheduler_state.accounted_receipts == ()
+    assert scheduler_state.receipts == ()
+    assert len(saved["failed_targets"]) == 2
+    assert not list((state / "batches").glob("*/loop-held-claims.json"))
+    seen = (state / "seen.jsonl").read_bytes()
+    assert sr.main(argv) == 1
+    assert (state / "seen.jsonl").read_bytes() == seen
+
+
+def test_postclaim_publication_failure_cannot_use_preclaim_settlement(tmp_path, monkeypatch):
+    state, argv = _inputs(tmp_path, monkeypatch, mode="fail_postclaim_publish", rounds=1)
+    argv = _scheduled(tmp_path, argv)
+    with pytest.raises(ss.SerialSchedulingRefused,
+                       match="issued selection awaits settlement"):
+        sr.main(argv)
+    saved = json.loads((state / "serial-state.json").read_text())
+    scheduler_state = scheduling.SchedulerState.from_dict(saved["scheduler_state"])
+    assert scheduler_state.issued_selection_digests
+    assert scheduler_state.campaign_attempts == 0
+    assert scheduler_state.receipts == ()
+    assert len(saved["failed_targets"]) == 1
+    assert not list((state / "batches").glob("*/loop-preclaim-failure.json"))
 
 
 def test_scheduled_restart_accounts_original_completed_child_before_new_selection(

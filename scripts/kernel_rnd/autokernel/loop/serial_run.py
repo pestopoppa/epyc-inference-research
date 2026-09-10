@@ -1550,10 +1550,23 @@ def _scheduled_account(state, manifest, active, body, batch_dir):
 
 def _scheduled_failure_account(state, manifest, active, batch_dir, original):
     from . import scheduling, serial_scheduling
-    reference, _sha = _json(batch_dir / "loop-held-claims.json", limit=64 * 1024)
     selection = scheduling.Selection.from_dict(active["scheduler_selection"])
     if active["scheduler_selection_sha256"] != selection.digest:
         raise SerialRefused("active selection digest differs from original selection")
+    try:
+        reference, _sha = _json(batch_dir / "loop-held-claims.json", limit=64 * 1024)
+    except FileNotFoundError:
+        marker, _sha = _json(batch_dir / "loop-preclaim-failure.json", limit=64 * 1024)
+        if (not isinstance(marker, dict)
+                or set(marker) != {"schema", "selection_digest", "target", "error_type"}
+                or marker["schema"] != "epyc.autokernel.preclaim_failure.v1"
+                or marker["selection_digest"] != selection.digest
+                or marker["target"] != _selected_identity(original)
+                or not isinstance(marker["error_type"], str) or not marker["error_type"]):
+            raise SerialRefused("pre-claim failure marker differs from issued selection")
+        return scheduling.fail_stage_before_claim(
+            manifest.config, scheduling.SchedulerState.from_dict(state["scheduler_state"]),
+            selection)
     receipts = serial_scheduling.reopen_held_receipts(
         batch_dir, reference, selection=selection, target=_selected_identity(original))
     return scheduling.account_stage_components(

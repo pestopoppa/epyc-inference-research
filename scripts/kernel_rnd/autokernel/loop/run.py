@@ -2100,6 +2100,17 @@ def main(argv: list[str] | None = None) -> int:
     held_claim_error = None
     held_claim_attempted = False
 
+    def publish_preclaim_failure(error):
+        if scheduler_selection is None or original_claims:
+            return
+        args.out.mkdir(parents=True, exist_ok=True)
+        status.write_json(args.out, "loop-preclaim-failure.json", {
+            "schema": "epyc.autokernel.preclaim_failure.v1",
+            "selection_digest": scheduler_selection.digest,
+            "target": selected_identity,
+            "error_type": type(error).__name__,
+        }, prefix=".preclaim-failure-")
+
     def publish_held_claims():
         nonlocal held_claim_evidence, held_claim_error, held_claim_attempted
         if scheduler_selection is None or held_claim_attempted:
@@ -2138,21 +2149,28 @@ def main(argv: list[str] | None = None) -> int:
         status_publisher.start()
         started = time.time()
         with ExitStack() as ownership:
-            if owned_cpu_list is not None:
-                # This thread and future actor/oracle children inherit the declared
-                # CPUs; pre-existing telemetry threads are not relabelled as confined.
-                previous_affinity = os.sched_getaffinity(0)
-                from ..execution.cpu_region_claim import parse_cpu_list
-                os.sched_setaffinity(0, set(parse_cpu_list(owned_cpu_list)))
-                ownership.callback(os.sched_setaffinity, 0, previous_affinity)
-                receipt = ownership.enter_context(claim.hold_cpu(owned_cpu_list))
-                original_claims.append(receipt)
-            elif cpu_launch:
-                receipt = ownership.enter_context(claim.hold_cpu(cpu_launch.template.cpu_list))
-                original_claims.append(receipt)
-            if not cpu_launch:
-                receipt = ownership.enter_context(claim.hold())
-                original_claims.append(receipt)
+            try:
+                if owned_cpu_list is not None:
+                    # This thread and future actor/oracle children inherit the declared
+                    # CPUs; pre-existing telemetry threads are not relabelled as confined.
+                    previous_affinity = os.sched_getaffinity(0)
+                    from ..execution.cpu_region_claim import parse_cpu_list
+                    os.sched_setaffinity(0, set(parse_cpu_list(owned_cpu_list)))
+                    ownership.callback(os.sched_setaffinity, 0, previous_affinity)
+                    receipt = ownership.enter_context(claim.hold_cpu(owned_cpu_list))
+                    original_claims.append(receipt)
+                elif cpu_launch:
+                    receipt = ownership.enter_context(claim.hold_cpu(cpu_launch.template.cpu_list))
+                    original_claims.append(receipt)
+                if not cpu_launch:
+                    receipt = ownership.enter_context(claim.hold())
+                    original_claims.append(receipt)
+            except BaseException as acquisition_error:
+                try:
+                    publish_preclaim_failure(acquisition_error)
+                except Exception as marker_error:
+                    print(f"pre-claim failure marker unavailable: {marker_error}", file=sys.stderr)
+                raise
             claim_started = time.time()
             if selected_target is not None:
                 # Same original invocation bound used by serial scheduling. This

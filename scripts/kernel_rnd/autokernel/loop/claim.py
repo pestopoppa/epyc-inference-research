@@ -17,6 +17,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import sys
 import time
 from typing import Iterator
 
@@ -26,6 +27,42 @@ DEVICE_ID = "mi210_0"
 
 class ClaimRefused(RuntimeError):
     """The device is held by someone else, or the claim did not survive the window."""
+
+
+def _ensure_orchestrator_importable() -> None:
+    """Put the configured CPU-lock owner on the import path.
+
+    Root lane worktrees do not contain the untracked ``repos`` symlinks from the
+    shared checkout.  Their Git common directory still identifies that checkout,
+    so a child launched from the research repository can resolve the same owner
+    without requiring operator-supplied ``PYTHONPATH`` glue.
+    """
+    configured = Path(os.environ.get("EPYC_ROOT_REPO", "/workspace")).resolve()
+    candidates = [configured, configured / "repos" / "epyc-orchestrator"]
+    git_marker = configured / ".git"
+    try:
+        if git_marker.is_file():
+            prefix, separator, value = git_marker.read_text(encoding="utf-8").strip().partition(":")
+            if prefix == "gitdir" and separator:
+                git_dir = Path(value.strip())
+                if not git_dir.is_absolute():
+                    git_dir = configured / git_dir
+                common_dir = (git_dir / "commondir").read_text(encoding="utf-8").strip()
+                common_git = Path(common_dir)
+                if not common_git.is_absolute():
+                    common_git = git_dir / common_git
+                candidates.append(common_git.resolve().parent / "repos" / "epyc-orchestrator")
+    except OSError:
+        pass
+
+    for candidate in candidates:
+        if (candidate / "src" / "runtime" / "cpu_region_lock.py").is_file():
+            path = str(candidate)
+            if path not in sys.path:
+                sys.path.insert(0, path)
+            return
+    raise ClaimRefused(
+        f"EPYC_ROOT_REPO={configured} does not resolve the orchestrator CPU-lock owner")
 
 
 class HeldCpuClaim(dict):
@@ -208,6 +245,7 @@ def hold_cpu(cpu_list: str) -> Iterator[dict]:
     if os.environ["ORCHESTRATOR_CROSS_ROLE_DISJOINT_PLACEMENT"].lower() not in {
             "1", "true", "yes", "on"}:
         raise ClaimRefused("CPU run requires the existing cross-role region mutex")
+    _ensure_orchestrator_importable()
     from src.runtime.cpu_region_lock import cpu_region_lock, global_region_lock_path
     from src.runtime.instance_topology import ATOMIC_REGIONS, cpu_list_to_regions
     from src.runtime.region_lock_cli import _preflight
