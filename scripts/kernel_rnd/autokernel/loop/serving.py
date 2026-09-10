@@ -28,6 +28,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
 import concurrent.futures as cf
+import base64
 import hashlib
 import json
 import math
@@ -42,6 +43,7 @@ import urllib.error
 
 from . import lifecycle_observation, residency, status
 from . import native_server_response as server_response
+from .loop import MeasurementInvalid
 
 if TYPE_CHECKING:
     from .resolved_recipe import ResolvedRecipe
@@ -647,6 +649,7 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
     observer_finish_ok = observation_session is None
     cpu_observer = None
     cpu_observer_error = None
+    cpu_invalidity = []
     response_reference = None
     if cpu_profile_capture is not None:
         from .cpu_profile import CpuProfileCapture
@@ -912,6 +915,11 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                     if cpu_observer is not None:
                         try:
                             record["cpu_lifecycle"] = cpu_observer.observation
+                            cpu_invalidity = residency.cpu_lifecycle_invalidity(
+                                record["cpu_lifecycle"], recipe.cpu_list)
+                            record["measurement_validity"] = {
+                                "status": "invalid" if cpu_invalidity else "unproven",
+                                "failed_conditions": cpu_invalidity}
                         except Exception as exc:
                             cpu_observer_error = f"{type(exc).__name__}: {exc}"[:256]
                     if cpu_observer_error is not None:
@@ -943,6 +951,20 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
             not observer_finish_ok or not observation_session.shutdown_resolved):
         raise lifecycle_observation.ObserverShutdownUnresolved(
             "lifecycle observer ownership remains unresolved; refusing a successor unit")
+    if cpu_invalidity:
+        raise MeasurementInvalid("CPU arm invalid: " + ", ".join(sorted(
+            {item["condition"] for item in cpu_invalidity})), {
+                "schema": "epyc.autokernel.serving_invalid_arm.v1",
+                "status": "measurement_invalid", "failed_conditions": cpu_invalidity,
+                "recipe": recipe.to_dict(), "recipe_hash": recipe.recipe_hash,
+                "resolved_recipe": resolved_recipe.to_dict(), "build_dir": str(build_dir),
+                "request_digest": request_digest(recipe, frozen_requests),
+                "frozen_requests": None if frozen_requests is None else [
+                    {"prompt_id": prompt_id, "body_base64": base64.b64encode(body).decode("ascii"),
+                     "sha256": hashlib.sha256(body).hexdigest()} for prompt_id, body in frozen_requests],
+                "process_pid": process_pid, "teardown": teardown,
+                "requests": request_rows, "residency": record,
+                "observed_rate_not_admissible_tok_s": value})
     return value
 
 
@@ -1059,46 +1081,92 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
     # it sampled as non-resident never gets here at all -- it raises.
     a_residency: list[dict] = []
     c_residency: list[dict] = []
-    for _ in range(pairs):
-        a_runs.append(_measure_once(recipe, anchor_build, port, evidence=a_residency, **a_options))
-        c_runs.append(_measure_once(candidate_recipe, candidate_build, port, evidence=c_residency, **c_options))
-    a_med, c_med = statistics.median(a_runs), statistics.median(c_runs)
-    effect = c_med / a_med - 1.0
-    decisive = None if floor_pct is None else (abs(effect) * 100.0 >= floor_pct)
-    out = {"schema": "epyc.autokernel.serving_ab.v1", "recipe": recipe.name,
-            # The recipe is part of the artifact, so its identity travels with the number:
-            # a reader (or a gate) can tell whether this row and the floor it was judged
-            # against were even produced under the same launch conditions (R23-59).
-            "recipe_hash": recipe.recipe_hash, "recipe_env": dict(recipe.env or {}),
-            "recipe_describe": recipe.describe(),
-            "metric": recipe.metric, "np": recipe.np, "pairs": pairs,
-            "anchor_tok_s": a_med, "candidate_tok_s": c_med,
-            "effect": effect, "effect_pct": effect * 100.0,
-            "noise_floor_pct": floor_pct, "decisive": decisive,
-            "anchor_samples": a_runs, "candidate_samples": c_runs,
-            # Reporting only -- no decision rule reads these (see `_spread`).
-            "anchor_spread": _spread(a_runs), "candidate_spread": _spread(c_runs),
-            # PROVENANCE, not a decision input: no gate reads these. The row states
-            # whether its own launches were shown to run on the device, so a later
-            # reader never has to assume it -- and cannot be handed a tuple invented
-            # after the fact, which is the one thing no re-analysis can supply.
-            "residency": _residency_fold(a_residency + c_residency),
-            "anchor_residency": a_residency, "candidate_residency": c_residency}
-    if requests_digest is not None:
-        out.update(request_digest=requests_digest, floor_request_digest=floor_request_digest)
-    if runtime_pair is not None:
-        out.update(schema="epyc.autokernel.serving_runtime_ab.v1",
-                   runtime_pair=runtime_pair.to_dict(),
-                   candidate_recipe_hash=candidate_recipe.recipe_hash,
-                   admission="observation_only_original_strict_evidence_unavailable")
-    if belief_inputs is not None:
-        try:
-            out["belief_capture"] = serving_beliefs.finish(out, belief_inputs)
-        except Exception as exc:
-            belief_error = f"{type(exc).__name__}: {exc}"[:256]
-    if belief_error is not None:
-        out["belief_capture_error"] = belief_error
-    return out
+    next_launch = [0]
+    reschedules = [0]
+    invalid_history = []
+
+    def resume_original():
+        if reschedules[0]:
+            raise RuntimeError("original comparison reschedule already consumed")
+        reschedules[0] += 1
+        return complete()
+
+    def complete():
+        nonlocal belief_error
+        for pair_index in range(pairs):
+            for arm, arm_recipe, build, options, runs, records in (
+                    ("anchor", recipe, anchor_build, a_options, a_runs, a_residency),
+                    ("candidate", candidate_recipe, candidate_build, c_options, c_runs, c_residency)):
+                if 2 * pair_index + (arm == "candidate") < next_launch[0]:
+                    continue
+                records_before = len(records)
+                try:
+                    runs.append(_measure_once(arm_recipe, build, port, evidence=records, **options))
+                    next_launch[0] += 1
+                except MeasurementInvalid as exc:
+                    # This attempt is invalid, never a null. Only the explicit
+                    # same-tail continuation may preserve its completed valid arms.
+                    exc.record = {"schema": "epyc.autokernel.serving_invalid_comparison.v1",
+                        "status": "measurement_invalid", "failed_arm": arm,
+                        "pair_index": pair_index, "pairs_requested": pairs,
+                        "invalid_arm": exc.record, "request_digest": requests_digest,
+                        "anchor_resolved_recipe": anchor_resolved_recipe.to_dict(),
+                        "candidate_resolved_recipe": candidate_resolved_recipe.to_dict(),
+                        "anchor_raw_samples": a_runs, "candidate_raw_samples": c_runs,
+                        "anchor_residency": a_residency, "candidate_residency": c_residency,
+                        "runtime_pair": None if runtime_pair is None else runtime_pair.to_dict(),
+                        "reschedule": "original in-memory continuation only; no restart replay"}
+                    exc.record = json.loads(json.dumps(exc.record))
+                    # Retained in the immutable invalid attempt above, not silently
+                    # included among the final valid launch vector's evidence.
+                    del records[records_before:]
+                    invalid_history.append({"failed_arm": arm, "pair_index": pair_index,
+                        "invalid_record_sha256": hashlib.sha256(json.dumps(
+                            exc.record, sort_keys=True, separators=(",", ":")).encode()).hexdigest()})
+                    if not reschedules[0]:
+                        exc.reschedule = resume_original
+                    raise
+        a_med, c_med = statistics.median(a_runs), statistics.median(c_runs)
+        effect = c_med / a_med - 1.0
+        decisive = None if floor_pct is None else (abs(effect) * 100.0 >= floor_pct)
+        out = {"schema": "epyc.autokernel.serving_ab.v1", "recipe": recipe.name,
+                # The recipe is part of the artifact, so its identity travels with the number:
+                # a reader (or a gate) can tell whether this row and the floor it was judged
+                # against were even produced under the same launch conditions (R23-59).
+                "recipe_hash": recipe.recipe_hash, "recipe_env": dict(recipe.env or {}),
+                "recipe_describe": recipe.describe(),
+                "metric": recipe.metric, "np": recipe.np, "pairs": pairs,
+                "anchor_tok_s": a_med, "candidate_tok_s": c_med,
+                "effect": effect, "effect_pct": effect * 100.0,
+                "noise_floor_pct": floor_pct, "decisive": decisive,
+                "anchor_samples": a_runs, "candidate_samples": c_runs,
+                # Reporting only -- no decision rule reads these (see `_spread`).
+                "anchor_spread": _spread(a_runs), "candidate_spread": _spread(c_runs),
+                # PROVENANCE, not a decision input: no gate reads these. The row states
+                # whether its own launches were shown to run on the device, so a later
+                # reader never has to assume it -- and cannot be handed a tuple invented
+                # after the fact, which is the one thing no re-analysis can supply.
+                "residency": _residency_fold(a_residency + c_residency),
+                "anchor_residency": a_residency, "candidate_residency": c_residency}
+        if requests_digest is not None:
+            out.update(request_digest=requests_digest, floor_request_digest=floor_request_digest)
+        if runtime_pair is not None:
+            out.update(schema="epyc.autokernel.serving_runtime_ab.v1",
+                       runtime_pair=runtime_pair.to_dict(),
+                       candidate_recipe_hash=candidate_recipe.recipe_hash,
+                       admission="observation_only_original_strict_evidence_unavailable")
+        if invalid_history:
+            out["rescheduled_invalid_arms"] = list(invalid_history)
+        if belief_inputs is not None:
+            try:
+                out["belief_capture"] = serving_beliefs.finish(out, belief_inputs)
+            except Exception as exc:
+                belief_error = f"{type(exc).__name__}: {exc}"[:256]
+        if belief_error is not None:
+            out["belief_capture_error"] = belief_error
+        return out
+
+    return complete()
 
 
 def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int = 18311,

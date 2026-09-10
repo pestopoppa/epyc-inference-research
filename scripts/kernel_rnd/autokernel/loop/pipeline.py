@@ -250,6 +250,15 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                 if on_step is not None:
                     on_step(_w.name, label)
 
+            def record_reschedule(invalid):
+                # The first draw belongs to the original invalid attempt. A
+                # reschedule consumes the NEXT draw, and its result uses the
+                # ordinary keep(outcome) below. Never reset the retained lane.
+                if not budget.take():
+                    return False
+                keep(invalid)  # durable before the next owned server is launched
+                return True
+
             try:
                 # `should_abandon` is the stop predicate itself: once a stop is asked,
                 # a lane still FORMING abandons at its next stage boundary instead of
@@ -260,7 +269,7 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                     planner=planner, critic=critic, context=build_context(),
                     measure=measure, gate=gate, commit=commit_one, on_step=step,
                     tail_session=lambda _b=base: tail.session(_b),
-                    should_abandon=should_stop)
+                    should_abandon=should_stop, record_reschedule=record_reschedule)
             except Superseded as exc:
                 # `iterate` already converted this into an Outcome carrying the
                 # hypothesis; reaching here means it escaped before one was formed.

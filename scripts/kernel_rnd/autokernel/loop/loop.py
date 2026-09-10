@@ -53,6 +53,20 @@ class RunAborted(RuntimeError):
     """The run stopped because iterations were failing systematically."""
 
 
+class MeasurementInvalid(RuntimeError):
+    """An original arm contradicted its instrument; not a candidate null.
+
+    The serving owner supplies original raw facts after owned teardown. No measured
+    comparison exists, and rescheduling must retain the candidate before lane reset.
+    """
+
+    def __init__(self, reason: str, record: dict):
+        super().__init__(reason)
+        self.record = record
+        # Created by the original serving invocation only, never from stored JSON.
+        self.reschedule = None
+
+
 #: The standing strategy, constraints and settled list. It is rendered into EVERY
 #: actor bundle: it sat unread beside the loop for the whole of run 6 while the
 #: planner proposed things its own "Already in v9" list names.
@@ -158,6 +172,7 @@ class Outcome:
     comparison: bench.Comparison | None = None
     gate_verdicts: list[gates.Verdict] = field(default_factory=list)
     champion_head: str | None = None
+    invalid_measurement: dict | None = None
 
     def to_attempt(self) -> dict:
         row = {"status": self.status, "turn_recorded_at": _now()}
@@ -172,6 +187,8 @@ class Outcome:
             row["gates"] = [verdict.to_dict() for verdict in self.gate_verdicts]
         if self.champion_head:
             row["champion_head"] = self.champion_head
+        if self.invalid_measurement is not None:
+            row["invalid_measurement"] = self.invalid_measurement
         return row
 
 
@@ -228,7 +245,8 @@ def iterate(*, planner: Planner, critic: Critic,
             patch_rounds: int = PATCH_ROUNDS,
             on_step: Callable[[str], None] | None = None,
             tail_session: Callable[[], Any] = nullcontext,
-            should_abandon: Callable[[], bool] | None = None) -> Outcome:
+            should_abandon: Callable[[], bool] | None = None,
+            record_reschedule: Callable[[Outcome], bool] | None = None) -> Outcome:
     """One full turn. Pure control flow: every side effect is an injected callable.
 
     `should_abandon` is the DRAIN TIER for a lane that does not hold the serialized
@@ -247,7 +265,8 @@ def iterate(*, planner: Planner, critic: Critic,
                         hypothesis_rounds=hypothesis_rounds,
                         patch_rounds=patch_rounds, on_step=_safe_step(on_step),
                         tail_session=tail_session,
-                        should_abandon=should_abandon or (lambda: False))
+                        should_abandon=should_abandon or (lambda: False),
+                        record_reschedule=record_reschedule)
     except TailRefused as exc:
         # The candidate was formed and never measured. Carry the hypothesis: the
         # patch may well still help against the champion that displaced it, and the
@@ -275,7 +294,7 @@ def iterate(*, planner: Planner, critic: Critic,
 def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, commit,
              hypothesis_rounds, patch_rounds, on_step=lambda _label: None,
              tail_session=nullcontext,
-             should_abandon=lambda: False) -> Outcome:
+             should_abandon=lambda: False, record_reschedule=None) -> Outcome:
     last_proposed: Hypothesis | None = None
 
     def stopped() -> Outcome:
@@ -296,12 +315,26 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
         # ---- CRITIC PASS 1: the hypothesis, before any patch exists ----------
         if should_abandon():
             return stopped()
-        on_step("critic pass 1: reviewing the hypothesis")
-        verdict = critic.review_hypothesis(hypothesis, working)
-        if not verdict.accepted:
-            # Verbatim, so the planner can answer the objection rather than guess.
-            hypothesis_reasons.append(verdict.reason)
-            continue
+        # Only the installed canonical runtime options get the deterministic fast
+        # path. A serialized pair is not itself installation or launch authority:
+        # the exact current anchor/options must also be in this owner's context,
+        # and the tail gate still rechecks ownership and correctness before launch.
+        pair = hypothesis.runtime_pair
+        prevalidated_runtime = (
+            pair is not None and pair.anchor.backend == "cpu"
+            and pair.anchor.to_dict() == working.get("runtime_anchor")
+            and pair.dimension.kind in {"threads", "cpu_list", "numa_policy", "env"}
+            and (pair.dimension.kind != "env" or pair.dimension.candidate["key"]
+                 in working.get("runtime_env_keys", ())))
+        if prevalidated_runtime:
+            on_step("prevalidated runtime option: deterministic checks, no critic call")
+        else:
+            on_step("critic pass 1: reviewing the hypothesis")
+            verdict = critic.review_hypothesis(hypothesis, working)
+            if not verdict.accepted:
+                # Verbatim, so the planner can answer the objection rather than guess.
+                hypothesis_reasons.append(verdict.reason)
+                continue
 
         patch_reasons: list[str] = []
         for _ in range(1 if hypothesis.runtime_pair is not None else patch_rounds):
@@ -355,7 +388,29 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                         continue
 
                     on_step("measuring A/B on the device")
-                    comparison = measure(hypothesis, paths)
+                    measure_original = lambda: measure(hypothesis, paths)
+                    rescheduled = False
+                    while True:
+                        try:
+                            comparison = measure_original()
+                            break
+                        except MeasurementInvalid as exc:
+                            invalid = Outcome("measurement_invalid", hypothesis, [str(exc)],
+                                gate_verdicts=verdicts, invalid_measurement=exc.record)
+                            if (rescheduled or exc.reschedule is None or record_reschedule is None
+                                    or (should_abandon is not None and should_abandon())
+                                    or not record_reschedule(invalid)):
+                                return invalid
+                            # Already archived and charged by the pool; no reset,
+                            # reauthor, rebuild, or valid-arm repetition. The same
+                            # serialized tail still owns the original candidate.
+                            rescheduled = True
+                            on_step("rescheduling original invalid CPU server arm (one bounded retry)")
+                            if should_abandon is not None and should_abandon():
+                                return Outcome("stopped_before_reschedule", hypothesis,
+                                    ["STOP after invalid arm archival; no replacement server launched"],
+                                    gate_verdicts=verdicts)
+                            measure_original = exc.reschedule
                     if comparison.decisive and comparison.effect > 0:
                         # A screen keep is a KEEP_CANDIDATE; with a confirm rung
                         # configured, `commit` measures it on the production shape
@@ -368,6 +423,9 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                             return Outcome("keep_candidate", hypothesis,
                                            [str(veto)], comparison, verdicts)
                         return Outcome("kept", hypothesis, [], comparison, verdicts, head)
+            except MeasurementInvalid as exc:
+                return Outcome("measurement_invalid", hypothesis, [str(exc)],
+                               gate_verdicts=verdicts, invalid_measurement=exc.record)
             except TailRefused as exc:
                 # Formed and never measured. Carry the hypothesis out so the planner
                 # can reconsider it against the champion that displaced it.
@@ -378,7 +436,10 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             # its record of success teaches its planner to repeat the failures.
             return Outcome("runtime_observed" if hypothesis.runtime_pair is not None
                            else "measured_null", hypothesis,
-                           [_null_reason(comparison)],
+                           ["Runtime observation retained; recipe selection requires original "
+                            "strict anchor/instrument calibration and admission, not a source floor"
+                            if hypothesis.runtime_pair is not None and comparison.decisive is None
+                            else _null_reason(comparison)],
                            comparison, verdicts)
 
         # Patch budget spent. Control returns to the HYPOTHESIS loop, so the planner
@@ -403,6 +464,6 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
 # `archive.record` as `run.py`'s injected `record`. `iterate` is the whole of this
 # module's control flow now, and the pool is its only driver.
 
-__all__ = ["ActorTransient", "ConfirmVetoed", "TailRefused", "RunAborted", "Critic",
+__all__ = ["ActorTransient", "ConfirmVetoed", "TailRefused", "RunAborted", "MeasurementInvalid", "Critic",
            "HYPOTHESIS_ROUNDS", "Hypothesis", "Outcome", "PATCH_ROUNDS",
            "Planner", "Review", "STOPPED_MID_FORMATION", "iterate"]

@@ -150,8 +150,10 @@ class CpuLifecycleSampler:
 
     def __init__(self, *, proc_root: Path = Path("/proc"), interval: float = 1.0,
                  max_samples: int = 8192, max_tasks: int = 512,
-                 max_bytes: int = 32 << 20, max_sample_s: float = 0.1):
-        for value, limit in ((max_samples, 8192), (max_tasks, 512), (max_bytes, 32 << 20)):
+                 max_bytes: int = 32 << 20, max_sample_s: float = 0.1,
+                 max_processes: int = 2048):
+        for value, limit in ((max_samples, 8192), (max_tasks, 512),
+                             (max_bytes, 32 << 20), (max_processes, 2048)):
             if type(value) is not int or not 1 <= value <= limit:
                 raise ValueError("CPU observation count/byte budget is out of bounds")
         if not all(math.isfinite(value) and 0 < value <= 60
@@ -160,6 +162,10 @@ class CpuLifecycleSampler:
         self.proc_root, self.interval = proc_root, interval
         self.max_samples, self.max_tasks = max_samples, max_tasks
         self.max_bytes, self.max_sample_s = max_bytes, max_sample_s
+        self.max_processes = max_processes
+        # Only the preceding bounded census, not another accumulated history.
+        self._previous_processes = {}
+        self._previous_census_at = None
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._wake = threading.Event()
@@ -230,6 +236,114 @@ class CpuLifecycleSampler:
                     raise ValueError("task count bound exceeded")
         return sorted(ids)
 
+    def _host(self) -> dict:
+        """Original counters, not a host-health verdict or a quiet-host threshold."""
+        from .lifecycle_observation import _key_values, _psi
+        row = {"cpu_ticks": None, "memory_kib": None, "swap_pages": None,
+               "memory_psi": None, "errors": []}
+        readers = {
+            "memory_kib": lambda: _key_values(self._text(self.proc_root / "meminfo"),
+                ("MemAvailable", "SwapFree", "SwapTotal"), "meminfo"),
+            "swap_pages": lambda: _key_values(self._text(self.proc_root / "vmstat"),
+                ("pswpin", "pswpout"), "vmstat"),
+            "memory_psi": lambda: _psi(self._text(self.proc_root / "pressure/memory")),
+        }
+        try:
+            # Only the aggregate first line is required; /proc/stat's per-CPU tail
+            # may exceed the read bound on this host and is not part of this fact.
+            fd = os.open(self.proc_root / "stat", os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+            try:
+                raw = os.read(fd, 16384)
+            finally:
+                os.close(fd)
+            if b"\n" not in raw:
+                raise ValueError("aggregate CPU stat line is incomplete")
+            fields = raw.split(b"\n", 1)[0].decode("ascii").split()
+            values = [int(value) for value in fields[1:]]
+            if fields[0] != "cpu" or len(values) != 10 or min(values) < 0:
+                raise ValueError("aggregate CPU stat fields differ")
+            row["cpu_ticks"] = dict(zip(("user", "nice", "system", "idle", "iowait",
+                "irq", "softirq", "steal", "guest", "guest_nice"), values))
+        except Exception as exc:
+            row["errors"].append(f"cpu_ticks: {type(exc).__name__}: {exc}"[:256])
+        for key, read in readers.items():
+            try:
+                value = read()
+                if key == "memory_psi" and any(
+                        not math.isfinite(number) or number < 0
+                        for counters in value.values() for number in counters.values()):
+                    raise ValueError("PSI contains negative/nonfinite counters")
+                row[key] = value
+            except Exception as exc:
+                row["errors"].append(f"{key}: {type(exc).__name__}: {exc}"[:256])
+        return row
+
+    def _non_target_activity(self, target, deadline: float) -> dict:
+        """Bounded identity-stable CPU deltas. Names are facts, never a classifier.
+
+        A non-target process may be our parent, an ordinary build, an idle server,
+        or somebody else's work. Neither CPU ticks nor an executable name establishes
+        competing model inference, held-region overlap, or permission to signal it.
+        """
+        from .lifecycle_observation import parse_proc_stat
+        started = time.monotonic()
+        row = {"started_monotonic_s": started, "ended_monotonic_s": None,
+               "previous_started_monotonic_s": self._previous_census_at,
+               "entries_seen": 0, "processes_read": 0, "incomplete": False,
+               "errors": [], "active_intervals": [], "classification": "unproven"}
+        current = {}
+        def error(exc):
+            row["incomplete"] = True
+            if len(row["errors"]) < 8:
+                row["errors"].append(str(exc)[:256])
+        try:
+            with os.scandir(self.proc_root) as entries:
+                for entry in entries:
+                    row["entries_seen"] += 1
+                    if row["entries_seen"] > self.max_processes + 256:
+                        raise ValueError("proc directory entry bound exceeded")
+                    if time.monotonic() > deadline or self._stop.is_set():
+                        raise ValueError("process census time bound exceeded or observer closing")
+                    if not entry.name.isdecimal():
+                        continue
+                    pid = int(entry.name)
+                    if target is not None and pid == target["pid"]:
+                        continue
+                    if row["processes_read"] >= self.max_processes:
+                        raise ValueError("process census count bound exceeded")
+                    row["processes_read"] += 1
+                    try:
+                        root = self.proc_root / entry.name
+                        before = parse_proc_stat(self._text(root / "stat"), pid)
+                        allowed = self._task(root, pid)
+                        after = parse_proc_stat(self._text(root / "stat"), pid)
+                        if (before["start_ticks"] != after["start_ticks"]
+                                or allowed["start_ticks"] != after["start_ticks"]
+                                or after["cpu_ticks"] < before["cpu_ticks"]):
+                            raise ValueError(f"PID {pid}: identity/counter changed during read")
+                        observed = {**after, "Cpus_allowed_list": allowed["Cpus_allowed_list"]}
+                        current[pid] = observed
+                        previous = self._previous_processes.get(pid)
+                        if previous is not None:
+                            if previous["start_ticks"] != after["start_ticks"]:
+                                error(f"PID {pid}: reused between samples")
+                            elif after["cpu_ticks"] < previous["cpu_ticks"]:
+                                error(f"PID {pid}: counter regressed between samples")
+                            elif after["cpu_ticks"] > previous["cpu_ticks"]:
+                                row["active_intervals"].append({"before": previous,
+                                    "after": observed,
+                                    "cpu_tick_delta": after["cpu_ticks"] - previous["cpu_ticks"]})
+                    except Exception as exc:
+                        error(f"PID {pid}: {type(exc).__name__}: {exc}")
+        except Exception as exc:
+            error(exc)
+        row["ended_monotonic_s"] = time.monotonic()
+        if row["ended_monotonic_s"] > deadline:
+            error("process census exceeded sample deadline")
+        self._previous_processes = current
+        self._previous_census_at = started
+        return row
+
     def note_hook_failure(self, method: str, exc: Exception) -> None:
         with self._lock:
             if len(self._errors) < 16:
@@ -270,18 +384,25 @@ class CpuLifecycleSampler:
     def _sample(self) -> None:
         started = time.monotonic()
         with self._lock:
-            if self._target is None or self._stop.is_set():
+            if self._stop.is_set():
                 return
             if len(self._samples) >= self.max_samples:
                 self._truncated = True
                 self._stop.set()
                 return
-            target, phase, generation = dict(self._target), self._phase, self._generation
+            target = None if self._target is None else dict(self._target)
+            phase, generation = self._phase, self._generation
         row = {"started_monotonic_s": started, "wall_s": time.time(), "phase": phase,
-               "process": None, "tasks": [], "error": None}
+               "process": None, "tasks": [], "error": None, "identity_mismatch": None,
+               "host": self._host(), "non_target_activity": None}
         try:
+            if target is None:
+                raise ValueError("target not attached yet; host facts retained")
             root = self.proc_root / str(target["pid"])
-            if self._identity(root, target["pid"]) != target["start_ticks"]:
+            observed_start = self._identity(root, target["pid"])
+            if observed_start != target["start_ticks"]:
+                row["identity_mismatch"] = {"expected_start_ticks": target["start_ticks"],
+                                            "observed_start_ticks": observed_start}
                 raise ValueError("attached process identity changed")
             row["process"] = self._task(root, target["pid"])
             ids = self._task_ids(root)
@@ -295,7 +416,10 @@ class CpuLifecycleSampler:
                 row["tasks"].append(self._task(root / "task" / str(tid), tid))
             if self._task_ids(root) != ids:
                 raise ValueError("task census changed during read")
-            if self._identity(root, target["pid"]) != target["start_ticks"]:
+            observed_start = self._identity(root, target["pid"])
+            if observed_start != target["start_ticks"]:
+                row["identity_mismatch"] = {"expected_start_ticks": target["start_ticks"],
+                                            "observed_start_ticks": observed_start}
                 raise ValueError("attached process identity changed during sample")
             if time.monotonic() - started > self.max_sample_s:
                 raise ValueError("sample duration bound exceeded")
@@ -303,6 +427,7 @@ class CpuLifecycleSampler:
                 raise ValueError("observer closed during sample")
         except Exception as exc:
             row["error"] = f"{type(exc).__name__}: {exc}"[:256]
+        row["non_target_activity"] = self._non_target_activity(target, started + self.max_sample_s)
         ended = time.monotonic()
         with self._lock:
             row.update(ended_monotonic_s=ended, phase_at_end=self._phase,
@@ -353,9 +478,58 @@ class CpuLifecycleSampler:
                 "errors": self._errors, "truncated": self._truncated,
                 "shutdown_resolved": not alive, "interval_s": self.interval,
                 "bounds": {"samples": self.max_samples, "tasks_per_sample": self.max_tasks,
+                           "processes_per_sample": self.max_processes,
                            "sample_bytes": self.max_bytes, "read_bytes": 16384,
                            "sample_duration_s": self.max_sample_s},
-                "cpu_placement": "unproven", "contention": "unproven"}))
+                "cpu_placement": "unproven", "contention": "unproven",
+                "host_noise_policy": "ordinary_load_and_PSI_are_diagnostic_not_blockers",
+                "foreign_inference_classification": "not_available"}))
+
+
+def cpu_lifecycle_invalidity(facts: dict, cpu_list: str | None) -> list[dict]:
+    """Only observed contradictions; missing facts do not become a clean warrant.
+
+    Setup/exec may precede taskset, and teardown may legitimately lose the process.
+    No pressure, load, process name, missing read or inferred inference is a veto.
+    """
+    allowed = set()
+    if cpu_list is not None:
+        for part in cpu_list.split(","):
+            numbers = [int(value) for value in part.split("-")]
+            allowed.update(range(numbers[0], numbers[-1] + 1))
+    failures = []
+    previous_outside = {}
+    for index, row in enumerate(facts.get("samples", ())):
+        if row.get("phase") not in {"health", "warmup", "measurement", "measurement_end"}:
+            continue
+        if row.get("crosses_phase_boundary"):
+            previous_outside = {}
+            continue
+        if row.get("identity_mismatch") is not None:
+            failures.append({"condition": "original_target_identity_changed", "sample_index": index,
+                             **row["identity_mismatch"]})
+        if row.get("error") is not None or not allowed:
+            previous_outside = {}
+            continue
+        outside = {}
+        for task in [row.get("process"), *row.get("tasks", ())]:
+            if task is None:
+                continue
+            for part in task["Cpus_allowed_list"].split(","):
+                numbers = [int(value) for value in part.split("-")]
+                if any(cpu not in allowed for cpu in range(numbers[0], numbers[-1] + 1)):
+                    key = (task["id"], task["start_ticks"])
+                    outside[key] = task
+                    break
+        # The process and its leader task are the same identity, not two samples.
+        for key, task in outside.items():
+            previous = previous_outside.get(key)
+            if previous is not None and previous[1] <= row["started_monotonic_s"]:
+                failures.append({"condition": "task_affinity_outside_original_recipe",
+                    "first_sample_index": previous[0], "sample_index": index,
+                    "observations": 2, "task": task, "expected_cpu_list": cpu_list})
+        previous_outside = {key: (index, row["ended_monotonic_s"]) for key in outside}
+    return failures
 
 
 def loader_env(binary: Path) -> dict[str, str]:
