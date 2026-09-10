@@ -482,64 +482,88 @@ class RuntimeAdmission:
             self.store.verify("direct-runtime-evaluation", event)
         return original, outcome, reduction
 
-    @staticmethod
-    def require_control_supplier(anchor):
+    def require_control_supplier(self, anchor):
         if anchor.backend == "gpu":
-            raise rc.RuntimeCalibrationRefused(
-                "GPU positive/historical control supplier not installed; source research remains available; "
-                "CPU IQK controls and their reference band are not GPU evidence")
+            from . import direct_gpu_control
+            direct_gpu_control.require_available(store=self.store,
+                held_claim=self.held_claim, gpu_claim=self.gpu_claim)
 
     def _controls(self, anchor, index, *, reopening=None):
         self.require_control_supplier(anchor)
         owner = self
-        try:
-            from . import direct_historical_control
-        except ImportError as exc:
-            raise rc.RuntimeCalibrationRefused("original historical control runner is not installed") from exc
-        frame, reference = self.calibration(anchor, reopen_only=reopening is not None)
-        solved = frame.reopen(reference)
+        from . import direct_historical_control, direct_gpu_control
         declared = self.statistical.commitment.committed_at
         completed = (reopening if reopening is not None else
                      self.state["attempts"][index].setdefault("controls", {}))
-        historical_reference = completed.get(controls.CONTROL_HISTORICAL_WIN_REPLAY)
-        self._progress(operation="historical_control")
-        historical_replacement = None
-        if reopening is None:
-            attempt = self.state["attempts"][index]
-            historical_replacement = attempt.get("historical_replacement")
-            if historical_reference is not None and self.recovery_reference is not None:
-                original_historical = _read(self.store, direct_historical_control.NAMESPACE,
-                                            historical_reference)
-                if str(original_historical.get("error", "")).startswith("HistoricalLaunchBudgetExhausted:"):
-                    historical_replacement = direct_historical_control.prepare_replacement(
-                        store=self.store, reference=historical_reference, held_claim=self.held_claim,
-                        recovery_reference=self.recovery_reference)
-                    attempt["historical_replacement"] = historical_replacement
-                    self._checkpoint()  # Original predecessor and fresh holder before collection.
-                    historical_reference = None
-        if reopening is not None or index not in self._historical:
-            historical_result = direct_historical_control.run_or_reopen(
-                store=self.store, held_claim=self.held_claim, campaign_id=self.campaign_id,
-                window_index=index, reference=historical_reference,
-                deadline_monotonic_s=self.deadline_monotonic_s,
-                **({"replacement": historical_replacement} if historical_reference is None
-                   and historical_replacement is not None else {}))
+        gpu_observations = None
+        if anchor.backend == "gpu":
+            retained = completed.get(controls.CONTROL_HISTORICAL_WIN_REPLAY)
+            if reopening is None and retained is not None:
+                previous = _read(self.store, direct_gpu_control.NAMESPACE, retained)
+                if previous["error"] is not None:
+                    retained = None  # Continue original checkpoint, never replay a failed setup as success.
+            historical, gpu_observations, historical_ref = direct_gpu_control.run_or_reopen(
+                store=self.store, held_claim=self.held_claim, gpu_claim=self.gpu_claim,
+                campaign_id=self.campaign_id, window_index=index, reference=retained,
+                deadline_monotonic_s=self.deadline_monotonic_s, statistical=self.statistical,
+                recovery_reference=self.recovery_reference)
+            historical_observation = gpu_observations[controls.CONTROL_HISTORICAL_WIN_REPLAY]
             if reopening is None:
-                self._historical[index] = historical_result
+                for control_id in gpu_observations:
+                    completed[control_id] = historical_ref.to_dict()
+                self._checkpoint()
+                reason = historical_observation.could_not_run_reason
+                if reason:
+                    if reason.startswith("RuntimeLaunchBudgetExhausted:"):
+                        raise rc.RuntimeLaunchBudgetExhausted(reason)
+                    raise rc.RuntimeCalibrationRefused(reason)
         else:
-            historical_result = self._historical[index]
-        historical, historical_observation, historical_ref = historical_result
-        if reopening is None:
-            completed[controls.CONTROL_HISTORICAL_WIN_REPLAY] = historical_ref.to_dict()
-            self._checkpoint()
-            if str(historical_observation.could_not_run_reason).startswith("HistoricalLaunchBudgetExhausted:"):
-                raise rc.RuntimeLaunchBudgetExhausted(historical_observation.could_not_run_reason)
+            frame, reference = self.calibration(anchor, reopen_only=reopening is not None)
+            solved = frame.reopen(reference)
+            historical_reference = completed.get(controls.CONTROL_HISTORICAL_WIN_REPLAY)
+            self._progress(operation="historical_control")
+            historical_replacement = None
+            if reopening is None:
+                attempt = self.state["attempts"][index]
+                historical_replacement = attempt.get("historical_replacement")
+                if historical_reference is not None and self.recovery_reference is not None:
+                    original_historical = _read(self.store, direct_historical_control.NAMESPACE,
+                                                historical_reference)
+                    if str(original_historical.get("error", "")).startswith("HistoricalLaunchBudgetExhausted:"):
+                        historical_replacement = direct_historical_control.prepare_replacement(
+                            store=self.store, reference=historical_reference, held_claim=self.held_claim,
+                            recovery_reference=self.recovery_reference)
+                        attempt["historical_replacement"] = historical_replacement
+                        self._checkpoint()  # Original predecessor and fresh holder before collection.
+                        historical_reference = None
+            if reopening is not None or index not in self._historical:
+                historical_result = direct_historical_control.run_or_reopen(
+                    store=self.store, held_claim=self.held_claim, campaign_id=self.campaign_id,
+                    window_index=index, reference=historical_reference,
+                    deadline_monotonic_s=self.deadline_monotonic_s,
+                    **({"replacement": historical_replacement} if historical_reference is None
+                       and historical_replacement is not None else {}))
+                if reopening is None:
+                    self._historical[index] = historical_result
+            else:
+                historical_result = self._historical[index]
+            historical, historical_observation, historical_ref = historical_result
+            if reopening is None:
+                completed[controls.CONTROL_HISTORICAL_WIN_REPLAY] = historical_ref.to_dict()
+                self._checkpoint()
+                if str(historical_observation.could_not_run_reason).startswith("HistoricalLaunchBudgetExhausted:"):
+                    raise rc.RuntimeLaunchBudgetExhausted(historical_observation.could_not_run_reason)
+        if anchor.backend == "gpu":
+            frame, reference = self.calibration(anchor, reopen_only=reopening is not None)
+            solved = frame.reopen(reference)
         bundle = controls.resolve_control_bundle(pinned_definitions_digest=controls.CONTROL_DEFINITIONS_DIGEST,
             aa_cadence=controls.AACadence(1, 3600, declared),
             seed_rotation=controls.SeedRotationSchedule(1, declared),
             historical_win_replays=() if historical.declaration is None else (historical.declaration,),
             source_label="direct original runtime controls")
         originals = {controls.CONTROL_HISTORICAL_WIN_REPLAY: historical_ref.to_dict()}
+        if gpu_observations is not None:
+            originals[controls.CONTROL_POSITIVE] = historical_ref.to_dict()
         # Cycle-breaking carrier only, as in execution.live_controls. Never put
         # this panel in a result, selected recipe, or candidate evaluation.
         provisional = schemas.Check(schemas.PASS, ("internal control-evaluation bootstrap only",))
@@ -550,6 +574,8 @@ class RuntimeAdmission:
             def run_control(self, definition, context):
                 if definition.control_id == controls.CONTROL_HISTORICAL_WIN_REPLAY:
                     return historical_observation
+                if gpu_observations is not None and definition.control_id == controls.CONTROL_POSITIVE:
+                    return gpu_observations[controls.CONTROL_POSITIVE]
                 owner._progress(operation=definition.control_id)
                 pairs = {controls.CONTROL_POSITIVE: lambda: rc.positive_control_pair(anchor),
                     controls.CONTROL_NEUTRAL: lambda: frame.pairs["neutral"],
@@ -567,10 +593,10 @@ class RuntimeAdmission:
                 return controls.ControlObservation(definition.control_id, True, outcome.verdict,
                     abs_effects=tuple(abs(value) for value in reduction.block_effects), evidence_ref=_ref(ref))
         harness = controls.ControlHarness(bundle=bundle, runner=Runner())
-        context = controls.ControlContext(self.campaign_id, "llama_cpu", "decode", "serving",
+        context = controls.ControlContext(self.campaign_id, "llama_" + anchor.backend, "decode", "serving",
             self.scope + ":" + str(index), historical, controls.neutral_dispersion_check(solved), solved.outputs)
         observations = harness.run_all(run_context=controls.ControlRunContext(self.campaign_id,
-            "llama_cpu", "decode", "serving", context.window_id, "T1", "derived by harness",
+            "llama_" + anchor.backend, "decode", "serving", context.window_id, "T1", "derived by harness",
             _anchor(anchor, self.source_commit), historical.declaration), historical=historical,
             campaign_seed=self.statistical.campaign_seed, windows_completed=index)
         result = harness.evaluate(observations=observations, context=context,

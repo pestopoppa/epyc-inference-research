@@ -146,8 +146,13 @@ def test_gpu_calibration_actual_http_keeps_both_original_claims_and_device_trace
 
 
 def test_missing_gpu_control_supplier_cannot_launch_cpu_controls_or_calibration(tmp_path, monkeypatch):
+    from . import direct_gpu_control
     pair, _, _ = gpu_pair(tmp_path)
     owner = ra.RuntimeAdmission.__new__(ra.RuntimeAdmission)
+    owner.store = owner.held_claim = owner.gpu_claim = None
+    def unavailable(**kwargs):
+        raise rc.RuntimeCalibrationRefused("GPU positive/historical fixture unavailable")
+    monkeypatch.setattr(direct_gpu_control, "require_available", unavailable)
     monkeypatch.setattr(ra.RuntimeAdmission, "calibration", lambda *a, **k: pytest.fail("calibration spent"))
     with pytest.raises(rc.RuntimeCalibrationRefused, match="GPU positive/historical"):
         owner._controls(pair.anchor, 0)
@@ -243,7 +248,7 @@ def test_actual_gpu_main_runtime_observation_preserves_source_and_skips_unavaila
         assert len(proposed) == 1 and len(observed) == 4, body["iterations"]
         assert not builds
         assert run._git(fixture.repo, "rev-parse", "HEAD") == before
-        assert "runtime calibration not started: GPU positive/historical" in output
+        assert "runtime calibration not started:" in output
         assert body["runtime_preparation"]["status"] == "observed_not_admitted"
         assert body["iterations"][0]["status"] == "runtime_observed"
         assert body["iterations"][0]["comparison"]["decisive"] is None
