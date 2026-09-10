@@ -29,8 +29,10 @@ _CHANGING_FLAGS = frozenset({"--out", "--iterations", "--resume-run", "--anchor-
                             "--scheduler-selection", "--dry-run", "--cpu-screen-scope",
                             "--cpu-confirm-from", "--source-anchor-continuation",
                             "--source-anchor-sha256", "--runtime-recipe-reference",
-                            "--runtime-recovery-reference", "--validate-source-continuation"})
-_BOOLEAN_FLAGS = frozenset({"--dry-run", "--validate-source-continuation"})
+                            "--runtime-recovery-reference", "--validate-source-continuation",
+                            "--validate-source-loo"})
+_BOOLEAN_FLAGS = frozenset({"--dry-run", "--validate-source-continuation",
+                            "--validate-source-loo"})
 _CONTINUATION_FIELDS = {"schema", "terminal", "input_argv", "input_argv_sha256", "binding",
                         "worktree", "branch", "model", "selected_target", "current_anchor", "cor_anchor",
                         "iterations_requested", "iterations_completed", "outcome_counts", "result_file"}
@@ -39,6 +41,62 @@ _CONTINUATION_FIELDS_V2 = _CONTINUATION_FIELDS | {"held_claim_evidence"}
 
 class SerialRefused(ValueError):
     pass
+
+
+def _source_loo_result(value, *, target=None, source_commit=None):
+    if not isinstance(value, dict) or set(value) != {"loo", "rebaseline"} \
+            or not isinstance(value["loo"], list) or not value["loo"]:
+        raise SerialRefused("source LOO result is malformed")
+    references = [*value["loo"], value["rebaseline"]]
+    if references[-1] is None:
+        raise SerialRefused("source LOO result lacks the required rebaseline")
+    for index, reference in enumerate(references):
+        if (not isinstance(reference, dict)
+                or set(reference) != {"path", "sha256", "disposition"}
+                or not isinstance(reference["path"], str)
+                or not Path(reference["path"]).is_absolute()
+                or not isinstance(reference["sha256"], str)
+                or len(reference["sha256"]) != 64
+                or any(char not in "0123456789abcdef"
+                       for char in reference["sha256"])
+                or reference["disposition"] not in {
+                    "supports_keep", "supports_removal", "neutral", "inconclusive",
+                    "passed", "failed", "pending"}):
+            raise SerialRefused("source LOO reference is malformed")
+        body, sha = _json(Path(reference["path"]), limit=16 * 1024 * 1024)
+        expected_operation = "rebaseline" if index == len(references) - 1 else "loo"
+        if (not isinstance(body, dict) or sha != reference["sha256"]
+                or body.get("operation") != expected_operation
+                or body.get("disposition") != reference["disposition"]
+                or body.get("deletion_authorized") is not False
+                or (target is not None and body.get("target") != target)
+                or (source_commit is not None
+                    and body.get("assembled_commit") != source_commit)):
+            raise SerialRefused("source LOO retained row changed")
+    return json.loads(json.dumps(value))
+
+
+def _source_loo_disposition(value):
+    checked = _source_loo_result(value)
+    dispositions = [reference["disposition"] for reference in checked["loo"]]
+    dispositions.append(checked["rebaseline"]["disposition"])
+    return ("pending" if any(item in {"inconclusive", "pending"}
+                             for item in dispositions) else
+            "failed" if "failed" in dispositions else "passed")
+
+
+def _source_loo_entry(value):
+    if (not isinstance(value, dict)
+            or set(value) != {"result", "disposition", "attempts",
+                              "retry_after_search_count"}
+            or type(value["attempts"]) is not int or value["attempts"] < 1
+            or type(value["retry_after_search_count"]) is not int
+            or value["retry_after_search_count"] < 0):
+        raise SerialRefused("source LOO attempt state is malformed")
+    result = _source_loo_result(value["result"])
+    if value["disposition"] != _source_loo_disposition(result):
+        raise SerialRefused("source LOO attempt disposition changed")
+    return value
 
 
 def _digest(value) -> str:
@@ -323,7 +381,7 @@ def continuation(*, argv, binding, terminal, worktree, branch, model, selected_t
                  cor_build=None, cor_commit=None, held_claim_evidence=None, cpu_screen=None,
                  runtime_recipe_reference=None, experimental_source_keeps=None,
                  source_validation=None, source_lineage_keeps=None,
-                 last_outcome_reference=None) -> dict:
+                 last_outcome_reference=None, source_loo=None) -> dict:
     counts = {}
     for outcome in outcomes:
         counts[outcome.status] = counts.get(outcome.status, 0) + 1
@@ -366,6 +424,12 @@ def continuation(*, argv, binding, terminal, worktree, branch, model, selected_t
         if validation_body["target"] != selected_target:
             raise SerialRefused("whole-source validation differs from continuation")
         row["source_validation"] = dict(source_validation)
+    if source_loo is not None:
+        if source_validation is None:
+            raise SerialRefused("source LOO lacks its original target validation")
+        row["source_loo"] = _source_loo_result(
+            source_loo, target=selected_target,
+            source_commit=validation_body["source_commit"])
     if source_lineage_keeps:
         from . import surface_fold
         refs = list(source_lineage_keeps)
@@ -402,6 +466,8 @@ def load_completed(path: Path, *, expected_argv=None, expected_binding=None):
         expected_fields = expected_fields | {"source_lineage_keeps"}
     if isinstance(row, dict) and "last_outcome_reference" in row:
         expected_fields = expected_fields | {"last_outcome_reference"}
+    if isinstance(row, dict) and "source_loo" in row:
+        expected_fields = expected_fields | {"source_loo"}
     if not isinstance(row, dict) or set(row) != expected_fields \
             or row["schema"] not in {CONTINUATION_SCHEMA, CONTINUATION_SCHEMA_V2} \
             or row["terminal"] not in {"complete", "stopped"}:
@@ -444,6 +510,10 @@ def load_completed(path: Path, *, expected_argv=None, expected_binding=None):
         checked = validation.reopen_reference(row["source_validation"])
         if checked["target"] != row["selected_target"]:
             raise SerialRefused("whole-source validation differs from original child identity")
+    if "source_loo" in row:
+        row["source_loo"] = _source_loo_result(
+            row["source_loo"], target=row["selected_target"],
+            source_commit=checked["source_commit"])
     if "source_lineage_keeps" in row:
         from . import surface_fold
         refs = row["source_lineage_keeps"]
@@ -921,6 +991,19 @@ def _remember_source_validation(state, body, target, index, target_count):
 def _record_completed_stage(state, body, target, index, target_count):
     if body.get("source_validation") is not None:
         _remember_source_validation(state, body, target, index, target_count)
+        if body.get("source_loo") is not None:
+            from . import surface_validation
+            validation = surface_validation.reopen_reference(body["source_validation"])
+            subject = _validation_subject(state, target, index, validation["source_commit"])
+            result = _source_loo_result(body["source_loo"])
+            prior = state["source_loo"].get(subject)
+            attempts = (_source_loo_entry(prior)["attempts"] if prior is not None else 0) + 1
+            disposition = _source_loo_disposition(result)
+            state["source_loo"][subject] = {
+                "result": result, "disposition": disposition, "attempts": attempts,
+                "retry_after_search_count": (
+                    state["source_search_counts"].get(str(index), 0) + 1
+                    if disposition == "pending" else 0)}
     else:
         key = str(index)
         state["source_search_counts"][key] = state["source_search_counts"].get(key, 0) + 1
@@ -1008,12 +1091,30 @@ def _required_source_validation(state, targets):
     dispositions = {row["disposition"] for row in rows}
     disposition = ("pending" if missing or "pending" in dispositions else
                    "failed" if "failed" in dispositions else "passed")
+    loo_rows = []
+    for row in rows:
+        entry = state.get("source_loo", {}).get(row["subject"])
+        if entry is not None:
+            entry = _source_loo_entry(entry)
+            checked = _source_loo_result(entry["result"])
+            outcomes = [reference["disposition"] for reference in checked["loo"]]
+            outcomes.append(checked["rebaseline"]["disposition"])
+            loo_rows.append({"selected_id": row["selected_id"],
+                             "subject": row["subject"], "result": checked,
+                             "dispositions": outcomes})
+    loo_dispositions = [item for row in loo_rows for item in row["dispositions"]]
+    loo_disposition = ("pending" if disposition != "passed"
+                       or len(loo_rows) != len(rows)
+                       or any(item in {"inconclusive", "pending"}
+                              for item in loo_dispositions) else
+                       "failed" if "failed" in loo_dispositions else "passed")
     body = {"schema": "epyc.autokernel.required_source_validation.v1",
             "source_reference": dict(source_reference), "source_commit": commit,
             "required_target_ids": [identity["selected_id"]
                                     for _, _, identity in required],
             "intended_target_id": intended, "rows": rows,
-            "missing_target_ids": missing, "disposition": disposition}
+            "missing_target_ids": missing, "disposition": disposition,
+            "loo_rows": loo_rows, "loo_disposition": loo_disposition}
     body["aggregate_digest"] = _digest(body)
     return body
 
@@ -1022,9 +1123,29 @@ def _refresh_required_source_validation(state, targets):
     state["required_source_validation"] = _required_source_validation(state, targets)
 
 
+def _pending_source_loo(state, targets):
+    aggregate = state.get("required_source_validation")
+    if not isinstance(aggregate, dict) or aggregate.get("disposition") != "passed":
+        return {}
+    by_id = {option(target, "--target-id"): index for index, target in enumerate(targets)}
+    pending = {}
+    for row in aggregate["rows"]:
+        subject = row["subject"]
+        index = by_id[row["selected_id"]]
+        entry = state["source_loo"].get(subject)
+        if entry is not None:
+            entry = _source_loo_entry(entry)
+        search_count = state["source_search_counts"].get(str(index), 0)
+        if (entry is None or (entry.get("disposition") == "pending"
+                              and search_count >= entry.get(
+                                  "retry_after_search_count", 0))):
+            pending[index] = subject
+    return pending
+
+
 def _batch_argv(original, prior, batch_iterations, directory, *, scheduler_selection=None,
                 scope_preview=None, source_prior=None, recovery_reference=None,
-                validate_source=False):
+                validate_source=False, validate_loo=False):
     child_argv = list(original)
     prior_body = None
     if prior is not None:
@@ -1070,6 +1191,8 @@ def _batch_argv(original, prior, batch_iterations, directory, *, scheduler_selec
                            "--source-anchor-sha256", source_sha]
         if validate_source:
             child_argv.append("--validate-source-continuation")
+        if validate_loo:
+            child_argv.append("--validate-source-loo")
     # Prospective common-scope selection remains inside these original child
     # arguments. Scheduler selection/claims must agree before this child launches.
     from . import cpu_screen
@@ -1310,6 +1433,7 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                  "active": None, "last_results": {}, "source_results": {},
                  "source_validations": {},
                  "required_source_validation": None,
+                 "source_loo": {},
                  "source_search_counts": {},
                  "failed_targets": {}}
         if scheduler_manifest is not None:
@@ -1320,6 +1444,7 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
     state.setdefault("runtime_recovery", {})
     state.setdefault("source_validations", {})
     state.setdefault("required_source_validation", None)
+    state.setdefault("source_loo", {})
     state.setdefault("source_search_counts", {})
     instruments = {option(row, "--target-id"): option(row, "--serving-instrument", "legacy_v1")
                    for row in targets}
@@ -1411,6 +1536,10 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
             recovered_active = dict(state["active"])
             recovered = _reconcile_completed(root, state, targets, batch_iterations)
             recovered_dir = root / "batches" / f"batch-{recovered['batch_number']:06d}"
+            recovered_validations = (_pending_source_validations(state, targets)
+                                     if scheduler_manifest is not None else {})
+            recovered_loo = (_pending_source_loo(state, targets)
+                             if scheduler_manifest is not None else {})
             expected_recovered_argv = _batch_argv(
                 targets[recovered["target_index"]],
                 state["last_results"].get(str(recovered["target_index"])),
@@ -1418,9 +1547,9 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                 recovery_reference=state["runtime_recovery"].get(str(recovered["target_index"])),
                 source_prior=_source_result(
                     state, targets[recovered["target_index"]]),
-                validate_source=(scheduler_manifest is not None and
-                                 recovered["target_index"] in
-                                 _pending_source_validations(state, targets)),
+                validate_source=(recovered["target_index"] in recovered_validations
+                                 or recovered["target_index"] in recovered_loo),
+                validate_loo=recovered["target_index"] in recovered_loo,
                 scheduler_selection=(recovered_dir / "scheduler-selection.json"
                                      if scheduler_manifest is not None else None))
             if recovered["result"] is None:
@@ -1472,6 +1601,8 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
             previews = None
             validation_targets = (_pending_source_validations(state, targets)
                                   if scheduler_manifest is not None else {})
+            loo_targets = (_pending_source_loo(state, targets)
+                           if scheduler_manifest is not None else {})
             if scheduler_manifest is not None:
                 from . import cpu_screen, scheduling, serial_scheduling
                 available = tuple((i, target) for i, target in enumerate(targets)
@@ -1486,7 +1617,8 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                         continue
                     preview = ({"scope": "full", "candidate": None,
                                 "reason": "whole-source validation uses the full enrolled target"}
-                               if i in validation_targets else cpu_screen.preview_batch(
+                               if i in validation_targets or i in loo_targets
+                               else cpu_screen.preview_batch(
                                    target, state["last_results"].get(str(i)),
                                    batch_iterations=batch_iterations))
                     recovery_ref = state["runtime_recovery"].get(str(i))
@@ -1520,7 +1652,8 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                     tuple(option(target, "--target-id") for _i, target in available),
                     now=time.time(), stage_number=number, scope_previews=previews,
                     validation_ids=frozenset(option(target, "--target-id")
-                        for i, target in available if i in validation_targets),
+                        for i, target in available
+                        if i in validation_targets or i in loo_targets),
                     duration_forecasts=_cost_forecasts(
                         state, scheduler_manifest, source_state, available, previews))
                 if available_index < 0:
@@ -1553,7 +1686,10 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                                                     if previews is not None else None),
                                      source_prior=_source_result(state, original),
                                      validate_source=(scheduler_manifest is not None
-                                                      and index in validation_targets))
+                                                      and (index in validation_targets
+                                                           or index in loo_targets)),
+                                     validate_loo=(scheduler_manifest is not None
+                                                   and index in loo_targets))
             expected_binding = input_binding(child_argv)
             active = {"target_index": index, "selected_id": option(original, "--target-id"),
                       "store": option(original, "--store"), "batch_dir": str(directory),

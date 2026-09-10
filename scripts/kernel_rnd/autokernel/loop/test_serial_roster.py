@@ -149,7 +149,7 @@ def test_generated_roster_drives_actual_children_and_completed_restart(tmp_path,
     assert len((state / "seen.jsonl").read_text().splitlines()) == 4
 
 
-def test_multiple_cpu_targets_serialize_one_owned_source_with_latest_anchor(
+def test_multiple_cpu_targets_serialize_one_owned_source_without_fabricating_shared_keep(
         tmp_path, monkeypatch):
     _, owners, argv = _inputs(tmp_path, backends=("cpu", "cpu"))
     owners["cpu-1"]["worktree"] = owners["cpu-0"]["worktree"]
@@ -164,17 +164,15 @@ def test_multiple_cpu_targets_serialize_one_owned_source_with_latest_anchor(
         tmp_path / "router" / "seen.jsonl").read_text().splitlines()]
     assert len(seen) == 4
     for number, row in enumerate(seen[1:], start=1):
-        # Cost-informed selection need not alternate seed targets. Whichever
-        # target wins must consume the latest original shared-source result.
+        # Cost-informed selection need not alternate seed targets. With only
+        # measured nulls, the selected target resumes its own latest result;
+        # no cross-target source continuation may be fabricated without a keep.
         reference = (sr.option(row, "--source-anchor-continuation")
                      or sr.option(row, "--resume-run"))
         assert reference.endswith(f"batch-{number - 1:06d}/loop-continuation.json")
-    targets, _, _ = _build(argv)
-    other = next(row for row in targets if sr.option(row, "--target-id") != sr.option(seen[-1], "--target-id"))
     state = json.loads((tmp_path / "router/serial-state.json").read_text())
-    latest = state["source_results"][sr._source_owner_key(other)]
-    forwarded = sr._batch_argv(other, None, 1, tmp_path / "next", source_prior=latest)
-    assert sr.option(forwarded, "--source-anchor-continuation") == latest["path"]
+    assert state["source_results"] == {}
+    assert all(sr.option(row, "--source-anchor-continuation") is None for row in seen)
 
 
 def test_identical_owned_aliases_schedule_once_and_missing_ownership_is_not_success(tmp_path):

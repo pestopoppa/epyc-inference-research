@@ -133,13 +133,12 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None, s
             if retained_instruments is not None:
                 instrument = retained_instruments.get(alias, serving.LEGACY_INSTRUMENT)
             else:
-                requests = prompts.requests(tuple(row.prompt_id for row in prompts.prompts), launch.template)
-                # A corrupt/mismatched original floor is NOT absence and never
-                # authorizes migration. The owning floor reader still refuses it.
-                legacy = serving.load_floor(Path(sr.option(argv, "--store")), launch.template,
-                                             frozen_requests=requests)
-                instrument = (serving.LEGACY_INSTRUMENT if legacy.floor_pct is not None
-                              else serving.MATCHED_INSTRUMENT)
+                # A fresh unified CPU campaign always uses the session-paired
+                # instrument. An identity-matching legacy floor proves only the
+                # declared recipe/request, not a valid quiet lifecycle; it must
+                # not select the new campaign's statistical contract. Existing
+                # serial state remains pinned above for deterministic restart.
+                instrument = serving.MATCHED_INSTRUMENT
             if instrument == serving.MATCHED_INSTRUMENT:
                 argv += ["--serving-instrument", instrument]
         if branch != champion.CANONICAL_BRANCH:
