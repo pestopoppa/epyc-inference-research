@@ -19,6 +19,7 @@ Two rules carry everything here:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from contextlib import nullcontext
 import json
 from pathlib import Path
 import random
@@ -205,7 +206,8 @@ KILL_BACKOFF_S = (5.0, 20.0, 60.0)
 
 
 def run_once(binary: Path, model: Path, *, pp: int, tg: int, ubatch: int | None = None,
-             reps: int = 9, timeout_s: int = 3600, sleep=time.sleep) -> tuple[float, dict]:
+             reps: int = 9, timeout_s: int = 3600, sleep=time.sleep,
+             capture=None) -> tuple[float, dict]:
     """One llama-bench invocation with residency proven while it runs.
 
     Retries an EXTERNAL kill, because losing a whole run to a memory-pressure reaper
@@ -221,9 +223,13 @@ def run_once(binary: Path, model: Path, *, pp: int, tg: int, ubatch: int | None 
             "-r", str(reps), "-ngl", "99", "-fa", "1", "-o", "json"
             ] + (["-b", str(ubatch), "-ub", str(ubatch)] if ubatch else [])
     for attempt in range(KILL_RETRIES + 1):
-        with residency.Sampler() as sampler:
-            done = subprocess.run(argv, capture_output=True, text=True,
-                                  timeout=timeout_s, env=residency.loader_env(binary))
+        env = residency.loader_env(binary)
+        with (nullcontext() if capture is None else capture.invocation(argv, env, attempt)):
+            with residency.Sampler() as sampler:
+                done = subprocess.run(argv, capture_output=True, text=True,
+                                      timeout=timeout_s, env=env)
+            if capture is not None:
+                capture.completed(done, sampler.proof)
         if done.returncode in EXTERNAL_KILL_CODES and attempt < KILL_RETRIES:
             sleep(KILL_BACKOFF_S[min(attempt, len(KILL_BACKOFF_S) - 1)])
             continue
