@@ -37,13 +37,35 @@ def snapshot(config, cpus, *, census, marker):
     return original.body()
 
 
-def boundary(config, held, *, marker):
+def boundary(config, held, *, marker, gpu_claim=None):
     cpus = tuple(sorted(parse_cpu_list(held["cpu_list"])))
     raw = snapshot(config, cpus, census=True, marker=marker)
     result = sw.captured_preflight(raw, self_pid=os.getpid(), scope=preflight.PreflightScope(
         label="original direct CPU serving window", cpu_regions=frozenset(held["regions"]),
         protocol_id="P-AK-SEARCH-1"))
-    return {"snapshot": raw, "preflight": result.to_dict(), "claim": held.observe()}
+    return {"snapshot": raw, "preflight": result.to_dict(), "claim": held.observe(),
+            **({"gpu_claim": gpu_claim.observe()} if gpu_claim is not None else {})}
+
+
+def validate_gpu_claim(cpu_claim, gpu_claim, recipe):
+    from .claim import HeldCpuClaim, DEVICE_ID
+    if recipe.backend == "cpu":
+        if gpu_claim is not None:
+            raise ValueError("CPU runtime cannot borrow a GPU context")
+        return
+    if (type(cpu_claim) is not HeldCpuClaim or cpu_claim.get("device_id") != "cpu"
+            or type(gpu_claim) is not HeldCpuClaim or gpu_claim.get("device_id") != DEVICE_ID
+            or recipe.template.device != "ROCm0"):
+        raise ValueError("GPU runtime requires its original CPU-host and ROCm0 device contexts")
+    if cpu_claim._domain != gpu_claim._domain:
+        raise ValueError("CPU-host and GPU contexts belong to different original owners")
+
+
+def same_claim(opened, closed):
+    return (opened["status"] == closed["status"] == "held"
+            and opened["owner_pid"] == closed["owner_pid"]
+            and [(r["path"], r["device"], r["inode"]) for r in opened["locks"]]
+            == [(r["path"], r["device"], r["inode"]) for r in closed["locks"]])
 
 
 def artifacts(pair):
@@ -205,6 +227,92 @@ class DuringWork:
             "cpu_lifecycle": self.lifecycle.observation}
 
 
+class GpuDuringWork(DuringWork):
+    """The existing numeric GPU sampler, bounded to the original request phase."""
+
+    def __init__(self, config, recipe):
+        super().__init__(config, recipe)
+        from ..execution.device_sampler import RocmSmiSampler
+        self.device_sampler = RocmSmiSampler(interval_s=config.limits.cadence_s)
+        self.device_session = None
+        self.device_receipt = None
+        self.device_started_monotonic = self.device_ended_monotonic = None
+        self.device_error = None
+        self.device_stopped = False
+
+    def phase(self, phase):
+        if phase == "measurement" and self.device_session is None:
+            try:
+                self.device_session = self.device_sampler.start()
+                self.device_started_monotonic = self.device_session._started_mono
+            except Exception as exc:
+                self.device_error = f"{type(exc).__name__}: {exc}"
+        elif phase != "measurement" and self.device_session is not None and self.device_receipt is None:
+            self._stop_device()
+        super().phase(phase)
+
+    def _stop_device(self):
+        if self.device_session is None or self.device_stopped:
+            return
+        self.device_stopped = True
+        try:
+            receipt = self.device_session.stop()
+            if len(receipt.samples) > self.config.limits.max_samples:
+                raise ValueError("original GPU sample capacity exceeded")
+            self.device_receipt = receipt.to_dict()
+            self.device_ended_monotonic = self.device_started_monotonic + receipt.duration_s
+        except Exception as exc:
+            self.device_error = f"{type(exc).__name__}: {exc}"
+
+    def finish(self):
+        if self.device_receipt is None:
+            self._stop_device()
+        super().finish()
+
+    @property
+    def shutdown_resolved(self):
+        worker = None if self.device_session is None else self.device_session._thread
+        return super().shutdown_resolved and (worker is None or not worker.is_alive())
+
+    def body(self):
+        return {**super().body(), "gpu_device": {
+            "receipt": self.device_receipt, "error": self.device_error,
+            "started_monotonic_s": self.device_started_monotonic,
+            "ended_monotonic_s": self.device_ended_monotonic}}
+
+
+def gpu_device_state(body, responses):
+    """Reopen numeric native samples; no clock or residency grades are invented."""
+    from ..execution import device_sampler as ds
+    from ..evaluator import devices
+    raw = body["gpu_device"]
+    if raw["error"] is not None or not isinstance(raw["receipt"], dict):
+        raise ValueError("original GPU device capture unavailable: " + str(raw["error"]))
+    row = raw["receipt"]
+    receipt = ds.DeviceSamplingReceipt(**{key: row[key] for key in (
+        "sampler_id", "device_id", "source", "started_at", "ended_at", "interval_s", "duration_s")},
+        command=tuple(row["command"]), samples=tuple(ds.TimedDeviceStateSample(
+            sample["offset_s"], devices.DeviceStateSample(**{
+                key: value for key, value in sample.items() if key != "offset_s"})) for sample in row["samples"]))
+    if receipt.to_dict() != row or receipt.device_id != "ROCm0":
+        raise ValueError("original GPU device receipt differs")
+    measured = [row["raw"] for row in responses if row["raw"]["phase"] == "measurement"]
+    if not measured:
+        raise ValueError("original measured GPU request interval absent")
+    start = min(row["started_monotonic_s"] for row in measured)
+    end = max(row["ended_monotonic_s"] for row in measured)
+    if not (raw["started_monotonic_s"] <= start <= end <= raw["ended_monotonic_s"]):
+        raise ValueError("GPU device trace does not enclose original requests")
+    samples = tuple(row.sample for row in receipt.samples
+        if start <= raw["started_monotonic_s"] + row.offset_s <= end)
+    if len(samples) < 2:
+        raise ValueError("fewer than two during-request GPU observations")
+    # Keep the complete raw trace; only samples inside the original HTTP phase
+    # become loaded device evidence. A pre-request idle clock is not throttling.
+    return devices.DeviceState(receipt.device_id, receipt.source, ds.MI210_NOMINAL_SCLK_MHZ,
+        ds.MI210_MIN_SCLK_RATIO, samples, "sha256:" + row["sha256"])
+
+
 def health(body):
     policy = microbench.HostStatePolicy(**body["host_policy"])
     cpus = tuple(body["cpus"])
@@ -236,17 +344,45 @@ def launch_health(body, responses, *, max_gap_s):
         and all(b["started"] - a["ended"] <= max_gap_s for a, b in zip(samples, samples[1:])))
     checks.append(schemas.Check(schemas.PASS if covered else schemas.COULD_NOT_CHECK,
                                ("original during-request host coverage",)))
+    if "gpu_device" in body:
+        try:
+            state = gpu_device_state(body, responses)
+            raw = body["gpu_device"]
+            if not (raw["started_monotonic_s"] <= start <= end <= raw["ended_monotonic_s"]):
+                raise ValueError("GPU device trace does not enclose original requests")
+            offsets = [raw["started_monotonic_s"] + row["offset_s"]
+                for row in raw["receipt"]["samples"]]
+            inside = [value for value in offsets if start <= value <= end]
+            if (len(inside) < 2 or inside[0] - start > max_gap_s or end - inside[-1] > max_gap_s
+                    or any(b - a > max_gap_s for a, b in zip(inside, inside[1:]))):
+                raise ValueError("during-request GPU observations have insufficient coverage or a gap")
+            checks.append(state.check())
+            from ..evaluator.devices import GFX90A_RANKED_DURATION_ADMISSION
+            checks.append(GFX90A_RANKED_DURATION_ADMISSION.check(
+                [int((end - start) * 1_000_000_000)], device_id=state.device_id))
+        except (ValueError, TypeError, KeyError, RuntimeError) as exc:
+            checks.append(schemas.Check(schemas.COULD_NOT_CHECK, (str(exc),)))
     return schemas.Check.worst_of(checks)
 
 
 def source_identity():
     from . import lifecycle_observation as lo
+    from ..execution import device_sampler
+    from ..evaluator import devices
     return ob._freeze({"functions": [lo.callable_identity(function) for function in (
         configuration, snapshot, boundary, artifacts, DuringWork.__init__, DuringWork._collect,
         DirectHeldClaimAdapter.__init__, DirectHeldClaimAdapter.attest,
         DuringWork.start, DuringWork.attach_target, DuringWork.checkpoint,
         DuringWork.note_hook_failure, DuringWork.shutdown_resolved.fget,
         DuringWork.phase, DuringWork.finish, DuringWork.body, health, launch_health,
+        validate_gpu_claim, same_claim, GpuDuringWork.__init__, GpuDuringWork.phase,
+        GpuDuringWork._stop_device, GpuDuringWork.finish, GpuDuringWork.body,
+        GpuDuringWork.shutdown_resolved.fget, gpu_device_state,
+        device_sampler.RocmSmiSampler.__init__, device_sampler.RocmSmiSampler.start,
+        device_sampler.RocmSmiSamplingSession._sample_loop, device_sampler.RocmSmiSamplingSession.stop,
+        device_sampler.AmdgpuHwmonSnapshotRunner.__call__, devices.parse_rocm_smi_snapshot,
         microbench.HostStatePolicy.frequency_verdict)],
+        "gpu_device_sources": {module.__name__: hashlib.sha256(Path(module.__file__).read_bytes()).hexdigest()
+            for module in (device_sampler, devices)},
         "nominal_reference": NOMINAL_REFERENCE, "default_nominal_khz": DEFAULT_NOMINAL_KHZ,
         "snapshot_source": ob._plain(sw.source_identity())})

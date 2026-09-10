@@ -109,8 +109,9 @@ def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
     environment = residency.loader_env(binary)
     if resolved_recipe is not None:
         resolved_recipe.validate_launch(resolved_recipe.template, build_dir, resolved_recipe.port)
-        if backend != "CPU" or resolved_recipe.backend != "cpu":
-            raise ValueError("runtime oracle requires the original CPU recipe")
+        expected = "CPU" if resolved_recipe.backend == "cpu" else resolved_recipe.template.device
+        if backend != expected:
+            raise ValueError("runtime oracle backend differs from the original recipe")
         # This is still the existing op oracle, not an exact-token serving proof.
         # Run it under the actual treatment's loader/env and CPU/NUMA prefix.
         argv = [*resolved_recipe.topology_prefix, *argv]

@@ -47,7 +47,7 @@ def source_identity():
     return {"files": {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in paths},
         "recovery": runtime_recovery.source_identity(),
         "loaded": [lo.callable_identity(function) for function in (
-            _check, _outputs, _window_checks, source_snapshot, DirectGates.run_gates,
+            _check, _outputs, _window_checks, _device_state, source_snapshot, DirectGates.run_gates,
             RuntimeAdmission.compare, RuntimeAdmission._compare_attempt, RuntimeAdmission._observation,
             RuntimeAdmission.calibration, RuntimeAdmission._evaluate_pair,
             RuntimeAdmission._controls, RuntimeAdmission.reopen_admission,
@@ -177,10 +177,17 @@ def _window_checks(window, rows, reduction, panel, anchor, raw_ref):
     same = claims[0]["owner_pid"] == claims[1]["owner_pid"] and [
         (r["path"], r["device"], r["inode"]) for r in claims[0]["locks"]] == [
         (r["path"], r["device"], r["inode"]) for r in claims[1]["locks"]]
+    opened_held, closed_held = claims[0]["status"] == "held", claims[1]["status"] == "held"
+    if window.pair.anchor.backend == "gpu":
+        gpu = opened["gpu_claim"], closed["gpu_claim"]
+        same = same and rw.same_claim(*gpu)
+        opened_held = opened_held and gpu[0]["status"] == "held"
+        closed_held = closed_held and gpu[1]["status"] == "held"
     physical, health = [], []
     for _kind, _index, arm, body, raw in rows:
         facts = body["during_work"]
-        health.append(rw.health(facts))
+        health.append(rw.launch_health(facts, raw, max_gap_s=window.window_config.limits.max_gap_s)
+            if window.pair.anchor.backend == "gpu" else rw.health(facts))
         measurements = [r for r in raw if r["raw"]["phase"] == "measurement"]
         start = min(r["raw"]["started_monotonic_s"] for r in measurements)
         end = max(r["raw"]["ended_monotonic_s"] for r in measurements)
@@ -220,8 +227,8 @@ def _window_checks(window, rows, reduction, panel, anchor, raw_ref):
     source_ok = _check(window.frame["calculation_source"] == rc.calculation_source()
         and window.frame["host_window_source"] == rw.source_identity(), "original loaded calculation/window source")
     return api.WindowAttestations(resource_claim_receipt=raw_ref,
-        resource_claim_open=_check(claims[0]["status"] == "held", "original claim observed at open"),
-        resource_claim_close=_check(claims[1]["status"] == "held", "original claim observed at close"),
+        resource_claim_open=_check(opened_held, "original component claims observed at open"),
+        resource_claim_close=_check(closed_held, "original component claims observed at close"),
         resource_claim_same_holder=_check(same, "same actual holder and physical locks"),
         no_concurrent_inference=schemas.Check.worst_of(preflights), preflight_attestation_ref=raw_ref,
         host_receipt=raw_ref, host_health=schemas.Check.worst_of(health),
@@ -237,12 +244,27 @@ def _window_checks(window, rows, reduction, panel, anchor, raw_ref):
         **reduction.window_checks, **panel)
 
 
+def _device_state(rows, raw_ref):
+    """Evaluator projection of original per-launch traces; raw intervals stay separate."""
+    from ..evaluator.devices import DeviceState
+    states = [rw.gpu_device_state(body["during_work"], raw) for _kind, _index, _arm, body, raw in rows]
+    if not states:
+        raise rc.RuntimeCalibrationRefused("original GPU device traces absent")
+    first = states[0]
+    if any((row.device_id, row.source, row.nominal_sclk_mhz, row.min_sclk_ratio) != (
+            first.device_id, first.source, first.nominal_sclk_mhz, first.min_sclk_ratio) for row in states):
+        raise rc.RuntimeCalibrationRefused("original GPU device traces belong to different instruments")
+    return DeviceState(first.device_id, first.source, first.nominal_sclk_mhz, first.min_sclk_ratio,
+        tuple(sample for row in states for sample in row.samples), raw_ref)
+
+
 class RuntimeAdmission:
     def __init__(self, *, store, held_claim, campaign_id, epoch, original, prompts,
                  statistical, host_state, worktree, source_commit, escalation=None,
-                 deadline_monotonic_s=None, recovery_reference=None, on_progress=None):
+                 deadline_monotonic_s=None, recovery_reference=None, on_progress=None, gpu_claim=None):
         self.recovery_reference = recovery_reference
         self.store, self.held_claim = store, held_claim
+        self.gpu_claim = gpu_claim
         self.deadline_monotonic_s = deadline_monotonic_s
         self._on_progress, self._progress_operation = on_progress, "preparation"
         if type(campaign_id) is not str or not campaign_id.startswith("ak-"):
@@ -298,7 +320,8 @@ class RuntimeAdmission:
                 held_claim=self.held_claim, campaign_id=self.campaign_id, epoch=self.epoch,
                 anchor=anchor, neutral=rc.neutral_material(store=self.store, anchor=anchor),
                 prompts=self.prompts, statistical=self.statistical, host_state=self.host_state,
-                deadline_monotonic_s=self.deadline_monotonic_s, on_progress=self._progress)
+                deadline_monotonic_s=self.deadline_monotonic_s, on_progress=self._progress,
+                **({"gpu_claim": self.gpu_claim} if self.gpu_claim is not None else {}))
         frame = self._frames[anchor.snapshot_digest]
         if reopen_only and frame.solution is None:
             raise rc.RuntimeCalibrationRefused("retained original calibration is incomplete; no replay launch")
@@ -323,7 +346,9 @@ class RuntimeAdmission:
             "schema": "epyc.autokernel.direct_runtime_interruption.v1",
             "scope": self.scope, "state_name": self.state_name, "index": index,
             "candidate_id": attempt["candidate_id"], "pair": attempt["pair"],
-            "holder": runtime_recovery.holder_identity(self.held_claim), "reason": reason}).to_dict()
+            "holder": runtime_recovery.holder_identity(self.held_claim), "reason": reason,
+            **({"gpu_holder": runtime_recovery.holder_identity(self.gpu_claim)}
+               if self.gpu_claim is not None else {})}).to_dict()
 
     def pending_pair(self):
         if self.recovery_reference is None:
@@ -370,7 +395,9 @@ class RuntimeAdmission:
                     operations, source = setup["operations"], StoredArtifact(**setup["source_snapshot"])
                 else:
                     operations = [{"arm": arm, "op": op, "verdict": asdict(gates.op_correctness(
-                        Path(getattr(pair, arm).build_dir), op=op, backend="CPU", resolved_recipe=getattr(pair, arm)))}
+                        Path(getattr(pair, arm).build_dir), op=op,
+                        backend="CPU" if pair.anchor.backend == "cpu" else pair.anchor.template.device,
+                        resolved_recipe=getattr(pair, arm)))}
                         for arm in ("anchor", "candidate") for op in correctness.MANDATORY_BACKEND_OPS]
                     source = source_snapshot(self.worktree, self.source_commit, self.store)
                     setup = self.store.write("direct-runtime-window-setup", {
@@ -431,15 +458,17 @@ class RuntimeAdmission:
         determinism = api.DeterminismReport("not_measured" if count_runs < 2 else
             "bitwise_stable" if len(set(vectors)) == 1 else "bitwise_unstable", count_runs)
         request = api.EvaluationRequest("ake-" + original.sha256, self.campaign_id, candidate_id,
-            "T1", "llama_cpu", "decode", "serving", api.PROTOCOL_VERSIONED_ID,
+            "T1", "llama_" + pair.anchor.backend, "decode", "serving", api.PROTOCOL_VERSIONED_ID,
             api.ArtifactIdentity(source_body["tree_manifest_sha256"], pair.candidate.executable.sha256,
                 rc._digest([row.to_dict() for row in pair.candidate.dsos])), anchor,
             api.EvaluatorIdentity("direct-runtime/v1", rc._digest(source_identity()), _ref(original)),
-            api.ScopeDenominator("partial", (), ("cpu",), len(parse_cpu_list(
+            api.ScopeDenominator("partial", (), ("cpu",) if pair.anchor.backend == "cpu"
+                else (pair.anchor.template.device,), len(parse_cpu_list(
                 pair.anchor.template.cpu_list or self.held_claim["cpu_list"]))),
             rc._digest(window.frame), "single", determinism,
             "aggregate_tok_s", "higher_better", 1, "parameter", "T1", (),
-            rows[-1][3]["ended_at"], self.statistical.controls, window.outputs)
+            rows[-1][3]["ended_at"], self.statistical.controls, window.outputs,
+            device_state=_device_state(rows, _ref(original)) if pair.anchor.backend == "gpu" else None)
         reduction = st.PairedBlockReducer(window.statistics).reduce(request, blocks, raw_samples_ref=_ref(original))
         attestations = _window_checks(window, rows, reduction, panel, anchor, _ref(original))
         runner = DirectGates(rows=rows, operations=operations, raw_ref=_ref(original), original_prompts=self.prompts)
@@ -453,7 +482,15 @@ class RuntimeAdmission:
             self.store.verify("direct-runtime-evaluation", event)
         return original, outcome, reduction
 
+    @staticmethod
+    def require_control_supplier(anchor):
+        if anchor.backend == "gpu":
+            raise rc.RuntimeCalibrationRefused(
+                "GPU positive/historical control supplier not installed; source research remains available; "
+                "CPU IQK controls and their reference band are not GPU evidence")
+
     def _controls(self, anchor, index, *, reopening=None):
+        self.require_control_supplier(anchor)
         owner = self
         try:
             from . import direct_historical_control
@@ -747,7 +784,7 @@ class RuntimeAdmission:
 
 
 def restore_selection(*, store, held_claim, reference, worktree, source_commit, build, prompts,
-                      source_anchor=None):
+                      source_anchor=None, gpu_claim=None):
     """Reopen the original admission, then verify its exact current-build rebind."""
     from .planned_serving import FrozenPromptManifest
     from .serving_preparation import ServingStatisticsDeclaration
@@ -769,7 +806,8 @@ def restore_selection(*, store, held_claim, reference, worktree, source_commit, 
     kwargs["original"] = CanonicalResolvedRecipe.from_dict(kwargs["original"])
     kwargs["prompts"] = FrozenPromptManifest.from_dict(kwargs["prompts"])
     kwargs["statistical"] = ServingStatisticsDeclaration.from_dict(kwargs["statistical"])
-    owner = RuntimeAdmission(store=store, held_claim=held_claim, **kwargs)
+    owner = RuntimeAdmission(store=store, held_claim=held_claim, **kwargs,
+        **({"gpu_claim": gpu_claim} if gpu_claim is not None else {}))
     pair, admitted = owner.reopen_admission(body["admission"])
     if not admitted:
         raise rc.RuntimeCalibrationRefused("runtime continuation original admission is absent")
