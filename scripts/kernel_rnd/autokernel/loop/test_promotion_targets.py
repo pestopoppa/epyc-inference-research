@@ -358,18 +358,5 @@ class TheRunWiringSeams(unittest.TestCase):
         self.assertNotIn("inbox_dir.glob", source)
         self.assertIn("inbox.read_inbox(args.store", source)
 
-    def test_build_champion_forwards_its_targets(self):
-        """`build_champion(dest, targets)` that ignores `targets` and calls
-        `gates.compiles` bare would give every promotion a bench-only anchor while
-        the e2e's fake still records what the closure was HANDED... it does not:
-        the e2e records what `gates.compiles` RECEIVED, so this seam test is the
-        redundant second lock, kept because it is free and names the line."""
-        source = (Path(__file__).resolve().parent / "run.py").read_text()
-        block = source.split("def build_champion(", 1)[1]
-        block = block.split("def ", 1)[0]
-        self.assertIn("targets=targets", block)
-        self.assertIn("gates.DEFAULT_TARGETS", block.split(")", 1)[0])
-
-
 if __name__ == "__main__":
     unittest.main()

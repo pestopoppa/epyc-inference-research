@@ -22,12 +22,12 @@ CONTINUATION_SCHEMA_V2 = "epyc.autokernel.loop_continuation.v2"
 HELD_REFERENCE_SCHEMA = "epyc.autokernel.direct_held_reference.v1"
 SERIAL_SCHEMA = "epyc.autokernel.serial_run.v1"
 _DOCUMENT_FLAGS = ("--resolved-campaign", "--cpu-serving-launch", "--gpu-serving-launch",
-                   "--frozen-prompts", "--serving-recipe")
+                   "--frozen-prompts", "--serving-recipe", "--runtime-recipe-reference")
 _CHANGING_FLAGS = frozenset({"--out", "--iterations", "--resume-run", "--anchor-build",
                             "--cor-build", "--cpu-calibrate-serving", "--gpu-calibrate-serving",
                             "--scheduler-selection", "--dry-run", "--cpu-screen-scope",
                             "--cpu-confirm-from", "--source-anchor-continuation",
-                            "--source-anchor-sha256"})
+                            "--source-anchor-sha256", "--runtime-recipe-reference"})
 _CONTINUATION_FIELDS = {"schema", "terminal", "input_argv", "input_argv_sha256", "binding",
                         "worktree", "branch", "model", "selected_target", "current_anchor", "cor_anchor",
                         "iterations_requested", "iterations_completed", "outcome_counts", "result_file"}
@@ -99,6 +99,19 @@ def input_binding(argv) -> dict:
     return {"argv": _without(argv, _CHANGING_FLAGS), "documents": documents}
 
 
+def resume_binding(argv) -> dict:
+    """Prior-child binding before adding a newly selected runtime recipe."""
+    return input_binding(_without(argv, {"--runtime-recipe-reference"}))
+
+
+def load_resume(path: Path, current_argv):
+    """Reopen a self-bound prior, then compare only stable target inputs."""
+    row, sha = load_completed(path)
+    if resume_binding(row["input_argv"]) != resume_binding(current_argv):
+        raise SerialRefused("result is for different stable resume inputs")
+    return row, sha
+
+
 def _held_reference(value):
     if not isinstance(value, dict) or set(value) != {"schema", "selection_digest", "evidence"} \
             or value.get("schema") != HELD_REFERENCE_SCHEMA:
@@ -118,9 +131,20 @@ def _held_reference(value):
             "evidence": dict(evidence)}
 
 
+def _runtime_recipe_reference(value):
+    if not isinstance(value, dict) or set(value) != {"locator", "sha256", "verified"} \
+            or not isinstance(value["locator"], str) or not value["locator"] \
+            or not isinstance(value["sha256"], str) or len(value["sha256"]) != 64 \
+            or any(char not in "0123456789abcdef" for char in value["sha256"]) \
+            or value["verified"] is not True:
+        raise SerialRefused("runtime recipe reference is malformed")
+    return {"locator": value["locator"], "sha256": value["sha256"], "verified": True}
+
+
 def continuation(*, argv, binding, terminal, worktree, branch, model, selected_target,
                  anchor_build, anchor_commit, iterations_requested, outcomes,
-                 cor_build=None, cor_commit=None, held_claim_evidence=None, cpu_screen=None) -> dict:
+                 cor_build=None, cor_commit=None, held_claim_evidence=None, cpu_screen=None,
+                 runtime_recipe_reference=None) -> dict:
     counts = {}
     for outcome in outcomes:
         counts[outcome.status] = counts.get(outcome.status, 0) + 1
@@ -139,6 +163,9 @@ def continuation(*, argv, binding, terminal, worktree, branch, model, selected_t
     if cpu_screen is not None:
         from .cpu_screen import routing
         row["cpu_screen"] = routing(cpu_screen, argv)
+    if runtime_recipe_reference is not None:
+        row["runtime_recipe_reference"] = _runtime_recipe_reference(
+            runtime_recipe_reference)
     return row
 
 
@@ -152,6 +179,8 @@ def load_completed(path: Path, *, expected_argv=None, expected_binding=None):
                        else _CONTINUATION_FIELDS)
     if isinstance(row, dict) and "cpu_screen" in row:
         expected_fields = expected_fields | {"cpu_screen"}
+    if isinstance(row, dict) and "runtime_recipe_reference" in row:
+        expected_fields = expected_fields | {"runtime_recipe_reference"}
     if not isinstance(row, dict) or set(row) != expected_fields \
             or row["schema"] not in {CONTINUATION_SCHEMA, CONTINUATION_SCHEMA_V2} \
             or row["terminal"] not in {"complete", "stopped"}:
@@ -172,8 +201,13 @@ def load_completed(path: Path, *, expected_argv=None, expected_binding=None):
             raise SerialRefused("pending screen candidate lacks its original completed provisional outcome")
     elif option(argv, "--cpu-screen-scope") or option(argv, "--cpu-confirm-from"):
         raise SerialRefused("CPU screen result omitted its original scope")
+    if "runtime_recipe_reference" in row:
+        row["runtime_recipe_reference"] = _runtime_recipe_reference(
+            row["runtime_recipe_reference"])
     if not isinstance(row["binding"], dict) or set(row["binding"]) != {"argv", "documents"}:
         raise SerialRefused("invalid original input binding")
+    if row["binding"] != input_binding(argv):
+        raise SerialRefused("continuation binding does not match its own original arguments")
     if expected_binding is not None and row["binding"] != expected_binding:
         raise SerialRefused("result workload/input binding differs")
     for key in ("worktree", "model"):
@@ -268,6 +302,7 @@ def _validate_target_args(argv, *, owner_anchor_waiver=False) -> list[str]:
     reserved = {"--out", "--iterations", "--resume-run", "--scheduler-selection", "--dry-run",
                 "--calibrate-surface",
                 "--source-anchor-continuation", "--source-anchor-sha256",
+                "--runtime-recipe-reference",
                 "--allow-unverified-anchor", "--help", "-h"}
     if owner_anchor_waiver:
         reserved.remove("--allow-unverified-anchor")
@@ -486,11 +521,22 @@ def _batch_argv(original, prior, batch_iterations, directory, *, scheduler_selec
                 scope_preview=None, source_prior=None):
     child_argv = list(original)
     if prior is not None:
-        _body, sha = load_completed(Path(prior["path"]), expected_binding=input_binding(original))
+        prior_body, sha = load_resume(Path(prior["path"]), original)
         if sha != prior["sha256"]:
             raise SerialRefused("retained child result changed")
         child_argv = _without(child_argv, {"--cpu-calibrate-serving", "--gpu-calibrate-serving"})
         child_argv += ["--resume-run", prior["path"]]
+        runtime_reference = prior_body.get("runtime_recipe_reference")
+        if runtime_reference is not None:
+            reference_path = Path(directory) / "runtime-recipe-reference.json"
+            raw = json.dumps(runtime_reference, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+            if reference_path.exists():
+                if _read(reference_path, limit=4096) != raw:
+                    raise SerialRefused("retained runtime recipe routing reference changed")
+            else:
+                from . import archive
+                archive._retain_bytes(reference_path, raw)
+            child_argv += ["--runtime-recipe-reference", str(reference_path.resolve())]
     if source_prior is not None and (prior is None or source_prior != prior):
         _source_body, source_sha = load_completed(Path(source_prior["path"]))
         if source_sha != source_prior["sha256"]:
