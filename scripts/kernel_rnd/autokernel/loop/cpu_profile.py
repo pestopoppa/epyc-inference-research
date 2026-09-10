@@ -1,8 +1,9 @@
 """Owned, request-scoped CPU perf observations; no correctness or promotion authority.
 
 The installed producer is a worker, never a grant provider. It can profile only
-the actual serving child launched below itself. The old GLM token/cache workload
-is deliberately not expressible by this v1 adapter.
+the actual serving child launched below itself. The sealed adapter keeps its
+original independent-full-request label; direct loop profiles retain their actual
+v1/v2 requests separately, without manufacturing sealed preparation authority.
 """
 from __future__ import annotations
 
@@ -32,6 +33,9 @@ from . import resolved_recipe as rr, worker_lifecycle as wl
 CONFIG_SCHEMA = "epyc.autokernel.cpu_profile_config.v1"
 CAPTURE_SCHEMA = "epyc.autokernel.cpu_profile_capture.v1"
 SOURCE_SCHEMA = "epyc.autokernel.cpu_profile_source.v1"
+LOOP_PROFILE_SCHEMA = "epyc.autokernel.loop_cpu_profile.v1"
+LOOP_CAPTURE_SCHEMA = "epyc.autokernel.loop_cpu_profile_capture.v1"
+LOOP_MODE = "original_serving_requests_observation"
 MODE = "independent_full_request_v1"
 MECHANISM_ID = "owned-cpu-perf-v1"
 CONFIG_ENV = "EPYC_AUTOKERNEL_CPU_PROFILE_CONFIG"
@@ -54,10 +58,19 @@ LIMITATIONS = ("sampled-period totals are estimated user-cycle attribution, not 
                "counter totals cover their own enable/disable window, not the exact request or sample window; no cross-window IPC",
                "no exact generated-token, MTP, correctness, contention or GPU warrant",
                "no ratified measurement protocol or opportunity is supplied")
+LOOP_BUDGETS = {"max_stage_seconds": 1800, "teardown_seconds": 5,
+                "control_seconds": 30, "reduce_seconds": 120,
+                "max_raw_file_bytes": 128 * 1024**2, "max_total_raw_bytes": 512 * 1024**2,
+                "max_parser_bytes": 64 * 1024**2, "max_rows": 1_000_000,
+                "max_symbols": 4096, "max_metadata_bytes": 16 * 1024**2}
 
 
 class CpuProfileRefused(ValueError):
     pass
+
+
+class CpuProfileCleanupUncertain(CpuProfileRefused):
+    """An owned profiling child was not proven terminal; do not continue a measurement."""
 
 
 def _plain(value):
@@ -214,6 +227,8 @@ def source_identity():
     from . import serving
     root = Path(__file__).resolve().parents[4]
     roles = {"capture_init": CpuProfileCapture.__init__,
+             "capture_initialize": CpuProfileCapture._initialize,
+             "capture_direct": CpuProfileCapture.for_loop.__func__,
              "capture_attach": CpuProfileCapture.attach_target,
              "capture_begin": CpuProfileCapture.begin_round,
              "capture_end": CpuProfileCapture.end_round,
@@ -239,6 +254,10 @@ def source_identity():
              "original_replay": reopen_capture,
              "no_gpu_proof": CpuOnlySampler.proof.fget,
              "run": run_profile_request, "source": source_identity,
+             "loop_profile": profile_loop, "phase_reduction": _reduce_phases,
+             "loop_reopen": reopen_loop_profile,
+             "phase_reopen": _reopen_phases,
+             "loop_claim": _loop_claim,
              "config": CpuProfileConfig.from_dict.__func__,
              "script_reducer": reduce_perf_script, "counter_reducer": reduce_perf_stat,
              "serving": serving._measure_once,
@@ -268,7 +287,8 @@ def source_identity():
                           "target_tid_limit": MAX_TARGET_TIDS, "line_bytes": MAX_LINE_BYTES,
                           "diagnostic_bytes": MAX_DIAGNOSTIC_BYTES, "limitations": list(LIMITATIONS),
                           "request_bytes": ns.MAX_REQUEST_BYTES,
-                          "response_bytes": ns.MAX_RESPONSE_BYTES}}
+                          "response_bytes": ns.MAX_RESPONSE_BYTES,
+                          "loop_mode": LOOP_MODE, "loop_budgets": dict(LOOP_BUDGETS)}}
 
 
 @dataclass(frozen=True)
@@ -281,7 +301,7 @@ class CpuProfileConfig:
             "prompt_manifest", "model_preparation", "profiler", "source_closure",
             "storage", "budgets"}, "CPU profile config")
         if row["schema"] != CONFIG_SCHEMA or row["mode"] != MODE:
-            raise CpuProfileRefused("unsupported profiling mode; exact GLM requires OP-AKU-PROMPT")
+            raise CpuProfileRefused("unsupported sealed profiling mode")
         recipe = rr.resolved_recipe_from_dict(row["resolved_recipe"])
         if recipe.backend != "cpu" or recipe.template.np != 1:
             raise CpuProfileRefused("CPU capture requires exact cpu backend and np=1")
@@ -577,7 +597,35 @@ class CpuProfileCapture:
     def __init__(self, *, config, request, store):
         if type(config) is not CpuProfileConfig or type(store) is not mc.ArtifactStore:
             raise CpuProfileRefused("concrete config/store required")
-        self.config = config.to_dict()
+        self._initialize(config.to_dict(), request, store)
+
+    @classmethod
+    def for_loop(cls, recipe, prompts, *, store, perf_path, timeout_s, server_interpreter=None):
+        if type(store) is not mc.ArtifactStore or cls is not CpuProfileCapture:
+            raise CpuProfileRefused("direct CPU profile requires the original concrete capture/store")
+        recipe = rr.resolved_recipe_from_dict(recipe.to_dict())
+        prompts = ps.FrozenPromptManifest.from_dict(prompts.to_dict())
+        if recipe.backend != "cpu" or recipe.template.np != 1 or len(prompts.prompts) != 1:
+            raise CpuProfileRefused("direct CPU profiling currently supports one original CPU request")
+        prompts.requests(tuple(item.prompt_id for item in prompts.prompts), recipe.template)
+        timeout_s = _number(timeout_s, "profile timeout", positive=True)
+        if timeout_s > LIMITS["max_stage_seconds"]:
+            raise CpuProfileRefused("profile timeout exceeds supported capture bound")
+        perf = _file(Path(perf_path).resolve(), 512 * 1024**2)
+        settings = {"resolved_recipe": recipe.to_dict(), "prompt_manifest": prompts.to_dict(),
+                    "profiler": {"path": perf["path"], "sha256": perf["sha256"],
+                                 "version": None, "server_interpreter": server_interpreter},
+                    "source_closure": source_identity(),
+                    "budgets": {**LOOP_BUDGETS, "max_stage_seconds": timeout_s}}
+        request = {"mode": LOOP_MODE, "execution_digest": recipe.execution_digest,
+                   "prompt_manifest_digest": prompts.digest,
+                   "producer_pid": os.getpid(), "started_monotonic_ns": time.monotonic_ns()}
+        capture = object.__new__(cls)
+        capture._initialize(settings, request, store)
+        return capture
+
+    def _initialize(self, settings, request, store):
+        self.config = _plain(settings)
         self.request = _plain(request)
         self.store = store
         self.budgets = self.config["budgets"]
@@ -593,6 +641,7 @@ class CpuProfileCapture:
         self.active = []
         self.raw_responses = None
         self.failed = None
+        self.cleanup_uncertain = None
         self.finished = False
         self.directory = store.root / ("cpu-raw-" + _digest(request)[:32])
         self.directory.mkdir(mode=0o700)
@@ -616,8 +665,11 @@ class CpuProfileCapture:
                 teardown_seconds=self.budgets["teardown_seconds"])
             stream.flush()
             os.fsync(stream.fileno())
-        _same(_read(path, MAX_DIAGNOSTIC_BYTES).decode().strip(),
-              self.config["profiler"]["version"], "perf reported version")
+        version = _read(path, MAX_DIAGNOSTIC_BYTES).decode().strip()
+        if not version:
+            raise CpuProfileRefused("perf reported no version")
+        if self.config["profiler"]["version"] is not None:
+            _same(version, self.config["profiler"]["version"], "perf reported version")
         return {**result, "artifact": _file(path, MAX_DIAGNOSTIC_BYTES)}
 
     def validate_launch(self, recipe, requests):
@@ -770,8 +822,14 @@ class CpuProfileCapture:
                 failure = failure or exc
                 if process.poll() is None:
                     process.kill()
-                process.wait(timeout=min(5.0, self.budgets["teardown_seconds"]))
+                try:
+                    process.wait(timeout=min(5.0, self.budgets["teardown_seconds"]))
+                except subprocess.TimeoutExpired as exc:
+                    self.cleanup_uncertain = "owned perf child did not terminate"
+                    raise CpuProfileCleanupUncertain(self.cleanup_uncertain) from exc
             finally:
+                if process.returncode is None:
+                    self.cleanup_uncertain = "owned perf child has no terminal wait result"
                 process.stderr.close()
                 for field in ("ctl", "ack"):
                     os.close(item[field])
@@ -830,9 +888,13 @@ class CpuProfileCapture:
             except Exception as exc:
                 failures.append(str(exc))
         if failures:
-            raise CpuProfileRefused("perf cleanup unresolved: " + ";".join(failures))
+            if self.cleanup_uncertain:
+                raise CpuProfileCleanupUncertain(self.cleanup_uncertain)
+            raise CpuProfileRefused("perf cleanup/control failed: " + ";".join(failures))
 
     def finish(self):
+        if self.cleanup_uncertain:
+            raise CpuProfileCleanupUncertain(self.cleanup_uncertain)
         if self.active:
             self.abort("capture did not finish both request rounds")
         self.finished = True
@@ -853,20 +915,28 @@ def reopen_capture(reference, *, store, config, request):
     _same(body["limitations"], list(LIMITATIONS), "capture limitations")
     if [item.get("phase") for item in body["phases"]] != list(PHASES):
         raise CpuProfileRefused("original phase cardinality/order differs")
-    prompts = ps.FrozenPromptManifest.from_dict(expected["prompt_manifest"])
-    recipe = rr.resolved_recipe_from_dict(expected["resolved_recipe"])
-    frozen = prompts.requests(tuple(x.prompt_id for x in prompts.prompts), recipe.template)
     _same(body["model_verification"]["spec"], expected["model_preparation"], "original model preparation")
     model = mp.ScheduledModelPreparation.from_dict(expected["model_preparation"])
     model_raw = body["model_verification"]["manifest_raw"].encode()
     _same(hashlib.sha256(model_raw).hexdigest(), model.inventory_identity["model_manifest_sha256"],
           "original verified model manifest")
+    return _reopen_phases(body, expected)
+
+
+def _reopen_phases(body, expected):
+    """One raw-evidence replay for both original sealed and direct observations."""
+    prompts = ps.FrozenPromptManifest.from_dict(expected["prompt_manifest"])
+    recipe = rr.resolved_recipe_from_dict(expected["resolved_recipe"])
+    frozen = prompts.requests(tuple(x.prompt_id for x in prompts.prompts), recipe.template)
     owner, ancestor, target = (body["processes"][key] for key in ("producer", "ancestor", "server"))
     _same(owner["ppid"], ancestor["pid"], "original worker ancestor")
     _same(target["ppid"], owner["pid"], "original server parent")
     _same(target["container"], owner["container"], "original server container")
-    _same(_read(Path(body["profiler"]["artifact"]["path"]), MAX_DIAGNOSTIC_BYTES).decode().strip(),
-          expected["profiler"]["version"], "original profiler version")
+    reported_version = _read(Path(body["profiler"]["artifact"]["path"]), MAX_DIAGNOSTIC_BYTES).decode().strip()
+    if not reported_version:
+        raise CpuProfileRefused("original profiler version is empty")
+    if expected["profiler"]["version"] is not None:
+        _same(reported_version, expected["profiler"]["version"], "original profiler version")
     version = _file(Path(body["profiler"]["artifact"]["path"]), MAX_DIAGNOSTIC_BYTES)
     _same(version, body["profiler"]["artifact"], "original profiler version artifact")
     total = version["size"]
@@ -938,6 +1008,132 @@ def reopen_capture(reference, *, store, config, request):
     return ob._freeze(body)
 
 
+def _reduce_phases(capture, recipe, frozen, budgets):
+    if capture.failed or not capture.finished or len(capture.phases) != 2 or capture.raw_responses is None:
+        raise CpuProfileRefused("profile capture is incomplete")
+    phase_results = []
+    for phase, response in zip(capture.phases, capture.raw_responses):
+        if response["error"] or response["response_hex"] is None:
+            raise CpuProfileRefused("request response failed")
+        request_raw = bytes.fromhex(response["request_hex"])
+        _same(request_raw, frozen[0][1], "original request bytes")
+        observed_n = _completed_response(bytes.fromhex(response["response_hex"]), recipe.template.n_predict)
+        interval = [response["start"], response["end"]]
+        if not phase["enabled_interval"][0] <= interval[0] <= interval[1] <= phase["enabled_interval"][1]:
+            raise CpuProfileRefused("request not enclosed by perf window")
+        record = next(x["artifact"] for x in phase["tools"] if x["kind"] == "record")
+        counter = next(x["artifact"] for x in phase["tools"] if x["kind"] == "stat")
+        script_path = capture.directory / (phase["phase"] + "-script.txt")
+        parser = capture.script(record, script_path)
+        script_ref = _file(script_path, budgets["max_parser_bytes"])
+        samples = _reduce_artifact(script_ref, kind="samples", arguments={
+            "pid": capture.target["pid"], "tids": phase["tids"], "interval": interval,
+            "max_bytes": budgets["max_parser_bytes"], "max_rows": budgets["max_rows"],
+            "max_symbols": budgets["max_symbols"]})
+        counters = _reduce_artifact(counter, kind="counters",
+            arguments={"max_bytes": MAX_DIAGNOSTIC_BYTES, "max_rows": 16})
+        phase_results.append({**phase, "response": response, "samples": samples,
+            "observed_predicted_n": observed_n, "parser": parser,
+            "counter_scope": {"enable_transition": phase["tools"][1]["controls"][0],
+                "disable_transition": phase["tools"][1]["controls"][1],
+                "scope": "cumulative own enable-to-disable window; not exact request/sample interval"},
+            "counters": counters, "script": script_ref})
+    return phase_results
+
+
+
+def reopen_loop_profile(reference, *, store):
+    """Reopen the original direct record; never create a sealed profile or verifier."""
+    record = _plain(store.read(reference["locator"], reference["sha256"]))
+    _closed(record, {"schema", "mode", "capture", "source_id", "run_id", "profile_claim_tuple"},
+            "loop profile")
+    _same(record["schema"], LOOP_PROFILE_SCHEMA, "loop profile schema")
+    _same(record["mode"], LOOP_MODE, "loop profile scope")
+    _same(record["source_id"], "VB-AK-UNIFIED-PROFILE", "original measurement source")
+    body = _plain(store.read(record["capture"]["locator"], record["capture"]["sha256"]))
+    _closed(body, {"schema", "request", "settings", "profiler", "processes", "phases",
+                   "completion", "limitations"}, "direct capture")
+    _same(body["schema"], LOOP_CAPTURE_SCHEMA, "direct capture schema")
+    _same(body["completion"], "complete", "direct capture completion")
+    _same(body["limitations"], list(LIMITATIONS), "direct capture limitations")
+    settings = body["settings"]
+    recipe = rr.resolved_recipe_from_dict(settings["resolved_recipe"])
+    prompts = ps.FrozenPromptManifest.from_dict(settings["prompt_manifest"])
+    _same(body["request"]["execution_digest"], recipe.execution_digest, "original execution")
+    _same(body["request"]["prompt_manifest_digest"], prompts.digest, "original prompts")
+    _same(body["request"]["mode"], LOOP_MODE, "original mode")
+    _same(body["request"]["producer_pid"], body["processes"]["producer"]["pid"], "original producer")
+    _same([item["phase"] for item in body["phases"]], list(PHASES), "original phases")
+    _reopen_phases(body, settings)
+    _same(record["run_id"], "loop-cpu-profile:" + _digest(body["request"]), "original run")
+    _same(record["profile_claim_tuple"], _loop_claim(body, record["capture"],
+          record["profile_claim_tuple"]["date"]), "original measurement claim")
+    return ob._freeze(body)
+
+
+def _loop_claim(body, artifact, observed_date):
+    return {"date": observed_date, "category": "CANDIDATE", "protocol_id": "", "reps": 1,
+        "reps_basis": "one completed profiled request; samples are not repetitions",
+        "attestation_locator": artifact["locator"], "attestation_sha256": artifact["sha256"],
+        "attestation_present": True, "attestation_verified": True,
+        "measurement_id": "loop-cpu-profile:" + _digest(body["request"]) + ":profile",
+        "metric": "request_sampled_period_total",
+        "value": body["phases"][1]["samples"]["sampled_period_total"],
+        "metric_direction": "lower_better", "unit": "sampled user-cycle periods",
+        "claim": "Recorded sampled-period total for this exact full request; estimated attribution, not exact CPU cost",
+        "source_class": "measurement", "extra": {"limitations": list(LIMITATIONS),
+            "mode": LOOP_MODE, "not_performance_comparison": True,
+            "model_inventory_verification": "not performed by direct profiler"}}
+
+
+def profile_loop(recipe, prompts, *, store_root, perf_path="/usr/bin/perf",
+                 timeout_s=1800, server_interpreter=None):
+    """Separate observational launch using the loop's actual current binary and requests."""
+    from . import serving
+    capture = None
+    with closing(mc.ArtifactStore(Path(store_root) / "cpu-profiles")) as store:
+        try:
+            capture = CpuProfileCapture.for_loop(recipe, prompts, store=store,
+                perf_path=perf_path, timeout_s=timeout_s, server_interpreter=server_interpreter)
+            profiler = capture.verify_version()
+            frozen = prompts.requests(tuple(x.prompt_id for x in prompts.prompts), recipe.template)
+            serving._measure_once(recipe.template, recipe.build_dir, recipe.port,
+                boot_timeout_s=math.ceil(capture._remaining(timeout_s)),
+                resolved_recipe=recipe, frozen_requests=frozen, cpu_profile_capture=capture)
+            phases = _reduce_phases(capture, recipe, frozen, capture.budgets)
+            _same(source_identity(), capture.config["source_closure"], "original direct source")
+            body = {"schema": LOOP_CAPTURE_SCHEMA, "request": capture.request,
+                "settings": capture.config, "profiler": profiler,
+                "processes": {"producer": capture.owner, "ancestor": capture.ancestor,
+                              "server": capture.target}, "phases": phases,
+                "completion": "complete", "limitations": list(LIMITATIONS)}
+            if len(_canonical(body)) > capture.budgets["max_metadata_bytes"]:
+                raise CpuProfileRefused("direct capture metadata exceeds byte budget")
+            artifact = store.write("loop-cpu-capture:" + _digest(capture.request), body)
+            record = {"schema": LOOP_PROFILE_SCHEMA, "mode": LOOP_MODE,
+                "capture": artifact.to_dict(), "source_id": "VB-AK-UNIFIED-PROFILE",
+                "run_id": "loop-cpu-profile:" + _digest(capture.request),
+                "profile_claim_tuple": _loop_claim(body, artifact.to_dict(),
+                    datetime.now(timezone.utc).date().isoformat())}
+            exported = store.write(record["run_id"], record)
+            original = reopen_loop_profile(exported.to_dict(), store=store)
+            measured = original["phases"][1]["samples"]
+            total = measured["sampled_period_total"]
+            return {"status": "observed", "record": str(store.root / exported.locator),
+                "record_sha256": exported.sha256, "execution_digest": recipe.execution_digest,
+                "prompt_manifest_digest": prompts.digest, "sampled_period_total": total,
+                "samples": measured["samples"], "limitations": list(LIMITATIONS),
+                "hotspots": [{**_plain(row), "sampled_period_fraction": row["period"] / total}
+                    for row in sorted(measured["symbol_periods"],
+                        key=lambda row: (-row["period"], row["dso"], row["symbol"]))[:12]]}
+        except BaseException as exc:
+            if capture is not None:
+                capture.abort(f"{type(exc).__name__}: {exc}")
+                if capture.cleanup_uncertain:
+                    raise CpuProfileCleanupUncertain(capture.cleanup_uncertain) from exc
+            raise
+
+
 def run_profile_request(request, config):
     """Run only inside the owning profile worker; successful JSON is not grant authority."""
     from . import serving, target_profile_execution as tp, unified_driver as ud, unified_planner as up
@@ -984,35 +1180,7 @@ def run_profile_request(request, config):
                 boot_timeout_s=math.ceil(capture._remaining(body["budgets"]["max_stage_seconds"])),
                 resolved_recipe=recipe, frozen_requests=frozen,
                 observation=observation, cpu_profile_capture=capture)
-            if capture.failed or not capture.finished or len(capture.phases) != 2 or capture.raw_responses is None:
-                raise CpuProfileRefused("profile capture is incomplete")
-            phase_results = []
-            for phase, response in zip(capture.phases, capture.raw_responses):
-                if response["error"] or response["response_hex"] is None:
-                    raise CpuProfileRefused("request response failed")
-                request_raw = bytes.fromhex(response["request_hex"])
-                _same(request_raw, frozen[0][1], "original request bytes")
-                observed_n = _completed_response(bytes.fromhex(response["response_hex"]), recipe.template.n_predict)
-                interval = [response["start"], response["end"]]
-                if not phase["enabled_interval"][0] <= interval[0] <= interval[1] <= phase["enabled_interval"][1]:
-                    raise CpuProfileRefused("request not enclosed by perf window")
-                record = next(x["artifact"] for x in phase["tools"] if x["kind"] == "record")
-                counter = next(x["artifact"] for x in phase["tools"] if x["kind"] == "stat")
-                script_path = capture.directory / (phase["phase"] + "-script.txt")
-                parser = capture.script(record, script_path)
-                script_ref = _file(script_path, body["budgets"]["max_parser_bytes"])
-                samples = _reduce_artifact(script_ref, kind="samples", arguments={
-                    "pid": capture.target["pid"], "tids": phase["tids"], "interval": interval,
-                    "max_bytes": body["budgets"]["max_parser_bytes"], "max_rows": body["budgets"]["max_rows"],
-                    "max_symbols": body["budgets"]["max_symbols"]})
-                counters = _reduce_artifact(counter, kind="counters",
-                    arguments={"max_bytes": MAX_DIAGNOSTIC_BYTES, "max_rows": 16})
-                phase_results.append({**phase, "response": response, "samples": samples,
-                    "observed_predicted_n": observed_n, "parser": parser,
-                    "counter_scope": {"enable_transition": phase["tools"][1]["controls"][0],
-                        "disable_transition": phase["tools"][1]["controls"][1],
-                        "scope": "cumulative own enable-to-disable window; not exact request/sample interval"},
-                    "counters": counters, "script": script_ref})
+            phase_results = _reduce_phases(capture, recipe, frozen, body["budgets"])
             _same(before, {str(path): _stable_stat(path) for path in paths}, "post-serving model continuity")
             receipt = {"schema": CAPTURE_SCHEMA, "request_digest": _digest(request),
                 "target_revision_digest": selected.target_revision_digest,

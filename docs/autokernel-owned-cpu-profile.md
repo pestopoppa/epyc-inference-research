@@ -45,8 +45,10 @@ before/after loaded-process readbacks. An external PID cannot be supplied.
 
 ## Supported observation and output
 
-The only mode is `independent_full_request_v1`: CPU backend, `np=1`, one existing
-frozen v1 prompt, and separate full warmup and measurement requests. The existing
+The sealed mode remains `independent_full_request_v1`: CPU backend, `np=1`, one
+original frozen prompt, and separate full warmup and measurement requests. The
+frozen prompt parser now supports v1 and explicit v2 token/cache requests; older
+documentation claiming an unconditional GLM request refusal was stale. The existing
 serving request bytes and throughput arithmetic are unchanged. A successful
 natural EOS is supported: original `stop=true` and observed positive completion
 length no greater than the requested maximum are retained. No tokens or seed are
@@ -139,13 +141,46 @@ source cursor unchanged. Legacy closures do not accumulate terminals they cannot
 consume; historical profiles without original terminals produce diagnostic zero
 tuples, never retrospective warrant.
 
-## Explicit activation limit
+## Direct existing-loop observation
 
-This route is not the required exact GLM cached-decode/MTP trial workload. That
-workload's token-array prompt, cache reuse, seed, returned-token and ignore-EOS
-requirements are not expressible by the current frozen v1 prompt contract.
-`OP-AKU-PROMPT` remains required; no arbitrary JSON/env workaround is provided.
+The ordinary CPU serving route in `loop.run` now calls `profile_loop` at startup
+and after an actual source keep, while its existing CPU claim is held. Nulls do
+not reprofile or recalibrate. This is a separate instrumented server launch:
+its throughput is discarded, and acceptance pairs/floor are not instrumented.
+`--cpu-profiler /usr/bin/perf` selects the executable (that path is the default).
+The bounded stage is at most 1800 seconds, reduced to the selected campaign's
+stage timeout when supplied. Perf permission denial/unavailability is visible to
+the planner; an owned-child cleanup uncertainty propagates and stops the run.
+
+`CpuProfileCapture.for_loop` reuses the same process checks, perf lifecycle and
+sample/counter reducers using the actual current resolved launch and unmodified
+`FrozenPromptManifest`. It creates no sealed config, model-verification receipt,
+loaded-target issuance, `TargetProfile` or `PROFILE_VERIFIED` event. The original
+2029-token GLM request is exercised byte-exactly by a tiny synthetic HTTP fixture;
+this is transport/ownership evidence, not a GLM model measurement.
+
+The store's `cpu-profiles/` directory retains a direct capture
+(`epyc.autokernel.loop_cpu_profile_capture.v1`) and a small producer-authored
+measurement carrier (`epyc.autokernel.loop_cpu_profile.v1`). The latter binds the
+capture's exact private-store locator/SHA. `reopen_loop_profile` uses the same raw
+replay as the sealed producer. `run.build_context` and `actors.render_context`
+carry descending symbol periods, fractions of the observed period total, original
+execution/request digests, record pointer and limitations into the actual actor
+prompt. They do not populate GPU duration/share fields.
+
+The existing ROOT `autokernel_profile` measurement projector and corpus ingestion
+accept this exact direct carrier; no direct integrity/verifier row is emitted.
+The prospective current source closure is explicitly pinned, with the historical
+sealed source pin preserved. The adapter reopens bounded compact bytes and checks
+their original joins; it does not independently reread the raw perf files. The
+numeric carrier's lower-better field is not permission to compare totals across
+windows: exposure, duration and unknown sample loss remain explicit limitations.
+
+## Acceptance scope
+
 The acceptance chain uses a tiny HTTP child, a harmless loaded fixture DSO, tiny
 synthetic model bytes, and a synthetic perf executable. It proves installed
 ownership, artifact joins, settlement, feedback, restart and refusal behavior,
-not real hardware profiling, scientific qualification or GLM readiness.
+plus direct loop observation/actor/corpus wiring, not real hardware profiling,
+scientific qualification or GLM performance. No host permissions or production
+kernel state are changed by this implementation.

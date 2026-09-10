@@ -9,13 +9,14 @@ from unittest import mock
 
 import pytest
 
-from . import claim, gates, pool, resolved_recipe as rr, run, serving
+from . import claim, cpu_profile, gates, pool, resolved_recipe as rr, run, serving
 from .test_glm_frozen_requests import _canonical_launch, _manifest, _request
 from . import test_promotion_targets as promotion_fixture
 
 
 @pytest.mark.parametrize("dry_run", [True, False])
-def test_existing_main_cpu_five_iterations_preserves_canonical_champion(dry_run, feedback_root=None):
+def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
+        dry_run, feedback_root=None, profile_observer=None, profile_contexts=None):
     fixture = promotion_fixture.TheKeepBuildsAProductionCompleteAnchor()
     fixture.setUp()
     try:
@@ -36,7 +37,7 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(dry_run,
             root.mkdir(parents=True, exist_ok=True)
             for name in ("llama-server", "libggml-cpu.so"):
                 (root / name).write_bytes(b"synthetic fixture artifact" + (
-                    Path(build).name.encode() if feedback_root is not None else b""))
+                    Path(build).name.encode() if feedback_root is not None or profile_observer is not None else b""))
 
         install_binaries(fixture.startup_anchor)
 
@@ -108,6 +109,8 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(dry_run,
                 base_propose = actor.propose
 
                 def propose(context):
+                    if profile_contexts is not None:
+                        profile_contexts.append(dict(context["cpu_profile"]))
                     feedback_contexts.append(context["serving_observations"])
                     assert context["target"]["scope"] == "experimental candidate, NOT canonical champion"
                     assert context["program"].startswith("CPU EXPERIMENTAL TARGET")
@@ -146,6 +149,8 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(dry_run,
                     mock.patch.object(run.bench, "compare", side_effect=AssertionError("GPU bench")), \
                     mock.patch.object(run, "noise_floor_pct", side_effect=AssertionError("GPU floor")), \
                     mock.patch.object(run.hotspots, "profile", side_effect=AssertionError("GPU profile")), \
+                    mock.patch.object(cpu_profile, "profile_loop", side_effect=profile_observer or
+                        cpu_profile.CpuProfileRefused("test-only profiler unavailable")), \
                     mock.patch.object(run.production, "refresh", side_effect=AssertionError("production")), \
                     mock.patch.object(serving, "_measure_once", observe), \
                     mock.patch.object(pool, "prune_anchor_generations", return_value=pool.PruneReport("complete")):

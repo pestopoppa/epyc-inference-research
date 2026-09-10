@@ -28,7 +28,7 @@ def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def fixture(tmp_path, *, perf_failure="", server_failure=""):
+def fixture(tmp_path, *, perf_failure="", server_failure="", original_request=None):
     build = tmp_path / "build"
     (build / "bin").mkdir(parents=True)
     model = tmp_path / "model.gguf"
@@ -52,8 +52,11 @@ class Handler(BaseHTTPRequestHandler):
   self.send_response(200); self.end_headers(); self.wfile.write(b'{{}}')
  def do_POST(self):
   req=json.loads(self.rfile.read(int(self.headers['Content-Length'])))
-  assert set(req)=={{'prompt','n_predict','temperature','top_p','top_k','cache_prompt'}}
-  assert req['cache_prompt'] is False
+  if {original_request!r} is None:
+   assert set(req)=={{'prompt','n_predict','temperature','top_p','top_k','cache_prompt'}}
+   assert req['cache_prompt'] is False
+  else:
+   assert req=={original_request!r}
   time.sleep(0.04)
   data=b'bad-json' if {server_failure!r}=='json' else json.dumps({{'content':'synthetic',
    'stop':{server_failure!r}!='truncated','timings':{{'predicted_n':1 if {server_failure!r}=='eos' else req['n_predict'],
@@ -111,6 +114,11 @@ else:
     cpus = sorted(os.sched_getaffinity(0))[:4]
     template = serving.Recipe(name="synthetic-cpu-profile", model=str(model), device="none",
         ngl=0, cpu_list=",".join(map(str, cpus)), threads=4, np=1, ctx=128, n_predict=2)
+    if original_request is not None:
+        from dataclasses import replace
+        template = replace(template, ctx=8192, n_predict=original_request["n_predict"],
+            temperature=original_request["temperature"], top_k=original_request["top_k"],
+            spec_decode={"type": "draft-mtp", "draft_n_max": 3})
     argv = template.server_argv(build, port)
     artifacts = {"model": {"schema": rr.ARTIFACT_SCHEMA, "role": "model", "path": str(model), "sha256": sha(model)},
         "drafter": None,
@@ -123,6 +131,13 @@ else:
             "measurement_keys": [], "allowed_inherit_keys": [], "witnesses": {}},
         runtime_binary_dir=str(build / "bin"), runtime_ld_paths=[str(build / "bin")],
         provenance={"export_sha256": "d"*64, "instance_mode": "full", "source:launcher": "e"*64})
+    if original_request is not None:
+        from .test_glm_frozen_requests import _manifest
+        # Direct loop test: no enrollment, model verification or sealed profile is issued.
+        return None, None, None, {"resolved_recipe": recipe.to_dict(),
+            "prompt_manifest": _manifest(original_request).to_dict(),
+            "profiler": {"path": str(perf),
+                "server_interpreter": {"path": python, "sha256": sha(python)}}}, events, None
     original_artifact = planner_fixture.artifact
     def issued_artifact(kind, ref, digit):
         value = original_artifact(kind, ref, digit)

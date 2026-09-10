@@ -292,6 +292,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="explicit serving candidate branch; never the canonical champion")
     parser.add_argument("--cpu-calibrate-serving", type=int,
                         help="collect this many original serving calibration launches before iterations")
+    parser.add_argument("--cpu-profiler", type=Path, default=Path("/usr/bin/perf"),
+                        help="perf executable for separate observational CPU request profiling")
     parser.add_argument("--gpu-calibrate-serving", type=int,
                         help="collect this many original GPU serving calibration launches before iterations")
     parser.add_argument("--fire-multiple", type=float, default=2.5,
@@ -589,8 +591,10 @@ def main(argv: list[str] | None = None) -> int:
                 "CPU EXPERIMENTAL TARGET — overrides inapplicable GPU instructions below.\n"
                 "Use the selected CPU launch, frozen requests and build recipe in target. "
                 "Do not follow ROCm/rocprofv3, GPU residency, -ngl 99 or GPU-specific "
-                "kernel-probe instructions for this target. CPU profiling is unavailable; "
-                "do not invent hotspots or reuse GPU timing evidence as CPU evidence. "
+                "kernel-probe instructions for this target. Read cpu_profile for original "
+                "request-scoped sampled user-cycle attribution (or its unavailable reason); "
+                "fractions are not wall-time shares or optimization gains. Do not invent "
+                "hotspots or reuse GPU timing evidence as CPU evidence. "
                 "Author/review source only: the existing loop owns compilation, the CPU "
                 "oracle, resource locking and paired serving measurements. Preserve the "
                 "selected request, cache/seed/speculation and placement conditions. "
@@ -611,6 +615,7 @@ def main(argv: list[str] | None = None) -> int:
         return {
             "program": program,
             "kernel_hotspots": [row.to_dict() for row in hotspot_rows],
+            **({"cpu_profile": dict(cpu_profile_observation)} if cpu_launch else {}),
             "prior_experiments": prior_experiments(args, epoch),
             "serving_observations": feedback.context(lambda: serving_beliefs.feedback_scope(
                 epoch=epoch, recipe=serving_recipe, resolved=feedback_anchor[0],
@@ -623,7 +628,7 @@ def main(argv: list[str] | None = None) -> int:
                             "recipe": cpu_launch.to_dict(),
                             "requests": str(args.frozen_prompts),
                             "build_recipe": recipe.to_dict(),
-                            "hotspot_status": "CPU profile unavailable; do not infer GPU hotspots",
+                            "hotspot_status": cpu_profile_observation["status"],
                             **({"enrollment": selected_identity} if selected_identity else {})}}
                if cpu_launch else {"target": {"scope": "selected GPU serving workload",
                                              "recipe": direct_launch.to_dict(),
@@ -794,6 +799,7 @@ def main(argv: list[str] | None = None) -> int:
         return measure
 
     hotspot_rows: list = []
+    cpu_profile_observation = {"status": "not_collected"}
 
     def reprofile() -> None:
         """Re-derive the hotspots from the CURRENT champion.
@@ -804,7 +810,25 @@ def main(argv: list[str] | None = None) -> int:
         spend hours aiming at a distribution it had already altered.
         """
         if cpu_launch:
-            print("profile   CPU profile unavailable; GPU rocprof is not a CPU instrument")
+            from . import cpu_profile
+            cpu_profile_observation.clear()
+            cpu_profile_observation["status"] = "unavailable"
+            publish("running", latest, step="CPU original-request observational profiling")
+            try:
+                observed = cpu_profile.profile_loop(
+                    _cpu_arm(direct_launch, anchor_build[0]), manifest,
+                    store_root=args.store, perf_path=args.cpu_profiler,
+                    timeout_s=min(1800, resolved_campaign.resources.stage_timeout_s)
+                    if selected_identity else 1800)
+            except cpu_profile.CpuProfileCleanupUncertain:
+                raise  # An unproven terminal child must not overlap the next A/B.
+            except (cpu_profile.CpuProfileRefused, serving.ServerDied, OSError) as exc:
+                cpu_profile_observation["reason"] = f"{type(exc).__name__}: {exc}"[:1024]
+                print(f"profile   CPU UNAVAILABLE ({exc})")
+            else:
+                cpu_profile_observation.update(observed)
+                print(f"profile   CPU {len(observed['hotspots'])} sampled symbols; "
+                      f"record {observed['record']}")
             return
         if direct_launch:
             print("profile   selected GPU serving profile unavailable; legacy bench profile not substituted")
