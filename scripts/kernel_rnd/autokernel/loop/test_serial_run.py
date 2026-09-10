@@ -138,6 +138,7 @@ elif selection_path:
         (out / "loop-held-claims.json").write_text(json.dumps(held))
         sys.exit(0)
 result_only_failure = mode == "gpu_result_only_failure" and target_id == "gpu"
+lane_failure = mode == "lane_error"
 count = 0 if stopped[0] else int(sr.option(argv, "--iterations"))
 prior = sr.option(argv, "--resume-run")
 anchor = Path(sr.option(argv, "--anchor-build"))
@@ -154,6 +155,8 @@ row = sr.continuation(argv=argv, binding=sr.input_binding(argv),
     iterations_requested=int(sr.option(argv, "--iterations")),
     outcomes=[SimpleNamespace(status="bench_failed") for _ in range(count)]
     if result_only_failure else
+    [SimpleNamespace(status="lane_error") for _ in range(count)]
+    if lane_failure else
     [SimpleNamespace(status="measured_null") for _ in range(count)],
     **({"runtime_recipe_reference": {"locator": "runtime-selection-fixture",
        "sha256": "b" * 64, "verified": True}}
@@ -265,6 +268,23 @@ def test_scheduled_failed_child_accounts_only_original_released_claim(tmp_path, 
     assert {record.outcome for record in scheduler_state.accounted_receipts} == {"failed"}
     assert len(saved["failed_targets"]) == 2
     assert "cost_forecast" not in saved  # released failed prefixes are charged, not successful forecasts
+
+
+def test_scheduled_lane_error_is_failed_accounting_and_remains_reschedulable(
+        tmp_path, monkeypatch):
+    state, argv = _inputs(tmp_path, monkeypatch, mode="lane_error", rounds=2)
+    argv = _scheduled(tmp_path, argv)
+    assert sr.main(argv) == 0
+    saved = json.loads((state / "serial-state.json").read_text())
+    scheduler_state = scheduling.SchedulerState.from_dict(saved["scheduler_state"])
+    assert saved["next_batch"] == 4 and saved["failed_targets"] == {}
+    assert scheduler_state.campaign_attempts == 4
+    assert {record.outcome for record in scheduler_state.accounted_receipts} == {"failed"}
+    assert scheduler_state.issued_selection_digests == ()
+    assert "cost_forecast" not in saved
+    for result in saved["last_results"].values():
+        body, _sha = sr.load_completed(Path(result["path"]))
+        assert body["outcome_counts"] == {"lane_error": 1}
 
 
 def test_scheduled_preclaim_failures_settle_each_selection_without_held_evidence(
