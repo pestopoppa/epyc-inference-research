@@ -95,15 +95,24 @@ def validate_target_bindings(manifest: SerialSchedulerManifest,
 
 
 def select_target(manifest: SerialSchedulerManifest, state: scheduling.SchedulerState,
-                  selected_ids: Sequence[str], *, now: float, stage_number: int
+                  selected_ids: Sequence[str], *, now: float, stage_number: int,
+                  scope_previews: Mapping[str, dict] | None = None
                   ) -> tuple[scheduling.SchedulerState, scheduling.Selection, int]:
     if type(stage_number) is not int or stage_number < 0:
         raise SerialSchedulingRefused("serial stage number must be nonnegative")
-    indexed = tuple((index, replace(
-        manifest.proposals[selected_id],
-        proposal_id=_digest({"manifest": manifest.digest,
-                             "selected_id": selected_id, "stage_number": stage_number}),
-        submitted_at=now)) for index, selected_id in enumerate(selected_ids))
+    if scope_previews is not None and set(scope_previews) != set(selected_ids):
+        raise SerialSchedulingRefused("CPU scope previews differ from available selected targets")
+    indexed = []
+    for index, selected_id in enumerate(selected_ids):
+        proposal = manifest.proposals[selected_id]
+        identity = {"manifest": manifest.digest, "selected_id": selected_id,
+                    "stage_number": stage_number}
+        if scope_previews is not None:
+            from .cpu_screen import scoped_proposal
+            preview = scope_previews[selected_id]
+            proposal = scoped_proposal(proposal, preview)
+            identity["cpu_scope"] = _digest(preview)
+        indexed.append((index, replace(proposal, proposal_id=_digest(identity), submitted_at=now)))
     proposals = tuple(proposal for _index, proposal in indexed)
     next_state, selection = scheduling.select_stage(
         manifest.config, state, proposals, now=now)
