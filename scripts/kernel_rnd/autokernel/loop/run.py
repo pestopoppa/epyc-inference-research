@@ -482,9 +482,12 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--model is required without --resolved-campaign and --target-id")
 
     source_resumed = None
+    continuation_worktree = args.worktree
+    continuation_branch = args.experimental_branch or args.champion_branch
     source_checkout = None
     source_tree = None
     cross_tree_source = False
+    foreign_source_owner = False
     if (args.source_anchor_continuation is None) != (args.source_anchor_sha256 is None):
         parser.error("shared-source continuation path and digest must be supplied together")
     if args.source_anchor_continuation is not None:
@@ -496,11 +499,22 @@ def main(argv: list[str] | None = None) -> int:
             expected_branch = args.experimental_branch or champion.CANONICAL_BRANCH
             source_target = source_resumed.get("selected_target")
             source_checkout = Path(source_resumed["worktree"])
+            operational_source_branch = source_resumed["branch"]
+            retained_lineage = (source_resumed.get("source_lineage_keeps")
+                                or source_resumed.get("experimental_source_keeps") or ())
+            if retained_lineage:
+                retained_tip = surface_fold.reopen_reference(retained_lineage[-1])
+                if retained_tip.kept_commit == source_resumed["current_anchor"]["commit"]:
+                    source_checkout = Path(retained_tip.repo)
+                    operational_source_branch = retained_tip.branch
+            if not isinstance(source_target, dict) or selected_identity is None:
+                raise ValueError("shared-source continuation lacks its selected owner")
+            foreign_source_owner = (source_target.get("selected_id")
+                                    != selected_identity.get("selected_id"))
             cross_tree_source = source_checkout.resolve() != args.worktree.resolve()
             if (source_resumed["terminal"] != "complete"
-                    or (not cross_tree_source and source_resumed["branch"] != expected_branch)
-                    or not isinstance(source_target, dict)
-                    or selected_identity is None
+                    or (not foreign_source_owner
+                        and source_resumed["branch"] != expected_branch)
                     or source_target.get("campaign_id") != selected_identity["campaign_id"]
                     or source_target.get("manifest_digest") != selected_identity["manifest_digest"]):
                 raise ValueError("shared-source continuation differs from this source owner")
@@ -521,6 +535,31 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("source validation is one scheduled target stage (--iterations 1)")
     if args.validate_source_continuation and args.out is None:
         parser.error("source validation requires a retained --out directory")
+    source_authoring = (foreign_source_owner or cross_tree_source) \
+        and not args.validate_source_continuation
+    if source_authoring:
+        try:
+            same_target_tip = (not foreign_source_owner and resumed is not None
+                               and resumed["current_anchor"]
+                               == source_resumed["current_anchor"])
+            if same_target_tip:
+                args.anchor_build = Path(resumed["current_anchor"]["path"])
+            else:
+                prior_validation = surface_validation.reopen_reference(
+                    resumed["source_validation"] if resumed is not None else None)
+                if (prior_validation["source_commit"]
+                        != source_resumed["current_anchor"]["commit"]
+                        or prior_validation["target"] != selected_identity
+                        or prior_validation["disposition"] != "passed"):
+                    raise ValueError("target validation does not authorize this source/build pair")
+                args.anchor_build = Path(prior_validation["candidate_anchor"]["path"])
+            champion.verify_anchor(args.anchor_build, source_checkout,
+                                   source_resumed["current_anchor"]["commit"],
+                                   experimental_identity=False)
+            args.worktree = source_checkout
+            args.experimental_branch = operational_source_branch
+        except (KeyError, OSError, ValueError) as exc:
+            parser.error(f"shared-source authoring refused: {exc}")
 
     direct_launch = None
     frozen_requests = None
@@ -650,7 +689,8 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(f"scheduler selection refused: {exc}")
 
     if resumed is not None:
-        if (resumed["branch"] != args.champion_branch
+        if (resumed["branch"] != (continuation_branch if source_authoring
+                                  else args.champion_branch)
                 or Path(resumed["model"]).resolve() != args.model.resolve()
                 or resumed["selected_target"] != selected_identity
                 or (not experimental) != (resumed["cor_anchor"] is not None)):
@@ -661,12 +701,23 @@ def main(argv: list[str] | None = None) -> int:
     # FIRST, before the claim, the census, even the dry run's wiring proof: the loop
     # optimises THE single champion branch or it does not start. See `champion` for
     # the 2026-08-31 incident this refusal exists to make unrepeatable.
-    verified_head = champion.verify_startup(
-        worktree=args.worktree, branch=args.champion_branch,
-        anchor_build=args.anchor_build,
-        allow_unverified_anchor=args.allow_unverified_anchor,
-        experimental_identity=experimental)
-    if resumed is not None or (source_resumed is not None and not cross_tree_source):
+    historical_target = (args.validate_source_continuation and foreign_source_owner
+                         and resumed is not None
+                         and source_checkout.resolve() == args.worktree.resolve()
+                         and args.anchor_build.resolve()
+                         == Path(resumed["current_anchor"]["path"]).resolve())
+    if historical_target:
+        verified_head = resumed["current_anchor"]["commit"]
+        champion.verify_anchor(args.anchor_build, args.worktree, verified_head,
+                               experimental_identity=experimental)
+    else:
+        verified_head = champion.verify_startup(
+            worktree=args.worktree, branch=args.champion_branch,
+            anchor_build=args.anchor_build,
+            allow_unverified_anchor=args.allow_unverified_anchor,
+            experimental_identity=experimental and not source_authoring)
+    if ((resumed is not None and not historical_target)
+            or (source_resumed is not None and not cross_tree_source)):
         anchor_source = source_resumed if source_resumed is not None else resumed
         if anchor_source["current_anchor"]["commit"] != verified_head:
             parser.error("continuation current anchor differs from current source head")
@@ -836,6 +887,8 @@ def main(argv: list[str] | None = None) -> int:
     runtime_recipe_reference = [None]
     runtime_status = [None]
     source_validation_reference = None
+    if source_authoring:
+        source_validation_reference = dict(resumed["source_validation"])
     runtime_env_keys = (set(direct_launch.environment_policy.measurement_keys) &
         ({"GGML_IQK", "OMP_NUM_THREADS", "OMP_PROC_BIND", "OMP_PLACES", "OMP_WAIT_POLICY"}
          if cpu_launch else {"OMP_NUM_THREADS", "OMP_PROC_BIND", "OMP_PLACES", "OMP_WAIT_POLICY"})
@@ -2037,7 +2090,9 @@ def main(argv: list[str] | None = None) -> int:
                             "reason", "original anchor source identity is unavailable")
                 origins = [receipt for receipt in validation_receipts
                            if receipt.selected_target == selected_identity]
-                validation_intended = bool(origins)
+                validation_intended = bool(
+                    validation_receipts
+                    and validation_receipts[-1].selected_target == selected_identity)
                 if origins and prior_validation is None:
                     first_origin = origins[0]
                     belief = first_origin.comparison.get("belief_capture")
@@ -2099,6 +2154,14 @@ def main(argv: list[str] | None = None) -> int:
                         validation_gate_failure = {
                             "type": "target_recipe_gate_refused",
                             "verdicts": [verdict.to_dict() for verdict in build_verdicts]}
+                    else:
+                        status.write_json(
+                            validation_candidate_build, "provenance.json",
+                            {"champion_commit": source_resumed["current_anchor"]["commit"],
+                             "build_recipe": recipe.to_dict(),
+                             "targets": list(gates.PROMOTION_TARGETS),
+                             "built_at": str(validation_candidate_build)},
+                            prefix=".provenance-")
 
             if (direct_launch and calibration_samples and validation_identity_error is None
                     and validation_reused_comparison is None
@@ -2289,7 +2352,7 @@ def main(argv: list[str] | None = None) -> int:
                 "continuation": serial_run.continuation(
                     argv=original_argv, binding=original_binding,
                     terminal="stopped" if should_stop() else "complete",
-                    worktree=args.worktree, branch=args.champion_branch, model=args.model,
+                    worktree=continuation_worktree, branch=continuation_branch, model=args.model,
                     selected_target=selected_identity,
                     anchor_build=anchor_build[0], anchor_commit=current_anchor_commit[0],
                     iterations_requested=args.iterations, outcomes=outcomes,
