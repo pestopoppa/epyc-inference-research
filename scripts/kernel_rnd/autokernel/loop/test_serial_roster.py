@@ -139,10 +139,10 @@ def test_generated_roster_drives_actual_children_and_completed_restart(tmp_path,
     # Distinct recipe artifacts keep these as two distinct enrolled targets.
     assert len(seen) == 4
     assert all(set(row["affinity"]) == set(os.sched_getaffinity(0)) & set(range(192)) for row in seen)
-    assert sr.option(seen[2]["argv"], "--resume-run")
-    assert [sr.option(row["argv"], "--target-id") for row in seen[:2]] == [
-        sr.option(row["argv"], "--target-id") for row in seen[2:]]
-    for row in seen[2:]:
+    assert {sr.option(row["argv"], "--target-id") for row in seen} == {"cpu-0", "gpu-1"}
+    resumed = [row for row in seen if sr.option(row["argv"], "--resume-run")]
+    assert resumed
+    for row in resumed:
         assert sr.option(row["argv"], "--cpu-calibrate-serving") is None
         assert sr.option(row["argv"], "--gpu-calibrate-serving") is None
     assert sr.main(argv) == 0
@@ -161,6 +161,18 @@ def test_identical_owned_aliases_schedule_once_and_missing_ownership_is_not_succ
     assert sr.option(targets[0], "--target-id") == first.target_ids[0]
     Path(sr.option(argv, "--owned-targets")).write_text("{}")
     with pytest.raises(sr.SerialRefused, match="1–64"):
+        _build(argv)
+
+
+def test_explicit_unverified_anchor_waiver_reaches_existing_owner_only(tmp_path):
+    _resolved, owners, argv = _inputs(tmp_path, backends=("cpu",))
+    owners["cpu-0"]["allow_unverified_anchor"] = True
+    Path(sr.option(argv, "--owned-targets")).write_text(json.dumps(owners))
+    targets, _skipped, _cpus = _build(argv)
+    assert "--allow-unverified-anchor" in targets[0]
+    owners["cpu-0"]["allow_unverified_anchor"] = "yes"
+    Path(sr.option(argv, "--owned-targets")).write_text(json.dumps(owners))
+    with pytest.raises(sr.SerialRefused, match="must be boolean"):
         _build(argv)
 
 

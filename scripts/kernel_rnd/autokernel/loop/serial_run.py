@@ -18,14 +18,18 @@ import time
 from . import campaign_cli, champion, legacy_targets, status, worker_lifecycle
 
 CONTINUATION_SCHEMA = "epyc.autokernel.loop_continuation.v1"
+CONTINUATION_SCHEMA_V2 = "epyc.autokernel.loop_continuation.v2"
+HELD_REFERENCE_SCHEMA = "epyc.autokernel.direct_held_reference.v1"
 SERIAL_SCHEMA = "epyc.autokernel.serial_run.v1"
 _DOCUMENT_FLAGS = ("--resolved-campaign", "--cpu-serving-launch", "--gpu-serving-launch",
                    "--frozen-prompts", "--serving-recipe")
 _CHANGING_FLAGS = frozenset({"--out", "--iterations", "--resume-run", "--anchor-build",
-                            "--cor-build", "--cpu-calibrate-serving", "--gpu-calibrate-serving", "--dry-run"})
+                            "--cor-build", "--cpu-calibrate-serving", "--gpu-calibrate-serving",
+                            "--scheduler-selection", "--dry-run"})
 _CONTINUATION_FIELDS = {"schema", "terminal", "input_argv", "input_argv_sha256", "binding",
                         "worktree", "branch", "model", "selected_target", "current_anchor", "cor_anchor",
                         "iterations_requested", "iterations_completed", "outcome_counts", "result_file"}
+_CONTINUATION_FIELDS_V2 = _CONTINUATION_FIELDS | {"held_claim_evidence"}
 
 
 class SerialRefused(ValueError):
@@ -93,13 +97,32 @@ def input_binding(argv) -> dict:
     return {"argv": _without(argv, _CHANGING_FLAGS), "documents": documents}
 
 
+def _held_reference(value):
+    if not isinstance(value, dict) or set(value) != {"schema", "selection_digest", "evidence"} \
+            or value.get("schema") != HELD_REFERENCE_SCHEMA:
+        raise SerialRefused("held-claim reference shape is invalid")
+    selection = value["selection_digest"]
+    evidence = value["evidence"]
+    if not isinstance(selection, str) or len(selection) != 64 \
+            or any(char not in "0123456789abcdef" for char in selection):
+        raise SerialRefused("held-claim selection digest is invalid")
+    if not isinstance(evidence, dict) or set(evidence) != {"locator", "sha256", "verified"} \
+            or not isinstance(evidence["locator"], str) or not evidence["locator"] \
+            or not isinstance(evidence["sha256"], str) or len(evidence["sha256"]) != 64 \
+            or any(char not in "0123456789abcdef" for char in evidence["sha256"]) \
+            or evidence["verified"] is not True:
+        raise SerialRefused("held-claim evidence locator is invalid")
+    return {"schema": HELD_REFERENCE_SCHEMA, "selection_digest": selection,
+            "evidence": dict(evidence)}
+
+
 def continuation(*, argv, binding, terminal, worktree, branch, model, selected_target,
                  anchor_build, anchor_commit, iterations_requested, outcomes,
-                 cor_build=None, cor_commit=None) -> dict:
+                 cor_build=None, cor_commit=None, held_claim_evidence=None) -> dict:
     counts = {}
     for outcome in outcomes:
         counts[outcome.status] = counts.get(outcome.status, 0) + 1
-    return {"schema": CONTINUATION_SCHEMA, "terminal": terminal,
+    row = {"schema": CONTINUATION_SCHEMA, "terminal": terminal,
             "input_argv": list(argv), "input_argv_sha256": _digest(list(argv)), "binding": binding,
             "worktree": str(Path(worktree).resolve()), "branch": branch,
             "model": str(Path(model).resolve()), "selected_target": selected_target,
@@ -108,6 +131,10 @@ def continuation(*, argv, binding, terminal, worktree, branch, model, selected_t
             "current_anchor": {"path": str(Path(anchor_build).resolve()), "commit": anchor_commit},
             "cor_anchor": ({"path": str(Path(cor_build).resolve()), "commit": cor_commit}
                            if cor_build is not None else None)}
+    if held_claim_evidence is not None:
+        row["schema"] = CONTINUATION_SCHEMA_V2
+        row["held_claim_evidence"] = _held_reference(held_claim_evidence)
+    return row
 
 
 def load_completed(path: Path, *, expected_argv=None, expected_binding=None):
@@ -115,9 +142,15 @@ def load_completed(path: Path, *, expected_argv=None, expected_binding=None):
     # lifecycle observations. This original-owner routing receipt does not parse
     # or grade them, and never pretends that its file stat is a content hash.
     row, sha = _json(path)
-    if not isinstance(row, dict) or set(row) != _CONTINUATION_FIELDS \
-            or row["schema"] != CONTINUATION_SCHEMA or row["terminal"] not in {"complete", "stopped"}:
+    expected_fields = (_CONTINUATION_FIELDS_V2 if isinstance(row, dict)
+                       and row.get("schema") == CONTINUATION_SCHEMA_V2
+                       else _CONTINUATION_FIELDS)
+    if not isinstance(row, dict) or set(row) != expected_fields \
+            or row["schema"] not in {CONTINUATION_SCHEMA, CONTINUATION_SCHEMA_V2} \
+            or row["terminal"] not in {"complete", "stopped"}:
         raise SerialRefused("missing or malformed terminal continuation")
+    if row["schema"] == CONTINUATION_SCHEMA_V2:
+        row["held_claim_evidence"] = _held_reference(row["held_claim_evidence"])
     argv = row["input_argv"]
     if not isinstance(argv, list) or not all(isinstance(item, str) for item in argv) \
             or row["input_argv_sha256"] != _digest(argv):
@@ -213,12 +246,15 @@ def _target_args(path: Path) -> list[str]:
     return _validate_target_args(argv)
 
 
-def _validate_target_args(argv) -> list[str]:
+def _validate_target_args(argv, *, owner_anchor_waiver=False) -> list[str]:
     if not isinstance(argv, list) or not argv or len(argv) > 512 \
             or not all(isinstance(item, str) and "\0" not in item for item in argv):
         raise SerialRefused("target args must be a bounded JSON string array")
-    reserved = {"--out", "--iterations", "--resume-run", "--dry-run", "--calibrate-surface",
+    reserved = {"--out", "--iterations", "--resume-run", "--scheduler-selection", "--dry-run",
+                "--calibrate-surface",
                 "--allow-unverified-anchor", "--help", "-h"}
+    if owner_anchor_waiver:
+        reserved.remove("--allow-unverified-anchor")
     if any(item.partition("=")[0] in reserved for item in argv):
         raise SerialRefused("target args contain a serial-owned or non-execution option")
     for flag in ("--worktree", "--anchor-build", "--store", "--worker-root", "--worker-build-root",
@@ -232,6 +268,87 @@ def _validate_target_args(argv) -> list[str]:
                                  cpu_serving=option(argv, "--cpu-serving-launch") is not None,
                                  model=Path(option(argv, "--model")) if option(argv, "--model") else None)
     return argv
+
+
+def _scheduler_bindings(targets):
+    from . import unified_planner
+    bindings = {}
+    for argv in targets:
+        resolved = campaign_cli.load_previous(Path(option(argv, "--resolved-campaign")))
+        selected_id = option(argv, "--target-id")
+        selected = legacy_targets.select_target(
+            resolved, selected_id,
+            cpu_serving=option(argv, "--cpu-serving-launch") is not None,
+            model=Path(option(argv, "--model")) if option(argv, "--model") else None)
+        if selected_id in bindings:
+            raise SerialRefused("serial roster repeats a scheduled target ID")
+        bindings[selected_id] = {
+            "target_revision": unified_planner._target_digest(selected),
+            "alias_identity": selected.workload_signature,
+            "backend": selected.execution.backend,
+            "eligibility_ref": f"resolved-campaign:{resolved.manifest_digest}:ready",
+        }
+    return bindings
+
+
+def _derived_scheduler_manifest(targets, resolved_path, rounds):
+    """Derive ordinary roster scheduling from its enrolled resource declaration."""
+    # This pure mirror is structurally tested against the installed provider and
+    # avoids importing the orchestrator's mutable package graph during routing.
+    from ..execution.cpu_region_claim import ATOMIC_REGIONS, cpu_list_to_regions
+    from . import claim, scheduling, serial_scheduling, unified_planner
+    from .resolved_recipe import CanonicalResolvedRecipe
+    resolved = campaign_cli.load_previous(Path(resolved_path))
+    # One held invocation can contain planner, critic, validation and serving
+    # phases in addition to a build. This is a declared scheduling bound, not a
+    # duration observation; an overrun remains charged and successor-fenced.
+    max_stage = resolved.resources.build_timeout_s + 4 * resolved.resources.stage_timeout_s
+    attempt_cap = rounds * len(targets) if rounds else 1000
+    proposals = {}
+    has_gpu = False
+    for argv in targets:
+        selected_id = option(argv, "--target-id")
+        cpu = option(argv, "--cpu-serving-launch") is not None
+        selected = legacy_targets.select_target(resolved, selected_id, cpu_serving=cpu)
+        launch_path = option(argv, "--cpu-serving-launch") or option(argv, "--gpu-serving-launch")
+        launch_body, _sha = _json(Path(launch_path))
+        launch = CanonicalResolvedRecipe.from_dict(launch_body)
+        owned = legacy_targets.validate_resources(
+            resolved.resources, launch, backend=selected.execution.backend,
+            environment=os.environ)
+        fraction = len(cpu_list_to_regions(owned)) / len(ATOMIC_REGIONS)
+        gpu_devices = () if cpu else (claim.DEVICE_ID,)
+        has_gpu = has_gpu or bool(gpu_devices)
+        proposals[selected_id] = scheduling.StageProposal(
+            proposal_id=f"template:{selected_id}", submitted_at=0.0,
+            backend=selected.execution.backend,
+            target_revision=unified_planner._target_digest(selected),
+            alias_identity=selected.workload_signature,
+            frontier_id=None, production_frontier=False,
+            seed_id=(unified_planner._target_digest(selected)
+                     if selected.seed_boost_units else None),
+            stage_class="search", estimated_duration_seconds=max_stage,
+            estimated_claims=scheduling.ResourceVector(fraction, gpu_devices, 0),
+            eligible=True,
+            eligibility_ref=f"resolved-campaign:{resolved.manifest_digest}:ready",
+            reservation_kind=None, full_region=fraction == 1.0,
+            compatibility_authority_refs=(), safe_chunking_declared=False)
+    config = scheduling.SchedulerConfig(
+        config_id=f"serial-derived:{resolved.manifest_digest}",
+        max_stage_seconds=max_stage, noncoverage_slots=max(1, len(targets)),
+        reservation_slots={}, reservation_shares={},
+        campaign_attempt_cap=attempt_cap,
+        campaign_charged_seconds_cap=max_stage * attempt_cap,
+        seed_attempt_cap=attempt_cap, seed_charged_seconds_cap=max_stage * attempt_cap,
+        capacity=scheduling.ResourceVector(1.0, (claim.DEVICE_ID,) if has_gpu else (), 0),
+        weights_source="resolved-campaign seed provenance; fixed normal=1 seed=2",
+        apportionment_rule="backend deficit over exact enrolled ready targets",
+        adaptive_rule_id=None)
+    return serial_scheduling.SerialSchedulerManifest.from_dict({
+        "schema": serial_scheduling.MANIFEST_SCHEMA,
+        "scheduler_id": f"serial:{resolved.manifest_digest}",
+        "config": config.to_dict(),
+        "targets": {key: value.to_dict() for key, value in proposals.items()}})
 
 
 def _child_command(argv):
@@ -249,10 +366,13 @@ def main(argv=None) -> int:
     parser.add_argument("--target-root", type=Path,
                         help="derived per-target store/lane roots (default: state-dir/targets)")
     parser.add_argument("--common-args", type=Path, help="optional shared actor/measurement argv JSON")
+    parser.add_argument("--scheduler-manifest", type=Path,
+                        help="closed resource-time budget and exact target proposals")
     parser.add_argument("--dry-run", action="store_true",
                         help="print inputs and run each existing owner dry-run; no execution or writes")
     parser.add_argument("--batch-iterations", type=int, required=True)
-    parser.add_argument("--rounds", type=int, default=1, help="0 rotates continuously until STOP")
+    parser.add_argument("--rounds", type=int, default=1,
+                        help="0 schedules until its configured budget or STOP")
     parser.add_argument("--state-dir", type=Path, required=True)
     args = parser.parse_args(argv)
     if args.batch_iterations <= 0 or args.rounds < 0:
@@ -266,7 +386,7 @@ def main(argv=None) -> int:
             from .serial_roster import build_targets
             targets, skipped, cpus = build_targets(args.resolved_campaign, args.owned_targets,
                 target_root=args.target_root or args.state_dir / "targets", common_path=args.common_args)
-            targets = [_validate_target_args(row) for row in targets]
+            targets = [_validate_target_args(row, owner_anchor_waiver=True) for row in targets]
             taskset = shutil.which("taskset")
             if taskset is None:
                 raise SerialRefused("taskset is required to confine generated owned children")
@@ -282,11 +402,36 @@ def main(argv=None) -> int:
             if any(a == b or a in b.parents or b in a.parents
                    for i, a in enumerate(paths) for b in paths[i + 1:]):
                 raise SerialRefused(f"target {flag} roots overlap")
+        scheduler_manifest = None
+        if args.scheduler_manifest is not None:
+            if args.batch_iterations != 1:
+                raise SerialRefused("scheduled serial mode requires one iteration per child")
+            from . import serial_scheduling
+            manifest_body, _manifest_sha = _json(args.scheduler_manifest, limit=256 * 1024)
+            scheduler_manifest = serial_scheduling.SerialSchedulerManifest.from_dict(manifest_body)
+            serial_scheduling.validate_target_bindings(
+                scheduler_manifest, _scheduler_bindings(targets))
+        elif args.resolved_campaign is not None:
+            from . import serial_scheduling
+            scheduler_manifest = _derived_scheduler_manifest(
+                targets, args.resolved_campaign, args.rounds)
+            serial_scheduling.validate_target_bindings(
+                scheduler_manifest, _scheduler_bindings(targets))
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
     if args.dry_run:
-        print(json.dumps({"targets": targets, "skipped": skipped, "child_prefix": child_prefix}, indent=2))
+        print(json.dumps({"targets": targets, "skipped": skipped, "child_prefix": child_prefix,
+                          "scheduler": (scheduler_manifest.to_dict()
+                                        if scheduler_manifest is not None else None)}, indent=2))
         from . import run
+        if scheduler_manifest is not None:
+            from . import scheduling, serial_scheduling
+            serial_scheduling.select_target(
+                scheduler_manifest,
+                scheduling.initial_state(scheduler_manifest.config,
+                                         scheduler_manifest.scheduler_id),
+                tuple(option(target, "--target-id") for target in targets), now=time.time(),
+                stage_number=0)
         for target in targets:
             result = run.main([*target, "--dry-run"])
             if result:
@@ -301,10 +446,11 @@ def main(argv=None) -> int:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
             raise SerialRefused("serial session already has an owner") from exc
-        return _drive(root, targets, args.batch_iterations, args.rounds, child_prefix=child_prefix)
+        return _drive(root, targets, args.batch_iterations, args.rounds, child_prefix=child_prefix,
+                      scheduler_manifest=scheduler_manifest)
 
 
-def _batch_argv(original, prior, batch_iterations, directory):
+def _batch_argv(original, prior, batch_iterations, directory, *, scheduler_selection=None):
     child_argv = list(original)
     if prior is not None:
         _body, sha = load_completed(Path(prior["path"]), expected_binding=input_binding(original))
@@ -312,7 +458,10 @@ def _batch_argv(original, prior, batch_iterations, directory):
             raise SerialRefused("retained child result changed")
         child_argv = _without(child_argv, {"--cpu-calibrate-serving", "--gpu-calibrate-serving"})
         child_argv += ["--resume-run", prior["path"]]
-    return [*child_argv, "--iterations", str(batch_iterations), "--out", str(directory)]
+    child_argv += ["--iterations", str(batch_iterations), "--out", str(directory)]
+    if scheduler_selection is not None:
+        child_argv += ["--scheduler-selection", str(Path(scheduler_selection).resolve())]
+    return child_argv
 
 
 def _original_child_terminal(active):
@@ -364,11 +513,24 @@ def _reconcile_completed(root, state, targets, batch_iterations):
         raise SerialRefused("previous active batch index is malformed")
     directory = root / "batches" / f"batch-{number:06d}"
     original = targets[index]
-    argv = _batch_argv(original, state["last_results"].get(str(index)), batch_iterations, directory)
+    scheduled = active.get("scheduler_selection")
+    scheduled_sha = active.get("scheduler_selection_sha256")
+    if (scheduled is None) != (scheduled_sha is None):
+        raise SerialRefused("previous active scheduler selection is incomplete")
+    selection_path = directory / "scheduler-selection.json" if scheduled is not None else None
+    if scheduled is not None:
+        if not isinstance(scheduled, dict) or _digest(scheduled) != scheduled_sha:
+            raise SerialRefused("previous active scheduler selection digest differs")
+        selection_body, _selection_file_sha = _json(selection_path, limit=256 * 1024)
+        if selection_body != scheduled:
+            raise SerialRefused("previous scheduler selection file changed")
+    argv = _batch_argv(original, state["last_results"].get(str(index)), batch_iterations,
+                       directory, scheduler_selection=selection_path)
     expected = {"target_index": index, "selected_id": option(original, "--target-id"),
                 "store": option(original, "--store"), "batch_dir": str(directory),
                 "input_argv_sha256": _digest(argv)}
-    if set(active) - {*expected, "pid", "process_identity"} or any(
+    if set(active) - {*expected, "pid", "process_identity", "scheduler_selection",
+                      "scheduler_selection_sha256"} or any(
             active.get(key) != value for key, value in expected.items()):
         raise SerialRefused("previous active batch differs from original target/arguments")
     path = directory / "loop-continuation.json"
@@ -381,9 +543,57 @@ def _reconcile_completed(root, state, targets, batch_iterations):
             "result": {"path": str(path), "sha256": sha}, "process_terminal_basis": terminal_basis}
 
 
-def _drive(root, targets, batch_iterations, rounds, *, child_prefix=()):
+def _selected_identity(argv):
+    resolved = campaign_cli.load_previous(Path(option(argv, "--resolved-campaign")))
+    selected_id = option(argv, "--target-id")
+    cpu = option(argv, "--cpu-serving-launch") is not None
+    gpu = option(argv, "--gpu-serving-launch") is not None
+    selected = legacy_targets.select_target(
+        resolved, selected_id, cpu_serving=cpu,
+        model=Path(option(argv, "--model")) if option(argv, "--model") else None)
+    return {"campaign_id": resolved.campaign_id, "request_id": resolved.request_id,
+            "manifest_digest": resolved.manifest_digest, "selected_id": selected_id,
+            "scope": ("cpu_serving_selected_workload" if cpu else
+                      "gpu_serving_selected_workload" if gpu else "legacy_gpu_screen"),
+            "original_target": selected.to_dict()}
+
+
+def _scheduled_account(state, manifest, active, body, batch_dir):
+    from . import scheduling, serial_scheduling
+    selection = scheduling.Selection.from_dict(active["scheduler_selection"])
+    if active["scheduler_selection_sha256"] != selection.digest:
+        raise SerialRefused("active selection digest differs from original selection")
+    if body.get("schema") != CONTINUATION_SCHEMA_V2:
+        raise SerialRefused("scheduled child lacks original held-resource evidence")
+    receipts = serial_scheduling.reopen_held_receipts(
+        batch_dir, body["held_claim_evidence"], selection=selection,
+        target=body["selected_target"])
+    scheduler_state = scheduling.SchedulerState.from_dict(state["scheduler_state"])
+    outcome = serial_scheduling.one_iteration_outcome(
+        body["terminal"], body["outcome_counts"])
+    return scheduling.account_stage_components(
+        manifest.config, scheduler_state, selection, receipts, outcome=outcome)
+
+
+def _scheduled_failure_account(state, manifest, active, batch_dir, original):
+    from . import scheduling, serial_scheduling
+    reference, _sha = _json(batch_dir / "loop-held-claims.json", limit=64 * 1024)
+    selection = scheduling.Selection.from_dict(active["scheduler_selection"])
+    if active["scheduler_selection_sha256"] != selection.digest:
+        raise SerialRefused("active selection digest differs from original selection")
+    receipts = serial_scheduling.reopen_held_receipts(
+        batch_dir, reference, selection=selection, target=_selected_identity(original))
+    return scheduling.account_stage_components(
+        manifest.config, scheduling.SchedulerState.from_dict(state["scheduler_state"]),
+        selection, receipts, outcome="failed")
+
+
+def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
+           scheduler_manifest=None):
     config = _digest({"targets": targets, "batch_iterations": batch_iterations, "rounds": rounds,
-                      **({"child_prefix": list(child_prefix)} if child_prefix else {})})
+                      **({"child_prefix": list(child_prefix)} if child_prefix else {}),
+                      **({"scheduler_manifest": scheduler_manifest.digest}
+                         if scheduler_manifest is not None else {})})
     state_path = root / "serial-state.json"
     if state_path.exists():
         state, _sha = _json(state_path)
@@ -392,6 +602,15 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=()):
     else:
         state = {"schema": SERIAL_SCHEMA, "config_digest": config, "next_batch": 0,
                  "active": None, "last_results": {}, "failed_targets": {}}
+        if scheduler_manifest is not None:
+            from . import scheduling
+            state["scheduler_state"] = scheduling.initial_state(
+                scheduler_manifest.config, scheduler_manifest.scheduler_id).to_dict()
+    if scheduler_manifest is not None:
+        from . import scheduling
+        scheduling.SchedulerState.from_dict(state.get("scheduler_state"))
+    elif "scheduler_state" in state:
+        raise SerialRefused("unscheduled session contains scheduler state")
     # Diagnostic configuration only. The original digest above still controls
     # restart; old state files acquire these values from that same checked input.
     state.update(target_count=len(targets), rounds=rounds, batch_iterations=batch_iterations)
@@ -409,6 +628,9 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=()):
         status.write_json(root, state_path.name, state)
 
     def publish(phase, active=None):
+        if isinstance(active, dict):
+            active = {key: value for key, value in active.items()
+                      if key not in {"scheduler_selection", "scheduler_selection_sha256"}}
         status.write(root, state=phase, epoch=config, campaign_id="legacy-serial",
                      anchor_commit="", surface="serial_targets", pairs=0, noise_floor_pct=None,
                      target=active, step="serial routing only; detailed original status stays in target store",
@@ -423,7 +645,21 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=()):
         signal.signal(sig, request_stop)
     try:
         if state.get("active") is not None:
+            recovered_active = dict(state["active"])
             recovered = _reconcile_completed(root, state, targets, batch_iterations)
+            if scheduler_manifest is not None:
+                body, _sha = load_completed(
+                    Path(recovered["result"]["path"]),
+                    expected_binding=input_binding(_batch_argv(
+                        targets[recovered["target_index"]],
+                        state["last_results"].get(str(recovered["target_index"])),
+                        batch_iterations,
+                        root / "batches" / f"batch-{recovered['batch_number']:06d}",
+                        scheduler_selection=root / "batches" /
+                        f"batch-{recovered['batch_number']:06d}" / "scheduler-selection.json")))
+                state["scheduler_state"] = _scheduled_account(
+                    state, scheduler_manifest, recovered_active, body,
+                    root / "batches" / f"batch-{recovered['batch_number']:06d}").to_dict()
             state["last_results"][str(recovered["target_index"])] = recovered["result"]
             state["last_reconciliation"] = recovered
             state["active"] = None
@@ -436,7 +672,25 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=()):
                 publish("failed")
                 return 1  # Continuous mode must not spin over a failed roster.
             number = state["next_batch"]
-            index = number % len(targets)
+            selection = None
+            if scheduler_manifest is not None:
+                from . import scheduling, serial_scheduling
+                available = tuple((i, target) for i, target in enumerate(targets)
+                                  if str(i) not in state["failed_targets"])
+                scheduler_state, selection, available_index = serial_scheduling.select_target(
+                    scheduler_manifest,
+                    scheduling.SchedulerState.from_dict(state["scheduler_state"]),
+                    tuple(option(target, "--target-id") for _i, target in available),
+                    now=time.time(), stage_number=number)
+                if available_index < 0:
+                    state["scheduler_state"] = scheduler_state.to_dict()
+                    save()
+                    publish("complete")
+                    return 0
+                index = available[available_index][0]
+                state["scheduler_state"] = scheduler_state.to_dict()
+            else:
+                index = number % len(targets)
             key = str(index)
             if key in state["failed_targets"]:
                 state["next_batch"] += 1
@@ -446,11 +700,20 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=()):
             directory = root / "batches" / f"batch-{number:06d}"
             directory.mkdir(parents=True, exist_ok=False)
             prior = state["last_results"].get(key)
-            child_argv = _batch_argv(original, prior, batch_iterations, directory)
+            selection_path = None
+            if selection is not None:
+                selection_path = directory / "scheduler-selection.json"
+                status.write_json(directory, selection_path.name, selection.to_dict(),
+                                  prefix=".scheduler-selection-")
+            child_argv = _batch_argv(original, prior, batch_iterations, directory,
+                                     scheduler_selection=selection_path)
             expected_binding = input_binding(child_argv)
             active = {"target_index": index, "selected_id": option(original, "--target-id"),
                       "store": option(original, "--store"), "batch_dir": str(directory),
                       "input_argv_sha256": _digest(child_argv), "pid": None}
+            if selection is not None:
+                active.update(scheduler_selection=selection.to_dict(),
+                              scheduler_selection_sha256=selection.digest)
             state["active"] = active
             save()
             publish("starting", active)
@@ -483,6 +746,9 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=()):
                             publish("running", active)
                             heartbeat_at = time.monotonic() + 30
                     if process.returncode != 0:
+                        if scheduler_manifest is not None:
+                            state["scheduler_state"] = _scheduled_failure_account(
+                                state, scheduler_manifest, active, directory, original).to_dict()
                         raise SerialRefused(f"child exited {process.returncode}; see retained logs")
                 result_path = directory / "loop-continuation.json"
                 body, sha = load_completed(result_path, expected_argv=child_argv,
@@ -491,6 +757,9 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=()):
                 if not isinstance(identity, dict) or identity.get("selected_id") != active["selected_id"]:
                     raise SerialRefused("child terminal belongs to another selected target")
                 state["last_results"][key] = {"path": str(result_path), "sha256": sha}
+                if scheduler_manifest is not None:
+                    state["scheduler_state"] = _scheduled_account(
+                        state, scheduler_manifest, active, body, directory).to_dict()
                 if body["terminal"] == "stopped":
                     request_stop(None, None)
             except (OSError, ValueError) as exc:
