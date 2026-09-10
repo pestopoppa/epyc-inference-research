@@ -18,7 +18,8 @@ from . import test_promotion_targets as promotion_fixture
 @pytest.mark.parametrize("dry_run", [True, False])
 def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
         dry_run, feedback_root=None, profile_observer=None, profile_contexts=None, runtime_only=False,
-        invalid_once=False, enrolled_pair=False, runtime_transition=None):
+        invalid_once=False, enrolled_pair=False, runtime_transition=None,
+        expected_claim_cycles=None):
     fixture = promotion_fixture.TheKeepBuildsAProductionCompleteAnchor()
     fixture.setUp()
     try:
@@ -231,7 +232,9 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
         else:
             assert len(issued) == (4 if invalid_once else 10 if enrolled_pair else 5)
             assert len(oracles) == len(issued)
-            assert held == ([True, False, True, False] if enrolled_pair else [True, False])
+            claim_cycles = (2 if enrolled_pair else 1) \
+                if expected_claim_cycles is None else expected_claim_cycles
+            assert held == [value for _ in range(claim_cycles) for value in (True, False)]
             if enrolled_pair:
                 # The caller owns the A -> B -> A identity/history assertions.
                 # This fixture only establishes both original source/build keeps.

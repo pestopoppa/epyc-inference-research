@@ -308,7 +308,10 @@ def _source_lineage_matches(row, receipts, validation_body=None):
             pass
         else:
             exact_validated_foreign = (
-                validation_body["source_commit"] == latest.kept_commit
+                (validation_body["source_commit"] == latest.kept_commit
+                 or (validation_body["source_commit"] in {
+                         receipts[0].parent_commit, receipts[0].kept_commit}
+                     and latest.kept_commit == row["current_anchor"]["commit"]))
                 and all(receipt.branch == latest.branch
                         and Path(receipt.repo).resolve() == Path(latest.repo).resolve()
                         for receipt in receipts))
@@ -430,8 +433,10 @@ def load_completed(path: Path, *, expected_argv=None, expected_binding=None):
         for reference in refs:
             receipt = surface_fold.reopen_reference(reference)
             if (receipt.selected_target != row["selected_target"]
-                    or receipt.branch != row["branch"]
-                    or Path(receipt.repo).resolve() != Path(row["worktree"]).resolve()):
+                    or ("source_validation" not in row
+                        and (receipt.branch != row["branch"]
+                             or Path(receipt.repo).resolve()
+                             != Path(row["worktree"]).resolve()))):
                 raise SerialRefused("source keep reference differs from original child identity")
     checked = None
     if "source_validation" in row:
@@ -971,16 +976,31 @@ def _batch_argv(original, prior, batch_iterations, directory, *, scheduler_selec
                 from . import archive
                 archive._retain_bytes(reference_path, raw)
             child_argv += ["--runtime-recipe-reference", str(reference_path.resolve())]
-    if source_prior is not None and (prior is None or source_prior != prior):
+    same_prior_cross_checkout = False
+    if source_prior is not None and source_prior == prior and prior_body is not None:
+        lineage = (prior_body.get("source_lineage_keeps")
+                   or prior_body.get("experimental_source_keeps") or ())
+        if lineage:
+            tip = surface_fold.reopen_reference(lineage[-1])
+            same_prior_cross_checkout = (Path(tip.repo).resolve()
+                                         != Path(prior_body["worktree"]).resolve())
+    if source_prior is not None and (prior is None or source_prior != prior
+                                     or same_prior_cross_checkout):
         _source_body, source_sha = load_completed(Path(source_prior["path"]))
         if source_sha != source_prior["sha256"]:
             raise SerialRefused("retained shared-source continuation changed")
-        child_argv += ["--source-anchor-continuation", source_prior["path"],
-                       "--source-anchor-sha256", source_sha]
-        if (validate_source or ((_source_body.get("source_lineage_keeps")
-                or _source_body.get("experimental_source_keeps"))
-                and (prior_body is None or prior_body["current_anchor"]
-                     != _source_body["current_anchor"]))):
+        source_target = _source_body.get("selected_target")
+        owns_source = (isinstance(source_target, dict)
+                       and source_target.get("selected_id") == option(original, "--target-id"))
+        authoring_ready = (prior_body is not None
+                           and prior_body.get("source_validation") is not None)
+        # The original owner resumes directly. Another target receives the pointer
+        # only for validation or after its exact passed validation has bound a build
+        # of this tip; source ownership then transfers without resetting either branch.
+        if owns_source or validate_source or authoring_ready:
+            child_argv += ["--source-anchor-continuation", source_prior["path"],
+                           "--source-anchor-sha256", source_sha]
+        if validate_source:
             child_argv.append("--validate-source-continuation")
     # Prospective common-scope selection remains inside these original child
     # arguments. Scheduler selection/claims must agree before this child launches.

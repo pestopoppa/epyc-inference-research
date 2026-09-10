@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 
-from . import run, scheduling, serial_run as sr, serial_scheduling as ss
+from . import cpu_screen, run, scheduling, serial_run as sr, serial_scheduling as ss
 from . import test_promotion_targets as promotion_fixture
 from . import test_existing_cpu_run as cpu_fixture
 from .test_legacy_targets import _argv, _resolved
@@ -672,6 +672,55 @@ def test_actual_cpu_keep_cross_target_then_older_history_uses_latest_source(
                 assert candidate_build.is_dir()
                 assert validation_oracles[0][0] == candidate_build
                 assert validation_oracles[0][1]["backend"] == "CPU"
+                authored = first.parent / "target-b-shared-author"
+                authored_argv = [*target_b[:target_b.index("--source-anchor-continuation")],
+                    "--resume-run", str(second / "loop-continuation.json"),
+                    "--source-anchor-continuation", str(first / "loop-continuation.json"),
+                    "--source-anchor-sha256", first_sha, "--iterations", "4",
+                    "--out", str(authored)]
+                assert original_main(authored_argv) == 0
+                authored_row, authored_sha = sr.load_completed(
+                    authored / "loop-continuation.json")
+                assert run._git(Path(first_row["worktree"]), "merge-base", "--is-ancestor",
+                                first_row["current_anchor"]["commit"],
+                                authored_row["current_anchor"]["commit"]) == ""
+                assert authored_row["worktree"] == str(target_b_tree.resolve())
+                b_next = first.parent / "target-b-shared-resume"
+                assert original_main([*target_b[:target_b.index(
+                    "--source-anchor-continuation")], "--resume-run",
+                    str(authored / "loop-continuation.json"),
+                    "--source-anchor-continuation",
+                    str(authored / "loop-continuation.json"), "--source-anchor-sha256",
+                    authored_sha, "--iterations", "1", "--out", str(b_next),
+                    "--dry-run"]) == 0
+                a_validation = first.parent / "target-a-shared-validation"
+                a_validation_argv = list(argv)
+                a_validation_argv[a_validation_argv.index("--anchor-build") + 1] = \
+                    first_row["current_anchor"]["path"]
+                assert original_main([*a_validation_argv, "--resume-run",
+                    str(first / "loop-continuation.json"), "--source-anchor-continuation",
+                    str(authored / "loop-continuation.json"), "--source-anchor-sha256",
+                    authored_sha, "--validate-source-continuation", "--iterations", "1",
+                    "--out", str(a_validation)]) == 0
+                a_validation_row, _a_validation_sha = sr.load_completed(
+                    a_validation / "loop-continuation.json")
+                assert run.surface_validation.reopen_reference(
+                    a_validation_row["source_validation"])["disposition"] == "passed"
+                a_resume = first.parent / "target-a-shared-resume"
+                assert original_main([*argv, "--resume-run",
+                    str(a_validation / "loop-continuation.json"),
+                    "--source-anchor-continuation",
+                    str(authored / "loop-continuation.json"), "--source-anchor-sha256",
+                    authored_sha, "--iterations", "1", "--out", str(a_resume)]) == 0
+                a_resume_row, _a_resume_sha = sr.load_completed(
+                    a_resume / "loop-continuation.json")
+                assert run._git(Path(first_row["worktree"]), "merge-base", "--is-ancestor",
+                                authored_row["current_anchor"]["commit"],
+                                a_resume_row["current_anchor"]["commit"]) == ""
+                assert a_resume_row["selected_target"]["selected_id"] == "target-a"
+                assert a_resume_row["worktree"] == first_row["worktree"]
+                observed.append((first_row, a_resume_row))
+                return 0
             # A newer keep can advance the live producer checkout without making
             # this immutable target-B verdict unreadable.
             newer = first.parent / "target-a-newer-source"
@@ -744,7 +793,11 @@ def test_actual_cpu_keep_cross_target_then_older_history_uses_latest_source(
         third = first.parent / "target-a-resumed"
         target_a = [*argv, "--resume-run", str(first / "loop-continuation.json"),
                     "--source-anchor-continuation", str(research / "loop-continuation.json"),
-                    "--source-anchor-sha256", research_sha, "--out", str(third), "--dry-run"]
+                    "--source-anchor-sha256", research_sha,
+                    "--validate-source-continuation", "--iterations", "1",
+                    "--out", str(third), "--dry-run"]
+        target_a[target_a.index("--anchor-build") + 1] = \
+            first_row["current_anchor"]["path"]
         starts = []
         real_startup = run.champion.verify_startup
 
@@ -760,7 +813,8 @@ def test_actual_cpu_keep_cross_target_then_older_history_uses_latest_source(
 
     with mock.patch.object(run, "main", exercise):
         cpu_fixture.test_existing_main_cpu_five_iterations_preserves_canonical_champion(
-            False, enrolled_pair=True)
+            False, enrolled_pair=True,
+            expected_claim_cycles=4 if cross_worktree and not validation_failure else 2)
     assert len(observed) == 1
 
 
@@ -773,3 +827,27 @@ def test_pending_validation_requires_ordinary_search_before_retry_for_each_targe
         assert sr._validation_retry_due(entry, 1)
     assert not sr._validation_retry_due(
         dict(entry, disposition="failed", retry_after_search_count=0), 99)
+
+
+def test_shared_source_routes_authoring_only_to_original_owner(tmp_path):
+    source_reference = {"path": "/retained/source", "sha256": "a" * 64}
+    source = {"selected_target": {"selected_id": "owner"}}
+
+    def prepare(argv, _prior, _directory, **_kwargs):
+        return list(argv), {"scope": "full"}
+
+    with mock.patch.object(sr, "load_completed", return_value=(source, "a" * 64)), \
+            mock.patch.object(cpu_screen, "prepare_batch", side_effect=prepare):
+        owner = sr._batch_argv(
+            ["--target-id", "owner"], None, 1, tmp_path / "owner",
+            source_prior=source_reference)
+        other = sr._batch_argv(
+            ["--target-id", "other"], None, 1, tmp_path / "other",
+            source_prior=source_reference)
+        validation = sr._batch_argv(
+            ["--target-id", "other"], None, 1, tmp_path / "validation",
+            source_prior=source_reference, validate_source=True)
+    assert sr.option(owner, "--source-anchor-continuation") == "/retained/source"
+    assert sr.option(other, "--source-anchor-continuation") is None
+    assert sr.option(validation, "--source-anchor-continuation") == "/retained/source"
+    assert "--validate-source-continuation" in validation
