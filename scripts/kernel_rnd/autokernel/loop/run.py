@@ -91,6 +91,19 @@ def _read_cpu_document(path: Path) -> dict:
     return json.loads(data)
 
 
+def _publish_preclaim_failure(out, scheduler_selection, target, error) -> None:
+    """Bind a scheduler refusal to its issued selection before any claim exists."""
+    if scheduler_selection is None or out is None:
+        return
+    out.mkdir(parents=True, exist_ok=True)
+    status.write_json(out, "loop-preclaim-failure.json", {
+        "schema": "epyc.autokernel.preclaim_failure.v1",
+        "selection_digest": scheduler_selection.digest,
+        "target": target,
+        "error_type": type(error).__name__,
+    }, prefix=".preclaim-failure-")
+
+
 def _bind_owned_cpu_affinity(original, resources):
     """Make inherited CPU placement explicit using only the campaign allocation."""
     from . import legacy_targets, resolved_recipe as rr
@@ -794,8 +807,19 @@ def main(argv: list[str] | None = None) -> int:
         if anchor_source["current_anchor"]["commit"] != verified_head:
             parser.error("continuation current anchor differs from current source head")
     if resumed is not None or source_resumed is not None:
-        serial_run.verify_exact_anchor(args.anchor_build, args.worktree, verified_head,
-                                       experimental=experimental)
+        try:
+            serial_run.verify_exact_anchor(
+                args.anchor_build, args.worktree, verified_head,
+                experimental=experimental,
+                allow_unverified=args.allow_unverified_anchor)
+        except Exception as verification_error:
+            try:
+                _publish_preclaim_failure(args.out, scheduler_selection,
+                                          selected_identity, verification_error)
+            except Exception as marker_error:
+                print(f"pre-claim failure marker unavailable: {marker_error}",
+                      file=sys.stderr)
+            raise
     print(f"{'candidate' if experimental else 'champion'}  {args.champion_branch} "
           f"@ {verified_head[:12]} — verified")
     if args.cpu_confirm_from:
@@ -2103,13 +2127,7 @@ def main(argv: list[str] | None = None) -> int:
     def publish_preclaim_failure(error):
         if scheduler_selection is None or original_claims:
             return
-        args.out.mkdir(parents=True, exist_ok=True)
-        status.write_json(args.out, "loop-preclaim-failure.json", {
-            "schema": "epyc.autokernel.preclaim_failure.v1",
-            "selection_digest": scheduler_selection.digest,
-            "target": selected_identity,
-            "error_type": type(error).__name__,
-        }, prefix=".preclaim-failure-")
+        _publish_preclaim_failure(args.out, scheduler_selection, selected_identity, error)
 
     def publish_held_claims():
         nonlocal held_claim_evidence, held_claim_error, held_claim_attempted

@@ -735,10 +735,13 @@ def full_commit(worktree: Path, commit: str) -> str:
     return done.stdout.strip()
 
 
-def verify_exact_anchor(path: Path, worktree: Path, commit: str, *, experimental=False):
+def verify_exact_anchor(path: Path, worktree: Path, commit: str, *, experimental=False,
+                        allow_unverified=False):
     """Reuse the original verifier, then require the named exact arm, not an ancestor."""
     commit = full_commit(worktree, commit)
-    champion.verify_anchor(path, worktree, commit, experimental_identity=experimental)
+    champion.verify_anchor(path, worktree, commit,
+                           experimental_identity=experimental,
+                           allow_unverified=allow_unverified)
     prov = path / "provenance.json"
     if prov.exists():
         body, _sha = _json(prov)
@@ -1556,7 +1559,12 @@ def _scheduled_failure_account(state, manifest, active, batch_dir, original):
     try:
         reference, _sha = _json(batch_dir / "loop-held-claims.json", limit=64 * 1024)
     except FileNotFoundError:
-        marker, _sha = _json(batch_dir / "loop-preclaim-failure.json", limit=64 * 1024)
+        try:
+            marker, _sha = _json(batch_dir / "loop-preclaim-failure.json", limit=64 * 1024)
+        except FileNotFoundError as exc:
+            raise SerialRefused(
+                "failed child published neither held-resource evidence nor a pre-claim "
+                "failure marker") from exc
         if (not isinstance(marker, dict)
                 or set(marker) != {"schema", "selection_digest", "target", "error_type"}
                 or marker["schema"] != "epyc.autokernel.preclaim_failure.v1"
