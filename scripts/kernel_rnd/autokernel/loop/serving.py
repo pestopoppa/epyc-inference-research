@@ -1012,18 +1012,33 @@ def _resolved_launch_options(recipe, build_dir, port, resolved):
 def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs: int,
             floor_pct: float | None, port: int = 18311,
             anchor_resolved_recipe=None, candidate_resolved_recipe=None,
-            frozen_requests=None, floor_request_digest: str | None = None) -> dict:
+            frozen_requests=None, floor_request_digest: str | None = None,
+            runtime_pair=None) -> dict:
     """Paired, alternating serving A/B: anchor vs candidate, `pairs` times, each pair a
     fresh server per side (drift control). Effect = median(candidate)/median(anchor) - 1.
     `decisive` is None when uncalibrated (no floor), so the keep gate fails closed."""
+    candidate_recipe = recipe
+    if runtime_pair is not None:
+        from .unified_planner import RuntimeArmPair
+        runtime_pair = RuntimeArmPair.from_dict(runtime_pair.to_dict())
+        if anchor_resolved_recipe is None or candidate_resolved_recipe is None \
+                or runtime_pair.anchor.backend != "cpu" \
+                or runtime_pair.anchor.template.to_dict() != recipe.to_dict() \
+                or runtime_pair.anchor.to_dict() != anchor_resolved_recipe.to_dict() \
+                or runtime_pair.candidate.to_dict() != candidate_resolved_recipe.to_dict():
+            raise RecipeError("runtime comparison differs from its original CPU arm pair")
+        if floor_pct is not None or floor_request_digest is not None:
+            raise ServingFloorMismatch("runtime treatment needs original strict frame admission, not a source floor")
+        candidate_recipe = runtime_pair.candidate.template
     frozen_requests = _frozen_requests(recipe, frozen_requests)
+    _frozen_requests(candidate_recipe, frozen_requests)
     requests_digest = request_digest(recipe, frozen_requests)
     if floor_request_digest != (requests_digest if floor_pct is not None else None):
         raise ServingFloorMismatch("serving floor does not identify these exact request bytes")
     if (anchor_resolved_recipe is None) != (candidate_resolved_recipe is None):
         raise RecipeError("resolved comparison requires both original arm launches")
     a_options = _resolved_launch_options(recipe, anchor_build, port, anchor_resolved_recipe)
-    c_options = _resolved_launch_options(recipe, candidate_build, port, candidate_resolved_recipe)
+    c_options = _resolved_launch_options(candidate_recipe, candidate_build, port, candidate_resolved_recipe)
     if frozen_requests is not None:
         a_options["frozen_requests"] = c_options["frozen_requests"] = frozen_requests
     belief_inputs = None
@@ -1033,7 +1048,9 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
         belief_inputs = serving_beliefs.prepare(
             recipe, anchor=anchor_resolved_recipe, candidate=candidate_resolved_recipe,
             anchor_build=anchor_build, candidate_build=candidate_build,
-            frozen_requests=frozen_requests, pairs=pairs)
+            frozen_requests=frozen_requests, pairs=pairs,
+            **({"candidate_recipe": candidate_recipe, "runtime_pair": runtime_pair}
+               if runtime_pair is not None else {}))
     except Exception as exc:
         belief_error = f"{type(exc).__name__}: {exc}"[:256]
     a_runs, c_runs = [], []
@@ -1044,7 +1061,7 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
     c_residency: list[dict] = []
     for _ in range(pairs):
         a_runs.append(_measure_once(recipe, anchor_build, port, evidence=a_residency, **a_options))
-        c_runs.append(_measure_once(recipe, candidate_build, port, evidence=c_residency, **c_options))
+        c_runs.append(_measure_once(candidate_recipe, candidate_build, port, evidence=c_residency, **c_options))
     a_med, c_med = statistics.median(a_runs), statistics.median(c_runs)
     effect = c_med / a_med - 1.0
     decisive = None if floor_pct is None else (abs(effect) * 100.0 >= floor_pct)
@@ -1069,6 +1086,11 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
             "anchor_residency": a_residency, "candidate_residency": c_residency}
     if requests_digest is not None:
         out.update(request_digest=requests_digest, floor_request_digest=floor_request_digest)
+    if runtime_pair is not None:
+        out.update(schema="epyc.autokernel.serving_runtime_ab.v1",
+                   runtime_pair=runtime_pair.to_dict(),
+                   candidate_recipe_hash=candidate_recipe.recipe_hash,
+                   admission="observation_only_original_strict_evidence_unavailable")
     if belief_inputs is not None:
         try:
             out["belief_capture"] = serving_beliefs.finish(out, belief_inputs)

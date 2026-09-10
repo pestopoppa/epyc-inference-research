@@ -86,7 +86,7 @@ RAN_MARKER = "backends passed"
 
 
 def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
-                   backend: str = "ROCm0") -> Verdict:
+                   backend: str = "ROCm0", resolved_recipe=None) -> Verdict:
     """`test-backend-ops` on the op the patch touches. The real correctness gate.
 
     THE DEFECT THIS SHAPE EXISTS TO PREVENT. This function used to pass
@@ -106,9 +106,18 @@ def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
         return Verdict("oracle_unavailable", False,
                        f"no test-backend-ops at {binary}")
     argv = [str(binary), "test", "-o", op, "-b", backend, "-j", "1"]
+    environment = residency.loader_env(binary)
+    if resolved_recipe is not None:
+        resolved_recipe.validate_launch(resolved_recipe.template, build_dir, resolved_recipe.port)
+        if backend != "CPU" or resolved_recipe.backend != "cpu":
+            raise ValueError("runtime oracle requires the original CPU recipe")
+        # This is still the existing op oracle, not an exact-token serving proof.
+        # Run it under the actual treatment's loader/env and CPU/NUMA prefix.
+        argv = [*resolved_recipe.topology_prefix, *argv]
+        environment = dict(resolved_recipe.launch_env)
     done = subprocess.run(argv, capture_output=True, text=True,
                           timeout=CORRECTNESS_TIMEOUT_S,
-                          env=residency.loader_env(binary))
+                          env=environment)
     output = done.stdout + done.stderr
     if RAN_MARKER not in output:
         # Usage text, a missing backend, a loader failure -- anything that means the

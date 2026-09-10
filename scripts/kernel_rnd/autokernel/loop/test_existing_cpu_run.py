@@ -16,7 +16,7 @@ from . import test_promotion_targets as promotion_fixture
 
 @pytest.mark.parametrize("dry_run", [True, False])
 def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
-        dry_run, feedback_root=None, profile_observer=None, profile_contexts=None):
+        dry_run, feedback_root=None, profile_observer=None, profile_contexts=None, runtime_only=False):
     fixture = promotion_fixture.TheKeepBuildsAProductionCompleteAnchor()
     fixture.setUp()
     try:
@@ -95,6 +95,7 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
             base_compile, base_planner = gates.compiles, run.actors.AgentPlanner
 
             def compile_cpu(*args, **kwargs):
+                assert not runtime_only, "runtime treatment must not compile"
                 assert held[-1] is True
                 assert kwargs["cpu_list"] == "0-95"
                 assert dict(kwargs["cmake_defines"])["GGML_HIP"] == "OFF"
@@ -118,18 +119,28 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
                     assert "Author/review source only" in context["program"]
                     assert context["program"].endswith(run.loop.PROGRAM.read_text(encoding="utf-8"))
                     hypothesis = replace(base_propose(context), mechanism_id=f"cpu-{len(issued) + 1}")
+                    assert context["target"]["recipe"] == context["runtime_anchor"]
+                    if runtime_only:
+                        treatment = run.actors._runtime_pair(
+                            {"kind": "threads", "candidate": template.threads + 1},
+                            context, hypothesis.mechanism_id)
+                        hypothesis = replace(hypothesis, runtime_pair=treatment)
                     issued.append(hypothesis)
                     return hypothesis
 
                 def author(hypothesis, _context):
+                    assert not runtime_only, "runtime treatment must not author source"
                     (actor.workspace / "kernel.c").write_text(hypothesis.mechanism_id)
                     return ("kernel.c",)
 
                 actor.propose, actor.author = propose, author
                 return actor
 
-            def oracle(build, *, backend):
+            def oracle(build, *, backend, resolved_recipe=None):
                 assert held[-1] is True and backend == "CPU"
+                if runtime_only:
+                    assert resolved_recipe.template.threads == template.threads + 1
+                    assert Path(build) == fixture.startup_anchor
                 oracles.append(str(build))
                 return gates.Verdict("correctness", True, "synthetic observation")
 
@@ -183,6 +194,15 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
                     host_state=changed) != expected_epoch
             assert result["baseline_scope"] == "experimental_candidate_not_champion"
             assert run.status.read(fixture.store)["baseline_scope"] == result["baseline_scope"]
+            if runtime_only:
+                assert not builds
+                assert run.status.read(fixture.store)["measurements_reached"] == 5
+                assert [row["status"] for row in result["iterations"]] == ["runtime_observed"] * 5
+                assert all(row["comparison"]["decisive"] is None for row in result["iterations"])
+                assert all(row["runtime_pair"]["anchor"]["build_dir"] == str(fixture.startup_anchor)
+                           for row in result["iterations"])
+                assert run._git(fixture.repo, "rev-parse", branch) == original_head
+                return
             assert [row["status"] for row in result["iterations"]] == [
                 "measured_null", "measured_null", "measured_null", "kept", "measured_null"]
             assert all(row["comparison"]["request_digest"] == result["floor_request_digest"]

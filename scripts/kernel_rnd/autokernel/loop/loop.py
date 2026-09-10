@@ -104,11 +104,22 @@ class Hypothesis:
     falsifier: str
     target_surface: str
     target_symbol: str
+    runtime_pair: Any = None
+
+    def __post_init__(self) -> None:
+        if self.runtime_pair is not None:
+            from .unified_planner import RuntimeArmPair
+            body = (self.runtime_pair.to_dict() if isinstance(self.runtime_pair, RuntimeArmPair)
+                    else self.runtime_pair)
+            object.__setattr__(self, "runtime_pair", RuntimeArmPair.from_dict(body))
 
     def to_dict(self) -> dict:
-        return {"mechanism_id": self.mechanism_id, "statement": self.statement,
+        row = {"mechanism_id": self.mechanism_id, "statement": self.statement,
                 "falsifier": self.falsifier, "target_surface": self.target_surface,
                 "target_symbol": self.target_symbol}
+        if self.runtime_pair is not None:
+            row["runtime_pair"] = self.runtime_pair.to_dict()
+        return row
 
 
 @dataclass(frozen=True)
@@ -293,25 +304,29 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             continue
 
         patch_reasons: list[str] = []
-        for _ in range(patch_rounds):
+        for _ in range(1 if hypothesis.runtime_pair is not None else patch_rounds):
             if should_abandon():
                 return stopped()
             working["prior_patch_rejections"] = list(patch_reasons)
-            on_step("authoring the patch")
-            paths = planner.author(hypothesis, working)
+            paths = ()
+            if hypothesis.runtime_pair is None:
+                on_step("authoring the patch")
+                paths = planner.author(hypothesis, working)
 
             # ---- CRITIC PASS 2: the diff, BEFORE the build ------------------
             if should_abandon():
                 return stopped()
-            on_step("critic pass 2: reviewing the diff")
-            patch_verdict = critic.review_patch(hypothesis, paths, working)
-            if not patch_verdict.accepted:
-                # The hypothesis is untouched: a bad patch is not evidence against
-                # the idea it was trying to implement.
-                patch_reasons.append(patch_verdict.reason)
-                continue
+            if hypothesis.runtime_pair is None:
+                on_step("critic pass 2: reviewing the diff")
+                patch_verdict = critic.review_patch(hypothesis, paths, working)
+                if not patch_verdict.accepted:
+                    # The hypothesis is untouched: a bad patch is not evidence against
+                    # the idea it was trying to implement.
+                    patch_reasons.append(patch_verdict.reason)
+                    continue
 
-            on_step("building and gating")
+            on_step("checking runtime treatment and correctness" if hypothesis.runtime_pair
+                    is not None else "building and gating")
             # Build, oracle, A/B and commit are ONE atomic step for this candidate.
             # Split across three separate acquisitions, a concurrent peer's keep
             # landing in a gap turns an ALREADY-MEASURED candidate into a stale one:
@@ -329,6 +344,10 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                 with tail_session():
                     passed, verdicts = gate(hypothesis, paths)
                     if not passed:
+                        if hypothesis.runtime_pair is not None:
+                            return Outcome("runtime_refused", hypothesis,
+                                           [verdicts[-1].reason if verdicts else "gate refused"],
+                                           gate_verdicts=verdicts)
                         # Compile and correctness failures loop back the same way; the
                         # toolchain's own message is the reason, so no critic is needed.
                         patch_reasons.append(
@@ -357,7 +376,8 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             # A null result IS a result. It is recorded with its mechanism and its
             # sample vector, because a loop whose record of failure is thinner than
             # its record of success teaches its planner to repeat the failures.
-            return Outcome("measured_null", hypothesis,
+            return Outcome("runtime_observed" if hypothesis.runtime_pair is not None
+                           else "measured_null", hypothesis,
                            [_null_reason(comparison)],
                            comparison, verdicts)
 
