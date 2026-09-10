@@ -244,6 +244,7 @@ def _solve(frame, statistical, blocks, samples_ref):
 
 
 def calculation_source():
+    from . import runtime_recovery
     return ob._freeze({"callables": [lo.callable_identity(function) for function in (
         _solve, controls.run_calibration_block, st.solve_calibration,
         DirectCalibration._launch, DirectCalibration._reopen_launch,
@@ -252,7 +253,8 @@ def calculation_source():
         DirectPairWindow._context, DirectPairWindow._checkpoint, DirectPairWindow.finish,
         DirectPairWindow._prompts_for,
         positive_control_pair, degraded_work_control)],
-        "statistics_module": st.STATISTICS_MODULE_ID})
+        "statistics_module": st.STATISTICS_MODULE_ID,
+        "recovery": runtime_recovery.source_identity()})
 
 
 class DirectCalibration:
@@ -265,7 +267,7 @@ class DirectCalibration:
     """
 
     def __init__(self, *, store, held_claim, campaign_id, epoch, anchor, neutral,
-                 prompts, statistical, host_state, deadline_monotonic_s=None):
+                 prompts, statistical, host_state, deadline_monotonic_s=None, on_progress=None):
         if type(store) is not mc.ArtifactStore or type(held_claim) is not claim.HeldCpuClaim:
             raise RuntimeCalibrationRefused("direct calibration requires original store and acquired CPU context")
         if type(statistical) is not ServingStatisticsDeclaration:
@@ -296,6 +298,7 @@ class DirectCalibration:
             raise RuntimeCalibrationRefused("original host-state frame is required")
         self.store, self.held_claim = store, held_claim
         self.deadline_monotonic_s = deadline_monotonic_s
+        self._on_progress = on_progress
         self.window_config = runtime_window.configuration(store, held_claim,
             storage_floor_bytes_free=statistical.controls.storage_floor_bytes_free,
             nominal_khz=host_state.get("nominal_khz", runtime_window.DEFAULT_NOMINAL_KHZ))
@@ -335,6 +338,9 @@ class DirectCalibration:
             self.failures = original["failures"]
             self.pending = original["pending"]
             self.solution = original["solution"]
+            if self.pending is not None:
+                from .loop import RunAborted
+                raise RunAborted("original calibration launch cleanup unresolved; no fallback measurement")
             # Reopen every completed prefix member before considering any new
             # launch. A moved or invalid original is never replaced silently.
             self._material(self.launches, complete=False)
@@ -347,16 +353,35 @@ class DirectCalibration:
             "declaration": self.declaration.to_dict(), "launches": self.launches,
             "failures": self.failures,
             "pending": self.pending, "solution": self.solution}, prefix=".direct-calibration-")
+        self._progress()
+
+    def _progress(self):
+        # Diagnostics only: no new artifact reads or authority, and callback
+        # failure cannot change a durable checkpoint or an execution exception.
+        try:
+            if self._on_progress is not None:
+                pair_window = isinstance(self, DirectPairWindow)
+                limit = (self.outputs.b_min_blocks + 2 * self.maximum if pair_window
+                         else 4 * self.statistical.controls.calibration_block_count)
+                self._on_progress({
+                    "observed_at": _now(), "phase": "pair_window" if pair_window else "calibration",
+                    "frame_digest": self.identity, "completed_launches": len(self.launches),
+                    "launch_limit": limit, "limit_is_upper_bound": pair_window,
+                    "failed_launches": len(self.failures),
+                    "pending": list(self.pending["membership"]) if self.pending else None})
+        except Exception:
+            pass
 
     def collect(self):
         self._sources()
+        if self.pending is not None:
+            from .loop import RunAborted
+            raise RunAborted("original calibration launch cleanup unresolved; no fallback measurement")
         if self.solution is not None:
             reference = mc.StoredArtifact(**self.solution)
             self.reopen(reference)
+            self._progress()
             return reference
-        if self.pending is not None:
-            raise RuntimeCalibrationRefused(
-                "original calibration launch has no completed owning boundary; it cannot be replay-launched")
         n = self.statistical.controls.calibration_block_count
         for kind, pair in self.pairs.items():
             schedule = st.OrderSchedule.derive(campaign_seed=self.statistical.campaign_seed,
@@ -582,10 +607,12 @@ class DirectPairWindow:
     _launch = DirectCalibration._launch
     _reopen_launch = DirectCalibration._reopen_launch
     _sources = DirectCalibration._sources
+    _progress = DirectCalibration._progress
 
     def __init__(self, *, calibration, calibration_reference, pair, candidate_id,
-                 stratum="selection"):
+                 stratum="selection", replacement=None):
         from .unified_planner import RuntimeArmPair
+        from . import runtime_recovery
         if type(calibration) is not DirectCalibration:
             raise RuntimeCalibrationRefused("original direct calibration owner is required")
         if type(pair) is RuntimeArmPair:
@@ -609,6 +636,7 @@ class DirectPairWindow:
         outputs = solve.require_accepted()
         self.store, self.held_claim = calibration.store, calibration.held_claim
         self.deadline_monotonic_s = calibration.deadline_monotonic_s
+        self._on_progress = calibration._on_progress
         self.window_config = calibration.window_config
         self.prompts, self.requests = calibration.prompts, calibration.requests
         self.statistical = calibration.statistical
@@ -647,10 +675,9 @@ class DirectPairWindow:
             "units": units, "prompt_manifest": self.prompts.to_dict(),
             "host_window_source": ob._plain(runtime_window.source_identity()),
             "calculation_source": ob._plain(calculation_source()),
-            "response_source": ob._plain(response.source_identity())})
+            "response_source": ob._plain(response.source_identity()),
+            **({"replacement": replacement} if replacement is not None else {})})
         self.identity = _digest(self.frame)
-        self.declaration = self.store.write("direct-pair-window", {
-            "schema": SCHEMA, "frame": ob._plain(self.frame)})
         self.state_name = f"direct-pair-window-{self.identity}.json"
         self.launches, self.failures, self.pending, self.solution = [], [], None, None
         self.boundaries = {"open": None, "close": None}
@@ -660,15 +687,26 @@ class DirectPairWindow:
             original, _sha = serial_run._json(path, limit=16_384 + 4096 * (3 * self.maximum))
             if (set(original) != {"schema", "frame_digest", "declaration", "launches", "failures", "pending", "solution", "boundaries"}
                     or original["schema"] != SCHEMA or original["frame_digest"] != self.identity
-                    or original["declaration"] != self.declaration.to_dict()
                     or type(original["launches"]) is not list
                     or len(original["launches"]) > outputs.b_min_blocks + 2 * self.maximum):
                 raise RuntimeCalibrationRefused("original pair-window checkpoint differs")
+            self.declaration = mc.StoredArtifact(**original["declaration"])
+            declared = ob._plain(self.store.read(self.declaration.locator, self.declaration.sha256))
+            if declared.get("schema") != SCHEMA or declared.get("frame") != ob._plain(self.frame):
+                raise RuntimeCalibrationRefused("original pair-window declaration differs")
             self.launches, self.pending, self.solution = (
                 original["launches"], original["pending"], original["solution"])
             self.boundaries = original["boundaries"]
             self.failures = original["failures"]
+            if self.pending is not None or any(row.get("terminal_invalid") is not True for row in self.failures):
+                from .loop import RunAborted
+                raise RunAborted("original pair launch cleanup unresolved; no fallback measurement")
         else:
+            if replacement is not None and replacement.get("holder") != runtime_recovery.holder_identity(self.held_claim):
+                raise RuntimeCalibrationRefused("replacement was selected for another original holder")
+            self.declaration = self.store.write("direct-pair-window", {
+                "schema": SCHEMA, "frame": ob._plain(self.frame),
+                "holder": runtime_recovery.holder_identity(self.held_claim)})
             self._checkpoint()
 
     def _context(self, kind, index, arm):
@@ -682,6 +720,7 @@ class DirectPairWindow:
             "failures": self.failures,
             "pending": self.pending, "solution": self.solution,
             "boundaries": self.boundaries}, prefix=".direct-pair-window-")
+        self._progress()
 
     def finish(self):
         if self.boundaries["close"] is None:

@@ -22,12 +22,14 @@ CONTINUATION_SCHEMA_V2 = "epyc.autokernel.loop_continuation.v2"
 HELD_REFERENCE_SCHEMA = "epyc.autokernel.direct_held_reference.v1"
 SERIAL_SCHEMA = "epyc.autokernel.serial_run.v1"
 _DOCUMENT_FLAGS = ("--resolved-campaign", "--cpu-serving-launch", "--gpu-serving-launch",
-                   "--frozen-prompts", "--serving-recipe", "--runtime-recipe-reference")
+                   "--frozen-prompts", "--serving-recipe", "--runtime-recipe-reference",
+                   "--runtime-recovery-reference")
 _CHANGING_FLAGS = frozenset({"--out", "--iterations", "--resume-run", "--anchor-build",
                             "--cor-build", "--cpu-calibrate-serving", "--gpu-calibrate-serving",
                             "--scheduler-selection", "--dry-run", "--cpu-screen-scope",
                             "--cpu-confirm-from", "--source-anchor-continuation",
-                            "--source-anchor-sha256", "--runtime-recipe-reference"})
+                            "--source-anchor-sha256", "--runtime-recipe-reference",
+                            "--runtime-recovery-reference"})
 _CONTINUATION_FIELDS = {"schema", "terminal", "input_argv", "input_argv_sha256", "binding",
                         "worktree", "branch", "model", "selected_target", "current_anchor", "cor_anchor",
                         "iterations_requested", "iterations_completed", "outcome_counts", "result_file"}
@@ -101,7 +103,7 @@ def input_binding(argv) -> dict:
 
 def resume_binding(argv) -> dict:
     """Prior-child binding before adding a newly selected runtime recipe."""
-    return input_binding(_without(argv, {"--runtime-recipe-reference"}))
+    return input_binding(_without(argv, {"--runtime-recipe-reference", "--runtime-recovery-reference"}))
 
 
 def load_resume(path: Path, current_argv):
@@ -302,7 +304,7 @@ def _validate_target_args(argv, *, owner_anchor_waiver=False) -> list[str]:
     reserved = {"--out", "--iterations", "--resume-run", "--scheduler-selection", "--dry-run",
                 "--calibrate-surface",
                 "--source-anchor-continuation", "--source-anchor-sha256",
-                "--runtime-recipe-reference",
+                "--runtime-recipe-reference", "--runtime-recovery-reference",
                 "--allow-unverified-anchor", "--help", "-h"}
     if owner_anchor_waiver:
         reserved.remove("--allow-unverified-anchor")
@@ -518,7 +520,7 @@ def _source_owner_key(argv):
 
 
 def _batch_argv(original, prior, batch_iterations, directory, *, scheduler_selection=None,
-                scope_preview=None, source_prior=None):
+                scope_preview=None, source_prior=None, recovery_reference=None):
     child_argv = list(original)
     if prior is not None:
         prior_body, sha = load_resume(Path(prior["path"]), original)
@@ -548,6 +550,12 @@ def _batch_argv(original, prior, batch_iterations, directory, *, scheduler_selec
     from . import cpu_screen
     child_argv, _screen_selection = cpu_screen.prepare_batch(
         child_argv, prior, directory, batch_iterations=batch_iterations, previewed=scope_preview)
+    if recovery_reference is not None and _screen_selection["scope"] == "full":
+        reference_path = Path(directory) / "runtime-recovery-reference.json"
+        raw = json.dumps(recovery_reference, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+        from . import archive
+        archive._retain_bytes(reference_path, raw)
+        child_argv += ["--runtime-recovery-reference", str(reference_path.resolve())]
     child_argv += ["--iterations", str(batch_iterations), "--out", str(directory)]
     if scheduler_selection is not None:
         child_argv += ["--scheduler-selection", str(Path(scheduler_selection).resolve())]
@@ -617,6 +625,7 @@ def _reconcile_completed(root, state, targets, batch_iterations):
     argv = _batch_argv(
         original, state["last_results"].get(str(index)), batch_iterations,
         directory, scheduler_selection=selection_path,
+        recovery_reference=state.get("runtime_recovery", {}).get(str(index)),
         source_prior=state.get("source_results", {}).get(_source_owner_key(original)))
     expected = {"target_index": index, "selected_id": option(original, "--target-id"),
                 "store": option(original, "--store"), "batch_dir": str(directory),
@@ -626,6 +635,14 @@ def _reconcile_completed(root, state, targets, batch_iterations):
             active.get(key) != value for key, value in expected.items()):
         raise SerialRefused("previous active batch differs from original target/arguments")
     path = directory / "loop-continuation.json"
+    if not path.exists() and scheduled is not None and option(original, "--cpu-serving-launch"):
+        from . import runtime_recovery
+        recovery = runtime_recovery.retain(directory, active, argv)
+        if runtime_recovery.pending(recovery) is None:
+            raise SerialRefused("failed child has no original recoverable runtime attempt")
+        return {"target_index": index, "batch_number": number, "terminal": "failed",
+            "result": None, "runtime_recovery": recovery,
+            "process_terminal_basis": _original_child_terminal(active)}
     body, sha = load_completed(path, expected_argv=argv, expected_binding=input_binding(argv))
     identity = body["selected_target"]
     if not isinstance(identity, dict) or identity.get("selected_id") != active["selected_id"]:
@@ -700,6 +717,7 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
             state["scheduler_state"] = scheduling.initial_state(
                 scheduler_manifest.config, scheduler_manifest.scheduler_id).to_dict()
     state.setdefault("source_results", {})
+    state.setdefault("runtime_recovery", {})
     if scheduler_manifest is not None:
         from . import scheduling
         scheduling.SchedulerState.from_dict(state.get("scheduler_state"))
@@ -735,6 +753,30 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                                                  for key, value in state["failed_targets"].items()}},
                      stale_after_s=180)
 
+    def retain_recovery(active, argv, directory):
+        # Optional for ordinary source work. Failure remains a visible diagnostic,
+        # not a new launch prerequisite or a fabricated success/held interval.
+        if scheduler_manifest is None or option(argv, "--cpu-serving-launch") is None:
+            return
+        from . import runtime_recovery
+        key = str(active["target_index"])
+        try:
+            reference = runtime_recovery.retain(directory, active, argv)
+            interrupted = runtime_recovery.pending(reference)
+            previous_pending = (runtime_recovery.pending(state["runtime_recovery"][key])
+                                if key in state["runtime_recovery"] else None)
+        except (OSError, ValueError) as exc:
+            state.setdefault("runtime_recovery_errors", {})[key] = str(exc)[:400]
+        else:
+            if interrupted is not None:
+                state["runtime_recovery"][key] = reference
+                state.get("runtime_recovery_errors", {}).pop(key, None)
+                # Reeligibility requires original pending runtime work, not merely
+                # a closed CPU claim after an unrelated deterministic failure.
+                state["failed_targets"].pop(key, None)
+            elif key in state["runtime_recovery"] and previous_pending is None:
+                state["runtime_recovery"].pop(key)
+
     for sig in handlers:
         signal.signal(sig, request_stop)
     try:
@@ -746,20 +788,28 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                 targets[recovered["target_index"]],
                 state["last_results"].get(str(recovered["target_index"])),
                 batch_iterations, recovered_dir,
+                recovery_reference=state["runtime_recovery"].get(str(recovered["target_index"])),
                 source_prior=state["source_results"].get(
                     _source_owner_key(targets[recovered["target_index"]])),
                 scheduler_selection=(recovered_dir / "scheduler-selection.json"
                                      if scheduler_manifest is not None else None))
-            body, _sha = load_completed(
-                Path(recovered["result"]["path"]),
-                expected_binding=input_binding(expected_recovered_argv))
-            if scheduler_manifest is not None:
-                state["scheduler_state"] = _scheduled_account(
-                    state, scheduler_manifest, recovered_active, body,
-                    recovered_dir).to_dict()
-            state["last_results"][str(recovered["target_index"])] = recovered["result"]
-            state["source_results"][_source_owner_key(
-                targets[recovered["target_index"]])] = recovered["result"]
+            if recovered["result"] is None:
+                state["scheduler_state"] = _scheduled_failure_account(
+                    state, scheduler_manifest, recovered_active, recovered_dir,
+                    targets[recovered["target_index"]]).to_dict()
+                state["runtime_recovery"][str(recovered["target_index"])] = recovered["runtime_recovery"]
+            else:
+                body, _sha = load_completed(
+                    Path(recovered["result"]["path"]),
+                    expected_binding=input_binding(expected_recovered_argv))
+                if scheduler_manifest is not None:
+                    state["scheduler_state"] = _scheduled_account(
+                        state, scheduler_manifest, recovered_active, body,
+                        recovered_dir).to_dict()
+                state["last_results"][str(recovered["target_index"])] = recovered["result"]
+                state["source_results"][_source_owner_key(
+                    targets[recovered["target_index"]])] = recovered["result"]
+                retain_recovery(recovered_active, expected_recovered_argv, recovered_dir)
             state["last_reconciliation"] = recovered
             state["active"] = None
             state["next_batch"] += 1
@@ -787,6 +837,17 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                         continue
                     preview = cpu_screen.preview_batch(target, state["last_results"].get(str(i)),
                                                        batch_iterations=batch_iterations)
+                    recovery_ref = state["runtime_recovery"].get(str(i))
+                    if recovery_ref is not None:
+                        from . import runtime_recovery
+                        try:
+                            interrupted = runtime_recovery.pending(recovery_ref)
+                        except (OSError, ValueError) as exc:
+                            state.setdefault("runtime_recovery_errors", {})[str(i)] = str(exc)[:400]
+                            interrupted = None
+                        if interrupted is not None and preview["scope"] != "full_confirmation":
+                            preview = {"scope": "full", "candidate": None,
+                                       "reason": "original pending full-target runtime pair"}
                     proposal = cpu_screen.scoped_proposal(scheduler_manifest.proposals[selected_id], preview)
                     debt = cpu_screen.confirmation_debt(
                         scheduler_manifest.config, source_state, proposal, preview)
@@ -830,6 +891,7 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                 status.write_json(directory, selection_path.name, selection.to_dict(),
                                   prefix=".scheduler-selection-")
             child_argv = _batch_argv(original, prior, batch_iterations, directory,
+                                     recovery_reference=state["runtime_recovery"].get(key),
                                      scheduler_selection=selection_path,
                                      scope_preview=(previews[option(original, "--target-id")]
                                                     if previews is not None else None),
@@ -900,6 +962,8 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                 if process is not None and process.poll() is None:
                     process.send_signal(signal.SIGTERM)
                     process.wait()  # The existing owner drains; never kill by name/group.
+            if process is not None:
+                retain_recovery(active, child_argv, directory)
             state["active"] = None
             state["next_batch"] += 1
             save()

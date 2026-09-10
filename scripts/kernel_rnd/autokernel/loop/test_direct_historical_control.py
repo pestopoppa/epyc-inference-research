@@ -64,13 +64,13 @@ def test_available_history_missing_execution_is_retained_not_backend_unavailable
         monkeypatch.undo()
 
 
-def test_repeated_fresh_call_cannot_reissue_failed_attempt(tmp_path, monkeypatch):
+def test_missing_caller_reference_reopens_original_result_without_reissuing(tmp_path, monkeypatch):
     store = ArtifactStore(tmp_path / "artifacts")
     monkeypatch.setattr(owner.lc, "INSTRUMENT_BINARY", tmp_path / "absent" / "llama-bench")
     with held(tmp_path) as claim:
-        invoke(store, claim)
-        with pytest.raises(owner.HistoricalControlRefused, match="already issued"):
-            invoke(store, claim)
+        original = invoke(store, claim)
+        assert invoke(store, claim)[2] == original[2]
+        assert len(list(store.root.glob("historical-control-*"))) == 1
 
 
 @pytest.mark.parametrize("change", ["campaign", "window", "frame", "source"])

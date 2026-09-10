@@ -353,6 +353,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="optional original ServingStatisticsDeclaration; otherwise direct campaign input defaults")
     parser.add_argument("--runtime-recipe-reference", type=Path,
                         help="original serial-owned retained recipe reference; never a floor or launch permit")
+    parser.add_argument("--runtime-recovery-reference", type=Path,
+                        help="target-local original serial teardown reference; not admission or a claim")
     parser.add_argument("--calibrate-runtime", action="store_true",
                         help="collect/reopen strict CPU anchor A/A and neutral calibration under the existing claim; "
                              "does not qualify controls or bank a runtime treatment")
@@ -787,6 +789,7 @@ def main(argv: list[str] | None = None) -> int:
     runtime_owner = [None]
     source_floor_refresh = [False]
     runtime_recipe_reference = [None]
+    runtime_status = [None]
     feedback = serving_beliefs.PlannerFeedback(args.store, args.belief_root_repo)
     shared_history = archive.SharedHistory(args.shared_history_root, current_store=args.store,
                                            batch_directory=args.out)
@@ -1040,9 +1043,11 @@ def main(argv: list[str] | None = None) -> int:
                     if isinstance(exc, runtime_calibration.RuntimeLaunchBudgetExhausted):
                         runtime_enabled = False
                         runtime_preparation.update(status="budget_exhausted", reason=str(exc))
+                        report_runtime_progress()
                         raise loop.TailRefused("runtime preparation budget ended; original prefix retained, "
                                                "source research and other targets remain available") from exc
                     runtime_preparation.update(status="observed_not_admitted", reason=str(exc))
+                    report_runtime_progress()
                     print(f"runtime admission unavailable: {exc}; retaining unqualified observation")
                 return _serving_comparison(lambda: serving.compare(
                     pair.anchor.template, anchor_build[0], anchor_build[0],
@@ -1553,6 +1558,7 @@ def main(argv: list[str] | None = None) -> int:
             **({"batch": {"output_dir": str(args.out.resolve()), "pid": os.getpid()}}
                if args.out is not None else {}),
             **({"baseline_scope": "experimental_candidate_not_champion"} if experimental else {}),
+            **({"runtime_preparation": runtime_status[0]} if runtime_status[0] is not None else {}),
             anchor_guard=anchor_guard_seen[-1] if anchor_guard_seen else None,
             accumulator=accumulator_state(),
             gpu=gpu if gpu is not None else gpu_reading(outcomes),
@@ -1580,6 +1586,35 @@ def main(argv: list[str] | None = None) -> int:
     # The original function above remains the one snapshot renderer; this wrapper is
     # the sole lifecycle/serialization path into it.
     publish = status_publisher.publish
+
+    def report_runtime_progress(row=None):
+        # Snapshot on the execution thread. The heartbeat only reuses this
+        # detached compact view; it never reads runtime artifacts or refreshes
+        # the owning progress timestamp.
+        try:
+            previous = runtime_status[0] or {}
+            progress = dict(row) if row is not None else previous.get("progress")
+            runtime_status[0] = {
+                "status": runtime_preparation.get("status", "preparing"),
+                "reason": str(runtime_preparation.get("reason") or "")[:256],
+                "calibration_launches": runtime_preparation.get("calibration_launches"),
+                "progress": progress,
+                "selected_execution_digest": feedback_anchor[0].execution_digest,
+                "selected_recipe": (
+                    f"threads={feedback_anchor[0].template.threads} "
+                    f"topology={' '.join(feedback_anchor[0].topology_prefix) or 'inherited'} · "
+                    + feedback_anchor[0].template.describe())[:512],
+                "selected_recipe_reference": (None if runtime_recipe_reference[0] is None
+                                              else dict(runtime_recipe_reference[0]))}
+            if row is not None:
+                label = "CPU runtime: " + row["operation"]
+                if "completed_launches" in row:
+                    bound = "up to " if row["limit_is_upper_bound"] else ""
+                    label += (f" / {row['phase']} — {row['completed_launches']}/"
+                              f"{bound}{row['launch_limit']} valid launches")
+                publish("running", latest, hotspot_rows=hotspot_rows, step=label)
+        except Exception as exc:
+            print(f"runtime progress unavailable: {type(exc).__name__}: {exc}", file=sys.stderr)
 
     def run_pooled() -> pool.PoolResult:
         """Drive the loop across N detached lanes. THE run path -- the sequential
@@ -1653,6 +1688,7 @@ def main(argv: list[str] | None = None) -> int:
                     selected_recipe=comparison.row["runtime_admission"])
                 runtime_recipe_reference[0] = runtime_owner[0].selection_reference(
                     selected, current_source_commit=current_anchor_commit[0])
+                report_runtime_progress()
                 reprofile()
                 return None
             refuse_uncalibrated_keep(args.surface, calibrated, comparison)
@@ -1690,6 +1726,18 @@ def main(argv: list[str] | None = None) -> int:
             return pool.reset_to_champion(worker, champion_tree=args.worktree,
                                           branch=args.champion_branch)
 
+        from . import runtime_recovery
+        pending_pair = (runtime_owner[0].pending_pair() if runtime_enabled and
+                        runtime_owner[0] is not None else None)
+        pending_slot = runtime_recovery.PendingPlanner.slot(pending_pair)
+
+        def make_planner(worker):
+            if screen_confirmation:
+                return cpu_screen.RetainedPlanner(screen_confirmation, worker, screen_prepared["launch"])
+            ordinary = actors.AgentPlanner(workspace=worker.worktree, backend=planner_backend)
+            return (runtime_recovery.PendingPlanner(ordinary, pending_slot)
+                    if pending_pair is not None else ordinary)
+
         return pool.drive(
             commit=commit_pooled,
             reset=reset_retained,
@@ -1698,9 +1746,7 @@ def main(argv: list[str] | None = None) -> int:
                                    root=args.worker_root,
                                    build_root=args.worker_build_root,
                                    execute=True),
-            make_planner=lambda worker: (cpu_screen.RetainedPlanner(
-                screen_confirmation, worker, screen_prepared["launch"]) if screen_confirmation
-                else actors.AgentPlanner(workspace=worker.worktree, backend=planner_backend)),
+            make_planner=make_planner,
             make_critic=lambda worker: actors.AgentCritic(
                 workspace=worker.worktree, backend=critic_backend),
             build_context=build_context, make_gate=gate_for,
@@ -1726,12 +1772,24 @@ def main(argv: list[str] | None = None) -> int:
         escalation = None if args.runtime_control_escalation is None else controls.OperatorEscalation(
             **_read_cpu_document(args.runtime_control_escalation))
         original = _cpu_arm(direct_launch, anchor_build[0])
+        recovery = None
+        if args.runtime_recovery_reference is not None:
+            from . import runtime_recovery
+            try:
+                recovery = _read_cpu_document(args.runtime_recovery_reference)
+                runtime_recovery.reopen(recovery, current_argv=original_argv)
+            except (OSError, ValueError) as exc:
+                # Ordinary source work remains available; an interrupted runtime
+                # window will still refuse without a valid original teardown join.
+                print(f"runtime recovery unavailable: {exc}", file=sys.stderr)
+                recovery = None
         runtime_owner[0] = runtime_admission.RuntimeAdmission(store=runtime_store,
             held_claim=original_claims[0], campaign_id=campaign_id, epoch=epoch,
             original=original, prompts=manifest, statistical=statistical,
             host_state={**epoch_inputs, "nominal_khz": args.runtime_nominal_khz},
             worktree=args.worktree, source_commit=current_anchor_commit[0], escalation=escalation,
-            deadline_monotonic_s=runtime_deadline)
+            deadline_monotonic_s=runtime_deadline, recovery_reference=recovery,
+            on_progress=report_runtime_progress)
         selected = runtime_owner[0].selected()
         feedback_anchor[0] = selected
         if selected.to_dict() != original.to_dict():
@@ -1747,6 +1805,7 @@ def main(argv: list[str] | None = None) -> int:
             historical_replay="original backend control owner supplies its separate declared frame")
         runtime_recipe_reference[0] = runtime_owner[0].selection_reference(selected,
             current_source_commit=current_anchor_commit[0], origin=runtime_recipe_reference[0])
+        report_runtime_progress()
         print(f"runtime   optional first-treatment setup: {4 * statistical.controls.calibration_block_count} "
               "original calibration server launches plus controls; source proposals do not require it")
     held_claim_evidence = None
@@ -1770,6 +1829,11 @@ def main(argv: list[str] | None = None) -> int:
                 "schema": "epyc.autokernel.direct_held_reference.v1",
                 "selection_digest": scheduler_selection.digest,
                 "evidence": held_claim_evidence}, prefix=".held-claims-")
+            if runtime_owner[0] is not None:
+                interrupted = runtime_owner[0].interruption_reference()
+                if interrupted is not None:
+                    status.write_json(args.out, "loop-runtime-interruption.json", interrupted,
+                                      prefix=".runtime-interruption-")
         except Exception as capture_error:
             # Missing accounting remains visible; never relabel an already
             # archived comparison or replace the original operational exception.
@@ -1779,6 +1843,8 @@ def main(argv: list[str] | None = None) -> int:
             if original_store is not None:
                 original_store.close()
 
+    if cpu_launch:
+        report_runtime_progress()
     try:
         publish("starting")
         status_publisher.start()
