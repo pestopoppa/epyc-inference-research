@@ -59,12 +59,32 @@ def _forbid_execution(monkeypatch):
             monkeypatch.setattr(module, name, forbidden)
 
 
-@pytest.mark.parametrize("backend,seed,envelope", [
-    ("cpu", False, False), ("cpu", True, True), ("gpu", False, True), ("gpu", True, False),
+@pytest.mark.parametrize("backend,seed,envelope,inherited", [
+    ("cpu", False, False, False), ("cpu", True, True, False),
+    ("gpu", False, True, False), ("gpu", True, False, False), ("cpu", False, True, True),
 ])
 def test_actual_main_selects_target_and_retains_existing_dry_run(
-        tmp_path, monkeypatch, capsys, backend, seed, envelope):
+        tmp_path, monkeypatch, capsys, backend, seed, envelope, inherited):
     resolved, launch = _resolved(backend=backend, seed=seed)
+    if inherited:
+        from . import resolved_recipe as rr
+        prefix = []  # Actual worker_fast production recipe inherits placement.
+        launch = rr.resolve_canonical_launch(
+            replace(launch.template, cpu_list=None), build_dir=launch.build_dir,
+            command_argv=launch.command_argv, topology_prefix=prefix,
+            launch_environment=dict(launch.launch_env),
+            artifact_identities={"model": launch.model.to_dict(), "drafter": None,
+                "executable": launch.executable.to_dict(), "dsos": [x.to_dict() for x in launch.dsos]},
+            backend="cpu", environment_policy=launch.environment_policy, port=launch.port,
+            runtime_binary_dir=launch.runtime_binary_dir, runtime_ld_paths=launch.runtime_ld_paths,
+            provenance=dict(launch.provenance))
+        rebound = run._bind_owned_cpu_affinity(launch, resolved.resources)
+        assert launch.template.cpu_list is None
+        assert rebound.template.cpu_list == "0-95"
+        assert rebound.command_argv == launch.command_argv and rebound.dsos == launch.dsos
+        assert rebound.executable == launch.executable and rebound.launch_env == launch.launch_env
+        assert dict(rebound.provenance)["inherited_affinity_parent"] == launch.snapshot_digest
+        assert run._bind_owned_cpu_affinity(rebound, resolved.resources) is rebound
     argv = _argv(tmp_path, resolved, launch, cpu=backend == "cpu", envelope=envelope)
     _forbid_execution(monkeypatch)
     startups, censuses = [], []

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import ExitStack
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import hashlib
 import json
 import os
@@ -89,6 +89,25 @@ def _read_cpu_document(path: Path) -> dict:
     if len(data) > 2 * 1024 * 1024:
         raise ValueError("CPU launch/request document exceeds 2 MiB")
     return json.loads(data)
+
+
+def _bind_owned_cpu_affinity(original, resources):
+    """Make inherited CPU placement explicit using only the campaign allocation."""
+    from . import legacy_targets, resolved_recipe as rr
+    if original.backend != "cpu" or original.template.cpu_list:
+        return original
+    cpu_list = legacy_targets.validate_resources(resources, original, backend="cpu")
+    return rr.resolve_canonical_launch(
+        replace(original.template, cpu_list=cpu_list), build_dir=original.build_dir,
+        command_argv=original.command_argv,
+        topology_prefix=(*original.topology_prefix, "taskset", "-c", cpu_list),
+        launch_environment=dict(original.launch_env),
+        artifact_identities={"model": original.model.to_dict(),
+            "drafter": original.drafter.to_dict() if original.drafter else None,
+            "executable": original.executable.to_dict(), "dsos": [x.to_dict() for x in original.dsos]},
+        backend="cpu", environment_policy=original.environment_policy, port=original.port,
+        runtime_binary_dir=original.runtime_binary_dir, runtime_ld_paths=original.runtime_ld_paths,
+        provenance={**dict(original.provenance), "inherited_affinity_parent": original.snapshot_digest})
 
 
 def _rebind_build_dso(original: Path, binary_dir: Path) -> Path:
@@ -453,7 +472,12 @@ def main(argv: list[str] | None = None) -> int:
         if direct_launch.backend != backend:
             parser.error("serving launch backend differs from selected CLI mode")
         if backend == "cpu" and not direct_launch.template.cpu_list:
-            parser.error("CPU serving requires a CPU launch with explicit affinity")
+            if selected_target is None:
+                parser.error("CPU serving requires explicit affinity or enrolled CPU resources")
+            try:
+                direct_launch = _bind_owned_cpu_affinity(direct_launch, resolved_campaign.resources)
+            except ValueError as exc:
+                parser.error(f"CPU inherited affinity refused: {exc}")
         if Path(direct_launch.model.path).resolve() != args.model.resolve():
             parser.error("serving launch model differs from selected --model")
         if resumed is not None and Path(direct_launch.build_dir).resolve() != args.anchor_build.resolve():
