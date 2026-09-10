@@ -5,6 +5,8 @@ import json
 import sqlite3
 import time
 
+import pytest
+
 from . import archive, serving, serving_beliefs as beliefs
 from .test_resolved_recipe import BUILD, _resolve
 
@@ -61,8 +63,9 @@ def test_original_compare_archive_and_atomic_export_bytes(tmp_path, monkeypatch)
     native = json.loads(native_bytes)
     assert len(native_bytes) == receipt["native_reference"]["size"]
     assert hashlib.sha256(native_bytes).hexdigest() == receipt["native_reference"]["sha256"]
-    assert native_bytes == json.dumps(native, indent=2, sort_keys=True).encode()
-    assert not native_bytes.endswith(b"\n")  # matches existing status.write_json exactly
+    assert native_bytes == json.dumps(native, sort_keys=True, separators=(",", ":"),
+                                      allow_nan=False).encode()
+    assert not native_bytes.endswith(b"\n")
     assert native["comparison"] == row
     with sqlite3.connect(tmp_path / "experiments.db") as db:
         retained = json.loads(db.execute("SELECT payload FROM experiments").fetchone()[0])
@@ -104,3 +107,30 @@ def test_export_fault_preserves_durable_result_and_is_visible(tmp_path, monkeypa
     assert row == original and len(calls) == 4
     with sqlite3.connect(tmp_path / "experiments.db") as db:
         assert json.loads(db.execute("SELECT payload FROM experiments").fetchone()[0]) == attempt
+
+
+def test_compact_export_fits_when_pretty_encoding_would_exceed_budget(tmp_path, monkeypatch):
+    body = {"observations": [{"allowed_cpus": list(range(64))}] * 8}
+    compact = json.dumps(body, sort_keys=True, separators=(",", ":"),
+                         allow_nan=False).encode()
+    pretty = json.dumps(body, indent=2, sort_keys=True).encode()
+    assert len(compact) < len(pretty)
+    monkeypatch.setattr(beliefs, "MAX_BYTES", len(compact))
+
+    reference = beliefs._write_exact(tmp_path, "capture.json", body)
+
+    assert reference["size"] == len(compact)
+    assert (tmp_path / "capture.json").read_bytes() == compact
+    assert not list(tmp_path.glob(".patch-*"))
+
+
+def test_compact_export_still_refuses_a_true_over_budget_body(tmp_path, monkeypatch):
+    body = {"observations": ["retained-native-observation"]}
+    encoded = json.dumps(body, sort_keys=True, separators=(",", ":"),
+                         allow_nan=False).encode()
+    monkeypatch.setattr(beliefs, "MAX_BYTES", len(encoded) - 1)
+
+    with pytest.raises(ValueError, match="belief export byte budget exceeded"):
+        beliefs._write_exact(tmp_path / "beliefs", "capture.json", body)
+
+    assert not (tmp_path / "beliefs").exists()
