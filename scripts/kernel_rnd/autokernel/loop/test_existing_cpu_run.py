@@ -231,7 +231,7 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
                 if runtime_only:
                     assert rows[0]["runtime_pair"] == rows[1]["runtime_pair"]
                 else:
-                    assert (fixture.store / "patches/cpu-1.lane0.patch").is_file()
+                    assert list((fixture.store / "patches").glob("cpu-1.lane0.*.patch"))
                 # The three A/A launches precede A,B(invalid),B(rescheduled).
                 assert measured[4] == measured[5]
                 assert measured[3] != measured[4]

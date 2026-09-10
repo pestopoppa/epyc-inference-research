@@ -8,8 +8,12 @@ Advancing source never creates or upgrades an artifact/evidence claim.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 from pathlib import Path
+import re
+import stat
 import subprocess
 import sys
 import tempfile
@@ -21,6 +25,114 @@ from . import kernel_mutation_guard
 
 class RatchetRefused(RuntimeError):
     """The champion branch could not be advanced."""
+
+
+def _retain_bytes(path: Path, raw: bytes) -> None:
+    """Publish immutable archive bytes; an interrupted publication can be retried."""
+    fd, temporary = tempfile.mkstemp(dir=path.parent, prefix=".patch-")
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(raw)
+            stream.flush()
+            os.fsync(stream.fileno())
+        try:
+            os.link(temporary, path)
+        except FileExistsError:
+            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+            with os.fdopen(fd, "rb") as stream:
+                if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode) \
+                        or stream.read(len(raw) + 1) != raw:
+                    raise RatchetRefused(f"existing immutable patch artifact differs: {path}")
+        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        os.unlink(temporary)
+
+
+def retain_patch(store_root: Path, repo: Path, *, lane: str,
+                 mechanism_id: str = "interrupted") -> Path | None:
+    """Keep original HEAD and working source before an owned lane is reset.
+
+    All tracked changes remain covered, including build recipes and documentation.
+    Newly included untracked files are limited to literal, regular UTF-8 kernel
+    source under ggml/src or src. This is a source archive, not build/measurement
+    evidence or permission to resume execution. The real Git index is untouched.
+    """
+    repo = _verified_repo(Path(repo))
+    head = _git(repo, "rev-parse", "HEAD")
+
+    def raw_git(*args):
+        done = subprocess.run(["git", "-C", str(repo), *args], capture_output=True,
+                              env=_git_env(), timeout=600)
+        if done.returncode:
+            raise RatchetRefused(f"patch capture git {args[0]} failed")
+        return done.stdout
+
+    patch = raw_git("diff", "--binary", "--full-index", "--no-ext-diff",
+                    "--no-textconv", head, "--")
+    additions = []
+    untracked = raw_git("ls-files", "--others", "--exclude-standard", "-z",
+                        "--", "ggml/src/", "src/")
+    source_suffixes = {".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx",
+                       ".cu", ".cuh", ".inc", ".inl", ".s", ".S"}
+    for entry in sorted(item for item in untracked.split(b"\0") if item):
+        name = os.fsdecode(entry)
+        if Path(name).suffix not in source_suffixes:
+            continue
+        if not re.fullmatch(r"[A-Za-z0-9_./+-]+", name) or any(
+                part.startswith(".") for part in Path(name).parts):
+            raise RatchetRefused("untracked kernel source has an unsafe path")
+        path = repo / name
+        if any(parent.is_symlink() for parent in (path, *path.parents) if parent != repo):
+            raise RatchetRefused(f"untracked kernel source is a symlink: {name}")
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(fd, "rb") as stream:
+            before = os.fstat(stream.fileno())
+            if not stat.S_ISREG(before.st_mode) or before.st_size > 4 * 1024 * 1024:
+                raise RatchetRefused(f"untracked kernel source is not bounded text: {name}")
+            raw = stream.read(4 * 1024 * 1024 + 1)
+            after = os.fstat(stream.fileno())
+        if (before.st_size != len(raw) or before.st_mtime_ns != after.st_mtime_ns
+                or before.st_size != after.st_size or b"\0" in raw):
+            raise RatchetRefused(f"untracked kernel source changed or is binary: {name}")
+        try:
+            raw.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise RatchetRefused(f"untracked kernel source is not UTF-8 text: {name}") from exc
+        mode = "100755" if before.st_mode & 0o111 else "100644"
+        new = f"diff --git a/{name} b/{name}\nnew file mode {mode}\n".encode()
+        if raw:
+            lines = raw.split(b"\n")
+            if raw.endswith(b"\n"):
+                lines.pop()
+            new += f"--- /dev/null\n+++ b/{name}\n@@ -0,0 +1,{len(lines)} @@\n".encode()
+            for line in lines:
+                new += b"+" + line + b"\n"
+            if not raw.endswith(b"\n"):
+                new += b"\\ No newline at end of file\n"
+        patch += new
+        additions.append(name)
+    if not patch:
+        return None
+    if _git(repo, "rev-parse", "HEAD") != head:
+        raise RatchetRefused("lane HEAD moved during patch capture; no reset")
+    digest = hashlib.sha256(head.encode() + b"\n" + patch).hexdigest()
+    label = re.sub(r"[^A-Za-z0-9_.-]", "_", mechanism_id)[:80] or "unnamed"
+    lane_label = re.sub(r"[^A-Za-z0-9_.-]", "_", lane)[:40] or "lane"
+    directory = Path(store_root) / "patches"
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{label}.{lane_label}.{digest}.patch"
+    _retain_bytes(path, patch)
+    metadata = {"schema": "epyc.autokernel.source_patch_archive.v1", "original_head": head,
+                "worktree": str(repo), "lane": lane, "mechanism_id": mechanism_id,
+                "patch_file": path.name, "patch_sha256": hashlib.sha256(patch).hexdigest(),
+                "untracked_source_paths": additions, "scope": "source_only_not_execution_evidence"}
+    _retain_bytes(path.with_suffix(".json"),
+                  (json.dumps(metadata, sort_keys=True, indent=2) + "\n").encode())
+    return path
 
 
 _AMBIENT_REPO_ENV = ("GIT_DIR", "GIT_WORK_TREE")
