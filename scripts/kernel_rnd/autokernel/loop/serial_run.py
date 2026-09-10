@@ -271,6 +271,9 @@ def _drive(root, targets, batch_iterations, rounds):
     else:
         state = {"schema": SERIAL_SCHEMA, "config_digest": config, "next_batch": 0,
                  "active": None, "last_results": {}, "failed_targets": {}}
+    # Diagnostic configuration only. The original digest above still controls
+    # restart; old state files acquire these values from that same checked input.
+    state.update(target_count=len(targets), rounds=rounds, batch_iterations=batch_iterations)
     stop = threading.Event()
     handlers = {sig: signal.getsignal(sig) for sig in (signal.SIGTERM, signal.SIGINT)}
 
@@ -288,6 +291,11 @@ def _drive(root, targets, batch_iterations, rounds):
         status.write(root, state=phase, epoch=config, campaign_id="legacy-serial",
                      anchor_commit="", surface="serial_targets", pairs=0, noise_floor_pct=None,
                      target=active, step="serial routing only; detailed original status stays in target store",
+                     routing={"target_count": len(targets), "rounds": rounds,
+                              "batch_iterations": batch_iterations, "next_batch": state["next_batch"],
+                              "stop_requested": stopped(),
+                              "failed_targets": {key: value[:240]
+                                                 for key, value in state["failed_targets"].items()}},
                      stale_after_s=180)
 
     for sig in handlers:
