@@ -355,6 +355,17 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
     else:
         lines.append("(nothing yet)")
 
+    feedback = context.get("serving_observations")
+    if feedback:
+        lines.append("\n## Original serving observations — recall, not qualified gains")
+        lines.append("Same model/recipe/request/epoch and original anchor only. A null or "
+                     "uncalibrated result is worth remembering; belief status does not "
+                     "promote it to a gain, and CPU allowed lists do not prove placement "
+                     "or absence of contention. Prior experiment history above is independent.")
+        lines.append("```json")
+        lines.append(json.dumps(feedback, sort_keys=True, indent=2))
+        lines.append("```")
+
     for label, key in (("Your hypothesis was rejected", "prior_hypothesis_rejections"),
                        ("Your patch was rejected", "prior_patch_rejections")):
         reasons = context.get(key) or []

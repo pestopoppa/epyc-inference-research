@@ -4,6 +4,7 @@ from dataclasses import replace
 import hashlib
 import json
 from pathlib import Path
+import time
 from unittest import mock
 
 import pytest
@@ -14,7 +15,7 @@ from . import test_promotion_targets as promotion_fixture
 
 
 @pytest.mark.parametrize("dry_run", [True, False])
-def test_existing_main_cpu_five_iterations_preserves_canonical_champion(dry_run):
+def test_existing_main_cpu_five_iterations_preserves_canonical_champion(dry_run, feedback_root=None):
     fixture = promotion_fixture.TheKeepBuildsAProductionCompleteAnchor()
     fixture.setUp()
     try:
@@ -34,7 +35,8 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(dry_run)
             root = Path(build) / "bin"
             root.mkdir(parents=True, exist_ok=True)
             for name in ("llama-server", "libggml-cpu.so"):
-                (root / name).write_bytes(b"synthetic fixture artifact")
+                (root / name).write_bytes(b"synthetic fixture artifact" + (
+                    Path(build).name.encode() if feedback_root is not None else b""))
 
         install_binaries(fixture.startup_anchor)
 
@@ -59,6 +61,7 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(dry_run)
         prompt_file.write_text(json.dumps(manifest.to_dict()))
         expected_requests = manifest.requests(("glm-fixed2029",), template)
         held, issued, measured, builds, oracles = [], [], [], [], []
+        feedback_contexts = []
         real_main = run.main
 
         @contextmanager
@@ -78,7 +81,9 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(dry_run)
             assert resolved_recipe.backend == "cpu"
             measured.append((str(build), tuple(resolved_recipe.argv), frozen_requests))
             if evidence is not None:
-                evidence.append({"backend": "cpu", "status": serving.RESIDENCY_NOT_APPLICABLE})
+                now = time.time()
+                evidence.append({"backend": "cpu", "status": serving.RESIDENCY_NOT_APPLICABLE,
+                                 "window_start": now, "window_end": now})
             if Path(build).name == "lane0-build":
                 return 9.9 if len(issued) == 4 else 8.1 if len(issued) == 5 else 9.0
             return 9.0
@@ -103,6 +108,7 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(dry_run)
                 base_propose = actor.propose
 
                 def propose(context):
+                    feedback_contexts.append(context["serving_observations"])
                     assert context["target"]["scope"] == "experimental candidate, NOT canonical champion"
                     assert context["program"].startswith("CPU EXPERIMENTAL TARGET")
                     assert "overrides inapplicable GPU instructions below" in context["program"]
@@ -129,6 +135,8 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(dry_run)
                      "--cpu-calibrate-serving", "3", "--out", str(fixture.root / "result")]
             if dry_run:
                 argv.append("--dry-run")
+            if feedback_root is not None:
+                argv += ["--belief-root-repo", str(feedback_root)]
             with mock.patch.object(gates, "compiles", compile_cpu), \
                     mock.patch.object(gates, "op_correctness", oracle), \
                     mock.patch.object(run.actors, "AgentPlanner", planner), \
@@ -175,6 +183,23 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(dry_run)
             assert all(row["comparison"]["request_digest"] == result["floor_request_digest"]
                        for row in result["iterations"])
             assert run._git(fixture.repo, "rev-parse", branch) != original_head
+            if feedback_root is not None:
+                assert feedback_contexts[0]["rows"] == []
+                first_null = feedback_contexts[1]["rows"][0]
+                assert first_null["anchor_tok_s"] == first_null["candidate_tok_s"] == 9.0
+                after_keep = feedback_contexts[4]
+                assert not after_keep["errors"]
+                assert after_keep["scope"]["anchor_build"] != str(fixture.startup_anchor)
+                assert after_keep["scope"]["anchor_execution_digest"] != selected.execution_digest
+                assert after_keep["scope"]["anchor_execution_digest"] == run._cpu_arm(
+                    selected, Path(after_keep["scope"]["anchor_build"])).execution_digest
+                assert all(row["anchor_execution_digest"] == after_keep["scope"]["anchor_execution_digest"]
+                           for row in after_keep["rows"])
+                recovered = run.serving_beliefs.PlannerFeedback(fixture.store, feedback_root).context(
+                    after_keep["scope"])
+                last_null = next(row for row in recovered["rows"] if row["mechanism_id"] == "cpu-5")
+                assert last_null["anchor_tok_s"] == 9.0 and last_null["candidate_tok_s"] == 8.1
+                assert last_null["anchor_execution_digest"] == after_keep["scope"]["anchor_execution_digest"]
     finally:
         fixture.doCleanups()
 

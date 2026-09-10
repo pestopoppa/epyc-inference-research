@@ -9,7 +9,7 @@ from . import archive, serving, serving_beliefs as beliefs
 from .test_resolved_recipe import BUILD, _resolve
 
 
-def comparison(monkeypatch, *, resolved=True):
+def comparison(monkeypatch, *, resolved=True, floor_pct=5.0):
     recipe = serving.Recipe(name="fixture", model="/fixture-model", device="none", ngl=0, np=1)
     launch = _resolve(recipe, backend="cpu") if resolved else None
     requests = (("fixture-prompt", b'{"prompt":[1,2],"n_predict":64}'),)
@@ -33,7 +33,7 @@ def comparison(monkeypatch, *, resolved=True):
         return next(samples)
 
     monkeypatch.setattr(serving, "_measure_once", measure)
-    row = serving.compare(recipe, BUILD, BUILD, pairs=2, floor_pct=5.0,
+    row = serving.compare(recipe, BUILD, BUILD, pairs=2, floor_pct=floor_pct,
                           anchor_resolved_recipe=launch, candidate_resolved_recipe=launch,
                           frozen_requests=requests,
                           floor_request_digest=serving.request_digest(recipe, requests))

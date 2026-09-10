@@ -117,3 +117,82 @@ def export(store_root, attempt, *, campaign_id, epoch, recorded_at):
                "capture_sha256": capture["capture_sha256"], "native_reference": source}
     _write_exact(root, f"{capture['capture_id']}.json", receipt)
     return root / f"{capture['capture_id']}.json"
+
+
+class PlannerFeedback:
+    """Lazy synchronous bridge; diagnostic faults never change loop outcomes."""
+
+    def __init__(self, store_root, root_repo=None):
+        import os
+        import threading
+
+        self.store_root = Path(store_root)
+        self.root_repo = Path(root_repo or os.environ.get("EPYC_ROOT_REPO", "/workspace"))
+        self._lock = threading.Lock()
+        self._reader = None
+        self._failure = None
+
+    def _load(self):
+        import importlib
+        import sys
+
+        expected = (self.root_repo / "scripts/vidya/adapters/autokernel_legacy_serving.py").resolve()
+        if not expected.is_file():
+            raise ValueError(f"serving belief reader is unavailable: {expected}")
+        sys.path.insert(0, str(self.root_repo / "scripts/vidya"))
+        module = importlib.import_module("adapters.autokernel_legacy_serving")
+        if Path(module.__file__).resolve() != expected:
+            raise ValueError("loaded serving belief reader differs from the selected ROOT")
+        self._reader = module.PlannerFeedback(self.store_root)
+
+    def _failed(self, exc):
+        import sys
+
+        self._failure = f"{type(exc).__name__}: {exc}"[:800]
+        print(f"warning: serving belief feedback unavailable: {self._failure}", file=sys.stderr)
+
+    def exported(self, receipt):
+        with self._lock:
+            try:
+                # A concrete new export is a bounded recovery opportunity; do not
+                # permanently disable feedback after a transient startup I/O fault.
+                if self._reader is None:
+                    self._load()
+                if self._reader is not None:
+                    self._reader.ingest(receipt)
+                    self._failure = None
+            except Exception as exc:
+                self._failed(exc)
+
+    def context(self, scope):
+        with self._lock:
+            try:
+                if callable(scope):
+                    scope = scope()
+                if scope is None:
+                    return {"status": "scope_unavailable", "rows": [], "errors": [],
+                            "qualified_measurement": False}
+                if self._reader is None and self._failure is None:
+                    self._load()
+                if self._reader is not None:
+                    result = self._reader.context(scope, as_of=datetime.now(timezone.utc).isoformat())
+                    if self._failure:
+                        result["errors"].append(self._failure)
+                    return result
+            except Exception as exc:
+                self._failed(exc)
+            return {"status": "unavailable", "rows": [], "errors": [self._failure],
+                    "qualified_measurement": False}
+
+
+def feedback_scope(*, epoch, recipe, resolved, frozen_requests, anchor_build):
+    """Original workload/anchor identity, never a model-family or recipe-name match."""
+    from .serving import request_digest
+
+    if recipe is None or resolved is None or frozen_requests is None:
+        return None
+    return {"epoch": epoch, "recipe_hash": recipe.recipe_hash,
+            "request_digest": request_digest(recipe, frozen_requests),
+            "model": resolved.model.to_dict(),
+            "anchor_execution_digest": resolved.execution_digest,
+            "anchor_build": str(anchor_build)}

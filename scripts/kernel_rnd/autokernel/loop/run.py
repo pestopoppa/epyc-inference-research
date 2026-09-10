@@ -30,7 +30,7 @@ HEARTBEAT_S = 30  # status heartbeat period; envelope = 6x this
 HEARTBEAT_STOP_TIMEOUT_S = 10
 
 from . import (accumulate, actors, anchor, archive, bench, champion, claim, gates,
-               heartbeat, hotspots, loop, serving,
+               heartbeat, hotspots, loop, serving, serving_beliefs,
                pipeline, pool, production, status)
 
 
@@ -243,6 +243,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="existing resolved campaign or campaign_cli output; selects inputs only")
     parser.add_argument("--target-id", help="exact enrolled target ID/alias; requires --resolved-campaign")
     parser.add_argument("--store", type=Path, required=True)
+    parser.add_argument("--belief-root-repo", type=Path,
+                        help="ROOT owning serving-observation reader (default EPYC_ROOT_REPO or /workspace)")
     parser.add_argument("--iterations", type=int, default=10,
                         help="0 means run CONTINUOUSLY until stopped: drop a STOP "
                              "file in the store, or send SIGTERM/SIGINT. On a stop, "
@@ -532,6 +534,9 @@ def main(argv: list[str] | None = None) -> int:
         print("\nDRY RUN — wiring proven, nothing spent.")
         return 0
 
+    feedback = serving_beliefs.PlannerFeedback(args.store, args.belief_root_repo)
+    feedback_anchor = [cpu_launch]
+
     def build_context() -> dict:
         program = loop.PROGRAM.read_text(encoding="utf-8")
         if cpu_launch:
@@ -551,6 +556,9 @@ def main(argv: list[str] | None = None) -> int:
             "program": program,
             "kernel_hotspots": [row.to_dict() for row in hotspot_rows],
             "prior_experiments": prior_experiments(args, epoch),
+            "serving_observations": feedback.context(lambda: serving_beliefs.feedback_scope(
+                epoch=epoch, recipe=serving_recipe, resolved=feedback_anchor[0],
+                frozen_requests=frozen_requests, anchor_build=anchor_build[0])),
             # Re-read EVERY iteration, never cached at startup, and hardened so one
             # unreadable file cannot kill the run through the breaker (R22-6): the
             # rationale for both lives on `controller.inbox.read_inbox`'s docstring.
@@ -697,11 +705,16 @@ def main(argv: list[str] | None = None) -> int:
         return measure
 
     def cpu_compare(a_build, c_build):
+        anchor_recipe = _cpu_arm(cpu_launch, a_build)
+        candidate_recipe = _cpu_arm(cpu_launch, c_build)
+        # Reuse the actual comparison's rebind, including after an anchor keep;
+        # never hash a build a second time merely to assemble a planner prompt.
+        feedback_anchor[0] = anchor_recipe
         row = serving.compare(
             serving_recipe, a_build, c_build, pairs=args.serving_pairs,
             floor_pct=floor, port=cpu_launch.port,
-            anchor_resolved_recipe=_cpu_arm(cpu_launch, a_build),
-            candidate_resolved_recipe=_cpu_arm(cpu_launch, c_build),
+            anchor_resolved_recipe=anchor_recipe,
+            candidate_resolved_recipe=candidate_recipe,
             frozen_requests=frozen_requests, floor_request_digest=floor_request_digest)
         return ServingComparison(row)
 
@@ -835,7 +848,8 @@ def main(argv: list[str] | None = None) -> int:
             on_step=lambda label: publish("running", latest,
                                           hotspot_rows=hotspot_rows, step=label))
         archive.record(args.store, outcome.to_attempt(), epoch=epoch,
-                       recorded_at=loop._now(), campaign_id="ak-loop")
+                       recorded_at=loop._now(), campaign_id="ak-loop",
+                       on_serving_export=feedback.exported)
         print(f"headline  {outcome.reason}")
 
     def verify_anchor() -> None:
@@ -845,7 +859,8 @@ def main(argv: list[str] | None = None) -> int:
             # Both outcomes, before any abort raises: store + status, so the dashboard
             # says WHY a run stopped and the check is auditable after the fact.
             archive.record(args.store, verdict.to_attempt(), epoch=epoch,
-                           recorded_at=loop._now(), campaign_id="ak-loop")
+                           recorded_at=loop._now(), campaign_id="ak-loop",
+                           on_serving_export=feedback.exported)
             anchor_guard_seen.append(verdict.to_dict())
             publish("running", latest, hotspot_rows=hotspot_rows)
             print(f"anchor    {verdict.detail}")
@@ -1168,7 +1183,8 @@ def main(argv: list[str] | None = None) -> int:
         """
         def record_pooled(outcome) -> None:
             archive.record(args.store, outcome.to_attempt(), epoch=epoch,
-                           recorded_at=loop._now(), campaign_id="ak-loop")
+                           recorded_at=loop._now(), campaign_id="ak-loop",
+                           on_serving_export=feedback.exported)
             latest.append(outcome)
             publish("running", latest, hotspot_rows=hotspot_rows)
 
