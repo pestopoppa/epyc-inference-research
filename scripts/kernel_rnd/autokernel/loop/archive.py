@@ -238,7 +238,7 @@ def keep(repo: Path, *, branch: str, message: str, paths: tuple[str, ...]) -> st
 
 
 def record(store_root: Path, attempt: Mapping[str, Any], *, epoch: str,
-           recorded_at: str, campaign_id: str) -> bool:
+           recorded_at: str, campaign_id: str, on_serving_export=None) -> bool:
     """Append one attempt to durable memory and refresh `experiments.md`.
 
     Idempotent on attempt identity, so a resumed loop re-recording its own rows
@@ -251,8 +251,10 @@ def record(store_root: Path, attempt: Mapping[str, Any], *, epoch: str,
         if added:
             try:
                 from . import serving_beliefs
-                serving_beliefs.export(store_root, attempt, campaign_id=campaign_id,
-                                       epoch=epoch, recorded_at=recorded_at)
+                receipt = serving_beliefs.export(store_root, attempt, campaign_id=campaign_id,
+                                                epoch=epoch, recorded_at=recorded_at)
+                if receipt is not None and on_serving_export is not None:
+                    on_serving_export(receipt)
             except Exception as exc:
                 # The experiment is already durable. Auxiliary export cannot change
                 # its outcome, trigger a relaunch or claim that settlement failed.
