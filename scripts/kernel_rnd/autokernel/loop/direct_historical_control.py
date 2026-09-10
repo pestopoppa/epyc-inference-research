@@ -59,7 +59,11 @@ def _deadline(value):
         if type(value) not in (int, float) or not math.isfinite(value):
             raise HistoricalControlRefused("original invocation deadline is not finite")
         if time.monotonic() >= value:
-            raise HistoricalControlRefused("original invocation budget exhausted before historical control launch")
+            raise HistoricalLaunchBudgetExhausted("original invocation budget exhausted before historical control launch")
+
+
+class HistoricalLaunchBudgetExhausted(HistoricalControlRefused):
+    """Known before/after-launch boundary, not unknown child cleanup."""
 
 
 def _frame():
@@ -76,10 +80,11 @@ def _frame():
 
 
 def source_identity():
-    from . import lifecycle_observation as lo
+    from . import lifecycle_observation as lo, runtime_recovery
     modules = (lc, microbench, tp, cr, api, controls, correctness, st, rw, inference_window)
     paths = (Path(__file__), *(Path(module.__file__) for module in modules))
     return {"files": {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in paths},
+        "recovery": runtime_recovery.source_identity(),
         "loaded": [lo.callable_identity(fn) for fn in
                    (run_or_reopen, _collect, _compose, _t0_material, _window, _frame)]}
 
@@ -567,8 +572,26 @@ def _compose(store, declaration, material, raw_ref):
     return observation, stages
 
 
+def prepare_replacement(*, store, reference, held_claim, recovery_reference):
+    """Only known budget-ending observations can get a fresh original window."""
+    from . import runtime_recovery
+    previous = _read(store, NAMESPACE, reference)
+    if not isinstance(previous.get("error"), str) or not previous["error"].startswith(
+            "HistoricalLaunchBudgetExhausted:"):
+        raise HistoricalControlRefused("historical control is not a known budget interruption")
+    declaration = _read(store, "direct-historical-declaration", previous["declaration"])
+    if declaration["frame"] != _frame() or declaration["source"] != source_identity():
+        raise HistoricalControlRefused("original historical predecessor source/frame differs")
+    try:
+        binding = runtime_recovery.replacement(reference=recovery_reference,
+            original_holder=declaration.get("holder"), new_holder=held_claim)
+    except (OSError, ValueError) as exc:
+        raise HistoricalControlRefused(str(exc)) from exc
+    return {**binding, "previous": dict(reference)}
+
+
 def run_or_reopen(*, store, held_claim, campaign_id, window_index, reference=None,
-                  deadline_monotonic_s=None):
+                  deadline_monotonic_s=None, replacement=None):
     """Installed runtime consumer entrypoint; replay never executes work."""
     if type(store) is not ArtifactStore or type(held_claim) is not HeldCpuClaim:
         raise TypeError("historical control requires the original store and acquired CPU context")
@@ -597,14 +620,36 @@ def run_or_reopen(*, store, held_claim, campaign_id, window_index, reference=Non
         if observation.to_dict() != result["observation"] or stages != result["tier_evaluations"]:
             raise HistoricalControlRefused("original historical observation does not rederive")
         return resolution, observation, StoredArtifact(**reference)
+    from . import runtime_recovery
+    if replacement is not None:
+        previous = _read(store, NAMESPACE, replacement["previous"])
+        previous_declaration = _read(store, "direct-historical-declaration", previous["declaration"])
+        if (previous_declaration["parent_campaign_id"] != campaign_id
+                or previous_declaration["window_index"] != window_index):
+            raise HistoricalControlRefused("replacement changes the original historical allocation")
+        key = _digest({"original": key, "replacement": replacement})
     root = store.root / ("historical-control-" + key)
+    if root.exists():
+        result_path = root / "result.json"
+        if result_path.exists():
+            retained, _sha = serial_run._json(result_path, limit=4096)
+            return run_or_reopen(store=store, held_claim=held_claim, campaign_id=campaign_id,
+                window_index=window_index, reference=retained)
+        if not result_path.exists():
+            from .loop import RunAborted
+            raise RunAborted("original historical execution cleanup unresolved; no fallback measurement")
+        raise HistoricalControlRefused("historical control already issued; unresolved original execution is not replayable")
+    if replacement is not None and replacement != prepare_replacement(store=store,
+            reference=replacement["previous"], held_claim=held_claim,
+            recovery_reference=replacement["recovery"]):
+        raise HistoricalControlRefused("historical replacement original holder binding differs")
     declaration = {"schema": SCHEMA, "parent_campaign_id": campaign_id, "window_index": window_index,
         "control_campaign_id": "ak-historical-" + key[:32], "root": str(root),
         "frame": _frame(), "source": source_identity(), "resolution": _resolve(store).to_dict(),
         "deadline_monotonic_s": deadline_monotonic_s,
+        "holder": runtime_recovery.holder_identity(held_claim),
+        **({"replacement": replacement} if replacement is not None else {}),
         "issued_at": datetime.now(timezone.utc).isoformat()}
-    if root.exists():
-        raise HistoricalControlRefused("historical control already issued; reopen its original reference, never rerun")
     declared = store.write("direct-historical-declaration", declaration)
     root.mkdir(exist_ok=False)
     resolution = _resolution(store, declaration["resolution"])
@@ -625,4 +670,7 @@ def run_or_reopen(*, store, held_claim, campaign_id, window_index, reference=Non
     result = store.write(NAMESPACE, {"schema": SCHEMA, "declaration": declared.to_dict(),
         "material": None if material_ref is None else material_ref.to_dict(), "error": error,
         "observation": observation.to_dict(), "tier_evaluations": stages})
+    from . import archive
+    archive._retain_bytes(root / "result.json", json.dumps(result.to_dict(), sort_keys=True,
+        separators=(",", ":")).encode() + b"\n")
     return resolution, observation, result

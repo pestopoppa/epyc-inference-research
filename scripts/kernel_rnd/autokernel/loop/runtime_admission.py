@@ -38,13 +38,14 @@ def _check(condition, reason, *, unavailable=False):
 
 def source_identity():
     # Whole-file pins include supporting callables, not just their callers' names.
-    from . import native_server_response, resolved_recipe, serving, serving_beliefs
+    from . import native_server_response, resolved_recipe, serving, serving_beliefs, runtime_recovery
     from .run import _cpu_arm, _rebind_build_dso
     modules = (api, controls, correctness, st, rc, rw, gates,
                native_server_response, resolved_recipe, serving, serving_beliefs)
     paths = (Path(__file__), *(Path(module.__file__) for module in modules))
     from . import lifecycle_observation as lo
     return {"files": {path.name: hashlib.sha256(path.read_bytes()).hexdigest() for path in paths},
+        "recovery": runtime_recovery.source_identity(),
         "loaded": [lo.callable_identity(function) for function in (
             _check, _outputs, _window_checks, source_snapshot, DirectGates.run_gates,
             RuntimeAdmission.compare, RuntimeAdmission._compare_attempt, RuntimeAdmission._observation,
@@ -239,9 +240,11 @@ def _window_checks(window, rows, reduction, panel, anchor, raw_ref):
 class RuntimeAdmission:
     def __init__(self, *, store, held_claim, campaign_id, epoch, original, prompts,
                  statistical, host_state, worktree, source_commit, escalation=None,
-                 deadline_monotonic_s=None):
+                 deadline_monotonic_s=None, recovery_reference=None, on_progress=None):
+        self.recovery_reference = recovery_reference
         self.store, self.held_claim = store, held_claim
         self.deadline_monotonic_s = deadline_monotonic_s
+        self._on_progress, self._progress_operation = on_progress, "preparation"
         if type(campaign_id) is not str or not campaign_id.startswith("ak-"):
             raise rc.RuntimeCalibrationRefused("prospective runtime campaign_id must use owning 'ak-' grammar; do not rename old records")
         self.campaign_id, self.epoch, self.prompts = campaign_id, epoch, prompts
@@ -269,6 +272,7 @@ class RuntimeAdmission:
         self._windows = {}
         self._historical = {}
         self._issued = {}
+        self._interruption = None
         self.default = store.write("direct-runtime-default", {
             "schema": "epyc.autokernel.direct_runtime_default.v1", "scope": self.scope,
             "campaign_id": campaign_id, "epoch": epoch, "recipe": original.to_dict(),
@@ -278,13 +282,23 @@ class RuntimeAdmission:
     def _checkpoint(self):
         status.write_json(self.store.root, self.state_name, self.state, prefix=".runtime-selection-")
 
+    def _progress(self, row=None, *, operation=None):
+        try:
+            if operation is not None:
+                self._progress_operation = operation
+            if self._on_progress is not None:
+                self._on_progress({"observed_at": rc._now(),
+                    "operation": self._progress_operation, **dict(row or {})})
+        except Exception:
+            pass  # Diagnostic publication is never an admission/retention gate.
+
     def calibration(self, anchor, *, reopen_only=False):
         if anchor.snapshot_digest not in self._frames:
             self._frames[anchor.snapshot_digest] = rc.DirectCalibration(store=self.store,
                 held_claim=self.held_claim, campaign_id=self.campaign_id, epoch=self.epoch,
                 anchor=anchor, neutral=rc.neutral_material(store=self.store, anchor=anchor),
                 prompts=self.prompts, statistical=self.statistical, host_state=self.host_state,
-                deadline_monotonic_s=self.deadline_monotonic_s)
+                deadline_monotonic_s=self.deadline_monotonic_s, on_progress=self._progress)
         frame = self._frames[anchor.snapshot_digest]
         if reopen_only and frame.solution is None:
             raise rc.RuntimeCalibrationRefused("retained original calibration is incomplete; no replay launch")
@@ -296,26 +310,81 @@ class RuntimeAdmission:
                 + ": " + "; ".join(health.reasons))
         return frame, reference
 
-    def _evaluate_pair(self, pair, candidate_id, *, panel, stratum="selection", reopening=None):
+    def interruption_reference(self):
+        """Original pending runtime work only; never retry a source/build failure."""
+        if self._interruption is None:
+            return None
+        index, reason = self._interruption
+        attempt = self.state["attempts"][index]
+        if attempt["result"] is not None:
+            return None
+        from . import runtime_recovery
+        return self.store.write("direct-runtime-interruption", {
+            "schema": "epyc.autokernel.direct_runtime_interruption.v1",
+            "scope": self.scope, "state_name": self.state_name, "index": index,
+            "candidate_id": attempt["candidate_id"], "pair": attempt["pair"],
+            "holder": runtime_recovery.holder_identity(self.held_claim), "reason": reason}).to_dict()
+
+    def pending_pair(self):
+        if self.recovery_reference is None:
+            return None
+        from . import runtime_recovery
+        original = runtime_recovery.pending(self.recovery_reference)
+        if original is None or original["scope"] != self.scope:
+            return None
+        pair = RuntimeArmPair.from_dict(original["pair"])
+        return pair if pair.anchor == self.original else None
+
+    def _evaluate_pair(self, pair, candidate_id, *, panel, stratum="selection", reopening=None,
+                       attempt_index=None):
         frame, reference = self.calibration(pair.anchor, reopen_only=reopening is not None)
         key = (rc._digest(pair.to_dict()), candidate_id, stratum)
         if reopening is None:
             if key not in self._windows:
                 if self.deadline_monotonic_s is not None and time.monotonic() >= self.deadline_monotonic_s:
                     raise rc.RuntimeLaunchBudgetExhausted("original invocation launch deadline reached; completed setup retained")
+                pointers = ({} if attempt_index is None else
+                    self.state["attempts"][attempt_index].setdefault("windows", {}))
+                window_key = rc._digest(list(key))
                 window = rc.DirectPairWindow(calibration=frame, calibration_reference=reference,
-                                             pair=pair, candidate_id=candidate_id, stratum=stratum)
+                    pair=pair, candidate_id=candidate_id, stratum=stratum,
+                    replacement=pointers.get(window_key))
+                if window._reopened and window.boundaries["close"] is None:
+                    if self.recovery_reference is None or attempt_index is None:
+                        raise rc.RuntimeCalibrationRefused("original pair window already exists; original teardown reference required")
+                    from . import runtime_recovery
+                    try:
+                        binding = runtime_recovery.replace_window(window, self.recovery_reference)
+                    except (OSError, ValueError) as exc:
+                        raise rc.RuntimeCalibrationRefused(str(exc)) from exc
+                    window = rc.DirectPairWindow(calibration=frame, calibration_reference=reference,
+                        pair=pair, candidate_id=candidate_id, stratum=stratum, replacement=binding)
+                    pointers[window_key] = binding
+                    self._checkpoint()  # Exact fresh locator before launch; old checkpoint is untouched.
                 if window._reopened:
-                    raise rc.RuntimeCalibrationRefused("original pair window already exists; no replay launch")
-                operations = [{"arm": arm, "op": op, "verdict": asdict(gates.op_correctness(
-                    Path(getattr(pair, arm).build_dir), op=op, backend="CPU", resolved_recipe=getattr(pair, arm)))}
-                    for arm in ("anchor", "candidate") for op in correctness.MANDATORY_BACKEND_OPS]
-                source = source_snapshot(self.worktree, self.source_commit, self.store)
+                    if window.pending is not None or window.solution is None:
+                        raise rc.RuntimeCalibrationRefused("completed window lacks original setup or has unresolved launch")
+                    setup = _read(self.store, "direct-runtime-window-setup", window.solution["setup"])
+                    if setup["window"] != window.declaration.to_dict() or setup["source"] != source_identity():
+                        raise rc.RuntimeCalibrationRefused("original completed-window setup/source differs")
+                    operations, source = setup["operations"], StoredArtifact(**setup["source_snapshot"])
+                else:
+                    operations = [{"arm": arm, "op": op, "verdict": asdict(gates.op_correctness(
+                        Path(getattr(pair, arm).build_dir), op=op, backend="CPU", resolved_recipe=getattr(pair, arm)))}
+                        for arm in ("anchor", "candidate") for op in correctness.MANDATORY_BACKEND_OPS]
+                    source = source_snapshot(self.worktree, self.source_commit, self.store)
+                    setup = self.store.write("direct-runtime-window-setup", {
+                        "window": window.declaration.to_dict(), "operations": operations,
+                        "source_snapshot": source.to_dict(), "source": source_identity()})
+                    window.solution = {"setup": setup.to_dict(), "result": None}
+                    window._checkpoint()  # Original T0/source before measurements, including crash-before-attempt-save.
                 self._windows[key] = window, operations, source
             window, operations, source = self._windows[key]
         else:
+            declaration = _read(self.store, "direct-pair-window", reopening["window"])
             window = rc.DirectPairWindow(calibration=frame, calibration_reference=reference,
-                                         pair=pair, candidate_id=candidate_id, stratum=stratum)
+                pair=pair, candidate_id=candidate_id, stratum=stratum,
+                replacement=declaration["frame"].get("replacement"))
             operations, source = reopening["operations"], StoredArtifact(**reopening["source_snapshot"])
         sequence = st.SequentialEvaluation(rule=self.statistical.stopping_rule,
             commitment=self.statistical.commitment, construction=window.statistics.construction,
@@ -325,7 +394,8 @@ class RuntimeAdmission:
             order_schedule=window.schedule)
         count = window.outputs.b_min_blocks
         while True:
-            anchors, blocks, rows = window.reopen(count) if reopening else window.collect_to(count)
+            anchors, blocks, rows = (window.reopen(count) if reopening or window._reopened
+                                    else window.collect_to(count))
             for block in blocks[len(sequence.blocks):]:
                 sequence.next_block_request()
                 sequence.submit_block(block)
@@ -347,6 +417,12 @@ class RuntimeAdmission:
         original = self.store.verify("direct-runtime-window-result", raw) if reopening else self.store.write("direct-runtime-window-result", raw)
         if reopening is not None and raw != reopening:
             raise rc.RuntimeCalibrationRefused("original runtime evidence/source/stopping rule differs")
+        if reopening is None and window.solution is not None:
+            if window.solution["result"] not in (None, original.to_dict()):
+                raise rc.RuntimeCalibrationRefused("completed window result changed on original replay")
+            if window.solution["result"] is None:
+                window.solution["result"] = original.to_dict()
+                window._checkpoint()
         outputs = _outputs(rows, "candidate")
         complete = bool(outputs) and all(row["digest"] is not None for values in outputs.values() for row in values)
         count_runs = min((len(values) for values in outputs.values()), default=0) if complete else 0
@@ -389,11 +465,28 @@ class RuntimeAdmission:
         completed = (reopening if reopening is not None else
                      self.state["attempts"][index].setdefault("controls", {}))
         historical_reference = completed.get(controls.CONTROL_HISTORICAL_WIN_REPLAY)
+        self._progress(operation="historical_control")
+        historical_replacement = None
+        if reopening is None:
+            attempt = self.state["attempts"][index]
+            historical_replacement = attempt.get("historical_replacement")
+            if historical_reference is not None and self.recovery_reference is not None:
+                original_historical = _read(self.store, direct_historical_control.NAMESPACE,
+                                            historical_reference)
+                if str(original_historical.get("error", "")).startswith("HistoricalLaunchBudgetExhausted:"):
+                    historical_replacement = direct_historical_control.prepare_replacement(
+                        store=self.store, reference=historical_reference, held_claim=self.held_claim,
+                        recovery_reference=self.recovery_reference)
+                    attempt["historical_replacement"] = historical_replacement
+                    self._checkpoint()  # Original predecessor and fresh holder before collection.
+                    historical_reference = None
         if reopening is not None or index not in self._historical:
             historical_result = direct_historical_control.run_or_reopen(
                 store=self.store, held_claim=self.held_claim, campaign_id=self.campaign_id,
                 window_index=index, reference=historical_reference,
-                deadline_monotonic_s=self.deadline_monotonic_s)
+                deadline_monotonic_s=self.deadline_monotonic_s,
+                **({"replacement": historical_replacement} if historical_reference is None
+                   and historical_replacement is not None else {}))
             if reopening is None:
                 self._historical[index] = historical_result
         else:
@@ -402,6 +495,8 @@ class RuntimeAdmission:
         if reopening is None:
             completed[controls.CONTROL_HISTORICAL_WIN_REPLAY] = historical_ref.to_dict()
             self._checkpoint()
+            if str(historical_observation.could_not_run_reason).startswith("HistoricalLaunchBudgetExhausted:"):
+                raise rc.RuntimeLaunchBudgetExhausted(historical_observation.could_not_run_reason)
         bundle = controls.resolve_control_bundle(pinned_definitions_digest=controls.CONTROL_DEFINITIONS_DIGEST,
             aa_cadence=controls.AACadence(1, 3600, declared),
             seed_rotation=controls.SeedRotationSchedule(1, declared),
@@ -418,6 +513,7 @@ class RuntimeAdmission:
             def run_control(self, definition, context):
                 if definition.control_id == controls.CONTROL_HISTORICAL_WIN_REPLAY:
                     return historical_observation
+                owner._progress(operation=definition.control_id)
                 pairs = {controls.CONTROL_POSITIVE: lambda: rc.positive_control_pair(anchor),
                     controls.CONTROL_NEUTRAL: lambda: frame.pairs["neutral"],
                     controls.CONTROL_AA: lambda: PreparationArmPair("aa", anchor, anchor, None),
@@ -426,7 +522,7 @@ class RuntimeAdmission:
                 retained = completed.get(definition.control_id)
                 original = None if retained is None else _read(owner.store, "direct-runtime-window-result", retained)
                 ref, outcome, reduction = owner._evaluate_pair(pair, "akc-control-" + context.seed,
-                    panel=bootstrap, reopening=original)
+                    panel=bootstrap, reopening=original, attempt_index=index)
                 originals[definition.control_id] = ref.to_dict()
                 if reopening is None:
                     completed[definition.control_id] = ref.to_dict()
@@ -465,7 +561,11 @@ class RuntimeAdmission:
             from .loop import MeasurementInvalid
             try:
                 return self._compare_attempt(pair, index, candidate_id)
+            except rc.RuntimeLaunchBudgetExhausted:
+                self._interruption = (index, "between_launch_budget")
+                raise
             except MeasurementInvalid as exc:
+                self._interruption = (index, "terminal_invalid_arm")
                 if not retried:
                     # Existing iterate owns whether this one same-tail reschedule
                     # receives its next iteration budget; no hidden local retry.
@@ -474,6 +574,7 @@ class RuntimeAdmission:
         return continuation()
 
     def _compare_attempt(self, pair, index, candidate_id):
+        self._progress(operation="preparation")
         panel, control_refs = self._controls(pair.anchor, index)
         if panel.panel is None:
             # Missing historical disposition is visible. Candidate observation
@@ -482,8 +583,10 @@ class RuntimeAdmission:
         attempt = self.state["attempts"][index]
         original_selection = (None if attempt.get("selection") is None else
             _read(self.store, "direct-runtime-window-result", attempt["selection"]))
+        self._progress(operation="candidate_selection")
         selected, outcome, reduction = self._evaluate_pair(pair, candidate_id,
-            panel=controls.window_control_attestations(panel), reopening=original_selection)
+            panel=controls.window_control_attestations(panel), reopening=original_selection,
+            attempt_index=index)
         attempt["selection"] = selected.to_dict()
         self._checkpoint()
         admitted = (outcome.event is not None and not outcome.event_violations
@@ -498,8 +601,9 @@ class RuntimeAdmission:
             else:
                 self.state["attempts"][index]["confirmation"] = True
                 self._checkpoint()
+                self._progress(operation="candidate_confirmation")
                 confirmation, confirmed, _reduction = self._evaluate_pair(pair, candidate_id,
-                    panel=controls.window_control_attestations(panel), stratum="confirmation",
+                    panel=controls.window_control_attestations(panel), stratum="confirmation", attempt_index=index,
                     reopening=None if attempt.get("confirmation_result") is None else
                         _read(self.store, "direct-runtime-window-result", attempt["confirmation_result"]))
                 attempt["confirmation_result"] = confirmation.to_dict()
@@ -515,6 +619,7 @@ class RuntimeAdmission:
         self.state["attempts"][index]["result"] = result.to_dict()
         self._checkpoint()
         self._issued[result.sha256] = pair
+        self._progress(operation="admitted" if admitted else "observed_not_admitted")
         effect = reduction.estimate
         row = {"recipe": pair.anchor.template.name, "recipe_hash": pair.anchor.template.recipe_hash,
             "pairs": len(reduction.blocks), "effect": 0.0 if effect is None else effect.value,

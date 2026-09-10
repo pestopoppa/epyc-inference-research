@@ -147,9 +147,9 @@ def test_actual_calibration_original_prefix_reopens_without_relaunch(tmp_path, m
         from . import status
         status.write_json(store.root, completed.state_name, state)
         with original_claim(tmp_path / "private.lock") as holder:
-            uncertain = open_frame(holder)
-            with pytest.raises(calibration.RuntimeCalibrationRefused, match="cannot be replay-launched"):
-                uncertain.collect()
+            from .loop import RunAborted
+            with pytest.raises(RunAborted, match="cleanup unresolved; no fallback measurement"):
+                open_frame(holder)
         assert len(pids.read_text().splitlines()) == 8
     finally:
         store.close()
