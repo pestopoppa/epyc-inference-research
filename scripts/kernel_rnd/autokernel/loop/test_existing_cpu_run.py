@@ -18,7 +18,7 @@ from . import test_promotion_targets as promotion_fixture
 @pytest.mark.parametrize("dry_run", [True, False])
 def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
         dry_run, feedback_root=None, profile_observer=None, profile_contexts=None, runtime_only=False,
-        invalid_once=False, enrolled_pair=False):
+        invalid_once=False, enrolled_pair=False, runtime_transition=None):
     fixture = promotion_fixture.TheKeepBuildsAProductionCompleteAnchor()
     fixture.setUp()
     try:
@@ -141,6 +141,7 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
 
             def compile_cpu(*args, **kwargs):
                 assert not runtime_only, "runtime treatment must not compile"
+                assert not (runtime_transition is not None and len(issued) == 1), "recipe-only keep must not compile"
                 assert held[-1] is True
                 assert kwargs["cpu_list"] == "0-95"
                 assert dict(kwargs["cmake_defines"])["GGML_HIP"] == "OFF"
@@ -164,8 +165,12 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
                     assert "Author/review source only" in context["program"]
                     assert context["program"].endswith(run.loop.PROGRAM.read_text(encoding="utf-8"))
                     hypothesis = replace(base_propose(context), mechanism_id=f"cpu-{len(issued) + 1}")
-                    assert context["target"]["recipe"] == context["runtime_anchor"]
-                    if runtime_only:
+                    if "runtime_anchor" in context:
+                        assert context["target"]["recipe"] == context["runtime_anchor"]
+                    else:
+                        # The historical aku-* enrolled pair remains source-only.
+                        assert enrolled_pair and not runtime_only and runtime_transition is None
+                    if runtime_only or (runtime_transition is not None and not issued):
                         treatment = run.actors._runtime_pair(
                             {"kind": "threads", "candidate": template.threads + 1},
                             context, hypothesis.mechanism_id)
@@ -211,7 +216,9 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
                         cpu_profile.CpuProfileRefused("test-only profiler unavailable")), \
                     mock.patch.object(run.production, "refresh", side_effect=AssertionError("production")), \
                     mock.patch.object(serving, "_measure_once", observe), \
-                    mock.patch.object(pool, "prune_anchor_generations", return_value=pool.PruneReport("complete")):
+                    mock.patch.object(pool, "prune_anchor_generations",
+                        side_effect=pool.prune_anchor_generations if runtime_transition else None,
+                        return_value=pool.PruneReport("complete")):
                 return real_main(argv)
 
         with mock.patch.object(run, "main", cpu_main):
@@ -246,6 +253,9 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
                     host_state=changed) != expected_epoch
             assert result["baseline_scope"] == "experimental_candidate_not_champion"
             assert run.status.read(fixture.store)["baseline_scope"] == result["baseline_scope"]
+            if runtime_transition is not None:
+                runtime_transition(result, measured, builds)
+                return
             if invalid_once:
                 rows = result["iterations"]
                 assert len(rows) == 5 and rows[0]["status"] == "measurement_invalid"

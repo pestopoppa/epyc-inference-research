@@ -21,6 +21,9 @@ from . import observation_binding as ob
 
 RESPONSE_SCHEMA = "epyc.autokernel.native_server_response.v1"
 UNIT_SCHEMA = "epyc.autokernel.native_server_response_unit.v1"
+DIRECT_FRAME_SCHEMA = "epyc.autokernel.direct_server_response_frame.v1"
+DIRECT_RESPONSE_SCHEMA = "epyc.autokernel.direct_server_response.v1"
+DIRECT_UNIT_SCHEMA = "epyc.autokernel.direct_server_response_unit.v1"
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 MAX_REQUEST_BYTES = 1024 * 1024
 MAX_TOTAL_RAW_BYTES = 64 * 1024 * 1024
@@ -59,7 +62,34 @@ def source_identity() -> Mapping[str, Any]:
             ServerResponseCapture.__init__, json.loads,
             ServerResponseCapture.seal, ServerResponseCapture.validate_launch,
             reopen_unit, _bytes, _clock, _same, _frame, _instrument_source,
-            source_identity)]})
+            source_identity, ServerResponseCapture.for_direct.__func__, _direct_frame,
+            reopen_direct_unit, _reopen_rows)],
+        "direct_schemas": [DIRECT_FRAME_SCHEMA, DIRECT_RESPONSE_SCHEMA, DIRECT_UNIT_SCHEMA]})
+
+
+def _direct_frame(context, recipe, prompts):
+    """Original working-loop identity, never a fabricated native plan or fence."""
+    from .planned_serving import FrozenPromptManifest
+    from .resolved_recipe import CanonicalResolvedRecipe
+    fields = {"campaign_id", "epoch", "comparison_id", "arm", "launch_index"}
+    if not isinstance(context, Mapping) or set(context) != fields:
+        raise ServerResponseRefused("direct response context fields differ")
+    if any(type(context[key]) is not str or not context[key].strip()
+           for key in ("campaign_id", "epoch", "comparison_id")) \
+            or context["arm"] not in {"anchor", "candidate"} \
+            or type(context["launch_index"]) is not int or context["launch_index"] < 0:
+        raise ServerResponseRefused("direct response identity is invalid")
+    if type(recipe) is not CanonicalResolvedRecipe or type(prompts) is not FrozenPromptManifest:
+        raise ServerResponseRefused("direct capture requires original canonical recipe and prompts")
+    recipe = CanonicalResolvedRecipe.from_dict(recipe.to_dict())
+    prompts = FrozenPromptManifest.from_dict(prompts.to_dict())
+    recipe.validate_launch(recipe.template, recipe.build_dir, recipe.port)
+    requests = prompts.requests(tuple(item.prompt_id for item in prompts.prompts), recipe.template)
+    if len(requests) != recipe.template.np:
+        raise ServerResponseRefused("direct capture requests differ from original slot count")
+    return ob._freeze({"schema": DIRECT_FRAME_SCHEMA, "context": dict(context),
+        "recipe": recipe.to_dict(), "prompt_manifest_digest": prompts.digest,
+        "prompt_ids": [name for name, _ in requests]}), requests
 
 
 def _frame(plan: Any, unit: Any, fence: Any, recipe: Any, prompts: Any) -> Mapping[str, Any]:
@@ -160,6 +190,23 @@ class ServerResponseCapture:
         _same(_instrument_source(store, self.frame), self.pins, "original instrument source")
         self._sealed = False
 
+    @classmethod
+    def for_direct(cls, *, store, context, recipe, prompts):
+        """Use this same recorder in the direct owner; no native issuance is claimed."""
+        if cls is not ServerResponseCapture or type(store) is not mc.ArtifactStore:
+            raise ServerResponseRefused("direct capture requires the concrete recorder/store")
+        frame, requests = _direct_frame(context, recipe, prompts)
+        if len(PHASES) * sum(len(body) + MAX_RESPONSE_BYTES for _, body in requests) > MAX_TOTAL_RAW_BYTES:
+            raise ServerResponseRefused("direct response aggregate raw-byte budget exceeded")
+        result = object.__new__(cls)
+        result.store, result.frame, result.requests = store, frame, requests
+        result.pins = source_identity()
+        if any(item["implementation_status"] != "pinned" or item["configuration_status"] != "pinned"
+               for item in result.pins["callables"]):
+            raise ServerResponseRefused("direct response loaded source identity is incomplete")
+        result._sealed = False
+        return result
+
     def validate_launch(self, recipe: Any, requests: Sequence[tuple[str, bytes]]) -> None:
         _same(self.frame["recipe"], ob._freeze(recipe.to_dict()), "selected recipe")
         _same(self.requests, tuple(requests), "selected requests")
@@ -181,12 +228,13 @@ class ServerResponseCapture:
         if len(rows) != len(expected) or any(type(row) is not RawServerResponse for row in rows):
             raise ServerResponseRefused("server response phase/slot cardinality differs")
         refs = []
+        direct = self.frame.get("schema") == DIRECT_FRAME_SCHEMA
         for sequence, (row, want) in enumerate(zip(rows, expected)):
             _same((row.phase, row.slot_index, row.prompt_id, row.request), want,
                   "phase/slot/request order")
             if not start <= row.started_monotonic_s <= row.ended_monotonic_s <= end:
                 raise ServerResponseRefused("server response lies outside original request interval")
-            body = {"schema": RESPONSE_SCHEMA, "frame": ob._plain(self.frame),
+            body = {"schema": DIRECT_RESPONSE_SCHEMA if direct else RESPONSE_SCHEMA, "frame": ob._plain(self.frame),
                 "process_pid": process_pid, "sequence": sequence,
                 "phase": row.phase, "slot_index": row.slot_index, "prompt_id": row.prompt_id,
                 "request_hex": row.request.hex(), "request_sha256": hashlib.sha256(row.request).hexdigest(),
@@ -197,7 +245,7 @@ class ServerResponseCapture:
                 "source_identity": ob._plain(self.pins)}
             refs.append(self.store.write(f"server-response:{sequence}", body).to_dict())
         _same(source_identity(), self.pins, "loaded producer source")
-        return {"schema": UNIT_SCHEMA, "frame": ob._plain(self.frame),
+        return {"schema": DIRECT_UNIT_SCHEMA if direct else UNIT_SCHEMA, "frame": ob._plain(self.frame),
             "process_pid": process_pid, "request_started_monotonic_s": start,
             "request_ended_monotonic_s": end, "retention_started_monotonic_s": retained_at,
             "retention_ended_monotonic_s": time.monotonic(), "responses": refs,
@@ -208,16 +256,33 @@ def reopen_unit(value: Mapping[str, Any], *, store: mc.ArtifactStore,
                 expected_frame: Mapping[str, Any], expected_requests: Sequence[tuple[str, bytes]],
                 expected_pid: int) -> tuple[Mapping[str, Any], ...]:
     """Reparse every retained response, checking bytes; never infer missing token/seed data."""
+    if not isinstance(value, Mapping) or value.get("schema") != UNIT_SCHEMA:
+        raise ServerResponseRefused("native server unit schema differs")
+    return _reopen_rows(value, store=store, expected_frame=expected_frame,
+        expected_requests=expected_requests, expected_pid=expected_pid,
+        unit_schema=UNIT_SCHEMA, response_schema=RESPONSE_SCHEMA)
+
+
+def reopen_direct_unit(value, *, store, context, recipe, prompts, expected_pid):
+    frame, requests = _direct_frame(context, recipe, prompts)
+    return _reopen_rows(value, store=store, expected_frame=frame,
+        expected_requests=requests, expected_pid=expected_pid,
+        unit_schema=DIRECT_UNIT_SCHEMA, response_schema=DIRECT_RESPONSE_SCHEMA)
+
+
+def _reopen_rows(value, *, store, expected_frame, expected_requests, expected_pid,
+                 unit_schema, response_schema):
     fields = {"schema", "frame", "process_pid", "request_started_monotonic_s",
         "request_ended_monotonic_s", "retention_started_monotonic_s",
         "retention_ended_monotonic_s", "responses", "source_identity"}
-    if not isinstance(value, Mapping) or set(value) != fields or value["schema"] != UNIT_SCHEMA:
+    if not isinstance(value, Mapping) or set(value) != fields or value["schema"] != unit_schema:
         raise ServerResponseRefused("server unit receipt has missing or unknown fields")
     value = ob._freeze(ob._plain(value))
     _same(value["frame"], expected_frame, "parent frame")
     _same(value["process_pid"], expected_pid, "parent target PID")
     _same(value["source_identity"], source_identity(), "installed source identity")
-    _same(_instrument_source(store, expected_frame), value["source_identity"], "original source closure")
+    if unit_schema == UNIT_SCHEMA:
+        _same(_instrument_source(store, expected_frame), value["source_identity"], "original source closure")
     start, end, retained, closed = (_clock(value[name]) for name in (
         "request_started_monotonic_s", "request_ended_monotonic_s",
         "retention_started_monotonic_s", "retention_ended_monotonic_s"))
@@ -244,7 +309,7 @@ def reopen_unit(value: Mapping[str, Any], *, store: mc.ArtifactStore,
             raise ServerResponseRefused("server response artifact fields differ")
         _same(store.verify(f"server-response:{sequence}", row).to_dict(), dict(ref), "artifact namespace")
         _same((row["schema"], row["frame"], row["process_pid"], row["sequence"], row["source_identity"]),
-              (RESPONSE_SCHEMA, expected_frame, expected_pid, sequence, value["source_identity"]), "original identity")
+              (response_schema, expected_frame, expected_pid, sequence, value["source_identity"]), "original identity")
         request = _bytes(bytes.fromhex(row["request_hex"]), MAX_REQUEST_BYTES, "request")
         response = None if row["response_hex"] is None else _bytes(
             bytes.fromhex(row["response_hex"]), MAX_RESPONSE_BYTES, "response")

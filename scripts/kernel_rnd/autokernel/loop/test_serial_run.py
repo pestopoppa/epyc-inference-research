@@ -104,7 +104,7 @@ count = 0 if stopped[0] else int(sr.option(argv, "--iterations"))
 prior = sr.option(argv, "--resume-run")
 anchor = Path(sr.option(argv, "--anchor-build"))
 if prior:
-    original, _ = sr.load_completed(Path(prior), expected_binding=sr.input_binding(argv))
+    original, _ = sr.load_completed(Path(prior), expected_binding=sr.resume_binding(argv))
     anchor = Path(original["current_anchor"]["path"])
 row = sr.continuation(argv=argv, binding=sr.input_binding(argv),
     terminal="stopped" if stopped[0] else "complete",
@@ -115,6 +115,9 @@ row = sr.continuation(argv=argv, binding=sr.input_binding(argv),
     cor_build=None if cpu else anchor, cor_commit=None if cpu else "a" * 40,
     iterations_requested=int(sr.option(argv, "--iterations")),
     outcomes=[SimpleNamespace(status="measured_null") for _ in range(count)],
+    **({"runtime_recipe_reference": {"locator": "runtime-selection-fixture",
+       "sha256": "b" * 64, "verified": True}}
+       if mode == "runtime_ref" and cpu else {}),
     **({"held_claim_evidence": held} if held else {}))
 (out / "loop-run.json").write_text(json.dumps({"fixture": "not measurement evidence"}))
 if mode == "wrong_args":
@@ -240,6 +243,33 @@ def test_actual_children_rotate_reuse_inputs_and_stop_at_finite_budget(tmp_path,
     for row in seen:
         with pytest.raises(ProcessLookupError):
             os.kill(row["pid"], 0)
+
+
+def test_runtime_recipe_reference_is_target_local_digest_bound_and_replay_stable(
+        tmp_path, monkeypatch):
+    state, argv = _inputs(tmp_path, monkeypatch, mode="runtime_ref", rounds=2)
+    assert sr.main(argv) == 0
+    seen = [json.loads(line)["argv"]
+            for line in (state / "seen.jsonl").read_text().splitlines()]
+    assert sr.option(seen[0], "--runtime-recipe-reference") is None
+    assert sr.option(seen[1], "--runtime-recipe-reference") is None  # GPU has no CPU recipe.
+    reference_path = Path(sr.option(seen[2], "--runtime-recipe-reference"))
+    assert reference_path.name == "runtime-recipe-reference.json"
+    assert json.loads(reference_path.read_text()) == {
+        "locator": "runtime-selection-fixture", "sha256": "b" * 64, "verified": True}
+    assert sr.option(seen[3], "--runtime-recipe-reference") is None
+    # Recovery recreates the same child argv and accepts only the immutable bytes.
+    first_path = state / "batches/batch-000000/loop-continuation.json"
+    prior = {"path": str(first_path),
+             "sha256": hashlib.sha256(first_path.read_bytes()).hexdigest()}
+    replayed = sr._batch_argv(
+        json.loads(Path(argv[1]).read_text()), prior, 1, reference_path.parent)
+    assert replayed == seen[2]
+    reference_path.write_text(json.dumps({
+        "locator": "changed", "sha256": "b" * 64, "verified": True}))
+    with pytest.raises(sr.SerialRefused, match="routing reference changed"):
+        sr._batch_argv(json.loads(Path(argv[1]).read_text()), prior, 1,
+                       reference_path.parent)
 
 
 def test_serialized_targets_share_latest_source_anchor_without_losing_own_resume(
