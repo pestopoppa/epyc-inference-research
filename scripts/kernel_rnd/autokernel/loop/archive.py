@@ -248,6 +248,16 @@ def record(store_root: Path, attempt: Mapping[str, Any], *, epoch: str,
         added = store.record(attempt, epoch=epoch, recorded_at=recorded_at,
                              campaign_id=campaign_id)
         store.write_markdown(epoch=epoch)
+        if added:
+            try:
+                from . import serving_beliefs
+                serving_beliefs.export(store_root, attempt, campaign_id=campaign_id,
+                                       epoch=epoch, recorded_at=recorded_at)
+            except Exception as exc:
+                # The experiment is already durable. Auxiliary export cannot change
+                # its outcome, trigger a relaunch or claim that settlement failed.
+                print(f"warning: serving belief export failed after durable archive: "
+                      f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return added
 
 

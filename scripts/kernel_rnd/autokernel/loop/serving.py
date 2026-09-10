@@ -1026,6 +1026,16 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
     c_options = _resolved_launch_options(recipe, candidate_build, port, candidate_resolved_recipe)
     if frozen_requests is not None:
         a_options["frozen_requests"] = c_options["frozen_requests"] = frozen_requests
+    belief_inputs = None
+    belief_error = None
+    try:
+        from . import serving_beliefs
+        belief_inputs = serving_beliefs.prepare(
+            recipe, anchor=anchor_resolved_recipe, candidate=candidate_resolved_recipe,
+            anchor_build=anchor_build, candidate_build=candidate_build,
+            frozen_requests=frozen_requests, pairs=pairs)
+    except Exception as exc:
+        belief_error = f"{type(exc).__name__}: {exc}"[:256]
     a_runs, c_runs = [], []
     # Per-launch residency evidence, one record per server launch, per arm. Written by
     # `_measure_once`; a launch it could not sample lands here as `unproven` and a launch
@@ -1059,6 +1069,13 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
             "anchor_residency": a_residency, "candidate_residency": c_residency}
     if requests_digest is not None:
         out.update(request_digest=requests_digest, floor_request_digest=floor_request_digest)
+    if belief_inputs is not None:
+        try:
+            out["belief_capture"] = serving_beliefs.finish(out, belief_inputs)
+        except Exception as exc:
+            belief_error = f"{type(exc).__name__}: {exc}"[:256]
+    if belief_error is not None:
+        out["belief_capture_error"] = belief_error
     return out
 
 
