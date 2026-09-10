@@ -144,6 +144,30 @@ def _runtime_recipe_reference(value):
     return {"locator": value["locator"], "sha256": value["sha256"], "verified": True}
 
 
+def _source_lineage_matches(row, receipts, validation_body=None):
+    exact_local = (receipts and
+        receipts[-1].kept_commit == row["current_anchor"]["commit"] and
+        all(receipt.branch == row["branch"]
+            and Path(receipt.repo).resolve() == Path(row["worktree"]).resolve()
+            for receipt in receipts))
+    exact_validated_foreign = False
+    if receipts and validation_body is not None:
+        latest = receipts[-1]
+        try:
+            from . import surface_validation as validation
+            validation.shared_git_commit(
+                Path(row["worktree"]), Path(latest.repo), latest.kept_commit)
+        except validation.SurfaceValidationRefused:
+            pass
+        else:
+            exact_validated_foreign = (
+                validation_body["source_commit"] == latest.kept_commit
+                and all(receipt.branch == latest.branch
+                        and Path(receipt.repo).resolve() == Path(latest.repo).resolve()
+                        for receipt in receipts))
+    return exact_local or exact_validated_foreign
+
+
 def continuation(*, argv, binding, terminal, worktree, branch, model, selected_target,
                  anchor_build, anchor_commit, iterations_requested, outcomes,
                  cor_build=None, cor_commit=None, held_claim_evidence=None, cpu_screen=None,
@@ -178,10 +202,11 @@ def continuation(*, argv, binding, terminal, worktree, branch, model, selected_t
         for reference in refs:
             surface_fold.reopen_reference(reference)
         row["experimental_source_keeps"] = refs
+    validation_body = None
     if source_validation is not None:
         from . import surface_validation as validation
-        checked = validation.reopen_reference(source_validation)
-        if checked["target"] != selected_target:
+        validation_body = validation.reopen_reference(source_validation)
+        if validation_body["target"] != selected_target:
             raise SerialRefused("whole-source validation differs from continuation")
         row["source_validation"] = dict(source_validation)
     if source_lineage_keeps:
@@ -190,13 +215,10 @@ def continuation(*, argv, binding, terminal, worktree, branch, model, selected_t
         if len(refs) > 64:
             raise SerialRefused("source lineage keep membership exceeds its bound")
         receipts = [surface_fold.reopen_reference(reference) for reference in refs]
-        if (not receipts or receipts[-1].kept_commit != row["current_anchor"]["commit"]
-                or any(receipt.branch != row["branch"]
-                       or Path(receipt.repo).resolve() != Path(row["worktree"]).resolve()
-                       for receipt in receipts)):
+        if not _source_lineage_matches(row, receipts, validation_body):
             raise SerialRefused("source lineage differs from continuation source")
         if (source_validation is not None
-                and checked["candidate_anchor"]["commit"]
+                and validation_body["candidate_anchor"]["commit"]
                 not in {receipt.kept_commit for receipt in receipts}):
             raise SerialRefused("validation candidate is outside retained source lineage")
         row["source_lineage_keeps"] = refs
@@ -255,6 +277,7 @@ def load_completed(path: Path, *, expected_argv=None, expected_binding=None):
                     or receipt.branch != row["branch"]
                     or Path(receipt.repo).resolve() != Path(row["worktree"]).resolve()):
                 raise SerialRefused("source keep reference differs from original child identity")
+    checked = None
     if "source_validation" in row:
         from . import surface_validation as validation
         checked = validation.reopen_reference(row["source_validation"])
@@ -266,10 +289,7 @@ def load_completed(path: Path, *, expected_argv=None, expected_binding=None):
         if not isinstance(refs, list) or not refs or len(refs) > 64:
             raise SerialRefused("source lineage keep membership is malformed")
         receipts = [surface_fold.reopen_reference(reference) for reference in refs]
-        if (receipts[-1].kept_commit != row["current_anchor"]["commit"]
-                or any(receipt.branch != row["branch"]
-                       or Path(receipt.repo).resolve() != Path(row["worktree"]).resolve()
-                       for receipt in receipts)):
+        if not _source_lineage_matches(row, receipts, checked):
             raise SerialRefused("source lineage keep membership differs")
         if ("source_validation" in row
                 and checked["candidate_anchor"]["commit"]
@@ -598,9 +618,97 @@ def main(argv=None) -> int:
 
 
 def _source_owner_key(argv):
-    return _digest({"worktree": str(Path(option(argv, "--worktree")).resolve()),
-                    "branch": option(argv, "--experimental-branch",
-                                     champion.CANONICAL_BRANCH)})
+    identity = _selected_identity(argv)
+    worktree = Path(option(argv, "--worktree")).resolve()
+    done = subprocess.run(
+        ["git", "-C", str(worktree), "rev-parse", "--path-format=absolute",
+         "--git-common-dir"], capture_output=True, text=True, timeout=60)
+    if done.returncode == 0:
+        try:
+            common = Path(done.stdout.strip()).resolve(strict=True)
+            stat = common.stat()
+            source_owner = {"common_git": str(common), "device": stat.st_dev,
+                            "inode": stat.st_ino}
+        except OSError:
+            source_owner = {"unavailable_worktree": str(worktree)}
+    else:
+        source_owner = {"unavailable_worktree": str(worktree)}
+    return _digest({"campaign_id": identity["campaign_id"],
+                    "manifest_digest": identity["manifest_digest"],
+                    "source_owner": source_owner})
+
+
+def _source_result(state, target):
+    """Recover old-key pointers and choose only a proven forward shared lineage."""
+    key = _source_owner_key(target)
+    direct = state["source_results"].get(key)
+    if direct is not None:
+        if not isinstance(direct, dict) or set(direct) != {"path", "sha256"}:
+            raise SerialRefused("retained shared-source pointer is malformed")
+        _body, sha = load_completed(Path(direct["path"]))
+        if sha != direct["sha256"]:
+            raise SerialRefused("retained shared-source result changed")
+        return direct
+    candidates = []
+    identity = _selected_identity(target)
+    for reference in state["source_results"].values():
+        if not isinstance(reference, dict) or set(reference) != {"path", "sha256"}:
+            raise SerialRefused("retained shared-source pointer is malformed")
+        body, sha = load_completed(Path(reference["path"]))
+        if sha != reference["sha256"]:
+            raise SerialRefused("retained shared-source result changed")
+        selected = body.get("selected_target")
+        lineage = body.get("source_lineage_keeps") or body.get("experimental_source_keeps")
+        if (not isinstance(selected, dict) or not lineage
+                or selected.get("campaign_id") != identity["campaign_id"]
+                or selected.get("manifest_digest") != identity["manifest_digest"]):
+            continue
+        from . import surface_fold, surface_validation
+        receipt = surface_fold.reopen_reference(lineage[-1])
+        if body["current_anchor"]["commit"] != receipt.kept_commit:
+            continue
+        try:
+            surface_validation.shared_git_commit(
+                Path(option(target, "--worktree")), Path(receipt.repo), receipt.kept_commit)
+        except surface_validation.SurfaceValidationRefused:
+            continue
+        candidates.append((dict(reference), body))
+    if not candidates:
+        return None
+    chosen = next(((reference, body) for reference, body in candidates
+                   if direct == reference), candidates[0])
+    for candidate in candidates:
+        if candidate[0] == chosen[0]:
+            continue
+        old = chosen[1]["current_anchor"]["commit"]
+        new = candidate[1]["current_anchor"]["commit"]
+        repo = option(target, "--worktree")
+        if subprocess.run(["git", "-C", repo, "merge-base", "--is-ancestor", old, new],
+                          capture_output=True, timeout=60).returncode == 0:
+            chosen = candidate
+        elif subprocess.run(["git", "-C", repo, "merge-base", "--is-ancestor", new, old],
+                            capture_output=True, timeout=60).returncode != 0 and direct is None:
+            return None
+    state["source_results"][key] = chosen[0]
+    return chosen[0]
+
+
+def _remember_source_result(state, body, target, reference):
+    if not body.get("experimental_source_keeps"):
+        return
+    key = _source_owner_key(target)
+    existing = _source_result(state, target)
+    if existing is not None:
+        prior, prior_sha = load_completed(Path(existing["path"]))
+        if prior_sha != existing["sha256"]:
+            raise SerialRefused("retained shared-source result changed")
+        done = subprocess.run(
+            ["git", "-C", option(target, "--worktree"), "merge-base", "--is-ancestor",
+             prior["current_anchor"]["commit"], body["current_anchor"]["commit"]],
+            capture_output=True, text=True, timeout=60)
+        if done.returncode != 0:
+            return
+    state["source_results"][key] = dict(reference)
 
 
 def _validation_subject(state, target, index, source_commit):
@@ -667,7 +775,7 @@ def _pending_source_validations(state, targets):
     """Return exact target indexes due for an initial or bounded retry verdict."""
     pending = {}
     for index, target in enumerate(targets):
-        reference = state["source_results"].get(_source_owner_key(target))
+        reference = _source_result(state, target)
         if reference is None:
             continue
         body, sha = load_completed(Path(reference["path"]))
@@ -799,7 +907,7 @@ def _reconcile_completed(root, state, targets, batch_iterations):
         original, state["last_results"].get(str(index)), batch_iterations,
         directory, scheduler_selection=selection_path,
         recovery_reference=state.get("runtime_recovery", {}).get(str(index)),
-        source_prior=state.get("source_results", {}).get(_source_owner_key(original)))
+        source_prior=_source_result(state, original))
     expected = {"target_index": index, "selected_id": option(original, "--target-id"),
                 "store": option(original, "--store"), "batch_dir": str(directory),
                 "input_argv_sha256": _digest(argv)}
@@ -874,7 +982,7 @@ def _cost_forecasts(state, manifest, scheduler_state, available, previews):
             if sha != prior["sha256"]:
                 raise SerialRefused("cost forecast original continuation changed")
             source_body = None
-            source = state["source_results"].get(_source_owner_key(original))
+            source = _source_result(state, original)
             if source is not None and source != prior:
                 source_body, sha = load_completed(Path(source["path"]))
                 if sha != source["sha256"]:
@@ -1062,8 +1170,8 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                 state["last_results"].get(str(recovered["target_index"])),
                 batch_iterations, recovered_dir,
                 recovery_reference=state["runtime_recovery"].get(str(recovered["target_index"])),
-                source_prior=state["source_results"].get(
-                    _source_owner_key(targets[recovered["target_index"]])),
+                source_prior=_source_result(
+                    state, targets[recovered["target_index"]]),
                 validate_source=(scheduler_manifest is not None and
                                  recovered["target_index"] in
                                  _pending_source_validations(state, targets)),
@@ -1085,8 +1193,8 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                 _record_completed_stage(state, body,
                     targets[recovered["target_index"]], recovered["target_index"], len(targets))
                 state["last_results"][str(recovered["target_index"])] = recovered["result"]
-                state["source_results"][_source_owner_key(
-                    targets[recovered["target_index"]])] = recovered["result"]
+                _remember_source_result(state, body,
+                    targets[recovered["target_index"]], recovered["result"])
                 retain_recovery(recovered_active, expected_recovered_argv, recovered_dir)
             state["last_reconciliation"] = recovered
             state["active"] = None
@@ -1196,8 +1304,7 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                                      scheduler_selection=selection_path,
                                      scope_preview=(previews[option(original, "--target-id")]
                                                     if previews is not None else None),
-                                     source_prior=state["source_results"].get(
-                                         _source_owner_key(original)),
+                                     source_prior=_source_result(state, original),
                                      validate_source=(scheduler_manifest is not None
                                                       and index in validation_targets))
             expected_binding = input_binding(child_argv)
@@ -1255,8 +1362,8 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                     raise SerialRefused("child terminal belongs to another selected target")
                 _record_completed_stage(state, body, original, index, len(targets))
                 state["last_results"][key] = {"path": str(result_path), "sha256": sha}
-                state["source_results"][_source_owner_key(original)] = {
-                    "path": str(result_path), "sha256": sha}
+                _remember_source_result(state, body, original,
+                    {"path": str(result_path), "sha256": sha})
                 if scheduler_manifest is not None:
                     state["scheduler_state"] = _scheduled_account(
                         state, scheduler_manifest, active, body, directory).to_dict()

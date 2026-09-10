@@ -482,6 +482,9 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--model is required without --resolved-campaign and --target-id")
 
     source_resumed = None
+    source_checkout = None
+    source_tree = None
+    cross_tree_source = False
     if (args.source_anchor_continuation is None) != (args.source_anchor_sha256 is None):
         parser.error("shared-source continuation path and digest must be supplied together")
     if args.source_anchor_continuation is not None:
@@ -492,15 +495,20 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValueError("shared-source continuation digest differs")
             expected_branch = args.experimental_branch or champion.CANONICAL_BRANCH
             source_target = source_resumed.get("selected_target")
+            source_checkout = Path(source_resumed["worktree"])
+            cross_tree_source = source_checkout.resolve() != args.worktree.resolve()
             if (source_resumed["terminal"] != "complete"
-                    or Path(source_resumed["worktree"]).resolve() != args.worktree.resolve()
-                    or source_resumed["branch"] != expected_branch
+                    or (not cross_tree_source and source_resumed["branch"] != expected_branch)
                     or not isinstance(source_target, dict)
                     or selected_identity is None
                     or source_target.get("campaign_id") != selected_identity["campaign_id"]
                     or source_target.get("manifest_digest") != selected_identity["manifest_digest"]):
                 raise ValueError("shared-source continuation differs from this source owner")
-            args.anchor_build = Path(source_resumed["current_anchor"]["path"])
+            source_checkout, source_tree = surface_validation.shared_source_checkout(
+                args.worktree, source_checkout,
+                source_resumed["current_anchor"]["commit"])
+            if not cross_tree_source:
+                args.anchor_build = Path(source_resumed["current_anchor"]["path"])
         except (OSError, ValueError) as exc:
             parser.error(f"shared-source continuation refused: {exc}")
     source_lineage_references = (list(source_resumed.get("source_lineage_keeps",
@@ -511,6 +519,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("source validation requires an original retained source lineage")
     if args.validate_source_continuation and args.iterations != 1:
         parser.error("source validation is one scheduled target stage (--iterations 1)")
+    if args.validate_source_continuation and args.out is None:
+        parser.error("source validation requires a retained --out directory")
 
     direct_launch = None
     frozen_requests = None
@@ -656,10 +666,11 @@ def main(argv: list[str] | None = None) -> int:
         anchor_build=args.anchor_build,
         allow_unverified_anchor=args.allow_unverified_anchor,
         experimental_identity=experimental)
-    if resumed is not None or source_resumed is not None:
+    if resumed is not None or (source_resumed is not None and not cross_tree_source):
         anchor_source = source_resumed if source_resumed is not None else resumed
         if anchor_source["current_anchor"]["commit"] != verified_head:
             parser.error("continuation current anchor differs from current source head")
+    if resumed is not None or source_resumed is not None:
         serial_run.verify_exact_anchor(args.anchor_build, args.worktree, verified_head,
                                        experimental=experimental)
     print(f"{'candidate' if experimental else 'champion'}  {args.champion_branch} "
@@ -2002,9 +2013,11 @@ def main(argv: list[str] | None = None) -> int:
             validation_original_commit = pre_source_anchor_commit
             validation_identity_error = None
             validation_anchor_build = pre_source_anchor_build
+            validation_candidate_build = Path(args.anchor_build)
             validation_receipts = []
             validation_intended = False
             validation_reused_comparison = None
+            validation_gate_failure = None
             if args.validate_source_continuation:
                 validation_receipts = [surface_fold.reopen_reference(reference)
                                        for reference in source_lineage_references]
@@ -2061,8 +2074,35 @@ def main(argv: list[str] | None = None) -> int:
                     except surface_validation.SurfaceValidationRefused as exc:
                         validation_identity_error = str(exc)
 
+                if cross_tree_source and validation_identity_error is None:
+                    validation_candidate_build = args.out / "whole-source-candidate-build"
+                    publish("running", step=(f"{direct_launch.backend.upper()} whole-source "
+                                             "validation: target-recipe build and oracle"))
+                    checked_source, checked_tree = surface_validation.shared_source_checkout(
+                        args.worktree, source_checkout,
+                        source_resumed["current_anchor"]["commit"])
+                    if checked_tree != source_tree:
+                        raise surface_validation.SurfaceValidationRefused(
+                            "shared source tree changed before target build")
+                    build_ok, build_verdicts = gates.run_all(
+                        lambda: gates.compiles(
+                            checked_source, validation_candidate_build,
+                            cmake_defines=recipe.cmake_defines(), jobs=build_jobs,
+                            cpu_list=build_cpu_list, targets=gates.PROMOTION_TARGETS),
+                        lambda: gates.op_correctness(
+                            validation_candidate_build,
+                            **({"backend": "CPU",
+                                "resolved_recipe": _cpu_arm(
+                                    direct_launch, validation_candidate_build)}
+                               if direct_launch.backend == "cpu" else {})))
+                    if not build_ok:
+                        validation_gate_failure = {
+                            "type": "target_recipe_gate_refused",
+                            "verdicts": [verdict.to_dict() for verdict in build_verdicts]}
+
             if (direct_launch and calibration_samples and validation_identity_error is None
-                    and validation_reused_comparison is None):
+                    and validation_reused_comparison is None
+                    and validation_gate_failure is None):
                 publish("running", step=f"{direct_launch.backend.upper()} serving: request-bound original calibration")
                 calibration_anchor = (validation_anchor_build
                                       if args.validate_source_continuation else args.anchor_build)
@@ -2088,24 +2128,32 @@ def main(argv: list[str] | None = None) -> int:
                 if not source_receipts:
                     raise surface_validation.SurfaceValidationRefused(
                         "propagated source has no original keep membership")
-                source_tree = _git(args.worktree, "rev-parse", f"{candidate_commit}^{{tree}}")
+                source_tree = (source_tree or
+                               _git(args.worktree, "rev-parse", f"{candidate_commit}^{{tree}}"))
                 original_anchor_identity = {
                     "path": str(validation_anchor_build.resolve()), "commit": original_commit}
-                candidate_anchor_identity = dict(source_resumed["current_anchor"])
-                candidate_launch = _cpu_arm(direct_launch, args.anchor_build)
+                candidate_anchor_identity = {
+                    "path": str(validation_candidate_build.resolve()),
+                    "commit": candidate_commit}
+                candidate_launch = (None if validation_gate_failure is not None else
+                                    _cpu_arm(direct_launch, validation_candidate_build))
                 common = {"source_commit": candidate_commit, "source_tree": source_tree,
                     "source_keep_ids": [receipt.keep_id for receipt in source_receipts],
                     "target": selected_identity, "original_anchor": original_anchor_identity,
                     "candidate_anchor": candidate_anchor_identity,
                     "request_digest": serving.request_digest(serving_recipe, frozen_requests),
-                    "recipe_execution_digest": candidate_launch.execution_digest}
-                if validation_identity_error is not None or original_commit == candidate_commit:
+                    "recipe_execution_digest": (None if candidate_launch is None else
+                                                candidate_launch.execution_digest)}
+                if (validation_identity_error is not None or validation_gate_failure is not None
+                        or original_commit == candidate_commit):
                     reason = (validation_identity_error or
+                              ("target-recipe build/oracle refused" if validation_gate_failure else None) or
                               "original target anchor equals propagated candidate; no A/B baseline")
                     validation_row = surface_validation.debt(
                         **common, reason=reason,
-                        failure={"type": "original_anchor_identity_unavailable",
-                                 "message": reason})
+                        failure=(validation_gate_failure or
+                                 {"type": "original_anchor_identity_unavailable",
+                                  "message": reason}))
                 elif validation_reused_comparison is not None:
                     validation_row = surface_validation.row(
                         **common, comparison=validation_reused_comparison,
@@ -2134,7 +2182,7 @@ def main(argv: list[str] | None = None) -> int:
                     original_launch = _cpu_arm(direct_launch, validation_anchor_build)
                     try:
                         validation_comparison = serving.compare(
-                            serving_recipe, validation_anchor_build, args.anchor_build,
+                            serving_recipe, validation_anchor_build, validation_candidate_build,
                             pairs=args.serving_pairs, floor_pct=serving_floor_pct,
                             port=direct_launch.port,
                             anchor_resolved_recipe=original_launch,
