@@ -184,15 +184,18 @@ def test_existing_gpu_pool_uses_selected_requests_and_original_keep_owners(
         assert rc == 0, log
         assert held == [True, False]
         assert cpu_held == [True, False] and affinities == [(0, {0, 1}), (0, {3, 4})]
-        assert len(calibration_calls) == int(calibrate)
+        # Missing exact request floors prepare automatically; the explicit option
+        # remains an override, not a prerequisite for this selected GPU target.
+        assert len(calibration_calls) == 1
+        assert calibration_calls[0]["samples"] == 2
         result = json.loads((fixture.root / "result/loop-run.json").read_text())
         outcome = result["iterations"][0]
-        assert outcome["status"] == ("kept" if calibrate else "measured_null")
+        assert outcome["status"] == "kept"
         row = outcome["comparison"]
         assert row["request_digest"] == serving.request_digest(selected.template, requests)
-        assert row["noise_floor_pct"] == (0.0 if calibrate else None)  # never bench's 99%
+        assert row["noise_floor_pct"] == 0.0  # never bench's 99%
         assert row["pairs"] == result["pairs"] == 2
-        assert row["decisive"] is (True if calibrate else None)
+        assert row["decisive"] is True
         assert row["baseline_scope"] == ("experimental_candidate_not_champion" if experimental
                                          else "canonical_candidate_vs_current_anchor")
         context = planners[0].contexts[0]
@@ -218,7 +221,7 @@ def test_existing_gpu_pool_uses_selected_requests_and_original_keep_owners(
             cor = result["continuation"]["cor_anchor"]
             assert cor["commit"] == (run._git(fixture.repo, "rev-parse", "HEAD") if cor_wins else fixture.tip)
             assert cor_comparison[2]["effect"] > 0 if cor_wins else cor_comparison[2]["effect"] < 0
-        assert len(builds) == (3 if calibrate else 1)
+        assert len(builds) == 3
         assert measured and all(path.exists() for path, _ in measured)
     finally:
         fixture.doCleanups()

@@ -725,14 +725,19 @@ def main(argv: list[str] | None = None) -> int:
         calibrated = floor is not None
         serving_floor_provenance = floor_reading.provenance
         floor_request_digest = floor_reading.request_digest
-        if screen_state is not None and floor is None:
-            # A different common recipe cannot borrow the full target's floor.
-            # Use the existing declared finite serving pair count when the original
-            # calibration option is absent (including resumed serial children).
+        if floor is None:
+            # Every selected workload needs its OWN request-bound source floor,
+            # including a first full-target visit and a reduced common screen.
+            # Reuse the declared finite pair count only when no explicit calibration
+            # count was supplied. Existing exact floors are never auto-recalibrated;
+            # load_floor still refuses malformed/mismatched records above.
             calibration_samples = calibration_samples or max(2, args.serving_pairs)
         args.surface = "serving:" + serving_recipe.name
         print(f"serving   selected {direct_launch.backend} workload: {serving_recipe.describe()}; "
               f"request-bound floor {floor} [{serving_floor_provenance}]")
+        if calibration_samples:
+            print(f"serving   prepare {calibration_samples} original calibration launches "
+                  "under the owning claim before source iterations")
     if args.serving_recipe is not None:
         serving_recipe = serving.Recipe.load(args.serving_recipe)
         # The floor is keyed by recipe IDENTITY, not by recipe NAME. This used to be a
