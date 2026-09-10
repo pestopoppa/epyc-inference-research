@@ -2121,13 +2121,15 @@ def main(argv: list[str] | None = None) -> int:
         try:
             args.out.mkdir(parents=True, exist_ok=True)
             original_store = ArtifactStore(args.out / "held-claim-artifacts")
-            held_claim_evidence = claim.publish_intervals(
+            artifact = claim.publish_intervals(
                 original_store, scheduler_selection, original_claims,
                 target=selected_identity).to_dict()
-            status.write_json(args.out, "loop-held-claims.json", {
+            held_claim_evidence = {
                 "schema": "epyc.autokernel.direct_held_reference.v1",
                 "selection_digest": scheduler_selection.digest,
-                "evidence": held_claim_evidence}, prefix=".held-claims-")
+                "evidence": artifact}
+            status.write_json(args.out, "loop-held-claims.json", held_claim_evidence,
+                              prefix=".held-claims-")
             if runtime_owner[0] is not None:
                 interrupted = runtime_owner[0].interruption_reference()
                 if interrupted is not None:
