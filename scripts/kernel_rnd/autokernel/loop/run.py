@@ -221,11 +221,16 @@ def calibrate(args, run=subprocess.run) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    original_argv = list(sys.argv[1:] if argv is None else argv)
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--worktree", type=Path, required=True,
                         help="candidate source tree the planner edits")
     parser.add_argument("--anchor-build", type=Path, required=True)
+    parser.add_argument("--cor-build", type=Path,
+                        help="original champion-of-record build when it differs from the current anchor")
+    parser.add_argument("--resume-run", type=Path,
+                        help="terminal result from the preceding finite batch of these exact inputs")
     # THE single champion branch; the worktree must have it checked out at its tip or
     # the loop refuses to start (`champion.verify_startup`).
     parser.add_argument("--champion-branch", default=champion.CANONICAL_BRANCH)
@@ -317,6 +322,26 @@ def main(argv: list[str] | None = None) -> int:
                         default=pool.WORKER_BUILD_ROOT,
                         help="parent of the per-lane candidate build directories")
     args = parser.parse_args(argv)
+    from . import serial_run
+    original_binding = serial_run.input_binding(original_argv) if args.out or args.resume_run else None
+    resumed = None
+    if args.resume_run is not None:
+        try:
+            prior, _sha = serial_run.load_completed(args.resume_run, expected_binding=original_binding)
+            resumed = prior
+            if resumed["terminal"] == "stopped":
+                parser.error("preceding batch was stopped; explicit new session required")
+            if Path(resumed["worktree"]).resolve() != args.worktree.resolve():
+                parser.error("continuation worktree differs")
+            args.anchor_build = Path(resumed["current_anchor"]["path"])
+            if resumed["cor_anchor"] is not None:
+                original_cor = Path(resumed["cor_anchor"]["path"])
+                if args.cor_build is not None and args.cor_build.resolve() != original_cor.resolve():
+                    parser.error("--cor-build differs from preceding original COR")
+                args.cor_build = original_cor
+            args.cpu_calibrate_serving = None  # Existing request-bound floor is reopened below.
+        except (OSError, ValueError) as exc:
+            parser.error(f"continuation refused: {exc}")
 
     selected_target = None
     selected_identity = None
@@ -365,6 +390,8 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("CPU serving requires a CPU launch with explicit affinity")
         if Path(cpu_launch.model.path).resolve() != args.model.resolve():
             parser.error("CPU launch model differs from selected --model")
+        if resumed is not None and Path(cpu_launch.build_dir).resolve() != args.anchor_build.resolve():
+            cpu_launch = _cpu_arm(cpu_launch, args.anchor_build)
         if Path(cpu_launch.build_dir).resolve() != args.anchor_build.resolve():
             parser.error("CPU launch build differs from selected --anchor-build")
         manifest = FrozenPromptManifest.from_dict(_read_cpu_document(args.frozen_prompts))
@@ -381,6 +408,15 @@ def main(argv: list[str] | None = None) -> int:
     elif args.frozen_prompts or args.experimental_branch or args.cpu_calibrate_serving:
         parser.error("CPU options require --cpu-serving-launch")
 
+    if resumed is not None:
+        if (resumed["branch"] != args.champion_branch
+                or Path(resumed["model"]).resolve() != args.model.resolve()
+                or resumed["selected_target"] != selected_identity
+                or (cpu_launch is None) != (resumed["cor_anchor"] is not None)):
+            parser.error("continuation target/branch/model/backend differs")
+    if cpu_launch is not None and args.cor_build is not None:
+        parser.error("experimental CPU serving has no canonical champion-of-record build")
+
     # FIRST, before the claim, the census, even the dry run's wiring proof: the loop
     # optimises THE single champion branch or it does not start. See `champion` for
     # the 2026-08-31 incident this refusal exists to make unrepeatable.
@@ -389,6 +425,11 @@ def main(argv: list[str] | None = None) -> int:
         anchor_build=args.anchor_build,
         allow_unverified_anchor=args.allow_unverified_anchor,
         experimental_identity=cpu_launch is not None)
+    if resumed is not None:
+        if resumed["current_anchor"]["commit"] != verified_head:
+            parser.error("continuation current anchor differs from current source head")
+        serial_run.verify_exact_anchor(args.anchor_build, args.worktree, verified_head,
+                                       experimental=cpu_launch is not None)
     print(f"{'candidate' if cpu_launch else 'champion'}  {args.champion_branch} "
           f"@ {verified_head[:12]} — verified")
 
@@ -624,7 +665,16 @@ def main(argv: list[str] | None = None) -> int:
             "automatic rerun occurred and no champion-of-record was inferred.") from exc
     bundle = [restored]
     cor_commit = [restored.champion_of_record]
-    cor_build = [args.anchor_build]
+    cor_build = [args.cor_build or args.anchor_build]
+    if cpu_launch is None and (args.cor_build is not None or cor_commit[0] != anchor_commit):
+        if args.cor_build is None:
+            raise champion.StartupRefused(
+                "REFUSED: restored champion of record differs from current anchor; "
+                "supply its original --cor-build or --resume-run, never relabel the tip build")
+        if resumed is not None and resumed["cor_anchor"]["commit"] != serial_run.full_commit(
+                args.worktree, cor_commit[0]):
+            raise champion.StartupRefused("REFUSED: retained COR differs from original restored bundle")
+        serial_run.verify_exact_anchor(cor_build[0], args.worktree, cor_commit[0])
     # R23-54: the last serving-gate firing and WHY it fired ("threshold" | "cadence" |
     # "both"), for the status body the dashboard reads. Per-run, not durable: the durable
     # fact is the bundle's counter; this is the narration of the most recent reading.
@@ -1235,6 +1285,16 @@ def main(argv: list[str] | None = None) -> int:
                 "phase_seconds": pooled_body.pop("phase_lane_seconds"),
                 "phase_seconds_are_lane_seconds": True,
                 "pool": pooled_body,
+                "continuation": serial_run.continuation(
+                    argv=original_argv, binding=original_binding,
+                    terminal="stopped" if should_stop() else "complete",
+                    worktree=args.worktree, branch=args.champion_branch, model=args.model,
+                    selected_target=selected_identity,
+                    anchor_build=anchor_build[0], anchor_commit=current_anchor_commit[0],
+                    iterations_requested=args.iterations, outcomes=outcomes,
+                    cor_build=cor_build[0] if cpu_launch is None else None,
+                    cor_commit=serial_run.full_commit(args.worktree, cor_commit[0])
+                    if cpu_launch is None else None),
                 **({"target": selected_identity} if selected_identity is not None else {}),
                 **({"baseline_scope": "experimental_candidate_not_champion",
                     "experimental_branch": args.experimental_branch,
@@ -1252,6 +1312,12 @@ def main(argv: list[str] | None = None) -> int:
         # The artifact is durable before this claim is made, and the heartbeat has
         # stopped and joined before the terminal snapshot is rendered.
         status_publisher.close("complete", outcomes, hotspot_rows=hotspot_rows)
+        if args.out:
+            # Same owner, after full output and terminal heartbeat close. Only
+            # routing metadata; no reparsing large native observation payloads.
+            body["continuation"]["terminal"] = "stopped" if should_stop() else "complete"
+            status.write_json(args.out, "loop-continuation.json", body["continuation"],
+                              prefix=".loop-continuation-")
 
     kept = sum(1 for outcome in outcomes if outcome.status == "kept")
     measured = sum(1 for outcome in outcomes
