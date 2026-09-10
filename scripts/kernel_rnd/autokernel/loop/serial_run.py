@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import shutil
 import stat
 import subprocess
 import sys
@@ -18,9 +19,10 @@ from . import campaign_cli, champion, legacy_targets, status
 
 CONTINUATION_SCHEMA = "epyc.autokernel.loop_continuation.v1"
 SERIAL_SCHEMA = "epyc.autokernel.serial_run.v1"
-_DOCUMENT_FLAGS = ("--resolved-campaign", "--cpu-serving-launch", "--frozen-prompts", "--serving-recipe")
+_DOCUMENT_FLAGS = ("--resolved-campaign", "--cpu-serving-launch", "--gpu-serving-launch",
+                   "--frozen-prompts", "--serving-recipe")
 _CHANGING_FLAGS = frozenset({"--out", "--iterations", "--resume-run", "--anchor-build",
-                            "--cor-build", "--cpu-calibrate-serving", "--dry-run"})
+                            "--cor-build", "--cpu-calibrate-serving", "--gpu-calibrate-serving", "--dry-run"})
 _CONTINUATION_FIELDS = {"schema", "terminal", "input_argv", "input_argv_sha256", "binding",
                         "worktree", "branch", "model", "selected_target", "current_anchor", "cor_anchor",
                         "iterations_requested", "iterations_completed", "outcome_counts", "result_file"}
@@ -134,9 +136,11 @@ def load_completed(path: Path, *, expected_argv=None, expected_binding=None):
     if Path(row["worktree"]).resolve() != Path(option(argv, "--worktree", "")).resolve():
         raise SerialRefused("recorded worktree differs from actual input arguments")
     cpu = option(argv, "--cpu-serving-launch") is not None
-    branch = option(argv, "--experimental-branch") if cpu else option(
+    gpu = option(argv, "--gpu-serving-launch") is not None
+    experimental = cpu or (gpu and option(argv, "--experimental-branch") is not None)
+    branch = option(argv, "--experimental-branch") if experimental else option(
         argv, "--champion-branch", champion.CANONICAL_BRANCH)
-    if branch != row["branch"] or cpu != (row["cor_anchor"] is None):
+    if (cpu and gpu) or branch != row["branch"] or experimental != (row["cor_anchor"] is None):
         raise SerialRefused("recorded branch/backend differs from actual input arguments")
     if option(argv, "--resolved-campaign") is not None:
         resolved = campaign_cli.load_previous(Path(option(argv, "--resolved-campaign")))
@@ -144,7 +148,8 @@ def load_completed(path: Path, *, expected_argv=None, expected_binding=None):
         expected_target = {"campaign_id": resolved.campaign_id, "request_id": resolved.request_id,
                            "manifest_digest": resolved.manifest_digest,
                            "selected_id": option(argv, "--target-id"),
-                           "scope": "cpu_serving_selected_workload" if cpu else "legacy_gpu_screen",
+                           "scope": ("cpu_serving_selected_workload" if cpu else
+                                     "gpu_serving_selected_workload" if gpu else "legacy_gpu_screen"),
                            "original_target": selected.to_dict()}
         if row["selected_target"] != expected_target \
                 or Path(row["model"]).resolve() != Path(selected.execution.model.path).resolve():
@@ -205,6 +210,10 @@ def verify_exact_anchor(path: Path, worktree: Path, commit: str, *, experimental
 
 def _target_args(path: Path) -> list[str]:
     argv, _sha = _json(path, limit=64 * 1024)
+    return _validate_target_args(argv)
+
+
+def _validate_target_args(argv) -> list[str]:
     if not isinstance(argv, list) or not argv or len(argv) > 512 \
             or not all(isinstance(item, str) and "\0" not in item for item in argv):
         raise SerialRefused("target args must be a bounded JSON string array")
@@ -231,7 +240,17 @@ def _child_command(argv):
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--target-args", type=Path, action="append", required=True)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--target-args", type=Path, action="append")
+    source.add_argument("--resolved-campaign", type=Path,
+                        help="derive the roster from ready enrolled production/candidate targets")
+    parser.add_argument("--owned-targets", type=Path,
+                        help="target alias → original owned source/anchor/branch/request paths")
+    parser.add_argument("--target-root", type=Path,
+                        help="derived per-target store/lane roots (default: state-dir/targets)")
+    parser.add_argument("--common-args", type=Path, help="optional shared actor/measurement argv JSON")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="print inputs and run each existing owner dry-run; no execution or writes")
     parser.add_argument("--batch-iterations", type=int, required=True)
     parser.add_argument("--rounds", type=int, default=1, help="0 rotates continuously until STOP")
     parser.add_argument("--state-dir", type=Path, required=True)
@@ -239,7 +258,23 @@ def main(argv=None) -> int:
     if args.batch_iterations <= 0 or args.rounds < 0:
         parser.error("batch iterations must be positive and rounds nonnegative")
     try:
-        targets = [_target_args(path) for path in args.target_args]
+        skipped = []
+        child_prefix = ()
+        if args.resolved_campaign:
+            if args.owned_targets is None:
+                raise SerialRefused("--resolved-campaign requires --owned-targets")
+            from .serial_roster import build_targets
+            targets, skipped, cpus = build_targets(args.resolved_campaign, args.owned_targets,
+                target_root=args.target_root or args.state_dir / "targets", common_path=args.common_args)
+            targets = [_validate_target_args(row) for row in targets]
+            taskset = shutil.which("taskset")
+            if taskset is None:
+                raise SerialRefused("taskset is required to confine generated owned children")
+            child_prefix = (taskset, "-c", ",".join(map(str, cpus)))
+        else:
+            if args.owned_targets or args.target_root or args.common_args:
+                raise SerialRefused("roster options require --resolved-campaign")
+            targets = [_target_args(path) for path in args.target_args]
         # No two configured targets may overwrite an active target's source,
         # build lanes or history. The owner never creates/repoints those roots.
         for flag in ("--worktree", "--store", "--worker-root", "--worker-build-root"):
@@ -249,6 +284,16 @@ def main(argv=None) -> int:
                 raise SerialRefused(f"target {flag} roots overlap")
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
+    if args.dry_run:
+        print(json.dumps({"targets": targets, "skipped": skipped, "child_prefix": child_prefix}, indent=2))
+        from . import run
+        for target in targets:
+            result = run.main([*target, "--dry-run"])
+            if result:
+                return result
+        return 0
+    for row in skipped:
+        print(f"roster    {','.join(row['target_ids'])}: {row['reason']}", file=sys.stderr)
     root = args.state_dir.resolve()
     root.mkdir(parents=True, exist_ok=True)
     with (root / "serial.lock").open("a") as lock:
@@ -256,11 +301,12 @@ def main(argv=None) -> int:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
             raise SerialRefused("serial session already has an owner") from exc
-        return _drive(root, targets, args.batch_iterations, args.rounds)
+        return _drive(root, targets, args.batch_iterations, args.rounds, child_prefix=child_prefix)
 
 
-def _drive(root, targets, batch_iterations, rounds):
-    config = _digest({"targets": targets, "batch_iterations": batch_iterations, "rounds": rounds})
+def _drive(root, targets, batch_iterations, rounds, *, child_prefix=()):
+    config = _digest({"targets": targets, "batch_iterations": batch_iterations, "rounds": rounds,
+                      **({"child_prefix": list(child_prefix)} if child_prefix else {})})
     state_path = root / "serial-state.json"
     if state_path.exists():
         state, _sha = _json(state_path)
@@ -321,7 +367,7 @@ def _drive(root, targets, batch_iterations, rounds):
                 _body, sha = load_completed(Path(prior["path"]), expected_binding=input_binding(original))
                 if sha != prior["sha256"]:
                     raise SerialRefused("retained child result changed")
-                child_argv = _without(child_argv, {"--cpu-calibrate-serving"})
+                child_argv = _without(child_argv, {"--cpu-calibrate-serving", "--gpu-calibrate-serving"})
                 child_argv += ["--resume-run", prior["path"]]
             child_argv += ["--iterations", str(batch_iterations), "--out", str(directory)]
             expected_binding = input_binding(child_argv)
@@ -335,7 +381,7 @@ def _drive(root, targets, batch_iterations, rounds):
             try:
                 with (directory / "stdout.log").open("xb") as stdout, \
                         (directory / "stderr.log").open("xb") as stderr:
-                    process = subprocess.Popen(_child_command(child_argv), stdout=stdout, stderr=stderr,
+                    process = subprocess.Popen([*child_prefix, *_child_command(child_argv)], stdout=stdout, stderr=stderr,
                                                cwd=Path(__file__).resolve().parents[4])
                     active["pid"] = process.pid
                     save()

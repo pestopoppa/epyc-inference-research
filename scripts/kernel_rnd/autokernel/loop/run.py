@@ -15,6 +15,7 @@ memory that outlives this process.
 from __future__ import annotations
 
 import argparse
+from contextlib import ExitStack
 from dataclasses import dataclass
 import hashlib
 import json
@@ -39,6 +40,7 @@ from . import (accumulate, actors, anchor, archive, bench, champion, claim, gate
 class ServingComparison:
     """Expose the existing serving verdict to iterate without regrading it."""
     row: dict
+    baseline_scope: str = "experimental_candidate_not_champion"
 
     @property
     def effect(self):
@@ -67,7 +69,7 @@ class ServingComparison:
 
     def to_dict(self):
         return {**self.row, "surface": self.surface,
-                "baseline_scope": "experimental_candidate_not_champion"}
+                "baseline_scope": self.baseline_scope}
 
 
 def _read_cpu_document(path: Path) -> dict:
@@ -113,7 +115,7 @@ def _cpu_arm(original, build: Path):
                                          if original.drafter else None),
                              "executable": identity("executable", binary_dir / "llama-server"),
                              "dsos": dsos},
-        backend="cpu", environment_policy=original.environment_policy,
+        backend=original.backend, environment_policy=original.environment_policy,
         port=original.port, runtime_binary_dir=str(binary_dir),
         runtime_ld_paths=ld_paths,
         provenance={**dict(original.provenance),
@@ -282,12 +284,16 @@ def main(argv: list[str] | None = None) -> int:
                         help="paired serving A/B runs per bundle at the serving gate")
     parser.add_argument("--cpu-serving-launch", type=Path,
                         help="selected target's canonical resolved CPU launch JSON")
+    parser.add_argument("--gpu-serving-launch", type=Path,
+                        help="explicit enrolled GPU target's canonical resolved serving launch JSON")
     parser.add_argument("--frozen-prompts", type=Path,
-                        help="original FrozenPromptManifest for CPU serving measurement")
+                        help="original FrozenPromptManifest for explicitly selected serving measurement")
     parser.add_argument("--experimental-branch",
-                        help="explicit CPU candidate branch; never the canonical champion")
+                        help="explicit serving candidate branch; never the canonical champion")
     parser.add_argument("--cpu-calibrate-serving", type=int,
                         help="collect this many original serving calibration launches before iterations")
+    parser.add_argument("--gpu-calibrate-serving", type=int,
+                        help="collect this many original GPU serving calibration launches before iterations")
     parser.add_argument("--fire-multiple", type=float, default=2.5,
                         help="R23-44: run the serving gate once the accumulator's compounded "
                              "bench gain over the champion of record reaches this multiple of "
@@ -325,6 +331,10 @@ def main(argv: list[str] | None = None) -> int:
                         default=pool.WORKER_BUILD_ROOT,
                         help="parent of the per-lane candidate build directories")
     args = parser.parse_args(argv)
+    if args.cpu_serving_launch and args.gpu_serving_launch:
+        parser.error("select only one CPU or GPU serving launch")
+    if args.gpu_serving_launch and not args.resolved_campaign:
+        parser.error("--gpu-serving-launch requires an explicitly enrolled target")
     from . import serial_run
     original_binding = serial_run.input_binding(original_argv) if args.out or args.resume_run else None
     resumed = None
@@ -343,6 +353,7 @@ def main(argv: list[str] | None = None) -> int:
                     parser.error("--cor-build differs from preceding original COR")
                 args.cor_build = original_cor
             args.cpu_calibrate_serving = None  # Existing request-bound floor is reopened below.
+            args.gpu_calibrate_serving = None
         except (OSError, ValueError) as exc:
             parser.error(f"continuation refused: {exc}")
 
@@ -360,7 +371,8 @@ def main(argv: list[str] | None = None) -> int:
         except (OSError, ValueError) as exc:
             parser.error(f"target selection refused: {exc}")
         args.model = Path(selected_target.execution.model.path)
-        scope = "cpu_serving_selected_workload" if args.cpu_serving_launch else "legacy_gpu_screen"
+        scope = ("cpu_serving_selected_workload" if args.cpu_serving_launch else
+                 "gpu_serving_selected_workload" if args.gpu_serving_launch else "legacy_gpu_screen")
         selected_identity = {
             "campaign_id": resolved_campaign.campaign_id,
             "request_id": resolved_campaign.request_id,
@@ -373,52 +385,79 @@ def main(argv: list[str] | None = None) -> int:
     elif args.model is None:
         parser.error("--model is required without --resolved-campaign and --target-id")
 
-    cpu_launch = None
+    direct_launch = None
     frozen_requests = None
-    if args.cpu_serving_launch is not None:
+    launch_path = args.cpu_serving_launch or args.gpu_serving_launch
+    if launch_path is not None:
         from .planned_serving import FrozenPromptManifest
         from .resolved_recipe import CanonicalResolvedRecipe
-        if (not args.experimental_branch or args.experimental_branch == champion.CANONICAL_BRANCH
+        backend = "cpu" if args.cpu_serving_launch else "gpu"
+        if args.cpu_serving_launch and not args.experimental_branch:
+            parser.error("CPU serving requires an explicit non-production --experimental-branch")
+        if args.experimental_branch and (args.experimental_branch == champion.CANONICAL_BRANCH
                 or args.experimental_branch.startswith("production-")
                 or args.champion_branch != champion.CANONICAL_BRANCH):
-            parser.error("CPU serving requires an explicit non-production --experimental-branch")
+            parser.error("serving experimental branch must be explicit and non-production")
         if args.frozen_prompts is None:
-            parser.error("CPU serving requires the original --frozen-prompts")
+            parser.error("selected serving requires the original --frozen-prompts")
         if args.confirm_model or args.calibrate_surface or args.serving_recipe:
-            parser.error("CPU serving uses its selected launch and request-bound floor, not GPU rungs")
-        if args.cpu_calibrate_serving is not None and args.cpu_calibrate_serving < 2:
-            parser.error("CPU serving calibration needs at least two launches")
-        cpu_launch = CanonicalResolvedRecipe.from_dict(_read_cpu_document(args.cpu_serving_launch))
-        if cpu_launch.backend != "cpu" or not cpu_launch.template.cpu_list:
+            parser.error("selected serving uses its launch and request-bound floor, not screen rungs")
+        calibration_samples = (args.cpu_calibrate_serving if backend == "cpu"
+                               else args.gpu_calibrate_serving)
+        if (args.gpu_calibrate_serving is not None if backend == "cpu"
+                else args.cpu_calibrate_serving is not None):
+            parser.error("serving calibration flag differs from selected backend")
+        if calibration_samples is not None and calibration_samples < 2:
+            parser.error("serving calibration needs at least two launches")
+        direct_launch = CanonicalResolvedRecipe.from_dict(_read_cpu_document(launch_path))
+        if direct_launch.backend != backend:
+            parser.error("serving launch backend differs from selected CLI mode")
+        if backend == "cpu" and not direct_launch.template.cpu_list:
             parser.error("CPU serving requires a CPU launch with explicit affinity")
-        if Path(cpu_launch.model.path).resolve() != args.model.resolve():
-            parser.error("CPU launch model differs from selected --model")
-        if resumed is not None and Path(cpu_launch.build_dir).resolve() != args.anchor_build.resolve():
-            cpu_launch = _cpu_arm(cpu_launch, args.anchor_build)
-        if Path(cpu_launch.build_dir).resolve() != args.anchor_build.resolve():
-            parser.error("CPU launch build differs from selected --anchor-build")
+        if Path(direct_launch.model.path).resolve() != args.model.resolve():
+            parser.error("serving launch model differs from selected --model")
+        if resumed is not None and Path(direct_launch.build_dir).resolve() != args.anchor_build.resolve():
+            direct_launch = _cpu_arm(direct_launch, args.anchor_build)
+        if Path(direct_launch.build_dir).resolve() != args.anchor_build.resolve():
+            parser.error("serving launch build differs from selected --anchor-build")
         manifest = FrozenPromptManifest.from_dict(_read_cpu_document(args.frozen_prompts))
         frozen_requests = manifest.requests(tuple(p.prompt_id for p in manifest.prompts),
-                                           cpu_launch.template)
-        if len(frozen_requests) != cpu_launch.template.np:
+                                           direct_launch.template)
+        if len(frozen_requests) != direct_launch.template.np:
             parser.error("frozen requests must describe exactly the selected serving concurrency")
         if selected_target is not None:
             try:
-                legacy_targets.validate_cpu_workload(selected_target, cpu_launch)
+                legacy_targets.validate_serving_workload(selected_target, direct_launch)
             except legacy_targets.TargetSelectionRefused as exc:
                 parser.error(f"target selection refused: {exc}")
-        args.champion_branch = args.experimental_branch
-    elif args.frozen_prompts or args.experimental_branch or args.cpu_calibrate_serving:
-        parser.error("CPU options require --cpu-serving-launch")
+        if args.experimental_branch:
+            args.champion_branch = args.experimental_branch
+    elif (args.frozen_prompts or args.experimental_branch or args.cpu_calibrate_serving
+          or args.gpu_calibrate_serving):
+        parser.error("serving options require --cpu-serving-launch or --gpu-serving-launch")
+    cpu_launch = direct_launch if args.cpu_serving_launch else None
+    experimental = direct_launch is not None and args.experimental_branch is not None
+    owned_cpu_list = None
+    build_cpu_list = cpu_launch.template.cpu_list if cpu_launch else "96-183"
+    build_jobs = min(64, cpu_launch.template.threads) if cpu_launch else 64
+    if selected_target is not None:
+        try:
+            owned_cpu_list = legacy_targets.validate_resources(
+                resolved_campaign.resources, direct_launch,
+                backend=selected_target.execution.backend, environment=os.environ)
+        except ValueError as exc:
+            parser.error(f"target resources refused: {exc}")
+        build_cpu_list = owned_cpu_list
+        build_jobs = min(build_jobs, resolved_campaign.resources.build_jobs)
 
     if resumed is not None:
         if (resumed["branch"] != args.champion_branch
                 or Path(resumed["model"]).resolve() != args.model.resolve()
                 or resumed["selected_target"] != selected_identity
-                or (cpu_launch is None) != (resumed["cor_anchor"] is not None)):
+                or (not experimental) != (resumed["cor_anchor"] is not None)):
             parser.error("continuation target/branch/model/backend differs")
-    if cpu_launch is not None and args.cor_build is not None:
-        parser.error("experimental CPU serving has no canonical champion-of-record build")
+    if experimental and args.cor_build is not None:
+        parser.error("experimental serving has no canonical champion-of-record build")
 
     # FIRST, before the claim, the census, even the dry run's wiring proof: the loop
     # optimises THE single champion branch or it does not start. See `champion` for
@@ -427,17 +466,17 @@ def main(argv: list[str] | None = None) -> int:
         worktree=args.worktree, branch=args.champion_branch,
         anchor_build=args.anchor_build,
         allow_unverified_anchor=args.allow_unverified_anchor,
-        experimental_identity=cpu_launch is not None)
+        experimental_identity=experimental)
     if resumed is not None:
         if resumed["current_anchor"]["commit"] != verified_head:
             parser.error("continuation current anchor differs from current source head")
         serial_run.verify_exact_anchor(args.anchor_build, args.worktree, verified_head,
-                                       experimental=cpu_launch is not None)
-    print(f"{'candidate' if cpu_launch else 'champion'}  {args.champion_branch} "
+                                       experimental=experimental)
+    print(f"{'candidate' if experimental else 'champion'}  {args.champion_branch} "
           f"@ {verified_head[:12]} — verified")
 
     # The workload must dispatch the kernels production dispatches. Refuse loudly.
-    census = (workload_contract.read_census(args.model) if cpu_launch
+    census = (workload_contract.read_census(args.model) if direct_launch
               else workload_contract.verify_workload(args.model))
     recipe = (build_recipe.NATIVE_CPU_RECIPE if cpu_launch else build_recipe.HOUSE_GPU_RECIPE)
     print(f"workload  {args.model.name}: n_embd={census.n_embd}, "
@@ -448,6 +487,9 @@ def main(argv: list[str] | None = None) -> int:
     anchor_commit = _git(args.worktree, "rev-parse", "HEAD")
     epoch_inputs = ({"cpu_execution_digest": cpu_launch.execution_digest,
                      "frozen_prompt_digest": manifest.digest} if cpu_launch else {})
+    if args.gpu_serving_launch:
+        epoch_inputs.update(gpu_execution_digest=direct_launch.execution_digest,
+                            frozen_prompt_digest=manifest.digest)
     if selected_identity is not None:
         epoch_inputs.update(
             enrolled_manifest_digest=resolved_campaign.manifest_digest,
@@ -460,11 +502,13 @@ def main(argv: list[str] | None = None) -> int:
     print(f"anchor    {anchor_commit[:12]}   epoch {epoch[:12]}")
 
     pp, tg, ubatch = bench.SURFACES[args.surface]
+    bench_surface = args.surface
     if args.calibrate_surface:
         return calibrate(args)
     # Never borrow a GPU bench floor for the selected CPU request.
-    floor = (None if cpu_launch else
+    bench_floor = (None if experimental else
              noise_floor_pct(args.surface, args.pairs, args.model, store=args.store))
+    floor = None if direct_launch else bench_floor
     calibrated = floor is not None
     print(f"surface   {args.surface}, {args.pairs} alternating pairs, "
           + (f"noise floor {floor:.3f}%" if calibrated else
@@ -487,8 +531,8 @@ def main(argv: list[str] | None = None) -> int:
     #: payload, because a reader cannot otherwise tell a checked floor from an assumed one.
     serving_floor_provenance = "absent"
     floor_request_digest = None
-    if cpu_launch:
-        serving_recipe = cpu_launch.template
+    if direct_launch:
+        serving_recipe = direct_launch.template
         floor_reading = serving.load_floor(args.store, serving_recipe,
                                            frozen_requests=frozen_requests)
         floor = serving_floor_pct = floor_reading.floor_pct
@@ -496,7 +540,7 @@ def main(argv: list[str] | None = None) -> int:
         serving_floor_provenance = floor_reading.provenance
         floor_request_digest = floor_reading.request_digest
         args.surface = "serving:" + serving_recipe.name
-        print(f"serving   experimental candidate only: {serving_recipe.describe()}; "
+        print(f"serving   selected {direct_launch.backend} workload: {serving_recipe.describe()}; "
               f"request-bound floor {floor} [{serving_floor_provenance}]")
     if args.serving_recipe is not None:
         serving_recipe = serving.Recipe.load(args.serving_recipe)
@@ -528,7 +572,7 @@ def main(argv: list[str] | None = None) -> int:
     # on the confirm rung -- the standing +17.9% was the screen shape, which is the
     # "headline must be the production recipe" defect. Floor re-keyed to that model.
     headline_model = args.confirm_model or args.model
-    headline_floor = floor if args.confirm_model is None else noise_floor_pct(
+    headline_floor = bench_floor if args.confirm_model is None else noise_floor_pct(
         args.surface, args.pairs, headline_model, store=args.store)
 
     if args.dry_run:
@@ -536,7 +580,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     feedback = serving_beliefs.PlannerFeedback(args.store, args.belief_root_repo)
-    feedback_anchor = [cpu_launch]
+    feedback_anchor = [direct_launch]
 
     def build_context() -> dict:
         program = loop.PROGRAM.read_text(encoding="utf-8")
@@ -553,6 +597,17 @@ def main(argv: list[str] | None = None) -> int:
                 "Keeps remain on the explicitly selected experimental candidate branch; "
                 "they do not promote the canonical champion or production.\n\n"
                 + program)
+        elif direct_launch:
+            program = (
+                "EXPLICIT GPU SERVING TARGET — measure the selected server launch and frozen "
+                "requests, not the legacy bench screen. Preserve its GPU/environment, "
+                "cache/seed/speculation and placement settings. Author/review source only; "
+                "the existing loop owns builds, GPU oracle, claim and paired measurements. "
+                "Serving profiling is unavailable; do not invent hotspots or treat the "
+                "legacy bench screen as a profile of these requests. "
+                + ("Keeps remain on the explicit experimental branch, not the canonical champion. "
+                   if experimental else "Canonical COR advancement retains the existing bundle gate. ")
+                + "\n\n" + program)
         return {
             "program": program,
             "kernel_hotspots": [row.to_dict() for row in hotspot_rows],
@@ -570,7 +625,13 @@ def main(argv: list[str] | None = None) -> int:
                             "build_recipe": recipe.to_dict(),
                             "hotspot_status": "CPU profile unavailable; do not infer GPU hotspots",
                             **({"enrollment": selected_identity} if selected_identity else {})}}
-               if cpu_launch else {"target": {"scope": "legacy GPU screen, NOT enrolled serving recipe",
+               if cpu_launch else {"target": {"scope": "selected GPU serving workload",
+                                             "recipe": direct_launch.to_dict(),
+                                             "requests": str(args.frozen_prompts),
+                                             "build_recipe": recipe.to_dict(),
+                                             "hotspot_status": "selected GPU serving profile unavailable",
+                                             "enrollment": selected_identity}}
+               if direct_launch else {"target": {"scope": "legacy GPU screen, NOT enrolled serving recipe",
                                              "enrollment": selected_identity}}
                if selected_identity else {}),
         }
@@ -617,9 +678,8 @@ def main(argv: list[str] | None = None) -> int:
             return gates.run_all(
                 lambda: gates.compiles(worker.worktree, worker.build_dir,
                                        cmake_defines=recipe.cmake_defines(),
-                                       jobs=min(64, cpu_launch.template.threads) if cpu_launch else 64,
-                                       cpu_list=cpu_launch.template.cpu_list if cpu_launch else "96-183",
-                                       **({"targets": gates.PROMOTION_TARGETS} if cpu_launch else {})),
+                                       jobs=build_jobs, cpu_list=build_cpu_list,
+                                       **({"targets": gates.PROMOTION_TARGETS} if direct_launch else {})),
                 lambda: gates.op_correctness(worker.build_dir,
                                             **({"backend": "CPU"} if cpu_launch else {})),
             )
@@ -657,9 +717,9 @@ def main(argv: list[str] | None = None) -> int:
                                "--is-ancestor", a, b],
                               capture_output=True).returncode == 0
     try:
-        if cpu_launch:
+        if experimental:
             # No bench accumulator and no canonical champion-of-record advance:
-            # CPU keeps are directly serving-measured experimental commits.
+            # These keeps are directly serving-measured experimental commits.
             restored = accumulate.Bundle(champion_of_record=anchor_commit, tip=anchor_commit)
             note = "experimental serving candidate; no production/champion designation"
         else:
@@ -675,7 +735,7 @@ def main(argv: list[str] | None = None) -> int:
     bundle = [restored]
     cor_commit = [restored.champion_of_record]
     cor_build = [args.cor_build or args.anchor_build]
-    if cpu_launch is None and (args.cor_build is not None or cor_commit[0] != anchor_commit):
+    if not experimental and (args.cor_build is not None or cor_commit[0] != anchor_commit):
         if args.cor_build is None:
             raise champion.StartupRefused(
                 "REFUSED: restored champion of record differs from current anchor; "
@@ -693,7 +753,7 @@ def main(argv: list[str] | None = None) -> int:
 
     def measure_for(worker):
         def measure(hypothesis, paths):
-            if cpu_launch:
+            if direct_launch:
                 return cpu_compare(anchor_build[0], worker.build_dir)
             # The anchor build is SHARED across lanes and only ever read, so it needs
             # no per-lane copy; the candidate binary is per lane because each lane
@@ -706,18 +766,19 @@ def main(argv: list[str] | None = None) -> int:
         return measure
 
     def cpu_compare(a_build, c_build):
-        anchor_recipe = _cpu_arm(cpu_launch, a_build)
-        candidate_recipe = _cpu_arm(cpu_launch, c_build)
+        anchor_recipe = _cpu_arm(direct_launch, a_build)
+        candidate_recipe = _cpu_arm(direct_launch, c_build)
         # Reuse the actual comparison's rebind, including after an anchor keep;
         # never hash a build a second time merely to assemble a planner prompt.
         feedback_anchor[0] = anchor_recipe
         row = serving.compare(
             serving_recipe, a_build, c_build, pairs=args.serving_pairs,
-            floor_pct=floor, port=cpu_launch.port,
+            floor_pct=floor, port=direct_launch.port,
             anchor_resolved_recipe=anchor_recipe,
             candidate_resolved_recipe=candidate_recipe,
             frozen_requests=frozen_requests, floor_request_digest=floor_request_digest)
-        return ServingComparison(row)
+        return ServingComparison(row, "experimental_candidate_not_champion" if experimental
+                                 else "canonical_candidate_vs_current_anchor")
 
     def confirm_measure(worker):
         """The confirm rung's A/B for one keep-candidate (§5.3): same arms, the
@@ -744,6 +805,9 @@ def main(argv: list[str] | None = None) -> int:
         """
         if cpu_launch:
             print("profile   CPU profile unavailable; GPU rocprof is not a CPU instrument")
+            return
+        if direct_launch:
+            print("profile   selected GPU serving profile unavailable; legacy bench profile not substituted")
             return
         try:
             rows = hotspots.profile(anchor_build[0] / "bin" / "llama-bench",
@@ -797,8 +861,8 @@ def main(argv: list[str] | None = None) -> int:
         # lane candidate builds (`gate_for`) keep jobs=64. A future toolchain-flag fix
         # (hipcc determinism at -j64) could restore parallel anchor builds; filed R23-41.
         return gates.compiles(args.worktree, dest, cmake_defines=recipe.cmake_defines(),
-                              jobs=1, cpu_list=cpu_launch.template.cpu_list if cpu_launch else "96-183",
-                              targets=gates.PROMOTION_TARGETS if cpu_launch else targets)
+                              jobs=1, cpu_list=build_cpu_list,
+                              targets=gates.PROMOTION_TARGETS if direct_launch else targets)
 
     def build_baseline(dest: Path, commit: str):
         """The frozen production kernel, built at most once PER FREEZE. Never in the
@@ -821,7 +885,7 @@ def main(argv: list[str] | None = None) -> int:
                                  f"refresh the copy to follow the promotion")
         return gates.compiles(production.BASELINE_TREE, dest,
                               cmake_defines=recipe.cmake_defines(),
-                              jobs=64, cpu_list="96-183")
+                              jobs=build_jobs, cpu_list=build_cpu_list)
 
     def publish_headline() -> None:
         """Refresh the dashboard headline for the champion that was just promoted.
@@ -830,7 +894,7 @@ def main(argv: list[str] | None = None) -> int:
         from this commit and `anchor.verify` just proved holds the champion. No second
         build is paid for here, and nothing below is allowed to end the run.
         """
-        if cpu_launch:
+        if experimental:
             print("headline  experimental serving results only; production comparison not applicable")
             return
         outcome = production.refresh(
@@ -844,7 +908,7 @@ def main(argv: list[str] | None = None) -> int:
                 bench.Arm("production_v9", base / "bin" / "llama-bench"),
                 bench.Arm("champion", champ / "bin" / "llama-bench"),
                 headline_model, pp=pp, tg=tg, pairs=args.pairs,
-                noise_floor_pct=headline_floor, surface=args.surface, ubatch=ubatch,
+                noise_floor_pct=headline_floor, surface=bench_surface, ubatch=ubatch,
                 calibrated=headline_floor is not None),
             on_step=lambda label: publish("running", latest,
                                           hotspot_rows=hotspot_rows, step=label))
@@ -874,14 +938,16 @@ def main(argv: list[str] | None = None) -> int:
             # for one commit aborted every keep on link noise). Objects prove identity.
             digest=anchor_integrity.object_digest,
             on_verdict=keep_verdict, build=build_champion,
-            compare=lambda promoted, fresh: cpu_compare(promoted, fresh) if cpu_launch else bench.compare(
+            compare=lambda promoted, fresh: cpu_compare(promoted, fresh) if direct_launch else bench.compare(
                 bench.Arm("promoted_anchor", promoted / "bin" / "llama-bench"),
                 bench.Arm("fresh_champion", fresh / "bin" / "llama-bench"),
                 args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor,
                 surface=args.surface, ubatch=ubatch, calibrated=calibrated),
             on_step=lambda label: publish("running", latest,
                                           hotspot_rows=hotspot_rows, step=label),
-            **({"scratch_build": args.store / "anchor-verify-cpu"} if cpu_launch else {}))
+            **({"scratch_build": args.store / ("anchor-verify-cpu" if cpu_launch else
+                                               "anchor-verify-gpu-serving")}
+               if direct_launch else {}))
 
     def promote_anchor() -> None:
         """Advance the anchor by BUILDING the champion into the new slot, never by
@@ -896,7 +962,7 @@ def main(argv: list[str] | None = None) -> int:
             champion_commit=_git(args.worktree, "rev-parse", "HEAD"))
         current_anchor_commit[0] = _git(args.worktree, "rev-parse", "HEAD")
         print(f"anchor    advanced to {anchor_build[0].name} — subsequent effects are "
-              f"MARGINAL against this {'experimental candidate' if cpu_launch else 'champion'}, "
+              f"MARGINAL against this {'experimental candidate' if experimental else 'champion'}, "
               "not cumulative")
         # FIRST, before the loop draws any further work: nothing below is worth doing
         # against an anchor that is not the champion (run 18: 114 candidates, 6.5 h).
@@ -910,11 +976,12 @@ def main(argv: list[str] | None = None) -> int:
         # serving-demonstrated state is the accumulator card's champion_of_record, not
         # this number. Cost: one tip-vs-production bench per keep (the pre-R23-44 cost).
         publish("running", latest, hotspot_rows=hotspot_rows,
-                step=("keep: experimental serving candidate retained" if cpu_launch else
+                step=("keep: experimental serving candidate retained" if experimental else
                       "keep: champion-vs-production headline bench"))
         publish_headline()
         publish("running", latest, hotspot_rows=hotspot_rows,
                 step=("keep: CPU profiling unavailable" if cpu_launch else
+                      "keep: selected GPU serving profiling unavailable" if direct_launch else
                       "keep: re-profiling the new champion (rocprofv3)"))
         # The champion moved, so the profile that named the hotspots is stale: the
         # accepted patch changed the very distribution the next hypothesis should aim
@@ -950,7 +1017,7 @@ def main(argv: list[str] | None = None) -> int:
         headline follows it; on a divergence (bundle cleared bench, serving did not confirm)
         the champion of record HOLDS, the bundle is KEPT, and the divergence is journaled as
         planner evidence naming the bundled keeps (operator 2026-09-04)."""
-        if serving_recipe is None or cpu_launch:
+        if serving_recipe is None or experimental:
             return
         try:
             _accumulate_after_keep(mechanism_id)
@@ -973,8 +1040,8 @@ def main(argv: list[str] | None = None) -> int:
         comp = bench.compare(
             bench.Arm("champion_of_record", cor_build[0] / "bin" / "llama-bench"),
             bench.Arm("accumulator", anchor_build[0] / "bin" / "llama-bench"),
-            args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor,
-            surface=args.surface, ubatch=ubatch, calibrated=calibrated).to_dict()
+            args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=bench_floor,
+            surface=bench_surface, ubatch=ubatch, calibrated=bench_floor is not None).to_dict()
         bundle[0].add_keep(mechanism_id, head, comp["effect"] * 100.0)
         bundle[0].save(args.store)   # durable BEFORE the gate decision, so a crash keeps it
         thr = (f"{accum_policy.fire_threshold_pct(serving_floor_pct):.2f}"
@@ -991,7 +1058,13 @@ def main(argv: list[str] | None = None) -> int:
             return
         # The gate is being spent -- once, on the whole bundle.
         sv_row = serving.compare(serving_recipe, cor_build[0], anchor_build[0],
-                                 pairs=args.serving_pairs, floor_pct=serving_floor_pct)
+                                 pairs=args.serving_pairs, floor_pct=serving_floor_pct,
+                                 **({"port": direct_launch.port,
+                                     "anchor_resolved_recipe": _cpu_arm(direct_launch, cor_build[0]),
+                                     "candidate_resolved_recipe": _cpu_arm(direct_launch, anchor_build[0]),
+                                     "frozen_requests": frozen_requests,
+                                     "floor_request_digest": floor_request_digest}
+                                    if direct_launch else {}))
         plan = accumulate.resolve(bundle[0], sv_row, accum_policy)
         # WHY it fired is part of the reading: a cadence firing at +2% compounded is a
         # different fact from a threshold firing at +9%, and the 2026-09-08 divergence is
@@ -1055,6 +1128,11 @@ def main(argv: list[str] | None = None) -> int:
         if claim_started is None or cpu_launch:
             return {}
         held = time.time() - claim_started
+        if direct_launch:
+            # Serving reports rates/windows, not measured device busy seconds.
+            # Missing bench-only accounting must not become "GPU idle all run".
+            return {"claim_held_s": round(held, 1), "device_seconds_under_load": None,
+                    "gpu_seconds_idle_while_claimed": None, "idle_fraction_while_claimed": None}
         busy = sum(float((o.comparison.to_dict() or {}).get("device_seconds") or 0.0)
                    for o in outcomes if o.comparison is not None)
         return {
@@ -1072,7 +1150,7 @@ def main(argv: list[str] | None = None) -> int:
         are current only when measured for this exact tip; a retained older magnitude
         is separately labelled historical. None means there is no serving tier.
         """
-        if serving_recipe is None or cpu_launch:
+        if serving_recipe is None or experimental:
             return None
         thr = (accum_policy.fire_threshold_pct(serving_floor_pct)
                if serving_floor_pct is not None else None)
@@ -1124,7 +1202,8 @@ def main(argv: list[str] | None = None) -> int:
         """A loop that only reports when it succeeds looks identical to a stuck one."""
         status.write(
             args.store, state=state, epoch=epoch, campaign_id="ak-loop",
-            anchor_commit=current_anchor_commit[0], surface=args.surface, pairs=args.pairs,
+            anchor_commit=current_anchor_commit[0], surface=args.surface,
+            pairs=args.serving_pairs if direct_launch else args.pairs,
             noise_floor_pct=floor, model=str(args.model),
             outcomes=[o.to_attempt() for o in outcomes],
             iterations_planned=args.iterations, step=step,
@@ -1132,7 +1211,7 @@ def main(argv: list[str] | None = None) -> int:
             **({"target": selected_identity} if selected_identity is not None else {}),
             **({"batch": {"output_dir": str(args.out.resolve()), "pid": os.getpid()}}
                if args.out is not None else {}),
-            **({"baseline_scope": "experimental_candidate_not_champion"} if cpu_launch else {}),
+            **({"baseline_scope": "experimental_candidate_not_champion"} if experimental else {}),
             anchor_guard=anchor_guard_seen[-1] if anchor_guard_seen else None,
             accumulator=accumulator_state(),
             gpu=gpu if gpu is not None else gpu_reading(outcomes),
@@ -1254,13 +1333,24 @@ def main(argv: list[str] | None = None) -> int:
         publish("starting")
         status_publisher.start()
         started = time.time()
-        with (claim.hold_cpu(cpu_launch.template.cpu_list) if cpu_launch else claim.hold()) as receipt:
+        with ExitStack() as ownership:
+            if owned_cpu_list is not None:
+                # This thread and future actor/oracle children inherit the declared
+                # CPUs; pre-existing telemetry threads are not relabelled as confined.
+                previous_affinity = os.sched_getaffinity(0)
+                os.sched_setaffinity(0, set(resolved_campaign.resources.cpu_logical))
+                ownership.callback(os.sched_setaffinity, 0, previous_affinity)
+                receipt = ownership.enter_context(claim.hold_cpu(owned_cpu_list))
+            elif cpu_launch:
+                receipt = ownership.enter_context(claim.hold_cpu(cpu_launch.template.cpu_list))
+            if not cpu_launch:
+                receipt = ownership.enter_context(claim.hold())
             claim_started = time.time()
             print(f"claim     held on {receipt['device_id']}\n")
             # R23-44: snapshot the starting champion into the protected champion-of-record slot
             # BEFORE the accumulator can advance and prune. The serving gate reads cor_build as
             # its A-arm; without this snapshot the first accumulator prune could delete it.
-            if serving_recipe is not None and not cpu_launch:
+            if serving_recipe is not None and not experimental:
                 print(f"cor       champion of record {cor_commit[0][:12]} = {cor_build[0].name} "
                       f"(serving A-arm, protected from prune; headline follows serving-"
                       f"demonstrated advances only)")
@@ -1268,11 +1358,11 @@ def main(argv: list[str] | None = None) -> int:
             # is re-run whenever a keep advances the champion.
             reprofile()
 
-            if cpu_launch and args.cpu_calibrate_serving:
-                publish("running", step="CPU serving: request-bound original calibration")
+            if direct_launch and calibration_samples:
+                publish("running", step=f"{direct_launch.backend.upper()} serving: request-bound original calibration")
                 calibration = serving.calibrate_floor(
-                    serving_recipe, args.anchor_build, samples=args.cpu_calibrate_serving,
-                    port=cpu_launch.port, resolved_recipe=_cpu_arm(cpu_launch, args.anchor_build),
+                    serving_recipe, args.anchor_build, samples=calibration_samples,
+                    port=direct_launch.port, resolved_recipe=_cpu_arm(direct_launch, args.anchor_build),
                     frozen_requests=frozen_requests)
                 serving.write_floor(args.store, serving_recipe, calibration,
                                     frozen_requests=frozen_requests)
@@ -1297,7 +1387,7 @@ def main(argv: list[str] | None = None) -> int:
             body = {
                 "schema": "epyc.autokernel.loop_run.v1",
                 "epoch": epoch, "anchor_commit": anchor_commit,
-                "surface": args.surface, "pairs": args.pairs,
+                "surface": args.surface, "pairs": args.serving_pairs if direct_launch else args.pairs,
                 "noise_floor_pct": floor, "elapsed_s": round(elapsed, 1),
                 "workers": args.workers,
                 "iterations": [outcome.to_attempt() for outcome in outcomes],
@@ -1311,14 +1401,14 @@ def main(argv: list[str] | None = None) -> int:
                     selected_target=selected_identity,
                     anchor_build=anchor_build[0], anchor_commit=current_anchor_commit[0],
                     iterations_requested=args.iterations, outcomes=outcomes,
-                    cor_build=cor_build[0] if cpu_launch is None else None,
+                    cor_build=cor_build[0] if not experimental else None,
                     cor_commit=serial_run.full_commit(args.worktree, cor_commit[0])
-                    if cpu_launch is None else None),
+                    if not experimental else None),
                 **({"target": selected_identity} if selected_identity is not None else {}),
                 **({"baseline_scope": "experimental_candidate_not_champion",
-                    "experimental_branch": args.experimental_branch,
-                    "launch_snapshot": cpu_launch.snapshot_digest,
-                    "floor_request_digest": floor_request_digest} if cpu_launch else {}),
+                    "experimental_branch": args.experimental_branch} if experimental else {}),
+                **({"launch_snapshot": direct_launch.snapshot_digest,
+                    "floor_request_digest": floor_request_digest} if direct_launch else {}),
             }
             status.write_json(args.out, "loop-run.json", body, prefix=".loop-run-")
     except BaseException as exc:
