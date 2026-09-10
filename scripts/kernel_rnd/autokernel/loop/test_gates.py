@@ -1,4 +1,5 @@
 """The gates, and the one property that makes them gates: order."""
+import ast
 from pathlib import Path
 import tempfile
 import unittest
@@ -63,9 +64,15 @@ class TheShortCircuitMustBeReal(unittest.TestCase):
 
     def test_the_runner_passes_callables_not_evaluated_verdicts(self):
         source = (Path(__file__).resolve().parent / "run.py").read_text()
-        block = source.split("gates.run_all(", 1)[1][:320]
-        self.assertIn("lambda: gates.compiles", block)
-        self.assertIn("lambda: gates.op_correctness", block)
+        # Select the source-build chain, not the first/new runtime-only oracle.
+        chains = [node for node in ast.walk(ast.parse(source)) if isinstance(node, ast.Call)
+                  and ast.unparse(node.func) == "gates.run_all"
+                  and any(isinstance(arg, ast.Lambda) and isinstance(arg.body, ast.Call)
+                          and ast.unparse(arg.body.func) == "gates.compiles" for arg in node.args)]
+        self.assertEqual(len(chains), 1)
+        self.assertTrue(all(isinstance(arg, ast.Lambda) for arg in chains[0].args))
+        self.assertEqual([ast.unparse(arg.body.func) for arg in chains[0].args],
+                         ["gates.compiles", "gates.op_correctness"])
 
 
 class ARefusedPatchMustSurviveTheReset(unittest.TestCase):
@@ -82,15 +89,16 @@ class ARefusedPatchMustSurviveTheReset(unittest.TestCase):
         self.assertIn("def keep_the_diff(", source)
         # It must run BEFORE the gate, because a failed build still leaves a patch
         # worth reading and that is the last moment it exists on disk.
-        gate_body = source.split("def gate(hypothesis, paths):", 1)[1][:900]
+        gate_node = next(node for node in ast.walk(ast.parse(source))
+                         if isinstance(node, ast.FunctionDef) and node.name == "gate")
         # `keep_the_diff` takes the LANE as well as the hypothesis since the gate
         # became per-worker: with concurrent lanes a bare `<mechanism>.patch` is two
         # lanes overwriting one file, which loses diffs the same way run 9 did. The
         # property under test is the ORDER, so match the call, not one spelling of
         # its argument list.
-        self.assertIn("keep_the_diff(", gate_body)
-        before = gate_body.index("keep_the_diff(")
-        self.assertLess(before, gate_body.index("gates.run_all"))
+        calls = {ast.unparse(node.func): node.lineno for node in ast.walk(gate_node)
+                 if isinstance(node, ast.Call)}
+        self.assertLess(calls["keep_the_diff"], calls["gates.compiles"])
 
     def test_an_empty_diff_writes_nothing(self):
         """An actor that changed nothing must not leave an empty patch file that
@@ -184,9 +192,11 @@ class TheAnchorMustAdvanceWithTheChampion(unittest.TestCase):
 
     def test_the_anchor_arm_is_not_the_immutable_cli_argument(self):
         source = self._source()
-        block = source.split("def measure_for(", 1)[1][:600]
-        self.assertIn('bench.Arm("anchor", anchor_build[0]', block)
-        self.assertNotIn('bench.Arm("anchor", args.anchor_build', block,
+        measure_node = next(node for node in ast.walk(ast.parse(source))
+                            if isinstance(node, ast.FunctionDef) and node.name == "measure_for")
+        block = ast.unparse(measure_node)
+        self.assertIn("bench.Arm('anchor', anchor_build[0]", block)
+        self.assertNotIn("bench.Arm('anchor', args.anchor_build", block,
                          "a static anchor makes every effect cumulative, not marginal")
 
     def test_it_advances_only_after_the_commit_succeeds(self):
@@ -435,7 +445,7 @@ class TwoTierChampionWiring(unittest.TestCase):
         # step. So: no copy, and the gen is handed to prune as `protect`.
         self.assertNotIn("snapshot_cor(", src)
         self.assertNotIn("shutil.copytree", src)
-        self.assertIn("cor_build = [args.anchor_build]", src)
+        self.assertIn("cor_build = [args.cor_build or args.anchor_build]", src)
         self.assertIn("protect=[cor_build[0]]", src)
         # a serving PROMOTE re-points cor at the verified accumulator gen
         self.assertIn("cor_build[0] = anchor_build[0]", src)
@@ -462,4 +472,3 @@ class TwoTierChampionWiring(unittest.TestCase):
         for field in ("compounded_bench_pct", "fire_threshold_pct", "n_keeps",
                       "progress_fraction", "champion_of_record"):
             self.assertIn(field, acc)
-

@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 CAPTURE_SCHEMA = "epyc.vidya.legacy_serving_capture.v1"
+RUNTIME_CAPTURE_SCHEMA = "epyc.vidya.legacy_serving_capture.v2"
 RECEIPT_SCHEMA = "epyc.vidya.legacy_serving_receipt.v1"
 PRODUCER_ID = "autokernel.loop.serving_beliefs/v1"
 MAX_BYTES = 64 << 20
@@ -21,7 +22,8 @@ def digest(value) -> str:
                                     allow_nan=False).encode()).hexdigest()
 
 
-def prepare(recipe, *, anchor, candidate, anchor_build, candidate_build, frozen_requests, pairs):
+def prepare(recipe, *, anchor, candidate, anchor_build, candidate_build, frozen_requests, pairs,
+            candidate_recipe=None, runtime_pair=None):
     if type(pairs) is not int or not 1 <= pairs <= 64:
         raise ValueError("belief capture supports at most 64 original pairs")
     if recipe.metric != "aggregate_tok_s":
@@ -36,6 +38,9 @@ def prepare(recipe, *, anchor, candidate, anchor_build, candidate_build, frozen_
                 [prompt_id, hashlib.sha256(body).hexdigest()]
                 for prompt_id, body in frozen_requests],
             "protocol_id": "", "loaded_instrument_attestation": "not_recorded"}
+    if runtime_pair is not None:
+        inputs.update(runtime_pair=runtime_pair.to_dict(),
+                      candidate_recipe=candidate_recipe.to_dict())
     return json.loads(json.dumps(inputs, allow_nan=False))
 
 
@@ -66,14 +71,17 @@ def finish(comparison, inputs):
                      "extra": {"arm": arm, "capture_id": capture_id,
                                "native_sha256": native_digest,
                                "build_path": inputs["build_paths"][arm],
-                               "recipe_hash": native["recipe_hash"],
+                               "recipe_hash": (native["candidate_recipe_hash"]
+                                               if arm == "candidate" and "runtime_pair" in inputs
+                                               else native["recipe_hash"]),
                                "request_digest": native.get("request_digest"),
                                "resolved_snapshot_digest": None if resolved is None else resolved.get("snapshot_digest"),
                                "execution_digest": None if resolved is None else resolved.get("execution_digest"),
                                "model_path": inputs["recipe"]["model"],
                                "applicability": "direct_serving_observation_only",
                                "cpu_facts": "dependency_only_not_placement_or_contention_proof"}})
-    capture = {"schema": CAPTURE_SCHEMA, "inputs": inputs, "capture_id": capture_id,
+    capture = {"schema": RUNTIME_CAPTURE_SCHEMA if "runtime_pair" in inputs else CAPTURE_SCHEMA,
+               "inputs": inputs, "capture_id": capture_id,
                "native_sha256": native_digest, "belief_measurements": rows}
     capture["capture_sha256"] = digest(capture)
     if len(json.dumps({"native": native, "capture": capture}).encode()) > MAX_BYTES:

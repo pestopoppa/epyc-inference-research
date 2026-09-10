@@ -624,8 +624,13 @@ def main(argv: list[str] | None = None) -> int:
             # unreadable file cannot kill the run through the breaker (R22-6): the
             # rationale for both lives on `controller.inbox.read_inbox`'s docstring.
             "inbox": inbox.read_inbox(args.store / "inbox"),
+            **({"runtime_anchor": feedback_anchor[0].to_dict(),
+                "runtime_env_keys": sorted(set(direct_launch.environment_policy.measurement_keys)
+                                           & {"GGML_IQK", "OMP_NUM_THREADS", "OMP_PROC_BIND",
+                                              "OMP_PLACES", "OMP_WAIT_POLICY"})}
+               if cpu_launch else {}),
             **({"target": {"scope": "experimental candidate, NOT canonical champion",
-                            "recipe": cpu_launch.to_dict(),
+                            "recipe": feedback_anchor[0].to_dict(),
                             "requests": str(args.frozen_prompts),
                             "build_recipe": recipe.to_dict(),
                             "hotspot_status": cpu_profile_observation["status"],
@@ -668,6 +673,28 @@ def main(argv: list[str] | None = None) -> int:
 
     def gate_for(worker):
         def gate(hypothesis, paths):
+            if hypothesis.runtime_pair is not None:
+                pair = hypothesis.runtime_pair
+                if not cpu_launch or paths:
+                    return False, [gates.Verdict("runtime_treatment", False,
+                                                "runtime treatment requires the owned CPU route and no patch")]
+                allowed_env = set(direct_launch.environment_policy.measurement_keys) & {
+                    "GGML_IQK", "OMP_NUM_THREADS", "OMP_PROC_BIND", "OMP_PLACES", "OMP_WAIT_POLICY"}
+                if pair.dimension.kind not in {"threads", "cpu_list", "numa_policy", "env"} \
+                        or (pair.dimension.kind == "env"
+                            and pair.dimension.candidate["key"] not in allowed_env):
+                    return False, [gates.Verdict("runtime_treatment", False,
+                                                "treatment is outside installed CPU runtime fields")]
+                current = _cpu_arm(direct_launch, anchor_build[0])
+                if pair.anchor.execution_digest != current.execution_digest:
+                    raise loop.TailRefused("runtime treatment was proposed against a different anchor recipe")
+                from ..execution.cpu_region_claim import parse_cpu_list
+                if pair.candidate.template.cpu_list is not None and not parse_cpu_list(
+                        pair.candidate.template.cpu_list).issubset(parse_cpu_list(build_cpu_list)):
+                    return False, [gates.Verdict("runtime_treatment", False,
+                                                "runtime treatment exceeds the owned CPU allocation")]
+                return gates.run_all(lambda: gates.op_correctness(
+                    anchor_build[0], backend="CPU", resolved_recipe=pair.candidate))
             # The diff first: a build that fails still leaves a patch worth reading,
             # and this is the last moment it exists on disk.
             keep_the_diff(worker, hypothesis)
@@ -758,6 +785,14 @@ def main(argv: list[str] | None = None) -> int:
 
     def measure_for(worker):
         def measure(hypothesis, paths):
+            if hypothesis.runtime_pair is not None:
+                pair = hypothesis.runtime_pair
+                row = serving.compare(
+                    pair.anchor.template, anchor_build[0], anchor_build[0],
+                    pairs=args.serving_pairs, floor_pct=None, port=pair.anchor.port,
+                    anchor_resolved_recipe=pair.anchor, candidate_resolved_recipe=pair.candidate,
+                    frozen_requests=frozen_requests, runtime_pair=pair)
+                return ServingComparison(row, "experimental_runtime_treatment_not_source_champion")
             if direct_launch:
                 return cpu_compare(anchor_build[0], worker.build_dir)
             # The anchor build is SHARED across lanes and only ever read, so it needs
@@ -991,6 +1026,10 @@ def main(argv: list[str] | None = None) -> int:
         # FIRST, before the loop draws any further work: nothing below is worth doing
         # against an anchor that is not the champion (run 18: 114 candidates, 6.5 h).
         verify_anchor()
+        if direct_launch is not None:
+            # This slot supplies the next hypothesis, not the recipe of the run's
+            # initial binary. Rebind once at the actual owning keep boundary.
+            feedback_anchor[0] = _cpu_arm(direct_launch, anchor_build[0])
         # AFTER the guard, never before (run 18's void number). 2026-09-07: publishing here
         # is RESTORED. R23-44 had moved it to the serving-PROMOTE branch only, so the
         # champion-vs-production headline froze for the whole accumulation phase -- the
@@ -1314,6 +1353,8 @@ def main(argv: list[str] | None = None) -> int:
             mid-formation against the old base and are refused as `superseded` on their
             next tail entry -- their candidates were never built on this champion.
             """
+            if hypothesis.runtime_pair is not None:
+                raise loop.ConfirmVetoed("runtime recipe requires original strict frame admission")
             refuse_uncalibrated_keep(args.surface, calibrated, comparison)
             # R23-44: the BENCH confirm rung is the KEEP GATE -- a cheap, deterministic screen
             # a keep must clear to enter the accumulator (§5.3: one extra bench.compare per
@@ -1454,7 +1495,7 @@ def main(argv: list[str] | None = None) -> int:
 
     kept = sum(1 for outcome in outcomes if outcome.status == "kept")
     measured = sum(1 for outcome in outcomes
-                   if outcome.status in {"kept", "measured_null", "keep_candidate"})
+                   if outcome.status in {"kept", "measured_null", "keep_candidate", "runtime_observed"})
     print(f"\n{len(outcomes)} iterations in {elapsed / 60:.1f} min: "
           f"{measured} reached a measurement, {kept} kept")
     # The number that decides the lane count: once the tail approaches the wall

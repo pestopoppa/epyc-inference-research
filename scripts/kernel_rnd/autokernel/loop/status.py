@@ -124,7 +124,7 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
         counts[status] = counts.get(status, 0) + 1
 
     measured = sum(counts.get(key, 0)
-                   for key in ("kept", "measured_null", "keep_candidate"))
+                   for key in ("kept", "measured_null", "keep_candidate", "runtime_observed"))
     body = {
         "schema": STATUS_SCHEMA,
         "generated_at": _now(),

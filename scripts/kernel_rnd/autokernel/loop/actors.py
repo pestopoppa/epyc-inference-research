@@ -413,6 +413,42 @@ Rules: {profile_rule}; name a MECHANISM, not a wish; \
 state a falsifier that could actually fail."""
 
 
+def _runtime_pair(treatment, context, mechanism_id):
+    """Bind a proposal to the original context; this reference is not launch authority."""
+    from .resolved_recipe import resolved_recipe_from_dict
+    from .unified_planner import RuntimeDimension, enumerate_runtime_dimensions
+
+    if not _cpu_target(context) or context.get("runtime_anchor") is None:
+        raise ProviderTransient("runtime treatment requires an installed original CPU launch")
+    if not isinstance(treatment, dict) or set(treatment) != {"kind", "candidate"}:
+        raise ProviderTransient("runtime treatment must name one kind and candidate value")
+    anchor = resolved_recipe_from_dict(context["runtime_anchor"])
+    kind, candidate = treatment["kind"], treatment["candidate"]
+    if kind == "threads":
+        value = anchor.template.threads
+    elif kind == "cpu_list":
+        value = anchor.template.cpu_list
+    elif kind == "numa_policy":
+        policies = [token for token in anchor.topology_prefix
+                    if token.startswith(("--interleave=", "--membind="))]
+        if len(policies) != 1:
+            raise ProviderTransient("original launch does not expose one NUMA policy")
+        value = policies[0]
+    elif kind == "env":
+        if not isinstance(candidate, dict) or set(candidate) != {"key", "value"} \
+                or candidate["key"] not in context.get("runtime_env_keys", ()):
+            raise ProviderTransient("environment treatment is outside installed runtime keys")
+        value = {"key": candidate["key"], "value": dict(anchor.launch_env).get(candidate["key"])}
+    else:
+        raise ProviderTransient("runtime treatment is not an installed CPU dimension")
+    try:
+        dimension = RuntimeDimension(mechanism_id, kind, value, candidate,
+                                     "original-hypothesis:" + mechanism_id)
+        return enumerate_runtime_dimensions(anchor, (dimension,))[0]
+    except ValueError as exc:
+        raise ProviderTransient(f"runtime treatment refused: {exc}") from exc
+
+
 @dataclass
 class AgentPlanner:
     """Proposes and authors through an external coding agent (default: gpt-5.6-sol
@@ -434,6 +470,16 @@ class AgentPlanner:
             profile_rule=("use the original CPU launch/model and inspect its source route; "
                           "if the CPU profile is unavailable, state that limit and do not invent timing evidence"
                           if cpu else "attack a route near the top of the profile"))
+        if cpu and context.get("runtime_anchor") is not None:
+            prompt += ("\nAlternatively propose ONE runtime treatment of the original CPU launch, "
+                       "without source edits or rebuilding. Add runtime_treatment={kind: threads|"
+                       "cpu_list|numa_policy|env, candidate: <exact value>}. For env, candidate is "
+                       "{key: <one listed runtime_env_keys key>, value: <string or null>}. "
+                       "Keep the same model, request bytes, context, sampling and speculation. "
+                       "Describe the mechanism and falsifier; target_surface/target_symbol name "
+                       "the runtime field. The host derives the original anchor value and validates "
+                       "the sole difference; do not author a patch for a runtime treatment.")
+            prompt += "\nInstalled runtime_env_keys: " + json.dumps(context.get("runtime_env_keys", []))
         raw, streak = _with_backoff(
             lambda: _run_agent(prompt, workspace=self.workspace,
                                timeout_s=self.timeout_s, backend=self.backend))
@@ -451,7 +497,10 @@ class AgentPlanner:
             mechanism_id=str(body["mechanism_id"]), statement=str(body["statement"]),
             falsifier=str(body["falsifier"]),
             target_surface=str(body["target_surface"]),
-            target_symbol=str(body["target_symbol"]))
+            target_symbol=str(body["target_symbol"]),
+            runtime_pair=(_runtime_pair(body["runtime_treatment"], context,
+                                        str(body["mechanism_id"]))
+                          if "runtime_treatment" in body else None))
 
     def author(self, hypothesis: Hypothesis,
                context: Mapping[str, Any]) -> tuple[str, ...]:
