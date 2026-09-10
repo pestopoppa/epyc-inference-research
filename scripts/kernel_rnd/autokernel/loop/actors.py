@@ -278,7 +278,25 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
     hotspots = context.get("kernel_hotspots") or []
     lines.append("## CPU profile for the selected experimental target" if cpu else
                  "## Where the device time actually goes (rocprofv3, current champion)")
-    if hotspots:
+    if cpu and context.get("cpu_profile"):
+        observation = context["cpu_profile"]
+        lines.append("Sampled user-cycle attribution for the original request, not exact CPU "
+                     "cost, wall-time share, a speedup estimate or an acceptance A/B.")
+        if observation.get("status") == "observed":
+            lines.append(f"Original record: {observation.get('record')} "
+                         f"(SHA-256 {observation.get('record_sha256')})")
+            lines.append(f"Execution: {observation.get('execution_digest')}; "
+                         f"frozen prompts: {observation.get('prompt_manifest_digest')}")
+            lines.append("| sampled-period fraction | observed periods | DSO | symbol |")
+            lines.append("|---|---|---|---|")
+            for row in observation.get("hotspots", [])[:limit]:
+                lines.append(f"| {row['sampled_period_fraction'] * 100:.2f}% | {row['period']} | "
+                             f"`{row.get('dso')}` | `{row['symbol']}` |")
+            lines.extend(observation.get("limitations", []))
+        else:
+            lines.append(f"CPU profile {observation.get('status')}: "
+                         f"{observation.get('reason', 'no original observation collected')}")
+    elif hotspots:
         lines.append("| share | ns | calls | kernel |")
         lines.append("|---|---|---|---|")
         for row in list(hotspots)[:limit]:
