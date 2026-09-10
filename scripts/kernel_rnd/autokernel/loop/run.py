@@ -672,15 +672,9 @@ def main(argv: list[str] | None = None) -> int:
         bare `<mechanism>.patch` is two lanes overwriting one file, which is run 9's
         lost-diffs defect returning by a different route.
         """
-        diff = _git(worker.worktree, "diff")
-        if not diff.strip():
-            return None
-        out = args.store / "patches"
-        out.mkdir(parents=True, exist_ok=True)
         name = getattr(hypothesis, "mechanism_id", None) or "unnamed"
-        target = out / f"{name}.{worker.name}.patch"
-        target.write_text(diff + "\n", encoding="utf-8")
-        return target
+        return archive.retain_patch(args.store, worker.worktree, lane=worker.name,
+                                    mechanism_id=name)
 
     def gate_for(worker):
         def gate(hypothesis, paths):
@@ -1387,8 +1381,17 @@ def main(argv: list[str] | None = None) -> int:
             accumulate_after_keep(hypothesis.mechanism_id)
             return head
 
+        def reset_retained(worker):
+            # STOP before the gate, or a hard interruption during authoring, leaves
+            # a dirty reused lane with no gate archive. Preserve it BEFORE the
+            # original owned reset. An archive failure must prevent that reset.
+            archive.retain_patch(args.store, worker.worktree, lane=worker.name)
+            return pool.reset_to_champion(worker, champion_tree=args.worktree,
+                                          branch=args.champion_branch)
+
         return pool.drive(
             commit=commit_pooled,
+            reset=reset_retained,
             workers=pool.provision(args.workers, champion_tree=args.worktree,
                                    champion_branch=args.champion_branch,
                                    root=args.worker_root,
