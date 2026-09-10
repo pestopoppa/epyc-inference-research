@@ -91,6 +91,29 @@ def _read_cpu_document(path: Path) -> dict:
     return json.loads(data)
 
 
+def _rebind_build_dso(original: Path, binary_dir: Path) -> Path:
+    """Resolve a changed version filename through the actual ELF SONAME."""
+    direct = binary_dir / original.name
+    if direct.exists():
+        return direct
+
+    def soname(path):
+        result = subprocess.run(["readelf", "-d", str(path)], capture_output=True,
+                                text=True, check=True, timeout=10)
+        names = [line.split("[", 1)[1].split("]", 1)[0]
+                 for line in result.stdout.splitlines()
+                 if "(SONAME)" in line and "[" in line and "]" in line]
+        if len(names) != 1 or Path(names[0]).name != names[0]:
+            raise ValueError(f"no unique local ELF SONAME for {path}")
+        return names[0]
+
+    name = soname(original)
+    candidate = (binary_dir / name).resolve(strict=True)
+    if candidate.parent != binary_dir.resolve() or soname(candidate) != name:
+        raise ValueError(f"candidate DSO escapes build or changes SONAME: {candidate}")
+    return candidate
+
+
 def _cpu_arm(original, build: Path):
     """Rebind only built executable/DSOs; preserve the selected target's launch."""
     from . import resolved_recipe as rr
@@ -111,7 +134,7 @@ def _cpu_arm(original, build: Path):
         # retain their exact paths and are rehashed, never silently substituted.
         path = Path(item.path)
         if path.parent == Path(original.build_dir) / "bin":
-            path = binary_dir / path.name
+            path = _rebind_build_dso(path, binary_dir)
         dsos.append(identity("dso", path))
     env = dict(original.launch_env)
     original_bin = str(Path(original.build_dir) / "bin")
