@@ -11,6 +11,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import subprocess
 from typing import Any, Mapping
 
 from . import accumulate, fold2_gates
@@ -23,6 +24,55 @@ MAX_BYTES = 16 << 20
 
 class SurfaceValidationRefused(ValueError):
     pass
+
+
+def shared_git_commit(target_repo: Path, source_repo: Path,
+                      commit: str) -> tuple[Path, str]:
+    """Prove a retained commit exists under the target's same Git object owner."""
+    target_repo, source_repo = Path(target_repo).resolve(), Path(source_repo).resolve()
+    if (not isinstance(commit, str) or len(commit) != 40
+            or any(char not in "0123456789abcdef" for char in commit)):
+        raise SurfaceValidationRefused("shared source commit is invalid")
+
+    def git(repo: Path, *argv: str) -> str:
+        done = subprocess.run(["git", "-C", str(repo), *argv], capture_output=True,
+                              text=True, timeout=60)
+        if done.returncode:
+            raise SurfaceValidationRefused(
+                f"shared source Git identity unavailable: {done.stderr[-512:]}")
+        return done.stdout.strip()
+
+    def common(repo: Path) -> Path:
+        path = Path(git(repo, "rev-parse", "--path-format=absolute", "--git-common-dir"))
+        return path.resolve(strict=True)
+
+    try:
+        target_stat = common(target_repo).stat()
+        source_stat = common(source_repo).stat()
+    except OSError as exc:
+        raise SurfaceValidationRefused("shared source Git directory is unavailable") from exc
+    if (target_stat.st_dev, target_stat.st_ino) != (source_stat.st_dev, source_stat.st_ino):
+        raise SurfaceValidationRefused("shared source does not belong to target Git ownership")
+    tree = git(source_repo, "rev-parse", f"{commit}^{{tree}}")
+    if len(tree) != 40 or any(char not in "0123456789abcdef" for char in tree):
+        raise SurfaceValidationRefused("shared source tree identity is invalid")
+    return source_repo, tree
+
+
+def shared_source_checkout(target_repo: Path, source_repo: Path,
+                           commit: str) -> tuple[Path, str]:
+    """Additionally prove the live source checkout is exact and clean before build."""
+    source_repo, tree = shared_git_commit(target_repo, source_repo, commit)
+    head = subprocess.run(["git", "-C", str(source_repo), "rev-parse", "HEAD"],
+                          capture_output=True, text=True, timeout=60)
+    status = subprocess.run(
+        ["git", "-C", str(source_repo), "status", "--porcelain", "--untracked-files=normal"],
+        capture_output=True, text=True, timeout=60)
+    if head.returncode or head.stdout.strip() != commit:
+        raise SurfaceValidationRefused("shared source checkout moved from retained commit")
+    if status.returncode or status.stdout:
+        raise SurfaceValidationRefused("shared source checkout is not clean")
+    return source_repo, tree
 
 
 def _digest(value: Any) -> str:
@@ -182,6 +232,8 @@ def validate_debt(value: Any) -> dict[str, Any]:
     for key in ("source_commit", "source_tree", "request_digest", "recipe_execution_digest"):
         expected_length = 40 if key in {"source_commit", "source_tree"} else 64
         raw = body[key]
+        if key == "recipe_execution_digest" and raw is None:
+            continue
         if (not isinstance(raw, str) or len(raw) != expected_length
                 or any(char not in "0123456789abcdef" for char in raw)):
             raise SurfaceValidationRefused(f"invalid debt {key}")
@@ -204,6 +256,10 @@ def validate_debt(value: Any) -> dict[str, Any]:
             or not body["reason"] or len(body["reason"]) > 1024
             or not isinstance(body["failure"], dict)):
         raise SurfaceValidationRefused("validation debt disposition is malformed")
+    if (body["recipe_execution_digest"] is None
+            and body["failure"].get("type") != "target_recipe_gate_refused"):
+        raise SurfaceValidationRefused(
+            "missing candidate execution identity requires an original gate refusal")
     unsigned = {key: item for key, item in body.items() if key != "row_digest"}
     if body["row_digest"] != _digest(unsigned) or len(json.dumps(body).encode()) > MAX_BYTES:
         raise SurfaceValidationRefused("validation debt digest/size differs")

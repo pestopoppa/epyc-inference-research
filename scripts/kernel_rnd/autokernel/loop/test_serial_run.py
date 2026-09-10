@@ -337,7 +337,7 @@ def test_runtime_recipe_reference_is_target_local_digest_bound_and_replay_stable
                        reference_path.parent)
 
 
-def test_serialized_targets_share_latest_source_anchor_without_losing_own_resume(
+def test_serialized_targets_without_source_keeps_preserve_only_own_resume(
         tmp_path, monkeypatch):
     state, argv = _inputs(tmp_path, monkeypatch, rounds=2)
     paths = [Path(argv[index + 1]) for index, value in enumerate(argv)
@@ -352,15 +352,11 @@ def test_serialized_targets_share_latest_source_anchor_without_losing_own_resume
     seen = [json.loads(line)["argv"]
             for line in (state / "seen.jsonl").read_text().splitlines()]
     assert sr.option(seen[0], "--source-anchor-continuation") is None
-    assert sr.option(seen[1], "--source-anchor-continuation").endswith(
-        "batch-000000/loop-continuation.json")
+    assert sr.option(seen[1], "--source-anchor-continuation") is None
     assert sr.option(seen[2], "--resume-run").endswith(
         "batch-000000/loop-continuation.json")
-    assert sr.option(seen[2], "--source-anchor-continuation").endswith(
-        "batch-000001/loop-continuation.json")
-    source_path = Path(sr.option(seen[2], "--source-anchor-continuation"))
-    assert sr.option(seen[2], "--source-anchor-sha256") == hashlib.sha256(
-        source_path.read_bytes()).hexdigest()
+    assert sr.option(seen[2], "--source-anchor-continuation") is None
+    assert sr.option(seen[2], "--source-anchor-sha256") is None
 
 
 @pytest.mark.parametrize("mode", ["missing", "wrong_args", "fail"])
@@ -394,6 +390,8 @@ def test_post_popen_status_failure_drains_before_another_child(tmp_path, monkeyp
     real_popen = sr.subprocess.Popen
 
     def spawn(*args, **kwargs):
+        if args[0][0] == "git":
+            return real_popen(*args, **kwargs)
         assert not spawned or spawned[-1].poll() is not None
         child = real_popen(*args, **kwargs)
         spawned.append(child)
@@ -525,8 +523,11 @@ def test_actual_cpu_post_keep_resume_rebinds_original_launch_without_recalibrati
     assert len(resumed) == 1
 
 
-@pytest.mark.parametrize("validation_failure", [False, True])
-def test_actual_cpu_keep_cross_target_then_older_history_uses_latest_source(validation_failure):
+@pytest.mark.parametrize("validation_failure,cross_worktree", [
+    (False, False), (True, False), (False, True), ("gate", True),
+])
+def test_actual_cpu_keep_cross_target_then_older_history_uses_latest_source(
+        validation_failure, cross_worktree):
     original_main = run.main
     observed = []
 
@@ -547,6 +548,14 @@ def test_actual_cpu_keep_cross_target_then_older_history_uses_latest_source(vali
         target_b = list(argv)
         target_b[target_b.index("--target-id") + 1] = "target-b"
         target_b[target_b.index("--store") + 1] = str(first.parent / "store-b")
+        if cross_worktree:
+            target_b_tree = first.parent / "target-b-tree"
+            target_b_branch = "ak/experimental/cpu-target-b"
+            run._git(Path(first_row["worktree"]), "worktree", "add", "-b",
+                     target_b_branch, str(target_b_tree), origin_receipt.parent_commit)
+            assert run._git(target_b_tree, "branch", "--show-current") == target_b_branch
+            target_b[target_b.index("--worktree") + 1] = str(target_b_tree)
+            target_b[target_b.index("--experimental-branch") + 1] = target_b_branch
         target_b += ["--source-anchor-continuation", str(first / "loop-continuation.json"),
                      "--source-anchor-sha256", first_sha, "--validate-source-continuation",
                      "--iterations", "1", "--out", str(second)]
@@ -601,9 +610,30 @@ def test_actual_cpu_keep_cross_target_then_older_history_uses_latest_source(vali
         validation_result = (mock.patch.object(
             run.serving, "compare", side_effect=run.loop.MeasurementInvalid(
                 "synthetic invalid target comparison", {"status": "measurement_invalid"}))
-            if validation_failure else nullcontext())
+            if validation_failure is True else nullcontext())
+        original_compile = run.gates.compiles
+
+        def validation_compile(*args, **kwargs):
+            if Path(args[1]).name == "whole-source-candidate-build":
+                return run.gates.Verdict("compile", False, "synthetic target recipe refusal")
+            return original_compile(*args, **kwargs)
+
+        gate_result = (mock.patch.object(run.gates, "compiles", validation_compile)
+                       if validation_failure == "gate" else nullcontext())
+        original_oracle = run.gates.op_correctness
+        validation_oracles = []
+
+        def validation_oracle(build, **kwargs):
+            if Path(build).name == "whole-source-candidate-build":
+                validation_oracles.append((Path(build), kwargs))
+                return run.gates.Verdict("correctness", True, "synthetic target oracle")
+            return original_oracle(build, **kwargs)
+
+        oracle_result = (mock.patch.object(run.gates, "op_correctness", validation_oracle)
+                         if cross_worktree else nullcontext())
         validation_exports = []
         with mock.patch.object(run.claim, "hold_cpu", validation_hold), validation_result, \
+                gate_result, oracle_result, \
                 mock.patch.object(run.serving_beliefs.PlannerFeedback, "exported",
                                   lambda _self, path: validation_exports.append(Path(path))):
             assert original_main(target_b) == 0
@@ -611,10 +641,15 @@ def test_actual_cpu_keep_cross_target_then_older_history_uses_latest_source(vali
         assert second_row["selected_target"]["selected_id"] == "target-b"
         # A validation stage consumes the propagated source without authoring
         # another candidate; ordinary research can continue in later stages.
-        assert second_row["current_anchor"] == first_row["current_anchor"]
+        if cross_worktree:
+            assert second_row["current_anchor"]["commit"] == origin_receipt.parent_commit
+            assert second_row["current_anchor"] != first_row["current_anchor"]
+        else:
+            assert second_row["current_anchor"] == first_row["current_anchor"]
         validation = run.surface_validation.reopen_reference(second_row["source_validation"])
         assert validation["target"]["selected_id"] == "target-b"
-        assert validation["candidate_anchor"] == first_row["current_anchor"]
+        if not cross_worktree:
+            assert validation["candidate_anchor"] == first_row["current_anchor"]
         assert validation["original_anchor"]["commit"] != validation["source_commit"]
         assert validation["disposition"] == ("pending" if validation_failure else "passed")
         assert validation["source_keep_ids"]
@@ -624,6 +659,56 @@ def test_actual_cpu_keep_cross_target_then_older_history_uses_latest_source(vali
             assert len(validation_exports) == 1
             assert validation_exports[0].is_file()
             assert validation_exports[0] != origin_export
+        if cross_worktree:
+            candidate_build = second / "whole-source-candidate-build"
+            assert validation["candidate_anchor"] == {
+                "path": str(candidate_build.resolve()),
+                "commit": first_row["current_anchor"]["commit"]}
+            if validation_failure == "gate":
+                assert validation["recipe_execution_digest"] is None
+                assert validation["failure"]["type"] == "target_recipe_gate_refused"
+                assert validation_oracles == []
+            else:
+                assert candidate_build.is_dir()
+                assert validation_oracles[0][0] == candidate_build
+                assert validation_oracles[0][1]["backend"] == "CPU"
+            # A newer keep can advance the live producer checkout without making
+            # this immutable target-B verdict unreadable.
+            newer = first.parent / "target-a-newer-source"
+            assert original_main([*argv, "--resume-run",
+                                  str(first / "loop-continuation.json"),
+                                  "--out", str(newer)]) == 0
+            newer_row, newer_sha = sr.load_completed(
+                newer / "loop-continuation.json")
+            reopened, reopened_sha = sr.load_completed(
+                second / "loop-continuation.json")
+            assert reopened == second_row and reopened_sha == second_sha
+            # A target-local branch fork remains retained but cannot replace the
+            # one forward shared-source pointer.
+            (target_b_tree / "kernel.c").write_text("target-b divergent keep\n")
+            run._git(target_b_tree, "add", "kernel.c")
+            run._git(target_b_tree, "-c", "user.email=t@t", "-c", "user.name=t",
+                     "commit", "-m", "target B divergent keep")
+            divergent_commit = run._git(target_b_tree, "rev-parse", "HEAD")
+            source_key = sr._source_owner_key(target_b)
+            legacy_key = sr._digest({
+                "worktree": str(Path(newer_row["worktree"]).resolve()),
+                "branch": newer_row["branch"]})
+            legacy_state = {"source_results": {legacy_key: {
+                "path": str(newer / "loop-continuation.json"), "sha256": newer_sha}}}
+            assert sr._source_result(legacy_state, target_b) == {
+                "path": str(newer / "loop-continuation.json"), "sha256": newer_sha}
+            assert legacy_state["source_results"][source_key]["sha256"] == newer_sha
+            source_state = {"source_results": {source_key: {
+                "path": str(newer / "loop-continuation.json"), "sha256": newer_sha}}}
+            sr._remember_source_result(source_state, {
+                "experimental_source_keeps": [{"retained": True}],
+                "current_anchor": {"commit": divergent_commit}}, target_b,
+                {"path": "/retained/target-b", "sha256": "f" * 64})
+            assert source_state["source_results"][source_key]["sha256"] == newer_sha
+            assert newer_row["current_anchor"]["commit"] != divergent_commit
+            observed.append((first_row, second_row))
+            return 0
         if validation_failure:
             retry = first.parent / "target-b-validation-retry"
             target_b_retry = list(argv)

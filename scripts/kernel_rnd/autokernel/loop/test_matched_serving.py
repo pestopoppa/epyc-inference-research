@@ -231,5 +231,5 @@ def test_actual_matched_keep_validation_reuse_and_other_target_compare():
     # The existing test keeps the exact source/build, reuses its original A/B
     # without another launch, then validates a distinct target under its own floor.
     with mock.patch.object(run, "main", matched), mock.patch.object(serving, "compare", compare):
-        test_actual_cpu_keep_cross_target_then_older_history_uses_latest_source(False)
+        test_actual_cpu_keep_cross_target_then_older_history_uses_latest_source(False, False)
     assert compared and all(row["schema"] == "epyc.autokernel.serving_ab.v2" for row in compared)
