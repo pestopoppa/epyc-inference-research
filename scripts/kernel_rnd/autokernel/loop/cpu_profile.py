@@ -429,7 +429,7 @@ def reduce_perf_stat(stream, *, max_bytes, max_rows):
         except json.JSONDecodeError as exc:
             raise CpuProfileRefused("malformed perf stat JSON") from exc
         if (not isinstance(row, dict) or not required <= set(row)
-                or set(row) - required - {"metric-value", "metric-unit"}
+                or set(row) - required - {"metric-value", "metric-unit", "metric-threshold"}
                 or row["event"] not in EVENTS or row["event"] in result):
             raise CpuProfileRefused("counter fields/event cardinality differs")
         value = row["counter-value"]

@@ -60,6 +60,13 @@ def test_counter_states_are_retained_not_all_clear(value, percentage, status):
     assert result[cp.EVENTS[0]]["status"] == status
 
 
+def test_installed_perf_metric_threshold_is_accepted():
+    result = cp.reduce_perf_stat(io.BytesIO(counters(**{"metric-value": "3.9",
+        "metric-unit": "of all cache refs", "metric-threshold": "good"})),
+        max_bytes=10000, max_rows=8)
+    assert result[cp.EVENTS[0]]["status"] == "reported_full_running"
+
+
 @pytest.mark.parametrize("change", [{"counter-value": "nan"}, {"event-runtime": -1},
     {"pcnt-running": 101}, {"event": "foreign"}, {"unknown": 1}])
 def test_counter_one_fact_refuses(change):
