@@ -858,7 +858,9 @@ class CpuProfileCapture:
         item["stderr"] = bytes(item["diagnostic"][:MAX_DIAGNOSTIC_BYTES]).decode("utf-8", errors="replace")
         if failure is not None:
             raise CpuProfileRefused(f"perf cleanup/control failed: {failure}") from failure
-        if normal and process.returncode != 0:
+        # `perf record` flushes a valid capture when its owning wrapper ends it
+        # with SIGINT; Popen reports that normal tool shutdown as -SIGINT.
+        if normal and process.returncode not in (0, -signal.SIGINT):
             raise CpuProfileRefused(f"perf {item['kind']} failed: {item['stderr'][:300]}")
         return item
 
