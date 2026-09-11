@@ -104,6 +104,21 @@ def _publish_preclaim_failure(out, scheduler_selection, target, error) -> None:
     }, prefix=".preclaim-failure-")
 
 
+def _verify_before_claim(action, *, out, scheduler_selection, target):
+    """Run an identity guard and settle scheduled failures before any claim."""
+    try:
+        return action()
+    except (Exception, champion.StartupRefused) as verification_error:
+        if scheduler_selection is not None:
+            try:
+                _publish_preclaim_failure(
+                    out, scheduler_selection, target, verification_error)
+            except Exception as marker_error:
+                print(f"pre-claim failure marker unavailable: {marker_error}",
+                      file=sys.stderr)
+        raise
+
+
 def _bind_owned_cpu_affinity(original, resources):
     """Make inherited CPU placement explicit using only the campaign allocation."""
     from . import legacy_targets, resolved_recipe as rr
@@ -1233,7 +1248,12 @@ def main(argv: list[str] | None = None) -> int:
         if resumed is not None and resumed["cor_anchor"]["commit"] != serial_run.full_commit(
                 args.worktree, cor_commit[0]):
             raise champion.StartupRefused("REFUSED: retained COR differs from original restored bundle")
-        serial_run.verify_exact_anchor(cor_build[0], args.worktree, cor_commit[0])
+        _verify_before_claim(
+            lambda: serial_run.verify_exact_anchor(
+                cor_build[0], args.worktree, cor_commit[0],
+                allow_unverified=args.allow_unverified_anchor),
+            out=args.out, scheduler_selection=scheduler_selection,
+            target=selected_identity)
     # R23-54: the last serving-gate firing and WHY it fired ("threshold" | "cadence" |
     # "both"), for the status body the dashboard reads. Per-run, not durable: the durable
     # fact is the bundle's counter; this is the narration of the most recent reading.
