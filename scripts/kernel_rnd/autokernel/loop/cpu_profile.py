@@ -61,7 +61,7 @@ LIMITATIONS = ("sampled-period totals are estimated user-cycle attribution, not 
 LOOP_BUDGETS = {"max_stage_seconds": 1800, "teardown_seconds": 5,
                 "control_seconds": 30, "reduce_seconds": 120,
                 "max_raw_file_bytes": 128 * 1024**2, "max_total_raw_bytes": 512 * 1024**2,
-                "max_parser_bytes": 64 * 1024**2, "max_rows": 1_000_000,
+                "max_parser_bytes": 96 * 1024**2, "max_rows": 1_000_000,
                 "max_symbols": 4096, "max_metadata_bytes": 16 * 1024**2}
 
 
