@@ -719,10 +719,16 @@ class CpuProfileCapture:
                 if len(row) != 6 or row[5].endswith(" (deleted)"):
                     continue
                 major, minor = row[3].split(":")
+                # The loader may expose a verified DSO through a distinct
+                # RUNPATH/build alias (or a hardlink), so pathname equality is
+                # not an identity requirement.  Device+inode identify the
+                # exact file whose bytes were hash-verified above; retain the
+                # observed mapping path for auditability.
                 if (int(row[4]) == fact["ino"] and os.makedev(int(major, 16), int(minor, 16)) == fact["dev"]
-                        and "x" in row[1] and str(Path(row[5]).resolve()) == fact["path"]):
+                        and "x" in row[1]):
                     matched = True
-                    mappings.append({"artifact": fact, "mapping": line})
+                    mappings.append({"artifact": fact, "mapping": line,
+                                     "observed_path": row[5]})
                     break
             if not matched:
                 raise CpuProfileRefused("required DSO executable mapping missing")
@@ -980,14 +986,15 @@ def _reopen_phases(body, expected):
             _same(readback["argv"], argv, "original loaded server argv")
             _same(readback["exe"], recipe.executable.path if interpreter is None else interpreter["path"],
                   "original loaded executable")
-            _same([(value["artifact"]["path"], value["artifact"]["sha256"])
+            _same([(value["artifact"]["sha256"], value["artifact"]["dev"], value["artifact"]["ino"])
                    for value in readback["loaded_dso_mappings"]],
-                  [(dso.path, dso.sha256) for dso in recipe.dsos], "original loaded DSO set")
+                  [(dso.sha256, _file(Path(dso.path).resolve(), 512 * 1024**2)["dev"],
+                    _file(Path(dso.path).resolve(), 512 * 1024**2)["ino"])
+                   for dso in recipe.dsos], "original loaded DSO set")
             for value in readback["loaded_dso_mappings"]:
                 row = value["mapping"].split(maxsplit=5)
                 major, minor = row[3].split(":")
                 if (len(row) != 6 or "x" not in row[1] or row[5].endswith(" (deleted)")
-                        or row[5] != value["artifact"]["path"]
                         or int(row[4]) != value["artifact"]["ino"]
                         or os.makedev(int(major, 16), int(minor, 16)) != value["artifact"]["dev"]):
                     raise CpuProfileRefused("original DSO mapping differs")

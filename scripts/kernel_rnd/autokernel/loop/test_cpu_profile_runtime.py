@@ -35,6 +35,9 @@ def fixture(tmp_path, *, perf_failure="", server_failure="", original_request=No
     model.write_bytes(b"synthetic model bytes, not a GGUF model")
     dso = build / "bin/libggml.so"
     shutil.copyfile(Path("/lib/x86_64-linux-gnu/libm.so.6").resolve(), dso)
+    runtime_dso = tmp_path / "runtime/libggml.so"
+    runtime_dso.parent.mkdir()
+    os.link(dso, runtime_dso)
     events = tmp_path / "child-events"
     python = str(Path(sys.executable).resolve())
     server = build / "bin/llama-server"
@@ -43,7 +46,7 @@ import ctypes,json,os,sys,time
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler,HTTPServer
 time.sleep(0.05)
-ctypes.CDLL({str(dso)!r})
+ctypes.CDLL({str(runtime_dso)!r})
 events=Path({str(events)!r})
 with events.open('a') as f: f.write('server '+str(os.getpid())+'\\n')
 class Handler(BaseHTTPRequestHandler):
@@ -254,6 +257,8 @@ def test_actual_installed_producer_to_settlement_planner_and_restart(tmp_path):
             assert phase["response"]["end"] <= controls["disable_transition"]["sent"] <= controls["disable_transition"]["acknowledged"]
             assert "not exact request" in controls["scope"]
             assert phase["target_before"]["loaded_dso_mappings"]
+            assert phase["target_before"]["loaded_dso_mappings"][0]["observed_path"].endswith(
+                "runtime/libggml.so")
             assert phase["target_after"]["argv"] == phase["target_before"]["argv"]
         assert original["processes"]["server"]["ppid"] == original["processes"]["producer"]["pid"]
         assert "not exact CPU cost" in original["limitations"][0]
