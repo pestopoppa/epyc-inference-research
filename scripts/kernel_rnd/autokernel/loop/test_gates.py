@@ -1,11 +1,32 @@
 """The gates, and the one property that makes them gates: order."""
 import ast
+import inspect
 from pathlib import Path
 import tempfile
 import unittest
 from unittest import mock
 
-from autokernel.loop import gates
+from autokernel.loop import archive, gates
+
+
+def _function_node(source, name):
+    """Return one complete function node without coupling tests to source spelling."""
+    nodes = [node for node in ast.walk(ast.parse(source))
+             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+             and node.name == name]
+    assert len(nodes) == 1, f"expected one {name}, found {len(nodes)}"
+    return nodes[0]
+
+
+def _function(source, name):
+    return ast.unparse(_function_node(source, name))
+
+
+def _calls(node, name):
+    """Find semantic calls by final function name, independent of call formatting."""
+    return [call for call in ast.walk(node) if isinstance(call, ast.Call)
+            and ((isinstance(call.func, ast.Name) and call.func.id == name)
+                 or (isinstance(call.func, ast.Attribute) and call.func.attr == name))]
 
 
 def _champion_build(dest, targets=gates.DEFAULT_TARGETS):
@@ -64,15 +85,17 @@ class TheShortCircuitMustBeReal(unittest.TestCase):
 
     def test_the_runner_passes_callables_not_evaluated_verdicts(self):
         source = (Path(__file__).resolve().parent / "run.py").read_text()
-        # Select the source-build chain, not the first/new runtime-only oracle.
+        # Select every source-build chain, not the runtime-only oracles. Whole-source
+        # target validation intentionally adds a second compile/correctness chain.
         chains = [node for node in ast.walk(ast.parse(source)) if isinstance(node, ast.Call)
                   and ast.unparse(node.func) == "gates.run_all"
                   and any(isinstance(arg, ast.Lambda) and isinstance(arg.body, ast.Call)
                           and ast.unparse(arg.body.func) == "gates.compiles" for arg in node.args)]
-        self.assertEqual(len(chains), 1)
-        self.assertTrue(all(isinstance(arg, ast.Lambda) for arg in chains[0].args))
-        self.assertEqual([ast.unparse(arg.body.func) for arg in chains[0].args],
-                         ["gates.compiles", "gates.op_correctness"])
+        self.assertTrue(chains)
+        for chain in chains:
+            self.assertTrue(all(isinstance(arg, ast.Lambda) for arg in chain.args))
+            self.assertEqual([ast.unparse(arg.body.func) for arg in chain.args],
+                             ["gates.compiles", "gates.op_correctness"])
 
 
 class ARefusedPatchMustSurviveTheReset(unittest.TestCase):
@@ -104,8 +127,9 @@ class ARefusedPatchMustSurviveTheReset(unittest.TestCase):
         """An actor that changed nothing must not leave an empty patch file that
         later reads as a real attempt."""
         source = (Path(__file__).resolve().parent / "run.py").read_text()
-        body = source.split("def keep_the_diff(", 1)[1][:1200]
-        self.assertIn("if not diff.strip():", body)
+        self.assertIn("archive.retain_patch", _function(source, "keep_the_diff"))
+        body = inspect.getsource(archive.retain_patch)
+        self.assertIn("if not patch:", body)
         self.assertIn("return None", body)
 
 
@@ -204,8 +228,7 @@ class TheAnchorMustAdvanceWithTheChampion(unittest.TestCase):
         bar for everything after it. Since the sequential path's deletion the one
         commit is `commit_pooled`: the champion ref moves, THEN the anchor builds."""
         source = self._source()
-        block = source.split(
-            "def commit_pooled(worker, hypothesis, paths, comparison)", 1)[1][:2900]
+        block = _function(source, "commit_pooled")
         self.assertIn("advance_champion", block)
         self.assertIn("promote_anchor", block)
         self.assertLess(block.index("advance_champion"),
@@ -231,12 +254,19 @@ class TheAnchorMustAdvanceWithTheChampion(unittest.TestCase):
         the champion-of-record snapshot. Pinned here the same way the order is."""
         source = self._source()
         # promote_anchor advances the accumulator + guards, and must NOT publish.
-        promote = source.split("def promote_anchor()", 1)[1].split("\n    def ", 1)[0]
-        self.assertIn("verify_anchor()", promote)
+        promote_node = _function_node(source, "promote_anchor")
+        promote = ast.unparse(promote_node)
+        verify_calls = _calls(promote_node, "verify_anchor")
+        self.assertEqual(len(verify_calls), 1)
+        guard_keywords = {item.arg: ast.unparse(item.value)
+                          for item in verify_calls[0].keywords}
+        self.assertEqual(guard_keywords, {"guard_floor": "prior_floor"})
         # 2026-09-07: per-keep headline RESTORED in promote_anchor (guard first, then
         # headline) -- R23-44 had frozen the headline for the whole accumulation phase.
-        self.assertIn("publish_headline()", promote)
-        self.assertLess(promote.index("verify_anchor()"), promote.index("publish_headline()"),
+        headline_calls = _calls(promote_node, "publish_headline")
+        self.assertEqual(len(headline_calls), 1)
+        self.assertLess((verify_calls[0].lineno, verify_calls[0].col_offset),
+                        (headline_calls[0].lineno, headline_calls[0].col_offset),
                         "the headline must never publish ahead of the guard")
         # the headline lives in accumulate_after_keep, after the cor snapshot.
         accum = source.split("def _accumulate_after_keep(", 1)[1].split("\n    def ", 1)[0]
@@ -256,10 +286,11 @@ class TheAnchorMustAdvanceWithTheChampion(unittest.TestCase):
         and run 18's mismatch costs 20 pairs again -- while every injected-double
         test stays green. Same wiring-only blind spot as the ordering test above."""
         source = self._source()
-        # `verify_anchor` nests `keep_verdict`, so cut at the NEXT top-level def.
-        block = source.split("def verify_anchor()", 1)[1]
-        block = block.split("def promote_anchor", 1)[0]
-        self.assertIn("digest=anchor_integrity.object_digest", block)
+        verify_node = _function_node(source, "verify_anchor")
+        calls = _calls(verify_node, "verify")
+        self.assertEqual(len(calls), 1)
+        keywords = {item.arg: ast.unparse(item.value) for item in calls[0].keywords}
+        self.assertEqual(keywords.get("digest"), "anchor_integrity.object_digest")
 
     def test_an_excursion_note_reaches_the_headline_refresh(self):
         """The excursion-flagged promotion still publishes -- the anchor is
@@ -316,7 +347,7 @@ class ThePooledPathMustAdvanceTheAnchorToo(unittest.TestCase):
 
     def _pooled_block(self):
         source = (Path(__file__).resolve().parent / "run.py").read_text()
-        return source.split("def commit_pooled(", 1)[1][:2900]  # widened for the R23-43 serving gate
+        return _function(source, "commit_pooled")
 
     def test_it_advances_the_champion_then_the_anchor(self):
         block = self._pooled_block()

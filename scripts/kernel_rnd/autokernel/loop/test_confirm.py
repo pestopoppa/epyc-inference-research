@@ -6,6 +6,7 @@ contracts: a confirmed candidate is promoted to `kept`; a confirm regression lan
 as `keep_candidate` -- never `kept` -- with BOTH measurements recorded; and with no
 confirm configured the behavior is exactly the single-rung keep of today.
 """
+import ast
 import json
 from pathlib import Path
 import tempfile
@@ -145,7 +146,9 @@ class UnconfiguredMeansSingleRungExactlyAsToday(unittest.TestCase):
         source = (Path(__file__).resolve().parent / "run.py").read_text()
         self.assertIn('parser.add_argument("--confirm-model", type=Path, '
                       'default=None', source)
-        block = source.split("def commit_pooled(", 1)[1][:2200]
+        block = ast.unparse(next(node for node in ast.walk(ast.parse(source))
+                                 if isinstance(node, ast.FunctionDef)
+                                 and node.name == "commit_pooled"))
         self.assertIn("if confirm is not None:", block,
                       "unconfigured, commit_pooled must skip the gate entirely")
         self.assertIn("refuse_uncalibrated_keep", block.split(

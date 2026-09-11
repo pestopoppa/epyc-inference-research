@@ -450,8 +450,11 @@ def _prepare_local_anchor(target: campaign.TargetRevision,
                      == (execution.drafter.sha256, execution.drafter.path))),
         "context": recipe.template.ctx == execution.context,
         "concurrency": recipe.template.np == execution.concurrency,
-        "speculation": recipe.template.spec_decode.get("type", "none")
-                       == execution.speculation,
+        # Campaign execution records the semantic speculation class, while the
+        # recipe template records the concrete launcher mechanism (for example,
+        # ``draft-mtp``).  Capability derivation is the validated bridge between
+        # those two representations and is independently checked against argv.
+        "speculation": recipe.capability.speculation == execution.speculation,
         "environment": ({key: value for key, value in recipe.launch_env
                          if key != "LD_LIBRARY_PATH"} == dict(execution.env)),
     }
@@ -503,8 +506,11 @@ def _bind_runtime_anchor(target: campaign.TargetRevision, anchor: RuntimeAnchor,
                      and recipe.drafter.sha256 == execution.drafter.sha256)),
         "context": recipe.template.ctx == execution.context,
         "concurrency": recipe.template.np == execution.concurrency,
-        "speculation": recipe.template.spec_decode.get("type", "none")
-                       == execution.speculation,
+        # Compare the common execution-class representation.  Comparing the
+        # concrete mechanism (``draft-mtp``, ``draft-dflash``, ...) directly to
+        # Campaign's ``self_draft``/``external_draft`` classification rejects
+        # valid enrolled launches.
+        "speculation": recipe.capability.speculation == execution.speculation,
         "environment": ({key: value for key, value in recipe.launch_env
                          if key != "LD_LIBRARY_PATH"} == dict(execution.env)),
     }

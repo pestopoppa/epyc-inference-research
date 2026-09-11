@@ -18,9 +18,13 @@ PRODUCER_ID = "autokernel.loop.serving_beliefs/v1"
 MAX_BYTES = 64 << 20
 
 
+def _canonical_bytes(value) -> bytes:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"),
+                      allow_nan=False).encode()
+
+
 def digest(value) -> str:
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"),
-                                    allow_nan=False).encode()).hexdigest()
+    return hashlib.sha256(_canonical_bytes(value)).hexdigest()
 
 
 def prepare(recipe, *, anchor, candidate, anchor_build, candidate_build, frozen_requests, pairs,
@@ -90,23 +94,23 @@ def finish(comparison, inputs):
                "inputs": inputs, "capture_id": capture_id,
                "native_sha256": native_digest, "belief_measurements": rows}
     capture["capture_sha256"] = digest(capture)
-    if len(json.dumps({"native": native, "capture": capture}).encode()) > MAX_BYTES:
+    if len(_canonical_bytes({"native": native, "capture": capture})) > MAX_BYTES:
         raise ValueError("belief capture byte budget exceeded")
     return capture
 
 
 def _write_exact(root: Path, name: str, body):
-    from .status import write_json
-    expected = json.dumps(body, indent=2, sort_keys=True).encode()
+    from . import archive
+
+    expected = _canonical_bytes(body)
     if len(expected) > MAX_BYTES:
         raise ValueError("belief export byte budget exceeded")
+    root.mkdir(parents=True, exist_ok=True)
     path = root / name
-    if path.exists():
-        with path.open("rb") as stream:
-            if stream.read(MAX_BYTES + 1) != expected:
-                raise ValueError("belief export path already holds different bytes")
-    else:
-        write_json(root, name, body, prefix=".serving-belief-")
+    try:
+        archive._retain_bytes(path, expected)
+    except archive.RatchetRefused as exc:
+        raise ValueError("belief export path already holds different bytes") from exc
     with path.open("rb") as stream:
         actual = stream.read(MAX_BYTES + 1)
     if actual != expected:

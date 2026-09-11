@@ -1771,6 +1771,23 @@ class SchedulerEngine:
                       receipt: HeldClaimReceipt | Mapping[str, Any], *, outcome: str) -> bool:
         return self.account_stage_components(selection, (receipt,), outcome=outcome)
 
+    def fail_stage_before_claim(self, selection: Selection | Mapping[str, Any]) -> None:
+        """Settle an issued launch that failed before any resource claim existed."""
+        selection = _normalize(selection, Selection)
+        if (selection.status != "selected" or selection.proposal is None
+                or selection.digest not in self.issued_selection_digests):
+            raise SchedulingRefused("pre-claim failure is not an issued selection")
+        if (selection.scheduler_id != self.scheduler_id
+                or selection.config_digest != self.config_digest
+                or selection.accounting_epoch != self.accounting_epoch
+                or selection.capacity_digest != self.capacity_digest
+                or selection.round_number != self.round_number
+                or selection.service_bound_seconds != self._bound()):
+            raise SchedulingRefused("pre-claim failure selection differs from scheduler state")
+        self.issued_selection_digests = tuple(
+            digest for digest in self.issued_selection_digests
+            if digest != selection.digest)
+
     def account_stage_components(
             self, selection: Selection | Mapping[str, Any],
             receipts: Sequence[HeldClaimReceipt | Mapping[str, Any]], *, outcome: str) -> bool:
@@ -1980,6 +1997,15 @@ def account_stage_components(
     return engine.export_state()
 
 
+def fail_stage_before_claim(
+        config: SchedulerConfig | Mapping[str, Any], state: SchedulerState | Mapping[str, Any],
+        selection: Selection | Mapping[str, Any]) -> SchedulerState:
+    """Receipt-free settlement for a launched stage that acquired no claim."""
+    engine = SchedulerEngine(config, state)
+    engine.fail_stage_before_claim(selection)
+    return engine.export_state()
+
+
 def change_capacity(state: SchedulerState | Mapping[str, Any],
                     new_config: SchedulerConfig | Mapping[str, Any]) -> SchedulerState:
     """Start an epoch under a config whose only semantic change is capacity."""
@@ -2014,6 +2040,7 @@ __all__ = [
     "ResourceVector", "SchedulerConfig", "SchedulerEngine", "SchedulerState",
     "SchedulingRefused", "SeedAccount", "Selection", "StageProposal",
     "account_stage", "account_stage_components", "adaptive_weights", "change_capacity",
+    "fail_stage_before_claim",
     "charge_receipts", "digest",
     "initial_state", "select_stage",
 ]

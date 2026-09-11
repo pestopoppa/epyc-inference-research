@@ -173,6 +173,9 @@ def test_actual_run_startup_compare_then_floor_reuse(monkeypatch):
             comparison = measure(SimpleNamespace(runtime_pair=None), ())
             assert isinstance(comparison, run.ServingComparison)
             assert comparison.row["measurement_plan"]["instrument"] == serving.MATCHED_INSTRUMENT
+            assert comparison.row["request_digest"] == serving.request_digest(
+                launch.template, requests)
+            assert comparison.row["floor_sha256"]
             assert kwargs["build_context"]()["serving_instrument"] == MODE
             comparisons.append(comparison)
             return pool.PoolResult()
@@ -191,7 +194,12 @@ def test_actual_run_startup_compare_then_floor_reuse(monkeypatch):
         with mock.patch.object(run, "main", invoke):
             assert fixture._run_one_keep()[0] == 0
             assert len(calls) == 58
-            path = serving.floor_path(fixture.store, launch.template, frozen_requests=requests, **MODE)
+            exact_anchor = run._cpu_arm(launch, fixture.startup_anchor)
+            floor_store = run._source_floor_store(
+                fixture.store, launch.template, exact_anchor,
+                instrument=serving.MATCHED_INSTRUMENT)
+            path = serving.floor_path(
+                floor_store, launch.template, frozen_requests=requests, **MODE)
             original = path.read_bytes()
             assert fixture._run_one_keep()[0] == 0
             assert len(calls) == 68 and path.read_bytes() == original
@@ -221,7 +229,15 @@ def test_actual_matched_keep_validation_reuse_and_other_target_compare():
     original_compare = serving.compare
     def compare(*args, **kwargs):
         assert kwargs["instrument"] == serving.MATCHED_INSTRUMENT
-        assert kwargs["floor_record"]["comparison_pairs"] == kwargs["pairs"]
+        if kwargs["floor_pct"] is None:
+            # The promoted-anchor integrity A/A is not a source candidate and
+            # deliberately does not consume the pending new-anchor floor.
+            assert "floor_record" not in kwargs
+            assert kwargs.get("floor_request_digest") is None
+        else:
+            assert kwargs["floor_record"]["comparison_pairs"] == kwargs["pairs"]
+            assert kwargs["floor_request_digest"] == serving.request_digest(
+                args[0], kwargs["frozen_requests"])
         row = original_compare(*args, **kwargs)
         compared.append(row)
         return row
@@ -233,3 +249,60 @@ def test_actual_matched_keep_validation_reuse_and_other_target_compare():
     with mock.patch.object(run, "main", matched), mock.patch.object(serving, "compare", compare):
         test_actual_cpu_keep_cross_target_then_older_history_uses_latest_source(False, False)
     assert compared and all(row["schema"] == "epyc.autokernel.serving_ab.v2" for row in compared)
+
+
+def test_post_keep_refresh_failure_preserves_keep_and_starts_no_candidate_compare():
+    from .test_existing_cpu_run import test_existing_main_cpu_five_iterations_preserves_canonical_champion
+    real_main = run.main
+    original_calibrate = serving.calibrate_floor
+    original_compare = serving.compare
+    calibrations, comparisons = [], []
+
+    def calibrate(*args, **kwargs):
+        calibrations.append((Path(args[1]), kwargs["samples"],
+                             kwargs["resolved_recipe"].execution_digest))
+        if len(calibrations) == 2:
+            raise RuntimeError("injected promoted-anchor calibration failure")
+        return original_calibrate(*args, **kwargs)
+
+    def compare(*args, **kwargs):
+        comparisons.append((Path(args[1]), Path(args[2]), kwargs["floor_pct"]))
+        return original_compare(*args, **kwargs)
+
+    def matched(argv):
+        return real_main([*argv, "--serving-instrument", serving.MATCHED_INSTRUMENT,
+                          "--cpu-calibrate-serving", "24"])
+
+    def expect(result, _measured, _builds, fixture, selected):
+        assert [row["status"] for row in result["iterations"]] == [
+            "measured_null", "measured_null", "measured_null", "kept", "lane_error"]
+        refs = result["continuation"]["experimental_source_keeps"]
+        assert len(refs) == 1
+        receipt = run.surface_fold.reopen_reference(refs[0])
+        assert receipt.floor_request_digest == result["iterations"][3]["comparison"]["request_digest"]
+        assert result["continuation"]["current_anchor"]["path"] != str(fixture.startup_anchor)
+        old_store = run._source_floor_store(
+            fixture.store, selected.template, selected,
+            instrument=serving.MATCHED_INSTRUMENT)
+        promoted = run._cpu_arm(
+            selected, Path(result["continuation"]["current_anchor"]["path"]))
+        new_store = run._source_floor_store(
+            fixture.store, promoted.template, promoted,
+            instrument=serving.MATCHED_INSTRUMENT)
+        assert list(old_store.rglob("*.json"))
+        assert not list(new_store.rglob("*.json"))
+
+    with mock.patch.object(run, "main", matched), \
+            mock.patch.object(serving, "calibrate_floor", calibrate), \
+            mock.patch.object(serving, "compare", compare):
+        test_existing_main_cpu_five_iterations_preserves_canonical_champion(
+            False, profile_observer=cpu_profile.CpuProfileRefused("fixture"),
+            enrolled_pair=True, expected_claim_cycles=1, result_expectation=expect)
+
+    assert len(calibrations) == 2
+    assert [samples for _build, samples, _digest in calibrations] == [24, 24]
+    assert calibrations[0][2] != calibrations[1][2]
+    # Four admitted source comparisons, then one uncalibrated integrity guard.
+    # The failed refresh occurs before the fifth research candidate can launch.
+    assert len(comparisons) == 5
+    assert [floor for _a, _c, floor in comparisons].count(None) == 1

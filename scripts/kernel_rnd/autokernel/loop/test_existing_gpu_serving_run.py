@@ -8,7 +8,8 @@ from unittest import mock
 
 import pytest
 
-from . import campaign, gates, legacy_targets, pool, resolved_recipe as rr, run, serial_run, serving
+from . import (campaign, gates, legacy_targets, pool, resolved_recipe as rr, run, scheduling,
+               serial_run, serial_scheduling, serving)
 from .test_campaign import _manifest as _campaign, _registry, _target
 from .test_glm_frozen_requests import _manifest, _request
 from .test_resolved_recipe import _policy
@@ -257,6 +258,14 @@ def test_selected_host_claim_failure_restores_original_affinity_without_launchin
         affinity = []
 
         def selected_main(argv):
+            full_argv = argv + options
+            manifest = serial_run._derived_scheduler_manifest(
+                [full_argv], Path(serial_run.option(full_argv, "--resolved-campaign")), 1)
+            scheduler_state = scheduling.initial_state(manifest.config, manifest.scheduler_id)
+            _state, selection, _index = serial_scheduling.select_target(
+                manifest, scheduler_state, ("selected",), now=1.0, stage_number=0)
+            selection_path = fixture.root / "scheduler-selection.json"
+            selection_path.write_text(json.dumps(selection.to_dict()))
             with mock.patch.object(run.os, "sched_getaffinity", return_value={7, 8}), \
                     mock.patch.object(run.os, "sched_setaffinity", side_effect=lambda pid, cpus:
                                       affinity.append((pid, cpus))), \
@@ -265,12 +274,19 @@ def test_selected_host_claim_failure_restores_original_affinity_without_launchin
                     mock.patch.object(run.claim, "hold_cpu", side_effect=run.claim.ClaimRefused("owned region busy")), \
                     mock.patch.object(run.claim, "hold", side_effect=AssertionError("GPU claim after refusal")), \
                     mock.patch.object(run.pool, "provision", side_effect=AssertionError("launch after refusal")):
-                return real_main(argv + options)
+                return real_main([*full_argv, "--out", str(fixture.store),
+                                  "--scheduler-selection", str(selection_path)])
 
         with mock.patch.object(run, "main", selected_main), pytest.raises(run.claim.ClaimRefused):
             fixture._run_one_keep()
         assert affinity == [(0, {0, 1}), (0, {7, 8})]
         assert run.status.read(fixture.store)["state"] == "failed"
+        marker = json.loads((fixture.store / "loop-preclaim-failure.json").read_text())
+        assert marker["schema"] == "epyc.autokernel.preclaim_failure.v1"
+        recorded_selection = scheduling.Selection.from_dict(json.loads(
+            (fixture.root / "scheduler-selection.json").read_text()))
+        assert marker["selection_digest"] == recorded_selection.digest
+        assert marker["error_type"] == "ClaimRefused"
     finally:
         fixture.doCleanups()
 

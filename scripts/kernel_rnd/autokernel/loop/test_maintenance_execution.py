@@ -125,7 +125,10 @@ class Provider(me.MaintenanceHoldProvider):
         self.acquire_error = False
         self.acquire_reply = None
         self.no_hold = False
-        self.deadline = NOW.timestamp() + 86400
+        # The retention fixtures intentionally use a frozen ``NOW``, while the
+        # real controller compatibility path validates provider deadlines with
+        # its live wall clock.  Keep this synthetic hold future in both domains.
+        self.deadline = max(NOW.timestamp(), time.time()) + 86400
         self.finished_hold = None
 
     def _receipt(self, token):

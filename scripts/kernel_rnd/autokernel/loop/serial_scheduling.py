@@ -19,7 +19,7 @@ INVALID_OUTCOMES = frozenset({
     "stopped_before_reschedule", "stopped_mid_formation", "superseded",
     "source_validation_failed", "source_validation_pending",
 })
-FAILED_OUTCOMES = frozenset({"bench_failed", "planner_transient"})
+FAILED_OUTCOMES = frozenset({"bench_failed", "lane_error", "planner_transient"})
 INTERVAL_SCHEMA = "epyc.autokernel.direct_held_intervals.v1"
 REFERENCE_SCHEMA = "epyc.autokernel.direct_held_reference.v1"
 COST_FORECAST_POLICY = "original-held-stage-p75-last8.v1"
