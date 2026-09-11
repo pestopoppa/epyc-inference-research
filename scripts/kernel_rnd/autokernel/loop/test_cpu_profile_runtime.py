@@ -5,6 +5,7 @@ import copy
 import json
 import os
 from pathlib import Path
+import signal
 import shutil
 import socket
 import sys
@@ -232,6 +233,13 @@ def test_actual_installed_producer_to_settlement_planner_and_restart(tmp_path):
         with closing(mc.ArtifactStore(Path(config["storage"]))) as store:
             original = cp.reopen_capture(snapshot["profile_event"]["artifact_identity"],
                 store=store, config=config, request=request.to_dict())
+            sigint_original = copy.deepcopy(cp._plain(original))
+            for phase in sigint_original["phases"]:
+                for tool in phase["tools"]:
+                    tool["returncode"] = -signal.SIGINT
+            sigint_artifact = store.write("test-only-normal-sigint", sigint_original)
+            cp.reopen_capture(sigint_artifact.to_dict(), store=store, config=config,
+                              request=request.to_dict())
             # New content addresses cannot replace any original factual join.
             for changed_fact in ("request", "source", "counter_window", "mapping_device", "response", "raw"):
                 altered = copy.deepcopy(cp._plain(original))

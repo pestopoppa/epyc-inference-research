@@ -983,7 +983,7 @@ def _reopen_phases(body, expected):
             _same(item["identity"]["pid"], item["process_observation"]["pid"], "original perf PID")
             controls = item["controls"]
             if ([value["command"] for value in controls] != ["enable", "disable"]
-                    or item["returncode"] != 0):
+                    or item["returncode"] not in (0, -signal.SIGINT)):
                 raise CpuProfileRefused("original perf control completion differs")
             enable, disable = controls
             times = [enable["sent"], enable["acknowledged"], phase["enabled_interval"][0],
