@@ -104,7 +104,7 @@ while not done:
   if cmd==b'disable\\n':
    enabled=False
    if failure=='disable_ack': continue
-  os.write(ack,b'ack\\n')
+  os.write(ack,b'ack\\n\\x00')
 if kind=='record': output.write_text(json.dumps({{'pid':pid,'times':times}}))
 else:
  output.write_text('\\n'.join(json.dumps({{'counter-value':'100','unit':'','event':event,

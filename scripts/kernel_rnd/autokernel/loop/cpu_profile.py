@@ -503,9 +503,11 @@ def _pump(item, deadline, *, expect_ack=False, output=None, limit=0):
                 output.write(raw)
             else:
                 acknowledgment.extend(raw)
-                if acknowledgment != b"ack\n"[:len(acknowledgment)]:
+                if (acknowledgment != b"a" and acknowledgment != b"ac"
+                        and acknowledgment != b"ack" and acknowledgment != b"ack\n"
+                        and acknowledgment != b"ack\n\x00"):
                     raise CpuProfileRefused("malformed perf acknowledgement")
-                if acknowledgment == b"ack\n":
+                if acknowledgment == b"ack\n" or acknowledgment == b"ack\n\x00":
                     return
         if expect_ack and process.poll() is not None:
             raise CpuProfileRefused("perf exited before acknowledgement")
