@@ -37,7 +37,7 @@ def fixture(tmp_path, *, perf_failure="", server_failure="", original_request=No
     shutil.copyfile(Path("/lib/x86_64-linux-gnu/libm.so.6").resolve(), dso)
     runtime_dso = tmp_path / "runtime/libggml.so"
     runtime_dso.parent.mkdir()
-    os.link(dso, runtime_dso)
+    shutil.copy2(dso, runtime_dso)
     events = tmp_path / "child-events"
     python = str(Path(sys.executable).resolve())
     server = build / "bin/llama-server"

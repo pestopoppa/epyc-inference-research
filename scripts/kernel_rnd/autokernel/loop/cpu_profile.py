@@ -719,15 +719,28 @@ class CpuProfileCapture:
                 if len(row) != 6 or row[5].endswith(" (deleted)"):
                     continue
                 major, minor = row[3].split(":")
-                # The loader may expose a verified DSO through a distinct
-                # RUNPATH/build alias (or a hardlink), so pathname equality is
-                # not an identity requirement.  Device+inode identify the
-                # exact file whose bytes were hash-verified above; retain the
-                # observed mapping path for auditability.
-                if (int(row[4]) == fact["ino"] and os.makedev(int(major, 16), int(minor, 16)) == fact["dev"]
-                        and "x" in row[1]):
+                if "x" not in row[1]:
+                    continue
+                mapped = None
+                if (int(row[4]) == fact["ino"]
+                        and os.makedev(int(major, 16), int(minor, 16)) == fact["dev"]):
+                    mapped = fact
+                else:
+                    # CMake may embed a RUNPATH to another build directory whose
+                    # DSO is a byte-identical copy, not a hardlink.  The recipe
+                    # pins bytes, so verify the file actually mapped by the
+                    # process instead of requiring filesystem identity with the
+                    # recipe's archival copy.
+                    try:
+                        mapped = _file(Path(row[5]).resolve(), 512 * 1024**2)
+                    except (FileNotFoundError, OSError, CpuProfileRefused):
+                        continue
+                    if mapped["sha256"] != dso.sha256:
+                        continue
+                if mapped is not None:
                     matched = True
-                    mappings.append({"artifact": fact, "mapping": line,
+                    mappings.append({"artifact": mapped, "declared_artifact": fact,
+                                     "mapping": line,
                                      "observed_path": row[5]})
                     break
             if not matched:
@@ -986,11 +999,9 @@ def _reopen_phases(body, expected):
             _same(readback["argv"], argv, "original loaded server argv")
             _same(readback["exe"], recipe.executable.path if interpreter is None else interpreter["path"],
                   "original loaded executable")
-            _same([(value["artifact"]["sha256"], value["artifact"]["dev"], value["artifact"]["ino"])
+            _same([value["artifact"]["sha256"]
                    for value in readback["loaded_dso_mappings"]],
-                  [(dso.sha256, _file(Path(dso.path).resolve(), 512 * 1024**2)["dev"],
-                    _file(Path(dso.path).resolve(), 512 * 1024**2)["ino"])
-                   for dso in recipe.dsos], "original loaded DSO set")
+                  [dso.sha256 for dso in recipe.dsos], "original loaded DSO set")
             for value in readback["loaded_dso_mappings"]:
                 row = value["mapping"].split(maxsplit=5)
                 major, minor = row[3].split(":")
