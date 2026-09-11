@@ -762,7 +762,7 @@ class CpuProfileCapture:
         if kind == "record":
             command += ["-F", "99", "-e", "cycles:u", "--clockid", "mono", "-P", "-T",
                         "--no-buildid", "--no-buildid-cache", "--mmap-pages=8",
-                        "--max-size", str(self.budgets["max_raw_file_bytes"])]
+                        "--max-size", f'{self.budgets["max_raw_file_bytes"]}B']
         else:
             command += ["--json-output", "-e", ",".join(EVENTS)]
         process = None

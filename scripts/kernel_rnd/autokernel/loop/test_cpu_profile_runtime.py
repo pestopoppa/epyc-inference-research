@@ -252,6 +252,9 @@ def test_actual_installed_producer_to_settlement_planner_and_restart(tmp_path):
                     cp.reopen_capture(forged.to_dict(), store=store, config=config, request=request.to_dict())
         assert len(original["phases"]) == 2
         for phase in original["phases"]:
+            record_command = phase["tools"][0]["command"]
+            max_size = record_command[record_command.index("--max-size") + 1]
+            assert max_size.endswith("B") and max_size[:-1].isdigit()
             controls = phase["counter_scope"]
             assert controls["enable_transition"]["sent"] <= controls["enable_transition"]["acknowledged"] <= phase["response"]["start"]
             assert phase["response"]["end"] <= controls["disable_transition"]["sent"] <= controls["disable_transition"]["acknowledged"]
