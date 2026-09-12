@@ -541,3 +541,52 @@ class AnUncalibratedMeasurementCannotBecomeAKeep(unittest.TestCase):
             noise_floor_pct=1.0, residency={})
         self.assertNotIn("UNDECIDABLE", loop._null_reason(comparison))
         self.assertIn("did not clear", loop._null_reason(comparison))
+
+
+class ValidSubFloorServingCandidatesCanAccumulate(unittest.TestCase):
+    """R23-44 applies to experimental CPU source research too: a valid positive
+    process-level observation may enter the working accumulator even when it is too
+    small for the full-serving floor.  The compounded gate, not the individual arm,
+    decides whether it advances the champion of record."""
+
+    def _comparison(self, *, effect=0.008, drifting=False, calibrated=True):
+        anchor = ([10.0, 20.0, 30.0, 40.0, 50.0,
+                   60.0, 70.0, 80.0, 90.0, 100.0]
+                  if drifting else [100.0] * 5)
+        return bench.Comparison(
+            surface="serving:glm53", anchor_samples=anchor,
+            candidate_samples=[100.0 * (1 + effect)] * 5, effect=effect,
+            estimator="matched_process_v2", pairs=5, noise_floor_pct=6.351,
+            residency={}, anchor_drift_pct=(90.0 if drifting else 0.0),
+            calibrated=calibrated)
+
+    def _run(self, comparison, **kwargs):
+        commits = []
+        outcome = loop.iterate(
+            planner=_Planner(), critic=_Critic([], []), context={},
+            measure=lambda h, p: comparison,
+            gate=lambda h, p: (True, [gates.Verdict("compile", True)]),
+            commit=lambda h, p, c: commits.append("tip") or "tip",
+            **kwargs)
+        return outcome, commits
+
+    def test_valid_positive_below_floor_enters_accumulator_when_enabled(self):
+        outcome, commits = self._run(
+            self._comparison(), accumulate_valid_positive=True)
+        self.assertEqual(outcome.status, "kept")
+        self.assertEqual(commits, ["tip"])
+        self.assertFalse(outcome.comparison.decisive,
+                         "the original measurement remains honestly sub-floor")
+
+    def test_default_path_remains_decisive_only(self):
+        outcome, commits = self._run(self._comparison())
+        self.assertEqual(outcome.status, "measured_null")
+        self.assertEqual(commits, [])
+
+    def test_drifting_or_uncalibrated_positive_never_accumulates(self):
+        for comparison in (self._comparison(drifting=True),
+                           self._comparison(calibrated=False)):
+            outcome, commits = self._run(
+                comparison, accumulate_valid_positive=True)
+            self.assertEqual(outcome.status, "measured_null")
+            self.assertEqual(commits, [])

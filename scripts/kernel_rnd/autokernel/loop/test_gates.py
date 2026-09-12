@@ -487,6 +487,18 @@ class TwoTierChampionWiring(unittest.TestCase):
         self.assertIn("except Exception", wrapper)
         self.assertIn("accum     FAILED", wrapper)
         self.assertIn("accum-error-", wrapper)
+
+    def test_experimental_serving_uses_the_durable_accumulator(self):
+        src = self._source()
+        setup = src.split("def _is_ancestor", 1)[1].split("last_gate = [None]", 1)[0]
+        self.assertIn("accumulate.load_bundle(", setup)
+        self.assertNotIn("if experimental:", setup)
+        wrapper = src.split("def accumulate_after_keep(", 1)[1].split("\n    def ", 1)[0]
+        self.assertNotIn("or experimental", wrapper)
+        compounded = src.split("def _accumulate_after_keep(", 1)[1].split("\n    def ", 1)[0]
+        self.assertIn("cpu_compare(cor_build[0], anchor_build[0])", compounded)
+        drive = src.split("return pool.drive(", 1)[1].split("\n        )", 1)[0]
+        self.assertIn("accumulate_valid_positive=experimental", drive)
     def test_fire_multiple_arg_defaults_to_operator_range(self):
         src = self._source()
         arg = src.split('"--fire-multiple"', 1)[1][:120]

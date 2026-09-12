@@ -246,7 +246,8 @@ def iterate(*, planner: Planner, critic: Critic,
             on_step: Callable[[str], None] | None = None,
             tail_session: Callable[[], Any] = nullcontext,
             should_abandon: Callable[[], bool] | None = None,
-            record_reschedule: Callable[[Outcome], bool] | None = None) -> Outcome:
+            record_reschedule: Callable[[Outcome], bool] | None = None,
+            accumulate_valid_positive: bool = False) -> Outcome:
     """One full turn. Pure control flow: every side effect is an injected callable.
 
     `should_abandon` is the DRAIN TIER for a lane that does not hold the serialized
@@ -266,7 +267,8 @@ def iterate(*, planner: Planner, critic: Critic,
                         patch_rounds=patch_rounds, on_step=_safe_step(on_step),
                         tail_session=tail_session,
                         should_abandon=should_abandon or (lambda: False),
-                        record_reschedule=record_reschedule)
+                        record_reschedule=record_reschedule,
+                        accumulate_valid_positive=accumulate_valid_positive)
     except TailRefused as exc:
         # The candidate was formed and never measured. Carry the hypothesis: the
         # patch may well still help against the champion that displaced it, and the
@@ -294,7 +296,8 @@ def iterate(*, planner: Planner, critic: Critic,
 def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, commit,
              hypothesis_rounds, patch_rounds, on_step=lambda _label: None,
              tail_session=nullcontext,
-             should_abandon=lambda: False, record_reschedule=None) -> Outcome:
+             should_abandon=lambda: False, record_reschedule=None,
+             accumulate_valid_positive=False) -> Outcome:
     last_proposed: Hypothesis | None = None
 
     def stopped() -> Outcome:
@@ -411,7 +414,21 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                                     ["STOP after invalid arm archival; no replacement server launched"],
                                     gate_verdicts=verdicts)
                             measure_original = exc.reschedule
-                    if comparison.decisive and comparison.effect > 0:
+                    # R23-44 compound-then-gate: an experimental serving source
+                    # candidate may be smaller than the process-unit floor and still
+                    # belong in the working accumulator.  It must still be a valid,
+                    # calibrated, non-drifting positive observation.  Runtime recipe
+                    # selection remains decisive-only: it has no source tree to
+                    # compound and cannot be recovered by a later bundle gate.
+                    accumulatable_positive = (
+                        accumulate_valid_positive
+                        and hypothesis.runtime_pair is None
+                        and comparison.decisive is False
+                        and comparison.noise_floor_pct is not None
+                        and not comparison.drifting
+                        and comparison.effect > 0)
+                    if ((comparison.decisive and comparison.effect > 0)
+                            or accumulatable_positive):
                         # A screen keep is a KEEP_CANDIDATE; with a confirm rung
                         # configured, `commit` measures it on the production shape
                         # and vetoes rather than committing (§5.3). Unconfigured,
