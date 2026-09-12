@@ -1270,8 +1270,9 @@ def main(argv: list[str] | None = None) -> int:
             raise champion.StartupRefused(
                 "REFUSED: restored champion of record differs from current anchor; "
                 "supply its original --cor-build or --resume-run, never relabel the tip build")
-        if resumed is not None and resumed["cor_anchor"]["commit"] != serial_run.full_commit(
-                args.worktree, cor_commit[0]):
+        if (resumed is not None and resumed["cor_anchor"] is not None
+                and resumed["cor_anchor"]["commit"] != serial_run.full_commit(
+                    args.worktree, cor_commit[0])):
             raise champion.StartupRefused("REFUSED: retained COR differs from original restored bundle")
         _verify_before_claim(
             lambda: serial_run.verify_exact_anchor(
