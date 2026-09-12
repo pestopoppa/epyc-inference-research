@@ -2026,7 +2026,11 @@ def main(argv: list[str] | None = None) -> int:
                 report_runtime_progress()
                 reprofile()
                 return None
-            refuse_uncalibrated_keep(args.surface, calibrated, comparison)
+            if not (experimental and calibrated
+                    and comparison.noise_floor_pct is not None
+                    and comparison.decisive is False
+                    and not comparison.drifting and comparison.effect > 0):
+                refuse_uncalibrated_keep(args.surface, calibrated, comparison)
             if screen_state and screen_state["scope"] in {"quarter", "half"}:
                 screen_state["candidate"] = cpu_screen.retain_candidate(
                     store_root=args.store, origin_batch=args.out, worker=worker,
