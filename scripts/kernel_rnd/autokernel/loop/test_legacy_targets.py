@@ -142,6 +142,18 @@ def test_actual_main_accepts_exact_scheduled_selection_without_ambient_src_packa
     assert run.main(argv) == 0
 
 
+def test_derived_scheduler_bounds_the_complete_retained_keep_lifecycle(tmp_path):
+    resolved, launch = _resolved(backend="cpu", seed=True)
+    argv = _argv(tmp_path, resolved, launch, cpu=True)
+    manifest = serial_run._derived_scheduler_manifest(
+        [[item for item in argv if item != "--dry-run"]], tmp_path / "resolved.json", 1)
+
+    expected = (3 * resolved.resources.build_timeout_s
+                + 8 * resolved.resources.stage_timeout_s)
+    assert manifest.config.max_stage_seconds == expected
+    assert manifest.proposals["selected"].estimated_duration_seconds == expected
+
+
 def test_actual_main_reopens_digest_bound_latest_shared_source_anchor(
         tmp_path, monkeypatch):
     resolved, launch = _resolved(backend="cpu", seed=True)

@@ -815,10 +815,14 @@ def _derived_scheduler_manifest(targets, resolved_path, rounds):
     from . import claim, scheduling, serial_scheduling, unified_planner
     from .resolved_recipe import CanonicalResolvedRecipe
     resolved = campaign_cli.load_previous(Path(resolved_path))
-    # One held invocation can contain planner, critic, validation and serving
-    # phases in addition to a build. This is a declared scheduling bound, not a
-    # duration observation; an overrun remains charged and successor-fenced.
-    max_stage = resolved.resources.build_timeout_s + 4 * resolved.resources.stage_timeout_s
+    # A retained keep stays inside the same held invocation: candidate build/A-B,
+    # promoted-anchor build, independent verification build/A-B, re-profile,
+    # compounded tip-vs-COR A-B, and (on cadence) the serving gate.  The derived
+    # scheduler must bound that existing lifecycle, not only an ordinary null.
+    # This is a declared scheduling bound, not a duration observation; a genuine
+    # overrun remains charged and successor-fenced.
+    max_stage = (3 * resolved.resources.build_timeout_s
+                 + 8 * resolved.resources.stage_timeout_s)
     attempt_cap = rounds * len(targets) if rounds else 1000
     proposals = {}
     has_gpu = False
