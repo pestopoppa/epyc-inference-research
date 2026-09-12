@@ -33,11 +33,11 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None, s
     if set(owners) - set(aliases):
         raise sr.SerialRefused(f"owned aliases are not enrolled: {sorted(set(owners) - set(aliases))}")
     required = {"worktree", "anchor_build", "branch", "frozen_prompts"}
-    optional = {"launch", "store", "calibrate_serving", "allow_unverified_anchor"}
+    optional = {"launch", "store", "cor_build", "calibrate_serving", "allow_unverified_anchor"}
     for alias, owner in owners.items():
         if not isinstance(owner, dict) or required - owner.keys() or owner.keys() - required - optional:
             raise sr.SerialRefused(f"{alias}: expected ownership fields {sorted(required)} plus {sorted(optional)}")
-        for key in required | (owner.keys() & {"launch", "store"}):
+        for key in required | (owner.keys() & {"launch", "store", "cor_build"}):
             value = owner[key]
             if not isinstance(value, str) or not value.strip() or "\0" in value:
                 raise sr.SerialRefused(f"{alias}: {key} must be nonempty text")
@@ -129,6 +129,8 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None, s
                 "--worker-root", str(root / "workers"), "--worker-build-root", str(root / "builds"),
                 f"--{backend}-serving-launch", str(launch_path),
                 "--frozen-prompts", owner["frozen_prompts"]]
+        if owner.get("cor_build"):
+            argv += ["--cor-build", owner["cor_build"]]
         if backend == "cpu":
             if retained_instruments is not None:
                 instrument = retained_instruments.get(alias, serving.LEGACY_INSTRUMENT)

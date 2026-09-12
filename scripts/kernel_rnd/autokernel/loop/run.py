@@ -925,6 +925,22 @@ def main(argv: list[str] | None = None) -> int:
             args.store, serving_recipe, direct_launch,
             frozen_requests=frozen_requests, instrument=args.serving_instrument,
             pairs=args.serving_pairs)
+        # A source treatment changes executable/DSO identity, not the matched
+        # process noise frame.  Once an accumulator has advanced, its protected
+        # champion-of-record remains the calibrated reference for the same
+        # workload, request bytes, placement and environment.  Reuse that
+        # verified frame instead of demanding 48 fresh A/A launches after every
+        # source keep.  serving.compare revalidates the complete frame against
+        # both treatment arms before admitting the floor.
+        if (floor_reading.floor_pct is None and source_instrument
+                and args.cor_build is not None):
+            cor_floor_launch = _cpu_arm(direct_launch, args.cor_build)
+            _cor_floor_store, cor_floor_reading = _load_source_floor(
+                args.store, serving_recipe, cor_floor_launch,
+                frozen_requests=frozen_requests, instrument=args.serving_instrument,
+                pairs=args.serving_pairs)
+            if cor_floor_reading.floor_pct is not None:
+                floor_reading = cor_floor_reading
         floor_record = floor_reading.row or None
         floor = serving_floor_pct = floor_reading.floor_pct
         calibrated = floor is not None
