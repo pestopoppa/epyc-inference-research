@@ -1321,7 +1321,8 @@ def _batch_argv(original, prior, batch_iterations, directory, *, scheduler_selec
             same_prior_cross_checkout = (Path(tip.repo).resolve()
                                          != Path(prior_body["worktree"]).resolve())
     if source_prior is not None and (prior is None or source_prior != prior
-                                     or same_prior_cross_checkout):
+                                     or same_prior_cross_checkout or validate_source
+                                     or validate_loo):
         _source_body, source_sha = load_completed(Path(source_prior["path"]))
         if source_sha != source_prior["sha256"]:
             raise SerialRefused("retained shared-source continuation changed")
