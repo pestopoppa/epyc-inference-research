@@ -1013,6 +1013,34 @@ def test_shared_source_routes_authoring_only_to_original_owner(tmp_path):
     assert "--validate-source-continuation" in validation
 
 
+def test_same_prior_cross_checkout_reopens_retained_tip_before_routing(tmp_path):
+    prior = {"path": "/retained/prior", "sha256": "a" * 64}
+    keep_reference = {"locator": "retained-keep", "sha256": "b" * 64}
+    continuation = {
+        "worktree": "/consumer",
+        "source_lineage_keeps": [keep_reference],
+    }
+    source = {"selected_target": {"selected_id": "owner"}}
+
+    def prepare(argv, _prior, _directory, **_kwargs):
+        return list(argv), {"scope": "full"}
+
+    with mock.patch.object(sr, "load_resume",
+                           return_value=(continuation, "a" * 64)), \
+            mock.patch.object(run.surface_fold, "reopen_reference",
+                              return_value=mock.Mock(repo="/producer")) as reopen, \
+            mock.patch.object(sr, "load_completed",
+                              return_value=(source, "a" * 64)), \
+            mock.patch.object(cpu_screen, "prepare_batch", side_effect=prepare):
+        child = sr._batch_argv(
+            ["--target-id", "owner"], prior, 1, tmp_path,
+            source_prior=prior)
+
+    reopen.assert_called_once_with(keep_reference)
+    assert sr.option(child, "--source-anchor-continuation") == prior["path"]
+    assert sr.option(child, "--source-anchor-sha256") == prior["sha256"]
+
+
 def test_required_source_validation_uses_production_and_every_keep_author():
     targets = [["--target-id", value] for value in ("a", "b", "prod", "optional")]
     identities = {value: {"selected_id": value,

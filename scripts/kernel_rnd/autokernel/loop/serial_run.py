@@ -1316,6 +1316,7 @@ def _batch_argv(original, prior, batch_iterations, directory, *, scheduler_selec
         lineage = (prior_body.get("source_lineage_keeps")
                    or prior_body.get("experimental_source_keeps") or ())
         if lineage:
+            from . import surface_fold
             tip = surface_fold.reopen_reference(lineage[-1])
             same_prior_cross_checkout = (Path(tip.repo).resolve()
                                          != Path(prior_body["worktree"]).resolve())
