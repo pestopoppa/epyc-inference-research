@@ -1174,6 +1174,16 @@ def _pending_source_validations(state, targets):
         lineage = body.get("source_lineage_keeps") or body.get("experimental_source_keeps")
         if not lineage:
             continue
+        from . import surface_fold
+        intended = surface_fold.reopen_reference(lineage[-1]).selected_target["selected_id"]
+        identity = _selected_identity(target)
+        enrolled = identity["original_target"].get("enrolled_as", ())
+        # The authoring target already measured this source keep. Re-running the
+        # same target as a promotion-grade validation would reject intentional
+        # sub-noise accumulation and requires an anchor the keep lifecycle has
+        # correctly pruned. Production targets still owe their separate verdict.
+        if identity["selected_id"] == intended and "production" not in enrolled:
+            continue
         commit = body["current_anchor"]["commit"]
         subject = _validation_subject(state, target, index, commit)
         entry = state["source_validations"].get(subject)
@@ -1212,9 +1222,12 @@ def _required_source_validation(state, targets):
     for index, target in enumerate(targets):
         identity = _selected_identity(target)
         enrolled = identity["original_target"].get("enrolled_as", ())
-        if "production" in enrolled or identity["selected_id"] in authored:
+        if ("production" in enrolled
+                or (identity["selected_id"] in authored
+                    and identity["selected_id"] != intended)):
             required.append((index, target, identity))
-    missing_authors = authored - {identity["selected_id"] for _, _, identity in required}
+    missing_authors = (authored - {intended}
+                       - {identity["selected_id"] for _, _, identity in required})
     if missing_authors:
         raise SerialRefused("retained keep author is absent from the owned target roster")
     rows, missing = [], []
