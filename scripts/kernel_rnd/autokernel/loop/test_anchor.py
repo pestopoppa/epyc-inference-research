@@ -585,6 +585,39 @@ class TheVerdictIsOnTheStatusSurface(unittest.TestCase):
         as a check that succeeded."""
         self.assertIsNone(self._write()["anchor_guard"])
 
+    def test_status_bounds_lifecycle_telemetry_and_points_to_durable_evidence(self):
+        """The heartbeat is a compact projection; experiments.db owns raw samples."""
+        from autokernel.loop import status
+
+        guard = {
+            "check": "anchor-aa-guard", "passed": True,
+            "champion_commit": CHAMPION, "effect_pct": 0.2,
+            "comparison": {
+                "schema": "epyc.autokernel.serving_ab.v2", "pairs": 5,
+                "anchor_tok_s": 8.0, "candidate_tok_s": 8.016,
+                "effect_pct": 0.2,
+                "anchor_residency": [{"cpu_lifecycle": "x" * 1_000_000}],
+                "candidate_residency": [{"cpu_lifecycle": "y" * 1_000_000}],
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            status.write(root, state="running", epoch="e", campaign_id="c",
+                         anchor_commit=CHAMPION, surface="pp512", pairs=5,
+                         noise_floor_pct=FLOOR, anchor_guard=guard)
+            raw = (root / status.STATUS_FILENAME).read_text(encoding="utf-8")
+            body = status.read(root)
+
+        self.assertLess(len(raw), 8_000)
+        self.assertNotIn("comparison", body["anchor_guard"])
+        self.assertEqual(body["anchor_guard"]["comparison_summary"]["pairs"], 5)
+        self.assertEqual(body["anchor_guard"]["evidence"]["record"],
+                         "experiments.payload")
+        self.assertEqual(body["anchor_guard"]["evidence"]["selector"], {
+            "campaign_id": "c", "mechanism_id": "anchor-aa-guard",
+            "champion_commit": CHAMPION,
+        })
+
 
 # ------------------------------------------- the hash pre-check triad (R22-3)
 #
