@@ -39,14 +39,20 @@ from . import accumulate, instruments, pool, serving, status
 
 
 def measure(recipe: serving.Recipe, cor_build: Path, tip_build: Path, *,
-            pairs: int, floor_pct: float) -> dict:
+            pairs: int, floor_pct: float, floor_unit: str) -> dict:
     """THE MEASUREMENT SEAM -- the only thing here that touches the GPU.
 
     A thin wrapper on purpose: everything above it (floor identity, the scheduling
     decision, the resolve/record/apply chain) is then testable without hardware, and a
     test that stubs this cannot accidentally launch a server.
+
+    `floor_unit` is the loaded floor's own unit and is passed straight through, so the
+    unit check happens where the comparison does and cannot be skipped by a caller that
+    forgot (R23-55). This gate's effect is `process`-unit: `serving.compare` relaunches
+    the server for every sample of every arm.
     """
-    return serving.compare(recipe, cor_build, tip_build, pairs=pairs, floor_pct=floor_pct)
+    return serving.compare(recipe, cor_build, tip_build, pairs=pairs, floor_pct=floor_pct,
+                           floor_unit=floor_unit)
 
 
 def _is_ancestor(worktree: Path, ancestor: str, descendant: str) -> bool:
@@ -93,7 +99,11 @@ def main(argv: list[str] | None = None) -> int:
     try:
         recipe = serving.Recipe.load(args.recipe)
         print(f"recipe    {recipe.describe()}")
-        reading = instruments.read_floor(args.store, recipe)
+        # The effect this gate produces is between-PROCESS (a fresh server per sample), so
+        # only a process-unit floor can be its bar; a legacy unit-less floor refuses here,
+        # before any GPU time is spent (R23-55).
+        reading = instruments.read_floor(args.store, recipe,
+                                         effect_unit=serving.COMPARE_EFFECT_UNIT)
         floor = reading.floor_pct
         bundle, _ = accumulate.load_bundle(
             Path(args.store), anchor_commit=args.tip,
@@ -102,8 +112,8 @@ def main(argv: list[str] | None = None) -> int:
             read_only=posture.dry_run)
         policy = accumulate.AccumulatorPolicy(fire_multiple=args.fire_multiple)
         thr = policy.fire_threshold_pct(floor)
-        print(f"floor     {floor:.3f}% [{reading.provenance}] from {reading.path.name} | "
-              f"fire threshold {thr:.2f}%")
+        print(f"floor     {floor:.3f}% [{reading.provenance}] unit={reading.unit} "
+              f"n={reading.n} from {reading.path.name} | fire threshold {thr:.2f}%")
         magnitude_label = (
             "current combined measurement"
             if bundle.measurement_validity == accumulate.MEASUREMENT_CURRENT
@@ -134,7 +144,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         started = time.time()
         row = measure(recipe, args.cor_build, args.tip_build,
-                      pairs=args.pairs, floor_pct=floor)
+                      pairs=args.pairs, floor_pct=floor, floor_unit=reading.unit)
     except (instruments.InstrumentRefusal, serving.ServingFloorMismatch,
             accumulate.BundleRecoveryRequired) as refusal:
         # A floor calibrated under a DIFFERENT recipe is a refusal, not a verdict: it
@@ -149,7 +159,11 @@ def main(argv: list[str] | None = None) -> int:
               "hand_run": "autokernel.loop.serving_gate",
               # The provenance of the bar travels with the verdict: a reader cannot
               # otherwise tell a checked floor from an assumed one (run.py does the same).
-              "floor_provenance": reading.provenance, **row}
+              "floor_provenance": reading.provenance,
+              # The bar's unit and n travel with the verdict for the same reason its
+              # provenance does: a reader cannot otherwise tell which dispersion this
+              # effect was judged against (R23-55 / R23-61).
+              "floor_unit": reading.unit, "floor_n": reading.n, **row}
     written = status.write_json(Path(args.store) / "serving",
                                 f"bundle-{bundle.tip[:12]}.json", record, prefix=".sv-")
     print(f"serving   {plan['reason']}  [{time.time() - started:.0f}s]  record: {written}")

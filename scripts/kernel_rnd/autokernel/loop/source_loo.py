@@ -95,6 +95,12 @@ def execute_surface(*, directory, store_root, repo, assembled_commit, assembled_
             raise serving.RecipeError("LOO original loaded artifact identities changed")
     floor = serving.load_floor(store_root, full_launch.template,
         frozen_requests=frozen_requests, instrument=instrument, pairs=pairs)
+    # Every LOO comparison below is between-PROCESS (`serving.compare` relaunches the
+    # server for every sample of every arm), so only a process-unit floor can be its bar.
+    # A legacy floor that cannot state its unit refuses HERE, before the first omission arm
+    # runs, rather than after the battery has been paid for (R23-55).
+    floor_gate_pct = floor.gate_floor(effect_unit=serving.COMPARE_EFFECT_UNIT)
+    floor_gate_unit = None if floor_gate_pct is None else floor.unit
     keeps = []
     for reference in keep_references:
         keep = surface_fold.validate_original(surface_fold.reopen_reference(reference))
@@ -136,7 +142,8 @@ def execute_surface(*, directory, store_root, repo, assembled_commit, assembled_
         boundary()
         try:
             comparison = serving.compare(anchor.template, Path(anchor.build_dir),
-                Path(candidate.build_dir), pairs=pairs, floor_pct=floor.floor_pct,
+                Path(candidate.build_dir), pairs=pairs, floor_pct=floor_gate_pct,
+                floor_unit=floor_gate_unit,
                 port=anchor.port, anchor_resolved_recipe=anchor,
                 candidate_resolved_recipe=candidate, frozen_requests=frozen_requests,
                 floor_request_digest=floor.request_digest, instrument=instrument,

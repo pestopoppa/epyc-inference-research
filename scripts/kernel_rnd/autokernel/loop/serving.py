@@ -59,6 +59,36 @@ MATCHED_ESTIMATOR = "median(candidate)/median(anchor)-1;paired-bootstrap-p95.v1"
 MATCHED_ORDER = "autokernel.evaluator.statistics.OrderSchedule.v1"
 MATCHED_CALIBRATION_PAIRS = 24
 
+# ---------------------------------------------------------------------------
+# THE UNIT OF A FLOOR (R23-55 / INF-73 U2). A floor is a dispersion, and a
+# dispersion only exists relative to WHAT WAS RESAMPLED between two readings.
+# INF-70's RETEST-1 measured the same host on the same day in two units:
+#
+#   * `arm`     -- two readings inside ONE server session (an arm-scoped knob
+#                  toggled between requests):            sd 0.501%
+#   * `session` -- two readings from two sessions of one process
+#   * `process` -- two readings from two SEPARATE launches: sd 2.793%
+#
+# ~13x coarser between processes than within a session. Sizing against the wrong
+# unit is not a rounding error: INF-70's 0.171% ARM floor sized CHAMP-2 THP at 4
+# sessions/side where the session-unit answer is 4,780 -- a 1200-fold
+# underestimate that would have been spent as real host time. So the unit is a
+# REQUIRED field of every floor record, and a gate handed a floor of a different
+# unit than the effect REFUSES: it does not warn, and it does not rescale.
+UNIT_ARM = "arm"
+UNIT_SESSION = "session"
+UNIT_PROCESS = "process"
+#: The only admissible units, narrowest first.
+FLOOR_UNITS = (UNIT_ARM, UNIT_SESSION, UNIT_PROCESS)
+
+#: The unit `compare` itself measures in: every sample of every arm is a FRESH
+#: server launch (`_measure_once` launches, fires `np` requests, tears down), so
+#: between-process variance is inside every effect this module produces. DERIVED
+#: from the harness, never configured -- a caller cannot relabel it.
+COMPARE_EFFECT_UNIT = UNIT_PROCESS
+#: Same reasoning for the A/A: `calibrate_floor` relaunches per sample.
+CALIBRATION_UNIT = UNIT_PROCESS
+
 
 def _digest(value):
     return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"),
@@ -557,6 +587,59 @@ class ServingFloorMismatch(RuntimeError):
     human noticing forced the recalibration. An `env` arm makes this sharper still: its
     entire purpose is to change DISPERSION, which is to change the floor itself.
     """
+
+
+class FloorUnitMismatch(ServingFloorMismatch):
+    """The floor's UNIT is absent, unknown, or not the effect's unit (R23-55).
+
+    A subclass so every caller that already refuses on `ServingFloorMismatch` refuses on
+    this too -- an effect judged against a floor of another unit is not a weaker verdict,
+    it is a verdict about a different question (0.501% arm vs 2.793% process, ~13x, and a
+    1200-fold sizing error on the one occasion it was worked through end to end).
+    """
+
+
+def unit_refusal(floor_unit: str | None, effect_unit: str | None, *,
+                 path: object = None, what: str = "floor") -> str:
+    """The refusal text, in one place so every gate says the same thing.
+
+    Names BOTH units (or the missing one) and the file, because "units differ" without the
+    two names is a message nobody can act on.
+    """
+    where = "" if path is None else f" {path}"
+    if floor_unit is None:
+        return (f"{what}{where} carries no admissible `unit`: it is a legacy record "
+                f"written before R23-55, so NOTHING says whether its dispersion was "
+                f"measured within one server session (`arm`, INF-70 sd 0.501%) or across "
+                f"process launches (`process`, sd 2.793% -- ~13x coarser). REFUSING to "
+                f"gate an effect measured in unit {effect_unit!r} against it: on the one "
+                f"occasion this was worked through, the arm-unit reading under-sized the "
+                f"experiment 1200-fold. Fix: recalibrate this floor "
+                f"(serving.calibrate_floor + serving.write_floor(..., unit=...)); the "
+                f"legacy file is left exactly as it is.")
+    if effect_unit is None:
+        return (f"effect declares no measurement `unit`, so it cannot be judged against "
+                f"{what}{where} (unit {floor_unit!r}). Pass the unit the effect was "
+                f"actually measured in, one of {FLOOR_UNITS}; guessing is what R23-55 "
+                f"exists to stop.")
+    return (f"UNIT MISMATCH: effect measured in unit {effect_unit!r}, {what}{where} "
+            f"calibrated in unit {floor_unit!r}. A floor is a dispersion over what was "
+            f"RESAMPLED between readings, so these are bars on different questions "
+            f"(INF-70 RETEST-1: arm sd 0.501% vs process-launch sd 2.793%, ~13x coarser). "
+            f"REFUSING rather than warning or rescaling: recalibrate a "
+            f"{effect_unit}-unit floor for this condition.")
+
+
+def check_unit(floor_unit: str | None, effect_unit: str | None, *,
+               path: object = None, what: str = "floor") -> str:
+    """Admit a floor as the bar for an effect, or raise. Returns the agreed unit."""
+    if (floor_unit not in FLOOR_UNITS or effect_unit not in FLOOR_UNITS
+            or floor_unit != effect_unit):
+        raise FloorUnitMismatch(unit_refusal(
+            floor_unit if floor_unit in FLOOR_UNITS else None,
+            effect_unit if effect_unit in FLOOR_UNITS else None,
+            path=path, what=what))
+    return floor_unit
 
 
 def _status_fields(text: str) -> dict[str, str]:
@@ -1157,10 +1240,16 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
             floor_pct: float | None, port: int = 18311,
             anchor_resolved_recipe=None, candidate_resolved_recipe=None,
             frozen_requests=None, floor_request_digest: str | None = None,
-            runtime_pair=None, instrument=LEGACY_INSTRUMENT, floor_record=None) -> dict:
+            runtime_pair=None, instrument=LEGACY_INSTRUMENT, floor_record=None,
+            floor_unit: str | None = None) -> dict:
     """Paired, alternating serving A/B: anchor vs candidate, `pairs` times, each pair a
     fresh server per side (drift control). Effect = median(candidate)/median(anchor) - 1.
-    `decisive` is None when uncalibrated (no floor), so the keep gate fails closed."""
+    `decisive` is None when uncalibrated (no floor), so the keep gate fails closed.
+
+    `floor_unit` is the unit of the bar in `floor_pct` and is REQUIRED whenever a bar is
+    given (R23-55): the effect here is `process`-unit by construction, and a floor
+    measured in another unit -- or one that cannot say -- is refused, never rescaled.
+    """
     matched = _instrument(instrument, pairs)
     if matched and runtime_pair is not None:
         raise ServingFloorMismatch("matched source floor cannot qualify a runtime treatment")
@@ -1177,6 +1266,22 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
         if floor_pct is not None or floor_request_digest is not None:
             raise ServingFloorMismatch("runtime treatment needs original strict frame admission, not a source floor")
         candidate_recipe = runtime_pair.candidate.template
+    # The bar's UNIT, checked after the frame refusals above (a runtime treatment may not
+    # carry a source floor at all) and before anything is launched. The effect below is
+    # between-PROCESS by construction, so a bar of any other unit -- or one that cannot say
+    # which it is -- REFUSES: within-session dispersion is ~13x tighter and picking the
+    # wrong one under-sized an experiment 1200-fold (R23-55).
+    if floor_pct is None:
+        if floor_unit is not None:
+            raise FloorUnitMismatch(
+                "a floor unit was given with no floor: nothing is being gated, so there "
+                "is no comparison for the unit to describe")
+    else:
+        check_unit(floor_unit, COMPARE_EFFECT_UNIT, what="serving floor")
+        if isinstance(floor_record, dict) and floor_record.get("unit") != floor_unit:
+            raise FloorUnitMismatch(
+                f"floor record states unit {floor_record.get('unit')!r} but the caller "
+                f"passed {floor_unit!r}: the record is the authority on its own unit")
     frozen_requests = _frozen_requests(recipe, frozen_requests)
     _frozen_requests(candidate_recipe, frozen_requests)
     requests_digest = request_digest(recipe, frozen_requests)
@@ -1291,6 +1396,10 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
                 "metric": recipe.metric, "np": recipe.np, "pairs": pairs,
                 "anchor_tok_s": a_med, "candidate_tok_s": c_med,
                 "effect": effect, "effect_pct": effect * 100.0,
+                # The unit the EFFECT was measured in, and the unit of the bar it was
+                # judged against. Written even when they agree: a reader must never have
+                # to infer which dispersion a verdict was decided against (R23-55).
+                "effect_unit": COMPARE_EFFECT_UNIT, "floor_unit": floor_unit,
                 "noise_floor_pct": floor_pct, "decisive": decisive,
                 "anchor_samples": a_runs, "candidate_samples": c_runs,
                 # Reporting only -- no decision rule reads these (see `_spread`).
@@ -1352,7 +1461,13 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
                "recipe_env": dict(recipe.env or {}), "recipe_describe": recipe.describe(),
                "metric": recipe.metric, "np": recipe.np,
                "request_digest": request_digest(recipe, frozen_requests),
-               "estimator": MATCHED_ESTIMATOR, "unit": "process",
+               "estimator": MATCHED_ESTIMATOR, "unit": CALIBRATION_UNIT,
+               # `n` is the sample count the floor was estimated from, under its own name
+               # so no reader has to know which of this schema's count fields is the n.
+               # A floor estimated from an extreme order statistic at n=10 carries no
+               # usable precision (R23-61), so a floor that cannot state its n must not
+               # gate -- `write_floor` refuses one that cannot.
+               "n": samples,
                "comparison_pairs": pairs, "calibration_pairs": samples,
                "process_launches": 2 * samples, "order_algorithm": MATCHED_ORDER,
                "calibration_plan": plan, "frame": frame,
@@ -1373,6 +1488,11 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
             "recipe_hash": recipe.recipe_hash, "recipe_env": dict(recipe.env or {}),
             "recipe_describe": recipe.describe(),
             "metric": recipe.metric, "np": recipe.np, "samples": samples,
+            # The unit is DERIVED from the harness that just ran, not configured: every
+            # sample above is its own server launch, so this dispersion is between
+            # PROCESSES. An arm-unit floor would be ~13x tighter and would size an
+            # experiment 1200-fold wrong (R23-55).
+            "unit": CALIBRATION_UNIT, "n": samples,
             "median_tok_s": sp["median"], "floor_pct": sp["p95_dev_pct"],
             "runs": runs, "cv_pct": sp["cv_pct"], "spread": sp,
             # A floor is a bar every future keep is judged against, so the row records
@@ -1457,6 +1577,51 @@ class FloorReading:
         return self.row.get("request_digest")
 
     @property
+    def unit(self) -> str | None:
+        """The unit this floor's dispersion was measured in, or None.
+
+        None means the file cannot say -- it predates R23-55 or carries something that is
+        not one of `FLOOR_UNITS`. None is NEVER filled in by inference: the two candidate
+        answers differ by ~13x, so a guess is worth less than a refusal.
+        """
+        value = self.row.get("unit")
+        return value if value in FLOOR_UNITS else None
+
+    @property
+    def legacy(self) -> bool:
+        """True for a floor on disk that carries no admissible `unit`. Such a floor is
+        READ (nothing on disk is rewritten) and REFUSED as a gate bar."""
+        return self.provenance != "absent" and self.unit is None
+
+    @property
+    def n(self) -> int | None:
+        """The sample count the floor was estimated from, or None when the file cannot
+        say. `samples`/`calibration_pairs` are this schema's older names for it."""
+        for key in ("n", "samples", "calibration_pairs"):
+            value = self.row.get(key)
+            if type(value) is int and value > 0:
+                return value
+        return None
+
+    def gate_floor(self, *, effect_unit: str) -> float | None:
+        """This floor AS A GATE BAR for an effect measured in `effect_unit`, or raise.
+
+        The ONE admission point: a legacy unit-less floor and a floor of another unit both
+        refuse here, naming the file and both units. `None` (absent) passes through
+        untouched -- uncalibrated already fails closed everywhere downstream.
+        """
+        if self.provenance == "absent" and self.floor_pct is None:
+            return None
+        check_unit(self.unit, effect_unit, path=self.path, what="serving floor")
+        if self.n is None:
+            raise FloorUnitMismatch(
+                f"serving floor {self.path} does not state its `n`. A floor is an extreme "
+                f"order statistic; at small n its point estimate carries no usable "
+                f"precision (R23-61: the n=10 5th-95th pct spanned 4.200%-7.821%), so a "
+                f"floor that cannot state its n must not gate. Recalibrate at n >= 24.")
+        return self.floor_pct
+
+    @property
     def residency_status(self) -> str:
         """`proven` only when the file says so. Absent evidence reads as `unproven`,
         never as proven -- the same fail-closed direction `provenance` takes."""
@@ -1477,6 +1642,7 @@ def _stamped_residency(block: object) -> dict:
 
 
 def write_floor(store: Path | str, recipe: Recipe, row: Mapping, *,
+                unit: str | None = None,
                 conditions: Mapping | None = None, frozen_requests=None,
                 instrument=LEGACY_INSTRUMENT, pairs=None) -> Path:
     """Persist a calibrated floor WITH the identity of the recipe it was calibrated under.
@@ -1490,9 +1656,41 @@ def write_floor(store: Path | str, recipe: Recipe, row: Mapping, *,
 
     `conditions` is free-form provenance for humans (host state, harness, timestamp); it
     is merged, never allowed to overwrite the identity keys.
+
+    `unit` has NO default and must be stated by the caller (R23-55). It is not a formality:
+    the same host on the same day reads sd 0.501% within a session and sd 2.793% between
+    process launches, so a floor whose unit nobody recorded is a bar on an unknown
+    question -- and the one time that was worked through end to end it under-sized an
+    experiment 1200-fold. The caller states what its harness actually resampled; a row that
+    already carries a unit must AGREE with it.
     """
     frozen_requests = _frozen_requests(recipe, frozen_requests)
     body = dict(row)
+    if unit not in FLOOR_UNITS:
+        raise FloorUnitMismatch(
+            f"refusing to write a floor for {recipe.name!r} with unit={unit!r}: every "
+            f"floor record must state the unit its dispersion was measured in, one of "
+            f"{FLOOR_UNITS}. A missing unit IS the defect (R23-55) -- `arm` and `process` "
+            f"differ ~13x on this host (0.501% vs 2.793%) and picked the wrong sizing by "
+            f"1200x once already. Pass the unit the harness actually resampled: "
+            f"serving.calibrate_floor relaunches per sample, so its rows are "
+            f"unit={CALIBRATION_UNIT!r}.")
+    stamped_unit = body.get("unit")
+    if stamped_unit is not None and stamped_unit != unit:
+        raise FloorUnitMismatch(unit_refusal(
+            stamped_unit if stamped_unit in FLOOR_UNITS else None, unit,
+            path=recipe.name, what="floor row"))
+    # `n` under its own name, from whichever count this schema actually recorded. A floor
+    # that cannot state its n must not gate (R23-61), and the cheapest place to guarantee
+    # it is the one writer -- it cannot be added after the fact.
+    count = next((body[key] for key in ("n", "samples", "calibration_pairs")
+                  if type(body.get(key)) is int and body[key] > 0), None)
+    if count is None:
+        raise FloorUnitMismatch(
+            f"refusing to write a floor for {recipe.name!r} with no sample count: a floor "
+            f"is an extreme order statistic and its precision is a function of `n`, so a "
+            f"record that cannot state its n must not gate (R23-61). Write the row "
+            f"`serving.calibrate_floor` returns, or state `n` explicitly.")
     if _instrument(instrument, pairs):
         _validate_matched_floor(body, recipe, frozen_requests, pairs)
     elif body.get("schema") == "epyc.autokernel.serving_floor.v2":
@@ -1519,6 +1717,19 @@ def write_floor(store: Path | str, recipe: Recipe, row: Mapping, *,
     # with no residency block is stamped `unproven` EXPLICITLY -- it is not a claim that
     # the calibration ran on the CPU, it is a refusal to let the absence pass unremarked.
     body["residency"] = _stamped_residency(body.get("residency"))
+    if body.get("schema") == "epyc.autokernel.serving_floor.v2":
+        # A matched floor is SEALED by `content_sha256`, so its unit and n must already be
+        # inside that digest. Stamping them here would put the two fields a gate depends on
+        # OUTSIDE the seal, where an edit leaves no trace.
+        if body.get("unit") != unit or body.get("n") != count:
+            raise FloorUnitMismatch(
+                f"matched floor must carry `unit` ({unit!r}) and `n` ({count!r}) inside its "
+                f"sealed content; this row carries unit={body.get('unit')!r} n="
+                f"{body.get('n')!r}. Recalibrate with a `serving.calibrate_floor` that "
+                f"stamps both before sealing -- they cannot be added afterwards.")
+    else:
+        body["unit"] = unit
+        body["n"] = count
     target = floor_path(store, recipe, frozen_requests=frozen_requests, instrument=instrument, pairs=pairs)
     return status.write_json(target.parent, target.name, body, prefix=".sv-floor-")
 
@@ -1532,6 +1743,12 @@ def load_floor(store: Path | str, recipe: Recipe, *, frozen_requests=None,
     bug -- the gate quietly never firing -- rather than as the stale floor it is. The
     caller gets an exception naming both hashes, or a reading it can trust the provenance
     of.
+
+    A file written before R23-55 carries no `unit`: it is returned as it is, with
+    `reading.unit is None` and `reading.legacy is True`, and nothing on disk is rewritten.
+    Such a floor CANNOT gate -- `FloorReading.gate_floor` refuses it, naming the file and
+    the fix -- because its dispersion could be the within-session one (0.501%) or the
+    between-launch one (2.793%) and the two differ by ~13x.
     """
     frozen_requests = _frozen_requests(recipe, frozen_requests)
     requests_digest = request_digest(recipe, frozen_requests)
@@ -1566,9 +1783,12 @@ def load_floor(store: Path | str, recipe: Recipe, *, frozen_requests=None,
     return FloorReading(row.get("floor_pct"), "verified", path, row)
 
 
-__all__ = ["FLOOR_KEY_MAX", "LOADER_OWNED_ENV", "RECIPE_SCHEMA", "RESIDENCY_PROVEN",
-           "RESIDENCY_NOT_APPLICABLE", "RESIDENCY_SCHEMA", "RESIDENCY_UNPROVEN", "UNSET",
-           "EnvReadbackFailed", "FloorReading", "Recipe", "RecipeError", "ServerDied",
-           "ServingFloorMismatch", "ServingNotResident", "calibrate_floor", "compare",
-           "covers_request_phase", "floor_key", "floor_path", "load_floor", "request_digest",
-           "verify_env_readback", "write_floor"]
+__all__ = ["CALIBRATION_UNIT", "COMPARE_EFFECT_UNIT", "FLOOR_KEY_MAX", "FLOOR_UNITS",
+           "LOADER_OWNED_ENV", "RECIPE_SCHEMA", "RESIDENCY_PROVEN",
+           "RESIDENCY_NOT_APPLICABLE", "RESIDENCY_SCHEMA", "RESIDENCY_UNPROVEN",
+           "UNIT_ARM", "UNIT_PROCESS", "UNIT_SESSION", "UNSET",
+           "EnvReadbackFailed", "FloorReading", "FloorUnitMismatch", "Recipe",
+           "RecipeError", "ServerDied",
+           "ServingFloorMismatch", "ServingNotResident", "calibrate_floor", "check_unit",
+           "compare", "covers_request_phase", "floor_key", "floor_path", "load_floor",
+           "request_digest", "unit_refusal", "verify_env_readback", "write_floor"]

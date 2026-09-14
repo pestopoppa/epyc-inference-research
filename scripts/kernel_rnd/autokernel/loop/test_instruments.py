@@ -39,6 +39,7 @@ def _floor_row(recipe: serving.Recipe, floor_pct: float = 3.536) -> dict:
             "recipe_hash": recipe.recipe_hash, "recipe_env": dict(recipe.env or {}),
             "recipe_describe": recipe.describe(), "metric": recipe.metric,
             "np": recipe.np, "samples": 5, "median_tok_s": 71.2,
+            "unit": serving.CALIBRATION_UNIT, "n": 5,
             "floor_pct": floor_pct, "cv_pct": 1.2, "runs": [71.0, 71.2, 71.4],
             "spread": {"p95_dev_pct": floor_pct}}
 
@@ -165,13 +166,17 @@ class FloorIdentityRefusal(unittest.TestCase):
         serving.floor_path(self.store, RECIPE).write_text(
             json.dumps(_floor_row(other)), encoding="utf-8")
         with self.assertRaises(serving.ServingFloorMismatch):
-            instruments.read_floor(self.store, RECIPE, echo=lambda *_: None)
+            instruments.read_floor(self.store, RECIPE,
+                                   effect_unit=serving.COMPARE_EFFECT_UNIT,
+                                   echo=lambda *_: None)
 
     def test_an_absent_floor_is_refused_rather_than_bought_with_a_full_gate(self):
         """`decisive` would come back None, `classify_serving` would read that as
         DIVERGED: a verdict decided before the measurement started."""
         with self.assertRaises(instruments.InstrumentRefusal):
-            instruments.read_floor(self.store, RECIPE, echo=lambda *_: None)
+            instruments.read_floor(self.store, RECIPE,
+                                   effect_unit=serving.COMPARE_EFFECT_UNIT,
+                                   echo=lambda *_: None)
 
     def test_an_unstamped_floor_is_used_but_announced(self):
         row = _floor_row(RECIPE)
@@ -179,14 +184,18 @@ class FloorIdentityRefusal(unittest.TestCase):
         serving.floor_path(self.store, RECIPE).write_text(json.dumps(row),
                                                           encoding="utf-8")
         said = []
-        reading = instruments.read_floor(self.store, RECIPE, echo=said.append)
+        reading = instruments.read_floor(self.store, RECIPE,
+                                         effect_unit=serving.COMPARE_EFFECT_UNIT,
+                                         echo=said.append)
         self.assertEqual(reading.provenance, "unverified")
         self.assertEqual(reading.floor_pct, 3.536)
         self.assertTrue(any("recipe_hash" in line for line in said), said)
 
     def test_a_matching_floor_is_verified(self):
-        serving.write_floor(self.store, RECIPE, _floor_row(RECIPE))
-        reading = instruments.read_floor(self.store, RECIPE, echo=lambda *_: None)
+        serving.write_floor(self.store, RECIPE, _floor_row(RECIPE), unit=serving.CALIBRATION_UNIT)
+        reading = instruments.read_floor(self.store, RECIPE,
+                                   effect_unit=serving.COMPARE_EFFECT_UNIT,
+                                   echo=lambda *_: None)
         self.assertTrue(reading.verified)
 
 
@@ -241,7 +250,7 @@ class RecalibrationWritesThroughWriteFloor(unittest.TestCase):
 
     def test_the_previous_floor_is_backed_up_not_overwritten_blind(self):
         target = serving.floor_path(self.store, self.recipe)
-        serving.write_floor(self.store, self.recipe, _floor_row(self.recipe, 3.536))
+        serving.write_floor(self.store, self.recipe, _floor_row(self.recipe, 3.536), unit=serving.CALIBRATION_UNIT)
         self._run("--apply")
         backups = list(self.store.glob("*.bak"))
         self.assertEqual(len(backups), 1, backups)
@@ -296,7 +305,7 @@ class ServingGate(unittest.TestCase):
         self.store = self.root / "store"
         self.store.mkdir()
         self.recipe = serving.Recipe.load(SHIPPED_RECIPE)
-        serving.write_floor(self.store, self.recipe, _floor_row(self.recipe, 3.536))
+        serving.write_floor(self.store, self.recipe, _floor_row(self.recipe, 3.536), unit=serving.CALIBRATION_UNIT)
         self.cor = _build(self.root / "cor", "llama-server")
         self.tip = _build(self.root / "tip", "llama-server")
         self._bundle(compounded=12.0, keeps=["akm-a", "akm-b"])

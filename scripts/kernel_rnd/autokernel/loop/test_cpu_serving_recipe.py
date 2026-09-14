@@ -138,8 +138,9 @@ def test_unsupported_capability_and_forged_supported_record_refuse_before_popen(
 
 def test_write_floor_delegates_to_hardened_writer_and_propagates_fault():
     recipe = serving.Recipe(name="gpu", model="/m")
-    row = {"recipe_hash": recipe.recipe_hash, "floor_pct": 1.0}
+    row = {"recipe_hash": recipe.recipe_hash, "floor_pct": 1.0, "n": 5}
     with mock.patch.object(serving.status, "write_json", side_effect=OSError("fsync fault")) as write:
         with pytest.raises(OSError, match="fsync fault"):
-            serving.write_floor(Path("/store"), recipe, row)
+            serving.write_floor(Path("/store"), recipe, row,
+                                unit=serving.CALIBRATION_UNIT)
     assert write.call_args.kwargs["prefix"] == ".sv-floor-"

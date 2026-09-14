@@ -360,7 +360,8 @@ class SpreadReporting(unittest.TestCase):
         with mock.patch.object(serving, "_measure_once",
                                side_effect=[v for pair in zip(self.NOISY, self.TIGHT)
                                             for v in pair]):
-            out = serving.compare(BASE, Path("/a"), Path("/c"), pairs=5, floor_pct=1.0)
+            out = serving.compare(BASE, Path("/a"), Path("/c"), pairs=5, floor_pct=1.0,
+                                  floor_unit=serving.COMPARE_EFFECT_UNIT)
         self.assertEqual(out["anchor_spread"]["runs"], self.NOISY)
         self.assertEqual(out["candidate_spread"]["runs"], self.TIGHT)
         for key in ("n", "median", "mean", "sd", "cv_pct", "min", "max",
@@ -381,7 +382,8 @@ class SpreadReporting(unittest.TestCase):
         with mock.patch.object(serving, "_measure_once",
                                side_effect=[v for pair in zip(self.NOISY, self.TIGHT)
                                             for v in pair]):
-            out = serving.compare(BASE, Path("/a"), Path("/c"), pairs=5, floor_pct=1.0)
+            out = serving.compare(BASE, Path("/a"), Path("/c"), pairs=5, floor_pct=1.0,
+                                  floor_unit=serving.COMPARE_EFFECT_UNIT)
         self.assertAlmostEqual(out["effect_pct"], 0.0, places=9)   # medians identical
         self.assertFalse(out["decisive"])                          # verdict UNCHANGED
         self.assertGreater(out["anchor_spread"]["sd"], out["candidate_spread"]["sd"] * 5)
@@ -399,7 +401,8 @@ class SpreadReporting(unittest.TestCase):
 
     def test_a_single_pair_still_produces_a_well_formed_spread(self):
         with mock.patch.object(serving, "_measure_once", side_effect=[100.0, 120.0]):
-            out = serving.compare(BASE, Path("/a"), Path("/c"), pairs=1, floor_pct=1.0)
+            out = serving.compare(BASE, Path("/a"), Path("/c"), pairs=1, floor_pct=1.0,
+                                  floor_unit=serving.COMPARE_EFFECT_UNIT)
         self.assertEqual(out["anchor_spread"]["n"], 1)
         self.assertEqual(out["anchor_spread"]["sd"], 0.0)
         self.assertEqual(out["anchor_spread"]["p95_dev_pct"], 0.0)
@@ -411,7 +414,8 @@ class TheRecordStatesTheArm(unittest.TestCase):
     def test_the_ab_row_carries_the_env_and_the_recipe_hash(self):
         r = dataclasses.replace(BASE, env=dict(THP))
         with mock.patch.object(serving, "_measure_once", side_effect=[100.0, 120.0]):
-            out = serving.compare(r, Path("/a"), Path("/c"), pairs=1, floor_pct=1.0)
+            out = serving.compare(r, Path("/a"), Path("/c"), pairs=1, floor_pct=1.0,
+                                  floor_unit=serving.COMPARE_EFFECT_UNIT)
         self.assertEqual(out["recipe_env"], THP)
         self.assertEqual(out["recipe_hash"], r.recipe_hash)
         self.assertIn("GGML_NOHUGEPAGE_PROCESS=1", out["recipe_describe"])
@@ -429,7 +433,8 @@ class TheRecordStatesTheArm(unittest.TestCase):
         for r in (off, on):
             with mock.patch.object(serving, "_measure_once", side_effect=[100.0, 100.0]):
                 rows.append(serving.compare(r, Path("/a"), Path("/c"), pairs=1,
-                                            floor_pct=1.0))
+                                            floor_pct=1.0,
+                                            floor_unit=serving.COMPARE_EFFECT_UNIT))
         self.assertNotEqual(rows[0]["recipe_hash"], rows[1]["recipe_hash"])
         self.assertNotEqual(rows[0]["recipe_env"], rows[1]["recipe_env"])
         self.assertNotEqual(rows[0]["recipe"], rows[1]["recipe"])

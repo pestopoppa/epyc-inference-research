@@ -36,6 +36,7 @@ def comparison(monkeypatch, *, resolved=True, floor_pct=5.0):
 
     monkeypatch.setattr(serving, "_measure_once", measure)
     row = serving.compare(recipe, BUILD, BUILD, pairs=2, floor_pct=floor_pct,
+                          floor_unit=None if floor_pct is None else serving.COMPARE_EFFECT_UNIT,
                           anchor_resolved_recipe=launch, candidate_resolved_recipe=launch,
                           frozen_requests=requests,
                           floor_request_digest=serving.request_digest(recipe, requests))

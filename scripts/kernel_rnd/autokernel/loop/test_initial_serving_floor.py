@@ -32,10 +32,10 @@ def test_selected_startup_prepares_only_missing_exact_floor(backend, case):
             original_requests = (("different-original-request", requests[0][1]),) \
                 if case == "new_request" else requests
             retained_path = serving.write_floor(fixture.store, launch.template, {
-                "floor_pct": 7.801, "recipe_hash": launch.template.recipe_hash,
+                "floor_pct": 7.801, "n": 5, "recipe_hash": launch.template.recipe_hash,
                 "request_digest": serving.request_digest(launch.template, original_requests),
                 "fixture": "synthetic retained floor, not a new hardware claim"},
-                frozen_requests=original_requests)
+                frozen_requests=original_requests, unit=serving.CALIBRATION_UNIT)
             if case == "mismatch":
                 row = json.loads(retained_path.read_text())
                 row["recipe_hash"] = "0" * 64

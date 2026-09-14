@@ -32,6 +32,7 @@ def test_actual_serving_compare_row_preserves_existing_nonregression_policy(tmp_
     monkeypatch.setattr(serving, "_measure_once", measured)
     comparison = serving.compare(
         recipe, anchor_build, candidate_build, pairs=1, floor_pct=1.0,
+        floor_unit=serving.COMPARE_EFFECT_UNIT,
         anchor_resolved_recipe=anchor, candidate_resolved_recipe=candidate,
         frozen_requests=frozen, floor_request_digest=serving.request_digest(recipe, frozen))
     body = sv.row(source_commit="a" * 40, source_tree="b" * 40,
