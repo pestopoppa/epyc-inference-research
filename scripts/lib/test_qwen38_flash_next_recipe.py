@@ -353,11 +353,68 @@ class TestHeadlineHygiene(unittest.TestCase):
         That gap must be DECLARED and fail-closed, never papered over."""
         self.assertFalse(R.CHAMPION_PIN_RESOLVED)
         self.assertTrue(R.CHAMPION_PIN_GAP)
+        # ★ These stay None even though digested builds of ef81196d5 now exist: they
+        # describe the HEADLINE's binary, which is a different (unidentified) build.
+        # Filling them in from CURRENT_CHAMPION["builds"] is the exact silent relabel
+        # the flag exists to prevent.
         self.assertIsNone(R.CURRENT_CHAMPION["build_number"])
         self.assertIsNone(R.CURRENT_CHAMPION["sha256"])
         # The prior champion is an ANCESTOR of the current one, not the champion.
         self.assertEqual(R.CURRENT_CHAMPION["lineages_by_ancestry"]["cpu_lineage"],
                          R.CHAMPION_COMMIT[:9])
+
+    def test_the_full_sha_is_recorded_and_the_short_form_is_its_prefix(self):
+        full = R.CURRENT_CHAMPION["commit_full"]
+        self.assertEqual(len(full), 40)
+        int(full, 16)
+        self.assertTrue(full.startswith(R.CURRENT_CHAMPION["commit"]))
+        self.assertTrue(R.CURRENT_CHAMPION["source_tree_clean"])
+
+    def test_both_surfaces_have_a_digested_build_labelled_by_surface(self):
+        """★ One entry per surface, each saying whether it is a HIP build. A CPU recipe
+        pinned to a HIP build's bundled libggml-cpu.so is a wrong pin that looks right."""
+        builds = R.CURRENT_CHAMPION["builds"]
+        self.assertEqual(set(builds), {"gpu-serving", "cpu-decode"})
+        self.assertTrue(builds["gpu-serving"]["is_hip_build"])
+        self.assertFalse(builds["cpu-decode"]["is_hip_build"])
+        for surface, spec in builds.items():
+            self.assertEqual(spec["build_number"], 10301, surface)
+            self.assertEqual(spec["commit_in_build_info"], "ef81196d5", surface)
+            for name, digest in spec["digests"].items():
+                self.assertEqual(len(digest), 64, f"{surface}/{name}")
+                int(digest, 16)
+        # The two builds' CPU backends are DIFFERENT objects: same commit, different
+        # configuration, so the digests must not be equal.
+        self.assertNotEqual(
+            builds["gpu-serving"]["digests"]["libggml-cpu.so.0.16.0"],
+            builds["cpu-decode"]["digests"]["libggml-cpu.so.0.16.0"],
+        )
+        # The GPU build's two doc-recorded digests were reproduced from the tree.
+        self.assertTrue(builds["gpu-serving"]["digests_confirmed_against_doc"])
+        # And the CPU build's cmake is the recipe's own cmake, not a lookalike.
+        self.assertTrue(builds["cpu-decode"]["cmake_matches_champion_cmake_args"])
+
+    def test_the_gap_names_the_measurement_not_a_missing_digest(self):
+        """★ The gap was NARROWED, not closed. Digests exist now; the headline's binary
+        is still unidentified (build 10303 vs the builds' 10301), and THAT is why the
+        flag stays False. A gap text still claiming 'no digests exist' would be stale in
+        a way every reader would act on."""
+        gap = R.CHAMPION_PIN_GAP
+        self.assertIn("10303", gap)
+        self.assertIn("10301", gap)
+        self.assertIn("build-champion-ef81196d5-cpu-20260909", gap)
+        self.assertIn("build-fold-ef81196d5", gap)
+        headline = R.HEADLINES[R.CANONICAL_HEADLINE]
+        self.assertEqual(headline["binary_build_number"], 10303)
+        self.assertNotEqual(
+            headline["binary_build_number"],
+            R.CURRENT_CHAMPION["builds"]["cpu-decode"]["build_number"],
+        )
+        # The instrument branch the numbers actually came off is named, and it is the
+        # same one do_not_fold already refuses to merge.
+        self.assertIn("2516c9807", headline["binary_gap"])
+        self.assertIn("2516c9807",
+                      " ".join(R.CURRENT_CHAMPION["do_not_fold"]))
 
     def test_do_not_fold_list_is_carried(self):
         """★ Folding a superseded decision is a failure ancestry cannot see."""

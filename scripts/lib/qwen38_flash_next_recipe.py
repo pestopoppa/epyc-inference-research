@@ -194,12 +194,16 @@ MTP_HEAD_REJECTED = {
 #   Standing rule: THE CHAMPION IS ALWAYS CURRENT.
 # ★ THE PIN IS NOT YET RESOLVED TO THE CURRENT CHAMPION, AND THE MODULE SAYS SO.
 # CHAMPION_* below still name the PIN-VERIFIABLE artifact (champion3, build 10241),
-# because that is the only tree whose object digests were measured. The CURRENT
-# champion is the folded ef81196d5, for which no build number and no digests exist
-# yet. Rather than pin a half-known artifact or silently keep naming a superseded
-# one, the module carries BOTH and refuses to certify identity until WRAP-10 resolves
-# it (CHAMPION_PIN_RESOLVED). A recipe that quietly names last week's champion is the
-# failure this module exists to prevent.
+# because that is the only tree whose object digests AND served numbers were measured
+# TOGETHER. Rather than pin a half-known artifact or silently keep naming a superseded
+# one, the module carries BOTH and refuses to certify identity while
+# CHAMPION_PIN_RESOLVED is False. A recipe that quietly names last week's champion is
+# the failure this module exists to prevent.
+#
+# ★ 2026-09-14 (WRAP-10 follow-up): ef81196d5 DOES have digested builds now -- two of
+#   them, one per surface -- and they are recorded in CURRENT_CHAMPION["builds"]. The
+#   gap that keeps the flag False is NO LONGER "no build exists"; it is that neither of
+#   them is the binary the canonical headline was measured on. See CHAMPION_PIN_GAP.
 # ⚠⚠ THE CHAMPION_* NAMES BELOW ARE THE **MEASUREMENT PIN**, NOT THE CURRENT CHAMPION.
 # They name champion3 (`9c4f73e29`, build 10241) because that is the ONLY tree whose
 # object digests, knob markers and served numbers were ever measured. Every digest,
@@ -227,7 +231,13 @@ CHAMPION_PIN_MEASURED_AT = {
 # Reconciled 2026-09-14 (WRAP-10) against handoffs/active/CURRENT-CAMPAIGN.md (top
 # banner) and docs/design/champion-max-performance-20260908.md, both in epyc-root.
 CURRENT_CHAMPION = {
-    "commit": "ef81196d5",          # ⚠ SHORT FORM -- full sha not yet recorded here
+    "commit": "ef81196d5",          # short form, as every record quotes it
+    # ★ FULL SHA, recorded 2026-09-14. Source: docs/design/champion-max-performance-
+    # 20260908.md §2.1 (epyc-root, CANONICAL), and confirmed independently by
+    # `git rev-parse HEAD` in the build's own source tree (clean, see source_dir).
+    "commit_full": "ef81196d5bdd4190b46dff4ae7eecc333a46c8ce",
+    "source_dir": "/mnt/raid0/llm/tmp/champ2",   # tree CLEAN at the full sha above
+    "source_tree_clean": True,
     # ★ THE CONSOLIDATED CHAMPION BRANCH. Was "inf70/fold-candidate-20260908" in the
     # draft -- that was the FOLD CANDIDATE, the branch the merge was staged on, not the
     # branch the champion lives on. The consolidated champion is on the AutoKernel
@@ -236,8 +246,85 @@ CURRENT_CHAMPION = {
     "fold_candidate_branch": "inf70/fold-candidate-20260908",  # provenance of the merge
     "recipe": "GGML_NOHUGEPAGE_PROCESS=1 at launch (see CHAMPION_GGML_ENV / THP_SHIM)",
     "recipe_surface": SURFACE,      # ★ CPU DECODE ONLY -- see SURFACE_RECIPES
-    "build_number": None,           # ⚠ NOT MEASURED -- do NOT reuse 10241
-    "sha256": None,                 # ⚠ NOT MEASURED
+    # ⚠ THESE TWO STAY None ON PURPOSE. They describe the binary the CANONICAL HEADLINE
+    # was measured on, and that binary is UNIDENTIFIED (build 10303 -- see
+    # CHAMPION_PIN_GAP and HEADLINES[...]["binary_gap"]). The builds of ef81196d5 that
+    # DO exist and ARE digested live in "builds" below; they are not this. Filling these
+    # in from "builds" would assert that a headline came off a binary it never touched.
+    "build_number": None,
+    "sha256": None,
+    # ★ DIGESTED BUILDS OF ef81196d5, one entry per surface. Recorded 2026-09-14 by
+    # inspection only -- no build, no exec: build numbers come from each build dir's
+    # generated `common/build-info.cpp` (`LLAMA_BUILD_NUMBER`), surface flags from its
+    # `CMakeCache.txt`, digests from `sha256sum` over the objects on disk.
+    "builds": {
+        "gpu-serving": {
+            "build_dir": "/mnt/raid0/llm/tmp/build-fold-ef81196d5",
+            "build_number": 10301,
+            "commit_in_build_info": "ef81196d5",
+            "compiler": "GNU 15.2.0",
+            "surface_flags": "GGML_HIP=ON, AMDGPU_TARGETS=gfx90a, "
+                             "GGML_HIP_ROCWMMA_FATTN=ON, GGML_NATIVE=ON, GGML_CUDA=OFF",
+            "is_hip_build": True,
+            "digests": {
+                # ★ These two REPRODUCE the digests recorded in
+                # docs/design/champion-max-performance-20260908.md §2.1 -- verified byte
+                # for byte on 2026-09-14, so the doc and the tree agree.
+                "llama-server":
+                    "869effe5f5cda7f72bd78c8ee168a30f5878b3f32558cd0c02cd38a62a77db37",
+                "libllama-common.so.0.0.10301":
+                    "51e26826d5c183451c3d77f664439ad283259c3887c6f49497e9b7d5de389b4b",
+                # Not in the doc; digested here so the build is fully identified.
+                "libggml-hip.so.0.16.0":
+                    "2aae58a1d437c51c1d54dca4206f82fa017b9df1297024c17c94f24066a28e5c",
+                "libggml-cpu.so.0.16.0":
+                    "ab20aab32aa70a3b1ce354617448ee74ef1eb95833ebfeaca3b760e9d1460def",
+                "libggml-base.so.0.16.0":
+                    "884d1bd7a7bcae4f4c89c824fe0774f73609425f0575dc9a372c3a4044a30731",
+                "libllama.so.0.0.10301":
+                    "7c50f6c27e76d3a3c41e31910841cadf54ff5457cbf4bb041e87f529ca34c630",
+            },
+            "digests_confirmed_against_doc": True,
+            "note": (
+                "A HIP build. It ships a libggml-cpu.so like every llama.cpp build "
+                "does, but that object is NOT this recipe's CPU artifact: its digest "
+                "differs from the CPU-surface build's because the two were configured "
+                "differently. Do not pin a CPU recipe to a HIP build's CPU backend."
+            ),
+        },
+        "cpu-decode": {
+            "build_dir": "/mnt/raid0/llm/tmp/build-champion-ef81196d5-cpu-20260909",
+            "build_number": 10301,
+            "commit_in_build_info": "ef81196d5",
+            "compiler": "GNU 15.2.0",
+            "surface_flags": "GGML_HIP=OFF, GGML_CUDA=OFF, GGML_BLAS=OFF, "
+                             "GGML_NATIVE=ON, GGML_OPENMP=ON, GGML_LLAMAFILE=ON, "
+                             "GGML_BACKEND_DL=OFF, GGML_CPU_ALL_VARIANTS=OFF, "
+                             "BUILD_SHARED_LIBS=ON, Release",
+            "is_hip_build": False,
+            "cmake_matches_champion_cmake_args": True,
+            "digests": {
+                "llama-server":
+                    "49dd0219f0490cee98ad713c7e8ea45d78069cf8b06809c053b711680c45b236",
+                "libllama-common.so.0.0.10301":
+                    "64948e27bfd575020748c5f30d37b9e7be2e48686d6886213963d287667a493a",
+                "libggml-cpu.so.0.16.0":
+                    "08da58d0fc8d9604f6ecdd38aa70977afbfb1335cc0d188592e435221d8b1748",
+                "libggml-base.so.0.16.0":
+                    "bd232a742722e3ccc1cf99a28e6f48ea15e2778ff8cd75d181991d5d80bbdd14",
+                "libllama.so.0.0.10301":
+                    "1b3885c8b93a8377592f2808550068b571d2264a3d1d8e02064c92117462a006",
+            },
+            "digests_confirmed_against_doc": False,   # no doc records them; first record
+            "note": (
+                "★ A GENUINE CPU-SURFACE BUILD OF THE CURRENT CHAMPION EXISTS, and its "
+                "cmake configuration matches CHAMPION_CMAKE_ARGS. It is still NOT a "
+                "valid pin for this module's numbers: built 2026-09-09, a DAY AFTER the "
+                "canonical headline window, and it appears in no handoff or run record. "
+                "Nothing was ever measured on it. See CHAMPION_PIN_GAP."
+            ),
+        },
+    },
     "folded": "2026-09-08",
     "consolidated": "2026-09-08",   # FOLD-2 G1-G5 all PASS; fold queue EMPTY
     "identity": "ef81196d5 = GPU tip bff30cebe + CPU champion3 9c4f73e29",
@@ -276,13 +363,26 @@ CURRENT_CHAMPION = {
 # certifying the current champion's binary.
 CHAMPION_PIN_RESOLVED = False
 CHAMPION_PIN_GAP = (
-    "CHAMPION_* name champion3 (build 10241, digests measured). CURRENT_CHAMPION is "
-    "ef81196d5 with no build number and no digests. WRAP-10 (2026-09-14) took the "
-    "second of the two options it was given: the module is LANDED with this flag "
-    "False and a loud refusal in preflight (assert_current_champion_identity, and the "
-    "stderr banner preflight() always prints). Closing the gap means rebuilding at "
-    "ef81196d5, re-digesting, and only then setting this flag True -- never by "
-    "relabelling champion3's digests."
+    "NARROWED 2026-09-14 (WRAP-10 follow-up). The gap is NO LONGER 'ef81196d5 has no "
+    "digested build' -- it has two, both build 10301, both recorded in "
+    "CURRENT_CHAMPION['builds']: a GPU/HIP build at /mnt/raid0/llm/tmp/build-fold-"
+    "ef81196d5 (digests reproduce docs/design/champion-max-performance-20260908.md "
+    "byte for byte) and a CPU-surface build at /mnt/raid0/llm/tmp/build-champion-"
+    "ef81196d5-cpu-20260909 whose cmake matches CHAMPION_CMAKE_ARGS. "
+    "THE GAP THAT REMAINS IS NARROWER AND WORSE: neither is the binary this module's "
+    "CANONICAL HEADLINE was measured on. The final-characterisation run record "
+    "(retest1/CHAMPION-FINAL.md, the 18-launch window behind "
+    "HEADLINES['champion_final_20260908']) identifies its champion arm as 'bin-r1 "
+    "(10303)' -- build 10303, NOT 10301 -- and the module's own do_not_fold entry says "
+    "inf70/retest1-fix1 @ 2516c9807 'is the binary the final numbers came from'. So the "
+    "headline was produced by an INSTRUMENT build that is not ef81196d5, and the "
+    "ef81196d5 CPU build that does exist postdates that window by a day and appears in "
+    "no run record: nothing was ever measured on it. "
+    "Setting this flag True would therefore certify a binary that produced none of the "
+    "numbers here -- the same defect one level up. It stays False, with a loud refusal "
+    "in preflight (assert_current_champion_identity, plus the stderr banner preflight() "
+    "always prints). Closing it needs a MEASUREMENT on a digested ef81196d5 CPU build, "
+    "not another digest."
 )
 # Byte-identical preserved copy of the same binaries (survives a worktree rebuild):
 CHAMPION_BINDIR_ARCHIVE = "/mnt/raid0/llm/tmp/inf70/agents/champion3/bin-c3"
@@ -622,6 +722,18 @@ HEADLINES = {
 # 18 launches, none dropped, all 24/24 rows complete, shim ON verified per launch.
 HEADLINES["champion_final_20260908"] = {
     "binary": "ef81196d5 (folded champion) + GGML_NOHUGEPAGE_PROCESS=1 at launch",
+    # ⚠ THE BINARY THIS HEADLINE ACTUALLY CAME OFF IS NOT IDENTIFIED. Recorded
+    # 2026-09-14; do not remove this field to make the entry look tidy.
+    "binary_build_number": 10303,
+    "binary_gap": (
+        "The run record (retest1/CHAMPION-FINAL.md §2) names the champion arm "
+        "'bin-r1 (10303)'. Both digested builds of ef81196d5 are build 10301, so the "
+        "headline's binary is NEITHER of them -- it is the retest1-fix1 instrument "
+        "(@ 2516c9807), which do_not_fold already records as 'the binary the final "
+        "numbers came from'. The prose calls it ef81196d5 because that was the "
+        "baseline; the build number says otherwise. No digests exist for 10303. "
+        "This is why CHAMPION_PIN_RESOLVED is False."
+    ),
     "window": "2026-09-08 15:05:39Z-16:12:47Z, GPU loop down, host exclusive",
     "prereg": "PREREG-FINAL.md frozen 15:05:15Z sha256 1d8f4ddc... BEFORE the lock",
     "unit": "LAUNCH",
@@ -917,7 +1029,16 @@ PIN_GAP_BANNER = (
     "================================================================================\n"
     "  WARNING -- THIS RECIPE'S BINARY PIN IS NOT THE CURRENT CHAMPION.\n"
     f"  pin      : {CHAMPION_COMMIT[:9]} (champion3, build {CHAMPION_BUILD_NUMBER}) -- digests measured\n"
-    f"  champion : {CURRENT_CHAMPION['commit']} on {CURRENT_CHAMPION['branch']} -- NO digests, NO build number\n"
+    f"  champion : {CURRENT_CHAMPION['commit_full']}\n"
+    f"             on {CURRENT_CHAMPION['branch']}\n"
+    "  builds   : "
+    + ", ".join(
+        "%s=b%s" % (surface, spec["build_number"])
+        for surface, spec in CURRENT_CHAMPION["builds"].items()
+    )
+    + " (digested, but NOTHING was measured on either)\n"
+    f"  headline : came off build {HEADLINES['champion_final_20260908']['binary_build_number']},"
+    " which is neither of those and has NO digests\n"
     "  A number produced under this pin is a champion3 number. Do NOT quote it as a\n"
     "  current-champion number. See CHAMPION_PIN_GAP.\n"
     "================================================================================\n"
