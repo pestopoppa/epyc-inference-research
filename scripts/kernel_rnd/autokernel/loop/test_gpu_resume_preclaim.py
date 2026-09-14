@@ -122,6 +122,30 @@ def test_preclaim_marker_is_bound_to_the_issued_selection(tmp_path):
     }
 
 
+def test_stopped_resume_publishes_scheduled_preclaim_marker(tmp_path, monkeypatch):
+    selection = SimpleNamespace(digest="d" * 64)
+    target = {"selected_id": "cpu"}
+    scheduler = tmp_path / "selection.json"
+    scheduler.write_text("{}")
+    args = SimpleNamespace(
+        scheduler_selection=scheduler,
+        out=tmp_path,
+    )
+    monkeypatch.setattr(scheduling.Selection, "from_dict", lambda _body: selection)
+    monkeypatch.setattr(serial_run, "_selected_identity", lambda _argv: target)
+
+    run._publish_early_preclaim_failure(
+        args, ["--target-id", "cpu"], ValueError("stopped continuation"))
+
+    marker = json.loads((tmp_path / "loop-preclaim-failure.json").read_text())
+    assert marker == {
+        "schema": "epyc.autokernel.preclaim_failure.v1",
+        "selection_digest": selection.digest,
+        "target": target,
+        "error_type": "ValueError",
+    }
+
+
 def test_missing_accounting_evidence_reports_contract_failure_not_enoent(
         tmp_path, monkeypatch):
     selection = SimpleNamespace(digest="b" * 64)

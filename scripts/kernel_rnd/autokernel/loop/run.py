@@ -104,6 +104,24 @@ def _publish_preclaim_failure(out, scheduler_selection, target, error) -> None:
     }, prefix=".preclaim-failure-")
 
 
+def _publish_early_preclaim_failure(args, original_argv, error) -> None:
+    """Settle a scheduled refusal that occurs before target preparation.
+
+    Resume validation deliberately runs before the ordinary enrolled-target and
+    scheduler-selection preparation below.  A refusal at that boundary still
+    belongs to the selection issued by the serial parent, so reconstruct the
+    same target identity from the immutable input binding and publish the
+    pre-claim marker before argparse exits.
+    """
+    if args.scheduler_selection is None or args.out is None:
+        return
+    from . import scheduling, serial_run
+    selection = scheduling.Selection.from_dict(
+        _read_cpu_document(args.scheduler_selection))
+    _publish_preclaim_failure(
+        args.out, selection, serial_run._selected_identity(original_argv), error)
+
+
 def _publish_claim_acquired(out, scheduler_selection, target, contexts) -> None:
     """Durably distinguish an acquired claim from a pre-claim failure.
 
@@ -555,6 +573,13 @@ def main(argv: list[str] | None = None) -> int:
             prior, _sha = serial_run.load_resume(args.resume_run, original_argv)
             resumed = prior
             if resumed["terminal"] == "stopped":
+                refusal = ValueError(
+                    "preceding batch was stopped; explicit new session required")
+                try:
+                    _publish_early_preclaim_failure(args, original_argv, refusal)
+                except Exception as marker_error:
+                    print(f"pre-claim failure marker unavailable: {marker_error}",
+                          file=sys.stderr)
                 parser.error("preceding batch was stopped; explicit new session required")
             if Path(resumed["worktree"]).resolve() != args.worktree.resolve():
                 parser.error("continuation worktree differs")
