@@ -102,13 +102,33 @@ def test_actual_planner_prompt_contains_sampled_symbols_or_unavailable_reason(tm
         "status": "observed", "record": "/original/cpu-profile.json", "record_sha256": "b" * 64,
         "execution_digest": "a" * 64, "prompt_manifest_digest": "c" * 64,
         "hotspots": [{"dso": "libggml-cpu.so", "symbol": "synthetic_kernel",
-            "period": 400, "sampled_period_fraction": 0.25}]}}
+            "period": 400, "sampled_period_fraction": 0.25}],
+        "ranked_levers": [{"family": "quantized-matmul-q4", "period": 400,
+            "sampled_period_fraction": 0.25, "symbols": [],
+            "evidence_kind": "current-request-sampled-user-cycles"}]}}
     with patch.object(actors, "_run_agent", side_effect=provider):
         actors.AgentPlanner(tmp_path).propose(context)
         context["cpu_profile"] = {"status": "unavailable", "reason": "perf permission denied"}
         actors.AgentPlanner(tmp_path).propose(context)
     assert "synthetic_kernel" in emitted[0] and "25.00% | 400" in emitted[0]
+    assert "quantized-matmul-q4" in emitted[0]
+    assert "highest-share unresolved causal mechanism" in emitted[0]
     assert "/original/cpu-profile.json" in emitted[0]
     assert "not exact CPU cost, wall-time share" in emitted[0]
     assert "| share | ns | calls |" not in emitted[0] and "no profile yet" not in emitted[0]
     assert "CPU profile unavailable: perf permission denied" in emitted[1]
+
+
+def test_ranked_levers_aggregate_symbols_without_model_hardcoding():
+    rows = [
+        {"dso": "/build/libggml-cpu.so", "symbol": "ggml_vec_dot_q8_0_q8_0", "period": 270},
+        {"dso": "/build/libggml-cpu.so", "symbol":
+         "mul_mat_qX_K_q8_2_X4_T<DequantizerQ4K_AVX2, 1>", "period": 200},
+        {"dso": "/build/libggml-cpu.so", "symbol": "ggml_barrier", "period": 120},
+        {"dso": "/usr/lib/libgomp.so", "symbol": "[unknown]", "period": 80},
+    ]
+    ranked = cp.ranked_levers(rows, 1000)
+    assert [row["family"] for row in ranked[:3]] == [
+        "dense-q8-dot-matmul", "quantized-matmul-q4",
+        "thread-synchronization-and-work-balance"]
+    assert ranked[2]["sampled_period_fraction"] == pytest.approx(0.2)

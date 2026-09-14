@@ -292,6 +292,19 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
             for row in observation.get("hotspots", [])[:limit]:
                 lines.append(f"| {row['sampled_period_fraction'] * 100:.2f}% | {row['period']} | "
                              f"`{row.get('dso')}` | `{row['symbol']}` |")
+            ranked = observation.get("ranked_levers") or []
+            if ranked:
+                lines.append("")
+                lines.append("### Ranked mechanism families from that same profile")
+                lines.append("This is a lossless grouping of the sampled symbols above, not a "
+                             "speedup estimate. Start with the highest-share unresolved causal "
+                             "mechanism; do not spend the iteration on a lower-share cosmetic "
+                             "variant without explaining why.")
+                lines.append("| rank | sampled-period fraction | mechanism family | evidence |")
+                lines.append("|---|---|---|---|")
+                for rank, row in enumerate(ranked[:limit], 1):
+                    lines.append(f"| {rank} | {row['sampled_period_fraction'] * 100:.2f}% | "
+                                 f"`{row['family']}` | {row['evidence_kind']} |")
             lines.extend(observation.get("limitations", []))
         else:
             lines.append(f"CPU profile {observation.get('status')}: "

@@ -1108,6 +1108,49 @@ def _loop_claim(body, artifact, observed_date):
             "model_inventory_verification": "not performed by direct profiler"}}
 
 
+def ranked_levers(symbol_periods, total, *, limit=8):
+    """Project sampled symbols into quantitative, model-agnostic mechanism families.
+
+    The raw symbol table remains the evidence.  This bounded projection prevents an
+    actor from seeing twelve unrelated spellings while missing that several rows are
+    one large mechanism family.  It assigns no speedup and deliberately leaves an
+    unrecognised symbol as its own family rather than guessing its semantics.
+    """
+    if type(total) not in (int, float) or total <= 0:
+        raise CpuProfileRefused("ranked lever total must be positive")
+    groups = {}
+    for row in symbol_periods:
+        symbol = str(row.get("symbol", ""))
+        dso = str(row.get("dso", ""))
+        lowered = symbol.lower()
+        if "mul_mat_q" in lowered and ("q4" in lowered or "dequantizerq4" in lowered):
+            family = "quantized-matmul-q4"
+        elif "mul_mat_q" in lowered and ("q5" in lowered or "dequantizerq5" in lowered):
+            family = "quantized-matmul-q5"
+        elif "mul_mat_q" in lowered and ("q6" in lowered or "dequantizerq6" in lowered):
+            family = "quantized-matmul-q6"
+        elif "vec_dot_q8" in lowered or "tinyblas_q0" in lowered:
+            family = "dense-q8-dot-matmul"
+        elif "barrier" in lowered or "gomp" in dso.lower():
+            family = "thread-synchronization-and-work-balance"
+        elif "vec_dot_f32" in lowered:
+            family = "dense-f32-dot"
+        elif symbol == "[unknown]":
+            family = "unresolved-symbol:" + Path(dso).name
+        else:
+            family = "symbol:" + symbol
+        group = groups.setdefault(family, {"family": family, "period": 0,
+            "symbols": [], "evidence_kind": "current-request-sampled-user-cycles"})
+        group["period"] += int(row["period"])
+        if len(group["symbols"]) < 4:
+            group["symbols"].append({"dso": dso, "symbol": symbol,
+                                     "period": int(row["period"])})
+    ranked = sorted(groups.values(), key=lambda row: (-row["period"], row["family"]))
+    for row in ranked:
+        row["sampled_period_fraction"] = row["period"] / total
+    return ranked[:limit]
+
+
 def profile_loop(recipe, prompts, *, store_root, perf_path="/usr/bin/perf",
                  timeout_s=1800, server_interpreter=None):
     """Separate observational launch using the loop's actual current binary and requests."""
@@ -1141,13 +1184,15 @@ def profile_loop(recipe, prompts, *, store_root, perf_path="/usr/bin/perf",
             original = reopen_loop_profile(exported.to_dict(), store=store)
             measured = original["phases"][1]["samples"]
             total = measured["sampled_period_total"]
+            symbols = sorted(measured["symbol_periods"],
+                key=lambda row: (-row["period"], row["dso"], row["symbol"]))
             return {"status": "observed", "record": str(store.root / exported.locator),
                 "record_sha256": exported.sha256, "execution_digest": recipe.execution_digest,
                 "prompt_manifest_digest": prompts.digest, "sampled_period_total": total,
                 "samples": measured["samples"], "limitations": list(LIMITATIONS),
                 "hotspots": [{**_plain(row), "sampled_period_fraction": row["period"] / total}
-                    for row in sorted(measured["symbol_periods"],
-                        key=lambda row: (-row["period"], row["dso"], row["symbol"]))[:12]]}
+                             for row in symbols[:12]],
+                "ranked_levers": ranked_levers(symbols, total)}
         except BaseException as exc:
             if capture is not None:
                 capture.abort(f"{type(exc).__name__}: {exc}")
