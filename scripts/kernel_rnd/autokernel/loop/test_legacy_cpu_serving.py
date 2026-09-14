@@ -73,12 +73,14 @@ def test_actual_cpu_http_comparison_and_request_bound_calibration(tmp_path, monk
     requests = _requests()
     floor = serving.calibrate_floor(recipe, Path(anchor.build_dir), samples=2, port=port,
                                     resolved_recipe=anchor, frozen_requests=requests)
-    path = serving.write_floor(tmp_path / "floors", recipe, floor, frozen_requests=requests)
+    path = serving.write_floor(tmp_path / "floors", recipe, floor, frozen_requests=requests,
+                               unit=serving.CALIBRATION_UNIT)
     reading = serving.load_floor(tmp_path / "floors", recipe, frozen_requests=requests)
     assert reading.verified and reading.path == path
     assert reading.request_digest == serving.request_digest(recipe, requests)
     row = serving.compare(recipe, Path(anchor.build_dir), Path(candidate.build_dir), pairs=1,
-        floor_pct=reading.floor_pct, floor_request_digest=reading.request_digest, port=port,
+        floor_pct=reading.floor_pct, floor_unit=reading.unit,
+        floor_request_digest=reading.request_digest, port=port,
         anchor_resolved_recipe=anchor, candidate_resolved_recipe=candidate, frozen_requests=requests)
     assert row["anchor_samples"] == [20.0] and row["candidate_samples"] == [24.0]
     assert row["effect"] == pytest.approx(0.2) and row["decisive"] is True
@@ -113,26 +115,30 @@ def test_forwarding_refuses_partial_or_mismatched_arm_before_any_measurement(mon
                         anchor_resolved_recipe=anchor, candidate_resolved_recipe=candidate)
     with pytest.raises(serving.ServingFloorMismatch, match="request"):
         serving.compare(recipe, Path("/a"), Path("/c"), pairs=1, floor_pct=1.0,
+                        floor_unit=serving.COMPARE_EFFECT_UNIT,
                         frozen_requests=_requests())
 
 
 def test_custom_requests_cannot_borrow_or_overwrite_legacy_floor(tmp_path):
     recipe = serving.Recipe(name="cpu", model="/m", device="none", ngl=0, np=2)
     requests = _requests()
-    legacy = serving.write_floor(tmp_path, recipe, {"floor_pct": 1.0})
+    legacy = serving.write_floor(tmp_path, recipe, {"floor_pct": 1.0, "n": 5},
+                                 unit=serving.CALIBRATION_UNIT)
     before = legacy.read_bytes()
     assert serving.load_floor(tmp_path, recipe, frozen_requests=requests).floor_pct is None
     assert serving.floor_path(tmp_path, recipe, frozen_requests=requests) != legacy
-    row = {"floor_pct": 2.0, "recipe_hash": recipe.recipe_hash,
+    row = {"floor_pct": 2.0, "n": 5, "recipe_hash": recipe.recipe_hash,
            "request_digest": serving.request_digest(recipe, requests)}
-    path = serving.write_floor(tmp_path, recipe, row, frozen_requests=iter(requests))
+    path = serving.write_floor(tmp_path, recipe, row, frozen_requests=iter(requests),
+                               unit=serving.CALIBRATION_UNIT)
     assert legacy.read_bytes() == before
     changed = ((requests[0][0], requests[0][1] + b" "), requests[1])
     assert serving.load_floor(tmp_path, recipe, frozen_requests=changed).floor_pct is None
     with pytest.raises(serving.ServingFloorMismatch):
-        serving.write_floor(tmp_path, recipe, row, frozen_requests=changed)
+        serving.write_floor(tmp_path, recipe, row, frozen_requests=changed,
+                            unit=serving.CALIBRATION_UNIT)
     with pytest.raises(serving.ServingFloorMismatch):
-        serving.write_floor(tmp_path, recipe, row)
+        serving.write_floor(tmp_path, recipe, row, unit=serving.CALIBRATION_UNIT)
     row.pop("request_digest")
     path.write_text(json.dumps(row))
     with pytest.raises(serving.ServingFloorMismatch):

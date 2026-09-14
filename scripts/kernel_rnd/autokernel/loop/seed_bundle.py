@@ -31,7 +31,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-from . import accumulate, bench, instruments, pool, status
+from . import accumulate, bench, instruments, pool, serving, status
 
 
 def measure(cor_build: Path, tip_build: Path, model: Path, *, pairs: int,
@@ -85,6 +85,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pairs", type=int, default=20)
     parser.add_argument("--floor", type=float, default=0.638,
                         help="tg128 noise floor %%, calibrated 2026-09-04 at 20 pairs")
+    parser.add_argument("--floor-unit", default=bench.FLOOR_UNIT, choices=serving.FLOOR_UNITS,
+                        help="the UNIT --floor was measured in (default: %(default)s). The "
+                             "seeding A/B is between-PROCESS (arms alternate across "
+                             "llama-bench invocations), so a floor of any other unit "
+                             "REFUSES rather than being rescaled (R23-55)")
     parser.add_argument("--measurement-out", type=Path, default=None,
                         help="where the raw comparison is recorded "
                              "(default: <store>/seed-measurement.json)")
@@ -112,7 +117,10 @@ def main(argv: list[str] | None = None) -> int:
         # checked nothing; a check that cannot fail is worse than an honest precondition.
         print(f"lineage   cor {args.cor} -> tip {tip[:12]}: {len(keeps)} keeps: {keeps}")
         print(f"builds    cor {args.cor_build}\n          tip {args.tip_build}")
-        print(f"surface   tg128, {args.pairs} alternating pairs, floor {args.floor}%")
+        # The bar and the effect must be in the SAME unit; refused before anything runs.
+        serving.check_unit(args.floor_unit, bench.FLOOR_UNIT, what="--floor")
+        print(f"surface   tg128, {args.pairs} alternating pairs, floor {args.floor}% "
+              f"(unit {args.floor_unit})")
         print(f"posture   {posture.describe()}")
         if posture.dry_run:
             print("\nDRY RUN -- nothing measured. Pass --execute to run the paired A/B "
@@ -120,7 +128,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         comparison = measure(args.cor_build, args.tip_build, args.model,
                              pairs=args.pairs, floor_pct=args.floor)
-    except instruments.InstrumentRefusal as refusal:
+    except (instruments.InstrumentRefusal, serving.FloorUnitMismatch) as refusal:
         print(f"REFUSED: {refusal}", file=sys.stderr)
         return instruments.REFUSED
     print(f"MEASURED compounded tip-vs-cor: {comparison['effect_pct']:+.3f}%  "

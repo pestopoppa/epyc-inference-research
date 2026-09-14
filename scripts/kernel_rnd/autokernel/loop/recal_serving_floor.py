@@ -100,9 +100,16 @@ def main(argv: list[str] | None = None) -> int:
         "cpu_list": recipe.cpu_list,
         "host_state": args.host_state or "hand-run recalibration (autokernel loop DOWN)",
         "harness": "serving.calibrate_floor A/A, one build, fresh server per sample",
+        # The unit is a first-class field of the record (`write_floor` stamps it below); it
+        # is repeated in the human-readable conditions because the harness sentence above
+        # is what makes it CHECKABLE -- "fresh server per sample" is exactly what makes
+        # this dispersion a between-PROCESS one rather than a within-session one.
+        "unit": serving.CALIBRATION_UNIT,
         "calibrated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
     runs = [round(value, 2) for value in row.get("runs", [])]
+    print(f"unit      {serving.CALIBRATION_UNIT} (n={args.samples}); a floor is only a bar "
+          f"for an effect measured in the SAME unit")
     print(f"floor_pct {row['floor_pct']:.3f}% (cv {row['cv_pct']:.3f}%, median "
           f"{row['median_tok_s']:.2f} tok/s, runs {runs}) [{time.time() - started:.0f}s]")
     if not posture.apply:
@@ -117,7 +124,8 @@ def main(argv: list[str] | None = None) -> int:
     # arm's A/A under another arm's name is the copy-paste this whole module exists to
     # make impossible.
     try:
-        written = serving.write_floor(args.store, recipe, row, conditions=conditions)
+        written = serving.write_floor(args.store, recipe, row, conditions=conditions,
+                                      unit=serving.CALIBRATION_UNIT)
     except serving.ServingFloorMismatch as refusal:
         print(f"REFUSED: {refusal}", file=sys.stderr)
         return instruments.REFUSED

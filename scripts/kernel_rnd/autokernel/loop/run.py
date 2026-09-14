@@ -269,6 +269,19 @@ def _load_source_floor(store: Path, recipe, anchor, *, frozen_requests,
     return floor_store, reading
 
 
+def _gate_floor(reading) -> tuple[float | None, str | None]:
+    """A floor reading AS THE BAR for this loop's serving comparisons: (pct, unit).
+
+    The ONE place the loop turns a floor file into a gate bar. Every serving effect the
+    loop measures is between-PROCESS (`serving.compare` relaunches the server for every
+    sample of every arm), so a floor of any other unit -- or a legacy floor that cannot
+    state its unit at all -- REFUSES here (R23-55). `(None, None)` for an absent floor,
+    which already fails closed everywhere downstream.
+    """
+    pct = reading.gate_floor(effect_unit=serving.COMPARE_EFFECT_UNIT)
+    return pct, (None if pct is None else reading.unit)
+
+
 def _write_new_source_floor(floor_store: Path, recipe, anchor, row, *, frozen_requests,
                             instrument: str, pairs: int) -> Path:
     """Write one immutable identity-keyed floor; an existing floor is reused."""
@@ -289,6 +302,9 @@ def _write_new_source_floor(floor_store: Path, recipe, anchor, row, *, frozen_re
             "refusing to overwrite an existing anchor-identity floor")
     return serving.write_floor(
         floor_store, recipe, row, frozen_requests=frozen_requests,
+        # `serving.calibrate_floor` relaunches the server for every sample, so the
+        # dispersion it just measured is a between-PROCESS one. Stated, not defaulted.
+        unit=serving.CALIBRATION_UNIT,
         instrument=instrument, pairs=pairs)
 
 
@@ -940,6 +956,12 @@ def main(argv: list[str] | None = None) -> int:
     #: says so) | "absent" (uncalibrated). Travels into the serving record and the status
     #: payload, because a reader cannot otherwise tell a checked floor from an assumed one.
     serving_floor_provenance = "absent"
+    #: The UNIT of the bar in `serving_floor_pct` -- `process` for every floor this loop
+    #: calibrates (a fresh server per sample), None when no admissible floor was read. A
+    #: bar of a different unit than the effect is REFUSED, never rescaled (R23-55): within
+    #: a session sd 0.501% vs between launches sd 2.793% is ~13x, and the arm-unit reading
+    #: sized one experiment 1200-fold wrong.
+    serving_floor_unit = None
     floor_request_digest = None
     floor_record = None
     source_instrument = ({"instrument": args.serving_instrument, "pairs": args.serving_pairs}
@@ -969,7 +991,8 @@ def main(argv: list[str] | None = None) -> int:
             if cor_floor_reading.floor_pct is not None:
                 floor_reading = cor_floor_reading
         floor_record = floor_reading.row or None
-        floor = serving_floor_pct = floor_reading.floor_pct
+        serving_floor_pct, serving_floor_unit = _gate_floor(floor_reading)
+        floor = serving_floor_pct
         calibrated = floor is not None
         serving_floor_provenance = floor_reading.provenance
         floor_request_digest = floor_reading.request_digest
@@ -1005,10 +1028,14 @@ def main(argv: list[str] | None = None) -> int:
         # "no floor": an absent floor already blocks both triggers (R23-54), so a silent
         # downgrade would read as a cadence bug instead of the stale floor it is.
         floor_reading = serving.load_floor(args.store, serving_recipe)
-        serving_floor_pct = floor_reading.floor_pct
+        # ... and the same is true of its UNIT: a floor that cannot say whether its
+        # dispersion is within-session or between-launch is refused here rather than used
+        # as a bar 13x off the right one (R23-55).
+        serving_floor_pct, serving_floor_unit = _gate_floor(floor_reading)
         serving_floor_provenance = floor_reading.provenance
         print(f"serving   {serving_recipe.describe()} — keep gate on llama-server; "
-              + (f"floor {serving_floor_pct}% [{serving_floor_provenance}]"
+              + (f"floor {serving_floor_pct}% unit={serving_floor_unit} "
+                 f"n={floor_reading.n} [{serving_floor_provenance}]"
                  if serving_floor_pct is not None
                  else "UNCALIBRATED (keeps refused until the serving floor is calibrated)"))
         if serving_floor_provenance == "unverified":
@@ -1060,12 +1087,13 @@ def main(argv: list[str] | None = None) -> int:
     def invalidate_source_floor() -> None:
         """Drop the prior in-memory bar after, never during, a successful keep."""
         nonlocal floor, floor_request_digest, floor_record, calibrated
-        nonlocal serving_floor_pct, serving_floor_provenance
+        nonlocal serving_floor_pct, serving_floor_provenance, serving_floor_unit
         floor = serving_floor_pct = None
         floor_request_digest = None
         floor_record = None
         calibrated = False
         serving_floor_provenance = "absent"
+        serving_floor_unit = None
         source_floor_refresh[0] = True
 
     def build_context() -> dict:
@@ -1358,7 +1386,7 @@ def main(argv: list[str] | None = None) -> int:
 
     def ensure_source_floor(anchor_recipe, a_build) -> None:
         nonlocal floor, floor_request_digest, floor_record, calibrated
-        nonlocal serving_floor_pct, serving_floor_provenance
+        nonlocal serving_floor_pct, serving_floor_provenance, serving_floor_unit
         if not source_floor_refresh[0]:
             return
         # Resolve the newly retained anchor's floor before either candidate arm
@@ -1381,7 +1409,8 @@ def main(argv: list[str] | None = None) -> int:
                 args.store, serving_recipe, anchor_recipe,
                 frozen_requests=frozen_requests, instrument=args.serving_instrument,
                 pairs=args.serving_pairs, dynamic=True)
-        floor = serving_floor_pct = reading.floor_pct
+        serving_floor_pct, serving_floor_unit = _gate_floor(reading)
+        floor = serving_floor_pct
         floor_request_digest = reading.request_digest
         floor_record = reading.row or None
         calibrated = floor is not None
@@ -1398,7 +1427,7 @@ def main(argv: list[str] | None = None) -> int:
         ensure_source_floor(anchor_recipe, a_build)
         return _serving_comparison(lambda: serving.compare(
             serving_recipe, a_build, c_build, pairs=args.serving_pairs,
-            floor_pct=floor, port=direct_launch.port,
+            floor_pct=floor, floor_unit=serving_floor_unit, port=direct_launch.port,
             anchor_resolved_recipe=anchor_recipe,
             candidate_resolved_recipe=candidate_recipe,
             frozen_requests=frozen_requests, floor_request_digest=floor_request_digest,
@@ -1755,6 +1784,7 @@ def main(argv: list[str] | None = None) -> int:
         # The gate is being spent -- once, on the whole bundle.
         sv_row = serving.compare(serving_recipe, cor_build[0], anchor_build[0],
                                  pairs=args.serving_pairs, floor_pct=serving_floor_pct,
+                                 floor_unit=serving_floor_unit,
                                  **({"port": direct_launch.port,
                                      "anchor_resolved_recipe": _cpu_arm(direct_launch, cor_build[0]),
                                      "candidate_resolved_recipe": _cpu_arm(direct_launch, anchor_build[0]),
@@ -1881,8 +1911,10 @@ def main(argv: list[str] | None = None) -> int:
             "historical_compounded_bench_pct": historical_comp,
             "serving_floor_pct": serving_floor_pct,
             # R23-49's lesson on the surface: a floor nobody could prove belonged to this
-            # recipe looked exactly like one that did.
+            # recipe looked exactly like one that did. R23-55's, beside it: a floor whose
+            # UNIT nobody recorded looked exactly like one measured in the effect's unit.
             "serving_floor_provenance": serving_floor_provenance,
+            "serving_floor_unit": serving_floor_unit,
             "fire_multiple": accum_policy.fire_multiple,
             "fire_threshold_pct": round(thr, 3) if thr is not None else None,
             "progress_fraction": (round(min(comp / thr, 1.0), 4)
@@ -2478,7 +2510,8 @@ def main(argv: list[str] | None = None) -> int:
                     frozen_requests=frozen_requests, instrument=args.serving_instrument,
                     pairs=args.serving_pairs)
                 floor_record = floor_reading.row or None
-                floor = serving_floor_pct = floor_reading.floor_pct
+                serving_floor_pct, serving_floor_unit = _gate_floor(floor_reading)
+                floor = serving_floor_pct
                 calibrated = floor is not None
                 serving_floor_provenance = floor_reading.provenance
                 floor_request_digest = floor_reading.request_digest
@@ -2531,11 +2564,13 @@ def main(argv: list[str] | None = None) -> int:
                             resolved_recipe=_cpu_arm(direct_launch, validation_anchor_build),
                             frozen_requests=frozen_requests, **source_instrument)
                         serving.write_floor(args.store, serving_recipe, calibration,
-                                            frozen_requests=frozen_requests, **source_instrument)
+                                            frozen_requests=frozen_requests,
+                                            unit=serving.CALIBRATION_UNIT, **source_instrument)
                         floor_reading = serving.load_floor(
                             args.store, serving_recipe, frozen_requests=frozen_requests, **source_instrument)
                         floor_record = floor_reading.row or None
-                        floor = serving_floor_pct = floor_reading.floor_pct
+                        serving_floor_pct, serving_floor_unit = _gate_floor(floor_reading)
+                        floor = serving_floor_pct
                         calibrated = floor is not None
                         serving_floor_provenance = floor_reading.provenance
                         floor_request_digest = floor_reading.request_digest
@@ -2546,6 +2581,7 @@ def main(argv: list[str] | None = None) -> int:
                         validation_comparison = serving.compare(
                             serving_recipe, validation_anchor_build, validation_candidate_build,
                             pairs=args.serving_pairs, floor_pct=serving_floor_pct,
+                            floor_unit=serving_floor_unit,
                             port=direct_launch.port,
                             anchor_resolved_recipe=original_launch,
                             candidate_resolved_recipe=candidate_launch,

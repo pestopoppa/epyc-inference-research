@@ -30,6 +30,25 @@ from typing import Sequence
 
 from . import residency
 
+#: The unit EVERY number in this module is measured in, floors and effects alike: a
+#: sample is one `llama-bench` INVOCATION, and the arms alternate across those
+#: invocations (see the module docstring), so both the effect and the A/A dispersion it
+#: is judged against are between-PROCESS. Derived from the harness, never configured.
+#: Why it has to be said out loud: the same host reads sd 0.501% within one session and
+#: 2.793% between launches (~13x), and the arm-unit reading once under-sized an
+#: experiment 1200-fold (R23-55 / INF-70 RETEST-1).
+#:
+#: The vocabulary's home is `serving.FLOOR_UNITS`; the literal is repeated here because
+#: `serving` imports `loop` which imports `bench`, so a module-level import of `serving`
+#: here is a cycle. `test_bench` asserts the two cannot drift.
+FLOOR_UNIT = "process"
+
+#: The one writer of a store bench-floor record: `benchmark/autokernel_aa_campaign.py`.
+#: A record carrying this schema is process-unit BY CONSTRUCTION -- that writer runs
+#: `bench.compare`/`bench.run_once`, i.e. alternating llama-bench invocations -- so the
+#: unit of a pre-R23-55 record is DERIVED from its schema, not assumed from its silence.
+CALIBRATION_SCHEMA = "epyc.autokernel.surface_calibration.v1"
+
 #: Host threads for the GPU lane. NOT 88-95 -- these are the SMT siblings the
 #: production GPU recipe uses, and taking others contends with the CPU baseline.
 CPU_LIST = "184-191"
@@ -52,6 +71,9 @@ MEASURED_FLOOR_PCT = {
 #: to serve it to any other model -- a floor borrowed across rungs manufactures
 #: exactly the fake-decisive keeps the `calibrated` flag exists to prevent.
 MEASURED_FLOOR_MODEL_STEM = "DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M"
+#: ...and the n it was estimated from. A floor is an extreme order statistic, so its
+#: precision is a function of n and a floor that cannot state one must not gate (R23-61).
+MEASURED_FLOOR_N = 20
 
 #: Every surface the loop can drive: name -> (pp, tg, ubatch). The dec-b* rows are the
 #: run-22 small-batch decode-regime surfaces the injected seed families (05 MTP verify,
@@ -180,6 +202,10 @@ class Comparison:
             "surface": self.surface, "model": self.model, "effect": self.effect,
             "effect_pct": self.effect * 100.0, "estimator": self.estimator,
             "pairs": self.pairs, "noise_floor_pct": self.noise_floor_pct,
+            # Both units, stated: `floor_rows` admits only a FLOOR_UNIT floor, so they
+            # always agree here -- and a reader must never have to infer that (R23-55).
+            "effect_unit": FLOOR_UNIT,
+            "floor_unit": None if self.noise_floor_pct is None else FLOOR_UNIT,
             "decisive": self.decisive, "device_seconds": self.device_seconds,
             "drifting": self.drifting, "calibrated": self.calibrated,
             "anchor_drift_pct": self.anchor_drift_pct,
@@ -415,6 +441,11 @@ def floor_rows(surface: str, model: Path | str,
     each recording it) keep working with no store mutation. A recorded-model
     mismatch on either filename returns None (uncalibrated -> keeps refused),
     never the other model's rows.
+
+    A record whose UNIT is not this instrument's REFUSES (R23-55): floors and effects here
+    are both between-process, and a bar measured within a session is ~13x tighter -- a
+    difference that sized one experiment 1200-fold wrong. A pre-R23-55 record has its unit
+    derived from `CALIBRATION_SCHEMA` rather than guessed; anything else cannot gate.
     """
     stem = Path(model).stem
     if surface in MEASURED_FLOOR_PCT and stem == MEASURED_FLOOR_MODEL_STEM:
@@ -427,8 +458,56 @@ def floor_rows(surface: str, model: Path | str,
             body = json.loads(path.read_text(encoding="utf-8"))
             if Path(str(body.get("model") or "")).stem != stem:
                 return None
+            unit = record_unit(body)
+            if unit != FLOOR_UNIT:
+                # Imported here, not at module scope: `serving` imports `loop` which
+                # imports this module, so a top-level import would be a cycle.
+                from .serving import FloorUnitMismatch
+                raise FloorUnitMismatch(
+                    f"bench floor {path} states unit {unit!r}, but every effect this "
+                    f"instrument measures is unit {FLOOR_UNIT!r} (arms alternate across "
+                    f"llama-bench invocations). REFUSING to gate against it: within-session "
+                    f"dispersion is ~13x tighter than between-launch (INF-70 RETEST-1: "
+                    f"0.501% vs 2.793%) and the wrong one under-sized an experiment "
+                    f"1200-fold. Fix: recalibrate this surface "
+                    f"(`run.py --calibrate-surface`, which stamps `unit` and `n`); the "
+                    f"existing file is left as it is.")
+            if record_n(body) is None:
+                from .serving import FloorUnitMismatch
+                raise FloorUnitMismatch(
+                    f"bench floor {path} does not state the `n` it was estimated from. A "
+                    f"floor is an extreme order statistic: at small n the point estimate "
+                    f"carries no usable precision (R23-61), so it must not gate. "
+                    f"Recalibrate this surface at n >= 24.")
             return {int(count): float(value) for count, value in
                     body["floor_pct"].items()}
+    return None
+
+
+def record_unit(body: dict) -> str | None:
+    """The unit of a store bench-floor record, or None when nothing can establish it.
+
+    An explicit `unit` field wins. Failing that, `CALIBRATION_SCHEMA` pins it: that schema
+    has exactly one writer and that writer alternates llama-bench INVOCATIONS, so such a
+    record is process-unit by construction. Silence with no recognised schema is NOT
+    resolved by assumption -- the two candidate answers differ by ~13x.
+    """
+    from .serving import FLOOR_UNITS  # leaf import: see FLOOR_UNIT above
+    unit = body.get("unit")
+    if unit in FLOOR_UNITS:
+        return unit
+    if unit is None and body.get("schema") == CALIBRATION_SCHEMA:
+        return FLOOR_UNIT
+    return None
+
+
+def record_n(body: dict) -> int | None:
+    """The sample count a store bench-floor record was estimated from, under any of the
+    names this schema has used for it."""
+    for key in ("n", "pairs_per_condition", "pairs"):
+        value = body.get(key)
+        if type(value) is int and value > 0:
+            return value
     return None
 
 
@@ -457,7 +536,8 @@ def bootstrap_floor(anchor: Sequence[float], candidate: Sequence[float],
     return rows
 
 
-__all__ = ["Arm", "BenchFailed", "CPU_LIST", "Comparison",
-           "MEASURED_FLOOR_MODEL_STEM", "MEASURED_FLOOR_PCT", "MIN_PAIRS",
+__all__ = ["Arm", "BenchFailed", "CALIBRATION_SCHEMA", "CPU_LIST", "Comparison",
+           "FLOOR_UNIT", "MEASURED_FLOOR_MODEL_STEM", "MEASURED_FLOOR_N",
+           "MEASURED_FLOOR_PCT", "MIN_PAIRS",
            "SURFACES", "WARMUP_PAIRS", "bootstrap_floor", "compare", "drift_pct",
-           "floor_rows", "run_once", "spread_is_suspect"]
+           "floor_rows", "record_n", "record_unit", "run_once", "spread_is_suspect"]

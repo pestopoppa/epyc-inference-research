@@ -18,8 +18,9 @@ def _legacy(argv, tmp_path, *, corrupt=False):
         json.loads(Path(sr.option(target, "--frozen-prompts")).read_text()))
     requests = prompts.requests(tuple(row.prompt_id for row in prompts.prompts), launch.template)
     path = serving.write_floor(Path(sr.option(target, "--store")), launch.template,
-        {"floor_pct": 7.801, "recipe_hash": launch.template.recipe_hash,
-         "request_digest": serving.request_digest(launch.template, requests)}, frozen_requests=requests)
+        {"floor_pct": 7.801, "n": 5, "recipe_hash": launch.template.recipe_hash,
+         "request_digest": serving.request_digest(launch.template, requests)},
+        frozen_requests=requests, unit=serving.CALIBRATION_UNIT)
     if corrupt:
         path.write_text("{broken")
     return path

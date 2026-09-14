@@ -42,6 +42,9 @@ def _floor_row(recipe: serving.Recipe, floor_pct: float = 3.536) -> dict:
             "recipe_hash": recipe.recipe_hash, "recipe_env": dict(recipe.env or {}),
             "recipe_describe": recipe.describe(), "metric": recipe.metric,
             "np": recipe.np, "samples": 10, "median_tok_s": 161.07,
+            # The harness a floor row must declare: `calibrate_floor` relaunches the
+            # server per sample, so its dispersion is between-PROCESS (R23-55).
+            "unit": serving.CALIBRATION_UNIT, "n": 10,
             "floor_pct": floor_pct, "runs": [161.0] * 10, "cv_pct": 3.136}
 
 
@@ -49,7 +52,7 @@ class FloorFileCarriesTheIdentity(unittest.TestCase):
     def test_the_written_file_carries_hash_describe_and_name_at_top_level(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = serving.write_floor(tmp, BASE, _floor_row(BASE),
-                                       conditions={"host_state": "loop DOWN"})
+                                       conditions={"host_state": "loop DOWN"}, unit=serving.CALIBRATION_UNIT)
             body = json.loads(path.read_text())
         self.assertEqual(body["recipe_hash"], BASE.recipe_hash)
         self.assertEqual(body["recipe"], BASE.name)
@@ -66,7 +69,7 @@ class FloorFileCarriesTheIdentity(unittest.TestCase):
                                side_effect=[100.0, 101.0, 99.0, 100.5, 99.5]):
             row = serving.calibrate_floor(BASE, Path("/b"), samples=5)
         with tempfile.TemporaryDirectory() as tmp:
-            body = json.loads(serving.write_floor(tmp, BASE, row).read_text())
+            body = json.loads(serving.write_floor(tmp, BASE, row, unit=serving.CALIBRATION_UNIT).read_text())
             self.assertEqual(serving.load_floor(tmp, BASE).provenance, "verified")
         self.assertEqual(body["recipe_hash"], BASE.recipe_hash)
 
@@ -74,13 +77,13 @@ class FloorFileCarriesTheIdentity(unittest.TestCase):
         other = dataclasses.replace(BASE, np=8)
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(serving.ServingFloorMismatch):
-                serving.write_floor(tmp, BASE, _floor_row(other))
+                serving.write_floor(tmp, BASE, _floor_row(other), unit=serving.CALIBRATION_UNIT)
 
 
 class LoadingAFloorChecksIt(unittest.TestCase):
     def test_a_matching_hash_proceeds(self):
         with tempfile.TemporaryDirectory() as tmp:
-            serving.write_floor(tmp, BASE, _floor_row(BASE))
+            serving.write_floor(tmp, BASE, _floor_row(BASE), unit=serving.CALIBRATION_UNIT)
             reading = serving.load_floor(tmp, BASE)
         self.assertEqual(reading.provenance, "verified")
         self.assertTrue(reading.verified)
@@ -91,7 +94,7 @@ class LoadingAFloorChecksIt(unittest.TestCase):
         pinned = dataclasses.replace(BASE, cpu_list="184-191")
         self.assertEqual(pinned.name, BASE.name)          # the name cannot tell them apart
         with tempfile.TemporaryDirectory() as tmp:
-            serving.write_floor(tmp, BASE, _floor_row(BASE))
+            serving.write_floor(tmp, BASE, _floor_row(BASE), unit=serving.CALIBRATION_UNIT)
             # the pinned recipe resolves to the SAME file -- and must refuse it
             self.assertEqual(serving.floor_path(tmp, pinned),
                              serving.floor_path(tmp, BASE))
@@ -124,7 +127,7 @@ class LoadingAFloorChecksIt(unittest.TestCase):
             absent = serving.load_floor(tmp, BASE)        # nothing on disk: no exception
             self.assertEqual(absent.provenance, "absent")
             self.assertIsNone(absent.floor_pct)
-            serving.write_floor(tmp, BASE, _floor_row(BASE))
+            serving.write_floor(tmp, BASE, _floor_row(BASE), unit=serving.CALIBRATION_UNIT)
             with self.assertRaises(serving.ServingFloorMismatch):
                 serving.load_floor(tmp, dataclasses.replace(BASE, np=8))
 
@@ -203,7 +206,7 @@ class FloorFilenames(unittest.TestCase):
         being used as this arm's bar."""
         arm = BASE.with_env(name=BASE.name, GGML_NOHUGEPAGE_PROCESS="1")
         with tempfile.TemporaryDirectory() as tmp:
-            serving.write_floor(tmp, BASE, _floor_row(BASE))
+            serving.write_floor(tmp, BASE, _floor_row(BASE), unit=serving.CALIBRATION_UNIT)
             self.assertEqual(serving.floor_path(tmp, arm), serving.floor_path(tmp, BASE))
             with self.assertRaises(serving.ServingFloorMismatch):
                 serving.load_floor(tmp, arm)

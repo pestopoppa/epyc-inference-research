@@ -91,8 +91,9 @@ def _inputs(tmp_path, backend="cpu"):
         _files(build)
         (build / "provenance.json").write_text(json.dumps({"champion_commit": commit}))
     frozen = (("prompt-0", b'{"prompt":"original exact request","n_predict":4}'),)
-    serving.write_floor(store, recipe, {"floor_pct": 1.0, "recipe_hash": recipe.recipe_hash,
-        "request_digest": serving.request_digest(recipe, frozen)}, frozen_requests=frozen)
+    serving.write_floor(store, recipe, {"floor_pct": 1.0, "n": 5, "recipe_hash": recipe.recipe_hash,
+        "request_digest": serving.request_digest(recipe, frozen)}, frozen_requests=frozen,
+        unit=serving.CALIBRATION_UNIT)
     return cpu, dict(directory=tmp_path / "operation", store_root=store, repo=repo,
         assembled_commit=tip, assembled_tree=_git(repo, "rev-parse", "HEAD^{tree}"),
         keep_references=[reference], target={"selected_id": backend, "model": str(model)},

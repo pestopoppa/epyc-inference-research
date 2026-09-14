@@ -189,8 +189,9 @@ def test_actual_gpu_main_runtime_observation_preserves_source_and_skips_unavaila
             selected, manifest, _resolved, options, _install = gpu_inputs._inputs(fixture, experimental=True)
         requests = manifest.requests(("glm-fixed2029",), selected.template)
         serving.write_floor(fixture.store, selected.template, {
-            "floor_pct": 7.8, "recipe_hash": selected.template.recipe_hash,
-            "request_digest": serving.request_digest(selected.template, requests)}, frozen_requests=requests)
+            "floor_pct": 7.8, "n": 5, "recipe_hash": selected.template.recipe_hash,
+            "request_digest": serving.request_digest(selected.template, requests)},
+            frozen_requests=requests, unit=serving.CALIBRATION_UNIT)
         actual_main, actual_gpu_hold = run.main, claim.hold
         observed, proposed = [], []
 

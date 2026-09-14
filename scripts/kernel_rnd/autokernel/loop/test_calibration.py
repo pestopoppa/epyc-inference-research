@@ -60,7 +60,7 @@ class TheFloorIsCalibrationOrNothing(unittest.TestCase):
             store = Path(tmp)
             (store / "calibration").mkdir()
             (store / "calibration" / "dec-b4.json").write_text(json.dumps(
-                {"model": THE_1P5B,
+                {"model": THE_1P5B, "unit": bench.FLOOR_UNIT, "n": 20,
                  "floor_pct": {"1": 3.0, "3": 2.4, "5": 2.0, "9": 1.6, "20": 1.2}}))
             floor = run_mod.noise_floor_pct("dec-b4", 5, THE_1P5B, store=store)
             # max(parametric 3.0/sqrt(5)=1.342, measured row 2.0) -- the same

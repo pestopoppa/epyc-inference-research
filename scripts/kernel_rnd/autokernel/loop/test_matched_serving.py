@@ -50,15 +50,17 @@ def test_24_original_pairs_48_launches_replay_five_pair_scalar_and_keep_v1(tmp_p
     assert row["floor_pct"] == bench.bootstrap_floor(row["anchor_samples"], row["candidate_samples"], ks=(5,))[5]
     assert row["interval"]["level"] == .95 and row["unit"] == "process"
     assert sum(order[0] == "anchor" for order in row["calibration_plan"]["orders"]) == 12
-    legacy = serving.write_floor(tmp_path, recipe, {"floor_pct": 7.801,
+    legacy = serving.write_floor(tmp_path, recipe, {"floor_pct": 7.801, "n": 5,
         "recipe_hash": recipe.recipe_hash, "request_digest": serving.request_digest(recipe, requests)},
-        frozen_requests=requests)
+        frozen_requests=requests, unit=serving.CALIBRATION_UNIT)
     original = legacy.read_bytes()
-    path = serving.write_floor(tmp_path, recipe, row, frozen_requests=requests, **MODE)
+    path = serving.write_floor(tmp_path, recipe, row, frozen_requests=requests,
+                               unit=serving.CALIBRATION_UNIT, **MODE)
     reading = serving.load_floor(tmp_path, recipe, frozen_requests=requests, **MODE)
     assert reading.row == row and path != legacy and legacy.read_bytes() == original
     assert serving.load_floor(tmp_path, recipe, frozen_requests=requests).floor_pct == 7.801
     out = serving.compare(recipe, BUILD, BUILD, pairs=5, floor_pct=reading.floor_pct,
+        floor_unit=reading.unit,
         floor_record=reading.row, instrument=serving.MATCHED_INSTRUMENT,
         anchor_resolved_recipe=launch, candidate_resolved_recipe=launch, frozen_requests=requests,
         floor_request_digest=reading.request_digest)
@@ -88,6 +90,7 @@ def test_incompatible_or_rehashed_changed_floor_refused_before_launch(monkeypatc
     row["content_sha256"] = serving._digest({k: v for k, v in row.items() if k != "content_sha256"})
     with pytest.raises(serving.ServingFloorMismatch):
         serving.compare(recipe, BUILD, BUILD, pairs=5, floor_pct=row["floor_pct"], floor_record=row,
+            floor_unit=row["unit"],
             instrument=serving.MATCHED_INSTRUMENT, anchor_resolved_recipe=launch,
             candidate_resolved_recipe=launch, frozen_requests=requests,
             floor_request_digest=serving.request_digest(recipe, requests))

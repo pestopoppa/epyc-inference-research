@@ -407,7 +407,11 @@ class TheFloorComesFromCalibrationOnly(unittest.TestCase):
     #: the lmstudio symlink farm must still hit its own floor).
     CALIBRATED = f"{bench.MEASURED_FLOOR_MODEL_STEM}.gguf"
     OTHER = "Qwen3.8-27B-Q8_0.gguf"
-    ROWS = {"floor_pct": {"1": 3.0, "5": 2.0, "9": 1.5, "20": 1.0}}
+    #: A store record as its ONE writer writes it: the schema (which pins the unit to
+    #: `process` even on a record written before R23-55) and the `n` it was estimated
+    #: from -- both required before `floor_rows` will serve it as a bar.
+    ROWS = {"schema": bench.CALIBRATION_SCHEMA, "pairs_per_condition": 20,
+            "floor_pct": {"1": 3.0, "5": 2.0, "9": 1.5, "20": 1.0}}
 
     def test_builtin_surfaces_answer_from_the_measured_table(self):
         self.assertIs(bench.floor_rows("tg128", self.CALIBRATED),

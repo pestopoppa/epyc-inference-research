@@ -125,6 +125,7 @@ def require_binary(build: Path, name: str) -> Path:
 
 
 def read_floor(store: Path | str, recipe: serving.Recipe, *,
+               effect_unit: str | None = None,
                echo=print) -> serving.FloorReading:
     """The ONE way an instrument obtains a serving floor.
 
@@ -138,6 +139,11 @@ def read_floor(store: Path | str, recipe: serving.Recipe, *,
     would return `decisive: None`, `accumulate.classify_serving` would read that as
     DIVERGED, and the run would spend the full gate to produce a verdict that was decided
     before it started.
+
+    `effect_unit` is the unit the instrument's own effect is measured in and must be stated
+    (R23-55). The check happens HERE, before any GPU is spent: a legacy unit-less floor and
+    a floor of another unit both refuse, rather than being discovered after a gate's worth
+    of host time has been paid for a verdict that could never have been admissible.
     """
     reading = serving.load_floor(store, recipe)
     if reading.provenance == "absent":
@@ -150,6 +156,10 @@ def read_floor(store: Path | str, recipe: serving.Recipe, *,
              f"identity-stamped floors, so NOTHING proves it was calibrated under this "
              f"recipe. It is used, and every record it touches is stamped "
              f"floor_provenance=unverified. Recalibrate it.")
+    try:
+        reading.gate_floor(effect_unit=effect_unit)
+    except serving.FloorUnitMismatch as refusal:
+        raise InstrumentRefusal(str(refusal)) from refusal
     return reading
 
 

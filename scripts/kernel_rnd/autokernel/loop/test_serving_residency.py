@@ -289,7 +289,8 @@ class TheRowsCarryTheEvidence(unittest.TestCase):
     def test_compare_carries_residency_per_arm_and_leaves_the_verdict_alone(self):
         with mock.patch.object(serving, "_measure_once",
                                side_effect=_stub_measure([100.0, 120.0])):
-            out = serving.compare(RECIPE, Path("/a"), Path("/c"), pairs=1, floor_pct=1.0)
+            out = serving.compare(RECIPE, Path("/a"), Path("/c"), pairs=1, floor_pct=1.0,
+                                  floor_unit=serving.COMPARE_EFFECT_UNIT)
         _assert_proven(self, out["residency"])
         self.assertEqual(out["residency"]["invocations"], 2)
         self.assertEqual(len(out["anchor_residency"]), 1)
@@ -316,7 +317,7 @@ class TheFloorFile(unittest.TestCase):
                                side_effect=_stub_measure([100.0] * 5)):
             row = serving.calibrate_floor(RECIPE, Path("/b"), samples=5)
         with tempfile.TemporaryDirectory() as tmp:
-            body = json.loads(serving.write_floor(tmp, RECIPE, row).read_text())
+            body = json.loads(serving.write_floor(tmp, RECIPE, row, unit=serving.CALIBRATION_UNIT).read_text())
             reading = serving.load_floor(tmp, RECIPE)
         _assert_proven(self, body["residency"])
         self.assertEqual(body["residency"]["invocations"], 5)
@@ -325,10 +326,10 @@ class TheFloorFile(unittest.TestCase):
 
     def test_a_row_with_no_evidence_is_stamped_unproven_rather_than_left_silent(self):
         row = {"schema": "epyc.autokernel.serving_floor.v1", "recipe": RECIPE.name,
-               "recipe_hash": RECIPE.recipe_hash, "floor_pct": 4.581,
+               "recipe_hash": RECIPE.recipe_hash, "floor_pct": 4.581, "n": 1,
                "runs": [100.0], "median_tok_s": 100.0}
         with tempfile.TemporaryDirectory() as tmp:
-            body = json.loads(serving.write_floor(tmp, RECIPE, row).read_text())
+            body = json.loads(serving.write_floor(tmp, RECIPE, row, unit=serving.CALIBRATION_UNIT).read_text())
             reading = serving.load_floor(tmp, RECIPE)
         self.assertEqual(body["residency"]["status"], serving.RESIDENCY_UNPROVEN)
         self.assertEqual(body["residency"]["invocations"], 0)
@@ -385,7 +386,8 @@ class TheEvidenceChecksAreNotVacuous(unittest.TestCase):
         """A `_measure_once` that returns a bare float and records nothing -- the serving
         path exactly as it was before R23-60."""
         with mock.patch.object(serving, "_measure_once", side_effect=[100.0, 120.0]):
-            out = serving.compare(RECIPE, Path("/a"), Path("/c"), pairs=1, floor_pct=1.0)
+            out = serving.compare(RECIPE, Path("/a"), Path("/c"), pairs=1, floor_pct=1.0,
+                                  floor_unit=serving.COMPARE_EFFECT_UNIT)
         self.assertEqual(out["anchor_residency"], [])
         self.assertEqual(out["candidate_residency"], [])
         self.assertEqual(out["residency"]["invocations"], 0)
@@ -396,7 +398,7 @@ class TheEvidenceChecksAreNotVacuous(unittest.TestCase):
         with mock.patch.object(serving, "_measure_once", side_effect=[100.0] * 5):
             row = serving.calibrate_floor(RECIPE, Path("/b"), samples=5)
         with tempfile.TemporaryDirectory() as tmp:
-            body = json.loads(serving.write_floor(tmp, RECIPE, row).read_text())
+            body = json.loads(serving.write_floor(tmp, RECIPE, row, unit=serving.CALIBRATION_UNIT).read_text())
         with self.assertRaises(AssertionError):
             _assert_proven(self, body["residency"])
         self.assertEqual(body["residency"]["status"], serving.RESIDENCY_UNPROVEN)

@@ -48,7 +48,7 @@ import subprocess
 import sys
 import time
 
-from . import bench, instruments, residency
+from . import bench, instruments, residency, serving
 
 #: The harness colours its verdicts. Strip before ANY counting -- see the module docstring.
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
@@ -226,6 +226,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pairs", type=int, default=20, help="G5 alternating pairs")
     parser.add_argument("--floor", type=float, default=0.638,
                         help="G5 tg128 noise floor %%, calibrated 2026-09-04 at 20 pairs")
+    parser.add_argument("--floor-unit", default=bench.FLOOR_UNIT, choices=serving.FLOOR_UNITS,
+                        help="the UNIT --floor was measured in (default: %(default)s). G5's "
+                             "own effect is between-PROCESS (arms alternate across "
+                             "llama-bench invocations), so any other unit REFUSES: a "
+                             "within-session floor is ~13x tighter and sized one "
+                             "experiment 1200-fold wrong (R23-55)")
     parser.add_argument("--only-correctness", action="store_true",
                         help="G1-G4 only; G5 (comparative) after the keep decision")
     instruments.add_posture_args(parser)
@@ -240,12 +246,15 @@ def main(argv: list[str] | None = None) -> int:
         instruments.require_binary(args.candidate_build, "test-backend-ops")
         instruments.require_binary(args.candidate_build, "llama-bench")
         if not args.only_correctness:
+            # The bar and the effect must be in the SAME unit, and the check happens before
+            # anything is launched (R23-55).
+            serving.check_unit(args.floor_unit, bench.FLOOR_UNIT, what="--floor")
             if args.anchor_build is None:
                 raise instruments.InstrumentRefusal(
                     "G5 compares against the champion build: pass --anchor-build, or "
                     "--only-correctness to run G1-G4 alone")
             instruments.require_binary(args.anchor_build, "llama-bench")
-    except instruments.InstrumentRefusal as refusal:
+    except (instruments.InstrumentRefusal, serving.FloorUnitMismatch) as refusal:
         print(f"REFUSED: {refusal}", file=sys.stderr)
         return instruments.REFUSED
     print(f"candidate {candidate_id} ({args.candidate_build})")
@@ -285,7 +294,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if result["overall_correctness"] == "PASS" else 1
 
     print(f"=== G5 tg128 A/B candidate vs champion, {args.pairs} pairs, "
-          f"floor {args.floor}%")
+          f"floor {args.floor}% (unit {args.floor_unit})")
     comparison = compare_tg128(Path(args.anchor_build) / "bin" / "llama-bench",
                                Path(args.candidate_build) / "bin" / "llama-bench",
                                args.model, pairs=args.pairs, floor_pct=args.floor)
