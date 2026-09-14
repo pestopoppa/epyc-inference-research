@@ -40,11 +40,12 @@ def _source(path: Path, required: Iterable[str]) -> dict[str, str]:
     return {"path": str(path), "sha256": _digest(path)}
 
 
-def _legacy_receipt(path: Path, surface: str, rounded_gain: float) -> dict[str, str]:
+def _legacy_receipt(path: Path, surface: str,
+                    rounded_gain: float) -> tuple[dict[str, str], float]:
     body = json.loads(path.read_text(encoding="utf-8"))
     if body.get("surface") != surface or round(float(body.get("effect_pct")), 3) != rounded_gain:
         raise ValueError(f"{path}: historical receipt no longer matches its ledger checkpoint")
-    return {"path": str(path), "sha256": _digest(path)}
+    return {"path": str(path), "sha256": _digest(path)}, float(body["effect_pct"])
 
 
 def _point(*, commit: str, at: str, model: str, surface: str, recipe: str,
@@ -85,12 +86,12 @@ def build(*, store: Path, research: Path, root_repo: Path) -> dict[str, Any]:
     ]
     for commit, at, surface, gain in legacy:
         receipt = store / f"champion-vs-production.{commit[:12]}.json"
-        evidence = _legacy_receipt(receipt, surface, gain)
+        evidence, exact_gain = _legacy_receipt(receipt, surface, gain)
         evidence["model_contract_path"] = model_contract["path"]
         evidence["model_contract_sha256"] = model_contract["sha256"]
         points.append(_point(commit=commit, at=at, model=DEEPSEEK,
             surface=surface, recipe="gpu-loop-production-shaped-v1", era="gpu-deepseek-loop",
-            gain=gain, baseline=PRODUCTION, baseline_label="production-consolidated-v9",
+            gain=exact_gain, baseline=PRODUCTION, baseline_label="production-consolidated-v9",
             state="serving_verified_direct", source=evidence, pairs=20))
 
     a272_path = research / "artifacts/autokernel-champ-a2728701-ab/champion-a2728701-vs-v9.json"
