@@ -37,6 +37,41 @@ STATUS_FILENAME = "loop-status.json"
 #: not "the loop is quiet", it is "nobody has heard from the loop".
 DEFAULT_STALE_AFTER_S = 1800
 
+# `Comparison.to_dict()` deliberately carries the complete measurement lifecycle,
+# including every residency sample from both arms.  That belongs in experiments.db,
+# where the guard verdict is already recorded before status publication; copying it
+# into the heartbeat document made a five-pair CPU guard exceed 100 MB.  Status is a
+# live projection, not a second evidence store.  Keep only scalar facts needed to
+# explain the verdict and point an auditor at the durable record.
+_ANCHOR_COMPARISON_SCALARS = (
+    "schema", "surface", "metric", "recipe", "recipe_hash", "request_digest",
+    "pairs", "anchor_tok_s", "candidate_tok_s", "effect", "effect_pct",
+    "noise_floor_pct", "decisive", "baseline_scope",
+)
+
+
+def _compact_anchor_guard(store_root: Path, campaign_id: str,
+                          guard: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    if not guard:
+        return None
+    compact = {key: value for key, value in guard.items() if key != "comparison"}
+    comparison = guard.get("comparison")
+    if isinstance(comparison, Mapping):
+        compact["comparison_summary"] = {
+            key: comparison[key] for key in _ANCHOR_COMPARISON_SCALARS
+            if key in comparison and not isinstance(comparison[key], (dict, list))
+        }
+    compact["evidence"] = {
+        "store": str(Path(store_root) / "experiments.db"),
+        "record": "experiments.payload",
+        "selector": {
+            "campaign_id": campaign_id,
+            "mechanism_id": str(guard.get("check") or "anchor-aa-guard"),
+            "champion_commit": guard.get("champion_commit"),
+        },
+    }
+    return compact
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
@@ -160,7 +195,7 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
         # The last promotion A/A: did the binary in the anchor slot prove to BE the
         # champion. `null` means no promotion has happened on this run, which is a
         # different fact from "the check passed" and must stay distinguishable.
-        "anchor_guard": dict(anchor_guard) if anchor_guard else None,
+        "anchor_guard": _compact_anchor_guard(store_root, campaign_id, anchor_guard),
         # R23-44: the two-tier champion's bundle — how many cheap bench keeps have
         # accumulated and how far their compounded gain has climbed toward the serving
         # gate's fire threshold. `null` on a run with no serving recipe (no second tier).
