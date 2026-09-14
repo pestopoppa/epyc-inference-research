@@ -275,3 +275,40 @@ class TheLoopMustNotReSampleUnchangedCode(unittest.TestCase):
         actually been pinned down."""
         text = actors.render_context({"prior_experiments": self.ROWS[:2]})
         self.assertNotIn("do NOT re-measure", text)
+
+
+class FamilyDiminishingReturnsRequireAnAbstractionEscape(unittest.TestCase):
+    def rows(self, count=3):
+        return [{"mechanism_id": f"akm-leaf-{index}", "status": "measured_null",
+                 "target_surface": "ggml/src/ggml-cpu/arch/x86/quants.c",
+                 "target_symbol": "ggml_vec_dot_q8_0_q8_0",
+                 # Poison would be unsafe to pool across epochs; rendering this
+                 # policy must depend only on attempt identity and outcome.
+                 "effect_fraction": 1000.0 + index, "stale_epoch": True,
+                 "comparable_measurement": False}
+                for index in range(count)]
+
+    def test_three_distinct_family_nulls_require_an_abstraction_escape(self):
+        text = actors.render_context({"prior_experiments": self.rows()})
+        self.assertIn("Family-level diminishing returns", text)
+        self.assertIn("caller/operator/dispatch or data-movement", text)
+        self.assertIn("Critic: reject a same-family synonym", text)
+        self.assertIn("materially distinct causal model", text)
+        stagnation_block = text.split("## Already tried")[0]
+        self.assertNotIn("+100000", stagnation_block)
+
+    def test_two_distinct_family_nulls_do_not_trigger(self):
+        text = actors.render_context({"prior_experiments": self.rows(2)})
+        self.assertNotIn("Family-level diminishing returns", text)
+
+    def test_a_newer_keep_resets_the_family_run(self):
+        rows = self.rows(3)
+        rows.insert(1, {**rows[0], "mechanism_id": "akm-leaf-kept", "status": "kept"})
+        text = actors.render_context({"prior_experiments": rows})
+        self.assertNotIn("Family-level diminishing returns", text)
+
+    def test_an_older_keep_does_not_erase_three_newer_nulls(self):
+        rows = self.rows(3) + [
+            {**self.rows(1)[0], "mechanism_id": "akm-old-keep", "status": "kept"}]
+        text = actors.render_context({"prior_experiments": rows})
+        self.assertIn("Family-level diminishing returns", text)
