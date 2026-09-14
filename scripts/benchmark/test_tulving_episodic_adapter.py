@@ -24,6 +24,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from tulving_episodic_adapter import (
+    CHRONOLOGICAL_GET_STYLE,
+    LATEST_GET_STYLE,
+    SIMPLE_RECALL_BINS,
+    SIMPLE_RECALL_GET_STYLE,
     TulvingEpisodicAdapter,
     _normalise_token,
     _tokenise,
@@ -32,6 +36,9 @@ from tulving_episodic_adapter import (
     _extract_list_from_response,
     compute_simple_recall_score,
     compute_chronological_awareness_score,
+    simple_recall_bin,
+    simple_recall_bin_basis,
+    simple_recall_bin_counts,
 )
 
 
@@ -342,6 +349,31 @@ class TestRowToPrompt:
         p = a._row_to_prompt(0, row)
         assert "entity" in p["prompt"].lower() or "name" in p["prompt"].lower()
 
+    # ── M-12e: the Simple Recall bin basis rides in the metadata ────────────
+    def test_nb_events_is_carried_from_n_chapters(self):
+        row = self._sample_row()
+        row["n_chapters_correct_answer"] = 7
+        a = self._make_adapter_with_row(row)
+        p = a._row_to_prompt(0, row)
+        assert p["metadata"]["nb_events"] == 7
+        assert p["scoring_config"]["nb_events"] == 7
+        # It is genuinely different from the item count.
+        assert p["metadata"]["nb_gt"] == 3
+
+    def test_nb_events_missing_is_none_not_zero(self):
+        """0 is the hallucination bin; inventing it would move a real question."""
+        row = self._sample_row()
+        a = self._make_adapter_with_row(row)
+        p = a._row_to_prompt(0, row)
+        assert p["metadata"]["nb_events"] is None
+
+    def test_nb_events_garbage_is_none(self):
+        row = self._sample_row()
+        row["n_chapters_correct_answer"] = "not a number"
+        a = self._make_adapter_with_row(row)
+        p = a._row_to_prompt(0, row)
+        assert p["metadata"]["nb_events"] is None
+
 
 # ── Tier assignment ───────────────────────────────────────────────────────────
 
@@ -459,6 +491,39 @@ class TestCompositeScores:
         chrono = [{"kendall_tau": 1.0}]
         score = compute_chronological_awareness_score(latest, chrono)
         assert score == 1.0
+
+    # ── M-12e: bins key on matching events, not item count ──────────────────
+    def test_bins_prefer_nb_events_over_nb_gt(self):
+        # One item, seven matching events -> bin 6+, not bin 1.
+        results = [{"f1": 1.0, "nb_gt": 1, "nb_events": 7}]
+        counts = simple_recall_bin_counts(results)
+        assert counts["6+"]["count"] == 1
+        assert counts["1"]["count"] == 0
+        assert simple_recall_bin_basis(results) == "nb_events"
+
+    def test_bins_fall_back_to_nb_gt_when_events_absent(self):
+        results = [{"f1": 1.0, "nb_gt": 1}]
+        counts = simple_recall_bin_counts(results)
+        assert counts["1"]["count"] == 1
+        assert simple_recall_bin_basis(results) == "nb_gt_fallback"
+
+    def test_bin_basis_reports_a_mixed_subset(self):
+        results = [{"f1": 1.0, "nb_gt": 1, "nb_events": 1}, {"f1": 1.0, "nb_gt": 1}]
+        assert simple_recall_bin_basis(results) == "mixed(1/2 nb_events)"
+
+    def test_bin_basis_of_empty_subset(self):
+        assert simple_recall_bin_basis([]) == "none"
+
+    def test_bin_labels_cover_the_five_paper_bins(self):
+        assert SIMPLE_RECALL_BINS == ("0", "1", "2", "3-5", "6+")
+        assert [simple_recall_bin(n) for n in (0, 1, 2, 3, 5, 6, 40)] == [
+            "0", "1", "2", "3-5", "3-5", "6+", "6+",
+        ]
+
+    def test_subset_get_style_constants(self):
+        assert SIMPLE_RECALL_GET_STYLE == "all"
+        assert LATEST_GET_STYLE == "latest"
+        assert CHRONOLOGICAL_GET_STYLE == "chronological"
 
 
 # ── compute_f1_for_result ─────────────────────────────────────────────────────

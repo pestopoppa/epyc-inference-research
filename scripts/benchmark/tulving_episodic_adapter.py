@@ -37,13 +37,33 @@ Manual download step (≈150 MB zip):
 
 Metrics (per benchmark paper):
   Simple Recall Score:
-    Group questions by number of matching events (0, 1, 2, 3–5, 6+).
+    Computed over the SIMPLE RECALL SUBSET ONLY: rows with ``get == "all"``.
+    The ``latest`` and ``chronological`` rows are the Chronological Awareness
+    subset and must never enter Simple Recall.  Verified against the authors'
+    shipped per-question results: ``result_lenient_all_book_200.csv`` has
+    exactly 548 rows, and the 196-chapter ``df_qa.parquet`` has exactly 548
+    ``get == "all"`` rows out of 686 (the other 69 + 69 are latest and
+    chronological).  The "all" in that filename is the get style.
+
+    Group the subset by number of matching EVENTS (0, 1, 2, 3-5, 6+).
     Average F1 within each group, then average across groups.
     Group 0 checks hallucination (expected empty answer).
 
+    "Matching events" is ``n_chapters_correct_answer``, NOT the number of
+    ground-truth items: reproducing the authors' own
+    ``bins_items_correct_answer`` column matches 686/686 rows on
+    ``n_chapters_correct_answer`` and only 629/686 on
+    ``n_items_correct_answer`` (one item can be the answer for several
+    chapters).  It is carried as ``nb_events`` in the prompt metadata.
+
   Chronological Awareness Score:
     Average of: Latest State score (F1 on single-latest-value questions)
-                + Chronological Order score (Kendall τ on ordered-list questions).
+                + Chronological Order score (Kendall tau on ordered-list
+                  questions).
+    The Kendall tau leg requires the FULL ordered ground-truth list to be
+    recovered; a partial match scores 0.0 (fail closed), because tau over a
+    predicted subset measures the ordering of whatever the model happened to
+    emit and so rewards emitting less.
 """
 
 from __future__ import annotations
@@ -70,6 +90,14 @@ _DEFAULT_DATA_DIR = Path("/mnt/raid0/llm/data/eval/tulving_episodic")
 
 # Preferred variant: 20-chapter short default (10K tokens, ~456 QA pairs)
 _DEFAULT_VARIANT = "Udefault_Sdefault_seed0"
+
+# ── Benchmark subset definitions (see the module docstring) ──────────────────
+
+#: ``get`` value of the Simple Recall subset.  Nothing else belongs in it.
+SIMPLE_RECALL_GET_STYLE = "all"
+#: ``get`` values of the two Chronological Awareness legs.
+LATEST_GET_STYLE = "latest"
+CHRONOLOGICAL_GET_STYLE = "chronological"
 
 # ── Deterministic F1 scorer ──────────────────────────────────────────────────
 
@@ -278,39 +306,108 @@ def _llm_judge_fallback_hook(
 # ── Composite score computation ──────────────────────────────────────────────
 
 
+SIMPLE_RECALL_BINS = ("0", "1", "2", "3-5", "6+")
+
+
+def simple_recall_bin(nb_events: int) -> str:
+    """Return the paper's five-bin label for a matching-event count."""
+    if nb_events == 0:
+        return "0"
+    if nb_events == 1:
+        return "1"
+    if nb_events == 2:
+        return "2"
+    if nb_events <= 5:
+        return "3-5"
+    return "6+"
+
+
+def simple_recall_bin_counts(per_question_results: list[dict]) -> dict[str, dict]:
+    """Per-bin count and mean F1, for reporting the five bins separately.
+
+    Bin 0 is the hallucination bin and is always reported, never dropped.
+    """
+    out: dict[str, dict] = {b: {"count": 0, "avg_f1": 0.0} for b in SIMPLE_RECALL_BINS}
+    for r in per_question_results:
+        bucket = out[simple_recall_bin(_bin_basis(r))]
+        bucket["count"] += 1
+        bucket["avg_f1"] += r.get("f1", 0.0)
+    for bucket in out.values():
+        if bucket["count"]:
+            bucket["avg_f1"] /= bucket["count"]
+    return out
+
+
+def _coerce_nb_events(raw) -> Optional[int]:
+    """Coerce ``n_chapters_correct_answer`` to an int, or None if unusable.
+
+    Returns None rather than 0 on a missing/garbage value: 0 is the
+    hallucination bin and inventing it would move a real question into it.
+    """
+    if raw is None or isinstance(raw, bool):
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 0 else None
+
+
+def _bin_basis(row: dict) -> int:
+    """Matching-event count for one scored row.
+
+    ``nb_events`` (``n_chapters_correct_answer``) is the paper's basis and
+    reproduces the authors' own ``bins_items_correct_answer`` column exactly.
+    ``nb_gt`` is the documented fallback for rows produced before ``nb_events``
+    was carried; it disagrees on ~8% of rows, so callers that care record which
+    basis was used rather than assuming.
+    """
+    nb_events = row.get("nb_events")
+    if isinstance(nb_events, int) and nb_events >= 0:
+        return nb_events
+    return int(row.get("nb_gt", 0) or 0)
+
+
+def simple_recall_bin_basis(per_question_results: list[dict]) -> str:
+    """Report which basis :func:`_bin_basis` actually used across the subset."""
+    if not per_question_results:
+        return "none"
+    have = sum(
+        1 for r in per_question_results
+        if isinstance(r.get("nb_events"), int) and r["nb_events"] >= 0
+    )
+    if have == len(per_question_results):
+        return "nb_events"
+    if have == 0:
+        return "nb_gt_fallback"
+    return f"mixed({have}/{len(per_question_results)} nb_events)"
+
+
 def compute_simple_recall_score(per_question_results: list[dict]) -> float:
     """Compute Simple Recall Score per paper methodology.
 
-    Groups questions by the number of matching events in the ground truth
-    (0, 1, 2, 3–5, 6+), averages F1 within each group, then averages groups.
+    Groups questions by the number of matching events (0, 1, 2, 3-5, 6+),
+    averages F1 within each group, then averages groups.
+
+    **The caller must pass the Simple Recall subset only** — rows with
+    ``get_style == "all"``.  This function does not filter, because the
+    subset decision belongs where the rows are assembled; passing the whole
+    question set silently mixes the Chronological Awareness legs into the
+    headline (the M-12e defect).
 
     Args:
         per_question_results: List of dicts with keys:
           - f1: float
-          - nb_gt: int  (number of ground truth items)
+          - nb_events: int  (number of matching events; preferred)
+          - nb_gt: int      (number of ground truth items; fallback only)
 
     Returns:
-        Simple Recall Score ∈ [0, 1].
+        Simple Recall Score in [0, 1].
     """
-    # Group by nb_gt bucket
-    groups: dict[str, list[float]] = {
-        "0": [], "1": [], "2": [], "3-5": [], "6+": [],
-    }
-
-    def _bucket(nb_gt: int) -> str:
-        if nb_gt == 0:
-            return "0"
-        if nb_gt == 1:
-            return "1"
-        if nb_gt == 2:
-            return "2"
-        if nb_gt <= 5:
-            return "3-5"
-        return "6+"
+    groups: dict[str, list[float]] = {b: [] for b in SIMPLE_RECALL_BINS}
 
     for r in per_question_results:
-        b = _bucket(r.get("nb_gt", 0))
-        groups[b].append(r.get("f1", 0.0))
+        groups[simple_recall_bin(_bin_basis(r))].append(r.get("f1", 0.0))
 
     group_avgs = [
         sum(vs) / len(vs)
@@ -330,8 +427,12 @@ def compute_chronological_awareness_score(
 
     Average of:
       Latest State score:        mean F1 over 'latest' questions.
-      Chronological Order score: mean Kendall τ over 'chronological' questions
-                                 (requires the full ordered lists to be present).
+      Chronological Order score: mean Kendall tau over 'chronological'
+                                 questions.  The tau of a question whose
+                                 matched set does not cover the FULL ordered
+                                 ground truth is 0.0 — the caller is
+                                 responsible for having failed it closed (see
+                                 ``score_tulving_run.chronological_tau``).
 
     Args:
         latest_results:       List of dicts with key 'f1'.
@@ -579,6 +680,10 @@ class TulvingEpisodicAdapter(BaseAdapter):
 
     # ── prompt construction ──────────────────────────────────────────────────
 
+    @staticmethod
+    def _coerce_nb_events(raw) -> Optional[int]:
+        return _coerce_nb_events(raw)
+
     def _row_to_prompt(self, idx: int, row: dict) -> dict:
         question = str(row.get("question", "")).strip()
         correct_answer_raw = row.get("correct_answer", [])
@@ -588,6 +693,9 @@ class TulvingEpisodicAdapter(BaseAdapter):
         cue = str(row.get("cue", ""))
         chapter = int(row.get("chapter", -1)) if row.get("chapter") is not None else -1
         nb_gt = len(ground_truth)
+        # Number of matching EVENTS — the paper's Simple Recall bin basis.
+        # Reproduces the authors' bins_items_correct_answer column 686/686.
+        nb_events = _coerce_nb_events(row.get("n_chapters_correct_answer"))
 
         tier = self._get_tier_for_index(idx)
 
@@ -646,6 +754,7 @@ class TulvingEpisodicAdapter(BaseAdapter):
                 "retrieval_type": retrieval_type,
                 "get_style": get_style,
                 "nb_gt": nb_gt,
+                "nb_events": nb_events,
                 "llm_judge_fallback": False,  # deterministic only
             },
             "metadata": {
@@ -654,6 +763,7 @@ class TulvingEpisodicAdapter(BaseAdapter):
                 "get_style": get_style,
                 "chapter": chapter,
                 "nb_gt": nb_gt,
+                "nb_events": nb_events,
                 "ground_truth_items": ground_truth,
             },
         }
