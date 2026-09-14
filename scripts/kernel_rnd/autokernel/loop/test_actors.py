@@ -149,7 +149,7 @@ class PlannerContract(unittest.TestCase):
             self.assertIn("do not invent timing evidence", captured[0])
             self.assertIn("DO NOT BUILD, COMPILE, BENCHMARK OR TEST", captured[1])
             self.assertIn(json.dumps({"paths": [hypothesis["target_surface"]]}), captured[1])
-            self.assertIn("invents unavailable profile evidence", captured[2])
+            self.assertIn("invents unavailable evidence as an established fact", captured[2])
             captured.clear()
             planner.propose({})
             planner.author(proposed, {})
@@ -159,6 +159,20 @@ class PlannerContract(unittest.TestCase):
         self.assertIn('"target_surface": "<one path under ggml/src/ggml-cuda/>"', captured[0])
         self.assertIn('{"paths": ["ggml/src/ggml-cuda/<file>"]}', captured[1])
         self.assertIn("negligible device-time share", captured[2])
+
+    def test_cpu_planner_uses_existing_ab_instead_of_promising_unsupported_trace(self):
+        context = {"target": {"resource_class": "cpu"},
+                   "prior_hypothesis_rejections": [
+                       "no frozen trace establishes the eligible-call fraction"]}
+        payload = ('{"mechanism_id": "akm-row", "statement": "bound row loop", '
+                   '"falsifier": "matched A/B is non-positive", '
+                   '"target_surface": "ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp", '
+                   '"target_symbol": "mul_mat"}')
+        with mock.patch.object(actors, "_run_agent", return_value=payload) as run:
+            actors.AgentPlanner(workspace=Path("/tmp")).propose(context)
+        prompt = run.call_args.args[0]
+        self.assertIn("Do not make an unsupported trace or counter a prerequisite", prompt)
+        self.assertIn("existing matched A/B can test", prompt)
 
     def test_a_complete_hypothesis_parses(self):
         planner = actors.AgentPlanner(workspace=Path("/tmp"))
@@ -187,6 +201,20 @@ class PlannerContract(unittest.TestCase):
 
 
 class CriticContract(unittest.TestCase):
+
+    def test_cpu_payoff_evidence_is_post_authoring_not_a_formation_gate(self):
+        context = {"target": {"recipe": {"backend": "cpu"}},
+                   "cpu_profile": {"status": "unavailable", "reason": "fixture"}}
+        with mock.patch.object(actors, "_run_agent",
+                               return_value='{"accepted": true}') as run:
+            review = actors.AgentCritic(workspace=Path("/tmp")).review_hypothesis(
+                Hypothesis("akm-row", "bound row loop", "matched A/B is non-positive",
+                           "ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp", "mul_mat"), context)
+        self.assertTrue(review.accepted)
+        prompt = run.call_args.args[0]
+        self.assertIn("Do NOT reject", prompt)
+        self.assertIn("ordinary post-authoring falsifiers", prompt)
+        self.assertIn("source reachability or safety", prompt)
 
     def test_a_reasonless_rejection_is_made_explicit_not_crashed_on(self):
         """The loop refuses a reasonless rejection; the critic must not hand it one."""

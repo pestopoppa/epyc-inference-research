@@ -468,7 +468,11 @@ Propose exactly one hypothesis. Reply with ONE json object and nothing else:
   "target_symbol": "<the function you will change>"}}
 
 Rules: {profile_rule}; name a MECHANISM, not a wish; \
-state a falsifier that could actually fail."""
+state a falsifier that could actually fail. The loop itself owns source inspection, \
+authoring, correctness gates and matched A/B measurement. Do not make an unsupported \
+trace or counter a prerequisite that this loop cannot collect. After a rejection for \
+missing evidence, either use an available diagnostic named in the context or choose \
+the smallest source-consistent change whose payoff the existing matched A/B can test."""
 
 
 def _runtime_pair(treatment, context, mechanism_id):
@@ -642,8 +646,15 @@ class AgentCritic:
                           context: Mapping[str, Any]) -> Review:
         grounds = (
             "it was already measured under the selected conditions; the mechanism is unsupported "
-            "by the selected CPU source route; it invents unavailable profile evidence; "
-            "there is no real falsifier; or it is already present in the selected source"
+            "by the selected CPU source route; it invents unavailable evidence as an established "
+            "fact; there is no real falsifier; it presents a correctness or safety risk that the "
+            "existing gates cannot resolve; or it is already present in the selected source. "
+            "Do NOT reject a source-consistent, bounded hypothesis merely because its expected "
+            "payoff, eligible-call fraction, wall-time exposure, local speedup, or other performance "
+            "bound has not already been measured. Those are ordinary post-authoring falsifiers: "
+            "the loop's correctness gates and matched A/B exist to test them. Require pre-authoring "
+            "evidence only when it is needed to establish source reachability or safety, or when the "
+            "loop's available experiment cannot observe the proposed mechanism"
             if _cpu_target(context) else
             "it was already measured; the mechanism is unsupported by the profile; "
             "there is no real falsifier; the target has negligible device-time share; "
