@@ -1578,6 +1578,16 @@ def _scheduled_failure_account(state, manifest, active, batch_dir, original):
     try:
         reference, _sha = _json(batch_dir / "loop-held-claims.json", limit=64 * 1024)
     except FileNotFoundError:
+        acquired_path = batch_dir / "loop-claim-acquired.json"
+        if acquired_path.exists():
+            acquired, _sha = _json(acquired_path, limit=64 * 1024)
+            if (not isinstance(acquired, dict)
+                    or acquired.get("schema") != "epyc.autokernel.claim_acquired.v1"
+                    or acquired.get("selection_digest") != selection.digest
+                    or acquired.get("target") != _selected_identity(original)):
+                raise SerialRefused("claim-acquired marker differs from issued selection")
+            raise SerialRefused(
+                "failed post-claim child lacks released held-resource evidence")
         try:
             marker, _sha = _json(batch_dir / "loop-preclaim-failure.json", limit=64 * 1024)
         except FileNotFoundError as exc:

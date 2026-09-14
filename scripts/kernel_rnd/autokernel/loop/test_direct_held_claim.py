@@ -1,6 +1,7 @@
 """Actual temporary flock lifecycle; no physical region or model execution."""
 from contextlib import contextmanager
 import fcntl
+import json
 import os
 import sys
 from types import ModuleType
@@ -115,6 +116,26 @@ def test_gpu_observer_constructor_failure_releases_acquired_lock(tmp_path, monke
     monkeypatch.setattr(claim, "HeldCpuClaim", original)
     with claim.hold(path, device_id="fixture-device") as recovered:
         assert recovered.observe()["status"] == "held"
+
+
+def test_scheduled_claim_acquisition_is_durable_before_release(tmp_path):
+    from . import run, scheduling as s
+    from .test_scheduling import config, proposal
+
+    cfg = s.SchedulerConfig.from_dict(config())
+    _state, selected = s.select_stage(cfg, s.initial_state(cfg, "original"),
+                                      [proposal()], now=0)
+    target = {"selected_id": "fixture"}
+    path = tmp_path / "fixture.lock"
+    with claim.hold(path, device_id="fixture-device") as held:
+        run._publish_claim_acquired(tmp_path, selected, target, [held])
+        marker = json.loads((tmp_path / "loop-claim-acquired.json").read_text())
+        assert marker["selection_digest"] == selected.digest
+        assert marker["target"] == target
+        assert marker["components"][0]["context_id"] == held._context_id
+        assert marker["components"][0]["open"]["status"] == "held"
+        with pytest.raises(claim.ClaimRefused, match="has not completed"):
+            held.retained_interval()
 
 
 def test_gpu_close_observer_failure_is_unavailable_and_releases(tmp_path, monkeypatch):

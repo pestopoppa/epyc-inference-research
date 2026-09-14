@@ -104,6 +104,33 @@ def _publish_preclaim_failure(out, scheduler_selection, target, error) -> None:
     }, prefix=".preclaim-failure-")
 
 
+def _publish_claim_acquired(out, scheduler_selection, target, contexts) -> None:
+    """Durably distinguish an acquired claim from a pre-claim failure.
+
+    This is not a scheduler receipt: only the released intervals published by
+    ``publish_held_claims`` can account resource time.  It closes the crash gap
+    between acquisition and that terminal publication without inventing an end
+    time for a process that disappeared abruptly.
+    """
+    if scheduler_selection is None or out is None:
+        return
+    from .claim import HeldCpuClaim
+    if not contexts or any(type(row) is not HeldCpuClaim for row in contexts):
+        raise claim.ClaimRefused("original acquired claim contexts are required")
+    status.write_json(out, "loop-claim-acquired.json", {
+        "schema": "epyc.autokernel.claim_acquired.v1",
+        "selection_digest": scheduler_selection.digest,
+        "target": target,
+        "components": [{
+            "context_id": row._context_id,
+            "domain": dict(row._domain),
+            "device_id": row["device_id"],
+            "physical_region_fraction": row._region_fraction,
+            "open": row._opened,
+        } for row in contexts],
+    }, prefix=".claim-acquired-")
+
+
 def _verify_before_claim(action, *, out, scheduler_selection, target):
     """Run an identity guard and settle scheduled failures before any claim."""
     try:
@@ -2244,6 +2271,8 @@ def main(argv: list[str] | None = None) -> int:
                 except Exception as marker_error:
                     print(f"pre-claim failure marker unavailable: {marker_error}", file=sys.stderr)
                 raise
+            _publish_claim_acquired(
+                args.out, scheduler_selection, selected_identity, original_claims)
             claim_started = time.time()
             if selected_target is not None:
                 # Same original invocation bound used by serial scheduling. This
