@@ -222,6 +222,89 @@ speculative_decoding_policy:
     reaches a launched server. A master-registry edit alone does NOT change
     production behaviour.
 
+  # ---------------------------------------------------------------------------
+  # WHAT IS AND IS NOT RUNTIME-SWITCHABLE  (read before designing any policy)
+  # ---------------------------------------------------------------------------
+  # Read from the FROZEN production kernel on 2026-09-14:
+  #   /mnt/raid0/llm/llama.cpp, branch production-consolidated-v9,
+  #   commit 0db32c06e3e550065b78311a6031ef3dd2c4f27c (llama-server --version 10125).
+  # All file:line references below are AT THAT COMMIT. Re-verify on every new
+  # production version — this surface changed between v8 and v9 (see the
+  # `v8_claim_corrected` note).
+  runtime_switchability:
+    launch_fixed:
+      spec_type: >
+        LAUNCH-ONLY. `--spec-type` (common/arg.cpp:3934-3946) appends to
+        `params.speculative.types` at server start. Which drafters are active —
+        and therefore whether the n-gram lane is composed in at all — is fixed
+        for the life of the process. The per-request `speculative.type` field IS
+        registered in the server schema (tools/server/server-schema.cpp:220-224)
+        but sits inside `#if 0` (opened at :210, closed at :234) under the
+        upstream comment at :209 — "disable speculative parameter adjustments
+        that are not wired per request". It is NOT compiled into the production
+        binary. Autopilot CANNOT switch drafter per request.
+      draft_model: >
+        LAUNCH-ONLY. `--spec-draft-model` / `-md` / `--model-draft`
+        (common/arg.cpp:3927). No per-request equivalent exists in any compiled
+        path.
+      ngram_composition: >
+        LAUNCH-ONLY, and NOT selectively disableable. The ngram lanes are
+        configured exclusively by launch flags: `--spec-ngram-mod-n-min` /
+        `-n-max` / `-n-match` (common/arg.cpp:3945-3973),
+        `--spec-ngram-simple-size-n` / `-size-m` / `-min-hits` (:3976-4004),
+        `--spec-ngram-map-k-*` (:4007+). Their per-request counterparts
+        (`speculative.ngram_size_n` / `_size_m` / `_min_hits`,
+        server-schema.cpp:226-233) are inside the same `#if 0`. Consequence: a
+        request cannot turn ngram off while leaving draft-mtp on — under a
+        composed launch the only per-request lever is the shared draft budget,
+        which kills BOTH arms together. Selective ngram requires SEPARATE SERVER
+        INSTANCES.
+      draft_n_min_and_p_min: >
+        LAUNCH-ONLY. `--spec-draft-n-min` (common/arg.cpp:3868) and
+        `--spec-draft-p-min` (:3883). The per-request `speculative.n_min` and
+        `speculative.p_min` fields (server-schema.cpp:211-218) are inside the
+        `#if 0` and are not compiled in.
+    per_request:
+      speculative.n_max: >
+        LIVE IN v9, AND LOWER-ONLY. `speculative.n_max` is registered OUTSIDE the
+        `#if 0` (tools/server/server-schema.cpp:205-207, hard limits 0..INT32_MAX,
+        "0 disables speculation for the request"). Post-processing then clamps it
+        to the launch value — server-schema.cpp:542-547:
+          "Per-request speculation may only reduce the launch-time budget. The
+           server sizes its output buffers from the launch parameters, so report
+           the clamped value that will actually be used by the slot."
+          params.speculative.draft.n_max = std::min(
+                  params.speculative.draft.n_max,
+                  params_base.speculative.draft.n_max);
+        The slot applies it with a second min at server-context.cpp:437. So a
+        request may LOWER the draft budget (down to 0 = no speculation for that
+        request) but can NEVER raise it above the `--spec-draft-n-max` the server
+        was launched with. Any autopilot search over n_max is therefore bounded
+        ABOVE by the launch value and needs a relaunch to explore higher.
+        NOTE the separate hazard recorded in SR-3 of
+        epyc-root/handoffs/active/speculative-decoding-mtp-refresh.md: under a
+        COMPOSED recipe `n_max` is a soft budget, not a cap — measured mean
+        accepted run length 2.36-2.67 at n_max=2 — because the ngram lane has its
+        own independent `--spec-ngram-mod-n-max`.
+    v8_claim_corrected: >
+      A 2026-07-31 source read of v8 (`67a433bf4`) concluded that the ENTIRE
+      per-request speculative surface was compiled out, `speculative.n_max`
+      included. That was true of v8 and is FALSE of v9: at
+      0db32c06e3e550065b78311a6031ef3dd2c4f27c the `#if 0` opens at :210, i.e.
+      BELOW the `speculative.n_max` registration at :205, and the :542-547 clamp
+      exists specifically to bound the newly-live field. Do not carry the v8
+      claim forward. Any statement about this surface must name the kernel commit
+      it was read at.
+    autopilot_implication: >
+      A per-request drafting policy is possible on v9 only in the LOWER direction
+      and only for the shared budget: skip or shorten drafting for a request,
+      never lengthen it, and never per-lane. Everything else — which drafters,
+      which draft model, the ngram parameters, n_min, p_min — is a RELAUNCH, and
+      raising the ceiling above the launch budget is a relaunch too. Enabling the
+      `#if 0` block would be a KERNEL CHANGE: it must ride the full
+      experimental -> validate -> new-production cycle in CLAUDE.md, never a patch
+      to a frozen production tree.
+
   retired_fields:
     ngram_candidate_spec_type: >
       RETIRED 2026-07-31. This field previously carried `ngram-mod,draft-mtp`
@@ -4712,7 +4795,9 @@ roles:
       # NOT A PRODUCTION ROLE. supergemma4_31b_q4km is a research/catalogue model.
       # This `ngram-simple` record is CANDIDATE category (measured, not adopted)
       # and is NOT the production recipe. Production recipe:
-      # see top-level `speculative_decoding_policy` (ngram-mod,draft-mtp).
+      # see top-level `speculative_decoding_policy` (draft-mtp alone; the composed
+      # `ngram-mod,draft-mtp` this comment used to name was REVERSED 2026-07-31 by
+      # a126e43d — do NOT reintroduce it).
       category: CANDIDATE
       type: ngram_lookup
       spec_type: ngram-simple
@@ -4815,8 +4900,12 @@ roles:
                           # with the larger canonical ubatch when sequence is short.
     constraints:
       forbid:
-      - prompt_lookup       # Legacy prompt_lookup remains disabled; v7 common_speculative ngram modes compose with draft-mtp when explicitly launched.
-      reason: "legacy prompt_lookup remains disabled; use common_speculative ngram-* + draft-mtp composition for launch-time n-gram fallback."
+      - prompt_lookup       # Legacy prompt_lookup remains disabled. Composed ngram+draft-mtp was REVERSED 2026-07-31 (a126e43d); draft-mtp alone is production.
+      # CORRECTED 2026-09-14: the prior text recommended an "ngram-* + draft-mtp
+      # composition" as the prompt_lookup replacement. That composed recipe was
+      # REVERSED on 2026-07-31 by a126e43d (epyc-inference-research) and propagated
+      # by epyc-orchestrator ed891211. Production launches draft-mtp ALONE.
+      reason: "legacy prompt_lookup remains disabled. Production launches --spec-type draft-mtp ALONE; there is no n-gram fallback lane (composed recipe reversed 2026-07-31, a126e43d). Spec type is launch-fixed: see speculative_decoding_policy.runtime_switchability."
     # 2026-06-26 v6 cutover: runtime_requirements (ik_llama binary_dir + ld_library_path) removed — native draft-mtp on production-consolidated-v6.
     performance:
       baseline_tps: 7.05    # measured 2026-05-06, EPYC canonical (96 threads, fa=1, no-mmap, OMP env stack)
@@ -4898,8 +4987,12 @@ roles:
       ubatch: 512           # 2026-05-08: smaller ubatch to match deep-dive recipe
     constraints:
       forbid:
-      - prompt_lookup       # Legacy prompt_lookup remains disabled; v7 common_speculative ngram modes compose with draft-mtp when explicitly launched.
-      reason: "legacy prompt_lookup remains disabled; use common_speculative ngram-* + draft-mtp composition for launch-time n-gram fallback."
+      - prompt_lookup       # Legacy prompt_lookup remains disabled. Composed ngram+draft-mtp was REVERSED 2026-07-31 (a126e43d); draft-mtp alone is production.
+      # CORRECTED 2026-09-14: the prior text recommended an "ngram-* + draft-mtp
+      # composition" as the prompt_lookup replacement. That composed recipe was
+      # REVERSED on 2026-07-31 by a126e43d (epyc-inference-research) and propagated
+      # by epyc-orchestrator ed891211. Production launches draft-mtp ALONE.
+      reason: "legacy prompt_lookup remains disabled. Production launches --spec-type draft-mtp ALONE; there is no n-gram fallback lane (composed recipe reversed 2026-07-31, a126e43d). Spec type is launch-fixed: see speculative_decoding_policy.runtime_switchability."
     # 2026-06-26 v6 cutover: runtime_requirements (ik_llama binary_dir + ld_library_path) removed — native draft-mtp on production-consolidated-v6.
     performance:
       baseline_tps: 41.49     # measured 2026-05-06, EPYC canonical
@@ -5172,7 +5265,15 @@ roles:
     constraints:
       forbid:
       - prompt_lookup
-      reason: "legacy prompt_lookup remains disabled; v7 common_speculative composes ngram-mod with draft-mtp as one launch-time stack."
+      # CORRECTED 2026-09-14. The prior text read "v7 common_speculative composes
+      # ngram-mod with draft-mtp as one launch-time stack", which contradicted
+      # `speculative_decoding_policy` and read as a description of production.
+      # The composed recipe was REVERSED on 2026-07-31 by a126e43d
+      # (epyc-inference-research, "registry: REVERSE the composed spec recipe --
+      # draft-mtp alone, ngram nowhere"), propagated to the lean registry and the
+      # derived priors by epyc-orchestrator ed891211. Production launches
+      # `--spec-type draft-mtp` alone; no role composes ngram-mod.
+      reason: "legacy prompt_lookup remains disabled. It is NOT replaced by an ngram composition: production launches --spec-type draft-mtp ALONE (reversal a126e43d 2026-07-31; see top-level speculative_decoding_policy). common_speculative CAN compose ngram-* with draft-mtp, but only at launch time and only if a future operator decision re-enables it for a measured role — spec type is launch-fixed, see speculative_decoding_policy.runtime_switchability."
     # 2026-06-26 v6 cutover: runtime_requirements (ik_llama binary_dir + ld_library_path) removed — native draft-mtp on production-consolidated-v6.
     performance:
       # CORRECTED 2026-07-31. Both rows held the same figure, so `optimized_tps`
