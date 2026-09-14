@@ -416,6 +416,38 @@ class TestHeadlineHygiene(unittest.TestCase):
         self.assertIn("2516c9807",
                       " ".join(R.CURRENT_CHAMPION["do_not_fold"]))
 
+    def test_the_headline_binary_is_identified_and_matches_the_headline(self):
+        """★ THE GUARD THAT TIES THE NUMBERS TO AN ARTIFACT.
+
+        The canonical headline's build number and HEADLINE_BINARY's must be the SAME
+        number, or the module is quoting numbers against a binary record that is not
+        theirs. Captured from scratch on 2026-09-14; if that tree is collected these
+        digests become the headline's entire identity.
+        """
+        hb = R.HEADLINE_BINARY
+        headline = R.HEADLINES[R.CANONICAL_HEADLINE]
+        self.assertEqual(headline["binary_build_number"], hb["build_number"])
+        self.assertEqual(headline["binary_record"], "HEADLINE_BINARY")
+        self.assertEqual(hb["headline"], R.CANONICAL_HEADLINE)
+        # It is NOT the champion commit, and NOT either digested champion build.
+        self.assertNotEqual(hb["commit"], R.CURRENT_CHAMPION["commit"])
+        for surface, spec in R.CURRENT_CHAMPION["builds"].items():
+            self.assertNotEqual(hb["build_number"], spec["build_number"], surface)
+        # ...but it DOES descend from the champion, and the delta is named rather than
+        # left for a reader to assume either way.
+        self.assertEqual(hb["descends_from_champion"], R.CURRENT_CHAMPION["commit"])
+        self.assertTrue(hb["delta_from_champion"])
+        self.assertTrue(hb["commit_full"].startswith(hb["commit"]))
+        self.assertEqual(len(hb["commit_full"]), 40)
+        for name, digest in hb["digests"].items():
+            self.assertEqual(len(digest), 64, name)
+            int(digest, 16)
+        # The role must say what this binary is NOT, not only what it is.
+        self.assertIn("NOT the champion", hb["role"])
+        # And the gap must point at the record, so a reader who only reads the gap
+        # still finds the digests.
+        self.assertIn("HEADLINE_BINARY", R.CHAMPION_PIN_GAP)
+
     def test_do_not_fold_list_is_carried(self):
         """★ Folding a superseded decision is a failure ancestry cannot see."""
         self.assertIn("feature/tree-draft-v6", R.CURRENT_CHAMPION["do_not_fold"])

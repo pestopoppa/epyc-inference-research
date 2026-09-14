@@ -358,6 +358,71 @@ CURRENT_CHAMPION = {
     },
 }
 
+# ---------------------------------------------------------------------------
+# 2b. ★★ THE BINARY THE CANONICAL HEADLINE ACTUALLY CAME OFF
+# ---------------------------------------------------------------------------
+# Captured 2026-09-14 (WRAP-10 follow-up) because this tree is scratch and would have
+# been collected with it, taking the only identity the campaign's headline numbers have.
+# Inspection only: digests from sha256sum, build number and commit from the build's own
+# generated common/build-info.cpp. NO BINARY EXECUTED.
+#
+# ★ THE NUANCE THAT MATTERS, AND IT CUTS BOTH WAYS.
+#   2516c9807 is a DESCENDANT of ef81196d5 -- `git merge-base --is-ancestor` confirms it,
+#   and the delta is exactly two commits, both INSTRUMENTATION:
+#     8f6487f38  HARNESS-1 runtime knob page (cherry-pick of eae02f2dc)
+#     2516c9807  SYNC-17 FIX-1/2/3 + SYNC-18 enforcement, all runtime-switchable
+#   So calling the headline run "ef81196d5" is not a wrong LINEAGE -- it is an
+#   unstated DELTA. That is better than a fabricated identity and still not good
+#   enough to pin on: the module's own do_not_fold entry records this branch as a
+#   "measurement instrument only", its knobs are runtime-switchable, and no
+#   bit-identity between 10303 and either 10301 build was ever established.
+#   Two of its five knobs DEFAULT ON and that default is a measured -2.136%
+#   regression (see do_not_fold), so "same source plus dead code" is NOT available
+#   as an argument here.
+HEADLINE_BINARY = {
+    "build_number": 10303,
+    "commit": "2516c9807",
+    "commit_full": "2516c9807b8a92d472c8e75a0a1ce8558d2e34a7",
+    "branch": "inf70/retest1-fix1",
+    "bindir": "/mnt/raid0/llm/tmp/inf70/agents/retest1/bin-r1",
+    "worktree": "/mnt/raid0/llm/tmp/inf70/retest1wt",   # tree CLEAN at commit_full
+    "compiler": "GNU 15.2.0",
+    "role": (
+        "the binary the canonical CPU headline numbers came from; NOT the champion "
+        "commit"
+    ),
+    "headline": "champion_final_20260908",
+    "descends_from_champion": "ef81196d5",
+    "delta_from_champion": (
+        "exactly 2 instrumentation commits: 8f6487f38 (HARNESS-1 runtime knob page, "
+        "cherry-pick of eae02f2dc) and 2516c9807 (SYNC-17 FIX-1/2/3 + SYNC-18 "
+        "enforcement, all runtime-switchable)"
+    ),
+    "digests": {
+        "llama-server":
+            "c96c7d892898cfda476597078ffeabddaa658c7119d55d87b1608b23e7971a35",
+        "libggml-cpu.so.0.16.0":
+            "d59543423ceb4ad125acec3c0e268b5684dfecaef930d994b844448e52966acc",
+        "libllama-common.so.0.0.10303":
+            "96e01fa02a84ad2258286fb840d69350725386d6166f2c66b2beb7ee7643b8a5",
+        "libggml-base.so.0.16.0":
+            "aee53568deb0bc88b8398c7478fb1148a2ed6a9151aa87d709c1a961e05c334d",
+        "libllama.so.0.0.10303":
+            "75b2088650ca70ea9b6a3778f971337cbe1f2e27a6d62762d84fd3579d90740c",
+    },
+    # ★ Four of the five reproduce the digest file the build script itself wrote at
+    # build time (retest1/binaries.sha256) -- an independent record, not this capture.
+    # libllama-common was NOT in that file; it is first recorded here.
+    "digests_confirmed_against_build_record":
+        "/mnt/raid0/llm/tmp/inf70/agents/retest1/binaries.sha256 (4 of 5 match; "
+        "libllama-common.so.0.0.10303 absent there, first recorded here)",
+    "record": "/mnt/raid0/llm/tmp/inf70/agents/retest1/CHAMPION-FINAL.md "
+              "(names this arm 'bin-r1 (10303)'); build_retest1.sh is its build script",
+    # ⚠ SCRATCH. If this path is gone, the headline numbers lose their only identity and
+    # these digests become the entire record. Do not delete this entry.
+    "storage": "SCRATCH -- /mnt/raid0/llm/tmp is not durable",
+}
+
 # ★ FAIL-CLOSED. assert_binary_identity() and the headline both depend on this.
 # While False, the module can verify the PRIOR artifact and must NOT be read as
 # certifying the current champion's binary.
@@ -378,6 +443,14 @@ CHAMPION_PIN_GAP = (
     "headline was produced by an INSTRUMENT build that is not ef81196d5, and the "
     "ef81196d5 CPU build that does exist postdates that window by a day and appears in "
     "no run record: nothing was ever measured on it. "
+    "★ THAT BINARY IS NOW IDENTIFIED AND DIGESTED -- see HEADLINE_BINARY: build 10303, "
+    "2516c9807b8a92d472c8e75a0a1ce8558d2e34a7 on inf70/retest1-fix1, bindir "
+    "/mnt/raid0/llm/tmp/inf70/agents/retest1/bin-r1 (captured 2026-09-14 before that "
+    "scratch tree could be collected). It DESCENDS from ef81196d5 by exactly two "
+    "instrumentation commits, so the headline's label is an unstated DELTA rather than a "
+    "wrong lineage -- but it is still the instrument tree do_not_fold refuses, two of "
+    "whose knobs default ON for a measured -2.136%, and no bit-identity with either "
+    "10301 build was ever established. "
     "Setting this flag True would therefore certify a binary that produced none of the "
     "numbers here -- the same defect one level up. It stays False, with a loud refusal "
     "in preflight (assert_current_champion_identity, plus the stderr banner preflight() "
@@ -731,9 +804,14 @@ HEADLINES["champion_final_20260908"] = {
         "headline's binary is NEITHER of them -- it is the retest1-fix1 instrument "
         "(@ 2516c9807), which do_not_fold already records as 'the binary the final "
         "numbers came from'. The prose calls it ef81196d5 because that was the "
-        "baseline; the build number says otherwise. No digests exist for 10303. "
-        "This is why CHAMPION_PIN_RESOLVED is False."
+        "baseline; the build number says otherwise. ★ IT IS NOW FULLY IDENTIFIED AND "
+        "DIGESTED -- see HEADLINE_BINARY -- and it DESCENDS from ef81196d5 by exactly "
+        "two instrumentation commits, so this is an unstated delta, not a wrong "
+        "lineage. Quote these numbers against HEADLINE_BINARY, never against a bare "
+        "'ef81196d5'. This is why CHAMPION_PIN_RESOLVED is False."
     ),
+    # ★ The one pointer to follow before quoting anything in this entry.
+    "binary_record": "HEADLINE_BINARY",
     "window": "2026-09-08 15:05:39Z-16:12:47Z, GPU loop down, host exclusive",
     "prereg": "PREREG-FINAL.md frozen 15:05:15Z sha256 1d8f4ddc... BEFORE the lock",
     "unit": "LAUNCH",
@@ -1037,8 +1115,10 @@ PIN_GAP_BANNER = (
         for surface, spec in CURRENT_CHAMPION["builds"].items()
     )
     + " (digested, but NOTHING was measured on either)\n"
-    f"  headline : came off build {HEADLINES['champion_final_20260908']['binary_build_number']},"
-    " which is neither of those and has NO digests\n"
+    f"  headline : came off build {HEADLINE_BINARY['build_number']}"
+    f" ({HEADLINE_BINARY['commit']} on {HEADLINE_BINARY['branch']}), which is NEITHER\n"
+    "             of those -- an instrument tree 2 commits past the champion."
+    " See HEADLINE_BINARY.\n"
     "  A number produced under this pin is a champion3 number. Do NOT quote it as a\n"
     "  current-champion number. See CHAMPION_PIN_GAP.\n"
     "================================================================================\n"
