@@ -102,6 +102,19 @@ def _inputs(tmp_path, backend="cpu"):
         epoch="fixture-epoch", campaign_id="fixture-loo", should_stop=lambda: False)
 
 
+def test_keep_receipt_allows_embedded_lifecycle_telemetry_over_metadata_bound(tmp_path):
+    _, inputs = _inputs(tmp_path)
+    original = surface_fold.reopen_reference(inputs["keep_references"][0]).to_dict()
+    original["comparison"] = {"lifecycle_telemetry": "x" * (surface_fold.MAX_RECEIPT_BYTES + 1)}
+    original["comparison_digest"] = surface_fold._digest(original["comparison"])
+    receipt = surface_fold.ExperimentalKeepReceipt.from_dict(original)
+
+    retained = surface_fold.retain_receipt(inputs["store_root"], receipt)
+    assert retained.stat().st_size > surface_fold.MAX_RECEIPT_BYTES
+    reference = surface_fold.receipt_reference(retained)
+    assert surface_fold.reopen_reference(reference) == receipt
+
+
 def _hardware_edges(monkeypatch, inputs, *, rates=(100.0, 90.0, 100.0, 110.0), failure=None):
     calls = []
     def compile(source, build, **kwargs):

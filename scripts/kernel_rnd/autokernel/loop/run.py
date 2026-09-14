@@ -26,7 +26,7 @@ import subprocess
 import sys
 import time
 
-from ..controller import (anchor_integrity, build_recipe, inbox, rung_confirm,
+from ..controller import (anchor_integrity, build_recipe, experiments, inbox, rung_confirm,
                           workload_contract)
 HEARTBEAT_S = 30  # status heartbeat period; envelope = 6x this
 HEARTBEAT_STOP_TIMEOUT_S = 10
@@ -102,6 +102,33 @@ def _publish_preclaim_failure(out, scheduler_selection, target, error) -> None:
         "target": target,
         "error_type": type(error).__name__,
     }, prefix=".preclaim-failure-")
+
+
+def _publish_claim_acquired(out, scheduler_selection, target, contexts) -> None:
+    """Durably distinguish an acquired claim from a pre-claim failure.
+
+    This is not a scheduler receipt: only the released intervals published by
+    ``publish_held_claims`` can account resource time.  It closes the crash gap
+    between acquisition and that terminal publication without inventing an end
+    time for a process that disappeared abruptly.
+    """
+    if scheduler_selection is None or out is None:
+        return
+    from .claim import HeldCpuClaim
+    if not contexts or any(type(row) is not HeldCpuClaim for row in contexts):
+        raise claim.ClaimRefused("original acquired claim contexts are required")
+    status.write_json(out, "loop-claim-acquired.json", {
+        "schema": "epyc.autokernel.claim_acquired.v1",
+        "selection_digest": scheduler_selection.digest,
+        "target": target,
+        "components": [{
+            "context_id": row._context_id,
+            "domain": dict(row._domain),
+            "device_id": row["device_id"],
+            "physical_region_fraction": row._region_fraction,
+            "open": row._opened,
+        } for row in contexts],
+    }, prefix=".claim-acquired-")
 
 
 def _verify_before_claim(action, *, out, scheduler_selection, target):
@@ -789,8 +816,6 @@ def main(argv: list[str] | None = None) -> int:
                 or resumed["selected_target"] != selected_identity
                 or (not experimental) != (resumed["cor_anchor"] is not None)):
             parser.error("continuation target/branch/model/backend differs")
-    if experimental and args.cor_build is not None:
-        parser.error("experimental serving has no canonical champion-of-record build")
 
     # FIRST, before the claim, the census, even the dry run's wiring proof: the loop
     # optimises THE single champion branch or it does not start. See `champion` for
@@ -927,6 +952,22 @@ def main(argv: list[str] | None = None) -> int:
             args.store, serving_recipe, direct_launch,
             frozen_requests=frozen_requests, instrument=args.serving_instrument,
             pairs=args.serving_pairs)
+        # A source treatment changes executable/DSO identity, not the matched
+        # process noise frame.  Once an accumulator has advanced, its protected
+        # champion-of-record remains the calibrated reference for the same
+        # workload, request bytes, placement and environment.  Reuse that
+        # verified frame instead of demanding 48 fresh A/A launches after every
+        # source keep.  serving.compare revalidates the complete frame against
+        # both treatment arms before admitting the floor.
+        if (floor_reading.floor_pct is None and source_instrument
+                and args.cor_build is not None):
+            cor_floor_launch = _cpu_arm(direct_launch, args.cor_build)
+            _cor_floor_store, cor_floor_reading = _load_source_floor(
+                args.store, serving_recipe, cor_floor_launch,
+                frozen_requests=frozen_requests, instrument=args.serving_instrument,
+                pairs=args.serving_pairs)
+            if cor_floor_reading.floor_pct is not None:
+                floor_reading = cor_floor_reading
         floor_record = floor_reading.row or None
         floor = serving_floor_pct = floor_reading.floor_pct
         calibrated = floor is not None
@@ -1222,11 +1263,22 @@ def main(argv: list[str] | None = None) -> int:
                                "--is-ancestor", a, b],
                               capture_output=True).returncode == 0
     try:
-        if experimental:
-            # No bench accumulator and no canonical champion-of-record advance:
-            # These keeps are directly serving-measured experimental commits.
-            restored = accumulate.Bundle(champion_of_record=anchor_commit, tip=anchor_commit)
-            note = "experimental serving candidate; no production/champion designation"
+        # Experimental serving historically skipped R23-44 entirely.  A genuinely
+        # new experimental store may therefore create its first empty durable bundle
+        # even when a request-bound floor was written first.  A store with experiment
+        # history is different: initializing it empty would repeat the exact loss this
+        # migration repairs, so it fails closed until recovery seeds the retained
+        # patches and measurements.
+        experiment_history = False
+        if (args.store / "experiments.db").is_file():
+            with experiments.ExperimentStore(args.store, read_only=True) as memory:
+                experiment_history = memory.count() > 0
+        if (experimental and not (args.store / accumulate.JOURNAL_DIRNAME).exists()
+                and not experiment_history):
+            restored = accumulate.Bundle(
+                champion_of_record=anchor_commit, tip=anchor_commit)
+            restored.save(args.store)
+            note = "initialized first durable experimental serving accumulator"
         else:
             restored, note = accumulate.load_bundle(
                 args.store, anchor_commit=anchor_commit, is_ancestor=_is_ancestor)
@@ -1240,13 +1292,14 @@ def main(argv: list[str] | None = None) -> int:
     bundle = [restored]
     cor_commit = [restored.champion_of_record]
     cor_build = [args.cor_build or args.anchor_build]
-    if not experimental and (args.cor_build is not None or cor_commit[0] != anchor_commit):
+    if args.cor_build is not None or cor_commit[0] != anchor_commit:
         if args.cor_build is None:
             raise champion.StartupRefused(
                 "REFUSED: restored champion of record differs from current anchor; "
                 "supply its original --cor-build or --resume-run, never relabel the tip build")
-        if resumed is not None and resumed["cor_anchor"]["commit"] != serial_run.full_commit(
-                args.worktree, cor_commit[0]):
+        if (resumed is not None and resumed["cor_anchor"] is not None
+                and resumed["cor_anchor"]["commit"] != serial_run.full_commit(
+                    args.worktree, cor_commit[0])):
             raise champion.StartupRefused("REFUSED: retained COR differs from original restored bundle")
         _verify_before_claim(
             lambda: serial_run.verify_exact_anchor(
@@ -1658,7 +1711,7 @@ def main(argv: list[str] | None = None) -> int:
         headline follows it; on a divergence (bundle cleared bench, serving did not confirm)
         the champion of record HOLDS, the bundle is KEPT, and the divergence is journaled as
         planner evidence naming the bundled keeps (operator 2026-09-04)."""
-        if serving_recipe is None or experimental:
+        if serving_recipe is None:
             return
         try:
             _accumulate_after_keep(mechanism_id)
@@ -1678,11 +1731,13 @@ def main(argv: list[str] | None = None) -> int:
         # compounded bench: champion-of-record build (A) vs the just-advanced accumulator (B),
         # re-measured (never a product of marginal effects -- keeps interact) because this is
         # the number the fire threshold reads and the serving gate will be asked to confirm.
-        comp = bench.compare(
-            bench.Arm("champion_of_record", cor_build[0] / "bin" / "llama-bench"),
-            bench.Arm("accumulator", anchor_build[0] / "bin" / "llama-bench"),
-            args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=bench_floor,
-            surface=bench_surface, ubatch=ubatch, calibrated=bench_floor is not None).to_dict()
+        comp = (cpu_compare(cor_build[0], anchor_build[0]).to_dict()
+                if direct_launch else bench.compare(
+                    bench.Arm("champion_of_record", cor_build[0] / "bin" / "llama-bench"),
+                    bench.Arm("accumulator", anchor_build[0] / "bin" / "llama-bench"),
+                    args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=bench_floor,
+                    surface=bench_surface, ubatch=ubatch,
+                    calibrated=bench_floor is not None).to_dict())
         bundle[0].add_keep(mechanism_id, head, comp["effect"] * 100.0)
         bundle[0].save(args.store)   # durable BEFORE the gate decision, so a crash keeps it
         thr = (f"{accum_policy.fire_threshold_pct(serving_floor_pct):.2f}"
@@ -1802,7 +1857,7 @@ def main(argv: list[str] | None = None) -> int:
         are current only when measured for this exact tip; a retained older magnitude
         is separately labelled historical. None means there is no serving tier.
         """
-        if serving_recipe is None or experimental:
+        if serving_recipe is None:
             return None
         thr = (accum_policy.fire_threshold_pct(serving_floor_pct)
                if serving_floor_pct is not None else None)
@@ -1998,7 +2053,11 @@ def main(argv: list[str] | None = None) -> int:
                 report_runtime_progress()
                 reprofile()
                 return None
-            refuse_uncalibrated_keep(args.surface, calibrated, comparison)
+            if not (experimental and calibrated
+                    and comparison.noise_floor_pct is not None
+                    and comparison.decisive is False
+                    and not comparison.drifting and comparison.effect > 0):
+                refuse_uncalibrated_keep(args.surface, calibrated, comparison)
             if screen_state and screen_state["scope"] in {"quarter", "half"}:
                 screen_state["candidate"] = cpu_screen.retain_candidate(
                     store_root=args.store, origin_batch=args.out, worker=worker,
@@ -2083,6 +2142,7 @@ def main(argv: list[str] | None = None) -> int:
             build_context=build_context, make_gate=gate_for,
             make_measure=measure_for, record=record_pooled,
             iterations=(args.iterations or None), should_stop=should_stop,
+            accumulate_valid_positive=experimental,
             champion_tree=args.worktree, branch=args.champion_branch,
             on_step=step_pooled)
 
@@ -2211,6 +2271,8 @@ def main(argv: list[str] | None = None) -> int:
                 except Exception as marker_error:
                     print(f"pre-claim failure marker unavailable: {marker_error}", file=sys.stderr)
                 raise
+            _publish_claim_acquired(
+                args.out, scheduler_selection, selected_identity, original_claims)
             claim_started = time.time()
             if selected_target is not None:
                 # Same original invocation bound used by serial scheduling. This
@@ -2220,7 +2282,7 @@ def main(argv: list[str] | None = None) -> int:
             # R23-44: snapshot the starting champion into the protected champion-of-record slot
             # BEFORE the accumulator can advance and prune. The serving gate reads cor_build as
             # its A-arm; without this snapshot the first accumulator prune could delete it.
-            if serving_recipe is not None and not experimental:
+            if serving_recipe is not None:
                 print(f"cor       champion of record {cor_commit[0][:12]} = {cor_build[0].name} "
                       f"(serving A-arm, protected from prune; headline follows serving-"
                       f"demonstrated advances only)")

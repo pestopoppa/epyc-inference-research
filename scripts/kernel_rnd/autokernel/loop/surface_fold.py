@@ -19,6 +19,7 @@ from . import archive
 KEEP_RECEIPT_SCHEMA = "epyc.autokernel.experimental_source_keep.v1"
 ASSEMBLY_SCHEMA = "epyc.autokernel.shared_source_fold.v1"
 MAX_RECEIPT_BYTES = 256 * 1024
+MAX_KEEP_RECEIPT_BYTES = 64 * 1024 * 1024
 MAX_PATCH_BYTES = 16 * 1024 * 1024
 
 
@@ -240,7 +241,7 @@ def retain_receipt(root: Path, receipt: ExperimentalKeepReceipt) -> Path:
 
 def receipt_reference(path: Path) -> dict[str, str]:
     path = Path(path).resolve()
-    raw = bounded_regular_bytes(path, MAX_RECEIPT_BYTES)
+    raw = bounded_regular_bytes(path, MAX_KEEP_RECEIPT_BYTES)
     return {"path": str(path), "sha256": hashlib.sha256(raw).hexdigest()}
 
 
@@ -250,7 +251,7 @@ def reopen_reference(value: Any) -> ExperimentalKeepReceipt:
     path = Path(_text(value["path"], "keep reference path"))
     if not path.is_absolute():
         raise FoldRefused("keep reference path must be absolute")
-    raw = bounded_regular_bytes(path, MAX_RECEIPT_BYTES)
+    raw = bounded_regular_bytes(path, MAX_KEEP_RECEIPT_BYTES)
     if hashlib.sha256(raw).hexdigest() != _sha(value["sha256"], "keep reference digest"):
         raise FoldRefused("keep reference digest differs")
     try:
@@ -260,6 +261,7 @@ def reopen_reference(value: Any) -> ExperimentalKeepReceipt:
 
 
 __all__ = ["ExperimentalKeepReceipt", "FoldRefused", "KEEP_RECEIPT_SCHEMA",
-           "MAX_PATCH_BYTES", "MAX_RECEIPT_BYTES", "bounded_regular_bytes",
+           "MAX_PATCH_BYTES", "MAX_RECEIPT_BYTES", "MAX_KEEP_RECEIPT_BYTES",
+           "bounded_regular_bytes",
            "canonical_bytes", "receipt_reference", "reopen_reference",
            "retain_receipt", "validate_original"]

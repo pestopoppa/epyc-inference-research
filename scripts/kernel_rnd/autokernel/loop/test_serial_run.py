@@ -1013,7 +1013,62 @@ def test_shared_source_routes_authoring_only_to_original_owner(tmp_path):
     assert "--validate-source-continuation" in validation
 
 
-def test_required_source_validation_uses_production_and_every_keep_author():
+def test_same_prior_cross_checkout_reopens_retained_tip_before_routing(tmp_path):
+    prior = {"path": "/retained/prior", "sha256": "a" * 64}
+    keep_reference = {"locator": "retained-keep", "sha256": "b" * 64}
+    continuation = {
+        "worktree": "/consumer",
+        "source_lineage_keeps": [keep_reference],
+    }
+    source = {"selected_target": {"selected_id": "owner"}}
+
+    def prepare(argv, _prior, _directory, **_kwargs):
+        return list(argv), {"scope": "full"}
+
+    with mock.patch.object(sr, "load_resume",
+                           return_value=(continuation, "a" * 64)), \
+            mock.patch.object(run.surface_fold, "reopen_reference",
+                              return_value=mock.Mock(repo="/producer")) as reopen, \
+            mock.patch.object(sr, "load_completed",
+                              return_value=(source, "a" * 64)), \
+            mock.patch.object(cpu_screen, "prepare_batch", side_effect=prepare):
+        child = sr._batch_argv(
+            ["--target-id", "owner"], prior, 1, tmp_path,
+            source_prior=prior)
+
+    reopen.assert_called_once_with(keep_reference)
+    assert sr.option(child, "--source-anchor-continuation") == prior["path"]
+    assert sr.option(child, "--source-anchor-sha256") == prior["sha256"]
+
+
+def test_same_prior_owner_routes_required_source_validation(tmp_path):
+    prior = {"path": "/retained/prior", "sha256": "a" * 64}
+    continuation = {
+        "worktree": "/owner",
+        "source_lineage_keeps": [{"locator": "retained-keep", "sha256": "b" * 64}],
+    }
+    source = {"selected_target": {"selected_id": "owner"}}
+
+    def prepare(argv, _prior, _directory, **_kwargs):
+        return list(argv), {"scope": "full"}
+
+    with mock.patch.object(sr, "load_resume",
+                           return_value=(continuation, "a" * 64)), \
+            mock.patch.object(run.surface_fold, "reopen_reference",
+                              return_value=mock.Mock(repo="/owner")), \
+            mock.patch.object(sr, "load_completed",
+                              return_value=(source, "a" * 64)), \
+            mock.patch.object(cpu_screen, "prepare_batch", side_effect=prepare):
+        child = sr._batch_argv(
+            ["--target-id", "owner"], prior, 1, tmp_path,
+            source_prior=prior, validate_source=True)
+
+    assert "--validate-source-continuation" in child
+    assert sr.option(child, "--source-anchor-continuation") == prior["path"]
+    assert sr.option(child, "--source-anchor-sha256") == prior["sha256"]
+
+
+def test_required_source_validation_uses_production_and_prior_keep_authors():
     targets = [["--target-id", value] for value in ("a", "b", "prod", "optional")]
     identities = {value: {"selected_id": value,
         "original_target": {"enrolled_as": ["production"] if value == "prod" else ["seed"]}}
@@ -1025,7 +1080,7 @@ def test_required_source_validation_uses_production_and_every_keep_author():
                 mock.Mock(selected_target=identities["b"], kept_commit="3" * 40)]
     rows = {}
     validations = {}
-    for value, intended in (("a", False), ("b", True), ("prod", False)):
+    for value, intended in (("a", False), ("prod", False)):
         reference = {"locator": value, "sha256": value.encode().hex().ljust(64, "0")}
         validations["subject-" + value] = {
             "latest_reference": reference, "disposition": "passed"}
@@ -1044,7 +1099,7 @@ def test_required_source_validation_uses_production_and_every_keep_author():
             mock.patch.object(run.surface_validation, "reopen_reference",
                 side_effect=lambda reference: rows[reference["locator"]]):
         aggregate = sr._required_source_validation(state, targets)
-    assert aggregate["required_target_ids"] == ["a", "b", "prod"]
+    assert aggregate["required_target_ids"] == ["a", "prod"]
     assert aggregate["intended_target_id"] == "b"
     assert aggregate["disposition"] == "passed"
     assert aggregate["missing_target_ids"] == []
@@ -1052,6 +1107,33 @@ def test_required_source_validation_uses_production_and_every_keep_author():
     with mock.patch.object(sr, "_required_source_validation", return_value=None):
         sr._refresh_required_source_validation(state, targets)
     assert state["required_source_validation"] is None
+
+
+def test_pending_source_validation_skips_nonproduction_authoring_target():
+    targets = [["--target-id", "author"], ["--target-id", "prod"]]
+    identities = {
+        "author": {"selected_id": "author",
+                   "original_target": {"enrolled_as": ["seed"]}},
+        "prod": {"selected_id": "prod",
+                 "original_target": {"enrolled_as": ["production"]}},
+    }
+    reference = {"path": "/source", "sha256": "a" * 64}
+    source = {"current_anchor": {"commit": "3" * 40},
+              "source_lineage_keeps": [{"locator": "keep"}]}
+    receipt = mock.Mock(selected_target=identities["author"])
+    state = {"source_validations": {}, "source_search_counts": {}}
+    with mock.patch.object(sr, "_source_result", return_value=reference), \
+            mock.patch.object(sr, "load_completed", return_value=(source, "a" * 64)), \
+            mock.patch.object(run.surface_fold, "reopen_reference",
+                              return_value=receipt), \
+            mock.patch.object(sr, "_selected_identity",
+                side_effect=lambda argv: identities[sr.option(argv, "--target-id")]), \
+            mock.patch.object(sr, "_validation_subject",
+                side_effect=lambda _state, argv, _index, _commit:
+                    "subject-" + sr.option(argv, "--target-id")):
+        pending = sr._pending_source_validations(state, targets)
+
+    assert pending == {1: "subject-prod"}
 
 
 def test_required_source_loo_routes_each_validated_target_once(tmp_path):

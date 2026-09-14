@@ -5,6 +5,7 @@ import copy
 import json
 import os
 from pathlib import Path
+import signal
 import shutil
 import socket
 import sys
@@ -37,7 +38,7 @@ def fixture(tmp_path, *, perf_failure="", server_failure="", original_request=No
     shutil.copyfile(Path("/lib/x86_64-linux-gnu/libm.so.6").resolve(), dso)
     runtime_dso = tmp_path / "runtime/libggml.so"
     runtime_dso.parent.mkdir()
-    os.link(dso, runtime_dso)
+    shutil.copy2(dso, runtime_dso)
     events = tmp_path / "child-events"
     python = str(Path(sys.executable).resolve())
     server = build / "bin/llama-server"
@@ -104,7 +105,7 @@ while not done:
   if cmd==b'disable\\n':
    enabled=False
    if failure=='disable_ack': continue
-  os.write(ack,b'ack\\n')
+  os.write(ack,b'ack\\n\\x00')
 if kind=='record': output.write_text(json.dumps({{'pid':pid,'times':times}}))
 else:
  output.write_text('\\n'.join(json.dumps({{'counter-value':'100','unit':'','event':event,
@@ -232,6 +233,13 @@ def test_actual_installed_producer_to_settlement_planner_and_restart(tmp_path):
         with closing(mc.ArtifactStore(Path(config["storage"]))) as store:
             original = cp.reopen_capture(snapshot["profile_event"]["artifact_identity"],
                 store=store, config=config, request=request.to_dict())
+            sigint_original = copy.deepcopy(cp._plain(original))
+            for phase in sigint_original["phases"]:
+                for tool in phase["tools"]:
+                    tool["returncode"] = -signal.SIGINT
+            sigint_artifact = store.write("test-only-normal-sigint", sigint_original)
+            cp.reopen_capture(sigint_artifact.to_dict(), store=store, config=config,
+                              request=request.to_dict())
             # New content addresses cannot replace any original factual join.
             for changed_fact in ("request", "source", "counter_window", "mapping_device", "response", "raw"):
                 altered = copy.deepcopy(cp._plain(original))
@@ -252,6 +260,9 @@ def test_actual_installed_producer_to_settlement_planner_and_restart(tmp_path):
                     cp.reopen_capture(forged.to_dict(), store=store, config=config, request=request.to_dict())
         assert len(original["phases"]) == 2
         for phase in original["phases"]:
+            record_command = phase["tools"][0]["command"]
+            max_size = record_command[record_command.index("--max-size") + 1]
+            assert max_size.endswith("B") and max_size[:-1].isdigit()
             controls = phase["counter_scope"]
             assert controls["enable_transition"]["sent"] <= controls["enable_transition"]["acknowledged"] <= phase["response"]["start"]
             assert phase["response"]["end"] <= controls["disable_transition"]["sent"] <= controls["disable_transition"]["acknowledged"]

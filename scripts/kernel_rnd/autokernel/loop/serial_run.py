@@ -815,10 +815,14 @@ def _derived_scheduler_manifest(targets, resolved_path, rounds):
     from . import claim, scheduling, serial_scheduling, unified_planner
     from .resolved_recipe import CanonicalResolvedRecipe
     resolved = campaign_cli.load_previous(Path(resolved_path))
-    # One held invocation can contain planner, critic, validation and serving
-    # phases in addition to a build. This is a declared scheduling bound, not a
-    # duration observation; an overrun remains charged and successor-fenced.
-    max_stage = resolved.resources.build_timeout_s + 4 * resolved.resources.stage_timeout_s
+    # A retained keep stays inside the same held invocation: candidate build/A-B,
+    # promoted-anchor build, independent verification build/A-B, re-profile,
+    # compounded tip-vs-COR A-B, and (on cadence) the serving gate.  The derived
+    # scheduler must bound that existing lifecycle, not only an ordinary null.
+    # This is a declared scheduling bound, not a duration observation; a genuine
+    # overrun remains charged and successor-fenced.
+    max_stage = (3 * resolved.resources.build_timeout_s
+                 + 8 * resolved.resources.stage_timeout_s)
     attempt_cap = rounds * len(targets) if rounds else 1000
     proposals = {}
     has_gpu = False
@@ -1170,6 +1174,16 @@ def _pending_source_validations(state, targets):
         lineage = body.get("source_lineage_keeps") or body.get("experimental_source_keeps")
         if not lineage:
             continue
+        from . import surface_fold
+        intended = surface_fold.reopen_reference(lineage[-1]).selected_target["selected_id"]
+        identity = _selected_identity(target)
+        enrolled = identity["original_target"].get("enrolled_as", ())
+        # The authoring target already measured this source keep. Re-running the
+        # same target as a promotion-grade validation would reject intentional
+        # sub-noise accumulation and requires an anchor the keep lifecycle has
+        # correctly pruned. Production targets still owe their separate verdict.
+        if identity["selected_id"] == intended and "production" not in enrolled:
+            continue
         commit = body["current_anchor"]["commit"]
         subject = _validation_subject(state, target, index, commit)
         entry = state["source_validations"].get(subject)
@@ -1208,9 +1222,12 @@ def _required_source_validation(state, targets):
     for index, target in enumerate(targets):
         identity = _selected_identity(target)
         enrolled = identity["original_target"].get("enrolled_as", ())
-        if "production" in enrolled or identity["selected_id"] in authored:
+        if ("production" in enrolled
+                or (identity["selected_id"] in authored
+                    and identity["selected_id"] != intended)):
             required.append((index, target, identity))
-    missing_authors = authored - {identity["selected_id"] for _, _, identity in required}
+    missing_authors = (authored - {intended}
+                       - {identity["selected_id"] for _, _, identity in required})
     if missing_authors:
         raise SerialRefused("retained keep author is absent from the owned target roster")
     rows, missing = [], []
@@ -1312,11 +1329,13 @@ def _batch_argv(original, prior, batch_iterations, directory, *, scheduler_selec
         lineage = (prior_body.get("source_lineage_keeps")
                    or prior_body.get("experimental_source_keeps") or ())
         if lineage:
+            from . import surface_fold
             tip = surface_fold.reopen_reference(lineage[-1])
             same_prior_cross_checkout = (Path(tip.repo).resolve()
                                          != Path(prior_body["worktree"]).resolve())
     if source_prior is not None and (prior is None or source_prior != prior
-                                     or same_prior_cross_checkout):
+                                     or same_prior_cross_checkout or validate_source
+                                     or validate_loo):
         _source_body, source_sha = load_completed(Path(source_prior["path"]))
         if source_sha != source_prior["sha256"]:
             raise SerialRefused("retained shared-source continuation changed")
@@ -1559,6 +1578,16 @@ def _scheduled_failure_account(state, manifest, active, batch_dir, original):
     try:
         reference, _sha = _json(batch_dir / "loop-held-claims.json", limit=64 * 1024)
     except FileNotFoundError:
+        acquired_path = batch_dir / "loop-claim-acquired.json"
+        if acquired_path.exists():
+            acquired, _sha = _json(acquired_path, limit=64 * 1024)
+            if (not isinstance(acquired, dict)
+                    or acquired.get("schema") != "epyc.autokernel.claim_acquired.v1"
+                    or acquired.get("selection_digest") != selection.digest
+                    or acquired.get("target") != _selected_identity(original)):
+                raise SerialRefused("claim-acquired marker differs from issued selection")
+            raise SerialRefused(
+                "failed post-claim child lacks released held-resource evidence")
         try:
             marker, _sha = _json(batch_dir / "loop-preclaim-failure.json", limit=64 * 1024)
         except FileNotFoundError as exc:

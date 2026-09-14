@@ -61,7 +61,7 @@ LIMITATIONS = ("sampled-period totals are estimated user-cycle attribution, not 
 LOOP_BUDGETS = {"max_stage_seconds": 1800, "teardown_seconds": 5,
                 "control_seconds": 30, "reduce_seconds": 120,
                 "max_raw_file_bytes": 128 * 1024**2, "max_total_raw_bytes": 512 * 1024**2,
-                "max_parser_bytes": 64 * 1024**2, "max_rows": 1_000_000,
+                "max_parser_bytes": 96 * 1024**2, "max_rows": 1_000_000,
                 "max_symbols": 4096, "max_metadata_bytes": 16 * 1024**2}
 
 
@@ -429,7 +429,7 @@ def reduce_perf_stat(stream, *, max_bytes, max_rows):
         except json.JSONDecodeError as exc:
             raise CpuProfileRefused("malformed perf stat JSON") from exc
         if (not isinstance(row, dict) or not required <= set(row)
-                or set(row) - required - {"metric-value", "metric-unit"}
+                or set(row) - required - {"metric-value", "metric-unit", "metric-threshold"}
                 or row["event"] not in EVENTS or row["event"] in result):
             raise CpuProfileRefused("counter fields/event cardinality differs")
         value = row["counter-value"]
@@ -503,9 +503,11 @@ def _pump(item, deadline, *, expect_ack=False, output=None, limit=0):
                 output.write(raw)
             else:
                 acknowledgment.extend(raw)
-                if acknowledgment != b"ack\n"[:len(acknowledgment)]:
+                if (acknowledgment != b"a" and acknowledgment != b"ac"
+                        and acknowledgment != b"ack" and acknowledgment != b"ack\n"
+                        and acknowledgment != b"ack\n\x00"):
                     raise CpuProfileRefused("malformed perf acknowledgement")
-                if acknowledgment == b"ack\n":
+                if acknowledgment == b"ack\n" or acknowledgment == b"ack\n\x00":
                     return
         if expect_ack and process.poll() is not None:
             raise CpuProfileRefused("perf exited before acknowledgement")
@@ -719,15 +721,28 @@ class CpuProfileCapture:
                 if len(row) != 6 or row[5].endswith(" (deleted)"):
                     continue
                 major, minor = row[3].split(":")
-                # The loader may expose a verified DSO through a distinct
-                # RUNPATH/build alias (or a hardlink), so pathname equality is
-                # not an identity requirement.  Device+inode identify the
-                # exact file whose bytes were hash-verified above; retain the
-                # observed mapping path for auditability.
-                if (int(row[4]) == fact["ino"] and os.makedev(int(major, 16), int(minor, 16)) == fact["dev"]
-                        and "x" in row[1]):
+                if "x" not in row[1]:
+                    continue
+                mapped = None
+                if (int(row[4]) == fact["ino"]
+                        and os.makedev(int(major, 16), int(minor, 16)) == fact["dev"]):
+                    mapped = fact
+                else:
+                    # CMake may embed a RUNPATH to another build directory whose
+                    # DSO is a byte-identical copy, not a hardlink.  The recipe
+                    # pins bytes, so verify the file actually mapped by the
+                    # process instead of requiring filesystem identity with the
+                    # recipe's archival copy.
+                    try:
+                        mapped = _file(Path(row[5]).resolve(), 512 * 1024**2)
+                    except (FileNotFoundError, OSError, CpuProfileRefused):
+                        continue
+                    if mapped["sha256"] != dso.sha256:
+                        continue
+                if mapped is not None:
                     matched = True
-                    mappings.append({"artifact": fact, "mapping": line,
+                    mappings.append({"artifact": mapped, "declared_artifact": fact,
+                                     "mapping": line,
                                      "observed_path": row[5]})
                     break
             if not matched:
@@ -749,7 +764,7 @@ class CpuProfileCapture:
         if kind == "record":
             command += ["-F", "99", "-e", "cycles:u", "--clockid", "mono", "-P", "-T",
                         "--no-buildid", "--no-buildid-cache", "--mmap-pages=8",
-                        "--max-size", str(self.budgets["max_raw_file_bytes"])]
+                        "--max-size", f'{self.budgets["max_raw_file_bytes"]}B']
         else:
             command += ["--json-output", "-e", ",".join(EVENTS)]
         process = None
@@ -843,7 +858,9 @@ class CpuProfileCapture:
         item["stderr"] = bytes(item["diagnostic"][:MAX_DIAGNOSTIC_BYTES]).decode("utf-8", errors="replace")
         if failure is not None:
             raise CpuProfileRefused(f"perf cleanup/control failed: {failure}") from failure
-        if normal and process.returncode != 0:
+        # `perf record` flushes a valid capture when its owning wrapper ends it
+        # with SIGINT; Popen reports that normal tool shutdown as -SIGINT.
+        if normal and process.returncode not in (0, -signal.SIGINT):
             raise CpuProfileRefused(f"perf {item['kind']} failed: {item['stderr'][:300]}")
         return item
 
@@ -966,7 +983,7 @@ def _reopen_phases(body, expected):
             _same(item["identity"]["pid"], item["process_observation"]["pid"], "original perf PID")
             controls = item["controls"]
             if ([value["command"] for value in controls] != ["enable", "disable"]
-                    or item["returncode"] != 0):
+                    or item["returncode"] not in (0, -signal.SIGINT)):
                 raise CpuProfileRefused("original perf control completion differs")
             enable, disable = controls
             times = [enable["sent"], enable["acknowledged"], phase["enabled_interval"][0],
@@ -986,11 +1003,9 @@ def _reopen_phases(body, expected):
             _same(readback["argv"], argv, "original loaded server argv")
             _same(readback["exe"], recipe.executable.path if interpreter is None else interpreter["path"],
                   "original loaded executable")
-            _same([(value["artifact"]["sha256"], value["artifact"]["dev"], value["artifact"]["ino"])
+            _same([value["artifact"]["sha256"]
                    for value in readback["loaded_dso_mappings"]],
-                  [(dso.sha256, _file(Path(dso.path).resolve(), 512 * 1024**2)["dev"],
-                    _file(Path(dso.path).resolve(), 512 * 1024**2)["ino"])
-                   for dso in recipe.dsos], "original loaded DSO set")
+                  [dso.sha256 for dso in recipe.dsos], "original loaded DSO set")
             for value in readback["loaded_dso_mappings"]:
                 row = value["mapping"].split(maxsplit=5)
                 major, minor = row[3].split(":")

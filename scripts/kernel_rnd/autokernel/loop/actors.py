@@ -311,6 +311,55 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
 
     prior = context.get("prior_experiments") or []
 
+    # A mechanism ID is actor prose; the durable source path and symbol are the
+    # host-owned family identity.  Detect a run of distinct null/refused ideas in
+    # that family without reading effect magnitudes (especially stale ones).  A
+    # keep resets the run because it changed the source the later ideas see.
+    stagnating_statuses = {"measured_null", "refused_at_formation", "runtime_refused"}
+    successful_statuses = {"kept", "keep_candidate"}
+    family_rows: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
+    closed_families: set[tuple[str, str]] = set()
+    for row in prior:
+        surface, symbol = row.get("target_surface"), row.get("target_symbol")
+        if not isinstance(surface, str) or not surface \
+                or not isinstance(symbol, str) or not symbol:
+            continue
+        family = (surface, symbol)
+        if family in closed_families:
+            continue
+        status = row.get("status")
+        if status in successful_statuses:
+            # Recall is newest-first.  Older outcomes precede the source-changing
+            # keep and cannot establish stagnation against its successor.
+            closed_families.add(family)
+        elif status in stagnating_statuses:
+            family_rows.setdefault(family, []).append(row)
+    stagnant = {}
+    for family, rows in family_rows.items():
+        distinct = []
+        seen = set()
+        for row in rows:
+            mechanism = row.get("mechanism_id")
+            if isinstance(mechanism, str) and mechanism and mechanism not in seen:
+                seen.add(mechanism)
+                distinct.append(row)
+        if len(distinct) >= 3:
+            stagnant[family] = distinct
+    if stagnant:
+        lines.append("## Family-level diminishing returns — abstraction escape required")
+        lines.append("These are attempt/outcome facts only; no stale or cross-epoch magnitude "
+                     "is aggregated. Rewording the same leaf mechanism is not exploration.")
+        for (surface, symbol), rows in stagnant.items():
+            summary = ", ".join(
+                f"{row['mechanism_id']} ({row['status']})" for row in rows[:limit])
+            lines.append(f"- `{surface}::{symbol}`: {len(rows)} distinct recent ideas — {summary}")
+        lines.append("Planner: move one abstraction level up to a caller/operator/dispatch or "
+                     "data-movement mechanism grounded in the current profile and source route.")
+        lines.append("Critic: reject a same-family synonym unless it supplies a materially "
+                     "distinct causal model and new profile/source/history evidence that the "
+                     "listed attempts did not test.")
+        lines.append("")
+
     # Mechanisms already CHARACTERISED by repeated measurement. Run 15 spent 9 of its
     # 10 measurements re-sampling two unchanged patches: a near-floor result reads as
     # "almost", so the planner re-proposed it. But re-measuring unchanged code adds no
@@ -419,7 +468,11 @@ Propose exactly one hypothesis. Reply with ONE json object and nothing else:
   "target_symbol": "<the function you will change>"}}
 
 Rules: {profile_rule}; name a MECHANISM, not a wish; \
-state a falsifier that could actually fail."""
+state a falsifier that could actually fail. The loop itself owns source inspection, \
+authoring, correctness gates and matched A/B measurement. Do not make an unsupported \
+trace or counter a prerequisite that this loop cannot collect. After a rejection for \
+missing evidence, either use an available diagnostic named in the context or choose \
+the smallest source-consistent change whose payoff the existing matched A/B can test."""
 
 
 def _runtime_pair(treatment, context, mechanism_id):
@@ -593,8 +646,15 @@ class AgentCritic:
                           context: Mapping[str, Any]) -> Review:
         grounds = (
             "it was already measured under the selected conditions; the mechanism is unsupported "
-            "by the selected CPU source route; it invents unavailable profile evidence; "
-            "there is no real falsifier; or it is already present in the selected source"
+            "by the selected CPU source route; it invents unavailable evidence as an established "
+            "fact; there is no real falsifier; it presents a correctness or safety risk that the "
+            "existing gates cannot resolve; or it is already present in the selected source. "
+            "Do NOT reject a source-consistent, bounded hypothesis merely because its expected "
+            "payoff, eligible-call fraction, wall-time exposure, local speedup, or other performance "
+            "bound has not already been measured. Those are ordinary post-authoring falsifiers: "
+            "the loop's correctness gates and matched A/B exist to test them. Require pre-authoring "
+            "evidence only when it is needed to establish source reachability or safety, or when the "
+            "loop's available experiment cannot observe the proposed mechanism"
             if _cpu_target(context) else
             "it was already measured; the mechanism is unsupported by the profile; "
             "there is no real falsifier; the target has negligible device-time share; "
