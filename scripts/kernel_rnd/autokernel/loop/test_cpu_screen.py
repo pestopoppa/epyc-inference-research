@@ -250,11 +250,27 @@ def test_original_qualitative_hint_not_magnitude_or_global_null_retirement(tmp_p
     assert (tmp_path / "experiments.db").read_bytes() == before
 
 
-def test_absent_hint_stays_full_and_foreign_model_does_not_select(tmp_path):
+def test_absent_or_unreadable_hint_uses_nonpromotable_half_screen(tmp_path):
     _template, full = _canonical_launch(18311)
-    assert cpu_screen.mechanism_hint(tmp_path / "missing", full)["scope"] == "full"
+    assert cpu_screen.mechanism_hint(tmp_path / "missing", full)["scope"] == "half"
     _record(tmp_path, statement="remove SIMD instructions")
-    assert cpu_screen.mechanism_hint(tmp_path, full)["scope"] == "full"
+    assert cpu_screen.mechanism_hint(tmp_path, full)["scope"] == "half"
+
+
+@pytest.mark.parametrize("mechanism_id,scope", [
+    ("akm-moe-up-gate-safe-fusion", "half"),
+    ("akm-q8-multirow-batched-dot", "half"),
+    ("akm-barrier-spin-policy", "full"),
+])
+def test_sealed_recent_mechanism_routes_without_scanning_history(
+        tmp_path, mechanism_id, scope):
+    _template, full = _canonical_launch(18311)
+    hint = cpu_screen.mechanism_hint(
+        tmp_path / "missing", full,
+        recent={"mechanism_id": mechanism_id, "status": "measured_null"})
+    assert hint["scope"] == scope
+    assert hint["mechanism_id"] == mechanism_id
+    assert "continuation" in hint["basis"]
 
 
 def test_scope_refuses_foreign_resources_and_incomplete_receipt():
