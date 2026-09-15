@@ -548,6 +548,20 @@ def test_actual_overrun_is_charged_and_fences_successors():
     assert blocked.status == "refused" and "exceeded" in " ".join(blocked.reasons)
 
 
+def test_valid_comparison_overrun_is_charged_without_poisoning_successors():
+    cfg = S.SchedulerConfig.from_dict(config(
+        noncoverage_slots=1, capacity=vector(fraction=0.5, memory=1000)))
+    state = S.initial_state(cfg, "scheduler")
+    prop = proposal("bounded", claims=vector(fraction=0.5, memory=500), duration=5)
+    state, selected = choose(cfg, state, [prop])
+    state = account(cfg, state, selected, prop, end=15, fraction=0.5,
+                    memory=500, outcome="valid_comparison")
+    assert state.campaign_attempts == 1 and state.campaign_charged_seconds == 15
+    assert not state.successor_fences
+    _, successor = choose(cfg, state, [prop], now=16)
+    assert successor.status == "selected"
+
+
 def test_indexed_engine_hot_path_does_not_export_or_rescan_receipt_history(monkeypatch):
     cfg = S.SchedulerConfig.from_dict(config(noncoverage_slots=1))
     engine = S.SchedulerEngine(cfg, S.initial_state(cfg, "scheduler"))
