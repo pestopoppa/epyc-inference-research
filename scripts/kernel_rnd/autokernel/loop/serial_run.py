@@ -1692,9 +1692,12 @@ def _scheduled_failure_account(state, manifest, active, batch_dir, original):
 def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
            scheduler_manifest=None, source_validation_priority_dir=None,
            control_listen=None, control_origin=None):
+    # Preserve the existing scheduler contract unless the operator/campaign
+    # explicitly enrolls the AKX priority producer.  Making an absent optional
+    # producer a new default launch dependency would stop every existing
+    # campaign at its first source-validation boundary.
     effective_priority_dir = (Path(source_validation_priority_dir).resolve()
-                              if source_validation_priority_dir is not None else
-                              root / "source-validation-priorities")
+                              if source_validation_priority_dir is not None else None)
     config = _digest({"targets": targets, "batch_iterations": batch_iterations, "rounds": rounds,
                       **({"child_prefix": list(child_prefix)} if child_prefix else {}),
                       **({"scheduler_manifest": scheduler_manifest.digest}

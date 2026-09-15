@@ -1248,6 +1248,25 @@ def test_pending_source_validation_without_priority_receipt_stays_pending(tmp_pa
     assert "absent" in state["source_validation_priority_pending"]["reason"]
 
 
+def test_existing_scheduled_campaign_needs_no_unconfigured_priority_receipt():
+    target = ["--target-id", "prod"]
+    identity = {"selected_id": "prod", "original_target": {"enrolled_as": ["production"]}}
+    source = {"current_anchor": {"commit": "3" * 40},
+              "source_lineage_keeps": [{"locator": "keep"}]}
+    state = {"source_validations": {}, "source_search_counts": {},
+             "required_source_validation": None}
+    with mock.patch.object(sr, "_source_result",
+                           return_value={"path": "/source", "sha256": "a" * 64}), \
+            mock.patch.object(sr, "load_completed", return_value=(source, "a" * 64)), \
+            mock.patch.object(run.surface_fold, "reopen_reference",
+                              return_value=mock.Mock(selected_target={"selected_id": "author"})), \
+            mock.patch.object(sr, "_selected_identity", return_value=identity), \
+            mock.patch.object(sr, "_validation_subject", return_value="subject-prod"):
+        assert sr._pending_source_validations(state, [target], priority_dir=None) == {
+            0: "subject-prod"}
+    assert "source_validation_priority_pending" not in state
+
+
 def test_failed_aggregate_never_reschedules_a_validation_target():
     state = {"source_validations": {}, "source_search_counts": {},
              "required_source_validation": {"disposition": "failed"}}
