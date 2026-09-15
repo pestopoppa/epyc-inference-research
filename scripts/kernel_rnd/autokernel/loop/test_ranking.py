@@ -363,25 +363,23 @@ class TheContextBundleNeverPoolsAStaleMagnitude(unittest.TestCase):
         self.assertNotIn("## Characterised",
                          actors.render_context({"prior_experiments": window}))
 
-    def test_a_row_with_no_provenance_at_all_is_still_pooled(self):
-        """The deliberate default, asserted so it cannot be tightened by accident.
-
-        Tightening it to require a positive `comparable_measurement` switches the whole
-        block off for every hand-built context -- `test_seed.py`'s five-sample run-15
-        regression included. Nothing on the real path relies on this: `recall()` always
-        stamps both markers, which the test above pins.
-        """
+    def test_a_row_with_no_claim_provenance_is_not_causally_pooled(self):
+        """Legacy effect records cannot verify the planner's mechanism narrative."""
         window = [{"mechanism_id": "akm-x", "status": "measured_null",
                    "effect_fraction": effect} for effect in (-0.001, -0.002, -0.003)]
         text = actors.render_context({"prior_experiments": window})
-        self.assertIn("## Characterised", text)
-        self.assertIn("`akm-x`: measured 3x", text)
+        self.assertNotIn("## Characterised", text)
+        self.assertIn("mechanism claim: hypothesis", text)
 
     def test_the_characterised_block_still_fires_on_comparable_rows(self):
         """Mutation guard: deleting the feature would pass the test above."""
         window = [{"mechanism_id": "akm-x", "status": "measured_null",
                    "effect_fraction": effect, "same_epoch": True,
-                   "stale_epoch": False, "comparable_measurement": True}
+                   "stale_epoch": False, "comparable_measurement": True,
+                   "claims": {"schema": "epyc.autokernel.keep_claims.v1",
+                              "mechanism": {"status": "verified", "ablation": {
+                                  "status": "verified",
+                                  "evidence": {"receipt_sha256": "a" * 64}}}}}
                   for effect in (-0.001, -0.002, -0.003)]
         text = actors.render_context({"prior_experiments": window})
         self.assertIn("## Characterised", text)

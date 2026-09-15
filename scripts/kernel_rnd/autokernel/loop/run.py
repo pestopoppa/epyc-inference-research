@@ -406,8 +406,13 @@ def prior_experiments(args, epoch: str) -> list[dict]:
     then recalled with the authority hardcoded off passed every test written against
     the parser; this is the seam that catches it.
     """
-    return archive.recall(args.store, epoch=epoch,
-                          ranking_authorized=args.rank_prior_experiments)
+    # This is the planner-facing view, so include typed keep claims. Other archive
+    # readers retain their byte-compatible projection and, in the absence of a
+    # claim, must conservatively treat mechanism attribution as hypothesis.
+    with experiments.ExperimentStore(args.store) as store:
+        return store.recall(epoch=epoch,
+                            ranking_authorized=args.rank_prior_experiments,
+                            include_claims=True)
 
 
 def calibrate(args, run=subprocess.run) -> int:

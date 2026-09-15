@@ -358,6 +358,7 @@ class ExperimentStore:
     def recall(self, *, epoch: str, limit: int = 40,
                ranking_authorized: bool = False,
                include_source_scope: bool = False,
+               include_claims: bool = False,
                statuses: Sequence[str] | None = None,
                exclude_statuses: bool = False) -> list[dict[str, Any]]:
         """Prior attempts, each marked same-epoch or stale.
@@ -401,6 +402,9 @@ class ExperimentStore:
                           "'unknown_reason','legacy record: only original captured fields shown; nulls remain unknown'"
                           ")) END "
                           "END AS research_scope")
+        elif include_claims:
+            projection = ("*, CASE WHEN length(payload)<=2097152 AND json_valid(payload) "
+                          "THEN json_extract(payload,'$.claims') END AS claims_projection")
         predicate, parameters = "", []
         if statuses:
             placeholders = ",".join("?" for _ in statuses)
@@ -450,6 +454,15 @@ class ExperimentStore:
                 "comparable_measurement": same_epoch,
                 "ranking_authorized": bool(ranking_authorized),
             })
+            if include_claims:
+                raw_claims = row["claims_projection"]
+                try:
+                    claim_record = (json.loads(raw_claims)
+                                    if isinstance(raw_claims, str) else raw_claims)
+                except json.JSONDecodeError:
+                    claim_record = None
+                recalled[-1]["claims"] = (claim_record
+                                           if isinstance(claim_record, dict) else None)
             if include_source_scope:
                 scope = json.loads(row["research_scope"]) if row["research_scope"] else None
                 recalled[-1].update(original_epoch=row["epoch_sha256"],
@@ -506,12 +519,18 @@ class ExperimentStore:
             effect = ("—" if row["effect_fraction"] is None
                       else f"{row['effect_fraction'] * 100:+.3f}%")
             note = row["refusal_reason"] or row["statement"] or ""
+            try:
+                payload = json.loads(row["payload"])
+            except (json.JSONDecodeError, TypeError):
+                payload = {}
+            from ..loop import claims as claim_contract
+            mechanism_claim = claim_contract.mechanism_status(payload)
             lines.append(
                 f"| {row['recorded_at']} | {row['status']} | "
                 f"{row['mechanism_id'] or '—'} | "
                 f"{row['target_symbol'] or row['target_surface'] or '—'} | "
                 f"{effect} | {row['epoch_sha256'][:12]}{stale} | "
-                f"{_cell(note)} |")
+                f"{_cell(note)} [mechanism claim: {mechanism_claim}] |")
         lines.append("")
         return "\n".join(lines)
 

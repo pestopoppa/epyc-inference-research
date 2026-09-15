@@ -215,6 +215,7 @@ class Outcome:
     prior_epoch: str | None = None
     refusal_gate: str | None = None
     candidate_diff_sha256: str | None = None
+    mechanism_ablation: dict | None = None
     # Observe-only planner telemetry.  These fields describe the formation path
     # which produced the outcome; they do not alter either budget or selection.
     hypothesis_round: int = 0
@@ -252,6 +253,18 @@ class Outcome:
         })
         if self.validator_provenance:
             row["validator_provenance"] = self.validator_provenance
+        if self.hypothesis is not None:
+            from . import claims
+            split = claims.keep_claims(
+                status=self.status,
+                mechanism_id=self.hypothesis.mechanism_id,
+                statement=self.hypothesis.statement,
+                comparison=(self.comparison.to_dict()
+                            if self.comparison is not None else None),
+                gates=[verdict.to_dict() for verdict in self.gate_verdicts],
+                ablation=self.mechanism_ablation)
+            if split is not None:
+                row["claims"] = split
         return row
 
 

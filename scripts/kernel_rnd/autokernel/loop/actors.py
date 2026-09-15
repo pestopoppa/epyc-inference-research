@@ -441,12 +441,14 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
     # `comparable_measurement` instead was the first version and it silently switched
     # the block off for every synthetic context, `test_seed.py`'s five-sample run-15
     # regression included: a conformance fix that disables the feature it is protecting.
+    from . import claims as claim_contract
     repeats: dict[str, list[float]] = {}
     for row in prior:
         effect = row.get("effect_fraction")
         if (row.get("mechanism_id") and isinstance(effect, (int, float))
                 and not row.get("stale_epoch")
-                and row.get("comparable_measurement", True)):
+                and row.get("comparable_measurement", True)
+                and claim_contract.mechanism_status(row) == claim_contract.VERIFIED):
             repeats.setdefault(row["mechanism_id"], []).append(effect * 100.0)
     characterised = {k: v for k, v in repeats.items() if len(v) >= 3}
     if characterised:
@@ -471,8 +473,9 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
                 if row.get("stale_epoch") else ""
             effect = row.get("effect_fraction")
             measured = f"{effect * 100:+.3f}%" if isinstance(effect, (int, float)) else "—"
+            mechanism_claim = claim_contract.mechanism_status(row)
             lines.append(f"- `{row.get('mechanism_id')}` → {row.get('status')} "
-                         f"{measured}{stale}"
+                         f"{measured}{stale} [mechanism claim: {mechanism_claim}]"
                          + (f"\n    refused: {row['refusal_reason']}"
                             if row.get("refusal_reason") else ""))
     else:
