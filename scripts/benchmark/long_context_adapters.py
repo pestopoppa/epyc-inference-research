@@ -10,13 +10,16 @@ Suites:
   - leval:                 L-Eval (L4NLP, 20 tasks, 3K-60K context)
   - ruler:                 RULER (NVIDIA, synthetic, configurable 4K-128K+)
   - needle_parameterized:  Needle-in-a-Haystack (parameterized depth/length)
+  - beam:                  BEAM conversational memory (arXiv 2510.27246, 100K split)
 
 All adapters produce standard prompt dicts compatible with
 compare_orchestrator_direct.py and the seeding harness.
 """
 from __future__ import annotations
 
+import ast
 import hashlib
+import json
 import os
 import random
 from pathlib import Path
@@ -463,5 +466,307 @@ class NeedleAdapter(BaseAdapter):
                 "context_length_target": row["context_length"],
                 "context_length_chars": row["haystack_chars"],
                 "needle_depth": row["depth"],
+            },
+        }
+
+
+# ── BEAM (conversational long-term memory) ─────────────────────────────────
+
+
+#: HF ``Mohammadta/BEAM`` split names (the paper's "128K" scale is labelled 100K
+#: in the released parquet). 10M ships only in the GitHub repo tree.
+BEAM_SPLITS = ("100K", "500K", "1M", "10M")
+BEAM_HF_DATASET = "Mohammadta/BEAM"
+#: Size of the default split's parquet on HF (dataset sha 3205395e), for the
+#: missing-data message; 500K is 33,956,263 B and 1M is 66,156,374 B.
+BEAM_100K_PARQUET_BYTES = 5_429_768
+
+#: Reference-answer field per ability; the dataset uses a different key for
+#: each question family.
+_BEAM_REFERENCE_FIELDS = (
+    "answer", "ideal_answer", "ideal_response", "ideal_summary", "expected_compliance",
+)
+_BEAM_DIFFICULTY_TIER = {"easy": 1, "clear": 1, "medium": 2, "hard": 3}
+
+
+class BEAMLoadError(RuntimeError):
+    """BEAM data that is present but cannot be loaded faithfully.
+
+    Raised rather than returning an empty dataset: a missing ``pyarrow`` or a
+    ``probing_questions`` payload that no longer parses must never degrade into
+    "zero questions" or "every question missing" (the Tulving-adapter defect).
+    """
+
+
+def _beam_flatten_chat(chat) -> list[dict]:
+    """Flatten either BEAM chat shape into an ordered list of message dicts.
+
+    HF parquet: ``list<list<message>>``. GitHub ``chat.json``: a list of
+    ``{"batch_number", "turns": list<list<message>>}``.
+    """
+    out: list[dict] = []
+
+    def walk(node) -> None:
+        if hasattr(node, "tolist"):
+            node = node.tolist()
+        if isinstance(node, dict):
+            if "turns" in node:
+                walk(node["turns"])
+            elif "role" in node and "content" in node:
+                out.append(node)
+            else:
+                raise BEAMLoadError(f"unrecognised BEAM chat node with keys {sorted(node)}")
+        elif isinstance(node, (list, tuple)):
+            for child in node:
+                walk(child)
+        elif node is not None:
+            raise BEAMLoadError(f"unrecognised BEAM chat node of type {type(node).__name__}")
+
+    walk(chat)
+    return out
+
+
+def _beam_parse_probing_questions(raw, conversation_id: str) -> dict:
+    """``probing_questions`` is a STRING in the parquet (dataset card: ``ast.literal_eval``)."""
+    from beam_scoring import BEAM_ABILITIES
+
+    parsed = raw
+    if isinstance(raw, str):
+        try:
+            parsed = ast.literal_eval(raw)
+        except (SyntaxError, ValueError):
+            try:
+                parsed = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                raise BEAMLoadError(
+                    f"conversation {conversation_id}: probing_questions parses as neither a "
+                    f"Python literal nor JSON ({exc})") from None
+    if not isinstance(parsed, dict):
+        raise BEAMLoadError(f"conversation {conversation_id}: probing_questions is not a mapping")
+    unknown = sorted(set(parsed) - set(BEAM_ABILITIES))
+    missing = sorted(set(BEAM_ABILITIES) - set(parsed))
+    if unknown or missing:
+        raise BEAMLoadError(
+            f"conversation {conversation_id}: ability keys drifted "
+            f"(unknown={unknown}, missing={missing})")
+    for ability, questions in parsed.items():
+        if not isinstance(questions, list) or not questions:
+            raise BEAMLoadError(f"conversation {conversation_id}: {ability} has no questions")
+        for i, q in enumerate(questions):
+            rubric = q.get("rubric") if isinstance(q, dict) else None
+            if (not isinstance(q, dict) or not str(q.get("question", "")).strip()
+                    or not isinstance(rubric, list) or not rubric
+                    or not all(isinstance(item, str) and item.strip() for item in rubric)):
+                raise BEAMLoadError(
+                    f"conversation {conversation_id}: {ability}[{i}] needs a question and a "
+                    "non-empty rubric of strings")
+    return parsed
+
+
+class BEAMAdapter(BaseAdapter):
+    """BEAM: conversational long-term memory, nugget-judged (arXiv 2510.27246).
+
+    One prompt per probing question: the whole conversation history rendered as
+    a transcript, then the probing question as the next user turn (the paper's
+    Section 2.1 formalism, the vanilla long-context arm). 100K split = 20
+    conversations x 10 abilities x 2 questions = 400 prompts.
+
+    Scoring is ``llm_judge`` against the served judge (``judge_port`` 8082), and
+    the NUGGET LIST rides in ``scoring_config`` so the judge scores per nugget
+    (0 / 0.5 / 1), not per answer. The fold that turns verdicts into a BEAM
+    number is ``beam_scoring.fold_beam`` (CME-2). The probing question is
+    carried too, so the judge prompt can apply its responsiveness check (BEAM's
+    own harness discards it — CME-3).
+
+    Sources, in order: HF parquet (``<data_dir>/**/<split>-*.parquet``), then the
+    GitHub repo tree (``<data_dir>/**/chats/<split>/<n>/``). Loading parquet
+    needs ``pyarrow`` and FAILS LOUDLY without it. No data at all is recorded as
+    a degraded source, never as an empty benchmark in disguise.
+
+    Data licence: CC BY-SA 4.0 (HF card); code MIT.
+    """
+
+    suite_name = "beam"
+    has_real_tiers = True
+
+    def __init__(self, data_dir: Path | str | None = None, split: str = "100K"):
+        super().__init__()
+        if split not in BEAM_SPLITS:
+            raise ValueError(f"BEAM split must be one of {BEAM_SPLITS}, got {split!r}")
+        self._data_dir = Path(data_dir) if data_dir else EVAL_DIR / "beam"
+        self._split = split
+        self._transcripts: dict[str, str] = {}
+        self.source_kind: str | None = None
+
+    # ── loading ──────────────────────────────────────────────────────────
+
+    def _parquet_files(self) -> list[Path]:
+        if not self._data_dir.exists():
+            return []
+        return sorted(self._data_dir.rglob(f"{self._split}-*.parquet"))
+
+    def _repo_conversation_dirs(self) -> list[Path]:
+        if not self._data_dir.exists():
+            return []
+        dirs = []
+        for split_dir in sorted(self._data_dir.rglob(f"chats/{self._split}")):
+            for conv in split_dir.iterdir():
+                if (conv / "chat.json").is_file() and (
+                        conv / "probing_questions" / "probing_questions.json").is_file():
+                    dirs.append(conv)
+        return sorted(dirs, key=lambda p: (int(p.name) if p.name.isdigit() else 10**9, p.name))
+
+    def _load_parquet_rows(self, files: list[Path]) -> list[dict]:
+        try:
+            import pyarrow.parquet as pq
+        except ImportError as exc:
+            raise BEAMLoadError(
+                f"BEAM parquet present at {files[0]} but pyarrow is not importable ({exc}). "
+                "Use an interpreter with pyarrow (e.g. /mnt/raid0/llm/delta-Mem/.venv/bin/python); "
+                "refusing to report zero questions.") from exc
+        rows: list[dict] = []
+        for path in files:
+            rows.extend(pq.read_table(path).to_pylist())
+        return rows
+
+    def _load_repo_rows(self, dirs: list[Path]) -> list[dict]:
+        rows = []
+        for conv in dirs:
+            rows.append({
+                "conversation_id": conv.name,
+                "chat": json.loads((conv / "chat.json").read_text(encoding="utf-8")),
+                "probing_questions": json.loads(
+                    (conv / "probing_questions" / "probing_questions.json").read_text(
+                        encoding="utf-8")),
+            })
+        return rows
+
+    def _ensure_loaded(self):
+        if self._dataset is not None:
+            return
+        self._ensure_accounting()
+
+        parquet = self._parquet_files()
+        if parquet:
+            conversations = self._load_parquet_rows(parquet)
+            self.source_kind = "hf_parquet"
+        else:
+            repo_dirs = self._repo_conversation_dirs()
+            conversations = self._load_repo_rows(repo_dirs) if repo_dirs else []
+            self.source_kind = "repo_tree" if repo_dirs else None
+
+        if not conversations:
+            self.record_degraded_source(
+                "beam",
+                f"no BEAM {self._split} data under {self._data_dir}; stage "
+                f"data/{self._split}-00000-of-00001.parquet from HF {BEAM_HF_DATASET} "
+                f"({BEAM_100K_PARQUET_BYTES:,} B for 100K)",
+            )
+            self._dataset = []
+            return
+
+        from beam_scoring import BEAM_ABILITIES
+
+        entries: list[dict] = []
+        seen: set[str] = set()
+        for conv_index, conv in enumerate(conversations):
+            conversation_id = str(conv.get("conversation_id") or conv_index)
+            if conversation_id in seen:
+                raise BEAMLoadError(f"duplicate BEAM conversation_id {conversation_id!r}")
+            seen.add(conversation_id)
+            messages = _beam_flatten_chat(conv.get("chat"))
+            if not messages:
+                raise BEAMLoadError(f"conversation {conversation_id}: empty chat")
+            self._transcripts[conversation_id] = self._render_transcript(messages)
+            probing = _beam_parse_probing_questions(conv.get("probing_questions"),
+                                                    conversation_id)
+            for ability in BEAM_ABILITIES:
+                for q_index, question in enumerate(probing[ability]):
+                    entries.append({
+                        "conversation_id": conversation_id,
+                        "ability": ability,
+                        "question_index": q_index,
+                        "question": question,
+                    })
+        self._dataset = entries
+
+    @staticmethod
+    def _render_transcript(messages: list[dict]) -> str:
+        lines = []
+        for msg in messages:
+            role = str(msg.get("role", "")).strip().lower()
+            label = "User" if role == "user" else "Assistant" if role == "assistant" else role
+            anchor = msg.get("time_anchor")
+            prefix = f"[{anchor}] " if anchor else ""
+            lines.append(f"{prefix}{label}: {msg.get('content', '')}")
+        return "\n\n".join(lines)
+
+    # ── prompts ──────────────────────────────────────────────────────────
+
+    def _get_tier_for_index(self, idx: int) -> int:
+        difficulty = str(self._dataset[idx]["question"].get("difficulty", "medium")).lower()
+        return _BEAM_DIFFICULTY_TIER.get(difficulty, 2)
+
+    @staticmethod
+    def _reference(question: dict) -> tuple[str, str]:
+        for field in _BEAM_REFERENCE_FIELDS:
+            value = question.get(field)
+            if isinstance(value, str) and value.strip():
+                return value, field
+        return "", ""
+
+    def _row_to_prompt(self, idx: int, row: dict) -> dict:
+        from beam_scoring import (
+            FOLD_NAME, FOLD_VERSION, JUDGE_PROMPT_VERSION, NUGGET_VERDICTS,
+        )
+
+        q = row["question"]
+        conversation_id = row["conversation_id"]
+        ability = row["ability"]
+        question_text = str(q["question"]).strip()
+        nuggets = [str(item) for item in q["rubric"]]
+        transcript = self._transcripts[conversation_id]
+        reference, reference_field = self._reference(q)
+
+        prompt = (
+            "The following is the complete history of your conversation with the user.\n\n"
+            f"{transcript}\n\n---\n\nUser: {question_text}"
+        )
+        scoring_config = {
+            "judge_port": 8082,
+            "per_nugget": True,
+            "nuggets": nuggets,
+            "nugget_verdict_scale": list(NUGGET_VERDICTS),
+            "probing_question": question_text,
+            "ability": ability,
+            "fold": FOLD_NAME,
+            "fold_version": FOLD_VERSION,
+            "judge_prompt_version": JUDGE_PROMPT_VERSION,
+        }
+        if ability == "event_ordering":
+            # BEAM's reference fold scores ordering by tau_norm against the rubric list.
+            scoring_config["tau_reference"] = "nuggets"
+
+        return {
+            "id": f"beam_{self._split}_{conversation_id}_{ability}_{row['question_index']}",
+            "suite": "beam",
+            "prompt": prompt,
+            "context": "",
+            "expected": reference,
+            "scoring": [],
+            "image_path": "",
+            "tier": self._get_tier_for_index(idx),
+            "scoring_method": "llm_judge",
+            "scoring_config": scoring_config,
+            "metadata": {
+                "split": self._split,
+                "conversation_id": conversation_id,
+                "ability": ability,
+                "question_index": row["question_index"],
+                "difficulty": q.get("difficulty", ""),
+                "n_nuggets": len(nuggets),
+                "reference_field": reference_field,
+                "context_length_chars": len(transcript),
+                "beam_source": self.source_kind,
             },
         }

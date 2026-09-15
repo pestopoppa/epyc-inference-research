@@ -299,8 +299,8 @@ ROLE_SUITE_MAP = {
     "architect": ["thinking", "coder", "agentic", "general", "instruction_precision", "math", "long_context", "longbench", "needle_parameterized", "omniscience", "aa_lcr", "scoring_verifiers"],
 
     # Context specialists — full long-context battery
-    "ingest": ["long_context", "general", "agentic", "longbench", "zeroscrolls", "leval", "ruler", "needle_parameterized", "aa_lcr", "tulving_episodic"],
-    "long_context": ["long_context", "general", "agentic", "longbench", "zeroscrolls", "leval", "ruler", "needle_parameterized", "aa_lcr", "tulving_episodic"],
+    "ingest": ["long_context", "general", "agentic", "longbench", "zeroscrolls", "leval", "ruler", "needle_parameterized", "aa_lcr", "tulving_episodic", "beam"],
+    "long_context": ["long_context", "general", "agentic", "longbench", "zeroscrolls", "leval", "ruler", "needle_parameterized", "aa_lcr", "tulving_episodic", "beam"],
 
     # Workers - general purpose
     "worker": ["general", "thinking", "agentic"],

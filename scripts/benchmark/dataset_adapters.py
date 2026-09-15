@@ -76,6 +76,8 @@ ADAPTER_SUITES = {
     "tulving_episodic",
     # K-LCM-1: LongCoT-Mini easy-split deterministic reasoning (intake-386/RE-4)
     "longcot_mini",
+    # CME-1: BEAM conversational long-term memory, 100K split (intake-1330)
+    "beam",
 }
 
 # Suites that stay YAML-based (no public dataset or intentionally synthetic)
@@ -90,7 +92,7 @@ def _get_long_context_adapter(class_name: str):
     try:
         from long_context_adapters import (
             LongBenchAdapter, ZeroSCROLLSAdapter, LEvalAdapter,
-            RULERAdapter, NeedleAdapter,
+            RULERAdapter, NeedleAdapter, BEAMAdapter,
         )
         return {
             "LongBenchAdapter": LongBenchAdapter,
@@ -98,6 +100,7 @@ def _get_long_context_adapter(class_name: str):
             "LEvalAdapter": LEvalAdapter,
             "RULERAdapter": RULERAdapter,
             "NeedleAdapter": NeedleAdapter,
+            "BEAMAdapter": BEAMAdapter,
         }[class_name]
     except ImportError:
         return None
@@ -184,6 +187,8 @@ def get_adapter(suite: str) -> Optional["BaseAdapter"]:
         "leval": _get_long_context_adapter("LEvalAdapter"),
         "ruler": _get_long_context_adapter("RULERAdapter"),
         "needle_parameterized": _get_long_context_adapter("NeedleAdapter"),
+        # CME-1: BEAM conversational long-term memory (intake-1330)
+        "beam": _get_long_context_adapter("BEAMAdapter"),
         # EV-3: verifier benchmarks (NVIDIA Scoring-Verifiers / HE-R+)
         "scoring_verifiers": _get_scoring_verifiers_adapter(),
         # P3b: episodic memory (Tulving Benchmark, arXiv 2501.13121)
