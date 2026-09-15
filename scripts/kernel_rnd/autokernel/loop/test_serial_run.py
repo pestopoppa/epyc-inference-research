@@ -1191,6 +1191,80 @@ def test_pending_source_validation_skips_nonproduction_authoring_target():
     assert pending == {1: "subject-prod"}
 
 
+def test_pending_source_validation_consumes_priority_receipt_and_selects_one(tmp_path):
+    targets = [["--target-id", value] for value in ("slow", "fast", "author")]
+    identities = {
+        value: {"selected_id": value,
+                "original_target": {"enrolled_as": ["seed"] if value == "author"
+                                    else ["production"]}}
+        for value in ("slow", "fast", "author")}
+    reference = {"path": "/source", "sha256": "a" * 64}
+    source = {"current_anchor": {"commit": "3" * 40},
+              "source_lineage_keeps": [{"locator": "keep"}]}
+    receipt = mock.Mock(selected_target=identities["author"])
+    priority = {"schema": "epyc.autokernel.source_validation_priority.v1",
+                "source_commit": "3" * 40,
+                "rows": [
+                    {"selected_id": "slow", "cost_seconds": 100, "p_fail": .5,
+                     "shared_machinery": False},
+                    {"selected_id": "fast", "cost_seconds": 20, "p_fail": .5,
+                     "shared_machinery": False}]}
+    (tmp_path / ("3" * 40 + ".json")).write_text(json.dumps(priority))
+    state = {"source_validations": {}, "source_search_counts": {},
+             "required_source_validation": None}
+    with mock.patch.object(sr, "_source_result", return_value=reference), \
+            mock.patch.object(sr, "load_completed", return_value=(source, "a" * 64)), \
+            mock.patch.object(run.surface_fold, "reopen_reference", return_value=receipt), \
+            mock.patch.object(sr, "_selected_identity",
+                side_effect=lambda argv: identities[sr.option(argv, "--target-id")]), \
+            mock.patch.object(sr, "_validation_subject",
+                side_effect=lambda _state, argv, _index, _commit:
+                    "subject-" + sr.option(argv, "--target-id")):
+        pending = sr._pending_source_validations(state, targets, priority_dir=tmp_path)
+
+    assert pending == {1: "subject-fast"}
+    assert state["source_validation_priority_refs"]["3" * 40]["path"].endswith(
+        "3" * 40 + ".json")
+
+
+def test_pending_source_validation_without_priority_receipt_stays_pending(tmp_path):
+    target = ["--target-id", "prod"]
+    identity = {"selected_id": "prod", "original_target": {"enrolled_as": ["production"]}}
+    reference = {"path": "/source", "sha256": "a" * 64}
+    source = {"current_anchor": {"commit": "3" * 40},
+              "source_lineage_keeps": [{"locator": "keep"}]}
+    receipt = mock.Mock(selected_target={"selected_id": "author"})
+    state = {"source_validations": {}, "source_search_counts": {},
+             "required_source_validation": None}
+    with mock.patch.object(sr, "_source_result", return_value=reference), \
+            mock.patch.object(sr, "load_completed", return_value=(source, "a" * 64)), \
+            mock.patch.object(run.surface_fold, "reopen_reference", return_value=receipt), \
+            mock.patch.object(sr, "_selected_identity", return_value=identity), \
+            mock.patch.object(sr, "_validation_subject", return_value="subject-prod"):
+        assert sr._pending_source_validations(
+            state, [target], priority_dir=tmp_path) == {}
+
+    assert state["source_validation_priority_pending"]["source_commit"] == "3" * 40
+    assert "absent" in state["source_validation_priority_pending"]["reason"]
+
+
+def test_failed_aggregate_never_reschedules_a_validation_target():
+    state = {"source_validations": {}, "source_search_counts": {},
+             "required_source_validation": {"disposition": "failed"}}
+    target = ["--target-id", "prod"]
+    identity = {"selected_id": "prod", "original_target": {"enrolled_as": ["production"]}}
+    source = {"current_anchor": {"commit": "3" * 40},
+              "source_lineage_keeps": [{"locator": "keep"}]}
+    with mock.patch.object(sr, "_source_result",
+                           return_value={"path": "/source", "sha256": "a" * 64}), \
+            mock.patch.object(sr, "load_completed", return_value=(source, "a" * 64)), \
+            mock.patch.object(run.surface_fold, "reopen_reference",
+                              return_value=mock.Mock(selected_target={"selected_id": "author"})), \
+            mock.patch.object(sr, "_selected_identity", return_value=identity), \
+            mock.patch.object(sr, "_validation_subject", return_value="subject-prod"):
+        assert sr._pending_source_validations(state, [target]) == {}
+
+
 def test_required_source_loo_routes_each_validated_target_once(tmp_path):
     targets = [["--target-id", "a"], ["--target-id", "b"]]
     state = {"required_source_validation": {"disposition": "passed", "rows": [

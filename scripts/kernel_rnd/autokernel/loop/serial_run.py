@@ -890,6 +890,8 @@ def main(argv=None) -> int:
     parser.add_argument("--common-args", type=Path, help="optional shared actor/measurement argv JSON")
     parser.add_argument("--scheduler-manifest", type=Path,
                         help="closed resource-time budget and exact target proposals")
+    parser.add_argument("--source-validation-priority-dir", type=Path,
+                        help="per-source-commit AKX validation priority receipts")
     parser.add_argument("--dry-run", action="store_true",
                         help="print inputs and run each existing owner dry-run; no execution or writes")
     parser.add_argument("--batch-iterations", type=int, required=True)
@@ -946,6 +948,9 @@ def main(argv=None) -> int:
             if overlaps:
                 raise SerialRefused(f"target {flag} roots overlap")
         scheduler_manifest = None
+        if args.source_validation_priority_dir is not None and args.scheduler_manifest is None \
+                and args.resolved_campaign is None:
+            raise SerialRefused("source validation priorities require scheduled serial mode")
         if args.scheduler_manifest is not None:
             if args.batch_iterations != 1:
                 raise SerialRefused("scheduled serial mode requires one iteration per child")
@@ -991,6 +996,7 @@ def main(argv=None) -> int:
             raise SerialRefused("serial session already has an owner") from exc
         return _drive(root, targets, args.batch_iterations, args.rounds, child_prefix=child_prefix,
                       scheduler_manifest=scheduler_manifest,
+                      source_validation_priority_dir=args.source_validation_priority_dir,
                       control_listen=args.control_listen, control_origin=args.control_origin)
 
 
@@ -1161,9 +1167,38 @@ def _validation_retry_due(entry, search_count):
              and search_count >= entry.get("retry_after_search_count", 0)))
 
 
-def _pending_source_validations(state, targets):
+def _validation_priority(state, directory, commit, required_ids):
+    """Reopen one immutable, producer-authored AKX priority receipt."""
+    from . import serial_scheduling
+    path = Path(directory).resolve() / f"{commit}.json"
+    try:
+        body, sha = _json(path, limit=256 * 1024)
+    except FileNotFoundError:
+        state["source_validation_priority_pending"] = {
+            "source_commit": commit, "path": str(path),
+            "reason": "explicit cost/failure priority receipt is absent"}
+        return None
+    fields = {"schema", "source_commit", "rows"}
+    if (not isinstance(body, dict) or set(body) != fields
+            or body.get("schema") != "epyc.autokernel.source_validation_priority.v1"
+            or body.get("source_commit") != commit or not isinstance(body.get("rows"), list)):
+        raise SerialRefused("source validation priority receipt is malformed")
+    order = serial_scheduling.order_source_validations(body["rows"])
+    if not set(required_ids) <= set(order):
+        raise SerialRefused("source validation priority rows omit required targets")
+    reference = {"path": str(path), "sha256": sha}
+    prior = state.setdefault("source_validation_priority_refs", {}).get(commit)
+    if prior is not None and prior != reference:
+        raise SerialRefused("source validation priority receipt changed")
+    state["source_validation_priority_refs"][commit] = reference
+    state.pop("source_validation_priority_pending", None)
+    return order
+
+
+def _pending_source_validations(state, targets, *, priority_dir=None):
     """Return exact target indexes due for an initial or bounded retry verdict."""
     pending = {}
+    commit = None
     for index, target in enumerate(targets):
         reference = _source_result(state, target)
         if reference is None:
@@ -1190,6 +1225,19 @@ def _pending_source_validations(state, targets):
         if _validation_retry_due(
                 entry, state["source_search_counts"].get(str(index), 0)):
             pending[index] = subject
+    aggregate = state.get("required_source_validation")
+    if isinstance(aggregate, dict) and aggregate.get("disposition") == "failed":
+        return {}
+    if pending and priority_dir is not None:
+        required_ids = [option(targets[index], "--target-id") for index in pending]
+        order = _validation_priority(state, priority_dir, commit, required_ids)
+        if order is None:
+            return {}
+        by_id = {option(targets[index], "--target-id"): (index, subject)
+                 for index, subject in pending.items()}
+        first = next(selected_id for selected_id in order if selected_id in by_id)
+        index, subject = by_id[first]
+        return {index: subject}
     return pending
 
 
@@ -1230,6 +1278,18 @@ def _required_source_validation(state, targets):
                        - {identity["selected_id"] for _, _, identity in required})
     if missing_authors:
         raise SerialRefused("retained keep author is absent from the owned target roster")
+    priority_reference = state.get("source_validation_priority_refs", {}).get(commit)
+    if priority_reference is not None:
+        priority, priority_sha = _json(Path(priority_reference["path"]), limit=256 * 1024)
+        if priority_sha != priority_reference["sha256"]:
+            raise SerialRefused("source validation priority receipt changed")
+        from . import serial_scheduling
+        ordered_ids = serial_scheduling.order_source_validations(priority["rows"])
+        by_id = {identity["selected_id"]: row for row in required
+                 for identity in (row[2],)}
+        if set(ordered_ids) != set(by_id):
+            raise SerialRefused("source validation priority rows differ from required targets")
+        required = [by_id[selected_id] for selected_id in ordered_ids]
     rows, missing = [], []
     refused_after = None
     for index, target, identity in required:
@@ -1283,6 +1343,8 @@ def _required_source_validation(state, targets):
             "intended_target_id": intended, "rows": rows,
             "missing_target_ids": missing, "disposition": disposition,
             "loo_rows": loo_rows, "loo_disposition": loo_disposition}
+    if priority_reference is not None:
+        body["priority_reference"] = dict(priority_reference)
     body["aggregate_digest"] = _digest(body)
     return body
 
@@ -1628,11 +1690,18 @@ def _scheduled_failure_account(state, manifest, active, batch_dir, original):
 
 
 def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
-           scheduler_manifest=None, control_listen=None, control_origin=None):
+           scheduler_manifest=None, source_validation_priority_dir=None,
+           control_listen=None, control_origin=None):
+    effective_priority_dir = (Path(source_validation_priority_dir).resolve()
+                              if source_validation_priority_dir is not None else
+                              root / "source-validation-priorities")
     config = _digest({"targets": targets, "batch_iterations": batch_iterations, "rounds": rounds,
                       **({"child_prefix": list(child_prefix)} if child_prefix else {}),
                       **({"scheduler_manifest": scheduler_manifest.digest}
-                         if scheduler_manifest is not None else {})})
+                         if scheduler_manifest is not None else {}),
+                      **({"source_validation_priority_dir":
+                          str(Path(source_validation_priority_dir).resolve())}
+                         if source_validation_priority_dir is not None else {})})
     state_path = root / "serial-state.json"
     if state_path.exists():
         state, _sha = _json(state_path)
@@ -1746,7 +1815,9 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
             recovered_active = dict(state["active"])
             recovered = _reconcile_completed(root, state, targets, batch_iterations)
             recovered_dir = root / "batches" / f"batch-{recovered['batch_number']:06d}"
-            recovered_validations = (_pending_source_validations(state, targets)
+            recovered_validations = (_pending_source_validations(
+                                     state, targets,
+                                     priority_dir=effective_priority_dir)
                                      if scheduler_manifest is not None else {})
             recovered_loo = (_pending_source_loo(state, targets)
                              if scheduler_manifest is not None else {})
@@ -1803,14 +1874,25 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                         paused_heartbeat = 0.0
                 if stopped():
                     break
+            aggregate = state.get("required_source_validation")
+            if isinstance(aggregate, dict) and aggregate.get("disposition") == "failed":
+                save()
+                publish("failed", reason="required source validation refused current source tip")
+                return 1
             if len(state["failed_targets"]) == len(targets):
                 publish("failed")
                 return 1  # Continuous mode must not spin over a failed roster.
             number = state["next_batch"]
             selection = None
             previews = None
-            validation_targets = (_pending_source_validations(state, targets)
+            validation_targets = (_pending_source_validations(
+                                  state, targets,
+                                  priority_dir=effective_priority_dir)
                                   if scheduler_manifest is not None else {})
+            if state.get("source_validation_priority_pending") is not None:
+                save()
+                publish("complete", reason=state["source_validation_priority_pending"]["reason"])
+                return 0
             loo_targets = (_pending_source_loo(state, targets)
                            if scheduler_manifest is not None else {})
             if scheduler_manifest is not None:
