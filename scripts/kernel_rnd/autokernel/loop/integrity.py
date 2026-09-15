@@ -59,10 +59,29 @@ class CandidateIntegrity:
 
 _PROTECTED_PREFIXES = ("tests/", "tools/llama-bench/", "tools/server/",
                        "examples/", "scripts/")
-_LITERAL_PREDICATE = re.compile(
-    r"(?:\b(?:ne\d|type|op|op_id)\b|->(?:ne|type|op)\b|\[(?:[0-3])\])"
-    r"[^;{}]*(?:==|!=|<=|>=|<|>)[^;{}]*"
-    r"(?:\b\d+\b|GGML_TYPE_[A-Z0-9_]+|GGML_OP_[A-Z0-9_]+)")
+_BRANCH = re.compile(r"\b(?:if|else\s+if|switch|while)\s*\(|\?")
+# ggml uses both indexed dimensions (`src->ne[0]`) and flattened locals
+# (`ne00`, `ne01`, `ne10`, `ne11`).  Keep the subject and literal tests separate:
+# doing so catches both `ne00 == 4096` and its equally suspicious reversed spelling
+# `4096 == ne00`.  The old one-direction regex silently missed the latter and all
+# two-digit flattened names.
+_TENSOR_SUBJECT = re.compile(
+    r"(?:\bne(?:\d{1,2})?\b|(?:->|\.)ne\s*\[[^\]]+\]|"
+    r"\b(?:type|op|op_id)\b|(?:->|\.)(?:type|op)\b)")
+_LITERAL = re.compile(
+    r"(?:\b(?:0[xX][0-9A-Fa-f]+|\d+)\b|"
+    r"\bGGML_(?:TYPE|OP)_[A-Z0-9_]+\b)")
+_COMPARISON = re.compile(r"==|!=|<=|>=|<|>")
+
+
+def _literal_tensor_branch(statement: str) -> bool:
+    """Whether an added branch compares tensor identity/shape with a literal."""
+    return bool(_BRANCH.search(statement)
+                and _TENSOR_SUBJECT.search(statement)
+                and _COMPARISON.search(statement)
+                and _LITERAL.search(statement))
+
+
 _MUTABLE_STATE = re.compile(
     r"\b(?:static\s+(?!const\b|constexpr\b)|(?:std::)?atomic\s*<|thread_local\b)")
 _IDENTIFIER = re.compile(r"\b[A-Za-z_]\w*\b")
@@ -200,7 +219,7 @@ def screen_special_cases(worktree: Path, *, oracle_shape: dict | None = None,
     findings: list[SpecialCaseFinding] = []
     mutable_by_path: dict[str, set[str]] = {}
     for path, line in _logical_additions(worktree):
-        if _LITERAL_PREDICATE.search(line):
+        if _literal_tensor_branch(line):
             findings.append(SpecialCaseFinding(
                 "literal_shape_predicate", path, line,
                 _matches(line, oracle_shape), _matches(line, bench_shape)))

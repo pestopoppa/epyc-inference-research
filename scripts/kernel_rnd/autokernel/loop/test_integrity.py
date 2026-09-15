@@ -106,6 +106,25 @@ def test_multiline_predicate_crosses_declared_shapes(repo):
     assert finding.bench_matches == ("4096", "GGML_TYPE_Q4_K")
 
 
+@pytest.mark.parametrize("predicate", [
+    "if (ne00 == 4096 && ne11 <= 128) return;",
+    "if (4096 == ne00 && GGML_TYPE_Q4_K == src0->type) return;",
+    "bool fast = (src0.ne[1] >= 128) ? true : false;",
+])
+def test_common_and_reversed_tensor_literal_predicates_are_flagged(repo, predicate):
+    """The reward-hack screen covers actual ggml dimension spellings/orderings."""
+    (repo / "ggml/src/kernel.cpp").write_text(
+        "int base = 1;\n" + predicate + "\n")
+    checked = integrity.validate_candidate(
+        repo, ("ggml/src/kernel.cpp",),
+        oracle_shape={"dims": [128], "types": ["GGML_TYPE_Q4_K"]},
+        bench_shape={"dims": [4096], "types": ["GGML_TYPE_Q4_K"]})
+    findings = [row for row in checked.findings
+                if row.kind == "literal_shape_predicate"]
+    assert len(findings) == 1
+    assert checked.needs_confirm
+
+
 def test_added_read_of_existing_mutable_global_is_flagged(repo):
     kernel = repo / "ggml/src/kernel.cpp"
     kernel.write_text("int call_count = 0;\nint base = 1;\n")
