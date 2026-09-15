@@ -898,12 +898,25 @@ def main(argv=None) -> int:
     parser.add_argument("--rounds", type=int, default=1,
                         help="0 schedules until its configured budget or STOP")
     parser.add_argument("--state-dir", type=Path, required=True)
+    parser.add_argument("--retention-trigger-free-gb", type=float, default=400.0,
+                        help="reclaim retired serial build caches below this free-space watermark")
+    parser.add_argument("--retention-target-free-gb", type=float, default=500.0,
+                        help="bounded cleanup target; receipts and source trees are never removed")
+    parser.add_argument("--retention-recent-state-caches", type=int, default=1,
+                        help="newest inactive serial-state build caches to preserve")
+    parser.add_argument("--retention-max-build-dirs", type=int, default=8,
+                        help="maximum retired build roots reclaimed at one startup")
+    parser.add_argument("--retention-dry-run", action="store_true",
+                        help="publish the exact cleanup plan without deleting build output")
     parser.add_argument("--control-listen", help="optional authenticated IPv4 loopback HOST:PORT")
     parser.add_argument("--control-origin", default=os.environ.get("AUTOKERNEL_TRUSTED_HUB_ORIGIN"),
                         help="exact trusted hub origin; token comes from AUTOKERNEL_CONTROL_TOKEN")
     args = parser.parse_args(argv)
-    if args.batch_iterations <= 0 or args.rounds < 0:
-        parser.error("batch iterations must be positive and rounds nonnegative")
+    if (args.batch_iterations <= 0 or args.rounds < 0
+            or not 0 <= args.retention_trigger_free_gb <= args.retention_target_free_gb
+            or args.retention_recent_state_caches < 0
+            or args.retention_max_build_dirs < 1):
+        parser.error("batch/round or build-retention policy is invalid")
     try:
         if args.control_listen:
             from . import campaign_service
@@ -994,6 +1007,23 @@ def main(argv=None) -> int:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
             raise SerialRefused("serial session already has an owner") from exc
+        # Retired serial states are independent cache owners.  Reclaim only their
+        # generated build roots, under pressure, after independently proving each
+        # sibling lock is free and its child state fully reconciled.  Receipts,
+        # patches, logs, source trees, stores and anchor builds are never candidates.
+        from . import serial_build_retention
+        retention_plan = serial_build_retention.plan(
+            root.parent, root,
+            trigger_free_bytes=int(args.retention_trigger_free_gb * 1024 ** 3),
+            target_free_bytes=int(args.retention_target_free_gb * 1024 ** 3),
+            recent_state_caches=args.retention_recent_state_caches,
+            max_build_dirs=args.retention_max_build_dirs)
+        status.write_json(root, "build-retention-plan.json", retention_plan,
+                          prefix=".build-retention-plan-")
+        retention_result = serial_build_retention.execute(
+            retention_plan, dry_run=args.retention_dry_run)
+        status.write_json(root, "build-retention-result.json", retention_result,
+                          prefix=".build-retention-result-")
         return _drive(root, targets, args.batch_iterations, args.rounds, child_prefix=child_prefix,
                       scheduler_manifest=scheduler_manifest,
                       source_validation_priority_dir=args.source_validation_priority_dir,
