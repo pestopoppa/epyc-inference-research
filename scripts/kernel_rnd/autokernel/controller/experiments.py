@@ -294,7 +294,14 @@ class ExperimentStore:
             self._connection.set_progress_handler(lambda: time.monotonic() > deadline, 1000)
         else:
             self.root.mkdir(parents=True, exist_ok=True)
-            self._connection = sqlite3.connect(self.path)
+            self._connection = sqlite3.connect(self.path, timeout=30.0)
+            # The dashboard and operator tooling read this append-only journal
+            # while the loop records outcomes.  DELETE journaling lets a long
+            # reader prevent the scientific owner from committing; WAL keeps
+            # those readers on their snapshot instead of turning an otherwise
+            # valid outcome into a lane_error.
+            self._connection.execute("PRAGMA journal_mode=WAL")
+            self._connection.execute("PRAGMA busy_timeout=30000")
         self._connection.row_factory = sqlite3.Row
         if not read_only:
             self._connection.executescript(_DDL)

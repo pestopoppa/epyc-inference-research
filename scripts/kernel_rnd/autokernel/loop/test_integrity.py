@@ -3,7 +3,12 @@ import subprocess
 
 import pytest
 
-from . import bench, integrity, loop, pipeline, pool
+from . import bench, integrity, loop, pipeline, pool, run
+
+
+def test_missing_census_quant_is_not_a_candidate_validation_error():
+    assert run._candidate_quant_tokens(None) == []
+    assert run._candidate_quant_tokens("Q4_K") == ["Q4_K", "GGML_TYPE_Q4_K"]
 
 
 def _git(root: Path, *args: str) -> str:

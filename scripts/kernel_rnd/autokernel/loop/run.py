@@ -84,6 +84,13 @@ def _serving_comparison(invoke, baseline_scope):
         raise
 
 
+def _candidate_quant_tokens(dominant_quant: str | None) -> list[str]:
+    """Return integrity-screen spellings for an optional census quant."""
+    if not dominant_quant:
+        return []
+    return [dominant_quant, "GGML_TYPE_" + dominant_quant]
+
+
 def _read_cpu_document(path: Path) -> dict:
     with path.open("rb") as stream:
         data = stream.read(2 * 1024 * 1024 + 1)
@@ -2149,8 +2156,11 @@ def main(argv: list[str] | None = None) -> int:
         integrity_evidence = {}
 
         def validate_pooled(worker, hypothesis, paths):
-            quant_tokens = [census.dominant_quant,
-                            "GGML_TYPE_" + census.dominant_quant]
+            # A byte-bounded or otherwise partial census legitimately has no
+            # dominant quant.  Candidate integrity must still inspect the full
+            # patch and bench-shape literals; an absent optional type constraint
+            # is not a malformed candidate (and must never become a lane error).
+            quant_tokens = _candidate_quant_tokens(census.dominant_quant)
             oracle_shape = {"op_ids": ["MUL_MAT", "GGML_OP_MUL_MAT"],
                             "types": quant_tokens}
             bench_shape = {"dims": [value for value in (pp, tg, ubatch) if value],

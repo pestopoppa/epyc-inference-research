@@ -74,6 +74,24 @@ class Memory(unittest.TestCase):
                 self.assertEqual(reopened.count(), 1)
                 self.assertEqual(reopened.mechanisms_tried(), ["akm-q5-bit-deposit"])
 
+    def test_a_reader_cannot_block_outcome_recording(self):
+        """Dashboard/operator reads must not poison the loop's journal writer."""
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.store(tmp) as initial:
+                initial.record(_attempt(), epoch=EPOCH_A,
+                               recorded_at="2026-08-28T00:00:00Z", campaign_id="c1")
+            reader = ex.sqlite3.connect(Path(tmp, "experiments.db"))
+            try:
+                reader.execute("BEGIN")
+                reader.execute("SELECT payload FROM experiments").fetchone()
+                with self.store(tmp) as writer:
+                    self.assertTrue(writer.record(
+                        _attempt(mechanism_id="akm-second", result_sha256="2" * 64),
+                        epoch=EPOCH_A,
+                        recorded_at="2026-08-28T00:00:01Z", campaign_id="c1"))
+            finally:
+                reader.close()
+
     def test_a_refused_attempt_with_no_result_is_still_remembered(self):
         """A refusal the planner cannot see is a refusal it will earn again.
 
