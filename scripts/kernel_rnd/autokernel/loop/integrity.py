@@ -40,6 +40,16 @@ class CandidateIntegrity:
     def needs_confirm(self) -> bool:
         return bool(self.findings)
 
+    def to_dict(self) -> dict:
+        return {
+            "schema": "epyc.autokernel.candidate_integrity.v1",
+            "paths": list(self.paths),
+            "measured_tree": self.tree,
+            "needs_confirm": self.needs_confirm,
+            "findings": [{"kind": row.kind, "path": row.path, "line": row.line}
+                         for row in self.findings],
+        }
+
 
 _PROTECTED_PREFIXES = ("tests/", "tools/llama-bench/", "tools/server/",
                        "examples/", "scripts/")
@@ -129,6 +139,22 @@ def screen_special_cases(worktree: Path) -> tuple[SpecialCaseFinding, ...]:
         if _MUTABLE_STATE.search(line):
             findings.append(SpecialCaseFinding("hot_path_mutable_state", path, line))
     return tuple(findings)
+
+
+def require_unseen_confirmation(candidate: CandidateIntegrity, *, screen_surface: str,
+                                screen_model: str | None, confirm_surfaces: Sequence[str],
+                                confirm_model: str | None) -> dict:
+    """Prove a flagged candidate's confirm identity was absent from its public screen."""
+    identities = tuple((str(surface), None if confirm_model is None else str(confirm_model))
+                       for surface in confirm_surfaces)
+    public = (str(screen_surface), None if screen_model is None else str(screen_model))
+    unseen = tuple(identity for identity in identities if identity != public)
+    if candidate.needs_confirm and not unseen:
+        raise IntegrityRefused(
+            "held_out_confirmation_missing",
+            f"public={public!r} confirm={list(identities)!r}")
+    return {"public_identity": list(public),
+            "held_out_identities": [list(identity) for identity in unseen]}
 
 
 def validate_candidate(worktree: Path, declared_paths: Sequence[str]) -> CandidateIntegrity:

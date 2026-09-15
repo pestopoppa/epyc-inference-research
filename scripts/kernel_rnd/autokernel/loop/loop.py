@@ -33,7 +33,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
-from . import bench, gates
+from . import bench, gates, integrity
 
 HYPOTHESIS_ROUNDS = 3
 PATCH_ROUNDS = 2
@@ -184,6 +184,7 @@ class Outcome:
     gate_verdicts: list[gates.Verdict] = field(default_factory=list)
     champion_head: str | None = None
     invalid_measurement: dict | None = None
+    integrity_screen: dict | None = None
 
     def to_attempt(self) -> dict:
         row = {"status": self.status, "turn_recorded_at": _now()}
@@ -200,6 +201,8 @@ class Outcome:
             row["champion_head"] = self.champion_head
         if self.invalid_measurement is not None:
             row["invalid_measurement"] = self.invalid_measurement
+        if self.integrity_screen is not None:
+            row["integrity_screen"] = self.integrity_screen
         return row
 
 
@@ -362,6 +365,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                 return stopped()
             working["prior_patch_rejections"] = list(patch_reasons)
             paths = ()
+            integrity_screen = None
             if hypothesis.runtime_pair is None:
                 on_step("authoring the patch")
                 paths = planner.author(hypothesis, working)
@@ -369,7 +373,14 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                     return Outcome("abstained", hypothesis, [paths.reason])
                 # A declared path list is a claim, not an isolation boundary.  The
                 # injected host check resolves the full worktree before review/build.
-                validate_candidate(hypothesis, paths)
+                try:
+                    checked = validate_candidate(hypothesis, paths)
+                    integrity_screen = (checked.to_dict() if hasattr(checked, "to_dict")
+                                        else checked)
+                except integrity.IntegrityRefused as exc:
+                    return Outcome(
+                        "integrity_refused", hypothesis, [str(exc)],
+                        integrity_screen={"refusal_class": exc.refusal_class})
 
             # ---- CRITIC PASS 2: the diff, BEFORE the build ------------------
             if should_abandon():
@@ -460,8 +471,10 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                             head = commit(hypothesis, paths, comparison)
                         except ConfirmVetoed as veto:
                             return Outcome("keep_candidate", hypothesis,
-                                           [str(veto)], comparison, verdicts)
-                        return Outcome("kept", hypothesis, [], comparison, verdicts, head)
+                                           [str(veto)], comparison, verdicts,
+                                           integrity_screen=integrity_screen)
+                        return Outcome("kept", hypothesis, [], comparison, verdicts, head,
+                                       integrity_screen=integrity_screen)
             except MeasurementInvalid as exc:
                 return Outcome("measurement_invalid", hypothesis, [str(exc)],
                                gate_verdicts=verdicts, invalid_measurement=exc.record)

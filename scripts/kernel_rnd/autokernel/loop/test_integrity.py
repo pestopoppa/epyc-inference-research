@@ -3,7 +3,7 @@ import subprocess
 
 import pytest
 
-from . import integrity
+from . import integrity, loop, pipeline
 
 
 def _git(root: Path, *args: str) -> str:
@@ -53,6 +53,17 @@ def test_literal_shape_predicate_and_mutable_state_need_confirmation(repo):
     assert checked.needs_confirm
     assert {row.kind for row in checked.findings} == {
         "literal_shape_predicate", "hot_path_mutable_state"}
+    assert checked.to_dict()["needs_confirm"] is True
+    assert checked.to_dict()["measured_tree"] == checked.tree
+    with pytest.raises(integrity.IntegrityRefused) as caught:
+        integrity.require_unseen_confirmation(
+            checked, screen_surface="tg128", screen_model="public.gguf",
+            confirm_surfaces=("tg128",), confirm_model="public.gguf")
+    assert caught.value.refusal_class == "held_out_confirmation_missing"
+    proof = integrity.require_unseen_confirmation(
+        checked, screen_surface="tg128", screen_model="public.gguf",
+        confirm_surfaces=("tg192",), confirm_model="held-out.gguf")
+    assert proof["held_out_identities"] == [["tg192", "held-out.gguf"]]
 
 
 def test_measured_tree_and_kept_commit_are_exact(repo):
@@ -69,3 +80,48 @@ def test_measured_tree_and_kept_commit_are_exact(repo):
     with pytest.raises(integrity.IntegrityRefused) as caught:
         integrity.assert_measured_tree(repo, checked.tree)
     assert caught.value.refusal_class == "measured_tree_changed"
+
+
+def test_pipeline_returns_journalable_refusal_before_critic_or_build():
+    hypothesis = loop.Hypothesis("akm-exploit", "edit oracle", "must refuse",
+                                 "ggml/src/kernel.cpp", "kernel")
+
+    class Planner:
+        def propose(self, context):
+            return hypothesis
+
+        def author(self, proposed, context):
+            return ("ggml/src/kernel.cpp",)
+
+    calls = {"patch_critic": 0, "gate": 0}
+
+    class Critic:
+        def review_hypothesis(self, proposed, context):
+            return loop.Review(True)
+
+        def review_patch(self, proposed, paths, context):
+            calls["patch_critic"] += 1
+            return loop.Review(True)
+
+    worker = pipeline.Worker("lane0", Path("/unused"), Path("/unused-build"))
+
+    def gate(_worker):
+        def invoke(*_args):
+            calls["gate"] += 1
+            return True, []
+        return invoke
+
+    outcomes = pipeline.run_pool(
+        workers=[worker], make_planner=lambda _worker: Planner(),
+        make_critic=lambda _worker: Critic(), build_context=dict, make_gate=gate,
+        make_measure=lambda _worker: lambda *_args: None,
+        commit=lambda *_args: "unused", champion_head=lambda: "a" * 40,
+        reset_to_champion=lambda _worker: "a" * 40, record=lambda _outcome: None,
+        iterations=1,
+        validate_candidate=lambda *_args: (_ for _ in ()).throw(
+            integrity.IntegrityRefused("dirty_set_mismatch", "undeclared oracle")))
+    assert [outcome.status for outcome in outcomes] == ["integrity_refused"]
+    assert calls == {"patch_critic": 0, "gate": 0}
+    row = outcomes[0].to_attempt()
+    assert row["integrity_screen"]["refusal_class"] == "dirty_set_mismatch"
+    assert "dirty_set_mismatch" in row["reason"]

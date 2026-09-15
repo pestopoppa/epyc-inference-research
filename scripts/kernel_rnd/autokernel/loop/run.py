@@ -2060,14 +2060,20 @@ def main(argv: list[str] | None = None) -> int:
             the archive rows comparable across the run.
         """
         candidate_integrity = {}
+        integrity_evidence = {}
 
         def validate_pooled(worker, hypothesis, paths):
             checked = integrity.validate_candidate(worker.worktree, paths)
             candidate_integrity[worker.name] = checked
+            integrity_evidence[hypothesis.mechanism_id] = checked.to_dict()
             return checked
 
         def record_pooled(outcome) -> None:
             attempt = outcome.to_attempt()
+            if outcome.hypothesis is not None:
+                evidence = integrity_evidence.get(outcome.hypothesis.mechanism_id)
+                if evidence is not None:
+                    attempt["integrity_screen"] = evidence
             attempt["research_scope"] = archive.original_research_scope(
                 attempt, model=args.model, quant=census.dominant_quant,
                 backend="cpu" if cpu_launch else "gpu", build_recipe=recipe.to_dict(),
@@ -2149,8 +2155,21 @@ def main(argv: list[str] | None = None) -> int:
                     + ", ".join(kinds)
                     + "; an unseen rotated/serving confirm rung is not configured")
             if confirm is not None:
+                held_out_identity = integrity.require_unseen_confirmation(
+                    checked, screen_surface=comparison.surface,
+                    screen_model=comparison.model, confirm_surfaces=confirm.surfaces,
+                    confirm_model=str(confirm.model))
+                integrity_evidence[hypothesis.mechanism_id].update(held_out_identity)
                 verdict = confirm.gate(hypothesis.mechanism_id, comparison,
                                        confirm_measure(worker))
+                if checked.needs_confirm:
+                    confirm_effects = [row.get("effect")
+                                       for row in verdict.get("confirm", ())]
+                    evidence = integrity_evidence[hypothesis.mechanism_id]
+                    evidence["held_out_confirm"] = verdict
+                    evidence["public_to_held_out_speedup_gap"] = [
+                        comparison.effect - effect for effect in confirm_effects
+                        if isinstance(effect, (int, float))]
                 if not verdict["promoted"]:
                     raise loop.ConfirmVetoed(verdict["reason"])
             source_fold_candidate = experimental and cpu_launch \
