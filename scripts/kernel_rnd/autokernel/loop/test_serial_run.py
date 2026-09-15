@@ -1129,6 +1129,41 @@ def test_failed_required_source_validation_refuses_instead_of_warning_only():
     assert state["required_source_validation"] is aggregate
 
 
+def test_required_source_validation_stops_rows_after_first_refusal():
+    targets = [["--target-id", value] for value in ("first", "second", "third", "author")]
+    identities = {value: {"selected_id": value,
+        "original_target": {"enrolled_as": ["production"] if value != "author" else ["seed"]}}
+        for value in ("first", "second", "third", "author")}
+    source_reference = {"path": "/source", "sha256": "a" * 64}
+    source = {"current_anchor": {"commit": "3" * 40},
+              "source_lineage_keeps": [{"locator": "author"}]}
+    receipt = mock.Mock(selected_target=identities["author"], kept_commit="3" * 40)
+    failed_ref = {"locator": "first", "sha256": "b" * 64}
+    failed_row = {"source_commit": "3" * 40, "target": identities["first"],
+                  "intended_target": False, "disposition": "failed"}
+    state = {"source_results": {}, "last_results": {}, "source_loo": {},
+             "source_validations": {"subject-first": {
+                 "latest_reference": failed_ref, "disposition": "failed"}}}
+    with mock.patch.object(sr, "_source_result", return_value=source_reference), \
+            mock.patch.object(sr, "load_completed", return_value=(source, "a" * 64)), \
+            mock.patch.object(sr, "_selected_identity",
+                side_effect=lambda argv: identities[sr.option(argv, "--target-id")]), \
+            mock.patch.object(sr, "_validation_subject",
+                side_effect=lambda _state, argv, _index, _commit:
+                    "subject-" + sr.option(argv, "--target-id")), \
+            mock.patch.object(run.surface_fold, "reopen_reference", return_value=receipt), \
+            mock.patch.object(run.surface_validation, "reopen_reference",
+                              return_value=failed_row):
+        aggregate = sr._required_source_validation(state, targets)
+
+    assert aggregate["disposition"] == "failed"
+    assert aggregate["missing_target_ids"] == []
+    assert [row["disposition"] for row in aggregate["rows"]] == [
+        "failed", "not_run_after_refusal", "not_run_after_refusal"]
+    assert aggregate["rows"][1]["refused_after_target_id"] == "first"
+    assert aggregate["rows"][2]["reference"] is None
+
+
 def test_pending_source_validation_skips_nonproduction_authoring_target():
     targets = [["--target-id", "author"], ["--target-id", "prod"]]
     identities = {

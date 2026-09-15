@@ -39,6 +39,27 @@ def test_window_is_bounded_original_duration_p75_and_idempotent():
                                 max_stage_seconds=20.) is None
 
 
+def test_source_validation_order_is_cost_over_failure_probability():
+    rows = [
+        {"selected_id": "cheap-low-risk", "cost_seconds": 4, "p_fail": .25,
+         "shared_machinery": False},
+        {"selected_id": "expensive-high-risk", "cost_seconds": 9, "p_fail": .9,
+         "shared_machinery": False},
+        {"selected_id": "shared", "cost_seconds": 8, "p_fail": .01,
+         "shared_machinery": True},
+    ]
+    assert ss.order_source_validations(rows) == (
+        "shared", "expensive-high-risk", "cheap-low-risk")
+
+
+def test_source_validation_order_refuses_missing_or_invalid_priors():
+    with pytest.raises(ss.SerialSchedulingRefused, match="shape"):
+        ss.order_source_validations([{"selected_id": "w", "cost_seconds": 1}])
+    with pytest.raises(ss.SerialSchedulingRefused, match="failure prior"):
+        ss.order_source_validations([{"selected_id": "w", "cost_seconds": 1,
+                                      "p_fail": 0, "shared_machinery": False}])
+
+
 @pytest.mark.parametrize("change", ["recipe", "requests", "source", "cor", "runtime",
                                     "geometry", "epoch", "capacity", "stage", "claims", "setup"])
 def test_compatibility_never_pools_other_original_inputs(change):

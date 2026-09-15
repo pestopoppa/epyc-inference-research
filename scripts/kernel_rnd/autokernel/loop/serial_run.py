@@ -1231,10 +1231,17 @@ def _required_source_validation(state, targets):
     if missing_authors:
         raise SerialRefused("retained keep author is absent from the owned target roster")
     rows, missing = [], []
+    refused_after = None
     for index, target, identity in required:
         subject = _validation_subject(state, target, index, commit)
         entry = state["source_validations"].get(subject)
         reference = entry.get("latest_reference") if isinstance(entry, dict) else None
+        if refused_after is not None and reference is None:
+            rows.append({"selected_id": identity["selected_id"], "subject": subject,
+                         "reference": None, "disposition": "not_run_after_refusal",
+                         "intended_target": identity["selected_id"] == intended,
+                         "refused_after_target_id": refused_after})
+            continue
         if reference is None:
             missing.append(identity["selected_id"])
             continue
@@ -1247,9 +1254,11 @@ def _required_source_validation(state, targets):
         rows.append({"selected_id": identity["selected_id"], "subject": subject,
                      "reference": dict(reference), "disposition": row["disposition"],
                      "intended_target": expected_intended})
+        if row["disposition"] == "failed":
+            refused_after = identity["selected_id"]
     dispositions = {row["disposition"] for row in rows}
-    disposition = ("pending" if missing or "pending" in dispositions else
-                   "failed" if "failed" in dispositions else "passed")
+    disposition = ("failed" if "failed" in dispositions else
+                   "pending" if missing or "pending" in dispositions else "passed")
     loo_rows = []
     for row in rows:
         entry = state.get("source_loo", {}).get(row["subject"])
