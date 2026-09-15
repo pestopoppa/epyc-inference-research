@@ -234,12 +234,12 @@ class PlannerContract(unittest.TestCase):
             with self.assertRaises(actors.ProviderTransient):
                 planner.propose({})
 
-    def test_authoring_with_no_paths_is_a_transient(self):
+    def test_legacy_empty_author_paths_are_an_abstention(self):
         planner = actors.AgentPlanner(workspace=Path("/tmp"))
         with mock.patch.object(actors, "_run_agent", return_value='{"paths": []}'):
-            with self.assertRaises(actors.ProviderTransient):
-                planner.author(
-                    Hypothesis("akm-x", "s", "f", "a.cu", "sym"), {})
+            got = planner.author(Hypothesis("akm-x", "s", "f", "a.cu", "sym"), {})
+        self.assertIsInstance(got, actors.Abstain)
+        self.assertEqual(got.reason, "authoring returned no changed paths")
 
     def test_authoring_can_abstain_without_dirty_path_check(self):
         planner = actors.AgentPlanner(workspace=Path("/tmp"))

@@ -676,8 +676,10 @@ class AgentPlanner:
         if abstention is not None:
             return abstention
         paths = body.get("paths")
-        if not isinstance(paths, list) or not paths:
-            raise ProviderTransient("authoring returned no changed paths")
+        if isinstance(paths, list) and not paths:
+            return Abstain("authoring returned no changed paths")
+        if not isinstance(paths, list):
+            raise ProviderTransient("authoring reply is missing a paths list")
         if any(_is_placeholder(item) for item in paths):
             raise ProviderTransient(
                 f"authoring echoed the prompt template instead of answering: {paths}")
