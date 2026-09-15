@@ -1,0 +1,7 @@
+timestamp_utc=20260718T164058Z
+host=Beelzebub
+binary=/mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench
+model=/mnt/raid0/llm/models/gemma-4-26B-A4B-it-UD-IQ4_XS.gguf
+branch=experimental-v7-refresh-20260716
+commit=d1e5a20ebebe567f0da6bc64ca7ea7ecd521fc24
+bench_stat=2026-07-18 14:13:05.185581509 +0000 /mnt/raid0/llm/llama.cpp-experimental/build-hip/bin/llama-bench

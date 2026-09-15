@@ -1,0 +1,14 @@
+{
+  "arm": "mtp_n8",
+  "claim_id": "akd-ec0811cfa8df4898",
+  "claim_released": true,
+  "failure": null,
+  "finished_at": "2026-08-20T13:51:09.150074+00:00",
+  "inference_window_released": true,
+  "runner_pid": 3818053,
+  "runner_returncode": 0,
+  "schema": "epyc.df2.arm_transport.v1",
+  "server_pid": 3817833,
+  "server_returncode": 0,
+  "started_at": "2026-08-20T13:43:45.514154+00:00"
+}

@@ -1,0 +1,1 @@
+0.02.940.069 I srv    load_model: initializing, n_slots = 4, n_ctx_slot = 49152, kv_unified = 'true'
