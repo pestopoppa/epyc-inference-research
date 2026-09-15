@@ -75,6 +75,21 @@ class AConfirmedCandidateIsPromotedToKept(unittest.TestCase):
         return json.loads(files[0].read_text(encoding="utf-8"))
 
 
+class AnAccumulatorInteractionRegressionIsNotAKeep(unittest.TestCase):
+
+    def test_completed_rollback_has_its_own_scientific_disposition(self):
+        def commit(_hypothesis, _paths, _comparison):
+            raise loop.InteractionRegression("reproduced negative; prior tip restored")
+
+        outcome = loop.iterate(
+            planner=_Planner(), critic=_Critic([], []), context={},
+            measure=lambda h, p: _comparison(0.05), gate=lambda h, p: (True, []),
+            commit=commit)
+        self.assertEqual(outcome.status, "interaction_regression")
+        self.assertIn("prior tip restored", outcome.reasons[0])
+        self.assertIsNone(outcome.champion_head)
+
+
 class AConfirmRegressionIsNeverKept(unittest.TestCase):
 
     def _veto_run(self, tmp, rows):
@@ -209,9 +224,9 @@ class TheRungIsOnEveryRecord(unittest.TestCase):
                 champion_build=store / "champ", baseline_build=base,
                 resolve=lambda: ("f" * 40, "production-consolidated-v9"),
                 compare=lambda _b, _c: bench.Comparison(
-                    surface="dec-b4", anchor_samples=[100.0],
-                    candidate_samples=[102.0], effect=0.02,
-                    estimator="median_over_median", pairs=20,
+                    surface="dec-b4", anchor_samples=[100.0] * 14,
+                    candidate_samples=[102.0] * 14, effect=0.02,
+                    estimator="median_over_median", pairs=14,
                     noise_floor_pct=0.668, residency={},
                     model="Qwen3.8-27B-Q8_0.gguf"))
             self.assertTrue(result.published, result.reason)

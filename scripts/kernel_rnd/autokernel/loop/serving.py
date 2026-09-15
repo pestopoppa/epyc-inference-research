@@ -43,9 +43,9 @@ from typing import TYPE_CHECKING
 import urllib.request
 import urllib.error
 
-from . import lifecycle_observation, residency, status
+from . import headline_admissibility, lifecycle_observation, residency, status
 from . import native_server_response as server_response
-from .loop import MeasurementInvalid
+from .loop import MeasurementFailed, MeasurementInvalid
 
 if TYPE_CHECKING:
     from .resolved_recipe import ResolvedRecipe
@@ -558,7 +558,7 @@ class EnvReadbackFailed(RuntimeError):
     """
 
 
-class ServerDied(RuntimeError):
+class ServerDied(MeasurementFailed):
     """The server exited during load or measurement -- a build/config fault, not noise."""
 
 
@@ -856,6 +856,7 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
     cpu_observer_error = None
     cpu_invalidity = []
     response_reference = None
+    serving_exception: Exception | None = None
     if cpu_profile_capture is not None:
         from .cpu_profile import CpuProfileCapture
         if (type(cpu_profile_capture) is not CpuProfileCapture or resolved_recipe is None
@@ -1101,6 +1102,7 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                     srv.wait(10)
                     teardown = "killed"
     except Exception as exc:
+        serving_exception = exc
         failure = f"{type(exc).__name__}: {exc}"
         raise
     finally:
@@ -1131,13 +1133,15 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                         record["cpu_lifecycle_error"] = cpu_observer_error
                     if evidence is not None:
                         evidence.append(record)
+                    exported = {
+                        "schema": "epyc.autokernel.serving_observation.v1",
+                        "process_pid": process_pid, "requests": request_rows,
+                        "residency": record, "teardown": teardown, "failure": failure}
+                    if response_reference is not None:
+                        exported["server_responses"] = response_reference
+                    if isinstance(serving_exception, ServerDied):
+                        serving_exception.record = exported
                     if observation is not None:
-                        exported = {
-                            "schema": "epyc.autokernel.serving_observation.v1",
-                            "process_pid": process_pid, "requests": request_rows,
-                            "residency": record, "teardown": teardown, "failure": failure}
-                        if response_reference is not None:
-                            exported["server_responses"] = response_reference
                         observation.append(exported)
                 except Exception:
                     if failure is None:
@@ -1384,6 +1388,23 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
                     if not reschedules[0]:
                         exc.reschedule = resume_original
                     raise
+                except ServerDied as exc:
+                    exc.record = {"schema": "epyc.autokernel.serving_failed_comparison.v1",
+                        "status": "bench_failed", "failed_arm": arm,
+                        "pair_index": pair_index, "pairs_requested": pairs,
+                        "failed_launch": dict(exc.record), "request_digest": requests_digest,
+                        "anchor_resolved_recipe": anchor_resolved_recipe.to_dict(),
+                        "candidate_resolved_recipe": candidate_resolved_recipe.to_dict(),
+                        "anchor_raw_samples": a_runs, "candidate_raw_samples": c_runs,
+                        "anchor_residency": a_residency, "candidate_residency": c_residency,
+                        "runtime_pair": None if runtime_pair is None else runtime_pair.to_dict()}
+                    if matched:
+                        exc.record.update(schema="epyc.autokernel.serving_failed_comparison.v2",
+                            measurement_plan=measurement_plan, failed_ordinal=ordinal,
+                            launch_membership=launch_membership,
+                            floor_sha256=None if floor_record is None else floor_record["content_sha256"])
+                    exc.record = json.loads(json.dumps(exc.record))
+                    raise
         a_med, c_med = statistics.median(a_runs), statistics.median(c_runs)
         effect = c_med / a_med - 1.0
         decisive = None if floor_pct is None else (abs(effect) * 100.0 >= floor_pct)
@@ -1468,6 +1489,7 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
                # usable precision (R23-61), so a floor that cannot state its n must not
                # gate -- `write_floor` refuses one that cannot.
                "n": samples,
+               "headline_admissibility": headline_admissibility.contract(),
                "comparison_pairs": pairs, "calibration_pairs": samples,
                "process_launches": 2 * samples, "order_algorithm": MATCHED_ORDER,
                "calibration_plan": plan, "frame": frame,
@@ -1493,6 +1515,7 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
             # PROCESSES. An arm-unit floor would be ~13x tighter and would size an
             # experiment 1200-fold wrong (R23-55).
             "unit": CALIBRATION_UNIT, "n": samples,
+            "headline_admissibility": headline_admissibility.contract(),
             "median_tok_s": sp["median"], "floor_pct": sp["p95_dev_pct"],
             "runs": runs, "cv_pct": sp["cv_pct"], "spread": sp,
             # A floor is a bar every future keep is judged against, so the row records
@@ -1666,6 +1689,16 @@ def write_floor(store: Path | str, recipe: Recipe, row: Mapping, *,
     """
     frozen_requests = _frozen_requests(recipe, frozen_requests)
     body = dict(row)
+    canonical_headline_contract = headline_admissibility.contract()
+    stated_headline_contract = body.get("headline_admissibility")
+    if (stated_headline_contract is not None
+            and stated_headline_contract != canonical_headline_contract):
+        raise ServingFloorMismatch(
+            "floor row carries a non-canonical headline admissibility contract")
+    # v1 is not sealed, so the one writer supplies the required schema field for
+    # callers constructed before S3-AKU-03. v2 must have carried it before sealing.
+    if body.get("schema") != "epyc.autokernel.serving_floor.v2":
+        body["headline_admissibility"] = canonical_headline_contract
     if unit not in FLOOR_UNITS:
         raise FloorUnitMismatch(
             f"refusing to write a floor for {recipe.name!r} with unit={unit!r}: every "
@@ -1721,12 +1754,14 @@ def write_floor(store: Path | str, recipe: Recipe, row: Mapping, *,
         # A matched floor is SEALED by `content_sha256`, so its unit and n must already be
         # inside that digest. Stamping them here would put the two fields a gate depends on
         # OUTSIDE the seal, where an edit leaves no trace.
-        if body.get("unit") != unit or body.get("n") != count:
+        if (body.get("unit") != unit or body.get("n") != count
+                or body.get("headline_admissibility") != canonical_headline_contract):
             raise FloorUnitMismatch(
-                f"matched floor must carry `unit` ({unit!r}) and `n` ({count!r}) inside its "
-                f"sealed content; this row carries unit={body.get('unit')!r} n="
-                f"{body.get('n')!r}. Recalibrate with a `serving.calibrate_floor` that "
-                f"stamps both before sealing -- they cannot be added afterwards.")
+                f"matched floor must carry `unit` ({unit!r}), `n` ({count!r}), and the "
+                f"canonical headline admissibility contract inside its sealed content; "
+                f"this row carries unit={body.get('unit')!r} n={body.get('n')!r}. "
+                f"Recalibrate with serving.calibrate_floor; sealed fields cannot be "
+                f"added afterwards.")
     else:
         body["unit"] = unit
         body["n"] = count

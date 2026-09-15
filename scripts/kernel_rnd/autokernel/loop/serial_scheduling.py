@@ -148,6 +148,35 @@ def select_target(manifest: SerialSchedulerManifest, state: scheduling.Scheduler
     return next_state, selection, by_proposal[selection.proposal.proposal_id]
 
 
+def order_source_validations(rows: Sequence[Mapping[str, Any]]) -> tuple[str, ...]:
+    """Order TOUCHED workload rows by the AKX cost/failure heuristic.
+
+    ``p_fail`` is evidence supplied by the blast-radius producer. Shared
+    machinery is deliberately assigned probability one. This helper does not
+    invent a prior when that producer has not supplied one.
+    """
+    ranked: list[tuple[float, str]] = []
+    seen: set[str] = set()
+    for row in rows:
+        _closed(row, {"selected_id", "cost_seconds", "p_fail",
+                      "shared_machinery"}, "source validation priority")
+        selected_id = row["selected_id"]
+        if (not isinstance(selected_id, str) or not selected_id or "\0" in selected_id
+                or selected_id in seen or type(row["shared_machinery"]) is not bool):
+            raise SerialSchedulingRefused("source validation priority identity is invalid")
+        cost = _number(row["cost_seconds"], "source validation cost")
+        if cost <= 0:
+            raise SerialSchedulingRefused("source validation cost must be positive")
+        supplied = _number(row["p_fail"], "source validation failure prior")
+        if not 0 < supplied <= 1:
+            raise SerialSchedulingRefused("source validation failure prior must be in (0, 1]")
+        probability = 1.0 if row["shared_machinery"] else supplied
+        ranked.append((cost / probability, selected_id))
+        seen.add(selected_id)
+    ranked.sort(key=lambda item: (item[0], item[1]))
+    return tuple(selected_id for _score, selected_id in ranked)
+
+
 def cost_scope(*, binding, anchor, cor_anchor, runtime_recipe, geometry,
                preparation, proposal, state):
     """Compatibility for an operational whole-stage forecast, not scientific reuse.

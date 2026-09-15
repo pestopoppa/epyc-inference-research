@@ -177,7 +177,9 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
              on_step: Callable[[str, str], None] | None = None,
              tail: SerializedTail | None = None,
              should_stop: Callable[[], bool] | None = None,
-             accumulate_valid_positive: bool = False) -> list[loop_mod.Outcome]:
+             accumulate_valid_positive: bool = False,
+             validate_candidate=None, formation_guard=None,
+             reserve_candidate=None) -> list[loop_mod.Outcome]:
     """Drive `iterations` iterations across `workers` concurrent lanes.
 
     Every side effect is injected, exactly as in `loop.iterate`, so the whole pool is
@@ -221,6 +223,7 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
     def lane(worker: Worker) -> None:
         planner, critic = make_planner(worker), make_critic(worker)
         while budget.take():
+            reservation = None
             # INSIDE the try. This sat outside it, so a failure here killed the whole
             # thread rather than costing one iteration -- run 16 lost four of seven
             # lanes that way, silently, while the run carried on looking healthy at
@@ -266,12 +269,23 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                 # completing multi-minute actor calls for results nobody will use
                 # (run 20 drained for ~50 min at 0% GPU that way). A lane holding the
                 # tail is unaffected -- `iterate` never polls inside the tail session.
+                def reserve(hypothesis, paths, _w=worker):
+                    nonlocal reservation
+                    reservation = reserve_candidate(_w, hypothesis, paths)
+                    return reservation
+
                 outcome = loop_mod.iterate(
                     planner=planner, critic=critic, context=build_context(),
                     measure=measure, gate=gate, commit=commit_one, on_step=step,
                     tail_session=lambda _b=base: tail.session(_b),
                     should_abandon=should_stop, record_reschedule=record_reschedule,
-                    accumulate_valid_positive=accumulate_valid_positive)
+                    accumulate_valid_positive=accumulate_valid_positive,
+                    validate_candidate=(
+                        (lambda hypothesis, paths, _w=worker:
+                         validate_candidate(_w, hypothesis, paths))
+                        if validate_candidate is not None else None),
+                    formation_guard=formation_guard,
+                    reserve_candidate=reserve if reserve_candidate is not None else None)
             except Superseded as exc:
                 # `iterate` already converted this into an Outcome carrying the
                 # hypothesis; reaching here means it escaped before one was formed.
@@ -295,6 +309,10 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                     "lane_error", None,
                     [f"lane {worker.name}: {type(exc).__name__}: {exc}",
                      traceback.format_exc()[-1500:]])
+            if reservation is not None:
+                outcome.attempt_identity = reservation.identity
+                outcome.exact_repeat_dispatch_count = reservation.dispatch_count
+                outcome.candidate_diff_sha256 = reservation.candidate_diff_sha256
             keep(outcome)
 
     threads = [threading.Thread(target=lane, args=(w,), name=w.name, daemon=True)

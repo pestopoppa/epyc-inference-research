@@ -188,7 +188,8 @@ def commit_message(hypothesis, comparison) -> str:
 
 def advance_champion(worker: pipeline.Worker, hypothesis, paths, comparison, *,
                      champion_tree: Path = CHAMPION_TREE,
-                     branch: str = CHAMPION_BRANCH) -> str:
+                     branch: str = CHAMPION_BRANCH,
+                     expected_tree: str | None = None) -> str:
     """Commit the lane's patch and move the champion BRANCH onto it.
 
     The sequential path commits with `branch="HEAD"`, which works because its worktree
@@ -211,6 +212,12 @@ def advance_champion(worker: pipeline.Worker, hypothesis, paths, comparison, *,
     new_head = archive.keep(worker.worktree, branch="HEAD",
                             message=commit_message(hypothesis, comparison),
                             paths=tuple(paths))
+    if expected_tree is not None:
+        committed_tree = _git(worker.worktree, "rev-parse", f"{new_head}^{{tree}}")
+        if committed_tree != expected_tree:
+            raise ValueError(
+                f"kept tree differs from measured tree: measured={expected_tree} "
+                f"kept={committed_tree}")
     _git(champion_tree, "update-ref", f"refs/heads/{branch}", new_head, base)
     _git(champion_tree, "reset", "--hard", new_head)
     return new_head
@@ -298,7 +305,9 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
           reset: Callable[[pipeline.Worker], str] | None = None,
           commit: Callable[..., str] | None = None,
           on_step: Callable[[str, str], None] | None = None,
-          accumulate_valid_positive: bool = False) -> PoolResult:
+          accumulate_valid_positive: bool = False,
+          validate_candidate=None, formation_guard=None,
+          reserve_candidate=None) -> PoolResult:
     """Run `iterations` iterations across `workers` lanes and report the accounting.
 
     Everything device-shaped is still injected; this only binds the git side and the
@@ -327,7 +336,9 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
             worker, champion_tree=champion_tree, branch=branch)),
         record=record, iterations=iterations, on_step=step, tail=tail,
         should_stop=should_stop,
-        accumulate_valid_positive=accumulate_valid_positive)
+        accumulate_valid_positive=accumulate_valid_positive,
+        validate_candidate=validate_candidate, formation_guard=formation_guard,
+        reserve_candidate=reserve_candidate)
     clock.close()
     return PoolResult(outcomes=outcomes, phase_seconds=clock.totals(),
                       wall_seconds=time.monotonic() - started,

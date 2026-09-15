@@ -33,7 +33,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
-from . import bench, gates
+from . import bench, gates, integrity
 
 HYPOTHESIS_ROUNDS = 3
 PATCH_ROUNDS = 2
@@ -67,6 +67,14 @@ class MeasurementInvalid(RuntimeError):
         self.reschedule = None
 
 
+class MeasurementFailed(RuntimeError):
+    """The instrument failed after collecting original facts; not a measured null."""
+
+    def __init__(self, reason: str, record: dict | None = None):
+        super().__init__(reason)
+        self.record = {} if record is None else record
+
+
 #: The standing strategy, constraints and settled list. It is rendered into EVERY
 #: actor bundle: it sat unread beside the loop for the whole of run 6 while the
 #: planner proposed things its own "Already in v9" list names.
@@ -97,6 +105,10 @@ class ConfirmVetoed(RuntimeError):
     """
 
 
+class InteractionRegression(RuntimeError):
+    """A kept source change reproduced a whole-bundle regression and was rolled back."""
+
+
 class ActorTransient(RuntimeError):
     """The actor provider failed in a way worth retrying.
 
@@ -105,6 +117,17 @@ class ActorTransient(RuntimeError):
     ITERATION, never the run: the superseded controller let provider faults escape as
     terminal, so a codex 401 on 2026-08-26 took down 284 attempts in 23 minutes.
     """
+
+
+@dataclass(frozen=True)
+class Abstain:
+    """A planner's truthful conclusion that this turn has no feasible answer."""
+
+    reason: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.reason, str) or not self.reason.strip():
+            raise ValueError("a planner abstention must carry a reason")
 
 
 def _now() -> str:
@@ -141,6 +164,10 @@ class Review:
     """A critic verdict. A rejection without a reason is a bug, so reason is required."""
     accepted: bool
     reason: str = ""
+    validator_identity: str = ""
+    validator_kind: str = ""
+    independence: str = ""
+    evidence_inspected: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.accepted and not self.reason.strip():
@@ -148,12 +175,18 @@ class Review:
                 "a critic rejection must carry a reason: the reason is what goes back "
                 "to the planner, and a rejection with no destination is the defect "
                 "that blinded 22 of 23 authoring failures")
+        if self.validator_kind and self.validator_kind not in {
+                "script", "oracle", "llm_critic"}:
+            raise ValueError(f"unknown validator kind {self.validator_kind!r}")
+        if self.independence and self.independence not in {
+                "same_fleet", "same_family", "different_family", "non_model"}:
+            raise ValueError(f"unknown validator independence {self.independence!r}")
 
 
 class Planner(Protocol):
-    def propose(self, context: Mapping[str, Any]) -> Hypothesis: ...
+    def propose(self, context: Mapping[str, Any]) -> Hypothesis | Abstain: ...
     def author(self, hypothesis: Hypothesis,
-               context: Mapping[str, Any]) -> tuple[str, ...]: ...
+               context: Mapping[str, Any]) -> tuple[str, ...] | Abstain: ...
 
 
 class Critic(Protocol):
@@ -173,6 +206,22 @@ class Outcome:
     gate_verdicts: list[gates.Verdict] = field(default_factory=list)
     champion_head: str | None = None
     invalid_measurement: dict | None = None
+    instrument_failure: dict | None = None
+    integrity_screen: dict | None = None
+    attempt_identity: str | None = None
+    exact_repeat_dispatch_count: int | None = None
+    duplicate_of: str | None = None
+    prior_effect: float | None = None
+    prior_epoch: str | None = None
+    refusal_gate: str | None = None
+    candidate_diff_sha256: str | None = None
+    mechanism_ablation: dict | None = None
+    # Observe-only planner telemetry.  These fields describe the formation path
+    # which produced the outcome; they do not alter either budget or selection.
+    hypothesis_round: int = 0
+    patch_round: int = 0
+    prior_rejection_prompt: bool = False
+    validator_provenance: list[dict] = field(default_factory=list)
 
     def to_attempt(self) -> dict:
         row = {"status": self.status, "turn_recorded_at": _now()}
@@ -189,7 +238,67 @@ class Outcome:
             row["champion_head"] = self.champion_head
         if self.invalid_measurement is not None:
             row["invalid_measurement"] = self.invalid_measurement
+        if self.instrument_failure is not None:
+            row["instrument_failure"] = self.instrument_failure
+        if self.integrity_screen is not None:
+            row["integrity_screen"] = self.integrity_screen
+        for key in ("attempt_identity", "exact_repeat_dispatch_count", "duplicate_of",
+                    "prior_effect", "prior_epoch", "refusal_gate", "candidate_diff_sha256"):
+            if getattr(self, key) is not None:
+                row[key] = getattr(self, key)
+        row.update({
+            "hypothesis_round": self.hypothesis_round,
+            "patch_round": self.patch_round,
+            "prior_rejection_prompt": self.prior_rejection_prompt,
+        })
+        if self.validator_provenance:
+            row["validator_provenance"] = self.validator_provenance
+        if self.hypothesis is not None:
+            from . import claims
+            split = claims.keep_claims(
+                status=self.status,
+                mechanism_id=self.hypothesis.mechanism_id,
+                statement=self.hypothesis.statement,
+                comparison=(self.comparison.to_dict()
+                            if self.comparison is not None else None),
+                gates=[verdict.to_dict() for verdict in self.gate_verdicts],
+                ablation=self.mechanism_ablation)
+            if split is not None:
+                row["claims"] = split
         return row
+
+
+def _critic_provenance(critic: Critic, review: Review, *, decision: str,
+                       evidence: tuple[str, ...]) -> dict:
+    """Project a critic verdict into the common provenance carrier."""
+    identity = (review.validator_identity or
+                f"{type(critic).__module__}.{type(critic).__qualname__}")
+    kind = review.validator_kind or "script"
+    independence = review.independence or "non_model"
+    return {
+        "decision": decision,
+        "validator_identity": identity,
+        "validator_kind": kind,
+        "independence": independence,
+        "evidence_inspected": list(review.evidence_inspected or evidence),
+        "accepted": review.accepted,
+        "reason": review.reason or None,
+        "changed_subsequent_search": False,
+    }
+
+
+def _gate_provenance(verdict: gates.Verdict) -> dict:
+    kind = "oracle" if verdict.gate in {"correctness", "determinism"} else "script"
+    return {
+        "decision": f"gate:{verdict.gate}",
+        "validator_identity": f"autokernel.gates.{verdict.gate}",
+        "validator_kind": kind,
+        "independence": "non_model",
+        "evidence_inspected": ["candidate build artifact", verdict.gate],
+        "accepted": verdict.passed,
+        "reason": verdict.reason or None,
+        "changed_subsequent_search": not verdict.passed,
+    }
 
 
 def _safe_step(hook):
@@ -247,7 +356,10 @@ def iterate(*, planner: Planner, critic: Critic,
             tail_session: Callable[[], Any] = nullcontext,
             should_abandon: Callable[[], bool] | None = None,
             record_reschedule: Callable[[Outcome], bool] | None = None,
-            accumulate_valid_positive: bool = False) -> Outcome:
+            accumulate_valid_positive: bool = False,
+            validate_candidate: Callable[[Hypothesis, Sequence[str]], Any] | None = None,
+            formation_guard=None, reserve_candidate=None
+            ) -> Outcome:
     """One full turn. Pure control flow: every side effect is an injected callable.
 
     `should_abandon` is the DRAIN TIER for a lane that does not hold the serialized
@@ -258,9 +370,32 @@ def iterate(*, planner: Planner, critic: Critic,
     """
     working = dict(context)
     hypothesis_reasons: list[str] = []
+    round_telemetry = {
+        "hypothesis_round": 0,
+        "patch_round": 0,
+        "prior_rejection_prompt": False,
+    }
+    validator_provenance: list[dict] = []
+
+    def observed(outcome: Outcome) -> Outcome:
+        outcome.hypothesis_round = int(round_telemetry["hypothesis_round"])
+        outcome.patch_round = int(round_telemetry["patch_round"])
+        outcome.prior_rejection_prompt = bool(
+            round_telemetry["prior_rejection_prompt"])
+        # An admissible A/B result is fed to campaign memory regardless of sign:
+        # keeps move the anchor, while nulls/regressions close that exact attempt.
+        # Record that causal use, rather than leaving every measurement validator
+        # falsely marked as having no effect on subsequent search.
+        for row in validator_provenance:
+            if row.get("decision") == "measurement:paired_ab":
+                row["changed_subsequent_search"] = outcome.status in {
+                    "kept", "keep_candidate", "measured_null", "regression",
+                    "confirm_vetoed"}
+        outcome.validator_provenance = list(validator_provenance)
+        return outcome
 
     try:
-        return _iterate(planner=planner, critic=critic, working=working,
+        return observed(_iterate(planner=planner, critic=critic, working=working,
                         hypothesis_reasons=hypothesis_reasons, measure=measure,
                         gate=gate, commit=commit,
                         hypothesis_rounds=hypothesis_rounds,
@@ -268,17 +403,22 @@ def iterate(*, planner: Planner, critic: Critic,
                         tail_session=tail_session,
                         should_abandon=should_abandon or (lambda: False),
                         record_reschedule=record_reschedule,
-                        accumulate_valid_positive=accumulate_valid_positive)
+                        accumulate_valid_positive=accumulate_valid_positive,
+                        validate_candidate=validate_candidate or (lambda _h, _p: None),
+                        formation_guard=formation_guard or (lambda _h, _c: None),
+                        reserve_candidate=reserve_candidate,
+                        round_telemetry=round_telemetry,
+                        validator_provenance=validator_provenance))
     except TailRefused as exc:
         # The candidate was formed and never measured. Carry the hypothesis: the
         # patch may well still help against the champion that displaced it, and the
         # planner is told to look at these FIRST.
-        return Outcome("superseded", getattr(exc, "hypothesis", None), [str(exc)])
+        return observed(Outcome("superseded", getattr(exc, "hypothesis", None), [str(exc)]))
     except ActorTransient as exc:
         # The provider failed, not the science. This ends the ITERATION and is
         # recorded as such; the run continues, and a streak becomes visible in
         # experiments.md rather than taking the campaign down with it.
-        return Outcome("planner_transient", None, [str(exc)])
+        return observed(Outcome("planner_transient", None, [str(exc)]))
     except bench.BenchFailed as exc:
         # The INSTRUMENT failed, not the science, and it gets the same treatment for
         # the same reason. Run 12 died on iteration 1 because `llama-bench` was
@@ -290,30 +430,54 @@ def iterate(*, planner: Planner, critic: Critic,
         # Recorded distinctly from a provider transient: "the benchmark could not be
         # taken" is a different fact from "the actor would not answer", and merging
         # them would hide an instrument failing behind an API being flaky.
-        return Outcome("bench_failed", None, [str(exc)])
+        return observed(Outcome("bench_failed", None, [str(exc)]))
 
 
 def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, commit,
              hypothesis_rounds, patch_rounds, on_step=lambda _label: None,
              tail_session=nullcontext,
              should_abandon=lambda: False, record_reschedule=None,
-             accumulate_valid_positive=False) -> Outcome:
+             accumulate_valid_positive=False,
+             validate_candidate=lambda _hypothesis, _paths: None,
+             formation_guard=lambda _hypothesis, _context: None,
+             reserve_candidate=None, round_telemetry=None,
+             validator_provenance=None) -> Outcome:
     last_proposed: Hypothesis | None = None
+    round_telemetry = round_telemetry if round_telemetry is not None else {}
+    validator_provenance = (validator_provenance if validator_provenance is not None
+                            else [])
+
+    def mark_search_changed(decision: str) -> None:
+        for row in reversed(validator_provenance):
+            if row["decision"] == decision and not row["accepted"]:
+                row["changed_subsequent_search"] = True
+                return
 
     def stopped() -> Outcome:
         # Names whatever was in flight, exactly as a refusal row must.
         return Outcome("stopped_mid_formation", last_proposed,
                        [STOPPED_MID_FORMATION])
 
-    for _ in range(hypothesis_rounds):
+    for hypothesis_index in range(hypothesis_rounds):
         # Polled BEFORE each actor call, never after: the whole point is that no
         # further multi-minute call is drawn once the run has been told to stop.
         if should_abandon():
             return stopped()
         working["prior_hypothesis_rejections"] = list(hypothesis_reasons)
+        round_telemetry["hypothesis_round"] = hypothesis_index + 1
+        round_telemetry["patch_round"] = 0
+        if hypothesis_reasons:
+            round_telemetry["prior_rejection_prompt"] = True
+            mark_search_changed("critic:hypothesis")
         on_step("proposing a hypothesis")
         hypothesis = planner.propose(working)
+        if isinstance(hypothesis, Abstain):
+            return Outcome("abstained", None, [hypothesis.reason])
         last_proposed = hypothesis
+        repeat_reason = formation_guard(hypothesis, working)
+        if repeat_reason:
+            return Outcome("refused_at_formation", hypothesis, [repeat_reason],
+                           refusal_gate="do_not_repeat")
 
         # ---- CRITIC PASS 1: the hypothesis, before any patch exists ----------
         if should_abandon():
@@ -334,20 +498,40 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
         else:
             on_step("critic pass 1: reviewing the hypothesis")
             verdict = critic.review_hypothesis(hypothesis, working)
+            validator_provenance.append(_critic_provenance(
+                critic, verdict, decision="critic:hypothesis",
+                evidence=("hypothesis", "planner context")))
             if not verdict.accepted:
                 # Verbatim, so the planner can answer the objection rather than guess.
                 hypothesis_reasons.append(verdict.reason)
                 continue
 
         patch_reasons: list[str] = []
-        for _ in range(1 if hypothesis.runtime_pair is not None else patch_rounds):
+        for patch_index in range(1 if hypothesis.runtime_pair is not None else patch_rounds):
             if should_abandon():
                 return stopped()
             working["prior_patch_rejections"] = list(patch_reasons)
+            round_telemetry["patch_round"] = patch_index + 1
+            if patch_reasons:
+                round_telemetry["prior_rejection_prompt"] = True
+                mark_search_changed("critic:patch")
             paths = ()
+            integrity_screen = None
             if hypothesis.runtime_pair is None:
                 on_step("authoring the patch")
                 paths = planner.author(hypothesis, working)
+                if isinstance(paths, Abstain):
+                    return Outcome("abstained", hypothesis, [paths.reason])
+                # A declared path list is a claim, not an isolation boundary.  The
+                # injected host check resolves the full worktree before review/build.
+                try:
+                    checked = validate_candidate(hypothesis, paths)
+                    integrity_screen = (checked.to_dict() if hasattr(checked, "to_dict")
+                                        else checked)
+                except integrity.IntegrityRefused as exc:
+                    return Outcome(
+                        "integrity_refused", hypothesis, [str(exc)],
+                        integrity_screen={"refusal_class": exc.refusal_class})
 
             # ---- CRITIC PASS 2: the diff, BEFORE the build ------------------
             if should_abandon():
@@ -355,6 +539,9 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             if hypothesis.runtime_pair is None:
                 on_step("critic pass 2: reviewing the diff")
                 patch_verdict = critic.review_patch(hypothesis, paths, working)
+                validator_provenance.append(_critic_provenance(
+                    critic, patch_verdict, decision="critic:patch",
+                    evidence=("candidate diff", "declared paths", "planner context")))
                 if not patch_verdict.accepted:
                     # The hypothesis is untouched: a bad patch is not evidence against
                     # the idea it was trying to implement.
@@ -378,7 +565,21 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             # around the call that builds it.
             try:
                 with tail_session():
+                    if reserve_candidate is not None and hypothesis.runtime_pair is None:
+                        try:
+                            reserve_candidate(hypothesis, paths)
+                        except Exception as exc:
+                            if type(exc).__name__ != "DispatchRefused":
+                                raise
+                            return Outcome("refused_duplicate", hypothesis, [str(exc)],
+                                           attempt_identity=getattr(
+                                               exc, "attempt_identity", None),
+                                           duplicate_of=getattr(exc, "duplicate_of", None),
+                                           prior_effect=getattr(exc, "prior_effect", None),
+                                           prior_epoch=getattr(exc, "prior_epoch", None),
+                                           refusal_gate="exact_attempt_identity")
                     passed, verdicts = gate(hypothesis, paths)
+                    validator_provenance.extend(_gate_provenance(v) for v in verdicts)
                     if not passed:
                         if hypothesis.runtime_pair is not None:
                             return Outcome("runtime_refused", hypothesis,
@@ -396,6 +597,18 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                     while True:
                         try:
                             comparison = measure_original()
+                            validator_provenance.append({
+                                "decision": "measurement:paired_ab",
+                                "validator_identity": "autokernel.bench.paired_ab",
+                                "validator_kind": "script",
+                                "independence": "non_model",
+                                "evidence_inspected": [
+                                    "anchor samples", "candidate samples",
+                                    "noise-floor calibration", "residency evidence"],
+                                "accepted": bool(comparison.decisive),
+                                "reason": None,
+                                "changed_subsequent_search": False,
+                            })
                             break
                         except MeasurementInvalid as exc:
                             invalid = Outcome("measurement_invalid", hypothesis, [str(exc)],
@@ -414,6 +627,9 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                                     ["STOP after invalid arm archival; no replacement server launched"],
                                     gate_verdicts=verdicts)
                             measure_original = exc.reschedule
+                        except MeasurementFailed as exc:
+                            return Outcome("bench_failed", hypothesis, [str(exc)],
+                                gate_verdicts=verdicts, instrument_failure=exc.record)
                     # R23-44 compound-then-gate: an experimental serving source
                     # candidate may be smaller than the process-unit floor and still
                     # belong in the working accumulator.  It must still be a valid,
@@ -438,11 +654,20 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                             head = commit(hypothesis, paths, comparison)
                         except ConfirmVetoed as veto:
                             return Outcome("keep_candidate", hypothesis,
-                                           [str(veto)], comparison, verdicts)
-                        return Outcome("kept", hypothesis, [], comparison, verdicts, head)
+                                           [str(veto)], comparison, verdicts,
+                                           integrity_screen=integrity_screen)
+                        except InteractionRegression as regression:
+                            return Outcome("interaction_regression", hypothesis,
+                                           [str(regression)], comparison, verdicts,
+                                           integrity_screen=integrity_screen)
+                        return Outcome("kept", hypothesis, [], comparison, verdicts, head,
+                                       integrity_screen=integrity_screen)
             except MeasurementInvalid as exc:
                 return Outcome("measurement_invalid", hypothesis, [str(exc)],
                                gate_verdicts=verdicts, invalid_measurement=exc.record)
+            except MeasurementFailed as exc:
+                return Outcome("bench_failed", hypothesis, [str(exc)],
+                               gate_verdicts=verdicts, instrument_failure=exc.record)
             except TailRefused as exc:
                 # Formed and never measured. Carry the hypothesis out so the planner
                 # can reconsider it against the champion that displaced it.
@@ -481,6 +706,6 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
 # `archive.record` as `run.py`'s injected `record`. `iterate` is the whole of this
 # module's control flow now, and the pool is its only driver.
 
-__all__ = ["ActorTransient", "ConfirmVetoed", "TailRefused", "RunAborted", "MeasurementInvalid", "Critic",
+__all__ = ["Abstain", "ActorTransient", "ConfirmVetoed", "InteractionRegression", "TailRefused", "RunAborted", "MeasurementInvalid", "MeasurementFailed", "Critic",
            "HYPOTHESIS_ROUNDS", "Hypothesis", "Outcome", "PATCH_ROUNDS",
            "Planner", "Review", "STOPPED_MID_FORMATION", "iterate"]

@@ -294,7 +294,14 @@ class ExperimentStore:
             self._connection.set_progress_handler(lambda: time.monotonic() > deadline, 1000)
         else:
             self.root.mkdir(parents=True, exist_ok=True)
-            self._connection = sqlite3.connect(self.path)
+            self._connection = sqlite3.connect(self.path, timeout=30.0)
+            # The dashboard and operator tooling read this append-only journal
+            # while the loop records outcomes.  DELETE journaling lets a long
+            # reader prevent the scientific owner from committing; WAL keeps
+            # those readers on their snapshot instead of turning an otherwise
+            # valid outcome into a lane_error.
+            self._connection.execute("PRAGMA journal_mode=WAL")
+            self._connection.execute("PRAGMA busy_timeout=30000")
         self._connection.row_factory = sqlite3.Row
         if not read_only:
             self._connection.executescript(_DDL)
@@ -351,6 +358,7 @@ class ExperimentStore:
     def recall(self, *, epoch: str, limit: int = 40,
                ranking_authorized: bool = False,
                include_source_scope: bool = False,
+               include_claims: bool = False,
                statuses: Sequence[str] | None = None,
                exclude_statuses: bool = False) -> list[dict[str, Any]]:
         """Prior attempts, each marked same-epoch or stale.
@@ -394,14 +402,32 @@ class ExperimentStore:
                           "'unknown_reason','legacy record: only original captured fields shown; nulls remain unknown'"
                           ")) END "
                           "END AS research_scope")
+        elif include_claims:
+            projection = ("*, CASE WHEN length(payload)<=2097152 AND json_valid(payload) "
+                          "THEN json_extract(payload,'$.claims') END AS claims_projection")
         predicate, parameters = "", []
         if statuses:
             placeholders = ",".join("?" for _ in statuses)
             predicate = f" WHERE status {'NOT IN' if exclude_statuses else 'IN'} ({placeholders})"
             parameters.extend(statuses)
-        rows = self._connection.execute(
-            f"SELECT {projection} FROM experiments{predicate} ORDER BY recorded_at DESC, rowid DESC LIMIT ?",
-            (*parameters, pool)).fetchall()
+        if include_source_scope:
+            # Limit on scalar columns before touching payload overflow pages.  Some
+            # lifecycle records are tens of MiB, and projecting length()/JSON while
+            # SQLite builds the recency sorter defeats the bounded read deadline even
+            # though those rows will not survive LIMIT.
+            query = (
+                "WITH selected AS MATERIALIZED ("
+                f"SELECT rowid FROM experiments{predicate} "
+                "ORDER BY recorded_at DESC, rowid DESC LIMIT ?"
+                ") "
+                f"SELECT {projection} FROM experiments "
+                "WHERE rowid IN (SELECT rowid FROM selected) "
+                "ORDER BY recorded_at DESC, rowid DESC"
+            )
+        else:
+            query = (f"SELECT {projection} FROM experiments{predicate} "
+                     "ORDER BY recorded_at DESC, rowid DESC LIMIT ?")
+        rows = self._connection.execute(query, (*parameters, pool)).fetchall()
         recalled = []
         for row in rows:
             same_epoch = row["epoch_sha256"] == epoch
@@ -428,6 +454,15 @@ class ExperimentStore:
                 "comparable_measurement": same_epoch,
                 "ranking_authorized": bool(ranking_authorized),
             })
+            if include_claims:
+                raw_claims = row["claims_projection"]
+                try:
+                    claim_record = (json.loads(raw_claims)
+                                    if isinstance(raw_claims, str) else raw_claims)
+                except json.JSONDecodeError:
+                    claim_record = None
+                recalled[-1]["claims"] = (claim_record
+                                           if isinstance(claim_record, dict) else None)
             if include_source_scope:
                 scope = json.loads(row["research_scope"]) if row["research_scope"] else None
                 recalled[-1].update(original_epoch=row["epoch_sha256"],
@@ -484,12 +519,18 @@ class ExperimentStore:
             effect = ("—" if row["effect_fraction"] is None
                       else f"{row['effect_fraction'] * 100:+.3f}%")
             note = row["refusal_reason"] or row["statement"] or ""
+            try:
+                payload = json.loads(row["payload"])
+            except (json.JSONDecodeError, TypeError):
+                payload = {}
+            from ..loop import claims as claim_contract
+            mechanism_claim = claim_contract.mechanism_status(payload)
             lines.append(
                 f"| {row['recorded_at']} | {row['status']} | "
                 f"{row['mechanism_id'] or '—'} | "
                 f"{row['target_symbol'] or row['target_surface'] or '—'} | "
                 f"{effect} | {row['epoch_sha256'][:12]}{stale} | "
-                f"{_cell(note)} |")
+                f"{_cell(note)} [mechanism claim: {mechanism_claim}] |")
         lines.append("")
         return "\n".join(lines)
 

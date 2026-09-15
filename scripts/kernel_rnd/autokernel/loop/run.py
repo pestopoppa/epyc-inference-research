@@ -32,8 +32,9 @@ HEARTBEAT_S = 30  # status heartbeat period; envelope = 6x this
 HEARTBEAT_STOP_TIMEOUT_S = 10
 
 from . import (accumulate, actors, anchor, archive, bench, champion, claim, gates,
-               heartbeat, hotspots, loop, serving, serving_beliefs,
-               pipeline, pool, production, status, surface_fold, surface_validation)
+               dispatch_guard, heartbeat, hotspots, loop, serving, serving_beliefs,
+               integrity, pipeline, pool, production, status, surface_fold,
+               surface_validation)
 
 
 @dataclass(frozen=True)
@@ -81,6 +82,13 @@ def _serving_comparison(invoke, baseline_scope):
             original = exc.reschedule
             exc.reschedule = lambda: _serving_comparison(original, baseline_scope)
         raise
+
+
+def _candidate_quant_tokens(dominant_quant: str | None) -> list[str]:
+    """Return integrity-screen spellings for an optional census quant."""
+    if not dominant_quant:
+        return []
+    return [dominant_quant, "GGML_TYPE_" + dominant_quant]
 
 
 def _read_cpu_document(path: Path) -> dict:
@@ -398,8 +406,13 @@ def prior_experiments(args, epoch: str) -> list[dict]:
     then recalled with the authority hardcoded off passed every test written against
     the parser; this is the seam that catches it.
     """
-    return archive.recall(args.store, epoch=epoch,
-                          ranking_authorized=args.rank_prior_experiments)
+    # This is the planner-facing view, so include typed keep claims. Other archive
+    # readers retain their byte-compatible projection and, in the absence of a
+    # claim, must conservatively treat mechanism attribution as hypothesis.
+    with experiments.ExperimentStore(args.store) as store:
+        return store.recall(epoch=epoch,
+                            ranking_authorized=args.rank_prior_experiments,
+                            include_claims=True)
 
 
 def calibrate(args, run=subprocess.run) -> int:
@@ -548,6 +561,8 @@ def main(argv: list[str] | None = None) -> int:
                              "instead of recency, cross-epoch magnitudes redacted")
     parser.add_argument("--shared-history-root", type=Path, action="append", default=[],
                         help="read-only prior mechanism store; historical outcomes do not transfer")
+    parser.add_argument("--operator-unblock-artifact", type=Path, action="append", default=[],
+                        help="content-addressed operator amendment reopening one do_not_repeat match")
     # ---- concurrency. EVERY run is pooled; --workers 1 is a one-lane pool. The
     # separate sequential path was deleted 2026-08-31 once the pool owned the
     # consecutive-error breaker -- two run paths were two things to drift.
@@ -570,6 +585,8 @@ def main(argv: list[str] | None = None) -> int:
                         default=pool.WORKER_BUILD_ROOT,
                         help="parent of the per-lane candidate build directories")
     args = parser.parse_args(argv)
+    operator_unblocks = dispatch_guard.load_operator_unblocks(
+        args.operator_unblock_artifact)
     if args.cpu_screen_scope or args.cpu_confirm_from:
         if (not args.cpu_serving_launch or not args.resolved_campaign or not args.out
                 or args.iterations != 1
@@ -1164,12 +1181,23 @@ def main(argv: list[str] | None = None) -> int:
                 + "\n\n" + program)
         return {
             "program": program,
+            "actor_provenance": {
+                "planner": planner_backend.describe(),
+                "critic": critic_backend.describe(),
+            },
             **({"serving_instrument": dict(source_instrument)} if source_instrument else {}),
             **({"cpu_screen": {**screen_state,
                                "full_target": full_cpu_target.to_dict()}} if screen_state else {}),
             "kernel_hotspots": [row.to_dict() for row in hotspot_rows],
             **({"cpu_profile": dict(cpu_profile_observation)} if cpu_launch else {}),
             "prior_experiments": prior_experiments(args, epoch),
+            "current_regime": {
+                "model": {"path": str(args.model)}, "quant": census.dominant_quant,
+                "backend": "cpu" if cpu_launch else "gpu",
+                "recipe": {"build_recipe": recipe.to_dict()},
+                "measurement_surface": args.surface},
+            **({"operator_unblock_artifacts": operator_unblocks}
+               if operator_unblocks else {}),
             **({"shared_prior_experiments": shared_history.recall(scope={
                 "model": str(args.model), "quant": census.dominant_quant,
                 "backend": "cpu" if cpu_launch else "gpu", "measurement_surface": args.surface})}
@@ -1769,6 +1797,11 @@ def main(argv: list[str] | None = None) -> int:
             return
         try:
             _accumulate_after_keep(mechanism_id)
+        except loop.InteractionRegression:
+            # This is a scientific disposition after a completed rollback, not a
+            # bookkeeping failure. Let iterate record it instead of returning the
+            # now-orphaned candidate commit as a keep.
+            raise
         except Exception as exc:  # the keep is already committed AND promoted: a
             # bookkeeping failure here must be LOUD, never a silent un-record (the
             # 2026-09-06 gen-018 keep vanished from dispositions with no trace).
@@ -1780,19 +1813,100 @@ def main(argv: list[str] | None = None) -> int:
 
     def _accumulate_after_keep(mechanism_id: str) -> None:
         head = _git(args.worktree, "rev-parse", "HEAD")
+        previous_tip = bundle[0].tip
+
+        def persist_comparison(row: dict, phase: str, *, measured_tip: str = head) -> dict:
+            """Retain the complete direct COR-vs-tip observation before using its scalar."""
+            body = {
+                "schema": "epyc.autokernel.accumulator_comparison.v1",
+                "phase": phase,
+                "mechanism_id": mechanism_id,
+                "champion_of_record": bundle[0].champion_of_record,
+                "prior_tip": previous_tip,
+                "measured_tip": measured_tip,
+                "comparison": row,
+            }
+            canonical = json.dumps(body, sort_keys=True, separators=(",", ":"),
+                                   allow_nan=False).encode()
+            identity = hashlib.sha256(canonical).hexdigest()
+            root = args.store / "accumulator-comparisons"
+            target = root / f"{head[:12]}-{phase}-{identity}.json"
+            if target.exists():
+                if json.loads(target.read_text(encoding="utf-8")) != body:
+                    raise RuntimeError(f"immutable accumulator evidence collision at {target}")
+            else:
+                status.write_json(root, target.name, body, prefix=".accumulator-comparison-")
+            return {"path": str(target.resolve()),
+                    "sha256": hashlib.sha256(target.read_bytes()).hexdigest()}
+
+        def record_resolution(kind: str, first_ref: dict, second_ref: dict,
+                              restored_ref: dict | None = None) -> dict:
+            body = {
+                "schema": "epyc.autokernel.accumulator_comparison_resolution.v1",
+                "outcome": kind,
+                "mechanism_id": mechanism_id,
+                "champion_of_record": bundle[0].champion_of_record,
+                "prior_tip": previous_tip,
+                "candidate_tip": head,
+                "first": first_ref,
+                "repeat": second_ref,
+                **({"restored_tip_recheck": restored_ref} if restored_ref else {}),
+            }
+            canonical = json.dumps(body, sort_keys=True, separators=(",", ":"),
+                                   allow_nan=False).encode()
+            identity = hashlib.sha256(canonical).hexdigest()
+            root = args.store / "accumulator-comparisons"
+            target = status.write_json(root, f"resolution-{head[:12]}-{identity}.json", body,
+                                       prefix=".accumulator-resolution-")
+            return {"path": str(target.resolve()),
+                    "sha256": hashlib.sha256(target.read_bytes()).hexdigest()}
+
         publish("running", latest, hotspot_rows=hotspot_rows,
                 step=f"keep: accumulate — champion-of-record vs tip bench ({mechanism_id})")
         # compounded bench: champion-of-record build (A) vs the just-advanced accumulator (B),
         # re-measured (never a product of marginal effects -- keeps interact) because this is
         # the number the fire threshold reads and the serving gate will be asked to confirm.
-        comp = (cpu_compare(cor_build[0], anchor_build[0]).to_dict()
-                if direct_launch else bench.compare(
-                    bench.Arm("champion_of_record", cor_build[0] / "bin" / "llama-bench"),
-                    bench.Arm("accumulator", anchor_build[0] / "bin" / "llama-bench"),
-                    args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=bench_floor,
-                    surface=bench_surface, ubatch=ubatch,
-                    calibrated=bench_floor is not None).to_dict())
-        bundle[0].add_keep(mechanism_id, head, comp["effect"] * 100.0)
+        def compare_bundle() -> dict:
+            return (cpu_compare(cor_build[0], anchor_build[0]).to_dict()
+                    if direct_launch else bench.compare(
+                        bench.Arm("champion_of_record", cor_build[0] / "bin" / "llama-bench"),
+                        bench.Arm("accumulator", anchor_build[0] / "bin" / "llama-bench"),
+                        args.model, pp=pp, tg=tg, pairs=args.pairs,
+                        noise_floor_pct=bench_floor, surface=bench_surface, ubatch=ubatch,
+                        calibrated=bench_floor is not None).to_dict())
+
+        comp = compare_bundle()
+        comp_ref = persist_comparison(comp, "initial")
+        if accumulate.negative_beyond_floor(comp, serving_floor_pct):
+            publish("running", latest, hotspot_rows=hotspot_rows,
+                    step=f"keep: accumulator negative repeat ({mechanism_id})")
+            repeated = compare_bundle()
+            repeated_ref = persist_comparison(repeated, "repeat")
+            if accumulate.negative_beyond_floor(repeated, serving_floor_pct):
+                # The just-created commit remains in Git as evidence, but it must not
+                # remain the working champion. Restore the prior accumulator source,
+                # rebuild it into a fresh owned anchor slot, and recheck that slot.
+                _git(args.worktree, "reset", "--hard", previous_tip)
+                if original_source_keeps and original_source_keeps[-1].get("kept_commit") == head:
+                    original_source_keeps.pop()
+                promote_anchor()
+                restored = compare_bundle()
+                restored_ref = persist_comparison(
+                    restored, "restored-prior-tip", measured_tip=previous_tip)
+                resolution_ref = record_resolution(
+                    "interaction_regression", comp_ref, repeated_ref, restored_ref)
+                if not accumulate.negative_beyond_floor(restored, serving_floor_pct):
+                    bundle[0].compounded_bench_pct = restored["effect"] * 100.0
+                    bundle[0].comparison_evidence = restored_ref
+                    bundle[0].measurement_validity = accumulate.MEASUREMENT_CURRENT
+                    bundle[0].save(args.store)
+                raise loop.InteractionRegression(
+                    f"whole bundle regressed beyond floor twice; restored prior tip "
+                    f"{previous_tip[:12]}; evidence {resolution_ref['path']}")
+            record_resolution("drift_null", comp_ref, repeated_ref)
+            comp, comp_ref = repeated, repeated_ref
+        bundle[0].add_keep(mechanism_id, head, comp["effect"] * 100.0,
+                           comparison_evidence=comp_ref)
         bundle[0].save(args.store)   # durable BEFORE the gate decision, so a crash keeps it
         thr = (f"{accum_policy.fire_threshold_pct(serving_floor_pct):.2f}"
                if serving_floor_pct is not None else "uncalibrated")
@@ -2058,6 +2172,57 @@ def main(argv: list[str] | None = None) -> int:
           * `epoch`: pinned to the champion the run STARTED from, which is what makes
             the archive rows comparable across the run.
         """
+        candidate_integrity = {}
+        integrity_evidence = {}
+
+        def validate_pooled(worker, hypothesis, paths):
+            # A byte-bounded or otherwise partial census legitimately has no
+            # dominant quant.  Candidate integrity must still inspect the full
+            # patch and bench-shape literals; an absent optional type constraint
+            # is not a malformed candidate (and must never become a lane error).
+            quant_tokens = _candidate_quant_tokens(census.dominant_quant)
+            oracle_shape = {"op_ids": ["MUL_MAT", "GGML_OP_MUL_MAT"],
+                            "types": quant_tokens}
+            bench_shape = {"dims": [value for value in (pp, tg, ubatch) if value],
+                           "types": quant_tokens}
+            checked = integrity.validate_candidate(
+                worker.worktree, paths, oracle_shape=oracle_shape,
+                bench_shape=bench_shape)
+            base = _git(worker.worktree, "rev-parse", "HEAD")
+            attempt = dispatch_guard.attempt_identity(
+                diff=_git(worker.worktree, "diff", "--no-ext-diff", "HEAD", "--"),
+                champion=current_anchor_commit[0], cmake_defines=recipe.cmake_defines(),
+                bench_recipe={"pairs": args.serving_pairs if direct_launch else args.pairs,
+                              "pp": pp, "tg": tg, "ubatch": ubatch},
+                model=str(args.model), surface=args.surface)
+            key = integrity.evidence_key(lane=worker.name, attempt_id=attempt,
+                                         base_commit=base, paths=paths)
+            evidence = checked.to_dict()
+            evidence["evidence_key"] = key
+            candidate_integrity[worker.name] = (checked, key)
+            integrity_evidence[key] = evidence
+            # loop.py retains this exact mutable mapping on the Outcome. Confirm
+            # evidence added later is therefore visible to status and the journal.
+            return evidence
+
+        def reserve_pooled(worker, _hypothesis, _paths):
+            diff = _git(worker.worktree, "diff", "--no-ext-diff", "HEAD", "--")
+            diff_sha256 = hashlib.sha256(
+                dispatch_guard.normalized_diff(diff).encode()).hexdigest()
+            identity = dispatch_guard.attempt_identity(
+                diff=diff, champion=current_anchor_commit[0],
+                cmake_defines=recipe.cmake_defines(),
+                bench_recipe={"pairs": args.serving_pairs if direct_launch else args.pairs,
+                              "pp": pp, "tg": tg, "ubatch": ubatch},
+                model=str(args.model), surface=args.surface)
+            registry = dispatch_guard.Registry(args.store)
+            try:
+                reservation = registry.reserve(identity)
+                return dispatch_guard.Reservation(
+                    reservation.identity, reservation.dispatch_count, diff_sha256)
+            finally:
+                registry.close()
+
         def record_pooled(outcome) -> None:
             attempt = outcome.to_attempt()
             attempt["research_scope"] = archive.original_research_scope(
@@ -2070,6 +2235,15 @@ def main(argv: list[str] | None = None) -> int:
             archive.record(args.store, attempt, epoch=epoch,
                            recorded_at=loop._now(), campaign_id="ak-loop",
                            on_serving_export=feedback.exported)
+            if outcome.attempt_identity is not None:
+                registry = dispatch_guard.Registry(args.store)
+                try:
+                    registry.finish(
+                        outcome.attempt_identity, status=outcome.status,
+                        effect=(outcome.comparison.effect
+                                if outcome.comparison is not None else None), epoch=epoch)
+                finally:
+                    registry.close()
             latest.append(outcome)
             publish("running", latest, hotspot_rows=hotspot_rows)
 
@@ -2110,6 +2284,15 @@ def main(argv: list[str] | None = None) -> int:
                 report_runtime_progress()
                 reprofile()
                 return None
+            candidate = candidate_integrity.get(worker.name)
+            if candidate is None:
+                raise integrity.IntegrityRefused(
+                    "missing_prebuild_integrity", "candidate reached keep without validation")
+            checked, evidence_key = candidate
+            evidence = integrity_evidence[evidence_key]
+            # This check is after build/oracle/A-B and immediately before keep: the
+            # tree accepted by measurement must still be the tree being committed.
+            integrity.assert_measured_tree(worker.worktree, checked.tree)
             if not (experimental and calibrated
                     and comparison.noise_floor_pct is not None
                     and comparison.decisive is False
@@ -2127,9 +2310,27 @@ def main(argv: list[str] | None = None) -> int:
             # keep_candidate, never kept). The SERVING gate is NO LONGER per-keep: it cannot
             # resolve a 1-3% keep against the ~3.5% serving floor, so it fires on the BUNDLE in
             # accumulate_after_keep once the compounded gain clears the floor.
+            if checked.needs_confirm and confirm is None:
+                kinds = sorted({finding.kind for finding in checked.findings})
+                raise loop.ConfirmVetoed(
+                    "KEEP_CANDIDATE-needs-confirm: integrity screen flagged "
+                    + ", ".join(kinds)
+                    + "; an unseen rotated/serving confirm rung is not configured")
             if confirm is not None:
+                held_out_identity = integrity.require_unseen_confirmation(
+                    checked, screen_surface=comparison.surface,
+                    screen_model=comparison.model, confirm_surfaces=confirm.surfaces,
+                    confirm_model=str(confirm.model))
+                evidence.update(held_out_identity)
                 verdict = confirm.gate(hypothesis.mechanism_id, comparison,
                                        confirm_measure(worker))
+                if checked.needs_confirm:
+                    confirm_effects = [row.get("effect")
+                                       for row in verdict.get("confirm", ())]
+                    evidence["held_out_confirm"] = verdict
+                    evidence["public_to_held_out_speedup_gap"] = [
+                        comparison.effect - effect for effect in confirm_effects
+                        if isinstance(effect, (int, float))]
                 if not verdict["promoted"]:
                     raise loop.ConfirmVetoed(verdict["reason"])
             source_fold_candidate = experimental and cpu_launch \
@@ -2145,7 +2346,8 @@ def main(argv: list[str] | None = None) -> int:
                       if source_fold_candidate else None)
             head = pool.advance_champion(worker, hypothesis, paths, comparison,
                                          champion_tree=args.worktree,
-                                         branch=args.champion_branch)
+                                         branch=args.champion_branch,
+                                         expected_tree=checked.tree)
             promote_anchor()
             if source_fold_candidate and patch_path is not None and parent is not None:
                 original_source_keeps.append({
@@ -2201,7 +2403,11 @@ def main(argv: list[str] | None = None) -> int:
             build_context=build_context, make_gate=gate_for,
             make_measure=measure_for, record=record_pooled,
             iterations=(args.iterations or None), should_stop=should_stop,
-            accumulate_valid_positive=experimental,
+            accumulate_valid_positive=(experimental and screen_state is None),
+            validate_candidate=validate_pooled,
+            formation_guard=lambda hypothesis, context: dispatch_guard.characterised_reason(
+                hypothesis, {**context, "epoch_sha256": epoch}),
+            reserve_candidate=reserve_pooled,
             champion_tree=args.worktree, branch=args.champion_branch,
             on_step=step_pooled)
 

@@ -195,20 +195,25 @@ class PlannedObservationSeam(unittest.TestCase):
             return Response(json.dumps({"stop": True, "timings": {
                 "predicted_n": 4, "predicted_per_second": 10.0}}).encode())
 
-        observations = []
-        with mock.patch.object(serving.subprocess, "Popen", return_value=FakeProcess()), \
-                mock.patch.object(serving.residency, "Sampler", return_value=FakeSampler()), \
-                mock.patch.object(serving.urllib.request, "urlopen", side_effect=urlopen), \
-                mock.patch.object(serving, "verify_env_readback"):
-            with self.assertRaises(serving.ServerDied):
-                serving._measure_once(recipe, Path("/b"), 18000,
-                                      frozen_requests=requests,
-                                      observation=observations)
-        rows = observations[0]["requests"]
-        self.assertEqual([(row["phase"], row["slot_index"]) for row in rows],
-                         [("warmup", 0), ("warmup", 1),
-                          ("measurement", 0), ("measurement", 1)])
-        self.assertEqual(sum(row["error"] is not None for row in rows), 2)
+        for observations in (None, []):
+            with mock.patch.object(serving.subprocess, "Popen", return_value=FakeProcess()), \
+                    mock.patch.object(serving.residency, "Sampler", return_value=FakeSampler()), \
+                    mock.patch.object(serving.urllib.request, "urlopen", side_effect=urlopen), \
+                    mock.patch.object(serving, "verify_env_readback"):
+                with self.assertRaises(serving.ServerDied) as caught:
+                    serving._measure_once(recipe, Path("/b"), 18000,
+                                          frozen_requests=requests,
+                                          observation=observations)
+            retained = caught.exception.record
+            rows = retained["requests"]
+            self.assertEqual([(row["phase"], row["slot_index"]) for row in rows],
+                             [("warmup", 0), ("warmup", 1),
+                              ("measurement", 0), ("measurement", 1)])
+            self.assertEqual(sum(row["error"] is not None for row in rows), 2)
+            self.assertEqual(retained["teardown"], "terminated")
+            self.assertIn("ServerDied", retained["failure"])
+            if observations is not None:
+                self.assertEqual(observations, [retained])
 
         malformed = (
             {"stop": True},

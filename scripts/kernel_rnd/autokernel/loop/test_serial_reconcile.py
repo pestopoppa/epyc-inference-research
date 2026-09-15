@@ -141,7 +141,11 @@ def test_restart_recovers_only_matching_embedded_failure_observation(tmp_path, m
     continuation = json.loads(continuation_path.read_text())
     continuation["outcome_counts"] = {"bench_failed": 1}
     full_path = continuation_path.parent / "loop-run.json"
-    full_path.write_text(json.dumps(_full_result(continuation)))
+    full = _full_result(continuation)
+    full["iterations"][0]["instrument_failure"] = {
+        "schema": "epyc.autokernel.serving_failed_comparison.v2",
+        "failed_arm": "candidate", "failed_ordinal": 1}
+    full_path.write_text(json.dumps(full))
     continuation_path.unlink()
 
     assert sr.main(argv) == 0
@@ -150,7 +154,9 @@ def test_restart_recovers_only_matching_embedded_failure_observation(tmp_path, m
     assert recovered["recovered_result_sha256"] == sr._json(full_path)[1]
     saved = json.loads(state_path.read_text())
     assert saved["last_reconciliation"]["result"]["path"] == str(continuation_path)
-    assert json.loads(full_path.read_text())["iterations"][0]["reason"] == "setup failed"
+    retained_attempt = json.loads(full_path.read_text())["iterations"][0]
+    assert retained_attempt["reason"] == "setup failed"
+    assert retained_attempt["instrument_failure"]["failed_arm"] == "candidate"
     changed = json.loads(full_path.read_text())
     changed["elapsed_s"] = 2.0
     full_path.write_text(json.dumps(changed))

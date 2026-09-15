@@ -146,8 +146,10 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
         for key, value in (("user.email", "t@t"), ("user.name", "t")):
             subprocess.run(["git", "-C", str(self.repo), "config", key, value],
                            capture_output=True, text=True, timeout=60)
-        (self.repo / "kernel.c").write_text("base\n", encoding="utf-8")
-        _sh(self.repo, "add", "kernel.c")
+        kernel = self.repo / "ggml/src/kernel.c"
+        kernel.parent.mkdir(parents=True)
+        kernel.write_text("base\n", encoding="utf-8")
+        _sh(self.repo, "add", "ggml/src/kernel.c")
         _sh(self.repo, "commit", "-q", "-m", "champion tip")
         self.tip = _sh(self.repo, "rev-parse", "HEAD")
 
@@ -194,13 +196,13 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
             def propose(self, context):
                 self.contexts.append(dict(context))
                 return loop.Hypothesis(mechanism_id="akm-e2e-keep", statement="s",
-                                       falsifier="f", target_surface="kernel.c",
+                                       falsifier="f", target_surface="ggml/src/kernel.c",
                                        target_symbol="sym")
 
             def author(self, hypothesis, context):
-                (self.workspace / "kernel.c").write_text("patched\n",
-                                                         encoding="utf-8")
-                return ("kernel.c",)
+                (self.workspace / "ggml/src/kernel.c").write_text(
+                    "patched\n", encoding="utf-8")
+                return ("ggml/src/kernel.c",)
 
         class _Critic:
             def __init__(self, workspace):

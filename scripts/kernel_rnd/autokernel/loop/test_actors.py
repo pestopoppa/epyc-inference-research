@@ -220,12 +220,51 @@ class PlannerContract(unittest.TestCase):
                 planner.propose({})
         self.assertIn("missing", str(caught.exception))
 
-    def test_authoring_with_no_paths_is_a_transient(self):
+    def test_proposal_can_abstain_with_a_reason(self):
+        planner = actors.AgentPlanner(workspace=Path("/tmp"))
+        with mock.patch.object(actors, "_run_agent",
+                               return_value='{"abstain": "profile has no reachable hot path"}'):
+            got = planner.propose({})
+        self.assertIsInstance(got, actors.Abstain)
+        self.assertEqual(got.reason, "profile has no reachable hot path")
+
+    def test_reasonless_abstention_is_a_malformed_provider_reply(self):
+        planner = actors.AgentPlanner(workspace=Path("/tmp"))
+        with mock.patch.object(actors, "_run_agent", return_value='{"abstain": ""}'):
+            with self.assertRaises(actors.ProviderTransient):
+                planner.propose({})
+
+    def test_legacy_empty_author_paths_are_an_abstention(self):
         planner = actors.AgentPlanner(workspace=Path("/tmp"))
         with mock.patch.object(actors, "_run_agent", return_value='{"paths": []}'):
-            with self.assertRaises(actors.ProviderTransient):
-                planner.author(
-                    Hypothesis("akm-x", "s", "f", "a.cu", "sym"), {})
+            got = planner.author(Hypothesis("akm-x", "s", "f", "a.cu", "sym"), {})
+        self.assertIsInstance(got, actors.Abstain)
+        self.assertEqual(got.reason, "authoring returned no changed paths")
+
+    def test_authoring_can_abstain_without_dirty_path_check(self):
+        planner = actors.AgentPlanner(workspace=Path("/tmp"))
+        with mock.patch.object(actors, "_run_agent",
+                               return_value='{"abstain": "required API is unavailable"}'), \
+                mock.patch.object(actors.subprocess, "run") as status:
+            got = planner.author(Hypothesis("akm-x", "s", "f", "a.cu", "sym"), {})
+        self.assertIsInstance(got, actors.Abstain)
+        status.assert_not_called()
+
+    def test_author_prompt_names_abstention_as_a_correct_result(self):
+        planner = actors.AgentPlanner(workspace=Path("/tmp"))
+        with mock.patch.object(actors, "_run_agent",
+                               return_value='{"abstain": "infeasible"}') as run:
+            planner.author(Hypothesis("akm-x", "s", "f", "a.cu", "sym"), {})
+        prompt = run.call_args.args[0]
+        self.assertIn("abstaining is a correct science result", prompt)
+        self.assertIn('{"abstain":', prompt)
+
+    def test_abstention_history_feeds_the_next_planner_context(self):
+        text = actors.render_context({"prior_experiments": [{
+            "status": "abstained", "mechanism_id": "akm-infeasible",
+            "refusal_reason": "required primitive is absent"}]})
+        self.assertIn("`akm-infeasible` → abstained", text)
+        self.assertIn("required primitive is absent", text)
 
 
 class CriticContract(unittest.TestCase):
@@ -260,6 +299,22 @@ class CriticContract(unittest.TestCase):
                                return_value='{"accepted": true}'):
             self.assertTrue(critic.review_hypothesis(
                 Hypothesis("akm-x", "s", "f", "a.cu", "sym"), {}).accepted)
+
+    def test_critic_names_identity_independence_and_evidence(self):
+        critic = actors.AgentCritic(workspace=Path("/tmp"))
+        context = {"actor_provenance": {
+            "planner": actors.PLANNER_DEFAULT.describe(),
+            "critic": critic.backend.describe(),
+        }}
+        with mock.patch.object(actors, "_run_agent",
+                               return_value='{"accepted": true}'):
+            review = critic.review_hypothesis(
+                Hypothesis("akm-x", "s", "f", "a.cu", "sym"), context)
+        self.assertEqual(review.validator_identity, critic.backend.describe())
+        self.assertEqual(review.validator_kind, "llm_critic")
+        self.assertEqual(review.independence, "different_family")
+        self.assertEqual(review.evidence_inspected,
+                         ("review subject", "rejection grounds", "planner context"))
 
 
 class PlaceholderEchoes(unittest.TestCase):

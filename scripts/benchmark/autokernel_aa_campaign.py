@@ -46,7 +46,7 @@ import time
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "kernel_rnd"))
 
 from autokernel.controller import build_recipe                      # noqa: E402
-from autokernel.loop import bench, claim, gates                     # noqa: E402
+from autokernel.loop import bench, claim, gates, headline_admissibility  # noqa: E402
 
 PAIRS = 20
 SETTLE_S = 300
@@ -229,6 +229,7 @@ def main(argv: list[str] | None = None) -> int:
                 # distinction went unrecorded it cost a 1200-fold sizing error.
                 "unit": bench.FLOOR_UNIT,
                 "n": args.pairs,
+                "headline_admissibility": headline_admissibility.contract(),
                 "recorded_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "method": "aa-bootstrap-3-condition (D8 2026-08-29)",
                 "floor_pct": {str(k): v for k, v in boot.items()},

@@ -41,7 +41,7 @@ import subprocess
 import time
 from typing import Any, Mapping, Sequence
 
-from .loop import ActorTransient, Hypothesis, Review
+from .loop import Abstain, ActorTransient, Hypothesis, Review
 
 CODEX = "/usr/local/share/npm-global/bin/codex"
 CLAUDE = "/home/node/.local/bin/claude"
@@ -232,6 +232,15 @@ def _cpu_target(context: Mapping[str, Any]) -> bool:
     target = context.get("target")
     recipe = target.get("recipe") if isinstance(target, Mapping) else None
     return isinstance(recipe, Mapping) and recipe.get("backend") == "cpu"
+
+
+def _abstention(body: Mapping[str, Any]) -> Abstain | None:
+    if "abstain" not in body:
+        return None
+    reason = body["abstain"]
+    if not isinstance(reason, str) or not reason.strip():
+        raise ProviderTransient("planner abstention is missing a non-empty reason")
+    return Abstain(reason)
 
 
 def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
@@ -432,12 +441,14 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
     # `comparable_measurement` instead was the first version and it silently switched
     # the block off for every synthetic context, `test_seed.py`'s five-sample run-15
     # regression included: a conformance fix that disables the feature it is protecting.
+    from . import claims as claim_contract
     repeats: dict[str, list[float]] = {}
     for row in prior:
         effect = row.get("effect_fraction")
         if (row.get("mechanism_id") and isinstance(effect, (int, float))
                 and not row.get("stale_epoch")
-                and row.get("comparable_measurement", True)):
+                and row.get("comparable_measurement", True)
+                and claim_contract.mechanism_status(row) == claim_contract.VERIFIED):
             repeats.setdefault(row["mechanism_id"], []).append(effect * 100.0)
     characterised = {k: v for k, v in repeats.items() if len(v) >= 3}
     if characterised:
@@ -462,8 +473,9 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
                 if row.get("stale_epoch") else ""
             effect = row.get("effect_fraction")
             measured = f"{effect * 100:+.3f}%" if isinstance(effect, (int, float)) else "—"
+            mechanism_claim = claim_contract.mechanism_status(row)
             lines.append(f"- `{row.get('mechanism_id')}` → {row.get('status')} "
-                         f"{measured}{stale}"
+                         f"{measured}{stale} [mechanism claim: {mechanism_claim}]"
                          + (f"\n    refused: {row['refusal_reason']}"
                             if row.get("refusal_reason") else ""))
     else:
@@ -537,7 +549,9 @@ state a falsifier that could actually fail. The loop itself owns source inspecti
 authoring, correctness gates and matched A/B measurement. Do not make an unsupported \
 trace or counter a prerequisite that this loop cannot collect. After a rejection for \
 missing evidence, either use an available diagnostic named in the context or choose \
-the smallest source-consistent change whose payoff the existing matched A/B can test."""
+the smallest source-consistent change whose payoff the existing matched A/B can test. \
+If no honest, feasible hypothesis satisfies these constraints, abstaining is a correct \
+science result; reply instead with {{"abstain": "<specific reason>"}}."""
 
 
 def _runtime_pair(treatment, context, mechanism_id):
@@ -586,7 +600,7 @@ class AgentPlanner:
     timeout_s: int = DEFAULT_TIMEOUT_S
     transient_streak: int = 0
 
-    def propose(self, context: Mapping[str, Any]) -> Hypothesis:
+    def propose(self, context: Mapping[str, Any]) -> Hypothesis | Abstain:
         cpu = _cpu_target(context)
         prompt = _HYPOTHESIS_TASK.format(
             context=render_context(context),
@@ -612,6 +626,9 @@ class AgentPlanner:
                                timeout_s=self.timeout_s, backend=self.backend))
         self.transient_streak = streak
         body = _extract_json(raw)
+        abstention = _abstention(body)
+        if abstention is not None:
+            return abstention
         missing = {"mechanism_id", "statement", "falsifier", "target_surface",
                    "target_symbol"} - set(body)
         if missing:
@@ -630,7 +647,7 @@ class AgentPlanner:
                           if "runtime_treatment" in body else None))
 
     def author(self, hypothesis: Hypothesis,
-               context: Mapping[str, Any]) -> tuple[str, ...]:
+               context: Mapping[str, Any]) -> tuple[str, ...] | Abstain:
         cpu = _cpu_target(context)
         resource = "selected CPU resources" if cpu else "GPU"
         reply = (json.dumps({"paths": [hypothesis.target_surface]}) if cpu else
@@ -649,14 +666,23 @@ class AgentPlanner:
             "session and it will not be used. Make the edit and stop.\n\n"
             "Then reply with ONE json object naming the files you actually changed, "
             "using their real paths:\n"
-            f"{reply}")
+            f"{reply}\n"
+            "If the hypothesis cannot be implemented honestly within these constraints, "
+            "abstaining is a correct science result. Make no edits and reply instead with:\n"
+            '{"abstain": "<specific reason the hypothesis is infeasible>"}')
         raw, streak = _with_backoff(
             lambda: _run_agent(prompt, workspace=self.workspace,
                                timeout_s=self.timeout_s, backend=self.backend))
         self.transient_streak = streak
-        paths = _extract_json(raw).get("paths")
-        if not isinstance(paths, list) or not paths:
-            raise ProviderTransient("authoring returned no changed paths")
+        body = _extract_json(raw)
+        abstention = _abstention(body)
+        if abstention is not None:
+            return abstention
+        paths = body.get("paths")
+        if isinstance(paths, list) and not paths:
+            return Abstain("authoring returned no changed paths")
+        if not isinstance(paths, list):
+            raise ProviderTransient("authoring reply is missing a paths list")
         if any(_is_placeholder(item) for item in paths):
             raise ProviderTransient(
                 f"authoring echoed the prompt template instead of answering: {paths}")
@@ -705,7 +731,19 @@ class AgentCritic:
             # The loop refuses a reasonless rejection at construction; make the
             # provider's omission explicit rather than crashing on it.
             reason = "critic rejected without stating a reason"
-        return Review(accepted=accepted, reason=reason)
+        actors = context.get("actor_provenance") or {}
+        planner = str(actors.get("planner") or "")
+        critic = self.backend.describe()
+        planner_family = planner.split(":", 1)[0] if ":" in planner else ""
+        independence = ("same_family" if planner_family == self.backend.kind
+                        else "different_family")
+        return Review(
+            accepted=accepted, reason=reason,
+            validator_identity=critic,
+            validator_kind="llm_critic",
+            independence=independence,
+            evidence_inspected=("review subject", "rejection grounds", "planner context"),
+        )
 
     def review_hypothesis(self, hypothesis: Hypothesis,
                           context: Mapping[str, Any]) -> Review:

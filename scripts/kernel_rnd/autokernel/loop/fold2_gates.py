@@ -48,7 +48,7 @@ import subprocess
 import sys
 import time
 
-from . import bench, instruments, residency, serving
+from . import bench, census, instruments, residency, serving
 
 #: The harness colours its verdicts. Strip before ANY counting -- see the module docstring.
 ANSI = re.compile(r"\x1b\[[0-9;]*m")
@@ -137,13 +137,10 @@ def parse_scheduler_graph(log: str) -> dict:
     verdict below refuses. It does not "assume the graph was fine because nothing looked
     wrong" -- nothing looking wrong is exactly what an unobserved graph looks like.
     """
-    ops: dict[str, dict[str, int]] = {}
-    nodes = NODE_LINE.findall(log)
-    for op, backend in nodes:
-        ops.setdefault(op, {}).setdefault(backend, 0)
-        ops[op][backend] += 1
+    ops: dict[str, dict[str, int]] = census.parse_scheduler_graph(log)["op_backend"]
+    nodes_parsed = sum(sum(backends.values()) for backends in ops.values())
     recurrent = {op: backends for op, backends in ops.items() if RECURRENT_OP.match(op)}
-    return {"nodes_parsed": len(nodes),
+    return {"nodes_parsed": nodes_parsed,
             "ssm_scan_nodes": sum(ops.get("SSM_SCAN", {}).values()),
             "recurrent_ops": recurrent,
             "recurrent_nodes": sum(sum(b.values()) for b in recurrent.values()),

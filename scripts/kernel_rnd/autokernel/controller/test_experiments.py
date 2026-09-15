@@ -74,6 +74,57 @@ class Memory(unittest.TestCase):
                 self.assertEqual(reopened.count(), 1)
                 self.assertEqual(reopened.mechanisms_tried(), ["akm-q5-bit-deposit"])
 
+    def test_a_reader_cannot_block_outcome_recording(self):
+        """Dashboard/operator reads must not poison the loop's journal writer."""
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.store(tmp) as initial:
+                initial.record(_attempt(), epoch=EPOCH_A,
+                               recorded_at="2026-08-28T00:00:00Z", campaign_id="c1")
+            reader = ex.sqlite3.connect(Path(tmp, "experiments.db"))
+            try:
+                reader.execute("BEGIN")
+                reader.execute("SELECT payload FROM experiments").fetchone()
+                with self.store(tmp) as writer:
+                    self.assertTrue(writer.record(
+                        _attempt(mechanism_id="akm-second", result_sha256="2" * 64),
+                        epoch=EPOCH_A,
+                        recorded_at="2026-08-28T00:00:01Z", campaign_id="c1"))
+            finally:
+                reader.close()
+
+    def test_scoped_recall_limits_rows_before_touching_large_payloads(self):
+        """Discarded giant rows cannot spend the bounded reader's JSON budget."""
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.store(tmp) as store:
+                for index in range(4):
+                    store.record(
+                        _attempt(status="measured_null",
+                                 result_sha256=f"{index + 1:064x}",
+                                 padding="x" * (2 * 1024 * 1024 + 1)),
+                        epoch=EPOCH_A,
+                        recorded_at=f"2026-08-28T00:00:0{index}Z",
+                        campaign_id="large-payloads")
+            with ex.ExperimentStore(Path(tmp), read_only=True) as reader:
+                touched = 0
+
+                def bounded_length(value):
+                    nonlocal touched
+                    touched += 1
+                    if touched > 1:
+                        raise ex.sqlite3.OperationalError(
+                            "payload projection ran before recency LIMIT")
+                    return len(value)
+
+                reader._connection.create_function("length", 1, bounded_length)
+                rows = reader.recall(
+                    epoch=EPOCH_A, limit=1, include_source_scope=True,
+                    statuses=("measured_null",))
+
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["result_sha256"], f"{4:064x}")
+            self.assertEqual(touched, 1)
+            self.assertIsNone(rows[0]["research_scope"])
+
     def test_a_refused_attempt_with_no_result_is_still_remembered(self):
         """A refusal the planner cannot see is a refusal it will earn again.
 

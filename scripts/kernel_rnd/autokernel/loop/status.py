@@ -36,6 +36,7 @@ STATUS_FILENAME = "loop-status.json"
 #: An iteration is minutes, dominated by the planner call. Past this the reading is
 #: not "the loop is quiet", it is "nobody has heard from the loop".
 DEFAULT_STALE_AFTER_S = 1800
+STAGNATION_WINDOW = 20
 
 # `Comparison.to_dict()` deliberately carries the complete measurement lifecycle,
 # including every residency sample from both arms.  That belongs in experiments.db,
@@ -75,6 +76,45 @@ def _compact_anchor_guard(store_root: Path, campaign_id: str,
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def stagnation_signal(outcomes: Sequence[Mapping[str, Any]], *,
+                      window: int = STAGNATION_WINDOW) -> dict[str, Any]:
+    """Project existing results into an observe-only per-target stagnation signal.
+
+    The slope is ordinary least squares over the trailing best-so-far effect
+    sequence.  Non-measurement outcomes do not create synthetic zero effects.
+    """
+    effects: list[float] = []
+    for row in outcomes:
+        value = row.get("effect_fraction")
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            effects.append(float(value))
+    best: list[float] = []
+    for effect in effects:
+        best.append(max(effect, best[-1] if best else effect))
+    trailing = best[-max(1, int(window)):]
+    slope = None
+    if len(trailing) >= 2:
+        x_mean = (len(trailing) - 1) / 2
+        y_mean = sum(trailing) / len(trailing)
+        denominator = sum((index - x_mean) ** 2
+                          for index in range(len(trailing)))
+        slope = (sum((index - x_mean) * (value - y_mean)
+                     for index, value in enumerate(trailing)) / denominator)
+
+    consecutive_nulls = 0
+    for row in reversed(outcomes):
+        if row.get("status") != "measured_null":
+            break
+        consecutive_nulls += 1
+    return {
+        "mode": "observe_only",
+        "window": int(window),
+        "measured_points": len(trailing),
+        "best_effect_slope_per_measurement": slope,
+        "consecutive_measured_nulls": consecutive_nulls,
+    }
 
 
 def write_json(store_root: Path, name: str, body: Any, *,
@@ -191,6 +231,16 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
         "iterations_done": len(outcomes),
         "measurements_reached": measured,
         "dispositions": dict(sorted(counts.items())),
+        # A truthful no-answer is a science outcome, not actor failure. Keep its
+        # run-level prevalence visible beside the disposition/rejection telemetry.
+        "abstain_rate": (counts.get("abstained", 0) / len(outcomes)
+                         if outcomes else 0.0),
+        "stagnation": {
+            **stagnation_signal(outcomes),
+            "target_id": ((target or {}).get("target_id")
+                          or (target or {}).get("id")
+                          or model or surface),
+        },
         "champion_head": champion_head,
         # The last promotion A/A: did the binary in the anchor slot prove to BE the
         # champion. `null` means no promotion has happened on this run, which is a
@@ -265,5 +315,6 @@ def freshness(body: Mapping[str, Any] | None, *, now: datetime | None = None
     }
 
 
-__all__ = ["DEFAULT_STALE_AFTER_S", "STATUS_FILENAME", "STATUS_SCHEMA", "freshness",
-           "read", "write", "write_json"]
+__all__ = ["DEFAULT_STALE_AFTER_S", "STAGNATION_WINDOW", "STATUS_FILENAME",
+           "STATUS_SCHEMA", "freshness", "read", "stagnation_signal", "write",
+           "write_json"]

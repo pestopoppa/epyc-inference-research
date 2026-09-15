@@ -27,6 +27,45 @@ def test_retained_critic_accepts_only_exact_screened_candidate():
     assert not critic.review_patch(hypothesis, ("other.c",), {}).accepted
 
 
+def test_reduced_positive_below_own_floor_is_a_measured_null_not_lane_error():
+    """A reduced screen is a filter, not the full-target accumulator.
+
+    The generic experimental path may accumulate a valid positive below the
+    full-serving floor.  A quarter/half screen must instead clear its own floor
+    before `retain_candidate` can create confirmation debt.  In particular, a
+    floor miss is an ordinary scientific result and must never escape into the
+    pool's blanket `lane_error` containment.
+    """
+    hypothesis = loop.Hypothesis(
+        "reduced-subfloor", "small positive on reduced CPU scope", "floor miss",
+        "serving:glm53", "ggml/src/ggml-cpu/file.c")
+    paths = ("ggml/src/ggml-cpu/file.c",)
+    planner = mock.Mock()
+    planner.propose.return_value = hypothesis
+    planner.author.return_value = paths
+    critic = cpu_screen.RetainedCritic({
+        "hypothesis": hypothesis.to_dict(), "paths": list(paths)})
+    comparison = run.bench.Comparison(
+        surface="serving:glm53", anchor_samples=[100.0] * 5,
+        candidate_samples=[100.5] * 5, effect=0.005,
+        estimator="matched_process_v2", pairs=5, noise_floor_pct=1.0,
+        residency={}, anchor_drift_pct=0.0, calibrated=True)
+    commit = mock.Mock(side_effect=AssertionError(
+        "a reduced floor miss must not reach retain_candidate"))
+
+    outcome = loop.iterate(
+        planner=planner, critic=critic, context={},
+        measure=lambda _hypothesis, _paths: comparison,
+        gate=lambda _hypothesis, _paths: (True, [gates.Verdict("oracle", True)]),
+        commit=commit, accumulate_valid_positive=False)
+
+    assert outcome.status == "measured_null"
+    assert outcome.hypothesis == hypothesis
+    assert outcome.comparison is comparison
+    assert "did not clear" in " ".join(outcome.reasons)
+    commit.assert_not_called()
+
+
 @pytest.mark.parametrize("scope,threads,regions", [("quarter", 24, ("q0",)),
                                                    ("half", 48, ("q0", "q1"))])
 def test_original_glm_common_scope_preserves_request_and_full_target(scope, threads, regions):

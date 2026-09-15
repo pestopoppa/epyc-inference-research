@@ -455,8 +455,11 @@ def validate_loop_bundle_saved_payload(payload: Mapping[str, Any]) -> list:
     elif schema == LOOP_BUNDLE_SNAPSHOT_SCHEMA_V2:
         allowed_snapshot = common | {
             "keeps_since_serving_gate", "measurement_validity",
+            "comparison_evidence",
         }
-        required_snapshot = allowed_snapshot
+        # comparison_evidence was added after v2 had already been published.  It
+        # is optional on recovery, but every new keep writes it.
+        required_snapshot = allowed_snapshot - {"comparison_evidence"}
         if provenance != "current_snapshot":
             out.append("snapshot.schema: v2 must use current_snapshot provenance")
     else:
@@ -504,6 +507,18 @@ def validate_loop_bundle_saved_payload(payload: Mapping[str, Any]) -> list:
             )
     elif validity is not None:
         out.append("snapshot.measurement_validity: not defined by legacy v1")
+    evidence = snapshot.get("comparison_evidence")
+    if evidence is not None:
+        if not isinstance(evidence, Mapping):
+            out.append("snapshot.comparison_evidence: must be a mapping")
+        else:
+            allowed_evidence = {"path", "sha256"}
+            if set(evidence) != allowed_evidence:
+                out.append("snapshot.comparison_evidence: requires exactly path and sha256")
+            for key in allowed_evidence:
+                value = evidence.get(key)
+                if not isinstance(value, str) or not value.strip():
+                    out.append(f"snapshot.comparison_evidence.{key}: required non-empty string")
     try:
         expected_digest = loop_bundle_snapshot_digest(snapshot)
     except (TypeError, ValueError) as exc:

@@ -83,6 +83,18 @@ BUNDLE_SCHEMA_V1 = journal.LOOP_BUNDLE_SNAPSHOT_SCHEMA_V1
 BUNDLE_SCHEMA_V2 = journal.LOOP_BUNDLE_SNAPSHOT_SCHEMA_V2
 
 
+def negative_beyond_floor(comparison: dict, fallback_floor_pct: float | None = None) -> bool:
+    """True only for a measured negative whose magnitude exceeds its applicable floor."""
+    effect_pct = comparison.get("effect_pct")
+    if effect_pct is None and isinstance(comparison.get("effect"), (int, float)):
+        effect_pct = float(comparison["effect"]) * 100.0
+    floor = comparison.get("noise_floor_pct", fallback_floor_pct)
+    return (isinstance(effect_pct, (int, float)) and not isinstance(effect_pct, bool)
+            and isinstance(floor, (int, float)) and not isinstance(floor, bool)
+            and math.isfinite(float(effect_pct)) and math.isfinite(float(floor))
+            and float(effect_pct) < -float(floor))
+
+
 class BundleRecoveryRequired(RuntimeError):
     """Authoritative accumulator state cannot be proved safe to resume."""
 
@@ -159,13 +171,17 @@ class Bundle:
     #: JSON predates the field and therefore maps to the matching historical
     #: snapshot; a later external tip advance makes the magnitude stale.
     measurement_validity: str = MEASUREMENT_CURRENT
+    comparison_evidence: dict | None = None
 
-    def add_keep(self, mechanism_id: str, tip: str, compounded_bench_pct: float) -> None:
+    def add_keep(self, mechanism_id: str, tip: str, compounded_bench_pct: float,
+                 comparison_evidence: dict | None = None) -> None:
         self.keeps.append(mechanism_id)
         self.tip = tip
         self.compounded_bench_pct = compounded_bench_pct
         self.keeps_since_serving_gate += 1
         self.measurement_validity = MEASUREMENT_CURRENT
+        self.comparison_evidence = (dict(comparison_evidence)
+                                    if comparison_evidence is not None else None)
 
     def mark_serving_gate_fired(self) -> None:
         """The serving gate RAN -- reset the cadence counter. Called on every outcome
@@ -194,7 +210,9 @@ class Bundle:
                 "tip": self.tip, "keeps": list(self.keeps),
                 "compounded_bench_pct": self.compounded_bench_pct,
                 "keeps_since_serving_gate": int(self.keeps_since_serving_gate),
-                "measurement_validity": self.measurement_validity}
+                "measurement_validity": self.measurement_validity,
+                **({"comparison_evidence": dict(self.comparison_evidence)}
+                   if self.comparison_evidence is not None else {})}
 
     @classmethod
     def from_dict(cls, d: dict) -> "Bundle":
@@ -207,8 +225,10 @@ class Bundle:
                   "compounded_bench_pct"}
         allowed = (common | {"keeps_since_serving_gate"}
                    if schema == cls.LEGACY_SCHEMA else
-                   common | {"keeps_since_serving_gate", "measurement_validity"})
-        required = (common if schema == cls.LEGACY_SCHEMA else allowed)
+                   common | {"keeps_since_serving_gate", "measurement_validity",
+                             "comparison_evidence"})
+        required = (common if schema == cls.LEGACY_SCHEMA else
+                    allowed - {"comparison_evidence"})
         extra = sorted(set(d) - allowed)
         missing = sorted(required - set(d))
         if extra:
@@ -237,12 +257,20 @@ class Bundle:
                     else d["measurement_validity"])
         if validity not in journal.LOOP_BUNDLE_MEASUREMENT_VALIDITIES:
             raise ValueError(f"unknown measurement_validity {validity!r}")
+        evidence = d.get("comparison_evidence")
+        if evidence is not None:
+            if (not isinstance(evidence, dict)
+                    or set(evidence) != {"path", "sha256"}
+                    or any(not isinstance(evidence[key], str) or not evidence[key].strip()
+                           for key in ("path", "sha256"))):
+                raise ValueError("comparison_evidence requires non-empty path and sha256")
         # v1 predates explicit measurement validity.  It remains readable as
         # unknown legacy state, but only v2 can represent a current measurement.
         return cls(champion_of_record=d["champion_of_record"], tip=d["tip"],
                    keeps=list(keeps), compounded_bench_pct=float(gain),
                    keeps_since_serving_gate=cadence,
-                   measurement_validity=validity)
+                   measurement_validity=validity,
+                   comparison_evidence=(dict(evidence) if evidence is not None else None))
 
     def save(self, store: Path) -> Path:
         store = Path(store)

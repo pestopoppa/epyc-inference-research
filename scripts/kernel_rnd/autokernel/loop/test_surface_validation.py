@@ -5,6 +5,19 @@ from . import serving
 from . import surface_validation as sv
 
 
+def _comparison(*, effect_pct, floor_pct=0.949, floor_unit="process",
+                effect_unit="process"):
+    return {
+        "schema": "epyc.autokernel.serving_ab.v1",
+        "effect": effect_pct / 100.0,
+        "effect_pct": effect_pct,
+        "noise_floor_pct": floor_pct,
+        "decisive": None if floor_pct is None else abs(effect_pct) >= floor_pct,
+        "floor_unit": floor_unit,
+        "effect_unit": effect_unit,
+    }
+
+
 def _launch(tmp_path: Path, recipe: serving.Recipe, build: Path):
     artifact = lambda role, path, digit: {
         "schema": rr.ARTIFACT_SCHEMA, "role": role, "path": str(path), "sha256": digit * 64}
@@ -59,3 +72,40 @@ def test_missing_original_anchor_identity_is_retained_as_pending_debt(tmp_path):
     reopened = sv.reopen_reference(reference)
     assert reopened["disposition"] == "pending"
     assert reopened["original_anchor"]["commit"] is None
+
+
+def test_non_author_interim_floor_refuses_subfloor_negative():
+    comparison = _comparison(effect_pct=-0.9)
+    assert comparison["decisive"] is False
+    assert sv.classify(comparison, intended_target=False) == "failed"
+
+
+def test_non_author_cross_unit_floor_refuses():
+    comparison = _comparison(effect_pct=0.1, floor_unit="arm", effect_unit="process")
+    try:
+        sv.classify(comparison, intended_target=False)
+    except sv.SurfaceValidationRefused as exc:
+        assert "unit" in str(exc)
+    else:
+        raise AssertionError("cross-unit floor unexpectedly passed")
+
+
+def test_non_author_missing_floor_stays_pending():
+    assert sv.classify(_comparison(effect_pct=0.1, floor_pct=None),
+                       intended_target=False) == "pending"
+
+
+def test_non_author_inert_requires_blast_radius_witness():
+    inert = {"schema": "epyc.autokernel.blast_radius_row.v1",
+             "classification": "INERT", "decision_class": "INERT", "tier": "T0",
+             "witnesses": {"dso_digests_anchor": "a" * 64,
+                           "dso_digests_candidate": "b" * 64,
+                           "shape_envelope_hash": "c" * 64}}
+    assert sv.classify({}, intended_target=False, blast_radius_row=inert) == "passed"
+    inert["witnesses"] = {}
+    try:
+        sv.classify({}, intended_target=False, blast_radius_row=inert)
+    except sv.SurfaceValidationRefused:
+        pass
+    else:
+        raise AssertionError("witness-free INERT row unexpectedly passed")
