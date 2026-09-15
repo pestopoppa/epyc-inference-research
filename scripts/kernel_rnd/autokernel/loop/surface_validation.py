@@ -1,9 +1,10 @@
 """Exact original serving-gate rows for a propagated whole-source candidate.
 
-This adapter adds no numerical policy.  The intended source target uses the loop's
-existing ``accumulate.classify_serving`` verdict; every other target uses the
-existing FOLD-2 non-regression verdict, where a within-floor result is not a
-regression claim.  Missing calibration never passes a row.
+The intended source target uses the loop's existing
+``accumulate.classify_serving`` verdict.  Every measured non-author target uses
+the cross-workload gate's conservative interim non-inferiority rule.  A target
+may be excused from measurement only by an explicit INERT blast-radius witness.
+Missing or unit-incompatible calibration never passes a row.
 """
 from __future__ import annotations
 
@@ -14,7 +15,7 @@ from pathlib import Path
 import subprocess
 from typing import Any, Mapping
 
-from . import accumulate, fold2_gates
+from . import accumulate
 
 SCHEMA = "epyc.autokernel.whole_source_serving_validation.v1"
 DEBT_SCHEMA = "epyc.autokernel.whole_source_serving_validation_debt.v1"
@@ -107,9 +108,43 @@ def original_anchor_commit(build: Path, repo: Path) -> str:
     return commit
 
 
-def classify(comparison: Mapping[str, Any], *, intended_target: bool) -> str:
+def _witnesses_inert(blast_radius_row: Mapping[str, Any] | None) -> bool:
+    """Recognise only the closed, witnessed structural-excuse record.
+
+    The full blast-radius producer owns deeper semantic validation.  This gate
+    deliberately checks the fields on which its decision depends and rejects an
+    open or witness-free lookalike.
+    """
+    if not isinstance(blast_radius_row, Mapping):
+        return False
+    witnesses = blast_radius_row.get("witnesses")
+    tier = blast_radius_row.get("tier")
+    if (blast_radius_row.get("schema") != "epyc.autokernel.blast_radius_row.v1"
+            or blast_radius_row.get("classification") != "INERT"
+            or blast_radius_row.get("decision_class") != "INERT"
+            or tier not in {"T0", "T1"}
+            or not isinstance(witnesses, Mapping)):
+        return False
+
+    def digest(name: str) -> bool:
+        value = witnesses.get(name)
+        return (isinstance(value, str) and len(value) == 64
+                and all(char in "0123456789abcdef" for char in value))
+
+    if not digest("shape_envelope_hash"):
+        return False
+    if tier == "T0":
+        return digest("dso_digests_anchor") and digest("dso_digests_candidate")
+    return (digest("coverage_profile_sha256_anchor")
+            and digest("coverage_profile_sha256_candidate"))
+
+
+def classify(comparison: Mapping[str, Any], *, intended_target: bool,
+             blast_radius_row: Mapping[str, Any] | None = None) -> str:
     """Return the existing owner's exact three-valued validation disposition."""
     from . import serving
+    if not intended_target and _witnesses_inert(blast_radius_row):
+        return "passed"
     if not isinstance(comparison, Mapping) or not (
             comparison.get("schema") == "epyc.autokernel.serving_ab.v1"
             or serving.comparison_instrument_matches(comparison,
@@ -132,7 +167,21 @@ def classify(comparison: Mapping[str, Any], *, intended_target: bool) -> str:
     if intended_target:
         return ("passed" if accumulate.classify_serving(dict(comparison))
                 is accumulate.Outcome.PROMOTE else "failed")
-    return "passed" if fold2_gates.ab_verdict(dict(comparison)) == "PASS" else "failed"
+    try:
+        serving.check_unit(comparison.get("floor_unit"), comparison.get("effect_unit"),
+                           what="cross-workload validation floor")
+    except serving.FloorUnitMismatch as exc:
+        raise SurfaceValidationRefused(str(exc)) from exc
+    # AKX-P2a interim k_delta=1 rule.  A decisive negative still refuses, and
+    # the lower-edge clause effect_pct - F < -delta simplifies to effect_pct < 0
+    # when delta = k_delta * F and k_delta = 1.
+    # This intentionally refuses even a sub-floor negative until the e-process
+    # specified by the cross-workload handoff replaces this interim statistic.
+    k_delta = 1.0
+    delta = k_delta * float(floor)
+    decisive_negative = bool(decisive) and float(effect_pct) < 0
+    lower_edge_breaches_margin = float(effect_pct) - float(floor) < -delta
+    return "failed" if decisive_negative or lower_edge_breaches_margin else "passed"
 
 
 def row(*, source_commit: str, source_tree: str, source_keep_ids: list[str],
