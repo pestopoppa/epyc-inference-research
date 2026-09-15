@@ -32,7 +32,7 @@ HEARTBEAT_S = 30  # status heartbeat period; envelope = 6x this
 HEARTBEAT_STOP_TIMEOUT_S = 10
 
 from . import (accumulate, actors, anchor, archive, bench, champion, claim, gates,
-               heartbeat, hotspots, loop, serving, serving_beliefs,
+               dispatch_guard, heartbeat, hotspots, loop, serving, serving_beliefs,
                integrity, pipeline, pool, production, status, surface_fold,
                surface_validation)
 
@@ -2154,6 +2154,20 @@ def main(argv: list[str] | None = None) -> int:
             integrity_evidence[hypothesis.mechanism_id] = checked.to_dict()
             return checked
 
+        def reserve_pooled(worker, _hypothesis, _paths):
+            diff = _git(worker.worktree, "diff", "--no-ext-diff", "HEAD", "--")
+            identity = dispatch_guard.attempt_identity(
+                diff=diff, champion=current_anchor_commit[0],
+                cmake_defines=recipe.cmake_defines(),
+                bench_recipe={"pairs": args.serving_pairs if direct_launch else args.pairs,
+                              "pp": pp, "tg": tg, "ubatch": ubatch},
+                model=str(args.model), surface=args.surface)
+            registry = dispatch_guard.Registry(args.store)
+            try:
+                return registry.reserve(identity)
+            finally:
+                registry.close()
+
         def record_pooled(outcome) -> None:
             attempt = outcome.to_attempt()
             if outcome.hypothesis is not None:
@@ -2170,6 +2184,15 @@ def main(argv: list[str] | None = None) -> int:
             archive.record(args.store, attempt, epoch=epoch,
                            recorded_at=loop._now(), campaign_id="ak-loop",
                            on_serving_export=feedback.exported)
+            if outcome.attempt_identity is not None:
+                registry = dispatch_guard.Registry(args.store)
+                try:
+                    registry.finish(
+                        outcome.attempt_identity, status=outcome.status,
+                        effect=(outcome.comparison.effect
+                                if outcome.comparison is not None else None), epoch=epoch)
+                finally:
+                    registry.close()
             latest.append(outcome)
             publish("running", latest, hotspot_rows=hotspot_rows)
 
@@ -2330,6 +2353,9 @@ def main(argv: list[str] | None = None) -> int:
             iterations=(args.iterations or None), should_stop=should_stop,
             accumulate_valid_positive=experimental,
             validate_candidate=validate_pooled,
+            formation_guard=lambda hypothesis, context: dispatch_guard.characterised_reason(
+                hypothesis, {**context, "epoch_sha256": epoch}),
+            reserve_candidate=reserve_pooled,
             champion_tree=args.worktree, branch=args.champion_branch,
             on_step=step_pooled)
 
