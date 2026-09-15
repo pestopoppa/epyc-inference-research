@@ -447,6 +447,18 @@ class Backends(unittest.TestCase):
         self.assertIn("Never build", note)
         self.assertEqual(argv[-1], "PROMPT")
 
+    def test_critic_backends_are_constructed_read_only(self):
+        claude = actors.backend_for("claude-opus-5", "high").argv(
+            "PROMPT", Path("/ws"), read_only=True)
+        self.assertNotIn("--dangerously-skip-permissions", claude)
+        self.assertEqual(claude[claude.index("--permission-mode") + 1], "plan")
+        critic_note = claude[claude.index("--append-system-prompt") + 1]
+        self.assertIn("read-only AutoKernel critic", critic_note)
+        self.assertIn("Do not edit", critic_note)
+        codex = actors.backend_for("gpt-5.6-sol", "high").argv(
+            "PROMPT", Path("/ws"), read_only=True)
+        self.assertEqual(codex[codex.index("-s") + 1], "read-only")
+
     def test_any_other_model_routes_to_codex_with_quoted_toml_effort(self):
         b = actors.backend_for("gpt-5.6-sol", "high")
         argv = b.argv("PROMPT", Path("/ws"))

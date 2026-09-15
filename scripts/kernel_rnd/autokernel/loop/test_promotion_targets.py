@@ -253,6 +253,11 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
         with mock.patch.object(gates, "compiles", fake_compiles), \
              mock.patch.object(gates, "op_correctness",
                                lambda _b: gates.Verdict("op_correctness", True)), \
+             mock.patch.object(gates, "deterministic",
+                               lambda *_a, **_k: gates.Verdict("determinism", True)), \
+             mock.patch.object(gates, "no_fallback_dispatch",
+                               lambda *_a, **_k: gates.Verdict(
+                                   "no_fallback_dispatch", True)), \
              mock.patch.object(run_mod.bench, "compare", fake_compare), \
              mock.patch.object(run_mod.actors, "AgentPlanner",
                                lambda workspace, **_: _Planner(workspace)), \

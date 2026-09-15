@@ -49,6 +49,15 @@ def test_declared_oracle_edit_has_durable_protected_refusal(repo):
     assert caught.value.refusal_class == "oracle_bench_source_modified"
 
 
+def test_whole_diff_reward_hack_scan_refuses_pointer_memo(repo):
+    (repo / "ggml/src/kernel.cpp").write_text(
+        "int base = 1;\nauto key = reinterpret_cast<uintptr_t>(input);\n")
+    with pytest.raises(integrity.IntegrityRefused) as caught:
+        integrity.validate_candidate(repo, ("ggml/src/kernel.cpp",))
+    assert caught.value.refusal_class == "reward_hack_scan"
+    assert "pointer_memoization" in str(caught.value)
+
+
 def test_literal_shape_predicate_and_mutable_state_need_confirmation(repo):
     (repo / "ggml/src/kernel.cpp").write_text(
         "int base = 1;\n"
@@ -218,6 +227,30 @@ def test_pipeline_returns_journalable_refusal_before_critic_or_build():
     row = outcomes[0].to_attempt()
     assert row["integrity_screen"]["refusal_class"] == "dirty_set_mismatch"
     assert "dirty_set_mismatch" in row["reason"]
+
+
+def test_critic_tree_mutation_is_hard_refused_before_gate():
+    hypothesis = loop.Hypothesis("akm-mutate", "change kernel", "must refuse",
+                                 "ggml/src/kernel.cpp", "kernel")
+
+    class Planner:
+        def propose(self, _context): return hypothesis
+        def author(self, _hypothesis, _context): return ("ggml/src/kernel.cpp",)
+
+    class Critic:
+        def review_hypothesis(self, *_args): return loop.Review(True)
+        def review_patch(self, *_args): return loop.Review(True)
+
+    validations = iter(({"measured_tree": "a" * 40}, {"measured_tree": "b" * 40}))
+    gate_calls = []
+    outcome = loop.iterate(
+        planner=Planner(), critic=Critic(), context={},
+        validate_candidate=lambda *_args: next(validations),
+        gate=lambda *_args: gate_calls.append(True) or (True, []),
+        measure=lambda *_args: None, commit=lambda *_args: "unused")
+    assert outcome.status == "integrity_refused"
+    assert outcome.integrity_screen["refusal_class"] == "critic_tree_mutation"
+    assert gate_calls == []
 
 
 def test_kept_tree_mismatch_never_advances_champion_ref(tmp_path):

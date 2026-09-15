@@ -1302,14 +1302,21 @@ def main(argv: list[str] | None = None) -> int:
             # concurrent 64-job builds would oversubscribe an 88-core lane and every
             # build time recorded during the overlap would be a measurement of
             # contention.
-            return gates.run_all(
+            checks = [
                 lambda: gates.compiles(worker.worktree, worker.build_dir,
                                        cmake_defines=recipe.cmake_defines(),
                                        jobs=build_jobs, cpu_list=build_cpu_list,
                                        **({"targets": gates.PROMOTION_TARGETS} if direct_launch else {})),
                 lambda: gates.op_correctness(worker.build_dir,
                                             **({"backend": "CPU"} if cpu_launch else {})),
-            )
+            ]
+            if not direct_launch:
+                checks.extend((
+                    lambda: gates.deterministic(worker.build_dir, args.model),
+                    lambda: gates.no_fallback_dispatch(
+                        worker.build_dir, args.model, pp=pp, tg=tg, ubatch=ubatch),
+                ))
+            return gates.run_all(*checks)
         return gate
 
     #: The anchor ADVANCES with the champion. It used to be a fixed binary while the

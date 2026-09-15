@@ -18,7 +18,9 @@ from pathlib import Path
 from typing import Callable
 import subprocess
 
-from . import residency
+from .. import schemas
+from ..evaluator import correctness
+from . import bench, census, residency
 
 #: One op suite, on the backend under test. 53 seconds measured, and it is the gate
 #: that decides whether a candidate is CORRECT -- everything downstream assumes it.
@@ -144,18 +146,63 @@ def deterministic(build_dir: Path, model: Path, *, runs: int = 3) -> Verdict:
     binary = build_dir / "bin" / "llama-bench"
     if not binary.is_file():
         return Verdict("determinism", False, f"no llama-bench at {binary}")
-    seen = set()
+    seed = bench._candidate_seed()
+    seen: set[str] = set()
     for _ in range(runs):
         done = subprocess.run(
             [str(binary), "-m", str(model), "-p", "0", "-n", "8", "-r", "1",
-             "-ngl", "99", "-fa", "1", "-o", "json"],
+             "-ngl", "99", "-fa", "1", "-o", "json",
+             "--autokernel-harden", str(seed)],
             capture_output=True, text=True, timeout=600,
             env=residency.loader_env(binary))
         if done.returncode != 0:
             return Verdict("determinism", False, "candidate failed to run",
                            done.stderr[-1000:])
-        seen.add(done.returncode)
+        try:
+            row = bench.hardened_row(done.stdout, pp=0, tg=8, reps=1)
+        except bench.BenchFailed as exc:
+            return Verdict("determinism", False, str(exc), done.stdout[-1000:])
+        seen.add(row.autokernel_output_hashes)
+    if len(seen) != 1:
+        return Verdict("determinism", False,
+                       f"candidate outputs changed across {runs} identical hardened runs",
+                       "\n".join(sorted(seen)))
     return Verdict("determinism", True)
+
+
+def no_fallback_dispatch(build_dir: Path, model: Path, *, pp: int, tg: int,
+                         ubatch: int | None = None, op: str = "MUL_MAT") -> Verdict:
+    """Observe the affected op's scheduler placement and apply the T0 no-fallback gate."""
+    binary = build_dir / "bin" / "llama-bench"
+    if not binary.is_file():
+        return Verdict("no_fallback_dispatch", False, f"no llama-bench at {binary}")
+    shape = census.Shape("prefill" if pp else "decode", pp if pp else tg)
+    recipe = ["-ngl", "99", "-fa", "1"]
+    if ubatch:
+        recipe.extend(("-b", str(ubatch), "-ub", str(ubatch)))
+    row = census.run_dispatch_probe(
+        binary, model, shape, recipe_argv=recipe,
+        env=residency.loader_env(binary), expected_ops=(op,), require_device=True)
+    assignments = row.get("op_backend", {}).get(op, {})
+    fallback = tuple(
+        f"{count} {op} node(s) assigned to {backend}, not ROCm0"
+        for backend, count in sorted(assignments.items())
+        if backend not in {"ROCm0", "NULL"}
+    )
+    evidence = correctness.DispatchTraceEvidence(
+        derived_surface=(op,),
+        traced_kernels=((op,) if op in row.get("op_backend", {}) else ()),
+        fallback_events=fallback,
+        fallback_instrumentation_active=row.get("state") == census.OBSERVED,
+        trace_ref="inline:autokernel-loop-scheduler-trace",
+        produced_by="evaluator",
+    )
+    result = correctness.check_no_fallback_dispatch_proof(evidence)
+    passed = result.check.outcome == schemas.PASS
+    reason = "" if passed else "; ".join(result.check.reasons)
+    return Verdict("no_fallback_dispatch", passed, reason,
+                   str({"state": row.get("state"), "assignments": assignments,
+                        "nodes_total": row.get("nodes_total")}))
 
 
 def run_all(*checks: "Callable[[], Verdict]") -> tuple[bool, list[Verdict]]:
@@ -185,4 +232,4 @@ def run_all(*checks: "Callable[[], Verdict]") -> tuple[bool, list[Verdict]]:
 
 __all__ = ["BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S", "DEFAULT_TARGETS",
            "PROMOTION_TARGETS", "Verdict", "compiles", "deterministic",
-           "op_correctness", "run_all"]
+           "no_fallback_dispatch", "op_correctness", "run_all"]

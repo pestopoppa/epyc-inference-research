@@ -11,6 +11,25 @@ from unittest import mock
 
 from autokernel.loop import bench
 
+
+class HardenedBenchReceipt(unittest.TestCase):
+    def test_receipt_reasons_refuse_the_measurement(self):
+        row = mock.Mock(n_prompt=0, n_gen=128, n_gpu_layers=99)
+        with mock.patch.object(bench.microbench, "parse_llama_bench_json",
+                               return_value=(row,)), \
+             mock.patch.object(bench.microbench, "_check_autokernel_hardening",
+                               return_value=("rotated output changed",)):
+            with self.assertRaisesRegex(bench.BenchFailed, "rotated output changed"):
+                bench.hardened_row("[]", pp=0, tg=128, reps=9)
+
+    def test_clean_receipt_is_the_only_row_admitted(self):
+        row = mock.Mock(n_prompt=512, n_gen=0, n_gpu_layers=99, avg_ts=123.0)
+        with mock.patch.object(bench.microbench, "parse_llama_bench_json",
+                               return_value=(row,)), \
+             mock.patch.object(bench.microbench, "_check_autokernel_hardening",
+                               return_value=()):
+            self.assertIs(bench.hardened_row("[]", pp=512, tg=0, reps=9), row)
+
 class ADriftingArmIsNotAMeasurement(unittest.TestCase):
     """The force-MMQ probe's real failure mode, pinned with its own numbers.
 
@@ -63,7 +82,7 @@ class ADriftingArmIsNotAMeasurement(unittest.TestCase):
         calls = []
 
         def fake_run_once(binary, model, *, pp, tg, ubatch=None, reps=9,
-                          timeout_s=3600):
+                          timeout_s=3600, hardening_seed=None):
             calls.append(str(binary))
             return 100.0, {"resident": True, "peak_vram_bytes": 1 << 31,
                            "peak_kfd_processes": 1}
@@ -182,7 +201,9 @@ class AnExternalKillIsRetriedAndACrashIsNot(unittest.TestCase):
 
         with mock.patch.object(bench.subprocess, "run", side_effect=fake), \
              mock.patch.object(bench.residency, "Sampler"), \
-             mock.patch.object(bench.residency, "loader_env", return_value={}):
+             mock.patch.object(bench.residency, "loader_env", return_value={}), \
+             mock.patch.object(bench, "hardened_row",
+                               return_value=mock.Mock(avg_ts=100.0)):
             try:
                 bench.run_once(Path("/b"), Path("/m"), pp=0, tg=128,
                                sleep=slept.append)
@@ -212,7 +233,9 @@ class AnExternalKillIsRetriedAndACrashIsNot(unittest.TestCase):
 
         with mock.patch.object(bench.subprocess, "run", side_effect=fake), \
              mock.patch.object(bench.residency, "Sampler"), \
-             mock.patch.object(bench.residency, "loader_env", return_value={}):
+             mock.patch.object(bench.residency, "loader_env", return_value={}), \
+             mock.patch.object(bench, "hardened_row",
+                               return_value=mock.Mock(avg_ts=100.0)):
             value, _ = bench.run_once(Path("/b"), Path("/m"), pp=0, tg=128,
                                       sleep=slept.append)
         self.assertEqual(value, 100.0)
@@ -344,7 +367,9 @@ class TheSurfaceTableDrivesTheBatchWidth(unittest.TestCase):
 
         with mock.patch.object(bench.subprocess, "run", side_effect=fake_run), \
              mock.patch.object(bench.residency, "Sampler", FakeSampler), \
-             mock.patch.object(bench.residency, "loader_env", lambda _b: {}):
+             mock.patch.object(bench.residency, "loader_env", lambda _b: {}), \
+             mock.patch.object(bench, "hardened_row",
+                               return_value=mock.Mock(avg_ts=100.0)):
             bench.run_once(Path("/b"), Path("/m.gguf"), pp=512, tg=0, ubatch=ubatch)
         return captured["argv"]
 
@@ -359,12 +384,14 @@ class TheSurfaceTableDrivesTheBatchWidth(unittest.TestCase):
         argv = self._argv_for(ubatch=None)
         self.assertNotIn("-b", argv)
         self.assertNotIn("-ub", argv)
+        self.assertIn("--autokernel-harden", argv)
+        self.assertGreaterEqual(int(argv[argv.index("--autokernel-harden") + 1]), 0)
 
     def test_compare_carries_the_surface_name_and_width_through(self):
         seen = []
 
         def fake_run_once(binary, model, *, pp, tg, ubatch=None, reps=9,
-                          timeout_s=3600):
+                          timeout_s=3600, hardening_seed=None):
             seen.append(ubatch)
             return 100.0, {"resident": True, "peak_vram_bytes": 1 << 31,
                            "peak_kfd_processes": 1}

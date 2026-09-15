@@ -547,6 +547,28 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                     # the idea it was trying to implement.
                     patch_reasons.append(patch_verdict.reason)
                     continue
+                # The critic is a verifier, not a second author. Re-run the host-owned
+                # whole-tree validation after its call and before entering the build
+                # tail. A critic that mutates even a declared file changes the tree
+                # reviewed by the first integrity pass and hard-refuses the candidate.
+                try:
+                    post_critic = validate_candidate(hypothesis, paths)
+                except integrity.IntegrityRefused as exc:
+                    return Outcome(
+                        "integrity_refused", hypothesis, [str(exc)],
+                        integrity_screen={"refusal_class": exc.refusal_class})
+                before_tree = ((integrity_screen or {}).get("measured_tree")
+                               if isinstance(integrity_screen, Mapping) else None)
+                after_tree = ((post_critic or {}).get("measured_tree")
+                              if isinstance(post_critic, Mapping) else None)
+                if before_tree is not None and after_tree != before_tree:
+                    return Outcome(
+                        "integrity_refused", hypothesis,
+                        ["critic mutated the candidate worktree: "
+                         f"tree changed {before_tree} -> {after_tree}"],
+                        integrity_screen={"refusal_class": "critic_tree_mutation",
+                                          "measured_tree": before_tree,
+                                          "post_critic_tree": after_tree})
 
             on_step("checking runtime treatment and correctness" if hypothesis.runtime_pair
                     is not None else "building and gating")

@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest import mock
+from types import SimpleNamespace
 
 from autokernel.loop import archive, gates
 
@@ -82,6 +83,39 @@ class TheShortCircuitMustBeReal(unittest.TestCase):
         self.assertTrue(passed)
         self.assertEqual(ran, ["compile", "correctness"])
         self.assertEqual(len(verdicts), 2)
+
+
+class HardenedCandidateGates(unittest.TestCase):
+    def test_determinism_compares_output_hashes_not_return_codes(self):
+        rows = iter((SimpleNamespace(autokernel_output_hashes="a/a"),
+                     SimpleNamespace(autokernel_output_hashes="b/b")))
+        with mock.patch.object(Path, "is_file", return_value=True), \
+             mock.patch.object(gates.subprocess, "run", return_value=mock.Mock(
+                 returncode=0, stdout="[]", stderr="")), \
+             mock.patch.object(gates.residency, "loader_env", return_value={}), \
+             mock.patch.object(gates.bench, "hardened_row", side_effect=lambda *a, **k: next(rows)):
+            verdict = gates.deterministic(Path("/build"), Path("/model"), runs=2)
+        self.assertFalse(verdict.passed)
+        self.assertIn("outputs changed", verdict.reason)
+
+    def test_no_fallback_dispatch_rejects_cpu_assignment(self):
+        row = {"state": gates.census.OBSERVED, "nodes_total": 2000,
+               "op_backend": {"MUL_MAT": {"ROCm0": 20, "CPU": 1}}}
+        with mock.patch.object(Path, "is_file", return_value=True), \
+             mock.patch.object(gates.census, "run_dispatch_probe", return_value=row), \
+             mock.patch.object(gates.residency, "loader_env", return_value={}):
+            verdict = gates.no_fallback_dispatch(
+                Path("/build"), Path("/model"), pp=512, tg=0)
+        self.assertFalse(verdict.passed)
+        self.assertIn("fallback event", verdict.reason)
+
+    def test_live_gate_chain_names_both_hardenings(self):
+        source = (Path(__file__).resolve().parent / "run.py").read_text()
+        gate_node = next(node for node in ast.walk(ast.parse(source))
+                         if isinstance(node, ast.FunctionDef) and node.name == "gate")
+        body = ast.unparse(gate_node)
+        self.assertIn("gates.deterministic", body)
+        self.assertIn("gates.no_fallback_dispatch", body)
 
     def test_the_runner_passes_callables_not_evaluated_verdicts(self):
         source = (Path(__file__).resolve().parent / "run.py").read_text()

@@ -23,11 +23,13 @@ from contextlib import nullcontext
 import json
 from pathlib import Path
 import random
+import secrets
 import statistics as st
 import subprocess
 import time
 from typing import Sequence
 
+from ..execution import microbench
 from . import residency
 
 #: The unit EVERY number in this module is measured in, floors and effects alike: a
@@ -231,9 +233,34 @@ KILL_RETRIES = 3
 KILL_BACKOFF_S = (5.0, 20.0, 60.0)
 
 
+def _candidate_seed() -> int:
+    """Draw one per-candidate seed, shared by both arms and retained in argv."""
+    return secrets.randbits(63)
+
+
+def hardened_row(stdout: str, *, pp: int, tg: int, reps: int):
+    """Parse and fail closed on the hardened llama-bench receipt for one surface."""
+    try:
+        rows = microbench.parse_llama_bench_json(stdout)
+    except (microbench.BenchOutputError, ValueError, TypeError,
+            json.JSONDecodeError) as exc:
+        raise BenchFailed(f"llama-bench emitted an invalid receipt: {exc}") from exc
+    key = f"pp{pp}" if pp else f"tg{tg}"
+    for row in rows:
+        name = f"pp{row.n_prompt}" if row.n_prompt else f"tg{row.n_gen}"
+        if name != key:
+            continue
+        reasons = microbench._check_autokernel_hardening(
+            row, reps=reps, n_gpu_layers=row.n_gpu_layers)
+        if reasons:
+            raise BenchFailed("hardened llama-bench receipt refused: " + "; ".join(reasons))
+        return row
+    raise BenchFailed(f"llama-bench produced no {key} row")
+
+
 def run_once(binary: Path, model: Path, *, pp: int, tg: int, ubatch: int | None = None,
              reps: int = 9, timeout_s: int = 3600, sleep=time.sleep,
-             capture=None) -> tuple[float, dict]:
+             capture=None, hardening_seed: int | None = None) -> tuple[float, dict]:
     """One llama-bench invocation with residency proven while it runs.
 
     Retries an EXTERNAL kill, because losing a whole run to a memory-pressure reaper
@@ -244,9 +271,11 @@ def run_once(binary: Path, model: Path, *, pp: int, tg: int, ubatch: int | None 
     carries exactly that many sequential tokens -- see the SURFACES note. The JSON row
     is still keyed pp{pp}/tg{tg} by llama-bench regardless of batch flags.
     """
+    seed = _candidate_seed() if hardening_seed is None else hardening_seed
     argv = ["taskset", "-c", CPU_LIST, "numactl", "--interleave=all",
             str(binary), "-m", str(model), "-p", str(pp), "-n", str(tg),
-            "-r", str(reps), "-ngl", "99", "-fa", "1", "-o", "json"
+            "-r", str(reps), "-ngl", "99", "-fa", "1", "-o", "json",
+            "--autokernel-harden", str(seed)
             ] + (["-b", str(ubatch), "-ub", str(ubatch)] if ubatch else [])
     for attempt in range(KILL_RETRIES + 1):
         env = residency.loader_env(binary)
@@ -266,16 +295,8 @@ def run_once(binary: Path, model: Path, *, pp: int, tg: int, ubatch: int | None 
                   if done.returncode in EXTERNAL_KILL_CODES else "")
         raise BenchFailed(
             f"llama-bench rc={done.returncode}{killed}: {done.stderr[-400:]}")
-    try:
-        rows = json.loads(done.stdout)
-    except json.JSONDecodeError as exc:
-        raise BenchFailed(f"llama-bench emitted non-JSON: {done.stdout[:200]}") from exc
-    key = f"pp{pp}" if pp else f"tg{tg}"
-    for row in rows:
-        name = f"pp{row['n_prompt']}" if row["n_prompt"] else f"tg{row['n_gen']}"
-        if name == key:
-            return float(row["avg_ts"]), sampler.proof
-    raise BenchFailed(f"llama-bench produced no {key} row")
+    row = hardened_row(done.stdout, pp=pp, tg=tg, reps=reps)
+    return float(row.avg_ts), sampler.proof
 
 
 def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
@@ -292,9 +313,11 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
     """
     if pairs < 1:
         raise ValueError("compare needs at least one pair")
+    hardening_seed = _candidate_seed()
     for _ in range(max(0, warmup_pairs)):
         for arm in (anchor, candidate):
-            run_once(arm.binary, model, pp=pp, tg=tg, ubatch=ubatch, reps=reps)
+            run_once(arm.binary, model, pp=pp, tg=tg, ubatch=ubatch, reps=reps,
+                     hardening_seed=hardening_seed)
     anchor_samples: list[float] = []
     candidate_samples: list[float] = []
     proofs: list[dict] = []
@@ -302,7 +325,7 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
     for _ in range(pairs):
         for arm, sink in ((anchor, anchor_samples), (candidate, candidate_samples)):
             value, proof = run_once(arm.binary, model, pp=pp, tg=tg, ubatch=ubatch,
-                                    reps=reps)
+                                    reps=reps, hardening_seed=hardening_seed)
             sink.append(value)
             proofs.append(proof)
 
