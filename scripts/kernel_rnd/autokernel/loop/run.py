@@ -1176,6 +1176,10 @@ def main(argv: list[str] | None = None) -> int:
                 + "\n\n" + program)
         return {
             "program": program,
+            "actor_provenance": {
+                "planner": planner_backend.describe(),
+                "critic": critic_backend.describe(),
+            },
             **({"serving_instrument": dict(source_instrument)} if source_instrument else {}),
             **({"cpu_screen": {**screen_state,
                                "full_target": full_cpu_target.to_dict()}} if screen_state else {}),

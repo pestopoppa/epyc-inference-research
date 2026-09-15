@@ -300,6 +300,22 @@ class CriticContract(unittest.TestCase):
             self.assertTrue(critic.review_hypothesis(
                 Hypothesis("akm-x", "s", "f", "a.cu", "sym"), {}).accepted)
 
+    def test_critic_names_identity_independence_and_evidence(self):
+        critic = actors.AgentCritic(workspace=Path("/tmp"))
+        context = {"actor_provenance": {
+            "planner": actors.PLANNER_DEFAULT.describe(),
+            "critic": critic.backend.describe(),
+        }}
+        with mock.patch.object(actors, "_run_agent",
+                               return_value='{"accepted": true}'):
+            review = critic.review_hypothesis(
+                Hypothesis("akm-x", "s", "f", "a.cu", "sym"), context)
+        self.assertEqual(review.validator_identity, critic.backend.describe())
+        self.assertEqual(review.validator_kind, "llm_critic")
+        self.assertEqual(review.independence, "different_family")
+        self.assertEqual(review.evidence_inspected,
+                         ("review subject", "rejection grounds", "planner context"))
+
 
 class PlaceholderEchoes(unittest.TestCase):
     """The first real run parsed the prompt's own template as the answer.

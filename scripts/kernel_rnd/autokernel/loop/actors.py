@@ -728,7 +728,19 @@ class AgentCritic:
             # The loop refuses a reasonless rejection at construction; make the
             # provider's omission explicit rather than crashing on it.
             reason = "critic rejected without stating a reason"
-        return Review(accepted=accepted, reason=reason)
+        actors = context.get("actor_provenance") or {}
+        planner = str(actors.get("planner") or "")
+        critic = self.backend.describe()
+        planner_family = planner.split(":", 1)[0] if ":" in planner else ""
+        independence = ("same_family" if planner_family == self.backend.kind
+                        else "different_family")
+        return Review(
+            accepted=accepted, reason=reason,
+            validator_identity=critic,
+            validator_kind="llm_critic",
+            independence=independence,
+            evidence_inspected=("review subject", "rejection grounds", "planner context"),
+        )
 
     def review_hypothesis(self, hypothesis: Hypothesis,
                           context: Mapping[str, Any]) -> Review:

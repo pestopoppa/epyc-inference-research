@@ -164,6 +164,42 @@ class TheLoopback(unittest.TestCase):
         self.assertEqual(row["patch_round"], 1)
         self.assertFalse(row["prior_rejection_prompt"])
 
+    def test_keep_records_validator_provenance_and_loopback_effect(self):
+        planner = _Planner([_hypothesis("akm-bad"), _hypothesis("akm-good")])
+        critic = _Critic(
+            [loop.Review(False, "unsupported", validator_identity="critic-a",
+                         validator_kind="llm_critic", independence="different_family",
+                         evidence_inspected=("hypothesis", "profile")),
+             loop.Review(True, validator_identity="critic-a",
+                         validator_kind="llm_critic", independence="different_family",
+                         evidence_inspected=("hypothesis", "profile"))],
+            [loop.Review(True, validator_identity="critic-a",
+                         validator_kind="llm_critic", independence="different_family",
+                         evidence_inspected=("candidate diff",))])
+
+        outcome, _ = _run(planner, critic)
+        rows = outcome.to_attempt()["validator_provenance"]
+
+        self.assertEqual(outcome.status, "kept")
+        self.assertTrue(rows[0]["changed_subsequent_search"])
+        self.assertFalse(rows[1]["changed_subsequent_search"])
+        self.assertEqual(rows[0]["validator_identity"], "critic-a")
+        self.assertEqual(rows[0]["validator_kind"], "llm_critic")
+        self.assertEqual(rows[0]["independence"], "different_family")
+        self.assertEqual(rows[0]["evidence_inspected"], ["hypothesis", "profile"])
+        self.assertEqual(
+            [row["decision"] for row in rows],
+            ["critic:hypothesis", "critic:hypothesis", "critic:patch",
+             "gate:compile", "measurement:paired_ab"])
+
+    def test_compatibility_critic_is_never_anonymous(self):
+        outcome, _ = _run(_Planner(), _Critic([], []))
+        critic_rows = [row for row in outcome.validator_provenance
+                       if row["decision"].startswith("critic:")]
+        self.assertTrue(all(row["validator_identity"] for row in critic_rows))
+        self.assertTrue(all(row["validator_kind"] == "script" for row in critic_rows))
+        self.assertTrue(all(row["independence"] == "non_model" for row in critic_rows))
+
     def test_a_gate_failure_loops_back_with_the_toolchain_message(self):
         planner = _Planner()
         critic = _Critic([], [])
