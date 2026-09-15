@@ -127,6 +127,44 @@ def test_ba_invalid_arm_resumes_ordinal_without_repeating_valid_arm(monkeypatch)
     assert [row["ordinal"] for row in result.row["launch_membership"]] == list(range(4))
 
 
+def test_failed_slot_retains_launch_and_matched_comparison_coordinates(monkeypatch):
+    recipe, anchor, requests = _inputs()
+    candidate = _resolve(recipe, backend="cpu", build=Path("/candidate"))
+    calls = []
+
+    def measure(recipe, build, port, *, evidence, **kwargs):
+        arm = "anchor" if build == BUILD else "candidate"
+        calls.append(arm)
+        residency = {"window_start": float(len(calls)),
+                     "window_end": float(len(calls)), "status": "unproven"}
+        evidence.append(residency)
+        if len(calls) == 2:
+            raise serving.ServerDied("fixture slot failed", {
+                "schema": "epyc.autokernel.serving_observation.v1",
+                "process_pid": 123, "requests": [{"slot_index": 0,
+                    "error": "TimeoutError: fixture"}], "residency": residency,
+                "teardown": "terminated", "failure": "ServerDied: fixture slot failed"})
+        return 10.0
+
+    monkeypatch.setattr(serving, "_measure_once", measure)
+    with pytest.raises(serving.ServerDied) as caught:
+        serving.compare(recipe, BUILD, Path("/candidate"), pairs=2,
+            floor_pct=None, instrument=serving.MATCHED_INSTRUMENT,
+            anchor_resolved_recipe=anchor, candidate_resolved_recipe=candidate,
+            frozen_requests=requests)
+    failure = caught.value.record
+    assert failure["schema"] == "epyc.autokernel.serving_failed_comparison.v2"
+    assert failure["status"] == "bench_failed"
+    assert failure["failed_ordinal"] == 1
+    assert failure["failed_arm"] == calls[1]
+    assert failure["failed_launch"]["requests"][0]["error"] == "TimeoutError: fixture"
+    assert sum(map(len, (failure["anchor_raw_samples"],
+                        failure["candidate_raw_samples"]))) == 1
+    assert len(failure["launch_membership"]) == 1
+    assert sum(map(len, (failure["anchor_residency"],
+                        failure["candidate_residency"]))) == 2
+
+
 def test_actual_http_counterbalanced_requests_archive_and_teardown(tmp_path, monkeypatch):
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))

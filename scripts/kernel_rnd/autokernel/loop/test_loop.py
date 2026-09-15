@@ -472,6 +472,21 @@ class AnInstrumentFailureEndsTheIterationNotTheRun(unittest.TestCase):
         self.assertEqual(outcome.status, "bench_failed")
         self.assertIn("rc=-9", " ".join(outcome.reasons))
 
+    def test_serving_failure_retains_structured_facts_and_is_not_a_null(self):
+        retained = {"schema": "epyc.autokernel.serving_failed_comparison.v2",
+                    "failed_arm": "candidate", "failed_ordinal": 1}
+
+        def measure(_hypothesis, _paths):
+            raise loop.MeasurementFailed("serving slot failed", retained)
+
+        outcome = drive_single_lane(
+            planner=_Planner(), critic=_Critic([], []), measure=measure,
+            gate=lambda *a: (True, [gates.Verdict("compile", True)]),
+            commit=lambda *a: "abc1234", iterations=1)[0]
+        self.assertEqual(outcome.status, "bench_failed")
+        self.assertEqual(outcome.instrument_failure, retained)
+        self.assertEqual(outcome.to_attempt()["instrument_failure"], retained)
+
     def test_it_is_not_conflated_with_a_provider_transient(self):
         """Merging them would hide a failing instrument behind a flaky API."""
         def measure(hypothesis, paths):

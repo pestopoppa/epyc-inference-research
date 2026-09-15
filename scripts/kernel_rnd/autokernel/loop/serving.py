@@ -45,7 +45,7 @@ import urllib.error
 
 from . import lifecycle_observation, residency, status
 from . import native_server_response as server_response
-from .loop import MeasurementInvalid
+from .loop import MeasurementFailed, MeasurementInvalid
 
 if TYPE_CHECKING:
     from .resolved_recipe import ResolvedRecipe
@@ -558,7 +558,7 @@ class EnvReadbackFailed(RuntimeError):
     """
 
 
-class ServerDied(RuntimeError):
+class ServerDied(MeasurementFailed):
     """The server exited during load or measurement -- a build/config fault, not noise."""
 
 
@@ -856,6 +856,7 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
     cpu_observer_error = None
     cpu_invalidity = []
     response_reference = None
+    serving_exception: Exception | None = None
     if cpu_profile_capture is not None:
         from .cpu_profile import CpuProfileCapture
         if (type(cpu_profile_capture) is not CpuProfileCapture or resolved_recipe is None
@@ -1101,6 +1102,7 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                     srv.wait(10)
                     teardown = "killed"
     except Exception as exc:
+        serving_exception = exc
         failure = f"{type(exc).__name__}: {exc}"
         raise
     finally:
@@ -1131,13 +1133,15 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                         record["cpu_lifecycle_error"] = cpu_observer_error
                     if evidence is not None:
                         evidence.append(record)
+                    exported = {
+                        "schema": "epyc.autokernel.serving_observation.v1",
+                        "process_pid": process_pid, "requests": request_rows,
+                        "residency": record, "teardown": teardown, "failure": failure}
+                    if response_reference is not None:
+                        exported["server_responses"] = response_reference
+                    if isinstance(serving_exception, ServerDied):
+                        serving_exception.record = exported
                     if observation is not None:
-                        exported = {
-                            "schema": "epyc.autokernel.serving_observation.v1",
-                            "process_pid": process_pid, "requests": request_rows,
-                            "residency": record, "teardown": teardown, "failure": failure}
-                        if response_reference is not None:
-                            exported["server_responses"] = response_reference
                         observation.append(exported)
                 except Exception:
                     if failure is None:
@@ -1383,6 +1387,23 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
                             exc.record, sort_keys=True, separators=(",", ":")).encode()).hexdigest()})
                     if not reschedules[0]:
                         exc.reschedule = resume_original
+                    raise
+                except ServerDied as exc:
+                    exc.record = {"schema": "epyc.autokernel.serving_failed_comparison.v1",
+                        "status": "bench_failed", "failed_arm": arm,
+                        "pair_index": pair_index, "pairs_requested": pairs,
+                        "failed_launch": dict(exc.record), "request_digest": requests_digest,
+                        "anchor_resolved_recipe": anchor_resolved_recipe.to_dict(),
+                        "candidate_resolved_recipe": candidate_resolved_recipe.to_dict(),
+                        "anchor_raw_samples": a_runs, "candidate_raw_samples": c_runs,
+                        "anchor_residency": a_residency, "candidate_residency": c_residency,
+                        "runtime_pair": None if runtime_pair is None else runtime_pair.to_dict()}
+                    if matched:
+                        exc.record.update(schema="epyc.autokernel.serving_failed_comparison.v2",
+                            measurement_plan=measurement_plan, failed_ordinal=ordinal,
+                            launch_membership=launch_membership,
+                            floor_sha256=None if floor_record is None else floor_record["content_sha256"])
+                    exc.record = json.loads(json.dumps(exc.record))
                     raise
         a_med, c_med = statistics.median(a_runs), statistics.median(c_runs)
         effect = c_med / a_med - 1.0

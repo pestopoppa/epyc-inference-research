@@ -67,6 +67,14 @@ class MeasurementInvalid(RuntimeError):
         self.reschedule = None
 
 
+class MeasurementFailed(RuntimeError):
+    """The instrument failed after collecting original facts; not a measured null."""
+
+    def __init__(self, reason: str, record: dict | None = None):
+        super().__init__(reason)
+        self.record = {} if record is None else record
+
+
 #: The standing strategy, constraints and settled list. It is rendered into EVERY
 #: actor bundle: it sat unread beside the loop for the whole of run 6 while the
 #: planner proposed things its own "Already in v9" list names.
@@ -188,6 +196,7 @@ class Outcome:
     gate_verdicts: list[gates.Verdict] = field(default_factory=list)
     champion_head: str | None = None
     invalid_measurement: dict | None = None
+    instrument_failure: dict | None = None
     integrity_screen: dict | None = None
     attempt_identity: str | None = None
     exact_repeat_dispatch_count: int | None = None
@@ -210,6 +219,8 @@ class Outcome:
             row["champion_head"] = self.champion_head
         if self.invalid_measurement is not None:
             row["invalid_measurement"] = self.invalid_measurement
+        if self.instrument_failure is not None:
+            row["instrument_failure"] = self.instrument_failure
         if self.integrity_screen is not None:
             row["integrity_screen"] = self.integrity_screen
         for key in ("attempt_identity", "exact_repeat_dispatch_count", "duplicate_of",
@@ -478,6 +489,9 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                                     ["STOP after invalid arm archival; no replacement server launched"],
                                     gate_verdicts=verdicts)
                             measure_original = exc.reschedule
+                        except MeasurementFailed as exc:
+                            return Outcome("bench_failed", hypothesis, [str(exc)],
+                                gate_verdicts=verdicts, instrument_failure=exc.record)
                     # R23-44 compound-then-gate: an experimental serving source
                     # candidate may be smaller than the process-unit floor and still
                     # belong in the working accumulator.  It must still be a valid,
@@ -513,6 +527,9 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             except MeasurementInvalid as exc:
                 return Outcome("measurement_invalid", hypothesis, [str(exc)],
                                gate_verdicts=verdicts, invalid_measurement=exc.record)
+            except MeasurementFailed as exc:
+                return Outcome("bench_failed", hypothesis, [str(exc)],
+                               gate_verdicts=verdicts, instrument_failure=exc.record)
             except TailRefused as exc:
                 # Formed and never measured. Carry the hypothesis out so the planner
                 # can reconsider it against the champion that displaced it.
@@ -551,6 +568,6 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
 # `archive.record` as `run.py`'s injected `record`. `iterate` is the whole of this
 # module's control flow now, and the pool is its only driver.
 
-__all__ = ["Abstain", "ActorTransient", "ConfirmVetoed", "InteractionRegression", "TailRefused", "RunAborted", "MeasurementInvalid", "Critic",
+__all__ = ["Abstain", "ActorTransient", "ConfirmVetoed", "InteractionRegression", "TailRefused", "RunAborted", "MeasurementInvalid", "MeasurementFailed", "Critic",
            "HYPOTHESIS_ROUNDS", "Hypothesis", "Outcome", "PATCH_ROUNDS",
            "Planner", "Review", "STOPPED_MID_FORMATION", "iterate"]

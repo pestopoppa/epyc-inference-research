@@ -656,7 +656,7 @@ def _load_completed_or_recover(path: Path, *, expected_argv=None,
     attempt_fields = {"status", "turn_recorded_at", "mechanism_id", "statement",
                       "falsifier", "target_surface", "target_symbol", "runtime_pair",
                       "reason", "effect_fraction", "comparison", "gates",
-                      "champion_head", "invalid_measurement"}
+                      "champion_head", "invalid_measurement", "instrument_failure"}
     for attempt in result["iterations"]:
         status_name = attempt.get("status") if isinstance(attempt, dict) else None
         if (not isinstance(status_name, str) or not status_name
