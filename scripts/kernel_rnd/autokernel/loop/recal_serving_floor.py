@@ -112,6 +112,10 @@ def main(argv: list[str] | None = None) -> int:
           f"for an effect measured in the SAME unit")
     print(f"floor_pct {row['floor_pct']:.3f}% (cv {row['cv_pct']:.3f}%, median "
           f"{row['median_tok_s']:.2f} tok/s, runs {runs}) [{time.time() - started:.0f}s]")
+    ci = row.get("floor_ci")
+    if ci:
+        print(f"floor_ci  {ci['level']:.0%} [{ci['low_pct']:.3f}%, {ci['high_pct']:.3f}%] "
+              f"n={ci['n']} ({ci['method']}, descriptive only)")
     if not posture.apply:
         print("DRY (no --apply): floor NOT written")
         return 0
