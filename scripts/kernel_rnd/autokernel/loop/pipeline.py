@@ -177,7 +177,8 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
              on_step: Callable[[str, str], None] | None = None,
              tail: SerializedTail | None = None,
              should_stop: Callable[[], bool] | None = None,
-             accumulate_valid_positive: bool = False) -> list[loop_mod.Outcome]:
+             accumulate_valid_positive: bool = False,
+             validate_candidate=None) -> list[loop_mod.Outcome]:
     """Drive `iterations` iterations across `workers` concurrent lanes.
 
     Every side effect is injected, exactly as in `loop.iterate`, so the whole pool is
@@ -271,7 +272,11 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                     measure=measure, gate=gate, commit=commit_one, on_step=step,
                     tail_session=lambda _b=base: tail.session(_b),
                     should_abandon=should_stop, record_reschedule=record_reschedule,
-                    accumulate_valid_positive=accumulate_valid_positive)
+                    accumulate_valid_positive=accumulate_valid_positive,
+                    validate_candidate=(
+                        (lambda hypothesis, paths, _w=worker:
+                         validate_candidate(_w, hypothesis, paths))
+                        if validate_candidate is not None else None))
             except Superseded as exc:
                 # `iterate` already converted this into an Outcome carrying the
                 # hypothesis; reaching here means it escaped before one was formed.

@@ -33,7 +33,8 @@ HEARTBEAT_STOP_TIMEOUT_S = 10
 
 from . import (accumulate, actors, anchor, archive, bench, champion, claim, gates,
                heartbeat, hotspots, loop, serving, serving_beliefs,
-               pipeline, pool, production, status, surface_fold, surface_validation)
+               integrity, pipeline, pool, production, status, surface_fold,
+               surface_validation)
 
 
 @dataclass(frozen=True)
@@ -2058,6 +2059,13 @@ def main(argv: list[str] | None = None) -> int:
           * `epoch`: pinned to the champion the run STARTED from, which is what makes
             the archive rows comparable across the run.
         """
+        candidate_integrity = {}
+
+        def validate_pooled(worker, hypothesis, paths):
+            checked = integrity.validate_candidate(worker.worktree, paths)
+            candidate_integrity[worker.name] = checked
+            return checked
+
         def record_pooled(outcome) -> None:
             attempt = outcome.to_attempt()
             attempt["research_scope"] = archive.original_research_scope(
@@ -2110,6 +2118,13 @@ def main(argv: list[str] | None = None) -> int:
                 report_runtime_progress()
                 reprofile()
                 return None
+            checked = candidate_integrity.get(worker.name)
+            if checked is None:
+                raise integrity.IntegrityRefused(
+                    "missing_prebuild_integrity", "candidate reached keep without validation")
+            # This check is after build/oracle/A-B and immediately before keep: the
+            # tree accepted by measurement must still be the tree being committed.
+            integrity.assert_measured_tree(worker.worktree, checked.tree)
             if not (experimental and calibrated
                     and comparison.noise_floor_pct is not None
                     and comparison.decisive is False
@@ -2127,6 +2142,12 @@ def main(argv: list[str] | None = None) -> int:
             # keep_candidate, never kept). The SERVING gate is NO LONGER per-keep: it cannot
             # resolve a 1-3% keep against the ~3.5% serving floor, so it fires on the BUNDLE in
             # accumulate_after_keep once the compounded gain clears the floor.
+            if checked.needs_confirm and confirm is None:
+                kinds = sorted({finding.kind for finding in checked.findings})
+                raise loop.ConfirmVetoed(
+                    "KEEP_CANDIDATE-needs-confirm: integrity screen flagged "
+                    + ", ".join(kinds)
+                    + "; an unseen rotated/serving confirm rung is not configured")
             if confirm is not None:
                 verdict = confirm.gate(hypothesis.mechanism_id, comparison,
                                        confirm_measure(worker))
@@ -2146,6 +2167,7 @@ def main(argv: list[str] | None = None) -> int:
             head = pool.advance_champion(worker, hypothesis, paths, comparison,
                                          champion_tree=args.worktree,
                                          branch=args.champion_branch)
+            integrity.assert_kept_commit(worker.worktree, head, checked.tree)
             promote_anchor()
             if source_fold_candidate and patch_path is not None and parent is not None:
                 original_source_keeps.append({
@@ -2202,6 +2224,7 @@ def main(argv: list[str] | None = None) -> int:
             make_measure=measure_for, record=record_pooled,
             iterations=(args.iterations or None), should_stop=should_stop,
             accumulate_valid_positive=experimental,
+            validate_candidate=validate_pooled,
             champion_tree=args.worktree, branch=args.champion_branch,
             on_step=step_pooled)
 

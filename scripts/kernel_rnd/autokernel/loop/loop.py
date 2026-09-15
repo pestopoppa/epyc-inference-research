@@ -247,7 +247,9 @@ def iterate(*, planner: Planner, critic: Critic,
             tail_session: Callable[[], Any] = nullcontext,
             should_abandon: Callable[[], bool] | None = None,
             record_reschedule: Callable[[Outcome], bool] | None = None,
-            accumulate_valid_positive: bool = False) -> Outcome:
+            accumulate_valid_positive: bool = False,
+            validate_candidate: Callable[[Hypothesis, Sequence[str]], Any] | None = None
+            ) -> Outcome:
     """One full turn. Pure control flow: every side effect is an injected callable.
 
     `should_abandon` is the DRAIN TIER for a lane that does not hold the serialized
@@ -268,7 +270,8 @@ def iterate(*, planner: Planner, critic: Critic,
                         tail_session=tail_session,
                         should_abandon=should_abandon or (lambda: False),
                         record_reschedule=record_reschedule,
-                        accumulate_valid_positive=accumulate_valid_positive)
+                        accumulate_valid_positive=accumulate_valid_positive,
+                        validate_candidate=validate_candidate or (lambda _h, _p: None))
     except TailRefused as exc:
         # The candidate was formed and never measured. Carry the hypothesis: the
         # patch may well still help against the champion that displaced it, and the
@@ -297,7 +300,8 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
              hypothesis_rounds, patch_rounds, on_step=lambda _label: None,
              tail_session=nullcontext,
              should_abandon=lambda: False, record_reschedule=None,
-             accumulate_valid_positive=False) -> Outcome:
+             accumulate_valid_positive=False,
+             validate_candidate=lambda _hypothesis, _paths: None) -> Outcome:
     last_proposed: Hypothesis | None = None
 
     def stopped() -> Outcome:
@@ -348,6 +352,9 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             if hypothesis.runtime_pair is None:
                 on_step("authoring the patch")
                 paths = planner.author(hypothesis, working)
+                # A declared path list is a claim, not an isolation boundary.  The
+                # injected host check resolves the full worktree before review/build.
+                validate_candidate(hypothesis, paths)
 
             # ---- CRITIC PASS 2: the diff, BEFORE the build ------------------
             if should_abandon():
