@@ -58,7 +58,7 @@ def test_pressure_plan_preserves_current_recent_and_locked_states(tmp_path):
     source, commit = _git(tmp_path)
     current = tmp_path / "current"
     current.mkdir()
-    old = _state(tmp_path, "old", source, commit, 10)
+    _state(tmp_path, "old", source, commit, 10)
     locked = _state(tmp_path, "locked", source, commit, 20)
     recent = _state(tmp_path, "recent", source, commit, 30)
     descriptor = os.open(locked / "serial.lock", os.O_RDWR)
@@ -107,3 +107,36 @@ def test_unreconciled_active_state_is_never_a_candidate(tmp_path):
         target_free_bytes=10**9, recent_state_caches=0, max_build_dirs=4)
     assert planned["selected"] == []
     assert (root / "targets/target/builds").is_dir()
+
+
+def test_failed_quarantine_removal_restores_retryable_build_root(tmp_path, monkeypatch):
+    source, commit = _git(tmp_path)
+    current = tmp_path / "current"
+    current.mkdir()
+    old = _state(tmp_path, "old", source, commit, 10)
+    build = old / "targets/target/builds"
+    planned = retention.plan(
+        tmp_path, current, free_bytes=0, trigger_free_bytes=1,
+        target_free_bytes=10**9, recent_state_caches=0, max_build_dirs=1)
+    real_rmtree = retention.shutil.rmtree
+    def partial_failure(path):
+        (path / "lane0/CMakeCache.txt").unlink()
+        raise OSError("injected")
+    monkeypatch.setattr(retention.shutil, "rmtree", partial_failure)
+    failed = retention.execute(planned)
+    assert failed["removed"] == []
+    assert failed["skipped"][0]["reason"].startswith("OSError: injected")
+    assert build.is_dir()
+    assert not list(build.parent.glob(".builds.retention-*"))
+    assert json.loads((old / retention.RETRY_FILENAME).read_text()) == {
+        "schema": retention.RETRY_SCHEMA, "build_root": str(build),
+        "source_commit": commit, "recipe_digest": planned["selected"][0]["recipe_digest"]}
+
+    monkeypatch.setattr(retention.shutil, "rmtree", real_rmtree)
+    retry = retention.plan(
+        tmp_path, current, free_bytes=0, trigger_free_bytes=1,
+        target_free_bytes=10**9, recent_state_caches=0, max_build_dirs=1)
+    assert retry["selected"][0]["build_root"] == str(build)
+    assert retention.execute(retry)["removed"][0]["build_root"] == str(build)
+    assert not build.exists()
+    assert not (old / retention.RETRY_FILENAME).exists()

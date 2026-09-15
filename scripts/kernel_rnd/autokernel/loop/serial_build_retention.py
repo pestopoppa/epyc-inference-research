@@ -20,6 +20,8 @@ from typing import Any, Sequence
 
 
 PLAN_SCHEMA = "epyc.autokernel.serial_build_retention_plan.v1"
+RETRY_SCHEMA = "epyc.autokernel.serial_build_retention_retry.v1"
+RETRY_FILENAME = "build-retention-retry.json"
 DEFAULT_TRIGGER_FREE_BYTES = 400 * 1024 ** 3
 DEFAULT_TARGET_FREE_BYTES = 500 * 1024 ** 3
 DEFAULT_RECENT_STATE_CACHES = 1
@@ -84,6 +86,22 @@ def _load_json(path: Path, *, maximum: int = 8 * 1024 * 1024) -> Any:
     if len(raw) != info.st_size:
         raise BuildRetentionRefused(f"record changed while read: {path}")
     return json.loads(raw)
+
+
+def _write_retry(root: Path, cache: BuildCache) -> None:
+    path = root / RETRY_FILENAME
+    temporary = root / f".{RETRY_FILENAME}.{os.getpid()}.{time.time_ns()}"
+    body = {"schema": RETRY_SCHEMA, "build_root": str(cache.build_root),
+            "source_commit": cache.source_commit,
+            "recipe_digest": cache.recipe_digest}
+    try:
+        with temporary.open("x", encoding="utf-8") as handle:
+            json.dump(body, handle, sort_keys=True, separators=(",", ":"))
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _open_inactive_state(root: Path) -> tuple[dict[str, Any], int, int] | None:
@@ -198,11 +216,21 @@ def _cache_from_state(root: Path, state: dict[str, Any], mtime_ns: int) -> Build
                    for item in protected)
             or not _git_commit_exists(worktree, commit)):
         return None
+    recipe_digest = _digest(recipe_inputs)
     lanes = [item for item in build_root.iterdir() if item.is_dir() and not item.is_symlink()]
-    if not lanes or any(not (lane / "CMakeCache.txt").is_file() for lane in lanes):
+    generated = bool(lanes) and all((lane / "CMakeCache.txt").is_file() for lane in lanes)
+    retry = None
+    try:
+        retry = _load_json(root / RETRY_FILENAME, maximum=4096)
+    except (OSError, ValueError, json.JSONDecodeError):
+        pass
+    retry_matches = retry == {
+        "schema": RETRY_SCHEMA, "build_root": str(build_root),
+        "source_commit": commit, "recipe_digest": recipe_digest}
+    if not generated and not retry_matches:
         return None
     return BuildCache(root, build_root, worktree, commit,
-                      _digest(recipe_inputs), _directory_bytes(build_root), mtime_ns)
+                      recipe_digest, _directory_bytes(build_root), mtime_ns)
 
 
 def plan(parent: Path, current: Path, *, free_bytes: int | None = None,
@@ -298,7 +326,20 @@ def execute(plan_body: dict[str, Any], *, dry_run: bool = False) -> dict[str, An
                 if ((before.st_dev, before.st_ino) != (moved.st_dev, moved.st_ino)
                         or not stat.S_ISDIR(moved.st_mode)):
                     raise OSError("quarantined build identity changed")
-                shutil.rmtree(quarantine)
+                try:
+                    shutil.rmtree(quarantine)
+                except OSError:
+                    # The continuation still names ``build``. Restore that exact
+                    # path so the next startup can revalidate and retry instead of
+                    # stranding an invisible .retention-* directory forever.
+                    if quarantine.exists():
+                        if build.exists():
+                            raise OSError(
+                                "both quarantined and canonical build roots exist")
+                        os.rename(quarantine, build)
+                        _write_retry(root, current)
+                        raise
+                (root / RETRY_FILENAME).unlink(missing_ok=True)
             finally:
                 os.close(descriptor)
         except OSError as exc:
@@ -309,9 +350,10 @@ def execute(plan_body: dict[str, Any], *, dry_run: bool = False) -> dict[str, An
     return {"schema": "epyc.autokernel.serial_build_retention_result.v1",
             "plan_digest": supplied, "dry_run": dry_run,
             "removed": removed, "skipped": skipped,
-            "reclaimed_bytes": sum(item["bytes"] for item in removed)}
+            "reclaimed_bytes": sum(item["bytes"] for item in removed),
+            "free_bytes_after": shutil.disk_usage(Path(body["parent"])).free}
 
 
 __all__ = ["BuildRetentionRefused", "DEFAULT_MAX_BUILD_DIRS",
            "DEFAULT_RECENT_STATE_CACHES", "DEFAULT_TARGET_FREE_BYTES",
-           "DEFAULT_TRIGGER_FREE_BYTES", "PLAN_SCHEMA", "execute", "plan"]
+           "DEFAULT_TRIGGER_FREE_BYTES", "PLAN_SCHEMA", "RETRY_SCHEMA", "execute", "plan"]
