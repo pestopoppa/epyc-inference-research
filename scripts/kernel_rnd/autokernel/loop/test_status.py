@@ -27,6 +27,43 @@ def _outcomes():
 
 class Write(unittest.TestCase):
 
+    def test_stagnation_is_per_target_observe_only_telemetry(self):
+        outcomes = [
+            {"status": "kept", "effect_fraction": 0.01},
+            {"status": "measured_null", "effect_fraction": 0.005},
+            {"status": "measured_null", "effect_fraction": 0.008},
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            status.write(Path(tmp), state="running", epoch="e" * 64,
+                         campaign_id="ak-loop", anchor_commit="a" * 40,
+                         surface="tg128", pairs=5, noise_floor_pct=1.0,
+                         model="glm", target={"target_id": "glm-cpu"},
+                         outcomes=outcomes)
+            signal = status.read(Path(tmp))["stagnation"]
+        self.assertEqual(signal["mode"], "observe_only")
+        self.assertEqual(signal["target_id"], "glm-cpu")
+        self.assertEqual(signal["consecutive_measured_nulls"], 2)
+        self.assertEqual(signal["best_effect_slope_per_measurement"], 0.0)
+        self.assertEqual(signal["measured_points"], 3)
+
+    def test_stagnation_does_not_treat_refusals_as_zero_effects(self):
+        signal = status.stagnation_signal([
+            {"status": "kept", "effect_fraction": 0.01},
+            {"status": "refused_at_formation"},
+        ])
+        self.assertEqual(signal["measured_points"], 1)
+        self.assertIsNone(signal["best_effect_slope_per_measurement"])
+        self.assertEqual(signal["consecutive_measured_nulls"], 0)
+
+    def test_trailing_slope_retains_the_earlier_best(self):
+        signal = status.stagnation_signal([
+            {"status": "kept", "effect_fraction": 0.10},
+            {"status": "measured_null", "effect_fraction": 0.01},
+            {"status": "measured_null", "effect_fraction": 0.02},
+        ], window=2)
+        self.assertEqual(signal["measured_points"], 2)
+        self.assertEqual(signal["best_effect_slope_per_measurement"], 0.0)
+
     def test_it_counts_every_disposition_not_just_the_wins(self):
         """A board that shows only keeps is how 0 promotions looked like progress."""
         with tempfile.TemporaryDirectory() as tmp:

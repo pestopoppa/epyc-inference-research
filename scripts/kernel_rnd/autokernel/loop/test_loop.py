@@ -136,6 +136,9 @@ class TheLoopback(unittest.TestCase):
         self.assertEqual(planner.seen_hypothesis_rejections[1],
                          ["already measured null in epoch 4de6"])
         self.assertEqual(outcome.hypothesis.mechanism_id, "akm-good")
+        self.assertEqual(outcome.hypothesis_round, 2)
+        self.assertEqual(outcome.patch_round, 1)
+        self.assertTrue(outcome.prior_rejection_prompt)
         self.assertEqual(committed["head"], "abc1234")
 
     def test_pass_two_rejection_reaches_the_planner_and_leaves_the_hypothesis_alone(self):
@@ -150,6 +153,16 @@ class TheLoopback(unittest.TestCase):
         # A bad patch is not evidence against the idea: one hypothesis, reproposed
         # zero times.
         self.assertEqual(planner.proposals, 1)
+        self.assertEqual(outcome.hypothesis_round, 1)
+        self.assertEqual(outcome.patch_round, 2)
+        self.assertTrue(outcome.prior_rejection_prompt)
+
+    def test_first_round_outcome_records_no_prior_rejection_prompt(self):
+        outcome, _ = _run(_Planner(), _Critic([], []))
+        row = outcome.to_attempt()
+        self.assertEqual(row["hypothesis_round"], 1)
+        self.assertEqual(row["patch_round"], 1)
+        self.assertFalse(row["prior_rejection_prompt"])
 
     def test_a_gate_failure_loops_back_with_the_toolchain_message(self):
         planner = _Planner()

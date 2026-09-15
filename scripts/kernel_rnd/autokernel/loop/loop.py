@@ -205,6 +205,11 @@ class Outcome:
     prior_epoch: str | None = None
     refusal_gate: str | None = None
     candidate_diff_sha256: str | None = None
+    # Observe-only planner telemetry.  These fields describe the formation path
+    # which produced the outcome; they do not alter either budget or selection.
+    hypothesis_round: int = 0
+    patch_round: int = 0
+    prior_rejection_prompt: bool = False
 
     def to_attempt(self) -> dict:
         row = {"status": self.status, "turn_recorded_at": _now()}
@@ -229,6 +234,11 @@ class Outcome:
                     "prior_effect", "prior_epoch", "refusal_gate", "candidate_diff_sha256"):
             if getattr(self, key) is not None:
                 row[key] = getattr(self, key)
+        row.update({
+            "hypothesis_round": self.hypothesis_round,
+            "patch_round": self.patch_round,
+            "prior_rejection_prompt": self.prior_rejection_prompt,
+        })
         return row
 
 
@@ -301,9 +311,21 @@ def iterate(*, planner: Planner, critic: Critic,
     """
     working = dict(context)
     hypothesis_reasons: list[str] = []
+    round_telemetry = {
+        "hypothesis_round": 0,
+        "patch_round": 0,
+        "prior_rejection_prompt": False,
+    }
+
+    def observed(outcome: Outcome) -> Outcome:
+        outcome.hypothesis_round = int(round_telemetry["hypothesis_round"])
+        outcome.patch_round = int(round_telemetry["patch_round"])
+        outcome.prior_rejection_prompt = bool(
+            round_telemetry["prior_rejection_prompt"])
+        return outcome
 
     try:
-        return _iterate(planner=planner, critic=critic, working=working,
+        return observed(_iterate(planner=planner, critic=critic, working=working,
                         hypothesis_reasons=hypothesis_reasons, measure=measure,
                         gate=gate, commit=commit,
                         hypothesis_rounds=hypothesis_rounds,
@@ -314,17 +336,18 @@ def iterate(*, planner: Planner, critic: Critic,
                         accumulate_valid_positive=accumulate_valid_positive,
                         validate_candidate=validate_candidate or (lambda _h, _p: None),
                         formation_guard=formation_guard or (lambda _h, _c: None),
-                        reserve_candidate=reserve_candidate)
+                        reserve_candidate=reserve_candidate,
+                        round_telemetry=round_telemetry))
     except TailRefused as exc:
         # The candidate was formed and never measured. Carry the hypothesis: the
         # patch may well still help against the champion that displaced it, and the
         # planner is told to look at these FIRST.
-        return Outcome("superseded", getattr(exc, "hypothesis", None), [str(exc)])
+        return observed(Outcome("superseded", getattr(exc, "hypothesis", None), [str(exc)]))
     except ActorTransient as exc:
         # The provider failed, not the science. This ends the ITERATION and is
         # recorded as such; the run continues, and a streak becomes visible in
         # experiments.md rather than taking the campaign down with it.
-        return Outcome("planner_transient", None, [str(exc)])
+        return observed(Outcome("planner_transient", None, [str(exc)]))
     except bench.BenchFailed as exc:
         # The INSTRUMENT failed, not the science, and it gets the same treatment for
         # the same reason. Run 12 died on iteration 1 because `llama-bench` was
@@ -336,7 +359,7 @@ def iterate(*, planner: Planner, critic: Critic,
         # Recorded distinctly from a provider transient: "the benchmark could not be
         # taken" is a different fact from "the actor would not answer", and merging
         # them would hide an instrument failing behind an API being flaky.
-        return Outcome("bench_failed", None, [str(exc)])
+        return observed(Outcome("bench_failed", None, [str(exc)]))
 
 
 def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, commit,
@@ -346,20 +369,25 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
              accumulate_valid_positive=False,
              validate_candidate=lambda _hypothesis, _paths: None,
              formation_guard=lambda _hypothesis, _context: None,
-             reserve_candidate=None) -> Outcome:
+             reserve_candidate=None, round_telemetry=None) -> Outcome:
     last_proposed: Hypothesis | None = None
+    round_telemetry = round_telemetry if round_telemetry is not None else {}
 
     def stopped() -> Outcome:
         # Names whatever was in flight, exactly as a refusal row must.
         return Outcome("stopped_mid_formation", last_proposed,
                        [STOPPED_MID_FORMATION])
 
-    for _ in range(hypothesis_rounds):
+    for hypothesis_index in range(hypothesis_rounds):
         # Polled BEFORE each actor call, never after: the whole point is that no
         # further multi-minute call is drawn once the run has been told to stop.
         if should_abandon():
             return stopped()
         working["prior_hypothesis_rejections"] = list(hypothesis_reasons)
+        round_telemetry["hypothesis_round"] = hypothesis_index + 1
+        round_telemetry["patch_round"] = 0
+        if hypothesis_reasons:
+            round_telemetry["prior_rejection_prompt"] = True
         on_step("proposing a hypothesis")
         hypothesis = planner.propose(working)
         if isinstance(hypothesis, Abstain):
@@ -395,10 +423,13 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                 continue
 
         patch_reasons: list[str] = []
-        for _ in range(1 if hypothesis.runtime_pair is not None else patch_rounds):
+        for patch_index in range(1 if hypothesis.runtime_pair is not None else patch_rounds):
             if should_abandon():
                 return stopped()
             working["prior_patch_rejections"] = list(patch_reasons)
+            round_telemetry["patch_round"] = patch_index + 1
+            if patch_reasons:
+                round_telemetry["prior_rejection_prompt"] = True
             paths = ()
             integrity_screen = None
             if hypothesis.runtime_pair is None:
