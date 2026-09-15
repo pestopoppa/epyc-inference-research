@@ -406,9 +406,24 @@ class ExperimentStore:
             placeholders = ",".join("?" for _ in statuses)
             predicate = f" WHERE status {'NOT IN' if exclude_statuses else 'IN'} ({placeholders})"
             parameters.extend(statuses)
-        rows = self._connection.execute(
-            f"SELECT {projection} FROM experiments{predicate} ORDER BY recorded_at DESC, rowid DESC LIMIT ?",
-            (*parameters, pool)).fetchall()
+        if include_source_scope:
+            # Limit on scalar columns before touching payload overflow pages.  Some
+            # lifecycle records are tens of MiB, and projecting length()/JSON while
+            # SQLite builds the recency sorter defeats the bounded read deadline even
+            # though those rows will not survive LIMIT.
+            query = (
+                "WITH selected AS MATERIALIZED ("
+                f"SELECT rowid FROM experiments{predicate} "
+                "ORDER BY recorded_at DESC, rowid DESC LIMIT ?"
+                ") "
+                f"SELECT {projection} FROM experiments "
+                "WHERE rowid IN (SELECT rowid FROM selected) "
+                "ORDER BY recorded_at DESC, rowid DESC"
+            )
+        else:
+            query = (f"SELECT {projection} FROM experiments{predicate} "
+                     "ORDER BY recorded_at DESC, rowid DESC LIMIT ?")
+        rows = self._connection.execute(query, (*parameters, pool)).fetchall()
         recalled = []
         for row in rows:
             same_epoch = row["epoch_sha256"] == epoch
