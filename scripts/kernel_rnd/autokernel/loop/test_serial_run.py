@@ -1109,6 +1109,26 @@ def test_required_source_validation_uses_production_and_prior_keep_authors():
     assert state["required_source_validation"] is None
 
 
+def test_failed_required_source_validation_refuses_instead_of_warning_only():
+    aggregate = {
+        "schema": "epyc.autokernel.required_source_validation.v1",
+        "disposition": "failed",
+        "rows": [
+            {"selected_id": "prod", "disposition": "failed"},
+            {"selected_id": "prior-author", "disposition": "passed"},
+        ],
+    }
+    state = {"required_source_validation": None}
+
+    with mock.patch.object(sr, "_required_source_validation", return_value=aggregate), \
+            pytest.raises(sr.SerialRefused,
+                          match="required source validation failed.*prod"):
+        sr._refresh_required_source_validation(state, [])
+
+    # The refusal is observable controller state, not a discarded warning.
+    assert state["required_source_validation"] is aggregate
+
+
 def test_pending_source_validation_skips_nonproduction_authoring_target():
     targets = [["--target-id", "author"], ["--target-id", "prod"]]
     identities = {

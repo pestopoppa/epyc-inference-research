@@ -1279,7 +1279,14 @@ def _required_source_validation(state, targets):
 
 
 def _refresh_required_source_validation(state, targets):
-    state["required_source_validation"] = _required_source_validation(state, targets)
+    aggregate = _required_source_validation(state, targets)
+    state["required_source_validation"] = aggregate
+    if isinstance(aggregate, dict) and aggregate.get("disposition") == "failed":
+        failed = [row.get("selected_id", "unknown") for row in aggregate.get("rows", ())
+                  if row.get("disposition") == "failed"]
+        detail = ", ".join(failed) if failed else "unknown target"
+        raise SerialRefused(
+            f"required source validation failed for current source tip: {detail}")
 
 
 def _pending_source_loo(state, targets):
