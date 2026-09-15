@@ -204,6 +204,7 @@ class Outcome:
     prior_effect: float | None = None
     prior_epoch: str | None = None
     refusal_gate: str | None = None
+    candidate_diff_sha256: str | None = None
 
     def to_attempt(self) -> dict:
         row = {"status": self.status, "turn_recorded_at": _now()}
@@ -225,7 +226,7 @@ class Outcome:
         if self.integrity_screen is not None:
             row["integrity_screen"] = self.integrity_screen
         for key in ("attempt_identity", "exact_repeat_dispatch_count", "duplicate_of",
-                    "prior_effect", "prior_epoch", "refusal_gate"):
+                    "prior_effect", "prior_epoch", "refusal_gate", "candidate_diff_sha256"):
             if getattr(self, key) is not None:
                 row[key] = getattr(self, key)
         return row

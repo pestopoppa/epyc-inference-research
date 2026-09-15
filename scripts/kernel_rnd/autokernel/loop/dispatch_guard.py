@@ -51,6 +51,7 @@ def attempt_identity(*, diff: bytes | str, champion: str,
 class Reservation:
     identity: str
     dispatch_count: int
+    candidate_diff_sha256: str | None = None
 
 
 class Registry:
@@ -121,6 +122,14 @@ class Registry:
 def characterised_reason(hypothesis, context: Mapping[str, Any]) -> str | None:
     """Refuse three comparable same-epoch outcomes by structural facets, never prose."""
     epoch = context.get("epoch_sha256")
+    regime = context.get("current_regime")
+
+    def same_regime(row: Mapping[str, Any]) -> bool:
+        if regime is None:  # compatibility for explicit synthetic/unit contexts
+            return True
+        prior = row.get("research_scope")
+        return isinstance(prior, Mapping) and all(prior.get(key) == value
+            for key, value in regime.items())
     query, _ = do_not_repeat.structural_target({
         "mechanism": hypothesis.mechanism_id, "symbol": hypothesis.target_symbol,
         "file": hypothesis.target_surface})
@@ -130,16 +139,80 @@ def characterised_reason(hypothesis, context: Mapping[str, Any]) -> str | None:
             "mechanism": row.get("mechanism_id"), "symbol": row.get("target_symbol"),
             "file": row.get("target_surface")})
         agrees, _why = target.agreement(query)
-        if (agrees and row.get("epoch_sha256") == epoch
+        if (agrees and row.get("epoch_sha256") == epoch and same_regime(row)
                 and row.get("comparable_measurement", True)
                 and row.get("status") in ANSWER_STATUSES):
             matches.append(row)
     if len(matches) < 3:
         return None
+    # A retained, host-digested candidate can reopen a characterised mechanism only
+    # when its exact diff differs from every comparable answer.  The digest is a
+    # structured archived field (never statement prose); absent provenance cannot
+    # claim a changed diff and therefore fails closed.
+    nonanswers = []
+    for row in context.get("prior_experiments") or ():
+        target, _ = do_not_repeat.structural_target({
+            "mechanism": row.get("mechanism_id"), "symbol": row.get("target_symbol"),
+            "file": row.get("target_surface")})
+        agrees, _why = target.agreement(query)
+        if (agrees and row.get("epoch_sha256") == epoch and same_regime(row)
+                and row.get("status") not in ANSWER_STATUSES
+                and row.get("candidate_diff_sha256")):
+            nonanswers.append(row["candidate_diff_sha256"])
+    candidate_diff = nonanswers[0] if len(set(nonanswers)) == 1 else None
+    prior_diffs = {row.get("candidate_diff_sha256") for row in matches
+                   if row.get("candidate_diff_sha256") is not None}
+    if candidate_diff is not None and prior_diffs and candidate_diff not in prior_diffs:
+        return None
+
+    # Operator unblocks are content-addressed amendments scoped to this exact gate,
+    # epoch and structural target.  Merely putting truthy prose in context is not an
+    # authorization.  The producer records the canonical body digest out of band;
+    # checking it here makes the amendment replayable after a fresh process restart.
+    for artifact in context.get("operator_unblock_artifacts") or ():
+        if not isinstance(artifact, Mapping):
+            continue
+        body = {key: artifact.get(key) for key in (
+            "schema", "gate", "epoch_sha256", "mechanism_id",
+            "target_surface", "target_symbol", "candidate_diff_sha256")}
+        digest = hashlib.sha256(json.dumps(
+            body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        if (artifact.get("sha256") == digest
+                and body == {"schema": "epyc.autokernel.operator_unblock.v1",
+                             "gate": "do_not_repeat", "epoch_sha256": epoch,
+                             "mechanism_id": hypothesis.mechanism_id,
+                             "target_surface": hypothesis.target_surface,
+                             "target_symbol": hypothesis.target_symbol,
+                             "candidate_diff_sha256": candidate_diff}):
+            return None
     return (f"do_not_repeat characterised {hypothesis.mechanism_id} on "
             f"{hypothesis.target_surface}::{hypothesis.target_symbol} with "
             f"{len(matches)} comparable same-epoch answers")
 
 
+def load_operator_unblocks(paths: Sequence[Path]) -> tuple[Mapping[str, Any], ...]:
+    """Load content-addressed human amendments; any supplied bad record fails closed."""
+    loaded = []
+    for path in paths:
+        try:
+            artifact = json.loads(Path(path).read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            raise DispatchRefused(f"operator unblock artifact unreadable: {path}: {exc}") from exc
+        if not isinstance(artifact, dict):
+            raise DispatchRefused(f"operator unblock artifact is not an object: {path}")
+        body = {key: artifact.get(key) for key in (
+            "schema", "gate", "epoch_sha256", "mechanism_id",
+            "target_surface", "target_symbol", "candidate_diff_sha256")}
+        digest = hashlib.sha256(json.dumps(
+            body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        if (artifact.get("schema") != "epyc.autokernel.operator_unblock.v1"
+                or artifact.get("gate") != "do_not_repeat"
+                or artifact.get("sha256") != digest):
+            raise DispatchRefused(f"operator unblock artifact failed schema/digest: {path}")
+        loaded.append(artifact)
+    return tuple(loaded)
+
+
 __all__ = ["ANSWER_STATUSES", "DispatchRefused", "Registry", "Reservation",
-           "attempt_identity", "characterised_reason", "normalized_diff"]
+           "attempt_identity", "characterised_reason", "load_operator_unblocks",
+           "normalized_diff"]

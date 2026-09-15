@@ -556,6 +556,8 @@ def main(argv: list[str] | None = None) -> int:
                              "instead of recency, cross-epoch magnitudes redacted")
     parser.add_argument("--shared-history-root", type=Path, action="append", default=[],
                         help="read-only prior mechanism store; historical outcomes do not transfer")
+    parser.add_argument("--operator-unblock-artifact", type=Path, action="append", default=[],
+                        help="content-addressed operator amendment reopening one do_not_repeat match")
     # ---- concurrency. EVERY run is pooled; --workers 1 is a one-lane pool. The
     # separate sequential path was deleted 2026-08-31 once the pool owned the
     # consecutive-error breaker -- two run paths were two things to drift.
@@ -578,6 +580,8 @@ def main(argv: list[str] | None = None) -> int:
                         default=pool.WORKER_BUILD_ROOT,
                         help="parent of the per-lane candidate build directories")
     args = parser.parse_args(argv)
+    operator_unblocks = dispatch_guard.load_operator_unblocks(
+        args.operator_unblock_artifact)
     if args.cpu_screen_scope or args.cpu_confirm_from:
         if (not args.cpu_serving_launch or not args.resolved_campaign or not args.out
                 or args.iterations != 1
@@ -1178,6 +1182,12 @@ def main(argv: list[str] | None = None) -> int:
             "kernel_hotspots": [row.to_dict() for row in hotspot_rows],
             **({"cpu_profile": dict(cpu_profile_observation)} if cpu_launch else {}),
             "prior_experiments": prior_experiments(args, epoch),
+            "current_regime": {
+                "model": str(args.model), "quant": census.dominant_quant,
+                "backend": "cpu" if cpu_launch else "gpu",
+                "build_recipe": recipe.to_dict(), "measurement_surface": args.surface},
+            **({"operator_unblock_artifacts": operator_unblocks}
+               if operator_unblocks else {}),
             **({"shared_prior_experiments": shared_history.recall(scope={
                 "model": str(args.model), "quant": census.dominant_quant,
                 "backend": "cpu" if cpu_launch else "gpu", "measurement_surface": args.surface})}
@@ -2187,6 +2197,8 @@ def main(argv: list[str] | None = None) -> int:
 
         def reserve_pooled(worker, _hypothesis, _paths):
             diff = _git(worker.worktree, "diff", "--no-ext-diff", "HEAD", "--")
+            diff_sha256 = hashlib.sha256(
+                dispatch_guard.normalized_diff(diff).encode()).hexdigest()
             identity = dispatch_guard.attempt_identity(
                 diff=diff, champion=current_anchor_commit[0],
                 cmake_defines=recipe.cmake_defines(),
@@ -2195,7 +2207,9 @@ def main(argv: list[str] | None = None) -> int:
                 model=str(args.model), surface=args.surface)
             registry = dispatch_guard.Registry(args.store)
             try:
-                return registry.reserve(identity)
+                reservation = registry.reserve(identity)
+                return dispatch_guard.Reservation(
+                    reservation.identity, reservation.dispatch_count, diff_sha256)
             finally:
                 registry.close()
 

@@ -312,6 +312,7 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
             if reservation is not None:
                 outcome.attempt_identity = reservation.identity
                 outcome.exact_repeat_dispatch_count = reservation.dispatch_count
+                outcome.candidate_diff_sha256 = reservation.candidate_diff_sha256
             keep(outcome)
 
     threads = [threading.Thread(target=lane, args=(w,), name=w.name, daemon=True)

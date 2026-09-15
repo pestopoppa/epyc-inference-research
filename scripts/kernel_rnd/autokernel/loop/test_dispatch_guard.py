@@ -1,4 +1,6 @@
 from pathlib import Path
+import hashlib
+import json
 import os
 import subprocess
 import sys
@@ -83,3 +85,113 @@ def test_characterised_gate_uses_facets_and_epoch_not_statement():
     assert "characterised" in D.characterised_reason(
         h, {"epoch_sha256": "e0", "prior_experiments": rows})
     assert D.characterised_reason(h, {"epoch_sha256": "e1", "prior_experiments": rows}) is None
+
+
+def test_characterised_gate_requires_same_recorded_regime():
+    regime = {"model": "m", "quant": "Q4_K", "backend": "gpu",
+              "build_recipe": {"id": "r"}, "measurement_surface": "tg128"}
+    h = Hypothesis("akm-x", "p", "f", "a.cu", "sym")
+    rows = [{"mechanism_id": "akm-x", "target_surface": "a.cu",
+             "target_symbol": "sym", "epoch_sha256": "e0",
+             "status": "measured_null", "research_scope": regime} for _ in range(3)]
+    context = {"epoch_sha256": "e0", "current_regime": regime,
+               "prior_experiments": rows}
+    assert "characterised" in D.characterised_reason(h, context)
+    context["current_regime"] = {**regime, "quant": "IQ2_XXS"}
+    assert D.characterised_reason(h, context) is None
+
+
+def test_characterised_gate_reopens_only_for_a_host_digested_changed_diff():
+    old = "1" * 64
+    rows = [{"mechanism_id": "akm-x", "target_surface": "a.cu",
+             "target_symbol": "sym", "candidate_diff_sha256": old,
+             "epoch_sha256": "e0", "status": "measured_null"} for _ in range(3)]
+    h = Hypothesis("akm-x", "same prose", "f", "a.cu", "sym")
+    context = {"epoch_sha256": "e0", "prior_experiments": rows}
+    assert "characterised" in D.characterised_reason(h, context)
+    context["prior_experiments"].append({
+        "mechanism_id": "akm-x", "target_surface": "a.cu", "target_symbol": "sym",
+        "candidate_diff_sha256": "2" * 64, "epoch_sha256": "e0",
+        "status": "superseded"})
+    assert D.characterised_reason(h, context) is None
+
+
+def test_characterised_gate_reopens_for_digest_bound_operator_artifact():
+    diff = "1" * 64
+    h = Hypothesis("akm-x", "p", "f", "a.cu", "sym")
+    rows = [{"mechanism_id": "akm-x", "target_surface": "a.cu",
+             "target_symbol": "sym", "candidate_diff_sha256": diff,
+             "epoch_sha256": "e0", "status": "measured_null"} for _ in range(3)]
+    body = {"schema": "epyc.autokernel.operator_unblock.v1",
+            "gate": "do_not_repeat", "epoch_sha256": "e0",
+            "mechanism_id": "akm-x", "target_surface": "a.cu",
+            "target_symbol": "sym", "candidate_diff_sha256": diff}
+    artifact = {**body, "sha256": hashlib.sha256(json.dumps(
+        body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()}
+    context = {"epoch_sha256": "e0", "prior_experiments": rows,
+               "operator_unblock_artifacts": [artifact]}
+    context["prior_experiments"].append({
+        "mechanism_id": "akm-x", "target_surface": "a.cu", "target_symbol": "sym",
+        "candidate_diff_sha256": diff, "epoch_sha256": "e0", "status": "superseded"})
+    assert D.characterised_reason(h, context) is None
+    context["operator_unblock_artifacts"][0]["target_symbol"] = "other"
+    assert "characterised" in D.characterised_reason(h, context)
+
+
+def test_operator_unblock_loader_is_digest_bound_and_fails_closed(tmp_path):
+    body = {"schema": "epyc.autokernel.operator_unblock.v1",
+            "gate": "do_not_repeat", "epoch_sha256": "e0",
+            "mechanism_id": "akm-x", "target_surface": "a.cu",
+            "target_symbol": "sym", "candidate_diff_sha256": None}
+    valid = {**body, "sha256": hashlib.sha256(json.dumps(
+        body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()}
+    path = tmp_path / "unblock.json"
+    path.write_text(json.dumps(valid))
+    assert D.load_operator_unblocks([path]) == (valid,)
+    path.write_text(json.dumps({**valid, "target_symbol": "tampered"}))
+    with pytest.raises(D.DispatchRefused, match="schema/digest"):
+        D.load_operator_unblocks([path])
+
+
+def test_characterised_reopen_context_round_trips_through_a_fresh_process(tmp_path):
+    """Epoch, changed-diff and operator amendment survive process-local state."""
+    old, changed = "1" * 64, "2" * 64
+    rows = [{"mechanism_id": "akm-x", "target_surface": "a.cu",
+             "target_symbol": "sym", "candidate_diff_sha256": old,
+             "epoch_sha256": "e0", "status": "measured_null"} for _ in range(3)]
+    body = {"schema": "epyc.autokernel.operator_unblock.v1",
+            "gate": "do_not_repeat", "epoch_sha256": "e0",
+            "mechanism_id": "akm-x", "target_surface": "a.cu",
+            "target_symbol": "sym", "candidate_diff_sha256": old}
+    artifact = {**body, "sha256": hashlib.sha256(json.dumps(
+        body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()}
+    cases = [
+        {"epoch_sha256": "e1", "prior_experiments": rows},
+        {"epoch_sha256": "e0", "prior_experiments": rows + [{
+            "mechanism_id": "akm-x", "target_surface": "a.cu", "target_symbol": "sym",
+            "candidate_diff_sha256": changed, "epoch_sha256": "e0", "status": "superseded"}]},
+        {"epoch_sha256": "e0", "prior_experiments": rows + [{
+            "mechanism_id": "akm-x", "target_surface": "a.cu", "target_symbol": "sym",
+            "candidate_diff_sha256": old, "epoch_sha256": "e0", "status": "superseded"}],
+         "operator_unblock_artifacts": [artifact]},
+    ]
+    path = tmp_path / "contexts.json"
+    path.write_text(json.dumps(cases))
+    code = """
+import json, sys
+from pathlib import Path
+from autokernel.loop.dispatch_guard import characterised_reason
+from autokernel.loop.loop import Hypothesis
+out = []
+for context in json.loads(Path(sys.argv[1]).read_text()):
+    h = Hypothesis('akm-x', 'p', 'f', 'a.cu', 'sym')
+    out.append(characterised_reason(h, context))
+print(json.dumps(out))
+"""
+    package_root = str(Path(__file__).resolve().parents[2])
+    child_env = dict(os.environ)
+    child_env["PYTHONPATH"] = package_root + (
+        os.pathsep + child_env["PYTHONPATH"] if child_env.get("PYTHONPATH") else "")
+    completed = subprocess.run([sys.executable, "-c", code, str(path)],
+                               check=True, capture_output=True, text=True, env=child_env)
+    assert json.loads(completed.stdout) == [None, None, None]
