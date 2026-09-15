@@ -1,5 +1,5 @@
 from pathlib import Path
-import sqlite3
+import os
 import subprocess
 import sys
 import tempfile
@@ -29,7 +29,11 @@ def test_answered_identity_refuses_after_fresh_process_round_trip():
             "from pathlib import Path; from autokernel.loop.dispatch_guard import Registry; "
             f"r=Registry(Path({tmp!r})); r.reserve({identity()!r}); "
             f"r.finish({identity()!r},status='measured_null',effect=-.01,epoch='e0'); r.close()")
-        subprocess.run([sys.executable, "-c", code], check=True)
+        package_root = str(Path(__file__).resolve().parents[2])
+        child_env = dict(os.environ)
+        child_env["PYTHONPATH"] = package_root + (
+            os.pathsep + child_env["PYTHONPATH"] if child_env.get("PYTHONPATH") else "")
+        subprocess.run([sys.executable, "-c", code], check=True, env=child_env)
         with pytest.raises(D.DispatchRefused) as caught:
             D.Registry(Path(tmp)).reserve(identity())
         assert caught.value.duplicate_of == identity()
