@@ -41,7 +41,7 @@ import subprocess
 import time
 from typing import Any, Mapping, Sequence
 
-from .loop import ActorTransient, Hypothesis, Review
+from .loop import Abstain, ActorTransient, Hypothesis, Review
 
 CODEX = "/usr/local/share/npm-global/bin/codex"
 CLAUDE = "/home/node/.local/bin/claude"
@@ -232,6 +232,15 @@ def _cpu_target(context: Mapping[str, Any]) -> bool:
     target = context.get("target")
     recipe = target.get("recipe") if isinstance(target, Mapping) else None
     return isinstance(recipe, Mapping) and recipe.get("backend") == "cpu"
+
+
+def _abstention(body: Mapping[str, Any]) -> Abstain | None:
+    if "abstain" not in body:
+        return None
+    reason = body["abstain"]
+    if not isinstance(reason, str) or not reason.strip():
+        raise ProviderTransient("planner abstention is missing a non-empty reason")
+    return Abstain(reason)
 
 
 def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
@@ -537,7 +546,9 @@ state a falsifier that could actually fail. The loop itself owns source inspecti
 authoring, correctness gates and matched A/B measurement. Do not make an unsupported \
 trace or counter a prerequisite that this loop cannot collect. After a rejection for \
 missing evidence, either use an available diagnostic named in the context or choose \
-the smallest source-consistent change whose payoff the existing matched A/B can test."""
+the smallest source-consistent change whose payoff the existing matched A/B can test. \
+If no honest, feasible hypothesis satisfies these constraints, abstaining is a correct \
+science result; reply instead with {{"abstain": "<specific reason>"}}."""
 
 
 def _runtime_pair(treatment, context, mechanism_id):
@@ -586,7 +597,7 @@ class AgentPlanner:
     timeout_s: int = DEFAULT_TIMEOUT_S
     transient_streak: int = 0
 
-    def propose(self, context: Mapping[str, Any]) -> Hypothesis:
+    def propose(self, context: Mapping[str, Any]) -> Hypothesis | Abstain:
         cpu = _cpu_target(context)
         prompt = _HYPOTHESIS_TASK.format(
             context=render_context(context),
@@ -612,6 +623,9 @@ class AgentPlanner:
                                timeout_s=self.timeout_s, backend=self.backend))
         self.transient_streak = streak
         body = _extract_json(raw)
+        abstention = _abstention(body)
+        if abstention is not None:
+            return abstention
         missing = {"mechanism_id", "statement", "falsifier", "target_surface",
                    "target_symbol"} - set(body)
         if missing:
@@ -630,7 +644,7 @@ class AgentPlanner:
                           if "runtime_treatment" in body else None))
 
     def author(self, hypothesis: Hypothesis,
-               context: Mapping[str, Any]) -> tuple[str, ...]:
+               context: Mapping[str, Any]) -> tuple[str, ...] | Abstain:
         cpu = _cpu_target(context)
         resource = "selected CPU resources" if cpu else "GPU"
         reply = (json.dumps({"paths": [hypothesis.target_surface]}) if cpu else
@@ -649,12 +663,19 @@ class AgentPlanner:
             "session and it will not be used. Make the edit and stop.\n\n"
             "Then reply with ONE json object naming the files you actually changed, "
             "using their real paths:\n"
-            f"{reply}")
+            f"{reply}\n"
+            "If the hypothesis cannot be implemented honestly within these constraints, "
+            "abstaining is a correct science result. Make no edits and reply instead with:\n"
+            '{"abstain": "<specific reason the hypothesis is infeasible>"}')
         raw, streak = _with_backoff(
             lambda: _run_agent(prompt, workspace=self.workspace,
                                timeout_s=self.timeout_s, backend=self.backend))
         self.transient_streak = streak
-        paths = _extract_json(raw).get("paths")
+        body = _extract_json(raw)
+        abstention = _abstention(body)
+        if abstention is not None:
+            return abstention
+        paths = body.get("paths")
         if not isinstance(paths, list) or not paths:
             raise ProviderTransient("authoring returned no changed paths")
         if any(_is_placeholder(item) for item in paths):

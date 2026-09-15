@@ -220,12 +220,51 @@ class PlannerContract(unittest.TestCase):
                 planner.propose({})
         self.assertIn("missing", str(caught.exception))
 
+    def test_proposal_can_abstain_with_a_reason(self):
+        planner = actors.AgentPlanner(workspace=Path("/tmp"))
+        with mock.patch.object(actors, "_run_agent",
+                               return_value='{"abstain": "profile has no reachable hot path"}'):
+            got = planner.propose({})
+        self.assertIsInstance(got, actors.Abstain)
+        self.assertEqual(got.reason, "profile has no reachable hot path")
+
+    def test_reasonless_abstention_is_a_malformed_provider_reply(self):
+        planner = actors.AgentPlanner(workspace=Path("/tmp"))
+        with mock.patch.object(actors, "_run_agent", return_value='{"abstain": ""}'):
+            with self.assertRaises(actors.ProviderTransient):
+                planner.propose({})
+
     def test_authoring_with_no_paths_is_a_transient(self):
         planner = actors.AgentPlanner(workspace=Path("/tmp"))
         with mock.patch.object(actors, "_run_agent", return_value='{"paths": []}'):
             with self.assertRaises(actors.ProviderTransient):
                 planner.author(
                     Hypothesis("akm-x", "s", "f", "a.cu", "sym"), {})
+
+    def test_authoring_can_abstain_without_dirty_path_check(self):
+        planner = actors.AgentPlanner(workspace=Path("/tmp"))
+        with mock.patch.object(actors, "_run_agent",
+                               return_value='{"abstain": "required API is unavailable"}'), \
+                mock.patch.object(actors.subprocess, "run") as status:
+            got = planner.author(Hypothesis("akm-x", "s", "f", "a.cu", "sym"), {})
+        self.assertIsInstance(got, actors.Abstain)
+        status.assert_not_called()
+
+    def test_author_prompt_names_abstention_as_a_correct_result(self):
+        planner = actors.AgentPlanner(workspace=Path("/tmp"))
+        with mock.patch.object(actors, "_run_agent",
+                               return_value='{"abstain": "infeasible"}') as run:
+            planner.author(Hypothesis("akm-x", "s", "f", "a.cu", "sym"), {})
+        prompt = run.call_args.args[0]
+        self.assertIn("abstaining is a correct science result", prompt)
+        self.assertIn('{"abstain":', prompt)
+
+    def test_abstention_history_feeds_the_next_planner_context(self):
+        text = actors.render_context({"prior_experiments": [{
+            "status": "abstained", "mechanism_id": "akm-infeasible",
+            "refusal_reason": "required primitive is absent"}]})
+        self.assertIn("`akm-infeasible` → abstained", text)
+        self.assertIn("required primitive is absent", text)
 
 
 class CriticContract(unittest.TestCase):

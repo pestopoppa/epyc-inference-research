@@ -107,6 +107,17 @@ class ActorTransient(RuntimeError):
     """
 
 
+@dataclass(frozen=True)
+class Abstain:
+    """A planner's truthful conclusion that this turn has no feasible answer."""
+
+    reason: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.reason, str) or not self.reason.strip():
+            raise ValueError("a planner abstention must carry a reason")
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -151,9 +162,9 @@ class Review:
 
 
 class Planner(Protocol):
-    def propose(self, context: Mapping[str, Any]) -> Hypothesis: ...
+    def propose(self, context: Mapping[str, Any]) -> Hypothesis | Abstain: ...
     def author(self, hypothesis: Hypothesis,
-               context: Mapping[str, Any]) -> tuple[str, ...]: ...
+               context: Mapping[str, Any]) -> tuple[str, ...] | Abstain: ...
 
 
 class Critic(Protocol):
@@ -317,6 +328,8 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
         working["prior_hypothesis_rejections"] = list(hypothesis_reasons)
         on_step("proposing a hypothesis")
         hypothesis = planner.propose(working)
+        if isinstance(hypothesis, Abstain):
+            return Outcome("abstained", None, [hypothesis.reason])
         last_proposed = hypothesis
 
         # ---- CRITIC PASS 1: the hypothesis, before any patch exists ----------
@@ -352,6 +365,8 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             if hypothesis.runtime_pair is None:
                 on_step("authoring the patch")
                 paths = planner.author(hypothesis, working)
+                if isinstance(paths, Abstain):
+                    return Outcome("abstained", hypothesis, [paths.reason])
                 # A declared path list is a claim, not an isolation boundary.  The
                 # injected host check resolves the full worktree before review/build.
                 validate_candidate(hypothesis, paths)
@@ -488,6 +503,6 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
 # `archive.record` as `run.py`'s injected `record`. `iterate` is the whole of this
 # module's control flow now, and the pool is its only driver.
 
-__all__ = ["ActorTransient", "ConfirmVetoed", "TailRefused", "RunAborted", "MeasurementInvalid", "Critic",
+__all__ = ["Abstain", "ActorTransient", "ConfirmVetoed", "TailRefused", "RunAborted", "MeasurementInvalid", "Critic",
            "HYPOTHESIS_ROUNDS", "Hypothesis", "Outcome", "PATCH_ROUNDS",
            "Planner", "Review", "STOPPED_MID_FORMATION", "iterate"]

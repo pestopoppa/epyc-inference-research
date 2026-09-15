@@ -158,6 +158,32 @@ class TheLoopback(unittest.TestCase):
         self.assertEqual(outcome.status, "refused_at_formation")
         self.assertIn("build failed: undefined symbol", " ".join(outcome.reasons))
 
+    def test_proposal_abstention_is_a_science_outcome_not_a_transient(self):
+        planner = mock.Mock()
+        planner.propose.return_value = loop.Abstain("no supported mechanism remains")
+        outcome, _ = _run(planner, _Critic([], []))
+        self.assertEqual(outcome.status, "abstained")
+        self.assertEqual(outcome.reasons, ["no supported mechanism remains"])
+        self.assertIsNone(outcome.hypothesis)
+        planner.author.assert_not_called()
+
+    def test_author_abstention_keeps_the_hypothesis_and_skips_all_judges(self):
+        planner = _Planner()
+        planner.author = mock.Mock(return_value=loop.Abstain("edit would violate scope"))
+        critic = _Critic([], [])
+        measure = mock.Mock(side_effect=AssertionError("abstention must not measure"))
+        gate = mock.Mock(side_effect=AssertionError("abstention must not build"))
+        outcome = loop.iterate(planner=planner, critic=critic, context={},
+                               measure=measure, gate=gate, commit=mock.Mock())
+        self.assertEqual(outcome.status, "abstained")
+        self.assertEqual(outcome.hypothesis.mechanism_id, "akm-q5-bit-deposit")
+        self.assertEqual(outcome.reasons, ["edit would violate scope"])
+        self.assertEqual(outcome.to_attempt()["status"], "abstained")
+        self.assertEqual(outcome.to_attempt()["reason"], "edit would violate scope")
+        self.assertEqual(critic.patch_verdicts, [])
+        gate.assert_not_called()
+        measure.assert_not_called()
+
 
 class BudgetsAreIndependent(unittest.TestCase):
     """critic_revise must never be charged to the hypothesis's counter."""

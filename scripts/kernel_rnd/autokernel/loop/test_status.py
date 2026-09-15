@@ -21,6 +21,7 @@ def _outcomes():
         {"status": "measured_null", "mechanism_id": "akm-b", "effect_fraction": 0.002},
         {"status": "planner_transient", "reason": "actor exited 1"},
         {"status": "refused_at_formation", "reason": "already measured"},
+        {"status": "abstained", "reason": "no feasible honest edit"},
     ]
 
 
@@ -36,9 +37,10 @@ class Write(unittest.TestCase):
             body = status.read(Path(tmp))
         self.assertEqual(body["dispositions"], {
             "kept": 1, "measured_null": 1, "planner_transient": 1,
-            "refused_at_formation": 1})
-        self.assertEqual(body["iterations_done"], 4)
+            "refused_at_formation": 1, "abstained": 1})
+        self.assertEqual(body["iterations_done"], 5)
         self.assertEqual(body["measurements_reached"], 2)
+        self.assertAlmostEqual(body["abstain_rate"], 0.2)
 
     def test_the_noise_floor_is_on_the_surface(self):
         """The bar a candidate must clear, and it must be visible."""
@@ -55,7 +57,7 @@ class Write(unittest.TestCase):
                          surface="pp512", pairs=5, noise_floor_pct=1.0,
                          outcomes=_outcomes())
             recent = status.read(Path(tmp))["recent"]
-        self.assertEqual(recent[0]["status"], "refused_at_formation")
+        self.assertEqual(recent[0]["status"], "abstained")
         self.assertIn("planner_transient", [row["status"] for row in recent])
 
     def test_the_write_is_atomic(self):

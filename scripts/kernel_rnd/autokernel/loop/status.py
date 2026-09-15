@@ -191,6 +191,10 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
         "iterations_done": len(outcomes),
         "measurements_reached": measured,
         "dispositions": dict(sorted(counts.items())),
+        # A truthful no-answer is a science outcome, not actor failure. Keep its
+        # run-level prevalence visible beside the disposition/rejection telemetry.
+        "abstain_rate": (counts.get("abstained", 0) / len(outcomes)
+                         if outcomes else 0.0),
         "champion_head": champion_head,
         # The last promotion A/A: did the binary in the anchor slot prove to BE the
         # champion. `null` means no promotion has happened on this run, which is a
