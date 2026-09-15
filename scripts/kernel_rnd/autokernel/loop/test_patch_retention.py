@@ -116,7 +116,7 @@ def test_actual_run_stop_before_gate_preserves_patch_before_next_owned_reset():
                 return original_main(argv)
 
         def checked_reset(worker, **kwargs):
-            if (worker.worktree / "kernel.c").read_text() == "patched\n":
+            if (worker.worktree / "ggml/src/kernel.c").read_text() == "patched\n":
                 paths = list((fixture.store / "patches").glob("interrupted.lane0.*.patch"))
                 assert paths, "original dirty source must be retained before reset"
                 metadata = json.loads(paths[0].with_suffix(".json").read_text())
@@ -129,7 +129,7 @@ def test_actual_run_stop_before_gate_preserves_patch_before_next_owned_reset():
                 mock.patch.object(pool, "reset_to_champion", checked_reset):
             rc, builds, _, _, log = fixture._run_one_keep()
             assert rc == 0 and not builds and "stopped_mid_formation" in log
-            assert (fixture.root / "lane0/kernel.c").read_text() == "patched\n"
+            assert (fixture.root / "lane0/ggml/src/kernel.c").read_text() == "patched\n"
             (fixture.store / "STOP").unlink()
             rc, builds, _, _, log = fixture._run_one_keep()
             assert rc == 0 and builds and "kept" in log
