@@ -16,6 +16,8 @@ import subprocess
 import tempfile
 from typing import Iterable, Sequence
 
+from ..execution import reward_hack_scan
+
 
 class IntegrityRefused(RuntimeError):
     """A durable science refusal: the candidate must not reach a build."""
@@ -134,7 +136,7 @@ def _protected(path: str) -> bool:
             or PurePosixPath(path).name == "CMakeLists.txt")
 
 
-def _candidate_tree(worktree: Path) -> str:
+def candidate_tree(worktree: Path) -> str:
     """Materialize the full working tree in a temporary index without changing it."""
     fd, name = tempfile.mkstemp(prefix="autokernel-integrity-index-")
     os.close(fd)
@@ -270,7 +272,22 @@ def validate_candidate(worktree: Path, declared_paths: Sequence[str], *,
                if not (path.startswith("ggml/src/") or path.startswith("src/"))]
     if outside:
         raise IntegrityRefused("outside_kernel_allowlist", repr(outside))
-    return CandidateIntegrity(dirty, _candidate_tree(worktree),
+    diff = _git(worktree, "diff", "--no-ext-diff", "HEAD", "--").decode(
+        "utf-8", "replace")
+    scan = reward_hack_scan.scan_unified_diff(diff)
+    findings = tuple(finding for value in (
+        scan.environment_probe_findings,
+        scan.timing_dependent_branch_findings,
+        scan.stream_creation_findings,
+        scan.async_escape_findings,
+        scan.instrument_frame_findings,
+        scan.pointer_memoization_findings,
+        scan.capture_replay_findings,
+        scan.content_specialization_findings,
+    ) for finding in value)
+    if findings:
+        raise IntegrityRefused("reward_hack_scan", "; ".join(findings))
+    return CandidateIntegrity(dirty, candidate_tree(worktree),
                               screen_special_cases(worktree, oracle_shape=oracle_shape,
                                                    bench_shape=bench_shape))
 
@@ -285,7 +302,7 @@ def evidence_key(*, lane: str, attempt_id: str, base_commit: str,
 
 
 def assert_measured_tree(worktree: Path, expected_tree: str) -> None:
-    actual = _candidate_tree(worktree)
+    actual = candidate_tree(worktree)
     if actual != expected_tree:
         raise IntegrityRefused("measured_tree_changed",
                                f"measured={expected_tree} current={actual}")
