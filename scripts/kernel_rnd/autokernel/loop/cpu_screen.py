@@ -291,6 +291,26 @@ class RetainedPlanner:
         return tuple(self.candidate["paths"])
 
 
+class RetainedCritic:
+    """Admit only the exact candidate already reviewed during reduced screening."""
+
+    def __init__(self, candidate):
+        self.hypothesis = dict(candidate["hypothesis"])
+        self.paths = tuple(candidate["paths"])
+
+    def review_hypothesis(self, hypothesis, _context):
+        from .loop import Review
+        exact = hypothesis.to_dict() == self.hypothesis
+        return Review(exact, "" if exact else
+                      "full confirmation hypothesis differs from retained candidate")
+
+    def review_patch(self, hypothesis, paths, _context):
+        from .loop import Review
+        exact = hypothesis.to_dict() == self.hypothesis and tuple(paths) == self.paths
+        return Review(exact, "" if exact else
+                      "full confirmation patch paths differ from retained candidate")
+
+
 def preview_batch(original, prior, *, batch_iterations=1):
     """Read-only serial planning; a pending candidate outranks new work on its lane."""
     from . import campaign_cli, legacy_targets, serial_run

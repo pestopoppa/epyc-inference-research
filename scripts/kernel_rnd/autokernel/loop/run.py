@@ -2162,8 +2162,10 @@ def main(argv: list[str] | None = None) -> int:
                                    build_root=args.worker_build_root,
                                    execute=True),
             make_planner=make_planner,
-            make_critic=lambda worker: actors.AgentCritic(
-                workspace=worker.worktree, backend=critic_backend),
+            make_critic=lambda worker: (
+                cpu_screen.RetainedCritic(screen_confirmation)
+                if screen_confirmation else actors.AgentCritic(
+                    workspace=worker.worktree, backend=critic_backend)),
             build_context=build_context, make_gate=gate_for,
             make_measure=measure_for, record=record_pooled,
             iterations=(args.iterations or None), should_stop=should_stop,

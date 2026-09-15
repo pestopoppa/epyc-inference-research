@@ -8,12 +8,23 @@ from unittest import mock
 
 import pytest
 
-from . import campaign, cpu_profile, cpu_screen, gates, pool, resolved_recipe as rr
+from . import campaign, cpu_profile, cpu_screen, gates, loop, pool, resolved_recipe as rr
 from . import run, serial_run as sr, serving
 from .test_campaign import _manifest as campaign_manifest, _registry, _target
 from .test_glm_frozen_requests import _canonical_launch, _manifest, _request
 from . import test_promotion_targets as fixtures
 from .test_shared_history import _record
+
+
+def test_retained_critic_accepts_only_exact_screened_candidate():
+    hypothesis = loop.Hypothesis("mechanism", "statement", "falsifier", "surface", "symbol")
+    critic = cpu_screen.RetainedCritic({"hypothesis": hypothesis.to_dict(),
+                                       "paths": ["ggml/src/ggml-cpu/file.c"]})
+    assert critic.review_hypothesis(hypothesis, {}).accepted
+    assert critic.review_patch(hypothesis, ("ggml/src/ggml-cpu/file.c",), {}).accepted
+    changed = loop.Hypothesis("other", "statement", "falsifier", "surface", "symbol")
+    assert not critic.review_hypothesis(changed, {}).accepted
+    assert not critic.review_patch(hypothesis, ("other.c",), {}).accepted
 
 
 @pytest.mark.parametrize("scope,threads,regions", [("quarter", 24, ("q0",)),
