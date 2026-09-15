@@ -224,9 +224,9 @@ class TheRungIsOnEveryRecord(unittest.TestCase):
                 champion_build=store / "champ", baseline_build=base,
                 resolve=lambda: ("f" * 40, "production-consolidated-v9"),
                 compare=lambda _b, _c: bench.Comparison(
-                    surface="dec-b4", anchor_samples=[100.0],
-                    candidate_samples=[102.0], effect=0.02,
-                    estimator="median_over_median", pairs=20,
+                    surface="dec-b4", anchor_samples=[100.0] * 14,
+                    candidate_samples=[102.0] * 14, effect=0.02,
+                    estimator="median_over_median", pairs=14,
                     noise_floor_pct=0.668, residency={},
                     model="Qwen3.8-27B-Q8_0.gguf"))
             self.assertTrue(result.published, result.reason)

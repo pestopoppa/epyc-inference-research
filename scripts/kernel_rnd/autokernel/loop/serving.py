@@ -43,7 +43,7 @@ from typing import TYPE_CHECKING
 import urllib.request
 import urllib.error
 
-from . import lifecycle_observation, residency, status
+from . import headline_admissibility, lifecycle_observation, residency, status
 from . import native_server_response as server_response
 from .loop import MeasurementFailed, MeasurementInvalid
 
@@ -1489,6 +1489,7 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
                # usable precision (R23-61), so a floor that cannot state its n must not
                # gate -- `write_floor` refuses one that cannot.
                "n": samples,
+               "headline_admissibility": headline_admissibility.contract(),
                "comparison_pairs": pairs, "calibration_pairs": samples,
                "process_launches": 2 * samples, "order_algorithm": MATCHED_ORDER,
                "calibration_plan": plan, "frame": frame,
@@ -1514,6 +1515,7 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
             # PROCESSES. An arm-unit floor would be ~13x tighter and would size an
             # experiment 1200-fold wrong (R23-55).
             "unit": CALIBRATION_UNIT, "n": samples,
+            "headline_admissibility": headline_admissibility.contract(),
             "median_tok_s": sp["median"], "floor_pct": sp["p95_dev_pct"],
             "runs": runs, "cv_pct": sp["cv_pct"], "spread": sp,
             # A floor is a bar every future keep is judged against, so the row records
@@ -1687,6 +1689,16 @@ def write_floor(store: Path | str, recipe: Recipe, row: Mapping, *,
     """
     frozen_requests = _frozen_requests(recipe, frozen_requests)
     body = dict(row)
+    canonical_headline_contract = headline_admissibility.contract()
+    stated_headline_contract = body.get("headline_admissibility")
+    if (stated_headline_contract is not None
+            and stated_headline_contract != canonical_headline_contract):
+        raise ServingFloorMismatch(
+            "floor row carries a non-canonical headline admissibility contract")
+    # v1 is not sealed, so the one writer supplies the required schema field for
+    # callers constructed before S3-AKU-03. v2 must have carried it before sealing.
+    if body.get("schema") != "epyc.autokernel.serving_floor.v2":
+        body["headline_admissibility"] = canonical_headline_contract
     if unit not in FLOOR_UNITS:
         raise FloorUnitMismatch(
             f"refusing to write a floor for {recipe.name!r} with unit={unit!r}: every "
@@ -1742,12 +1754,14 @@ def write_floor(store: Path | str, recipe: Recipe, row: Mapping, *,
         # A matched floor is SEALED by `content_sha256`, so its unit and n must already be
         # inside that digest. Stamping them here would put the two fields a gate depends on
         # OUTSIDE the seal, where an edit leaves no trace.
-        if body.get("unit") != unit or body.get("n") != count:
+        if (body.get("unit") != unit or body.get("n") != count
+                or body.get("headline_admissibility") != canonical_headline_contract):
             raise FloorUnitMismatch(
-                f"matched floor must carry `unit` ({unit!r}) and `n` ({count!r}) inside its "
-                f"sealed content; this row carries unit={body.get('unit')!r} n="
-                f"{body.get('n')!r}. Recalibrate with a `serving.calibrate_floor` that "
-                f"stamps both before sealing -- they cannot be added afterwards.")
+                f"matched floor must carry `unit` ({unit!r}), `n` ({count!r}), and the "
+                f"canonical headline admissibility contract inside its sealed content; "
+                f"this row carries unit={body.get('unit')!r} n={body.get('n')!r}. "
+                f"Recalibrate with serving.calibrate_floor; sealed fields cannot be "
+                f"added afterwards.")
     else:
         body["unit"] = unit
         body["n"] = count

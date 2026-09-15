@@ -55,7 +55,7 @@ from pathlib import Path
 import subprocess
 from typing import Any, Callable
 
-from . import status
+from . import headline_admissibility, status
 
 #: The contract `dashboard/loop_status.py` reads. Its reader REFUSES a bundle whose
 #: `baseline.commit` is not the frozen production commit rather than relabelling it,
@@ -239,6 +239,8 @@ def refresh(*, store: Path, champion_commit: str, champion_build: Path,
         _ensure_baseline(slot, frozen_commit, frozen_label, build_baseline, on_step)
         on_step("champion-vs-production: A/B against the frozen production kernel")
         comparison = compare(slot, Path(champion_build))
+        headline_ci = headline_admissibility.confidence_interval(
+            comparison.anchor_samples, comparison.candidate_samples)
         # Per-champion, so publishing a new bundle never overwrites the raw record the
         # PREVIOUS bundle points at. `evidence` in a superseded bundle must still
         # resolve, or the number it carries stops being auditable the moment it ages.
@@ -260,6 +262,9 @@ def refresh(*, store: Path, champion_commit: str, champion_build: Path,
             "model": comparison.model,
             "surface": comparison.surface,
             "pairs": comparison.pairs,
+            "launches": len(comparison.anchor_samples) + len(comparison.candidate_samples),
+            "headline_admissibility": headline_admissibility.contract(),
+            "confidence_interval": headline_ci,
             "noise_floor_pct": comparison.noise_floor_pct,
             "evidence": str(evidence),
             "mechanism_id": MECHANISM_ID,
@@ -279,7 +284,7 @@ def refresh(*, store: Path, champion_commit: str, champion_build: Path,
             f"{frozen_commit[:12]} ({frozen_label}) over {comparison.pairs} "
             f"{comparison.surface} pairs, floor {comparison.noise_floor_pct}%",
             target, float(comparison.effect))
-    except Unavailable as exc:
+    except (Unavailable, headline_admissibility.HeadlineInadmissible) as exc:
         return Refresh(False, f"champion-vs-production NOT refreshed: {exc}. The "
                               f"previous bundle stands, so the headline reads "
                               f"SUPERSEDED rather than a number measured against "
