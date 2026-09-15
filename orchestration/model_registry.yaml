@@ -11465,6 +11465,57 @@ deprecated_models:
     reason: >-
       Zero active consumer, verified 2026-09-01 against BOTH registries (no lean role), the retention-language sweep (no "rollback"/"retained"/"REMAIN ON DISK"/"kept per"/"preserved"), and all 177 active handoffs (no open-task dependency). Operator-approved zero-consumer purge. Master tier-C; zero active-handoff references.
     deleted: 2026-09-01
+  - model: bge-m3-f16.gguf
+    path_was: /mnt/raid0/llm/models/bge-m3-f16.gguf
+    size_gb: 1.1
+    reason: NIB2-65 safe set (2026-08-23 census). No references outside non-inference-backlog.md; not
+      a lean/master role. Disk-pressure reclaim (96% full, 2026-09-15 sub-disk-investigation session).
+    deleted: 2026-09-15
+  - model: multilingual-e5-base-f16.gguf
+    path_was: /mnt/raid0/llm/models/multilingual-e5-base-f16.gguf
+    size_gb: 0.56
+    reason: NIB2-65 safe set (2026-08-23 census). No references outside non-inference-backlog.md; not
+      a lean/master role. Disk-pressure reclaim (96% full, 2026-09-15 sub-disk-investigation session).
+    deleted: 2026-09-15
+  - model: granite-embedding-97m-multilingual-r2-Q4_K_M.gguf
+    path_was: /mnt/raid0/llm/models/granite-embedding-97m-multilingual-r2-Q4_K_M.gguf
+    size_gb: 0.1
+    reason: NIB2-65 safe set (2026-08-23 census). No references outside non-inference-backlog.md; not
+      a lean/master role. Disk-pressure reclaim (96% full, 2026-09-15 sub-disk-investigation session).
+    deleted: 2026-09-15
+  - model: Qwen3-TTS-12Hz-0.6B-Talker-Q8_0.gguf
+    path_was: /mnt/raid0/llm/models/Qwen3-TTS-12Hz-0.6B-Talker-Q8_0.gguf
+    size_gb: 0.75
+    reason: NIB2-65 safe set (2026-08-23 census). No references outside non-inference-backlog.md; not
+      a lean/master role. Disk-pressure reclaim (96% full, 2026-09-15 sub-disk-investigation session).
+    deleted: 2026-09-15
+  - model: gemma-4-26B-A4B-it-assistant-v6-f16.gguf
+    path_was: /mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-f16.gguf
+    size_gb: 0.8
+    reason: NIB2-65 safe set (2026-08-23 census). Referenced only in kb_rag RAG-index text and the
+      historical llamacpp-v6-consolidation.md narrative (GEMMA-MTP-RESOLUTION, 2026-06-25) documenting
+      how the gemma4 MTP lineage mismatch was fixed; no live launch spec, lean registry, or master
+      registry role points at this path. Disk-pressure reclaim (96% full, 2026-09-15).
+    deleted: 2026-09-15
+  - model: tinyllamas-stories-260k-f32.gguf
+    path_was: /mnt/raid0/llm/models/tinyllamas-stories-260k-f32.gguf
+    size_gb: 0.0011
+    reason: NIB2-65 safe set (2026-08-23 census). No references outside non-inference-backlog.md; not
+      a lean/master role. Disk-pressure reclaim (96% full, 2026-09-15 sub-disk-investigation session).
+    deleted: 2026-09-15
+  - model: DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf
+    path_was: /mnt/raid0/llm/models/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf
+    size_gb: 1.04
+    reason: NIB2-65 safe set (2026-08-23 census). No references outside non-inference-backlog.md; not
+      a lean/master role. Disk-pressure reclaim (96% full, 2026-09-15 sub-disk-investigation session).
+    deleted: 2026-09-15
+  - model: empty model-root husk directories (MaziyarPanahi, Mungert, prithivMLmods, jiaojjjjje, hugging-quants)
+    path_was: /mnt/raid0/llm/models/{MaziyarPanahi,Mungert,prithivMLmods,jiaojjjjje,hugging-quants}/
+    size_gb: 0
+    reason: NIB2-65 safe set (2026-08-23 census). Verified empty (4-8K directory metadata only, no
+      weight files) before removal. Disk-pressure reclaim (96% full, 2026-09-15).
+    deleted: 2026-09-15
+
 
 
 optimized_params:
