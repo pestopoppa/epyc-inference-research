@@ -75,6 +75,21 @@ class AConfirmedCandidateIsPromotedToKept(unittest.TestCase):
         return json.loads(files[0].read_text(encoding="utf-8"))
 
 
+class AnAccumulatorInteractionRegressionIsNotAKeep(unittest.TestCase):
+
+    def test_completed_rollback_has_its_own_scientific_disposition(self):
+        def commit(_hypothesis, _paths, _comparison):
+            raise loop.InteractionRegression("reproduced negative; prior tip restored")
+
+        outcome = loop.iterate(
+            planner=_Planner(), critic=_Critic([], []), context={},
+            measure=lambda h, p: _comparison(0.05), gate=lambda h, p: (True, []),
+            commit=commit)
+        self.assertEqual(outcome.status, "interaction_regression")
+        self.assertIn("prior tip restored", outcome.reasons[0])
+        self.assertIsNone(outcome.champion_head)
+
+
 class AConfirmRegressionIsNeverKept(unittest.TestCase):
 
     def _veto_run(self, tmp, rows):

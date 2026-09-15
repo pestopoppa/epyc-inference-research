@@ -1770,6 +1770,11 @@ def main(argv: list[str] | None = None) -> int:
             return
         try:
             _accumulate_after_keep(mechanism_id)
+        except loop.InteractionRegression:
+            # This is a scientific disposition after a completed rollback, not a
+            # bookkeeping failure. Let iterate record it instead of returning the
+            # now-orphaned candidate commit as a keep.
+            raise
         except Exception as exc:  # the keep is already committed AND promoted: a
             # bookkeeping failure here must be LOUD, never a silent un-record (the
             # 2026-09-06 gen-018 keep vanished from dispositions with no trace).
@@ -1781,19 +1786,100 @@ def main(argv: list[str] | None = None) -> int:
 
     def _accumulate_after_keep(mechanism_id: str) -> None:
         head = _git(args.worktree, "rev-parse", "HEAD")
+        previous_tip = bundle[0].tip
+
+        def persist_comparison(row: dict, phase: str, *, measured_tip: str = head) -> dict:
+            """Retain the complete direct COR-vs-tip observation before using its scalar."""
+            body = {
+                "schema": "epyc.autokernel.accumulator_comparison.v1",
+                "phase": phase,
+                "mechanism_id": mechanism_id,
+                "champion_of_record": bundle[0].champion_of_record,
+                "prior_tip": previous_tip,
+                "measured_tip": measured_tip,
+                "comparison": row,
+            }
+            canonical = json.dumps(body, sort_keys=True, separators=(",", ":"),
+                                   allow_nan=False).encode()
+            identity = hashlib.sha256(canonical).hexdigest()
+            root = args.store / "accumulator-comparisons"
+            target = root / f"{head[:12]}-{phase}-{identity}.json"
+            if target.exists():
+                if json.loads(target.read_text(encoding="utf-8")) != body:
+                    raise RuntimeError(f"immutable accumulator evidence collision at {target}")
+            else:
+                status.write_json(root, target.name, body, prefix=".accumulator-comparison-")
+            return {"path": str(target.resolve()),
+                    "sha256": hashlib.sha256(target.read_bytes()).hexdigest()}
+
+        def record_resolution(kind: str, first_ref: dict, second_ref: dict,
+                              restored_ref: dict | None = None) -> dict:
+            body = {
+                "schema": "epyc.autokernel.accumulator_comparison_resolution.v1",
+                "outcome": kind,
+                "mechanism_id": mechanism_id,
+                "champion_of_record": bundle[0].champion_of_record,
+                "prior_tip": previous_tip,
+                "candidate_tip": head,
+                "first": first_ref,
+                "repeat": second_ref,
+                **({"restored_tip_recheck": restored_ref} if restored_ref else {}),
+            }
+            canonical = json.dumps(body, sort_keys=True, separators=(",", ":"),
+                                   allow_nan=False).encode()
+            identity = hashlib.sha256(canonical).hexdigest()
+            root = args.store / "accumulator-comparisons"
+            target = status.write_json(root, f"resolution-{head[:12]}-{identity}.json", body,
+                                       prefix=".accumulator-resolution-")
+            return {"path": str(target.resolve()),
+                    "sha256": hashlib.sha256(target.read_bytes()).hexdigest()}
+
         publish("running", latest, hotspot_rows=hotspot_rows,
                 step=f"keep: accumulate — champion-of-record vs tip bench ({mechanism_id})")
         # compounded bench: champion-of-record build (A) vs the just-advanced accumulator (B),
         # re-measured (never a product of marginal effects -- keeps interact) because this is
         # the number the fire threshold reads and the serving gate will be asked to confirm.
-        comp = (cpu_compare(cor_build[0], anchor_build[0]).to_dict()
-                if direct_launch else bench.compare(
-                    bench.Arm("champion_of_record", cor_build[0] / "bin" / "llama-bench"),
-                    bench.Arm("accumulator", anchor_build[0] / "bin" / "llama-bench"),
-                    args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=bench_floor,
-                    surface=bench_surface, ubatch=ubatch,
-                    calibrated=bench_floor is not None).to_dict())
-        bundle[0].add_keep(mechanism_id, head, comp["effect"] * 100.0)
+        def compare_bundle() -> dict:
+            return (cpu_compare(cor_build[0], anchor_build[0]).to_dict()
+                    if direct_launch else bench.compare(
+                        bench.Arm("champion_of_record", cor_build[0] / "bin" / "llama-bench"),
+                        bench.Arm("accumulator", anchor_build[0] / "bin" / "llama-bench"),
+                        args.model, pp=pp, tg=tg, pairs=args.pairs,
+                        noise_floor_pct=bench_floor, surface=bench_surface, ubatch=ubatch,
+                        calibrated=bench_floor is not None).to_dict())
+
+        comp = compare_bundle()
+        comp_ref = persist_comparison(comp, "initial")
+        if accumulate.negative_beyond_floor(comp, serving_floor_pct):
+            publish("running", latest, hotspot_rows=hotspot_rows,
+                    step=f"keep: accumulator negative repeat ({mechanism_id})")
+            repeated = compare_bundle()
+            repeated_ref = persist_comparison(repeated, "repeat")
+            if accumulate.negative_beyond_floor(repeated, serving_floor_pct):
+                # The just-created commit remains in Git as evidence, but it must not
+                # remain the working champion. Restore the prior accumulator source,
+                # rebuild it into a fresh owned anchor slot, and recheck that slot.
+                _git(args.worktree, "reset", "--hard", previous_tip)
+                if original_source_keeps and original_source_keeps[-1].get("kept_commit") == head:
+                    original_source_keeps.pop()
+                promote_anchor()
+                restored = compare_bundle()
+                restored_ref = persist_comparison(
+                    restored, "restored-prior-tip", measured_tip=previous_tip)
+                resolution_ref = record_resolution(
+                    "interaction_regression", comp_ref, repeated_ref, restored_ref)
+                if not accumulate.negative_beyond_floor(restored, serving_floor_pct):
+                    bundle[0].compounded_bench_pct = restored["effect"] * 100.0
+                    bundle[0].comparison_evidence = restored_ref
+                    bundle[0].measurement_validity = accumulate.MEASUREMENT_CURRENT
+                    bundle[0].save(args.store)
+                raise loop.InteractionRegression(
+                    f"whole bundle regressed beyond floor twice; restored prior tip "
+                    f"{previous_tip[:12]}; evidence {resolution_ref['path']}")
+            record_resolution("drift_null", comp_ref, repeated_ref)
+            comp, comp_ref = repeated, repeated_ref
+        bundle[0].add_keep(mechanism_id, head, comp["effect"] * 100.0,
+                           comparison_evidence=comp_ref)
         bundle[0].save(args.store)   # durable BEFORE the gate decision, so a crash keeps it
         thr = (f"{accum_policy.fire_threshold_pct(serving_floor_pct):.2f}"
                if serving_floor_pct is not None else "uncalibrated")

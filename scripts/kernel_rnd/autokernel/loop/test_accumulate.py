@@ -2,6 +2,7 @@
 bench number and the serving row, and these pin the decisions those inputs must yield."""
 import pytest
 
+from autokernel import journal
 from autokernel.loop import accumulate as A
 
 
@@ -97,6 +98,33 @@ def test_bundle_add_keep_tracks_tip_and_compounded():
     b.add_keep("m1", "c1", 3.0)
     b.add_keep("m2", "c2", 6.5)
     assert b.tip == "c2" and b.keeps == ["m1", "m2"] and b.compounded_bench_pct == 6.5
+
+
+def test_bundle_persists_exact_comparison_reference(tmp_path):
+    ref = {"path": str(tmp_path / "comparison.json"), "sha256": "a" * 64}
+    b = _bundle()
+    b.add_keep("m1", "tip1", 2.5, comparison_evidence=ref)
+    saved = b.to_dict()
+    assert saved["comparison_evidence"] == ref
+    assert A.Bundle.from_dict(saved).comparison_evidence == ref
+    assert not journal.validate_loop_bundle_saved_payload(
+        A._saved_payload(saved, provenance="current_snapshot"))
+
+
+def test_bundle_v2_without_comparison_reference_remains_readable():
+    old = _bundle().to_dict()
+    old.pop("comparison_evidence", None)
+    assert A.Bundle.from_dict(old).comparison_evidence is None
+    assert not journal.validate_loop_bundle_saved_payload(
+        A._saved_payload(old, provenance="current_snapshot"))
+
+
+def test_negative_excursion_requires_finite_effect_beyond_floor():
+    assert A.negative_beyond_floor({"effect_pct": -7.85, "noise_floor_pct": 6.351})
+    assert not A.negative_beyond_floor({"effect_pct": -6.35, "noise_floor_pct": 6.351})
+    assert not A.negative_beyond_floor({"effect_pct": 7.85, "noise_floor_pct": 6.351})
+    assert A.negative_beyond_floor({"effect": -0.08}, fallback_floor_pct=6.351)
+    assert not A.negative_beyond_floor({"effect_pct": -8.0})
     assert not _bundle().is_empty.__self__.keeps  # empty bundle is empty
 
 

@@ -97,6 +97,10 @@ class ConfirmVetoed(RuntimeError):
     """
 
 
+class InteractionRegression(RuntimeError):
+    """A kept source change reproduced a whole-bundle regression and was rolled back."""
+
+
 class ActorTransient(RuntimeError):
     """The actor provider failed in a way worth retrying.
 
@@ -473,6 +477,10 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                             return Outcome("keep_candidate", hypothesis,
                                            [str(veto)], comparison, verdicts,
                                            integrity_screen=integrity_screen)
+                        except InteractionRegression as regression:
+                            return Outcome("interaction_regression", hypothesis,
+                                           [str(regression)], comparison, verdicts,
+                                           integrity_screen=integrity_screen)
                         return Outcome("kept", hypothesis, [], comparison, verdicts, head,
                                        integrity_screen=integrity_screen)
             except MeasurementInvalid as exc:
@@ -516,6 +524,6 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
 # `archive.record` as `run.py`'s injected `record`. `iterate` is the whole of this
 # module's control flow now, and the pool is its only driver.
 
-__all__ = ["Abstain", "ActorTransient", "ConfirmVetoed", "TailRefused", "RunAborted", "MeasurementInvalid", "Critic",
+__all__ = ["Abstain", "ActorTransient", "ConfirmVetoed", "InteractionRegression", "TailRefused", "RunAborted", "MeasurementInvalid", "Critic",
            "HYPOTHESIS_ROUNDS", "Hypothesis", "Outcome", "PATCH_ROUNDS",
            "Planner", "Review", "STOPPED_MID_FORMATION", "iterate"]
