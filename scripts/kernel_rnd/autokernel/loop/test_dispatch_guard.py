@@ -88,16 +88,24 @@ def test_characterised_gate_uses_facets_and_epoch_not_statement():
 
 
 def test_characterised_gate_requires_same_recorded_regime():
-    regime = {"model": "m", "quant": "Q4_K", "backend": "gpu",
-              "build_recipe": {"id": "r"}, "measurement_surface": "tg128"}
+    current = {"model": {"path": "/models/m.gguf"}, "quant": "Q4_K",
+               "backend": "gpu", "recipe": {"build_recipe": {"id": "r"}},
+               "measurement_surface": "tg128"}
+    # Exact shape emitted by archive.original_research_scope, including fields which
+    # are deliberately not regime identity (model hash, serving arms, request).
+    archived = {"model": {"path": "/models/m.gguf", "sha256": "a" * 64},
+                "quant": "Q4_K", "backend": "gpu", "measurement_surface": "tg128",
+                "recipe": {"build_recipe": {"id": "r"},
+                           "original_serving_arms": {"anchor": "old"}},
+                "request_digest": "b" * 64}
     h = Hypothesis("akm-x", "p", "f", "a.cu", "sym")
     rows = [{"mechanism_id": "akm-x", "target_surface": "a.cu",
              "target_symbol": "sym", "epoch_sha256": "e0",
-             "status": "measured_null", "research_scope": regime} for _ in range(3)]
-    context = {"epoch_sha256": "e0", "current_regime": regime,
+             "status": "measured_null", "research_scope": archived} for _ in range(3)]
+    context = {"epoch_sha256": "e0", "current_regime": current,
                "prior_experiments": rows}
     assert "characterised" in D.characterised_reason(h, context)
-    context["current_regime"] = {**regime, "quant": "IQ2_XXS"}
+    context["current_regime"] = {**current, "quant": "IQ2_XXS"}
     assert D.characterised_reason(h, context) is None
 
 
@@ -114,6 +122,20 @@ def test_characterised_gate_reopens_only_for_a_host_digested_changed_diff():
         "candidate_diff_sha256": "2" * 64, "epoch_sha256": "e0",
         "status": "superseded"})
     assert D.characterised_reason(h, context) is None
+
+
+def test_characterised_changed_diff_is_fail_closed_when_nonanswers_disagree():
+    old = "1" * 64
+    rows = [{"mechanism_id": "akm-x", "target_surface": "a.cu",
+             "target_symbol": "sym", "candidate_diff_sha256": old,
+             "epoch_sha256": "e0", "status": "measured_null"} for _ in range(3)]
+    for digest in ("2" * 64, "3" * 64):
+        rows.append({"mechanism_id": "akm-x", "target_surface": "a.cu",
+                     "target_symbol": "sym", "candidate_diff_sha256": digest,
+                     "epoch_sha256": "e0", "status": "superseded"})
+    h = Hypothesis("akm-x", "p", "f", "a.cu", "sym")
+    assert "characterised" in D.characterised_reason(
+        h, {"epoch_sha256": "e0", "prior_experiments": rows})
 
 
 def test_characterised_gate_reopens_for_digest_bound_operator_artifact():

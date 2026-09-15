@@ -124,12 +124,30 @@ def characterised_reason(hypothesis, context: Mapping[str, Any]) -> str | None:
     epoch = context.get("epoch_sha256")
     regime = context.get("current_regime")
 
+    def project_regime(scope: Mapping[str, Any]) -> tuple[Any, ...] | None:
+        """Canonical identity across live context and original_research_scope."""
+        model = scope.get("model")
+        model_path = model.get("path") if isinstance(model, Mapping) else model
+        recipe = scope.get("recipe")
+        build_recipe = (recipe.get("build_recipe")
+                        if isinstance(recipe, Mapping) else scope.get("build_recipe"))
+        values = (model_path, scope.get("quant"), scope.get("backend"),
+                  build_recipe, scope.get("measurement_surface"))
+        if any(value is None for value in values):
+            return None
+        # Recipes are structured; canonical JSON makes mapping/list equality explicit
+        # and stable across independently loaded fresh-process objects.
+        return (*values[:3], json.dumps(values[3], sort_keys=True, separators=(",", ":")),
+                values[4])
+
+    projected_regime = project_regime(regime) if isinstance(regime, Mapping) else None
+
     def same_regime(row: Mapping[str, Any]) -> bool:
         if regime is None:  # compatibility for explicit synthetic/unit contexts
             return True
         prior = row.get("research_scope")
-        return isinstance(prior, Mapping) and all(prior.get(key) == value
-            for key, value in regime.items())
+        return (projected_regime is not None and isinstance(prior, Mapping)
+                and project_regime(prior) == projected_regime)
     query, _ = do_not_repeat.structural_target({
         "mechanism": hypothesis.mechanism_id, "symbol": hypothesis.target_symbol,
         "file": hypothesis.target_surface})

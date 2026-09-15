@@ -1183,9 +1183,10 @@ def main(argv: list[str] | None = None) -> int:
             **({"cpu_profile": dict(cpu_profile_observation)} if cpu_launch else {}),
             "prior_experiments": prior_experiments(args, epoch),
             "current_regime": {
-                "model": str(args.model), "quant": census.dominant_quant,
+                "model": {"path": str(args.model)}, "quant": census.dominant_quant,
                 "backend": "cpu" if cpu_launch else "gpu",
-                "build_recipe": recipe.to_dict(), "measurement_surface": args.surface},
+                "recipe": {"build_recipe": recipe.to_dict()},
+                "measurement_surface": args.surface},
             **({"operator_unblock_artifacts": operator_unblocks}
                if operator_unblocks else {}),
             **({"shared_prior_experiments": shared_history.recall(scope={
