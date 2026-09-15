@@ -7,6 +7,8 @@ the caller a tree object that can be compared with the eventual keep commit.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
+import json
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -28,6 +30,8 @@ class SpecialCaseFinding:
     kind: str
     path: str
     line: str
+    oracle_matches: tuple[str, ...] = ()
+    bench_matches: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -46,7 +50,9 @@ class CandidateIntegrity:
             "paths": list(self.paths),
             "measured_tree": self.tree,
             "needs_confirm": self.needs_confirm,
-            "findings": [{"kind": row.kind, "path": row.path, "line": row.line}
+            "findings": [{"kind": row.kind, "path": row.path, "line": row.line,
+                          "oracle_matches": list(row.oracle_matches),
+                          "bench_matches": list(row.bench_matches)}
                          for row in self.findings],
         }
 
@@ -59,6 +65,11 @@ _LITERAL_PREDICATE = re.compile(
     r"(?:\b\d+\b|GGML_TYPE_[A-Z0-9_]+|GGML_OP_[A-Z0-9_]+)")
 _MUTABLE_STATE = re.compile(
     r"\b(?:static\s+(?!const\b|constexpr\b)|(?:std::)?atomic\s*<|thread_local\b)")
+_IDENTIFIER = re.compile(r"\b[A-Za-z_]\w*\b")
+_DECLARATION = re.compile(
+    r"\b(?:static\s+|thread_local\s+)?(?:std::atomic\s*<[^>]+>|"
+    r"(?:unsigned\s+|signed\s+)?(?:bool|char|short|int|long|float|double|size_t|"
+    r"uint\d+_t|int\d+_t|auto))\s+(?:\*\s*)?([A-Za-z_]\w*)")
 
 
 def _git(worktree: Path, *args: str, input_bytes: bytes | None = None,
@@ -131,13 +142,79 @@ def _added_lines(worktree: Path) -> Iterable[tuple[str, str]]:
             yield path, raw[1:].strip()
 
 
-def screen_special_cases(worktree: Path) -> tuple[SpecialCaseFinding, ...]:
-    findings: list[SpecialCaseFinding] = []
+def _logical_additions(worktree: Path) -> Iterable[tuple[str, str]]:
+    """Join multiline C/C++ conditions before inspecting their syntax tokens."""
+    pending_path, pending, depth = "", [], 0
     for path, line in _added_lines(worktree):
+        starts = re.search(r"\b(?:if|else\s+if|switch|while)\s*\(", line)
+        if pending and path != pending_path:
+            yield pending_path, " ".join(pending)
+            pending, depth = [], 0
+        if pending or starts:
+            pending_path = path
+            pending.append(line)
+            depth += line.count("(") - line.count(")")
+            if depth <= 0:
+                yield path, " ".join(pending)
+                pending, depth = [], 0
+        else:
+            yield path, line
+    if pending:
+        yield pending_path, " ".join(pending)
+
+
+def _shape_tokens(shape: dict | None) -> set[str]:
+    if not shape:
+        return set()
+    tokens: set[str] = set()
+    for key in ("dims", "types", "op_ids"):
+        for value in shape.get(key, ()):
+            tokens.add(str(value))
+    return tokens
+
+
+def _matches(statement: str, shape: dict | None) -> tuple[str, ...]:
+    tokens = _shape_tokens(shape)
+    present = set(_IDENTIFIER.findall(statement)) | set(re.findall(r"\b\d+\b", statement))
+    return tuple(sorted(tokens & present))
+
+
+def _base_mutable_names(worktree: Path, path: str) -> set[str]:
+    try:
+        source = _git(worktree, "show", f"HEAD:{path}").decode("utf-8", "replace")
+    except IntegrityRefused:
+        return set()
+    names, depth = set(), 0
+    for line in source.splitlines():
+        stripped = re.sub(r"//.*$", "", line)
+        declaration = _DECLARATION.search(stripped)
+        if declaration and (depth == 0 or _MUTABLE_STATE.search(stripped)) \
+                and not re.search(r"\b(?:const|constexpr)\b", stripped):
+            names.add(declaration.group(1))
+        depth += stripped.count("{") - stripped.count("}")
+    return names
+
+
+def screen_special_cases(worktree: Path, *, oracle_shape: dict | None = None,
+                         bench_shape: dict | None = None) -> tuple[SpecialCaseFinding, ...]:
+    findings: list[SpecialCaseFinding] = []
+    mutable_by_path: dict[str, set[str]] = {}
+    for path, line in _logical_additions(worktree):
         if _LITERAL_PREDICATE.search(line):
-            findings.append(SpecialCaseFinding("literal_shape_predicate", path, line))
+            findings.append(SpecialCaseFinding(
+                "literal_shape_predicate", path, line,
+                _matches(line, oracle_shape), _matches(line, bench_shape)))
         if _MUTABLE_STATE.search(line):
             findings.append(SpecialCaseFinding("hot_path_mutable_state", path, line))
+        if path not in mutable_by_path:
+            mutable_by_path[path] = _base_mutable_names(worktree, path)
+        names = mutable_by_path[path]
+        declared = _DECLARATION.search(line)
+        for name in sorted(names & set(_IDENTIFIER.findall(line))):
+            if declared is None or declared.group(1) != name:
+                findings.append(SpecialCaseFinding(
+                    "hot_path_mutable_state_read", path, line,
+                    oracle_matches=(name,)))
     return tuple(findings)
 
 
@@ -145,19 +222,23 @@ def require_unseen_confirmation(candidate: CandidateIntegrity, *, screen_surface
                                 screen_model: str | None, confirm_surfaces: Sequence[str],
                                 confirm_model: str | None) -> dict:
     """Prove a flagged candidate's confirm identity was absent from its public screen."""
-    identities = tuple((str(surface), None if confirm_model is None else str(confirm_model))
-                       for surface in confirm_surfaces)
-    public = (str(screen_surface), None if screen_model is None else str(screen_model))
-    unseen = tuple(identity for identity in identities if identity != public)
+    identities = tuple(str(surface) for surface in confirm_surfaces)
+    public = str(screen_surface)
+    # A different model is not a different shape. Serving gates are explicitly
+    # identified; otherwise pp/tg/ubatch identity must rotate.
+    unseen = tuple(surface for surface in identities
+                   if surface.startswith("serving:") or surface != public)
     if candidate.needs_confirm and not unseen:
         raise IntegrityRefused(
             "held_out_confirmation_missing",
-            f"public={public!r} confirm={list(identities)!r}")
-    return {"public_identity": list(public),
-            "held_out_identities": [list(identity) for identity in unseen]}
+            f"public_shape={public!r} confirm_shapes={list(identities)!r}")
+    return {"public_identity": [public, screen_model],
+            "held_out_identities": [[surface, confirm_model] for surface in unseen]}
 
 
-def validate_candidate(worktree: Path, declared_paths: Sequence[str]) -> CandidateIntegrity:
+def validate_candidate(worktree: Path, declared_paths: Sequence[str], *,
+                       oracle_shape: dict | None = None,
+                       bench_shape: dict | None = None) -> CandidateIntegrity:
     declared = tuple(sorted({_normal_path(str(path)) for path in declared_paths}))
     dirty = dirty_paths(worktree)
     if dirty != declared:
@@ -171,7 +252,17 @@ def validate_candidate(worktree: Path, declared_paths: Sequence[str]) -> Candida
     if outside:
         raise IntegrityRefused("outside_kernel_allowlist", repr(outside))
     return CandidateIntegrity(dirty, _candidate_tree(worktree),
-                              screen_special_cases(worktree))
+                              screen_special_cases(worktree, oracle_shape=oracle_shape,
+                                                   bench_shape=bench_shape))
+
+
+def evidence_key(*, lane: str, attempt_id: str, base_commit: str,
+                 paths: Sequence[str]) -> str:
+    """Collision-resistant evidence identity; mechanism ids are deliberately reusable."""
+    body = {"lane": lane, "attempt_id": attempt_id, "base_commit": base_commit,
+            "paths": sorted(str(path) for path in paths)}
+    return hashlib.sha256(json.dumps(body, sort_keys=True,
+                                     separators=(",", ":")).encode()).hexdigest()
 
 
 def assert_measured_tree(worktree: Path, expected_tree: str) -> None:

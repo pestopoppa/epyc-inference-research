@@ -49,12 +49,19 @@ def test_literal_shape_predicate_and_mutable_state_need_confirmation(repo):
         "int base = 1;\n"
         "+static int calls = 0;\n".replace("+", "")
         + "if (src->ne[0] == 4096 && src->type == GGML_TYPE_Q4_K) calls++;\n")
-    checked = integrity.validate_candidate(repo, ("ggml/src/kernel.cpp",))
+    checked = integrity.validate_candidate(
+        repo, ("ggml/src/kernel.cpp",),
+        oracle_shape={"dims": [4096], "types": ["GGML_TYPE_Q4_K"]},
+        bench_shape={"dims": [4096], "types": ["GGML_TYPE_Q4_K"]})
     assert checked.needs_confirm
     assert {row.kind for row in checked.findings} == {
         "literal_shape_predicate", "hot_path_mutable_state"}
     assert checked.to_dict()["needs_confirm"] is True
     assert checked.to_dict()["measured_tree"] == checked.tree
+    predicate = next(row for row in checked.findings
+                     if row.kind == "literal_shape_predicate")
+    assert predicate.oracle_matches == ("4096", "GGML_TYPE_Q4_K")
+    assert predicate.bench_matches == ("4096", "GGML_TYPE_Q4_K")
     with pytest.raises(integrity.IntegrityRefused) as caught:
         integrity.require_unseen_confirmation(
             checked, screen_surface="tg128", screen_model="public.gguf",
@@ -64,6 +71,68 @@ def test_literal_shape_predicate_and_mutable_state_need_confirmation(repo):
         checked, screen_surface="tg128", screen_model="public.gguf",
         confirm_surfaces=("tg192",), confirm_model="held-out.gguf")
     assert proof["held_out_identities"] == [["tg192", "held-out.gguf"]]
+
+
+def test_different_model_same_bench_shape_is_not_held_out(repo):
+    (repo / "ggml/src/kernel.cpp").write_text(
+        "int base = 1;\nif (src->ne[0] == 128) return;\n")
+    checked = integrity.validate_candidate(repo, ("ggml/src/kernel.cpp",))
+    with pytest.raises(integrity.IntegrityRefused) as caught:
+        integrity.require_unseen_confirmation(
+            checked, screen_surface="tg128", screen_model="public.gguf",
+            confirm_surfaces=("tg128",), confirm_model="different.gguf")
+    assert caught.value.refusal_class == "held_out_confirmation_missing"
+    proof = integrity.require_unseen_confirmation(
+        checked, screen_surface="tg128", screen_model="public.gguf",
+        confirm_surfaces=("serving:decode",), confirm_model="public.gguf")
+    assert proof["held_out_identities"] == [["serving:decode", "public.gguf"]]
+
+
+def test_multiline_predicate_crosses_declared_shapes(repo):
+    (repo / "ggml/src/kernel.cpp").write_text(
+        "int base = 1;\nif (src->ne[0] ==\n    4096 && src->type ==\n    GGML_TYPE_Q4_K) return;\n")
+    checked = integrity.validate_candidate(
+        repo, ("ggml/src/kernel.cpp",),
+        oracle_shape={"dims": [2048], "types": ["GGML_TYPE_Q4_K"]},
+        bench_shape={"dims": [4096], "types": ["GGML_TYPE_Q4_K"]})
+    finding = next(row for row in checked.findings
+                   if row.kind == "literal_shape_predicate")
+    assert finding.oracle_matches == ("GGML_TYPE_Q4_K",)
+    assert finding.bench_matches == ("4096", "GGML_TYPE_Q4_K")
+
+
+def test_added_read_of_existing_mutable_global_is_flagged(repo):
+    kernel = repo / "ggml/src/kernel.cpp"
+    kernel.write_text("int call_count = 0;\nint base = 1;\n")
+    _git(repo, "add", "ggml/src/kernel.cpp")
+    _git(repo, "commit", "-qm", "global state")
+    kernel.write_text("int call_count = 0;\nint base = 1;\nif (ready) call_count++;\n")
+    checked = integrity.validate_candidate(repo, ("ggml/src/kernel.cpp",))
+    reads = [row for row in checked.findings
+             if row.kind == "hot_path_mutable_state_read"]
+    assert len(reads) == 1 and reads[0].oracle_matches == ("call_count",)
+
+
+@pytest.mark.parametrize("protected", [
+    "tests/other.cpp", "tools/llama-bench/hack.cpp", "tools/server/hack.cpp",
+    "examples/hack.cpp", "scripts/hack.py", "ggml/src/nested/CMakeLists.txt",
+])
+def test_every_protected_path_class_is_refused(repo, protected):
+    path = repo / protected
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("added\n")
+    with pytest.raises(integrity.IntegrityRefused) as caught:
+        integrity.validate_candidate(repo, (protected,))
+    assert caught.value.refusal_class == "oracle_bench_source_modified"
+
+
+def test_evidence_identity_is_lane_and_attempt_specific():
+    common = dict(base_commit="a" * 40, paths=("ggml/src/kernel.cpp",))
+    first = integrity.evidence_key(lane="lane0", attempt_id="attempt-1", **common)
+    assert first != integrity.evidence_key(
+        lane="lane1", attempt_id="attempt-1", **common)
+    assert first != integrity.evidence_key(
+        lane="lane0", attempt_id="attempt-2", **common)
 
 
 def test_measured_tree_and_kept_commit_are_exact(repo):
