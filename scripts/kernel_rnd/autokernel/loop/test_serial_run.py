@@ -8,7 +8,8 @@ from unittest import mock
 
 import pytest
 
-from . import cpu_screen, run, scheduling, serial_run as sr, serial_scheduling as ss, source_loo
+from . import (cpu_screen, run, scheduling, serial_build_retention, serial_run as sr,
+               serial_scheduling as ss, source_loo)
 from . import test_promotion_targets as promotion_fixture
 from . import test_existing_cpu_run as cpu_fixture
 from .test_legacy_targets import _argv, _resolved
@@ -29,6 +30,9 @@ root = out.parents[1]
 with (root / "seen.jsonl").open("a") as f:
     f.write(json.dumps({"argv": argv, "pid": __import__('os').getpid()}) + "\n")
 mode = (root / "mode").read_text() if (root / "mode").exists() else "good"
+if mode == "noisy":
+    sys.stdout.write("s" * (sr.MAX_SERIAL_CHILD_LOG_BYTES_PER_STREAM + 17))
+    sys.stderr.write("e" * (sr.MAX_SERIAL_CHILD_LOG_BYTES_PER_STREAM + 29))
 if mode == "missing":
     sys.exit(0)
 if mode == "fail":
@@ -213,7 +217,77 @@ def _inputs(tmp_path, monkeypatch, *, mode="good", rounds=2):
         path = target_root / "args.json"
         path.write_text(json.dumps(argv))
         files += ["--target-args", str(path)]
-    return state, [*files, "--batch-iterations", "1", "--rounds", str(rounds), "--state-dir", str(state)]
+    return state, [*files, "--batch-iterations", "1", "--rounds", str(rounds),
+                   "--state-dir", str(state),
+                   "--retention-trigger-free-gb", "0",
+                   "--retention-target-free-gb", "0"]
+
+
+def test_bounded_child_output_retains_exact_tails_hashes_and_counts(tmp_path):
+    maximum = 4096
+    stdout = b"s" * (maximum + 91) + b"stdout-tail"
+    stderr = b"e" * (maximum + 37) + b"stderr-tail"
+    program = (
+        "import os\n"
+        f"os.write(1, {stdout!r})\n"
+        f"os.write(2, {stderr!r})\n"
+    )
+    process = sr.subprocess.Popen(
+        [sr.sys.executable, "-c", program], stdout=sr.subprocess.PIPE,
+        stderr=sr.subprocess.PIPE)
+    capture = sr._BoundedChildOutput(process, tmp_path, maximum=maximum)
+    assert process.wait(timeout=10) == 0
+    receipt = capture.finish()
+    for name, raw in (("stdout", stdout), ("stderr", stderr)):
+        retained = (tmp_path / f"{name}.log").read_bytes()
+        assert retained == raw[-maximum:]
+        assert len(retained) == maximum
+        assert receipt["streams"][name] == {
+            "bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest(),
+            "retained_bytes": maximum, "truncated": True}
+
+
+def test_serial_child_wiring_persists_bounded_output_evidence(tmp_path, monkeypatch):
+    state, argv = _inputs(tmp_path, monkeypatch, mode="noisy", rounds=1)
+    repo_root = Path(sr.__file__).resolve().parents[4]
+    monkeypatch.setenv(
+        "PYTHONPATH", os.pathsep.join((str(repo_root), str(repo_root / "scripts/kernel_rnd"))))
+    # The hermetic GPU fixture has no CPU-screen dependency and still traverses
+    # the real serial Popen, polling, continuation and capture wiring.
+    assert sr.main(argv[2:]) == 0
+    batch = state / "batches/batch-000000"
+    receipt = json.loads((batch / "child-output.json").read_text())
+    maximum = sr.MAX_SERIAL_CHILD_LOG_BYTES_PER_STREAM
+    for name, byte, extra in (("stdout", b"s", 17), ("stderr", b"e", 29)):
+        raw = byte * (maximum + extra)
+        assert (batch / f"{name}.log").read_bytes() == raw[-maximum:]
+        assert receipt["streams"][name] == {
+            "bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest(),
+            "retained_bytes": maximum, "truncated": True}
+
+
+def test_retention_pressure_refuses_before_any_child(tmp_path, monkeypatch):
+    state, argv = _inputs(tmp_path, monkeypatch, rounds=1)
+    trigger = argv.index("--retention-trigger-free-gb") + 1
+    target = argv.index("--retention-target-free-gb") + 1
+    argv[trigger], argv[target] = "1", "2"
+    monkeypatch.setattr(serial_build_retention.shutil, "disk_usage",
+                        lambda _path: type("Usage", (), {"free": 0})())
+    with pytest.raises(sr.SerialRefused, match="could not restore"):
+        sr.main(argv)
+    assert not (state / "batches").exists()
+
+
+def test_retention_plan_only_prints_and_never_drives(tmp_path, capsys):
+    state = tmp_path / "state"
+    assert sr.main(["--state-dir", str(state), "--retention-plan-only",
+                    "--retention-trigger-free-gb", "0",
+                    "--retention-target-free-gb", "0"]) == 0
+    plan = json.loads(capsys.readouterr().out)
+    assert plan["schema"] == serial_build_retention.PLAN_SCHEMA
+    assert plan["current_state"] == str(state.resolve())
+    assert not (state / "serial-state.json").exists()
+    assert not (state / "batches").exists()
 
 
 def _scheduled(tmp_path, argv):

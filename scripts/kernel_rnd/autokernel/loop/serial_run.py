@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import selectors
 import signal
 import shutil
 import stat
@@ -23,6 +24,8 @@ CONTINUATION_SCHEMA_V2 = "epyc.autokernel.loop_continuation.v2"
 HELD_REFERENCE_SCHEMA = "epyc.autokernel.direct_held_reference.v1"
 SERIAL_SCHEMA = "epyc.autokernel.serial_run.v1"
 FULL_RESULT_RECOVERY_LIMIT = 512 * 1024 * 1024
+SERIAL_CHILD_LOG_SCHEMA = "epyc.autokernel.serial_child_output.v1"
+MAX_SERIAL_CHILD_LOG_BYTES_PER_STREAM = 1024 * 1024
 _DOCUMENT_FLAGS = ("--resolved-campaign", "--cpu-serving-launch", "--gpu-serving-launch",
                    "--frozen-prompts", "--serving-recipe", "--runtime-recipe-reference",
                    "--runtime-recovery-reference")
@@ -43,6 +46,102 @@ _CONTINUATION_FIELDS_V2 = _CONTINUATION_FIELDS | {"held_claim_evidence"}
 
 class SerialRefused(ValueError):
     pass
+
+
+class _BoundedChildOutput:
+    """Continuously drain both child pipes while retaining only their exact tails."""
+
+    def __init__(self, process: subprocess.Popen, directory: Path, *,
+                 maximum: int = MAX_SERIAL_CHILD_LOG_BYTES_PER_STREAM):
+        if maximum < 1 or process.stdout is None or process.stderr is None:
+            raise SerialRefused("serial child output capture is malformed")
+        self.process = process
+        self.directory = directory
+        self.maximum = maximum
+        self._stop = threading.Event()
+        self._errors: list[BaseException] = []
+        self._streams = {
+            "stdout": {"stream": process.stdout, "tail": bytearray(), "bytes": 0,
+                       "digest": hashlib.sha256()},
+            "stderr": {"stream": process.stderr, "tail": bytearray(), "bytes": 0,
+                       "digest": hashlib.sha256()},
+        }
+        self._finished = False
+        self._thread = threading.Thread(
+            target=self._drain, name=f"serial-child-output-{process.pid}", daemon=True)
+        self._thread.start()
+
+    def _drain(self) -> None:
+        selector = selectors.DefaultSelector()
+        try:
+            for name, row in self._streams.items():
+                stream = row["stream"]
+                os.set_blocking(stream.fileno(), False)
+                selector.register(stream, selectors.EVENT_READ, name)
+            while selector.get_map():
+                events = selector.select(timeout=0.1)
+                if self._stop.is_set() and not events:
+                    break
+                for key, _mask in events:
+                    stream, name = key.fileobj, key.data
+                    try:
+                        chunk = os.read(stream.fileno(), 64 * 1024)
+                    except BlockingIOError:
+                        continue
+                    if not chunk:
+                        selector.unregister(stream)
+                        stream.close()
+                        continue
+                    row = self._streams[name]
+                    row["bytes"] += len(chunk)
+                    row["digest"].update(chunk)
+                    tail = row["tail"]
+                    tail.extend(chunk)
+                    if len(tail) > self.maximum:
+                        del tail[:-self.maximum]
+        except BaseException as exc:
+            self._errors.append(exc)
+        finally:
+            for key in list(selector.get_map().values()):
+                try:
+                    selector.unregister(key.fileobj)
+                    key.fileobj.close()
+                except OSError:
+                    pass
+            selector.close()
+
+    @property
+    def finished(self) -> bool:
+        return self._finished
+
+    def finish(self) -> dict:
+        if self._finished:
+            raise SerialRefused("serial child output was finalized twice")
+        self._stop.set()
+        self._thread.join(timeout=2.0)
+        if self._thread.is_alive():
+            raise SerialRefused("serial child output drain did not terminate")
+        if self._errors:
+            raise SerialRefused(
+                f"serial child output drain failed: {type(self._errors[0]).__name__}: "
+                f"{self._errors[0]}")
+        streams = {}
+        for name, row in self._streams.items():
+            retained = bytes(row["tail"])
+            with (self.directory / f"{name}.log").open("xb") as handle:
+                handle.write(retained)
+            streams[name] = {
+                "bytes": row["bytes"], "sha256": row["digest"].hexdigest(),
+                "retained_bytes": len(retained),
+                "truncated": row["bytes"] > len(retained),
+            }
+        receipt = {"schema": SERIAL_CHILD_LOG_SCHEMA,
+                   "maximum_retained_bytes_per_stream": self.maximum,
+                   "streams": streams}
+        status.write_json(self.directory, "child-output.json", receipt,
+                          prefix=".child-output-")
+        self._finished = True
+        return receipt
 
 
 def _source_loo_result(value, *, target=None, source_commit=None):
@@ -879,7 +978,7 @@ def _child_command(argv):
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    source = parser.add_mutually_exclusive_group(required=True)
+    source = parser.add_mutually_exclusive_group()
     source.add_argument("--target-args", type=Path, action="append")
     source.add_argument("--resolved-campaign", type=Path,
                         help="derive the roster from ready enrolled production/candidate targets")
@@ -894,7 +993,7 @@ def main(argv=None) -> int:
                         help="per-source-commit AKX validation priority receipts")
     parser.add_argument("--dry-run", action="store_true",
                         help="print inputs and run each existing owner dry-run; no execution or writes")
-    parser.add_argument("--batch-iterations", type=int, required=True)
+    parser.add_argument("--batch-iterations", type=int)
     parser.add_argument("--rounds", type=int, default=1,
                         help="0 schedules until its configured budget or STOP")
     parser.add_argument("--state-dir", type=Path, required=True)
@@ -908,14 +1007,20 @@ def main(argv=None) -> int:
                         help="maximum retired build roots reclaimed at one startup")
     parser.add_argument("--retention-dry-run", action="store_true",
                         help="publish the exact cleanup plan without deleting build output")
+    parser.add_argument("--retention-plan-only", action="store_true",
+                        help="print the exact retention plan and exit without cleanup or a run")
     parser.add_argument("--control-listen", help="optional authenticated IPv4 loopback HOST:PORT")
     parser.add_argument("--control-origin", default=os.environ.get("AUTOKERNEL_TRUSTED_HUB_ORIGIN"),
                         help="exact trusted hub origin; token comes from AUTOKERNEL_CONTROL_TOKEN")
     args = parser.parse_args(argv)
-    if (args.batch_iterations <= 0 or args.rounds < 0
+    if ((not args.retention_plan_only
+         and (args.batch_iterations is None or args.batch_iterations <= 0
+              or not (args.target_args or args.resolved_campaign)))
+            or args.rounds < 0
             or not 0 <= args.retention_trigger_free_gb <= args.retention_target_free_gb
             or args.retention_recent_state_caches < 0
-            or args.retention_max_build_dirs < 1):
+            or args.retention_max_build_dirs < 1
+            or (args.retention_plan_only and args.retention_dry_run)):
         parser.error("batch/round or build-retention policy is invalid")
     try:
         if args.control_listen:
@@ -944,7 +1049,7 @@ def main(argv=None) -> int:
         else:
             if args.owned_targets or args.target_root or args.common_args:
                 raise SerialRefused("roster options require --resolved-campaign")
-            targets = [_target_args(path) for path in args.target_args]
+            targets = [_target_args(path) for path in (args.target_args or [])]
         # No two configured targets may overwrite an active target's source,
         # build lanes or history. The owner never creates/repoints those roots.
         for flag in ("--worktree", "--store", "--worker-root", "--worker-build-root"):
@@ -980,6 +1085,17 @@ def main(argv=None) -> int:
                 scheduler_manifest, _scheduler_bindings(targets))
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
+    if args.retention_plan_only:
+        from . import serial_build_retention
+        root = args.state_dir.resolve()
+        retention_plan = serial_build_retention.plan(
+            root.parent, root,
+            trigger_free_bytes=int(args.retention_trigger_free_gb * 1024 ** 3),
+            target_free_bytes=int(args.retention_target_free_gb * 1024 ** 3),
+            recent_state_caches=args.retention_recent_state_caches,
+            max_build_dirs=args.retention_max_build_dirs)
+        print(json.dumps(retention_plan, indent=2))
+        return 0
     if args.dry_run:
         print(json.dumps({"targets": targets, "skipped": skipped, "child_prefix": child_prefix,
                           "scheduler": (scheduler_manifest.to_dict()
@@ -1024,6 +1140,13 @@ def main(argv=None) -> int:
             retention_plan, dry_run=args.retention_dry_run)
         status.write_json(root, "build-retention-result.json", retention_result,
                           prefix=".build-retention-result-")
+        if (retention_plan["free_bytes_before"] < retention_plan["trigger_free_bytes"]
+                and retention_result["free_bytes_after"]
+                    < retention_plan["target_free_bytes"]):
+            raise SerialRefused(
+                "build retention could not restore the required free-space reserve: "
+                f"{retention_result['free_bytes_after']} < "
+                f"{retention_plan['target_free_bytes']} bytes")
         return _drive(root, targets, args.batch_iterations, args.rounds, child_prefix=child_prefix,
                       scheduler_manifest=scheduler_manifest,
                       source_validation_priority_dir=args.source_validation_priority_dir,
@@ -2026,37 +2149,40 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
             save()
             publish("starting", active)
             process = None
+            output_capture = None
             try:
-                with (directory / "stdout.log").open("xb") as stdout, \
-                        (directory / "stderr.log").open("xb") as stderr:
-                    process = subprocess.Popen([*child_prefix, *_child_command(child_argv)], stdout=stdout, stderr=stderr,
-                                               cwd=Path(__file__).resolve().parents[4])
-                    active["pid"] = process.pid
-                    try:
-                        active["process_identity"] = worker_lifecycle.process_identity(process.pid).to_dict()
-                    except worker_lifecycle.LifecycleRefused:
-                        # The original Popen still owns cleanup. Missing identity
-                        # cannot permit later adoption/signaling of a reused PID.
-                        pass
-                    save()
-                    publish("running", active)
-                    sent = False
-                    heartbeat_at = time.monotonic() + 30
-                    while process.poll() is None:
-                        if control is not None:
-                            previous = control.publish_snapshot()
-                            if control.pump(active, stopped=stopped()) != previous:
-                                publish("running", active)
-                        if stopped() and not sent:
-                            process.send_signal(signal.SIGTERM)  # This captured child only; it drains its tail.
-                            sent = True
-                        try:
-                            process.wait(timeout=0.5)
-                        except subprocess.TimeoutExpired:
-                            pass
-                        if time.monotonic() >= heartbeat_at:
+                process = subprocess.Popen(
+                    [*child_prefix, *_child_command(child_argv)],
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    cwd=Path(__file__).resolve().parents[4])
+                output_capture = _BoundedChildOutput(process, directory)
+                active["pid"] = process.pid
+                try:
+                    active["process_identity"] = worker_lifecycle.process_identity(process.pid).to_dict()
+                except worker_lifecycle.LifecycleRefused:
+                    # The original Popen still owns cleanup. Missing identity
+                    # cannot permit later adoption/signaling of a reused PID.
+                    pass
+                save()
+                publish("running", active)
+                sent = False
+                heartbeat_at = time.monotonic() + 30
+                while process.poll() is None:
+                    if control is not None:
+                        previous = control.publish_snapshot()
+                        if control.pump(active, stopped=stopped()) != previous:
                             publish("running", active)
-                            heartbeat_at = time.monotonic() + 30
+                    if stopped() and not sent:
+                        process.send_signal(signal.SIGTERM)  # This captured child only; it drains its tail.
+                        sent = True
+                    try:
+                        process.wait(timeout=0.5)
+                    except subprocess.TimeoutExpired:
+                        pass
+                    if time.monotonic() >= heartbeat_at:
+                        publish("running", active)
+                        heartbeat_at = time.monotonic() + 30
+                output_capture.finish()
                 result_path = directory / "loop-continuation.json"
                 recovery_error = None
                 try:
@@ -2099,6 +2225,11 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                 if process is not None and process.poll() is None:
                     process.send_signal(signal.SIGTERM)
                     process.wait()  # The existing owner drains; never kill by name/group.
+                if output_capture is not None and not output_capture.finished:
+                    try:
+                        output_capture.finish()
+                    except (OSError, ValueError) as exc:
+                        state["failed_targets"][key] = f"{type(exc).__name__}: {exc}"
             if process is not None:
                 retain_recovery(active, child_argv, directory)
             state["active"] = None
