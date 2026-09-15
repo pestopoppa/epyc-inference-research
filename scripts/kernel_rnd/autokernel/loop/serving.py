@@ -1177,6 +1177,62 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
     return value
 
 
+def _sorted_devs(runs: Sequence[float]) -> list[float]:
+    """|deviation from median| in percent, ascending. The ONE definition `floor_pct`,
+    `_spread` and `floor_ci` share, so a CI can never describe a different statistic."""
+    med = statistics.median(runs)
+    return sorted(abs(r / med - 1.0) * 100.0 for r in runs) if med else [0.0] * len(runs)
+
+
+def _p95_of_sorted(devs: Sequence[float]) -> float:
+    return devs[min(len(devs) - 1, int(round(0.95 * (len(devs) - 1))))]
+
+
+#: Identity of the legacy floor's interval. Changing the draws, the seed or the statistic
+#: is a different CI, so the method string is versioned and written with the numbers.
+FLOOR_CI_METHOD = "percentile_bootstrap.p95_dev_from_median.resample_n.v1"
+FLOOR_CI_LEVEL = 0.95
+FLOOR_CI_DRAWS = 20000
+FLOOR_CI_SEED = 2361
+
+
+def floor_ci(runs: Sequence[float], *, level: float = FLOOR_CI_LEVEL,
+             draws: int = FLOOR_CI_DRAWS, seed: int = FLOOR_CI_SEED) -> dict:
+    """Bootstrap interval for the legacy floor's own statistic (R23-61).
+
+    `floor_pct` is p95 |deviation from median| -- an EXTREME order statistic. At n=10 the
+    5th-95th percentile of its sampling distribution spanned 4.200%-7.821% on the champion,
+    so the point estimate alone carries no usable precision and every gate built on it
+    inherits that. This resamples the launches WITH replacement at the calibration's own
+    `n`, recomputes the identical statistic, and reports the percentile interval.
+
+    DESCRIPTIVE, NOT A GATE ENDPOINT. A percentile bootstrap of a tail order statistic is
+    biased toward the observed sample's own tail (a resample only ever redraws launches
+    that were observed, never a more extreme one), so the upper bound is optimistic at
+    small n. It exists so a reader
+    can see how wide the bar is; no decision rule reads it. Deterministic: fixed seed.
+    """
+    values = [float(value) for value in runs]
+    if (len(values) < 2 or any(not math.isfinite(v) or v <= 0 for v in values)):
+        raise RecipeError("floor CI needs >= 2 finite positive launch values")
+    if not 0.0 < level < 1.0 or type(draws) is not int or draws < 100:
+        raise RecipeError("floor CI needs 0 < level < 1 and >= 100 draws")
+    rng = random.Random(seed)
+    n = len(values)
+    estimates = sorted(_p95_of_sorted(_sorted_devs([values[rng.randrange(n)] for _ in range(n)]))
+                       for _ in range(draws))
+    tail = (1.0 - level) / 2.0
+
+    def quantile(q: float) -> float:
+        return estimates[min(draws - 1, max(0, int(round(q * (draws - 1)))))]
+
+    return {"level": level, "low_pct": round(quantile(tail), 3),
+            "median_pct": round(quantile(0.5), 3),
+            "high_pct": round(quantile(1.0 - tail), 3), "n": n,
+            "method": FLOOR_CI_METHOD, "draws": draws, "seed": seed,
+            "use": "descriptive_only_not_gate_endpoint"}
+
+
 def _spread(runs: Sequence[float]) -> dict:
     """Per-arm dispersion, in the SAME grammar the serving floor is defined in.
 
@@ -1192,8 +1248,8 @@ def _spread(runs: Sequence[float]) -> dict:
     """
     runs = list(runs)
     med = statistics.median(runs)
-    devs = sorted(abs(r / med - 1.0) * 100.0 for r in runs) if med else [0.0] * len(runs)
-    p95 = devs[min(len(devs) - 1, int(round(0.95 * (len(devs) - 1))))]
+    devs = _sorted_devs(runs)
+    p95 = _p95_of_sorted(devs)
     sd = statistics.pstdev(runs)
     return {"n": len(runs), "median": med, "mean": statistics.fmean(runs), "sd": sd,
             "cv_pct": round(sd / med * 100.0, 3) if med else None,
@@ -1517,6 +1573,9 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
             "unit": CALIBRATION_UNIT, "n": samples,
             "headline_admissibility": headline_admissibility.contract(),
             "median_tok_s": sp["median"], "floor_pct": sp["p95_dev_pct"],
+            # How wide the bar itself is (R23-61). Descriptive; `write_floor` re-derives
+            # it from `runs` and refuses a row whose stated interval disagrees.
+            "floor_ci": floor_ci(runs) if len(runs) >= 2 else None,
             "runs": runs, "cv_pct": sp["cv_pct"], "spread": sp,
             # A floor is a bar every future keep is judged against, so the row records
             # whether the launches that DEFINED it were proven resident. `write_floor`
@@ -1624,6 +1683,17 @@ class FloorReading:
             value = self.row.get(key)
             if type(value) is int and value > 0:
                 return value
+        return None
+
+    @property
+    def ci(self) -> dict | None:
+        """The floor's interval, or None when the file carries none (every floor written
+        before R23-61a). A legacy floor states it as `floor_ci`; a matched (v2) floor as
+        its sealed `interval`. Descriptive only: `gate_floor` does not read it."""
+        for key in ("floor_ci", "interval"):
+            value = self.row.get(key)
+            if isinstance(value, Mapping) and value:
+                return dict(value)
         return None
 
     def gate_floor(self, *, effect_unit: str) -> float | None:
@@ -1765,6 +1835,23 @@ def write_floor(store: Path | str, recipe: Recipe, row: Mapping, *,
     else:
         body["unit"] = unit
         body["n"] = count
+        # The CI travels next to the percentage whenever the launches that defined it are
+        # in the row (R23-61). Re-derived here rather than trusted from the row: the writer
+        # is the one place a stated interval can be checked against its own runs.
+        runs = body.get("runs")
+        if (isinstance(runs, list) and len(runs) == count and count >= 2
+                and all(type(v) in (int, float) and math.isfinite(v) and v > 0 for v in runs)):
+            derived = floor_ci(runs)
+            stated = body.get("floor_ci")
+            if stated is not None and stated != derived:
+                raise ServingFloorMismatch(
+                    f"refusing to write a floor for {recipe.name!r}: its stated floor_ci "
+                    f"{stated!r} does not re-derive from its own {count} runs ({derived!r})")
+            body["floor_ci"] = derived
+        elif body.get("floor_ci") is not None:
+            raise ServingFloorMismatch(
+                f"refusing to write a floor for {recipe.name!r}: it states a floor_ci but "
+                f"not the n={count} runs it would be derived from, so nothing can check it")
     target = floor_path(store, recipe, frozen_requests=frozen_requests, instrument=instrument, pairs=pairs)
     return status.write_json(target.parent, target.name, body, prefix=".sv-floor-")
 
