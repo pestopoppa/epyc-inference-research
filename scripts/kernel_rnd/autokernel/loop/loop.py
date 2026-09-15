@@ -369,6 +369,15 @@ def iterate(*, planner: Planner, critic: Critic,
         outcome.patch_round = int(round_telemetry["patch_round"])
         outcome.prior_rejection_prompt = bool(
             round_telemetry["prior_rejection_prompt"])
+        # An admissible A/B result is fed to campaign memory regardless of sign:
+        # keeps move the anchor, while nulls/regressions close that exact attempt.
+        # Record that causal use, rather than leaving every measurement validator
+        # falsely marked as having no effect on subsequent search.
+        for row in validator_provenance:
+            if row.get("decision") == "measurement:paired_ab":
+                row["changed_subsequent_search"] = outcome.status in {
+                    "kept", "keep_candidate", "measured_null", "regression",
+                    "confirm_vetoed"}
         outcome.validator_provenance = list(validator_provenance)
         return outcome
 

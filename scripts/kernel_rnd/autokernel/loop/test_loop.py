@@ -191,6 +191,7 @@ class TheLoopback(unittest.TestCase):
             [row["decision"] for row in rows],
             ["critic:hypothesis", "critic:hypothesis", "critic:patch",
              "gate:compile", "measurement:paired_ab"])
+        self.assertTrue(rows[-1]["changed_subsequent_search"])
 
     def test_compatibility_critic_is_never_anonymous(self):
         outcome, _ = _run(_Planner(), _Critic([], []))
