@@ -108,6 +108,34 @@ class ContextBundle(unittest.TestCase):
         self.assertIn("IQ4_XS", text)
         self.assertIn("Operator suggestions", text)
 
+    def test_repeated_family_failures_force_a_higher_level_diagnostic(self):
+        rows = [
+            {"status": "measured_null", "mechanism_id": f"akm-barrier-{name}",
+             "statement": "change the OpenMP barrier implementation"}
+            for name in ("spin", "yield", "tree")
+        ]
+        text = actors.render_context({"prior_experiments": rows})
+        self.assertIn("DIMINISHING-RETURNS ESCAPE", text)
+        self.assertIn("synchronization/barrier", text)
+        self.assertIn("MUST target one of graph scheduling", text)
+        self.assertIn("expert/load balance", text)
+
+    def test_two_family_failures_do_not_force_an_early_escape(self):
+        rows = [
+            {"status": "refused_at_formation", "mechanism_id": f"akm-q4k-{name}"}
+            for name in ("a", "b")
+        ]
+        text = actors.render_context({"prior_experiments": rows})
+        self.assertNotIn("DIMINISHING-RETURNS ESCAPE", text)
+
+    def test_harness_failures_do_not_exhaust_a_mechanism_family(self):
+        rows = [
+            {"status": "bench_failed", "mechanism_id": f"akm-barrier-{name}"}
+            for name in ("a", "b", "c")
+        ]
+        text = actors.render_context({"prior_experiments": rows})
+        self.assertNotIn("DIMINISHING-RETURNS ESCAPE", text)
+
 
 class PlannerContract(unittest.TestCase):
 

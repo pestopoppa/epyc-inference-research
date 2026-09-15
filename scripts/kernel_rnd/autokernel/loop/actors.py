@@ -292,6 +292,19 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
             for row in observation.get("hotspots", [])[:limit]:
                 lines.append(f"| {row['sampled_period_fraction'] * 100:.2f}% | {row['period']} | "
                              f"`{row.get('dso')}` | `{row['symbol']}` |")
+            ranked = observation.get("ranked_levers") or []
+            if ranked:
+                lines.append("")
+                lines.append("### Ranked mechanism families from that same profile")
+                lines.append("This is a lossless grouping of the sampled symbols above, not a "
+                             "speedup estimate. Start with the highest-share unresolved causal "
+                             "mechanism; do not spend the iteration on a lower-share cosmetic "
+                             "variant without explaining why.")
+                lines.append("| rank | sampled-period fraction | mechanism family | evidence |")
+                lines.append("|---|---|---|---|")
+                for rank, row in enumerate(ranked[:limit], 1):
+                    lines.append(f"| {rank} | {row['sampled_period_fraction'] * 100:.2f}% | "
+                                 f"`{row['family']}` | {row['evidence_kind']} |")
             lines.extend(observation.get("limitations", []))
         else:
             lines.append(f"CPU profile {observation.get('status')}: "
@@ -310,6 +323,40 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
         lines.append("(no profile yet — say so rather than guessing a target)")
 
     prior = context.get("prior_experiments") or []
+
+    # A flat DNR list stops exact repeats, but it does not stop the planner from
+    # spending a campaign on cosmetic variants of the same failed idea. Treat three
+    # resolved failures in one mechanism family as a signal to change the QUESTION,
+    # not merely the implementation. This is formation guidance only: it neither
+    # changes a recorded result nor assigns a magnitude to a historical observation.
+    exhausted: dict[str, list[Mapping[str, Any]]] = {}
+    terminal = {"measured_null", "refused_at_formation", "authoring_refused",
+                "screened_out"}
+    for row in prior:
+        if row.get("status") not in terminal:
+            continue
+        family = _mechanism_family(row)
+        if family:
+            exhausted.setdefault(family, []).append(row)
+    exhausted = {family: rows for family, rows in exhausted.items()
+                 if len(rows) >= 3}
+    if exhausted:
+        lines.append("\n## DIMINISHING-RETURNS ESCAPE — mandatory for this turn")
+        lines.append(
+            "Repeated nulls/refusals show that the families below are exhausted. "
+            "Do NOT propose another implementation variant in one of them. Escalate "
+            "the causal question: determine why the hot work is waiting, imbalanced, "
+            "poorly partitioned, remotely placed, or serialised. The next hypothesis "
+            "MUST target one of graph scheduling, row/work partitioning, NUMA/memory "
+            "placement, or expert/load balance, and name evidence that distinguishes "
+            "that diagnosis from the exhausted local mechanism.")
+        for family, rows in sorted(exhausted.items()):
+            mechanisms = list(dict.fromkeys(
+                str(row.get("mechanism_id")) for row in rows
+                if row.get("mechanism_id")))
+            lines.append(f"- `{family}`: {len(rows)} resolved failures across "
+                         f"{', '.join(mechanisms[:6])}")
+        lines.append("")
 
     # A mechanism ID is actor prose; the durable source path and symbol are the
     # host-owned family identity.  Detect a run of distinct null/refused ideas in
@@ -454,6 +501,24 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
         lines.append("\n## Operator suggestions (async; use if relevant)")
         lines.extend(f"- {item}" for item in inbox)
     return "\n".join(lines)
+
+
+def _mechanism_family(row: Mapping[str, Any]) -> str | None:
+    """Return a coarse causal family used only to detect search stagnation."""
+    text = " ".join(str(row.get(key) or "").lower() for key in (
+        "mechanism_id", "statement", "target_symbol", "target_surface"))
+    families = (
+        ("synchronization/barrier", ("barrier", "spin-wait", "spin_wait",
+                                     "omp wait", "openmp wait", "futex")),
+        ("local quant/dot kernel", ("q4_k", "q4k", "q5_k", "q5k", "q8_0",
+                                    "q8-", "vec_dot", "dot-product", "dot_product")),
+        ("local fusion", ("fusion", "fuse-", "fused", "up-gate", "up_gate")),
+        ("prefetch/cache", ("prefetch", "cacheline", "cache-line", "l1", "l2")),
+    )
+    for family, needles in families:
+        if any(needle in text for needle in needles):
+            return family
+    return None
 
 
 _HYPOTHESIS_TASK = """You are proposing ONE kernel optimisation for llama.cpp on {platform}.

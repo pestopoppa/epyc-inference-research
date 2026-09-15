@@ -1864,7 +1864,12 @@ class SchedulerEngine:
             self._check_new_intervals(receipt)
         duration = receipts[-1].ended_at - receipts[0].started_at
         violations = []
-        if duration > self.config.max_stage_seconds:
+        # D is an admission forecast, not a reason to poison an otherwise valid
+        # continuous campaign after the resources have already been released.
+        # Charge the complete observed duration below.  Keep fencing overruns
+        # that did not produce a valid comparison, because those still indicate
+        # an unresolved execution path rather than merely expensive setup.
+        if duration > self.config.max_stage_seconds and outcome != "valid_comparison":
             violations.append("actual held interval exceeded configured stage-plus-teardown D")
         if any(receipt.physical_region_fraction > self.capacity.physical_region_fraction
                or not set(receipt.gpu_device_ids).issubset(self.capacity.gpu_devices)

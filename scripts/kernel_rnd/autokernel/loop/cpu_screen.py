@@ -81,8 +81,36 @@ def prepare_launch(full: rr.CanonicalResolvedRecipe, scope: str, owned_cpus) -> 
                           "changing those conditions, not NUMA-local equivalence, and no full-target transfer"}
 
 
-def mechanism_hint(store_root: Path, full: rr.CanonicalResolvedRecipe) -> dict:
+def _scope_for_mechanism(text: str):
+    """Map qualitative mechanism words to an already validated screen geometry."""
+    text = text.lower()
+    if re.search(r"barrier|schedul|numa|scaling|thread.synchron|load.balance", text):
+        return "scale_sensitive", "full"
+    if re.search(r"prefetch|repack|layout|blocking|cache|traffic|cop(?:y|ies)|"
+                 r"moe|expert|multi.?row|batch(?:ed)?|up.?gate", text):
+        return "memory_geometry", "half"
+    if re.search(r"simd|arithmetic|redundant|dispatch|unpack|dequant|vec_dot|vecdot|q8", text):
+        return "local_work", "quarter"
+    return None
+
+
+def mechanism_hint(store_root: Path, full: rr.CanonicalResolvedRecipe,
+                   recent: dict | None = None) -> dict:
     """Read original qualitative mechanisms; hints neither grade nor retire them."""
+    # The serial continuation already seals the immediately preceding mechanism.
+    # Prefer it over a scan of the growing experiment database: the latter has a
+    # deliberately short read budget and used to time out into a full-core batch,
+    # silently defeating the cheap-screen path on long campaigns.
+    if isinstance(recent, dict):
+        mechanism_id = recent.get("mechanism_id")
+        classified = _scope_for_mechanism(str(mechanism_id or ""))
+        if classified is not None:
+            family, selection = classified
+            return {"scope": selection, "mechanism_family": family,
+                    "source_store": str(store_root), "attempt_id": None,
+                    "mechanism_id": mechanism_id, "statement": None,
+                    "basis": "immediately preceding sealed continuation mechanism; "
+                             "qualitative screening hint only, not transfer evidence"}
     try:
         with experiments.ExperimentStore(store_root, read_only=True) as store:
             rows = store.recall(epoch="", limit=16, include_source_scope=True,
@@ -95,23 +123,21 @@ def mechanism_hint(store_root: Path, full: rr.CanonicalResolvedRecipe) -> dict:
                 continue
             text = " ".join(str(row.get(key) or "") for key in (
                 "mechanism_id", "statement", "target_symbol", "falsifier")).lower()
-            if re.search(r"barrier|schedul|numa|scaling|thread.synchron", text):
-                family, selection = "scale_sensitive", "full"
-            elif re.search(r"prefetch|repack|layout|blocking|cache|traffic|cop(?:y|ies)", text):
-                family, selection = "memory_geometry", "half"
-            elif re.search(r"simd|arithmetic|redundant|dispatch|unpack|dequant|vec_dot|vecdot", text):
-                family, selection = "local_work", "quarter"
-            else:
+            classified = _scope_for_mechanism(text)
+            if classified is None:
                 continue
+            family, selection = classified
             return {"scope": selection, "mechanism_family": family,
                     "source_store": str(store_root), "attempt_id": row["attempt_id"],
                     "mechanism_id": row["mechanism_id"], "statement": row["statement"],
                     "basis": "qualitative keyword hint from original recorded mechanism; not transfer evidence"}
     except Exception as exc:
-        return {"scope": "full", "mechanism_family": "unknown",
-                "reason": f"prior mechanism hint unavailable: {type(exc).__name__}: {exc}"[:512]}
-    return {"scope": "full", "mechanism_family": "unknown",
-            "reason": "no relevant recorded mechanism hint; retain the original full target"}
+        return {"scope": "half", "mechanism_family": "unknown_source_screen",
+                "reason": f"history hint unavailable; use non-promotable half screen: "
+                          f"{type(exc).__name__}: {exc}"[:512]}
+    return {"scope": "half", "mechanism_family": "unknown_source_screen",
+            "reason": "no scale-sensitive mechanism identified; use non-promotable half screen "
+                      "and require the existing full-target confirmation before keep"}
 
 
 def read_candidate(reference: dict) -> dict:
@@ -265,12 +291,33 @@ class RetainedPlanner:
         return tuple(self.candidate["paths"])
 
 
+class RetainedCritic:
+    """Admit only the exact candidate already reviewed during reduced screening."""
+
+    def __init__(self, candidate):
+        self.hypothesis = dict(candidate["hypothesis"])
+        self.paths = tuple(candidate["paths"])
+
+    def review_hypothesis(self, hypothesis, _context):
+        from .loop import Review
+        exact = hypothesis.to_dict() == self.hypothesis
+        return Review(exact, "" if exact else
+                      "full confirmation hypothesis differs from retained candidate")
+
+    def review_patch(self, hypothesis, paths, _context):
+        from .loop import Review
+        exact = hypothesis.to_dict() == self.hypothesis and tuple(paths) == self.paths
+        return Review(exact, "" if exact else
+                      "full confirmation patch paths differ from retained candidate")
+
+
 def preview_batch(original, prior, *, batch_iterations=1):
     """Read-only serial planning; a pending candidate outranks new work on its lane."""
     from . import campaign_cli, legacy_targets, serial_run
 
     if serial_run.option(original, "--cpu-serving-launch") is None:
         return {"scope": "full", "candidate": None}
+    recent = None
     if prior is not None:
         receipt, sha = serial_run.load_completed(Path(prior["path"]))
         if sha != prior["sha256"]:
@@ -282,11 +329,12 @@ def preview_batch(original, prior, *, batch_iterations=1):
             read_candidate(screen["candidate"])
             return {"scope": "full_confirmation", "candidate": screen["candidate"],
                     "confirm_from": prior["path"]}
+        recent = receipt.get("last_outcome_reference")
     if batch_iterations != 1 or serial_run.option(original, "--resolved-campaign") is None:
         return {"scope": "full", "candidate": None}
     full = rr.CanonicalResolvedRecipe.from_dict(serial_run._json(Path(
         serial_run.option(original, "--cpu-serving-launch")))[0])
-    hint = mechanism_hint(Path(serial_run.option(original, "--store")), full)
+    hint = mechanism_hint(Path(serial_run.option(original, "--store")), full, recent=recent)
     if hint["scope"] == "full":
         return {**hint, "candidate": None}
     if full.template.cpu_list is None:
