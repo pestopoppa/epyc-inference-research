@@ -188,7 +188,8 @@ def commit_message(hypothesis, comparison) -> str:
 
 def advance_champion(worker: pipeline.Worker, hypothesis, paths, comparison, *,
                      champion_tree: Path = CHAMPION_TREE,
-                     branch: str = CHAMPION_BRANCH) -> str:
+                     branch: str = CHAMPION_BRANCH,
+                     expected_tree: str | None = None) -> str:
     """Commit the lane's patch and move the champion BRANCH onto it.
 
     The sequential path commits with `branch="HEAD"`, which works because its worktree
@@ -211,6 +212,12 @@ def advance_champion(worker: pipeline.Worker, hypothesis, paths, comparison, *,
     new_head = archive.keep(worker.worktree, branch="HEAD",
                             message=commit_message(hypothesis, comparison),
                             paths=tuple(paths))
+    if expected_tree is not None:
+        committed_tree = _git(worker.worktree, "rev-parse", f"{new_head}^{{tree}}")
+        if committed_tree != expected_tree:
+            raise ValueError(
+                f"kept tree differs from measured tree: measured={expected_tree} "
+                f"kept={committed_tree}")
     _git(champion_tree, "update-ref", f"refs/heads/{branch}", new_head, base)
     _git(champion_tree, "reset", "--hard", new_head)
     return new_head

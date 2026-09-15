@@ -2149,10 +2149,31 @@ def main(argv: list[str] | None = None) -> int:
         integrity_evidence = {}
 
         def validate_pooled(worker, hypothesis, paths):
-            checked = integrity.validate_candidate(worker.worktree, paths)
-            candidate_integrity[worker.name] = checked
-            integrity_evidence[hypothesis.mechanism_id] = checked.to_dict()
-            return checked
+            quant_tokens = [census.dominant_quant,
+                            "GGML_TYPE_" + census.dominant_quant]
+            oracle_shape = {"op_ids": ["MUL_MAT", "GGML_OP_MUL_MAT"],
+                            "types": quant_tokens}
+            bench_shape = {"dims": [value for value in (pp, tg, ubatch) if value],
+                           "types": quant_tokens}
+            checked = integrity.validate_candidate(
+                worker.worktree, paths, oracle_shape=oracle_shape,
+                bench_shape=bench_shape)
+            base = _git(worker.worktree, "rev-parse", "HEAD")
+            attempt = dispatch_guard.attempt_identity(
+                diff=_git(worker.worktree, "diff", "--no-ext-diff", "HEAD", "--"),
+                champion=current_anchor_commit[0], cmake_defines=recipe.cmake_defines(),
+                bench_recipe={"pairs": args.serving_pairs if direct_launch else args.pairs,
+                              "pp": pp, "tg": tg, "ubatch": ubatch},
+                model=str(args.model), surface=args.surface)
+            key = integrity.evidence_key(lane=worker.name, attempt_id=attempt,
+                                         base_commit=base, paths=paths)
+            evidence = checked.to_dict()
+            evidence["evidence_key"] = key
+            candidate_integrity[worker.name] = (checked, key)
+            integrity_evidence[key] = evidence
+            # loop.py retains this exact mutable mapping on the Outcome. Confirm
+            # evidence added later is therefore visible to status and the journal.
+            return evidence
 
         def reserve_pooled(worker, _hypothesis, _paths):
             diff = _git(worker.worktree, "diff", "--no-ext-diff", "HEAD", "--")
@@ -2170,10 +2191,6 @@ def main(argv: list[str] | None = None) -> int:
 
         def record_pooled(outcome) -> None:
             attempt = outcome.to_attempt()
-            if outcome.hypothesis is not None:
-                evidence = integrity_evidence.get(outcome.hypothesis.mechanism_id)
-                if evidence is not None:
-                    attempt["integrity_screen"] = evidence
             attempt["research_scope"] = archive.original_research_scope(
                 attempt, model=args.model, quant=census.dominant_quant,
                 backend="cpu" if cpu_launch else "gpu", build_recipe=recipe.to_dict(),
@@ -2233,10 +2250,12 @@ def main(argv: list[str] | None = None) -> int:
                 report_runtime_progress()
                 reprofile()
                 return None
-            checked = candidate_integrity.get(worker.name)
-            if checked is None:
+            candidate = candidate_integrity.get(worker.name)
+            if candidate is None:
                 raise integrity.IntegrityRefused(
                     "missing_prebuild_integrity", "candidate reached keep without validation")
+            checked, evidence_key = candidate
+            evidence = integrity_evidence[evidence_key]
             # This check is after build/oracle/A-B and immediately before keep: the
             # tree accepted by measurement must still be the tree being committed.
             integrity.assert_measured_tree(worker.worktree, checked.tree)
@@ -2268,13 +2287,12 @@ def main(argv: list[str] | None = None) -> int:
                     checked, screen_surface=comparison.surface,
                     screen_model=comparison.model, confirm_surfaces=confirm.surfaces,
                     confirm_model=str(confirm.model))
-                integrity_evidence[hypothesis.mechanism_id].update(held_out_identity)
+                evidence.update(held_out_identity)
                 verdict = confirm.gate(hypothesis.mechanism_id, comparison,
                                        confirm_measure(worker))
                 if checked.needs_confirm:
                     confirm_effects = [row.get("effect")
                                        for row in verdict.get("confirm", ())]
-                    evidence = integrity_evidence[hypothesis.mechanism_id]
                     evidence["held_out_confirm"] = verdict
                     evidence["public_to_held_out_speedup_gap"] = [
                         comparison.effect - effect for effect in confirm_effects
@@ -2294,8 +2312,8 @@ def main(argv: list[str] | None = None) -> int:
                       if source_fold_candidate else None)
             head = pool.advance_champion(worker, hypothesis, paths, comparison,
                                          champion_tree=args.worktree,
-                                         branch=args.champion_branch)
-            integrity.assert_kept_commit(worker.worktree, head, checked.tree)
+                                         branch=args.champion_branch,
+                                         expected_tree=checked.tree)
             promote_anchor()
             if source_fold_candidate and patch_path is not None and parent is not None:
                 original_source_keeps.append({

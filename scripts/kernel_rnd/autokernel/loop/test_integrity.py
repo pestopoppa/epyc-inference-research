@@ -3,7 +3,7 @@ import subprocess
 
 import pytest
 
-from . import integrity, loop, pipeline
+from . import bench, integrity, loop, pipeline, pool
 
 
 def _git(root: Path, *args: str) -> str:
@@ -194,3 +194,61 @@ def test_pipeline_returns_journalable_refusal_before_critic_or_build():
     row = outcomes[0].to_attempt()
     assert row["integrity_screen"]["refusal_class"] == "dirty_set_mismatch"
     assert "dirty_set_mismatch" in row["reason"]
+
+
+def test_kept_tree_mismatch_never_advances_champion_ref(tmp_path):
+    repo = tmp_path / "repo"
+    lane = tmp_path / "lane"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "champion")
+    _git(repo, "config", "user.email", "test@example.invalid")
+    _git(repo, "config", "user.name", "test")
+    kernel = repo / "ggml/src/kernel.cpp"
+    kernel.parent.mkdir(parents=True)
+    kernel.write_text("int base = 1;\n")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-qm", "base")
+    base = _git(repo, "rev-parse", "refs/heads/champion")
+    _git(repo, "worktree", "add", "--detach", str(lane), base)
+    (lane / "ggml/src/kernel.cpp").write_text("int base = 2;\n")
+    worker = pipeline.Worker("lane0", lane, tmp_path / "build")
+    hypothesis = loop.Hypothesis("akm-tree", "change", "f", "ggml/src/kernel.cpp", "k")
+    comparison = bench.Comparison(
+        "tg128", [100.0], [102.0], 0.02, "median_over_median", 5, 1.0,
+        {"invocations": 10, "resident": 10})
+    with pytest.raises(ValueError, match="differs from measured"):
+        pool.advance_champion(
+            worker, hypothesis, ("ggml/src/kernel.cpp",), comparison,
+            champion_tree=repo, branch="champion", expected_tree="0" * 40)
+    assert _git(repo, "rev-parse", "refs/heads/champion") == base
+
+
+def test_held_out_gap_is_persisted_on_actual_outcome():
+    hypothesis = loop.Hypothesis("akm-held", "change", "f", "ggml/src/kernel.cpp", "k")
+
+    class Planner:
+        def propose(self, _context): return hypothesis
+        def author(self, _hypothesis, _context): return ("ggml/src/kernel.cpp",)
+
+    class Critic:
+        def review_hypothesis(self, *_args): return loop.Review(True)
+        def review_patch(self, *_args): return loop.Review(True)
+
+    evidence = {"needs_confirm": True, "findings": [{"kind": "literal_shape_predicate"}]}
+    comparison = bench.Comparison(
+        "tg128", [100.0], [102.0], 0.02, "median_over_median", 5, 1.0,
+        {"invocations": 10, "resident": 10})
+
+    def commit(*_args):
+        evidence["public_to_held_out_speedup_gap"] = [0.015]
+        evidence["held_out_identities"] = [["tg192", "model.gguf"]]
+        return "f" * 40
+
+    outcome = loop.iterate(
+        planner=Planner(), critic=Critic(), context={},
+        validate_candidate=lambda *_args: evidence,
+        gate=lambda *_args: (True, []), measure=lambda *_args: comparison,
+        commit=commit)
+    assert outcome.status == "kept"
+    assert outcome.integrity_screen["public_to_held_out_speedup_gap"] == [0.015]
+    assert outcome.to_attempt()["integrity_screen"]["held_out_identities"][0][0] == "tg192"
