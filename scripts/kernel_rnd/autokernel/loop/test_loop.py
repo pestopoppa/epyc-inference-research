@@ -165,6 +165,7 @@ class TheLoopback(unittest.TestCase):
             gate=mock.Mock(), commit=mock.Mock(),
             formation_guard=lambda _h, _c: "do_not_repeat characterised target")
         self.assertEqual(outcome.status, "refused_at_formation")
+        self.assertEqual(outcome.to_attempt()["refusal_gate"], "do_not_repeat")
         critic.review_hypothesis.assert_not_called()
 
     def test_duplicate_reservation_refuses_before_build(self):
@@ -178,6 +179,7 @@ class TheLoopback(unittest.TestCase):
                                reserve_candidate=refuse)
         self.assertEqual(outcome.status, "refused_duplicate")
         self.assertEqual(outcome.to_attempt()["duplicate_of"], "d1")
+        self.assertEqual(outcome.to_attempt()["refusal_gate"], "exact_attempt_identity")
         gate.assert_not_called()
 
     def test_proposal_abstention_is_a_science_outcome_not_a_transient(self):

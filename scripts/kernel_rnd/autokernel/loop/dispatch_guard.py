@@ -17,10 +17,15 @@ SCHEMA = "epyc.autokernel.dispatch_guard.v1"
 
 class DispatchRefused(RuntimeError):
     def __init__(self, reason: str, *, duplicate_of: str | None = None,
-                 prior_effect: float | None = None, prior_epoch: str | None = None):
+                 prior_effect: float | None = None, prior_epoch: str | None = None,
+                 attempt_identity: str | None = None):
         self.duplicate_of = duplicate_of
         self.prior_effect = prior_effect
         self.prior_epoch = prior_epoch
+        # Keep the refused identity on the exception.  A reservation is not returned
+        # on refusal, but the archive row still has to name the exact configuration
+        # that was closed (and not merely the row it duplicated).
+        self.attempt_identity = attempt_identity
         super().__init__(reason)
 
 
@@ -81,11 +86,12 @@ class Registry:
             elif row[1] in ANSWER_STATUSES:
                 raise DispatchRefused("exact candidate already answered",
                                       duplicate_of=identity, prior_effect=row[2],
-                                      prior_epoch=row[3])
+                                      prior_epoch=row[3], attempt_identity=identity)
             elif row[0] >= 2:
                 raise DispatchRefused(
                     "identical NON-ANSWER already retried once; configuration closed infeasible",
-                    duplicate_of=identity, prior_effect=row[2], prior_epoch=row[3])
+                    duplicate_of=identity, prior_effect=row[2], prior_epoch=row[3],
+                    attempt_identity=identity)
             else:
                 count = row[0] + 1
                 self.db.execute("UPDATE attempts SET dispatch_count=?,status='pending' "

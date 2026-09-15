@@ -203,6 +203,7 @@ class Outcome:
     duplicate_of: str | None = None
     prior_effect: float | None = None
     prior_epoch: str | None = None
+    refusal_gate: str | None = None
 
     def to_attempt(self) -> dict:
         row = {"status": self.status, "turn_recorded_at": _now()}
@@ -224,7 +225,7 @@ class Outcome:
         if self.integrity_screen is not None:
             row["integrity_screen"] = self.integrity_screen
         for key in ("attempt_identity", "exact_repeat_dispatch_count", "duplicate_of",
-                    "prior_effect", "prior_epoch"):
+                    "prior_effect", "prior_epoch", "refusal_gate"):
             if getattr(self, key) is not None:
                 row[key] = getattr(self, key)
         return row
@@ -365,7 +366,8 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
         last_proposed = hypothesis
         repeat_reason = formation_guard(hypothesis, working)
         if repeat_reason:
-            return Outcome("refused_at_formation", hypothesis, [repeat_reason])
+            return Outcome("refused_at_formation", hypothesis, [repeat_reason],
+                           refusal_gate="do_not_repeat")
 
         # ---- CRITIC PASS 1: the hypothesis, before any patch exists ----------
         if should_abandon():
@@ -450,9 +452,12 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                             if type(exc).__name__ != "DispatchRefused":
                                 raise
                             return Outcome("refused_duplicate", hypothesis, [str(exc)],
+                                           attempt_identity=getattr(
+                                               exc, "attempt_identity", None),
                                            duplicate_of=getattr(exc, "duplicate_of", None),
                                            prior_effect=getattr(exc, "prior_effect", None),
-                                           prior_epoch=getattr(exc, "prior_epoch", None))
+                                           prior_epoch=getattr(exc, "prior_epoch", None),
+                                           refusal_gate="exact_attempt_identity")
                     passed, verdicts = gate(hypothesis, paths)
                     if not passed:
                         if hypothesis.runtime_pair is not None:

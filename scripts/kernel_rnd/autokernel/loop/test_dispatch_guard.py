@@ -37,6 +37,7 @@ def test_answered_identity_refuses_after_fresh_process_round_trip():
         with pytest.raises(D.DispatchRefused) as caught:
             D.Registry(Path(tmp)).reserve(identity())
         assert caught.value.duplicate_of == identity()
+        assert caught.value.attempt_identity == identity()
         assert caught.value.prior_effect == -.01
         assert caught.value.prior_epoch == "e0"
 
@@ -48,8 +49,23 @@ def test_non_answer_gets_one_identical_retry_then_closes_infeasible():
         registry.finish(identity(), status="bench_failed", effect=None, epoch="e0")
         assert registry.reserve(identity()).dispatch_count == 2
         registry.finish(identity(), status="planner_transient", effect=None, epoch="e0")
-        with pytest.raises(D.DispatchRefused, match="closed infeasible"):
+        with pytest.raises(D.DispatchRefused, match="closed infeasible") as caught:
             registry.reserve(identity())
+        assert caught.value.attempt_identity == identity()
+
+
+def test_changed_recipe_or_champion_reopens_in_the_persistent_registry():
+    """Acceptance is registry behaviour, not merely unequal hash strings."""
+    with tempfile.TemporaryDirectory() as tmp:
+        registry = D.Registry(Path(tmp))
+        original = identity()
+        registry.reserve(original)
+        registry.finish(original, status="measured_null", effect=0.0, epoch="e0")
+
+        changed_champion = identity(champion="c1")
+        changed_recipe = identity(bench_recipe={"pairs": 6, "pp": 512})
+        assert registry.reserve(changed_champion).dispatch_count == 1
+        assert registry.reserve(changed_recipe).dispatch_count == 1
 
 
 def test_corrupt_registry_fails_closed():
