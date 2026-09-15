@@ -158,6 +158,28 @@ class TheLoopback(unittest.TestCase):
         self.assertEqual(outcome.status, "refused_at_formation")
         self.assertIn("build failed: undefined symbol", " ".join(outcome.reasons))
 
+    def test_characterised_guard_runs_before_critic_pass_one(self):
+        critic = mock.Mock()
+        outcome = loop.iterate(
+            planner=_Planner(), critic=critic, context={}, measure=mock.Mock(),
+            gate=mock.Mock(), commit=mock.Mock(),
+            formation_guard=lambda _h, _c: "do_not_repeat characterised target")
+        self.assertEqual(outcome.status, "refused_at_formation")
+        critic.review_hypothesis.assert_not_called()
+
+    def test_duplicate_reservation_refuses_before_build(self):
+        from autokernel.loop.dispatch_guard import DispatchRefused
+        def refuse(_h, _p):
+            raise DispatchRefused("exact candidate already answered", duplicate_of="d1",
+                                  prior_effect=-.02, prior_epoch="e0")
+        gate = mock.Mock()
+        outcome = loop.iterate(planner=_Planner(), critic=_Critic([], []), context={},
+                               measure=mock.Mock(), gate=gate, commit=mock.Mock(),
+                               reserve_candidate=refuse)
+        self.assertEqual(outcome.status, "refused_duplicate")
+        self.assertEqual(outcome.to_attempt()["duplicate_of"], "d1")
+        gate.assert_not_called()
+
     def test_proposal_abstention_is_a_science_outcome_not_a_transient(self):
         planner = mock.Mock()
         planner.propose.return_value = loop.Abstain("no supported mechanism remains")

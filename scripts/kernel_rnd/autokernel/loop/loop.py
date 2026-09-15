@@ -189,6 +189,11 @@ class Outcome:
     champion_head: str | None = None
     invalid_measurement: dict | None = None
     integrity_screen: dict | None = None
+    attempt_identity: str | None = None
+    exact_repeat_dispatch_count: int | None = None
+    duplicate_of: str | None = None
+    prior_effect: float | None = None
+    prior_epoch: str | None = None
 
     def to_attempt(self) -> dict:
         row = {"status": self.status, "turn_recorded_at": _now()}
@@ -207,6 +212,10 @@ class Outcome:
             row["invalid_measurement"] = self.invalid_measurement
         if self.integrity_screen is not None:
             row["integrity_screen"] = self.integrity_screen
+        for key in ("attempt_identity", "exact_repeat_dispatch_count", "duplicate_of",
+                    "prior_effect", "prior_epoch"):
+            if getattr(self, key) is not None:
+                row[key] = getattr(self, key)
         return row
 
 
@@ -266,7 +275,8 @@ def iterate(*, planner: Planner, critic: Critic,
             should_abandon: Callable[[], bool] | None = None,
             record_reschedule: Callable[[Outcome], bool] | None = None,
             accumulate_valid_positive: bool = False,
-            validate_candidate: Callable[[Hypothesis, Sequence[str]], Any] | None = None
+            validate_candidate: Callable[[Hypothesis, Sequence[str]], Any] | None = None,
+            formation_guard=None, reserve_candidate=None
             ) -> Outcome:
     """One full turn. Pure control flow: every side effect is an injected callable.
 
@@ -289,7 +299,9 @@ def iterate(*, planner: Planner, critic: Critic,
                         should_abandon=should_abandon or (lambda: False),
                         record_reschedule=record_reschedule,
                         accumulate_valid_positive=accumulate_valid_positive,
-                        validate_candidate=validate_candidate or (lambda _h, _p: None))
+                        validate_candidate=validate_candidate or (lambda _h, _p: None),
+                        formation_guard=formation_guard or (lambda _h, _c: None),
+                        reserve_candidate=reserve_candidate)
     except TailRefused as exc:
         # The candidate was formed and never measured. Carry the hypothesis: the
         # patch may well still help against the champion that displaced it, and the
@@ -319,7 +331,9 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
              tail_session=nullcontext,
              should_abandon=lambda: False, record_reschedule=None,
              accumulate_valid_positive=False,
-             validate_candidate=lambda _hypothesis, _paths: None) -> Outcome:
+             validate_candidate=lambda _hypothesis, _paths: None,
+             formation_guard=lambda _hypothesis, _context: None,
+             reserve_candidate=None) -> Outcome:
     last_proposed: Hypothesis | None = None
 
     def stopped() -> Outcome:
@@ -338,6 +352,9 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
         if isinstance(hypothesis, Abstain):
             return Outcome("abstained", None, [hypothesis.reason])
         last_proposed = hypothesis
+        repeat_reason = formation_guard(hypothesis, working)
+        if repeat_reason:
+            return Outcome("refused_at_formation", hypothesis, [repeat_reason])
 
         # ---- CRITIC PASS 1: the hypothesis, before any patch exists ----------
         if should_abandon():
@@ -415,6 +432,16 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             # around the call that builds it.
             try:
                 with tail_session():
+                    if reserve_candidate is not None and hypothesis.runtime_pair is None:
+                        try:
+                            reserve_candidate(hypothesis, paths)
+                        except Exception as exc:
+                            if type(exc).__name__ != "DispatchRefused":
+                                raise
+                            return Outcome("refused_duplicate", hypothesis, [str(exc)],
+                                           duplicate_of=getattr(exc, "duplicate_of", None),
+                                           prior_effect=getattr(exc, "prior_effect", None),
+                                           prior_epoch=getattr(exc, "prior_epoch", None))
                     passed, verdicts = gate(hypothesis, paths)
                     if not passed:
                         if hypothesis.runtime_pair is not None:
