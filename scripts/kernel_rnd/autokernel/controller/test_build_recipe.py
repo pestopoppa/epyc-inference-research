@@ -152,6 +152,52 @@ class SettledNonAdoptions(unittest.TestCase):
             "27a65ce389e7e053ab44cc64f5bae30579c81f7d6344b3595e927a72728e8404")
 
 
+class CoverageVariants(unittest.TestCase):
+    """Coverage is a separately identified correctness instrument, not a recipe mutation."""
+
+    def test_production_like_recipe_digests_are_unchanged(self):
+        self.assertEqual(
+            br.HOUSE_GPU_RECIPE.sha256(),
+            "27a65ce389e7e053ab44cc64f5bae30579c81f7d6344b3595e927a72728e8404")
+        self.assertEqual(
+            br.NATIVE_CPU_RECIPE.sha256(),
+            "f6a56ee6e2af3fe483244de274cd8925d54bb39168d27505c90acd20cce6537b")
+
+    def test_cpu_coverage_preserves_base_defines_and_adds_atomic_counters(self):
+        base = br.NATIVE_CPU_RECIPE.cmake_defines()
+        coverage = br.NATIVE_CPU_COVERAGE_RECIPE.cmake_defines()
+        self.assertEqual(coverage[:len(base)], base)
+        additions = dict(coverage[len(base):])
+        self.assertEqual(set(additions), {"CMAKE_C_FLAGS", "CMAKE_CXX_FLAGS"})
+        self.assertTrue(all("--coverage" in value for value in additions.values()))
+        self.assertTrue(all("-fprofile-update=atomic" in value
+                            for value in additions.values()))
+        self.assertNotEqual(br.NATIVE_CPU_COVERAGE_RECIPE.sha256(),
+                            br.NATIVE_CPU_RECIPE.sha256())
+
+    def test_hip_coverage_preserves_base_defines_and_instruments_host_launches(self):
+        base = br.HOUSE_GPU_RECIPE.cmake_defines()
+        coverage = br.HOUSE_GPU_COVERAGE_RECIPE.cmake_defines()
+        self.assertEqual(coverage[:len(base)], base)
+        additions = dict(coverage[len(base):])
+        self.assertEqual(set(additions),
+                         {"CMAKE_C_FLAGS", "CMAKE_CXX_FLAGS", "CMAKE_HIP_FLAGS"})
+        self.assertIn("-fprofile-instr-generate", additions["CMAKE_HIP_FLAGS"])
+        self.assertIn("-fcoverage-mapping", additions["CMAKE_HIP_FLAGS"])
+        self.assertTrue(all("-fprofile-update=atomic" in value
+                            for value in additions.values()))
+        self.assertNotEqual(br.HOUSE_GPU_COVERAGE_RECIPE.sha256(),
+                            br.HOUSE_GPU_RECIPE.sha256())
+
+    def test_coverage_variants_are_resolvable_but_never_alias_base_recipes(self):
+        for coverage, base in (
+                (br.NATIVE_CPU_COVERAGE_RECIPE, br.NATIVE_CPU_RECIPE),
+                (br.HOUSE_GPU_COVERAGE_RECIPE, br.HOUSE_GPU_RECIPE)):
+            self.assertIs(br.recipe_for(coverage.name), coverage)
+            self.assertNotEqual(coverage.name, base.name)
+            self.assertIn("correctness use only", coverage.notes)
+
+
 class FactoryUsesTheRecipe(unittest.TestCase):
 
     def test_the_factory_source_no_longer_carries_a_literal_tuple(self):

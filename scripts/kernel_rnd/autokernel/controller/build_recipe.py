@@ -200,12 +200,58 @@ NATIVE_CPU_RECIPE = BuildRecipe(
 )
 
 
+# Correctness-only instrument variants.  Keep the base recipe flags byte-for-byte
+# identical and append instrumentation rather than changing the production-like
+# build surface.  In particular, coverage is never a candidate/champion recipe:
+# its identity is distinct and its counter overhead makes throughput results from
+# it inadmissible.
+_GCC_COVERAGE_FLAGS = "--coverage -fprofile-update=atomic"
+_CLANG_COVERAGE_FLAGS = (
+    "-fprofile-instr-generate -fcoverage-mapping -fprofile-update=atomic"
+)
+
+
+def _coverage_variant(base: BuildRecipe, *, name: str,
+                      include_hip: bool) -> BuildRecipe:
+    flags = list(base.flags)
+    flags.extend((
+        Flag("CMAKE_C_FLAGS", _GCC_COVERAGE_FLAGS, None,
+             "Correctness-only host line coverage with thread-safe counters"),
+        Flag("CMAKE_CXX_FLAGS", _GCC_COVERAGE_FLAGS, None,
+             "Correctness-only host line coverage with thread-safe counters"),
+    ))
+    if include_hip:
+        flags.append(Flag(
+            "CMAKE_HIP_FLAGS", _CLANG_COVERAGE_FLAGS, None,
+            "Correctness-only HIP host-launch coverage with thread-safe counters",
+        ))
+    return BuildRecipe(
+        name=name,
+        notes=(f"Coverage instrument variant of {base.name}; correctness use only, "
+               "never throughput or champion evidence."),
+        flags=tuple(flags),
+    )
+
+
+NATIVE_CPU_COVERAGE_RECIPE = _coverage_variant(
+    NATIVE_CPU_RECIPE, name="native-openmp-gcc15-cpu-coverage-v1",
+    include_hip=False)
+
+HOUSE_GPU_COVERAGE_RECIPE = _coverage_variant(
+    HOUSE_GPU_RECIPE, name="gfx90a-house-coverage-v1", include_hip=True)
+
+
 def recipe_for(name: str) -> BuildRecipe:
-    if name == NATIVE_CPU_RECIPE.name:
-        return NATIVE_CPU_RECIPE
-    if name != HOUSE_GPU_RECIPE.name:
-        raise BuildRecipeError(f"unknown build recipe {name!r}")
-    return HOUSE_GPU_RECIPE
+    recipes = {
+        recipe.name: recipe for recipe in (
+            HOUSE_GPU_RECIPE, NATIVE_CPU_RECIPE,
+            HOUSE_GPU_COVERAGE_RECIPE, NATIVE_CPU_COVERAGE_RECIPE,
+        )
+    }
+    try:
+        return recipes[name]
+    except KeyError as exc:
+        raise BuildRecipeError(f"unknown build recipe {name!r}") from exc
 
 
 def from_flags(name: str, flags: Sequence[Mapping[str, Any]], *,
@@ -221,6 +267,7 @@ def from_flags(name: str, flags: Sequence[Mapping[str, Any]], *,
 
 
 __all__ = ["BuildRecipe", "BuildRecipeError", "Flag", "HOUSE_GPU_RECIPE",
-           "NATIVE_CPU_RECIPE",
+           "HOUSE_GPU_COVERAGE_RECIPE", "NATIVE_CPU_RECIPE",
+           "NATIVE_CPU_COVERAGE_RECIPE",
            "NonAdoption", "PRODUCTION_RECIPE_IS_VERIFIABLE", "RECIPE_SCHEMA",
            "SETTLED_NON_ADOPTIONS", "from_flags", "recipe_for"]
