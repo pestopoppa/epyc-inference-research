@@ -16,6 +16,7 @@ import sys
 import tempfile
 import threading
 import time
+import uuid
 
 from . import campaign_cli, champion, legacy_targets, status, worker_lifecycle
 
@@ -23,6 +24,9 @@ CONTINUATION_SCHEMA = "epyc.autokernel.loop_continuation.v1"
 CONTINUATION_SCHEMA_V2 = "epyc.autokernel.loop_continuation.v2"
 HELD_REFERENCE_SCHEMA = "epyc.autokernel.direct_held_reference.v1"
 SERIAL_SCHEMA = "epyc.autokernel.serial_run.v1"
+CURRENT_SERIAL_RUN_SCHEMA = "epyc.autokernel.current_serial_run.v1"
+CURRENT_SERIAL_RUN_POINTER = Path("/mnt/raid0/llm/autokernel/loop-memory/current-serial-run.json")
+CURRENT_SERIAL_RUN_TRUSTED_ROOT = Path("/mnt/raid0/llm/tmp")
 FULL_RESULT_RECOVERY_LIMIT = 512 * 1024 * 1024
 SERIAL_CHILD_LOG_SCHEMA = "epyc.autokernel.serial_child_output.v1"
 MAX_SERIAL_CHILD_LOG_BYTES_PER_STREAM = 1024 * 1024
@@ -976,6 +980,37 @@ def _child_command(argv):
     return [sys.executable, "-m", "scripts.kernel_rnd.autokernel.loop.run", *argv]
 
 
+def _current_run_pointer(root: Path) -> Path | None:
+    """Do not let fixtures or unrelated state roots repoint the live dashboard."""
+    trusted = Path(os.environ.get("AUTOKERNEL_CURRENT_SERIAL_RUN_TRUSTED_ROOT",
+                                  str(CURRENT_SERIAL_RUN_TRUSTED_ROOT))).resolve()
+    if root != trusted and trusted not in root.parents:
+        return None
+    return Path(os.environ.get("AUTOKERNEL_CURRENT_SERIAL_RUN_POINTER",
+                               str(CURRENT_SERIAL_RUN_POINTER))).resolve()
+
+
+def _publish_current_run(pointer: Path, root: Path, run_id: str, phase: str) -> bool:
+    """Atomically select this run; an older run cannot overwrite a newer selection."""
+    pointer.parent.mkdir(parents=True, exist_ok=True)
+    with pointer.with_name(pointer.name + ".lock").open("a") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        if phase != "starting":
+            if not pointer.exists():
+                return False
+            current, _sha = _json(pointer, limit=4096)
+            if current.get("run_id") != run_id:
+                return False
+        status.write_json(pointer.parent, pointer.name, {
+            "schema": CURRENT_SERIAL_RUN_SCHEMA,
+            "state_dir": str(root),
+            "generated_at": status._now(),
+            "run_id": run_id,
+            "phase": phase,
+        }, prefix=".current-serial-run-")
+        return True
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     source = parser.add_mutually_exclusive_group()
@@ -1123,34 +1158,43 @@ def main(argv=None) -> int:
             fcntl.flock(lock.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
             raise SerialRefused("serial session already has an owner") from exc
-        # Retired serial states are independent cache owners.  Reclaim only their
-        # generated build roots, under pressure, after independently proving each
-        # sibling lock is free and its child state fully reconciled.  Receipts,
-        # patches, logs, source trees, stores and anchor builds are never candidates.
-        from . import serial_build_retention
-        retention_plan = serial_build_retention.plan(
-            root.parent, root,
-            trigger_free_bytes=int(args.retention_trigger_free_gb * 1024 ** 3),
-            target_free_bytes=int(args.retention_target_free_gb * 1024 ** 3),
-            recent_state_caches=args.retention_recent_state_caches,
-            max_build_dirs=args.retention_max_build_dirs)
-        status.write_json(root, "build-retention-plan.json", retention_plan,
-                          prefix=".build-retention-plan-")
-        retention_result = serial_build_retention.execute(
-            retention_plan, dry_run=args.retention_dry_run)
-        status.write_json(root, "build-retention-result.json", retention_result,
-                          prefix=".build-retention-result-")
-        if (retention_plan["free_bytes_before"] < retention_plan["trigger_free_bytes"]
-                and retention_result["free_bytes_after"]
-                    < retention_plan["target_free_bytes"]):
-            raise SerialRefused(
-                "build retention could not restore the required free-space reserve: "
-                f"{retention_result['free_bytes_after']} < "
-                f"{retention_plan['target_free_bytes']} bytes")
-        return _drive(root, targets, args.batch_iterations, args.rounds, child_prefix=child_prefix,
-                      scheduler_manifest=scheduler_manifest,
-                      source_validation_priority_dir=args.source_validation_priority_dir,
-                      control_listen=args.control_listen, control_origin=args.control_origin)
+        pointer = _current_run_pointer(root)
+        run_id = uuid.uuid4().hex
+        if pointer is not None:
+            _publish_current_run(pointer, root, run_id, "starting")
+        terminal_phase = "failed"
+        try:
+            # Retired serial states are independent cache owners. Reclaim only
+            # generated build roots, after proving each sibling lock is free.
+            from . import serial_build_retention
+            retention_plan = serial_build_retention.plan(
+                root.parent, root,
+                trigger_free_bytes=int(args.retention_trigger_free_gb * 1024 ** 3),
+                target_free_bytes=int(args.retention_target_free_gb * 1024 ** 3),
+                recent_state_caches=args.retention_recent_state_caches,
+                max_build_dirs=args.retention_max_build_dirs)
+            status.write_json(root, "build-retention-plan.json", retention_plan,
+                              prefix=".build-retention-plan-")
+            retention_result = serial_build_retention.execute(
+                retention_plan, dry_run=args.retention_dry_run)
+            status.write_json(root, "build-retention-result.json", retention_result,
+                              prefix=".build-retention-result-")
+            if (retention_plan["free_bytes_before"] < retention_plan["trigger_free_bytes"]
+                    and retention_result["free_bytes_after"]
+                        < retention_plan["target_free_bytes"]):
+                raise SerialRefused(
+                    "build retention could not restore the required free-space reserve: "
+                    f"{retention_result['free_bytes_after']} < "
+                    f"{retention_plan['target_free_bytes']} bytes")
+            result = _drive(root, targets, args.batch_iterations, args.rounds, child_prefix=child_prefix,
+                            scheduler_manifest=scheduler_manifest,
+                            source_validation_priority_dir=args.source_validation_priority_dir,
+                            control_listen=args.control_listen, control_origin=args.control_origin)
+            terminal_phase = "complete" if result == 0 else "failed"
+            return result
+        finally:
+            if pointer is not None:
+                _publish_current_run(pointer, root, run_id, terminal_phase)
 
 
 def _source_owner_key(argv):

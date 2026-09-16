@@ -44,3 +44,49 @@ def test_original_run_publisher_retains_actual_output_and_pid():
     assert batches and len({row["output_dir"] for row in batches}) == 2
     assert all(row["pid"] == os.getpid() for row in batches)
     assert all(set(row) == {"output_dir", "pid"} for row in batches)
+
+
+def test_serial_current_run_pointer_follows_finished_run(tmp_path, monkeypatch):
+    pointer = tmp_path / "current-serial-run.json"
+    monkeypatch.setattr(serial_run, "CURRENT_SERIAL_RUN_TRUSTED_ROOT", tmp_path)
+    monkeypatch.setattr(serial_run, "CURRENT_SERIAL_RUN_POINTER", pointer)
+    root, argv = test_serial_run._inputs(tmp_path, monkeypatch, mode="good", rounds=1)
+    def observe_start(*_args, **_kwargs):
+        starting = json.loads(pointer.read_text())
+        assert starting["state_dir"] == str(root.resolve())
+        assert starting["phase"] == "starting"
+        return 0
+    with mock.patch.object(serial_run, "_drive", side_effect=observe_start):
+        assert serial_run.main(argv) == 0
+    current = json.loads(pointer.read_text())
+    assert current["schema"] == serial_run.CURRENT_SERIAL_RUN_SCHEMA
+    assert current["state_dir"] == str(root.resolve())
+    assert current["phase"] == "complete"
+    assert current["generated_at"].endswith("Z")
+    assert len(current["run_id"]) == 32
+
+
+def test_old_serial_run_cannot_repoint_newer_run(tmp_path):
+    pointer = tmp_path / "current-serial-run.json"
+    older, newer = tmp_path / "older", tmp_path / "newer"
+    assert serial_run._publish_current_run(pointer, older, "old", "starting")
+    assert serial_run._publish_current_run(pointer, newer, "new", "starting")
+    assert not serial_run._publish_current_run(pointer, older, "old", "failed")
+    current = json.loads(pointer.read_text())
+    assert current["state_dir"] == str(newer)
+    assert current["run_id"] == "new"
+    assert current["phase"] == "starting"
+    pointer.unlink()
+    assert not serial_run._publish_current_run(pointer, older, "old", "failed")
+    assert not pointer.exists()
+
+
+def test_serial_current_run_pointer_marks_startup_failure(tmp_path, monkeypatch):
+    pointer = tmp_path / "current-serial-run.json"
+    monkeypatch.setattr(serial_run, "CURRENT_SERIAL_RUN_TRUSTED_ROOT", tmp_path)
+    monkeypatch.setattr(serial_run, "CURRENT_SERIAL_RUN_POINTER", pointer)
+    _root, argv = test_serial_run._inputs(tmp_path, monkeypatch, mode="good", rounds=1)
+    with mock.patch.object(serial_run, "_drive", side_effect=serial_run.SerialRefused("fixture")):
+        with pytest.raises(serial_run.SerialRefused, match="fixture"):
+            serial_run.main(argv)
+    assert json.loads(pointer.read_text())["phase"] == "failed"
