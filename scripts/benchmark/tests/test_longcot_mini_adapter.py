@@ -43,9 +43,8 @@ class _Skip(Exception):
 def _require_data():
     if not _DATA_DIR.exists():
         _skip(f"dataset not present at {_DATA_DIR}")
-    # The adapter FAILS OPEN to an empty dataset when `datasets` (and its pyarrow
-    # backend) cannot be imported, which read as "0 rows" rather than a skip in
-    # environments without them (e.g. the uv test env).
+    # The adapter FAILS CLOSED (RuntimeError) when `datasets` (and its pyarrow
+    # backend) cannot be imported; skip those environments (e.g. the uv test env).
     try:
         import datasets  # noqa: F401
     except ImportError as exc:
@@ -189,6 +188,35 @@ def test_compute_score_for_result_unscorable_is_none():
     r = LongCoTMiniAdapter.compute_score_for_result("solution = [[1,2],[3,4]]", pd)
     assert r["correct"] is None and r["reason"] == "unscorable_null_gold"
     assert r["is_scorable"] is False
+
+
+# ── loader: fail closed when `datasets` is missing ────────────────────────────
+
+def test_missing_datasets_package_fails_closed():
+    """Data present + `datasets` unimportable must raise, never yield 0 rows."""
+    import tempfile
+
+    sentinel = object()
+    saved = sys.modules.get("datasets", sentinel)
+    sys.modules["datasets"] = None  # makes `from datasets import ...` raise ImportError
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            adapter = LongCoTMiniAdapter(data_dir=tmp)
+            try:
+                adapter._ensure_loaded()
+            except RuntimeError as exc:
+                assert "datasets" in str(exc), exc
+                assert tmp in str(exc), exc
+            else:
+                raise AssertionError(
+                    f"expected RuntimeError, loaded {adapter._dataset!r}"
+                )
+            assert adapter._dataset is None, adapter._dataset
+    finally:
+        if saved is sentinel:
+            sys.modules.pop("datasets", None)
+        else:
+            sys.modules["datasets"] = saved
 
 
 # ── dataset-backed load tests (skip if data absent) ───────────────────────────
