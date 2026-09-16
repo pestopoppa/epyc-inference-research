@@ -261,6 +261,10 @@ def one_iteration_outcome(terminal: str, outcome_counts: Mapping[str, int]) -> s
         raise SerialSchedulingRefused("scheduled child must cover exactly one research iteration")
     if status in VALID_COMPARISONS:
         return "valid_comparison"
+    if status == "abstained":
+        # A planner/author feasibility abstention is a completed science turn,
+        # but it supplies no measurement and is neither invalid nor a failure.
+        return "abstained"
     if status in INVALID_OUTCOMES:
         return "invalid"
     if status in FAILED_OUTCOMES:
