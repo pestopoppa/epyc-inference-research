@@ -47,11 +47,12 @@ def _recorded(payload: dict, chapters: int = 20) -> dict:
 
 def _score(payload: dict, prompts: dict, chapters: int = 20) -> dict:
     """Metric tests: rows recorded as ``chapters``, graded against that gold set."""
-    return score_result_payload(_recorded(payload, chapters), prompts, chapters=chapters)
+    return score_result_payload(_recorded(payload, chapters), _gold(prompts, chapters))
 
 
 def _gold(prompts: dict, chapters: int = 20) -> GoldIndex:
-    return GoldIndex(prompts, chapters=chapters, variant=VARIANT)
+    return GoldIndex(prompts, chapters=chapters, variant=VARIANT,
+                     book_chapters={20: 19, 200: 196}[chapters])
 
 
 def test_chronological_tau_perfect_and_reversed():

@@ -626,6 +626,13 @@ def main() -> int:
             raise SystemExit(
                 "--belief-measurements requires --arm. A tuple that guesses the arm claims "
                 "warrant the run never captured.")
+        # B1: only rows the harness bound to their own recorded identity may back a claim.
+        # A pre-B1 row (legacy_prompt_verified) is scoreable, but its run is pre-hook.
+        binding = scored["summary"].get("row_binding") or {}
+        if set(binding) != {"recorded"}:
+            raise SystemExit(
+                f"refusing to emit belief rows: rows were bound as {binding}, and only a run "
+                "whose rows recorded their own provenance is post-hook")
         # CME-4: the stored prompts record which arm the model actually saw. A --arm
         # that disagrees with them would put the wrong arm behind the claim.
         seen_modes = scored["summary"].get("context_mode_by_prompt", {})

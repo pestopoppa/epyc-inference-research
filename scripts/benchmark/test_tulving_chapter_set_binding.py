@@ -339,3 +339,17 @@ def test_run_benchmark_records_provenance_and_generation_params(data_dir, monkey
 def test_legacy_question_id_is_the_pre_b1_form():
     assert legacy_question_id(VARIANT, -1, 42) == f"tulving_{VARIANT}_ch-001_q0042"
     assert parse_question_id(legacy_question_id(VARIANT, -1, 42))["chapters"] is None
+
+
+def test_a_pre_b1_run_scores_but_never_emits_belief_rows(data_dir, tmp_path, monkeypatch):
+    result = tmp_path / "r.json"
+    result.write_text(json.dumps(_result(_items(20), recorded=False, legacy_ids=True)))
+    monkeypatch.setattr(score_tulving_run, "_load_belief_capture",
+                        lambda: pytest.fail("a pre-hook run must not reach the writer"))
+    monkeypatch.setattr("sys.argv", [
+        "score_tulving_run.py", str(result), "--chapters", "20", "--out-json",
+        str(tmp_path / "s.json"), "--belief-measurements", "--arm", "full", "--run-id", "r"])
+    with pytest.raises(SystemExit, match="only a run whose rows recorded"):
+        score_tulving_run.main()
+    assert json.loads((tmp_path / "s.json").read_text())["summary"]["row_binding"] == {
+        "legacy_prompt_verified": 4}

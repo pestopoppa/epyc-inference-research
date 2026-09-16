@@ -470,7 +470,8 @@ def test_load_belief_capture_explains_a_missing_root(tmp_path, monkeypatch):
 def test_belief_sidecar_round_trips_through_the_root_writer(tmp_path, monkeypatch):
     monkeypatch.setattr(score_beam_run, "_ROOT_CANDIDATES", (_root_with_capture(),))
     capture = score_beam_run._load_belief_capture()
-    scored = score_beam_run.score_judged_payload(_judged_payload())
+    payload = {**_judged_payload(), "context_mode_by_row": {"full": 40}}
+    scored = score_beam_run.score_judged_payload(payload)
     out = tmp_path / "beam_score.json"
     out.write_text(json.dumps(scored, indent=2))
     sidecar = capture.write_belief_measurements(
