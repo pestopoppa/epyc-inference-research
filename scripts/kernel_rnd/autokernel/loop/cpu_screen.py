@@ -115,7 +115,7 @@ def mechanism_hint(store_root: Path, full: rr.CanonicalResolvedRecipe,
         with experiments.ExperimentStore(store_root, read_only=True) as store:
             rows = store.recall(epoch="", limit=16, include_source_scope=True,
                                 append_order=True,
-                                statuses=("measured_null", "kept", "keep_candidate",
+                                statuses=("measured_null", "regression", "kept", "keep_candidate",
                                           "runtime_observed"))
         for row in rows:
             scope = row.get("research_scope") or {}

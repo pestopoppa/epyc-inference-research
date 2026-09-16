@@ -11,7 +11,8 @@ from typing import Any, Mapping, Sequence
 
 from ..controller import do_not_repeat
 
-ANSWER_STATUSES = frozenset({"kept", "keep_candidate", "confirm_vetoed", "measured_null"})
+ANSWER_STATUSES = frozenset({"kept", "keep_candidate", "confirm_vetoed", "measured_null",
+                             "regression"})
 SCHEMA = "epyc.autokernel.dispatch_guard.v1"
 
 

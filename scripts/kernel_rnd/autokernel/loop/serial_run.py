@@ -1829,7 +1829,8 @@ def _scheduled_account(state, manifest, active, body, batch_dir):
     # charged above but cannot train successful duration from a truncated prefix.
     if (settled.campaign_attempts > scheduler_state.campaign_attempts
             and body["terminal"] == "complete"
-            and body["outcome_counts"] in ({"measured_null": 1}, {"keep_candidate": 1})
+            and body["outcome_counts"] in ({"measured_null": 1}, {"regression": 1},
+                                           {"keep_candidate": 1})
             and selection.proposal.stage_class == "search"
             and settled.successor_fences == scheduler_state.successor_fences):
         selected_id = active["selected_id"]

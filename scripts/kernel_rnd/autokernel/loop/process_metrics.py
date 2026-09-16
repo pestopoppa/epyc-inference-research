@@ -15,7 +15,8 @@ import sqlite3
 from typing import Any, Iterable, Mapping, Sequence
 
 SCHEMA = "epyc.autokernel.process_metrics.v1"
-MEASURED = frozenset({"kept", "keep_candidate", "measured_null", "runtime_observed"})
+MEASURED = frozenset({"kept", "keep_candidate", "measured_null", "regression",
+                      "runtime_observed"})
 VALID_DENOMINATOR = MEASURED | {"refused_at_formation", "planner_transient", "bench_failed"}
 
 

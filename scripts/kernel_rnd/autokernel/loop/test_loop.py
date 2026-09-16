@@ -315,8 +315,16 @@ class TheDecision(unittest.TestCase):
 
     def test_a_slower_candidate_is_never_kept(self):
         outcome, committed = _run(_Planner(), _Critic([], []), effect=-0.05, floor=1.0)
-        self.assertEqual(outcome.status, "measured_null")
+        self.assertEqual(outcome.status, "regression")
+        self.assertIn("DECISIVE REGRESSION", outcome.reasons[0])
+        self.assertIn("-5.000%", outcome.reasons[0])
         self.assertEqual(committed, {}, "a regression must not advance the champion")
+
+    def test_sub_floor_negative_is_still_unresolved_null(self):
+        outcome, committed = _run(_Planner(), _Critic([], []), effect=-0.005, floor=1.0)
+        self.assertEqual(outcome.status, "measured_null")
+        self.assertIn("did not clear", outcome.reasons[0])
+        self.assertEqual(committed, {})
 
     def test_an_effect_inside_the_noise_floor_is_not_a_win(self):
         """The defect in one assertion.

@@ -129,6 +129,7 @@ _MAGNITUDE_FIELDS = ("effect_fraction", "exact_attribution_effect_fraction",
 _STATUS_MERIT = {
     "kept": 5.0,
     "measured_null": 5.0,
+    "regression": 5.0,
     "superseded": 4.0,
     "refused_at_formation": 3.0,
     "bench_failed": 1.0,
