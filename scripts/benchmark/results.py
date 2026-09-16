@@ -48,6 +48,18 @@ class QuestionResult:
     algorithmic_score: Optional[int] = None
     score_reason: Optional[str] = None
     acceptance_rate: Optional[float] = None
+    # M-12 B1: the adapter's dataset/arm identity, copied verbatim from the question.
+    # Scorers bind ground truth to it (Tulving refuses a chapter-set mismatch).
+    provenance: Optional[dict] = None
+    # M-12 B3: the generation parameters this answer was actually requested with
+    # (max_tokens, temperature, enable_thinking, cache_prompt, endpoint).
+    inference: Optional[dict] = None
+    # Server-reported stop reason ("stop" | "length" | ...), when the endpoint gives one;
+    # "length" means the answer hit max_tokens.
+    finish_reason: Optional[str] = None
+
+
+_QUESTION_RESULT_FIELDS = frozenset(QuestionResult.__dataclass_fields__)
 
 
 @dataclass
@@ -87,7 +99,9 @@ class ModelConfigResult:
         for suite, questions in data.get("results", {}).items():
             results[suite] = {}
             for qid, qdata in questions.items():
-                results[suite][qid] = QuestionResult(**qdata)
+                # Keys a newer writer added are kept out of the constructor, not fatal.
+                results[suite][qid] = QuestionResult(
+                    **{k: v for k, v in qdata.items() if k in _QUESTION_RESULT_FIELDS})
 
         return cls(
             model_role=data["model_role"],

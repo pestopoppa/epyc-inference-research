@@ -27,6 +27,18 @@ from typing import Any
 
 from dataset_adapters import BaseAdapter
 
+try:
+    from beam_memory_retrievers import (
+        CHUNKING, BM25PairChunkRetriever, TracePairChunkRetriever, pair_chunks, render_message,
+    )
+except ImportError:  # imported as a package module
+    import sys as _sys
+
+    _sys.path.insert(0, str(Path(__file__).parent))
+    from beam_memory_retrievers import (  # noqa: E402
+        CHUNKING, BM25PairChunkRetriever, TracePairChunkRetriever, pair_chunks, render_message,
+    )
+
 EVAL_DIR = Path("/mnt/raid0/llm/data/eval")
 
 
@@ -489,6 +501,39 @@ _BEAM_REFERENCE_FIELDS = (
 _BEAM_DIFFICULTY_TIER = {"easy": 1, "clear": 1, "medium": 2, "hard": 3}
 
 
+# ── M-12b arms (B2) ─────────────────────────────────────────────────────────
+#
+# The arm is chosen like the Tulving CME-4 arm: a constructor argument, else an env var,
+# because ``get_adapter("beam")`` constructs with no arguments. Both memory arms share
+# one prompt header (M-12c(7): prompt-matched, so the control and the arm under test
+# differ ONLY in which excerpts they show); the arm itself is recorded in each prompt's
+# ``provenance`` and the scorer refuses a ``--arm`` that disagrees with it.
+
+BEAM_CONTEXT_FULL = "full"      # BEAM's Vanilla column: the whole history (memory-off)
+BEAM_CONTEXT_RAG = "rag"        # naive-memory control: pair_chunk x BM25
+BEAM_CONTEXT_TRACE = "trace"    # arm under test: pair_chunk through the trace store
+BEAM_CONTEXT_MODES = (BEAM_CONTEXT_FULL, BEAM_CONTEXT_RAG, BEAM_CONTEXT_TRACE)
+BEAM_CONTEXT_MODE_ENV = "BEAM_CONTEXT_MODE"
+BEAM_RETRIEVAL_TOP_K_ENV = "BEAM_RETRIEVAL_TOP_K"
+#: ~10 x the median pair chunk (~2.9K chars) ~= 6K Qwen tokens: the same order as the
+#: Tulving retrieved arm's top-5 chapters, and far inside the 32K the paper gave RAG.
+BEAM_DEFAULT_RETRIEVAL_TOP_K = 10
+BEAM_FULL_HEADER = "The following is the complete history of your conversation with the user.\n\n"
+BEAM_RETRIEVED_HEADER = (
+    "The following are excerpts retrieved from the history of your conversation with "
+    "the user.\n\n")
+BEAM_NO_EXCERPTS = "(no excerpts retrieved)"
+
+
+def beam_context_kind_of_prompt(prompt: str) -> str:
+    """``"full"`` or ``"retrieved"``, read from a stored prompt's header, else ``"unknown"``."""
+    if prompt.startswith(BEAM_FULL_HEADER):
+        return "full"
+    if prompt.startswith(BEAM_RETRIEVED_HEADER):
+        return "retrieved"
+    return "unknown"
+
+
 class BEAMLoadError(RuntimeError):
     """BEAM data that is present but cannot be loaded faithfully.
 
@@ -584,19 +629,55 @@ class BEAMAdapter(BaseAdapter):
     a degraded source, never as an empty benchmark in disguise.
 
     Data licence: CC BY-SA 4.0 (HF card); code MIT.
+
+    M-12b arms (B2): ``context_mode`` is ``"full"`` (default; the history above),
+    ``"rag"`` (``pair_chunk`` x BM25, the naive-memory control) or ``"trace"``
+    (the same chunks through the orchestrator trace store). Defaults to
+    ``$BEAM_CONTEXT_MODE``. Both memory arms use ``retrieval_top_k`` chunks
+    (``$BEAM_RETRIEVAL_TOP_K``, else 10) and one prompt header. ``retriever``
+    injects a callable ``(question, *, conversation_id, top_k) -> list[str]``.
     """
 
     suite_name = "beam"
     has_real_tiers = True
+    #: All questions of a conversation share its history; keep them contiguous so the
+    #: server's prompt cache is hit (M-12 B5). Adapter order is conversation order.
+    preserve_order = True
+    #: M-12 B3: explicit generation parameters (see docs/m12-long-context-gpu-recipe.md §5).
+    #: 2048 tokens ~= 5x the longest reference answer (1,584 chars, summarization); thinking
+    #: off so the budget is the answer (M-12c(3)); temperature 0 for a comparable A/B.
+    inference_params = {
+        "temperature": 0.0,
+        "max_tokens": 2048,
+        "enable_thinking": False,
+        "cache_prompt": True,
+        "timeout": 1800,
+    }
 
-    def __init__(self, data_dir: Path | str | None = None, split: str = "100K"):
+    def __init__(self, data_dir: Path | str | None = None, split: str = "100K",
+                 context_mode: str | None = None, retriever=None,
+                 retrieval_top_k: int | None = None):
         super().__init__()
         if split not in BEAM_SPLITS:
             raise ValueError(f"BEAM split must be one of {BEAM_SPLITS}, got {split!r}")
         self._data_dir = Path(data_dir) if data_dir else EVAL_DIR / "beam"
         self._split = split
         self._transcripts: dict[str, str] = {}
+        self._chunks: dict[str, list[str]] = {}
         self.source_kind: str | None = None
+        mode = context_mode or os.environ.get(BEAM_CONTEXT_MODE_ENV) or BEAM_CONTEXT_FULL
+        if mode not in BEAM_CONTEXT_MODES:
+            raise ValueError(f"BEAM context_mode must be one of {BEAM_CONTEXT_MODES}, got {mode!r}")
+        if retriever is not None and not callable(retriever):
+            raise TypeError("retriever must be callable")
+        top_k = retrieval_top_k
+        if top_k is None:
+            top_k = int(os.environ.get(BEAM_RETRIEVAL_TOP_K_ENV) or BEAM_DEFAULT_RETRIEVAL_TOP_K)
+        if top_k < 1:
+            raise ValueError("retrieval_top_k must be >= 1")
+        self.context_mode = mode
+        self._retriever = retriever
+        self._retrieval_top_k = top_k
 
     # ── loading ──────────────────────────────────────────────────────────
 
@@ -678,6 +759,7 @@ class BEAMAdapter(BaseAdapter):
             if not messages:
                 raise BEAMLoadError(f"conversation {conversation_id}: empty chat")
             self._transcripts[conversation_id] = self._render_transcript(messages)
+            self._chunks[conversation_id] = pair_chunks(messages)
             probing = _beam_parse_probing_questions(conv.get("probing_questions"),
                                                     conversation_id)
             for ability in BEAM_ABILITIES:
@@ -689,17 +771,34 @@ class BEAMAdapter(BaseAdapter):
                         "question": question,
                     })
         self._dataset = entries
+        if entries and self.context_mode != BEAM_CONTEXT_FULL and self._retriever is None:
+            if self.context_mode == BEAM_CONTEXT_RAG:
+                self._retriever = BM25PairChunkRetriever(self._chunks)
+            else:
+                # Raises TraceRetrieverUnavailable; the arm never degrades to another arm.
+                self._retriever = TracePairChunkRetriever(
+                    self._chunks, store_id=f"{self._split}-{self.source_kind}")
 
     @staticmethod
     def _render_transcript(messages: list[dict]) -> str:
-        lines = []
-        for msg in messages:
-            role = str(msg.get("role", "")).strip().lower()
-            label = "User" if role == "user" else "Assistant" if role == "assistant" else role
-            anchor = msg.get("time_anchor")
-            prefix = f"[{anchor}] " if anchor else ""
-            lines.append(f"{prefix}{label}: {msg.get('content', '')}")
-        return "\n\n".join(lines)
+        return "\n\n".join(render_message(msg) for msg in messages)
+
+    def retriever_name(self) -> str | None:
+        if self.context_mode == BEAM_CONTEXT_FULL:
+            return None
+        return getattr(self._retriever, "name", None) or "injected"
+
+    def provenance(self) -> dict:
+        record = {
+            "suite": self.suite_name,
+            "split": self._split,
+            "beam_source": self.source_kind,
+            "context_mode": self.context_mode,
+        }
+        if self.context_mode != BEAM_CONTEXT_FULL:
+            record.update({"chunking": CHUNKING, "retrieval_top_k": self._retrieval_top_k,
+                           "retriever": self.retriever_name()})
+        return record
 
     # ── prompts ──────────────────────────────────────────────────────────
 
@@ -728,10 +827,23 @@ class BEAMAdapter(BaseAdapter):
         transcript = self._transcripts[conversation_id]
         reference, reference_field = self._reference(q)
 
-        prompt = (
-            "The following is the complete history of your conversation with the user.\n\n"
-            f"{transcript}\n\n---\n\nUser: {question_text}"
-        )
+        retrieved_chunks = None
+        if self.context_mode == BEAM_CONTEXT_FULL:
+            prompt = BEAM_FULL_HEADER + f"{transcript}\n\n---\n\nUser: {question_text}"
+        else:
+            if self._retriever is None:
+                raise RuntimeError(
+                    f"context_mode={self.context_mode!r} has no retriever; refusing to build a "
+                    "prompt that would silently be another arm")
+            excerpts = [
+                str(x).strip() for x in self._retriever(
+                    question_text, conversation_id=conversation_id,
+                    top_k=self._retrieval_top_k)
+                if str(x).strip()
+            ]
+            retrieved_chunks = len(excerpts)
+            body = "\n\n".join(excerpts) if excerpts else BEAM_NO_EXCERPTS
+            prompt = BEAM_RETRIEVED_HEADER + f"{body}\n\n---\n\nUser: {question_text}"
         scoring_config = {
             "judge_port": 8082,
             "per_nugget": True,
@@ -768,5 +880,9 @@ class BEAMAdapter(BaseAdapter):
                 "reference_field": reference_field,
                 "context_length_chars": len(transcript),
                 "beam_source": self.source_kind,
+                "context_mode": self.context_mode,
+                "retrieved_chunks": retrieved_chunks,
+                "prompt_chars": len(prompt),
             },
+            "provenance": self.provenance(),
         }

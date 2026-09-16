@@ -1125,6 +1125,13 @@ def _run_speed_question(
         print(f"    [ERROR] {role}/{config.name}/{suite_name}/{question_id}: {e}")
 
 
+#: M-12 suites whose adapters pin their generation parameters (B3). Registry
+#: temperature overrides, max_tokens multipliers and thinking-disable prompt suffixes
+#: are IGNORED for them (and logged + recorded): temperature 0, the token caps and a
+#: prompt-matched, prefix-shared prompt are part of the instrument.
+PINNED_GENERATION_SUITES = frozenset({"tulving_episodic", "beam"})
+
+
 def _run_quality_question(
     executor: Executor,
     results_manager: ResultsManager,
@@ -1166,20 +1173,34 @@ def _run_quality_question(
                 print(f"    [COPY] {role}/{config.name}/{question.id} <- {existing_role}")
                 return
 
+    pinned = suite_name in PINNED_GENERATION_SUITES
+    ignored_overrides: dict = {}
+
+    def _ignore(name: str, value) -> None:
+        ignored_overrides[name] = value
+        print(f"    [PINNED] {suite_name}: ignoring registry {name}={value!r} for "
+              f"{role} (M-12 suite pins its generation parameters)", flush=True)
+
     # Apply per-suite temperature override if configured
     effective_params = params
     if registry:
         temp_override = registry.get_temperature_override(role, suite_name)
         if temp_override is not None:
-            effective_params = dict(params)
-            effective_params["temperature"] = temp_override
+            if pinned:
+                _ignore("temperature_override", temp_override)
+            else:
+                effective_params = dict(params)
+                effective_params["temperature"] = temp_override
 
     # Apply thinking disable trick if configured for this suite
     effective_prompt = question.prompt
     if registry:
         think_trick = registry.get_thinking_disable_trick(role, suite_name)
         if think_trick:
-            effective_prompt = effective_prompt + think_trick
+            if pinned:
+                _ignore("thinking_disable_trick", think_trick)
+            else:
+                effective_prompt = effective_prompt + think_trick
 
     # Read model-specific sampling params (e.g., repeat_penalty for Gemma4/M2.7)
     model_repeat_penalty = None
@@ -1192,6 +1213,9 @@ def _run_quality_question(
             model_repeat_penalty = model_cfg.get("sampling", {}).get("repeat_penalty")
             model_disable_thinking = model_cfg.get("disable_thinking", False)
             max_tokens_mult = model_cfg.get("max_tokens_multiplier", 1)
+            if pinned and max_tokens_mult != 1:
+                _ignore("max_tokens_multiplier", max_tokens_mult)
+                max_tokens_mult = 1
 
     # Apply max_tokens multiplier for thinking models (need budget for reasoning + answer).
     # The timeout MUST scale alongside — generating Nx more tokens at the same t/s takes Nx
@@ -1210,8 +1234,36 @@ def _run_quality_question(
             and config.config_type in ("baseline", "moe", "spec", "moe_spec", "moe_spec_lookup", "spec_lookup", "lookup", "moe_lookup")
         )
 
+        # M-12 B3: a suite that pins its thinking mode / prompt cache wins over the registry.
+        suite_enable_thinking = effective_params.get("enable_thinking")
+        suite_cache_prompt = effective_params.get("cache_prompt")
+        inference_record = {
+            "max_tokens": effective_params["max_tokens"],
+            "temperature": effective_params["temperature"],
+            "timeout": effective_params["timeout"],
+            "enable_thinking": (suite_enable_thinking if suite_enable_thinking is not None
+                                else (False if model_disable_thinking else None)),
+            "enable_thinking_source": ("suite" if suite_enable_thinking is not None
+                                       else "registry" if model_disable_thinking else "unset"),
+            "cache_prompt": suite_cache_prompt,
+            "prompt_suffix_trick": bool(effective_prompt != question.prompt),
+            "pinned_suite": pinned,
+            "ignored_registry_overrides": ignored_overrides,
+        }
+
         if use_server:
             spec_k = config.spec_k if config.config_type in ("spec", "moe_spec", "moe_spec_lookup", "spec_lookup") else None
+            inference_record["endpoint"] = (
+                "chat_completions"
+                if (ss.server.mmproj_path is not None or ss.server.use_chat_api
+                    or suite_enable_thinking is not None)
+                else "completion")
+            if inference_record["endpoint"] == "completion":
+                # /completion applies no chat template, so no thinking kwarg reaches the model.
+                inference_record["enable_thinking"] = None
+                inference_record["enable_thinking_source"] = "not_applicable_raw_completion"
+                if suite_cache_prompt is None:
+                    inference_record["cache_prompt"] = False
             result = ss.server.run_inference(
                 prompt=effective_prompt,
                 max_tokens=effective_params["max_tokens"],
@@ -1221,8 +1273,15 @@ def _run_quality_question(
                 image_path=question.image_path,
                 repeat_penalty=model_repeat_penalty,
                 disable_thinking=model_disable_thinking,
+                enable_thinking=suite_enable_thinking,
+                cache_prompt=suite_cache_prompt,
             )
         else:
+            if suite_enable_thinking is not None:
+                raise RuntimeError(
+                    f"suite {suite_name} pins enable_thinking={suite_enable_thinking}, which only "
+                    "the server chat-completions path can apply; run with --server-mode")
+            inference_record["endpoint"] = "cli"
             result = executor.run_inference(
                 model_path=model_path,
                 config=config,
@@ -1271,6 +1330,9 @@ def _run_quality_question(
             algorithmic_score=None,
             score_reason=None,
             acceptance_rate=parsed.acceptance_rate,
+            provenance=dict(question.provenance) if question.provenance else None,
+            inference=inference_record,
+            finish_reason=getattr(result, "finish_reason", None),
         )
 
         results_manager.add_question_result(

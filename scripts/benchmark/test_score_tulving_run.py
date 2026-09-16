@@ -9,6 +9,7 @@ import pytest
 import score_tulving_run
 from score_tulving_run import (
     SCORER_VERSION,
+    GoldIndex,
     _load_belief_capture,
     chronological_tau,
     chronological_tau_detail,
@@ -32,6 +33,26 @@ def _prompt(
             "nb_events": len(ground_truth) if nb_events is None else nb_events,
         },
     }
+
+
+VARIANT = "Udefault_Sdefault_seed0"
+
+
+def _recorded(payload: dict, chapters: int = 20) -> dict:
+    """Stamp every row the way a post-B1 run_benchmark records it."""
+    for row in payload.get("results", {}).get("tulving_episodic", {}).values():
+        row.setdefault("provenance", {"chapters": chapters, "variant": VARIANT})
+    return payload
+
+
+def _score(payload: dict, prompts: dict, chapters: int = 20) -> dict:
+    """Metric tests: rows recorded as ``chapters``, graded against that gold set."""
+    return score_result_payload(_recorded(payload, chapters), _gold(prompts, chapters))
+
+
+def _gold(prompts: dict, chapters: int = 20) -> GoldIndex:
+    return GoldIndex(prompts, chapters=chapters, variant=VARIANT,
+                     book_chapters={20: 19, 200: 196}[chapters])
 
 
 def test_chronological_tau_perfect_and_reversed():
@@ -71,7 +92,7 @@ def test_score_result_payload_computes_composites():
         "q_all": _prompt("q_all", ["Jan 1"], get_style="all"),
     }
 
-    scored = score_result_payload(payload, prompt_index)
+    scored = _score(payload, prompt_index)
     summary = scored["summary"]
 
     assert summary["scorer_version"] == SCORER_VERSION
@@ -90,7 +111,7 @@ def test_score_result_payload_tracks_missing_ground_truth():
         "run_id": "run",
         "results": {"tulving_episodic": {"missing": {"response": "- A"}}},
     }
-    scored = score_result_payload(payload, {})
+    scored = _score(payload, {})
     assert scored["summary"]["scored_questions"] == 0
     assert scored["summary"]["missing_ground_truth"] == 1
     assert scored["missing_ground_truth_ids"] == ["missing"]
@@ -148,7 +169,7 @@ def _m12e_fixture() -> tuple[dict, dict]:
 
 def test_simple_recall_uses_only_the_recall_subset():
     payload, prompts = _m12e_fixture()
-    scored = score_result_payload(payload, prompts)
+    scored = _score(payload, prompts)
     summary = scored["summary"]
 
     assert summary["scored_questions"] == 8
@@ -172,7 +193,7 @@ def test_pre_m12e_behaviour_would_have_differed():
     from tulving_episodic_adapter import compute_simple_recall_score
 
     payload, prompts = _m12e_fixture()
-    scored = score_result_payload(payload, prompts)
+    scored = _score(payload, prompts)
 
     # Bins 1 and 2 pick up the failing latest/chronological rows and average to
     # 1/3 each, so the whole-set score is (1 + 1/3 + 1/3 + 1) / 4.
@@ -194,7 +215,7 @@ def test_simple_recall_bins_on_matching_events_not_item_count():
     }
     prompts = {"q": _prompt("q", ["Jan 1"], get_style="all", nb_events=7)}
 
-    scored = score_result_payload(payload, prompts)
+    scored = _score(payload, prompts)
     bins = scored["summary"]["simple_recall_bins"]
     assert bins["6+"]["count"] == 1
     assert bins["1"]["count"] == 0
@@ -209,7 +230,7 @@ def test_simple_recall_bin_basis_reports_the_fallback():
     prompt = _prompt("q", ["Jan 1"], get_style="all")
     prompt["metadata"].pop("nb_events")
 
-    scored = score_result_payload(payload, {"q": prompt})
+    scored = _score(payload, {"q": prompt})
     assert scored["summary"]["simple_recall_bin_basis"] == "nb_gt_fallback"
 
 
@@ -263,7 +284,7 @@ def test_partial_coverage_is_reported_not_silent():
         ),
     }
 
-    scored = score_result_payload(payload, prompts)
+    scored = _score(payload, prompts)
     assert scored["summary"]["chronological_partial_coverage"] == 1
     assert scored["chronological_partial_coverage_ids"] == ["c_partial"]
 
@@ -275,7 +296,7 @@ def test_unknown_get_style_enters_no_subset():
     }
     prompts = {"q": _prompt("q", ["Jan 1"], get_style="surprise")}
 
-    scored = score_result_payload(payload, prompts)
+    scored = _score(payload, prompts)
     summary = scored["summary"]
     assert summary["scored_questions"] == 1
     assert summary["simple_recall_questions"] == 0
@@ -307,7 +328,7 @@ def test_render_markdown_includes_key_metrics(tmp_path):
 
 def test_render_markdown_reports_partial_tau_coverage(tmp_path):
     payload, prompts = _m12e_fixture()
-    scored = score_result_payload(payload, prompts)
+    scored = _score(payload, prompts)
     md = render_markdown(scored, tmp_path / "result.json")
     assert "Scorer version: 2" in md
     assert "failed closed for partial coverage" in md
@@ -356,14 +377,14 @@ def test_belief_sidecar_round_trips_through_the_root_writer(tmp_path, monkeypatc
     capture = _load_belief_capture()
 
     payload, prompts = _m12e_fixture()
-    scored = score_result_payload(payload, prompts)
+    scored = _score(payload, prompts)
     out = tmp_path / "tulving_score.json"
     out.write_text(json.dumps(scored, indent=2))
 
     sidecar = capture.write_belief_measurements(
         out, summary=scored["summary"], run_id="m12e-test",
         producer="score_tulving_run.py", arm="none",
-        variant="Udefault_Sdefault_seed0", chapters=196)
+        variant="Udefault_Sdefault_seed0", chapters=20)
     rows = [json.loads(line) for line in sidecar.read_text().splitlines()]
     assert len(rows) == 2
     for row in rows:
@@ -379,7 +400,7 @@ def test_root_writer_refuses_a_pre_m12e_summary(tmp_path, monkeypatch):
     capture = _load_belief_capture()
 
     payload, prompts = _m12e_fixture()
-    scored = score_result_payload(payload, prompts)
+    scored = _score(payload, prompts)
     scored["summary"]["scorer_version"] = 1
     out = tmp_path / "tulving_score.json"
     out.write_text(json.dumps(scored, indent=2))
@@ -388,7 +409,7 @@ def test_root_writer_refuses_a_pre_m12e_summary(tmp_path, monkeypatch):
         capture.write_belief_measurements(
             out, summary=scored["summary"], run_id="m12e-test",
             producer="score_tulving_run.py", arm="none",
-            variant="Udefault_Sdefault_seed0", chapters=196)
+            variant="Udefault_Sdefault_seed0", chapters=20)
     assert not (tmp_path / "belief_measurements.jsonl").exists()
 
 
@@ -398,15 +419,15 @@ def _payload_with_prompts(prompt_text: str) -> tuple[dict, dict]:
     payload, prompts = _m12e_fixture()
     for row in payload["results"]["tulving_episodic"].values():
         row["prompt"] = prompt_text
-    return payload, prompts
+    return _recorded(payload), prompts
 
 
 def test_summary_counts_the_arm_of_each_stored_prompt():
     payload, prompts = _payload_with_prompts("Book narrative:\nChapter 1\n\n---\n\nQ")
-    summary = score_result_payload(payload, prompts)["summary"]
+    summary = _score(payload, prompts)["summary"]
     assert summary["context_mode_by_prompt"] == {"full": 8}
     payload, prompts = _m12e_fixture()
-    assert score_result_payload(payload, prompts)["summary"]["context_mode_by_prompt"] == {
+    assert _score(payload, prompts)["summary"]["context_mode_by_prompt"] == {
         "unrecorded": 8}
 
 
@@ -424,7 +445,7 @@ def test_build_prompt_index_is_arm_independent(monkeypatch):
 
     monkeypatch.setenv(tea.CONTEXT_MODE_ENV, "retrieved")
     monkeypatch.setattr(score_tulving_run, "TulvingEpisodicAdapter", Spy)
-    assert score_tulving_run.build_prompt_index() == {}
+    assert score_tulving_run.build_prompt_index(20) == {}
     assert seen["context_mode"] == tea.CONTEXT_NONE
 
 
@@ -432,13 +453,14 @@ def _run_main(tmp_path, monkeypatch, prompt_text, arm):
     payload, prompts = _payload_with_prompts(prompt_text)
     result = tmp_path / "ingest_long_context_x.json"
     result.write_text(json.dumps(payload))
-    monkeypatch.setattr(score_tulving_run, "build_prompt_index", lambda: prompts)
+    monkeypatch.setattr(score_tulving_run, "build_prompt_index",
+                        lambda chapters, variant=VARIANT: _gold(prompts, chapters))
     monkeypatch.setattr(score_tulving_run, "_load_belief_capture",
                         lambda: pytest.fail("capture must not load on an arm mismatch"))
     monkeypatch.setattr("sys.argv", [
         "score_tulving_run.py", str(result), "--out-json", str(tmp_path / "s.json"),
         "--belief-measurements", "--arm", arm, "--variant", "Udefault_Sdefault_seed0",
-        "--chapters", "19", "--run-id", "r1"])
+        "--chapters", "20", "--run-id", "r1"])
     return score_tulving_run.main()
 
 
@@ -451,11 +473,12 @@ def test_arm_that_disagrees_with_the_stored_prompts_is_refused(tmp_path, monkeyp
 def test_arm_without_recorded_prompts_is_refused(tmp_path, monkeypatch):
     payload, prompts = _m12e_fixture()
     result = tmp_path / "r.json"
-    result.write_text(json.dumps(payload))
-    monkeypatch.setattr(score_tulving_run, "build_prompt_index", lambda: prompts)
+    result.write_text(json.dumps(_recorded(payload)))
+    monkeypatch.setattr(score_tulving_run, "build_prompt_index",
+                        lambda chapters, variant=VARIANT: _gold(prompts, chapters))
     monkeypatch.setattr("sys.argv", [
         "score_tulving_run.py", str(result), "--out-json", str(tmp_path / "s.json"),
-        "--belief-measurements", "--arm", "full", "--variant", "v", "--chapters", "19",
+        "--belief-measurements", "--arm", "full", "--variant", VARIANT, "--chapters", "20",
         "--run-id", "r1"])
     with pytest.raises(SystemExit, match="unrecorded"):
         score_tulving_run.main()
@@ -466,13 +489,14 @@ def test_matching_arm_emits_through_main(tmp_path, monkeypatch):
     payload, prompts = _payload_with_prompts("Q only, no context header")
     result = tmp_path / "r.json"
     result.write_text(json.dumps(payload))
-    monkeypatch.setattr(score_tulving_run, "build_prompt_index", lambda: prompts)
+    monkeypatch.setattr(score_tulving_run, "build_prompt_index",
+                        lambda chapters, variant=VARIANT: _gold(prompts, chapters))
     monkeypatch.setattr(
         score_tulving_run, "_ROOT_CANDIDATES", (_root_capture_module(),), raising=True)
     monkeypatch.setattr("sys.argv", [
         "score_tulving_run.py", str(result), "--out-json", str(tmp_path / "s.json"),
         "--belief-measurements", "--arm", "none", "--variant", "Udefault_Sdefault_seed0",
-        "--chapters", "19", "--run-id", "r1"])
+        "--chapters", "20", "--run-id", "r1"])
     assert score_tulving_run.main() == 0
     rows = [json.loads(x) for x in (tmp_path / "belief_measurements.jsonl").read_text().splitlines()]
     assert {r["extra"]["arm"] for r in rows} == {"none"} and len(rows) == 2

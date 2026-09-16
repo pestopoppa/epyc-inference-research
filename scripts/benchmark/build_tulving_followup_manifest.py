@@ -32,11 +32,29 @@ def _load_json(path: Path) -> dict[str, Any]:
         return json.load(f)
 
 
-def _prompt_index_or_empty() -> dict[str, dict[str, Any]]:
-    try:
-        return build_prompt_index()
-    except Exception:
+def prompt_index_for(scored: dict[str, Any], chapters: int | None = None) -> dict[str, dict[str, Any]]:
+    """Gold prompts for the chapter set the score was graded against (M-12 B1).
+
+    A post-B1 score names its set; ``chapters`` may only restate it. A pre-B1 score names
+    none, so ``chapters`` must be given, and its (legacy) question ids are resolved through
+    the gold's legacy-id map. With no set at all, prompts are not attached, loudly.
+    """
+    import sys
+
+    summary = scored.get("summary", {})
+    recorded = summary.get("chapters")
+    if recorded is not None and chapters is not None and int(recorded) != int(chapters):
+        raise SystemExit(f"--chapters {chapters} disagrees with the score's {recorded}")
+    chapters = recorded if recorded is not None else chapters
+    if chapters is None:
+        print("[followup] the score records no chapter set and --chapters was not given; "
+              "prompts are NOT attached", file=sys.stderr)
         return {}
+    kwargs = {"variant": summary["variant"]} if summary.get("variant") else {}
+    index = build_prompt_index(int(chapters), **kwargs)
+    if recorded is None:
+        return dict(getattr(index, "by_legacy_id", {}))
+    return dict(index)
 
 
 def _record_base(
@@ -215,10 +233,14 @@ def main() -> int:
         action="store_true",
         help="Skip adapter prompt enrichment; useful when dataset dependencies are unavailable.",
     )
+    parser.add_argument(
+        "--chapters", type=int, default=None,
+        help="Chapter set (20/200) of a pre-B1 score, which does not record it.",
+    )
     args = parser.parse_args()
 
     scored = _load_json(args.score_json)
-    prompt_index = {} if args.no_prompt_enrichment else _prompt_index_or_empty()
+    prompt_index = {} if args.no_prompt_enrichment else prompt_index_for(scored, args.chapters)
     records = build_followup_records(
         scored,
         prompt_index=prompt_index,

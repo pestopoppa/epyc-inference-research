@@ -141,6 +141,36 @@ def judge_run(
     return {"records": records, "unjudged": unjudged}
 
 
+def recorded_arms(payload: Mapping[str, Any]) -> dict[str, int]:
+    """How many result rows each M-12b arm produced, from the rows' ``provenance``
+    (B2). Rows written before the harness recorded it count as ``"unrecorded"``."""
+    counts: dict[str, int] = {}
+    for row in (payload.get("results", {}).get("beam") or {}).values():
+        arm = (row.get("provenance") or {}).get("context_mode") or "unrecorded"
+        counts[arm] = counts.get(arm, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+#: ``finish_reason`` meaning the reader's answer hit ``max_tokens`` (M-12c(3)).
+TRUNCATED_FINISH_REASON = "length"
+
+
+def finish_reason_summary(payload: Mapping[str, Any]) -> dict:
+    """Per-row ``finish_reason`` counts and the truncated question ids of a result file."""
+    rows = payload.get("results", {}).get("beam") or {}
+    counts: dict[str, int] = {}
+    for row in rows.values():
+        key = row.get("finish_reason") or "unrecorded"
+        counts[key] = counts.get(key, 0) + 1
+    truncated = sorted(q for q, row in rows.items()
+                       if row.get("finish_reason") == TRUNCATED_FINISH_REASON)
+    return {"finish_reason_by_row": dict(sorted(counts.items())),
+            # None when no row recorded a finish_reason (pre-B3 run): zero would be a guess.
+            "truncated_rows": (len(truncated) if any(r.get("finish_reason") for r in rows.values())
+                               else None),
+            "truncated_question_ids": truncated}
+
+
 def build_judged_payload(payload: Mapping[str, Any], judged: Mapping[str, Any], *,
                          split: str, judge_model: str) -> dict:
     return {
@@ -153,6 +183,8 @@ def build_judged_payload(payload: Mapping[str, Any], judged: Mapping[str, Any], 
         "judge_prompt_version": JUDGE_PROMPT_VERSION,
         "question_in_judge_prompt": QUESTION_IN_JUDGE_PROMPT,
         "result_questions": len(payload.get("results", {}).get("beam", {})),
+        "context_mode_by_row": recorded_arms(payload),
+        **finish_reason_summary(payload),
         "records": list(judged["records"]),
         "unjudged": list(judged["unjudged"]),
     }
@@ -175,7 +207,9 @@ def main(argv: list[str] | None = None) -> int:
     from long_context_adapters import BEAMAdapter
 
     payload = json.loads(args.result.read_text())
-    adapter = BEAMAdapter(data_dir=args.data_dir, split=args.split)
+    # Nuggets and ids are identical across the M-12b arms, so the index is built from the
+    # full-history arm whatever $BEAM_CONTEXT_MODE says (no retriever, no trace store).
+    adapter = BEAMAdapter(data_dir=args.data_dir, split=args.split, context_mode="full")
     prompt_index = {p["id"]: p for p in adapter.extract_all()}
     if not prompt_index:
         raise SystemExit(f"no BEAM {args.split} data loaded: "
