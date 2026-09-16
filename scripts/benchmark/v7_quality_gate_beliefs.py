@@ -59,6 +59,28 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _pinned_sample_identities(path: Path) -> dict[str, dict]:
+    """Per-suite ``sample`` identity blocks stamped into a pinned manifest.
+
+    A manifest may carry one top-level ``sample`` mapping naming its ``suite``
+    (``cj_gpqa_sample.py``). Anything else -- a bare list, no block, a block
+    without a suite name, unreadable JSON -- yields no identity rather than a
+    guessed one: the row then says ``sample: None``, which is true.
+    """
+    try:
+        doc = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+    block = doc.get("sample") if isinstance(doc, dict) else None
+    if not isinstance(block, dict) or not isinstance(block.get("suite"), str):
+        return {}
+    suites = doc.get("suites")
+    if isinstance(suites, dict) and isinstance(suites.get(block["suite"]), list):
+        block = dict(block)
+        block["manifest_item_count"] = len(suites[block["suite"]])
+    return {block["suite"]: dict(block)}
+
+
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise BeliefRefused(message)
@@ -132,10 +154,12 @@ def attach_accuracy_beliefs(
 
     pinned = meta.get("questions_pinned")
     pinned_sha256 = None
+    pinned_samples: Mapping[str, Any] = {}
     if isinstance(pinned, str) and pinned:
         pinned_path = Path(pinned)
         if pinned_path.is_file():
             pinned_sha256 = _sha256_file(pinned_path)
+            pinned_samples = _pinned_sample_identities(pinned_path)
     arm = str(meta.get("arm", ""))
     producer = _producer(runner_source_sha256)
 
@@ -189,6 +213,11 @@ def attach_accuracy_beliefs(
                 "id": pinned or "fresh_sample_at_seed",
                 "path": pinned,
                 "sha256": pinned_sha256,
+                # Producer-stamped sample identity (e.g. CJ-1d GPQA,
+                # ``cj_gpqa_sample.py``): seed, n vs population, and the
+                # item-id digests. Copied verbatim from the pinned manifest;
+                # None when the manifest carries none — never reconstructed.
+                "sample": pinned_samples.get(suite_name),
             },
             "scored": {
                 "correct": correct,
