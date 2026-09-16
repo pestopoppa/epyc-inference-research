@@ -360,7 +360,8 @@ class ExperimentStore:
                include_source_scope: bool = False,
                include_claims: bool = False,
                statuses: Sequence[str] | None = None,
-               exclude_statuses: bool = False) -> list[dict[str, Any]]:
+               exclude_statuses: bool = False,
+               append_order: bool = False) -> list[dict[str, Any]]:
         """Prior attempts, each marked same-epoch or stale.
 
         `ranking_authorized` is the `P-AK-SEARCH-1` denial-4 boundary, narrowed by
@@ -376,7 +377,13 @@ class ExperimentStore:
         validity penalty AND their magnitudes redacted -- see `_MAGNITUDE_FIELDS`.
         Ranking is all it turns on: nothing here banks, composes, contributes to
         readiness, or relaxes a threshold the campaign derives for itself.
+
+        `append_order` is for qualitative hints only: reverse rowid order avoids
+        sorting an unindexed, multi-GB journal by recorded_at. It does not claim
+        timestamp order and must not be used for evidence selection or ranking.
         """
+        if append_order and (ranking_authorized or not include_source_scope):
+            raise ValueError("append-order recall is only for unranked scoped hints")
         pool = max(int(limit), RANKING_POOL) if ranking_authorized else int(limit)
         projection = "*"
         if include_source_scope:
@@ -385,7 +392,7 @@ class ExperimentStore:
             projection = ("attempt_id,recorded_at,campaign_id,epoch_sha256,hypothesis_id,"
                           "mechanism_id,target_surface,target_symbol,statement,falsifier,status,"
                           "effect_fraction,exact_effect,target_effect,refusal_reason,result_sha256,"
-                          "CASE WHEN length(payload)<=2097152 THEN "
+                          "CASE WHEN octet_length(payload)<=2097152 THEN "
                           "CASE WHEN json_valid(payload) THEN coalesce("
                           "json_extract(payload,'$.research_scope'),json_object("
                           "'model',coalesce(json_extract(payload,'$.comparison.model'),"
@@ -412,17 +419,17 @@ class ExperimentStore:
             parameters.extend(statuses)
         if include_source_scope:
             # Limit on scalar columns before touching payload overflow pages.  Some
-            # lifecycle records are tens of MiB, and projecting length()/JSON while
-            # SQLite builds the recency sorter defeats the bounded read deadline even
-            # though those rows will not survive LIMIT.
+            # lifecycle records are tens of MiB. Project only selected rows;
+            # octet_length reads TEXT size metadata without scanning each payload.
+            ordering = "rowid DESC" if append_order else "recorded_at DESC, rowid DESC"
             query = (
                 "WITH selected AS MATERIALIZED ("
                 f"SELECT rowid FROM experiments{predicate} "
-                "ORDER BY recorded_at DESC, rowid DESC LIMIT ?"
+                f"ORDER BY {ordering} LIMIT ?"
                 ") "
                 f"SELECT {projection} FROM experiments "
                 "WHERE rowid IN (SELECT rowid FROM selected) "
-                "ORDER BY recorded_at DESC, rowid DESC"
+                f"ORDER BY {ordering}"
             )
         else:
             query = (f"SELECT {projection} FROM experiments{predicate} "

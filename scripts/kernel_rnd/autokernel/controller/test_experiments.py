@@ -115,7 +115,7 @@ class Memory(unittest.TestCase):
                             "payload projection ran before recency LIMIT")
                     return len(value)
 
-                reader._connection.create_function("length", 1, bounded_length)
+                reader._connection.create_function("octet_length", 1, bounded_length)
                 rows = reader.recall(
                     epoch=EPOCH_A, limit=1, include_source_scope=True,
                     statuses=("measured_null",))
@@ -124,6 +124,32 @@ class Memory(unittest.TestCase):
             self.assertEqual(rows[0]["result_sha256"], f"{4:064x}")
             self.assertEqual(touched, 1)
             self.assertIsNone(rows[0]["research_scope"])
+
+    def test_append_order_hint_does_not_sort_the_journal(self):
+        """A large store's 200 ms reader must not sort every historical row."""
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.store(tmp) as store:
+                for index, timestamp in enumerate(("02", "01", "00"), start=1):
+                    store.record(
+                        _attempt(status="measured_null",
+                                 mechanism_id=f"mechanism-{index}",
+                                 result_sha256=f"{index:064x}"),
+                        epoch=EPOCH_A,
+                        recorded_at=f"2026-08-28T00:00:{timestamp}Z",
+                        campaign_id="append-order")
+            with ex.ExperimentStore(Path(tmp), read_only=True) as reader:
+                sql = []
+                reader._connection.set_trace_callback(sql.append)
+                rows = reader.recall(epoch=EPOCH_A, limit=2,
+                                     include_source_scope=True, append_order=True,
+                                     statuses=("measured_null",))
+                self.assertEqual([r["mechanism_id"] for r in rows],
+                                 ["mechanism-3", "mechanism-2"])
+                self.assertIn("ORDER BY rowid DESC LIMIT", sql[-1])
+                self.assertNotIn("ORDER BY recorded_at", sql[-1])
+                self.assertIn("octet_length(payload)", sql[-1])
+                with self.assertRaisesRegex(ValueError, "unranked scoped hints"):
+                    reader.recall(epoch=EPOCH_A, append_order=True)
 
     def test_a_refused_attempt_with_no_result_is_still_remembered(self):
         """A refusal the planner cannot see is a refusal it will earn again.
