@@ -199,8 +199,17 @@ class EndToEndMockedTests(unittest.TestCase):
             mock.patch.object(fixture, "SQUAD_SHA256", sq),
             mock.patch.dict(render.FONT_SHA256, {"6x10.bdf": fixture.sha256_file(self.cache / "6x10.bdf")}),
         ]
+        # GPU residency: fake an in-flight reader at +25 GiB with a KFD context (no real GPU touched).
+        self.vram = 30 * 2**30
+        self.kfd = [4242]
+        self.patches += [
+            mock.patch.object(run_occ1, "read_vram", lambda: self.vram),
+            mock.patch.object(run_occ1, "read_kfd_pids", lambda: list(self.kfd)),
+        ]
         for p in self.patches:
             p.start()
+        self.out.mkdir()
+        (self.out / "vram_baseline_bytes").write_text(str(5 * 2**30))
         self.base = ["--out", str(self.out), "--cache", str(self.cache), "--arms", "text,img-6x10-bw",
                      "--chunk-chars", "8000", "--qpc", "4", "--tokenizer", ""]
 
@@ -208,6 +217,30 @@ class EndToEndMockedTests(unittest.TestCase):
         for p in self.patches:
             p.stop()
         self.td.cleanup()
+
+    def run_ns(self, **kw):
+        base = dict(command="run", out=str(self.out), cache=str(self.cache), download=False,
+                    arms="text,img-6x10-bw", chunk_chars=8000, qpc=4, seed=42, limit_chunks=0,
+                    tokenizer="", url="http://mock", expect_build="ef81196d5", max_tokens=1024,
+                    max_requests=0, force=False, residency_interval=60.0)
+        base.update(kw)
+        return run_occ1.argparse.Namespace(**base)
+
+    def report_with_fake_capture(self):
+        calls = []
+
+        class FakeCapture:
+            class CaptureError(ValueError):
+                pass
+
+            @staticmethod
+            def write_belief_measurements(out, **kw):
+                calls.append(kw)
+                return out / "belief_measurements.jsonl"
+
+        with mock.patch.object(run_occ1, "_load_belief_capture", lambda: FakeCapture):
+            rc = run_occ1.main(["report", *self.base])
+        return rc, calls, json.loads((self.out / "summary.json").read_text())
 
     def fake_post(self, url, payload):
         content = payload["messages"][0]["content"]
@@ -380,3 +413,140 @@ class PortTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(HAVE_PIL, "Pillow not installed")
+class ReviewFixTests(EndToEndMockedTests):
+    """Fable review 2026-09-16: prereg drift, malformed 200 bodies, Pillow pin, GPU residency."""
+
+    def test_plan_records_pillow_version(self):
+        run_occ1.main(["plan", *self.base])
+        plan = json.loads((self.out / "plan.json").read_text())
+        self.assertEqual(plan["pillow_version"], run_occ1.pillow_version())
+        self.assertIsNotNone(plan["pillow_version"])
+
+    def test_pillow_mismatch_refuses_run(self):
+        run_occ1.main(["plan", *self.base])
+        with mock.patch.object(run_occ1, "pillow_version", lambda: "0.0.0"):
+            with self.assertRaises(SystemExit):
+                run_occ1.cmd_run(self.run_ns(), post=self.fake_post, ident=self.fake_ident)
+
+    def test_post_run_prereg_edit_in_plan_cannot_change_a_verdict(self):
+        self._planned_and_run()
+        rc, calls, clean = self.report_with_fake_capture()
+        self.assertEqual(clean["overall"], "NEGATIVE")
+        # someone loosens the plan's thresholds after seeing the data
+        plan = json.loads((self.out / "plan.json").read_text())
+        plan["prereg"] = {**plan["prereg"], "max_token_ratio": 0.99, "ni_margin_f1": 0.99}
+        (self.out / "plan.json").write_text(json.dumps(plan))
+        rc, calls, summary = self.report_with_fake_capture()
+        self.assertEqual(summary["overall"], "VOID")
+        self.assertTrue(any("pre-registration drift" in v for v in summary["void_reasons"]))
+        self.assertEqual(summary["prereg"], plan["prereg"])        # the plan's prereg is what is emitted
+        self.assertEqual(summary["prereg_code"], run_occ1.PREREG)  # and the code's is shown beside it
+        self.assertEqual(calls, [])                                # VOID: no belief row
+        self.assertFalse((self.out / "belief_measurements.jsonl").exists())
+
+    def test_post_run_prereg_edit_in_code_grades_with_the_plan(self):
+        self._planned_and_run()
+        planned = json.loads((self.out / "plan.json").read_text())["prereg"]
+        loosened = {**run_occ1.PREREG, "max_token_ratio": 0.99, "ni_margin_f1": 0.99}
+        with mock.patch.object(run_occ1, "PREREG", loosened):
+            rc, calls, summary = self.report_with_fake_capture()
+        self.assertEqual(summary["overall"], "VOID")
+        self.assertEqual(summary["prereg"], planned)
+        img = next(r for r in summary["rows"] if r["arm"] == "img-6x10-bw")
+        # graded with the planned 0.05 margin: a ~-0.6 F1 delta is never POSITIVE
+        self.assertNotEqual(img["verdict"], "POSITIVE")
+        self.assertEqual(calls, [])
+
+    def test_prereg_drift_refuses_run(self):
+        run_occ1.main(["plan", *self.base])
+        with mock.patch.object(run_occ1, "PREREG", {**run_occ1.PREREG, "ni_margin_f1": 0.2}):
+            with self.assertRaises(SystemExit):
+                run_occ1.cmd_run(self.run_ns(), post=self.fake_post, ident=self.fake_ident)
+
+    def test_capture_receives_the_planned_prereg(self):
+        self._planned_and_run()
+        rc, calls, summary = self.report_with_fake_capture()
+        self.assertEqual(rc, 0)
+        planned = json.loads((self.out / "plan.json").read_text())["prereg"]
+        self.assertEqual(calls[0]["summary"]["prereg"], planned)
+        self.assertIsNone(calls[0]["summary"]["prereg_code"])
+
+    def test_200_without_choices_is_an_error_retried_then_void(self):
+        run_occ1.main(["plan", *self.base])
+        sent = []
+
+        def bad(url, payload):
+            sent.append(1)
+            return {"error": {"message": "slot unavailable"}}
+
+        run_occ1.cmd_run(self.run_ns(max_requests=1), post=bad, ident=self.fake_ident)
+        self.assertEqual(len(sent), 2)  # retried once
+        rec = json.loads((self.out / "records.jsonl").read_text().splitlines()[0])
+        self.assertIn("no choices", rec["error"])
+        run_occ1.cmd_run(self.run_ns(), post=self.fake_post, ident=self.fake_ident)  # resume repairs it
+        rc, calls, summary = self.report_with_fake_capture()
+        self.assertNotEqual(summary["overall"], "VOID")
+        # an unrepaired malformed body voids the run
+        (self.out / "records.jsonl").write_text(json.dumps({**rec, "key": "text|c999"}) + "\n"
+                                                + (self.out / "records.jsonl").read_text())
+        rc, calls, summary = self.report_with_fake_capture()
+        self.assertEqual(summary["overall"], "VOID")
+        self.assertTrue(any("unrepaired" in v for v in summary["void_reasons"]))
+
+    def test_malformed_response_variants(self):
+        ok = {"choices": [{"message": {"content": "1. x"}}], "usage": {"prompt_tokens": 5}}
+        self.assertIsNone(run_occ1.malformed_response(ok))
+        for bad in ({}, {"choices": []}, {"choices": [{}]}, {"choices": [{"message": {}}]},
+                    {"choices": [{"message": {"content": "x"}}]}, [], "x"):
+            self.assertIsNotNone(run_occ1.malformed_response(bad), bad)
+
+    def test_missing_vram_baseline_refuses_run(self):
+        run_occ1.main(["plan", *self.base])
+        (self.out / "vram_baseline_bytes").unlink()
+        with self.assertRaises(SystemExit):
+            run_occ1.cmd_run(self.run_ns(), post=self.fake_post, ident=self.fake_ident)
+
+    def test_residency_proven_is_recorded(self):
+        self._planned_and_run()
+        res = json.loads((self.out / "residency.json").read_text())
+        self.assertEqual(len(res), 1)
+        self.assertTrue(res[0]["proven"], res[0])
+        self.assertGreaterEqual(res[0]["n_high"], 2)
+        self.assertTrue((self.out / "residency_samples.jsonl").exists())
+        rc, calls, summary = self.report_with_fake_capture()
+        self.assertNotEqual(summary["overall"], "VOID")
+
+    def test_vram_never_rising_voids_the_run(self):
+        self.vram = 5 * 2**30 + 100  # stays at baseline: the reader is not on the GPU
+        self._planned_and_run()
+        self.assertFalse(json.loads((self.out / "residency.json").read_text())[0]["proven"])
+        rc, calls, summary = self.report_with_fake_capture()
+        self.assertEqual(summary["overall"], "VOID")
+        self.assertTrue(any("residency not proven" in v for v in summary["void_reasons"]))
+        self.assertEqual(calls, [])
+
+    def test_server_pid_without_kfd_context_voids(self):
+        run_occ1.main(["plan", *self.base])
+        run_occ1.cmd_run(self.run_ns(server_pid=999), post=self.fake_post, ident=self.fake_ident)
+        res = json.loads((self.out / "residency.json").read_text())[0]
+        self.assertFalse(res["proven"])
+        self.assertTrue(any("server pid 999" in p for p in res["problems"]))
+
+    def test_unreadable_sysfs_voids(self):
+        self.vram = -1
+        self._planned_and_run()
+        self.assertFalse(json.loads((self.out / "residency.json").read_text())[0]["proven"])
+
+    def test_records_without_residency_record_void(self):
+        self._planned_and_run()
+        (self.out / "residency.json").unlink()
+        rc, calls, summary = self.report_with_fake_capture()
+        self.assertEqual(summary["overall"], "VOID")
+
+    def test_single_high_sample_is_not_residency(self):
+        samples = [{"vram_bytes": 30 * 2**30, "kfd_pids": [1]}, {"vram_bytes": 0, "kfd_pids": [1]}]
+        v = run_occ1.residency_verdict(samples, 0, 16 * 2**30, None)
+        self.assertFalse(v["proven"])

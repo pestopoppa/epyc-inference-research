@@ -46,8 +46,17 @@ the real ratio from server counts.
   (10,000 iterations, seed 0).
 - An arm is **NEGATIVE_COST** when its ratio is > 0.50, and **NOT_NONINFERIOR** otherwise.
 - **OCC-1 is POSITIVE** if any arm is POSITIVE; that arm seeds OCC-3. Otherwise OCC-1 is NEGATIVE.
-- **VOID** if any of these hold: text-arm F1 < 0.60, unrepaired transport errors, a prompt-cache hit,
-  a server identity mismatch, suite-fingerprint drift, frame pixel drift, or an incomplete run.
+- **VOID** if any of these hold:
+  - text-arm F1 < 0.60, or an incomplete run
+  - an unrepaired transport error, or an unrepaired malformed 200 body (no `choices`/content/usage).
+    Both are retried once, then stored as errors; `run` retries them on resume.
+  - a prompt-cache hit, or a server identity mismatch
+  - suite-fingerprint, frame-pixel or Pillow-version drift between `plan` and `run`
+  - **pre-registration drift**. `report` grades with the `prereg` stored in `plan.json`, never with
+    the code's `PREREG`. If the two differ, the run is VOID, and `summary.json` carries the plan's
+    `prereg` plus the code's as `prereg_code`. So a threshold edit after the run can never change a
+    verdict, and a VOID run writes no belief row.
+  - **GPU residency not proven** (see the recipe)
 
 ## GPU runner recipe
 
@@ -73,24 +82,31 @@ export OCC1_PORT=$PORT                           # report needs an epyc-root wit
 cd $RES
 
 # 0. (already done 2026-09-16; re-run only if the plan dir is lost — deterministic, ~50 s CPU)
-uv run --no-project --with pillow --with tokenizers \
+uv run --no-project --with pillow==12.3.0 --with tokenizers \
   python scripts/benchmark/occ1/run_occ1.py plan --out $RUN
 
 # 1. launch the reader (foreground exec; capture YOUR pid, kill only it)
+#    first record the VRAM baseline BEFORE the reader exists (run refuses without it)
+cat /sys/class/drm/card2/device/mem_info_vram_used > $RUN/vram_baseline_bytes
+cp $RUN/vram_baseline_bytes $RUN-pilot/vram_baseline_bytes
 nohup scripts/benchmark/occ1/launch_reader.sh --port $PORT > $RUN/server.log 2>&1 &
-SRV=$!
+SRV=$!                                           # taskset and the launcher exec, so this IS llama-server
 until curl -sf http://127.0.0.1:$PORT/health >/dev/null; do sleep 5; done   # ~1–2 min load
-# residency proof DURING the run, not after: rocm-smi --showmeminfo vram (≥ +20 GB) + KFD process count
+# residency is proven BY `run` itself, DURING the run: it samples VRAM + /sys/class/kfd/kfd/proc
+# before the first request, after every request, and every 2 s, into residency_samples.jsonl /
+# residency.json. It is PROVEN only if >= 2 samples show VRAM >= 16 GiB above the baseline AND
+# $SRV holds a KFD context. Otherwise report VOIDs the run. (ldd cannot prove a HIP run; ggml dlopens it.)
+# If another tenant frees or grabs VRAM between baseline and launch, re-take the baseline.
 
 # 2. pilot — 3 chunks, 18 requests, ~3–5 min; checks the plumbing before the full spend
-uv run --no-project --with pillow python scripts/benchmark/occ1/run_occ1.py plan --out $RUN-pilot --limit-chunks 3 --tokenizer ''
-uv run --no-project --with pillow python scripts/benchmark/occ1/run_occ1.py run  --out $RUN-pilot --limit-chunks 3 --tokenizer ''
+uv run --no-project --with pillow==12.3.0 python scripts/benchmark/occ1/run_occ1.py plan --out $RUN-pilot --limit-chunks 3 --tokenizer ''
+uv run --no-project --with pillow==12.3.0 python scripts/benchmark/occ1/run_occ1.py run  --out $RUN-pilot --limit-chunks 3 --tokenizer '' --server-pid $SRV
 uv run --no-project python scripts/benchmark/occ1/run_occ1.py report --out $RUN-pilot
 #   go/no-go: text F1 ≳ 0.8; non_image_prompt_tokens range narrow (≈ text-arm prompt − context tokens);
 #   no truncation. If an image arm answers everything UNREADABLE, that is a RESULT, not a bug.
 
 # 3. full run — 234 requests
-uv run --no-project --with pillow python scripts/benchmark/occ1/run_occ1.py run --out $RUN
+uv run --no-project --with pillow==12.3.0 python scripts/benchmark/occ1/run_occ1.py run --out $RUN --server-pid $SRV
 uv run --no-project python scripts/benchmark/occ1/run_occ1.py report --out $RUN   # summary.md / summary.json + belief_measurements.jsonl
 
 # 4. teardown
@@ -110,7 +126,7 @@ pilot and the report, budget **about 1.5 h of MI210 time**.
 ## Tests (mocked server, no inference)
 
 ```bash
-uv run --no-project --with pillow python -m unittest scripts/benchmark/occ1/tests/test_occ1.py
+uv run --no-project --with pillow==12.3.0 python -m unittest scripts/benchmark/occ1/tests/test_occ1.py
 ```
 
 ## Belief-kernel wiring (SC85)
