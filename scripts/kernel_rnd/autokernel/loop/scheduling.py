@@ -37,7 +37,7 @@ RESERVATION_KINDS = frozenset({"seed", "calibration", "validation", "reject_audi
                                "maintenance", "full_region"})
 OUTAGE_KINDS = frozenset({"authority", "resource"})
 BACKENDS = frozenset({"cpu", "gpu", "both"})
-OUTCOMES = frozenset({"valid_comparison", "invalid", "failed", "prerequisite",
+OUTCOMES = frozenset({"valid_comparison", "abstained", "invalid", "failed", "prerequisite",
                       "calibration", "validation", "reject_audit", "maintenance"})
 
 

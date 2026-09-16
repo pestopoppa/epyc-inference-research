@@ -143,6 +143,7 @@ elif selection_path:
         sys.exit(0)
 result_only_failure = mode == "gpu_result_only_failure" and target_id == "gpu"
 lane_failure = mode == "lane_error"
+science_abstention = mode == "abstained"
 count = 0 if stopped[0] else int(sr.option(argv, "--iterations"))
 prior = sr.option(argv, "--resume-run")
 anchor = Path(sr.option(argv, "--anchor-build"))
@@ -161,10 +162,16 @@ row = sr.continuation(argv=argv, binding=sr.input_binding(argv),
     if result_only_failure else
     [SimpleNamespace(status="lane_error") for _ in range(count)]
     if lane_failure else
+    [SimpleNamespace(status="abstained") for _ in range(count)]
+    if science_abstention else
     [SimpleNamespace(status="measured_null") for _ in range(count)],
     **({"runtime_recipe_reference": {"locator": "runtime-selection-fixture",
        "sha256": "b" * 64, "verified": True}}
        if mode == "runtime_ref" and cpu else {}),
+    **({"cpu_screen": {"scope": sr.option(argv, "--cpu-screen-scope"),
+       "full_execution_digest": "c" * 64,
+       "measured_execution_digest": "d" * 64, "candidate": None}}
+       if cpu and sr.option(argv, "--cpu-screen-scope") else {}),
     **({"held_claim_evidence": held} if held else {}))
 if result_only_failure:
     (out / "loop-run.json").write_text(json.dumps({
@@ -200,7 +207,9 @@ def _inputs(tmp_path, monkeypatch, *, mode="good", rounds=2):
     child.write_text(CHILD)
     monkeypatch.setattr(sr, "_child_command", lambda argv: [sr.sys.executable, str(child), *argv])
     # Source imports remain pinned to the tested checkout, not ambient installations.
-    monkeypatch.setenv("PYTHONPATH", str(Path(sr.__file__).resolve().parents[4]))
+    repo_root = Path(sr.__file__).resolve().parents[4]
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join(
+        (str(repo_root), str(repo_root / "scripts/kernel_rnd"))))
     files = []
     for backend in ("cpu", "gpu"):
         target_root = tmp_path / backend
@@ -359,6 +368,56 @@ def test_scheduled_lane_error_is_failed_accounting_and_remains_reschedulable(
     for result in saved["last_results"].values():
         body, _sha = sr.load_completed(Path(result["path"]))
         assert body["outcome_counts"] == {"lane_error": 1}
+
+
+def test_scheduled_fresh_children_account_science_abstention_without_comparison(
+        tmp_path, monkeypatch):
+    state, argv = _inputs(tmp_path, monkeypatch, mode="abstained", rounds=1)
+    argv = _scheduled(tmp_path, argv)
+    assert sr.main(argv) == 0
+    saved = json.loads((state / "serial-state.json").read_text())
+    scheduler_state = scheduling.SchedulerState.from_dict(saved["scheduler_state"])
+    assert saved["next_batch"] == 2 and saved["failed_targets"] == {}
+    assert scheduler_state.campaign_attempts == 2
+    assert {record.outcome for record in scheduler_state.accounted_receipts} == {"abstained"}
+    assert all(seed.valid_comparisons == 0 for seed in scheduler_state.seed_accounts)
+    assert "cost_forecast" not in saved
+    for result in saved["last_results"].values():
+        body, _sha = sr.load_completed(Path(result["path"]))
+        assert body["outcome_counts"] == {"abstained": 1}
+    assert len((state / "seen.jsonl").read_text().splitlines()) == 2
+
+
+def test_scheduled_restart_recovers_abstention_once_without_relaunching_child(
+        tmp_path, monkeypatch):
+    state, argv = _inputs(tmp_path, monkeypatch, mode="abstained", rounds=1)
+    argv = _scheduled(tmp_path, argv)
+    with mock.patch.object(sr, "_scheduled_account", side_effect=KeyboardInterrupt):
+        with pytest.raises(KeyboardInterrupt):
+            sr.main(argv)
+    crashed = json.loads((state / "serial-state.json").read_text())
+    assert crashed["active"] is not None and crashed["next_batch"] == 0
+    # The resumed owner is a new Python process, not merely another call on
+    # this module instance; only the first child may be recovered, not rerun.
+    runner = (
+        "import json, sys\n"
+        "from scripts.kernel_rnd.autokernel.loop import serial_run as sr\n"
+        "sr._child_command = lambda argv: [sys.executable, sys.argv[2], *argv]\n"
+        "raise SystemExit(sr.main(json.loads(sys.argv[1])))\n"
+    )
+    restarted = sr.subprocess.run(
+        (sr.sys.executable, "-c", runner, json.dumps(argv), str(tmp_path / "child.py")),
+        capture_output=True, text=True, check=False)
+    assert restarted.returncode == 0, restarted.stderr
+    recovered = json.loads((state / "serial-state.json").read_text())
+    scheduler_state = scheduling.SchedulerState.from_dict(recovered["scheduler_state"])
+    assert recovered["next_batch"] == 2 and recovered["failed_targets"] == {}
+    assert recovered["last_reconciliation"]["batch_number"] == 0
+    assert scheduler_state.campaign_attempts == 2
+    assert {record.outcome for record in scheduler_state.accounted_receipts} == {"abstained"}
+    assert all(seed.valid_comparisons == 0 for seed in scheduler_state.seed_accounts)
+    assert "cost_forecast" not in recovered
+    assert len((state / "seen.jsonl").read_text().splitlines()) == 2
 
 
 def test_scheduled_preclaim_failures_settle_each_selection_without_held_evidence(
