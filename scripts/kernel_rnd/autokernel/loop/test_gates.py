@@ -533,7 +533,7 @@ class TwoTierChampionWiring(unittest.TestCase):
         self.assertIn("cpu_compare(cor_build[0], anchor_build[0])", compounded)
         drive = src.split("return pool.drive(", 1)[1].split("\n        )", 1)[0]
         self.assertIn(
-            "accumulate_valid_positive=(experimental and screen_state is None)", drive)
+            "accumulate_valid_positive=experimental", drive)
     def test_fire_multiple_arg_defaults_to_operator_range(self):
         src = self._source()
         arg = src.split('"--fire-multiple"', 1)[1][:120]

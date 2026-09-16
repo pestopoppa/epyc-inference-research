@@ -2410,7 +2410,10 @@ def main(argv: list[str] | None = None) -> int:
             build_context=build_context, make_gate=gate_for,
             make_measure=measure_for, record=record_pooled,
             iterations=(args.iterations or None), should_stop=should_stop,
-            accumulate_valid_positive=(experimental and screen_state is None),
+            # Reduced positives remain KEEP_CANDIDATE until original full-target
+            # confirmation; full-confirmed sub-floor positives may then enter the
+            # same working accumulator as unscreened experimental source keeps.
+            accumulate_valid_positive=experimental,
             validate_candidate=validate_pooled,
             formation_guard=lambda hypothesis, context: dispatch_guard.characterised_reason(
                 hypothesis, {**context, "epoch_sha256": epoch}),
