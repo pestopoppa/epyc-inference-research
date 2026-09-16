@@ -131,12 +131,44 @@ class HarnessConfig:
         return {
             "judge_model": self.judge_model,
             "judge_quant": self.judge_quant,
+            # NB: legacy key — only means "a judge distinct from the reader is set".
             "cross_family_required": bool(self.judge_model)
             and self.judge_model != self.model,
+            "judge_distinct_from_reader": bool(self.judge_model)
+            and self.judge_model != self.model,
+            # EV-6 proper: mirrors epyc-orchestrator eval_tower.check_cross_family
+            # (unknown family => permissive True). Qwen-judges-Qwen is False.
+            "cross_family_ok": bool(self.judge_model)
+            and cross_family_ok(self.model, self.judge_model),
             "swap_tolerance_pp": 2.0,
             "matcher": "deterministic-criterion-location (build leg); "
-            "semantic-judge is a later inference entry",
+            "semantic-judge spec: data/review_f1/SEMANTIC_MATCHER_SPEC.md",
         }
+
+
+# Mirror of epyc-orchestrator scripts/autopilot/eval_tower.py VERIFICATION_FAMILIES
+# (cross-repo import is not available here; keep in sync).
+VERIFICATION_FAMILIES = {
+    "qwen": ("qwen", "qwq"),
+    "llama": ("llama", "meta-llama"),
+    "deepseek": ("deepseek",),
+    "ouro": ("ouro", "bytedance"),
+    "mistral": ("mistral",),
+    "gemma": ("gemma", "google"),
+}
+
+
+def model_family(name: str) -> str:
+    low = str(name).lower()
+    for family, pats in VERIFICATION_FAMILIES.items():
+        if any(p in low for p in pats):
+            return family
+    return "unknown"
+
+
+def cross_family_ok(reader_model: str, judge_model: str) -> bool:
+    a, b = model_family(reader_model), model_family(judge_model)
+    return a != b or a == "unknown"
 
 
 # --------------------------------------------------------------------------- #

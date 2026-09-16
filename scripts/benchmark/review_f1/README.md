@@ -101,20 +101,28 @@ cd /mnt/raid0/llm/epyc-inference-research && \
 - `enable_thinking=False` (Qwen3.x rule); run *i* uses `seed = base_seed + i`
   so the ≥3 runs vary for the StdDev protocol.
 
-## Real data still to source (for the run-leg manifest entry)
+## Real data — Augment v1 (EV-13b sourcing, 2026-09-16)
 
-The **build leg ships a 3-PR synthetic fixture set** only
-(`data/review_f1/fixtures/`). Before the run leg, source:
+`golden_comments` upstream has **no licence** (no LICENSE file, GitHub
+`license: null`) and this repo is public, so the data is **not committed**.
+`fetch_augment_v1.py` fetches it into the git-ignored
+`data/external/review_f1/augment_v1/` tree and verifies it against the
+committed pin manifest `data/review_f1/augment_v1_manifest.json` (upstream
+commit `3f2c8ab7`, per-file sha256, 50 fork PRs `ai-code-review-evaluations/augment-<repo>#N`
+with head/base SHA + diff sha256, golden_set checksum):
 
-1. **Augment v1 golden set (145 bugs / 50 PRs)** — open, from
-   `github.com/ai-code-review-evaluations/golden_comments`. Assemble via the
-   command above. Note the criterion/location gap (above); the semantic matcher
-   covers it.
-2. **The 5 real PR diffs** (Sentry/py, Cal.com/ts, Grafana/go, Discourse/rb,
-   Keycloak/java — 10 PRs each) for the review input. Store diffs and reference
-   them via `pr_ref.diff_path` + `--context-dir`.
-3. (Optional) Factory v3 expansion (167) is **gitignored upstream** — not
-   reusable; do not attempt to reconstruct.
+```bash
+.venv/bin/python scripts/benchmark/review_f1/fetch_augment_v1.py   # verify mode; exit 1 on any drift
+# then: harness.py --golden data/external/review_f1/augment_v1/golden_set.json \
+#                  --context-dir data/external/review_f1/augment_v1 ...
+```
+
+Counts: **50 PRs / 137 golden / 97 scored** (the upstream README table says
+145; the data blobs have never held 145). Comments carry no file/line — 114/137
+name an identifier present in the PR diff, 23 are free text. The deterministic
+matcher therefore scores TP=0 on this data; the run leg needs the semantic judge
+specified in `data/review_f1/SEMANTIC_MATCHER_SPEC.md`. Factory v3 (167) is
+gitignored upstream — do not reconstruct.
 
 ## Running the tests
 
