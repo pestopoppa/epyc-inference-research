@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import random
 import sys
 import time
@@ -39,10 +40,56 @@ _HEADER_KEY = "__pool_metadata__"
 _STALE_DAYS = 30
 
 
+class PoolBuildInvariantError(RuntimeError):
+    """The pool build would silently lose a suite; nothing was written."""
+
+
+def _empty_suite_reason(summary: dict[str, Any] | None) -> str:
+    """The adapter's own recorded explanation for yielding zero rows, or ''."""
+    if not summary:
+        return ""
+    degraded = summary.get("degraded_sources") or []
+    if degraded:
+        return "degraded_sources: " + "; ".join(
+            f"{d.get('source', '?')}: {d.get('error', '?')}" for d in degraded
+        )
+    return ""
+
+
+def _check_build_invariant(
+    adapter_suites: set[str],
+    stats: dict[str, int],
+    empty_suites: dict[str, str],
+) -> list[str]:
+    """A3 build invariant (EVL-12 C2 / LOSS-1/2).
+
+    (a) every registered adapter suite has an entry in the build stats;
+    (b) every suite with zero rows carries a recorded reason (extraction error or
+        adapter-recorded degraded source). A zero with no reason is a silent loss.
+    """
+    violations: list[str] = []
+    missing = sorted(adapter_suites - set(stats))
+    if missing:
+        violations.append(f"adapter suites absent from the build: {missing}")
+    silent = sorted(
+        suite for suite, count in stats.items()
+        if count == 0 and not empty_suites.get(suite)
+    )
+    if silent:
+        violations.append(f"suites with zero rows and no recorded reason: {silent}")
+    return violations
+
+
 def build_pool(output_path: Path | None = None) -> dict[str, int]:
     """Extract all questions from all adapters + YAML suites into a JSONL file.
 
     Returns dict mapping suite_name -> count of questions extracted.
+
+    Raises PoolBuildInvariantError BEFORE writing when a registered adapter suite
+    is missing or a suite yields zero rows with no recorded reason; an accounted
+    zero (e.g. a gated/absent source) is recorded in the header's
+    ``empty_suites`` and does not fail the build (A3, 2026-07-21). The pool is
+    written atomically so a failed build never truncates the live file.
     """
     from dataset_adapters import ADAPTER_SUITES, YAML_ONLY_SUITES, get_adapter
 
@@ -50,6 +97,7 @@ def build_pool(output_path: Path | None = None) -> dict[str, int]:
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     stats: dict[str, int] = {}
+    empty_suites: dict[str, str] = {}
     adapter_stats: dict[str, dict[str, Any]] = {}
     source_counts: dict[str, dict[str, int]] = {}
     all_questions: list[dict] = []
@@ -62,6 +110,7 @@ def build_pool(output_path: Path | None = None) -> dict[str, int]:
             continue
         try:
             questions = adapter.extract_all()
+            summary = None
             if hasattr(adapter, "accounting_summary"):
                 summary = adapter.accounting_summary()
                 adapter_stats[suite_name] = summary
@@ -75,11 +124,16 @@ def build_pool(output_path: Path | None = None) -> dict[str, int]:
                 q.setdefault("suite", suite_name)
                 q.setdefault("dataset_source", "hf_adapter")
             stats[suite_name] = len(questions)
+            if not questions:
+                empty_suites[suite_name] = _empty_suite_reason(summary)
             all_questions.extend(questions)
             logger.info(f"  [{suite_name}] Extracted {len(questions)} questions")
         except Exception as e:
             logger.error(f"  [{suite_name}] Extraction failed: {e}")
             stats[suite_name] = 0
+            empty_suites[suite_name] = (
+                f"extraction failed: {type(e).__name__}: {e}"
+            )
 
     # 2. Extract from YAML-only suites
     try:
@@ -119,6 +173,20 @@ def build_pool(output_path: Path | None = None) -> dict[str, int]:
             except Exception as e:
                 logger.error(f"  [{suite_name}] YAML extraction failed: {e}")
                 stats[suite_name] = 0
+                empty_suites[suite_name] = (
+                    f"YAML extraction failed: {type(e).__name__}: {e}"
+                )
+            else:
+                if not converted:
+                    empty_suites[suite_name] = ""
+
+    violations = _check_build_invariant(set(ADAPTER_SUITES), stats, empty_suites)
+    if violations:
+        raise PoolBuildInvariantError(
+            f"refusing to write {output_path}: " + "; ".join(violations)
+        )
+    for suite_name, reason in sorted(empty_suites.items()):
+        logger.warning(f"  [{suite_name}] 0 rows (accounted): {reason}")
 
     # 3. Write JSONL with header
     header = {
@@ -130,12 +198,17 @@ def build_pool(output_path: Path | None = None) -> dict[str, int]:
         "adapter_stats": adapter_stats,
         "source_counts": source_counts,
         "n_math500": source_counts.get("math", {}).get("math500", 0),
+        "empty_suites": dict(sorted(empty_suites.items())),
     }
 
-    with open(output_path, "w") as f:
+    tmp_path = output_path.with_name(output_path.name + ".tmp")
+    with open(tmp_path, "w") as f:
         f.write(json.dumps(header) + "\n")
         for q in all_questions:
             f.write(json.dumps(q, ensure_ascii=False) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp_path, output_path)
 
     logger.info(f"Pool written: {output_path} ({len(all_questions)} questions)")
     return stats
