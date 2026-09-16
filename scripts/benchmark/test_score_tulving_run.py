@@ -390,3 +390,89 @@ def test_root_writer_refuses_a_pre_m12e_summary(tmp_path, monkeypatch):
             producer="score_tulving_run.py", arm="none",
             variant="Udefault_Sdefault_seed0", chapters=196)
     assert not (tmp_path / "belief_measurements.jsonl").exists()
+
+
+# ── CME-4: the stored prompt records the arm; --arm must agree with it ────────
+
+def _payload_with_prompts(prompt_text: str) -> tuple[dict, dict]:
+    payload, prompts = _m12e_fixture()
+    for row in payload["results"]["tulving_episodic"].values():
+        row["prompt"] = prompt_text
+    return payload, prompts
+
+
+def test_summary_counts_the_arm_of_each_stored_prompt():
+    payload, prompts = _payload_with_prompts("Book narrative:\nChapter 1\n\n---\n\nQ")
+    summary = score_result_payload(payload, prompts)["summary"]
+    assert summary["context_mode_by_prompt"] == {"full": 8}
+    payload, prompts = _m12e_fixture()
+    assert score_result_payload(payload, prompts)["summary"]["context_mode_by_prompt"] == {
+        "unrecorded": 8}
+
+
+def test_build_prompt_index_is_arm_independent(monkeypatch):
+    import tulving_episodic_adapter as tea
+    seen = {}
+
+    class Spy(tea.TulvingEpisodicAdapter):
+        def __init__(self, *a, **kw):
+            seen.update(kw)
+            super().__init__(*a, **kw)
+
+        def extract_all(self):
+            return []
+
+    monkeypatch.setenv(tea.CONTEXT_MODE_ENV, "retrieved")
+    monkeypatch.setattr(score_tulving_run, "TulvingEpisodicAdapter", Spy)
+    assert score_tulving_run.build_prompt_index() == {}
+    assert seen["context_mode"] == tea.CONTEXT_NONE
+
+
+def _run_main(tmp_path, monkeypatch, prompt_text, arm):
+    payload, prompts = _payload_with_prompts(prompt_text)
+    result = tmp_path / "ingest_long_context_x.json"
+    result.write_text(json.dumps(payload))
+    monkeypatch.setattr(score_tulving_run, "build_prompt_index", lambda: prompts)
+    monkeypatch.setattr(score_tulving_run, "_load_belief_capture",
+                        lambda: pytest.fail("capture must not load on an arm mismatch"))
+    monkeypatch.setattr("sys.argv", [
+        "score_tulving_run.py", str(result), "--out-json", str(tmp_path / "s.json"),
+        "--belief-measurements", "--arm", arm, "--variant", "Udefault_Sdefault_seed0",
+        "--chapters", "19", "--run-id", "r1"])
+    return score_tulving_run.main()
+
+
+def test_arm_that_disagrees_with_the_stored_prompts_is_refused(tmp_path, monkeypatch):
+    with pytest.raises(SystemExit, match="disagrees with the stored prompts"):
+        _run_main(tmp_path, monkeypatch, "Book narrative:\nX\n\n---\n\nQ", "none")
+    assert not (tmp_path / "belief_measurements.jsonl").exists()
+
+
+def test_arm_without_recorded_prompts_is_refused(tmp_path, monkeypatch):
+    payload, prompts = _m12e_fixture()
+    result = tmp_path / "r.json"
+    result.write_text(json.dumps(payload))
+    monkeypatch.setattr(score_tulving_run, "build_prompt_index", lambda: prompts)
+    monkeypatch.setattr("sys.argv", [
+        "score_tulving_run.py", str(result), "--out-json", str(tmp_path / "s.json"),
+        "--belief-measurements", "--arm", "full", "--variant", "v", "--chapters", "19",
+        "--run-id", "r1"])
+    with pytest.raises(SystemExit, match="unrecorded"):
+        score_tulving_run.main()
+
+
+@pytest.mark.skipif(_root_capture_module() is None, reason="epyc-root not on this host")
+def test_matching_arm_emits_through_main(tmp_path, monkeypatch):
+    payload, prompts = _payload_with_prompts("Q only, no context header")
+    result = tmp_path / "r.json"
+    result.write_text(json.dumps(payload))
+    monkeypatch.setattr(score_tulving_run, "build_prompt_index", lambda: prompts)
+    monkeypatch.setattr(
+        score_tulving_run, "_ROOT_CANDIDATES", (_root_capture_module(),), raising=True)
+    monkeypatch.setattr("sys.argv", [
+        "score_tulving_run.py", str(result), "--out-json", str(tmp_path / "s.json"),
+        "--belief-measurements", "--arm", "none", "--variant", "Udefault_Sdefault_seed0",
+        "--chapters", "19", "--run-id", "r1"])
+    assert score_tulving_run.main() == 0
+    rows = [json.loads(x) for x in (tmp_path / "belief_measurements.jsonl").read_text().splitlines()]
+    assert {r["extra"]["arm"] for r in rows} == {"none"} and len(rows) == 2

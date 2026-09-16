@@ -99,6 +99,56 @@ SIMPLE_RECALL_GET_STYLE = "all"
 LATEST_GET_STYLE = "latest"
 CHRONOLOGICAL_GET_STYLE = "chronological"
 
+# ── Context arms (CME-4 / M-12a) ─────────────────────────────────────────────
+#
+# ``run_benchmark.py`` never reads a prompt's ``"context"`` key, so each arm has to
+# be written into the prompt text itself. Every arm has its own header, which makes
+# the arm recoverable from the prompt the harness stores
+# (:func:`context_mode_of_prompt`). The scorer uses that to refuse a ``--arm`` that
+# does not match what the model was actually shown.
+
+CONTEXT_NONE = "none"
+CONTEXT_RETRIEVED = "retrieved"
+CONTEXT_FULL = "full"
+CONTEXT_MODES = (CONTEXT_NONE, CONTEXT_RETRIEVED, CONTEXT_FULL)
+#: Harness surface: ``get_adapter("tulving_episodic")`` constructs with no arguments,
+#: so the arm is chosen through this variable. An explicit constructor argument wins.
+CONTEXT_MODE_ENV = "TULVING_CONTEXT_MODE"
+RETRIEVAL_TOP_K_ENV = "TULVING_RETRIEVAL_TOP_K"
+DEFAULT_RETRIEVAL_TOP_K = 5
+FULL_BOOK_HEADER = "Book narrative:\n"
+RETRIEVED_HEADER = "Retrieved book excerpts:\n"
+_CONTEXT_SEPARATOR = "\n\n---\n\n"
+
+
+def context_mode_of_prompt(prompt: str) -> str:
+    """Which arm a stored prompt was built under, read from its header."""
+    if prompt.startswith(FULL_BOOK_HEADER):
+        return CONTEXT_FULL
+    if prompt.startswith(RETRIEVED_HEADER):
+        return CONTEXT_RETRIEVED
+    return CONTEXT_NONE
+
+
+_CHAPTER_HEADING = re.compile(r"^Chapter (\d+)\s*$", re.MULTILINE)
+
+
+def split_book_chapters(book_text: str) -> list[tuple[int, str]]:
+    """Split a Tulving ``book.json`` narrative into ``(chapter_number, text)`` pairs.
+
+    Each chapter keeps its own ``Chapter N`` heading. Raises ``ValueError`` when the
+    text has no chapter headings, because a retrieval arm over one undivided blob
+    would really be the full-book arm under another name.
+    """
+    matches = list(_CHAPTER_HEADING.finditer(book_text or ""))
+    if not matches:
+        raise ValueError("book text has no 'Chapter N' headings; cannot index chapters")
+    chapters = []
+    for i, match in enumerate(matches):
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(book_text)
+        chapters.append((int(match.group(1)), book_text[match.start():end].strip()))
+    return chapters
+
 # ── Deterministic F1 scorer ──────────────────────────────────────────────────
 
 
@@ -481,6 +531,20 @@ class TulvingEpisodicAdapter(BaseAdapter):
         llm_judge: Optional callable(predicted_items, gt_items, retrieval_type)
                    → Optional[float].  If it returns a non-None float, that
                    overrides the deterministic token-F1 for the given question.
+        context_mode: M-12a arm, one of ``"none"`` (no book text; the memory-off
+                   floor), ``"retrieved"`` (only the passages ``retriever``
+                   returns) or ``"full"`` (the whole book; the ceiling, and the
+                   historical behaviour).  Defaults to ``$TULVING_CONTEXT_MODE``,
+                   else ``"full"``.  Ground truth and metadata are identical
+                   across arms; only the prompt's context block differs.
+        retriever: For ``"retrieved"``: a callable
+                   ``(question, *, cue, top_k) -> list[str]`` of passages.  When
+                   omitted, the trace-FTS5 chapter retriever
+                   (``tulving_trace_retriever``) is built over the loaded book.
+                   If that surface cannot be imported, loading raises; the arm
+                   never silently degrades to ``none`` or ``full``.
+        retrieval_top_k: Passages per question for ``"retrieved"``.  Defaults to
+                   ``$TULVING_RETRIEVAL_TOP_K``, else 5.
     """
 
     suite_name = "tulving_episodic"
@@ -492,12 +556,31 @@ class TulvingEpisodicAdapter(BaseAdapter):
         variant: str = _DEFAULT_VARIANT,
         chapters: int = 20,
         llm_judge=None,
+        context_mode: Optional[str] = None,
+        retriever=None,
+        retrieval_top_k: Optional[int] = None,
     ):
+        import os
+
         self._data_dir = Path(data_dir) if data_dir else _DEFAULT_DATA_DIR
         self._variant = variant
         self._target_chapters = chapters
         self._llm_judge = llm_judge or _llm_judge_fallback_hook
         self._book_text: Optional[str] = None
+        mode = context_mode or os.environ.get(CONTEXT_MODE_ENV) or CONTEXT_FULL
+        if mode not in CONTEXT_MODES:
+            raise ValueError(
+                f"context_mode must be one of {CONTEXT_MODES}, got {mode!r}")
+        if retriever is not None and not callable(retriever):
+            raise TypeError("retriever must be callable")
+        top_k = retrieval_top_k
+        if top_k is None:
+            top_k = int(os.environ.get(RETRIEVAL_TOP_K_ENV) or DEFAULT_RETRIEVAL_TOP_K)
+        if top_k < 1:
+            raise ValueError("retrieval_top_k must be >= 1")
+        self.context_mode = mode
+        self._retriever = retriever
+        self._retrieval_top_k = top_k
 
     # ── loading ─────────────────────────────────────────────────────────────
 
@@ -529,6 +612,15 @@ class TulvingEpisodicAdapter(BaseAdapter):
             rows = self._load_from_json(variant_dir)
 
         self._dataset = rows
+        if self.context_mode == CONTEXT_RETRIEVED and rows and self._retriever is None:
+            if not self._book_text:
+                raise RuntimeError(
+                    "context_mode='retrieved' needs the book text to index, and none was "
+                    f"found under {variant_dir}")
+            from tulving_trace_retriever import TraceFTSChapterRetriever
+
+            self._retriever = TraceFTSChapterRetriever(
+                self._book_text, book_id=f"{self._variant}-{self._target_chapters}ch")
 
     def _load_qa_from_variant(self, variant_dir: Path) -> list[dict]:
         """Load QA pairs from parquet files in the variant directory."""
@@ -545,21 +637,27 @@ class TulvingEpisodicAdapter(BaseAdapter):
             return []
         self._book_text = self._load_book_text(target_files[0].parent)
 
+        # M-12e-a: fail LOUDLY. This used to swallow a missing pandas/pyarrow (and
+        # every per-file read error) and return no rows, so a run in an environment
+        # without pyarrow scored every question as "missing ground truth" and wrote an
+        # all-zero summary that looked like a result.
         try:
             import pandas as pd
-            dfs = []
-            for pf in target_files:
-                try:
-                    dfs.append(pd.read_parquet(pf))
-                except Exception:
-                    pass
-            if not dfs:
-                return []
-            df = pd.concat(dfs, ignore_index=True) if len(dfs) > 1 else dfs[0]
-            return df.to_dict(orient="records")
-        except ImportError:
-            print("  [adapter] pandas not available; falling back to JSON")
-            return []
+        except ImportError as exc:
+            raise RuntimeError(
+                "TulvingEpisodicAdapter needs pandas + pyarrow to read "
+                f"{target_files[0]}; install them in this interpreter "
+                f"({exc})") from exc
+        dfs = []
+        for pf in target_files:
+            try:
+                dfs.append(pd.read_parquet(pf))
+            except Exception as exc:
+                raise RuntimeError(
+                    f"TulvingEpisodicAdapter could not read QA parquet {pf}: "
+                    f"{type(exc).__name__}: {exc}") from exc
+        df = pd.concat(dfs, ignore_index=True) if len(dfs) > 1 else dfs[0]
+        return df.to_dict(orient="records")
 
     def _select_target_qa_files(self, parquet_files: list[Path]) -> list[Path]:
         """Pick QA parquet files for the configured chapter target."""
@@ -727,13 +825,29 @@ class TulvingEpisodicAdapter(BaseAdapter):
             )
 
         prompt = f"{question}\n\n{instruction}"
-        if self._book_text:
-            prompt = (
-                "Book narrative:\n"
-                f"{self._book_text.strip()}\n\n"
-                "---\n\n"
-                f"{prompt}"
-            )
+        retrieved_chapters: Optional[int] = None
+        if self.context_mode == CONTEXT_FULL:
+            if self._book_text:
+                prompt = (
+                    FULL_BOOK_HEADER
+                    + self._book_text.strip()
+                    + _CONTEXT_SEPARATOR
+                    + prompt
+                )
+        elif self.context_mode == CONTEXT_RETRIEVED:
+            if self._retriever is None:
+                raise RuntimeError(
+                    "context_mode='retrieved' has no retriever; refusing to build a "
+                    "prompt that would silently be the memory-off arm")
+            passages = [
+                str(p).strip()
+                for p in self._retriever(question, cue=cue, top_k=self._retrieval_top_k)
+                if str(p).strip()
+            ]
+            retrieved_chapters = len(passages)
+            body = "\n\n".join(passages) if passages else "(no passages retrieved)"
+            prompt = RETRIEVED_HEADER + body + _CONTEXT_SEPARATOR + prompt
+        # CONTEXT_NONE: the bare question — the memory-off floor.
 
         # Serialise expected as JSON for storage (we keep it as list in metadata)
         expected_str = json.dumps(ground_truth)
@@ -742,7 +856,8 @@ class TulvingEpisodicAdapter(BaseAdapter):
             "id": f"tulving_{self._variant}_ch{chapter:04d}_q{idx:04d}",
             "suite": "tulving_episodic",
             "prompt": prompt,
-            "context": self._book_text or "",
+            # INERT: run_benchmark.py never reads this key; the arm lives in the prompt.
+            "context": self._book_text if self.context_mode == CONTEXT_FULL else "",
             "expected": expected_str,  # JSON-encoded list
             "scoring": [],
             "image_path": "",
@@ -765,6 +880,8 @@ class TulvingEpisodicAdapter(BaseAdapter):
                 "nb_gt": nb_gt,
                 "nb_events": nb_events,
                 "ground_truth_items": ground_truth,
+                "context_mode": self.context_mode,
+                "retrieved_passages": retrieved_chapters,
             },
         }
 
