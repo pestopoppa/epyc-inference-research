@@ -171,8 +171,12 @@ def retain_candidate(*, store_root, origin_batch, worker, target, hypothesis, pa
     if hypothesis.runtime_pair is not None:
         raise ScreenRefused("source-screen continuation does not select runtime recipes")
     row = comparison.to_dict()
-    if not comparison.decisive or comparison.effect <= 0:
-        raise ScreenRefused("reduced source candidate did not clear its own original floor")
+    # The reduced screen is a provisional filter, not the promotion gate. A
+    # calibrated, stationary sub-floor positive may be accumulated only after
+    # the original source/build also measures positive on the full target.
+    if (comparison.decisive is None or comparison.noise_floor_pct is None
+            or comparison.drifting or comparison.effect <= 0):
+        raise ScreenRefused("reduced source candidate lacks a valid positive observation")
     capture = row.get("belief_capture") or {}
     arms = (capture.get("inputs") or {}).get("resolved_arms") or {}
     if not arms.get("anchor") or not arms.get("candidate"):

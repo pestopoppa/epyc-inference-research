@@ -27,15 +27,8 @@ def test_retained_critic_accepts_only_exact_screened_candidate():
     assert not critic.review_patch(hypothesis, ("other.c",), {}).accepted
 
 
-def test_reduced_positive_below_own_floor_is_a_measured_null_not_lane_error():
-    """A reduced screen is a filter, not the full-target accumulator.
-
-    The generic experimental path may accumulate a valid positive below the
-    full-serving floor.  A quarter/half screen must instead clear its own floor
-    before `retain_candidate` can create confirmation debt.  In particular, a
-    floor miss is an ordinary scientific result and must never escape into the
-    pool's blanket `lane_error` containment.
-    """
+def test_reduced_subfloor_positive_creates_confirmation_debt_not_a_keep():
+    """A valid sub-floor positive is provisional until full-target confirmation."""
     hypothesis = loop.Hypothesis(
         "reduced-subfloor", "small positive on reduced CPU scope", "floor miss",
         "serving:glm53", "ggml/src/ggml-cpu/file.c")
@@ -50,20 +43,54 @@ def test_reduced_positive_below_own_floor_is_a_measured_null_not_lane_error():
         candidate_samples=[100.5] * 5, effect=0.005,
         estimator="matched_process_v2", pairs=5, noise_floor_pct=1.0,
         residency={}, anchor_drift_pct=0.0, calibrated=True)
-    commit = mock.Mock(side_effect=AssertionError(
-        "a reduced floor miss must not reach retain_candidate"))
+    commit = mock.Mock(side_effect=loop.ConfirmVetoed(
+        "reduced positive retained; original full-target confirmation pending"))
 
     outcome = loop.iterate(
         planner=planner, critic=critic, context={},
         measure=lambda _hypothesis, _paths: comparison,
         gate=lambda _hypothesis, _paths: (True, [gates.Verdict("oracle", True)]),
-        commit=commit, accumulate_valid_positive=False)
+        commit=commit, accumulate_valid_positive=True)
 
-    assert outcome.status == "measured_null"
+    assert outcome.status == "keep_candidate"
     assert outcome.hypothesis == hypothesis
     assert outcome.comparison is comparison
-    assert "did not clear" in " ".join(outcome.reasons)
-    commit.assert_not_called()
+    assert "full-target confirmation pending" in " ".join(outcome.reasons)
+    commit.assert_called_once_with(hypothesis, paths, comparison)
+
+
+def test_reduced_subfloor_archive_requires_calibrated_stationary_positive(tmp_path):
+    hypothesis = loop.Hypothesis(
+        "reduced-subfloor", "small positive on reduced CPU scope", "floor miss",
+        "serving:glm53", "ggml/src/ggml-cpu/file.c")
+    worker = SimpleNamespace(worktree=tmp_path, name="lane0")
+    full = SimpleNamespace(to_dict=lambda: {"full": "target"})
+    capture = {"inputs": {"resolved_arms": {"anchor": {"a": 1},
+                                                 "candidate": {"b": 2}}}}
+
+    def comparison(effect=0.005, calibrated=True, drifting=False):
+        value = mock.Mock()
+        value.effect, value.decisive = effect, False if calibrated else None
+        value.noise_floor_pct, value.drifting = 1.0, drifting
+        value.to_dict.return_value = {"belief_capture": capture,
+                                      "request_digest": "request", "noise_floor_pct": 1.0}
+        return value
+
+    with mock.patch.object(cpu_screen.archive, "retain_patch", return_value=None) as retained:
+        with pytest.raises(cpu_screen.ScreenRefused, match="no original source patch"):
+            cpu_screen.retain_candidate(store_root=tmp_path, origin_batch=tmp_path,
+                worker=worker, target={"id": "glm"}, hypothesis=hypothesis,
+                paths=["ggml/src/ggml-cpu/file.c"], full_target=full,
+                comparison=comparison())
+        retained.assert_called_once()
+        for rejected in (comparison(effect=-0.005), comparison(calibrated=False),
+                         comparison(drifting=True)):
+            with pytest.raises(cpu_screen.ScreenRefused, match="valid positive"):
+                cpu_screen.retain_candidate(store_root=tmp_path, origin_batch=tmp_path,
+                    worker=worker, target={"id": "glm"}, hypothesis=hypothesis,
+                    paths=["ggml/src/ggml-cpu/file.c"], full_target=full,
+                    comparison=rejected)
+        retained.assert_called_once()
 
 
 @pytest.mark.parametrize("scope,threads,regions", [("quarter", 24, ("q0",)),
