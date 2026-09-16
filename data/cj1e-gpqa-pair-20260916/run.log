@@ -1,0 +1,31 @@
+[cj_gpqa_sample] wrote /mnt/raid0/llm/tmp/sub-gpu-runner-20260916/cj1e/cj1_gpqa_manifest.json: n=198/198 seed=42 sample_ids_sha256=381ba36533eb8971e50c18481c6fde69722a97d80762ee61fd8eb0e9fbb23194
+GPU claim held: {'device_id': 'mi210_0', 'lock_path': '/mnt/raid0/llm/tmp/gpu_device.mi210_0.lock', 'pid': 3541854}
+[11:28:44] arm qwen3.8-27b-q8-dflash2
+{"arm": "qwen3.8-27b-q8-dflash2", "recipe": "qwen3.8-27b-q8-gpu-dflash2-np4.json", "base_recipe_hash": "29fbffc56cd75e0d2906d9ed29f88f2dc5607a542c9cc6ceeb9a6f3e467da9dd"} [(4, 'ok', 5799.3)]
+[13:05:30] arm qwen3.6-35b-a3b-q8-mtp
+{"arm": "qwen3.6-35b-a3b-q8-mtp", "recipe": "qwen3.6-35b-a3b-q8-gpu-mtp.json", "base_recipe_hash": "92c97894fa53e2fb27349ea78b39a31c88975a5556091320d11facb40681197b"} [(4, 'ok', 3352.0)]
+{
+  "arms": {
+    "qwen3.8-27b-q8-dflash2": {
+      "n": 198,
+      "correct": 152,
+      "accuracy": 0.7676767676767676,
+      "think_tag_rows": 0,
+      "reasoning_rows": 0
+    },
+    "qwen3.6-35b-a3b-q8-mtp": {
+      "n": 198,
+      "correct": 158,
+      "accuracy": 0.797979797979798,
+      "think_tag_rows": 0,
+      "reasoning_rows": 0
+    }
+  },
+  "paired": {
+    "n": 198,
+    "both_correct": 0.6919191919191919,
+    "only_qwen3.8-27b-q8-dflash2": 15,
+    "only_qwen3.6-35b-a3b-q8-mtp": 21,
+    "sign_test_p_two_sided": 0.40503224614076316
+  }
+}

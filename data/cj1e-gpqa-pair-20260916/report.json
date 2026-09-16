@@ -1,0 +1,25 @@
+{
+  "arms": {
+    "qwen3.8-27b-q8-dflash2": {
+      "n": 198,
+      "correct": 152,
+      "accuracy": 0.7676767676767676,
+      "think_tag_rows": 0,
+      "reasoning_rows": 0
+    },
+    "qwen3.6-35b-a3b-q8-mtp": {
+      "n": 198,
+      "correct": 158,
+      "accuracy": 0.797979797979798,
+      "think_tag_rows": 0,
+      "reasoning_rows": 0
+    }
+  },
+  "paired": {
+    "n": 198,
+    "both_correct": 0.6919191919191919,
+    "only_qwen3.8-27b-q8-dflash2": 15,
+    "only_qwen3.6-35b-a3b-q8-mtp": 21,
+    "sign_test_p_two_sided": 0.40503224614076316
+  }
+}

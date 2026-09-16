@@ -1,0 +1,34 @@
+{
+  "schema": "epyc.inf62.sl1_sweep.v1",
+  "build": "/mnt/raid0/llm/tmp/build-fold-ef81196d5",
+  "llama_server_sha256": "869effe5f5cda7f72bd78c8ee168a30f5878b3f32558cd0c02cd38a62a77db37",
+  "champion_commit": "ef81196d5bdd4190b46dff4ae7eecc333a46c8ce",
+  "base_recipe": "/mnt/raid0/llm/worktrees/sub-gpu-runner-epyc-inference-research/artifacts/serving-recipes/qwen3.8-27b-q8-gpu-dflash2-np4.json",
+  "base_recipe_hash": "29fbffc56cd75e0d2906d9ed29f88f2dc5607a542c9cc6ceeb9a6f3e467da9dd",
+  "grid": {
+    "n_max": [
+      4,
+      6,
+      7,
+      8
+    ],
+    "p_min": [
+      0.0,
+      0.5
+    ],
+    "in_flight": [
+      1,
+      2,
+      4,
+      8
+    ],
+    "rounds": 5
+  },
+  "temperature": 0.6,
+  "seed": 42,
+  "plan_seed": 20260916,
+  "unit": "process",
+  "harness": "serving.calibrate_floor(samples=1) per launch",
+  "steps_estimator": "predicted_n - 1 - draft_n_accepted per slot",
+  "started_at": "2026-09-16T09:27:31Z"
+}
