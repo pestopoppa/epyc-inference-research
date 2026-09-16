@@ -83,6 +83,7 @@ def test_manifest_refuses_unknown_fields_duplicate_proposals_and_crossed_target(
 @pytest.mark.parametrize("native, expected", [
     ("kept", "valid_comparison"),
     ("measured_null", "valid_comparison"),
+    ("regression", "valid_comparison"),
     ("abstained", "abstained"),
     ("runtime_observed", "invalid"),
     ("measurement_invalid", "invalid"),

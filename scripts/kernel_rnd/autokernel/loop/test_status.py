@@ -79,6 +79,17 @@ class Write(unittest.TestCase):
         self.assertEqual(body["measurements_reached"], 2)
         self.assertAlmostEqual(body["abstain_rate"], 0.2)
 
+    def test_decisive_regression_reaches_the_measurement_count(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            status.write(Path(tmp), state="running", epoch="e" * 64,
+                         campaign_id="ak-loop", anchor_commit="a" * 40,
+                         surface="pp512", pairs=5, noise_floor_pct=0.973,
+                         outcomes=[{"status": "regression", "effect_fraction": -0.02}],
+                         iterations_planned=1)
+            body = status.read(Path(tmp))
+        self.assertEqual(body["dispositions"], {"regression": 1})
+        self.assertEqual(body["measurements_reached"], 1)
+
     def test_the_noise_floor_is_on_the_surface(self):
         """The bar a candidate must clear, and it must be visible."""
         with tempfile.TemporaryDirectory() as tmp:

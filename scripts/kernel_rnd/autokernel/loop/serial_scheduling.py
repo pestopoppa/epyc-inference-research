@@ -12,7 +12,7 @@ from typing import Any, Mapping, Sequence
 from . import scheduling
 
 MANIFEST_SCHEMA = "epyc.autokernel.serial_scheduler_manifest.v1"
-VALID_COMPARISONS = frozenset({"kept", "keep_candidate", "measured_null",
+VALID_COMPARISONS = frozenset({"kept", "keep_candidate", "measured_null", "regression",
                                "source_validation_passed"})
 INVALID_OUTCOMES = frozenset({
     "measurement_invalid", "runtime_observed", "runtime_refused", "refused_at_formation",

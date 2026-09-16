@@ -351,7 +351,7 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
     # not merely the implementation. This is formation guidance only: it neither
     # changes a recorded result nor assigns a magnitude to a historical observation.
     exhausted: dict[str, list[Mapping[str, Any]]] = {}
-    terminal = {"measured_null", "refused_at_formation", "authoring_refused",
+    terminal = {"measured_null", "regression", "refused_at_formation", "authoring_refused",
                 "screened_out"}
     for row in prior:
         if row.get("status") not in terminal:
@@ -383,7 +383,8 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
     # host-owned family identity.  Detect a run of distinct null/refused ideas in
     # that family without reading effect magnitudes (especially stale ones).  A
     # keep resets the run because it changed the source the later ideas see.
-    stagnating_statuses = {"measured_null", "refused_at_formation", "runtime_refused"}
+    stagnating_statuses = {"measured_null", "regression", "refused_at_formation",
+                           "runtime_refused"}
     successful_statuses = {"kept", "keep_candidate"}
     family_rows: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
     closed_families: set[tuple[str, str]] = set()
