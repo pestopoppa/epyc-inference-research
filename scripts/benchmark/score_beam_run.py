@@ -67,6 +67,13 @@ def score_judged_payload(payload: Mapping[str, Any],
     records = payload.get("records")
     if not isinstance(records, list) or not records:
         raise BEAMFoldError("judged payload carries no records")
+    unjudged = payload.get("unjudged") or []
+    if unjudged:
+        # judge_beam_run.py lists questions it could not judge; folding without them
+        # would silently re-weight their abilities. Re-judge first.
+        reasons = sorted({str(u.get("reason")) for u in unjudged if isinstance(u, Mapping)})
+        raise BEAMFoldError(f"{len(unjudged)} question(s) were never judged ({reasons}); "
+                            "re-run judge_beam_run.py before folding")
     unknown_ids = 0
     if prompt_index is not None:
         for record in records:
