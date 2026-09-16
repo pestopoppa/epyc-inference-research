@@ -556,6 +556,8 @@ class ServerManager:
         image_path: Optional[str] = None,
         repeat_penalty: Optional[float] = None,
         disable_thinking: bool = False,
+        enable_thinking: Optional[bool] = None,
+        cache_prompt: Optional[bool] = None,
     ) -> "InferenceResult":
         """Run inference via HTTP API with streaming to capture partial output.
 
@@ -566,13 +568,19 @@ class ServerManager:
             timeout: Request timeout in seconds.
             speculative_n_max: Optional K value for speculative decoding (overrides startup default).
             image_path: Optional path to image file for VL models.
+            enable_thinking: An explicit thinking mode. Not None forces the
+                chat-completions path, because Qwen3.6+ only honour
+                ``chat_template_kwargs.enable_thinking`` there; it overrides
+                ``disable_thinking``.
+            cache_prompt: Explicit llama-server ``cache_prompt``. None keeps the
+                path default (False on /completion, the server default on chat).
 
         Returns:
             InferenceResult with response content and timing.
             On timeout, returns partial output collected so far.
         """
-        # VL mode or chat-template-required: use /v1/chat/completions
-        if self.mmproj_path is not None or self.use_chat_api:
+        # VL mode, chat-template-required, or an explicit thinking mode: /v1/chat/completions
+        if self.mmproj_path is not None or self.use_chat_api or enable_thinking is not None:
             return self._run_vl_inference(
                 prompt=prompt,
                 max_tokens=max_tokens,
@@ -581,6 +589,8 @@ class ServerManager:
                 image_path=image_path,
                 repeat_penalty=repeat_penalty,
                 disable_thinking=disable_thinking,
+                enable_thinking=enable_thinking,
+                cache_prompt=cache_prompt,
             )
 
         url = f"http://127.0.0.1:{self.port}/completion"
@@ -593,7 +603,7 @@ class ServerManager:
             "prompt": prompt,
             "n_predict": max_tokens,
             "temperature": temperature,
-            "cache_prompt": False,  # Fresh context for each question
+            "cache_prompt": False if cache_prompt is None else bool(cache_prompt),
             "stream": True,  # Enable streaming for incremental collection
         }
         if repeat_penalty is not None:
@@ -687,6 +697,8 @@ class ServerManager:
         image_path: Optional[str] = None,
         repeat_penalty: Optional[float] = None,
         disable_thinking: bool = False,
+        enable_thinking: Optional[bool] = None,
+        cache_prompt: Optional[bool] = None,
     ) -> "InferenceResult":
         """Run VL inference via /v1/chat/completions with multimodal payload.
 
@@ -725,8 +737,12 @@ class ServerManager:
         }
         if repeat_penalty is not None:
             payload["repeat_penalty"] = repeat_penalty
-        if disable_thinking:
+        if enable_thinking is not None:
+            payload["chat_template_kwargs"] = {"enable_thinking": bool(enable_thinking)}
+        elif disable_thinking:
             payload["chat_template_kwargs"] = {"enable_thinking": False}
+        if cache_prompt is not None:
+            payload["cache_prompt"] = bool(cache_prompt)
 
         start_time = time.time()
         try:
@@ -750,9 +766,11 @@ class ServerManager:
 
             # Extract response content
             content = ""
+            finish_reason = None
             if "choices" in data and len(data["choices"]) > 0:
                 msg = data["choices"][0].get("message", {})
                 content = msg.get("content", "")
+                finish_reason = data["choices"][0].get("finish_reason")
 
             # Extract timing — llama-server may include timings in response
             usage = data.get("usage", {})
@@ -778,6 +796,7 @@ class ServerManager:
                 exit_code=0,
                 command=f"POST {url}",
                 tokens_per_second=tokens_per_second if tokens_per_second else None,
+                finish_reason=finish_reason,
             )
 
         except requests.exceptions.Timeout:
@@ -805,6 +824,7 @@ class InferenceResult:
     timed_out: bool = False
     tokens_per_second: Optional[float] = None  # Direct from server response
     stderr: str = ""  # stderr only - for debugging errors
+    finish_reason: Optional[str] = None  # chat endpoint's stop reason, when reported
 
     @property
     def success(self) -> bool:

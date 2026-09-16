@@ -1210,8 +1210,34 @@ def _run_quality_question(
             and config.config_type in ("baseline", "moe", "spec", "moe_spec", "moe_spec_lookup", "spec_lookup", "lookup", "moe_lookup")
         )
 
+        # M-12 B3: a suite that pins its thinking mode / prompt cache wins over the registry.
+        suite_enable_thinking = effective_params.get("enable_thinking")
+        suite_cache_prompt = effective_params.get("cache_prompt")
+        inference_record = {
+            "max_tokens": effective_params["max_tokens"],
+            "temperature": effective_params["temperature"],
+            "timeout": effective_params["timeout"],
+            "enable_thinking": (suite_enable_thinking if suite_enable_thinking is not None
+                                else (False if model_disable_thinking else None)),
+            "enable_thinking_source": ("suite" if suite_enable_thinking is not None
+                                       else "registry" if model_disable_thinking else "unset"),
+            "cache_prompt": suite_cache_prompt,
+            "prompt_suffix_trick": bool(effective_prompt != question.prompt),
+        }
+
         if use_server:
             spec_k = config.spec_k if config.config_type in ("spec", "moe_spec", "moe_spec_lookup", "spec_lookup") else None
+            inference_record["endpoint"] = (
+                "chat_completions"
+                if (ss.server.mmproj_path is not None or ss.server.use_chat_api
+                    or suite_enable_thinking is not None)
+                else "completion")
+            if inference_record["endpoint"] == "completion":
+                # /completion applies no chat template, so no thinking kwarg reaches the model.
+                inference_record["enable_thinking"] = None
+                inference_record["enable_thinking_source"] = "not_applicable_raw_completion"
+                if suite_cache_prompt is None:
+                    inference_record["cache_prompt"] = False
             result = ss.server.run_inference(
                 prompt=effective_prompt,
                 max_tokens=effective_params["max_tokens"],
@@ -1221,8 +1247,15 @@ def _run_quality_question(
                 image_path=question.image_path,
                 repeat_penalty=model_repeat_penalty,
                 disable_thinking=model_disable_thinking,
+                enable_thinking=suite_enable_thinking,
+                cache_prompt=suite_cache_prompt,
             )
         else:
+            if suite_enable_thinking is not None:
+                raise RuntimeError(
+                    f"suite {suite_name} pins enable_thinking={suite_enable_thinking}, which only "
+                    "the server chat-completions path can apply; run with --server-mode")
+            inference_record["endpoint"] = "cli"
             result = executor.run_inference(
                 model_path=model_path,
                 config=config,
@@ -1271,6 +1304,9 @@ def _run_quality_question(
             algorithmic_score=None,
             score_reason=None,
             acceptance_rate=parsed.acceptance_rate,
+            provenance=dict(question.provenance) if question.provenance else None,
+            inference=inference_record,
+            finish_reason=getattr(result, "finish_reason", None),
         )
 
         results_manager.add_question_result(

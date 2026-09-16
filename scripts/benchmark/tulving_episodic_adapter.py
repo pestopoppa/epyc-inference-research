@@ -91,6 +91,72 @@ _DEFAULT_DATA_DIR = Path("/mnt/raid0/llm/data/eval/tulving_episodic")
 # Preferred variant: 20-chapter short default (10K tokens, ~456 QA pairs)
 _DEFAULT_VARIANT = "Udefault_Sdefault_seed0"
 
+# ── Chapter set (M-12 B1) ────────────────────────────────────────────────────
+#
+# The 20ch and 200ch books share ONE question-id space if the id carries only the
+# variant, the row's ``chapter`` (always -1) and the row index: all 456 20ch ids also
+# occur among the 686 200ch ids, with different questions behind them. The chapter
+# set is therefore an explicit, recorded parameter: it is chosen at construction (or
+# through ``$TULVING_CHAPTERS`` for the harness, whose ``get_adapter`` constructs with no
+# arguments), it is part of every question id, and it rides in each prompt's
+# ``provenance`` block, which ``run_benchmark`` copies into the result row. The scorer
+# refuses a row whose recorded set disagrees with the gold set it loaded.
+
+#: Harness surface for the chapter set. An explicit constructor argument wins.
+CHAPTERS_ENV = "TULVING_CHAPTERS"
+DEFAULT_CHAPTERS = 20
+#: The two book sizes the paper defines. ``_select_target_qa_files`` maps them onto the
+#: parquet directories on disk (20 -> the 19-chapter Claude book, 200 -> 196 chapters).
+#: Any other value would silently pick whichever book happens to be nearest.
+CHAPTER_SETS = (20, 200)
+#: Question id: ``tulving_<variant>_<N>ch_ch<chapter>_q<idx>``. The pre-B1 form lacked
+#: the ``<N>ch`` token; :func:`parse_question_id` reports those as ``chapters=None``.
+_QUESTION_ID = re.compile(
+    r"^tulving_(?P<variant>.+?)_(?:(?P<chapters>\d+)ch_)?ch(?P<chapter>-?\d+)_q(?P<idx>\d+)$")
+
+
+def chapter_set_label(chapters: int) -> str:
+    return f"{int(chapters)}ch"
+
+
+def resolve_chapters(chapters: Optional[int] = None) -> int:
+    """The chapter set to use: the argument, else ``$TULVING_CHAPTERS``, else 20."""
+    import os
+
+    raw = chapters if chapters is not None else (os.environ.get(CHAPTERS_ENV) or DEFAULT_CHAPTERS)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        raise ValueError(f"chapters must be one of {CHAPTER_SETS}, got {raw!r}") from None
+    if isinstance(raw, bool) or value not in CHAPTER_SETS:
+        raise ValueError(f"chapters must be one of {CHAPTER_SETS}, got {raw!r}")
+    return value
+
+
+def question_id(variant: str, chapters: int, chapter: int, idx: int) -> str:
+    return f"tulving_{variant}_{chapter_set_label(chapters)}_ch{chapter:04d}_q{idx:04d}"
+
+
+def legacy_question_id(variant: str, chapter: int, idx: int) -> str:
+    """The pre-B1 id, which does not name the chapter set (run ``20260619_141212``)."""
+    return f"tulving_{variant}_ch{chapter:04d}_q{idx:04d}"
+
+
+def parse_question_id(qid: str) -> Optional[dict]:
+    """``{variant, chapters, chapter, idx}`` for a Tulving id, or None if it is not one.
+
+    ``chapters`` is None for a pre-B1 id, which never recorded its chapter set.
+    """
+    match = _QUESTION_ID.match(qid or "")
+    if not match:
+        return None
+    return {
+        "variant": match.group("variant"),
+        "chapters": int(match.group("chapters")) if match.group("chapters") else None,
+        "chapter": int(match.group("chapter")),
+        "idx": int(match.group("idx")),
+    }
+
 # ── Benchmark subset definitions (see the module docstring) ──────────────────
 
 #: ``get`` value of the Simple Recall subset.  Nothing else belongs in it.
@@ -119,6 +185,11 @@ DEFAULT_RETRIEVAL_TOP_K = 5
 FULL_BOOK_HEADER = "Book narrative:\n"
 RETRIEVED_HEADER = "Retrieved book excerpts:\n"
 _CONTEXT_SEPARATOR = "\n\n---\n\n"
+
+
+def full_book_prompt(book_text: str, question_block: str) -> str:
+    """The ``full`` arm's prompt: the whole book, a separator, then the question block."""
+    return FULL_BOOK_HEADER + book_text.strip() + _CONTEXT_SEPARATOR + question_block
 
 
 def context_mode_of_prompt(prompt: str) -> str:
@@ -526,8 +597,10 @@ class TulvingEpisodicAdapter(BaseAdapter):
     Args:
         data_dir: Root directory of the extracted Figshare data.
         variant: Dataset variant subfolder (default: Udefault_Sdefault_seed0).
-        chapters: Target chapter count for choosing the QA parquet file
-                  (20 = short, 200 = long).  Falls back to whatever is found.
+        chapters: The chapter set, 20 (short) or 200 (long).  Defaults to
+                  ``$TULVING_CHAPTERS``, else 20.  It is part of every question id
+                  and of each prompt's ``provenance`` (M-12 B1), and a set with no
+                  matching QA parquet raises rather than loading another book.
         llm_judge: Optional callable(predicted_items, gt_items, retrieval_type)
                    → Optional[float].  If it returns a non-None float, that
                    overrides the deterministic token-F1 for the given question.
@@ -554,7 +627,7 @@ class TulvingEpisodicAdapter(BaseAdapter):
         self,
         data_dir: Optional[Path | str] = None,
         variant: str = _DEFAULT_VARIANT,
-        chapters: int = 20,
+        chapters: Optional[int] = None,
         llm_judge=None,
         context_mode: Optional[str] = None,
         retriever=None,
@@ -564,7 +637,10 @@ class TulvingEpisodicAdapter(BaseAdapter):
 
         self._data_dir = Path(data_dir) if data_dir else _DEFAULT_DATA_DIR
         self._variant = variant
-        self._target_chapters = chapters
+        self._target_chapters = resolve_chapters(chapters)
+        #: Chapter count of the book actually loaded (19 or 196 for the default variant).
+        self.book_chapters: Optional[int] = None
+        self._book_sha16: Optional[str] = None
         self._llm_judge = llm_judge or _llm_judge_fallback_hook
         self._book_text: Optional[str] = None
         mode = context_mode or os.environ.get(CONTEXT_MODE_ENV) or CONTEXT_FULL
@@ -620,7 +696,8 @@ class TulvingEpisodicAdapter(BaseAdapter):
             from tulving_trace_retriever import TraceFTSChapterRetriever
 
             self._retriever = TraceFTSChapterRetriever(
-                self._book_text, book_id=f"{self._variant}-{self._target_chapters}ch")
+                self._book_text,
+                book_id=f"{self._variant}-{chapter_set_label(self._target_chapters)}")
 
     def _load_qa_from_variant(self, variant_dir: Path) -> list[dict]:
         """Load QA pairs from parquet files in the variant directory."""
@@ -629,13 +706,22 @@ class TulvingEpisodicAdapter(BaseAdapter):
         # parquet filename. Select the intended QA table only; debug/book
         # parquet files must not expand the 20ch run into 100K/1M variants.
         parquet_files = sorted(variant_dir.rglob("df_qa.parquet"))
+        if not parquet_files:
+            return []
         target_files = self._select_target_qa_files(parquet_files)
         if not target_files:
-            target_files = parquet_files  # Fallback: any parquet file
-
-        if not target_files:
-            return []
+            # M-12 B1: never fall back to "any parquet". That would load some other book
+            # under this chapter set's name.
+            raise RuntimeError(
+                f"TulvingEpisodicAdapter: no df_qa.parquet under {variant_dir} names its "
+                f"chapter count (nbchapters_N); refusing to guess the "
+                f"{chapter_set_label(self._target_chapters)} book")
+        self.book_chapters = self._chapter_count(target_files[0])
         self._book_text = self._load_book_text(target_files[0].parent)
+        if self._book_text:
+            import hashlib
+
+            self._book_sha16 = hashlib.sha256(self._book_text.encode("utf-8")).hexdigest()[:16]
 
         # M-12e-a: fail LOUDLY. This used to swallow a missing pandas/pyarrow (and
         # every per-file read error) and return no rows, so a run in an environment
@@ -659,16 +745,18 @@ class TulvingEpisodicAdapter(BaseAdapter):
         df = pd.concat(dfs, ignore_index=True) if len(dfs) > 1 else dfs[0]
         return df.to_dict(orient="records")
 
+    @staticmethod
+    def _chapter_count(path: Path) -> int | None:
+        match = re.search(r"nbchapters_(\d+)", str(path))
+        if not match:
+            return None
+        return int(match.group(1))
+
     def _select_target_qa_files(self, parquet_files: list[Path]) -> list[Path]:
         """Pick QA parquet files for the configured chapter target."""
         if not parquet_files:
             return []
-
-        def chapter_count(path: Path) -> int | None:
-            match = re.search(r"nbchapters_(\d+)", str(path))
-            if not match:
-                return None
-            return int(match.group(1))
+        chapter_count = self._chapter_count
 
         by_chapter: dict[int, list[Path]] = {}
         for path in parquet_files:
@@ -828,12 +916,7 @@ class TulvingEpisodicAdapter(BaseAdapter):
         retrieved_chapters: Optional[int] = None
         if self.context_mode == CONTEXT_FULL:
             if self._book_text:
-                prompt = (
-                    FULL_BOOK_HEADER
-                    + self._book_text.strip()
-                    + _CONTEXT_SEPARATOR
-                    + prompt
-                )
+                prompt = full_book_prompt(self._book_text, prompt)
         elif self.context_mode == CONTEXT_RETRIEVED:
             if self._retriever is None:
                 raise RuntimeError(
@@ -853,7 +936,7 @@ class TulvingEpisodicAdapter(BaseAdapter):
         expected_str = json.dumps(ground_truth)
 
         return {
-            "id": f"tulving_{self._variant}_ch{chapter:04d}_q{idx:04d}",
+            "id": question_id(self._variant, self._target_chapters, chapter, idx),
             "suite": "tulving_episodic",
             "prompt": prompt,
             # INERT: run_benchmark.py never reads this key; the arm lives in the prompt.
@@ -882,8 +965,39 @@ class TulvingEpisodicAdapter(BaseAdapter):
                 "ground_truth_items": ground_truth,
                 "context_mode": self.context_mode,
                 "retrieved_passages": retrieved_chapters,
+                "chapters": self._target_chapters,
+                "legacy_id": legacy_question_id(self._variant, chapter, idx),
             },
+            # M-12 B1: the run identity run_benchmark records verbatim in the result row.
+            "provenance": self.provenance(),
         }
+
+    def provenance(self) -> dict:
+        """The dataset/arm identity of every prompt this adapter builds."""
+        record = {
+            "suite": self.suite_name,
+            "variant": self._variant,
+            "chapters": self._target_chapters,
+            "chapter_set": chapter_set_label(self._target_chapters),
+            "book_chapters": self.book_chapters,
+            "book_sha16": self._book_sha16,
+            "context_mode": self.context_mode,
+        }
+        if self.context_mode == CONTEXT_RETRIEVED:
+            record["retrieval_top_k"] = self._retrieval_top_k
+        return record
+
+    #: M-12 B3: explicit generation parameters for this suite (see ``suites.py``).
+    #: 1024 output tokens is >3x the longest gold answer (17 items, 317 chars in the 200ch
+    #: set); thinking is OFF so the budget is spent on the list, and temperature 0 makes
+    #: the arms comparable.
+    inference_params = {
+        "temperature": 0.0,
+        "max_tokens": 1024,
+        "enable_thinking": False,
+        "cache_prompt": True,
+        "timeout": 1800,
+    }
 
     # ── scoring convenience method ───────────────────────────────────────────
 
