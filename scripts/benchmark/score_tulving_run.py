@@ -36,6 +36,7 @@ from typing import Any
 
 from tulving_episodic_adapter import (
     CHRONOLOGICAL_GET_STYLE,
+    CONTEXT_NONE,
     LATEST_GET_STYLE,
     SIMPLE_RECALL_GET_STYLE,
     TulvingEpisodicAdapter,
@@ -43,6 +44,7 @@ from tulving_episodic_adapter import (
     _token_f1,
     compute_chronological_awareness_score,
     compute_simple_recall_score,
+    context_mode_of_prompt,
     simple_recall_bin_basis,
     simple_recall_bin_counts,
 )
@@ -63,7 +65,10 @@ def _load_json(path: Path) -> dict[str, Any]:
 
 
 def build_prompt_index() -> dict[str, dict[str, Any]]:
-    adapter = TulvingEpisodicAdapter()
+    # Ground truth and question ids are identical across the M-12a arms (CME-4), so
+    # the index is built memory-off: it needs neither the book nor a retriever,
+    # whatever $TULVING_CONTEXT_MODE says.
+    adapter = TulvingEpisodicAdapter(context_mode=CONTEXT_NONE)
     return {item["id"]: item for item in adapter.extract_all()}
 
 
@@ -172,12 +177,18 @@ def score_result_payload(payload: dict[str, Any], prompt_index: dict[str, dict[s
     chronological_inputs: list[dict[str, Any]] = []
     missing_ground_truth: list[str] = []
     unknown_get_styles: list[str] = []
+    context_modes: dict[str, int] = {}
 
     for question_id, row in sorted(suite_results.items()):
         prompt_dict = prompt_index.get(question_id)
         if prompt_dict is None:
             missing_ground_truth.append(question_id)
             continue
+
+        stored_prompt = row.get("prompt")
+        mode_key = (context_mode_of_prompt(stored_prompt)
+                    if isinstance(stored_prompt, str) else "unrecorded")
+        context_modes[mode_key] = context_modes.get(mode_key, 0) + 1
 
         response = row.get("response", "")
         score = TulvingEpisodicAdapter.compute_f1_for_result(response, prompt_dict)
@@ -247,6 +258,8 @@ def score_result_payload(payload: dict[str, Any], prompt_index: dict[str, dict[s
         "scored_questions": len(per_question),
         "missing_ground_truth": len(missing_ground_truth),
         "unknown_get_style": len(unknown_get_styles),
+        # CME-4: the arm each scored prompt was built under, read from its stored header.
+        "context_mode_by_prompt": dict(sorted(context_modes.items())),
         "avg_f1": avg_f1,
         "simple_recall_score": compute_simple_recall_score(simple_inputs),
         "simple_recall_questions": len(simple_inputs),
@@ -393,6 +406,13 @@ def main() -> int:
                 "--belief-measurements requires " + ", ".join(missing)
                 + ". The harness does not record the arm or the book identity, and a tuple "
                   "that guesses them claims warrant the run never captured.")
+        # CME-4: the stored prompts record which arm the model actually saw. A --arm
+        # that disagrees with them would put the wrong arm behind the claim.
+        seen_modes = scored["summary"].get("context_mode_by_prompt", {})
+        if set(seen_modes) != {args.arm}:
+            raise SystemExit(
+                f"--arm {args.arm!r} disagrees with the stored prompts, whose context "
+                f"headers read {seen_modes}; refusing to emit belief rows")
         capture = _load_belief_capture()
         run_id = args.run_id or scored["summary"].get("run_id")
         if not run_id:
