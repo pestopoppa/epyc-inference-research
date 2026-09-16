@@ -48,6 +48,8 @@ SUITES = {"math": 150, "olympiadbench": 100, "mmlu_pro": 150, "livecodebench": 1
 TEMPERATURE = 0.1  # model_registry.yaml roles.architect_general.generation_defaults.temperature
 GGUF = "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf"
 CONDITIONS = ("baseline", "static", "tale")
+#: the research repo's own venv (the harness needs httpx; system python lacks it)
+RES_PY = "/mnt/raid0/llm/epyc-inference-research/.venv/bin/python"
 
 RESOLVE = r"""
 import json, sys
@@ -218,7 +220,7 @@ def main() -> int:
                     raise RuntimeError(f"VRAM {vram} below 8 GiB -- not GPU-resident")
                 for suite in args.suites:
                     outp = args.out / f"prb_t4_gpu_{suite}_{ts}.jsonl"
-                    cmd = [sys.executable, "scripts/benchmark/eval_tale_budget.py",
+                    cmd = [RES_PY, "scripts/benchmark/eval_tale_budget.py",
                            "--endpoint", f"http://127.0.0.1:{PORT}", "--suites", suite,
                            "--n-questions", str(SUITES[suite]), "--conditions", *CONDITIONS,
                            "--budget-unit", "tokens", "--temperature", str(TEMPERATURE), "--seed", "42",
