@@ -20,8 +20,8 @@ the same fail-closed error taxonomy as every other llm_judge item. The boolean
 Failure is recorded, never folded. A question whose judge call is unavailable, or
 whose reply does not parse, is listed under ``unjudged`` with its reason and never
 scored 0.0. ``score_beam_run.py`` refuses a payload whose ``unjudged`` list is not
-empty. Verdicts are persisted per question to ``<out>.partial.jsonl`` and a
-rerun resumes from that file.
+empty. Verdicts are persisted per question to ``<out>.partial.jsonl``. A rerun
+keeps the judged questions from that file and retries every unjudged one.
 
 The judge identity (``--judge-model``) is required: a BEAM headline with no judge
 recorded cannot be compared to anything.
@@ -82,13 +82,17 @@ def served_judge(scoring_config: Mapping[str, Any], overrides: Mapping[str, Any]
 
 
 def _load_partial(path: Path) -> dict[str, dict]:
+    """Previously JUDGED questions only. An ``unjudged`` row (judge down, bad verdict,
+    empty response) is a failure to retry, never a result to carry forward. Carrying
+    it forward would make a rerun after the judge recovers exit 3 forever."""
     done: dict[str, dict] = {}
     if not path.is_file():
         return done
     for line in path.read_text().splitlines():
         if line.strip():
             row = json.loads(line)
-            done[row["question_id"]] = row
+            if "nugget_verdicts" in row:
+                done[row["question_id"]] = row
     return done
 
 
@@ -113,8 +117,7 @@ def judge_run(
     for question_id in sorted(results):
         row = results[question_id]
         if question_id in done:
-            prior = done[question_id]
-            (records if "nugget_verdicts" in prior else unjudged).append(prior)
+            records.append(done[question_id])
             continue
         prompt = prompt_index.get(question_id)
         if prompt is None:

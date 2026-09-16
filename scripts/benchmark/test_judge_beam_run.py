@@ -143,6 +143,40 @@ def test_partial_file_resumes_without_rejudging(tmp_path):
     assert len(again["records"]) == len(index)
 
 
+def test_rerun_retries_unjudged_rows_from_the_partial_file(tmp_path):
+    """Regression: unjudged rows in the partial file must be retried, not carried forward."""
+    index = _index(tmp_path)
+    partial = tmp_path / "out.json.partial.jsonl"
+    first_id = sorted(index)[0]
+
+    def down_for_first(cfg):
+        def judge(prompt):
+            if cfg["probing_question"] == index[first_id]["scoring_config"]["probing_question"]:
+                raise jbr.JudgeUnavailable("llm_judge_transport_error: down")
+            return '{"score": 1.0}'
+        return judge
+
+    before = jbr.judge_run(_payload(index), index, judge_for=down_for_first,
+                           partial_path=partial)
+    assert [u["question_id"] for u in before["unjudged"]] == [first_id]
+
+    recovered = StubJudge()
+    after = jbr.judge_run(_payload(index), index, judge_for=lambda cfg: recovered,
+                          partial_path=partial)
+    assert after["unjudged"] == []
+    assert len(after["records"]) == len(index)
+    # Only the previously unjudged question was re-judged.
+    assert len(recovered.prompts) == len(index[first_id]["scoring_config"]["nuggets"])
+    by_id = {r["question_id"]: r for r in after["records"]}
+    assert set(by_id[first_id]["nugget_verdicts"]) == {0.5}
+
+    # A third pass is a pure resume: nothing left to judge.
+    third = StubJudge(reply="must not be called")
+    final = jbr.judge_run(_payload(index), index, judge_for=lambda cfg: third,
+                          partial_path=partial)
+    assert third.prompts == [] and final["unjudged"] == []
+
+
 def test_served_judge_binds_the_orchestrator_transport(monkeypatch):
     calls = []
 
