@@ -1478,12 +1478,16 @@ def main(argv: list[str] | None = None) -> int:
         source_floor_refresh[0] = False
         runtime_preparation["source_comparison_floor"] = str(reading.path)
 
-    def cpu_compare(a_build, c_build):
+    def cpu_compare(a_build, c_build, *, rebind_feedback=True):
         anchor_recipe = _cpu_arm(direct_launch, a_build)
         candidate_recipe = _cpu_arm(direct_launch, c_build)
         # Reuse the actual comparison's rebind, including after an anchor keep;
         # never hash a build a second time merely to assemble a planner prompt.
-        feedback_anchor[0] = anchor_recipe
+        # Only a comparison whose A-arm IS the current anchor may rebind: the
+        # accumulator's champion-of-record-vs-tip bundle has the OLD champion as
+        # its A-arm and would otherwise revert the post-keep planner scope.
+        if rebind_feedback:
+            feedback_anchor[0] = anchor_recipe
         ensure_source_floor(anchor_recipe, a_build)
         return _serving_comparison(lambda: serving.compare(
             serving_recipe, a_build, c_build, pairs=args.serving_pairs,
@@ -1874,7 +1878,7 @@ def main(argv: list[str] | None = None) -> int:
         # re-measured (never a product of marginal effects -- keeps interact) because this is
         # the number the fire threshold reads and the serving gate will be asked to confirm.
         def compare_bundle() -> dict:
-            return (cpu_compare(cor_build[0], anchor_build[0]).to_dict()
+            return (cpu_compare(cor_build[0], anchor_build[0], rebind_feedback=False).to_dict()
                     if direct_launch else bench.compare(
                         bench.Arm("champion_of_record", cor_build[0] / "bin" / "llama-bench"),
                         bench.Arm("accumulator", anchor_build[0] / "bin" / "llama-bench"),
