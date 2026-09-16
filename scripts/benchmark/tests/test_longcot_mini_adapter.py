@@ -42,7 +42,22 @@ class _Skip(Exception):
 
 def _require_data():
     if not _DATA_DIR.exists():
-        raise _Skip(f"dataset not present at {_DATA_DIR}")
+        _skip(f"dataset not present at {_DATA_DIR}")
+    # The adapter FAILS OPEN to an empty dataset when `datasets` (and its pyarrow
+    # backend) cannot be imported, which read as "0 rows" rather than a skip in
+    # environments without them (e.g. the uv test env).
+    try:
+        import datasets  # noqa: F401
+    except ImportError as exc:
+        _skip(f"`datasets` is not importable here ({exc}); the adapter would load 0 rows")
+
+
+def _skip(reason):
+    """pytest's skip under pytest; the stdlib runner's _Skip otherwise."""
+    pytest = sys.modules.get("pytest")
+    if pytest is not None:
+        pytest.skip(reason)
+    raise _Skip(reason)
 
 
 def _synthetic_prompt(domain, template, gold_value, canary="CANARY-UUID-XYZ",

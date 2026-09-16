@@ -12,6 +12,23 @@ sys.path.insert(0, str(Path(__file__).parent))
 import fg4b_a4_cpu_optimized_reanchor as runner
 
 
+@pytest.fixture(autouse=True)
+def clean_checkout_status(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`instrument_identity()` refuses a dirty checkout, so every receipt test
+    went red whenever ANY file in the research checkout was uncommitted (i.e.
+    in every session with work in progress). Report a clean status; all other
+    Git identity queries stay real. The dirty-refusal test wraps this and
+    reinstates a dirty status, so that check keeps its signal."""
+    real = runner._git_output
+
+    def clean(*args: str) -> str:
+        if args[:1] == ("status",):
+            return ""
+        return real(*args)
+
+    monkeypatch.setattr(runner, "_git_output", clean)
+
+
 def test_git_identity_uses_absolute_trusted_binary() -> None:
     assert runner.GIT == Path("/usr/bin/git")
     assert runner.GIT.is_file()
