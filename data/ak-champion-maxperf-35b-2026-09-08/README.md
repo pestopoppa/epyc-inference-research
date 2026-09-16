@@ -16,7 +16,9 @@ which is **6**. **Unit is the LAUNCH.** All points residency `proven`.
 
 ## What this establishes
 
-**Not saturated at 16 slots.** +28% from 8 to 12, +16% from 12 to 16, and VRAM is only 41 of 64 GB.
+**Not saturated at 16 slots.** +28% from 4 to 8, +10% from 8 to 12, +16% from 12 to 16, and VRAM is
+only 41 of 64 GB. (Corrected 2026-09-16: this line originally read "+28% from 8 to 12"; recomputed
+from `sweep.json`/`sweep-hi.json`, 8 -> 12 is +10.45% and +28.05% is the 4 -> 8 step.)
 **The ceiling is UNMEASURED** — 24/32 slots was offered and the operator chose to stop. That is a
 recorded decision, not a gap in the data.
 
@@ -42,4 +44,9 @@ recipe-expressiveness gap found in one day, after env vars and the recipe identi
 surfaced only when a slightly new question was asked.
 
 Raw: `sweep.json` (np 1-8), `sweep-hi.json` (12, 16), `sweep-np1-n6.json` (the tightened single-slot
-point), the two logs, and `sweep.py` as executed.
+point), the two logs, and `sweep.py` / `sweep-hi.py` / `sweep-np1.py` as executed (they differ only in
+their `OUT` path). `sweep-hi.log` holds the console of BOTH the np 12/16 run and the chained np=1 n=6
+run. `SHA256SUMS` pins every raw file; all were byte-compared against the scratch originals in
+`/mnt/raid0/llm/tmp/maxperf-35b-20260908/` and every table value was recomputed from the JSON on
+2026-09-16. The np=1 headline is the median of 6 launches, i.e. the mean of the middle two runs
+(112.39, 112.96), not itself one of the runs.
