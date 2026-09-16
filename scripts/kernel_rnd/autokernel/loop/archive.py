@@ -400,7 +400,7 @@ def _shared_rows(source, scope):
     this selection. Keep qualitative negative/invalid outcomes and their caveats.
     """
     kept = ("kept", "runtime_kept")
-    measured = ("measured_null", "runtime_observed", "measurement_invalid",
+    measured = ("measured_null", "regression", "runtime_observed", "measurement_invalid",
                 "confirm_vetoed", "screened_out")
     pools = [source.recall(epoch="", limit=16, include_source_scope=True, statuses=kept),
              source.recall(epoch="", limit=16, include_source_scope=True, statuses=measured),

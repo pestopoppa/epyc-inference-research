@@ -44,6 +44,16 @@ def test_answered_identity_refuses_after_fresh_process_round_trip():
         assert caught.value.prior_epoch == "e0"
 
 
+def test_decisive_regression_closes_exact_attempt():
+    with tempfile.TemporaryDirectory() as tmp:
+        registry = D.Registry(Path(tmp))
+        registry.reserve(identity())
+        registry.finish(identity(), status="regression", effect=-.02, epoch="e0")
+        with pytest.raises(D.DispatchRefused) as caught:
+            registry.reserve(identity())
+        assert caught.value.prior_effect == -.02
+
+
 def test_non_answer_gets_one_identical_retry_then_closes_infeasible():
     with tempfile.TemporaryDirectory() as tmp:
         registry = D.Registry(Path(tmp))

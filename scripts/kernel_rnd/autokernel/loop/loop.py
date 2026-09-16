@@ -341,6 +341,10 @@ def _null_reason(comparison: bench.Comparison) -> str:
                 f"{comparison.effect * 100:+.3f}%, but an arm that is still moving "
                 f"resolves nothing. This mechanism is UNTESTED, not unpromising — "
                 f"re-run it rather than abandoning it")
+    if comparison.decisive and comparison.effect < 0:
+        return (f"DECISIVE REGRESSION — effect {comparison.effect * 100:+.3f}% "
+                f"exceeded the {comparison.noise_floor_pct:.3f}% noise floor; "
+                "candidate rejected, champion unchanged")
     return (f"effect {comparison.effect * 100:+.3f}% did not clear the "
             f"{comparison.noise_floor_pct:.3f}% noise floor")
 
@@ -695,10 +699,11 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                 # can reconsider it against the champion that displaced it.
                 exc.hypothesis = hypothesis
                 raise
-            # A null result IS a result. It is recorded with its mechanism and its
+            # A negative result IS a result. It is recorded with its mechanism and its
             # sample vector, because a loop whose record of failure is thinner than
             # its record of success teaches its planner to repeat the failures.
             return Outcome("runtime_observed" if hypothesis.runtime_pair is not None
+                           else "regression" if comparison.decisive and comparison.effect < 0
                            else "measured_null", hypothesis,
                            ["Runtime observation retained; recipe selection requires original "
                             "strict anchor/instrument calibration and admission, not a source floor"

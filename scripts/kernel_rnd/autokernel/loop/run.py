@@ -3006,7 +3006,8 @@ def main(argv: list[str] | None = None) -> int:
 
     kept = sum(1 for outcome in outcomes if outcome.status == "kept")
     measured = sum(1 for outcome in outcomes
-                   if outcome.status in {"kept", "measured_null", "keep_candidate", "runtime_observed"})
+                   if outcome.status in {"kept", "measured_null", "regression",
+                                         "keep_candidate", "runtime_observed"})
     print(f"\n{len(outcomes)} iterations in {elapsed / 60:.1f} min: "
           f"{measured} reached a measurement, {kept} kept")
     # The number that decides the lane count: once the tail approaches the wall
