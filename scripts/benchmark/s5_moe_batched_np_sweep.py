@@ -45,17 +45,23 @@ ARMS = {
     "gemma26a4b_q8": M / "gemma-4-26B-A4B-it-ORIG-Q8_0.gguf",
     "gemma31_dense_q4km": M / "gemma-4-31B-it-Q4_K_M.gguf",
     "qwen36_35ba3b_q8": M / "Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
-    "qwen36_27b_dense_q8": M / "Qwen_Qwen3.6-27B-Q8_0.gguf",
+    "qwen36_27b_dense_q8": M / "Qwen3.6-27B-MTP-Q8_0.gguf",  # MTP twin: both Qwen arms carry the unused head
 }
+#: Operator approval of the Option-A thresholds (2026-09-16-sub-s5-thresholds.md) must exist before launch.
+APPROVAL = Path("/mnt/raid0/llm/tmp/sub-gpu-runner-20260916/s5/APPROVED")
+THRESHOLDS_DOC = Path("/workspace/progress/2026-09/2026-09-16-sub-s5-thresholds.md")
 NPL = (1, 2, 4, 8, 16, 32)
 PREREG = {
-    "statistic": "scaling(arm) = median over launches of S_TG(B=32) / median S_TG(B=1)",
-    "PASS": "scaling(gemma26a4b_q4km) >= 0.8 * scaling(gemma31_dense_q4km) AND "
-            "S_TG(gemma26a4b_q4km)/S_TG(gemma26a4b_q8) at B=32 >= the same ratio at B=1",
-    "FAIL": "scaling(gemma26a4b_q4km) < 0.5 * scaling(gemma31_dense_q4km) -> L3-MoE MUL_MAT_ID/MMQ kernel gains ROI",
-    "otherwise": "INTERMEDIATE",
-    "reported_beside": "scaling(qwen36_35ba3b_q8) / scaling(qwen36_27b_dense_q8)",
-    "grade": "observation, speed only",
+    "source": "Option A, /workspace/progress/2026-09/2026-09-16-sub-s5-thresholds.md (sections 3-6)",
+    "n": "5 launches/arm; one pre-committed top-up (+5 at B in {1,32}) only on INCONCLUSIVE",
+    "delta_eff": "max(8%, measured p95_dev of the verdict statistic); a statistic with p95_dev > 16% is INVALID",
+    "K(B)": "S_TG(B)/S_TG(1) within one launch",
+    "Q-A": "F(B)=S_TG,G4(B)/S_TG,G8(B) over paired adjacent launches; E=F(32)/F(1) median. "
+           "GO if E >= 1-delta_eff; NO-GO if E < 1-2*delta_eff AND F(32) < 1.0; else INCONCLUSIVE",
+    "Q-B": "M2=K_moe(32)/K_dense(32) per pair (G4:Dg4, Q8m:Dq8), median. PASS >= 0.80; FAIL < 0.50; "
+           "else INCONCLUSIVE; INCONCLUSIVE also when M2 lies within delta_eff of 0.80 or 0.50",
+    "secondary": "E and M2 at B=16 reported as a consistency check",
+    "grade": "observation proxy, category BASELINE, never a headline",
 }
 
 
@@ -108,22 +114,31 @@ def run_one(out: Path, arm: str, launch: int) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", type=Path, required=True)
-    ap.add_argument("--launches", type=int, default=3)
+    ap.add_argument("--launches", type=int, default=5)
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
+    if not APPROVAL.exists():
+        print(f"HELD: operator approval of the pre-registered thresholds not recorded ({APPROVAL})", flush=True)
+        return 3
     prereg = args.out / "PREREGISTRATION.json"
     if not prereg.exists():
         body = {**PREREG, "arms": {k: str(v) for k, v in ARMS.items()}, "npl": NPL,
                 "launches": args.launches, "argv_template": argv_for(Path("<model>")),
                 "binary_sha256": hashlib.sha256((BIN / "llama-batched-bench").read_bytes()).hexdigest(),
+                "approval_file": str(APPROVAL), "approval": APPROVAL.read_text().strip(),
+                "thresholds_doc_sha256": hashlib.sha256(THRESHOLDS_DOC.read_bytes()).hexdigest(),
                 "frozen_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
         prereg.write_text(json.dumps(body, indent=2))
     print(f"prereg sha256 {hashlib.sha256(prereg.read_bytes()).hexdigest()}", flush=True)
     names = list(ARMS)
+    units = [("gemma26a4b_q4km", "gemma26a4b_q8"), ("gemma31_dense_q4km",), ("qwen36_35ba3b_q8",),
+             ("qwen36_27b_dense_q8",)]
     plan = []
     for launch in range(args.launches):
-        k = launch % len(names)
-        plan += [(a, launch) for a in (names[k:] + names[:k])]
+        k = launch % len(units)
+        for unit in units[k:] + units[:k]:
+            pair = unit if launch % 2 == 0 else tuple(reversed(unit))
+            plan += [(a, launch) for a in pair]
     rows_path = args.out / "launches.jsonl"
     done = set()
     if rows_path.exists():
@@ -154,16 +169,50 @@ def main() -> int:
                       max(r["S_TG"].get(str(b), r["S_TG"].get(b)) for r in rs)] for b in NPL}
         summ[arm] = {"n": len(rs), "median_S_TG": med, "min_max_S_TG": spread,
                      "scaling_32_over_1": med[32] / med[1]}
-    verdict = None
-    if all(a in summ for a in ("gemma26a4b_q4km", "gemma26a4b_q8", "gemma31_dense_q4km")):
-        rel = summ["gemma26a4b_q4km"]["scaling_32_over_1"] / summ["gemma31_dense_q4km"]["scaling_32_over_1"]
-        r1 = summ["gemma26a4b_q4km"]["median_S_TG"][1] / summ["gemma26a4b_q8"]["median_S_TG"][1]
-        r32 = summ["gemma26a4b_q4km"]["median_S_TG"][32] / summ["gemma26a4b_q8"]["median_S_TG"][32]
-        verdict = {"moe_over_dense_scaling": rel, "q4k_over_q8_B1": r1, "q4k_over_q8_B32": r32,
-                   "verdict": ("PASS" if rel >= 0.8 and r32 >= r1 else "FAIL" if rel < 0.5 else "INTERMEDIATE")}
-    if "qwen36_35ba3b_q8" in summ and "qwen36_27b_dense_q8" in summ:
-        (verdict or {}).update(qwen_moe_over_dense_scaling=summ["qwen36_35ba3b_q8"]["scaling_32_over_1"]
-                               / summ["qwen36_27b_dense_q8"]["scaling_32_over_1"])
+    import sys as _s
+    _s.path.insert(0, str(REPO / "scripts/kernel_rnd"))
+    from autokernel.loop.serving import _spread
+
+    def per_launch(arm):
+        return {r["launch"]: {int(k): v for k, v in r["S_TG"].items()} for r in ok if r["arm"] == arm}
+
+    def med(xs):
+        return statistics.median(xs) if xs else None
+
+    reading = {}
+    g4, g8 = per_launch("gemma26a4b_q4km"), per_launch("gemma26a4b_q8")
+    paired = sorted(set(g4) & set(g8))
+    if paired:
+        F = {b: [g4[l][b] / g8[l][b] for l in paired] for b in (1, 16, 32)}
+        E32 = [F[32][i] / F[1][i] for i in range(len(paired))]
+        E16 = [F[16][i] / F[1][i] for i in range(len(paired))]
+        sp = _spread(E32)["p95_dev_pct"] if len(E32) >= 2 else None
+        d = max(8.0, sp or 0.0) / 100
+        e, f32 = med(E32), med(F[32])
+        qa = ("INVALID" if sp is not None and sp > 16 else "GO" if e >= 1 - d else
+              "NO-GO" if (e < 1 - 2 * d and f32 < 1.0) else "INCONCLUSIVE")
+        reading["Q-A"] = {"n_pairs": len(paired), "E32": E32, "E32_median": e, "E32_p95_dev_pct": sp,
+                          "delta_eff": d, "F1_median": med(F[1]), "F32_median": f32,
+                          "E16_median": med(E16), "verdict": qa}
+    for moe, dense in (("gemma26a4b_q4km", "gemma31_dense_q4km"), ("qwen36_35ba3b_q8", "qwen36_27b_dense_q8")):
+        a, b = per_launch(moe), per_launch(dense)
+        if not a or not b:
+            continue
+        ka = {bb: [v[bb] / v[1] for v in a.values()] for bb in (16, 32)}
+        kb = {bb: [v[bb] / v[1] for v in b.values()] for bb in (16, 32)}
+        m2 = med(ka[32]) / med(kb[32])
+        m2_16 = med(ka[16]) / med(kb[16])
+        spa = _spread(ka[32])["p95_dev_pct"] if len(ka[32]) >= 2 else 0.0
+        spb = _spread(kb[32])["p95_dev_pct"] if len(kb[32]) >= 2 else 0.0
+        sp = max(spa, spb)
+        d = max(8.0, sp) / 100
+        near = abs(m2 - 0.80) <= d * 0.80 or abs(m2 - 0.50) <= d * 0.50
+        qb = ("INVALID" if sp > 16 else "INCONCLUSIVE" if near else
+              "PASS" if m2 >= 0.80 else "FAIL" if m2 < 0.50 else "INCONCLUSIVE")
+        reading[f"Q-B {moe}:{dense}"] = {"M2_32": m2, "M2_16": m2_16, "K32_moe_median": med(ka[32]),
+                                          "K32_dense_median": med(kb[32]), "K32_p95_dev_pct": [spa, spb],
+                                          "delta_eff": d, "verdict": qb}
+    verdict = reading
     (args.out / "summary.json").write_text(json.dumps({"arms": summ, "reading": verdict}, indent=2))
     print(json.dumps(verdict, indent=2))
     return 0
