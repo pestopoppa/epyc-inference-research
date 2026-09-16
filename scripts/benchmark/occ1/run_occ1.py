@@ -11,7 +11,9 @@ Needs Pillow for plan/run (`uv run --with pillow ...`). See README.md for the GP
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
+import os
 import statistics
 import sys
 import time
@@ -29,6 +31,12 @@ from . import costs, fixture, prompts, render, stats  # noqa: E402
 DEFAULT_ARMS = "text,img-6x10-bw,img-6x10-color,img-8x13-bw,img-8x8u-bw,img-12x12u-bw"
 EXPECTED_MODEL = "Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf"
 EXPECTED_BUILD = "ef81196d5"
+# A free TEST port. :8090 is the production embedder; never point this harness at a production port.
+DEFAULT_PORT = int(os.environ.get("OCC1_PORT", "18431"))
+# Where the belief-kernel write-side vocabulary lives. It is hosted in epyc-root so the writer and
+# the strict reader cannot drift into two dialects of one schema (SC85; the SC67/CT-8 precedent).
+ROOT_CANDIDATES = (os.environ.get("EPYC_ROOT", ""), "/mnt/raid0/llm/epyc-root", "/workspace")
+CAPTURE_MODULE = "occ1_optical_compression_capture"
 # Pre-registered decision parameters (do not change after the first `run`).
 PREREG = {
     "primary_metric": "SQuAD F1 per question, paired arm-vs-text (higher is better)",
@@ -207,7 +215,8 @@ def cmd_run(args, post=http_json, ident=server_identity) -> int:
         problems.append("server has no vision modality (was --mmproj passed?)")
     if problems and not args.force:
         raise SystemExit("server identity check failed: " + "; ".join(problems))
-    (out / "server_identity.json").write_text(json.dumps({**identity, "problems": problems}, indent=1))
+    (out / "server_identity.json").write_text(
+        json.dumps({**identity, "url": args.url, "problems": problems}, indent=1))
 
     chunk_text = {c.index: c.text for c in load_fixture(args)[0]}
     rec_path = out / "records.jsonl"
@@ -378,6 +387,56 @@ def cmd_report(args) -> int:
             + f" | {r['unreadable']} | {r.get('verdict', 'baseline')} |")
     (out / "summary.md").write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
+    if not getattr(args, "belief_measurements", True):
+        return 0
+    return write_belief_sidecar(args, out, summary)
+
+
+def _load_belief_capture():
+    """Import epyc-root's OCC-1 capture module, or explain why it is unavailable."""
+    tried = []
+    for root in ROOT_CANDIDATES:
+        if not root:
+            continue
+        module = Path(root) / "scripts" / "vidya" / "adapters" / f"{CAPTURE_MODULE}.py"
+        tried.append(str(module))
+        if not module.is_file():
+            continue
+        spec = importlib.util.spec_from_file_location(CAPTURE_MODULE, module)
+        if spec is None or spec.loader is None:  # pragma: no cover - defensive
+            continue
+        loaded = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(loaded)
+        return loaded
+    raise SystemExit(f"belief sidecar: epyc-root's {CAPTURE_MODULE}.py not found (set EPYC_ROOT, "
+                     "or pass --no-belief-measurements). Looked in: " + ", ".join(tried))
+
+
+def write_belief_sidecar(args, out: Path, summary: dict, loader=None) -> int:
+    """SC85 write-side hook: producer-authored claim rows beside summary.json.
+
+    A VOID run is not a measurement, so it writes no sidecar, and a sidecar left by an earlier
+    report of the same directory is removed. The writer copies values out of ``summary``. It
+    never guesses the serving identity or the protocol. While no OCC protocol is codified,
+    ``--protocol-id`` stays empty and the belief kernel grades every row as an observation.
+    """
+    sidecar = out / "belief_measurements.jsonl"
+    if summary["overall"] == "VOID":
+        if sidecar.exists():
+            sidecar.unlink()
+            print("belief sidecar: removed the stale sidecar; this report is VOID")
+        else:
+            print("belief sidecar: not written; a VOID run is not a measurement")
+        return 0
+    capture = (loader or _load_belief_capture)()
+    try:
+        path = capture.write_belief_measurements(
+            out, summary=summary, run_id=getattr(args, "run_id", None) or out.name,
+            producer="run_occ1.py report", protocol_id=getattr(args, "protocol_id", "") or "")
+    except capture.CaptureError as exc:
+        print(f"belief sidecar: REFUSED: {exc}", file=sys.stderr)
+        return 3
+    print(f"belief sidecar: {path}")
     return 0
 
 
@@ -394,12 +453,23 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--limit-chunks", type=int, default=0, help="0 = every full chunk of SQuAD dev")
     ap.add_argument("--tokenizer", default="/mnt/raid0/llm/hf-models/Qwen3-4B-Instruct-2507/tokenizer.json",
                     help="plan-time text-token ESTIMATE only (Qwen3 BPE); '' to skip")
-    ap.add_argument("--url", default="http://127.0.0.1:8090")
+    ap.add_argument("--port", type=int, default=DEFAULT_PORT,
+                    help="reader port on 127.0.0.1 (default $OCC1_PORT or 18431; a test port, never production)")
+    ap.add_argument("--url", default=None, help="full reader URL; overrides --port")
     ap.add_argument("--expect-build", default=EXPECTED_BUILD)
     ap.add_argument("--max-tokens", type=int, default=1024)
     ap.add_argument("--max-requests", type=int, default=0)
     ap.add_argument("--force", action="store_true", help="run despite identity problems (run is VOID)")
+    belief = ap.add_argument_group("belief kernel (SC85)", "report writes belief_measurements.jsonl "
+                                   "beside summary.json via epyc-root's capture module")
+    belief.add_argument("--no-belief-measurements", dest="belief_measurements", action="store_false",
+                        help="report: do not write the belief sidecar")
+    belief.add_argument("--run-id", default=None, help="report: belief run id (default: the --out dir name)")
+    belief.add_argument("--protocol-id", default="",
+                        help="report: codified protocol under measurement/protocols/ (empty until one exists)")
     args = ap.parse_args(argv)
+    if args.url is None:
+        args.url = f"http://127.0.0.1:{args.port}"
     return {"plan": cmd_plan, "run": cmd_run, "report": cmd_report}[args.command](args)
 
 

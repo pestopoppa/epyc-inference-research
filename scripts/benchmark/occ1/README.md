@@ -57,13 +57,19 @@ Prerequisites (checked 2026-09-16, zero inference):
   17.7 GB weights, 1.0 GB mmproj, 0.8 GB q8_0 KV at 16k, about 0.8 GB overhead, plus the vision compute
   buffer. The prior 65k-ctx measurement was 21.0 GB.
 - **Reader already in production**: the same model already serves `:8086` on the production kernel.
-  This run uses a **separate** champion-binary server on `:8090`, so production is not touched. If
+  This run uses a **separate** champion-binary server on test port `:18431`, so production is not
+  touched. (`:8090` is the production embedder, so never use it.) The port is a parameter:
+  `launch_reader.sh --port N` (or `OCC1_PORT=N`) plus `run_occ1.py --port N`. Before overriding it,
+  check that the port is absent from `epyc-orchestrator/orchestration/launch_manifest.yaml` and
+  from `ss -ltn`. The launcher refuses a port that is already listening. If
   VRAM is short, the session that owns the GPU decides whether to evict. Do not evict it yourself.
 - **Region claim**: take the GPU region claim for the MI210 before launching and release it after.
 
 ```bash
 RES=/mnt/raid0/llm/worktrees/sub-occ1          # or the research clone once merged
 RUN=/mnt/raid0/llm/tmp/occ1-run-20260916        # ALREADY PLANNED: 234 requests, suite 261d8ac1eaed
+PORT=18431                                       # free test port (checked 2026-09-16); never 8090
+export OCC1_PORT=$PORT                           # report needs an epyc-root with the SC85 capture module ($EPYC_ROOT)
 cd $RES
 
 # 0. (already done 2026-09-16; re-run only if the plan dir is lost — deterministic, ~50 s CPU)
@@ -71,9 +77,9 @@ uv run --no-project --with pillow --with tokenizers \
   python scripts/benchmark/occ1/run_occ1.py plan --out $RUN
 
 # 1. launch the reader (foreground exec; capture YOUR pid, kill only it)
-nohup scripts/benchmark/occ1/launch_reader.sh > $RUN/server.log 2>&1 &
+nohup scripts/benchmark/occ1/launch_reader.sh --port $PORT > $RUN/server.log 2>&1 &
 SRV=$!
-until curl -sf http://127.0.0.1:8090/health >/dev/null; do sleep 5; done   # ~1–2 min load
+until curl -sf http://127.0.0.1:$PORT/health >/dev/null; do sleep 5; done   # ~1–2 min load
 # residency proof DURING the run, not after: rocm-smi --showmeminfo vram (≥ +20 GB) + KFD process count
 
 # 2. pilot — 3 chunks, 18 requests, ~3–5 min; checks the plumbing before the full spend
@@ -85,7 +91,7 @@ uv run --no-project python scripts/benchmark/occ1/run_occ1.py report --out $RUN-
 
 # 3. full run — 234 requests
 uv run --no-project --with pillow python scripts/benchmark/occ1/run_occ1.py run --out $RUN
-uv run --no-project python scripts/benchmark/occ1/run_occ1.py report --out $RUN   # summary.md / summary.json
+uv run --no-project python scripts/benchmark/occ1/run_occ1.py report --out $RUN   # summary.md / summary.json + belief_measurements.jsonl
 
 # 4. teardown
 kill $SRV; sleep 5; ps -p $SRV >/dev/null && kill -9 $SRV; ps -p $SRV || echo "server $SRV gone"
@@ -107,11 +113,23 @@ pilot and the report, budget **about 1.5 h of MI210 time**.
 uv run --no-project --with pillow python -m unittest scripts/benchmark/occ1/tests/test_occ1.py
 ```
 
-## Belief-kernel wiring
+## Belief-kernel wiring (SC85)
 
-OCC-1 produces measurements. `summary.json` + `records.jsonl` need a source row in epyc-root
-`scripts/vidya/adapters/README.md`, plus a task in `vidya-belief-substrate-program.md`. That is
-prepared, not applied. See the progress note of 2026-09-16.
+`report` writes `belief_measurements.jsonl` beside `summary.json` using epyc-root's
+`scripts/vidya/adapters/occ1_optical_compression_capture.py`. The module is found through
+`$EPYC_ROOT`, then `/mnt/raid0/llm/epyc-root`, then `/workspace`.
+
+- **Rows per arm**: SQuAD F1 and EM. The text arm is BASELINE and the image arms are CANDIDATE.
+  Each image arm also gets the paired F1 delta vs text, with its 95% CI, McNemar p and verdict, and
+  the prompt-token ratio vs text.
+- **Identity on every row**: the suite fingerprint, the `/props` serving identity (including the
+  URL), and a digest of the pre-registration.
+- **VOID runs**: a VOID run writes nothing, and removes a stale sidecar.
+- **Protocol**: `--protocol-id` stays empty until an OCC protocol is codified under
+  `measurement/protocols/`. Until then, every tuple grades `Judged/Located`, an observation.
+- **Skipping or naming**: `--no-belief-measurements` skips the sidecar. `--run-id` names the run;
+  the default is the `--out` directory name.
+- **Ingest**: `python3 scripts/vidya/cli.py ingest occ1 --path $RUN`, run from epyc-root.
 
 ## Attribution
 

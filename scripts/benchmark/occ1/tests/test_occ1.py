@@ -10,6 +10,7 @@ written to a temp cache; hash pins are patched for the synthetic files only.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -251,7 +252,25 @@ class EndToEndMockedTests(unittest.TestCase):
         run_occ1.cmd_run(ns, post=lambda u, p: calls.append(1), ident=self.fake_ident)
         self.assertEqual(calls, [])
 
-        self.assertEqual(run_occ1.main(["report", *self.base]), 0)
+        calls = []
+
+        class FakeCapture:
+            class CaptureError(ValueError):
+                pass
+
+            @staticmethod
+            def write_belief_measurements(out, **kw):
+                calls.append((out, kw))
+                return out / "belief_measurements.jsonl"
+
+        with mock.patch.object(run_occ1, "_load_belief_capture", lambda: FakeCapture):
+            self.assertEqual(run_occ1.main(["report", *self.base]), 0)
+        self.assertEqual(len(calls), 1)
+        _, kw = calls[0]
+        self.assertEqual(kw["run_id"], "run")
+        self.assertEqual(kw["protocol_id"], "")
+        self.assertEqual(kw["producer"], "run_occ1.py report")
+        self.assertEqual(kw["summary"]["server_identity"]["url"], "http://mock")
         summary = json.loads((self.out / "summary.json").read_text())
         rows = {r["arm"]: r for r in summary["rows"]}
         self.assertEqual(rows["text"]["f1"], 1.0)
@@ -260,6 +279,60 @@ class EndToEndMockedTests(unittest.TestCase):
         self.assertIn(rows["img-6x10-bw"]["verdict"], {"NOT_NONINFERIOR", "NEGATIVE_COST", "POSITIVE"})
         self.assertEqual(summary["overall"], "NEGATIVE")  # ~half recall lost -> not non-inferior
         self.assertEqual(rows["img-6x10-bw"]["non_image_prompt_tokens_median"], 150)
+
+    def _planned_and_run(self):
+        run_occ1.main(["plan", *self.base])
+        ns = run_occ1.argparse.Namespace(
+            command="run", out=str(self.out), cache=str(self.cache), download=False,
+            arms="text,img-6x10-bw", chunk_chars=8000, qpc=4, seed=42, limit_chunks=0, tokenizer="",
+            url="http://127.0.0.1:18431", expect_build="ef81196d5", max_tokens=1024, max_requests=0,
+            force=False)
+        run_occ1.cmd_run(ns, post=self.fake_post, ident=self.fake_ident)
+
+    def test_real_root_capture_writes_a_sidecar_the_reader_accepts(self):
+        try:
+            capture = run_occ1._load_belief_capture()
+        except SystemExit:
+            self.skipTest("epyc-root SC85 capture module not found (set EPYC_ROOT)")
+        self._planned_and_run()
+        self.assertEqual(run_occ1.main(["report", *self.base, "--run-id", "occ1-test"]), 0)
+        sidecar = self.out / "belief_measurements.jsonl"
+        rows = [json.loads(x) for x in sidecar.read_text().splitlines()]
+        self.assertEqual(len(rows), 2 + 4)  # text: F1+EM; image: F1+EM+delta+ratio
+        self.assertTrue(all(not capture.validate_row(r) for r in rows))
+        self.assertEqual({r["extra"]["serving"]["url"] for r in rows}, {"http://127.0.0.1:18431"})
+        self.assertEqual({r["protocol_id"] for r in rows}, {""})
+
+    def test_void_report_writes_no_sidecar_and_removes_a_stale_one(self):
+        run_occ1.main(["plan", *self.base])  # no run: the report is VOID (incomplete)
+        stale = self.out / "belief_measurements.jsonl"
+        stale.write_text("{}\n")
+        loader = mock.Mock(side_effect=AssertionError("must not load the writer for a VOID run"))
+        with mock.patch.object(run_occ1, "_load_belief_capture", loader):
+            self.assertEqual(run_occ1.main(["report", *self.base]), 0)
+        self.assertEqual(json.loads((self.out / "summary.json").read_text())["overall"], "VOID")
+        self.assertFalse(stale.exists())
+
+    def test_no_belief_flag_skips_the_writer(self):
+        self._planned_and_run()
+        loader = mock.Mock(side_effect=AssertionError("writer must not load"))
+        with mock.patch.object(run_occ1, "_load_belief_capture", loader):
+            self.assertEqual(run_occ1.main(["report", *self.base, "--no-belief-measurements"]), 0)
+        self.assertFalse((self.out / "belief_measurements.jsonl").exists())
+
+    def test_writer_refusal_is_a_nonzero_exit(self):
+        self._planned_and_run()
+
+        class Refusing:
+            class CaptureError(ValueError):
+                pass
+
+            @classmethod
+            def write_belief_measurements(cls, out, **kw):
+                raise cls.CaptureError("identity problems")
+
+        with mock.patch.object(run_occ1, "_load_belief_capture", lambda: Refusing):
+            self.assertEqual(run_occ1.main(["report", *self.base]), 3)
 
     def test_identity_mismatch_refuses(self):
         run_occ1.main(["plan", *self.base])
@@ -279,6 +352,30 @@ class EndToEndMockedTests(unittest.TestCase):
             url="http://mock", expect_build="ef81196d5", max_tokens=1024, max_requests=0, force=False)
         with self.assertRaises(SystemExit):
             run_occ1.cmd_run(ns, post=self.fake_post, ident=self.fake_ident)
+
+
+class PortTests(unittest.TestCase):
+    def test_default_port_is_the_test_port_not_production(self):
+        self.assertEqual(run_occ1.DEFAULT_PORT, int(os.environ.get("OCC1_PORT", "18431")))
+        self.assertNotEqual(run_occ1.DEFAULT_PORT, 8090)
+
+    def test_port_and_url_resolution(self):
+        seen = {}
+
+        def fake(args):
+            seen["url"] = args.url
+            return 0
+
+        with mock.patch.dict(run_occ1.__dict__, {"cmd_report": fake}):
+            run_occ1.main(["report", "--out", "x", "--port", "18432"])
+            self.assertEqual(seen["url"], "http://127.0.0.1:18432")
+            run_occ1.main(["report", "--out", "x", "--url", "http://127.0.0.1:18433", "--port", "1"])
+            self.assertEqual(seen["url"], "http://127.0.0.1:18433")
+
+    def test_launcher_has_no_production_port(self):
+        text = (Path(run_occ1.__file__).parent / "launch_reader.sh").read_text()
+        self.assertIn('OCC1_PORT:-18431', text)
+        self.assertNotIn(":-8090", text)
 
 
 if __name__ == "__main__":
