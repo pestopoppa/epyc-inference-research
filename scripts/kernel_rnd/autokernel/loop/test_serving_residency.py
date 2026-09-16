@@ -78,7 +78,8 @@ def _stub_measure(values, proof: dict | None = None):
     body = _proof() if proof is None else proof
     it = iter(values)
 
-    def _measure(recipe, build_dir, port, boot_timeout_s=360, *, evidence=None):
+    def _measure(recipe, build_dir, port, boot_timeout_s=360, *, evidence=None,
+                 target_sample_steps=None):
         if evidence is not None:
             evidence.append(_record(body))
         return next(it)

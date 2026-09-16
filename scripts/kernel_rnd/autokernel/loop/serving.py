@@ -829,7 +829,8 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                   observation: list | None = None,
                   observation_session: lifecycle_observation.ObservationSession | None = None,
                   response_capture: server_response.ServerResponseCapture | None = None,
-                  cpu_profile_capture=None
+                  cpu_profile_capture=None,
+                  target_sample_steps: list | None = None
                   ) -> float:
     """Launch the server under `recipe`, fire `np` concurrent requests, return aggregate
     tok/s. The server is always stopped, even on error.
@@ -846,6 +847,11 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
     vanishing. Passing a sink is OPTIONAL and the residency REFUSAL is not: a launch
     measured non-resident raises `ServingNotResident` whether or not anyone asked for
     the record.
+
+    `target_sample_steps`, when given, receives this launch's `aggregate_target_sample_steps_s_est`
+    record (SL-2) on the SUCCESS path only, so it stays index-aligned with the returned
+    values a caller collects. It is kept out of the request rows and the exported
+    observation on purpose: those shapes are closed and sealed by native capture.
     """
     request_rows: list[dict] = []
     process_pid: int | None = None
@@ -986,6 +992,7 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                     started_monotonic = time.monotonic()
                     ended_monotonic = started_monotonic
                     result = (0, 0.0, False)
+                    target_steps = {"status": "unavailable", "reason": "request failed"}
                     try:
                         req = urllib.request.Request(
                             f"http://127.0.0.1:{port}/completion", data=body,
@@ -1036,13 +1043,14 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                         record.update(predicted_n=tokens, predicted_per_second=rate,
                                       terminal=terminal)
                         result = (tokens, rate, terminal)
+                        target_steps = _target_steps_slot(timings)
                     except Exception as exc:
                         ended_monotonic = time.monotonic()
                         record["error"] = f"{type(exc).__name__}: {exc}"
                     captured = None if response_capture is None and cpu_profile_capture is None else server_response.RawServerResponse(
                         phase, i, prompt_id, body, response_bytes, started_monotonic,
                         ended_monotonic, record["error"])
-                    return (*result, record, captured)
+                    return (*result, record, captured, target_steps)
 
                 # The request phase proper starts HERE, warmup included: the
                 # residency window must overlap the work, not merely the boot.
@@ -1174,6 +1182,8 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                 "process_pid": process_pid, "teardown": teardown,
                 "requests": request_rows, "residency": record,
                 "observed_rate_not_admissible_tok_s": value})
+    if target_sample_steps is not None:
+        target_sample_steps.append(_target_steps_aggregate([row[5] for row in rows], value))
     return value
 
 
@@ -1259,6 +1269,143 @@ def _spread(runs: Sequence[float]) -> dict:
             # arm's own spread is directly comparable to the floor it must clear.
             "p95_dev_pct": round(p95, 3), "max_dev_pct": round(devs[-1], 3),
             "runs": runs}
+
+
+# ---------------------------------------------------------------------------
+# VERIFIER STEPS/S (INF-62 SL-2). tok/s = steps/s x tokens/step, and only steps/s is a
+# kernel property: tokens/step is the drafter's acceptance trajectory, which is what
+# makes the np4 serving floor (3.536%) ~5.5x wider than the tg128 floor (0.638%). So
+# every launch now reports an ESTIMATED target-step rate BESIDE `aggregate_tok_s`, with the
+# same estimator shape (sum over slots of each slot's own count / its own
+# `predicted_ms`), so `tok_s == steps_s * tokens_per_step` holds per slot exactly.
+#
+# REPORTING ONLY, today. The keep gate still reads `recipe.metric`; moving the gate to
+# steps/s needs a floor recalibrated on this metric and lands at a run boundary.
+#
+# ESTIMATOR. The server counts `n_draft_verif_steps` per slot (server-context.cpp) but
+# does NOT export it in `timings`: only `predicted_n`, `predicted_ms`, `draft_n` and
+# `draft_n_accepted` (the latter two only when the slot drafted at all). Every decoded
+# token is either one plain target sample or one of the `1 + accepted` tokens a
+# verification step emits, so
+#     predicted_n - draft_n_accepted = verif_steps + plain_steps
+# = the number of TARGET sampling steps, the first (prefill-sampled) token included. It
+# over-counts `n_draft_verif_steps` by the plain steps (>= 1 per request), which is the
+# kernel-relevant count anyway: each one is a target forward pass. If a server ever
+# exports the counter itself it is preferred and the estimator string says so.
+#
+# NOT THE HANDOFF'S METRIC. SL-2 asks for `n_draft_verif_steps`/wall; this is an estimate
+# that differs by the plain steps, hence the `_est` names. The exact count needs the
+# champion server to add it to `result_timings` (a kernel-tree change, champion boundary).
+# ---------------------------------------------------------------------------
+TARGET_STEPS_SCHEMA = "epyc.autokernel.serving_target_sample_steps_est.v1"
+TARGET_STEPS_METRIC = "aggregate_target_sample_steps_s_est"
+TARGET_STEPS_ESTIMATOR_SERVER = "server_n_draft_verif_steps"
+TARGET_STEPS_ESTIMATOR_TARGET_STEPS = "predicted_n_minus_draft_n_accepted"
+TARGET_STEPS_ESTIMATOR_NO_SPEC = "predicted_n_no_speculation"
+#: Timing keys a server exporting the counter directly would use; first match wins.
+_SERVER_VERIF_STEP_KEYS = ("draft_verif_steps", "n_draft_verif_steps")
+
+
+def _target_steps_slot(timings: object) -> dict:
+    """One slot's ESTIMATED target sampling-step count and rate from its response `timings`. Never raises:
+    this is a reporting field and must not turn a valid serving sample into a failure."""
+    if not isinstance(timings, Mapping):
+        return {"status": "unavailable", "reason": "timings is not an object"}
+
+    def count(key: str):
+        value = timings.get(key)
+        return value if type(value) is int and value >= 0 else None
+
+    predicted_n = count("predicted_n")
+    ms = timings.get("predicted_ms")
+    if (predicted_n is None or isinstance(ms, bool) or not isinstance(ms, (int, float))
+            or not math.isfinite(float(ms)) or ms <= 0):
+        return {"status": "unavailable", "reason": "predicted_n/predicted_ms missing or invalid"}
+    draft_n, accepted = count("draft_n"), count("draft_n_accepted")
+    server_steps = next((count(key) for key in _SERVER_VERIF_STEP_KEYS
+                         if count(key) is not None), None)
+    if server_steps is not None:
+        steps, estimator = server_steps, TARGET_STEPS_ESTIMATOR_SERVER
+    elif "draft_n" not in timings and "draft_n_accepted" not in timings:
+        # The server omits both counters when the slot never drafted: every decoded
+        # token was one plain target step.
+        steps, estimator = predicted_n, TARGET_STEPS_ESTIMATOR_NO_SPEC
+    elif draft_n is None or accepted is None or accepted > draft_n or accepted > predicted_n:
+        return {"status": "unavailable", "reason": "draft counters missing or inconsistent"}
+    else:
+        steps, estimator = predicted_n - accepted, TARGET_STEPS_ESTIMATOR_TARGET_STEPS
+    if steps <= 0:
+        return {"status": "unavailable", "reason": "zero verifier steps"}
+    return {"status": "ok", "estimator": estimator, "predicted_n": predicted_n,
+            "predicted_ms": float(ms), "draft_n": draft_n, "draft_n_accepted": accepted,
+            "target_sample_steps_est": steps,
+            "target_sample_steps_per_second_est": steps * 1000.0 / float(ms),
+            "tokens_per_step": predicted_n / steps}
+
+
+def _target_steps_aggregate(slots: Sequence[Mapping], aggregate_tok_s: float) -> dict:
+    """One launch's `aggregate_target_sample_steps_s_est`: the sum of the measured slots' rates,
+    or `None` with a reason when any slot could not state its count (never partial)."""
+    slots = [dict(slot) for slot in slots]
+    out = {"schema": TARGET_STEPS_SCHEMA, "metric": TARGET_STEPS_METRIC,
+           "role": "reporting_only_not_gate", "aggregate_tok_s": aggregate_tok_s,
+           "slots": slots}
+    if not slots or any(slot.get("status") != "ok" for slot in slots):
+        return {**out, "status": "unavailable", "value": None, "estimator": None,
+                "tokens_per_step": None}
+    estimators = sorted({slot["estimator"] for slot in slots})
+    value = sum(slot["target_sample_steps_per_second_est"] for slot in slots)
+    return {**out, "status": "ok", "value": value,
+            "estimator": estimators[0] if len(estimators) == 1 else "mixed:" + ",".join(estimators),
+            "tokens_per_step": aggregate_tok_s / value if value > 0 else None}
+
+
+def _target_steps_summary(launches: Sequence[Mapping]) -> dict:
+    """Per-arm steps/s summary in the floor's own grammar (`_spread`). `median` is None
+    unless EVERY launch of the arm stated its steps/s -- a median over a subset would be
+    a different sample than the tok/s median it sits beside."""
+    launches = list(launches)
+    values = [launch.get("value") if isinstance(launch, Mapping) else None
+              for launch in launches]
+    complete = bool(values) and all(
+        type(v) in (int, float) and math.isfinite(v) and v > 0 for v in values)
+    estimators = sorted({str(launch.get("estimator")) for launch in launches
+                         if isinstance(launch, Mapping) and launch.get("estimator")})
+    tps = [launch.get("tokens_per_step") if isinstance(launch, Mapping) else None
+           for launch in launches]
+    return {"metric": TARGET_STEPS_METRIC, "n": len(values),
+            "status": "ok" if complete else "unavailable",
+            "estimators": estimators,
+            "median": statistics.median(values) if complete else None,
+            "spread": _spread(values) if complete else None,
+            "floor_ci": floor_ci(values) if complete and len(values) >= 2 else None,
+            "median_tokens_per_step": (statistics.median(tps) if complete and all(
+                type(v) in (int, float) for v in tps) else None),
+            "samples": values}
+
+
+def _target_steps_calibration(launches: Sequence[Mapping]) -> dict:
+    """A/A floor on estimated target steps/s from the calibration's own launches: `floor_pct` is
+    the identical p95 |deviation from median| statistic `floor_pct` uses for tok/s."""
+    summary = _target_steps_summary(launches)
+    return {"schema": TARGET_STEPS_SCHEMA, **summary,
+            "role": "reporting_only_not_gate",
+            "floor_statistic": "p95_abs_dev_from_median_pct_pooled_launches",
+            "floor_pct": None if summary["spread"] is None else summary["spread"]["p95_dev_pct"],
+            "launches": [dict(row) for row in launches]}
+
+
+def _target_steps_comparison(anchor: Sequence[Mapping], candidate: Sequence[Mapping]) -> dict:
+    """Paired steps/s view of a serving A/B, same effect definition as the tok/s one
+    (median(candidate)/median(anchor) - 1). No decision rule reads it."""
+    a, c = _target_steps_summary(anchor), _target_steps_summary(candidate)
+    effect = (c["median"] / a["median"] - 1.0
+              if a["status"] == c["status"] == "ok" else None)
+    return {"schema": TARGET_STEPS_SCHEMA, "metric": TARGET_STEPS_METRIC,
+            "role": "reporting_only_not_gate", "anchor": a, "candidate": c,
+            "effect": effect, "effect_pct": None if effect is None else effect * 100.0,
+            "anchor_launches": [dict(row) for row in anchor],
+            "candidate_launches": [dict(row) for row in candidate]}
 
 
 def _frozen_requests(recipe: Recipe, rows) -> tuple | None:
@@ -1386,6 +1533,9 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
     # it sampled as non-resident never gets here at all -- it raises.
     a_residency: list[dict] = []
     c_residency: list[dict] = []
+    # SL-2: per-launch estimated target steps/s, index-aligned with a_runs/c_runs. Reporting only.
+    a_steps: list[dict] = []
+    c_steps: list[dict] = []
     next_launch = [0]
     reschedules = [0]
     invalid_history = []
@@ -1400,17 +1550,19 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
     def complete():
         nonlocal belief_error
         for pair_index in range(pairs):
-            arms = {"anchor": (recipe, anchor_build, a_options, a_runs, a_residency),
-                    "candidate": (candidate_recipe, candidate_build, c_options, c_runs, c_residency)}
+            arms = {"anchor": (recipe, anchor_build, a_options, a_runs, a_residency, a_steps),
+                    "candidate": (candidate_recipe, candidate_build, c_options, c_runs,
+                                  c_residency, c_steps)}
             order = measurement_plan["orders"][pair_index] if matched else ("anchor", "candidate")
             for position, arm in enumerate(order):
-                arm_recipe, build, options, runs, records = arms[arm]
+                arm_recipe, build, options, runs, records, steps = arms[arm]
                 ordinal = 2 * pair_index + position
                 if ordinal < next_launch[0]:
                     continue
                 records_before = len(records)
                 try:
-                    runs.append(_measure_once(arm_recipe, build, port, evidence=records, **options))
+                    runs.append(_measure_once(arm_recipe, build, port, evidence=records,
+                                              target_sample_steps=steps, **options))
                     if matched:
                         launch_membership.append({"ordinal": ordinal, "pair_index": pair_index,
                             "arm": arm, "arm_sample_index": len(runs) - 1,
@@ -1486,7 +1638,10 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
                 # reader never has to assume it -- and cannot be handed a tuple invented
                 # after the fact, which is the one thing no re-analysis can supply.
                 "residency": _residency_fold(a_residency + c_residency),
-                "anchor_residency": a_residency, "candidate_residency": c_residency}
+                "anchor_residency": a_residency, "candidate_residency": c_residency,
+                # SL-2: estimated target steps/s BESIDE the tok/s effect. Reporting only -- the
+                # decision above reads `recipe.metric`; see `_target_steps_aggregate`.
+                "target_sample_steps_est": _target_steps_comparison(a_steps, c_steps)}
         if matched:
             out.update(schema="epyc.autokernel.serving_ab.v2",
                        measurement_plan=measurement_plan, launch_membership=launch_membership,
@@ -1529,10 +1684,12 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
         plan = _matched_plan(samples)
         values = {"anchor": [], "candidate": []}
         windows = {"anchor": [], "candidate": []}
+        steps = {"anchor": [], "candidate": []}
         for order in plan["orders"]:
             for arm in order:
                 values[arm].append(_measure_once(recipe, build_dir, port,
-                                   evidence=windows[arm], **options))
+                                   evidence=windows[arm], target_sample_steps=steps[arm],
+                                   **options))
         row = {"schema": "epyc.autokernel.serving_floor.v2", "instrument": instrument,
                "recipe": recipe.name, "recipe_hash": recipe.recipe_hash,
                "recipe_env": dict(recipe.env or {}), "recipe_describe": recipe.describe(),
@@ -1553,11 +1710,16 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
                "anchor_samples": values["anchor"], "candidate_samples": values["candidate"],
                "anchor_residency": windows["anchor"], "candidate_residency": windows["candidate"],
                "residency": _residency_fold(windows["anchor"] + windows["candidate"]),
-               **_matched_summary(values["anchor"], values["candidate"], pairs)}
+               **_matched_summary(values["anchor"], values["candidate"], pairs),
+               # SL-2: the A/A of estimated target steps/s, inside the seal. Reporting only until a
+               # run boundary moves the keep gate onto this metric.
+               "target_sample_steps_est": _target_steps_calibration(steps["anchor"] + steps["candidate"])}
         row["content_sha256"] = _digest(row)
         return row
     launch_residency: list[dict] = []
-    runs = [_measure_once(recipe, build_dir, port, evidence=launch_residency, **options)
+    launch_steps: list[dict] = []
+    runs = [_measure_once(recipe, build_dir, port, evidence=launch_residency,
+                          target_sample_steps=launch_steps, **options)
             for _ in range(samples)]
     # `floor_pct` IS this arm's p95 deviation from its own median -- taken from `_spread`
     # so the floor and the per-arm spread reported by `compare` can never drift apart.
@@ -1581,7 +1743,10 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
             # whether the launches that DEFINED it were proven resident. `write_floor`
             # carries this to disk.
             "residency": _residency_fold(launch_residency),
-            "launch_residency": launch_residency}
+            "launch_residency": launch_residency,
+            # SL-2: the same A/A on estimated target steps/s, so the floor is re-calibrated on
+            # BOTH metrics from the same launches. Reporting only; no gate reads it yet.
+            "target_sample_steps_est": _target_steps_calibration(launch_steps)}
     if frozen_requests is not None:
         out["request_digest"] = request_digest(recipe, frozen_requests)
     return out
