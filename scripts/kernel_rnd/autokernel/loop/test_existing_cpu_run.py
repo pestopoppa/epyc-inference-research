@@ -295,7 +295,7 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
                 assert run._git(fixture.repo, "rev-parse", branch) == original_head
                 return
             assert [row["status"] for row in result["iterations"]] == [
-                "measured_null", "measured_null", "measured_null", "kept", "measured_null"]
+                "measured_null", "measured_null", "measured_null", "kept", "regression"]
             assert all(row["comparison"]["request_digest"] == result["floor_request_digest"]
                        for row in result["iterations"])
             assert run._git(fixture.repo, "rev-parse", branch) != original_head

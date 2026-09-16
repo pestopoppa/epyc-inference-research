@@ -530,7 +530,7 @@ class TwoTierChampionWiring(unittest.TestCase):
         wrapper = src.split("def accumulate_after_keep(", 1)[1].split("\n    def ", 1)[0]
         self.assertNotIn("or experimental", wrapper)
         compounded = src.split("def _accumulate_after_keep(", 1)[1].split("\n    def ", 1)[0]
-        self.assertIn("cpu_compare(cor_build[0], anchor_build[0])", compounded)
+        self.assertIn("cpu_compare(cor_build[0], anchor_build[0], rebind_feedback=False)", compounded)
         drive = src.split("return pool.drive(", 1)[1].split("\n        )", 1)[0]
         self.assertIn(
             "accumulate_valid_positive=experimental", drive)
