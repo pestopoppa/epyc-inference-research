@@ -1,0 +1,710 @@
+{
+ "schema": "epyc.inf62.df26_serial_exact.v1",
+ "build_bin": "/mnt/raid0/llm/tmp/build-champion-c463f601b-hip-20260909/bin",
+ "llama_server_sha256": "ed72d9d185e6c1cbab6f5f4996e200bba7eb5f31e68ce49acb760ee47d098627",
+ "prompts": [
+  "olympiadbench_hard_combinatorics_1882",
+  "olympiadbench_hard_algebra_1659",
+  "olympiadbench_hard_combinatorics_2230",
+  "olympiadbench_hard_algebra_2171",
+  "olympiadbench_hard_combinatorics_2127",
+  "olympiadbench_hard_algebra_1938",
+  "olympiadbench_hard_number_theory_1869",
+  "olympiadbench_hard_algebra_2574",
+  "olympiadbench_hard_combinatorics_1818",
+  "olympiadbench_hard_number_theory_2415",
+  "olympiadbench_hard_combinatorics_1664",
+  "olympiadbench_hard_combinatorics_1662"
+ ],
+ "max_tokens": 256,
+ "arms": {
+  "none_A": {
+   "kind": "baseline",
+   "env": {},
+   "spec_exact_mode_logged": [],
+   "route_lines": 0,
+   "vram_bytes": 30753972224,
+   "residency": {
+    "peak_vram_bytes": 32383217664,
+    "median_vram_bytes": 31731232768,
+    "vram_reads": 215,
+    "peak_kfd_processes": 1,
+    "sclk_min_mhz": 1695,
+    "sclk_max_mhz": 1700,
+    "clock_stable": false,
+    "samples": 215,
+    "resident": true
+   },
+   "error": null
+  },
+  "simple_unset": {
+   "kind": "draft_simple",
+   "env": {
+    "GGML_CUDA_LOG_MMVQ_ROUTE": "2",
+    "LLAMA_SPEC_DIAG_ACCEPT": "1"
+   },
+   "spec_exact_mode_logged": [],
+   "route_lines": 0,
+   "vram_bytes": 35156348928,
+   "residency": {
+    "peak_vram_bytes": 38515871744,
+    "median_vram_bytes": 38504235008,
+    "vram_reads": 595,
+    "peak_kfd_processes": 1,
+    "sclk_min_mhz": 1620,
+    "sclk_max_mhz": 1700,
+    "clock_stable": false,
+    "samples": 595,
+    "resident": true
+   },
+   "error": null
+  },
+  "dflash_unset": {
+   "kind": "dflash2",
+   "env": {
+    "GGML_CUDA_LOG_MMVQ_ROUTE": "2",
+    "LLAMA_SPEC_DIAG_ACCEPT": "1"
+   },
+   "spec_exact_mode_logged": [],
+   "route_lines": 0,
+   "vram_bytes": 36414668800,
+   "residency": {
+    "peak_vram_bytes": 37344858112,
+    "median_vram_bytes": 37327122432,
+    "vram_reads": 121,
+    "peak_kfd_processes": 1,
+    "sclk_min_mhz": 1665,
+    "sclk_max_mhz": 1700,
+    "clock_stable": false,
+    "samples": 121,
+    "resident": true
+   },
+   "error": null
+  },
+  "simple_serial": {
+   "kind": "draft_simple",
+   "env": {
+    "LLAMA_SPEC_EXACT": "serial"
+   },
+   "spec_exact_mode_logged": [
+    "serial"
+   ],
+   "route_lines": 0,
+   "vram_bytes": 35156348928,
+   "residency": {
+    "peak_vram_bytes": 39768752128,
+    "median_vram_bytes": 39116869632,
+    "vram_reads": 439,
+    "peak_kfd_processes": 1,
+    "sclk_min_mhz": 1670,
+    "sclk_max_mhz": 1700,
+    "clock_stable": false,
+    "samples": 439,
+    "resident": true
+   },
+   "error": null
+  },
+  "dflash_serial": {
+   "kind": "dflash2",
+   "env": {
+    "LLAMA_SPEC_EXACT": "serial"
+   },
+   "spec_exact_mode_logged": [
+    "serial"
+   ],
+   "route_lines": 0,
+   "vram_bytes": 36414652416,
+   "residency": {
+    "peak_vram_bytes": 38624768000,
+    "median_vram_bytes": 37954424832,
+    "vram_reads": 246,
+    "peak_kfd_processes": 1,
+    "sclk_min_mhz": 1660,
+    "sclk_max_mhz": 1700,
+    "clock_stable": false,
+    "samples": 246,
+    "resident": true
+   },
+   "error": null
+  },
+  "none_B": {
+   "kind": "baseline",
+   "env": {},
+   "spec_exact_mode_logged": [],
+   "route_lines": 0,
+   "vram_bytes": 30753980416,
+   "residency": {
+    "peak_vram_bytes": 32383385600,
+    "median_vram_bytes": 31731298304,
+    "vram_reads": 223,
+    "peak_kfd_processes": 1,
+    "sclk_min_mhz": 1640,
+    "sclk_max_mhz": 1700,
+    "clock_stable": false,
+    "samples": 223,
+    "resident": true
+   },
+   "error": null
+  }
+ },
+ "comparisons": {
+  "none_B~none_A": {
+   "n_pass": 12,
+   "n": 12,
+   "all_drafted": false,
+   "per_prompt": [
+    {
+     "id": "olympiadbench_hard_combinatorics_1882",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": null,
+     "draft_n_accepted": null
+    },
+    {
+     "id": "olympiadbench_hard_algebra_1659",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": null,
+     "draft_n_accepted": null
+    },
+    {
+     "id": "olympiadbench_hard_combinatorics_2230",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": null,
+     "draft_n_accepted": null
+    },
+    {
+     "id": "olympiadbench_hard_algebra_2171",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": null,
+     "draft_n_accepted": null
+    },
+    {
+     "id": "olympiadbench_hard_combinatorics_2127",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": null,
+     "draft_n_accepted": null
+    },
+    {
+     "id": "olympiadbench_hard_algebra_1938",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": null,
+     "draft_n_accepted": null
+    },
+    {
+     "id": "olympiadbench_hard_number_theory_1869",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": null,
+     "draft_n_accepted": null
+    },
+    {
+     "id": "olympiadbench_hard_algebra_2574",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": null,
+     "draft_n_accepted": null
+    },
+    {
+     "id": "olympiadbench_hard_combinatorics_1818",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": null,
+     "draft_n_accepted": null
+    },
+    {
+     "id": "olympiadbench_hard_number_theory_2415",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": null,
+     "draft_n_accepted": null
+    },
+    {
+     "id": "olympiadbench_hard_combinatorics_1664",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": null,
+     "draft_n_accepted": null
+    },
+    {
+     "id": "olympiadbench_hard_combinatorics_1662",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": null,
+     "draft_n_accepted": null
+    }
+   ]
+  },
+  "simple_unset~none_A": {
+   "n_pass": 5,
+   "n": 12,
+   "all_drafted": true,
+   "per_prompt": [
+    {
+     "id": "olympiadbench_hard_combinatorics_1882",
+     "verdict": "FAIL",
+     "first_diff": 62,
+     "draft_n": 1001,
+     "draft_n_accepted": 128,
+     "at_first_diff": {
+      "mapped": false,
+      "diag_rows": 383
+     }
+    },
+    {
+     "id": "olympiadbench_hard_algebra_1659",
+     "verdict": "FAIL",
+     "first_diff": 128,
+     "draft_n": 1000,
+     "draft_n_accepted": 128,
+     "at_first_diff": {
+      "mapped": false,
+      "diag_rows": 383
+     }
+    },
+    {
+     "id": "olympiadbench_hard_combinatorics_2230",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 1000,
+     "draft_n_accepted": 128
+    },
+    {
+     "id": "olympiadbench_hard_algebra_2171",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 996,
+     "draft_n_accepted": 128
+    },
+    {
+     "id": "olympiadbench_hard_combinatorics_2127",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 1000,
+     "draft_n_accepted": 128
+    },
+    {
+     "id": "olympiadbench_hard_algebra_1938",
+     "verdict": "FAIL",
+     "first_diff": 247,
+     "draft_n": 992,
+     "draft_n_accepted": 129,
+     "at_first_diff": {
+      "mapped": false,
+      "diag_rows": 384
+     }
+    },
+    {
+     "id": "olympiadbench_hard_number_theory_1869",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 1000,
+     "draft_n_accepted": 128
+    },
+    {
+     "id": "olympiadbench_hard_algebra_2574",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 1000,
+     "draft_n_accepted": 128
+    },
+    {
+     "id": "olympiadbench_hard_combinatorics_1818",
+     "verdict": "FAIL",
+     "first_diff": 193,
+     "draft_n": 1004,
+     "draft_n_accepted": 127,
+     "at_first_diff": {
+      "mapped": false,
+      "diag_rows": 381
+     }
+    },
+    {
+     "id": "olympiadbench_hard_number_theory_2415",
+     "verdict": "FAIL",
+     "first_diff": 36,
+     "draft_n": 976,
+     "draft_n_accepted": 131,
+     "at_first_diff": {
+      "mapped": false,
+      "diag_rows": 387
+     }
+    },
+    {
+     "id": "olympiadbench_hard_combinatorics_1664",
+     "verdict": "FAIL",
+     "first_diff": 238,
+     "draft_n": 992,
+     "draft_n_accepted": 129,
+     "at_first_diff": {
+      "mapped": false,
+      "diag_rows": 384
+     }
+    },
+    {
+     "id": "olympiadbench_hard_combinatorics_1662",
+     "verdict": "FAIL",
+     "first_diff": 250,
+     "draft_n": 987,
+     "draft_n_accepted": 130,
+     "at_first_diff": {
+      "mapped": false,
+      "diag_rows": 385
+     }
+    }
+   ]
+  },
+  "dflash_unset~none_A": {
+   "n_pass": 6,
+   "n": 12,
+   "all_drafted": true,
+   "per_prompt": [
+    {
+     "id": "olympiadbench_hard_combinatorics_1882",
+     "verdict": "FAIL",
+     "first_diff": 34,
+     "draft_n": 326,
+     "draft_n_accepted": 207,
+     "at_first_diff": {
+      "mapped": true,
+      "role": "verify",
+      "row": 1,
+      "n_rows": 8,
+      "sampled": 279,
+      "top2": 411,
+      "margin": 0.02392,
+      "reference_token": 411,
+      "reference_is_top2": true
+     }
+    },
+    {
+     "id": "olympiadbench_hard_algebra_1659",
+     "verdict": "FAIL",
+     "first_diff": 128,
+     "draft_n": 283,
+     "draft_n_accepted": 214,
+     "at_first_diff": {
+      "mapped": true,
+      "role": "verify",
+      "row": 3,
+      "n_rows": 8,
+      "sampled": 7995,
+      "top2": 1716,
+      "margin": 0.044771,
+      "reference_token": 1716,
+      "reference_is_top2": true
+     }
+    },
+    {
+     "id": "olympiadbench_hard_combinatorics_2230",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 352,
+     "draft_n_accepted": 204
+    },
+    {
+     "id": "olympiadbench_hard_algebra_2171",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 393,
+     "draft_n_accepted": 197
+    },
+    {
+     "id": "olympiadbench_hard_combinatorics_2127",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 329,
+     "draft_n_accepted": 207
+    },
+    {
+     "id": "olympiadbench_hard_algebra_1938",
+     "verdict": "FAIL",
+     "first_diff": 247,
+     "draft_n": 304,
+     "draft_n_accepted": 211,
+     "at_first_diff": {
+      "mapped": true,
+      "role": "verify",
+      "row": 1,
+      "n_rows": 8,
+      "sampled": 7897,
+      "top2": 2007,
+      "margin": 0.078693,
+      "reference_token": 2007,
+      "reference_is_top2": true
+     }
+    },
+    {
+     "id": "olympiadbench_hard_number_theory_1869",
+     "verdict": "FAIL",
+     "first_diff": 182,
+     "draft_n": 359,
+     "draft_n_accepted": 203,
+     "at_first_diff": {
+      "mapped": true,
+      "role": "verify",
+      "row": 3,
+      "n_rows": 8,
+      "sampled": 478,
+      "top2": 471,
+      "margin": 0.079391,
+      "reference_token": 471,
+      "reference_is_top2": true
+     }
+    },
+    {
+     "id": "olympiadbench_hard_algebra_2574",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 267,
+     "draft_n_accepted": 216
+    },
+    {
+     "id": "olympiadbench_hard_combinatorics_1818",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 341,
+     "draft_n_accepted": 206
+    },
+    {
+     "id": "olympiadbench_hard_number_theory_2415",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 281,
+     "draft_n_accepted": 214
+    },
+    {
+     "id": "olympiadbench_hard_combinatorics_1664",
+     "verdict": "FAIL",
+     "first_diff": 238,
+     "draft_n": 324,
+     "draft_n_accepted": 208,
+     "at_first_diff": {
+      "mapped": true,
+      "role": "verify",
+      "row": 5,
+      "n_rows": 8,
+      "sampled": 8839,
+      "top2": 35944,
+      "margin": 0.004648,
+      "reference_token": 35944,
+      "reference_is_top2": true
+     }
+    },
+    {
+     "id": "olympiadbench_hard_combinatorics_1662",
+     "verdict": "FAIL",
+     "first_diff": 212,
+     "draft_n": 353,
+     "draft_n_accepted": 203,
+     "at_first_diff": {
+      "mapped": true,
+      "role": "verify",
+      "row": 1,
+      "n_rows": 8,
+      "sampled": 11179,
+      "top2": 760,
+      "margin": 0.022514,
+      "reference_token": 760,
+      "reference_is_top2": true
+     }
+    }
+   ]
+  },
+  "simple_serial~none_A": {
+   "n_pass": 12,
+   "n": 12,
+   "all_drafted": true,
+   "per_prompt": [
+    {
+     "id": "olympiadbench_hard_combinatorics_1882",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 1988,
+     "draft_n_accepted": 2
+    },
+    {
+     "id": "olympiadbench_hard_algebra_1659",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 1980,
+     "draft_n_accepted": 3
+    },
+    {
+     "id": "olympiadbench_hard_combinatorics_2230",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 1964,
+     "draft_n_accepted": 5
+    },
+    {
+     "id": "olympiadbench_hard_algebra_2171",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 1996,
+     "draft_n_accepted": 1
+    },
+    {
+     "id": "olympiadbench_hard_combinatorics_2127",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 1996,
+     "draft_n_accepted": 1
+    },
+    {
+     "id": "olympiadbench_hard_algebra_1938",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 1964,
+     "draft_n_accepted": 5
+    },
+    {
+     "id": "olympiadbench_hard_number_theory_1869",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 1980,
+     "draft_n_accepted": 3
+    },
+    {
+     "id": "olympiadbench_hard_algebra_2574",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 1985,
+     "draft_n_accepted": 3
+    },
+    {
+     "id": "olympiadbench_hard_combinatorics_1818",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 2004,
+     "draft_n_accepted": 0
+    },
+    {
+     "id": "olympiadbench_hard_number_theory_2415",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 1924,
+     "draft_n_accepted": 11
+    },
+    {
+     "id": "olympiadbench_hard_combinatorics_1664",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 1965,
+     "draft_n_accepted": 5
+    },
+    {
+     "id": "olympiadbench_hard_combinatorics_1662",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 1956,
+     "draft_n_accepted": 6
+    }
+   ]
+  },
+  "dflash_serial~none_A": {
+   "n_pass": 12,
+   "n": 12,
+   "all_drafted": true,
+   "per_prompt": [
+    {
+     "id": "olympiadbench_hard_combinatorics_1882",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 386,
+     "draft_n_accepted": 198
+    },
+    {
+     "id": "olympiadbench_hard_algebra_1659",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 299,
+     "draft_n_accepted": 211
+    },
+    {
+     "id": "olympiadbench_hard_combinatorics_2230",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 352,
+     "draft_n_accepted": 204
+    },
+    {
+     "id": "olympiadbench_hard_algebra_2171",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 386,
+     "draft_n_accepted": 198
+    },
+    {
+     "id": "olympiadbench_hard_combinatorics_2127",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 329,
+     "draft_n_accepted": 207
+    },
+    {
+     "id": "olympiadbench_hard_algebra_1938",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 301,
+     "draft_n_accepted": 211
+    },
+    {
+     "id": "olympiadbench_hard_number_theory_1869",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 348,
+     "draft_n_accepted": 205
+    },
+    {
+     "id": "olympiadbench_hard_algebra_2574",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 266,
+     "draft_n_accepted": 217
+    },
+    {
+     "id": "olympiadbench_hard_combinatorics_1818",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 341,
+     "draft_n_accepted": 206
+    },
+    {
+     "id": "olympiadbench_hard_number_theory_2415",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 281,
+     "draft_n_accepted": 214
+    },
+    {
+     "id": "olympiadbench_hard_combinatorics_1664",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 336,
+     "draft_n_accepted": 206
+    },
+    {
+     "id": "olympiadbench_hard_combinatorics_1662",
+     "verdict": "PASS",
+     "first_diff": null,
+     "draft_n": 368,
+     "draft_n_accepted": 202
+    }
+   ]
+  }
+ },
+ "verdict": {
+  "aa_identical": true,
+  "serial_arms_12_of_12_drafted_and_mode_confirmed": true,
+  "unset_arm_failures": [
+   7,
+   6
+  ],
+  "hypothesis_supported": true
+ }
+}
