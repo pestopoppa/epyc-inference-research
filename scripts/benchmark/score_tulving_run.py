@@ -87,6 +87,20 @@ class GoldBindingError(ValueError):
     """A result row cannot be proven to belong to the gold set it would be graded against."""
 
 
+#: ``finish_reason`` meaning the answer hit ``max_tokens`` (M-12c(3)): such a row is scored,
+#: but it is counted and listed, because a truncated list is a budget artifact, not recall.
+TRUNCATED_FINISH_REASON = "length"
+
+
+def finish_reason_counts(rows) -> dict[str, int]:
+    """``finish_reason`` per result row; rows from before it was recorded are "unrecorded"."""
+    counts: dict[str, int] = {}
+    for row in rows:
+        key = row.get("finish_reason") or "unrecorded"
+        counts[key] = counts.get(key, 0) + 1
+    return dict(sorted(counts.items()))
+
+
 def _load_json(path: Path) -> dict[str, Any]:
     with path.open() as f:
         return json.load(f)
@@ -392,6 +406,7 @@ def score_result_payload(payload: dict[str, Any], prompt_index: dict[str, dict[s
             "get_style": score.get("get_style", ""),
             "tokens_per_second": row.get("tokens_per_second"),
             "completion_tokens": row.get("completion_tokens"),
+            "finish_reason": row.get("finish_reason"),
             "nb_events": meta.get("nb_events"),
             "ground_truth_items": meta.get("ground_truth_items", []),
             "matched_gt_items": score.get("matched_gt_items", []),
@@ -432,6 +447,9 @@ def score_result_payload(payload: dict[str, Any], prompt_index: dict[str, dict[s
     for bucket in by_retrieval.values():
         bucket["avg_f1"] /= bucket["count"]
 
+    truncated = sorted(
+        qid for qid, row in suite_results.items()
+        if row.get("finish_reason") == TRUNCATED_FINISH_REASON)
     partial_tau = [
         row["question_id"] for row in chronological_inputs
         if not row.get("tau_full_coverage")
@@ -447,6 +465,11 @@ def score_result_payload(payload: dict[str, Any], prompt_index: dict[str, dict[s
         "book_chapters": getattr(prompt_index, "book_chapters", None),
         "book_sha16": getattr(prompt_index, "book_sha16", None),
         "row_binding": dict(sorted(bindings.items())),
+        # B3/M-12c(3): how many answers hit the output cap.
+        "finish_reason_by_row": finish_reason_counts(suite_results.values()),
+        # None when no row recorded a finish_reason (pre-B3 run): zero would be a guess.
+        "truncated_rows": (len(truncated) if any(r.get("finish_reason")
+                                                 for r in suite_results.values()) else None),
         "run_id": payload.get("run_id"),
         "model_role": payload.get("model_role"),
         "config_name": payload.get("config_name"),
@@ -474,6 +497,7 @@ def score_result_payload(payload: dict[str, Any], prompt_index: dict[str, dict[s
         "summary": summary,
         "missing_ground_truth_ids": missing_ground_truth,
         "unknown_get_style_ids": unknown_get_styles,
+        "truncated_ids": truncated,
         "chronological_partial_coverage_ids": partial_tau,
         "per_question": per_question,
     }
@@ -494,6 +518,8 @@ def render_markdown(scored: dict[str, Any], result_path: Path) -> str:
         f" rows {summary.get('row_binding')})",
         f"- Scored questions: {summary['scored_questions']} / {summary['result_questions']}",
         f"- Missing ground truth: {summary['missing_ground_truth']}",
+        f"- Answers truncated at max_tokens (finish_reason=length): "
+        f"{summary.get('truncated_rows', 'n/a')} (finish reasons {summary.get('finish_reason_by_row')})",
         f"- Average F1: {summary['avg_f1']:.4f}",
         f"- Simple Recall Score: {summary['simple_recall_score']:.4f}"
         f" (over {summary.get('simple_recall_questions', 0)}"

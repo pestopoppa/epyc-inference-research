@@ -104,6 +104,14 @@ TRANSCRIPT = "T" * 180_000
 
 
 @pytest.fixture(autouse=True)
+def no_production_ports(monkeypatch, tmp_path):
+    """Hermetic: the production port declarations are a fixture naming no test port."""
+    manifest = tmp_path / "launch_manifest.yaml"
+    manifest.write_text("port_map:\n  frontdoor: 2\n")
+    monkeypatch.setattr(smoke, "PRODUCTION_PORT_SOURCES", (manifest,))
+
+
+@pytest.fixture(autouse=True)
 def fake_prompts(monkeypatch):
     monkeypatch.setattr(smoke, "tulving_prompts", lambda chapters=200: (
         "200ch", [BOOK + f"\n\nQ{i}" for i in range(3)]))

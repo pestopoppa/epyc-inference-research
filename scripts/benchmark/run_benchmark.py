@@ -1125,6 +1125,13 @@ def _run_speed_question(
         print(f"    [ERROR] {role}/{config.name}/{suite_name}/{question_id}: {e}")
 
 
+#: M-12 suites whose adapters pin their generation parameters (B3). Registry
+#: temperature overrides, max_tokens multipliers and thinking-disable prompt suffixes
+#: are IGNORED for them (and logged + recorded): temperature 0, the token caps and a
+#: prompt-matched, prefix-shared prompt are part of the instrument.
+PINNED_GENERATION_SUITES = frozenset({"tulving_episodic", "beam"})
+
+
 def _run_quality_question(
     executor: Executor,
     results_manager: ResultsManager,
@@ -1166,20 +1173,34 @@ def _run_quality_question(
                 print(f"    [COPY] {role}/{config.name}/{question.id} <- {existing_role}")
                 return
 
+    pinned = suite_name in PINNED_GENERATION_SUITES
+    ignored_overrides: dict = {}
+
+    def _ignore(name: str, value) -> None:
+        ignored_overrides[name] = value
+        print(f"    [PINNED] {suite_name}: ignoring registry {name}={value!r} for "
+              f"{role} (M-12 suite pins its generation parameters)", flush=True)
+
     # Apply per-suite temperature override if configured
     effective_params = params
     if registry:
         temp_override = registry.get_temperature_override(role, suite_name)
         if temp_override is not None:
-            effective_params = dict(params)
-            effective_params["temperature"] = temp_override
+            if pinned:
+                _ignore("temperature_override", temp_override)
+            else:
+                effective_params = dict(params)
+                effective_params["temperature"] = temp_override
 
     # Apply thinking disable trick if configured for this suite
     effective_prompt = question.prompt
     if registry:
         think_trick = registry.get_thinking_disable_trick(role, suite_name)
         if think_trick:
-            effective_prompt = effective_prompt + think_trick
+            if pinned:
+                _ignore("thinking_disable_trick", think_trick)
+            else:
+                effective_prompt = effective_prompt + think_trick
 
     # Read model-specific sampling params (e.g., repeat_penalty for Gemma4/M2.7)
     model_repeat_penalty = None
@@ -1192,6 +1213,9 @@ def _run_quality_question(
             model_repeat_penalty = model_cfg.get("sampling", {}).get("repeat_penalty")
             model_disable_thinking = model_cfg.get("disable_thinking", False)
             max_tokens_mult = model_cfg.get("max_tokens_multiplier", 1)
+            if pinned and max_tokens_mult != 1:
+                _ignore("max_tokens_multiplier", max_tokens_mult)
+                max_tokens_mult = 1
 
     # Apply max_tokens multiplier for thinking models (need budget for reasoning + answer).
     # The timeout MUST scale alongside — generating Nx more tokens at the same t/s takes Nx
@@ -1223,6 +1247,8 @@ def _run_quality_question(
                                        else "registry" if model_disable_thinking else "unset"),
             "cache_prompt": suite_cache_prompt,
             "prompt_suffix_trick": bool(effective_prompt != question.prompt),
+            "pinned_suite": pinned,
+            "ignored_registry_overrides": ignored_overrides,
         }
 
         if use_server:

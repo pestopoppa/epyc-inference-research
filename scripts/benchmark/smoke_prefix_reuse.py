@@ -78,6 +78,40 @@ WARM_TIME_MAX_RATIO = 0.25
 COLD_MIN_SHARE = 0.90
 MI210_VRAM_MIN_TOTAL = 60 * 1024**3
 
+#: Files that declare production serving ports. A smoke against any port they name could
+#: be aimed at a production role's server, so such ports are refused outright.
+PRODUCTION_PORT_SOURCES = (
+    Path("/mnt/raid0/llm/epyc-orchestrator/orchestration/launch_manifest.yaml"),
+    Path("/mnt/raid0/llm/epyc-orchestrator/orchestration/model_registry.yaml"),
+    Path("/mnt/raid0/llm/epyc-inference-research/orchestration/model_registry.yaml"),
+)
+
+
+def declared_ports(sources=PRODUCTION_PORT_SOURCES) -> set[int]:
+    """Every integer under any key containing ``port`` (port, ports, numa_ports, port_map...).
+
+    Fails closed: a source that cannot be read raises, because "no ports found" would
+    otherwise pass a production port.
+    """
+    import yaml
+
+    found: set[int] = set()
+
+    def walk(node, under_port: bool) -> None:
+        if isinstance(node, dict):
+            for key, value in node.items():
+                walk(value, under_port or "port" in str(key).lower())
+        elif isinstance(node, list):
+            for value in node:
+                walk(value, under_port)
+        elif under_port and isinstance(node, int) and not isinstance(node, bool):
+            found.add(node)
+
+    for path in sources:
+        walk(yaml.safe_load(Path(path).read_text()), False)
+    return found
+
+
 TULVING_QUESTIONS = (
     "List all locations where events took place in chapter order.",
     "List all dates on which events happened.",
@@ -237,6 +271,8 @@ def main() -> int:
     parser.add_argument("--max-tokens", type=int, default=16)
     parser.add_argument("--timeout", type=float, default=1500)
     parser.add_argument("--out", type=Path, default=None, help="Receipt JSON path")
+    parser.add_argument("--port-manifests", type=Path, nargs="+", default=None,
+                        help="Override the production port declaration files (tests)")
     args = parser.parse_args()
 
     base = f"http://{args.host}:{args.port}"
@@ -267,6 +303,17 @@ def main() -> int:
             line += " (" + "; ".join(fails) + ")"
         print(line)
         return 0 if not fails else 1
+
+    # ── preflight 0: never aim the smoke at a production-declared port ──
+    try:
+        production = declared_ports(args.port_manifests or PRODUCTION_PORT_SOURCES)
+    except Exception as exc:  # noqa: BLE001 - fail closed on any unreadable declaration
+        fails.append(f"cannot read the production port declarations: {exc}")
+        return finish()
+    if args.port in production:
+        fails.append(f"port {args.port} is declared by the production launch manifest/registry; "
+                     "refusing to send smoke traffic to it")
+        return finish()
 
     # ── preflight: the server is up, is the expected model, and has the expected slots ──
     try:

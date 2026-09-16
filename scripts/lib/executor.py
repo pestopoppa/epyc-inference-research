@@ -597,6 +597,7 @@ class ServerManager:
         collected_chunks: list[str] = []
         timed_out = False
         timings = {}
+        finish_reason: Optional[str] = None
 
         # Build request payload
         payload = {
@@ -648,9 +649,10 @@ class ServerManager:
                         data = json.loads(line[6:])  # Skip "data: " prefix
                         if "content" in data:
                             collected_chunks.append(data["content"])
-                        # Final message contains timings
+                        # Final message contains timings and the stop reason
                         if data.get("stop", False):
                             timings = data.get("timings", {})
+                            finish_reason = completion_finish_reason(data)
                     except json.JSONDecodeError:
                         continue
 
@@ -686,6 +688,7 @@ class ServerManager:
             command=f"POST {url}",
             tokens_per_second=tokens_per_second if tokens_per_second else None,
             timed_out=timed_out,
+            finish_reason=finish_reason,
         )
 
     def _run_vl_inference(
@@ -812,6 +815,22 @@ class ServerManager:
                 exit_code=1,
                 command=f"POST {url}",
             )
+
+
+#: llama-server ``/completion`` ``stop_type`` -> the OpenAI ``finish_reason`` vocabulary.
+_STOP_TYPE_FINISH_REASON = {"eos": "stop", "word": "stop", "limit": "length"}
+
+
+def completion_finish_reason(final_chunk: dict) -> Optional[str]:
+    """``finish_reason`` of a llama-server ``/completion`` final message.
+
+    ``stop_type`` is ``eos``/``word`` (-> ``stop``) or ``limit`` (-> ``length``, the
+    n_predict cap was hit). ``none`` or a missing field maps to None, never to a guess.
+    """
+    stop_type = final_chunk.get("stop_type")
+    if stop_type in _STOP_TYPE_FINISH_REASON:
+        return _STOP_TYPE_FINISH_REASON[stop_type]
+    return None
 
 
 @dataclass

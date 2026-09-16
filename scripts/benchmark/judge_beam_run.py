@@ -151,6 +151,26 @@ def recorded_arms(payload: Mapping[str, Any]) -> dict[str, int]:
     return dict(sorted(counts.items()))
 
 
+#: ``finish_reason`` meaning the reader's answer hit ``max_tokens`` (M-12c(3)).
+TRUNCATED_FINISH_REASON = "length"
+
+
+def finish_reason_summary(payload: Mapping[str, Any]) -> dict:
+    """Per-row ``finish_reason`` counts and the truncated question ids of a result file."""
+    rows = payload.get("results", {}).get("beam") or {}
+    counts: dict[str, int] = {}
+    for row in rows.values():
+        key = row.get("finish_reason") or "unrecorded"
+        counts[key] = counts.get(key, 0) + 1
+    truncated = sorted(q for q, row in rows.items()
+                       if row.get("finish_reason") == TRUNCATED_FINISH_REASON)
+    return {"finish_reason_by_row": dict(sorted(counts.items())),
+            # None when no row recorded a finish_reason (pre-B3 run): zero would be a guess.
+            "truncated_rows": (len(truncated) if any(r.get("finish_reason") for r in rows.values())
+                               else None),
+            "truncated_question_ids": truncated}
+
+
 def build_judged_payload(payload: Mapping[str, Any], judged: Mapping[str, Any], *,
                          split: str, judge_model: str) -> dict:
     return {
@@ -164,6 +184,7 @@ def build_judged_payload(payload: Mapping[str, Any], judged: Mapping[str, Any], 
         "question_in_judge_prompt": QUESTION_IN_JUDGE_PROMPT,
         "result_questions": len(payload.get("results", {}).get("beam", {})),
         "context_mode_by_row": recorded_arms(payload),
+        **finish_reason_summary(payload),
         "records": list(judged["records"]),
         "unjudged": list(judged["unjudged"]),
     }

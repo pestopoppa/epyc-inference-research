@@ -105,6 +105,10 @@ def score_judged_payload(payload: Mapping[str, Any],
         "checked_against_dataset": prompt_index is not None,
         # M-12 B2: the arm each judged row was produced under, as the harness recorded it.
         "context_mode_by_row": dict(payload.get("context_mode_by_row") or {"unrecorded": 0}),
+        # M-12c(3): reader answers that hit max_tokens, carried from the judged payload.
+        "finish_reason_by_row": dict(payload.get("finish_reason_by_row") or {"unrecorded": 0}),
+        "truncated_rows": payload.get("truncated_rows"),
+        "truncated_question_ids": list(payload.get("truncated_question_ids") or []),
         **folded,
     }
     return {"summary": summary, "per_question": per_question}
