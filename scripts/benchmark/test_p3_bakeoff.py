@@ -26,9 +26,12 @@ import p3_bakeoff_manifest as manifest_mod
 import p3_bakeoff_report as report_mod
 import p3_bakeoff_runner as runner_mod
 
-RESEARCH_ROOT = Path("/mnt/raid0/llm/epyc-inference-research")
+# The manifest is tracked, so read THIS checkout's copy (a worktree or a copy
+# must test its own manifest, not the live clone's). The files it pins are
+# banked, untracked data; the manifest itself names them by absolute path or
+# relative to manifest_mod.RESEARCH_ROOT.
 REAL_MANIFEST = (
-    RESEARCH_ROOT
+    Path(__file__).resolve().parents[2]
     / "artifacts/p3-shadow-bakeoff-20260728/manifest/p3_bakeoff_manifest.json"
 )
 
@@ -257,6 +260,27 @@ def test_manifest_verify_ok_and_tamper_detection(mini_manifest):
 # ---------------------------------------------------------------------------
 # runner: plan-only default + execute gating
 # ---------------------------------------------------------------------------
+
+
+def test_manifest_verify_resolves_relative_pins_against_research_root(
+        tmp_path, monkeypatch, mini_manifest):
+    """A relative pin is relative to RESEARCH_ROOT, never to the caller's cwd."""
+    manifest, _ = mini_manifest
+    manifest = json.loads(json.dumps(manifest))
+    pin = manifest["duties"]["cocritic"]["tasks_file"]
+    src = Path(pin["path"])
+    root = tmp_path / "research_root"
+    (root / "sub").mkdir(parents=True)
+    (root / "sub" / src.name).write_bytes(src.read_bytes())
+    pin["path"] = f"sub/{src.name}"
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    monkeypatch.setattr(manifest_mod, "RESEARCH_ROOT", root)
+    assert manifest_mod.verify_manifest(manifest) == []
+    (root / "sub" / src.name).unlink()
+    assert any("cocritic/tasks: missing" in f
+               for f in manifest_mod.verify_manifest(manifest))
 
 
 def test_runner_plan_mode_emits_commands_only(mini_manifest, capsys, tmp_path):
