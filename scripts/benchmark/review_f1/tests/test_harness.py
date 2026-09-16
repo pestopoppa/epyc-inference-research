@@ -153,6 +153,7 @@ def test_payload_shape_has_no_thinking_and_seeded_runs():
     p0 = harness.build_payload(golden["cases"][0], 0, cfg)
     p1 = harness.build_payload(golden["cases"][0], 1, cfg)
     assert p0["enable_thinking"] is False
+    assert p0["chat_template_kwargs"] == {"enable_thinking": False}
     assert p0["seed"] == 42 and p1["seed"] == 43  # per-run seed for StdDev
     assert p0["messages"][0]["role"] == "system"
     assert p0["model"] == "gemma4-26B-A4B"
