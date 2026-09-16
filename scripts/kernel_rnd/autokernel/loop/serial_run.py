@@ -593,7 +593,8 @@ def load_completed(path: Path, *, expected_argv=None, expected_binding=None):
         if row["cpu_screen"]["candidate"] is not None and (
                 row["outcome_counts"] != {"keep_candidate": 1}):
             raise SerialRefused("pending screen candidate lacks its original completed provisional outcome")
-    elif option(argv, "--cpu-screen-scope") or option(argv, "--cpu-confirm-from"):
+    elif (option(argv, "--cpu-screen-scope") or option(argv, "--cpu-confirm-from")
+          or option(argv, "--cpu-recover-from")):
         raise SerialRefused("CPU screen result omitted its original scope")
     if "runtime_recipe_reference" in row:
         row["runtime_recipe_reference"] = _runtime_recipe_reference(

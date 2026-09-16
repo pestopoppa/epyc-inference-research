@@ -232,6 +232,129 @@ def confirmation_from(path, *, full_target, selected_target, request_digest, ori
     return candidate
 
 
+def recovery_from(path, source_metadata, *, full_target, selected_target,
+                  request_digest, original_head, worker_root, worker_build_root):
+    """One-shot full confirmation of an original sub-floor positive lost as a null.
+
+    This is not a retrospective keep or an amendment to the old journal. The
+    original completed result, serving capture, source patch and binary must all
+    still exist and agree. The ordinary full-target oracle/A-B then decides anew.
+    """
+    from . import serial_run
+
+    path = Path(path).resolve()
+    receipt, receipt_sha = serial_run.load_completed(path)
+    screen = receipt.get("cpu_screen") or {}
+    if (receipt["terminal"] != "complete" or receipt["iterations_completed"] != 1
+            or receipt["outcome_counts"] != {"measured_null": 1}
+            or screen.get("scope") not in {"quarter", "half"}
+            or screen.get("candidate") is not None
+            or receipt["current_anchor"]["commit"] != original_head
+            or screen.get("full_execution_digest") != full_target.execution_digest
+            or receipt.get("selected_target") != selected_target):
+        raise ScreenRefused("recovery source is not the original reduced null for this full target")
+    result_name = receipt.get("result_file")
+    if not isinstance(result_name, str) or Path(result_name).name != result_name:
+        raise ScreenRefused("recovery result path is not the original batch result")
+    result, _ = serial_run._json(path.parent / result_name,
+                                 limit=serial_run.FULL_RESULT_RECOVERY_LIMIT)
+    if (result.get("continuation") != receipt
+            or not isinstance(result.get("iterations"), list)
+            or len(result["iterations"]) != 1):
+        raise ScreenRefused("recovery result differs from its completed continuation")
+    outcome = result["iterations"][0]
+    comparison = outcome.get("comparison") or {}
+    capture = comparison.get("belief_capture") or {}
+    arms = (capture.get("inputs") or {}).get("resolved_arms") or {}
+    if (outcome.get("status") != "measured_null"
+            or outcome.get("mechanism_id") !=
+            (receipt.get("last_outcome_reference") or {}).get("mechanism_id")
+            or comparison.get("decisive") is not False
+            or type(comparison.get("effect")) not in (int, float)
+            or not 0 < comparison["effect"] * 100 < comparison.get("noise_floor_pct", 0)
+            or comparison.get("request_digest") != request_digest
+            or not arms.get("anchor") or not arms.get("candidate")):
+        raise ScreenRefused("recovery source lacks its original calibrated sub-floor positive")
+    old_capture = (receipt.get("last_outcome_reference") or {}).get("serving_receipt") or {}
+    old_capture_path = Path(old_capture.get("path", ""))
+    if (not old_capture_path.is_absolute()
+            or old_capture_path.resolve().parent !=
+            Path(serial_run.option(receipt["input_argv"], "--store")).resolve() / "serving-beliefs"
+            or hashlib.sha256(serial_run._read(old_capture_path, limit=16384)).hexdigest()
+            != old_capture.get("sha256")
+            or old_capture_path.stem != capture.get("capture_id")):
+        raise ScreenRefused("recovery serving capture differs from its original reference")
+    old_capture_body, _ = serial_run._json(old_capture_path, limit=16384)
+    native = old_capture_body.get("native_reference") or {}
+    native_path = old_capture_path.parent / str(native.get("path", ""))
+    if native_path.resolve().parent != old_capture_path.parent / "sources":
+        raise ScreenRefused("recovery native serving observation path differs")
+    native_raw = serial_run._read(native_path,
+        limit=serial_run.FULL_RESULT_RECOVERY_LIMIT)
+    if hashlib.sha256(native_raw).hexdigest() != native.get("sha256"):
+        raise ScreenRefused("recovery native serving observation differs from its capture")
+    native_body = json.loads(native_raw)
+    if (native_body.get("mechanism_id") != outcome["mechanism_id"]
+            or native_body.get("comparison") != comparison):
+        raise ScreenRefused("recovery result differs from its original native comparison")
+    from . import dispatch_guard
+    store_root = Path(serial_run.option(receipt["input_argv"], "--store")).resolve()
+    metadata_path = Path(source_metadata).resolve()
+    if metadata_path.parent != store_root / "patches":
+        raise ScreenRefused("recovery source metadata is not in the original store")
+    metadata, metadata_sha = serial_run._json(metadata_path, limit=16384)
+    expected_worker = (Path(worker_root).resolve() / "lane0")
+    expected_build = (Path(worker_build_root).resolve() / "lane0")
+    if (metadata.get("schema") != "epyc.autokernel.source_patch_archive.v1"
+            or metadata.get("original_head") != original_head
+            or metadata.get("mechanism_id") != outcome["mechanism_id"]
+            or Path(metadata.get("worktree", "")).resolve() != expected_worker
+            or Path(arms["candidate"].get("build_dir", "")).resolve() != expected_build):
+        raise ScreenRefused("recovery source/build differs from original owned lane")
+    patch_name = metadata.get("patch_file")
+    if not isinstance(patch_name, str) or Path(patch_name).name != patch_name:
+        raise ScreenRefused("recovery source patch path is malformed")
+    patch = serial_run._read(metadata_path.parent / patch_name, limit=64 * 1024 * 1024)
+    if hashlib.sha256(patch).hexdigest() != metadata.get("patch_sha256"):
+        raise ScreenRefused("recovery source patch bytes changed")
+    archive._verified_repo(expected_worker)
+    if archive._git(expected_worker, "rev-parse", "HEAD") != original_head:
+        raise ScreenRefused("recovery original source lane moved from its measured base")
+    diff = archive._git(expected_worker, "diff", "--no-ext-diff", "HEAD", "--",
+                        raw_output=True)
+    if hashlib.sha256(dispatch_guard.normalized_diff(diff).encode()).hexdigest() \
+            != outcome.get("candidate_diff_sha256"):
+        raise ScreenRefused("recovery source differs from the measured candidate diff")
+    current_patch = archive._git(expected_worker, "diff", "--binary", "--full-index",
+                                 "--no-ext-diff", "--no-textconv", original_head, "--",
+                                 raw_output=True).encode()
+    if current_patch != patch:
+        raise ScreenRefused("recovery source differs from the original archived patch")
+    paths = re.findall(rb"(?m)^diff --git a/([^\n]+) b/\1$", patch)
+    if not paths or any(not path.startswith((b"ggml/src/", b"src/")) for path in paths):
+        raise ScreenRefused("recovery source patch has no admissible kernel path")
+    from .loop import Hypothesis
+    hypothesis = Hypothesis(**{key: outcome[key] for key in (
+        "mechanism_id", "statement", "falsifier", "target_surface", "target_symbol")})
+    # The launcher verifies executable/DSO hashes and the restored source again
+    # before the ordinary full-target oracle and measurement. No reduced effect
+    # is treated as a full-target verdict or added to an existing accumulator.
+    return {"schema": "epyc.autokernel.cpu_screen_candidate.v1",
+            "origin_batch": str(path.parent), "target": selected_target,
+            "original_head": original_head, "full_target": full_target.to_dict(),
+            "evaluated_anchor": arms["anchor"], "candidate_launch": arms["candidate"],
+            "request_digest": request_digest, "hypothesis": hypothesis.to_dict(),
+            "paths": [item.decode() for item in paths],
+            "source_archive": {"path": str(metadata_path), "sha256": metadata_sha},
+            "screen_capture": {"capture_id": capture["capture_id"],
+                               "native_sha256": capture.get("native_sha256")},
+            "screen_assessment": {"effect": comparison["effect"], "decisive": False,
+                                  "noise_floor_pct": comparison["noise_floor_pct"],
+                                  "scope": "recovered_reduced_only_full_target_confirmation_required"},
+            "recovery_origin": {"path": str(path), "sha256": receipt_sha},
+            "scope": screen["scope"]}
+
+
 def verify_candidate(candidate, worker, reduced):
     """Original binary inventory and patch bytes, not a rebuild or renewed verdict."""
     from . import run, serial_run
@@ -511,9 +634,12 @@ def routing(value, argv):
             or serial_run.option(argv, "--resolved-campaign") is None
             or int(serial_run.option(argv, "--iterations", "10")) != 1
             or (scope != "full_confirmation" and serial_run.option(argv, "--cpu-screen-scope") != scope)
-            or (scope != "full_confirmation" and serial_run.option(argv, "--cpu-confirm-from"))
-            or (scope == "full_confirmation" and (not serial_run.option(argv, "--cpu-confirm-from")
-                                                  or serial_run.option(argv, "--cpu-screen-scope")))):
+            or (scope != "full_confirmation" and (serial_run.option(argv, "--cpu-confirm-from")
+                                                    or serial_run.option(argv, "--cpu-recover-from")))
+            or (scope == "full_confirmation" and (
+                bool(serial_run.option(argv, "--cpu-confirm-from")) ==
+                bool(serial_run.option(argv, "--cpu-recover-from"))
+                or serial_run.option(argv, "--cpu-screen-scope")))):
         raise ScreenRefused("CPU screen scope differs from original child inputs")
     for key in ("full_execution_digest", "measured_execution_digest"):
         if not isinstance(value[key], str) or not re.fullmatch("[0-9a-f]{64}", value[key]):

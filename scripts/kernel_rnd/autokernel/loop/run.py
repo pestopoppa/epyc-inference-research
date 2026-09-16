@@ -540,6 +540,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="common reduced CPU source screen; positive requires separate full confirmation")
     parser.add_argument("--cpu-confirm-from", type=Path,
                         help="original completed reduced batch retaining the exact source/build to confirm")
+    parser.add_argument("--cpu-recover-from", type=Path,
+                        help="one-shot original reduced measured-null continuation to recheck at full scope")
+    parser.add_argument("--cpu-recover-source", type=Path,
+                        help="original immutable source-patch metadata for --cpu-recover-from")
     parser.add_argument("--gpu-calibrate-serving", type=int,
                         help="collect this many original GPU serving calibration launches before iterations")
     parser.add_argument("--fire-multiple", type=float, default=2.5,
@@ -587,12 +591,16 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     operator_unblocks = dispatch_guard.load_operator_unblocks(
         args.operator_unblock_artifact)
-    if args.cpu_screen_scope or args.cpu_confirm_from:
+    if args.cpu_screen_scope or args.cpu_confirm_from or args.cpu_recover_from:
         if (not args.cpu_serving_launch or not args.resolved_campaign or not args.out
                 or args.iterations != 1
-                or (args.cpu_screen_scope and args.cpu_confirm_from)):
+                or sum(bool(item) for item in (args.cpu_screen_scope, args.cpu_confirm_from,
+                                               args.cpu_recover_from)) != 1
+                or bool(args.cpu_recover_from) != bool(args.cpu_recover_source)):
             parser.error("CPU screen/confirmation requires one enrolled CPU iteration/lane and --out")
         args.workers = 1  # One finite candidate owns the retained build until confirmation.
+    elif args.cpu_recover_source:
+        parser.error("--cpu-recover-source requires --cpu-recover-from")
     if args.cpu_serving_launch and args.gpu_serving_launch:
         parser.error("select only one CPU or GPU serving launch")
     if args.gpu_serving_launch and not args.resolved_campaign:
@@ -799,7 +807,8 @@ def main(argv: list[str] | None = None) -> int:
     cpu_launch = direct_launch if args.cpu_serving_launch else None
     runtime_campaign_id = resolved_campaign.campaign_id if selected_target is not None else "ak-loop"
     runtime_enabled = bool(direct_launch and runtime_campaign_id.startswith("ak-")
-                           and not (args.cpu_screen_scope or args.cpu_confirm_from))
+                           and not (args.cpu_screen_scope or args.cpu_confirm_from
+                                    or args.cpu_recover_from))
     if (args.calibrate_runtime or args.runtime_statistics is not None
             or args.runtime_recipe_reference is not None) and not runtime_enabled:
         parser.error("prospective runtime campaigns require campaign_id beginning 'ak-' and "
@@ -920,13 +929,21 @@ def main(argv: list[str] | None = None) -> int:
             raise
     print(f"{'candidate' if experimental else 'champion'}  {args.champion_branch} "
           f"@ {verified_head[:12]} — verified")
-    if args.cpu_confirm_from:
+    if args.cpu_confirm_from or args.cpu_recover_from:
         from . import cpu_screen
         try:
-            screen_confirmation = cpu_screen.confirmation_from(args.cpu_confirm_from,
-                full_target=full_cpu_target, selected_target=selected_identity,
-                request_digest=serving.request_digest(cpu_launch.template, frozen_requests),
-                original_head=verified_head)
+            if args.cpu_recover_from:
+                screen_confirmation = cpu_screen.recovery_from(
+                    args.cpu_recover_from, args.cpu_recover_source,
+                    full_target=full_cpu_target, selected_target=selected_identity,
+                    request_digest=serving.request_digest(cpu_launch.template, frozen_requests),
+                    original_head=verified_head, worker_root=args.worker_root,
+                    worker_build_root=args.worker_build_root)
+            else:
+                screen_confirmation = cpu_screen.confirmation_from(args.cpu_confirm_from,
+                    full_target=full_cpu_target, selected_target=selected_identity,
+                    request_digest=serving.request_digest(cpu_launch.template, frozen_requests),
+                    original_head=verified_head)
             screen_prepared = cpu_screen.prepare_launch(full_cpu_target,
                 screen_confirmation["scope"], resolved_campaign.resources.cpu_logical)
             if screen_prepared["launch"].execution_digest != CanonicalResolvedRecipe.from_dict(
@@ -2220,7 +2237,9 @@ def main(argv: list[str] | None = None) -> int:
                 diff=diff, champion=current_anchor_commit[0],
                 cmake_defines=recipe.cmake_defines(),
                 bench_recipe={"pairs": args.serving_pairs if direct_launch else args.pairs,
-                              "pp": pp, "tg": tg, "ubatch": ubatch},
+                              "pp": pp, "tg": tg, "ubatch": ubatch,
+                              **({"cpu_execution_digest": cpu_launch.execution_digest}
+                                 if screen_state is not None else {})},
                 model=str(args.model), surface=args.surface)
             registry = dispatch_guard.Registry(args.store)
             try:
@@ -2415,8 +2434,11 @@ def main(argv: list[str] | None = None) -> int:
             # same working accumulator as unscreened experimental source keeps.
             accumulate_valid_positive=experimental,
             validate_candidate=validate_pooled,
-            formation_guard=lambda hypothesis, context: dispatch_guard.characterised_reason(
-                hypothesis, {**context, "epoch_sha256": epoch}),
+            # A confirmed original patch is not a new hypothesis. Its changed
+            # full-target execution digest still receives an exact dispatch key.
+            formation_guard=(None if screen_confirmation else
+                lambda hypothesis, context: dispatch_guard.characterised_reason(
+                    hypothesis, {**context, "epoch_sha256": epoch})),
             reserve_candidate=reserve_pooled,
             champion_tree=args.worktree, branch=args.champion_branch,
             on_step=step_pooled)

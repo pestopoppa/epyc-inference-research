@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 
-from . import campaign, cpu_profile, cpu_screen, gates, loop, pool, resolved_recipe as rr
+from . import campaign, cpu_profile, cpu_screen, dispatch_guard, gates, loop, pool, resolved_recipe as rr
 from . import run, serial_run as sr, serving
 from .test_campaign import _manifest as campaign_manifest, _registry, _target
 from .test_glm_frozen_requests import _canonical_launch, _manifest, _request
@@ -91,6 +91,85 @@ def test_reduced_subfloor_archive_requires_calibrated_stationary_positive(tmp_pa
                     paths=["ggml/src/ggml-cpu/file.c"], full_target=full,
                     comparison=rejected)
         retained.assert_called_once()
+
+
+def test_recovery_reads_original_null_and_patch_without_regrading_or_writing(tmp_path):
+    store = tmp_path / "store"
+    original = tmp_path / "old-batch"
+    original.mkdir()
+    worker_root = tmp_path / "workers"
+    build_root = tmp_path / "builds"
+    capture_dir = store / "serving-beliefs"
+    source_dir = capture_dir / "sources"
+    source_dir.mkdir(parents=True)
+    native = source_dir / "capture.json"
+    native.write_bytes(b"temporary native observation")
+    receipt_file = capture_dir / "capture.json"
+    receipt_file.write_text(json.dumps({"native_reference": {
+        "path": "sources/capture.json", "sha256": hashlib.sha256(native.read_bytes()).hexdigest()}}))
+    patch_dir = store / "patches"
+    patch_dir.mkdir()
+    patch = patch_dir / "source.patch"
+    patch.write_bytes(b"diff --git a/ggml/src/kernel.c b/ggml/src/kernel.c\n")
+    metadata_path = patch_dir / "source.json"
+    metadata_path.write_text(json.dumps({
+        "schema": "epyc.autokernel.source_patch_archive.v1", "original_head": "a" * 40,
+        "mechanism_id": "recover-me", "worktree": str(worker_root / "lane0"),
+        "patch_file": patch.name, "patch_sha256": hashlib.sha256(patch.read_bytes()).hexdigest()}))
+    continuation_path = original / "loop-continuation.json"
+    receipt = {"terminal": "complete", "iterations_completed": 1,
+        "outcome_counts": {"measured_null": 1}, "cpu_screen": {
+            "scope": "half", "candidate": None, "full_execution_digest": "f" * 64},
+        "current_anchor": {"commit": "a" * 40}, "selected_target": {"id": "glm"},
+        "result_file": "loop-run.json", "input_argv": ["--store", str(store)],
+        "last_outcome_reference": {"mechanism_id": "recover-me", "serving_receipt": {
+            "path": str(receipt_file),
+            "sha256": hashlib.sha256(receipt_file.read_bytes()).hexdigest()}}}
+    comparison = {"decisive": False, "effect": 0.005, "noise_floor_pct": 0.7,
+        "request_digest": "request", "belief_capture": {"capture_id": "capture",
+            "native_sha256": "native", "inputs": {"resolved_arms": {
+                "anchor": {"build_dir": str(store / "anchor")},
+                "candidate": {"build_dir": str(build_root / "lane0")}}}}}
+    outcome = {"status": "measured_null", "mechanism_id": "recover-me",
+        "statement": "source change", "falsifier": "full comparison",
+        "target_surface": "ggml/src/kernel.c", "target_symbol": "kernel",
+        "comparison": comparison,
+        "candidate_diff_sha256": hashlib.sha256(
+            dispatch_guard.normalized_diff(patch.read_bytes()).encode()).hexdigest()}
+    native.write_text(json.dumps({"mechanism_id": "recover-me", "comparison": comparison}))
+    receipt_file.write_text(json.dumps({"native_reference": {
+        "path": "sources/capture.json", "sha256": hashlib.sha256(native.read_bytes()).hexdigest()}}))
+    receipt["last_outcome_reference"]["serving_receipt"]["sha256"] = hashlib.sha256(
+        receipt_file.read_bytes()).hexdigest()
+    (original / "loop-run.json").write_text(json.dumps(
+        {"continuation": receipt, "iterations": [outcome]}))
+    full = SimpleNamespace(execution_digest="f" * 64, to_dict=lambda: {"full": True})
+    def git_result(_repo, *args, **_kwargs):
+        return "a" * 40 if args[0] == "rev-parse" else patch.read_text()
+
+    with mock.patch.object(sr, "load_completed", return_value=(receipt, "old-receipt-sha")), \
+            mock.patch.object(cpu_screen.archive, "_verified_repo"), \
+            mock.patch.object(cpu_screen.archive, "_git", side_effect=git_result):
+        recovered = cpu_screen.recovery_from(continuation_path, metadata_path,
+            full_target=full, selected_target={"id": "glm"}, request_digest="request",
+            original_head="a" * 40, worker_root=worker_root, worker_build_root=build_root)
+        assert recovered["screen_assessment"]["effect"] == 0.005
+        assert recovered["paths"] == ["ggml/src/kernel.c"]
+        assert recovered["recovery_origin"]["sha256"] == "old-receipt-sha"
+        comparison["effect"] = -0.005
+        (original / "loop-run.json").write_text(json.dumps(
+            {"continuation": receipt, "iterations": [outcome]}))
+        with pytest.raises(cpu_screen.ScreenRefused, match="sub-floor positive"):
+            cpu_screen.recovery_from(continuation_path, metadata_path,
+                full_target=full, selected_target={"id": "glm"}, request_digest="request",
+                original_head="a" * 40, worker_root=worker_root, worker_build_root=build_root)
+        comparison["effect"] = 0.006
+        (original / "loop-run.json").write_text(json.dumps(
+            {"continuation": receipt, "iterations": [outcome]}))
+        with pytest.raises(cpu_screen.ScreenRefused, match="native comparison"):
+            cpu_screen.recovery_from(continuation_path, metadata_path,
+                full_target=full, selected_target={"id": "glm"}, request_digest="request",
+                original_head="a" * 40, worker_root=worker_root, worker_build_root=build_root)
 
 
 @pytest.mark.parametrize("scope,threads,regions", [("quarter", 24, ("q0",)),
@@ -356,3 +435,13 @@ def test_scope_refuses_foreign_resources_and_incomplete_receipt():
         cpu_screen.prepare_launch(full, "quarter", range(8))
     with pytest.raises(cpu_screen.ScreenRefused, match="routing fields"):
         cpu_screen.routing({"scope": "quarter"}, [])
+
+
+def test_one_shot_recovery_routes_only_as_full_confirmation():
+    argv = ["--cpu-serving-launch", "/tmp/full.json", "--resolved-campaign", "/tmp/campaign.json",
+            "--iterations", "1", "--cpu-recover-from", "/tmp/original.json"]
+    route = {"scope": "full_confirmation", "full_execution_digest": "a" * 64,
+             "measured_execution_digest": "a" * 64, "candidate": None}
+    assert cpu_screen.routing(route, argv) == route
+    with pytest.raises(cpu_screen.ScreenRefused, match="differs"):
+        cpu_screen.routing(route, argv + ["--cpu-confirm-from", "/tmp/other.json"])
