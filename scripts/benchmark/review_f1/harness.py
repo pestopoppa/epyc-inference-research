@@ -203,6 +203,10 @@ def build_payload(case: dict, run_index: int, config: HarnessConfig) -> dict:
         "seed": config.base_seed + run_index,
         "max_tokens": config.max_tokens,
         "enable_thinking": False,
+        # llama-server only honours the template switch under chat_template_kwargs; the
+        # top-level key above is inert there (PRB-T3 live check, 2026-08-21). Kept for
+        # servers that read it.
+        "chat_template_kwargs": {"enable_thinking": False},
         "_meta": {"case_id": case["case_id"], "run_index": run_index},
     }
 
