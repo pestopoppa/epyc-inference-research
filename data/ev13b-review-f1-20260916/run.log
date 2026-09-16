@@ -1,0 +1,11 @@
+GPU claim held: {'device_id': 'mi210_0', 'lock_path': '/mnt/raid0/llm/tmp/gpu_device.mi210_0.lock', 'pid': 1858122}
+server pid 1870037: numactl --membind=3 -- taskset -c 184-191 /mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf --host 127.0.0.1 --port 18391 -np 1 -c 131072 -t 8 -ub 8192 --flash-attn on --jinja -ctk q8_0 -ctv q8_0 --no-mmap -ngl all --chat-template-file /mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja --spec-type draft-mtp --spec-draft-n-max 8 --reasoning off --device ROCm0 --slot-save-path /mnt/raid0/llm/tmp/sub-gpu-runner-20260916/ev13b/results/slots --device-draft ROCm0
+  healthy: model /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf VRAM 34.4G template 25796B
+  stopped pid 1870037 rc=0
+server pid 1139742: taskset -c 184-191 /mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server -m /mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf --host 127.0.0.1 --port 18392 -np 4 -c 32768 -t 8 -b 2048 -ub 2048 -ngl 99 -fa on -ctk f16 -ctv f16 --jinja --reasoning off --device ROCm0 --metrics
+  healthy: model /mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q4_K_M.gguf VRAM 19.5G template 17466B
+  stopped pid 1139742 rc=0
+server pid 1191468: taskset -c 184-191 /mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf --host 127.0.0.1 --port 18392 -np 4 -c 32768 -t 8 -b 2048 -ub 2048 -ngl 99 -fa on -ctk f16 -ctv f16 --jinja --reasoning off --device ROCm0 --metrics --spec-type draft-mtp --spec-draft-n-max 4
+  healthy: model /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf VRAM 37.8G template 8057B
+  stopped pid 1191468 rc=0
+done

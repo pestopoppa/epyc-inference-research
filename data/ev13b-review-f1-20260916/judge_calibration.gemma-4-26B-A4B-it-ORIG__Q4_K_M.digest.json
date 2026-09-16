@@ -1,0 +1,1536 @@
+{
+ "positive_rate": 0.9896907216494846,
+ "n_positive": 97,
+ "negative_rate": 1.0,
+ "n_negative": 50,
+ "bar": 0.95,
+ "valid": true,
+ "parse_fail": 0,
+ "rows": [
+  {
+   "kind": "positive",
+   "case_id": "cal_dot_com__pr-1",
+   "expect": "cal_dot_com__pr-1-g0",
+   "source_golden": null,
+   "ok": false,
+   "matches": [
+    "cal_dot_com__pr-1-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "cal_dot_com__pr-1",
+   "expect": null,
+   "source_golden": "cal_dot_com__pr-8-g3",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "cal_dot_com__pr-10",
+   "expect": "cal_dot_com__pr-10-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "cal_dot_com__pr-10-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "cal_dot_com__pr-10",
+   "expect": null,
+   "source_golden": "cal_dot_com__pr-4-g3",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "cal_dot_com__pr-2",
+   "expect": "cal_dot_com__pr-2-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "cal_dot_com__pr-2-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "cal_dot_com__pr-2",
+   "expect": "cal_dot_com__pr-2-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "cal_dot_com__pr-2-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "cal_dot_com__pr-2",
+   "expect": "cal_dot_com__pr-2-g2",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "cal_dot_com__pr-2-g2"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "cal_dot_com__pr-2",
+   "expect": "cal_dot_com__pr-2-g3",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "cal_dot_com__pr-2-g3"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "cal_dot_com__pr-2",
+   "expect": null,
+   "source_golden": "cal_dot_com__pr-9-g0",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "cal_dot_com__pr-3",
+   "expect": "cal_dot_com__pr-3-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "cal_dot_com__pr-3-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "cal_dot_com__pr-3",
+   "expect": "cal_dot_com__pr-3-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "cal_dot_com__pr-3-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "cal_dot_com__pr-3",
+   "expect": null,
+   "source_golden": "cal_dot_com__pr-8-g3",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "cal_dot_com__pr-4",
+   "expect": "cal_dot_com__pr-4-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "cal_dot_com__pr-4-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "cal_dot_com__pr-4",
+   "expect": "cal_dot_com__pr-4-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "cal_dot_com__pr-4-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "cal_dot_com__pr-4",
+   "expect": "cal_dot_com__pr-4-g2",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "cal_dot_com__pr-4-g2"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "cal_dot_com__pr-4",
+   "expect": "cal_dot_com__pr-4-g3",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "cal_dot_com__pr-4-g3",
+    "cal_dot_com__pr-4-g4"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "cal_dot_com__pr-4",
+   "expect": "cal_dot_com__pr-4-g4",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "cal_dot_com__pr-4-g4"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "cal_dot_com__pr-4",
+   "expect": null,
+   "source_golden": "cal_dot_com__pr-8-g2",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "cal_dot_com__pr-5",
+   "expect": "cal_dot_com__pr-5-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "cal_dot_com__pr-5-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "cal_dot_com__pr-5",
+   "expect": "cal_dot_com__pr-5-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "cal_dot_com__pr-5-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "cal_dot_com__pr-5",
+   "expect": null,
+   "source_golden": "cal_dot_com__pr-9-g1",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "cal_dot_com__pr-6",
+   "expect": "cal_dot_com__pr-6-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "cal_dot_com__pr-6-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "cal_dot_com__pr-6",
+   "expect": "cal_dot_com__pr-6-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "cal_dot_com__pr-6-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "cal_dot_com__pr-6",
+   "expect": null,
+   "source_golden": "cal_dot_com__pr-1-g0",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "cal_dot_com__pr-7",
+   "expect": "cal_dot_com__pr-7-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "cal_dot_com__pr-7-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "cal_dot_com__pr-7",
+   "expect": null,
+   "source_golden": "cal_dot_com__pr-10-g0",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "cal_dot_com__pr-8",
+   "expect": "cal_dot_com__pr-8-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "cal_dot_com__pr-8-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "cal_dot_com__pr-8",
+   "expect": "cal_dot_com__pr-8-g2",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "cal_dot_com__pr-8-g2"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "cal_dot_com__pr-8",
+   "expect": "cal_dot_com__pr-8-g3",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "cal_dot_com__pr-8-g3"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "cal_dot_com__pr-8",
+   "expect": null,
+   "source_golden": "cal_dot_com__pr-4-g2",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "cal_dot_com__pr-9",
+   "expect": "cal_dot_com__pr-9-g2",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "cal_dot_com__pr-9-g2"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "cal_dot_com__pr-9",
+   "expect": "cal_dot_com__pr-9-g3",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "cal_dot_com__pr-9-g3"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "cal_dot_com__pr-9",
+   "expect": null,
+   "source_golden": "cal_dot_com__pr-2-g4",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "discourse__pr-1",
+   "expect": "discourse__pr-1-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "discourse__pr-1-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "discourse__pr-1",
+   "expect": "discourse__pr-1-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "discourse__pr-1-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "discourse__pr-1",
+   "expect": "discourse__pr-1-g2",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "discourse__pr-1-g2"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "discourse__pr-1",
+   "expect": "discourse__pr-1-g3",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "discourse__pr-1-g3"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "discourse__pr-1",
+   "expect": null,
+   "source_golden": "discourse__pr-4-g2",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "discourse__pr-10",
+   "expect": "discourse__pr-10-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "discourse__pr-10-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "discourse__pr-10",
+   "expect": "discourse__pr-10-g2",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "discourse__pr-10-g2"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "discourse__pr-10",
+   "expect": null,
+   "source_golden": "discourse__pr-8-g0",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "discourse__pr-2",
+   "expect": null,
+   "source_golden": "discourse__pr-9-g1",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "discourse__pr-3",
+   "expect": "discourse__pr-3-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "discourse__pr-3-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "discourse__pr-3",
+   "expect": "discourse__pr-3-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "discourse__pr-3-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "discourse__pr-3",
+   "expect": "discourse__pr-3-g2",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "discourse__pr-3-g2"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "discourse__pr-3",
+   "expect": null,
+   "source_golden": "discourse__pr-2-g1",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "discourse__pr-4",
+   "expect": null,
+   "source_golden": "discourse__pr-6-g0",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "discourse__pr-5",
+   "expect": "discourse__pr-5-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "discourse__pr-5-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "discourse__pr-5",
+   "expect": null,
+   "source_golden": "discourse__pr-7-g0",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "discourse__pr-6",
+   "expect": null,
+   "source_golden": "discourse__pr-5-g0",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "discourse__pr-7",
+   "expect": "discourse__pr-7-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "discourse__pr-7-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "discourse__pr-7",
+   "expect": "discourse__pr-7-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "discourse__pr-7-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "discourse__pr-7",
+   "expect": "discourse__pr-7-g2",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "discourse__pr-7-g2"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "discourse__pr-7",
+   "expect": "discourse__pr-7-g3",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "discourse__pr-7-g3"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "discourse__pr-7",
+   "expect": "discourse__pr-7-g4",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "discourse__pr-7-g4"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "discourse__pr-7",
+   "expect": "discourse__pr-7-g5",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "discourse__pr-7-g5"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "discourse__pr-7",
+   "expect": null,
+   "source_golden": "discourse__pr-3-g2",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "discourse__pr-8",
+   "expect": "discourse__pr-8-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "discourse__pr-8-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "discourse__pr-8",
+   "expect": "discourse__pr-8-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "discourse__pr-8-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "discourse__pr-8",
+   "expect": null,
+   "source_golden": "discourse__pr-5-g0",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "discourse__pr-9",
+   "expect": "discourse__pr-9-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "discourse__pr-9-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "discourse__pr-9",
+   "expect": null,
+   "source_golden": "discourse__pr-7-g1",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "grafana__pr-1",
+   "expect": "grafana__pr-1-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "grafana__pr-1-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "grafana__pr-1",
+   "expect": "grafana__pr-1-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "grafana__pr-1-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "grafana__pr-1",
+   "expect": null,
+   "source_golden": "grafana__pr-5-g1",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "grafana__pr-10",
+   "expect": "grafana__pr-10-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "grafana__pr-10-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "grafana__pr-10",
+   "expect": "grafana__pr-10-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "grafana__pr-10-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "grafana__pr-10",
+   "expect": "grafana__pr-10-g2",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "grafana__pr-10-g2"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "grafana__pr-10",
+   "expect": null,
+   "source_golden": "grafana__pr-4-g0",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "grafana__pr-2",
+   "expect": "grafana__pr-2-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "grafana__pr-2-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "grafana__pr-2",
+   "expect": "grafana__pr-2-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "grafana__pr-2-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "grafana__pr-2",
+   "expect": null,
+   "source_golden": "grafana__pr-6-g1",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "grafana__pr-3",
+   "expect": "grafana__pr-3-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "grafana__pr-3-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "grafana__pr-3",
+   "expect": "grafana__pr-3-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "grafana__pr-3-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "grafana__pr-3",
+   "expect": null,
+   "source_golden": "grafana__pr-1-g1",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "grafana__pr-4",
+   "expect": null,
+   "source_golden": "grafana__pr-10-g1",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "grafana__pr-5",
+   "expect": "grafana__pr-5-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "grafana__pr-5-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "grafana__pr-5",
+   "expect": "grafana__pr-5-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "grafana__pr-5-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "grafana__pr-5",
+   "expect": "grafana__pr-5-g2",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "grafana__pr-5-g2"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "grafana__pr-5",
+   "expect": null,
+   "source_golden": "grafana__pr-3-g1",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "grafana__pr-6",
+   "expect": "grafana__pr-6-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "grafana__pr-6-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "grafana__pr-6",
+   "expect": "grafana__pr-6-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "grafana__pr-6-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "grafana__pr-6",
+   "expect": null,
+   "source_golden": "grafana__pr-4-g0",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "grafana__pr-7",
+   "expect": null,
+   "source_golden": "grafana__pr-9-g0",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "grafana__pr-8",
+   "expect": "grafana__pr-8-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "grafana__pr-8-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "grafana__pr-8",
+   "expect": null,
+   "source_golden": "grafana__pr-3-g0",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "grafana__pr-9",
+   "expect": "grafana__pr-9-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "grafana__pr-9-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "grafana__pr-9",
+   "expect": null,
+   "source_golden": "grafana__pr-6-g1",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "keycloak__pr-1",
+   "expect": "keycloak__pr-1-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "keycloak__pr-1-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "keycloak__pr-1",
+   "expect": "keycloak__pr-1-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "keycloak__pr-1-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "keycloak__pr-1",
+   "expect": null,
+   "source_golden": "keycloak__pr-5-g0",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "keycloak__pr-10",
+   "expect": "keycloak__pr-10-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "keycloak__pr-10-g1",
+    "keycloak__pr-10-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "keycloak__pr-10",
+   "expect": "keycloak__pr-10-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "keycloak__pr-10-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "keycloak__pr-10",
+   "expect": null,
+   "source_golden": "keycloak__pr-4-g0",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "keycloak__pr-2",
+   "expect": "keycloak__pr-2-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "keycloak__pr-2-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "keycloak__pr-2",
+   "expect": null,
+   "source_golden": "keycloak__pr-5-g1",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "keycloak__pr-3",
+   "expect": "keycloak__pr-3-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "keycloak__pr-3-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "keycloak__pr-3",
+   "expect": "keycloak__pr-3-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "keycloak__pr-3-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "keycloak__pr-3",
+   "expect": null,
+   "source_golden": "keycloak__pr-5-g1",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "keycloak__pr-4",
+   "expect": "keycloak__pr-4-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "keycloak__pr-4-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "keycloak__pr-4",
+   "expect": "keycloak__pr-4-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "keycloak__pr-4-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "keycloak__pr-4",
+   "expect": null,
+   "source_golden": "keycloak__pr-1-g1",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "keycloak__pr-5",
+   "expect": "keycloak__pr-5-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "keycloak__pr-5-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "keycloak__pr-5",
+   "expect": "keycloak__pr-5-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "keycloak__pr-5-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "keycloak__pr-5",
+   "expect": null,
+   "source_golden": "keycloak__pr-3-g1",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "keycloak__pr-6",
+   "expect": "keycloak__pr-6-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "keycloak__pr-6-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "keycloak__pr-6",
+   "expect": "keycloak__pr-6-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "keycloak__pr-6-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "keycloak__pr-6",
+   "expect": "keycloak__pr-6-g2",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "keycloak__pr-6-g2"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "keycloak__pr-6",
+   "expect": null,
+   "source_golden": "keycloak__pr-5-g1",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "keycloak__pr-7",
+   "expect": "keycloak__pr-7-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "keycloak__pr-7-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "keycloak__pr-7",
+   "expect": null,
+   "source_golden": "keycloak__pr-6-g0",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "keycloak__pr-8",
+   "expect": "keycloak__pr-8-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "keycloak__pr-8-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "keycloak__pr-8",
+   "expect": null,
+   "source_golden": "keycloak__pr-5-g1",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "keycloak__pr-9",
+   "expect": "keycloak__pr-9-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "keycloak__pr-9-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "keycloak__pr-9",
+   "expect": "keycloak__pr-9-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "keycloak__pr-9-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "keycloak__pr-9",
+   "expect": null,
+   "source_golden": "keycloak__pr-4-g1",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "sentry__pr-10",
+   "expect": "sentry__pr-10-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "sentry__pr-10-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "sentry__pr-10",
+   "expect": "sentry__pr-10-g2",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "sentry__pr-10-g2"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "sentry__pr-10",
+   "expect": "sentry__pr-10-g3",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "sentry__pr-10-g3"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "sentry__pr-10",
+   "expect": "sentry__pr-10-g4",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "sentry__pr-10-g4"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "sentry__pr-10",
+   "expect": null,
+   "source_golden": "sentry__pr-6-g0",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "sentry__pr-11",
+   "expect": "sentry__pr-11-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "sentry__pr-11-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "sentry__pr-11",
+   "expect": "sentry__pr-11-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "sentry__pr-11-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "sentry__pr-11",
+   "expect": null,
+   "source_golden": "sentry__pr-14-g1",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "sentry__pr-12",
+   "expect": "sentry__pr-12-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "sentry__pr-12-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "sentry__pr-12",
+   "expect": "sentry__pr-12-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "sentry__pr-12-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "sentry__pr-12",
+   "expect": "sentry__pr-12-g2",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "sentry__pr-12-g2"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "sentry__pr-12",
+   "expect": null,
+   "source_golden": "sentry__pr-10-g3",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "sentry__pr-13",
+   "expect": "sentry__pr-13-g2",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "sentry__pr-13-g2"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "sentry__pr-13",
+   "expect": null,
+   "source_golden": "sentry__pr-7-g1",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "sentry__pr-14",
+   "expect": "sentry__pr-14-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "sentry__pr-14-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "sentry__pr-14",
+   "expect": "sentry__pr-14-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "sentry__pr-14-g1",
+    "sentry__pr-14-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "sentry__pr-14",
+   "expect": "sentry__pr-14-g2",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "sentry__pr-14-g2"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "sentry__pr-14",
+   "expect": null,
+   "source_golden": "sentry__pr-12-g1",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "sentry__pr-15",
+   "expect": "sentry__pr-15-g1",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "sentry__pr-15-g1"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "sentry__pr-15",
+   "expect": "sentry__pr-15-g2",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "sentry__pr-15-g2"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "sentry__pr-15",
+   "expect": "sentry__pr-15-g3",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "sentry__pr-15-g3"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "sentry__pr-15",
+   "expect": null,
+   "source_golden": "sentry__pr-11-g2",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "sentry__pr-6",
+   "expect": "sentry__pr-6-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "sentry__pr-6-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "sentry__pr-6",
+   "expect": null,
+   "source_golden": "sentry__pr-7-g0",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "sentry__pr-7",
+   "expect": "sentry__pr-7-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "sentry__pr-7-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "sentry__pr-7",
+   "expect": null,
+   "source_golden": "sentry__pr-15-g1",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "sentry__pr-8",
+   "expect": "sentry__pr-8-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "sentry__pr-8-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "sentry__pr-8",
+   "expect": null,
+   "source_golden": "sentry__pr-10-g3",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "sentry__pr-9",
+   "expect": "sentry__pr-9-g0",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "sentry__pr-9-g0"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "positive",
+   "case_id": "sentry__pr-9",
+   "expect": "sentry__pr-9-g3",
+   "source_golden": null,
+   "ok": true,
+   "matches": [
+    "sentry__pr-9-g3"
+   ],
+   "parse_ok": true
+  },
+  {
+   "kind": "negative",
+   "case_id": "sentry__pr-9",
+   "expect": null,
+   "source_golden": "sentry__pr-7-g2",
+   "ok": true,
+   "matches": [],
+   "parse_ok": true
+  }
+ ],
+ "judge_model": "gemma-4-26B-A4B-it-ORIG",
+ "judge_quant": "Q4_K_M",
+ "generated_at": "2026-09-16T15:24:36.554761+00:00",
+ "source_sha256": "0b22e82128b041f551388b7a25657c3db1bc07fb4950800f098f623a64049390",
+ "redaction": "judge raw text dropped (it paraphrases unlicensed Augment-v1 golden comments); ids, verdicts and parse flags kept"
+}
