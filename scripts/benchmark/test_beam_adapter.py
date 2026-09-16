@@ -180,7 +180,8 @@ def test_repo_tree_fixture_matches_parquet_prompts(tmp_path):
     assert repo.source_kind == "repo_tree"
 
     def strip(p):
-        return {**p, "metadata": {k: v for k, v in p["metadata"].items() if k != "beam_source"}}
+        return {**p, "metadata": {k: v for k, v in p["metadata"].items() if k != "beam_source"},
+                "provenance": {k: v for k, v in p["provenance"].items() if k != "beam_source"}}
 
     assert [strip(p) for p in from_repo] == [strip(p) for p in from_parquet]
 

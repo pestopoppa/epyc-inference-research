@@ -1,5 +1,20 @@
 # M-12 long-context GPU serving recipe (MI210), prefix reuse, and the judge
 
+> **M-12 GPU window deferred by operator 2026-09-16; smoke_prefix_reuse.sh ready (a6491b9e) for when it resumes.**
+>
+> Blocker status on branch `sub/m12-blockers-20260916` (handoff note; the root M-12 handoff is
+> being ported by a wrap-up agent and is updated from `progress/2026-09/2026-09-16-sub-m12-blockers.md`):
+>
+> | Blocker | State |
+> |---|---|
+> | B1 | Fixed (`b69be5b2`). |
+> | B2 | Fixed: BEAM `rag` / `trace` arms. |
+> | B3 | Fixed: explicit, recorded generation parameters. |
+> | B4 | Judge chosen: gemma-4-26B-A4B-it-ORIG-Q8_0, §6. |
+> | B5 | Recipe and smoke written (`a6491b9e`). The smoke itself is inference, so it waits for the window. |
+> | B6 | Merges: still open. |
+> | B7 | pyarrow and pandas are both already declared in the `benchmark` extra and locked (pyarrow 24.0.0, pandas 3.0.3). The research `.venv` has pyarrow 25.0.1 and **no pandas**, so M-12a's Tulving adapter still needs pandas in that venv: `uv sync --extra benchmark`, or add pandas alone. |
+
 **Status: NOT RUN.** Everything below comes from reading source code and from
 planning estimates, not from measurement. The first 10 minutes of the M-12 window
 are the smoke test in §4, and the plan stands or falls on it.

@@ -156,7 +156,7 @@ def beam_prompts() -> tuple[str, list[str]]:
     """Two questions over the LONGEST BEAM 100K conversation (the vanilla arm's prompt)."""
     from long_context_adapters import BEAMAdapter
 
-    adapter = BEAMAdapter(split="100K")
+    adapter = BEAMAdapter(split="100K", context_mode="full")
     items = adapter.extract_all()
     if not items:
         raise SystemExit("no BEAM 100K data loaded")

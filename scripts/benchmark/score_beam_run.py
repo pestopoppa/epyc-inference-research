@@ -103,6 +103,8 @@ def score_judged_payload(payload: Mapping[str, Any],
         "question_in_judge_prompt": payload.get("question_in_judge_prompt",
                                                 QUESTION_IN_JUDGE_PROMPT),
         "checked_against_dataset": prompt_index is not None,
+        # M-12 B2: the arm each judged row was produced under, as the harness recorded it.
+        "context_mode_by_row": dict(payload.get("context_mode_by_row") or {"unrecorded": 0}),
         **folded,
     }
     return {"summary": summary, "per_question": per_question}
@@ -147,7 +149,8 @@ def main() -> int:
     belief.add_argument("--belief-measurements", action="store_true",
                         help="Write belief_measurements.jsonl beside --out-json")
     belief.add_argument("--arm", default=None,
-                        help="M-12a arm: none (memory-off) | retrieved | full (ceiling)")
+                        help="M-12b arm: full (Vanilla, memory-off) | rag (pair_chunk BM25 "
+                             "control) | trace (arm under test)")
     belief.add_argument("--run-id", default=None, help="Run id override")
     belief.add_argument("--category", default="CANDIDATE",
                         choices=("OPTIMUM", "BASELINE", "CANDIDATE"))
@@ -157,7 +160,8 @@ def main() -> int:
     prompt_index = None
     if args.check_dataset:
         from long_context_adapters import BEAMAdapter
-        adapter = BEAMAdapter(data_dir=args.data_dir, split=payload.get("split") or "100K")
+        adapter = BEAMAdapter(data_dir=args.data_dir, split=payload.get("split") or "100K",
+                              context_mode="full")
         prompt_index = build_prompt_index(adapter)
         if not prompt_index:
             raise SystemExit(f"--check-dataset: no BEAM data loaded "
@@ -175,6 +179,12 @@ def main() -> int:
         if not args.arm:
             raise SystemExit("--belief-measurements requires --arm; the judged artifact does "
                              "not record it and nothing may be guessed on read")
+        # B2: the rows record which arm produced them; --arm may only restate it.
+        seen = {k for k, v in scored["summary"]["context_mode_by_row"].items() if v}
+        if seen != {args.arm}:
+            raise SystemExit(
+                f"--arm {args.arm!r} disagrees with the arm the result rows record "
+                f"({scored['summary']['context_mode_by_row']}); refusing to emit belief rows")
         capture = _load_belief_capture()
         run_id = args.run_id or scored["summary"].get("run_id")
         if not run_id:
