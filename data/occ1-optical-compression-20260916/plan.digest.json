@@ -1,0 +1,56 @@
+{
+ "arms": [
+  "text",
+  "img-6x10-bw",
+  "img-6x10-color",
+  "img-8x13-bw",
+  "img-8x8u-bw",
+  "img-12x12u-bw"
+ ],
+ "n_chunks": 39,
+ "n_questions_per_arm": 1165,
+ "chunk_chars": 40716,
+ "qpc": 30,
+ "seed": 42,
+ "squad_sha256": "95aa6a52d5d6a735563366753ca50492a658031da74f301ac5238b03966972c9",
+ "font_sha256": {
+  "6x10.bdf": "99abf27fa2ca5a5171cad3df13aed2d4c55e73698cb141981b3e2268c733f64c",
+  "8x13.bdf": "57cf39e2f24007c5e6bd0d4b9c03ebe5ae0003277a005f819c3aab4cc5ecb623",
+  "unscii-8.hex": "03094f7fbab7085cf6a6b624cee61e47e71ce5d0c2f308c2f4436afdc17f776c"
+ },
+ "frame": {
+  "w": 1568,
+  "h_max": 1568,
+  "h_min": 672,
+  "align": 32
+ },
+ "reader_grid": {
+  "name": "qwen3vl_merger",
+  "patch_size": 16,
+  "n_merge": 2,
+  "min_tokens": 1024,
+  "max_tokens": 4096
+ },
+ "prereg": {
+  "primary_metric": "SQuAD F1 per question, paired arm-vs-text (higher is better)",
+  "cost_metric": "server usage.prompt_tokens per request (lower is better)",
+  "max_token_ratio": 0.5,
+  "ni_margin_f1": 0.05,
+  "ci": "95% percentile bootstrap of mean paired F1 delta, resampling whole chunks, 10000 iters, seed 0",
+  "secondary": "EM, exact two-sided McNemar; UNREADABLE rate; F1 by position quartile",
+  "decision": {
+   "POSITIVE": "ratio <= 0.5 AND F1-delta CI lower bound > -0.05",
+   "NOT_NONINFERIOR": "ratio <= 0.5 AND CI lower bound <= -0.05",
+   "NEGATIVE_COST": "ratio > 0.5 (no worthwhile saving regardless of recall)",
+   "OCC-1 overall": "POSITIVE if ANY image arm is POSITIVE (that arm seeds OCC-3), else NEGATIVE",
+   "VOID": "text-arm F1 < 0.60 (reader/instrument broken), any transport error or malformed 200 body left unrepaired, server identity mismatch, suite fingerprint or Pillow drift between plan and run, pre-registration drift between plan and code, a prompt-cache hit, an incomplete run, or GPU residency not proven (>= 2 in-flight samples with VRAM >= 16 GiB above the pre-launch baseline AND a KFD context for the server)"
+  }
+ },
+ "pillow_version": "12.3.0",
+ "suite_fingerprint": "261d8ac1eaedefb40555de301d5598417943feb84b9534454d89677560920ae3",
+ "created_utc": "2026-09-16T10:50:10Z",
+ "render_s": 54.0,
+ "requests_count": 234,
+ "source_sha256": "d4e434a943b0cee4a845cac9c9110f35820cacc44d3c01a075dbf7ea87e7f8cd",
+ "redaction": "requests (SQuAD context/questions, frame refs) dropped"
+}

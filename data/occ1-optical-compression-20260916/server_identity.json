@@ -1,0 +1,13 @@
+{
+ "build_info": "b10301-ef81196d5",
+ "model_path": "/mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf",
+ "n_ctx": 16384,
+ "modalities": {
+  "vision": true,
+  "video": true,
+  "audio": false
+ },
+ "total_slots": 1,
+ "url": "http://127.0.0.1:18431",
+ "problems": []
+}
