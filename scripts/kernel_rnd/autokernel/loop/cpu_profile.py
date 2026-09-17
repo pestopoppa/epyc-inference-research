@@ -46,6 +46,7 @@ MAX_STDOUT_BYTES = 48 * 1024
 MAX_LINE_BYTES = 16384
 MAX_DIAGNOSTIC_BYTES = 65536
 MAX_TARGET_TIDS = 4096
+MAX_LOCATION_GROUPS = 16384
 LIMITS = {"max_stage_seconds": 14400, "teardown_seconds": 120,
           "control_seconds": 30, "reduce_seconds": 600,
           "max_raw_file_bytes": 4 * 1024**3, "max_total_raw_bytes": 10 * 1024**3,
@@ -57,11 +58,13 @@ LIMITATIONS = ("sampled-period totals are estimated user-cycle attribution, not 
                "full-request warmup/measurement only; setup/load are not profiled",
                "counter totals cover their own enable/disable window, not the exact request or sample window; no cross-window IPC",
                "no exact generated-token, MTP, correctness, contention or GPU warrant",
+               "sampled CPU/NUMA attribution is execution location, not remote-memory traffic or a causal diagnosis",
                "no ratified measurement protocol or opportunity is supplied")
+LEGACY_LIMITATIONS = LIMITATIONS[:-2] + LIMITATIONS[-1:]
 LOOP_BUDGETS = {"max_stage_seconds": 1800, "teardown_seconds": 5,
                 "control_seconds": 30, "reduce_seconds": 120,
-                "max_raw_file_bytes": 128 * 1024**2, "max_total_raw_bytes": 512 * 1024**2,
-                "max_parser_bytes": 96 * 1024**2, "max_rows": 1_000_000,
+                "max_raw_file_bytes": 128 * 1024**2, "max_total_raw_bytes": 768 * 1024**2,
+                "max_parser_bytes": 192 * 1024**2, "max_rows": 1_000_000,
                 "max_symbols": 4096, "max_metadata_bytes": 16 * 1024**2}
 
 
@@ -383,10 +386,13 @@ def _lines(stream, *, max_bytes, max_rows):
             raise CpuProfileRefused("perf output is not UTF-8") from exc
 
 
-def reduce_perf_script(stream, *, pid, tids, interval, max_bytes, max_rows, max_symbols):
-    """Reduce exact perf -F pid,tid,time,period,event,ip,sym,dso output, never infer lost=0."""
-    pattern = re.compile(r"^(\d+)(?:/|\s+)(\d+)\s+(\d+\.\d{9}):\s+(\d+)\s+cycles:u:\s+([0-9a-fA-F]+)\s+(.+)\s+\((.+)\)$")
-    groups, by_tid = {}, {}
+def reduce_perf_script(stream, *, pid, tids, interval, max_bytes, max_rows, max_symbols,
+                       cpu_to_node=None):
+    """Reduce request samples; a CPU/node claim requires perf's sampled CPU field."""
+    cpu_field = r"\s+\[(\d+)\]" if cpu_to_node is not None else ""
+    pattern = re.compile(r"^(\d+)(?:/|\s+)(\d+)" + cpu_field +
+        r"\s+(\d+\.\d{9}):\s+(\d+)\s+cycles:u:\s+([0-9a-fA-F]+)\s+(.+)\s+\((.+)\)$")
+    groups, by_tid, locations = {}, {}, {}
     samples = outside = total = 0
     for line in _lines(stream, max_bytes=max_bytes, max_rows=max_rows):
         if not line or line.startswith("#"):
@@ -394,7 +400,14 @@ def reduce_perf_script(stream, *, pid, tids, interval, max_bytes, max_rows, max_
         match = pattern.fullmatch(line)
         if match is None:
             raise CpuProfileRefused("unsupported/lost/malformed perf sample record")
-        got_pid, tid, stamp, period, _ip, symbol, dso = match.groups()
+        if cpu_to_node is None:
+            got_pid, tid, stamp, period, _ip, symbol, dso = match.groups()
+            cpu = None
+        else:
+            got_pid, tid, raw_cpu, stamp, period, _ip, symbol, dso = match.groups()
+            cpu = int(raw_cpu)
+            if str(cpu) not in cpu_to_node:
+                raise CpuProfileRefused("sampled CPU has no captured NUMA mapping")
         tid, period, stamp = int(tid), int(period), float(stamp)
         if int(got_pid) != pid or tid not in tids or period < 1:
             raise CpuProfileRefused("sample target/TID/period differs")
@@ -406,15 +419,30 @@ def reduce_perf_script(stream, *, pid, tids, interval, max_bytes, max_rows, max_
             raise CpuProfileRefused("symbol table budget exhausted")
         groups[key] = groups.get(key, 0) + period
         by_tid[tid] = by_tid.get(tid, 0) + period
+        if cpu is not None:
+            family = _mechanism_family(dso, symbol)
+            # Unknown symbols remain in the global evidence table, but do not
+            # multiply the location table by thousands of unrelated spellings.
+            if family.startswith("symbol:") or family.startswith("unresolved-symbol:"):
+                family = "other-symbols"
+            location = (tid, cpu, cpu_to_node[str(cpu)], family)
+            if location not in locations and len(locations) >= MAX_LOCATION_GROUPS:
+                raise CpuProfileRefused("sampled location table budget exhausted")
+            locations[location] = locations.get(location, 0) + period
         samples += 1
         total += period
     if not samples:
         raise CpuProfileRefused("no target samples overlap the request")
-    return {"samples": samples, "sampled_period_total": total,
+    result = {"samples": samples, "sampled_period_total": total,
             "outside_request_samples": outside, "lost_records": "not_independently_quantified",
             "symbol_periods": [{"dso": key[0], "symbol": key[1], "period": value}
                                for key, value in sorted(groups.items())],
             "tid_periods": {str(key): value for key, value in sorted(by_tid.items())}}
+    if cpu_to_node is not None:
+        result["location_periods"] = [{"tid": tid, "cpu": cpu, "numa_node": node,
+            "family": family, "period": value} for (tid, cpu, node, family), value
+            in sorted(locations.items())]
+    return result
 
 
 def reduce_perf_stat(stream, *, max_bytes, max_rows):
@@ -763,7 +791,7 @@ class CpuProfileCapture:
                    "-p", str(self.target["pid"]), "-o", f"/proc/self/fd/{output}"]
         if kind == "record":
             command += ["-F", "99", "-e", "cycles:u", "--clockid", "mono", "-P", "-T",
-                        "--no-buildid", "--no-buildid-cache", "--mmap-pages=8",
+                        "--sample-cpu", "--no-buildid", "--no-buildid-cache", "--mmap-pages=8",
                         "--max-size", f'{self.budgets["max_raw_file_bytes"]}B']
         else:
             command += ["--json-output", "-e", ",".join(EVENTS)]
@@ -816,6 +844,7 @@ class CpuProfileCapture:
             raise CpuProfileRefused("perf round overlaps")
         self.round_target_before = self._check_target()
         self.round_tids = set()
+        self.round_topology = lo.read_topology(Path("/sys/devices/system/cpu"))
         for path in Path(f"/proc/{self.target['pid']}/task").iterdir():
             if len(self.round_tids) == MAX_TARGET_TIDS:
                 raise CpuProfileRefused("target TID budget exhausted")
@@ -867,7 +896,7 @@ class CpuProfileCapture:
     def script(self, record, path):
         with os.fdopen(self._open(path.name), "wb") as stream:
             result = _owned_reader([self.perf, "script", "-i", record["path"],
-                "--ns", "--show-lost-events", "-F", "pid,tid,time,period,event,ip,sym,dso"],
+                "--ns", "--show-lost-events", "-F", "pid,tid,cpu,time,period,event,ip,sym,dso"],
                 output=stream, limit=self.budgets["max_parser_bytes"],
                 deadline=time.monotonic() + self._remaining(self.budgets["reduce_seconds"]),
                 teardown_seconds=self.budgets["teardown_seconds"])
@@ -881,7 +910,8 @@ class CpuProfileCapture:
         items = [self._stop(item, normal=True) for item in list(self.active)]
         self.phases.append({"phase": phase, "enabled_interval": [self.round_started, ended],
             "target_before": self.round_target_before, "target_after": target_after,
-            "tids": sorted(self.round_tids), "tools": [{"kind": item["kind"],
+            "tids": sorted(self.round_tids), "topology": self.round_topology,
+            "tools": [{"kind": item["kind"],
                 "identity": item["identity"].to_dict(), "returncode": item["process"].returncode,
                 "process_observation": item["process_observation"], "command": item["command"],
                 "controls": item["controls"],
@@ -935,7 +965,9 @@ def reopen_capture(reference, *, store, config, request):
     _same(body["loaded_identity"], expected["loaded_identity"], "original loaded identities")
     _same(body["target_revision_digest"], request["target_revision_digest"], "original target")
     _same(body["completion"], "complete", "capture completion")
-    _same(body["limitations"], list(LIMITATIONS), "capture limitations")
+    sampled_cpu = "--sample-cpu" in body["phases"][0]["tools"][0]["command"]
+    _same(body["limitations"], list(LIMITATIONS if sampled_cpu else LEGACY_LIMITATIONS),
+          "capture limitations")
     if [item.get("phase") for item in body["phases"]] != list(PHASES):
         raise CpuProfileRefused("original phase cardinality/order differs")
     _same(body["model_verification"]["spec"], expected["model_preparation"], "original model preparation")
@@ -1017,10 +1049,27 @@ def _reopen_phases(body, expected):
             actual = _file(Path(ref["path"]), expected["budgets"]["max_total_raw_bytes"])
             _same(actual, ref, "original raw artifact")
             total += actual["size"]
+        record_command = phase["tools"][0]["command"]
+        sampled_cpu = "--sample-cpu" in record_command
+        script_command = phase["parser"]["command"]
+        if "-F" not in script_command:
+            raise CpuProfileRefused("original perf script field declaration is absent")
+        _same(script_command[script_command.index("-F") + 1],
+              "pid,tid,cpu,time,period,event,ip,sym,dso" if sampled_cpu else
+              "pid,tid,time,period,event,ip,sym,dso",
+              "original sampled CPU script/record agreement")
+        topology = phase.get("topology")
+        if sampled_cpu:
+            if topology is None:
+                raise CpuProfileRefused("sampled CPU topology is absent")
+            _same(topology["schema"], "epyc.autokernel.cpu_topology.v1", "original CPU topology schema")
+            _same(topology["topology_digest"], lo._digest({k: v for k, v in topology.items()
+                  if k != "topology_digest"}), "original CPU topology digest")
         samples = _reduce_artifact(phase["script"], kind="samples", arguments={
             "pid": target["pid"], "tids": phase["tids"], "interval": interval,
             "max_bytes": expected["budgets"]["max_parser_bytes"],
-            "max_rows": expected["budgets"]["max_rows"], "max_symbols": expected["budgets"]["max_symbols"]})
+            "max_rows": expected["budgets"]["max_rows"], "max_symbols": expected["budgets"]["max_symbols"],
+            "cpu_to_node": topology["cpu_to_numa_node"] if sampled_cpu else None})
         counters = _reduce_artifact(phase["tools"][1]["artifact"], kind="counters",
             arguments={"max_bytes": MAX_DIAGNOSTIC_BYTES, "max_rows": 16})
         _same(samples, phase["samples"], "original sample reduction")
@@ -1051,7 +1100,8 @@ def _reduce_phases(capture, recipe, frozen, budgets):
         samples = _reduce_artifact(script_ref, kind="samples", arguments={
             "pid": capture.target["pid"], "tids": phase["tids"], "interval": interval,
             "max_bytes": budgets["max_parser_bytes"], "max_rows": budgets["max_rows"],
-            "max_symbols": budgets["max_symbols"]})
+            "max_symbols": budgets["max_symbols"],
+            "cpu_to_node": phase["topology"]["cpu_to_numa_node"]})
         counters = _reduce_artifact(counter, kind="counters",
             arguments={"max_bytes": MAX_DIAGNOSTIC_BYTES, "max_rows": 16})
         phase_results.append({**phase, "response": response, "samples": samples,
@@ -1077,7 +1127,9 @@ def reopen_loop_profile(reference, *, store):
                    "completion", "limitations"}, "direct capture")
     _same(body["schema"], LOOP_CAPTURE_SCHEMA, "direct capture schema")
     _same(body["completion"], "complete", "direct capture completion")
-    _same(body["limitations"], list(LIMITATIONS), "direct capture limitations")
+    sampled_cpu = "--sample-cpu" in body["phases"][0]["tools"][0]["command"]
+    _same(body["limitations"], list(LIMITATIONS if sampled_cpu else LEGACY_LIMITATIONS),
+          "direct capture limitations")
     settings = body["settings"]
     recipe = rr.resolved_recipe_from_dict(settings["resolved_recipe"])
     prompts = ps.FrozenPromptManifest.from_dict(settings["prompt_manifest"])
@@ -1103,42 +1155,39 @@ def _loop_claim(body, artifact, observed_date):
         "value": body["phases"][1]["samples"]["sampled_period_total"],
         "metric_direction": "lower_better", "unit": "sampled user-cycle periods",
         "claim": "Recorded sampled-period total for this exact full request; estimated attribution, not exact CPU cost",
-        "source_class": "measurement", "extra": {"limitations": list(LIMITATIONS),
+        "source_class": "measurement", "extra": {"limitations": list(body["limitations"]),
             "mode": LOOP_MODE, "not_performance_comparison": True,
             "model_inventory_verification": "not performed by direct profiler"}}
 
 
-def ranked_levers(symbol_periods, total, *, limit=8):
-    """Project sampled symbols into quantitative, model-agnostic mechanism families.
+def _mechanism_family(dso, symbol):
+    lowered = symbol.lower()
+    if "mul_mat_q" in lowered and ("q4" in lowered or "dequantizerq4" in lowered):
+        return "quantized-matmul-q4"
+    if "mul_mat_q" in lowered and ("q5" in lowered or "dequantizerq5" in lowered):
+        return "quantized-matmul-q5"
+    if "mul_mat_q" in lowered and ("q6" in lowered or "dequantizerq6" in lowered):
+        return "quantized-matmul-q6"
+    if "vec_dot_q8" in lowered or "tinyblas_q0" in lowered:
+        return "dense-q8-dot-matmul"
+    if "barrier" in lowered or "gomp" in dso.lower():
+        return "thread-synchronization-and-work-balance"
+    if "vec_dot_f32" in lowered:
+        return "dense-f32-dot"
+    if symbol == "[unknown]":
+        return "unresolved-symbol:" + Path(dso).name
+    return "symbol:" + symbol
 
-    The raw symbol table remains the evidence.  This bounded projection prevents an
-    actor from seeing twelve unrelated spellings while missing that several rows are
-    one large mechanism family.  It assigns no speedup and deliberately leaves an
-    unrecognised symbol as its own family rather than guessing its semantics.
-    """
+
+def ranked_levers(symbol_periods, total, *, limit=8):
+    """Group sampled symbols, without turning sample share into a speedup claim."""
     if type(total) not in (int, float) or total <= 0:
         raise CpuProfileRefused("ranked lever total must be positive")
     groups = {}
     for row in symbol_periods:
         symbol = str(row.get("symbol", ""))
         dso = str(row.get("dso", ""))
-        lowered = symbol.lower()
-        if "mul_mat_q" in lowered and ("q4" in lowered or "dequantizerq4" in lowered):
-            family = "quantized-matmul-q4"
-        elif "mul_mat_q" in lowered and ("q5" in lowered or "dequantizerq5" in lowered):
-            family = "quantized-matmul-q5"
-        elif "mul_mat_q" in lowered and ("q6" in lowered or "dequantizerq6" in lowered):
-            family = "quantized-matmul-q6"
-        elif "vec_dot_q8" in lowered or "tinyblas_q0" in lowered:
-            family = "dense-q8-dot-matmul"
-        elif "barrier" in lowered or "gomp" in dso.lower():
-            family = "thread-synchronization-and-work-balance"
-        elif "vec_dot_f32" in lowered:
-            family = "dense-f32-dot"
-        elif symbol == "[unknown]":
-            family = "unresolved-symbol:" + Path(dso).name
-        else:
-            family = "symbol:" + symbol
+        family = _mechanism_family(dso, symbol)
         group = groups.setdefault(family, {"family": family, "period": 0,
             "symbols": [], "evidence_kind": "current-request-sampled-user-cycles"})
         group["period"] += int(row["period"])
@@ -1149,6 +1198,81 @@ def ranked_levers(symbol_periods, total, *, limit=8):
     for row in ranked:
         row["sampled_period_fraction"] = row["period"] / total
     return ranked[:limit]
+
+
+def location_attribution(samples):
+    """Bounded, descriptive thread and execution-node view of sampled periods."""
+    rows = samples.get("location_periods")
+    if rows is None:
+        return None  # An older perf capture did not record sampled CPU IDs.
+    total = samples["sampled_period_total"]
+    nodes, tids = {}, {}
+    for row in rows:
+        period = row["period"]
+        node = nodes.setdefault(row["numa_node"], {"period": 0, "sync_period": 0})
+        tid = tids.setdefault(row["tid"], {"period": 0, "sync_period": 0,
+            "cpus": set(), "nodes": set()})
+        node["period"] += period
+        tid["period"] += period
+        tid["cpus"].add(row["cpu"])
+        tid["nodes"].add(row["numa_node"])
+        if row["family"] == "thread-synchronization-and-work-balance":
+            node["sync_period"] += period
+            tid["sync_period"] += period
+    node_rows = [{"numa_node": key, **value,
+        "sampled_period_fraction": value["period"] / total,
+        "sync_fraction_within_node": value["sync_period"] / value["period"]}
+        for key, value in sorted(nodes.items())]
+    # The activity threshold is disclosed; sampled period is not a wall-time or
+    # work-completion denominator. Keep both ends rather than only outliers.
+    active_cutoff = total / max(len(tids), 1) / 4
+    active = [{"tid": key, "period": value["period"],
+        "sync_period": value["sync_period"],
+        "sync_fraction_within_tid": value["sync_period"] / value["period"],
+        "sampled_cpus": sorted(value["cpus"]), "execution_nodes": sorted(value["nodes"])}
+        for key, value in tids.items() if value["period"] >= active_cutoff]
+    active.sort(key=lambda row: (row["sync_fraction_within_tid"], row["tid"]))
+    selected = active[:4] + [row for row in active[-4:] if row not in active[:4]]
+    return {"basis": "original-request sampled user-cycle periods; sampled execution CPUs, not memory locality",
+        "sampled_tid_count": len(tids), "active_tid_count": len(active),
+        "active_period_cutoff": active_cutoff,
+        "execution_nodes": node_rows, "low_high_sync_threads": selected}
+
+
+def loop_observation(reference, *, store_root):
+    """Reopen one original request profile for planning, never as an A/B claim."""
+    with closing(mc.ArtifactStore(Path(store_root) / "cpu-profiles")) as store:
+        body = reopen_loop_profile(reference, store=store)
+    measured = body["phases"][1]["samples"]
+    total = measured["sampled_period_total"]
+    symbols = sorted(measured["symbol_periods"],
+        key=lambda row: (-row["period"], row["dso"], row["symbol"]))
+    return {"status": "observed",
+        "record": str(Path(store_root) / "cpu-profiles" / reference["locator"]),
+        "record_sha256": reference["sha256"],
+        "execution_digest": body["request"]["execution_digest"],
+        "prompt_manifest_digest": body["request"]["prompt_manifest_digest"],
+        "sampled_period_total": total, "samples": measured["samples"],
+        "limitations": list(body["limitations"]),
+        "hotspots": [{**_plain(row), "sampled_period_fraction": row["period"] / total}
+                     for row in symbols[:12]],
+        "ranked_levers": ranked_levers(symbols, total),
+        "location_attribution": location_attribution(measured)}
+
+
+def cached_loop_observation(reference, *, store_root, anchor_commit,
+                            execution_digest, prompt_manifest_digest, scope):
+    """Reuse only the same source, binary/DSOs, request and CPU allocation."""
+    if reference is None or any((reference["anchor_commit"] != anchor_commit,
+            reference["execution_digest"] != execution_digest,
+            reference["prompt_manifest_digest"] != prompt_manifest_digest,
+            reference["scope"] != scope)):
+        return None
+    observed = loop_observation(reference["record"], store_root=store_root)
+    if (observed["execution_digest"] != execution_digest
+            or observed["prompt_manifest_digest"] != prompt_manifest_digest):
+        raise CpuProfileRefused("retained CPU profile differs from exact original launch/request")
+    return observed
 
 
 def profile_loop(recipe, prompts, *, store_root, perf_path="/usr/bin/perf",
@@ -1181,18 +1305,7 @@ def profile_loop(recipe, prompts, *, store_root, perf_path="/usr/bin/perf",
                 "profile_claim_tuple": _loop_claim(body, artifact.to_dict(),
                     datetime.now(timezone.utc).date().isoformat())}
             exported = store.write(record["run_id"], record)
-            original = reopen_loop_profile(exported.to_dict(), store=store)
-            measured = original["phases"][1]["samples"]
-            total = measured["sampled_period_total"]
-            symbols = sorted(measured["symbol_periods"],
-                key=lambda row: (-row["period"], row["dso"], row["symbol"]))
-            return {"status": "observed", "record": str(store.root / exported.locator),
-                "record_sha256": exported.sha256, "execution_digest": recipe.execution_digest,
-                "prompt_manifest_digest": prompts.digest, "sampled_period_total": total,
-                "samples": measured["samples"], "limitations": list(LIMITATIONS),
-                "hotspots": [{**_plain(row), "sampled_period_fraction": row["period"] / total}
-                             for row in symbols[:12]],
-                "ranked_levers": ranked_levers(symbols, total)}
+            return loop_observation(exported.to_dict(), store_root=store_root)
         except BaseException as exc:
             if capture is not None:
                 capture.abort(f"{type(exc).__name__}: {exc}")

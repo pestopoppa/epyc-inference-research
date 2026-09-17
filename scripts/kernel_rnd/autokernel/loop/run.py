@@ -15,9 +15,10 @@ memory that outlives this process.
 from __future__ import annotations
 
 import argparse
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass, replace
 import hashlib
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -28,12 +29,13 @@ import time
 
 from ..controller import (anchor_integrity, build_recipe, experiments, inbox, rung_confirm,
                           workload_contract)
+from .. import codegen_summary
 HEARTBEAT_S = 30  # status heartbeat period; envelope = 6x this
 HEARTBEAT_STOP_TIMEOUT_S = 10
 
 from . import (accumulate, actors, anchor, archive, bench, champion, claim, gates,
                dispatch_guard, heartbeat, hotspots, loop, serving, serving_beliefs,
-               integrity, pipeline, pool, production, status, surface_fold,
+               integrity, lineage_beliefs, pipeline, pool, production, status, surface_fold,
                surface_validation)
 
 
@@ -73,15 +75,49 @@ class ServingComparison:
                 "baseline_scope": self.baseline_scope}
 
 
-def _serving_comparison(invoke, baseline_scope):
+def _serving_comparison(invoke, baseline_scope, *, measurement_window=nullcontext):
     """Keep native original-arm continuations behind the same existing view."""
     try:
-        return ServingComparison(invoke(), baseline_scope)
+        with measurement_window():
+            return ServingComparison(invoke(), baseline_scope)
     except loop.MeasurementInvalid as exc:
         if exc.reschedule is not None:
             original = exc.reschedule
-            exc.reschedule = lambda: _serving_comparison(original, baseline_scope)
+            exc.reschedule = lambda: _serving_comparison(
+                original, baseline_scope, measurement_window=measurement_window)
         raise
+
+
+@contextmanager
+def _q3_cpu_gpu_quiet_window(launch, *, on_wait, should_stop):
+    """Exclude a GPU item only while a q3 CPU measurement is active."""
+    if launch is None or launch.backend != "cpu":
+        yield
+        return
+    from ..execution.cpu_region_claim import cpu_list_to_regions
+    cpu_list = launch.template.cpu_list
+    if cpu_list is not None and "q3" not in cpu_list_to_regions(cpu_list):
+        yield
+        return
+    lock = claim.DEVICE_LOCK
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    with lock.open("a") as handle:
+        next_report = 0.0
+        while True:
+            if should_stop():
+                raise loop.TailRefused("stopped before q3 CPU measurement acquired GPU quiet window")
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= next_report:
+                    on_wait()
+                    next_report = time.monotonic() + HEARTBEAT_S
+                time.sleep(0.5)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
 
 
 def _candidate_quant_tokens(dominant_quant: str | None) -> list[str]:
@@ -256,6 +292,16 @@ def _cpu_arm(original, build: Path):
                     "experimental_parent_snapshot": original.snapshot_digest})
 
 
+def _runtime_serving_capable(direct_launch, selected_target, *, screen_scope, confirm_from):
+    """Admit only the already-bound full serving route, independent of ID spelling."""
+    if direct_launch is None or screen_scope or confirm_from:
+        return False
+    if selected_target is None:
+        return direct_launch.backend == "cpu"  # Established legacy CPU serving route.
+    return (selected_target.status == "ready" and
+            selected_target.execution.backend == direct_launch.backend)
+
+
 def _source_floor_store(store: Path, recipe, anchor, *, instrument: str,
                         dynamic: bool = False) -> Path:
     """Key matched source floors by the exact executable/DSO execution identity."""
@@ -332,6 +378,32 @@ def _write_new_source_floor(floor_store: Path, recipe, anchor, row, *, frozen_re
         # dispersion it just measured is a between-PROCESS one. Stated, not defaulted.
         unit=serving.CALIBRATION_UNIT,
         instrument=instrument, pairs=pairs)
+
+
+def attempt_with_codegen(outcome: loop.Outcome, summaries: dict[str, dict]) -> dict:
+    """Attach a keep's diagnostic to the same durable experiment row."""
+    attempt = outcome.to_attempt()
+    if outcome.status == "kept" and outcome.champion_head:
+        summary = summaries.get(
+            outcome.champion_head, {
+                "schema": codegen_summary.SCHEMA, "status": "unavailable",
+                "reason": "codegen collection was not retained",
+                "authority": "diagnostic_only"})
+        if (summary.get("attempt_identity") is not None
+                and summary["attempt_identity"] != outcome.attempt_identity):
+            summary = {"schema": codegen_summary.SCHEMA, "status": "unavailable",
+                       "reason": "codegen attempt identity differs from committed outcome",
+                       "authority": "diagnostic_only"}
+        attempt["codegen_summary"] = summary
+    elif (outcome.status == "kept" and outcome.hypothesis is not None
+          and outcome.hypothesis.runtime_pair is not None):
+        # A runtime-recipe keep selects an existing build; it did not compile a
+        # new kernel. Record that distinction in its durable attempt row.
+        attempt["codegen_summary"] = {
+            "schema": codegen_summary.SCHEMA, "status": "unavailable",
+            "reason": "runtime-recipe keep selected an existing build; no new codegen artifact",
+            "authority": "diagnostic_only"}
+    return attempt
 
 
 def noise_floor_pct(surface: str, pairs: int, model: Path | str,
@@ -522,7 +594,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cpu-calibrate-serving", type=int,
                         help="collect this many original serving calibration launches before iterations")
     parser.add_argument("--runtime-statistics", type=Path,
-                        help="optional original ServingStatisticsDeclaration; otherwise direct campaign input defaults")
+                        help="prospective original ServingStatisticsDeclaration for runtime work")
+    parser.add_argument("--runtime-calibration-max-launches", type=int,
+                        help="explicit upper bound for the complete A/A plus neutral runtime calibration")
     parser.add_argument("--runtime-recipe-reference", type=Path,
                         help="original serial-owned retained recipe reference; never a floor or launch permit")
     parser.add_argument("--runtime-recovery-reference", type=Path,
@@ -797,13 +871,28 @@ def main(argv: list[str] | None = None) -> int:
           or args.gpu_calibrate_serving):
         parser.error("serving options require --cpu-serving-launch or --gpu-serving-launch")
     cpu_launch = direct_launch if args.cpu_serving_launch else None
-    runtime_campaign_id = resolved_campaign.campaign_id if selected_target is not None else "ak-loop"
-    runtime_enabled = bool(direct_launch and runtime_campaign_id.startswith("ak-")
-                           and not (args.cpu_screen_scope or args.cpu_confirm_from))
+    # The selected canonical serving route, not the spelling of its campaign ID,
+    # carries runtime capability. Enrolled targets were checked for ready status,
+    # backend and exact serving-workload compatibility above; legacy CPU serving
+    # retains its established ak-loop identity. Reduced source screens do not
+    # select runtime recipes.
+    runtime_capable = _runtime_serving_capable(direct_launch, selected_target,
+        screen_scope=args.cpu_screen_scope, confirm_from=args.cpu_confirm_from)
+    runtime_enabled = runtime_capable and args.runtime_statistics is not None
+    # A full CPU launch can test a topology/NUMA hypothesis without claiming the
+    # strict runtime protocol has admitted a recipe. Reduced source screens cannot.
+    runtime_probe_enabled = (runtime_capable and args.runtime_statistics is None
+                             and direct_launch.backend == "cpu")
     if (args.calibrate_runtime or args.runtime_statistics is not None
-            or args.runtime_recipe_reference is not None) and not runtime_enabled:
-        parser.error("prospective runtime campaigns require campaign_id beginning 'ak-' and "
-                     "an original full serving target; source-only aku-* campaigns remain supported unchanged")
+            or args.runtime_recipe_reference is not None) and not runtime_capable:
+        parser.error("prospective runtime campaigns require an eligible original full serving "
+                     "target; source-only and reduced-screen campaigns remain unchanged")
+    if args.calibrate_runtime and args.runtime_statistics is None:
+        parser.error("runtime calibration requires explicit prospective --runtime-statistics")
+    if args.runtime_recipe_reference is not None and args.runtime_statistics is None:
+        parser.error("retained runtime recipe requires its explicit prospective --runtime-statistics")
+    if args.runtime_statistics is None and args.runtime_calibration_max_launches is not None:
+        parser.error("runtime calibration launch budget requires --runtime-statistics")
     experimental = direct_launch is not None and args.experimental_branch is not None
     owned_cpu_list = None
     build_cpu_list = cpu_launch.template.cpu_list if cpu_launch else "96-183"
@@ -967,6 +1056,21 @@ def main(argv: list[str] | None = None) -> int:
     epoch = archive.epoch_for(anchor_commit=anchor_commit,
                               build_recipe=recipe.to_dict(),
                               **({"host_state": epoch_inputs} if epoch_inputs else {}))
+    runtime_statistical = None
+    runtime_epoch = None
+    runtime_calibration_launches = None
+    if args.runtime_statistics is not None:
+        from . import runtime_calibration
+        from .serving_preparation import ServingStatisticsDeclaration
+        try:
+            runtime_statistical = ServingStatisticsDeclaration.from_dict(
+                _read_cpu_document(args.runtime_statistics))
+            runtime_epoch, runtime_calibration_launches = runtime_calibration.prospective_budget(
+                campaign_id=resolved_campaign.campaign_id if selected_target is not None else "ak-loop",
+                source_epoch=epoch, statistical=runtime_statistical,
+                max_launches=args.runtime_calibration_max_launches)
+        except (OSError, ValueError, runtime_calibration.RuntimeCalibrationRefused) as exc:
+            parser.error(f"runtime calibration preflight refused before resource claim: {exc}")
     print(f"anchor    {anchor_commit[:12]}   epoch {epoch[:12]}")
 
     pp, tg, ubatch = bench.SURFACES[args.surface]
@@ -1107,8 +1211,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if (args.calibrate_runtime or args.runtime_statistics is not None) and not direct_launch:
         parser.error("direct runtime calibration requires the original serving launch")
-    runtime_preparation = ({} if runtime_enabled else {"status": "unavailable",
-        "reason": "strict runtime needs a prospective ak-* full serving frame; source research is unchanged"})
+    runtime_preparation = ({} if runtime_enabled else {"status": (
+        "observation_only" if runtime_probe_enabled else "unavailable"),
+        "reason": ("runtime calibration needs explicit prospective statistics and complete-launch budget; "
+                   "runtime probes cannot select a recipe or keep") if runtime_probe_enabled else
+                  "strict runtime requires an eligible full serving target; source research is unchanged"})
     runtime_owner = [None]
     source_floor_refresh = [False]
     runtime_recipe_reference = [None]
@@ -1149,7 +1256,9 @@ def main(argv: list[str] | None = None) -> int:
                 "request-scoped sampled user-cycle attribution (or its unavailable reason); "
                 "fractions are not wall-time shares or optimization gains. Do not invent "
                 "hotspots or reuse GPU timing evidence as CPU evidence. "
-                "Author/review source only: the existing loop owns compilation, the CPU "
+                "Author/review source only for source hypotheses; runtime treatments "
+                "have no source edit and are observation-only unless separately admitted. "
+                "The existing loop owns compilation, the CPU "
                 "oracle, resource locking and paired serving measurements. Preserve the "
                 "selected request, cache/seed/speculation and placement conditions. "
                 "Keeps remain on the explicitly selected experimental candidate branch; "
@@ -1210,9 +1319,12 @@ def main(argv: list[str] | None = None) -> int:
             # rationale for both lives on `controller.inbox.read_inbox`'s docstring.
             "inbox": inbox.read_inbox(args.store / "inbox"),
             **({"runtime_anchor": feedback_anchor[0].to_dict(),
-                "runtime_preparation": dict(runtime_preparation),
-                "runtime_env_keys": sorted(runtime_env_keys)}
-               if direct_launch and screen_state is None and runtime_enabled else {}),
+                "runtime_env_keys": sorted(runtime_env_keys),
+                "runtime_observation_only": not runtime_enabled}
+               if direct_launch and screen_state is None
+               and (runtime_enabled or runtime_probe_enabled) else {}),
+            **({"runtime_preparation": dict(runtime_preparation)}
+               if direct_launch and screen_state is None else {}),
             **({"target": {"scope": "experimental candidate, NOT canonical champion",
                             "recipe": feedback_anchor[0].to_dict(),
                             "requests": str(args.frozen_prompts),
@@ -1259,7 +1371,7 @@ def main(argv: list[str] | None = None) -> int:
                 return False, [gates.Verdict("cpu_screen", False,
                                             "common-scope source screen does not select runtime recipes")]
             if hypothesis.runtime_pair is not None:
-                if not runtime_enabled:
+                if not runtime_enabled and not runtime_probe_enabled:
                     return False, [gates.Verdict("runtime_preparation", False,
                         runtime_preparation.get("reason", "strict runtime frame is unavailable"))]
                 pair = hypothesis.runtime_pair
@@ -1286,13 +1398,44 @@ def main(argv: list[str] | None = None) -> int:
             # The diff first: a build that fails still leaves a patch worth reading,
             # and this is the last moment it exists on disk.
             keep_the_diff(worker, hypothesis)
+            changed = tuple(archive._git(worker.worktree, "diff", "HEAD", "--name-only").splitlines())
+            untracked = tuple(archive._git(worker.worktree, "ls-files", "--others",
+                                           "--exclude-standard", "--", "ggml/src/", "src/").splitlines())
+            cpu_ops = worker.worktree / "ggml/src/ggml-cpu/ops.cpp"
+            iqk_rows_path = "ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp"
+            if changed == (iqk_rows_path,) and not cpu_launch:
+                return False, [gates.Verdict(
+                    "op_scope", False, "CPU IQK helper route requires a CPU target recipe")]
+            scope_source = (cpu_ops if changed == ("ggml/src/ggml-cpu/ops.cpp",) else
+                            worker.worktree / iqk_rows_path if changed == (iqk_rows_path,) else None)
+            scope = gates.affected_op_scope(changed + untracked,
+                                             target_surface=hypothesis.target_surface,
+                                             target_symbol=hypothesis.target_symbol,
+                                             source_text=(scope_source.read_text(encoding="utf-8")
+                                                          if scope_source is not None
+                                                          else None),
+                                             patch_text=(archive._git(worker.worktree, "diff", "-U0",
+                                                                      "HEAD", "--", str(scope_source.relative_to(worker.worktree)))
+                                                         if scope_source is not None
+                                                         else None))
+            if isinstance(scope, gates.Verdict):
+                return False, [scope]
             if screen_confirmation is not None:
                 cpu_screen.verify_restored(screen_confirmation, worker, screen_prepared["launch"],
                                            args.store, hypothesis)
                 # Original candidate executable/DSOs already proved, source restored
                 # exactly. Re-run the ordinary oracle at FULL conditions, no rebuild.
-                return gates.run_all(lambda: gates.op_correctness(worker.build_dir,
-                    backend="CPU", resolved_recipe=_cpu_arm(direct_launch, worker.build_dir)))
+                arm = _cpu_arm(direct_launch, worker.build_dir)
+                checks = [lambda op=op: gates.op_correctness(
+                    worker.build_dir, op=op, backend="CPU", resolved_recipe=arm)
+                    for op in scope]
+                if "GATED_DELTA_NET" in scope:
+                    checks.append(lambda: gates.check_cpu_gdn_reference(
+                        worker.build_dir, worker.worktree, resolved_recipe=arm))
+                if cpu_launch and changed == (iqk_rows_path,):
+                    checks.append(lambda: gates.check_cpu_iqk_reference(
+                        worker.build_dir, worker.worktree, resolved_recipe=arm))
+                return gates.run_all(*checks)
             # Callables, so a failed build actually short-circuits: an eagerly
             # evaluated op_correctness ran the suite against a stale binary and blamed
             # this patch.
@@ -1307,9 +1450,20 @@ def main(argv: list[str] | None = None) -> int:
                                        cmake_defines=recipe.cmake_defines(),
                                        jobs=build_jobs, cpu_list=build_cpu_list,
                                        **({"targets": gates.PROMOTION_TARGETS} if direct_launch else {})),
-                lambda: gates.op_correctness(worker.build_dir,
-                                            **({"backend": "CPU"} if cpu_launch else {})),
             ]
+            checks.extend(lambda op=op: gates.op_correctness(worker.build_dir, op=op,
+                          require_reference=not cpu_launch,
+                          **({"backend": "CPU",
+                              "resolved_recipe": _cpu_arm(direct_launch, worker.build_dir)}
+                             if cpu_launch else {})) for op in scope)
+            if cpu_launch and "GATED_DELTA_NET" in scope:
+                checks.append(lambda: gates.check_cpu_gdn_reference(
+                    worker.build_dir, worker.worktree,
+                    resolved_recipe=_cpu_arm(direct_launch, worker.build_dir)))
+            if cpu_launch and changed == (iqk_rows_path,):
+                checks.append(lambda: gates.check_cpu_iqk_reference(
+                    worker.build_dir, worker.worktree,
+                    resolved_recipe=_cpu_arm(direct_launch, worker.build_dir)))
             if not direct_launch:
                 checks.extend((
                     lambda: gates.deterministic(worker.build_dir, args.model),
@@ -1408,30 +1562,33 @@ def main(argv: list[str] | None = None) -> int:
             if hypothesis.runtime_pair is not None:
                 pair = hypothesis.runtime_pair
                 from . import runtime_calibration
-                try:
-                    def strict_compare():
-                        row = runtime_owner[0].compare(pair)
-                        if row.get("belief_export_receipt"):
-                            feedback.exported(Path(row["belief_export_receipt"]))
-                        return row
-                    return _serving_comparison(strict_compare,
-                        "experimental_runtime_treatment_not_source_champion")
-                except runtime_calibration.RuntimeCalibrationRefused as exc:
-                    if isinstance(exc, runtime_calibration.RuntimeLaunchBudgetExhausted):
-                        runtime_enabled = False
-                        runtime_preparation.update(status="budget_exhausted", reason=str(exc))
+                if runtime_enabled:
+                    try:
+                        def strict_compare():
+                            row = runtime_owner[0].compare(pair)
+                            if row.get("belief_export_receipt"):
+                                feedback.exported(Path(row["belief_export_receipt"]))
+                            return row
+                        return _serving_comparison(strict_compare,
+                            "experimental_runtime_treatment_not_source_champion",
+                            measurement_window=cpu_measurement_window)
+                    except runtime_calibration.RuntimeCalibrationRefused as exc:
+                        if isinstance(exc, runtime_calibration.RuntimeLaunchBudgetExhausted):
+                            runtime_enabled = False
+                            runtime_preparation.update(status="budget_exhausted", reason=str(exc))
+                            report_runtime_progress()
+                            raise loop.TailRefused("runtime preparation budget ended; original prefix retained, "
+                                                   "source research and other targets remain available") from exc
+                        runtime_preparation.update(status="observed_not_admitted", reason=str(exc))
                         report_runtime_progress()
-                        raise loop.TailRefused("runtime preparation budget ended; original prefix retained, "
-                                               "source research and other targets remain available") from exc
-                    runtime_preparation.update(status="observed_not_admitted", reason=str(exc))
-                    report_runtime_progress()
-                    print(f"runtime admission unavailable: {exc}; retaining unqualified observation")
+                        print(f"runtime admission unavailable: {exc}; retaining unqualified observation")
                 return _serving_comparison(lambda: serving.compare(
                     pair.anchor.template, anchor_build[0], anchor_build[0],
                     pairs=args.serving_pairs, floor_pct=None, port=pair.anchor.port,
                     anchor_resolved_recipe=pair.anchor, candidate_resolved_recipe=pair.candidate,
                     frozen_requests=frozen_requests, runtime_pair=pair),
-                    "experimental_runtime_treatment_not_source_champion")
+                    "experimental_runtime_treatment_not_source_champion",
+                    measurement_window=cpu_measurement_window)
             if direct_launch:
                 return cpu_compare(anchor_build[0], worker.build_dir)
             # The anchor build is SHARED across lanes and only ever read, so it needs
@@ -1457,7 +1614,7 @@ def main(argv: list[str] | None = None) -> int:
             frozen_requests=frozen_requests, instrument=args.serving_instrument,
             pairs=args.serving_pairs, dynamic=True)
         if reading.floor_pct is None:
-            value = serving.calibrate_floor(serving_recipe, a_build,
+            value = measured_serving_calibrate(serving_recipe, a_build,
                 samples=serving.MATCHED_CALIBRATION_PAIRS if source_instrument else max(2, args.serving_pairs),
                 port=direct_launch.port, resolved_recipe=anchor_recipe, frozen_requests=frozen_requests,
                 **source_instrument)
@@ -1498,7 +1655,8 @@ def main(argv: list[str] | None = None) -> int:
             **({"instrument": args.serving_instrument, "floor_record": floor_record}
                if source_instrument else {})),
             "experimental_candidate_not_champion" if experimental
-            else "canonical_candidate_vs_current_anchor")
+            else "canonical_candidate_vs_current_anchor",
+            measurement_window=cpu_measurement_window)
 
     def cpu_anchor_guard_compare(a_build, c_build):
         """Measure the promoted-anchor integrity A/A without consuming a source floor.
@@ -1518,7 +1676,8 @@ def main(argv: list[str] | None = None) -> int:
             candidate_resolved_recipe=candidate_recipe,
             frozen_requests=frozen_requests,
             **({"instrument": args.serving_instrument} if source_instrument else {})),
-            "promoted_anchor_integrity_not_source_candidate")
+            "promoted_anchor_integrity_not_source_candidate",
+            measurement_window=cpu_measurement_window)
 
     def confirm_measure(worker):
         """The confirm rung's A/B for one keep-candidate (§5.3): same arms, the
@@ -1548,13 +1707,31 @@ def main(argv: list[str] | None = None) -> int:
             from . import cpu_profile
             cpu_profile_observation.clear()
             cpu_profile_observation["status"] = "unavailable"
+            profile_arm = _cpu_arm(direct_launch, anchor_build[0])
+            retained = resumed.get("cpu_profile_reference") if resumed is not None else None
+            if retained is not None:
+                try:
+                    observed = cpu_profile.cached_loop_observation(retained,
+                        store_root=args.store, anchor_commit=current_anchor_commit[0],
+                        execution_digest=profile_arm.execution_digest,
+                        prompt_manifest_digest=manifest.digest,
+                        scope=(screen_state or {}).get("scope", "full"))
+                except (cpu_profile.CpuProfileRefused, OSError, ValueError) as exc:
+                    print(f"profile   retained CPU observation unavailable ({exc}); reprofile")
+                else:
+                    if observed is not None:
+                        cpu_profile_observation.update(observed)
+                        cpu_profile_observation["anchor_commit"] = current_anchor_commit[0]
+                        print(f"profile   reused original CPU observation; record {observed['record']}")
+                        return
             publish("running", latest, step="CPU original-request observational profiling")
             try:
-                observed = cpu_profile.profile_loop(
-                    _cpu_arm(direct_launch, anchor_build[0]), manifest,
-                    store_root=args.store, perf_path=args.cpu_profiler,
-                    timeout_s=min(1800, resolved_campaign.resources.stage_timeout_s)
-                    if selected_identity else 1800)
+                with cpu_measurement_window():
+                    observed = cpu_profile.profile_loop(
+                        profile_arm, manifest,
+                        store_root=args.store, perf_path=args.cpu_profiler,
+                        timeout_s=min(1800, resolved_campaign.resources.stage_timeout_s)
+                        if selected_identity else 1800)
             except cpu_profile.CpuProfileCleanupUncertain:
                 raise  # An unproven terminal child must not overlap the next A/B.
             except (cpu_profile.CpuProfileRefused, serving.ServerDied, OSError) as exc:
@@ -1562,6 +1739,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"profile   CPU UNAVAILABLE ({exc})")
             else:
                 cpu_profile_observation.update(observed)
+                cpu_profile_observation["anchor_commit"] = current_anchor_commit[0]
                 print(f"profile   CPU {len(observed['hotspots'])} sampled symbols; "
                       f"record {observed['record']}")
             return
@@ -1596,6 +1774,20 @@ def main(argv: list[str] | None = None) -> int:
 
     def should_stop() -> bool:
         return stopping["asked"] or pool.stop_requested(args.store)
+
+    def cpu_measurement_window():
+        return _q3_cpu_gpu_quiet_window(
+            cpu_launch, should_stop=should_stop,
+            on_wait=lambda: publish("running", latest,
+                step="q3 CPU measurement waiting for MI210 GPU item to release"))
+
+    def measured_serving_compare(*args_, **kwargs_):
+        with cpu_measurement_window():
+            return serving.compare(*args_, **kwargs_)
+
+    def measured_serving_calibrate(*args_, **kwargs_):
+        with cpu_measurement_window():
+            return serving.calibrate_floor(*args_, **kwargs_)
 
     anchor_guard_seen: list = []
 
@@ -1932,7 +2124,7 @@ def main(argv: list[str] | None = None) -> int:
         if trigger is None:
             return
         # The gate is being spent -- once, on the whole bundle.
-        sv_row = serving.compare(serving_recipe, cor_build[0], anchor_build[0],
+        sv_row = measured_serving_compare(serving_recipe, cor_build[0], anchor_build[0],
                                  pairs=args.serving_pairs, floor_pct=serving_floor_pct,
                                  floor_unit=serving_floor_unit,
                                  **({"port": direct_launch.port,
@@ -2160,6 +2352,10 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:
             print(f"runtime progress unavailable: {type(exc).__name__}: {exc}", file=sys.stderr)
 
+    lineage_recorded_outcomes = []
+
+    codegen_by_head: dict[str, dict] = {}
+
     def run_pooled() -> pool.PoolResult:
         """Drive the loop across N detached lanes. THE run path -- the sequential
         `loop.run` wiring was deleted 2026-08-31, and the `loop.run` seam itself on
@@ -2210,6 +2406,7 @@ def main(argv: list[str] | None = None) -> int:
                                          base_commit=base, paths=paths)
             evidence = checked.to_dict()
             evidence["evidence_key"] = key
+            evidence["attempt_identity"] = attempt
             candidate_integrity[worker.name] = (checked, key)
             integrity_evidence[key] = evidence
             # loop.py retains this exact mutable mapping on the Outcome. Confirm
@@ -2235,7 +2432,7 @@ def main(argv: list[str] | None = None) -> int:
                 registry.close()
 
         def record_pooled(outcome) -> None:
-            attempt = outcome.to_attempt()
+            attempt = attempt_with_codegen(outcome, codegen_by_head)
             attempt["research_scope"] = archive.original_research_scope(
                 attempt, model=args.model, quant=census.dominant_quant,
                 backend="cpu" if cpu_launch else "gpu", build_recipe=recipe.to_dict(),
@@ -2243,9 +2440,17 @@ def main(argv: list[str] | None = None) -> int:
             if screen_state is not None:
                 attempt["cpu_screen"] = dict(screen_state)
                 attempt["research_scope"]["cpu_screen"] = dict(screen_state)
-            archive.record(args.store, attempt, epoch=epoch,
-                           recorded_at=loop._now(), campaign_id="ak-loop",
-                           on_serving_export=feedback.exported)
+            journal_receipts = []
+            try:
+                archive.record(args.store, attempt, epoch=epoch,
+                               recorded_at=loop._now(), campaign_id="ak-loop",
+                               on_serving_export=feedback.exported,
+                               journal_receipt_out=journal_receipts)
+            finally:
+                # A later markdown/export fault cannot erase an already-committed
+                # row receipt. Missing receipts remain explicit in the sidecar.
+                outcome.journal_receipt = journal_receipts[0] if journal_receipts else None
+                lineage_recorded_outcomes.append(outcome)
             if outcome.attempt_identity is not None:
                 registry = dispatch_guard.Registry(args.store)
                 try:
@@ -2359,6 +2564,24 @@ def main(argv: list[str] | None = None) -> int:
                                          champion_tree=args.worktree,
                                          branch=args.champion_branch,
                                          expected_tree=checked.tree)
+            # The lane build is the exact candidate whose patch was just committed.
+            # Write this immediately: anchor promotion can take 30+ minutes or abort,
+            # but the champion commit already exists. Missing toolchain evidence is
+            # represented explicitly and must never veto that KEEP.
+            try:
+                codegen_by_head[head] = codegen_summary.retain_summary(
+                    args.store, head,
+                    backend="llama_cpu" if cpu_launch else "llama_gpu",
+                    build_dir=worker.build_dir, recipe=recipe.to_dict(),
+                    attempt_identity=evidence["attempt_identity"],
+                    source_tree_oid=_git(worker.worktree, "rev-parse", f"{head}^{{tree}}"))
+            except Exception as exc:  # diagnostics cannot undo an accepted commit
+                codegen_by_head[head] = {
+                    "schema": codegen_summary.SCHEMA, "status": "unavailable",
+                    "authority": "diagnostic_only", "champion_head": head,
+                    "reason": f"codegen sidecar failed: {type(exc).__name__}"}
+                print(f"codegen   unavailable for {head[:12]}: {type(exc).__name__}: {exc}",
+                      file=sys.stderr)
             promote_anchor()
             if source_fold_candidate and patch_path is not None and parent is not None:
                 original_source_keeps.append({
@@ -2433,12 +2656,10 @@ def main(argv: list[str] | None = None) -> int:
     def install_runtime_owner():
         nonlocal direct_launch, cpu_launch, serving_recipe
         from . import runtime_admission, runtime_calibration
-        from .serving_preparation import ServingStatisticsDeclaration
         from ..evaluator import controls
         campaign_id = resolved_campaign.campaign_id if selected_target is not None else "ak-loop"
         statistical = runtime_calibration.declare_statistics(store=runtime_store,
-            campaign_id=campaign_id, epoch=epoch, supplied=None if args.runtime_statistics is None
-            else ServingStatisticsDeclaration.from_dict(_read_cpu_document(args.runtime_statistics)))
+            campaign_id=campaign_id, epoch=runtime_epoch, supplied=runtime_statistical)
         escalation = None if args.runtime_control_escalation is None else controls.OperatorEscalation(
             **_read_cpu_document(args.runtime_control_escalation))
         original = _cpu_arm(direct_launch, anchor_build[0])
@@ -2454,7 +2675,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"runtime recovery unavailable: {exc}", file=sys.stderr)
                 recovery = None
         runtime_owner[0] = runtime_admission.RuntimeAdmission(store=runtime_store,
-            held_claim=original_claims[0], campaign_id=campaign_id, epoch=epoch,
+            held_claim=original_claims[0], campaign_id=campaign_id, epoch=runtime_epoch,
             **({"gpu_claim": original_claims[-1]} if not cpu_launch else {}),
             original=original, prompts=manifest, statistical=statistical,
             host_state={**epoch_inputs, "nominal_khz": args.runtime_nominal_khz},
@@ -2472,12 +2693,12 @@ def main(argv: list[str] | None = None) -> int:
             default_recipe=runtime_owner[0].default.to_dict(),
             selected_recipe=runtime_owner[0].state["selected"],
             statistics=statistical.to_dict(),
-            calibration_launches=4 * statistical.controls.calibration_block_count,
+            calibration_launches=runtime_calibration_launches,
             historical_replay="original backend control owner supplies its separate declared frame")
         runtime_recipe_reference[0] = runtime_owner[0].selection_reference(selected,
             current_source_commit=current_anchor_commit[0], origin=runtime_recipe_reference[0])
         report_runtime_progress()
-        print(f"runtime   optional first-treatment setup: {4 * statistical.controls.calibration_block_count} "
+        print(f"runtime   optional first-treatment setup: {runtime_calibration_launches} "
               "original calibration server launches plus controls; source proposals do not require it")
     held_claim_evidence = None
     held_claim_error = None
@@ -2520,6 +2741,23 @@ def main(argv: list[str] | None = None) -> int:
         finally:
             if original_store is not None:
                 original_store.close()
+
+    def publish_lineage(observed, run_artifact=None):
+        # The write side is retrospective to this run only. It is never an input
+        # to the planner, evaluator, promotion gate, or resource scheduler.
+        try:
+            source_root = Path(__file__).resolve().parents[4]
+            source_revision = subprocess.run(
+                ["git", "-C", str(source_root), "rev-parse", "HEAD"],
+                capture_output=True, text=True, check=True, timeout=5).stdout.strip()
+            lineage_beliefs.publish(
+                args.store, observed, epoch=epoch, anchor_commit=anchor_commit,
+                producer_commit=source_revision,
+                producer_file_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                run_artifact=run_artifact)
+        except Exception as exc:
+            print(f"warning: lineage belief export unavailable: {type(exc).__name__}: "
+                  f"{exc}", file=sys.stderr)
 
     if direct_launch:
         report_runtime_progress()
@@ -2596,7 +2834,8 @@ def main(argv: list[str] | None = None) -> int:
                         print(f"runtime calibration not started: {exc}")
                     else:
                         publish("running", step=f"{direct_launch.backend.upper()} runtime: original anchor A/A and neutral calibration")
-                        preparation, reference = runtime_owner[0].calibration(feedback_anchor[0])
+                        with cpu_measurement_window():
+                            preparation, reference = runtime_owner[0].calibration(feedback_anchor[0])
                         solved = preparation.reopen(reference)
                         runtime_preparation.update(calibration=reference.to_dict(),
                             status="numeric_calibration_accepted" if solved.accepted else "calibration_failed")
@@ -2715,11 +2954,22 @@ def main(argv: list[str] | None = None) -> int:
                             cmake_defines=recipe.cmake_defines(), jobs=build_jobs,
                             cpu_list=build_cpu_list, targets=gates.PROMOTION_TARGETS),
                         lambda: gates.op_correctness(
-                            validation_candidate_build,
+                            validation_candidate_build, op="MUL_MAT",
                             **({"backend": "CPU",
                                 "resolved_recipe": _cpu_arm(
                                     direct_launch, validation_candidate_build)}
                                if direct_launch.backend == "cpu" else {})))
+                    if build_ok and direct_launch.backend == "cpu":
+                        validation_arm = _cpu_arm(direct_launch, validation_candidate_build)
+                        gdn_ok, gdn_verdicts = gates.run_all(
+                            lambda: gates.op_correctness(
+                                validation_candidate_build, op="GATED_DELTA_NET",
+                                backend="CPU", resolved_recipe=validation_arm),
+                            lambda: gates.check_cpu_gdn_reference(
+                                validation_candidate_build, checked_source,
+                                resolved_recipe=validation_arm))
+                        build_ok = gdn_ok
+                        build_verdicts.extend(gdn_verdicts)
                     if not build_ok:
                         validation_gate_failure = {
                             "type": "target_recipe_gate_refused",
@@ -2740,7 +2990,7 @@ def main(argv: list[str] | None = None) -> int:
                 calibration_anchor = (validation_anchor_build
                                       if args.validate_source_continuation else args.anchor_build)
                 calibration_recipe = _cpu_arm(direct_launch, calibration_anchor)
-                calibration = serving.calibrate_floor(
+                calibration = measured_serving_calibrate(
                     serving_recipe, calibration_anchor, samples=calibration_samples,
                     port=direct_launch.port,
                     resolved_recipe=calibration_recipe,
@@ -2804,7 +3054,7 @@ def main(argv: list[str] | None = None) -> int:
                     if serving_floor_pct is None:
                         publish("running", step=(f"{direct_launch.backend.upper()} whole-source "
                                                 "validation: original request-bound calibration"))
-                        calibration = serving.calibrate_floor(
+                        calibration = measured_serving_calibrate(
                             serving_recipe, validation_anchor_build,
                             samples=serving.MATCHED_CALIBRATION_PAIRS if source_instrument else max(2, args.serving_pairs),
                             port=direct_launch.port,
@@ -2825,7 +3075,7 @@ def main(argv: list[str] | None = None) -> int:
                                              "validation: original anchor vs propagated source"))
                     original_launch = _cpu_arm(direct_launch, validation_anchor_build)
                     try:
-                        validation_comparison = serving.compare(
+                        validation_comparison = measured_serving_compare(
                             serving_recipe, validation_anchor_build, validation_candidate_build,
                             pairs=args.serving_pairs, floor_pct=serving_floor_pct,
                             floor_unit=serving_floor_unit,
@@ -2955,6 +3205,13 @@ def main(argv: list[str] | None = None) -> int:
                 "noise_floor_pct": floor, "elapsed_s": round(elapsed, 1),
                 "workers": args.workers,
                 "iterations": [outcome.to_attempt() for outcome in outcomes],
+                # Ordered completion points, not a proposed/adaptive policy. The
+                # same facts are captured in each attempt's durable journal row.
+                "width_depth_trajectory": [
+                    {"spawn_parent": outcome.spawn_parent,
+                     "branch_id": outcome.branch_id,
+                     "width": outcome.width, "depth": outcome.depth}
+                    for outcome in outcomes],
                 "phase_seconds": pooled_body.pop("phase_lane_seconds"),
                 "phase_seconds_are_lane_seconds": True,
                 "pool": pooled_body,
@@ -2969,6 +3226,11 @@ def main(argv: list[str] | None = None) -> int:
                     cor_commit=serial_run.full_commit(args.worktree, cor_commit[0])
                     if not experimental else None,
                     **({"cpu_screen": screen_state} if screen_state is not None else {}),
+                    **({"cpu_profile_reference": serial_run.cpu_profile_reference(
+                        cpu_profile_observation, store=args.store,
+                        anchor_commit=current_anchor_commit[0],
+                        scope=(screen_state or {}).get("scope", "full"))}
+                       if cpu_profile_observation.get("status") == "observed" else {}),
                     **({"experimental_source_keeps": keep_references}
                        if keep_references else {}),
                     **({"source_lineage_keeps": source_lineage_references + keep_references}
@@ -2993,8 +3255,16 @@ def main(argv: list[str] | None = None) -> int:
                     "floor_request_digest": floor_request_digest} if direct_launch else {}),
             }
             status.write_json(args.out, "loop-run.json", body, prefix=".loop-run-")
+        # Reporting only: a failed sidecar cannot change a measured outcome or
+        # relaunch a candidate, and absence of a receipt cannot be graded on read.
+        publish_lineage(outcomes, args.out / "loop-run.json" if args.out else None)
     except BaseException as exc:
         publish_held_claims()
+        # An interrupted pooled run can have durable journal rows without a
+        # terminal loop-run.json. Capture those exact committed rows, never a
+        # reconstructed result or a synthetic zero-rate claim.
+        if lineage_recorded_outcomes:
+            publish_lineage(lineage_recorded_outcomes)
         # Starting, claim acquisition, reprofiling, and the run body all terminate
         # through the same ordered lifecycle. A failed status write cannot mask `exc`.
         status_publisher.close_failed(

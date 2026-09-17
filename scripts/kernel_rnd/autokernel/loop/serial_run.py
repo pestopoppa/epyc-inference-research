@@ -23,6 +23,7 @@ from . import campaign_cli, champion, legacy_targets, status, worker_lifecycle
 CONTINUATION_SCHEMA = "epyc.autokernel.loop_continuation.v1"
 CONTINUATION_SCHEMA_V2 = "epyc.autokernel.loop_continuation.v2"
 HELD_REFERENCE_SCHEMA = "epyc.autokernel.direct_held_reference.v1"
+CPU_PROFILE_REFERENCE_SCHEMA = "epyc.autokernel.loop_cpu_profile_reference.v1"
 SERIAL_SCHEMA = "epyc.autokernel.serial_run.v1"
 CURRENT_SERIAL_RUN_SCHEMA = "epyc.autokernel.current_serial_run.v1"
 CURRENT_SERIAL_RUN_POINTER = Path("/mnt/raid0/llm/autokernel/loop-memory/current-serial-run.json")
@@ -307,6 +308,67 @@ def _runtime_recipe_reference(value):
     return {"locator": value["locator"], "sha256": value["sha256"], "verified": True}
 
 
+def cpu_profile_reference(observation, *, store, anchor_commit, scope):
+    """Bind an observed profile to its original source/launch for the next batch."""
+    if not isinstance(observation, dict) or observation.get("status") != "observed":
+        return None
+    # A keep may advance the anchor after this profile was collected. Never
+    # misattribute the old binary's observation to the newly kept commit.
+    if observation.get("anchor_commit") != anchor_commit:
+        return None
+    # Synthetic callers may supply a planning-only observation without an original
+    # artifact. It remains visible to that batch, but cannot be reused as evidence.
+    if not all(observation.get(key) for key in ("record", "record_sha256",
+            "execution_digest", "prompt_manifest_digest")):
+        return None
+    path = Path(observation["record"])
+    expected = (Path(store) / "cpu-profiles").resolve()
+    if not path.is_absolute() or path.parent.resolve() != expected:
+        raise SerialRefused("CPU profile record is outside its original store")
+    value = {"schema": CPU_PROFILE_REFERENCE_SCHEMA,
+        "record": {"locator": path.name, "sha256": observation["record_sha256"],
+                   "verified": True},
+        "anchor_commit": anchor_commit,
+        "execution_digest": observation["execution_digest"],
+        "prompt_manifest_digest": observation["prompt_manifest_digest"],
+        "scope": scope}
+    return _cpu_profile_reference(value, store=store, anchor_commit=anchor_commit,
+                                  scope=scope)
+
+
+def _cpu_profile_reference(value, *, store, anchor_commit, scope):
+    """Check a bounded original record, without turning it into a performance claim."""
+    if not isinstance(value, dict) or set(value) != {"schema", "record", "anchor_commit",
+            "execution_digest", "prompt_manifest_digest", "scope"} \
+            or value["schema"] != CPU_PROFILE_REFERENCE_SCHEMA \
+            or value["anchor_commit"] != anchor_commit \
+            or value["scope"] != scope or scope not in {"full", "half", "quarter",
+                                                   "full_confirmation"}:
+        raise SerialRefused("CPU profile continuation identity differs")
+    for key in ("anchor_commit", "execution_digest", "prompt_manifest_digest"):
+        digest = value[key]
+        expected_length = 40 if key == "anchor_commit" else 64
+        if not isinstance(digest, str) or len(digest) != expected_length \
+                or any(char not in "0123456789abcdef" for char in digest):
+            raise SerialRefused("CPU profile continuation digest is malformed")
+    record = value["record"]
+    if not isinstance(record, dict) or set(record) != {"locator", "sha256", "verified"} \
+            or record["verified"] is not True \
+            or not isinstance(record["locator"], str) \
+            or Path(record["locator"]).name != record["locator"] \
+            or not record["locator"].endswith(".json") \
+            or not isinstance(record["sha256"], str) or len(record["sha256"]) != 64 \
+            or any(char not in "0123456789abcdef" for char in record["sha256"]):
+        raise SerialRefused("CPU profile record reference is malformed")
+    path = Path(store) / "cpu-profiles" / record["locator"]
+    body, sha = _json(path, limit=2 * 1024 * 1024)
+    if sha != record["sha256"] or not isinstance(body, dict) \
+            or body.get("schema") != "epyc.autokernel.loop_cpu_profile.v1" \
+            or not isinstance(body.get("capture"), dict):
+        raise SerialRefused("CPU profile original record changed")
+    return {**value, "record": dict(record)}
+
+
 def last_outcome_reference(outcomes, *, store):
     """Point to the last completed outcome's EXISTING artifacts, not the batch."""
     if not outcomes or outcomes[-1].comparison is None:
@@ -484,6 +546,7 @@ def _source_lineage_matches(row, receipts, validation_body=None):
 def continuation(*, argv, binding, terminal, worktree, branch, model, selected_target,
                  anchor_build, anchor_commit, iterations_requested, outcomes,
                  cor_build=None, cor_commit=None, held_claim_evidence=None, cpu_screen=None,
+                 cpu_profile_reference=None,
                  runtime_recipe_reference=None, experimental_source_keeps=None,
                  source_validation=None, source_lineage_keeps=None,
                  last_outcome_reference=None, source_loo=None) -> dict:
@@ -505,6 +568,12 @@ def continuation(*, argv, binding, terminal, worktree, branch, model, selected_t
     if cpu_screen is not None:
         from .cpu_screen import routing
         row["cpu_screen"] = routing(cpu_screen, argv)
+    if cpu_profile_reference is not None:
+        if option(argv, "--cpu-serving-launch") is None:
+            raise SerialRefused("CPU profile continuation requires a CPU serving target")
+        row["cpu_profile_reference"] = _cpu_profile_reference(cpu_profile_reference,
+            store=option(argv, "--store"), anchor_commit=anchor_commit,
+            scope=(row.get("cpu_screen") or {}).get("scope", "full"))
     if runtime_recipe_reference is not None:
         row["runtime_recipe_reference"] = _runtime_recipe_reference(
             runtime_recipe_reference)
@@ -561,6 +630,8 @@ def load_completed(path: Path, *, expected_argv=None, expected_binding=None):
                        else _CONTINUATION_FIELDS)
     if isinstance(row, dict) and "cpu_screen" in row:
         expected_fields = expected_fields | {"cpu_screen"}
+    if isinstance(row, dict) and "cpu_profile_reference" in row:
+        expected_fields = expected_fields | {"cpu_profile_reference"}
     if isinstance(row, dict) and "runtime_recipe_reference" in row:
         expected_fields = expected_fields | {"runtime_recipe_reference"}
     if isinstance(row, dict) and "experimental_source_keeps" in row:
@@ -595,6 +666,12 @@ def load_completed(path: Path, *, expected_argv=None, expected_binding=None):
             raise SerialRefused("pending screen candidate lacks its original completed provisional outcome")
     elif option(argv, "--cpu-screen-scope") or option(argv, "--cpu-confirm-from"):
         raise SerialRefused("CPU screen result omitted its original scope")
+    if "cpu_profile_reference" in row:
+        if option(argv, "--cpu-serving-launch") is None:
+            raise SerialRefused("CPU profile continuation is not a CPU serving result")
+        row["cpu_profile_reference"] = _cpu_profile_reference(row["cpu_profile_reference"],
+            store=option(argv, "--store"), anchor_commit=row["current_anchor"]["commit"],
+            scope=(row.get("cpu_screen") or {}).get("scope", "full"))
     if "runtime_recipe_reference" in row:
         row["runtime_recipe_reference"] = _runtime_recipe_reference(
             row["runtime_recipe_reference"])
@@ -1105,8 +1182,6 @@ def main(argv=None) -> int:
                 and args.resolved_campaign is None:
             raise SerialRefused("source validation priorities require scheduled serial mode")
         if args.scheduler_manifest is not None:
-            if args.batch_iterations != 1:
-                raise SerialRefused("scheduled serial mode requires one iteration per child")
             from . import serial_scheduling
             manifest_body, _manifest_sha = _json(args.scheduler_manifest, limit=256 * 1024)
             scheduler_manifest = serial_scheduling.SerialSchedulerManifest.from_dict(manifest_body)
@@ -1118,6 +1193,8 @@ def main(argv=None) -> int:
                 targets, args.resolved_campaign, args.rounds)
             serial_scheduling.validate_target_bindings(
                 scheduler_manifest, _scheduler_bindings(targets))
+        if scheduler_manifest is not None and args.batch_iterations != 1:
+            raise SerialRefused("scheduled serial mode requires one iteration per child")
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
     if args.retention_plan_only:

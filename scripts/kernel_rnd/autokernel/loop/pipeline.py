@@ -222,7 +222,22 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
 
     def lane(worker: Worker) -> None:
         planner, critic = make_planner(worker), make_critic(worker)
+        depth = 0
+        base: str | None = None
+
+        def keep_lane(outcome: loop_mod.Outcome) -> None:
+            # A lane is detached, so this is a logical branch identifier rather
+            # than an invented Git ref. The parent is the commit actually returned
+            # by reset_to_champion for this draw, not a later champion snapshot.
+            outcome.spawn_parent = base
+            outcome.branch_id = f"detached:{worker.name}"
+            outcome.width = len(workers)
+            outcome.depth = depth
+            keep(outcome)
+
         while budget.take():
+            depth += 1
+            base = None
             reservation = None
             # INSIDE the try. This sat outside it, so a failure here killed the whole
             # thread rather than costing one iteration -- run 16 lost four of seven
@@ -231,7 +246,7 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
             try:
                 base = reset_to_champion(worker)
             except Exception as exc:      # noqa: BLE001
-                keep(loop_mod.Outcome(
+                keep_lane(loop_mod.Outcome(
                     "lane_error", None,
                     [f"lane {worker.name} could not reach the champion: "
                      f"{type(exc).__name__}: {exc}",
@@ -255,12 +270,14 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                     on_step(_w.name, label)
 
             def record_reschedule(invalid):
+                nonlocal depth
                 # The first draw belongs to the original invalid attempt. A
                 # reschedule consumes the NEXT draw, and its result uses the
                 # ordinary keep(outcome) below. Never reset the retained lane.
                 if not budget.take():
                     return False
-                keep(invalid)  # durable before the next owned server is launched
+                keep_lane(invalid)  # durable before the next owned server is launched
+                depth += 1
                 return True
 
             try:
@@ -313,7 +330,7 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                 outcome.attempt_identity = reservation.identity
                 outcome.exact_repeat_dispatch_count = reservation.dispatch_count
                 outcome.candidate_diff_sha256 = reservation.candidate_diff_sha256
-            keep(outcome)
+            keep_lane(outcome)
 
     threads = [threading.Thread(target=lane, args=(w,), name=w.name, daemon=True)
                for w in workers]

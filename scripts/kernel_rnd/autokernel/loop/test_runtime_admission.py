@@ -6,6 +6,7 @@ capture, correctness, ControlHarness, sequential reducer and retained selection.
 They are not qualified hardware measurements.
 """
 from dataclasses import replace
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -198,6 +199,46 @@ def test_connected_measured_panel_keep_and_reopen_no_relaunch(tmp_path, monkeypa
             changed.setattr(admission, "_outputs", lambda *args: {})
             with pytest.raises(rc.RuntimeCalibrationRefused, match="source/original frame"):
                 reopened.selected()
+    finally:
+        store.close()
+
+
+def test_nonprefix_campaign_uses_original_owned_runtime_frame(tmp_path, monkeypatch):
+    pair, store, _counter, make_owner = installed_fixture(
+        tmp_path, monkeypatch, campaign_id="glm-5.3-flash-runtime")
+    try:
+        with original_claim(tmp_path / "private.lock") as holder:
+            owner = make_owner(holder)
+            assert owner.campaign_id == "glm-5.3-flash-runtime"
+            assert owner.selected() == pair.anchor
+            row = owner.compare(pair)
+            assert row["decisive"] is True
+            assert row["control_panel"]["may_rank"] is True
+            assert owner.statistical.commitment.campaign_id == owner.campaign_id
+            state = json.loads((store.root / owner.state_name).read_text())
+            assert state["scope"] == owner.scope == rc._digest({
+                "campaign": owner.campaign_id, "epoch": owner.epoch,
+                "recipe": pair.anchor.to_dict(), "prompts": owner.prompts.to_dict(),
+                "statistics": owner.statistical.to_dict()})
+            assert row["evaluation"]["campaign_id"].startswith("ak-runtime-")
+            namespace = hashlib.sha256(b"direct-runtime-evaluation").hexdigest()
+            events = [json.loads(path.read_text()) for path in
+                      store.root.glob(f"{namespace}-*.json")]
+            assert events
+            for event in events:
+                join = event["campaign_join"]
+                assert join["parent_campaign_id"] == "glm-5.3-flash-runtime"
+                assert join["evaluator_campaign_id"] == row["evaluation"]["campaign_id"]
+                assert event["event"]["campaign_id"] == join["evaluator_campaign_id"]
+                original = admission._read(store, "direct-runtime-window-result",
+                                           event["original_window"])
+                declared = admission._read(store, "direct-pair-window", original["window"])
+                frame = declared["frame"]
+                assert frame["campaign_id"] == owner.campaign_id
+                assert join["original_window_frame_sha256"] == rc._digest(frame)
+            with pytest.raises(rc.RuntimeCalibrationRefused, match="subcampaign differs"):
+                admission._evaluation_campaign_join("foreign-campaign", "fixture",
+                    {"campaign_id": owner.campaign_id, "epoch": owner.epoch})
     finally:
         store.close()
 

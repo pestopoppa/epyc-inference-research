@@ -7,7 +7,7 @@ import unittest
 from unittest import mock
 from types import SimpleNamespace
 
-from autokernel.loop import archive, gates
+from autokernel.loop import archive, gates, gdn_reference
 
 
 def _function_node(source, name):
@@ -195,7 +195,8 @@ class AnOracleThatCannotRunIsNotAFailedPatch(unittest.TestCase):
         self.assertNotIn("MUL_MAT failed", verdict.reason)
 
     def test_a_real_failure_is_still_a_correctness_verdict(self):
-        ran = "  1100/1139 tests passed\n  Backend ROCm0: FAIL\n1/2 backends passed\n"
+        ran = ("Backend 1/2: ROCm0\n  1100/1139 tests passed\n"
+               "  Backend ROCm0: FAIL\n1/2 backends passed\n")
         with mock.patch.object(Path, "is_file", return_value=True), \
                 self._fake_run(ran, 1):
             verdict = gates.op_correctness(Path("/nonexistent"))
@@ -204,7 +205,8 @@ class AnOracleThatCannotRunIsNotAFailedPatch(unittest.TestCase):
         self.assertIn("MUL_MAT failed", verdict.reason)
 
     def test_a_pass_requires_proof_the_suite_executed(self):
-        ran = "  1139/1139 tests passed\n2/2 backends passed\nOK\n"
+        ran = ("Backend 1/2: ROCm0\n  1139/1139 tests passed\n"
+               "  Backend ROCm0: \033[1;32mOK\033[0m\n2/2 backends passed\nOK\n")
         with mock.patch.object(Path, "is_file", return_value=True), \
                 self._fake_run(ran, 0):
             self.assertTrue(gates.op_correctness(Path("/nonexistent")).passed)
@@ -217,18 +219,123 @@ class AnOracleThatCannotRunIsNotAFailedPatch(unittest.TestCase):
         self.assertFalse(verdict.passed)
         self.assertEqual(verdict.gate, "oracle_unavailable")
 
-    def test_the_unsupported_flag_is_gone_from_the_INVOCATION(self):
-        """The docstring still names the flag on purpose -- it records the defect.
-        What must not contain it is the argv actually handed to the binary."""
-        import inspect
-        body = inspect.getsource(gates.op_correctness)
-        body = body.split('"""', 2)[-1]          # drop the docstring
-        self.assertIn("argv = [", body)
-        self.assertNotIn("--suite-seed", body)
+    def test_other_backend_or_zero_target_cases_cannot_pass(self):
+        for output in (
+            "Backend 1/1: CPU\n  3/3 tests passed\n  Backend CPU: OK\n1/1 backends passed\n",
+            "Backend 1/2: ROCm0\n  0/0 tests passed\n  Backend ROCm0: OK\n2/2 backends passed\n",
+        ):
+            with mock.patch.object(Path, "is_file", return_value=True), \
+                    self._fake_run(output, 0):
+                verdict = gates.op_correctness(Path("/nonexistent"), op="GATED_DELTA_NET")
+            self.assertEqual(verdict.gate, "oracle_unavailable")
+
+
+class AffectedOpAndIndependentReference(unittest.TestCase):
+    def test_cpu_gdn_route_has_independent_reference(self):
+        source = "// ggml_compute_forward_gated_delta_net\nold\nnew\n// ggml_compute_forward_next\n"
+        patch = "@@ -2 +2 @@\n-old\n+new\n"
+        self.assertEqual(gates.affected_op_scope(
+            ("ggml/src/ggml-cpu/ops.cpp",),
+            target_surface="ggml/src/ggml-cpu/ops.cpp",
+            target_symbol="ggml_compute_forward_gated_delta_net_f32",
+            source_text=source, patch_text=patch),
+            ("GATED_DELTA_NET",))
+        self.assertFalse(gates.affected_op_scope(
+            ("ggml/src/ggml-cpu/ops.cpp",),
+            target_surface="ggml/src/ggml-cpu/ops.cpp",
+            target_symbol="ggml_compute_forward_gated_delta_net_f32",
+            source_text=source, patch_text="@@ -4 +4 @@\n-old\n+new\n").passed)
+
+    def test_cuda_gdn_and_vecdot_routes(self):
+        self.assertEqual(gates.affected_op_scope(
+            ("ggml/src/ggml-cuda/gated_delta_net.cu",),
+            target_surface="ggml/src/ggml-cuda/gated_delta_net.cu",
+            target_symbol="gated_delta_net_cuda"), ("GATED_DELTA_NET",))
+        self.assertEqual(gates.affected_op_scope(
+            ("ggml/src/ggml-cuda/vecdotq.cuh",),
+            target_surface="ggml/src/ggml-cuda/vecdotq.cuh",
+            target_symbol="vec_dot_q5_0_q8_1_impl"), ("MUL_MAT", "MUL_MAT_ID"))
+        for path, symbol in (("ggml/src/ggml-cuda/mmvq.cu", "vec_dot_q4_K_q8_1"),
+                             ("ggml/src/ggml-cuda/mmq.cu", "ggml_cuda_should_use_mmq")):
+            self.assertEqual(gates.affected_op_scope(
+                (path,), target_surface=path, target_symbol=symbol),
+                ("MUL_MAT", "MUL_MAT_ID"))
+
+    def test_unknown_and_shared_source_refuse(self):
+        for paths in (("ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp",),
+                      ("ggml/src/ggml-cpu/ops.cpp", "ggml/src/ggml-cpu/ggml-cpu.c")):
+            verdict = gates.affected_op_scope(
+                paths, target_surface=paths[0],
+                target_symbol="ggml_compute_forward_gated_delta_net_f32")
+            self.assertIsInstance(verdict, gates.Verdict)
+            self.assertFalse(verdict.passed)
+
+    def test_cpu_quant_routes_refuse_before_build_without_edited_case_reference(self):
+        for path, symbol in (("ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp", "iqk_mul_mat"),
+                             ("ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp", "iqk_gemm"),
+                             ("ggml/src/ggml-cpu/arch/x86/quants.c",
+                              "ggml_vec_dot_q8_0_q8_0")):
+            verdict = gates.affected_op_scope(
+                (path,), target_surface=path, target_symbol=symbol)
+            self.assertIsInstance(verdict, gates.Verdict)
+            self.assertFalse(verdict.passed)
+
+    def test_cpu_iqk_moe_rows_route_requires_actual_function_body_hunks(self):
+        source = ('extern "C" IQK_API bool iqk_mul_mat_moe_rows(long n) {\n'
+                  '    changed();\n}\n'
+                  'extern "C" IQK_API bool iqk_moe_fused_up_gate(long n) {\n'
+                  '    sibling();\n}\n')
+        path = "ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp"
+        scope = gates.affected_op_scope(
+            (path,), target_surface=path, target_symbol="iqk_mul_mat_moe_rows",
+            source_text=source, patch_text="@@ -2 +2 @@\n-old\n+changed();\n")
+        self.assertEqual(scope, ("MUL_MAT_ID",))
+        for patch in ("@@ -4 +4 @@\n-old\n+sibling();\n",
+                      "@@ -1 +1 @@\n-old\n+extern foo\n", ""):
+            refused = gates.affected_op_scope(
+                (path,), target_surface=path, target_symbol="iqk_mul_mat_moe_rows",
+                source_text=source, patch_text=patch)
+            self.assertIsInstance(refused, gates.Verdict)
+            self.assertFalse(refused.passed)
+
+    def test_cpu_iqk_reference_distinguishes_wrong_and_unavailable(self):
+        from autokernel.loop import iqk_witness
+        for status, gate in (("pass", "reference_comparison"),
+                             ("wrong", "reference_comparison"),
+                             ("unavailable", "oracle_unavailable")):
+            with mock.patch.object(iqk_witness, "check",
+                    return_value=iqk_witness.Result(status, "reason", "detail")):
+                verdict = gates.check_cpu_iqk_reference(
+                    Path("/build"), Path("/source"), resolved_recipe=object())
+            self.assertEqual(verdict.gate, gate)
+            self.assertEqual(verdict.passed, status == "pass")
+
+    def test_wrong_vs_unavailable_reference_are_distinct(self):
+        for status, gate in (("pass", "reference_comparison"),
+                             ("wrong", "reference_comparison"),
+                             ("unavailable", "oracle_unavailable")):
+            with mock.patch.object(gdn_reference, "check_cpu_gdn",
+                    return_value=gdn_reference.GDNResult(status, "reason", "detail")):
+                verdict = gates.check_cpu_gdn_reference(Path("/build"), Path("/source"))
+            self.assertEqual(verdict.gate, gate)
+            self.assertEqual(verdict.passed, status == "pass")
+
+    def test_default_invocation_does_not_use_optional_metric_flags(self):
+        """Legacy instrument compatibility remains the default route."""
+        output = ("Testing 1 devices\n\nBackend 1/1: ROCm0\n"
+                  "  MUL_MAT(type=f32): OK\n  1/1 tests passed\n"
+                  "  Backend ROCm0: OK\n1/1 backends passed\nOK\n")
+        with mock.patch.object(Path, "is_file", return_value=True), \
+             mock.patch.object(gates.residency, "loader_env", return_value={}), \
+             mock.patch.object(gates.subprocess, "run", return_value=mock.Mock(
+                 returncode=0, stdout=output, stderr="")) as invoke:
+            self.assertTrue(gates.op_correctness(Path("/build")).passed)
+        argv = invoke.call_args.args[0]
+        self.assertNotIn("--suite-seed", argv)
+        self.assertNotIn("--autokernel-properties", argv)
 
     def test_the_invocation_is_the_one_proven_to_work_on_the_anchor(self):
-        """`test-backend-ops test -o MUL_MAT -b ROCm0 -j 1` exits 0 on the anchor;
-        adding --suite-seed makes it exit 1. Pin the proven form."""
+        """The original op-selection argv remains the default form."""
         import inspect
         body = inspect.getsource(gates.op_correctness).split('"""', 2)[-1]
         for token in ('"test"', '"-o", op', '"-b", backend', '"-j", "1"'):
@@ -487,7 +594,7 @@ class TwoTierChampionWiring(unittest.TestCase):
         src = self._source()
         accum = src.split("def _accumulate_after_keep(", 1)[1].split("\n    def ", 1)[0]
         # the serving A-arm is the champion-of-record build, B-arm the accumulator anchor
-        self.assertIn("serving.compare(serving_recipe, cor_build[0], anchor_build[0]", accum)
+        self.assertIn("measured_serving_compare(serving_recipe, cor_build[0], anchor_build[0]", accum)
         # it fires only on a named trigger (R23-54: threshold OR the 4-keep cadence), and
         # the trigger is recorded — never left for a reader to infer from the compounded
         # number the 2026-09-08 divergence discredited.

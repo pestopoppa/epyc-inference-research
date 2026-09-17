@@ -228,6 +228,21 @@ class PlannerContract(unittest.TestCase):
         self.assertIsInstance(got, actors.Abstain)
         self.assertEqual(got.reason, "profile has no reachable hot path")
 
+    def test_unconfigured_runtime_treatment_is_not_a_provider_transient(self):
+        planner = actors.AgentPlanner(workspace=Path("/tmp"))
+        context = {"target": {"resource_class": "cpu"},
+                   "runtime_preparation": {"status": "unavailable",
+                       "reason": "explicit prospective statistics are missing"}}
+        payload = ('{"mechanism_id": "akm-threads", "statement": "s", '
+                   '"falsifier": "f", "target_surface": "threads", '
+                   '"target_symbol": "threads", '
+                   '"runtime_treatment": {"kind": "threads", "candidate": 32}}')
+        with mock.patch.object(actors, "_run_agent", return_value=payload) as invoked:
+            got = planner.propose(context)
+        self.assertIsInstance(got, actors.Abstain)
+        self.assertIn("explicit prospective statistics", got.reason)
+        self.assertNotIn("Alternatively propose ONE runtime treatment", invoked.call_args.args[0])
+
     def test_reasonless_abstention_is_a_malformed_provider_reply(self):
         planner = actors.AgentPlanner(workspace=Path("/tmp"))
         with mock.patch.object(actors, "_run_agent", return_value='{"abstain": ""}'):

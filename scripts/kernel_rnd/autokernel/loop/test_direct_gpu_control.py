@@ -37,7 +37,7 @@ def available(monkeypatch):
 
 def invoke(store, pair, **kwargs):
     return owner.run_or_reopen(store=store, held_claim=pair[0], gpu_claim=pair[1],
-        campaign_id="ak-gpu-control-fixture", window_index=0,
+        campaign_id=kwargs.pop("campaign_id", "ak-gpu-control-fixture"), window_index=0,
         statistical=kwargs.pop("statistical", statistics()), **kwargs)
 
 
@@ -106,6 +106,21 @@ def test_missing_control_setup_emits_original_observation_and_pure_reopen(tmp_pa
         monkeypatch.setattr(pair[0], "observe", forbidden)
         assert invoke(store, pair, reference=reference.to_dict())[2] == reference
         monkeypatch.undo()
+
+
+def test_nonprefix_gpu_campaign_is_receipt_bound_and_blank_refused(tmp_path, monkeypatch):
+    available(monkeypatch)
+    monkeypatch.setattr(owner, "require_available",
+                        lambda **kwargs: (_ for _ in ()).throw(
+                            owner.GpuControlRefused("synthetic missing GPU instrument")))
+    with closing(ArtifactStore(tmp_path / "artifacts")) as store, claims(tmp_path) as pair:
+        _, _, ref = invoke(store, pair, campaign_id="gpu-serving-runtime")
+        assert invoke(store, pair, campaign_id="gpu-serving-runtime",
+                      reference=ref.to_dict())[2] == ref
+        with pytest.raises(owner.GpuControlRefused, match="campaign"):
+            invoke(store, pair, campaign_id="other-runtime", reference=ref.to_dict())
+        with pytest.raises(owner.GpuControlRefused, match="campaign/window identity"):
+            invoke(store, pair, campaign_id=" ")
 
 
 def synthetic_bench(tmp_path, monkeypatch, *, fail_once=None, native_failure=False):

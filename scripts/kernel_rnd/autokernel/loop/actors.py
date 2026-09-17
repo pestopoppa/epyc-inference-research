@@ -326,6 +326,29 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
                 for rank, row in enumerate(ranked[:limit], 1):
                     lines.append(f"| {rank} | {row['sampled_period_fraction'] * 100:.2f}% | "
                                  f"`{row['family']}` | {row['evidence_kind']} |")
+            locations = observation.get("location_attribution")
+            if locations:
+                lines.append("")
+                lines.append("### Where sampled threads executed")
+                lines.append("These are user-cycle sample periods on sampled execution CPUs. They do "
+                             "not measure remote-memory traffic, completed work per thread, "
+                             "wall-time imbalance, or a causal NUMA penalty.")
+                lines.append(f"Active TIDs: {locations['active_tid_count']} of "
+                             f"{locations['sampled_tid_count']} sampled (activity cutoff "
+                             f"{locations['active_period_cutoff']:.0f} periods).")
+                lines.append("| execution NUMA node | sampled-period share | sync fraction within node |")
+                lines.append("|---|---|---|")
+                for row in locations["execution_nodes"][:limit]:
+                    lines.append(f"| {row['numa_node']} | "
+                                 f"{row['sampled_period_fraction'] * 100:.2f}% | "
+                                 f"{row['sync_fraction_within_node'] * 100:.2f}% |")
+                lines.append("Low/high synchronization-fraction active TIDs (descriptive extremes):")
+                lines.append("| TID | sampled CPUs | execution nodes | sync fraction |")
+                lines.append("|---|---|---|---|")
+                for row in locations["low_high_sync_threads"][:limit]:
+                    lines.append(f"| {row['tid']} | {row['sampled_cpus']} | "
+                                 f"{row['execution_nodes']} | "
+                                 f"{row['sync_fraction_within_tid'] * 100:.2f}% |")
             lines.extend(observation.get("limitations", []))
         else:
             lines.append(f"CPU profile {observation.get('status')}: "
@@ -634,6 +657,10 @@ class AgentPlanner:
                        "the runtime field. The host derives the original anchor value and validates "
                        "the sole difference; do not author a patch for a runtime treatment.")
             prompt += "\nInstalled runtime_env_keys: " + json.dumps(context.get("runtime_env_keys", []))
+            if context.get("runtime_observation_only"):
+                prompt += ("\nRuntime treatments here are observation-only diagnostics. "
+                           "Their A/B result cannot select a recipe, keep a candidate, "
+                           "or establish a causal explanation for a sampled hotspot.")
         raw, streak = _with_backoff(
             lambda: _run_agent(prompt, workspace=self.workspace,
                                timeout_s=self.timeout_s, backend=self.backend))
@@ -642,6 +669,10 @@ class AgentPlanner:
         abstention = _abstention(body)
         if abstention is not None:
             return abstention
+        if "runtime_treatment" in body and context.get("runtime_anchor") is None:
+            preparation = context.get("runtime_preparation") or {}
+            return Abstain("runtime treatment unavailable before authoring: "
+                + str(preparation.get("reason") or "no prospective runtime frame is installed"))
         missing = {"mechanism_id", "statement", "falsifier", "target_surface",
                    "target_symbol"} - set(body)
         if missing:

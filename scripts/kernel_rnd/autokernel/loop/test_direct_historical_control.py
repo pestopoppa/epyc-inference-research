@@ -32,7 +32,7 @@ def held(tmp_path, cpu_list="0-95"):
 
 def invoke(store, claim, **kwargs):
     return owner.run_or_reopen(store=store, held_claim=claim,
-        campaign_id="ak-test-historical-original", window_index=0, **kwargs)
+        campaign_id=kwargs.pop("campaign_id", "ak-test-historical-original"), window_index=0, **kwargs)
 
 
 def forbidden(*args, **kwargs):
@@ -71,6 +71,19 @@ def test_missing_caller_reference_reopens_original_result_without_reissuing(tmp_
         original = invoke(store, claim)
         assert invoke(store, claim)[2] == original[2]
         assert len(list(store.root.glob("historical-control-*"))) == 1
+
+
+def test_nonprefix_historical_campaign_is_receipt_bound_and_blank_refused(tmp_path, monkeypatch):
+    store = ArtifactStore(tmp_path / "artifacts")
+    monkeypatch.setattr(owner.lc, "INSTRUMENT_BINARY", tmp_path / "absent" / "llama-bench")
+    with held(tmp_path) as claim:
+        _, _, ref = invoke(store, claim, campaign_id="glm-5.3-flash-runtime")
+        assert invoke(store, claim, campaign_id="glm-5.3-flash-runtime",
+                      reference=ref.to_dict())[2] == ref
+        with pytest.raises(owner.HistoricalControlRefused, match="campaign"):
+            invoke(store, claim, campaign_id="other-runtime", reference=ref.to_dict())
+        with pytest.raises(owner.HistoricalControlRefused, match="campaign identity"):
+            invoke(store, claim, campaign_id=" ")
 
 
 @pytest.mark.parametrize("change", ["campaign", "window", "frame", "source"])

@@ -595,7 +595,7 @@ def run_or_reopen(*, store, held_claim, campaign_id, window_index, reference=Non
     """Installed runtime consumer entrypoint; replay never executes work."""
     if type(store) is not ArtifactStore or type(held_claim) is not HeldCpuClaim:
         raise TypeError("historical control requires the original store and acquired CPU context")
-    if type(campaign_id) is not str or not campaign_id.startswith("ak-"):
+    if type(campaign_id) is not str or not campaign_id.strip():
         raise HistoricalControlRefused("historical control requires the original campaign identity")
     if type(window_index) is not int or window_index < 0:
         raise HistoricalControlRefused("historical control window index must be nonnegative")

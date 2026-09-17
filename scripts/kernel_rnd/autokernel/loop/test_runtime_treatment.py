@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import socket
 from types import SimpleNamespace
+from unittest import mock
 
 import pytest
 
@@ -104,6 +105,36 @@ def test_planner_binds_candidate_to_original_context(tmp_path):
 def test_actual_main_cpu_runtime_five_iterations_no_source_change():
     from .test_existing_cpu_run import test_existing_main_cpu_five_iterations_preserves_canonical_champion
     test_existing_main_cpu_five_iterations_preserves_canonical_champion(False, runtime_only=True)
+
+
+def test_full_cpu_without_statistics_probes_but_never_keeps():
+    from .test_existing_cpu_run import test_existing_main_cpu_five_iterations_preserves_canonical_champion
+    test_existing_main_cpu_five_iterations_preserves_canonical_champion(
+        False, runtime_only=True, runtime_declaration=False)
+
+
+def test_reduced_cpu_screen_never_exposes_runtime_probe(tmp_path):
+    pair, _, _ = _fixture(tmp_path)
+    assert run._runtime_serving_capable(pair.anchor, None,
+        screen_scope=None, confirm_from=None)
+    assert not run._runtime_serving_capable(pair.anchor, None,
+        screen_scope="half", confirm_from=None)
+    assert not run._runtime_serving_capable(pair.anchor, None,
+        screen_scope=None, confirm_from="prior-batch")
+
+
+def test_observation_only_planner_prompt_names_non_admission(tmp_path):
+    pair, _, _ = _fixture(tmp_path)
+    planner = actors.AgentPlanner(workspace=tmp_path)
+    context = {"target": {"resource_class": "cpu"},
+               "runtime_anchor": pair.anchor.to_dict(),
+               "runtime_env_keys": [], "runtime_observation_only": True}
+    with mock.patch.object(actors, "_run_agent",
+                           return_value='{"abstain": "no honest treatment"}') as invoked:
+        assert isinstance(planner.propose(context), actors.Abstain)
+    prompt = invoked.call_args.args[0]
+    assert "Alternatively propose ONE runtime treatment" in prompt
+    assert "cannot select a recipe, keep a candidate" in prompt
 
 
 @pytest.mark.parametrize("installed", [True, False])

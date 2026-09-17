@@ -164,10 +164,13 @@ def _inputs(fixture):
 
 
 @pytest.mark.parametrize("confirm_gain", [True, False])
-def test_actual_owner_reduced_positive_automatically_confirms_same_source_build(confirm_gain):
+def test_actual_owner_reduced_positive_automatically_confirms_same_source_build(
+        confirm_gain, monkeypatch):
     fixture = fixtures.TheKeepBuildsAProductionCompleteAnchor()
     fixture.setUp()
     try:
+        from . import claim
+        monkeypatch.setattr(claim, "DEVICE_LOCK", fixture.root / "test-mi210.lock")
         full, prompts, options, install = _inputs(fixture)
         requests = prompts.requests(("glm-fixed2029",), full.template)
         original_main = run.main
@@ -348,6 +351,30 @@ def test_sealed_recent_mechanism_routes_without_scanning_history(
     assert hint["scope"] == scope
     assert hint["mechanism_id"] == mechanism_id
     assert "continuation" in hint["basis"]
+
+
+def test_sealed_dominant_synchronization_profile_routes_next_batch_full(tmp_path):
+    _template, full = _canonical_launch(18311)
+    launch_path = tmp_path / "launch.json"
+    launch_path.write_text(json.dumps(full.to_dict()))
+    original = ["--cpu-serving-launch", str(launch_path), "--resolved-campaign",
+        str(tmp_path / "campaign.json"), "--store", str(tmp_path)]
+    reference = {"record": {"locator": "original.json", "sha256": "a" * 64,
+                            "verified": True},
+        "execution_digest": "b" * 64, "prompt_manifest_digest": "c" * 64}
+    prior = {"path": str(tmp_path / "prior.json"), "sha256": "d" * 64}
+    completed = {"cpu_screen": {"candidate": None},
+        "cpu_profile_reference": reference, "last_outcome_reference": None}
+    observed = {"execution_digest": reference["execution_digest"],
+        "prompt_manifest_digest": reference["prompt_manifest_digest"],
+        "ranked_levers": [{"family": "thread-synchronization-and-work-balance",
+                           "sampled_period_fraction": .54}]}
+    with mock.patch.object(sr, "load_completed", return_value=(completed, prior["sha256"])), \
+            mock.patch.object(cpu_profile, "loop_observation", return_value=observed):
+        selected = cpu_screen.preview_batch(original, prior)
+    assert selected["scope"] == "full" and selected["candidate"] is None
+    assert selected["profile_record_sha256"] == "a" * 64
+    assert "not full-target timing or a gain" in selected["basis"]
 
 
 def test_scope_refuses_foreign_resources_and_incomplete_receipt():

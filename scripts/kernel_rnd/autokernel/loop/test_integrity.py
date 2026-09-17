@@ -58,6 +58,15 @@ def test_whole_diff_reward_hack_scan_refuses_pointer_memo(repo):
     assert "pointer_memoization" in str(caught.value)
 
 
+def test_whole_diff_reward_hack_scan_refuses_timing_phase_probe(repo):
+    (repo / "ggml/src/kernel.cpp").write_text(
+        "int base = 1;\nif (timing_phase) return cached;\n")
+    with pytest.raises(integrity.IntegrityRefused) as caught:
+        integrity.validate_candidate(repo, ("ggml/src/kernel.cpp",))
+    assert caught.value.refusal_class == "reward_hack_scan"
+    assert "phase_detection" in str(caught.value)
+
+
 def test_literal_shape_predicate_and_mutable_state_need_confirmation(repo):
     (repo / "ggml/src/kernel.cpp").write_text(
         "int base = 1;\n"

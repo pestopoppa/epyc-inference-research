@@ -815,7 +815,7 @@ def run_or_reopen(*, store, held_claim, gpu_claim, campaign_id, window_index,
     from .measurement_capture import ArtifactStore
     if type(store) is not ArtifactStore or type(held_claim) is not HeldCpuClaim or type(gpu_claim) is not HeldCpuClaim:
         raise TypeError("GPU control requires the original store and both acquired contexts")
-    if not isinstance(campaign_id, str) or not campaign_id.startswith("ak-") or type(window_index) is not int or window_index < 0:
+    if type(campaign_id) is not str or not campaign_id.strip() or type(window_index) is not int or window_index < 0:
         raise GpuControlRefused("GPU control original campaign/window identity required")
     declared_resolution = resolution()
     if reference is not None:

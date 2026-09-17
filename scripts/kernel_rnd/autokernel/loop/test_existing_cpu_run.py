@@ -10,6 +10,7 @@ from unittest import mock
 import pytest
 
 from . import campaign, campaign_cli, claim, cpu_profile, gates, pool, resolved_recipe as rr, run, serving
+from . import measurement_capture as mc, runtime_calibration as runtime_cal
 from .test_glm_frozen_requests import _canonical_launch, _manifest, _request
 from .test_campaign import _manifest as _campaign_manifest, _registry, _target
 from . import test_promotion_targets as promotion_fixture
@@ -19,7 +20,8 @@ from . import test_promotion_targets as promotion_fixture
 def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
         dry_run, feedback_root=None, profile_observer=None, profile_contexts=None, runtime_only=False,
         invalid_once=False, enrolled_pair=False, runtime_transition=None,
-        expected_claim_cycles=None, result_expectation=None):
+        expected_claim_cycles=None, result_expectation=None, runtime_declaration=True,
+        reference_verdict=None, route_verdict=None):
     fixture = promotion_fixture.TheKeepBuildsAProductionCompleteAnchor()
     fixture.setUp()
     try:
@@ -82,6 +84,16 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
                 campaign.CampaignManifest.from_dict(declaration), registry_snapshot=registry)
             resolved_file.write_text(json.dumps(campaign_cli.build_output(
                 resolved, verify_artifacts=False)))
+        if runtime_declaration:
+            statistical_store = mc.ArtifactStore(fixture.root / "statistics-material")
+            try:
+                statistical = runtime_cal.declare_statistics(store=statistical_store,
+                    campaign_id=resolved.campaign_id if enrolled_pair else "ak-loop",
+                    epoch="fixture-prospective-statistics")
+            finally:
+                statistical_store.close()
+            statistical_file = fixture.root / "runtime-statistics.json"
+            statistical_file.write_text(json.dumps(statistical.to_dict()))
         expected_requests = manifest.requests(("glm-fixed2029",), template)
         held, issued, measured, builds, oracles = [], [], [], [], []
         invalidated = []
@@ -168,9 +180,13 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
                     hypothesis = replace(base_propose(context), mechanism_id=f"cpu-{len(issued) + 1}")
                     if "runtime_anchor" in context:
                         assert context["target"]["recipe"] == context["runtime_anchor"]
+                        if runtime_only and not runtime_declaration:
+                            assert context["runtime_observation_only"] is True
+                            assert context["runtime_preparation"]["status"] == "observation_only"
                     else:
-                        # The historical aku-* enrolled pair remains source-only.
-                        assert enrolled_pair and not runtime_only and runtime_transition is None
+                        # Reduced/source-only routes still have no runtime treatment.
+                        assert enrolled_pair and not runtime_only \
+                            and runtime_transition is None
                     if runtime_only or (runtime_transition is not None and not issued):
                         treatment = run.actors._runtime_pair(
                             {"kind": "threads", "candidate": template.threads + 1},
@@ -189,7 +205,7 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
                 actor.propose, actor.author = propose, author
                 return actor
 
-            def oracle(build, *, backend, resolved_recipe=None):
+            def oracle(build, *, op="MUL_MAT", backend, resolved_recipe=None):
                 assert held[-1] is True and backend == "CPU"
                 if runtime_only:
                     assert resolved_recipe.template.threads == template.threads + 1
@@ -200,6 +216,9 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
             argv += ["--cpu-serving-launch", str(launch_file), "--frozen-prompts", str(prompt_file),
                      "--experimental-branch", branch, "--iterations", "5", "--serving-pairs", "2",
                      "--cpu-calibrate-serving", "3", "--out", str(fixture.root / "result")]
+            if runtime_declaration:
+                argv += ["--runtime-statistics", str(statistical_file),
+                         "--runtime-calibration-max-launches", "800"]
             if enrolled_pair:
                 argv += ["--resolved-campaign", str(resolved_file), "--target-id", "target-a"]
             if dry_run:
@@ -208,6 +227,12 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
                 argv += ["--belief-root-repo", str(feedback_root)]
             with mock.patch.object(gates, "compiles", compile_cpu), \
                     mock.patch.object(gates, "op_correctness", oracle), \
+                    mock.patch.object(gates, "affected_op_scope", return_value=(
+                        route_verdict if route_verdict is not None else ("GATED_DELTA_NET",))), \
+                    mock.patch.object(gates, "check_cpu_gdn_reference",
+                                      return_value=reference_verdict or gates.Verdict(
+                                          "reference_comparison", True,
+                                          "synthetic fixture observation")), \
                     mock.patch.object(run.actors, "AgentPlanner", planner), \
                     mock.patch.object(run.workload_contract, "read_census", run.workload_contract.verify_workload), \
                     mock.patch.object(claim, "hold_cpu", cpu_hold), \
@@ -228,6 +253,13 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
             rc, _calls, _planners, _scratch, log = fixture._run_one_keep()
         assert rc == 0, log
         assert run._git(fixture.repo, "rev-parse", run.champion.CANONICAL_BRANCH) == original_head
+        if reference_verdict is not None or route_verdict is not None:
+            assert issued and not any(Path(build).name == "lane0-build" for build, *_ in measured)
+            if route_verdict is not None:
+                assert builds == [] and oracles == []
+            else:
+                assert builds and oracles
+            return
         if dry_run:
             assert not any((held, issued, measured, builds, oracles))
             assert "DRY RUN" in log
@@ -290,6 +322,9 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
                 assert run.status.read(fixture.store)["measurements_reached"] == 5
                 assert [row["status"] for row in result["iterations"]] == ["runtime_observed"] * 5
                 assert all(row["comparison"]["decisive"] is None for row in result["iterations"])
+                assert all(row["comparison"].get("admission") ==
+                           "observation_only_original_strict_evidence_unavailable"
+                           for row in result["iterations"])
                 assert all(row["runtime_pair"]["anchor"]["build_dir"] == str(fixture.startup_anchor)
                            for row in result["iterations"])
                 assert run._git(fixture.repo, "rev-parse", branch) == original_head
@@ -334,3 +369,17 @@ def test_gpu_actor_program_and_epoch_inputs_remain_legacy_exact():
         assert planners[0].contexts[0]["program"] == run.loop.PROGRAM.read_text(encoding="utf-8")
     finally:
         fixture.doCleanups()
+
+
+@pytest.mark.parametrize("gate,reason", [
+    ("reference_comparison", "scalar mismatch"),
+    ("oracle_unavailable", "probe could not run"),
+])
+def test_cpu_gdn_reference_refusal_prevents_candidate_timing(gate, reason):
+    test_existing_main_cpu_five_iterations_preserves_canonical_champion(
+        False, reference_verdict=gates.Verdict(gate, False, reason))
+
+
+def test_unknown_cpu_source_route_refuses_before_compile_or_timing():
+    test_existing_main_cpu_five_iterations_preserves_canonical_champion(
+        False, route_verdict=gates.Verdict("op_scope", False, "unresolved source route"))

@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from dataclasses import replace
 import fcntl
 import json
+from pathlib import Path
 
 import pytest
 
@@ -47,6 +48,73 @@ def test_default_inputs_are_prospective_immutable_and_supplied_inputs_win(tmp_pa
                     controls=replace(supplied.controls, calibration_block_count=3)))
     finally:
         store.close()
+
+
+def test_prospective_runtime_budget_separates_protocol_epoch_without_rewriting_old_frame(tmp_path):
+    store = mc.ArtifactStore(tmp_path / "captures")
+    try:
+        legacy = calibration.declare_statistics(
+            store=store, campaign_id="calibration-campaign", epoch="a" * 64)
+        old_path = store.root / f"direct-statistics-{calibration._digest({'campaign_id': 'calibration-campaign', 'epoch': 'a' * 64})}.json"
+        old_bytes = old_path.read_bytes()
+        supplied = statistics()
+        supplied = replace(supplied, controls=replace(supplied.controls,
+            calibration_block_count=24))
+        with pytest.raises(calibration.RuntimeCalibrationRefused, match="budget"):
+            calibration.prospective_budget(campaign_id="calibration-campaign",
+                source_epoch="a" * 64, statistical=supplied, max_launches=95)
+        new_epoch, count = calibration.prospective_budget(
+            campaign_id="calibration-campaign", source_epoch="a" * 64,
+            statistical=supplied, max_launches=96)
+        assert count == 96 and new_epoch != "a" * 64
+        assert calibration.prospective_budget(campaign_id="calibration-campaign",
+            source_epoch="a" * 64, statistical=supplied, max_launches=96) == (new_epoch, count)
+        new = calibration.declare_statistics(store=store,
+            campaign_id="calibration-campaign", epoch=new_epoch, supplied=supplied)
+        assert new.controls.calibration_block_count == 24
+        assert legacy.controls.calibration_block_count == 200
+        assert old_path.read_bytes() == old_bytes
+    finally:
+        store.close()
+
+
+def test_source_research_continues_without_implicit_800_launch_runtime_frame(monkeypatch):
+    from .test_existing_cpu_run import test_existing_main_cpu_five_iterations_preserves_canonical_champion
+    from . import run
+    observed = []
+    original = run.status.write_json
+    def written(root, name, body, **kwargs):
+        if name == "loop-run.json":
+            observed.append(body)
+        return original(root, name, body, **kwargs)
+    monkeypatch.setattr(run.status, "write_json", written)
+    test_existing_main_cpu_five_iterations_preserves_canonical_champion(
+        False, runtime_declaration=False)
+    assert observed and observed[0]["runtime_preparation"]["status"] == "observation_only"
+    assert "explicit prospective statistics" in observed[0]["runtime_preparation"]["reason"]
+    assert "cannot select a recipe or keep" in observed[0]["runtime_preparation"]["reason"]
+    assert all(row.get("runtime_pair") is None for row in observed[0]["iterations"])
+
+
+def test_explicit_calibration_without_bounded_statistics_refuses_before_claim(monkeypatch):
+    from .test_existing_cpu_run import test_existing_main_cpu_five_iterations_preserves_canonical_champion
+    from . import run
+    original_main = run.main
+    def unconfigured(argv):
+        def strip(flag):
+            index = argv.index(flag)
+            del argv[index:index + 2]
+        argv = list(argv)
+        strip("--runtime-statistics")
+        strip("--runtime-calibration-max-launches")
+        store = argv[argv.index("--store") + 1]
+        try:
+            return original_main([*argv, "--calibrate-runtime"])
+        finally:
+            assert not (Path(store) / "runtime-preparation").exists()
+    monkeypatch.setattr(run, "main", unconfigured)
+    with pytest.raises(SystemExit, match="2"):
+        test_existing_main_cpu_five_iterations_preserves_canonical_champion(False)
 
 
 def test_positive_control_keeps_original_glm_requests_and_distinct_control_anchor():

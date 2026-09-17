@@ -79,13 +79,15 @@ failure={perf_failure!r}
 if sys.argv[1]=='--version':
  print('wrong' if failure=='version' else 'SYNTHETIC-test-only');sys.exit(0)
 if sys.argv[1]=='script':
+ assert 'pid,tid,cpu,time,period,event,ip,sym,dso' in sys.argv
  data=json.loads(Path(sys.argv[sys.argv.index('-i')+1]).read_text())
  if failure=='script_stderr': sys.stderr.write('x'*200000);sys.stderr.flush()
  for stamp in data['times']:
-  print(str(data['pid'])+'/'+str(data['pid'])+' '+format(stamp,'.9f')+': 100 cycles:u: 0000 synthetic_kernel ({str(dso)})')
+  print(str(data['pid'])+'/'+str(data['pid'])+' ['+format(min(os.sched_getaffinity(0)),'03d')+'] '+format(stamp,'.9f')+': 100 cycles:u: 0000 synthetic_kernel ({str(dso)})')
  sys.exit(0)
 if failure=='denied': sys.stderr.write('synthetic permission denied');sys.exit(7)
 kind=sys.argv[1];pid=int(sys.argv[sys.argv.index('-p')+1])
+if kind=='record': assert '--sample-cpu' in sys.argv
 output=Path(sys.argv[sys.argv.index('-o')+1])
 ctl,ack=map(int,next(x for x in sys.argv if x.startswith('--control=fd:')).split(':')[1].split(','))
 done=False;enabled=False;times=[]

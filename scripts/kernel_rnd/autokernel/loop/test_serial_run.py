@@ -887,6 +887,9 @@ def test_actual_cpu_keep_cross_target_then_older_history_uses_latest_source(
         validation_exports = []
         with mock.patch.object(run.claim, "hold_cpu", validation_hold), validation_result, \
                 gate_result, oracle_result, \
+                mock.patch.object(run.gates, "check_cpu_gdn_reference",
+                                  return_value=run.gates.Verdict(
+                                      "reference_comparison", True, "synthetic fixture")), \
                 mock.patch.object(run.serving_beliefs.PlannerFeedback, "exported",
                                   lambda _self, path: validation_exports.append(Path(path))):
             assert original_main(target_b) == 0
