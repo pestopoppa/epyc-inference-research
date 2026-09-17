@@ -162,7 +162,7 @@ from pathlib import Path
 from statistics import median
 from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
 
-from . import (artifact_diff, candidate_record, dashboard, least_commitment_capture,
+from . import (artifact_diff, candidate_record, codegen_summary, dashboard, least_commitment_capture,
                journal as journal_module, source_candidate,
                source_prerequisite_package, source_prerequisite_producer)
 from . import schemas, storage
@@ -250,6 +250,8 @@ MODULES_THE_DRIVER_USES: Mapping[str, str] = {
                      "a GPU claim before the behavioural T0 provider can launch",
     "candidate_record": "every executed candidate is durably recorded from the exact "
                         "built snapshot and evaluation event identities",
+    "codegen_summary": "a bounded backend-native diagnostic accompanies every executed KEEP; "
+                       "missing compiler evidence stays unavailable and never changes ranking",
     "least_commitment_capture": "a live IQK result must carry the predeclared, hash-bound "
                                 "diagnostics and measured outcome reducers needed by the "
                                 "observe-only AK-WM-2 archive",
@@ -2958,6 +2960,7 @@ class HostOps:
         self._build_snapshot: Optional[worktree.Worktree] = None
         self._cached_evaluation_events: Optional[tuple] = None
         self._cached_candidate_record: Optional[dict] = None
+        self._codegen_summary: Optional[Mapping[str, Any]] = None
 
     def calibration_gate(self, spec: CampaignSpec) -> schemas.Check:
         """Refuse live ranking outside the accepted cell-local calibration."""
@@ -4642,6 +4645,11 @@ class HostOps:
         Nothing is promoted here and nothing is merged. The release plane is
         what SHIPS a champion, and this driver's job ends at a banked result.
         """
+        if decision is not None and decision.keep:
+            plan = self._build_state.get("plan")
+            build_dir = plan.build_dir.path if plan is not None else spec.build_dir
+            self._codegen_summary = codegen_summary.summarize_codegen(
+                spec.backend, build_dir)
         return {"keep": bool(decision and decision.keep),
                 "branch": getattr(getattr(tree, "branch", None), "name", None)}
 
@@ -5102,6 +5110,8 @@ class CampaignResult:
     #: Candidate-only discovery receipt. Present only for SCREENING_ONLY and
     #: explicitly carries zero anchor invocations/non-promotable authority.
     screening_report: Optional[Mapping[str, Any]] = None
+    #: Bounded diagnostic artifact for an executed KEEP; never ranking authority.
+    codegen_summary: Optional[Mapping[str, Any]] = None
 
     @property
     def ok(self) -> bool:
@@ -5159,6 +5169,8 @@ class CampaignResult:
             "journal_error": self.journal_error,
             "screening_report": (None if self.screening_report is None
                                   else dict(self.screening_report)),
+            "codegen_summary": (None if self.codegen_summary is None
+                                 else dict(self.codegen_summary)),
             "ok": self.ok,
             "grammar": "SEARCH RECORD, NOT A CLAIM",
         }
@@ -5368,6 +5380,7 @@ def _finish(spec: CampaignSpec, ops: Any, ledger: ResourceLedger, *, state: str,
         # host was touched.
         executed=bool(getattr(ops, "executes", True)),
         screening_report=getattr(ops, "_screening_report", None),
+        codegen_summary=getattr(ops, "_codegen_summary", None),
         error="\n".join(x for x in (error, traceback_text) if x) or None)
 
     evaluation_writer = getattr(ops, "journal_evaluation", None)

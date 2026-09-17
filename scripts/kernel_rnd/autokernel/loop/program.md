@@ -43,6 +43,19 @@ CRITIC PASS 2 on the committed diff, before the build   · budget 2 rounds
     else → negative, with mechanism and sample vector, into experiments.md
 ```
 
+Every committed source keep (GPU or direct CPU) also gets a bounded diagnostic artifact at
+`<store>/codegen/<champion-commit>.json`; its contents are embedded in that
+keep's experiment row. The collector hashes up to eight standalone AMD
+`.hsaco`/`.co` objects and, when ROCm `llvm-objdump` can disassemble them,
+counts scalar/vector/matrix/memory instructions. CPU builds currently record
+an explicit unavailable machine-code summary. This is **not** an additional
+keep gate. The current `llama.cpp` HIP build may contain only an embedded
+fatbin; on this host `roc-obj-extract` is unusable (missing `File::Which`), so
+the artifact must then say `unavailable` instead of inventing a disassembly.
+Spills, occupancy, vectorization and CUDA PTX/SASS/CUBIN are likewise never
+inferred from this MI210 diagnostic. A separate verified compiler/profiler
+receipt is required before any of those become a mechanism claim.
+
 ---
 
 ## Porting gate order (AK-PORT-1/2)

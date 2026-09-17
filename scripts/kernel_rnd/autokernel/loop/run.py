@@ -29,6 +29,7 @@ import time
 
 from ..controller import (anchor_integrity, build_recipe, experiments, inbox, rung_confirm,
                           workload_contract)
+from .. import codegen_summary
 HEARTBEAT_S = 30  # status heartbeat period; envelope = 6x this
 HEARTBEAT_STOP_TIMEOUT_S = 10
 
@@ -377,6 +378,18 @@ def _write_new_source_floor(floor_store: Path, recipe, anchor, row, *, frozen_re
         # dispersion it just measured is a between-PROCESS one. Stated, not defaulted.
         unit=serving.CALIBRATION_UNIT,
         instrument=instrument, pairs=pairs)
+
+
+def attempt_with_codegen(outcome: loop.Outcome, summaries: dict[str, dict]) -> dict:
+    """Attach a keep's diagnostic to the same durable experiment row."""
+    attempt = outcome.to_attempt()
+    if outcome.status == "kept" and outcome.champion_head:
+        attempt["codegen_summary"] = summaries.get(
+            outcome.champion_head, {
+                "schema": codegen_summary.SCHEMA, "status": "unavailable",
+                "reason": "codegen collection was not retained",
+                "authority": "diagnostic_only"})
+    return attempt
 
 
 def noise_floor_pct(surface: str, pairs: int, model: Path | str,
@@ -2303,6 +2316,8 @@ def main(argv: list[str] | None = None) -> int:
 
     lineage_recorded_outcomes = []
 
+    codegen_by_head: dict[str, dict] = {}
+
     def run_pooled() -> pool.PoolResult:
         """Drive the loop across N detached lanes. THE run path -- the sequential
         `loop.run` wiring was deleted 2026-08-31, and the `loop.run` seam itself on
@@ -2378,7 +2393,7 @@ def main(argv: list[str] | None = None) -> int:
                 registry.close()
 
         def record_pooled(outcome) -> None:
-            attempt = outcome.to_attempt()
+            attempt = attempt_with_codegen(outcome, codegen_by_head)
             attempt["research_scope"] = archive.original_research_scope(
                 attempt, model=args.model, quant=census.dominant_quant,
                 backend="cpu" if cpu_launch else "gpu", build_recipe=recipe.to_dict(),
@@ -2510,6 +2525,22 @@ def main(argv: list[str] | None = None) -> int:
                                          champion_tree=args.worktree,
                                          branch=args.champion_branch,
                                          expected_tree=checked.tree)
+            # The lane build is the exact candidate whose patch was just committed.
+            # Write this immediately: anchor promotion can take 30+ minutes or abort,
+            # but the champion commit already exists. Missing toolchain evidence is
+            # represented explicitly and must never veto that KEEP.
+            try:
+                codegen_by_head[head] = codegen_summary.retain_summary(
+                    args.store, head,
+                    backend="llama_cpu" if cpu_launch else "llama_gpu",
+                    build_dir=worker.build_dir)
+            except Exception as exc:  # diagnostics cannot undo an accepted commit
+                codegen_by_head[head] = {
+                    "schema": codegen_summary.SCHEMA, "status": "unavailable",
+                    "authority": "diagnostic_only", "champion_head": head,
+                    "reason": f"codegen sidecar failed: {type(exc).__name__}"}
+                print(f"codegen   unavailable for {head[:12]}: {type(exc).__name__}: {exc}",
+                      file=sys.stderr)
             promote_anchor()
             if source_fold_candidate and patch_path is not None and parent is not None:
                 original_source_keeps.append({
