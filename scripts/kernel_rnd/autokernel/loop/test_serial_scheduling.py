@@ -87,6 +87,7 @@ def test_manifest_refuses_unknown_fields_duplicate_proposals_and_crossed_target(
     ("abstained", "abstained"),
     ("runtime_observed", "invalid"),
     ("measurement_invalid", "invalid"),
+    ("integrity_refused", "invalid"),
     ("bench_failed", "failed"),
     ("lane_error", "failed"),
     ("planner_transient", "failed"),

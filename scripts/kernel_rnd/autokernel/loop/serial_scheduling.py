@@ -16,6 +16,7 @@ VALID_COMPARISONS = frozenset({"kept", "keep_candidate", "measured_null", "regre
                                "source_validation_passed"})
 INVALID_OUTCOMES = frozenset({
     "measurement_invalid", "runtime_observed", "runtime_refused", "refused_at_formation",
+    "integrity_refused",
     "stopped_before_reschedule", "stopped_mid_formation", "superseded",
     "source_validation_failed", "source_validation_pending",
 })
