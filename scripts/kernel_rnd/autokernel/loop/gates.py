@@ -109,6 +109,28 @@ def _gdn_hunks_confined(source_text: str | None, patch_text: str | None) -> bool
                                for line, count in hunks)
 
 
+def _iqk_moe_rows_hunks_confined(source_text: str | None,
+                                  patch_text: str | None) -> bool:
+    """Only the real exported helper body, never sibling helpers or its stub."""
+    if not source_text or not patch_text:
+        return False
+    lines = source_text.splitlines()
+    starts = [i + 1 for i, line in enumerate(lines)
+              if line.startswith('extern "C" IQK_API bool iqk_mul_mat_moe_rows(')]
+    ends = [i + 1 for i, line in enumerate(lines)
+            if line.startswith('extern "C" IQK_API bool iqk_moe_fused_up_gate(')]
+    if not starts or not ends or starts[0] >= ends[0]:
+        return False
+    body_start = next((i + 1 for i in range(starts[0] - 1, ends[0] - 1)
+                       if lines[i].rstrip().endswith('{')), None)
+    if body_start is None:
+        return False
+    hunks = re.findall(r"(?m)^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", patch_text)
+    return bool(hunks) and all(body_start < int(line) and
+                               int(line) + max(int(count or 1), 1) - 1 < ends[0]
+                               for line, count in hunks)
+
+
 def affected_op_scope(paths: tuple[str, ...], *, target_surface: str,
                       target_symbol: str, source_text: str | None = None,
                       patch_text: str | None = None) -> tuple[str, ...] | Verdict:
@@ -138,6 +160,16 @@ def affected_op_scope(paths: tuple[str, ...], *, target_surface: str,
     if changed == {"ggml/src/ggml-cuda/mmq.cu"} and \
             ("mul_mat_q" in target_symbol or "should_use_mmq" in target_symbol):
         return ("MUL_MAT", "MUL_MAT_ID")
+    if changed == {"ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp"} and \
+            target_symbol == "iqk_mul_mat_moe_rows" and \
+            _iqk_moe_rows_hunks_confined(source_text, patch_text):
+        return ("MUL_MAT_ID",)
+    if any(path.startswith("ggml/src/ggml-cpu/iqk/") for path in changed):
+        return Verdict("op_scope", False,
+                       "CPU IQK source refused before build: the selected MUL_MAT/MUL_MAT_ID "
+                       "case must prove the edited quant/function path executed with use_ref=false "
+                       "and passed against the independent use_ref=true reference; the generic "
+                       "per-type [iqk] ACTIVE marker does not identify the edited path or case")
     return Verdict("op_scope", False,
                    "affected native op/reference is unresolved for actual changed source; "
                    "MUL_MAT is not a universal correctness oracle")
@@ -152,6 +184,19 @@ def check_cpu_gdn_reference(build_dir: Path, source_root: Path, *,
                 "topology_prefix": tuple(resolved_recipe.topology_prefix)}
                if resolved_recipe is not None else {})
     result = gdn_reference.check_cpu_gdn(build_dir, source_root, **options)
+    return Verdict("reference_comparison" if result.status == "wrong" else
+                   "oracle_unavailable" if result.status == "unavailable" else
+                   "reference_comparison", result.status == "pass",
+                   result.reason, result.detail)
+
+
+def check_cpu_iqk_reference(build_dir: Path, source_root: Path, *,
+                            resolved_recipe) -> Verdict:
+    """One passing Q4_K case with a trusted inner-function debugger witness."""
+    from . import iqk_witness
+
+    result = iqk_witness.check(build_dir, resolved_recipe=resolved_recipe,
+                               source_root=source_root)
     return Verdict("reference_comparison" if result.status == "wrong" else
                    "oracle_unavailable" if result.status == "unavailable" else
                    "reference_comparison", result.status == "pass",
@@ -313,5 +358,6 @@ def run_all(*checks: "Callable[[], Verdict]") -> tuple[bool, list[Verdict]]:
 
 __all__ = ["BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S", "DEFAULT_TARGETS",
            "PROMOTION_TARGETS", "Verdict", "compiles", "deterministic",
-           "affected_op_scope", "check_cpu_gdn_reference", "no_fallback_dispatch",
+           "affected_op_scope", "check_cpu_gdn_reference", "check_cpu_iqk_reference",
+           "no_fallback_dispatch",
            "op_correctness", "run_all"]

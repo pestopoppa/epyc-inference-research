@@ -1393,15 +1393,18 @@ def main(argv: list[str] | None = None) -> int:
             untracked = tuple(archive._git(worker.worktree, "ls-files", "--others",
                                            "--exclude-standard", "--", "ggml/src/", "src/").splitlines())
             cpu_ops = worker.worktree / "ggml/src/ggml-cpu/ops.cpp"
+            iqk_rows_path = "ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp"
+            scope_source = (cpu_ops if changed == ("ggml/src/ggml-cpu/ops.cpp",) else
+                            worker.worktree / iqk_rows_path if changed == (iqk_rows_path,) else None)
             scope = gates.affected_op_scope(changed + untracked,
                                              target_surface=hypothesis.target_surface,
                                              target_symbol=hypothesis.target_symbol,
-                                             source_text=(cpu_ops.read_text(encoding="utf-8")
-                                                          if changed == ("ggml/src/ggml-cpu/ops.cpp",)
+                                             source_text=(scope_source.read_text(encoding="utf-8")
+                                                          if scope_source is not None
                                                           else None),
                                              patch_text=(archive._git(worker.worktree, "diff", "-U0",
-                                                                      "HEAD", "--", "ggml/src/ggml-cpu/ops.cpp")
-                                                         if changed == ("ggml/src/ggml-cpu/ops.cpp",)
+                                                                      "HEAD", "--", str(scope_source.relative_to(worker.worktree)))
+                                                         if scope_source is not None
                                                          else None))
             if isinstance(scope, gates.Verdict):
                 return False, [scope]
@@ -1416,6 +1419,9 @@ def main(argv: list[str] | None = None) -> int:
                     for op in scope]
                 if "GATED_DELTA_NET" in scope:
                     checks.append(lambda: gates.check_cpu_gdn_reference(
+                        worker.build_dir, worker.worktree, resolved_recipe=arm))
+                if cpu_launch and changed == (iqk_rows_path,):
+                    checks.append(lambda: gates.check_cpu_iqk_reference(
                         worker.build_dir, worker.worktree, resolved_recipe=arm))
                 return gates.run_all(*checks)
             # Callables, so a failed build actually short-circuits: an eagerly
@@ -1439,6 +1445,10 @@ def main(argv: list[str] | None = None) -> int:
                              if cpu_launch else {})) for op in scope)
             if cpu_launch and "GATED_DELTA_NET" in scope:
                 checks.append(lambda: gates.check_cpu_gdn_reference(
+                    worker.build_dir, worker.worktree,
+                    resolved_recipe=_cpu_arm(direct_launch, worker.build_dir)))
+            if cpu_launch and changed == (iqk_rows_path,):
+                checks.append(lambda: gates.check_cpu_iqk_reference(
                     worker.build_dir, worker.worktree,
                     resolved_recipe=_cpu_arm(direct_launch, worker.build_dir)))
             if not direct_launch:

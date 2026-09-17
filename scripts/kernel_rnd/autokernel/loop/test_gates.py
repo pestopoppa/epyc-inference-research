@@ -280,6 +280,36 @@ class AffectedOpAndIndependentReference(unittest.TestCase):
             self.assertIsInstance(verdict, gates.Verdict)
             self.assertFalse(verdict.passed)
 
+    def test_cpu_iqk_moe_rows_route_requires_actual_function_body_hunks(self):
+        source = ('extern "C" IQK_API bool iqk_mul_mat_moe_rows(long n) {\n'
+                  '    changed();\n}\n'
+                  'extern "C" IQK_API bool iqk_moe_fused_up_gate(long n) {\n'
+                  '    sibling();\n}\n')
+        path = "ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp"
+        scope = gates.affected_op_scope(
+            (path,), target_surface=path, target_symbol="iqk_mul_mat_moe_rows",
+            source_text=source, patch_text="@@ -2 +2 @@\n-old\n+changed();\n")
+        self.assertEqual(scope, ("MUL_MAT_ID",))
+        for patch in ("@@ -4 +4 @@\n-old\n+sibling();\n",
+                      "@@ -1 +1 @@\n-old\n+extern foo\n", ""):
+            refused = gates.affected_op_scope(
+                (path,), target_surface=path, target_symbol="iqk_mul_mat_moe_rows",
+                source_text=source, patch_text=patch)
+            self.assertIsInstance(refused, gates.Verdict)
+            self.assertFalse(refused.passed)
+
+    def test_cpu_iqk_reference_distinguishes_wrong_and_unavailable(self):
+        from autokernel.loop import iqk_witness
+        for status, gate in (("pass", "reference_comparison"),
+                             ("wrong", "reference_comparison"),
+                             ("unavailable", "oracle_unavailable")):
+            with mock.patch.object(iqk_witness, "check",
+                    return_value=iqk_witness.Result(status, "reason", "detail")):
+                verdict = gates.check_cpu_iqk_reference(
+                    Path("/build"), Path("/source"), resolved_recipe=object())
+            self.assertEqual(verdict.gate, gate)
+            self.assertEqual(verdict.passed, status == "pass")
+
     def test_wrong_vs_unavailable_reference_are_distinct(self):
         for status, gate in (("pass", "reference_comparison"),
                              ("wrong", "reference_comparison"),

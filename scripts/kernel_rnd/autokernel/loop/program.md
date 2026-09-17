@@ -73,10 +73,17 @@ receipt. A fast but wrong candidate is discarded.
 The experimental CPU `GATED_DELTA_NET` route has a deterministic F32 scalar
 reference fixture with exactly representable outputs. The native CPU suite alone
 compares CPU against CPU and is not independent evidence. It must be followed by
-that scalar fixture. IQK kernel-body paths have a known native `MUL_MAT`/
-`MUL_MAT_ID` screen, but prospective IQK edits currently refuse before build: the CPU `use_ref` path
-bypasses IQK, yet generic active-dispatch logging does not prove that the edited
-quant function ran on a passing selected case. x86 `quants.c` is shared by both
+that scalar fixture. One CPU IQK helper route is admitted narrowly:
+`iqk_mul_mat_moe_rows` body-only edits in `iqk_mul_mat.cpp` run the native
+`MUL_MAT_ID` suite, then two exact Q4_K/Q5_K cases under the resolved CPU
+recipe. A trusted one-shot GDB child proves `use_ref=true` was set on the
+reference and the exported helper executed in the candidate DSO in each
+passing case. The separate independent scalar fixture compares Q4_K/Q5_K
+`MUL_MAT_ID` outputs at its fixed 40-row, two-token shape. This proves helper
+entry and those numerical shapes, not every branch or production shape.
+Other prospective IQK edits still refuse before build: generic active-dispatch
+logging cannot prove an edited quant function ran on a passing selected case.
+x86 `quants.c` is shared by both
 arms and is not admitted. Other CPU source families need a supported route
 before admission. GPU matmul routes use the native CPU-reference suite;
 the selected device block must report a nonempty passing count. Do not infer a
