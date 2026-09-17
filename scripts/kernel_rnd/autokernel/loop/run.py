@@ -384,11 +384,25 @@ def attempt_with_codegen(outcome: loop.Outcome, summaries: dict[str, dict]) -> d
     """Attach a keep's diagnostic to the same durable experiment row."""
     attempt = outcome.to_attempt()
     if outcome.status == "kept" and outcome.champion_head:
-        attempt["codegen_summary"] = summaries.get(
+        summary = summaries.get(
             outcome.champion_head, {
                 "schema": codegen_summary.SCHEMA, "status": "unavailable",
                 "reason": "codegen collection was not retained",
                 "authority": "diagnostic_only"})
+        if (summary.get("attempt_identity") is not None
+                and summary["attempt_identity"] != outcome.attempt_identity):
+            summary = {"schema": codegen_summary.SCHEMA, "status": "unavailable",
+                       "reason": "codegen attempt identity differs from committed outcome",
+                       "authority": "diagnostic_only"}
+        attempt["codegen_summary"] = summary
+    elif (outcome.status == "kept" and outcome.hypothesis is not None
+          and outcome.hypothesis.runtime_pair is not None):
+        # A runtime-recipe keep selects an existing build; it did not compile a
+        # new kernel. Record that distinction in its durable attempt row.
+        attempt["codegen_summary"] = {
+            "schema": codegen_summary.SCHEMA, "status": "unavailable",
+            "reason": "runtime-recipe keep selected an existing build; no new codegen artifact",
+            "authority": "diagnostic_only"}
     return attempt
 
 
@@ -2368,6 +2382,7 @@ def main(argv: list[str] | None = None) -> int:
                                          base_commit=base, paths=paths)
             evidence = checked.to_dict()
             evidence["evidence_key"] = key
+            evidence["attempt_identity"] = attempt
             candidate_integrity[worker.name] = (checked, key)
             integrity_evidence[key] = evidence
             # loop.py retains this exact mutable mapping on the Outcome. Confirm
@@ -2533,7 +2548,9 @@ def main(argv: list[str] | None = None) -> int:
                 codegen_by_head[head] = codegen_summary.retain_summary(
                     args.store, head,
                     backend="llama_cpu" if cpu_launch else "llama_gpu",
-                    build_dir=worker.build_dir, recipe=recipe.to_dict())
+                    build_dir=worker.build_dir, recipe=recipe.to_dict(),
+                    attempt_identity=evidence["attempt_identity"],
+                    source_tree_oid=_git(worker.worktree, "rev-parse", f"{head}^{{tree}}"))
             except Exception as exc:  # diagnostics cannot undo an accepted commit
                 codegen_by_head[head] = {
                     "schema": codegen_summary.SCHEMA, "status": "unavailable",

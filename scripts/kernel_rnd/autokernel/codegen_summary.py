@@ -16,6 +16,7 @@ import select
 import subprocess
 import tempfile
 import time
+from datetime import datetime, timezone
 from typing import Any, Mapping
 
 
@@ -24,6 +25,7 @@ MAX_OBJECTS = 8
 MAX_OBJECT_BYTES = 8 * 1024 * 1024
 MAX_OUTPUT_BYTES = 1024 * 1024
 MAX_SCAN_FILES = 2048
+MAX_CMAKE_CACHE_BYTES = 2 * 1024 * 1024
 TIMEOUT_S = 8.0
 MAX_TOTAL_S = 12.0
 LLVM_OBJDUMP = Path("/opt/rocm/llvm/bin/llvm-objdump")
@@ -161,8 +163,103 @@ def summarize_codegen(backend: str, build_dir: str | Path) -> dict[str, Any]:
     return result
 
 
+def _toolchain_identity(build_dir: Path) -> dict[str, Any]:
+    """Capture bounded compiler declarations from this build, not ambient PATH."""
+    objdump_stat = None
+    try:
+        stat = LLVM_OBJDUMP.stat()
+        objdump_stat = {"path": str(LLVM_OBJDUMP.resolve()),
+                        "device": stat.st_dev, "inode": stat.st_ino,
+                        "bytes": stat.st_size, "mtime_ns": stat.st_mtime_ns}
+    except OSError:
+        pass
+    cache = build_dir / "CMakeCache.txt"
+    try:
+        with cache.open("rb") as stream:
+            raw = stream.read(MAX_CMAKE_CACHE_BYTES + 1)
+    except OSError:
+        return {"status": "unavailable", "reason": "CMakeCache.txt unavailable",
+                "objdump_stat": objdump_stat}
+    if len(raw) > MAX_CMAKE_CACHE_BYTES:
+        return {"status": "unavailable", "reason": "CMakeCache.txt exceeds bound",
+                "objdump_stat": objdump_stat}
+    wanted = ("CMAKE_CXX_COMPILER", "CMAKE_C_COMPILER", "CMAKE_HIP_COMPILER",
+              "CMAKE_CUDA_COMPILER", "CMAKE_CXX_COMPILER_ID",
+              "CMAKE_CXX_COMPILER_VERSION")
+    declarations = {}
+    for line in raw.decode("utf-8", "replace").splitlines():
+        if "=" not in line or line.startswith(("#", "//")):
+            continue
+        key, value = line.split("=", 1)
+        name = key.split(":", 1)[0]
+        if name in wanted:
+            declarations[name] = value
+    compiler_path = declarations.get("CMAKE_HIP_COMPILER") or declarations.get(
+        "CMAKE_CXX_COMPILER")
+    compiler_stat = None
+    if compiler_path:
+        try:
+            compiler = Path(compiler_path).resolve(strict=True)
+            stat = compiler.stat()
+            if compiler.is_file():
+                compiler_stat = {"path": str(compiler), "device": stat.st_dev,
+                                 "inode": stat.st_ino, "bytes": stat.st_size,
+                                 "mtime_ns": stat.st_mtime_ns}
+        except OSError:
+            pass
+    return {"status": "captured" if declarations else "unavailable",
+            "cmake_cache_sha256": hashlib.sha256(raw).hexdigest(),
+            "declarations": declarations, "compiler_stat": compiler_stat,
+            "objdump_stat": objdump_stat,
+            "identity_limit": "paths/stat/cache digest; compiler binary content not hashed"}
+
+
+def _belief_claim_tuple(summary: Mapping[str, Any], *, attempt_identity: str,
+                        source_tree_oid: str, observed_at: str) -> dict[str, Any]:
+    """Producer-authored ClaimTuple-shaped observation; no local grading rule."""
+    available = summary["status"] == "partial" and summary["instruction_mix"] is not None
+    return {
+        "measurement_id": "ak-codegen:" + attempt_identity + ":" + summary["build_frame_sha256"],
+        "metric": "codegen_disassembly_availability",
+        "value": int(available), "unit": "availability indicator",
+        "metric_direction": "higher_better",  # evidence coverage, never kernel performance
+        "category": "CANDIDATE",
+        "claim": ("Bounded native code-object disassembly was available for this retained build"
+                  if available else
+                  "Bounded native code-object disassembly was unavailable for this retained build"),
+        "date": observed_at,
+        "protocol_id": "",  # diagnostic observation; no decision-grade protocol
+        "reps": 1, "reps_basis": "one retained build; not benchmark repetitions",
+        "attestation_locator": summary["artifact_ref"],
+        # The summary and tuple live in one file; a full-file self-hash is
+        # impossible. The reader re-derives the core digest below instead.
+        "attestation_sha256": "", "attestation_verified": None,
+        "source_class": "measurement",
+        "extra": {
+            "authority": "diagnostic_only", "not_throughput_or_correctness": True,
+            "not_occupancy_evidence": True,
+            "attempt_identity": attempt_identity,
+            "retained_source_commit": summary["champion_head"],
+            "retained_source_tree_oid": source_tree_oid,
+            "backend": summary["backend"], "toolchain": summary["toolchain"],
+            "build_frame_sha256": summary["build_frame_sha256"],
+            "summary_core_sha256": summary["summary_core_sha256"],
+            "code_objects": [{"relative_path": row["relative_path"],
+                              "sha256": row["sha256"]}
+                             for row in summary["objects"] if "sha256" in row],
+            "instruction_mix": summary["instruction_mix"],
+            "unavailable_fields": [name for name in
+                                   ("register_spills", "occupancy", "vectorization")
+                                   if summary[name] is None],
+            "ptx_sass_cubin": summary["ptx_sass_cubin"],
+        },
+    }
+
+
 def retain_summary(store: Path, champion_head: str, *, backend: str,
-                   build_dir: Path, recipe: Mapping[str, Any] | None = None) -> dict[str, Any]:
+                   build_dir: Path, recipe: Mapping[str, Any] | None = None,
+                   attempt_identity: str | None = None,
+                   source_tree_oid: str | None = None) -> dict[str, Any]:
     """Write one fsynced, content-stable sidecar for a committed variant.
 
     The caller also embeds the returned object in its attempt row. It should
@@ -172,6 +269,13 @@ def retain_summary(store: Path, champion_head: str, *, backend: str,
         raise ValueError("champion head must be a full SHA-1 commit id")
     summary = summarize_codegen(backend, build_dir)
     summary["champion_head"] = champion_head
+    if (attempt_identity is None) != (source_tree_oid is None):
+        raise ValueError("attempt identity and source tree must be supplied together")
+    if source_tree_oid is not None and re.fullmatch(r"[0-9a-f]{40}", source_tree_oid) is None:
+        raise ValueError("source tree must be a full Git tree OID")
+    if attempt_identity is not None and not attempt_identity.strip():
+        raise ValueError("attempt identity must be nonempty")
+    summary["toolchain"] = _toolchain_identity(Path(build_dir))
     binary = Path(build_dir) / "bin" / "llama-bench"
     try:
         stat = binary.stat()
@@ -184,6 +288,7 @@ def retain_summary(store: Path, champion_head: str, *, backend: str,
     # binary/object remains visible and cannot silently become codegen evidence.
     frame = {"backend": backend, "build_dir": str(Path(build_dir).resolve()),
              "recipe": dict(recipe or {}), "binary_stat": binary_stat,
+             "toolchain": summary["toolchain"],
              "object_sha256s": [row["sha256"] for row in summary["objects"]
                                 if "sha256" in row]}
     frame_digest = hashlib.sha256(json.dumps(
@@ -194,6 +299,18 @@ def retain_summary(store: Path, champion_head: str, *, backend: str,
     directory.mkdir(parents=True, exist_ok=True)
     name = f"{champion_head}.{backend}.{frame_digest}.json"
     summary["artifact_ref"] = f"codegen/{name}"
+    if attempt_identity is not None:
+        summary["attempt_identity"] = attempt_identity
+        summary["source_tree_oid"] = source_tree_oid
+        # This digest covers every native evidence field and the exact build
+        # frame, but not the tuple that cites it. The strict reader must check
+        # it before projecting the tuple; no reader-side tuple reconstruction.
+        summary["summary_core_sha256"] = hashlib.sha256(json.dumps(
+            summary, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        summary["belief_claim_tuple"] = _belief_claim_tuple(
+            summary, attempt_identity=attempt_identity,
+            source_tree_oid=source_tree_oid,
+            observed_at=datetime.now(timezone.utc).isoformat())
     destination = directory / name
     payload = (json.dumps(summary, sort_keys=True, separators=(",", ":")) + "\n").encode()
     descriptor, temporary = tempfile.mkstemp(prefix=f".{champion_head}.", dir=directory)
@@ -207,8 +324,22 @@ def retain_summary(store: Path, champion_head: str, *, backend: str,
             # overwritten between an exists check and a rename.
             os.link(temporary, destination)
         except FileExistsError:
-            if destination.read_bytes() != payload:
-                raise ValueError("existing codegen sidecar differs for build frame")
+            previous = destination.read_bytes()
+            if previous != payload:
+                try:
+                    existing = json.loads(previous)
+                    core = {key: value for key, value in existing.items()
+                            if key not in {"summary_core_sha256", "belief_claim_tuple"}}
+                    valid_existing = (summary.get("summary_core_sha256")
+                        and existing.get("summary_core_sha256") == summary["summary_core_sha256"]
+                        and hashlib.sha256(json.dumps(
+                            core, sort_keys=True, separators=(",", ":")).encode()
+                            ).hexdigest() == summary["summary_core_sha256"])
+                except (ValueError, TypeError, AttributeError):
+                    valid_existing = False
+                if not valid_existing:
+                    raise ValueError("existing codegen sidecar differs for build frame")
+                return existing
         dir_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
         try:
             os.fsync(dir_fd)

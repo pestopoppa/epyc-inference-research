@@ -5,6 +5,7 @@ import ast
 import hashlib
 import json
 from pathlib import Path
+import sys
 import tempfile
 import time
 import unittest
@@ -113,6 +114,48 @@ class TestCodegenSummary(unittest.TestCase):
                     root / "store", "../not-a-commit", backend="llama_gpu",
                     build_dir=build)
 
+    def test_write_side_tuple_binds_attempt_tree_and_unavailable_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = root / "build"
+            build.mkdir()
+            (build / "CMakeCache.txt").write_text(
+                "CMAKE_CXX_COMPILER:FILEPATH=/opt/rocm/llvm/bin/clang++\n")
+            kwargs = dict(backend="llama_gpu", build_dir=build,
+                          recipe={"schema": "fixture-recipe", "GGML_HIP": "ON"},
+                          attempt_identity="ak-attempt-fixture", source_tree_oid="d" * 40)
+            summary = codegen_summary.retain_summary(
+                root / "store", "e" * 40, **kwargs)
+            tuple_row = summary["belief_claim_tuple"]
+            self.assertEqual(tuple_row["protocol_id"], "")
+            self.assertEqual(tuple_row["value"], 0)
+            self.assertEqual(tuple_row["extra"]["attempt_identity"], "ak-attempt-fixture")
+            self.assertEqual(tuple_row["extra"]["retained_source_tree_oid"], "d" * 40)
+            self.assertEqual(tuple_row["extra"]["toolchain"]["status"], "captured")
+            self.assertIsNone(tuple_row["extra"]["instruction_mix"])
+            self.assertIn("occupancy", tuple_row["extra"]["unavailable_fields"])
+            core = {key: value for key, value in summary.items()
+                    if key not in {"summary_core_sha256", "belief_claim_tuple"}}
+            digest = hashlib.sha256(json.dumps(
+                core, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+            self.assertEqual(summary["summary_core_sha256"], digest)
+            self.assertEqual(tuple_row["extra"]["summary_core_sha256"], digest)
+            vidya = Path("/workspace/scripts/vidya")
+            if (vidya / "claim_tuple.py").is_file():
+                sys.path.insert(0, str(vidya))
+                try:
+                    from claim_tuple import ClaimTuple, grade
+                    self.assertEqual(grade(ClaimTuple(**tuple_row))[:2],
+                                     ("Judged", "Located"))
+                finally:
+                    sys.path.remove(str(vidya))
+            self.assertEqual(codegen_summary.retain_summary(
+                root / "store", "e" * 40, **kwargs), summary)
+            with self.assertRaises(ValueError):
+                codegen_summary.retain_summary(
+                    root / "store", "e" * 40, **{**kwargs,
+                        "attempt_identity": "different-attempt"})
+
     def test_live_attempt_embeds_diagnostic_only_for_keeps(self) -> None:
         head = "b" * 40
         summary = {"schema": codegen_summary.SCHEMA, "status": "unavailable"}
@@ -122,6 +165,14 @@ class TestCodegenSummary(unittest.TestCase):
             kept, {head: summary})["codegen_summary"], summary)
         self.assertNotIn("codegen_summary", loop_run.attempt_with_codegen(
             rejected, {head: summary}))
+        mismatch = {**summary, "attempt_identity": "other-attempt"}
+        self.assertNotIn("attempt_identity", loop_run.attempt_with_codegen(
+            kept, {head: mismatch})["codegen_summary"])
+        runtime_hypothesis = mock.Mock(runtime_pair=object())
+        runtime_hypothesis.to_dict.return_value = {"mechanism_id": "runtime-only"}
+        runtime = loop_module.Outcome("kept", hypothesis=runtime_hypothesis)
+        self.assertIn("no new codegen artifact", loop_run.attempt_with_codegen(
+            runtime, {})["codegen_summary"]["reason"])
 
     def test_concurrent_sidecar_create_never_overwrites_winner(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
