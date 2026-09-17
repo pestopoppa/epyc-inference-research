@@ -1,0 +1,89 @@
+{
+  "meta": {
+    "kernel": "production-consolidated-v9",
+    "binary": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+    "models": "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+    "arm": "qwen3.8-27b",
+    "timestamp": "2026-08-19T12:43:29.631143+00:00",
+    "elapsed_s": 5.1,
+    "n_per_suite": 1,
+    "seed": 42,
+    "stratify": false,
+    "endpoint": "chat",
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 20,
+    "enable_thinking": false,
+    "repeats": 1,
+    "max_tokens": 3072,
+    "questions_pinned": "/workspace/tmp/questions_11477.json",
+    "capture_schema_version": "v7_quality_gate_capture.v4",
+    "runner_source_sha256": "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e"
+  },
+  "suites": [
+    {
+      "suite": "swebench_oracle",
+      "accuracy": 0.0,
+      "n": 1,
+      "n_questions": 1,
+      "repeats": 1,
+      "correct": 0,
+      "errors": 0,
+      "truncated": 0,
+      "per_tier": {
+        "3": {
+          "accuracy": 0.0,
+          "n": 1,
+          "correct": 0
+        }
+      },
+      "per_item": {
+        "django__django-11477": {
+          "correct": 0,
+          "n": 1
+        }
+      },
+      "capture": {
+        "schema_version": "v7_quality_gate_capture.v4",
+        "new_rows": 1,
+        "request_error_rows": 0,
+        "length_cap_rows": 0,
+        "response_chars": 286,
+        "response_utf8_bytes": 286,
+        "reasoning_chars": 0,
+        "reasoning_utf8_bytes": 0,
+        "swebench_search_replace": {
+          "applicable": true,
+          "new_rows": 1,
+          "resumed_rows": 0,
+          "resumed_rows_without_diagnostics": 0,
+          "resumed_rows_without_provenance": 0,
+          "resumed_rows_source_sha_mismatch": 0,
+          "rows_with_markers": 0,
+          "parseable_blocks": 0,
+          "malformed_rows": 0,
+          "zero_strict_block_rows": 1,
+          "partial_strict_block_rows": 0,
+          "state_counts": {
+            "strict_ready": 0,
+            "prompt_contract_candidate": 1,
+            "model_truncation_no_patch": 0,
+            "model_truncation_partial_patch": 0,
+            "request_error": 0
+          },
+          "summary_complete": true,
+          "converter_contract_ready": false,
+          "score_status": "provisional_prompt_contract"
+        }
+      },
+      "throughput": {
+        "concurrency": 1,
+        "wall_s": 5.1,
+        "completion_tokens": 76,
+        "prompt_tokens": 2321,
+        "aggregate_decode_tok_s": 14.9,
+        "aggregate_total_tok_s": 471.2
+      }
+    }
+  ]
+}

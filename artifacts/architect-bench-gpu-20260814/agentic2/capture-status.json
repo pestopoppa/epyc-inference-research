@@ -1,0 +1,49 @@
+{
+  "incomplete_capture_instance_ids": [],
+  "instances": {
+    "django__django-11087": {
+      "anomalies": [],
+      "capture_status": "complete",
+      "evidence_bytes_captured": 45118,
+      "evidence_bytes_limit": 67108864,
+      "evidence_complete": true,
+      "model_patch_sha256": "61d5a24b337a8f2748ccbd7fd2023084d52fd7bc0a08a323ed6016d64c3bab64",
+      "model_patch_utf8_bytes": 986,
+      "runner_source_sha256": "ab5f67660977dae1d8589e87165f7b598ef1d8f10709ed96507653bf1d36f1d0",
+      "trajectory": "trajectories/django__django-11087.jsonl",
+      "trajectory_sha256": "893ad9af64b934fa834c4ec85806f8bff6d4360a0acaaaea41df09a76c99f4a1"
+    },
+    "django__django-11095": {
+      "anomalies": [],
+      "capture_status": "complete",
+      "evidence_bytes_captured": 28197,
+      "evidence_bytes_limit": 67108864,
+      "evidence_complete": true,
+      "model_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "model_patch_utf8_bytes": 0,
+      "runner_source_sha256": "ab5f67660977dae1d8589e87165f7b598ef1d8f10709ed96507653bf1d36f1d0",
+      "trajectory": "trajectories/django__django-11095.jsonl",
+      "trajectory_sha256": "8c7a542c99918103137b11b0ddc2a998540dcb99b17ab2adf5fb0fbc7e5ce9c3"
+    },
+    "django__django-11119": {
+      "anomalies": [],
+      "capture_status": "complete",
+      "evidence_bytes_captured": 9943,
+      "evidence_bytes_limit": 67108864,
+      "evidence_complete": true,
+      "model_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "model_patch_utf8_bytes": 0,
+      "runner_source_sha256": "ab5f67660977dae1d8589e87165f7b598ef1d8f10709ed96507653bf1d36f1d0",
+      "trajectory": "trajectories/django__django-11119.jsonl",
+      "trajectory_sha256": "a0fbec5d2b19725826d11827f986e844d61c2885d17a88c1a33bb8dd905d90c4"
+    }
+  },
+  "missing_capture_status_instance_ids": [],
+  "prediction_instance_ids": [
+    "django__django-11087",
+    "django__django-11095",
+    "django__django-11119"
+  ],
+  "schema_version": 1,
+  "scoring_eligible": true
+}

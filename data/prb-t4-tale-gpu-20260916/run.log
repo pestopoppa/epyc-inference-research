@@ -1,0 +1,43 @@
+GPU claim held: {'device_id': 'mi210_0', 'lock_path': '/mnt/raid0/llm/tmp/gpu_device.mi210_0.lock', 'pid': 1824533}
+server pid 1824576: numactl --membind=3 -- taskset -c 184-191 /mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf --host 127.0.0.1 --port 18383 -np 2 -c 65536 -t 8 -ub 8192 --flash-attn on --jinja -ctk q8_0 -ctv q8_0 --no-mmap -ngl all --chat-template-file /mnt/raid0/llm/models/chat-templates/epyc-qwen3x-v1-terse.jinja --spec-type draft-mtp --spec-draft-n-max 8 --reasoning off --device ROCm0 --slot-save-path /mnt/raid0/llm/tmp/sub-gpu-runner-20260916/prbt4/slots --device-draft ROCm0
+healthy; VRAM 32.5 GiB, KFD 1
+[19:10:56] suite math n=150
+  rc=0 [1354s] vram_now=33.3G peak=33.3G
+  served gguf /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf via props: OK
+  beliefs: /mnt/raid0/llm/tmp/sub-gpu-runner-20260916/prbt4/prb_t4_gpu_math_20260916_191049.beliefs.jsonl
+[19:33:30] suite olympiadbench n=100
+  rc=0 [23504s] vram_now=34.3G peak=36.1G
+  served gguf /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf via props: OK
+  beliefs: /mnt/raid0/llm/tmp/sub-gpu-runner-20260916/prbt4/prb_t4_gpu_olympiadbench_20260916_191049.beliefs.jsonl
+[02:05:14] suite mmlu_pro n=150
+  rc=1 [3s] vram_now=34.3G peak=36.1G
+[02:05:17] suite livecodebench n=100
+  rc=0 [1026s] vram_now=35.1G peak=36.1G
+  served gguf /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf via props: OK
+  beliefs: /mnt/raid0/llm/tmp/sub-gpu-runner-20260916/prbt4/prb_t4_gpu_livecodebench_20260916_191049.beliefs.jsonl
+server 1824576 stopped rc=0
+{
+  "verdict": "INCONCLUSIVE",
+  "suites_meeting_30pct_and_minus1pp": [
+    "math"
+  ],
+  "worst_suite_acc_delta_pp": -1.0,
+  "tale_beats_static_everywhere": false,
+  "static_wins_by_suite": {
+    "livecodebench": true,
+    "math": false,
+    "olympiadbench": false
+  },
+  "tale_net_reduction_pct_by_suite": {
+    "livecodebench": 18.644067796610166,
+    "math": 58.43879213131187,
+    "olympiadbench": 26.611713095108158
+  },
+  "tale_acc_delta_pp_by_suite": {
+    "livecodebench": 0.0,
+    "math": 0.6666666666666666,
+    "olympiadbench": -1.0
+  },
+  "mean_tale_net_reduction_pct": 34.5648576743434,
+  "note": "DECLINE's '<15% net reduction' is read on the mean across suites; per-suite values are above."
+}

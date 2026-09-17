@@ -9,6 +9,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
 
 RESEARCH_ROOT = Path(__file__).resolve().parents[2]
 RUNNER = RESEARCH_ROOT / "scripts/benchmark/v7_quality_gate_runner.py"
@@ -35,13 +37,27 @@ def sliced_capture_names(path: Path) -> list[str]:
     return names
 
 
+def _require_converter() -> None:
+    # The SWE converter lives in an UNTRACKED artifact directory that exists only
+    # in the canonical research checkout; a fresh worktree or clone has no copy.
+    if not SWE_CONVERTER.is_file():
+        pytest.skip(f"{SWE_CONVERTER.relative_to(RESEARCH_ROOT)} is untracked and "
+                    "absent from this checkout")
+
+
 def test_capture_and_judge_paths_never_slice_model_payloads():
-    for path in (RUNNER, JUDGE_SCORER, SWE_CONVERTER):
+    for path in (RUNNER, JUDGE_SCORER):
         assert sliced_capture_names(path) == [], (
             f"{path.relative_to(RESEARCH_ROOT)} slices a prompt/response in a "
             "scoring or conversion path; preserve it losslessly or mark the row "
             "provisional before any scoring."
         )
+    _require_converter()
+    assert sliced_capture_names(SWE_CONVERTER) == [], (
+        f"{SWE_CONVERTER.relative_to(RESEARCH_ROOT)} slices a prompt/response in "
+        "a conversion path; preserve it losslessly or mark the row provisional "
+        "before any scoring."
+    )
 
 
 def test_guard_detects_the_historical_response_tail_loss(tmp_path: Path):
@@ -81,6 +97,7 @@ def test_judge_contract_sends_fingerprinted_full_payload_or_marks_ineligible():
 
 
 def test_converter_rejects_missing_or_mismatched_current_capture_fingerprints():
+    _require_converter()
     source = SWE_CONVERTER.read_text(encoding="utf-8")
     required_fragments = (
         'CURRENT_CAPTURE_SCHEMA = "v7_quality_gate_capture.v4"',

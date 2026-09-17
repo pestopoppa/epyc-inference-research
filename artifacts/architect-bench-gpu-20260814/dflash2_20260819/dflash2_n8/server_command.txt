@@ -1,0 +1,1 @@
+/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server -m /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf -np 1 -c 32768 -t 8 -tb 8 -b 2048 -ub 2048 -ctk f16 -ctv f16 --spec-type draft-dflash --spec-draft-model /mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf --spec-draft-n-max 8 

@@ -1,0 +1,287 @@
+{
+  "arms": {
+    "dflash2": {
+      "per_prompt": [
+        {
+          "id": "olympiadbench_hard_combinatorics_1882",
+          "verdict": "FAIL",
+          "first_diff_generation_token_index": 34,
+          "content_sha256_baseline": "cb038903326bebc23310902eb32f4f45053fe4f99317495579bcd3a7ee83ff1e",
+          "content_sha256_arm": "4ace29d63b89690275a3d9a6b68a7a557b6aafde8fb877d9fb43b6189666a80e",
+          "draft_n": 326,
+          "draft_n_accepted": 207,
+          "predicted_n_baseline": 256,
+          "predicted_n_arm": 256
+        },
+        {
+          "id": "olympiadbench_hard_algebra_1659",
+          "verdict": "FAIL",
+          "first_diff_generation_token_index": 128,
+          "content_sha256_baseline": "b84c05b96d7ba4cec0ca75c7340fd550ef30a6e0aff0b1f5b670cbe062d76118",
+          "content_sha256_arm": "2a6664cdc555b7814efb488fe780e26ba6a01d85453c0772ee26e1696b983a86",
+          "draft_n": 283,
+          "draft_n_accepted": 214,
+          "predicted_n_baseline": 256,
+          "predicted_n_arm": 256
+        },
+        {
+          "id": "olympiadbench_hard_combinatorics_2230",
+          "verdict": "PASS",
+          "first_diff_generation_token_index": null,
+          "content_sha256_baseline": "5adfe0a2fc3399b1a079940cd6bf0c8b6ef0242fb3fa19010bc3b1fe355ba24f",
+          "content_sha256_arm": "5adfe0a2fc3399b1a079940cd6bf0c8b6ef0242fb3fa19010bc3b1fe355ba24f",
+          "draft_n": 352,
+          "draft_n_accepted": 204,
+          "predicted_n_baseline": 256,
+          "predicted_n_arm": 256
+        },
+        {
+          "id": "olympiadbench_hard_algebra_2171",
+          "verdict": "PASS",
+          "first_diff_generation_token_index": null,
+          "content_sha256_baseline": "9dbd1959668347b7180934df5bfb6acecb2207490455ef9ed36cb22dc2b9ab82",
+          "content_sha256_arm": "9dbd1959668347b7180934df5bfb6acecb2207490455ef9ed36cb22dc2b9ab82",
+          "draft_n": 393,
+          "draft_n_accepted": 197,
+          "predicted_n_baseline": 256,
+          "predicted_n_arm": 256
+        },
+        {
+          "id": "olympiadbench_hard_combinatorics_2127",
+          "verdict": "PASS",
+          "first_diff_generation_token_index": null,
+          "content_sha256_baseline": "73c818a318639743c5a18f144860951426af766d1606db37eadceeaa7314d727",
+          "content_sha256_arm": "73c818a318639743c5a18f144860951426af766d1606db37eadceeaa7314d727",
+          "draft_n": 329,
+          "draft_n_accepted": 207,
+          "predicted_n_baseline": 256,
+          "predicted_n_arm": 256
+        },
+        {
+          "id": "olympiadbench_hard_algebra_1938",
+          "verdict": "FAIL",
+          "first_diff_generation_token_index": 247,
+          "content_sha256_baseline": "cb1f465a5f51b6176d34ec450ca34e6aeb9504e50e954a3e84d21725190715ad",
+          "content_sha256_arm": "68d420246f1b4895899e55874cb37c8f189f3a8140e404577d4b301b5766e851",
+          "draft_n": 304,
+          "draft_n_accepted": 211,
+          "predicted_n_baseline": 256,
+          "predicted_n_arm": 256
+        },
+        {
+          "id": "olympiadbench_hard_number_theory_1869",
+          "verdict": "FAIL",
+          "first_diff_generation_token_index": 182,
+          "content_sha256_baseline": "cec9e13b325f3bb131c0bf823d6bd42406586d2c5607f4fa547e0485c977858d",
+          "content_sha256_arm": "bca33e17304a6f1f6264208ff8e0779647fce68ed7515e83ef011a5eaddb558f",
+          "draft_n": 359,
+          "draft_n_accepted": 203,
+          "predicted_n_baseline": 256,
+          "predicted_n_arm": 256
+        },
+        {
+          "id": "olympiadbench_hard_algebra_2574",
+          "verdict": "PASS",
+          "first_diff_generation_token_index": null,
+          "content_sha256_baseline": "04aa0cb88472c0a2ac82722fb195b32c72b3b3f0efdc8d819891f1cc867b3e5d",
+          "content_sha256_arm": "04aa0cb88472c0a2ac82722fb195b32c72b3b3f0efdc8d819891f1cc867b3e5d",
+          "draft_n": 267,
+          "draft_n_accepted": 216,
+          "predicted_n_baseline": 256,
+          "predicted_n_arm": 256
+        },
+        {
+          "id": "olympiadbench_hard_combinatorics_1818",
+          "verdict": "PASS",
+          "first_diff_generation_token_index": null,
+          "content_sha256_baseline": "b679560b126d84fd82d84e505b2423978988255d953afa5dc6d87e76b2c7864f",
+          "content_sha256_arm": "b679560b126d84fd82d84e505b2423978988255d953afa5dc6d87e76b2c7864f",
+          "draft_n": 341,
+          "draft_n_accepted": 206,
+          "predicted_n_baseline": 256,
+          "predicted_n_arm": 256
+        },
+        {
+          "id": "olympiadbench_hard_number_theory_2415",
+          "verdict": "PASS",
+          "first_diff_generation_token_index": null,
+          "content_sha256_baseline": "c366ef74dfa5913fbac07369d8a32cf9d83c0c28d33c35c4e2088e36db58ce86",
+          "content_sha256_arm": "c366ef74dfa5913fbac07369d8a32cf9d83c0c28d33c35c4e2088e36db58ce86",
+          "draft_n": 281,
+          "draft_n_accepted": 214,
+          "predicted_n_baseline": 256,
+          "predicted_n_arm": 256
+        },
+        {
+          "id": "olympiadbench_hard_combinatorics_1664",
+          "verdict": "FAIL",
+          "first_diff_generation_token_index": 238,
+          "content_sha256_baseline": "357c72cdc807d211de40ca509e5eb5461def591f9fb8a550e21ab35818a15e43",
+          "content_sha256_arm": "9dbe8e8987f454c0c2db971e5c634d0e01d46878cb9b641f833326cf608c501c",
+          "draft_n": 324,
+          "draft_n_accepted": 208,
+          "predicted_n_baseline": 256,
+          "predicted_n_arm": 256
+        },
+        {
+          "id": "olympiadbench_hard_combinatorics_1662",
+          "verdict": "FAIL",
+          "first_diff_generation_token_index": 212,
+          "content_sha256_baseline": "d10cb04012ad2cd789f74eedeeef93c3a61e10f5cc88574ec130408dd27c473f",
+          "content_sha256_arm": "244aa2a6e9f3f1998720693cb32963ea7f4c4a0f1ae331202ebf54dfb05cca40",
+          "draft_n": 353,
+          "draft_n_accepted": 203,
+          "predicted_n_baseline": 256,
+          "predicted_n_arm": 256
+        }
+      ],
+      "n_pass": 6,
+      "n_fail": 6,
+      "negative_control_arm_drafted": true,
+      "mmvq_route_lines": 0
+    },
+    "draft_simple": {
+      "per_prompt": [
+        {
+          "id": "olympiadbench_hard_combinatorics_1882",
+          "verdict": "FAIL",
+          "first_diff_generation_token_index": 62,
+          "content_sha256_baseline": "cb038903326bebc23310902eb32f4f45053fe4f99317495579bcd3a7ee83ff1e",
+          "content_sha256_arm": "ff4a408c88c43aac02e1520b4f7471e20fd3f62642b4a297b82e1bae64d8b7d5",
+          "draft_n": 1001,
+          "draft_n_accepted": 128,
+          "predicted_n_baseline": 256,
+          "predicted_n_arm": 256
+        },
+        {
+          "id": "olympiadbench_hard_algebra_1659",
+          "verdict": "FAIL",
+          "first_diff_generation_token_index": 128,
+          "content_sha256_baseline": "b84c05b96d7ba4cec0ca75c7340fd550ef30a6e0aff0b1f5b670cbe062d76118",
+          "content_sha256_arm": "2a6664cdc555b7814efb488fe780e26ba6a01d85453c0772ee26e1696b983a86",
+          "draft_n": 1000,
+          "draft_n_accepted": 128,
+          "predicted_n_baseline": 256,
+          "predicted_n_arm": 256
+        },
+        {
+          "id": "olympiadbench_hard_combinatorics_2230",
+          "verdict": "PASS",
+          "first_diff_generation_token_index": null,
+          "content_sha256_baseline": "5adfe0a2fc3399b1a079940cd6bf0c8b6ef0242fb3fa19010bc3b1fe355ba24f",
+          "content_sha256_arm": "5adfe0a2fc3399b1a079940cd6bf0c8b6ef0242fb3fa19010bc3b1fe355ba24f",
+          "draft_n": 1000,
+          "draft_n_accepted": 128,
+          "predicted_n_baseline": 256,
+          "predicted_n_arm": 256
+        },
+        {
+          "id": "olympiadbench_hard_algebra_2171",
+          "verdict": "PASS",
+          "first_diff_generation_token_index": null,
+          "content_sha256_baseline": "9dbd1959668347b7180934df5bfb6acecb2207490455ef9ed36cb22dc2b9ab82",
+          "content_sha256_arm": "9dbd1959668347b7180934df5bfb6acecb2207490455ef9ed36cb22dc2b9ab82",
+          "draft_n": 996,
+          "draft_n_accepted": 128,
+          "predicted_n_baseline": 256,
+          "predicted_n_arm": 256
+        },
+        {
+          "id": "olympiadbench_hard_combinatorics_2127",
+          "verdict": "PASS",
+          "first_diff_generation_token_index": null,
+          "content_sha256_baseline": "73c818a318639743c5a18f144860951426af766d1606db37eadceeaa7314d727",
+          "content_sha256_arm": "73c818a318639743c5a18f144860951426af766d1606db37eadceeaa7314d727",
+          "draft_n": 1000,
+          "draft_n_accepted": 128,
+          "predicted_n_baseline": 256,
+          "predicted_n_arm": 256
+        },
+        {
+          "id": "olympiadbench_hard_algebra_1938",
+          "verdict": "FAIL",
+          "first_diff_generation_token_index": 247,
+          "content_sha256_baseline": "cb1f465a5f51b6176d34ec450ca34e6aeb9504e50e954a3e84d21725190715ad",
+          "content_sha256_arm": "68d420246f1b4895899e55874cb37c8f189f3a8140e404577d4b301b5766e851",
+          "draft_n": 992,
+          "draft_n_accepted": 129,
+          "predicted_n_baseline": 256,
+          "predicted_n_arm": 256
+        },
+        {
+          "id": "olympiadbench_hard_number_theory_1869",
+          "verdict": "PASS",
+          "first_diff_generation_token_index": null,
+          "content_sha256_baseline": "cec9e13b325f3bb131c0bf823d6bd42406586d2c5607f4fa547e0485c977858d",
+          "content_sha256_arm": "cec9e13b325f3bb131c0bf823d6bd42406586d2c5607f4fa547e0485c977858d",
+          "draft_n": 1000,
+          "draft_n_accepted": 128,
+          "predicted_n_baseline": 256,
+          "predicted_n_arm": 256
+        },
+        {
+          "id": "olympiadbench_hard_algebra_2574",
+          "verdict": "PASS",
+          "first_diff_generation_token_index": null,
+          "content_sha256_baseline": "04aa0cb88472c0a2ac82722fb195b32c72b3b3f0efdc8d819891f1cc867b3e5d",
+          "content_sha256_arm": "04aa0cb88472c0a2ac82722fb195b32c72b3b3f0efdc8d819891f1cc867b3e5d",
+          "draft_n": 1000,
+          "draft_n_accepted": 128,
+          "predicted_n_baseline": 256,
+          "predicted_n_arm": 256
+        },
+        {
+          "id": "olympiadbench_hard_combinatorics_1818",
+          "verdict": "FAIL",
+          "first_diff_generation_token_index": 193,
+          "content_sha256_baseline": "b679560b126d84fd82d84e505b2423978988255d953afa5dc6d87e76b2c7864f",
+          "content_sha256_arm": "8d512dd67aa061f266f304979173e135c257449122525deca987146df1d167cc",
+          "draft_n": 1004,
+          "draft_n_accepted": 127,
+          "predicted_n_baseline": 256,
+          "predicted_n_arm": 256
+        },
+        {
+          "id": "olympiadbench_hard_number_theory_2415",
+          "verdict": "FAIL",
+          "first_diff_generation_token_index": 36,
+          "content_sha256_baseline": "c366ef74dfa5913fbac07369d8a32cf9d83c0c28d33c35c4e2088e36db58ce86",
+          "content_sha256_arm": "67261375b4c956ae67a2813d562107c3be9154888a76006bf76681f7023ff576",
+          "draft_n": 976,
+          "draft_n_accepted": 131,
+          "predicted_n_baseline": 256,
+          "predicted_n_arm": 256
+        },
+        {
+          "id": "olympiadbench_hard_combinatorics_1664",
+          "verdict": "FAIL",
+          "first_diff_generation_token_index": 238,
+          "content_sha256_baseline": "357c72cdc807d211de40ca509e5eb5461def591f9fb8a550e21ab35818a15e43",
+          "content_sha256_arm": "9dbe8e8987f454c0c2db971e5c634d0e01d46878cb9b641f833326cf608c501c",
+          "draft_n": 992,
+          "draft_n_accepted": 129,
+          "predicted_n_baseline": 256,
+          "predicted_n_arm": 256
+        },
+        {
+          "id": "olympiadbench_hard_combinatorics_1662",
+          "verdict": "FAIL",
+          "first_diff_generation_token_index": 250,
+          "content_sha256_baseline": "d10cb04012ad2cd789f74eedeeef93c3a61e10f5cc88574ec130408dd27c473f",
+          "content_sha256_arm": "220c9a961c1382ba71a4d5396dabc2df890543a83bea9e7dc5fbb8964113231c",
+          "draft_n": 987,
+          "draft_n_accepted": 130,
+          "predicted_n_baseline": 256,
+          "predicted_n_arm": 256
+        }
+      ],
+      "n_pass": 5,
+      "n_fail": 7,
+      "negative_control_arm_drafted": true,
+      "mmvq_route_lines": 0
+    }
+  },
+  "refusals": [],
+  "baseline_negative_control_ok": true,
+  "baseline_arms_that_drafted": []
+}

@@ -1,0 +1,55 @@
+diff --git a/artifacts/p3-shadow-bakeoff-20260728/manifest/p3_bakeoff_manifest.json b/artifacts/p3-shadow-bakeoff-20260728/manifest/p3_bakeoff_manifest.json
+index 533a3e85..4fabc117 100644
+--- a/artifacts/p3-shadow-bakeoff-20260728/manifest/p3_bakeoff_manifest.json
++++ b/artifacts/p3-shadow-bakeoff-20260728/manifest/p3_bakeoff_manifest.json
+@@ -115,7 +115,7 @@
+           },
+           "scorer": {
+             "id": "answer_scoring.code_execution (executable pass@1, scored at capture; offline re-scorable from captures)",
+-            "runner_sha256": "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e",
++            "runner_sha256": "20a97fbd4aecc6f3887299243362d5315b76f819aa1cbc4b8fd92f33b307b45a",
+             "deferred": false
+           }
+         }
+@@ -159,7 +159,7 @@
+   "capture": {
+     "runner": {
+       "path": "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/v7_quality_gate_runner.py",
+-      "sha256": "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e"
++      "sha256": "20a97fbd4aecc6f3887299243362d5315b76f819aa1cbc4b8fd92f33b307b45a"
+     },
+     "capture_schema_version": "v7_quality_gate_capture.v4",
+     "per_question_incremental": true
+diff --git a/artifacts/p3-shadow-bakeoff-20260728/manifest/p3_bakeoff_manifest.json.sha256 b/artifacts/p3-shadow-bakeoff-20260728/manifest/p3_bakeoff_manifest.json.sha256
+index 9e1fca01..08462dea 100644
+--- a/artifacts/p3-shadow-bakeoff-20260728/manifest/p3_bakeoff_manifest.json.sha256
++++ b/artifacts/p3-shadow-bakeoff-20260728/manifest/p3_bakeoff_manifest.json.sha256
+@@ -1 +1 @@
+-3bb31a7a5fb38dfc90d463855db7af02cd1b8843ab72ded59b261e543ff4dbea  p3_bakeoff_manifest.json
++0ce1f2c3a1911b068486a37841de80e8f241e50c40017acaeec3d01bc1cb14cf  p3_bakeoff_manifest.json
+diff --git a/scripts/benchmark/dflash2_followups.py b/scripts/benchmark/dflash2_followups.py
+index 163b1f79..95788523 100644
+--- a/scripts/benchmark/dflash2_followups.py
++++ b/scripts/benchmark/dflash2_followups.py
+@@ -51,7 +51,7 @@ EXPECTED = {
+     "target_model_sha256": "a680f44a06920e5d689774823782006aa3acc8db95750323373b24139b67e348",
+     "draft_model_sha256": "7f1c9a31a6ed40044c69f6508b50fd63b87abd8e1fb7fe4290303df549153751",
+     "questions_sha256": "2088d2c0bf2c66a4a76d67359d4cfcebdbeb19eefd6161b5a309e94ce6a5476d",
+-    "runner_sha256": "6dea92dd9e374f79691f5df502fa11035ffd484906754f20190a4189111ae7dc",
++    "runner_sha256": "20a97fbd4aecc6f3887299243362d5315b76f819aa1cbc4b8fd92f33b307b45a",
+ }
+ 
+ 
+diff --git a/scripts/benchmark/test_dflash2_followups.py b/scripts/benchmark/test_dflash2_followups.py
+index 4b1f8233..861d6b84 100644
+--- a/scripts/benchmark/test_dflash2_followups.py
++++ b/scripts/benchmark/test_dflash2_followups.py
+@@ -9,7 +9,7 @@ class DFlash2FollowupContractTests(unittest.TestCase):
+     def test_exact_runner_bytes_are_unchanged(self):
+         self.assertEqual(F.sha256(F.RUNNER), F.EXPECTED["runner_sha256"])
+         self.assertEqual(F.EXPECTED["runner_sha256"],
+-                         "6dea92dd9e374f79691f5df502fa11035ffd484906754f20190a4189111ae7dc")
++                         "20a97fbd4aecc6f3887299243362d5315b76f819aa1cbc4b8fd92f33b307b45a")
+ 
+     def test_six_matched_cells_and_only_drafter_diff(self):
+         self.assertEqual(F.CELLS["concurrency"], (

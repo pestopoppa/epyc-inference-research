@@ -1,0 +1,2 @@
+taskset -c 184-191 /mnt/raid0/llm/worktrees/sub-gpu-prep-stable-diffusion.cpp/build-rocm-gpuprep-20260916/bin/sd-server --diffusion-model /mnt/raid0/llm/models/diffusion/ernie-image-turbo-gguf/ernie-image-turbo-Q8_0.gguf --vae /mnt/raid0/llm/models/diffusion/ernie-image-turbo-comfy/vae/flux2-vae.safetensors --llm /mnt/raid0/llm/models/diffusion/ernie-image-turbo-comfy/text_encoders/ministral-3-3b.safetensors -t 8 --diffusion-fa --diffusion-conv-direct --vae-conv-direct --listen-ip 127.0.0.1 --listen-port 18190
+SD_ERNIE_ROCM_F32=0

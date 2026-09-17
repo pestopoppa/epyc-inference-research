@@ -1,0 +1,1000 @@
+{
+  "meta": {
+    "kernel": "champion-ef81196d5",
+    "binary": "/mnt/raid0/llm/tmp/build-fold-ef81196d5/bin/llama-server",
+    "models": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+    "arm": "qwen3.6-35b-a3b-q8-mtp",
+    "timestamp": "2026-09-16T14:01:31.331661+00:00",
+    "elapsed_s": 3352.0,
+    "n_per_suite": 198,
+    "seed": 42,
+    "stratify": false,
+    "endpoint": "chat",
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 20,
+    "enable_thinking": false,
+    "sampling_fields_are_requested_not_effective": true,
+    "repeats": 1,
+    "max_tokens": 8192,
+    "questions_pinned": "/mnt/raid0/llm/tmp/sub-gpu-runner-20260916/cj1e/cj1_gpqa_manifest.json",
+    "capture_schema_version": "v7_quality_gate_capture.v4",
+    "runner_source_sha256": "20a97fbd4aecc6f3887299243362d5315b76f819aa1cbc4b8fd92f33b307b45a"
+  },
+  "suites": [
+    {
+      "suite": "gpqa_diamond_cot",
+      "accuracy": 0.797979797979798,
+      "n": 198,
+      "n_questions": 198,
+      "repeats": 1,
+      "correct": 158,
+      "errors": 0,
+      "truncated": 8,
+      "per_tier": {
+        "1": {
+          "accuracy": 0.7333333333333333,
+          "n": 15,
+          "correct": 11
+        },
+        "2": {
+          "accuracy": 0.9069767441860465,
+          "n": 43,
+          "correct": 39
+        },
+        "3": {
+          "accuracy": 0.7714285714285715,
+          "n": 140,
+          "correct": 108
+        }
+      },
+      "per_item": {
+        "gpqa_diamond_cot_05feddf9b061": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_05b8ae54964c": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_033f527ff40b": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_0b2ba477d600": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_08bb2291aa41": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_0bfd854d7672": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_04e1b33ab9d0": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_0c760ae63cb9": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_0761e5d33028": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_0ea4a4ae77b1": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_0f645ed1a5b6": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_103704cc1c47": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_14cb14d7901d": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_0fe24d3b8f4c": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_15ff6e843953": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_0d9437c8eb46": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_162d3aea3f5f": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_16317269132d": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_17a4ea6e0a38": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_17ab2a06f467": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_1978c6f55724": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_1d32d0e2bd39": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_1086b83f9b09": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_1ec70a20895d": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_1de218359792": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_15f6179057b3": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_20991a9a9282": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_2305aa77f736": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_216441760367": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_285dc1737550": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_207480534a51": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_1ccf6cb5ccd7": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_25c1f159b998": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_315fa4138216": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_28bd639c4516": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_33bcddc9dba4": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_2f4b87cce936": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_34eca24cb8c8": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_3414ae58943d": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_2abf0ef398b0": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_35f56448fc01": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_37d04e21601b": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_3684cd9c4b8f": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_3caedbe2742a": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_35ba108398d1": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_3dcbea1198af": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_3faa2ee74913": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_44c996a260e1": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_43ec5a9994a1": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_3a71e4893214": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_48092d087c6d": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_44dfc7140083": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_4bad428c883b": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_4bd96fcfc451": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_391b83e1291e": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_4fa219c8ee88": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_547725aa1b3d": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_5264190ffc78": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_4e86e2893657": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_59a6745047ac": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_59e13195e4a4": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_556c91b17ec6": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_5bf5e94e2b29": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_59e77636abea": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_5a1b0707d427": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_56010fc087ff": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_5f385c7f399c": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_5d4e56507b18": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_62dae16307b8": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_5fd3fe9084c9": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_64c23bc5ece9": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_612c248c004b": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_6005d9ed304b": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_654169e3d799": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_6b70010006b4": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_6db8730006ec": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_6a686db3ec85": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_64d1b920ee51": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_71fb261898a5": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_76c60e8125fc": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_68d3e978abeb": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_79e7a7935eeb": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_7013c1d75aac": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_7c2a53866a85": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_7cb41044d9fb": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_794ed39f96c4": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_7ee4e6559240": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_7dce1712acca": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_772f11fbadb5": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_80a677bd67e8": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_7fcd238710a9": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_8116937b0ca6": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_8245601027ec": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_8400c79f88ad": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_7e151621ce33": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_7fb13c87aa1d": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_84a679ae07a3": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_8420759eefc1": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_871ea94fbbf6": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_8769268ab907": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_82ec93d491ce": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_887db94c8207": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_877a599cee57": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_89d4c7b1c39f": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_8cabb5a8e4ac": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_8b37d0ac9531": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_9343800bd9d9": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_92a5100091e8": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_98cadc374750": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_968909b50f5f": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_9a0773dd81aa": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_99ef9ddc8290": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_8a7936892d01": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_9c0f27eada5c": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_90672016a169": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_a08ace6c928e": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_9fa6eb863e1a": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_9c20b3b8dc0a": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_a352908e9469": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_a2153d1c4692": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_a73b0a696b98": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_a882cfdd4014": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_a936a7b483aa": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_9ccb97e364d4": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_a97cee844150": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_a4858dc758a9": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_a977963f5d44": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_ac123a11e310": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_ada1a98fb555": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_af9ff7ad3dbc": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_ae97a40841ff": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_b2f59a61b8ca": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_b0286d32d382": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_a650bf73f2f3": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_b3f6d3fd4bca": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_b328bb679c68": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_b60c345b7986": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_b5fefa1b2e66": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_b6546d1723b8": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_ba3f9524be29": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_af7173ccec34": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_ba5c8a1d1625": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_bb59660ef2b4": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_bc02c9c2fc29": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_bd4ca25411b1": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_bf6ebf9ec01f": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_c0704534917d": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_b6662cde1bf9": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_b6a67f32140a": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_c406fdc64cb8": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_c4db8bec04aa": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_bf3325f358b9": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_c5053c80b3d1": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_c6a40a5542a9": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_ca1d6a2f9e02": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_ce83f0d38f24": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_ca9820744159": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_d310610633c8": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_d522db23b252": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_c5d3dfe3d3ba": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_d5924acc2eb0": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_d7852b8a4a2d": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_d7f761d5a244": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_cbb1bd8b79a2": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_d541702e985a": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_dc32d6aa137d": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_d995d5db4d34": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_d9d1b507c78f": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_db62d72d2036": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_ddcfd176acb1": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_dca0de952c88": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_e04b4a664d1e": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_e11f34580b0c": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_dcef591b51b8": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_e41baef45a98": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_e4a35442b122": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_deee27a61c04": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_e94f8e4e3ffa": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_e06868acdc28": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_e37276dfe15e": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_ef2ac8dc7eb5": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_ede7c8de0e03": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_ef4ca9bd0f3e": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_ef62bba35bf1": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_ef704289c72a": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_f050477d085b": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_e55ff88d93e0": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_ee6b0dbdedfa": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_f01c0823c478": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_f3a462fd2694": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_f4538726c8f0": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_faf5ccbf92e2": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_f624b8723d7b": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_f44af5e50606": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_fb9f775279f2": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_fc42071e8a9c": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cot_fc3a39f84543": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_cot_fd8f767d092d": {
+          "correct": 1,
+          "n": 1
+        }
+      },
+      "capture": {
+        "schema_version": "v7_quality_gate_capture.v4",
+        "new_rows": 198,
+        "request_error_rows": 0,
+        "length_cap_rows": 8,
+        "response_chars": 1571430,
+        "response_utf8_bytes": 1571596,
+        "reasoning_chars": 0,
+        "reasoning_utf8_bytes": 0,
+        "swebench_search_replace": {
+          "applicable": false,
+          "new_rows": 0,
+          "resumed_rows": 0,
+          "resumed_rows_without_diagnostics": 0,
+          "resumed_rows_without_provenance": 0,
+          "resumed_rows_source_sha_mismatch": 0,
+          "rows_with_markers": 0,
+          "parseable_blocks": 0,
+          "malformed_rows": 0,
+          "zero_strict_block_rows": 0,
+          "partial_strict_block_rows": 0,
+          "state_counts": {
+            "strict_ready": 0,
+            "prompt_contract_candidate": 0,
+            "model_truncation_no_patch": 0,
+            "model_truncation_partial_patch": 0,
+            "request_error": 0
+          },
+          "summary_complete": true,
+          "converter_contract_ready": false,
+          "score_status": "not_applicable"
+        }
+      },
+      "throughput": {
+        "concurrency": 4,
+        "wall_s": 3352.0,
+        "completion_tokens": 520111,
+        "prompt_tokens": 49898,
+        "aggregate_decode_tok_s": 155.2,
+        "aggregate_total_tok_s": 170.1
+      }
+    }
+  ],
+  "belief_measurements": [
+    {
+      "measurement_id": "quality_gate_qwen3.6-35b-a3b-q8-mtp_gpqa_diamond_cot_accuracy",
+      "metric": "gpqa_diamond_cot_accuracy",
+      "value": 0.797979797979798,
+      "unit": "fraction",
+      "metric_direction": "higher_better",
+      "category": "CANDIDATE",
+      "protocol_id": "epyc.v7_quality_gate_runner.accuracy.v1",
+      "reps": 198,
+      "reps_basis": "scored:198 gpqa_diamond_cot questions (seed 42, repeats 1)",
+      "claim": "CANDIDATE arm qwen3.6-35b-a3b-q8-mtp scored 0.7980 accuracy (158/198) on gpqa_diamond_cot",
+      "extra": {
+        "date": "2026-09-16T14:01:31.331661+00:00",
+        "arm": "qwen3.6-35b-a3b-q8-mtp",
+        "category": "CANDIDATE",
+        "kernel": "champion-ef81196d5",
+        "binary": "/mnt/raid0/llm/tmp/build-fold-ef81196d5/bin/llama-server",
+        "models": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+        "serving": {
+          "host": "127.0.0.1",
+          "port": 18372,
+          "endpoint": "chat",
+          "template": "server-side; not observable by the runner"
+        },
+        "sampling": {
+          "seed": 42,
+          "stratify": false,
+          "temperature": 0.6,
+          "top_p": 0.95,
+          "top_k": 20,
+          "enable_thinking": false,
+          "sampling_fields_are_requested_not_effective": true,
+          "repeats": 1,
+          "max_tokens": 8192,
+          "concurrency": 4
+        },
+        "prompt_set": {
+          "id": "/mnt/raid0/llm/tmp/sub-gpu-runner-20260916/cj1e/cj1_gpqa_manifest.json",
+          "path": "/mnt/raid0/llm/tmp/sub-gpu-runner-20260916/cj1e/cj1_gpqa_manifest.json",
+          "sha256": "937070b0ca6d95e0de18c5b526b1df6c9bdf1f15c67fe3031e3ef9180258d52b",
+          "sample": {
+            "schema": "epyc.cj1.gpqa_sample.v1",
+            "suite": "gpqa_diamond_cot",
+            "method": "sorted_id+random.Random(seed).sample.v1",
+            "seed": 42,
+            "seed_effective": false,
+            "n": 198,
+            "n_population": 198,
+            "full_population": true,
+            "population_path": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-bench-gpu-20260720/questions_gpqa_diamond_cot.json",
+            "population_sha256": "14e807dd11736b022f337466efc0fb5c95bf6e521a4514a09d0f25916524ecee",
+            "population_ids_sha256": "381ba36533eb8971e50c18481c6fde69722a97d80762ee61fd8eb0e9fbb23194",
+            "sample_ids_sha256": "381ba36533eb8971e50c18481c6fde69722a97d80762ee61fd8eb0e9fbb23194",
+            "tier_counts": {
+              "1": 15,
+              "2": 43,
+              "3": 140
+            },
+            "gold_counts": {
+              "A": 38,
+              "B": 61,
+              "C": 62,
+              "D": 37
+            },
+            "manifest_item_count": 198
+          }
+        },
+        "scored": {
+          "correct": 158,
+          "n": 198,
+          "accuracy": 0.797979797979798,
+          "truncated": 8,
+          "errors": 0,
+          "tier_accuracy": {
+            "1": {
+              "accuracy": 0.7333333333333333,
+              "n": 15,
+              "correct": 11
+            },
+            "2": {
+              "accuracy": 0.9069767441860465,
+              "n": 43,
+              "correct": 39
+            },
+            "3": {
+              "accuracy": 0.7714285714285715,
+              "n": 140,
+              "correct": 108
+            }
+          }
+        },
+        "capture_schema_version": "v7_quality_gate_capture.v4",
+        "producer_id": "scripts.benchmark.v7_quality_gate_runner/main",
+        "producer_sha256": "20a97fbd4aecc6f3887299243362d5315b76f819aa1cbc4b8fd92f33b307b45a",
+        "attestation_path": "/mnt/raid0/llm/tmp/sub-gpu-runner-20260916/cj1e/qwen3.6-35b-a3b-q8-mtp/result.json",
+        "attestation_sha256": "8f44ff98447f3e86aa6ec86eac371161c7b40b7ed54f05719a060e3b0d013271",
+        "attestation_locator": "result.json",
+        "arm_config": {
+          "recipe": "qwen3.6-35b-a3b-q8-gpu-mtp",
+          "ctx_override": 49152,
+          "np": 4
+        }
+      },
+      "measurement_sha256": "4a828cda387d610387001e0bfd91f671c64ff0e8a12ce53c0236f83c9987ad08"
+    }
+  ],
+  "belief_attestation": {
+    "schema": "epyc.v7_quality_gate_runner.accuracy.v1",
+    "attestation_sha256": "8f44ff98447f3e86aa6ec86eac371161c7b40b7ed54f05719a060e3b0d013271",
+    "attestation_path": "/mnt/raid0/llm/tmp/sub-gpu-runner-20260916/cj1e/qwen3.6-35b-a3b-q8-mtp/result.json"
+  }
+}

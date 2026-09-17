@@ -540,6 +540,130 @@ def test_waiver_does_not_leak_to_other_citations_on_other_lines(repo):
     assert len(res.errors) == 1
 
 
+# ------------------------------------------------------ withheld artifacts (2026-09-15)
+
+class TestWithheldIsNotMissing:
+    """A `<file>.WITHHELD.sha256` sibling resolves the citation.
+
+    The bug: `MEASUREMENT.md` §5 lets an artifact that cannot be committed be recorded
+    hash-and-provenance-only, and the 2026-08-02 migration did exactly that for the
+    PaddleOCR receipt `summary.json`/`response.json` (a third party's company name,
+    registration number, address, phone and GST ID). The checker then reported the
+    deliberate withholding as `MISSING` — a hard error whose printed remedy is
+    "re-measure it or demote the number", which is wrong advice for a policy decision,
+    and which made a WITHHELD artifact indistinguishable from LOST evidence.
+    """
+
+    def _withheld(self, repo, name="secret.json", digest="a" * 64, body=None):
+        """A cited-but-absent artifact with a hash sibling next to where it would be."""
+        d = repo / "data" / "withheld_campaign_20260902"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "README.md").write_text("# withheld")
+        (d / "SHA256SUMS").write_text(f"{digest}  data/withheld_campaign_20260902/{name}\n")
+        rec = d / f"{name}.WITHHELD.sha256"
+        rec.write_text(f"{digest}  data/withheld_campaign_20260902/{name}\n"
+                       if body is None else body)
+        assert not (d / name).exists(), "the artifact itself must NOT be carried"
+        return write_registry(
+            repo, f"evidence: data/withheld_campaign_20260902/{name}\n")
+
+    def test_withheld_resolves_the_citation(self, repo):
+        res = check(self._withheld(repo), repo)
+        (c,) = res.citations
+        assert c.verdict == "WITHHELD"
+        assert not res.errors
+
+    def test_withheld_is_not_ok(self, repo):
+        """`OK` means a reader can recompute the hash from this checkout; WITHHELD means
+        they cannot. Folding the two together would erase a permanent caveat on the
+        claim, so the verdict must stay distinguishable."""
+        (c,) = check(self._withheld(repo), repo).citations
+        assert c.verdict != "OK"
+        assert c.severity == "info"
+        assert "MEASUREMENT.md" in c.hint and "secret.json.WITHHELD.sha256" in c.hint
+
+    def test_withheld_is_listed_without_show_ok(self, repo, capsys):
+        """Visible by default: a caveat nobody sees is not a caveat."""
+        reg = self._withheld(repo)
+        assert main([str(reg), "--repo", str(repo)]) == 0
+        out = capsys.readouterr().out
+        assert "WITHHELD" in out
+        assert "held" in out
+
+    def test_withheld_is_not_escalated_by_warnings_as_errors(self, repo):
+        """-W escalates RECORDED LOSSES. Withholding is neither a loss nor a pending
+        action, and lumping it back in would re-merge the two states this verdict exists
+        to separate."""
+        reg = self._withheld(repo)
+        res = check(reg, repo)
+        assert res.errors == [] and res.warnings == []
+        assert main([str(reg), "--repo", str(repo), "-W"]) == 0
+
+    def test_empty_hash_sibling_is_not_a_mute_button(self, repo):
+        """The sibling must record an actual digest. A zero-byte `touch` records nothing,
+        so it must silence nothing — same reasoning as UNREADABLE not being waivable by
+        `ARTIFACT LOST`: a marker asserting something false must not buy silence."""
+        reg = self._withheld(repo, body="")
+        res = check(reg, repo)
+        (c,) = res.citations
+        assert (c.verdict, c.severity) == ("MISSING", "error")
+
+    def test_hash_free_sibling_is_not_a_mute_button(self, repo):
+        reg = self._withheld(repo, body="withheld because PII, trust me\n")
+        (c,) = check(reg, repo).citations
+        assert c.verdict == "MISSING"
+
+    def test_lost_marker_still_wins_over_a_hash_sibling(self, repo):
+        """An explicitly recorded LOSS is not downgraded to a withholding: the two make
+        different assertions and want different remedies."""
+        d = repo / "data" / "withheld_campaign_20260902"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "gone.json.WITHHELD.sha256").write_text("b" * 64 + "  gone.json\n")
+        reg = write_registry(repo, "evidence: data/withheld_campaign_20260902/gone.json"
+                                   "  # ARTIFACT LOST — recorded 2026-09-15\n")
+        (c,) = check(reg, repo).citations
+        assert c.verdict == "WAIVED_LOST"
+
+    def test_a_present_artifact_is_still_plain_ok(self, repo):
+        """A stray hash sibling next to an artifact that IS carried must not demote it."""
+        (repo / "data" / "good_campaign_20260801"
+         / "summary.json.WITHHELD.sha256").write_text("c" * 64 + "  summary.json\n")
+        reg = write_registry(repo, "evidence: data/good_campaign_20260801/summary.json\n")
+        (c,) = check(reg, repo).citations
+        assert c.verdict == "OK"
+
+    def test_scratch_citation_is_not_rescued_by_a_hash_sibling(self, repo, tmp_path):
+        """The ungrantable rule stays ungrantable. WITHHELD is reached only through the
+        MISSING path; a citation out of a scratch root fails before it gets there, even
+        with a sibling sitting next to it."""
+        scratch = tmp_path / "scratchlike"
+        scratch.mkdir()
+        (scratch / "x.json.WITHHELD.sha256").write_text("d" * 64 + "  x.json\n")
+        reg = write_registry(
+            repo, "evidence: /mnt/raid0/llm/tmp/withheld_campaign/x.json\n")
+        (c,) = check(reg, repo).citations
+        assert (c.verdict, c.severity) == ("EPHEMERAL", "error")
+
+    def test_directory_citation_can_be_withheld(self, repo):
+        """Citations name directories as well as files; the sibling convention is the
+        same (`<dir>.WITHHELD.sha256`), so the two must not diverge."""
+        d = repo / "data" / "withheld_campaign_20260902"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "run_control.WITHHELD.sha256").write_text("e" * 64 + "  run_control\n")
+        reg = write_registry(
+            repo, "evidence: data/withheld_campaign_20260902/run_control\n")
+        (c,) = check(reg, repo).citations
+        assert c.verdict == "WITHHELD"
+
+    def test_missing_hint_names_the_withheld_escape(self, repo):
+        """Someone staring at a genuine PII case must be told the convention exists,
+        rather than reaching for the only two options the old hint offered."""
+        reg = write_registry(repo, "evidence: data/withheld_campaign_20260902/nope.json\n")
+        (c,) = check(reg, repo).citations
+        assert c.verdict == "MISSING"
+        assert ".WITHHELD.sha256" in c.hint
+
+
 # --------------------------------------------------------------- the compliant path
 
 def test_compliant_registry_is_silent(repo):

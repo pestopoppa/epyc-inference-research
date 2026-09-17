@@ -1,0 +1,26 @@
+taken 2026-09-17T02:22:37Z
+5801cd74df22952051d907fa15859d7039b0099830913500e4d2675dcab5a3b9  /mnt/raid0/llm/llama.cpp/build-hip/bin/llama-batched-bench
+0db32c06e3e550065b78311a6031ef3dd2c4f27c
+tracked_dirty_files=0
+binary : /mnt/raid0/llm/llama.cpp/build-hip/bin/llama-batched-bench
+expect : libraries under /mnt/raid0/llm/llama.cpp
+
+  OK   libllama-batched-bench-impl.so -> /mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-batched-bench-impl.so
+  OK   libllama-common.so.0         -> /mnt/raid0/llm/llama.cpp/build-hip/bin/libllama-common.so.0
+  OK   libllama.so.0                -> /mnt/raid0/llm/llama.cpp/build-hip/bin/libllama.so.0
+  OK   libggml-base.so.0            -> /mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-base.so.0
+  OK   libggml.so.0                 -> /mnt/raid0/llm/llama.cpp/build-hip/bin/libggml.so.0
+  OK   libggml-cpu.so.0             -> /mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-cpu.so.0
+  OK   libggml-hip.so.0             -> /mnt/raid0/llm/llama.cpp/build-hip/bin/libggml-hip.so.0
+
+LD_LIBRARY_PATH order as the loader sees it:
+         1	/mnt/raid0/llm/llama.cpp/build-hip/bin
+         2	/opt/rocm/lib
+
+PASS: all linked ggml libraries resolve inside /mnt/raid0/llm/llama.cpp
+NOTE: ggml backends (ggml-hip, ggml-cpu-<arch>) are dlopened at RUNTIME and
+      are not covered by ldd. Confirm the intended device appears in the
+      program's own startup log (e.g. 'Device 0: AMD Instinct MI210') and
+      do not trust a 'use gpu = 1' flag alone — that flag reports what was
+      REQUESTED, not what was loaded.
+linkage_rc=0

@@ -1,0 +1,445 @@
+{
+  "meta": {
+    "kernel": "production-consolidated-v9",
+    "binary": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+    "models": "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+    "arm": "qwen3.8-27b",
+    "timestamp": "2026-08-15T09:20:27.591473+00:00",
+    "elapsed_s": 751.6,
+    "n_per_suite": 90,
+    "seed": 42,
+    "stratify": false,
+    "endpoint": "chat",
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 20,
+    "enable_thinking": false,
+    "repeats": 1,
+    "max_tokens": 4096,
+    "questions_pinned": "artifacts/architect-code-eval-20260724/questions_bigcodebench_hard.json",
+    "capture_schema_version": "v7_quality_gate_capture.v4",
+    "runner_source_sha256": "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e"
+  },
+  "suites": [
+    {
+      "suite": "bigcodebench_hard",
+      "accuracy": 0.3111111111111111,
+      "n": 90,
+      "n_questions": 90,
+      "repeats": 1,
+      "correct": 28,
+      "errors": 0,
+      "truncated": 0,
+      "per_tier": {
+        "3": {
+          "accuracy": 0.3111111111111111,
+          "n": 90,
+          "correct": 28
+        }
+      },
+      "per_item": {
+        "BigCodeBench_13": {
+          "correct": 1,
+          "n": 1
+        },
+        "BigCodeBench_15": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_17": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_19": {
+          "correct": 1,
+          "n": 1
+        },
+        "BigCodeBench_34": {
+          "correct": 1,
+          "n": 1
+        },
+        "BigCodeBench_37": {
+          "correct": 1,
+          "n": 1
+        },
+        "BigCodeBench_89": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_92": {
+          "correct": 1,
+          "n": 1
+        },
+        "BigCodeBench_93": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_99": {
+          "correct": 1,
+          "n": 1
+        },
+        "BigCodeBench_100": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_120": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_123": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_124": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_129": {
+          "correct": 1,
+          "n": 1
+        },
+        "BigCodeBench_139": {
+          "correct": 1,
+          "n": 1
+        },
+        "BigCodeBench_147": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_161": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_162": {
+          "correct": 1,
+          "n": 1
+        },
+        "BigCodeBench_184": {
+          "correct": 1,
+          "n": 1
+        },
+        "BigCodeBench_199": {
+          "correct": 1,
+          "n": 1
+        },
+        "BigCodeBench_208": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_211": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_239": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_241": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_267": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_273": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_274": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_302": {
+          "correct": 1,
+          "n": 1
+        },
+        "BigCodeBench_308": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_310": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_324": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_326": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_341": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_346": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_360": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_367": {
+          "correct": 1,
+          "n": 1
+        },
+        "BigCodeBench_368": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_374": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_399": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_409": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_443": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_445": {
+          "correct": 1,
+          "n": 1
+        },
+        "BigCodeBench_454": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_458": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_477": {
+          "correct": 1,
+          "n": 1
+        },
+        "BigCodeBench_486": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_492": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_502": {
+          "correct": 1,
+          "n": 1
+        },
+        "BigCodeBench_509": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_513": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_526": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_528": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_530": {
+          "correct": 1,
+          "n": 1
+        },
+        "BigCodeBench_532": {
+          "correct": 1,
+          "n": 1
+        },
+        "BigCodeBench_553": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_560": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_567": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_574": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_579": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_582": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_592": {
+          "correct": 1,
+          "n": 1
+        },
+        "BigCodeBench_593": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_594": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_618": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_636": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_637": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_654": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_655": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_678": {
+          "correct": 1,
+          "n": 1
+        },
+        "BigCodeBench_720": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_723": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_752": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_760": {
+          "correct": 1,
+          "n": 1
+        },
+        "BigCodeBench_763": {
+          "correct": 1,
+          "n": 1
+        },
+        "BigCodeBench_765": {
+          "correct": 1,
+          "n": 1
+        },
+        "BigCodeBench_771": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_777": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_785": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_800": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_854": {
+          "correct": 1,
+          "n": 1
+        },
+        "BigCodeBench_857": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_870": {
+          "correct": 1,
+          "n": 1
+        },
+        "BigCodeBench_897": {
+          "correct": 1,
+          "n": 1
+        },
+        "BigCodeBench_906": {
+          "correct": 1,
+          "n": 1
+        },
+        "BigCodeBench_914": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_915": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_916": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_917": {
+          "correct": 0,
+          "n": 1
+        },
+        "BigCodeBench_928": {
+          "correct": 1,
+          "n": 1
+        }
+      },
+      "capture": {
+        "schema_version": "v7_quality_gate_capture.v4",
+        "new_rows": 90,
+        "request_error_rows": 0,
+        "length_cap_rows": 0,
+        "response_chars": 153380,
+        "response_utf8_bytes": 153386,
+        "reasoning_chars": 0,
+        "reasoning_utf8_bytes": 0,
+        "swebench_search_replace": {
+          "applicable": false,
+          "new_rows": 0,
+          "resumed_rows": 0,
+          "resumed_rows_without_diagnostics": 0,
+          "resumed_rows_without_provenance": 0,
+          "resumed_rows_source_sha_mismatch": 0,
+          "rows_with_markers": 0,
+          "parseable_blocks": 0,
+          "malformed_rows": 0,
+          "zero_strict_block_rows": 0,
+          "partial_strict_block_rows": 0,
+          "state_counts": {
+            "strict_ready": 0,
+            "prompt_contract_candidate": 0,
+            "model_truncation_no_patch": 0,
+            "model_truncation_partial_patch": 0,
+            "request_error": 0
+          },
+          "summary_complete": true,
+          "converter_contract_ready": false,
+          "score_status": "not_applicable"
+        }
+      },
+      "throughput": {
+        "concurrency": 1,
+        "wall_s": 751.6,
+        "completion_tokens": 38303,
+        "prompt_tokens": 18796,
+        "aggregate_decode_tok_s": 51.0,
+        "aggregate_total_tok_s": 76.0
+      }
+    }
+  ]
+}

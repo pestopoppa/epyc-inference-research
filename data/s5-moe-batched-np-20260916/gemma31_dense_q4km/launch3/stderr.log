@@ -1,0 +1,4 @@
+0.00.298.894 W load: override 'tokenizer.ggml.add_bos_token' to 'true' for Gemma4
+0.00.342.407 W load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.342.667 W load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden
+0.00.355.833 W load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list

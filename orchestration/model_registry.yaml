@@ -1305,6 +1305,12 @@ server_mode:
       # Curve turns over: optimum 6-8 (n6 vs n8 inside noise), 8 chosen. MTP is worth 2.00x over
       # plain at n-max 8. Evidence: epyc-inference-research/artifacts/architect-bench-gpu-20260814/
       # mtp_nmax_sweep_20260819/ and mtp_ab_20260819/.
+      # 2026-09-15 (NIB2-73a): that evidence was UNTRACKED — it resolved in one clone and read
+      # MISSING in every worktree. The distilled per-arm results plus the provenance chain are now
+      # carried in git (167 of 432 files, 362 KB of 22.4 MB). Raw prompts/completions, agentic
+      # trajectories, -lv 3 server logs and VRAM telemetry are deliberately NOT carried and remain
+      # only at the origin path. What was dropped and why:
+      # artifacts/architect-bench-gpu-20260814/README.md.
       spec_type: draft-mtp
       draft_max: 8
       draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
@@ -10025,6 +10031,10 @@ roles:
       attest: "epyc-inference-research/artifacts/architect-bench-gpu-20260814/ —
         mtp_ab_20260819/ (plain-vs-MTP), mtp_nmax_sweep_20260819/ (depth sweep),
         q38_vram_shape_20260820/ (VRAM at production shape). All OBSERVATIONS per MEASUREMENT.md."
+      # 2026-09-15 (NIB2-73a): the attested tree was untracked. The distilled results and the
+      # provenance chain (preflight sha256s, linkage-report, server_command, geometry, rocm_during,
+      # kfd_line, capture completeness markers) are now in git; the bulk substrate is not. See
+      # artifacts/architect-bench-gpu-20260814/README.md for the carry boundary.
     model:
       name: Qwen3.8-27B-Q8_0
       path: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
@@ -10075,6 +10085,11 @@ roles:
         - artifacts/architect-bench-gpu-20260814/dflash2_np1_20260820/campaign-summary.json
         evidence_sha256: e4f9e21fd399c37fceca31e171be0299bcd4c35284d5a5828e3201a8bf50b053
         manifest_sha256: ebfc55f5706d549e7c5e00cf814e968f299491fe9ab23466f83a7dfb6cb6be4e
+        # 2026-09-15 (NIB2-73a): both hashes VERIFIED against the artifacts now carried in git —
+        # campaign-summary.json -> evidence_sha256, dflash2_np1_20260820/sha256sums.txt ->
+        # manifest_sha256. Until today they hashed untracked files, i.e. they were assertions in
+        # every checkout but one. Note sha256sums.txt intentionally seals substrate that was NOT
+        # carried (pq.jsonl, resource-samples.json), so it is not checkable from git alone.
         build: "llama.cpp-experimental ak/dflash2-qwen38-20260820 @ 2046c64e (PR #27342 forward-port;
           frozen v9 NOT edited). Requires this non-production binary — it cannot run on v9."
         blocking_before_selection:

@@ -1,0 +1,11 @@
+{
+  "peak_vram_bytes": 38722084864,
+  "median_vram_bytes": 36436877312,
+  "vram_reads": 25869,
+  "peak_kfd_processes": 1,
+  "sclk_min_mhz": 1565,
+  "sclk_max_mhz": 1700,
+  "clock_stable": false,
+  "samples": 25869,
+  "resident": true
+}

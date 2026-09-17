@@ -1,0 +1,21 @@
+{
+  "pid": 1250371,
+  "pilot": {
+    "run_rc": 0,
+    "verdict": [
+      "NEGATIVE",
+      []
+    ]
+  },
+  "full": {
+    "run_rc": 0,
+    "verdict": [
+      "NEGATIVE",
+      []
+    ]
+  },
+  "teardown": {
+    "rc": 0,
+    "still_alive": false
+  }
+}

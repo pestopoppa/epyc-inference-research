@@ -137,12 +137,23 @@ def test_judge_swap_config_recorded():
         assert json.loads(pr_path.read_text())["judge_config"]["judge_model"] == "qwen3-coder-30B-A3B"
 
 
+def test_cross_family_distinguishes_qwen_pair_from_gemma_qwen():
+    assert harness.cross_family_ok("Qwen3.8-27B", "Qwen3.6-35B-A3B-MTP") is False
+    assert harness.cross_family_ok("gemma4-26B-A4B", "qwen3-coder-30B-A3B") is True
+    assert harness.cross_family_ok("mystery-model", "Qwen3.8-27B") is True
+    cfg = harness.HarnessConfig(golden_path="x", out_dir="y", model="Qwen3.8-27B",
+                                quant="Q8_0", judge_model="Qwen3.6-35B-A3B-MTP", judge_quant="Q8_0")
+    jc = cfg.judge_config()
+    assert jc["judge_distinct_from_reader"] is True and jc["cross_family_ok"] is False
+
+
 def test_payload_shape_has_no_thinking_and_seeded_runs():
     golden = conftest.load_synthetic_golden()
     cfg = _config("/tmp/unused")
     p0 = harness.build_payload(golden["cases"][0], 0, cfg)
     p1 = harness.build_payload(golden["cases"][0], 1, cfg)
     assert p0["enable_thinking"] is False
+    assert p0["chat_template_kwargs"] == {"enable_thinking": False}
     assert p0["seed"] == 42 and p1["seed"] == 43  # per-run seed for StdDev
     assert p0["messages"][0]["role"] == "system"
     assert p0["model"] == "gemma4-26B-A4B"

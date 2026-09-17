@@ -1,0 +1,887 @@
+{
+  "meta": {
+    "kernel": "production-consolidated-v9",
+    "binary": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+    "models": "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+    "arm": "qwen3.8-27b",
+    "timestamp": "2026-08-14T23:53:33.376449+00:00",
+    "elapsed_s": 174.7,
+    "n_per_suite": 200,
+    "seed": 42,
+    "stratify": false,
+    "endpoint": "chat",
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 20,
+    "enable_thinking": false,
+    "repeats": 1,
+    "max_tokens": 512,
+    "questions_pinned": "artifacts/architect-bench-gpu-20260720/questions_gpqa_diamond.json",
+    "capture_schema_version": "v7_quality_gate_capture.v4",
+    "runner_source_sha256": "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e"
+  },
+  "suites": [
+    {
+      "suite": "gpqa_diamond",
+      "accuracy": 0.42424242424242425,
+      "n": 198,
+      "n_questions": 198,
+      "repeats": 1,
+      "correct": 84,
+      "errors": 0,
+      "truncated": 5,
+      "per_tier": {
+        "1": {
+          "accuracy": 0.4,
+          "n": 15,
+          "correct": 6
+        },
+        "2": {
+          "accuracy": 0.5116279069767442,
+          "n": 43,
+          "correct": 22
+        },
+        "3": {
+          "accuracy": 0.4,
+          "n": 140,
+          "correct": 56
+        }
+      },
+      "per_item": {
+        "gpqa_diamond_ada1a98fb555": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_b5fefa1b2e66": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_5a1b0707d427": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_c0704534917d": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_9fa6eb863e1a": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_faf5ccbf92e2": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_7cb41044d9fb": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_04e1b33ab9d0": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_bf6ebf9ec01f": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_556c91b17ec6": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_15f6179057b3": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_ef4ca9bd0f3e": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_ef62bba35bf1": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_b6662cde1bf9": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_dcef591b51b8": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_76c60e8125fc": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_6b70010006b4": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_ee6b0dbdedfa": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_5fd3fe9084c9": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_a97cee844150": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_ef704289c72a": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_7ee4e6559240": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_bb59660ef2b4": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_1d32d0e2bd39": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_3dcbea1198af": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_033f527ff40b": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_1de218359792": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_25c1f159b998": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_14cb14d7901d": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_d541702e985a": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_7fcd238710a9": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_b3f6d3fd4bca": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_62dae16307b8": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_98cadc374750": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_1978c6f55724": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_dc32d6aa137d": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_3faa2ee74913": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_0d9437c8eb46": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_e41baef45a98": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_9a0773dd81aa": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_5264190ffc78": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_7dce1712acca": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_612c248c004b": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_1ec70a20895d": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_7c2a53866a85": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_794ed39f96c4": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_0bfd854d7672": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_05b8ae54964c": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_6a686db3ec85": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_bc02c9c2fc29": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_fd8f767d092d": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_b0286d32d382": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_5d4e56507b18": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_59e13195e4a4": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_d522db23b252": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_8769268ab907": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_0b2ba477d600": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_fc42071e8a9c": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_d5924acc2eb0": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_877a599cee57": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_d9d1b507c78f": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_ba3f9524be29": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_90672016a169": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_a352908e9469": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_f050477d085b": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_162d3aea3f5f": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_ede7c8de0e03": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_f624b8723d7b": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_b6a67f32140a": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_e55ff88d93e0": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_79e7a7935eeb": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_1ccf6cb5ccd7": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_5bf5e94e2b29": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_a2153d1c4692": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_59a6745047ac": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_8cabb5a8e4ac": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_35ba108398d1": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_871ea94fbbf6": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_0fe24d3b8f4c": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_af7173ccec34": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_6005d9ed304b": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_15ff6e843953": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_8420759eefc1": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_17ab2a06f467": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_bf3325f358b9": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_99ef9ddc8290": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_c5053c80b3d1": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_84a679ae07a3": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_0f645ed1a5b6": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_8400c79f88ad": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_f3a462fd2694": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_e4a35442b122": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_4bad428c883b": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_d7852b8a4a2d": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_b6546d1723b8": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_dca0de952c88": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_deee27a61c04": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_103704cc1c47": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_f44af5e50606": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_8116937b0ca6": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_9c0f27eada5c": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_4bd96fcfc451": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_285dc1737550": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_08bb2291aa41": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_c6a40a5542a9": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_6db8730006ec": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_8245601027ec": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_e94f8e4e3ffa": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_ca1d6a2f9e02": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_207480534a51": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_3684cd9c4b8f": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_bd4ca25411b1": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_fb9f775279f2": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_391b83e1291e": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_44dfc7140083": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_2f4b87cce936": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_ef2ac8dc7eb5": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_7013c1d75aac": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_64c23bc5ece9": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_ae97a40841ff": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_a08ace6c928e": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_7fb13c87aa1d": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_48092d087c6d": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_d7f761d5a244": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_05feddf9b061": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_cbb1bd8b79a2": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_c4db8bec04aa": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_a936a7b483aa": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_8b37d0ac9531": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_80a677bd67e8": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_ba5c8a1d1625": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_20991a9a9282": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_71fb261898a5": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_9343800bd9d9": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_b328bb679c68": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_28bd639c4516": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_ce83f0d38f24": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_547725aa1b3d": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_68d3e978abeb": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_7e151621ce33": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_fc3a39f84543": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_a73b0a696b98": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_4e86e2893657": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_44c996a260e1": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_17a4ea6e0a38": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_db62d72d2036": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_4fa219c8ee88": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_b2f59a61b8ca": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_e11f34580b0c": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_92a5100091e8": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_e04b4a664d1e": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_2305aa77f736": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_2abf0ef398b0": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_315fa4138216": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_c406fdc64cb8": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_37d04e21601b": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_a4858dc758a9": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_d995d5db4d34": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_c5d3dfe3d3ba": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_a650bf73f2f3": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_59e77636abea": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_ddcfd176acb1": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_af9ff7ad3dbc": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_82ec93d491ce": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_34eca24cb8c8": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_216441760367": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_3414ae58943d": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_8a7936892d01": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_e37276dfe15e": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_d310610633c8": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_e06868acdc28": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_43ec5a9994a1": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_0ea4a4ae77b1": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_9c20b3b8dc0a": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_3caedbe2742a": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_56010fc087ff": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_3a71e4893214": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_0c760ae63cb9": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_89d4c7b1c39f": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_35f56448fc01": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_ca9820744159": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_a882cfdd4014": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_ac123a11e310": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_772f11fbadb5": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_654169e3d799": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_33bcddc9dba4": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_64d1b920ee51": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_f4538726c8f0": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_f01c0823c478": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_0761e5d33028": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_5f385c7f399c": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_968909b50f5f": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_a977963f5d44": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_887db94c8207": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_1086b83f9b09": {
+          "correct": 0,
+          "n": 1
+        },
+        "gpqa_diamond_16317269132d": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_9ccb97e364d4": {
+          "correct": 1,
+          "n": 1
+        },
+        "gpqa_diamond_b60c345b7986": {
+          "correct": 0,
+          "n": 1
+        }
+      },
+      "capture": {
+        "schema_version": "v7_quality_gate_capture.v4",
+        "new_rows": 198,
+        "request_error_rows": 0,
+        "length_cap_rows": 5,
+        "response_chars": 7444,
+        "response_utf8_bytes": 7444,
+        "reasoning_chars": 0,
+        "reasoning_utf8_bytes": 0,
+        "swebench_search_replace": {
+          "applicable": false,
+          "new_rows": 0,
+          "resumed_rows": 0,
+          "resumed_rows_without_diagnostics": 0,
+          "resumed_rows_without_provenance": 0,
+          "resumed_rows_source_sha_mismatch": 0,
+          "rows_with_markers": 0,
+          "parseable_blocks": 0,
+          "malformed_rows": 0,
+          "zero_strict_block_rows": 0,
+          "partial_strict_block_rows": 0,
+          "state_counts": {
+            "strict_ready": 0,
+            "prompt_contract_candidate": 0,
+            "model_truncation_no_patch": 0,
+            "model_truncation_partial_patch": 0,
+            "request_error": 0
+          },
+          "summary_complete": true,
+          "converter_contract_ready": false,
+          "score_status": "not_applicable"
+        }
+      },
+      "throughput": {
+        "concurrency": 1,
+        "wall_s": 174.7,
+        "completion_tokens": 2946,
+        "prompt_tokens": 47918,
+        "aggregate_decode_tok_s": 16.9,
+        "aggregate_total_tok_s": 291.2
+      }
+    }
+  ]
+}

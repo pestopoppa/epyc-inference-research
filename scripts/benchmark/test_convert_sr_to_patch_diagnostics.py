@@ -75,6 +75,10 @@ def prediction_map(path: Path) -> dict[str, str]:
     }
 
 
+@unittest.skipUnless(
+    CONVERTER.is_file(),
+    f"{CONVERTER} is in an untracked artifact directory present only in the "
+    "canonical research checkout")
 class ConverterDiagnosticsTests(unittest.TestCase):
     def setUp(self):
         self.converter = load_converter()

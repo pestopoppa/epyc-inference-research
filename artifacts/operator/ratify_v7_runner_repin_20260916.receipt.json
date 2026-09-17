@@ -1,0 +1,312 @@
+{
+  "constitution_clause": "MEASUREMENT.md \u00a75 \u2014 Consolidated apply-time ratification: the human signs ONCE over protocol + evidence hashes + validation results + exact state diff; and \u00a75 (2026-08-02) \u2014 evidence must be DURABLE, not merely hashed.",
+  "emitted_at_utc": "2026-09-16T15:02:09Z",
+  "evidence": [
+    {
+      "bytes": 5841,
+      "citation": "data/v7-runner-repin-20260916/README.md",
+      "durability": {
+        "hint": "",
+        "severity": "ok",
+        "verdict": "OK"
+      },
+      "exists": true,
+      "label": null,
+      "resolved": "/mnt/raid0/llm/worktrees/op-v7-runner-repin-20260916/data/v7-runner-repin-20260916/README.md",
+      "sha256": "48387c2200a841d3f4e74087a8ddd5364ae0c8bdfb637b893bc9fbe4085d8ce4"
+    },
+    {
+      "bytes": 709,
+      "citation": "data/v7-runner-repin-20260916/SHA256SUMS",
+      "durability": {
+        "hint": "",
+        "severity": "ok",
+        "verdict": "OK"
+      },
+      "exists": true,
+      "label": null,
+      "resolved": "/mnt/raid0/llm/worktrees/op-v7-runner-repin-20260916/data/v7-runner-repin-20260916/SHA256SUMS",
+      "sha256": "f6c9b80db27ddd0198453e75a01d754f0adf82bffe8901d40efe97779a815998"
+    },
+    {
+      "bytes": 10817,
+      "citation": "data/v7-runner-repin-20260916/equivalence_summary.json",
+      "durability": {
+        "hint": "",
+        "severity": "ok",
+        "verdict": "OK"
+      },
+      "exists": true,
+      "label": null,
+      "resolved": "/mnt/raid0/llm/worktrees/op-v7-runner-repin-20260916/data/v7-runner-repin-20260916/equivalence_summary.json",
+      "sha256": "3a61477864bb3143a92a3c3d4d5415e5ddd3a54f0e1f8fc8982da6ac4224dd88"
+    },
+    {
+      "bytes": 577,
+      "citation": "data/v7-runner-repin-20260916/negative_control.json",
+      "durability": {
+        "hint": "",
+        "severity": "ok",
+        "verdict": "OK"
+      },
+      "exists": true,
+      "label": null,
+      "resolved": "/mnt/raid0/llm/worktrees/op-v7-runner-repin-20260916/data/v7-runner-repin-20260916/negative_control.json",
+      "sha256": "c530a199330ea37ec64ec4ea2bc48bdf3a59f34162d5e5a2594e8933ed5ff075"
+    },
+    {
+      "bytes": 677,
+      "citation": "data/v7-runner-repin-20260916/offline_tests.tsv",
+      "durability": {
+        "hint": "",
+        "severity": "ok",
+        "verdict": "OK"
+      },
+      "exists": true,
+      "label": null,
+      "resolved": "/mnt/raid0/llm/worktrees/op-v7-runner-repin-20260916/data/v7-runner-repin-20260916/offline_tests.tsv",
+      "sha256": "171e4059562935ff1644d4a2d714d11fbb894dbd575ca2238eef03adeea6f000"
+    },
+    {
+      "bytes": 3962,
+      "citation": "data/v7-runner-repin-20260916/runner_79721927_to_6dea92dd.diff",
+      "durability": {
+        "hint": "",
+        "severity": "ok",
+        "verdict": "OK"
+      },
+      "exists": true,
+      "label": null,
+      "resolved": "/mnt/raid0/llm/worktrees/op-v7-runner-repin-20260916/data/v7-runner-repin-20260916/runner_79721927_to_6dea92dd.diff",
+      "sha256": "1354b23236fa7a1b0272a57bcf506a32afc1c044dcc3d01321f1da0f723e55b7"
+    },
+    {
+      "bytes": 3516,
+      "citation": "data/v7-runner-repin-20260916/runner_6dea92dd_to_20a97fbd.diff",
+      "durability": {
+        "hint": "",
+        "severity": "ok",
+        "verdict": "OK"
+      },
+      "exists": true,
+      "label": null,
+      "resolved": "/mnt/raid0/llm/worktrees/op-v7-runner-repin-20260916/data/v7-runner-repin-20260916/runner_6dea92dd_to_20a97fbd.diff",
+      "sha256": "8fc84a1e8ca858e4c43dcdeff3c14144a8eb2f9fde8114a7facfd665535eda2c"
+    },
+    {
+      "bytes": 19302,
+      "citation": "data/v7-runner-repin-20260916/equivalence_harness.py",
+      "durability": {
+        "hint": "",
+        "severity": "ok",
+        "verdict": "OK"
+      },
+      "exists": true,
+      "label": null,
+      "resolved": "/mnt/raid0/llm/worktrees/op-v7-runner-repin-20260916/data/v7-runner-repin-20260916/equivalence_harness.py",
+      "sha256": "617009387cb254777150cac0601b7e1fcf507bacddb4c36b8e669f4fba811ba4"
+    },
+    {
+      "bytes": 2098,
+      "citation": "data/v7-runner-repin-20260916/offline_tests.sh",
+      "durability": {
+        "hint": "",
+        "severity": "ok",
+        "verdict": "OK"
+      },
+      "exists": true,
+      "label": null,
+      "resolved": "/mnt/raid0/llm/worktrees/op-v7-runner-repin-20260916/data/v7-runner-repin-20260916/offline_tests.sh",
+      "sha256": "1719b729686388865dcd73392f09eb4fd30619d81241babb3252bd1c46a0ad2c"
+    }
+  ],
+  "evidence_durability_checker": {
+    "path": "/mnt/raid0/llm/epyc-inference-research/scripts/validate/check_evidence_durability.py",
+    "sha256": "db34a605e35b4b56e5da2505e3e6078fecaab817f51e01c587007bb07212a184"
+  },
+  "git_head_at_emit": "d347f47f05cb44715291ba6e82bb3e4f48c8109f",
+  "git_head_before": "d347f47f05cb44715291ba6e82bb3e4f48c8109f",
+  "operator": "pestopoppa",
+  "protocol_id": "EVAL-TOWER-INSTRUMENT-PIN",
+  "ratification_id": "RATIFY-V7-RUNNER-REPIN-20260916",
+  "ratify_script": {
+    "exists": true,
+    "path": "/mnt/raid0/llm/worktrees/op-v7-runner-repin-20260916/scripts/operator/ratify_v7_runner_repin_20260916.sh",
+    "sha256": "e3a021fbd3a99eb93f1d8ee7b786f5e242cb59b10c273deecf20df38863b45d3"
+  },
+  "receipt_version": "1.0",
+  "repo_root": "/mnt/raid0/llm/epyc-root",
+  "sections": {
+    "coherence": {
+      "data": null,
+      "detail": [],
+      "verdict": "PASS"
+    },
+    "evidence": {
+      "data": null,
+      "detail": [],
+      "verdict": "PASS"
+    },
+    "protocol": {
+      "data": null,
+      "detail": [
+        "protocol id EVAL-TOWER-INSTRUMENT-PIN is a clause reference, not a registered protocol name; verified via 1 anchor(s) instead",
+        "anchor present: - **Trust boundary**: this file, its `protocols/` annexes, the era reg"
+      ],
+      "verdict": "PASS"
+    },
+    "state_diff": {
+      "data": null,
+      "detail": [],
+      "verdict": "PASS"
+    },
+    "validation": {
+      "data": null,
+      "detail": [],
+      "verdict": "PASS"
+    }
+  },
+  "state_diff": [
+    {
+      "lines_added": 2,
+      "lines_after": 182,
+      "lines_before": 182,
+      "lines_removed": 2,
+      "path": "/mnt/raid0/llm/worktrees/op-v7-runner-repin-20260916/artifacts/p3-shadow-bakeoff-20260728/manifest/p3_bakeoff_manifest.json",
+      "sha256_after": "0ce1f2c3a1911b068486a37841de80e8f241e50c40017acaeec3d01bc1cb14cf",
+      "sha256_before": "3bb31a7a5fb38dfc90d463855db7af02cd1b8843ab72ded59b261e543ff4dbea",
+      "unchanged": false,
+      "unified_diff": [
+        "--- a//mnt/raid0/llm/worktrees/op-v7-runner-repin-20260916/artifacts/p3-shadow-bakeoff-20260728/manifest/p3_bakeoff_manifest.json",
+        "+++ b//mnt/raid0/llm/worktrees/op-v7-runner-repin-20260916/artifacts/p3-shadow-bakeoff-20260728/manifest/p3_bakeoff_manifest.json",
+        "@@ -115,7 +115,7 @@",
+        "           },",
+        "           \"scorer\": {",
+        "             \"id\": \"answer_scoring.code_execution (executable pass@1, scored at capture; offline re-scorable from captures)\",",
+        "-            \"runner_sha256\": \"79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e\",",
+        "+            \"runner_sha256\": \"20a97fbd4aecc6f3887299243362d5315b76f819aa1cbc4b8fd92f33b307b45a\",",
+        "             \"deferred\": false",
+        "           }",
+        "         }",
+        "@@ -159,7 +159,7 @@",
+        "   \"capture\": {",
+        "     \"runner\": {",
+        "       \"path\": \"/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/v7_quality_gate_runner.py\",",
+        "-      \"sha256\": \"79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e\"",
+        "+      \"sha256\": \"20a97fbd4aecc6f3887299243362d5315b76f819aa1cbc4b8fd92f33b307b45a\"",
+        "     },",
+        "     \"capture_schema_version\": \"v7_quality_gate_capture.v4\",",
+        "     \"per_question_incremental\": true"
+      ]
+    },
+    {
+      "lines_added": 1,
+      "lines_after": 2,
+      "lines_before": 2,
+      "lines_removed": 1,
+      "path": "/mnt/raid0/llm/worktrees/op-v7-runner-repin-20260916/artifacts/p3-shadow-bakeoff-20260728/manifest/p3_bakeoff_manifest.json.sha256",
+      "sha256_after": "3b0ab2da74a85d4dc9a4704223c9db0cd339ef4f81834a5b7a7e25fa3a8aeffb",
+      "sha256_before": "041e898e32dbdaf446fb56f2276f641d686c9e3f7c5ee48696685eab623e9311",
+      "unchanged": false,
+      "unified_diff": [
+        "--- a//mnt/raid0/llm/worktrees/op-v7-runner-repin-20260916/artifacts/p3-shadow-bakeoff-20260728/manifest/p3_bakeoff_manifest.json.sha256",
+        "+++ b//mnt/raid0/llm/worktrees/op-v7-runner-repin-20260916/artifacts/p3-shadow-bakeoff-20260728/manifest/p3_bakeoff_manifest.json.sha256",
+        "@@ -1,2 +1,2 @@",
+        "-3bb31a7a5fb38dfc90d463855db7af02cd1b8843ab72ded59b261e543ff4dbea  p3_bakeoff_manifest.json",
+        "+0ce1f2c3a1911b068486a37841de80e8f241e50c40017acaeec3d01bc1cb14cf  p3_bakeoff_manifest.json",
+        " "
+      ]
+    },
+    {
+      "lines_added": 1,
+      "lines_after": 396,
+      "lines_before": 396,
+      "lines_removed": 1,
+      "path": "/mnt/raid0/llm/worktrees/op-v7-runner-repin-20260916/scripts/benchmark/dflash2_followups.py",
+      "sha256_after": "9f8baf829140232e5c6a34c48b9a3c33dd68a55c95cfbb0447da62f018d39c0d",
+      "sha256_before": "9dc48324ce54184a2bb826dbcba9bc4300e248af05514de0141b2660a0930586",
+      "unchanged": false,
+      "unified_diff": [
+        "--- a//mnt/raid0/llm/worktrees/op-v7-runner-repin-20260916/scripts/benchmark/dflash2_followups.py",
+        "+++ b//mnt/raid0/llm/worktrees/op-v7-runner-repin-20260916/scripts/benchmark/dflash2_followups.py",
+        "@@ -51,7 +51,7 @@",
+        "     \"target_model_sha256\": \"a680f44a06920e5d689774823782006aa3acc8db95750323373b24139b67e348\",",
+        "     \"draft_model_sha256\": \"7f1c9a31a6ed40044c69f6508b50fd63b87abd8e1fb7fe4290303df549153751\",",
+        "     \"questions_sha256\": \"2088d2c0bf2c66a4a76d67359d4cfcebdbeb19eefd6161b5a309e94ce6a5476d\",",
+        "-    \"runner_sha256\": \"6dea92dd9e374f79691f5df502fa11035ffd484906754f20190a4189111ae7dc\",",
+        "+    \"runner_sha256\": \"20a97fbd4aecc6f3887299243362d5315b76f819aa1cbc4b8fd92f33b307b45a\",",
+        " }",
+        " ",
+        " "
+      ]
+    },
+    {
+      "lines_added": 1,
+      "lines_after": 40,
+      "lines_before": 40,
+      "lines_removed": 1,
+      "path": "/mnt/raid0/llm/worktrees/op-v7-runner-repin-20260916/scripts/benchmark/test_dflash2_followups.py",
+      "sha256_after": "d4d54b724c5700a67863b0532214b8f91ef5296d455bc0a86c6784855860ea71",
+      "sha256_before": "610d27dea09eabafe427f479a8739d3be5e6a7e37f87bacbd4bbc6b511561dc6",
+      "unchanged": false,
+      "unified_diff": [
+        "--- a//mnt/raid0/llm/worktrees/op-v7-runner-repin-20260916/scripts/benchmark/test_dflash2_followups.py",
+        "+++ b//mnt/raid0/llm/worktrees/op-v7-runner-repin-20260916/scripts/benchmark/test_dflash2_followups.py",
+        "@@ -9,7 +9,7 @@",
+        "     def test_exact_runner_bytes_are_unchanged(self):",
+        "         self.assertEqual(F.sha256(F.RUNNER), F.EXPECTED[\"runner_sha256\"])",
+        "         self.assertEqual(F.EXPECTED[\"runner_sha256\"],",
+        "-                         \"6dea92dd9e374f79691f5df502fa11035ffd484906754f20190a4189111ae7dc\")",
+        "+                         \"20a97fbd4aecc6f3887299243362d5315b76f819aa1cbc4b8fd92f33b307b45a\")",
+        " ",
+        "     def test_six_matched_cells_and_only_drafter_diff(self):",
+        "         self.assertEqual(F.CELLS[\"concurrency\"], ("
+      ]
+    }
+  ],
+  "supersedes": null,
+  "validation": [
+    {
+      "command": "cd /mnt/raid0/llm/worktrees/op-v7-runner-repin-20260916 && python3 -m pytest -q -p no:cacheprovider scripts/benchmark/test_dflash2_followups.py scripts/benchmark/test_p3_bakeoff.py",
+      "exit_code": 0,
+      "outcome": "PASS",
+      "output_tail": [
+        "......................................                                   [100%]",
+        "38 passed in 0.44s"
+      ]
+    },
+    {
+      "command": "cd /mnt/raid0/llm/worktrees/op-v7-runner-repin-20260916/scripts/benchmark && python3 -m pytest -q -p no:cacheprovider test_p3_bakeoff.py",
+      "exit_code": 0,
+      "outcome": "PASS",
+      "output_tail": [
+        "..................................                                       [100%]",
+        "34 passed in 0.07s"
+      ]
+    },
+    {
+      "command": "cd /mnt/raid0/llm/worktrees/op-v7-runner-repin-20260916 && python3 data/v7-runner-repin-20260916/equivalence_harness.py --repo . --out /tmp/tmp.raUL5PQftv/equiv",
+      "exit_code": 0,
+      "outcome": "PASS",
+      "output_tail": [
+        "olymp_chat_sampled_c1: current rc=0 reqs=12 rows=12 79721927:req_eq=True out_eq=False residual=['+per_question[]/effective_request', '+result/meta/sampling_fields_are_requested_not_effective'] 6dea92dd:req_eq=True out_eq=True residual=[]",
+        "olymp_completion_greedy_c4: current rc=0 reqs=12 rows=12 79721927:req_eq=True out_eq=False residual=['+per_question[]/effective_request', '+result/meta/sampling_fields_are_requested_not_effective'] 6dea92dd:req_eq=True out_eq=True residual=[]",
+        "critic_chat_nothink_rep2: current rc=0 reqs=40 rows=40 79721927:req_eq=True out_eq=False residual=['+per_question[]/effective_request', '+result/meta/sampling_fields_are_requested_not_effective'] 6dea92dd:req_eq=True out_eq=True residual=[]",
+        "swe_chat_c1: current rc=0 reqs=4 rows=4 79721927:req_eq=True out_eq=False residual=['+per_question[]/effective_request', '+result/meta/sampling_fields_are_requested_not_effective'] 6dea92dd:req_eq=True out_eq=True residual=[]",
+        "synthetic_scored_chat_c2: current rc=0 reqs=28 rows=28 79721927:req_eq=True out_eq=False residual=['+per_question[]/effective_request', '+result/meta/sampling_fields_are_requested_not_effective'] 6dea92dd:req_eq=True out_eq=True residual=[]",
+        "lcb_chat_c1: current rc=0 reqs=4 rows=4 79721927:req_eq=True out_eq=False residual=['+per_question[]/effective_request', '+result/meta/sampling_fields_are_requested_not_effective'] 6dea92dd:req_eq=True out_eq=True residual=[]",
+        "verdict: EQUIVALENT  -> /tmp/tmp.raUL5PQftv/equiv/summary.json"
+      ]
+    },
+    {
+      "command": "cd /mnt/raid0/llm/worktrees/op-v7-runner-repin-20260916 && python3 data/v7-runner-repin-20260916/equivalence_harness.py --repo . --out /tmp/tmp.raUL5PQftv/neg --negative-control",
+      "exit_code": 0,
+      "outcome": "PASS",
+      "output_tail": [
+        "negative control request: {'requests_byte_identical': False, 'outputs_identical_after_volatile_strip': False, 'detected': True}",
+        "negative control scoring: {'requests_byte_identical': True, 'outputs_identical_after_volatile_strip': False, 'detected': True}"
+      ]
+    }
+  ],
+  "verdict": "RATIFIED"
+}

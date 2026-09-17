@@ -1,0 +1,10 @@
+version	suite	exit	summary	failed_tests
+79721927	test_v7_quality_gate_runner.py	1	1 failed, 23 passed in 0.37s	test_v7_quality_gate_runner.py::test_effective_request_records_what_was_sent_not_what_was_asked 
+79721927	test_capture_contract_guard.py	0	5 passed in 0.03s	
+79721927	test_cj_gpqa_sample.py	0	19 passed in 0.06s	
+6dea92dd	test_v7_quality_gate_runner.py	0	24 passed in 0.09s	
+6dea92dd	test_capture_contract_guard.py	0	5 passed in 0.03s	
+6dea92dd	test_cj_gpqa_sample.py	0	19 passed in 0.06s	
+20a97fbd	test_v7_quality_gate_runner.py	0	24 passed in 0.08s	
+20a97fbd	test_capture_contract_guard.py	0	5 passed in 0.03s	
+20a97fbd	test_cj_gpqa_sample.py	0	19 passed in 0.06s	

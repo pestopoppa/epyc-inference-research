@@ -1,0 +1,26 @@
+{
+  "schema": "epyc.inf61.q38_np_depth_grid.v1",
+  "binary": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+  "llama_server_sha256": "21cfb750dc0ba4b3add0674fcb9dd061d77b3604ebf8e1d063ba0e2c51902feb",
+  "kernel": "production-consolidated-v9 (0db32c06e, 10125)",
+  "model": "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+  "spec": "draft-mtp n-max 8",
+  "nps": [
+    1,
+    2,
+    4,
+    8,
+    16,
+    32
+  ],
+  "lengths": [
+    2048,
+    8192,
+    16384,
+    32768
+  ],
+  "passes": 2,
+  "unit": "launch",
+  "questions": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-bench-gpu-20260720/questions_olympiadbench_hard.json",
+  "started_at": "2026-09-16T16:16:29Z"
+}

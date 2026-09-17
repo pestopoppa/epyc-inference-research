@@ -1,0 +1,15 @@
+{
+  "acceptance_lines": 12,
+  "aggregate_decode_tok_s": 55.2,
+  "aggregate_total_tok_s": 59.6,
+  "arm": "mtp_n8",
+  "claim_id": "akd-ec0811cfa8df4898",
+  "claim_released": true,
+  "completion_tokens": 24262,
+  "kfd_resident_samples": 1768,
+  "peak_vram_used_bytes": 33999409152,
+  "positive_vram_samples": 1768,
+  "resource_sample_count": 1769,
+  "schema": "epyc.df2.matched_np1_arm.v1",
+  "wall_s": 439.7
+}

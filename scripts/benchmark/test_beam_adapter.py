@@ -180,7 +180,8 @@ def test_repo_tree_fixture_matches_parquet_prompts(tmp_path):
     assert repo.source_kind == "repo_tree"
 
     def strip(p):
-        return {**p, "metadata": {k: v for k, v in p["metadata"].items() if k != "beam_source"}}
+        return {**p, "metadata": {k: v for k, v in p["metadata"].items() if k != "beam_source"},
+                "provenance": {k: v for k, v in p["provenance"].items() if k != "beam_source"}}
 
     assert [strip(p) for p in from_repo] == [strip(p) for p in from_parquet]
 
@@ -469,7 +470,8 @@ def test_load_belief_capture_explains_a_missing_root(tmp_path, monkeypatch):
 def test_belief_sidecar_round_trips_through_the_root_writer(tmp_path, monkeypatch):
     monkeypatch.setattr(score_beam_run, "_ROOT_CANDIDATES", (_root_with_capture(),))
     capture = score_beam_run._load_belief_capture()
-    scored = score_beam_run.score_judged_payload(_judged_payload())
+    payload = {**_judged_payload(), "context_mode_by_row": {"full": 40}}
+    scored = score_beam_run.score_judged_payload(payload)
     out = tmp_path / "beam_score.json"
     out.write_text(json.dumps(scored, indent=2))
     sidecar = capture.write_belief_measurements(

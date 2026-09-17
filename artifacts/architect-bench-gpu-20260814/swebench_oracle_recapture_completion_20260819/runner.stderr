@@ -1,0 +1,18 @@
+[runner] Waiting for server at http://127.0.0.1:18072...
+[runner] Server healthy
+
+[runner] Evaluating swebench_oracle (n=40, seed=42)...
+[runner] WARNING swebench_oracle capture not converter-ready id=django__django-11138 state=model_truncation_no_patch anomalies=length_cap,zero_strict_blocks markers={'search': 0, 'divider': 0, 'replace': 0} parseable=0
+[runner] WARNING swebench_oracle capture not converter-ready id=django__django-11206 state=model_truncation_no_patch anomalies=length_cap,zero_strict_blocks markers={'search': 1, 'divider': 0, 'replace': 0} parseable=0
+[runner] WARNING swebench_oracle capture not converter-ready id=django__django-11211 state=model_truncation_no_patch anomalies=length_cap,zero_strict_blocks markers={'search': 0, 'divider': 0, 'replace': 0} parseable=0
+[runner] WARNING swebench_oracle capture not converter-ready id=django__django-11265 state=model_truncation_no_patch anomalies=length_cap,zero_strict_blocks markers={'search': 0, 'divider': 0, 'replace': 0} parseable=0
+[runner] WARNING swebench_oracle capture not converter-ready id=django__django-11433 state=model_truncation_no_patch anomalies=length_cap,zero_strict_blocks markers={'search': 0, 'divider': 0, 'replace': 0} parseable=0
+  [runner] swebench_oracle: pass 1/1 25/40 (0/25 correct so far)
+[runner] WARNING swebench_oracle capture not converter-ready id=matplotlib__matplotlib-14623 state=model_truncation_no_patch anomalies=length_cap,zero_strict_blocks markers={'search': 0, 'divider': 0, 'replace': 0} parseable=0
+[runner] WARNING swebench_oracle capture not converter-ready id=matplotlib__matplotlib-20488 state=model_truncation_partial_patch anomalies=length_cap,partial_strict_blocks markers={'search': 1, 'divider': 1, 'replace': 1} parseable=1
+[runner] WARNING swebench_oracle capture not converter-ready id=matplotlib__matplotlib-20676 state=model_truncation_no_patch anomalies=length_cap,zero_strict_blocks markers={'search': 0, 'divider': 0, 'replace': 0} parseable=0
+[runner] WARNING swebench_oracle capture not converter-ready id=sympy__sympy-11618 state=model_truncation_partial_patch anomalies=length_cap,partial_strict_blocks markers={'search': 37, 'divider': 36, 'replace': 36} parseable=36
+[runner] WARNING swebench_oracle capture not converter-ready id=sympy__sympy-12419 state=model_truncation_no_patch anomalies=length_cap,zero_strict_blocks markers={'search': 0, 'divider': 0, 'replace': 0} parseable=0
+[runner] swebench_oracle: 0.0% (0/40)
+
+[runner] Results written to /mnt/raid0/llm/epyc-inference-research/artifacts/architect-bench-gpu-20260814/swebench_oracle_recapture_completion_20260819/result.json

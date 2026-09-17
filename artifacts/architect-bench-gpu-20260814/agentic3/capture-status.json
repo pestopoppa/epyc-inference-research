@@ -1,0 +1,251 @@
+{
+  "incomplete_capture_instance_ids": [
+    "django__django-11211",
+    "django__django-11265",
+    "django__django-11292",
+    "django__django-11299",
+    "django__django-11477",
+    "matplotlib__matplotlib-14623",
+    "matplotlib__matplotlib-20488",
+    "matplotlib__matplotlib-20676",
+    "scikit-learn__scikit-learn-10297",
+    "scikit-learn__scikit-learn-11310",
+    "sphinx-doc__sphinx-10435",
+    "sphinx-doc__sphinx-10449",
+    "sphinx-doc__sphinx-10466",
+    "sympy__sympy-11618",
+    "sympy__sympy-12419"
+  ],
+  "instances": {
+    "django__django-11211": {
+      "anomalies": [
+        "testbed_reset_failed: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"
+      ],
+      "capture_status": "incomplete",
+      "evidence_bytes_captured": 0,
+      "evidence_bytes_limit": 67108864,
+      "evidence_complete": false,
+      "model_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "model_patch_utf8_bytes": 0,
+      "runner_source_sha256": "e9c110f9d6076eab90b5b787f14e63d6de09bc7a810865f076961d3d7c62fcb0",
+      "trajectory": "trajectories/django__django-11211.jsonl",
+      "trajectory_sha256": ""
+    },
+    "django__django-11265": {
+      "anomalies": [
+        "testbed_reset_failed: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"
+      ],
+      "capture_status": "incomplete",
+      "evidence_bytes_captured": 0,
+      "evidence_bytes_limit": 67108864,
+      "evidence_complete": false,
+      "model_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "model_patch_utf8_bytes": 0,
+      "runner_source_sha256": "e9c110f9d6076eab90b5b787f14e63d6de09bc7a810865f076961d3d7c62fcb0",
+      "trajectory": "trajectories/django__django-11265.jsonl",
+      "trajectory_sha256": ""
+    },
+    "django__django-11292": {
+      "anomalies": [
+        "testbed_reset_failed: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"
+      ],
+      "capture_status": "incomplete",
+      "evidence_bytes_captured": 0,
+      "evidence_bytes_limit": 67108864,
+      "evidence_complete": false,
+      "model_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "model_patch_utf8_bytes": 0,
+      "runner_source_sha256": "e9c110f9d6076eab90b5b787f14e63d6de09bc7a810865f076961d3d7c62fcb0",
+      "trajectory": "trajectories/django__django-11292.jsonl",
+      "trajectory_sha256": ""
+    },
+    "django__django-11299": {
+      "anomalies": [
+        "testbed_reset_failed: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"
+      ],
+      "capture_status": "incomplete",
+      "evidence_bytes_captured": 0,
+      "evidence_bytes_limit": 67108864,
+      "evidence_complete": false,
+      "model_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "model_patch_utf8_bytes": 0,
+      "runner_source_sha256": "e9c110f9d6076eab90b5b787f14e63d6de09bc7a810865f076961d3d7c62fcb0",
+      "trajectory": "trajectories/django__django-11299.jsonl",
+      "trajectory_sha256": ""
+    },
+    "django__django-11477": {
+      "anomalies": [
+        "testbed_reset_failed: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"
+      ],
+      "capture_status": "incomplete",
+      "evidence_bytes_captured": 0,
+      "evidence_bytes_limit": 67108864,
+      "evidence_complete": false,
+      "model_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "model_patch_utf8_bytes": 0,
+      "runner_source_sha256": "e9c110f9d6076eab90b5b787f14e63d6de09bc7a810865f076961d3d7c62fcb0",
+      "trajectory": "trajectories/django__django-11477.jsonl",
+      "trajectory_sha256": ""
+    },
+    "matplotlib__matplotlib-14623": {
+      "anomalies": [
+        "testbed_reset_failed: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"
+      ],
+      "capture_status": "incomplete",
+      "evidence_bytes_captured": 0,
+      "evidence_bytes_limit": 67108864,
+      "evidence_complete": false,
+      "model_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "model_patch_utf8_bytes": 0,
+      "runner_source_sha256": "e9c110f9d6076eab90b5b787f14e63d6de09bc7a810865f076961d3d7c62fcb0",
+      "trajectory": "trajectories/matplotlib__matplotlib-14623.jsonl",
+      "trajectory_sha256": ""
+    },
+    "matplotlib__matplotlib-20488": {
+      "anomalies": [
+        "testbed_reset_failed: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"
+      ],
+      "capture_status": "incomplete",
+      "evidence_bytes_captured": 0,
+      "evidence_bytes_limit": 67108864,
+      "evidence_complete": false,
+      "model_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "model_patch_utf8_bytes": 0,
+      "runner_source_sha256": "e9c110f9d6076eab90b5b787f14e63d6de09bc7a810865f076961d3d7c62fcb0",
+      "trajectory": "trajectories/matplotlib__matplotlib-20488.jsonl",
+      "trajectory_sha256": ""
+    },
+    "matplotlib__matplotlib-20676": {
+      "anomalies": [
+        "testbed_reset_failed: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"
+      ],
+      "capture_status": "incomplete",
+      "evidence_bytes_captured": 0,
+      "evidence_bytes_limit": 67108864,
+      "evidence_complete": false,
+      "model_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "model_patch_utf8_bytes": 0,
+      "runner_source_sha256": "e9c110f9d6076eab90b5b787f14e63d6de09bc7a810865f076961d3d7c62fcb0",
+      "trajectory": "trajectories/matplotlib__matplotlib-20676.jsonl",
+      "trajectory_sha256": ""
+    },
+    "scikit-learn__scikit-learn-10297": {
+      "anomalies": [
+        "testbed_reset_failed: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"
+      ],
+      "capture_status": "incomplete",
+      "evidence_bytes_captured": 0,
+      "evidence_bytes_limit": 67108864,
+      "evidence_complete": false,
+      "model_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "model_patch_utf8_bytes": 0,
+      "runner_source_sha256": "e9c110f9d6076eab90b5b787f14e63d6de09bc7a810865f076961d3d7c62fcb0",
+      "trajectory": "trajectories/scikit-learn__scikit-learn-10297.jsonl",
+      "trajectory_sha256": ""
+    },
+    "scikit-learn__scikit-learn-11310": {
+      "anomalies": [
+        "testbed_reset_failed: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"
+      ],
+      "capture_status": "incomplete",
+      "evidence_bytes_captured": 0,
+      "evidence_bytes_limit": 67108864,
+      "evidence_complete": false,
+      "model_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "model_patch_utf8_bytes": 0,
+      "runner_source_sha256": "e9c110f9d6076eab90b5b787f14e63d6de09bc7a810865f076961d3d7c62fcb0",
+      "trajectory": "trajectories/scikit-learn__scikit-learn-11310.jsonl",
+      "trajectory_sha256": ""
+    },
+    "sphinx-doc__sphinx-10435": {
+      "anomalies": [
+        "testbed_reset_failed: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"
+      ],
+      "capture_status": "incomplete",
+      "evidence_bytes_captured": 0,
+      "evidence_bytes_limit": 67108864,
+      "evidence_complete": false,
+      "model_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "model_patch_utf8_bytes": 0,
+      "runner_source_sha256": "e9c110f9d6076eab90b5b787f14e63d6de09bc7a810865f076961d3d7c62fcb0",
+      "trajectory": "trajectories/sphinx-doc__sphinx-10435.jsonl",
+      "trajectory_sha256": ""
+    },
+    "sphinx-doc__sphinx-10449": {
+      "anomalies": [
+        "testbed_reset_failed: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"
+      ],
+      "capture_status": "incomplete",
+      "evidence_bytes_captured": 0,
+      "evidence_bytes_limit": 67108864,
+      "evidence_complete": false,
+      "model_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "model_patch_utf8_bytes": 0,
+      "runner_source_sha256": "e9c110f9d6076eab90b5b787f14e63d6de09bc7a810865f076961d3d7c62fcb0",
+      "trajectory": "trajectories/sphinx-doc__sphinx-10449.jsonl",
+      "trajectory_sha256": ""
+    },
+    "sphinx-doc__sphinx-10466": {
+      "anomalies": [
+        "testbed_reset_failed: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"
+      ],
+      "capture_status": "incomplete",
+      "evidence_bytes_captured": 0,
+      "evidence_bytes_limit": 67108864,
+      "evidence_complete": false,
+      "model_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "model_patch_utf8_bytes": 0,
+      "runner_source_sha256": "e9c110f9d6076eab90b5b787f14e63d6de09bc7a810865f076961d3d7c62fcb0",
+      "trajectory": "trajectories/sphinx-doc__sphinx-10466.jsonl",
+      "trajectory_sha256": ""
+    },
+    "sympy__sympy-11618": {
+      "anomalies": [
+        "testbed_reset_failed: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"
+      ],
+      "capture_status": "incomplete",
+      "evidence_bytes_captured": 0,
+      "evidence_bytes_limit": 67108864,
+      "evidence_complete": false,
+      "model_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "model_patch_utf8_bytes": 0,
+      "runner_source_sha256": "e9c110f9d6076eab90b5b787f14e63d6de09bc7a810865f076961d3d7c62fcb0",
+      "trajectory": "trajectories/sympy__sympy-11618.jsonl",
+      "trajectory_sha256": ""
+    },
+    "sympy__sympy-12419": {
+      "anomalies": [
+        "testbed_reset_failed: Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"
+      ],
+      "capture_status": "incomplete",
+      "evidence_bytes_captured": 0,
+      "evidence_bytes_limit": 67108864,
+      "evidence_complete": false,
+      "model_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "model_patch_utf8_bytes": 0,
+      "runner_source_sha256": "e9c110f9d6076eab90b5b787f14e63d6de09bc7a810865f076961d3d7c62fcb0",
+      "trajectory": "trajectories/sympy__sympy-12419.jsonl",
+      "trajectory_sha256": ""
+    }
+  },
+  "missing_capture_status_instance_ids": [],
+  "prediction_instance_ids": [
+    "django__django-11211",
+    "django__django-11265",
+    "django__django-11292",
+    "django__django-11299",
+    "django__django-11477",
+    "matplotlib__matplotlib-14623",
+    "matplotlib__matplotlib-20488",
+    "matplotlib__matplotlib-20676",
+    "scikit-learn__scikit-learn-10297",
+    "scikit-learn__scikit-learn-11310",
+    "sphinx-doc__sphinx-10435",
+    "sphinx-doc__sphinx-10449",
+    "sphinx-doc__sphinx-10466",
+    "sympy__sympy-11618",
+    "sympy__sympy-12419"
+  ],
+  "schema_version": 1,
+  "scoring_eligible": false
+}

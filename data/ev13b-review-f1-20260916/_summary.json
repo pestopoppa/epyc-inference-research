@@ -1,0 +1,52 @@
+{
+  "aggregate": {
+    "mean_f1": 0.0,
+    "n_runs": 3,
+    "note": "internal-only F1; not comparable to the Factory leaderboard",
+    "per_run": [
+      {
+        "f1": 0.0,
+        "fn": 97,
+        "fp": 124,
+        "precision": 0.0,
+        "recall": 0.0,
+        "tp": 0
+      },
+      {
+        "f1": 0.0,
+        "fn": 97,
+        "fp": 127,
+        "precision": 0.0,
+        "recall": 0.0,
+        "tp": 0
+      },
+      {
+        "f1": 0.0,
+        "fn": 97,
+        "fp": 119,
+        "precision": 0.0,
+        "recall": 0.0,
+        "tp": 0
+      }
+    ],
+    "protocol_ok": true,
+    "std_f1": 0.0
+  },
+  "cases_scored": 50,
+  "cases_skipped_resume": 0,
+  "generated_at": "2026-09-16T15:23:04.656623+00:00",
+  "golden_checksum": "fa0aba78c3006a878edea07fd08a51790aca4c8e00a59369acd6070b97d1bd97",
+  "judge_config": {
+    "cross_family_ok": true,
+    "cross_family_required": true,
+    "judge_distinct_from_reader": true,
+    "judge_model": "gemma-4-26B-A4B-it-ORIG",
+    "judge_quant": "Q4_K_M",
+    "matcher": "deterministic-criterion-location (build leg); semantic-judge spec: data/review_f1/SEMANTIC_MATCHER_SPEC.md",
+    "swap_tolerance_pp": 2.0
+  },
+  "model": "Qwen3.8-27B",
+  "model_quant_key": "Qwen3.8-27B__Q8_0",
+  "quant": "Q8_0",
+  "runs_requested": 3
+}

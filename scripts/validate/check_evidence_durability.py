@@ -80,6 +80,9 @@ VERDICTS
 --------
   OK            resolves to a readable artifact on a durable root. In-repo or not,
                 tracked or gitignored, relative or absolute -- all equally fine.
+  WITHHELD      INFO  -- the artifact is deliberately NOT carried, and a
+                         `<file>.WITHHELD.sha256` sibling records its hash instead.
+                         Permitted by `MEASUREMENT.md` §5. See WITHHELD below.
   WAIVED_LOST   WARN  -- artifact is gone and the line says so, verbatim, with an
                          `ARTIFACT LOST` marker. A recorded loss, not a silent one.
   EPHEMERAL     ERROR -- cited from a scratch directory (symlinks followed). One
@@ -89,6 +92,39 @@ VERDICTS
                          cannot be recomputed. Same failure, different cause.
 
 Exit 0 when there are no errors. Warnings never fail unless `-W`/`--warnings-as-errors`.
+
+WITHHELD -- WHY IT IS NOT `MISSING` (added 2026-09-15)
+-----------------------------------------------------
+`MEASUREMENT.md` §5 already permits an artifact that CANNOT be carried to be recorded
+hash-and-provenance-only, and the 2026-08-02 migration exercised that clause: the
+PaddleOCR receipt-extract `summary.json` and `response.json` hold a third party's
+company name, registration number, address, telephone and GST ID, so they were left
+uncommitted with a `<file>.WITHHELD.sha256` sibling carrying the digest.
+
+This checker could not see that. It read the withheld artifact's absence and returned
+`MISSING` -- "the hash has nothing to check against" -- which is exactly backwards: the
+hash is the thing that WAS durably recorded, on purpose, and the remedy the verdict
+prints ("re-measure it or demote the number") is wrong advice for a deliberate policy
+decision. Worse, it made a withheld artifact indistinguishable from LOST evidence in
+the report, so the one signal the operator needs -- *is this a decision or a failure?*
+-- was destroyed at the point of measurement. Every run since the migration carried a
+permanent, unfixable red line, and a gate that is permanently red teaches people to
+read past it.
+
+So a `<file>.WITHHELD.sha256` sibling RESOLVES the citation. It is reported as its own
+verdict, never folded into `OK`:
+
+  * `OK` means a reader can recompute the hash from this checkout. `WITHHELD` means
+    they cannot -- verification needs the original on its durable local root. That is a
+    real, permanent caveat on the claim and it stays visible in the report.
+  * it is listed by default (severity `info`, so it appears without `--show-ok`) but
+    counts as neither an error nor a warning. `-W` escalates *recorded losses*; folding
+    withholding into that would re-merge the two states this verdict exists to separate.
+
+NOT A MUTE BUTTON. The sibling must be readable and must actually contain a sha256
+digest. An empty or hash-free `x.json.WITHHELD.sha256` records nothing, so it silences
+nothing -- the citation stays `MISSING`. Same reasoning as `UNREADABLE` not being
+waivable by `ARTIFACT LOST`: a marker that asserts something false must not buy silence.
 
 USAGE
 -----
@@ -147,6 +183,16 @@ ARTIFACT_TREES = ("data/", "artifacts/", "benchmarks/", "measurement/")
 
 # An artifact that is gone, recorded as gone. The marker must sit on the citing line.
 LOST_MARKER = "ARTIFACT LOST"
+
+# An artifact deliberately not carried, recorded hash-and-provenance-only per
+# `MEASUREMENT.md` §5. Unlike `LOST_MARKER` this is NOT a comment on the citing line: it
+# is a real sibling file next to where the artifact would be, so the record is durable
+# in the evidence tree itself rather than in the prose of whatever happens to cite it.
+# One artifact can be cited from many lines (the receipt `summary.json` is cited twice);
+# a per-line marker would have to be repeated at every site and would rot at the first
+# one somebody forgot.
+WITHHELD_SUFFIX = ".WITHHELD.sha256"
+_SHA256 = re.compile(r'\b[0-9a-fA-F]{64}\b')
 # A line documenting where an artifact USED to live is history, not a live citation.
 PROVENANCE_MARKERS = ("REPOINTED from",)
 
@@ -280,6 +326,27 @@ def _waive(c: Citation) -> Citation:
     return c
 
 
+def _withheld_record(resolved: Path) -> Path | None:
+    """The `<file>.WITHHELD.sha256` sibling, if it records an actual digest.
+
+    Readable AND containing a sha256 is the whole test, and both halves are load-bearing.
+    A zero-byte `touch`ed sibling would otherwise silence any citation at all, which
+    would make this verdict the general-purpose mute button that `ARTIFACT LOST`
+    deliberately is not (see `UNREADABLE` below: a marker asserting something false must
+    not buy silence). Committedness is NOT checked -- same 2026-08-03 ruling as
+    everywhere else in this file -- but note the practical consequence: an untracked
+    sibling resolves the citation only in the checkout that happens to hold it, which is
+    the defect this whole convention exists to close, so commit the sibling.
+    """
+    rec = resolved.with_name(resolved.name + WITHHELD_SUFFIX)
+    try:
+        if not rec.is_file():
+            return None
+        return rec if _SHA256.search(rec.read_text(errors="replace")) else None
+    except (OSError, ValueError):
+        return None
+
+
 def _is_scratch(cited: str, resolved: Path) -> bool:
     """True when either the literal citation or what it really points at is scratch.
 
@@ -382,12 +449,22 @@ def classify(c: Citation, repo: Path) -> Citation:
 def _missing(c: Citation) -> Citation:
     if LOST_MARKER in c.context:
         return _waive(c)
+    rec = _withheld_record(Path(c.resolved))
+    if rec is not None:
+        c.verdict, c.severity = "WITHHELD", "info"
+        c.hint = (
+            f"artifact deliberately not carried; hash recorded in {rec.name} "
+            "(MEASUREMENT.md §5). Verification needs the original on its durable local "
+            "root — see the campaign README for where it lives and why it is withheld.")
+        return c
     c.verdict, c.severity = "MISSING", "error"
     c.hint = (
         "citation resolves nowhere, so its hash has nothing to check against. "
         "Locate the artifact (it may live in a sibling repo, or on a durable local root "
         "outside any repo — a bare `data/...` path is ambiguous) and cite it "
-        "unambiguously, or mark the line "
+        "unambiguously; record it hash-only with a "
+        f"`<file>{WITHHELD_SUFFIX}` sibling if it exists but cannot be committed "
+        "(PII, licence); or mark the line "
         f"`# {LOST_MARKER} (...) — recorded <date>` if it is genuinely gone.")
     return c
 
@@ -450,7 +527,10 @@ def check(registry: Path, repo: Path) -> Result:
                   campaign_issues=check_campaign_docs(cites, repo))
 
 
-SEV_ORDER = {"error": 0, "warn": 1, "ok": 2}
+# `info` sorts between `warn` and `ok`: it is listed by default (the filter below shows
+# everything that is not `ok`) but it is neither an error nor a warning, so it neither
+# fails the gate nor is escalated by `-W`.
+SEV_ORDER = {"error": 0, "warn": 1, "info": 2, "ok": 3}
 
 
 def report(res: Result, show_ok: bool, fix_hint: bool) -> None:
@@ -462,16 +542,17 @@ def report(res: Result, show_ok: bool, fix_hint: bool) -> None:
     print(f"repository          :: {res.repo}")
     print(f"citations in scope  :: {len(res.citations)}")
     print()
-    for v in ("OK", "WAIVED_LOST", "EPHEMERAL", "MISSING", "UNREADABLE"):
+    for v in ("OK", "WITHHELD", "WAIVED_LOST", "EPHEMERAL", "MISSING", "UNREADABLE"):
         if v in counts:
-            mark = {"OK": "  ok  ", "WAIVED_LOST": " warn "}.get(v, " FAIL ")
+            mark = {"OK": "  ok  ", "WITHHELD": " held ",
+                    "WAIVED_LOST": " warn "}.get(v, " FAIL ")
             print(f"  [{mark}] {v:<18} {counts[v]:>4}")
     print()
 
     shown = [c for c in res.citations if show_ok or c.severity != "ok"]
     shown.sort(key=lambda c: (SEV_ORDER[c.severity], c.line))
     for c in shown:
-        tag = {"error": "FAIL", "warn": "warn", "ok": "ok"}[c.severity]
+        tag = {"error": "FAIL", "warn": "warn", "info": "held", "ok": "ok"}[c.severity]
         ref = f"{c.path}{c.lineref}"
         print(f"  {tag:>4}  L{c.line:<6} {c.verdict:<17} {ref}")
         if c.severity != "ok" and c.hint:
@@ -548,6 +629,13 @@ _FIX_PLAYBOOK = {
     * If it was a build artifact (a build tree, a compiled binary), nothing reproducible
       was lost. Keep the dead path VERBATIM so provenance survives and annotate the line:
         # ARTIFACT LOST (build tree, not a measurement result) — recorded <YYYY-MM-DD>
+    * If the artifact EXISTS but must not be committed -- third-party PII, a licence bar
+      -- do not delete the citation and do not pretend it is lost. Record it hash-and-
+      provenance-only per MEASUREMENT.md §5: write the digest to a sibling
+        <file>.WITHHELD.sha256          # `sha256sum <original> > <that file>`
+      commit THAT (and the campaign README saying what is withheld and why), and leave
+      the original on its durable local root. The citation then reports WITHHELD, not
+      MISSING. Pattern: data/paddleocr_vl_receipt_extract_20260717T194415Z/
 
   Note what this verdict is NOT: it is not a complaint that the artifact is untracked.
   Gitignored, out-of-repo and on another mount are all fine. Absent is not.""",

@@ -1,0 +1,109 @@
+[INFO ] ggml_extend.hpp:63   - ggml_cuda_init: found 1 ROCm devices (Total VRAM: 65520 MiB):
+[INFO ] ggml_extend.hpp:63   -   Device 0: AMD Instinct MI210, gfx90a:sramecc+:xnack- (0x90a), VMM: no, Wave Size: 64, VRAM: 65520 MiB
+[INFO ] stable-diffusion.cpp:219  - loading diffusion model from '/mnt/raid0/llm/models/diffusion/ernie-image-turbo-gguf/ernie-image-turbo-Q8_0.gguf'
+[INFO ] model.cpp:216  - load /mnt/raid0/llm/models/diffusion/ernie-image-turbo-gguf/ernie-image-turbo-Q8_0.gguf using gguf format
+[INFO ] stable-diffusion.cpp:266  - loading llm from '/mnt/raid0/llm/models/diffusion/ernie-image-turbo-comfy/text_encoders/ministral-3-3b.safetensors'
+[INFO ] model.cpp:219  - load /mnt/raid0/llm/models/diffusion/ernie-image-turbo-comfy/text_encoders/ministral-3-3b.safetensors using safetensors format
+[INFO ] stable-diffusion.cpp:280  - loading vae from '/mnt/raid0/llm/models/diffusion/ernie-image-turbo-comfy/vae/flux2-vae.safetensors'
+[INFO ] model.cpp:219  - load /mnt/raid0/llm/models/diffusion/ernie-image-turbo-comfy/vae/flux2-vae.safetensors using safetensors format
+[INFO ] stable-diffusion.cpp:305  - Version: Ernie Image 
+[INFO ] stable-diffusion.cpp:333  - Weight type stat:                      f32: 398  |    q8_0: 253  |    bf16: 464  
+[INFO ] stable-diffusion.cpp:334  - Conditioner weight type stat:         bf16: 458  
+[INFO ] stable-diffusion.cpp:335  - Diffusion model weight type stat:      f32: 150  |    q8_0: 253  |    bf16: 6    
+[INFO ] stable-diffusion.cpp:336  - VAE weight type stat:                  f32: 248  
+[INFO ] ernie_image.hpp:399  - ernie_image: layers = 36, hidden_size = 4096, heads = 32, ffn_hidden_size = 12288, in_channels = 128, out_channels = 128
+[INFO ] stable-diffusion.cpp:640  - using VAE for encoding / decoding
+[INFO ] auto_encoder_kl.hpp:525  - vae decoder: ch = 128
+[INFO ] stable-diffusion.cpp:655  - Using Conv2d direct in the vae model
+[INFO ] stable-diffusion.cpp:737  - Using flash attention in the diffusion model
+  |>                                                 | 5/1115 - 0.00MB/s[K  |>                                                 | 8/1115 - 0.00MB/s[K  |====>                                             | 90/1115 - 4.03GB/s[K  |======>                                           | 142/1115 - 4.35GB/s[K  |==========>                                       | 224/1115 - 5.23GB/s[K  |=============>                                    | 298/1115 - 5.58GB/s[K  |=================>                                | 380/1115 - 6.00GB/s[K  |==================>                               | 409/1115 - 5.78GB/s[K
+  |==================>                               | 416/1115 - 5.77GB/s[K  |====================>                             | 467/1115 - 5.73GB/s[K  |=======================>                          | 515/1115 - 5.72GB/s[K  |=========================>                        | 560/1115 - 5.69GB/s[K  |===========================>                      | 607/1115 - 5.69GB/s[K  |======================================>           | 867/1115 - 5.56GB/s[K
+  |=======================================>          | 872/1115 - 5.56GB/s[K  |==================================================| 1115/1115 - 5.27GB/s[K
+[INFO ] model.cpp:993  - loading tensors completed, taking 2.81s (process: 0.00s, read: 1.23s, memcpy: 0.00s, convert: 0.04s, copy_to_backend: 0.44s)
+[INFO ] stable-diffusion.cpp:858  - total params memory size = 15765.14MB (VRAM 15765.14MB, RAM 0.00MB): text_encoders 7308.62MB(VRAM), diffusion_model 8292.08MB(VRAM), vae 164.43MB(VRAM), controlnet 0.00MB(VRAM), pmid 0.00MB(VRAM)
+[INFO ] stable-diffusion.cpp:942  - running in FLOW mode
+[INFO ] main.cpp:148  - listening on: 127.0.0.1:18190
+[INFO ] stable-diffusion.cpp:3367 - generate_image 512x512
+[INFO ] denoiser.hpp:499  - get_sigmas with discrete scheduler
+[INFO ] stable-diffusion.cpp:2814 - sampling using Euler method
+[INFO ] stable-diffusion.cpp:3168 - get_learned_condition completed, taking 0.11s
+[INFO ] stable-diffusion.cpp:3401 - generating image: 1/1 - seed 2026072732
+  |======>                                           | 1/8 - 2.25it/s[K  |============>                                     | 2/8 - 2.30it/s[K  |==================>                               | 3/8 - 2.32it/s[K  |=========================>                        | 4/8 - 2.34it/s[K  |===============================>                  | 5/8 - 2.28it/s[K  |=====================================>            | 6/8 - 2.29it/s[K  |===========================================>      | 7/8 - 2.30it/s[K  |==================================================| 8/8 - 2.31it/s[K
+[INFO ] stable-diffusion.cpp:3432 - sampling completed, taking 3.48s
+[INFO ] stable-diffusion.cpp:3450 - generating 1 latent images completed, taking 3.48s
+[INFO ] stable-diffusion.cpp:3192 - decoding 1 latents
+[INFO ] stable-diffusion.cpp:3208 - latent 1 decoded, taking 3.01s
+[INFO ] stable-diffusion.cpp:3212 - decode_first_stage completed, taking 3.01s
+[INFO ] stable-diffusion.cpp:3591 - generate_image completed in 6.61s
+[INFO ] stable-diffusion.cpp:3367 - generate_image 896x896
+[INFO ] denoiser.hpp:499  - get_sigmas with discrete scheduler
+[INFO ] stable-diffusion.cpp:2814 - sampling using Euler method
+[INFO ] stable-diffusion.cpp:3168 - get_learned_condition completed, taking 0.01s
+[INFO ] stable-diffusion.cpp:3401 - generating image: 1/1 - seed 2026072732
+  |======>                                           | 1/8 - 1.34s/it[K  |============>                                     | 2/8 - 1.33s/it[K  |==================>                               | 3/8 - 1.33s/it[K  |=========================>                        | 4/8 - 1.35s/it[K  |===============================>                  | 5/8 - 1.34s/it[K  |=====================================>            | 6/8 - 1.34s/it[K  |===========================================>      | 7/8 - 1.34s/it[K  |==================================================| 8/8 - 1.34s/it[K
+[INFO ] stable-diffusion.cpp:3432 - sampling completed, taking 10.80s
+[INFO ] stable-diffusion.cpp:3450 - generating 1 latent images completed, taking 10.80s
+[INFO ] stable-diffusion.cpp:3192 - decoding 1 latents
+[INFO ] stable-diffusion.cpp:3208 - latent 1 decoded, taking 9.41s
+[INFO ] stable-diffusion.cpp:3212 - decode_first_stage completed, taking 9.41s
+[INFO ] stable-diffusion.cpp:3591 - generate_image completed in 20.23s
+[INFO ] stable-diffusion.cpp:3367 - generate_image 896x896
+[INFO ] denoiser.hpp:499  - get_sigmas with discrete scheduler
+[INFO ] stable-diffusion.cpp:2814 - sampling using Euler method
+[INFO ] stable-diffusion.cpp:3168 - get_learned_condition completed, taking 0.01s
+[INFO ] stable-diffusion.cpp:3401 - generating image: 1/1 - seed 2026072732
+  |======>                                           | 1/8 - 1.33s/it[K  |============>                                     | 2/8 - 1.33s/it[K  |==================>                               | 3/8 - 1.34s/it[K  |=========================>                        | 4/8 - 1.34s/it[K  |===============================>                  | 5/8 - 1.34s/it[K  |=====================================>            | 6/8 - 1.34s/it[K  |===========================================>      | 7/8 - 1.34s/it[K  |==================================================| 8/8 - 1.34s/it[K
+[INFO ] stable-diffusion.cpp:3432 - sampling completed, taking 10.79s
+[INFO ] stable-diffusion.cpp:3450 - generating 1 latent images completed, taking 10.79s
+[INFO ] stable-diffusion.cpp:3192 - decoding 1 latents
+[INFO ] stable-diffusion.cpp:3208 - latent 1 decoded, taking 9.44s
+[INFO ] stable-diffusion.cpp:3212 - decode_first_stage completed, taking 9.44s
+[INFO ] stable-diffusion.cpp:3591 - generate_image completed in 20.25s
+[INFO ] stable-diffusion.cpp:3367 - generate_image 896x896
+[INFO ] denoiser.hpp:499  - get_sigmas with discrete scheduler
+[INFO ] stable-diffusion.cpp:2814 - sampling using Euler method
+[INFO ] stable-diffusion.cpp:3168 - get_learned_condition completed, taking 0.01s
+[INFO ] stable-diffusion.cpp:3401 - generating image: 1/1 - seed 2026072732
+  |======>                                           | 1/8 - 1.33s/it[K  |============>                                     | 2/8 - 1.35s/it[K  |==================>                               | 3/8 - 1.35s/it[K  |=========================>                        | 4/8 - 1.34s/it[K  |===============================>                  | 5/8 - 1.34s/it[K  |=====================================>            | 6/8 - 1.34s/it[K  |===========================================>      | 7/8 - 1.34s/it[K  |==================================================| 8/8 - 1.34s/it[K
+[INFO ] stable-diffusion.cpp:3432 - sampling completed, taking 10.79s
+[INFO ] stable-diffusion.cpp:3450 - generating 1 latent images completed, taking 10.79s
+[INFO ] stable-diffusion.cpp:3192 - decoding 1 latents
+[INFO ] stable-diffusion.cpp:3208 - latent 1 decoded, taking 9.46s
+[INFO ] stable-diffusion.cpp:3212 - decode_first_stage completed, taking 9.46s
+[INFO ] stable-diffusion.cpp:3591 - generate_image completed in 20.27s
+[INFO ] stable-diffusion.cpp:3367 - generate_image 1024x1024
+[INFO ] denoiser.hpp:499  - get_sigmas with discrete scheduler
+[INFO ] stable-diffusion.cpp:2814 - sampling using Euler method
+[INFO ] stable-diffusion.cpp:3168 - get_learned_condition completed, taking 0.01s
+[INFO ] stable-diffusion.cpp:3401 - generating image: 1/1 - seed 2026072732
+  |======>                                           | 1/8 - 1.79s/it[K  |============>                                     | 2/8 - 1.78s/it[K  |==================>                               | 3/8 - 1.78s/it[K  |=========================>                        | 4/8 - 1.78s/it[K  |===============================>                  | 5/8 - 1.78s/it[K  |=====================================>            | 6/8 - 1.78s/it[K  |===========================================>      | 7/8 - 1.78s/it[K  |==================================================| 8/8 - 1.78s/it[K
+[INFO ] stable-diffusion.cpp:3432 - sampling completed, taking 14.32s
+[INFO ] stable-diffusion.cpp:3450 - generating 1 latent images completed, taking 14.32s
+[INFO ] stable-diffusion.cpp:3192 - decoding 1 latents
+[INFO ] stable-diffusion.cpp:3208 - latent 1 decoded, taking 12.13s
+[INFO ] stable-diffusion.cpp:3212 - decode_first_stage completed, taking 12.13s
+[INFO ] stable-diffusion.cpp:3591 - generate_image completed in 26.46s
+[INFO ] stable-diffusion.cpp:3367 - generate_image 1024x1024
+[INFO ] denoiser.hpp:499  - get_sigmas with discrete scheduler
+[INFO ] stable-diffusion.cpp:2814 - sampling using Euler method
+[INFO ] stable-diffusion.cpp:3168 - get_learned_condition completed, taking 0.01s
+[INFO ] stable-diffusion.cpp:3401 - generating image: 1/1 - seed 2026072732
+  |======>                                           | 1/8 - 1.77s/it[K  |============>                                     | 2/8 - 1.77s/it[K  |==================>                               | 3/8 - 1.78s/it[K  |=========================>                        | 4/8 - 1.78s/it[K  |===============================>                  | 5/8 - 1.78s/it[K  |=====================================>            | 6/8 - 1.78s/it[K  |===========================================>      | 7/8 - 1.78s/it[K  |==================================================| 8/8 - 1.78s/it[K
+[INFO ] stable-diffusion.cpp:3432 - sampling completed, taking 14.33s
+[INFO ] stable-diffusion.cpp:3450 - generating 1 latent images completed, taking 14.33s
+[INFO ] stable-diffusion.cpp:3192 - decoding 1 latents
+[INFO ] stable-diffusion.cpp:3208 - latent 1 decoded, taking 12.14s
+[INFO ] stable-diffusion.cpp:3212 - decode_first_stage completed, taking 12.14s
+[INFO ] stable-diffusion.cpp:3591 - generate_image completed in 26.49s
+[INFO ] stable-diffusion.cpp:3367 - generate_image 1024x1024
+[INFO ] denoiser.hpp:499  - get_sigmas with discrete scheduler
+[INFO ] stable-diffusion.cpp:2814 - sampling using Euler method
+[INFO ] stable-diffusion.cpp:3168 - get_learned_condition completed, taking 0.01s
+[INFO ] stable-diffusion.cpp:3401 - generating image: 1/1 - seed 2026072732
+  |======>                                           | 1/8 - 1.78s/it[K  |============>                                     | 2/8 - 1.78s/it[K  |==================>                               | 3/8 - 1.77s/it[K  |=========================>                        | 4/8 - 1.78s/it[K  |===============================>                  | 5/8 - 1.78s/it[K  |=====================================>            | 6/8 - 1.78s/it[K  |===========================================>      | 7/8 - 1.78s/it[K  |==================================================| 8/8 - 1.78s/it[K
+[INFO ] stable-diffusion.cpp:3432 - sampling completed, taking 14.31s
+[INFO ] stable-diffusion.cpp:3450 - generating 1 latent images completed, taking 14.31s
+[INFO ] stable-diffusion.cpp:3192 - decoding 1 latents
+[INFO ] stable-diffusion.cpp:3208 - latent 1 decoded, taking 12.12s
+[INFO ] stable-diffusion.cpp:3212 - decode_first_stage completed, taking 12.12s
+[INFO ] stable-diffusion.cpp:3591 - generate_image completed in 26.45s

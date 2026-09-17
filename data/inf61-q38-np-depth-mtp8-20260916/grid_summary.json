@@ -1,0 +1,604 @@
+{
+ "schema": "epyc.inf61.grid_summary.v1",
+ "metric": "v7 runner throughput.aggregate_decode_tok_s (higher is better)",
+ "unit": "launch",
+ "passes": 2,
+ "category": "CANDIDATE (MTP n-max 8)",
+ "comparison_note": "nmax4 column = withdrawn 2026-08-15 grid, single launch, different session and containment; cross-session, not ABA",
+ "cells": [
+  {
+   "cell": "np1_L2048",
+   "status": "ok",
+   "tok_s_per_launch": [
+    44.7,
+    48.0
+   ],
+   "tok_s_mean": 46.35,
+   "spread_pct": 7.1,
+   "n_questions_per_launch": 1,
+   "truncated": [
+    1,
+    1
+   ],
+   "accuracy": [
+    0.0,
+    0.0
+   ],
+   "mtp_accept_rate": 0.4072,
+   "peak_vram_gib": 29.54,
+   "residency": [
+    "proven",
+    "proven"
+   ],
+   "all_threads_pinned": [
+    true,
+    true
+   ],
+   "nmax4_20260815_tok_s": 47.6
+  },
+  {
+   "cell": "np1_L8192",
+   "status": "ok",
+   "tok_s_per_launch": [
+    43.5,
+    47.0
+   ],
+   "tok_s_mean": 45.25,
+   "spread_pct": 7.7,
+   "n_questions_per_launch": 1,
+   "truncated": [
+    1,
+    1
+   ],
+   "accuracy": [
+    0.0,
+    0.0
+   ],
+   "mtp_accept_rate": 0.3957,
+   "peak_vram_gib": 49.3,
+   "residency": [
+    "proven",
+    "proven"
+   ],
+   "all_threads_pinned": [
+    true,
+    true
+   ],
+   "nmax4_20260815_tok_s": 45.8
+  },
+  {
+   "cell": "np1_L16384",
+   "status": "ok",
+   "tok_s_per_launch": [
+    44.2,
+    43.7
+   ],
+   "tok_s_mean": 43.95,
+   "spread_pct": 1.1,
+   "n_questions_per_launch": 1,
+   "truncated": [
+    0,
+    0
+   ],
+   "accuracy": [
+    0.0,
+    0.0
+   ],
+   "mtp_accept_rate": 0.3872,
+   "peak_vram_gib": 55.07,
+   "residency": [
+    "proven",
+    "proven"
+   ],
+   "all_threads_pinned": [
+    true,
+    true
+   ],
+   "nmax4_20260815_tok_s": 45.0
+  },
+  {
+   "cell": "np1_L32768",
+   "status": "ok",
+   "tok_s_per_launch": [
+    46.6,
+    44.4
+   ],
+   "tok_s_mean": 45.5,
+   "spread_pct": 4.8,
+   "n_questions_per_launch": 1,
+   "truncated": [
+    0,
+    0
+   ],
+   "accuracy": [
+    0.0,
+    0.0
+   ],
+   "mtp_accept_rate": 0.3868,
+   "peak_vram_gib": 44.53,
+   "residency": [
+    "proven",
+    "proven"
+   ],
+   "all_threads_pinned": [
+    true,
+    true
+   ],
+   "nmax4_20260815_tok_s": 45.3
+  },
+  {
+   "cell": "np2_L2048",
+   "status": "ok",
+   "tok_s_per_launch": [
+    59.8,
+    66.2
+   ],
+   "tok_s_mean": 63.0,
+   "spread_pct": 10.2,
+   "n_questions_per_launch": 2,
+   "truncated": [
+    2,
+    2
+   ],
+   "accuracy": [
+    0.0,
+    0.0
+   ],
+   "mtp_accept_rate": 0.4024,
+   "peak_vram_gib": 31.8,
+   "residency": [
+    "proven",
+    "proven"
+   ],
+   "all_threads_pinned": [
+    true,
+    true
+   ],
+   "nmax4_20260815_tok_s": 75.4
+  },
+  {
+   "cell": "np2_L8192",
+   "status": "ok",
+   "tok_s_per_launch": [
+    58.7,
+    60.8
+   ],
+   "tok_s_mean": 59.75,
+   "spread_pct": 3.5,
+   "n_questions_per_launch": 2,
+   "truncated": [
+    0,
+    0
+   ],
+   "accuracy": [
+    0.5,
+    0.5
+   ],
+   "mtp_accept_rate": 0.4067,
+   "peak_vram_gib": 33.3,
+   "residency": [
+    "proven",
+    "proven"
+   ],
+   "all_threads_pinned": [
+    true,
+    true
+   ],
+   "nmax4_20260815_tok_s": 66.6
+  },
+  {
+   "cell": "np2_L16384",
+   "status": "ok",
+   "tok_s_per_launch": [
+    58.1,
+    57.8
+   ],
+   "tok_s_mean": 57.95,
+   "spread_pct": 0.5,
+   "n_questions_per_launch": 2,
+   "truncated": [
+    0,
+    0
+   ],
+   "accuracy": [
+    0.5,
+    0.5
+   ],
+   "mtp_accept_rate": 0.4069,
+   "peak_vram_gib": 32.89,
+   "residency": [
+    "proven",
+    "proven"
+   ],
+   "all_threads_pinned": [
+    true,
+    true
+   ],
+   "nmax4_20260815_tok_s": 66.1
+  },
+  {
+   "cell": "np2_L32768",
+   "status": "ok",
+   "tok_s_per_launch": [
+    58.2,
+    60.0
+   ],
+   "tok_s_mean": 59.1,
+   "spread_pct": 3.0,
+   "n_questions_per_launch": 2,
+   "truncated": [
+    0,
+    0
+   ],
+   "accuracy": [
+    0.5,
+    0.5
+   ],
+   "mtp_accept_rate": 0.4067,
+   "peak_vram_gib": 35.14,
+   "residency": [
+    "proven",
+    "proven"
+   ],
+   "all_threads_pinned": [
+    true,
+    true
+   ],
+   "nmax4_20260815_tok_s": 66.3
+  },
+  {
+   "cell": "np4_L2048",
+   "status": "ok",
+   "tok_s_per_launch": [
+    88.6,
+    95.1
+   ],
+   "tok_s_mean": 91.85,
+   "spread_pct": 7.1,
+   "n_questions_per_launch": 4,
+   "truncated": [
+    4,
+    4
+   ],
+   "accuracy": [
+    0.0,
+    0.0
+   ],
+   "mtp_accept_rate": 0.4117,
+   "peak_vram_gib": 37.53,
+   "residency": [
+    "proven",
+    "proven"
+   ],
+   "all_threads_pinned": [
+    true,
+    true
+   ],
+   "nmax4_20260815_tok_s": 108.7
+  },
+  {
+   "cell": "np4_L8192",
+   "status": "ok",
+   "tok_s_per_launch": [
+    93.9,
+    90.6
+   ],
+   "tok_s_mean": 92.25,
+   "spread_pct": 3.6,
+   "n_questions_per_launch": 4,
+   "truncated": [
+    2,
+    2
+   ],
+   "accuracy": [
+    0.5,
+    0.5
+   ],
+   "mtp_accept_rate": 0.4413,
+   "peak_vram_gib": 40.53,
+   "residency": [
+    "proven",
+    "proven"
+   ],
+   "all_threads_pinned": [
+    true,
+    true
+   ],
+   "nmax4_20260815_tok_s": 92.3
+  },
+  {
+   "cell": "np4_L16384",
+   "status": "ok",
+   "tok_s_per_launch": [
+    73.6,
+    83.6
+   ],
+   "tok_s_mean": 78.6,
+   "spread_pct": 12.7,
+   "n_questions_per_launch": 4,
+   "truncated": [
+    0,
+    0
+   ],
+   "accuracy": [
+    0.5,
+    0.75
+   ],
+   "mtp_accept_rate": 0.4332,
+   "peak_vram_gib": 44.53,
+   "residency": [
+    "proven",
+    "proven"
+   ],
+   "all_threads_pinned": [
+    true,
+    true
+   ],
+   "nmax4_20260815_tok_s": 91.6
+  },
+  {
+   "cell": "np4_L32768",
+   "status": "ok",
+   "tok_s_per_launch": [
+    88.0,
+    88.1
+   ],
+   "tok_s_mean": 88.05,
+   "spread_pct": 0.1,
+   "n_questions_per_launch": 4,
+   "truncated": [
+    0,
+    0
+   ],
+   "accuracy": [
+    1.0,
+    0.5
+   ],
+   "mtp_accept_rate": 0.4432,
+   "peak_vram_gib": 52.53,
+   "residency": [
+    "proven",
+    "proven"
+   ],
+   "all_threads_pinned": [
+    true,
+    true
+   ],
+   "nmax4_20260815_tok_s": 91.7
+  },
+  {
+   "cell": "np8_L2048",
+   "status": "ok",
+   "tok_s_per_launch": [
+    105.2,
+    119.4
+   ],
+   "tok_s_mean": 112.3,
+   "spread_pct": 12.6,
+   "n_questions_per_launch": 8,
+   "truncated": [
+    8,
+    8
+   ],
+   "accuracy": [
+    0.0,
+    0.0
+   ],
+   "mtp_accept_rate": 0.4636,
+   "peak_vram_gib": 49.3,
+   "residency": [
+    "proven",
+    "proven"
+   ],
+   "all_threads_pinned": [
+    true,
+    true
+   ],
+   "nmax4_20260815_tok_s": 157.3
+  },
+  {
+   "cell": "np8_L8192",
+   "status": "ok",
+   "tok_s_per_launch": [
+    105.9,
+    93.2
+   ],
+   "tok_s_mean": 99.55,
+   "spread_pct": 12.8,
+   "n_questions_per_launch": 8,
+   "truncated": [
+    0,
+    2
+   ],
+   "accuracy": [
+    0.75,
+    0.625
+   ],
+   "mtp_accept_rate": 0.4606,
+   "peak_vram_gib": 55.3,
+   "residency": [
+    "proven",
+    "proven"
+   ],
+   "all_threads_pinned": [
+    true,
+    true
+   ],
+   "nmax4_20260815_tok_s": 94.0
+  },
+  {
+   "cell": "np8_L16384",
+   "status": "ok",
+   "tok_s_per_launch": [
+    96.0,
+    98.7
+   ],
+   "tok_s_mean": 97.35,
+   "spread_pct": 2.8,
+   "n_questions_per_launch": 8,
+   "truncated": [
+    0,
+    0
+   ],
+   "accuracy": [
+    0.75,
+    0.625
+   ],
+   "mtp_accept_rate": 0.4664,
+   "peak_vram_gib": 47.24,
+   "residency": [
+    "proven",
+    "proven"
+   ],
+   "all_threads_pinned": [
+    true,
+    true
+   ],
+   "nmax4_20260815_tok_s": 111.3
+  },
+  {
+   "cell": "np8_L32768",
+   "status": "ok",
+   "tok_s_per_launch": [
+    97.6,
+    92.9
+   ],
+   "tok_s_mean": 95.25,
+   "spread_pct": 4.9,
+   "n_questions_per_launch": 8,
+   "truncated": [
+    0,
+    0
+   ],
+   "accuracy": [
+    0.625,
+    0.75
+   ],
+   "mtp_accept_rate": 0.4687,
+   "peak_vram_gib": 55.84,
+   "residency": [
+    "proven",
+    "proven"
+   ],
+   "all_threads_pinned": [
+    true,
+    true
+   ],
+   "nmax4_20260815_tok_s": null
+  },
+  {
+   "cell": "np16_L2048",
+   "status": "ok",
+   "tok_s_per_launch": [
+    108.9,
+    124.8
+   ],
+   "tok_s_mean": 116.85,
+   "spread_pct": 13.6,
+   "n_questions_per_launch": 16,
+   "truncated": [
+    15,
+    15
+   ],
+   "accuracy": [
+    0.0,
+    0.0625
+   ],
+   "mtp_accept_rate": 0.4729,
+   "peak_vram_gib": 54.04,
+   "residency": [
+    "proven",
+    "proven"
+   ],
+   "all_threads_pinned": [
+    true,
+    true
+   ],
+   "nmax4_20260815_tok_s": 153.5
+  },
+  {
+   "cell": "np16_L8192",
+   "status": "ok",
+   "tok_s_per_launch": [
+    101.3,
+    93.2
+   ],
+   "tok_s_mean": 97.25,
+   "spread_pct": 8.3,
+   "n_questions_per_launch": 16,
+   "truncated": [
+    4,
+    2
+   ],
+   "accuracy": [
+    0.375,
+    0.375
+   ],
+   "mtp_accept_rate": 0.4722,
+   "peak_vram_gib": 60.49,
+   "residency": [
+    "proven",
+    "proven"
+   ],
+   "all_threads_pinned": [
+    true,
+    true
+   ],
+   "nmax4_20260815_tok_s": 104.0
+  },
+  {
+   "cell": "np16_L16384",
+   "status": "skip",
+   "reason": [
+    "capacity_start:failed to allocate ROCm0 buffer",
+    "capacity skip in an earlier pass"
+   ],
+   "nmax4_20260815_tok_s": null
+  },
+  {
+   "cell": "np16_L32768",
+   "status": "skip",
+   "reason": [
+    "capacity_start:failed to allocate ROCm0 buffer",
+    "capacity skip in an earlier pass"
+   ],
+   "nmax4_20260815_tok_s": null
+  },
+  {
+   "cell": "np32_L2048",
+   "status": "skip",
+   "reason": [
+    "capacity_start:failed to allocate ROCm0 buffer",
+    "capacity skip in an earlier pass"
+   ],
+   "nmax4_20260815_tok_s": 141.1
+  },
+  {
+   "cell": "np32_L8192",
+   "status": "skip",
+   "reason": [
+    "capacity_start:failed to allocate ROCm0 buffer",
+    "capacity skip in an earlier pass"
+   ],
+   "nmax4_20260815_tok_s": null
+  },
+  {
+   "cell": "np32_L16384",
+   "status": "skip",
+   "reason": [
+    "capacity_start:failed to allocate ROCm0 buffer",
+    "capacity skip in an earlier pass"
+   ],
+   "nmax4_20260815_tok_s": null
+  },
+  {
+   "cell": "np32_L32768",
+   "status": "skip",
+   "reason": [
+    "capacity_start:failed to allocate ROCm0 buffer",
+    "capacity skip in an earlier pass"
+   ],
+   "nmax4_20260815_tok_s": null
+  }
+ ]
+}

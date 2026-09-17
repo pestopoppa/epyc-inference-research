@@ -1,0 +1,56 @@
+{
+  "rule": "FIX = every rep of 1024\u00b2 and 832x1248 non-blank AND every 768/896/960\u00b2 cell of the same variant non-blank; server resident and knob echo matches. Cost = median generate_s at 896\u00b2 vs off (3 reps each).",
+  "blank_threshold_stddev": 5.0,
+  "variants": {
+    "off": {
+      "target_nonblank": "0/6",
+      "guard_nonblank": "4/7",
+      "server_valid": true,
+      "verdict": "BASELINE",
+      "off_960_nonblank": [
+        false,
+        false,
+        false
+      ],
+      "defect_reproduced_1024": true
+    },
+    "f32": {
+      "target_nonblank": "0/6",
+      "guard_nonblank": "0/0",
+      "server_valid": true,
+      "verdict": "DOES-NOT-FIX"
+    },
+    "wide": {
+      "target_nonblank": "0/6",
+      "guard_nonblank": "4/5",
+      "server_valid": true,
+      "verdict": "DOES-NOT-FIX",
+      "cost_896_generate_s": {
+        "off": 19.44,
+        "wide": 27.66,
+        "ratio": 1.4228
+      }
+    },
+    "outscale": {
+      "target_nonblank": "0/6",
+      "guard_nonblank": "4/5",
+      "server_valid": true,
+      "verdict": "DOES-NOT-FIX",
+      "cost_896_generate_s": {
+        "off": 19.44,
+        "outscale": 19.7,
+        "ratio": 1.0134
+      }
+    },
+    "wide+outscale": {
+      "target_nonblank": "0/6",
+      "guard_nonblank": "2/3",
+      "server_valid": true,
+      "verdict": "DOES-NOT-FIX"
+    }
+  },
+  "sd_server_sha256": "d33cbe6f064ae306f4bacd84a854a4539f47dd7d3b41901f3451b24f84d05b50",
+  "build": "/mnt/raid0/llm/worktrees/sub-gpu-prep-stable-diffusion.cpp/build-rocm-variants-20260916",
+  "finished": "2026-09-17T02:54:53Z",
+  "prod_cpu_pid_alive_after": true
+}

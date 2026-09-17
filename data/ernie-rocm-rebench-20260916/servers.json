@@ -1,0 +1,44 @@
+[
+  {
+    "label": "patch_on",
+    "pid": 771761,
+    "f32_off": false,
+    "teardown": "terminated",
+    "log_rocm_device": true,
+    "log_params_lines": [
+      "total params memory size = 15765.14MB (VRAM 15765.14MB, RAM 0.00MB): text_encoders 7308.62MB(VRAM), diffusion_model 8292.08MB(VRAM), vae 164.43MB(VRAM), controlnet 0.00MB(VRAM), pmid 0.00MB(VRAM)"
+    ],
+    "residency": {
+      "peak_vram_bytes": 27426725888,
+      "median_vram_bytes": 18245394432,
+      "vram_reads": 402,
+      "peak_kfd_processes": 1,
+      "sclk_min_mhz": 1295,
+      "sclk_max_mhz": 1700,
+      "clock_stable": false,
+      "samples": 402,
+      "resident": true
+    }
+  },
+  {
+    "label": "patch_off",
+    "pid": 1339071,
+    "f32_off": true,
+    "teardown": "terminated",
+    "log_rocm_device": true,
+    "log_params_lines": [
+      "total params memory size = 15765.14MB (VRAM 15765.14MB, RAM 0.00MB): text_encoders 7308.62MB(VRAM), diffusion_model 8292.08MB(VRAM), vae 164.43MB(VRAM), controlnet 0.00MB(VRAM), pmid 0.00MB(VRAM)"
+    ],
+    "residency": {
+      "peak_vram_bytes": 20428361728,
+      "median_vram_bytes": 18150834176,
+      "vram_reads": 155,
+      "peak_kfd_processes": 1,
+      "sclk_min_mhz": 1475,
+      "sclk_max_mhz": 1700,
+      "clock_stable": false,
+      "samples": 155,
+      "resident": true
+    }
+  }
+]

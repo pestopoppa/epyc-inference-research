@@ -287,12 +287,25 @@ def build_manifest(
     return manifest
 
 
+def resolve_pin_path(raw: str) -> Path:
+    """A pinned path as the manifest means it.
+
+    Absolute pins are taken as-is. A relative pin (``cocritic/tasks_file`` is
+    written that way, because the builder was invoked from the research root) is
+    relative to RESEARCH_ROOT -- never to the caller's cwd. Resolving it against
+    the cwd made ``verify_manifest`` report the co-critic set missing whenever it
+    ran from anywhere but the repo root, e.g. ``pytest`` inside scripts/benchmark.
+    """
+    path = Path(raw)
+    return path if path.is_absolute() else RESEARCH_ROOT / path
+
+
 def verify_manifest(manifest: dict) -> list[str]:
     """Re-hash every pinned source; return a list of failures (empty = ok)."""
     failures: list[str] = []
 
     def check(pin: dict, label: str) -> None:
-        path = Path(pin["path"])
+        path = resolve_pin_path(pin["path"])
         if not path.exists():
             failures.append(f"{label}: missing {path}")
             return

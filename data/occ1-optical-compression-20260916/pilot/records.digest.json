@@ -1,0 +1,4632 @@
+{
+"source_sha256": "5ea86821352bb5c3fd9d16c4e45b84523451c50362fc932b0640cc39703db35d",
+"redaction": "model output text and predicted answers dropped (no SQuAD text); ids and scores kept",
+"records": [
+{
+"key": "text|c000",
+"arm": "text",
+"chunk": 0,
+"error": null,
+"finish_reason": "stop",
+"prompt_tokens": 9785,
+"cached_tokens": 0,
+"completion_tokens": 233,
+"prompt_ms": 7345.781,
+"predicted_ms": 3951.449,
+"wall_s": 11.315,
+"n_frames": 0,
+"pred_image_tokens": null,
+"items": [
+{
+"qid": "56d20362e7d4791d009025e9",
+"pos_rel": 0.0,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d601e41c85041400946ed0",
+"pos_rel": 0.03472836231456921,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bf42f53aeaaa14008c95a3",
+"pos_rel": 0.05297671676982022,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d98f0ddc89441400fdb55b",
+"pos_rel": 0.061548285686216724,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d6f1190d65d21400198275",
+"pos_rel": 0.08527360251498182,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d997cddc89441400fdb587",
+"pos_rel": 0.12513508203163376,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bf301c3aeaaa14008c954e",
+"pos_rel": 0.18503782296885746,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d6fea90d65d214001982af",
+"pos_rel": 0.25849788780823263,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56beb7953aeaaa14008c92af",
+"pos_rel": 0.2845073189900776,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d9a0eadc89441400fdb63f",
+"pos_rel": 0.30346792415757934,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d70adc0d65d21400198312",
+"pos_rel": 0.33124570193535713,
+"em": 0.0,
+"f1": 0.7499999999999999,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bebb293aeaaa14008c9303",
+"pos_rel": 0.3779349641418607,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bebc383aeaaa14008c9320",
+"pos_rel": 0.40151291875429806,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d714cd0d65d21400198356",
+"pos_rel": 0.4310836034973966,
+"em": 0.0,
+"f1": 0.5,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bebe873aeaaa14008c9342",
+"pos_rel": 0.45274584929757344,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bf5b933aeaaa14008c95f1",
+"pos_rel": 0.4723941448079379,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec1823aeaaa14008c9362",
+"pos_rel": 0.4955300127713921,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bf6f743aeaaa14008c9631",
+"pos_rel": 0.5250761371451027,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d722330d65d214001983a8",
+"pos_rel": 0.5578642302780233,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec4a33aeaaa14008c93b2",
+"pos_rel": 0.5783230179781904,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec6573aeaaa14008c93ed",
+"pos_rel": 0.6118479221927497,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec7353aeaaa14008c940d",
+"pos_rel": 0.6283524904214559,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec8243aeaaa14008c942b",
+"pos_rel": 0.6577512525788388,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d9c79edc89441400fdb804",
+"pos_rel": 0.6953777384811868,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d7261e0d65d214001983e4",
+"pos_rel": 0.7328814225365949,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d9ccacdc89441400fdb845",
+"pos_rel": 0.7680518715001473,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733a5f54776f41900660f44",
+"pos_rel": 0.8298703212496316,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57337ddc4776f41900660bbc",
+"pos_rel": 0.8830926417133313,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57339555d058e614000b5df4",
+"pos_rel": 0.9171824344238138,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573399b54776f41900660e65",
+"pos_rel": 0.9526476078200216,
+"em": 0.0,
+"f1": 0.5,
+"unreadable": false,
+"missing": false
+}
+]
+},
+{
+"key": "img-6x10-bw|c000",
+"arm": "img-6x10-bw",
+"chunk": 0,
+"error": null,
+"finish_reason": "stop",
+"prompt_tokens": 3028,
+"cached_tokens": 0,
+"completion_tokens": 250,
+"prompt_ms": 2977.107,
+"predicted_ms": 3611.729,
+"wall_s": 6.618,
+"n_frames": 1,
+"pred_image_tokens": 2401,
+"items": [
+{
+"qid": "56d20362e7d4791d009025e9",
+"pos_rel": 0.0,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d601e41c85041400946ed0",
+"pos_rel": 0.03472836231456921,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bf42f53aeaaa14008c95a3",
+"pos_rel": 0.05297671676982022,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d98f0ddc89441400fdb55b",
+"pos_rel": 0.061548285686216724,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d6f1190d65d21400198275",
+"pos_rel": 0.08527360251498182,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d997cddc89441400fdb587",
+"pos_rel": 0.12513508203163376,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bf301c3aeaaa14008c954e",
+"pos_rel": 0.18503782296885746,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d6fea90d65d214001982af",
+"pos_rel": 0.25849788780823263,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56beb7953aeaaa14008c92af",
+"pos_rel": 0.2845073189900776,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d9a0eadc89441400fdb63f",
+"pos_rel": 0.30346792415757934,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d70adc0d65d21400198312",
+"pos_rel": 0.33124570193535713,
+"em": 0.0,
+"f1": 0.8571428571428571,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bebb293aeaaa14008c9303",
+"pos_rel": 0.3779349641418607,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bebc383aeaaa14008c9320",
+"pos_rel": 0.40151291875429806,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d714cd0d65d21400198356",
+"pos_rel": 0.4310836034973966,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bebe873aeaaa14008c9342",
+"pos_rel": 0.45274584929757344,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bf5b933aeaaa14008c95f1",
+"pos_rel": 0.4723941448079379,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec1823aeaaa14008c9362",
+"pos_rel": 0.4955300127713921,
+"em": 0.0,
+"f1": 0.5,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bf6f743aeaaa14008c9631",
+"pos_rel": 0.5250761371451027,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d722330d65d214001983a8",
+"pos_rel": 0.5578642302780233,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec4a33aeaaa14008c93b2",
+"pos_rel": 0.5783230179781904,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec6573aeaaa14008c93ed",
+"pos_rel": 0.6118479221927497,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec7353aeaaa14008c940d",
+"pos_rel": 0.6283524904214559,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec8243aeaaa14008c942b",
+"pos_rel": 0.6577512525788388,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d9c79edc89441400fdb804",
+"pos_rel": 0.6953777384811868,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d7261e0d65d214001983e4",
+"pos_rel": 0.7328814225365949,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d9ccacdc89441400fdb845",
+"pos_rel": 0.7680518715001473,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733a5f54776f41900660f44",
+"pos_rel": 0.8298703212496316,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57337ddc4776f41900660bbc",
+"pos_rel": 0.8830926417133313,
+"em": 0.0,
+"f1": 0.5,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57339555d058e614000b5df4",
+"pos_rel": 0.9171824344238138,
+"em": 0.0,
+"f1": 0.36363636363636365,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573399b54776f41900660e65",
+"pos_rel": 0.9526476078200216,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+}
+]
+},
+{
+"key": "img-6x10-color|c000",
+"arm": "img-6x10-color",
+"chunk": 0,
+"error": null,
+"finish_reason": "stop",
+"prompt_tokens": 3028,
+"cached_tokens": 0,
+"completion_tokens": 242,
+"prompt_ms": 2972.078,
+"predicted_ms": 3695.327,
+"wall_s": 6.697,
+"n_frames": 1,
+"pred_image_tokens": 2401,
+"items": [
+{
+"qid": "56d20362e7d4791d009025e9",
+"pos_rel": 0.0,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d601e41c85041400946ed0",
+"pos_rel": 0.03472836231456921,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bf42f53aeaaa14008c95a3",
+"pos_rel": 0.05297671676982022,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d98f0ddc89441400fdb55b",
+"pos_rel": 0.061548285686216724,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d6f1190d65d21400198275",
+"pos_rel": 0.08527360251498182,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d997cddc89441400fdb587",
+"pos_rel": 0.12513508203163376,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bf301c3aeaaa14008c954e",
+"pos_rel": 0.18503782296885746,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d6fea90d65d214001982af",
+"pos_rel": 0.25849788780823263,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56beb7953aeaaa14008c92af",
+"pos_rel": 0.2845073189900776,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d9a0eadc89441400fdb63f",
+"pos_rel": 0.30346792415757934,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d70adc0d65d21400198312",
+"pos_rel": 0.33124570193535713,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bebb293aeaaa14008c9303",
+"pos_rel": 0.3779349641418607,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bebc383aeaaa14008c9320",
+"pos_rel": 0.40151291875429806,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d714cd0d65d21400198356",
+"pos_rel": 0.4310836034973966,
+"em": 0.0,
+"f1": 0.3333333333333333,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bebe873aeaaa14008c9342",
+"pos_rel": 0.45274584929757344,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bf5b933aeaaa14008c95f1",
+"pos_rel": 0.4723941448079379,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec1823aeaaa14008c9362",
+"pos_rel": 0.4955300127713921,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bf6f743aeaaa14008c9631",
+"pos_rel": 0.5250761371451027,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d722330d65d214001983a8",
+"pos_rel": 0.5578642302780233,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec4a33aeaaa14008c93b2",
+"pos_rel": 0.5783230179781904,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec6573aeaaa14008c93ed",
+"pos_rel": 0.6118479221927497,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec7353aeaaa14008c940d",
+"pos_rel": 0.6283524904214559,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec8243aeaaa14008c942b",
+"pos_rel": 0.6577512525788388,
+"em": 0.0,
+"f1": 0.5,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d9c79edc89441400fdb804",
+"pos_rel": 0.6953777384811868,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d7261e0d65d214001983e4",
+"pos_rel": 0.7328814225365949,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d9ccacdc89441400fdb845",
+"pos_rel": 0.7680518715001473,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733a5f54776f41900660f44",
+"pos_rel": 0.8298703212496316,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57337ddc4776f41900660bbc",
+"pos_rel": 0.8830926417133313,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57339555d058e614000b5df4",
+"pos_rel": 0.9171824344238138,
+"em": 0.0,
+"f1": 0.5,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573399b54776f41900660e65",
+"pos_rel": 0.9526476078200216,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+}
+]
+},
+{
+"key": "img-8x13-bw|c000",
+"arm": "img-8x13-bw",
+"chunk": 0,
+"error": null,
+"finish_reason": "stop",
+"prompt_tokens": 4794,
+"cached_tokens": 0,
+"completion_tokens": 248,
+"prompt_ms": 4957.681,
+"predicted_ms": 3890.729,
+"wall_s": 8.915,
+"n_frames": 2,
+"pred_image_tokens": 4165,
+"items": [
+{
+"qid": "56d20362e7d4791d009025e9",
+"pos_rel": 0.0,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d601e41c85041400946ed0",
+"pos_rel": 0.03472836231456921,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bf42f53aeaaa14008c95a3",
+"pos_rel": 0.05297671676982022,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d98f0ddc89441400fdb55b",
+"pos_rel": 0.061548285686216724,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d6f1190d65d21400198275",
+"pos_rel": 0.08527360251498182,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d997cddc89441400fdb587",
+"pos_rel": 0.12513508203163376,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bf301c3aeaaa14008c954e",
+"pos_rel": 0.18503782296885746,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d6fea90d65d214001982af",
+"pos_rel": 0.25849788780823263,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56beb7953aeaaa14008c92af",
+"pos_rel": 0.2845073189900776,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d9a0eadc89441400fdb63f",
+"pos_rel": 0.30346792415757934,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d70adc0d65d21400198312",
+"pos_rel": 0.33124570193535713,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bebb293aeaaa14008c9303",
+"pos_rel": 0.3779349641418607,
+"em": 0.0,
+"f1": 0.8571428571428571,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bebc383aeaaa14008c9320",
+"pos_rel": 0.40151291875429806,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d714cd0d65d21400198356",
+"pos_rel": 0.4310836034973966,
+"em": 0.0,
+"f1": 0.7272727272727273,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bebe873aeaaa14008c9342",
+"pos_rel": 0.45274584929757344,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bf5b933aeaaa14008c95f1",
+"pos_rel": 0.4723941448079379,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec1823aeaaa14008c9362",
+"pos_rel": 0.4955300127713921,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bf6f743aeaaa14008c9631",
+"pos_rel": 0.5250761371451027,
+"em": 0.0,
+"f1": 0.5454545454545454,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d722330d65d214001983a8",
+"pos_rel": 0.5578642302780233,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec4a33aeaaa14008c93b2",
+"pos_rel": 0.5783230179781904,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec6573aeaaa14008c93ed",
+"pos_rel": 0.6118479221927497,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec7353aeaaa14008c940d",
+"pos_rel": 0.6283524904214559,
+"em": 0.0,
+"f1": 0.8,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec8243aeaaa14008c942b",
+"pos_rel": 0.6577512525788388,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d9c79edc89441400fdb804",
+"pos_rel": 0.6953777384811868,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d7261e0d65d214001983e4",
+"pos_rel": 0.7328814225365949,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d9ccacdc89441400fdb845",
+"pos_rel": 0.7680518715001473,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733a5f54776f41900660f44",
+"pos_rel": 0.8298703212496316,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57337ddc4776f41900660bbc",
+"pos_rel": 0.8830926417133313,
+"em": 0.0,
+"f1": 0.5454545454545454,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57339555d058e614000b5df4",
+"pos_rel": 0.9171824344238138,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573399b54776f41900660e65",
+"pos_rel": 0.9526476078200216,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+}
+]
+},
+{
+"key": "img-8x8u-bw|c000",
+"arm": "img-8x8u-bw",
+"chunk": 0,
+"error": null,
+"finish_reason": "stop",
+"prompt_tokens": 4059,
+"cached_tokens": 0,
+"completion_tokens": 240,
+"prompt_ms": 4070.143,
+"predicted_ms": 3730.018,
+"wall_s": 7.855,
+"n_frames": 2,
+"pred_image_tokens": 3430,
+"items": [
+{
+"qid": "56d20362e7d4791d009025e9",
+"pos_rel": 0.0,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d601e41c85041400946ed0",
+"pos_rel": 0.03472836231456921,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bf42f53aeaaa14008c95a3",
+"pos_rel": 0.05297671676982022,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d98f0ddc89441400fdb55b",
+"pos_rel": 0.061548285686216724,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d6f1190d65d21400198275",
+"pos_rel": 0.08527360251498182,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d997cddc89441400fdb587",
+"pos_rel": 0.12513508203163376,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bf301c3aeaaa14008c954e",
+"pos_rel": 0.18503782296885746,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d6fea90d65d214001982af",
+"pos_rel": 0.25849788780823263,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56beb7953aeaaa14008c92af",
+"pos_rel": 0.2845073189900776,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d9a0eadc89441400fdb63f",
+"pos_rel": 0.30346792415757934,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d70adc0d65d21400198312",
+"pos_rel": 0.33124570193535713,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bebb293aeaaa14008c9303",
+"pos_rel": 0.3779349641418607,
+"em": 0.0,
+"f1": 0.28571428571428575,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bebc383aeaaa14008c9320",
+"pos_rel": 0.40151291875429806,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d714cd0d65d21400198356",
+"pos_rel": 0.4310836034973966,
+"em": 0.0,
+"f1": 0.3333333333333333,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bebe873aeaaa14008c9342",
+"pos_rel": 0.45274584929757344,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bf5b933aeaaa14008c95f1",
+"pos_rel": 0.4723941448079379,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec1823aeaaa14008c9362",
+"pos_rel": 0.4955300127713921,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bf6f743aeaaa14008c9631",
+"pos_rel": 0.5250761371451027,
+"em": 0.0,
+"f1": 0.5454545454545454,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d722330d65d214001983a8",
+"pos_rel": 0.5578642302780233,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec4a33aeaaa14008c93b2",
+"pos_rel": 0.5783230179781904,
+"em": 0.0,
+"f1": 0.5,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec6573aeaaa14008c93ed",
+"pos_rel": 0.6118479221927497,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec7353aeaaa14008c940d",
+"pos_rel": 0.6283524904214559,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec8243aeaaa14008c942b",
+"pos_rel": 0.6577512525788388,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d9c79edc89441400fdb804",
+"pos_rel": 0.6953777384811868,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d7261e0d65d214001983e4",
+"pos_rel": 0.7328814225365949,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d9ccacdc89441400fdb845",
+"pos_rel": 0.7680518715001473,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733a5f54776f41900660f44",
+"pos_rel": 0.8298703212496316,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57337ddc4776f41900660bbc",
+"pos_rel": 0.8830926417133313,
+"em": 0.0,
+"f1": 0.5454545454545454,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57339555d058e614000b5df4",
+"pos_rel": 0.9171824344238138,
+"em": 0.0,
+"f1": 0.6,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573399b54776f41900660e65",
+"pos_rel": 0.9526476078200216,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+}
+]
+},
+{
+"key": "img-12x12u-bw|c000",
+"arm": "img-12x12u-bw",
+"chunk": 0,
+"error": null,
+"finish_reason": "stop",
+"prompt_tokens": 4059,
+"cached_tokens": 0,
+"completion_tokens": 234,
+"prompt_ms": 4114.697,
+"predicted_ms": 3904.573,
+"wall_s": 8.2,
+"n_frames": 3,
+"pred_image_tokens": 5831,
+"items": [
+{
+"qid": "56d20362e7d4791d009025e9",
+"pos_rel": 0.0,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d601e41c85041400946ed0",
+"pos_rel": 0.03472836231456921,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bf42f53aeaaa14008c95a3",
+"pos_rel": 0.05297671676982022,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d98f0ddc89441400fdb55b",
+"pos_rel": 0.061548285686216724,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d6f1190d65d21400198275",
+"pos_rel": 0.08527360251498182,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d997cddc89441400fdb587",
+"pos_rel": 0.12513508203163376,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bf301c3aeaaa14008c954e",
+"pos_rel": 0.18503782296885746,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d6fea90d65d214001982af",
+"pos_rel": 0.25849788780823263,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56beb7953aeaaa14008c92af",
+"pos_rel": 0.2845073189900776,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d9a0eadc89441400fdb63f",
+"pos_rel": 0.30346792415757934,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d70adc0d65d21400198312",
+"pos_rel": 0.33124570193535713,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bebb293aeaaa14008c9303",
+"pos_rel": 0.3779349641418607,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bebc383aeaaa14008c9320",
+"pos_rel": 0.40151291875429806,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d714cd0d65d21400198356",
+"pos_rel": 0.4310836034973966,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bebe873aeaaa14008c9342",
+"pos_rel": 0.45274584929757344,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bf5b933aeaaa14008c95f1",
+"pos_rel": 0.4723941448079379,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec1823aeaaa14008c9362",
+"pos_rel": 0.4955300127713921,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bf6f743aeaaa14008c9631",
+"pos_rel": 0.5250761371451027,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d722330d65d214001983a8",
+"pos_rel": 0.5578642302780233,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec4a33aeaaa14008c93b2",
+"pos_rel": 0.5783230179781904,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec6573aeaaa14008c93ed",
+"pos_rel": 0.6118479221927497,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec7353aeaaa14008c940d",
+"pos_rel": 0.6283524904214559,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56bec8243aeaaa14008c942b",
+"pos_rel": 0.6577512525788388,
+"em": 0.0,
+"f1": 0.5,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d9c79edc89441400fdb804",
+"pos_rel": 0.6953777384811868,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d7261e0d65d214001983e4",
+"pos_rel": 0.7328814225365949,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56d9ccacdc89441400fdb845",
+"pos_rel": 0.7680518715001473,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733a5f54776f41900660f44",
+"pos_rel": 0.8298703212496316,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57337ddc4776f41900660bbc",
+"pos_rel": 0.8830926417133313,
+"em": 0.0,
+"f1": 0.18181818181818182,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57339555d058e614000b5df4",
+"pos_rel": 0.9171824344238138,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573399b54776f41900660e65",
+"pos_rel": 0.9526476078200216,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+}
+]
+},
+{
+"key": "img-6x10-bw|c001",
+"arm": "img-6x10-bw",
+"chunk": 1,
+"error": null,
+"finish_reason": "stop",
+"prompt_tokens": 3006,
+"cached_tokens": 0,
+"completion_tokens": 266,
+"prompt_ms": 3004.537,
+"predicted_ms": 4512.531,
+"wall_s": 7.556,
+"n_frames": 1,
+"pred_image_tokens": 2401,
+"items": [
+{
+"qid": "57339dd94776f41900660ecc",
+"pos_rel": 0.011715296198054819,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57339eb9d058e614000b5ef6",
+"pos_rel": 0.031265350230867475,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733a2a9d058e614000b5f2a",
+"pos_rel": 0.059779939090283916,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733a45d4776f41900660f26",
+"pos_rel": 0.08711563021907849,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733a560d058e614000b5f7a",
+"pos_rel": 0.10116416150898909,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573312fcd058e614000b56e7",
+"pos_rel": 0.133289124668435,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573314e3d058e614000b56f1",
+"pos_rel": 0.19982316534040673,
+"em": 0.0,
+"f1": 0.25,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57332442d058e614000b5724",
+"pos_rel": 0.22290991256508497,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733266d4776f41900660715",
+"pos_rel": 0.2616661754592789,
+"em": 0.0,
+"f1": 0.16666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57332b66d058e614000b5758",
+"pos_rel": 0.29442970822281167,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57332e48d058e614000b5764",
+"pos_rel": 0.33205619412515963,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57332f81d058e614000b5777",
+"pos_rel": 0.3513360840947048,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733314e4776f4190066076d",
+"pos_rel": 0.3804892425582081,
+"em": 0.0,
+"f1": 0.5,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57335ddbd058e614000b5932",
+"pos_rel": 0.42182434423813736,
+"em": 0.0,
+"f1": 0.4,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57335fcad058e614000b5973",
+"pos_rel": 0.44410059927301304,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573362b94776f41900660978",
+"pos_rel": 0.48101483446311033,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733647e4776f419006609b2",
+"pos_rel": 0.5253708615777581,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573368044776f41900660a2c",
+"pos_rel": 0.5429560860595344,
+"em": 0.0,
+"f1": 0.5,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57337f6ad058e614000b5bcb",
+"pos_rel": 0.5852244817762059,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573380e0d058e614000b5be9",
+"pos_rel": 0.6235386580214166,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57338255d058e614000b5c0f",
+"pos_rel": 0.6662982611258473,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573382d24776f41900660c38",
+"pos_rel": 0.6849150211219177,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573383d0d058e614000b5c35",
+"pos_rel": 0.7303517044896355,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56ddde6b9a695914005b962c",
+"pos_rel": 0.7650555064348168,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dddf4066d3e219004dad5f",
+"pos_rel": 0.7833038608900678,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dde0ba66d3e219004dad76",
+"pos_rel": 0.8269721976618528,
+"em": 0.0,
+"f1": 0.5,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dde27d9a695914005b9651",
+"pos_rel": 0.8671529619805481,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dde2fa66d3e219004dad9b",
+"pos_rel": 0.8803910010806563,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de0daecffd8e1900b4b595",
+"pos_rel": 0.9162000196482956,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de0ed14396321400ee257a",
+"pos_rel": 0.9536791433343157,
+"em": 0.0,
+"f1": 0.5,
+"unreadable": false,
+"missing": false
+}
+]
+},
+{
+"key": "img-6x10-color|c001",
+"arm": "img-6x10-color",
+"chunk": 1,
+"error": null,
+"finish_reason": "stop",
+"prompt_tokens": 3006,
+"cached_tokens": 0,
+"completion_tokens": 257,
+"prompt_ms": 2968.875,
+"predicted_ms": 4068.841,
+"wall_s": 7.078,
+"n_frames": 1,
+"pred_image_tokens": 2401,
+"items": [
+{
+"qid": "57339dd94776f41900660ecc",
+"pos_rel": 0.011715296198054819,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57339eb9d058e614000b5ef6",
+"pos_rel": 0.031265350230867475,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733a2a9d058e614000b5f2a",
+"pos_rel": 0.059779939090283916,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733a45d4776f41900660f26",
+"pos_rel": 0.08711563021907849,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733a560d058e614000b5f7a",
+"pos_rel": 0.10116416150898909,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573312fcd058e614000b56e7",
+"pos_rel": 0.133289124668435,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573314e3d058e614000b56f1",
+"pos_rel": 0.19982316534040673,
+"em": 0.0,
+"f1": 0.25,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57332442d058e614000b5724",
+"pos_rel": 0.22290991256508497,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733266d4776f41900660715",
+"pos_rel": 0.2616661754592789,
+"em": 0.0,
+"f1": 0.1818181818181818,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57332b66d058e614000b5758",
+"pos_rel": 0.29442970822281167,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57332e48d058e614000b5764",
+"pos_rel": 0.33205619412515963,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57332f81d058e614000b5777",
+"pos_rel": 0.3513360840947048,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733314e4776f4190066076d",
+"pos_rel": 0.3804892425582081,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57335ddbd058e614000b5932",
+"pos_rel": 0.42182434423813736,
+"em": 0.0,
+"f1": 0.4,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57335fcad058e614000b5973",
+"pos_rel": 0.44410059927301304,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573362b94776f41900660978",
+"pos_rel": 0.48101483446311033,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733647e4776f419006609b2",
+"pos_rel": 0.5253708615777581,
+"em": 0.0,
+"f1": 0.8,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573368044776f41900660a2c",
+"pos_rel": 0.5429560860595344,
+"em": 0.0,
+"f1": 0.5,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57337f6ad058e614000b5bcb",
+"pos_rel": 0.5852244817762059,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573380e0d058e614000b5be9",
+"pos_rel": 0.6235386580214166,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57338255d058e614000b5c0f",
+"pos_rel": 0.6662982611258473,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573382d24776f41900660c38",
+"pos_rel": 0.6849150211219177,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573383d0d058e614000b5c35",
+"pos_rel": 0.7303517044896355,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56ddde6b9a695914005b962c",
+"pos_rel": 0.7650555064348168,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dddf4066d3e219004dad5f",
+"pos_rel": 0.7833038608900678,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dde0ba66d3e219004dad76",
+"pos_rel": 0.8269721976618528,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dde27d9a695914005b9651",
+"pos_rel": 0.8671529619805481,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dde2fa66d3e219004dad9b",
+"pos_rel": 0.8803910010806563,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de0daecffd8e1900b4b595",
+"pos_rel": 0.9162000196482956,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de0ed14396321400ee257a",
+"pos_rel": 0.9536791433343157,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+}
+]
+},
+{
+"key": "img-8x13-bw|c001",
+"arm": "img-8x13-bw",
+"chunk": 1,
+"error": null,
+"finish_reason": "stop",
+"prompt_tokens": 4772,
+"cached_tokens": 0,
+"completion_tokens": 287,
+"prompt_ms": 5527.628,
+"predicted_ms": 4731.047,
+"wall_s": 10.343,
+"n_frames": 2,
+"pred_image_tokens": 4165,
+"items": [
+{
+"qid": "57339dd94776f41900660ecc",
+"pos_rel": 0.011715296198054819,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57339eb9d058e614000b5ef6",
+"pos_rel": 0.031265350230867475,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733a2a9d058e614000b5f2a",
+"pos_rel": 0.059779939090283916,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733a45d4776f41900660f26",
+"pos_rel": 0.08711563021907849,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733a560d058e614000b5f7a",
+"pos_rel": 0.10116416150898909,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573312fcd058e614000b56e7",
+"pos_rel": 0.133289124668435,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573314e3d058e614000b56f1",
+"pos_rel": 0.19982316534040673,
+"em": 0.0,
+"f1": 0.25,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57332442d058e614000b5724",
+"pos_rel": 0.22290991256508497,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733266d4776f41900660715",
+"pos_rel": 0.2616661754592789,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57332b66d058e614000b5758",
+"pos_rel": 0.29442970822281167,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57332e48d058e614000b5764",
+"pos_rel": 0.33205619412515963,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57332f81d058e614000b5777",
+"pos_rel": 0.3513360840947048,
+"em": 0.0,
+"f1": 0.5,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733314e4776f4190066076d",
+"pos_rel": 0.3804892425582081,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57335ddbd058e614000b5932",
+"pos_rel": 0.42182434423813736,
+"em": 0.0,
+"f1": 0.3333333333333333,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57335fcad058e614000b5973",
+"pos_rel": 0.44410059927301304,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573362b94776f41900660978",
+"pos_rel": 0.48101483446311033,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733647e4776f419006609b2",
+"pos_rel": 0.5253708615777581,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573368044776f41900660a2c",
+"pos_rel": 0.5429560860595344,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57337f6ad058e614000b5bcb",
+"pos_rel": 0.5852244817762059,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573380e0d058e614000b5be9",
+"pos_rel": 0.6235386580214166,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57338255d058e614000b5c0f",
+"pos_rel": 0.6662982611258473,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573382d24776f41900660c38",
+"pos_rel": 0.6849150211219177,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573383d0d058e614000b5c35",
+"pos_rel": 0.7303517044896355,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56ddde6b9a695914005b962c",
+"pos_rel": 0.7650555064348168,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dddf4066d3e219004dad5f",
+"pos_rel": 0.7833038608900678,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dde0ba66d3e219004dad76",
+"pos_rel": 0.8269721976618528,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dde27d9a695914005b9651",
+"pos_rel": 0.8671529619805481,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dde2fa66d3e219004dad9b",
+"pos_rel": 0.8803910010806563,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de0daecffd8e1900b4b595",
+"pos_rel": 0.9162000196482956,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de0ed14396321400ee257a",
+"pos_rel": 0.9536791433343157,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+}
+]
+},
+{
+"key": "img-8x8u-bw|c001",
+"arm": "img-8x8u-bw",
+"chunk": 1,
+"error": null,
+"finish_reason": "stop",
+"prompt_tokens": 4037,
+"cached_tokens": 0,
+"completion_tokens": 238,
+"prompt_ms": 4614.723,
+"predicted_ms": 4011.224,
+"wall_s": 8.985,
+"n_frames": 2,
+"pred_image_tokens": 3430,
+"items": [
+{
+"qid": "57339dd94776f41900660ecc",
+"pos_rel": 0.011715296198054819,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57339eb9d058e614000b5ef6",
+"pos_rel": 0.031265350230867475,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733a2a9d058e614000b5f2a",
+"pos_rel": 0.059779939090283916,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733a45d4776f41900660f26",
+"pos_rel": 0.08711563021907849,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733a560d058e614000b5f7a",
+"pos_rel": 0.10116416150898909,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573312fcd058e614000b56e7",
+"pos_rel": 0.133289124668435,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573314e3d058e614000b56f1",
+"pos_rel": 0.19982316534040673,
+"em": 0.0,
+"f1": 0.25,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57332442d058e614000b5724",
+"pos_rel": 0.22290991256508497,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733266d4776f41900660715",
+"pos_rel": 0.2616661754592789,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57332b66d058e614000b5758",
+"pos_rel": 0.29442970822281167,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57332e48d058e614000b5764",
+"pos_rel": 0.33205619412515963,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57332f81d058e614000b5777",
+"pos_rel": 0.3513360840947048,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733314e4776f4190066076d",
+"pos_rel": 0.3804892425582081,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57335ddbd058e614000b5932",
+"pos_rel": 0.42182434423813736,
+"em": 0.0,
+"f1": 0.4,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57335fcad058e614000b5973",
+"pos_rel": 0.44410059927301304,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573362b94776f41900660978",
+"pos_rel": 0.48101483446311033,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733647e4776f419006609b2",
+"pos_rel": 0.5253708615777581,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573368044776f41900660a2c",
+"pos_rel": 0.5429560860595344,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57337f6ad058e614000b5bcb",
+"pos_rel": 0.5852244817762059,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573380e0d058e614000b5be9",
+"pos_rel": 0.6235386580214166,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57338255d058e614000b5c0f",
+"pos_rel": 0.6662982611258473,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573382d24776f41900660c38",
+"pos_rel": 0.6849150211219177,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573383d0d058e614000b5c35",
+"pos_rel": 0.7303517044896355,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56ddde6b9a695914005b962c",
+"pos_rel": 0.7650555064348168,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dddf4066d3e219004dad5f",
+"pos_rel": 0.7833038608900678,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dde0ba66d3e219004dad76",
+"pos_rel": 0.8269721976618528,
+"em": 0.0,
+"f1": 0.8,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dde27d9a695914005b9651",
+"pos_rel": 0.8671529619805481,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dde2fa66d3e219004dad9b",
+"pos_rel": 0.8803910010806563,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de0daecffd8e1900b4b595",
+"pos_rel": 0.9162000196482956,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de0ed14396321400ee257a",
+"pos_rel": 0.9536791433343157,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+}
+]
+},
+{
+"key": "img-12x12u-bw|c001",
+"arm": "img-12x12u-bw",
+"chunk": 1,
+"error": null,
+"finish_reason": "stop",
+"prompt_tokens": 4037,
+"cached_tokens": 0,
+"completion_tokens": 254,
+"prompt_ms": 5164.568,
+"predicted_ms": 4074.977,
+"wall_s": 9.884,
+"n_frames": 3,
+"pred_image_tokens": 5831,
+"items": [
+{
+"qid": "57339dd94776f41900660ecc",
+"pos_rel": 0.011715296198054819,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57339eb9d058e614000b5ef6",
+"pos_rel": 0.031265350230867475,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733a2a9d058e614000b5f2a",
+"pos_rel": 0.059779939090283916,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733a45d4776f41900660f26",
+"pos_rel": 0.08711563021907849,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733a560d058e614000b5f7a",
+"pos_rel": 0.10116416150898909,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573312fcd058e614000b56e7",
+"pos_rel": 0.133289124668435,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573314e3d058e614000b56f1",
+"pos_rel": 0.19982316534040673,
+"em": 0.0,
+"f1": 0.25,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57332442d058e614000b5724",
+"pos_rel": 0.22290991256508497,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733266d4776f41900660715",
+"pos_rel": 0.2616661754592789,
+"em": 0.0,
+"f1": 0.7499999999999999,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57332b66d058e614000b5758",
+"pos_rel": 0.29442970822281167,
+"em": 0.0,
+"f1": 0.6153846153846153,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57332e48d058e614000b5764",
+"pos_rel": 0.33205619412515963,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57332f81d058e614000b5777",
+"pos_rel": 0.3513360840947048,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733314e4776f4190066076d",
+"pos_rel": 0.3804892425582081,
+"em": 0.0,
+"f1": 0.5,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57335ddbd058e614000b5932",
+"pos_rel": 0.42182434423813736,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57335fcad058e614000b5973",
+"pos_rel": 0.44410059927301304,
+"em": 0.0,
+"f1": 0.3333333333333333,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573362b94776f41900660978",
+"pos_rel": 0.48101483446311033,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733647e4776f419006609b2",
+"pos_rel": 0.5253708615777581,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573368044776f41900660a2c",
+"pos_rel": 0.5429560860595344,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57337f6ad058e614000b5bcb",
+"pos_rel": 0.5852244817762059,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573380e0d058e614000b5be9",
+"pos_rel": 0.6235386580214166,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57338255d058e614000b5c0f",
+"pos_rel": 0.6662982611258473,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573382d24776f41900660c38",
+"pos_rel": 0.6849150211219177,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573383d0d058e614000b5c35",
+"pos_rel": 0.7303517044896355,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56ddde6b9a695914005b962c",
+"pos_rel": 0.7650555064348168,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dddf4066d3e219004dad5f",
+"pos_rel": 0.7833038608900678,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dde0ba66d3e219004dad76",
+"pos_rel": 0.8269721976618528,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dde27d9a695914005b9651",
+"pos_rel": 0.8671529619805481,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dde2fa66d3e219004dad9b",
+"pos_rel": 0.8803910010806563,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de0daecffd8e1900b4b595",
+"pos_rel": 0.9162000196482956,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de0ed14396321400ee257a",
+"pos_rel": 0.9536791433343157,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+}
+]
+},
+{
+"key": "text|c001",
+"arm": "text",
+"chunk": 1,
+"error": null,
+"finish_reason": "stop",
+"prompt_tokens": 10112,
+"cached_tokens": 0,
+"completion_tokens": 313,
+"prompt_ms": 7623.487,
+"predicted_ms": 5784.329,
+"wall_s": 13.439,
+"n_frames": 0,
+"pred_image_tokens": null,
+"items": [
+{
+"qid": "57339dd94776f41900660ecc",
+"pos_rel": 0.011715296198054819,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57339eb9d058e614000b5ef6",
+"pos_rel": 0.031265350230867475,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733a2a9d058e614000b5f2a",
+"pos_rel": 0.059779939090283916,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733a45d4776f41900660f26",
+"pos_rel": 0.08711563021907849,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733a560d058e614000b5f7a",
+"pos_rel": 0.10116416150898909,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573312fcd058e614000b56e7",
+"pos_rel": 0.133289124668435,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573314e3d058e614000b56f1",
+"pos_rel": 0.19982316534040673,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57332442d058e614000b5724",
+"pos_rel": 0.22290991256508497,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733266d4776f41900660715",
+"pos_rel": 0.2616661754592789,
+"em": 0.0,
+"f1": 0.5555555555555556,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57332b66d058e614000b5758",
+"pos_rel": 0.29442970822281167,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57332e48d058e614000b5764",
+"pos_rel": 0.33205619412515963,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57332f81d058e614000b5777",
+"pos_rel": 0.3513360840947048,
+"em": 0.0,
+"f1": 0.4,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733314e4776f4190066076d",
+"pos_rel": 0.3804892425582081,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57335ddbd058e614000b5932",
+"pos_rel": 0.42182434423813736,
+"em": 0.0,
+"f1": 0.8,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57335fcad058e614000b5973",
+"pos_rel": 0.44410059927301304,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573362b94776f41900660978",
+"pos_rel": 0.48101483446311033,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "5733647e4776f419006609b2",
+"pos_rel": 0.5253708615777581,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573368044776f41900660a2c",
+"pos_rel": 0.5429560860595344,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57337f6ad058e614000b5bcb",
+"pos_rel": 0.5852244817762059,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573380e0d058e614000b5be9",
+"pos_rel": 0.6235386580214166,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "57338255d058e614000b5c0f",
+"pos_rel": 0.6662982611258473,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573382d24776f41900660c38",
+"pos_rel": 0.6849150211219177,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "573383d0d058e614000b5c35",
+"pos_rel": 0.7303517044896355,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56ddde6b9a695914005b962c",
+"pos_rel": 0.7650555064348168,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dddf4066d3e219004dad5f",
+"pos_rel": 0.7833038608900678,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dde0ba66d3e219004dad76",
+"pos_rel": 0.8269721976618528,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dde27d9a695914005b9651",
+"pos_rel": 0.8671529619805481,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dde2fa66d3e219004dad9b",
+"pos_rel": 0.8803910010806563,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de0daecffd8e1900b4b595",
+"pos_rel": 0.9162000196482956,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de0ed14396321400ee257a",
+"pos_rel": 0.9536791433343157,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+}
+]
+},
+{
+"key": "img-6x10-color|c002",
+"arm": "img-6x10-color",
+"chunk": 2,
+"error": null,
+"finish_reason": "stop",
+"prompt_tokens": 2958,
+"cached_tokens": 0,
+"completion_tokens": 271,
+"prompt_ms": 3365.992,
+"predicted_ms": 4259.756,
+"wall_s": 7.82,
+"n_frames": 1,
+"pred_image_tokens": 2401,
+"items": [
+{
+"qid": "56de10b44396321400ee2593",
+"pos_rel": 0.0058699282837213875,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de148dcffd8e1900b4b5bd",
+"pos_rel": 0.035587975243147656,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de1563cffd8e1900b4b5c4",
+"pos_rel": 0.09684153649670892,
+"em": 0.0,
+"f1": 0.33333333333333337,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de1645cffd8e1900b4b5d1",
+"pos_rel": 0.1198546026132233,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de1728cffd8e1900b4b5d7",
+"pos_rel": 0.1508252284114353,
+"em": 0.0,
+"f1": 0.5,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de17f9cffd8e1900b4b5e0",
+"pos_rel": 0.19834954317712938,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de3dbacffd8e1900b4b6d2",
+"pos_rel": 0.24648786717752236,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de3ebc4396321400ee26e8",
+"pos_rel": 0.2678308281756558,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de3f784396321400ee26fd",
+"pos_rel": 0.28814225365949503,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de41504396321400ee2714",
+"pos_rel": 0.32874054425778565,
+"em": 0.0,
+"f1": 0.5,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de49564396321400ee277a",
+"pos_rel": 0.35445525100697517,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de4a474396321400ee2787",
+"pos_rel": 0.367791531584635,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de4b5c4396321400ee279a",
+"pos_rel": 0.3994498477257098,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de4c324396321400ee27ac",
+"pos_rel": 0.43626584143825525,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de51c64396321400ee27f8",
+"pos_rel": 0.46843992533647705,
+"em": 0.0,
+"f1": 0.2,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0b94b7aa994140058e6b7",
+"pos_rel": 0.492803811769329,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0bab7231d4119001ac35c",
+"pos_rel": 0.5148344631103252,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfa13d4a1a83140091ebc3",
+"pos_rel": 0.5469348659003831,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfa2c54a1a83140091ebf4",
+"pos_rel": 0.5848315158659986,
+"em": 0.0,
+"f1": 0.35294117647058826,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfa3c338dc421700152154",
+"pos_rel": 0.6035710777090088,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfaa047aa994140058dfc1",
+"pos_rel": 0.6522497298359368,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfad0a7aa994140058dfc8",
+"pos_rel": 0.6715787405442578,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfb4be7aa994140058e010",
+"pos_rel": 0.6965566362118086,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0d76d231d4119001ac42b",
+"pos_rel": 0.7260536398467433,
+"em": 0.0,
+"f1": 0.4444444444444445,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e057e1231d4119001ac045",
+"pos_rel": 0.7740200412614205,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e059c8231d4119001ac057",
+"pos_rel": 0.8032468808330877,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0ecd37aa994140058e7d7",
+"pos_rel": 0.847922192749779,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0ef0c231d4119001ac463",
+"pos_rel": 0.8925238235583063,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e08aa0231d4119001ac29a",
+"pos_rel": 0.9311572846055605,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0f5a6231d4119001ac4d6",
+"pos_rel": 0.9595736319874251,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+}
+]
+},
+{
+"key": "img-8x13-bw|c002",
+"arm": "img-8x13-bw",
+"chunk": 2,
+"error": null,
+"finish_reason": "stop",
+"prompt_tokens": 4724,
+"cached_tokens": 0,
+"completion_tokens": 258,
+"prompt_ms": 5560.23,
+"predicted_ms": 4675.783,
+"wall_s": 10.97,
+"n_frames": 2,
+"pred_image_tokens": 4165,
+"items": [
+{
+"qid": "56de10b44396321400ee2593",
+"pos_rel": 0.0058699282837213875,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de148dcffd8e1900b4b5bd",
+"pos_rel": 0.035587975243147656,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de1563cffd8e1900b4b5c4",
+"pos_rel": 0.09684153649670892,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de1645cffd8e1900b4b5d1",
+"pos_rel": 0.1198546026132233,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de1728cffd8e1900b4b5d7",
+"pos_rel": 0.1508252284114353,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de17f9cffd8e1900b4b5e0",
+"pos_rel": 0.19834954317712938,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de3dbacffd8e1900b4b6d2",
+"pos_rel": 0.24648786717752236,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de3ebc4396321400ee26e8",
+"pos_rel": 0.2678308281756558,
+"em": 0.0,
+"f1": 0.5,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de3f784396321400ee26fd",
+"pos_rel": 0.28814225365949503,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de41504396321400ee2714",
+"pos_rel": 0.32874054425778565,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de49564396321400ee277a",
+"pos_rel": 0.35445525100697517,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de4a474396321400ee2787",
+"pos_rel": 0.367791531584635,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de4b5c4396321400ee279a",
+"pos_rel": 0.3994498477257098,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de4c324396321400ee27ac",
+"pos_rel": 0.43626584143825525,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de51c64396321400ee27f8",
+"pos_rel": 0.46843992533647705,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0b94b7aa994140058e6b7",
+"pos_rel": 0.492803811769329,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0bab7231d4119001ac35c",
+"pos_rel": 0.5148344631103252,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfa13d4a1a83140091ebc3",
+"pos_rel": 0.5469348659003831,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfa2c54a1a83140091ebf4",
+"pos_rel": 0.5848315158659986,
+"em": 0.0,
+"f1": 0.8750000000000001,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfa3c338dc421700152154",
+"pos_rel": 0.6035710777090088,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfaa047aa994140058dfc1",
+"pos_rel": 0.6522497298359368,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfad0a7aa994140058dfc8",
+"pos_rel": 0.6715787405442578,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfb4be7aa994140058e010",
+"pos_rel": 0.6965566362118086,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0d76d231d4119001ac42b",
+"pos_rel": 0.7260536398467433,
+"em": 0.0,
+"f1": 0.4444444444444445,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e057e1231d4119001ac045",
+"pos_rel": 0.7740200412614205,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e059c8231d4119001ac057",
+"pos_rel": 0.8032468808330877,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0ecd37aa994140058e7d7",
+"pos_rel": 0.847922192749779,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0ef0c231d4119001ac463",
+"pos_rel": 0.8925238235583063,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e08aa0231d4119001ac29a",
+"pos_rel": 0.9311572846055605,
+"em": 0.0,
+"f1": 0.6666666666666665,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0f5a6231d4119001ac4d6",
+"pos_rel": 0.9595736319874251,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+}
+]
+},
+{
+"key": "img-8x8u-bw|c002",
+"arm": "img-8x8u-bw",
+"chunk": 2,
+"error": null,
+"finish_reason": "stop",
+"prompt_tokens": 3989,
+"cached_tokens": 0,
+"completion_tokens": 263,
+"prompt_ms": 4733.333,
+"predicted_ms": 4713.972,
+"wall_s": 10.057,
+"n_frames": 2,
+"pred_image_tokens": 3430,
+"items": [
+{
+"qid": "56de10b44396321400ee2593",
+"pos_rel": 0.0058699282837213875,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de148dcffd8e1900b4b5bd",
+"pos_rel": 0.035587975243147656,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de1563cffd8e1900b4b5c4",
+"pos_rel": 0.09684153649670892,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de1645cffd8e1900b4b5d1",
+"pos_rel": 0.1198546026132233,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de1728cffd8e1900b4b5d7",
+"pos_rel": 0.1508252284114353,
+"em": 0.0,
+"f1": 0.5,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de17f9cffd8e1900b4b5e0",
+"pos_rel": 0.19834954317712938,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de3dbacffd8e1900b4b6d2",
+"pos_rel": 0.24648786717752236,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de3ebc4396321400ee26e8",
+"pos_rel": 0.2678308281756558,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de3f784396321400ee26fd",
+"pos_rel": 0.28814225365949503,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de41504396321400ee2714",
+"pos_rel": 0.32874054425778565,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de49564396321400ee277a",
+"pos_rel": 0.35445525100697517,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de4a474396321400ee2787",
+"pos_rel": 0.367791531584635,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de4b5c4396321400ee279a",
+"pos_rel": 0.3994498477257098,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de4c324396321400ee27ac",
+"pos_rel": 0.43626584143825525,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de51c64396321400ee27f8",
+"pos_rel": 0.46843992533647705,
+"em": 0.0,
+"f1": 0.7142857142857143,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0b94b7aa994140058e6b7",
+"pos_rel": 0.492803811769329,
+"em": 0.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0bab7231d4119001ac35c",
+"pos_rel": 0.5148344631103252,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfa13d4a1a83140091ebc3",
+"pos_rel": 0.5469348659003831,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfa2c54a1a83140091ebf4",
+"pos_rel": 0.5848315158659986,
+"em": 0.0,
+"f1": 0.5263157894736842,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfa3c338dc421700152154",
+"pos_rel": 0.6035710777090088,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfaa047aa994140058dfc1",
+"pos_rel": 0.6522497298359368,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfad0a7aa994140058dfc8",
+"pos_rel": 0.6715787405442578,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfb4be7aa994140058e010",
+"pos_rel": 0.6965566362118086,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0d76d231d4119001ac42b",
+"pos_rel": 0.7260536398467433,
+"em": 0.0,
+"f1": 0.4444444444444445,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e057e1231d4119001ac045",
+"pos_rel": 0.7740200412614205,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e059c8231d4119001ac057",
+"pos_rel": 0.8032468808330877,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0ecd37aa994140058e7d7",
+"pos_rel": 0.847922192749779,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0ef0c231d4119001ac463",
+"pos_rel": 0.8925238235583063,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e08aa0231d4119001ac29a",
+"pos_rel": 0.9311572846055605,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0f5a6231d4119001ac4d6",
+"pos_rel": 0.9595736319874251,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+}
+]
+},
+{
+"key": "img-12x12u-bw|c002",
+"arm": "img-12x12u-bw",
+"chunk": 2,
+"error": null,
+"finish_reason": "stop",
+"prompt_tokens": 3989,
+"cached_tokens": 0,
+"completion_tokens": 270,
+"prompt_ms": 5932.453,
+"predicted_ms": 4499.415,
+"wall_s": 12.678,
+"n_frames": 3,
+"pred_image_tokens": 5831,
+"items": [
+{
+"qid": "56de10b44396321400ee2593",
+"pos_rel": 0.0058699282837213875,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de148dcffd8e1900b4b5bd",
+"pos_rel": 0.035587975243147656,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de1563cffd8e1900b4b5c4",
+"pos_rel": 0.09684153649670892,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de1645cffd8e1900b4b5d1",
+"pos_rel": 0.1198546026132233,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de1728cffd8e1900b4b5d7",
+"pos_rel": 0.1508252284114353,
+"em": 0.0,
+"f1": 0.5,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de17f9cffd8e1900b4b5e0",
+"pos_rel": 0.19834954317712938,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de3dbacffd8e1900b4b6d2",
+"pos_rel": 0.24648786717752236,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de3ebc4396321400ee26e8",
+"pos_rel": 0.2678308281756558,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de3f784396321400ee26fd",
+"pos_rel": 0.28814225365949503,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de41504396321400ee2714",
+"pos_rel": 0.32874054425778565,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de49564396321400ee277a",
+"pos_rel": 0.35445525100697517,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de4a474396321400ee2787",
+"pos_rel": 0.367791531584635,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de4b5c4396321400ee279a",
+"pos_rel": 0.3994498477257098,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de4c324396321400ee27ac",
+"pos_rel": 0.43626584143825525,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de51c64396321400ee27f8",
+"pos_rel": 0.46843992533647705,
+"em": 0.0,
+"f1": 0.5714285714285714,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0b94b7aa994140058e6b7",
+"pos_rel": 0.492803811769329,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0bab7231d4119001ac35c",
+"pos_rel": 0.5148344631103252,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfa13d4a1a83140091ebc3",
+"pos_rel": 0.5469348659003831,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfa2c54a1a83140091ebf4",
+"pos_rel": 0.5848315158659986,
+"em": 0.0,
+"f1": 0.35294117647058826,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfa3c338dc421700152154",
+"pos_rel": 0.6035710777090088,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfaa047aa994140058dfc1",
+"pos_rel": 0.6522497298359368,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfad0a7aa994140058dfc8",
+"pos_rel": 0.6715787405442578,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfb4be7aa994140058e010",
+"pos_rel": 0.6965566362118086,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0d76d231d4119001ac42b",
+"pos_rel": 0.7260536398467433,
+"em": 0.0,
+"f1": 0.4,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e057e1231d4119001ac045",
+"pos_rel": 0.7740200412614205,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e059c8231d4119001ac057",
+"pos_rel": 0.8032468808330877,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0ecd37aa994140058e7d7",
+"pos_rel": 0.847922192749779,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0ef0c231d4119001ac463",
+"pos_rel": 0.8925238235583063,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e08aa0231d4119001ac29a",
+"pos_rel": 0.9311572846055605,
+"em": 0.0,
+"f1": 0.888888888888889,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0f5a6231d4119001ac4d6",
+"pos_rel": 0.9595736319874251,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+}
+]
+},
+{
+"key": "text|c002",
+"arm": "text",
+"chunk": 2,
+"error": null,
+"finish_reason": "stop",
+"prompt_tokens": 9417,
+"cached_tokens": 0,
+"completion_tokens": 241,
+"prompt_ms": 6886.734,
+"predicted_ms": 4463.804,
+"wall_s": 11.393,
+"n_frames": 0,
+"pred_image_tokens": null,
+"items": [
+{
+"qid": "56de10b44396321400ee2593",
+"pos_rel": 0.0058699282837213875,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de148dcffd8e1900b4b5bd",
+"pos_rel": 0.035587975243147656,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de1563cffd8e1900b4b5c4",
+"pos_rel": 0.09684153649670892,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de1645cffd8e1900b4b5d1",
+"pos_rel": 0.1198546026132233,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de1728cffd8e1900b4b5d7",
+"pos_rel": 0.1508252284114353,
+"em": 0.0,
+"f1": 0.5,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de17f9cffd8e1900b4b5e0",
+"pos_rel": 0.19834954317712938,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de3dbacffd8e1900b4b6d2",
+"pos_rel": 0.24648786717752236,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de3ebc4396321400ee26e8",
+"pos_rel": 0.2678308281756558,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de3f784396321400ee26fd",
+"pos_rel": 0.28814225365949503,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de41504396321400ee2714",
+"pos_rel": 0.32874054425778565,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de49564396321400ee277a",
+"pos_rel": 0.35445525100697517,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de4a474396321400ee2787",
+"pos_rel": 0.367791531584635,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de4b5c4396321400ee279a",
+"pos_rel": 0.3994498477257098,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de4c324396321400ee27ac",
+"pos_rel": 0.43626584143825525,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de51c64396321400ee27f8",
+"pos_rel": 0.46843992533647705,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0b94b7aa994140058e6b7",
+"pos_rel": 0.492803811769329,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0bab7231d4119001ac35c",
+"pos_rel": 0.5148344631103252,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfa13d4a1a83140091ebc3",
+"pos_rel": 0.5469348659003831,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfa2c54a1a83140091ebf4",
+"pos_rel": 0.5848315158659986,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfa3c338dc421700152154",
+"pos_rel": 0.6035710777090088,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfaa047aa994140058dfc1",
+"pos_rel": 0.6522497298359368,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfad0a7aa994140058dfc8",
+"pos_rel": 0.6715787405442578,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfb4be7aa994140058e010",
+"pos_rel": 0.6965566362118086,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0d76d231d4119001ac42b",
+"pos_rel": 0.7260536398467433,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e057e1231d4119001ac045",
+"pos_rel": 0.7740200412614205,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e059c8231d4119001ac057",
+"pos_rel": 0.8032468808330877,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0ecd37aa994140058e7d7",
+"pos_rel": 0.847922192749779,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0ef0c231d4119001ac463",
+"pos_rel": 0.8925238235583063,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e08aa0231d4119001ac29a",
+"pos_rel": 0.9311572846055605,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0f5a6231d4119001ac4d6",
+"pos_rel": 0.9595736319874251,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+}
+]
+},
+{
+"key": "img-6x10-bw|c002",
+"arm": "img-6x10-bw",
+"chunk": 2,
+"error": null,
+"finish_reason": "stop",
+"prompt_tokens": 2958,
+"cached_tokens": 0,
+"completion_tokens": 249,
+"prompt_ms": 2796.506,
+"predicted_ms": 3579.659,
+"wall_s": 6.419,
+"n_frames": 1,
+"pred_image_tokens": 2401,
+"items": [
+{
+"qid": "56de10b44396321400ee2593",
+"pos_rel": 0.0058699282837213875,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de148dcffd8e1900b4b5bd",
+"pos_rel": 0.035587975243147656,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de1563cffd8e1900b4b5c4",
+"pos_rel": 0.09684153649670892,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de1645cffd8e1900b4b5d1",
+"pos_rel": 0.1198546026132233,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de1728cffd8e1900b4b5d7",
+"pos_rel": 0.1508252284114353,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de17f9cffd8e1900b4b5e0",
+"pos_rel": 0.19834954317712938,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de3dbacffd8e1900b4b6d2",
+"pos_rel": 0.24648786717752236,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de3ebc4396321400ee26e8",
+"pos_rel": 0.2678308281756558,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de3f784396321400ee26fd",
+"pos_rel": 0.28814225365949503,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de41504396321400ee2714",
+"pos_rel": 0.32874054425778565,
+"em": 0.0,
+"f1": 0.3333333333333333,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de49564396321400ee277a",
+"pos_rel": 0.35445525100697517,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de4a474396321400ee2787",
+"pos_rel": 0.367791531584635,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de4b5c4396321400ee279a",
+"pos_rel": 0.3994498477257098,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de4c324396321400ee27ac",
+"pos_rel": 0.43626584143825525,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56de51c64396321400ee27f8",
+"pos_rel": 0.46843992533647705,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0b94b7aa994140058e6b7",
+"pos_rel": 0.492803811769329,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0bab7231d4119001ac35c",
+"pos_rel": 0.5148344631103252,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfa13d4a1a83140091ebc3",
+"pos_rel": 0.5469348659003831,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfa2c54a1a83140091ebf4",
+"pos_rel": 0.5848315158659986,
+"em": 0.0,
+"f1": 0.35294117647058826,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfa3c338dc421700152154",
+"pos_rel": 0.6035710777090088,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfaa047aa994140058dfc1",
+"pos_rel": 0.6522497298359368,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfad0a7aa994140058dfc8",
+"pos_rel": 0.6715787405442578,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56dfb4be7aa994140058e010",
+"pos_rel": 0.6965566362118086,
+"em": 0.0,
+"f1": 0.6666666666666666,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0d76d231d4119001ac42b",
+"pos_rel": 0.7260536398467433,
+"em": 0.0,
+"f1": 0.4444444444444445,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e057e1231d4119001ac045",
+"pos_rel": 0.7740200412614205,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e059c8231d4119001ac057",
+"pos_rel": 0.8032468808330877,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0ecd37aa994140058e7d7",
+"pos_rel": 0.847922192749779,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0ef0c231d4119001ac463",
+"pos_rel": 0.8925238235583063,
+"em": 0.0,
+"f1": 0.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e08aa0231d4119001ac29a",
+"pos_rel": 0.9311572846055605,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+},
+{
+"qid": "56e0f5a6231d4119001ac4d6",
+"pos_rel": 0.9595736319874251,
+"em": 1.0,
+"f1": 1.0,
+"unreadable": false,
+"missing": false
+}
+]
+}
+]
+}

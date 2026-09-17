@@ -1,0 +1,29 @@
+{
+  "schema": "epyc.autokernel.canonical_recipe.v1",
+  "name": "gemma-4-26b-a4b-orig-q8-gpu-judge-np4",
+  "model": "/mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q8_0.gguf",
+  "device": "ROCm0",
+  "ngl": 99,
+  "spec_decode": {
+    "type": "none"
+  },
+  "np": 4,
+  "ctx": 32768,
+  "threads": 8,
+  "batch": 2048,
+  "ubatch": 2048,
+  "ctk": "f16",
+  "ctv": "f16",
+  "fa": "on",
+  "kv_unified": false,
+  "extra_flags": [
+    "--reasoning",
+    "off"
+  ],
+  "cpu_list": "184-191",
+  "n_predict": 512,
+  "temperature": 0.0,
+  "top_p": 0.95,
+  "top_k": 1,
+  "metric": "aggregate_tok_s"
+}

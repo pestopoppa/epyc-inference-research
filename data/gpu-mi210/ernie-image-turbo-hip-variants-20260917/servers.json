@@ -1,0 +1,124 @@
+[
+  {
+    "label": "off",
+    "pid": 2446471,
+    "env": {
+      "SD_ERNIE_ROCM_F32": "0"
+    },
+    "load_s": 4.0,
+    "teardown": "terminated",
+    "log_rocm_device": true,
+    "log_params_lines": [
+      "[INFO ] stable-diffusion.cpp:858  - total params memory size = 15765.14MB (VRAM 15765.14MB, RAM 0.00MB): text_encoders 7308.62MB(VRAM), diffusion_model 8292.08MB(VRAM), vae 164.43MB(VRAM), controlnet 0.00MB(VRAM), pmid 0.00MB(VRAM)"
+    ],
+    "params_ram_zero": true,
+    "knob_echo": "ROCm precision knobs SD_ERNIE_ROCM_F32=off SD_ERNIE_ROCM_OUTSCALE -> out_scale=1",
+    "knob_matches": true,
+    "residency": {
+      "samples": 310,
+      "peak_vram_bytes": 20583763968,
+      "median_vram_bytes": 18306174976,
+      "samples_listing_pid": 309,
+      "gpu_use_max": 100
+    },
+    "resident": true
+  },
+  {
+    "label": "f32",
+    "pid": 2465058,
+    "env": {
+      "SD_ERNIE_ROCM_F32": "1"
+    },
+    "load_s": 3.0,
+    "teardown": "terminated",
+    "log_rocm_device": true,
+    "log_params_lines": [
+      "[INFO ] stable-diffusion.cpp:858  - total params memory size = 15765.14MB (VRAM 15765.14MB, RAM 0.00MB): text_encoders 7308.62MB(VRAM), diffusion_model 8292.08MB(VRAM), vae 164.43MB(VRAM), controlnet 0.00MB(VRAM), pmid 0.00MB(VRAM)"
+    ],
+    "params_ram_zero": true,
+    "knob_echo": "ROCm precision knobs SD_ERNIE_ROCM_F32=narrow SD_ERNIE_ROCM_OUTSCALE -> out_scale=1",
+    "knob_matches": true,
+    "residency": {
+      "samples": 187,
+      "peak_vram_bytes": 21202042880,
+      "median_vram_bytes": 18245017600,
+      "samples_listing_pid": 187,
+      "gpu_use_max": 100
+    },
+    "resident": true
+  },
+  {
+    "label": "wide",
+    "pid": 2472140,
+    "env": {
+      "SD_ERNIE_ROCM_F32": "wide"
+    },
+    "load_s": 3.0,
+    "teardown": "terminated",
+    "log_rocm_device": true,
+    "log_params_lines": [
+      "[INFO ] stable-diffusion.cpp:858  - total params memory size = 15765.14MB (VRAM 15765.14MB, RAM 0.00MB): text_encoders 7308.62MB(VRAM), diffusion_model 8292.08MB(VRAM), vae 164.43MB(VRAM), controlnet 0.00MB(VRAM), pmid 0.00MB(VRAM)"
+    ],
+    "params_ram_zero": true,
+    "knob_echo": "ROCm precision knobs SD_ERNIE_ROCM_F32=wide SD_ERNIE_ROCM_OUTSCALE -> out_scale=1",
+    "knob_matches": true,
+    "residency": {
+      "samples": 375,
+      "peak_vram_bytes": 20369743872,
+      "median_vram_bytes": 18092085248,
+      "samples_listing_pid": 375,
+      "gpu_use_max": 100
+    },
+    "resident": true
+  },
+  {
+    "label": "outscale",
+    "pid": 2484867,
+    "env": {
+      "SD_ERNIE_ROCM_F32": "0",
+      "SD_ERNIE_ROCM_OUTSCALE": "1"
+    },
+    "load_s": 3.0,
+    "teardown": "terminated",
+    "log_rocm_device": true,
+    "log_params_lines": [
+      "[INFO ] stable-diffusion.cpp:858  - total params memory size = 15765.14MB (VRAM 15765.14MB, RAM 0.00MB): text_encoders 7308.62MB(VRAM), diffusion_model 8292.08MB(VRAM), vae 164.43MB(VRAM), controlnet 0.00MB(VRAM), pmid 0.00MB(VRAM)"
+    ],
+    "params_ram_zero": true,
+    "knob_echo": "ROCm precision knobs SD_ERNIE_ROCM_F32=off SD_ERNIE_ROCM_OUTSCALE -> out_scale=0.0625",
+    "knob_matches": true,
+    "residency": {
+      "samples": 265,
+      "peak_vram_bytes": 20583661568,
+      "median_vram_bytes": 18306084864,
+      "samples_listing_pid": 264,
+      "gpu_use_max": 100
+    },
+    "resident": true
+  },
+  {
+    "label": "wide+outscale",
+    "pid": 2492933,
+    "env": {
+      "SD_ERNIE_ROCM_F32": "wide",
+      "SD_ERNIE_ROCM_OUTSCALE": "1"
+    },
+    "load_s": 3.0,
+    "teardown": "terminated",
+    "log_rocm_device": true,
+    "log_params_lines": [
+      "[INFO ] stable-diffusion.cpp:858  - total params memory size = 15765.14MB (VRAM 15765.14MB, RAM 0.00MB): text_encoders 7308.62MB(VRAM), diffusion_model 8292.08MB(VRAM), vae 164.43MB(VRAM), controlnet 0.00MB(VRAM), pmid 0.00MB(VRAM)"
+    ],
+    "params_ram_zero": true,
+    "knob_echo": "ROCm precision knobs SD_ERNIE_ROCM_F32=wide SD_ERNIE_ROCM_OUTSCALE -> out_scale=0.0625",
+    "knob_matches": true,
+    "residency": {
+      "samples": 321,
+      "peak_vram_bytes": 20369641472,
+      "median_vram_bytes": 18092015616,
+      "samples_listing_pid": 320,
+      "gpu_use_max": 100
+    },
+    "resident": true
+  }
+]

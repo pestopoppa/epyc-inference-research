@@ -1,0 +1,14 @@
+{
+  "arm": "dflash2_n8",
+  "claim_id": "akd-e69ea6faf73a4441",
+  "claim_released": true,
+  "failure": null,
+  "finished_at": "2026-08-20T13:57:12.863336+00:00",
+  "inference_window_released": true,
+  "runner_pid": 3824586,
+  "runner_returncode": 0,
+  "schema": "epyc.df2.arm_transport.v1",
+  "server_pid": 3824350,
+  "server_returncode": 0,
+  "started_at": "2026-08-20T13:51:16.992943+00:00"
+}

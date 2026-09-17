@@ -1,0 +1,265 @@
+{
+ "overall": "NEGATIVE",
+ "void_reasons": [],
+ "rows": [
+  {
+   "arm": "text",
+   "requests": 3,
+   "n": 90,
+   "em": 0.8222222222222222,
+   "f1": 0.9111728395061729,
+   "f1_se": 0.02334823957022312,
+   "unreadable": 0,
+   "missing": 0,
+   "truncated": 0,
+   "prompt_tokens_mean": 9771.333333333334,
+   "prompt_tokens_per_1k_chars": 239.9895208232703,
+   "cached_tokens_max": 0,
+   "prompt_ms_median": 7345.781,
+   "wall_s_median": 11.393,
+   "f1_by_quartile": [
+    0.9318181818181818,
+    0.8767489711934155,
+    0.9565217391304348,
+    0.8796296296296297
+   ]
+  },
+  {
+   "arm": "img-6x10-bw",
+   "requests": 3,
+   "n": 90,
+   "em": 0.28888888888888886,
+   "f1": 0.39446109083363984,
+   "f1_se": 0.04643155734565326,
+   "unreadable": 0,
+   "missing": 0,
+   "truncated": 0,
+   "prompt_tokens_mean": 2997.3333333333335,
+   "prompt_tokens_per_1k_chars": 73.61621652598917,
+   "cached_tokens_max": 0,
+   "prompt_ms_median": 2977.107,
+   "wall_s_median": 6.618,
+   "f1_by_quartile": [
+    0.20833333333333331,
+    0.46014109347442683,
+    0.462205171923842,
+    0.43686868686868685
+   ],
+   "n_paired": 90,
+   "f1_delta": -0.516711748672533,
+   "f1_delta_ci95": [
+    -0.550974025974026,
+    -0.4900871459694989
+   ],
+   "em_discordant_arm_only": 1,
+   "em_discordant_text_only": 49,
+   "em_mcnemar_p": 9.059419880941277e-14,
+   "token_ratio_vs_text": 0.3067476291191922,
+   "non_image_prompt_tokens_median": 605,
+   "non_image_prompt_tokens_range": [
+    557,
+    627
+   ],
+   "verdict": "NOT_NONINFERIOR"
+  },
+  {
+   "arm": "img-6x10-color",
+   "requests": 3,
+   "n": 90,
+   "em": 0.28888888888888886,
+   "f1": 0.38291707928962837,
+   "f1_se": 0.04648890988317997,
+   "unreadable": 0,
+   "missing": 0,
+   "truncated": 0,
+   "prompt_tokens_mean": 2997.3333333333335,
+   "prompt_tokens_per_1k_chars": 73.61621652598917,
+   "cached_tokens_max": 0,
+   "prompt_ms_median": 2972.078,
+   "wall_s_median": 7.078,
+   "f1_by_quartile": [
+    0.32196969696969696,
+    0.38080808080808076,
+    0.35930662119920437,
+    0.49074074074074076
+   ],
+   "n_paired": 90,
+   "f1_delta": -0.5282557602165445,
+   "f1_delta_ci95": [
+    -0.5541245791245791,
+    -0.49166666666666664
+   ],
+   "em_discordant_arm_only": 1,
+   "em_discordant_text_only": 49,
+   "em_mcnemar_p": 9.059419880941277e-14,
+   "token_ratio_vs_text": 0.3067476291191922,
+   "non_image_prompt_tokens_median": 605,
+   "non_image_prompt_tokens_range": [
+    557,
+    627
+   ],
+   "verdict": "NOT_NONINFERIOR"
+  },
+  {
+   "arm": "img-8x13-bw",
+   "requests": 3,
+   "n": 90,
+   "em": 0.36666666666666664,
+   "f1": 0.49679373096039764,
+   "f1_se": 0.048030658058797054,
+   "unreadable": 0,
+   "missing": 0,
+   "truncated": 0,
+   "prompt_tokens_mean": 4763.333333333333,
+   "prompt_tokens_per_1k_chars": 116.99018395867274,
+   "cached_tokens_max": 0,
+   "prompt_ms_median": 5527.628,
+   "wall_s_median": 10.343,
+   "f1_by_quartile": [
+    0.34469696969696967,
+    0.5648548981882315,
+    0.5216622749231444,
+    0.5488215488215489
+   ],
+   "n_paired": 90,
+   "f1_delta": -0.4143791085457752,
+   "f1_delta_ci95": [
+    -0.4782407407407407,
+    -0.3446296296296296
+   ],
+   "em_discordant_arm_only": 2,
+   "em_discordant_text_only": 43,
+   "em_mcnemar_p": 5.88897819397971e-11,
+   "token_ratio_vs_text": 0.48748038479907213,
+   "non_image_prompt_tokens_median": 607,
+   "non_image_prompt_tokens_range": [
+    559,
+    629
+   ],
+   "verdict": "NOT_NONINFERIOR"
+  },
+  {
+   "arm": "img-8x8u-bw",
+   "requests": 3,
+   "n": 90,
+   "em": 0.2222222222222222,
+   "f1": 0.32716669620178396,
+   "f1_se": 0.04496487384306062,
+   "unreadable": 0,
+   "missing": 0,
+   "truncated": 0,
+   "prompt_tokens_mean": 4028.3333333333335,
+   "prompt_tokens_per_1k_chars": 98.93816467043808,
+   "cached_tokens_max": 0,
+   "prompt_ms_median": 4614.723,
+   "wall_s_median": 8.985,
+   "f1_by_quartile": [
+    0.20075757575757577,
+    0.3851851851851852,
+    0.24708180200171045,
+    0.49696969696969695
+   ],
+   "n_paired": 90,
+   "f1_delta": -0.5840061433043889,
+   "f1_delta_ci95": [
+    -0.6313347763347762,
+    -0.5327206906154275
+   ],
+   "em_discordant_arm_only": 0,
+   "em_discordant_text_only": 54,
+   "em_mcnemar_p": 1.1102230246251565e-16,
+   "token_ratio_vs_text": 0.41226035341475065,
+   "non_image_prompt_tokens_median": 607,
+   "non_image_prompt_tokens_range": [
+    559,
+    629
+   ],
+   "verdict": "NOT_NONINFERIOR"
+  },
+  {
+   "arm": "img-12x12u-bw",
+   "requests": 3,
+   "n": 90,
+   "em": 0.26666666666666666,
+   "f1": 0.36122734926656497,
+   "f1_se": 0.04651822123072579,
+   "unreadable": 0,
+   "missing": 0,
+   "truncated": 0,
+   "prompt_tokens_mean": 4028.3333333333335,
+   "prompt_tokens_per_1k_chars": 98.93816467043808,
+   "cached_tokens_max": 0,
+   "prompt_ms_median": 5164.568,
+   "wall_s_median": 9.884,
+   "f1_by_quartile": [
+    0.20075757575757577,
+    0.42358567358567356,
+    0.35882352941176476,
+    0.46689113355780026
+   ],
+   "n_paired": 90,
+   "f1_delta": -0.5499454902396079,
+   "f1_delta_ci95": [
+    -0.568939393939394,
+    -0.5324501424501424
+   ],
+   "em_discordant_arm_only": 0,
+   "em_discordant_text_only": 50,
+   "em_mcnemar_p": 1.7763568394002505e-15,
+   "token_ratio_vs_text": 0.41226035341475065,
+   "non_image_prompt_tokens_median": -1794,
+   "non_image_prompt_tokens_range": [
+    -1842,
+    -1772
+   ],
+   "verdict": "NOT_NONINFERIOR"
+  }
+ ],
+ "prereg": {
+  "primary_metric": "SQuAD F1 per question, paired arm-vs-text (higher is better)",
+  "cost_metric": "server usage.prompt_tokens per request (lower is better)",
+  "max_token_ratio": 0.5,
+  "ni_margin_f1": 0.05,
+  "ci": "95% percentile bootstrap of mean paired F1 delta, resampling whole chunks, 10000 iters, seed 0",
+  "secondary": "EM, exact two-sided McNemar; UNREADABLE rate; F1 by position quartile",
+  "decision": {
+   "POSITIVE": "ratio <= 0.5 AND F1-delta CI lower bound > -0.05",
+   "NOT_NONINFERIOR": "ratio <= 0.5 AND CI lower bound <= -0.05",
+   "NEGATIVE_COST": "ratio > 0.5 (no worthwhile saving regardless of recall)",
+   "OCC-1 overall": "POSITIVE if ANY image arm is POSITIVE (that arm seeds OCC-3), else NEGATIVE",
+   "VOID": "text-arm F1 < 0.60 (reader/instrument broken), any transport error or malformed 200 body left unrepaired, server identity mismatch, suite fingerprint or Pillow drift between plan and run, pre-registration drift between plan and code, a prompt-cache hit, an incomplete run, or GPU residency not proven (>= 2 in-flight samples with VRAM >= 16 GiB above the pre-launch baseline AND a KFD context for the server)"
+  }
+ },
+ "prereg_code": null,
+ "pillow_version": "12.3.0",
+ "suite_fingerprint": "e4cbd4448e910b7522684ff850213d19a633f82ce7eb9f8386824cc147fa292d",
+ "server_identity": {
+  "build_info": "b10301-ef81196d5",
+  "model_path": "/mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf",
+  "n_ctx": 16384,
+  "modalities": {
+   "vision": true,
+   "video": true,
+   "audio": false
+  },
+  "total_slots": 1,
+  "url": "http://127.0.0.1:18431",
+  "problems": []
+ },
+ "residency": [
+  {
+   "proven": true,
+   "problems": [],
+   "n_samples": 102,
+   "n_high": 102,
+   "n_kfd": 102,
+   "baseline_bytes": 13062144,
+   "peak_bytes": 21772980224,
+   "peak_rise_gib": 20.266,
+   "min_rise_bytes": 17179869184,
+   "server_pid": 1250371,
+   "started_utc": "2026-09-16T15:38:16Z",
+   "requests_sent": 18
+  }
+ ]
+}

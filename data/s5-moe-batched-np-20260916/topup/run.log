@@ -1,0 +1,166 @@
+prereg sha256 94a05eeaed42e99b7c4aeae2a10f493c43fd862ed717479d951a7f6187c55c6e binary 5801cd74df22952051d907fa15859d7039b0099830913500e4d2675dcab5a3b9
+GPU claim held: {'device_id': 'mi210_0', 'lock_path': '/mnt/raid0/llm/tmp/gpu_device.mi210_0.lock', 'pid': 2409552}
+gemma31_dense_q4km     L5 ok       S_TG {1: 30.203852, 32: 386.994965} peakVRAM 34.1G kfd 1 [22.2s]
+qwen36_35ba3b_q8       L5 ok       S_TG {1: 99.500938, 32: 347.003113} peakVRAM 38.7G kfd 1 [25.6s]
+qwen36_27b_dense_q8    L5 ok       S_TG {1: 30.911051, 32: 162.294693} peakVRAM 34.1G kfd 1 [38.6s]
+gemma26a4b_q4km        L5 ok       S_TG {1: 88.842064, 32: 710.121887} peakVRAM 31.3G kfd 1 [11.3s]
+qwen36_35ba3b_q8       L6 ok       S_TG {1: 100.276154, 32: 348.891541} peakVRAM 38.7G kfd 1 [20.2s]
+qwen36_27b_dense_q8    L6 ok       S_TG {1: 30.501942, 32: 161.720245} peakVRAM 34.1G kfd 1 [38.7s]
+gemma26a4b_q4km        L6 ok       S_TG {1: 85.356606, 32: 710.335266} peakVRAM 31.2G kfd 1 [11.1s]
+gemma31_dense_q4km     L6 ok       S_TG {1: 30.135195, 32: 389.368835} peakVRAM 34.1G kfd 1 [22.1s]
+qwen36_27b_dense_q8    L7 ok       S_TG {1: 30.513706, 32: 161.819992} peakVRAM 33.9G kfd 1 [38.7s]
+gemma26a4b_q4km        L7 ok       S_TG {1: 88.731026, 32: 701.704529} peakVRAM 31.2G kfd 1 [11.2s]
+gemma31_dense_q4km     L7 ok       S_TG {1: 29.802574, 32: 389.402924} peakVRAM 34.1G kfd 1 [22.1s]
+qwen36_35ba3b_q8       L7 ok       S_TG {1: 100.302872, 32: 347.597656} peakVRAM 38.7G kfd 1 [20.2s]
+gemma26a4b_q4km        L8 ok       S_TG {1: 88.345749, 32: 710.168457} peakVRAM 49.9G kfd 1 [11.1s]
+gemma31_dense_q4km     L8 ok       S_TG {1: 30.499115, 32: 388.262054} peakVRAM 34.1G kfd 1 [22.1s]
+qwen36_35ba3b_q8       L8 ok       S_TG {1: 100.689415, 32: 348.937897} peakVRAM 38.7G kfd 1 [20.2s]
+qwen36_27b_dense_q8    L8 ok       S_TG {1: 30.442455, 32: 163.169983} peakVRAM 34.1G kfd 1 [38.5s]
+gemma31_dense_q4km     L9 ok       S_TG {1: 29.924173, 32: 388.683472} peakVRAM 34.1G kfd 1 [22.1s]
+qwen36_35ba3b_q8       L9 ok       S_TG {1: 96.336937, 32: 347.330505} peakVRAM 38.7G kfd 1 [20.3s]
+qwen36_27b_dense_q8    L9 ok       S_TG {1: 30.164469, 32: 162.725311} peakVRAM 34.1G kfd 1 [38.7s]
+gemma26a4b_q4km        L9 ok       S_TG {1: 88.996361, 32: 710.655273} peakVRAM 31.3G kfd 1 [11.1s]
+{
+  "gemma26a4b_q4km:gemma31_dense_q4km": {
+    "pooled": {
+      "M2_32": 0.6189544539933928,
+      "n": [
+        10,
+        10
+      ],
+      "K32_moe_median": 7.9807500183117295,
+      "K32_dense_median": 12.893921300382019,
+      "K32_moe_minmax": [
+        7.65792380608036,
+        8.321971775681897
+      ],
+      "K32_dense_minmax": [
+        12.527161066565064,
+        13.066083620830872
+      ],
+      "K32_p95_dev_pct": [
+        4.276,
+        2.844
+      ],
+      "delta_eff": 0.08,
+      "verdict": "INCONCLUSIVE"
+    },
+    "first_pass": {
+      "M2_32": 0.6022908611374431,
+      "n": [
+        5,
+        5
+      ],
+      "K32_moe_median": 7.76529543803986,
+      "K32_dense_median": 12.892932533252926,
+      "K32_moe_minmax": [
+        7.65792380608036,
+        8.231057830824456
+      ],
+      "K32_dense_minmax": [
+        12.527161066565064,
+        12.895400149785791
+      ],
+      "K32_p95_dev_pct": [
+        5.998,
+        2.837
+      ],
+      "delta_eff": 0.08,
+      "verdict": "INCONCLUSIVE"
+    },
+    "topup_only": {
+      "M2_32": 0.6186244449406243,
+      "n": [
+        5,
+        5
+      ],
+      "K32_moe_median": 7.993081824393455,
+      "K32_dense_median": 12.920733879438975,
+      "K32_moe_minmax": [
+        7.908220614962797,
+        8.321971775681897
+      ],
+      "K32_dense_minmax": [
+        12.730272796440158,
+        13.066083620830872
+      ],
+      "K32_p95_dev_pct": [
+        4.115,
+        1.474
+      ],
+      "delta_eff": 0.08,
+      "verdict": "INCONCLUSIVE"
+    }
+  },
+  "qwen36_35ba3b_q8:qwen36_27b_dense_q8": {
+    "pooled": {
+      "M2_32": 0.6553286360646227,
+      "n": [
+        10,
+        10
+      ],
+      "K32_moe_median": 3.472397272136007,
+      "K32_dense_median": 5.298711335107276,
+      "K32_moe_minmax": [
+        3.3724954662840148,
+        3.605372101460938
+      ],
+      "K32_dense_minmax": [
+        5.185826481450473,
+        5.394602205661236
+      ],
+      "K32_p95_dev_pct": [
+        3.829,
+        2.13
+      ],
+      "delta_eff": 0.08,
+      "verdict": "INCONCLUSIVE"
+    },
+    "first_pass": {
+      "M2_32": 0.64795216337383,
+      "n": [
+        5,
+        5
+      ],
+      "K32_moe_median": 3.429713152133575,
+      "K32_dense_median": 5.293157961346036,
+      "K32_moe_minmax": [
+        3.3724954662840148,
+        3.5585610858792753
+      ],
+      "K32_dense_minmax": [
+        5.185826481450473,
+        5.329408974272413
+      ],
+      "K32_p95_dev_pct": [
+        3.757,
+        2.028
+      ],
+      "delta_eff": 0.08,
+      "verdict": "INCONCLUSIVE"
+    },
+    "topup_only": {
+      "M2_32": 0.6560781185112166,
+      "n": [
+        5,
+        5
+      ],
+      "K32_moe_median": 3.4793071640940676,
+      "K32_dense_median": 5.3031903761542445,
+      "K32_moe_minmax": [
+        3.46548058962858,
+        3.605372101460938
+      ],
+      "K32_dense_minmax": [
+        5.250377704724436,
+        5.394602205661236
+      ],
+      "K32_p95_dev_pct": [
+        3.623,
+        1.724
+      ],
+      "delta_eff": 0.08,
+      "verdict": "INCONCLUSIVE"
+    }
+  }
+}
