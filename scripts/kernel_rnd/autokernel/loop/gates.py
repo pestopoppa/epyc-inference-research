@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import hashlib
+import json
 import re
 from typing import Callable
 import subprocess
@@ -87,6 +89,8 @@ def compiles(source_root: Path, build_dir: Path, *, cmake_defines: tuple,
 #: it passes or fails, so its ABSENCE means the run never happened.
 RAN_MARKER = "backends passed"
 TEST_COUNT = re.compile(r"(\d+)/(\d+) tests passed")
+REFERENCE_SUITE_SEED = 71  # fixed case population; not a numerical acceptance threshold
+MAX_REFERENCE_OUTPUT_BYTES = 2 * 1024 * 1024
 
 
 def _gdn_hunks_confined(source_text: str | None, patch_text: str | None) -> bool:
@@ -204,15 +208,16 @@ def check_cpu_iqk_reference(build_dir: Path, source_root: Path, *,
 
 
 def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
-                   backend: str = "ROCm0", resolved_recipe=None) -> Verdict:
+                   backend: str = "ROCm0", resolved_recipe=None,
+                   require_reference: bool = False) -> Verdict:
     """`test-backend-ops` on the op the patch touches. The real correctness gate.
 
-    THE DEFECT THIS SHAPE EXISTS TO PREVENT. This function used to pass
-    `--suite-seed <n>`, which `test-backend-ops` does not accept in this tree. The
-    binary printed its usage text and exited 1, and every candidate was therefore
-    refused with "MUL_MAT failed on ROCm0" -- a correctness verdict manufactured from
-    an argument error. It never ran once. Seven of ten run-9 iterations died on it,
-    and those refusals were recorded into durable memory as measured negatives.
+    THE DEFECT THIS SHAPE EXISTS TO PREVENT. An older binary did not accept
+    `--suite-seed <n>`; blindly passing it produced usage text and fabricated
+    "MUL_MAT failed on ROCm0" refusals. Seven of ten run-9 iterations died on
+    that harness fault. The optional metric route now checks the selected
+    binary's capability before passing the flags. The original route remains
+    the default for older instruments and CPU checks.
 
     A non-zero exit is NOT sufficient evidence that a test failed: it is equally
     consistent with the tool refusing to run at all. So the pass/fail decision is made
@@ -223,6 +228,9 @@ def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
     if not binary.is_file():
         return Verdict("oracle_unavailable", False,
                        f"no test-backend-ops at {binary}")
+    if require_reference and not re.fullmatch(r"ROCm[0-9]+", backend):
+        return Verdict("oracle_unavailable", False,
+                       "candidate-local CPU reference is not independent for a CPU source edit")
     argv = [str(binary), "test", "-o", op, "-b", backend, "-j", "1"]
     environment = residency.loader_env(binary)
     if resolved_recipe is not None:
@@ -234,10 +242,31 @@ def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
         # Run it under the actual treatment's loader/env and CPU/NUMA prefix.
         argv = [*resolved_recipe.topology_prefix, *argv]
         environment = dict(resolved_recipe.launch_env)
+    if require_reference:
+        # An older test-backend-ops rejected --suite-seed and printed usage. The
+        # selected binary, not the source tree or an anchor, must prove support.
+        from ..execution import t0_provider
+        try:
+            help_run = subprocess.run([str(binary), "--help"], capture_output=True,
+                                      text=True, timeout=30, env=environment)
+            help_text = help_run.stdout + help_run.stderr
+            if len(help_text.encode()) > 256 * 1024:
+                raise ValueError("help output exceeds bound")
+            capabilities = t0_provider.parse_backend_ops_help(help_text)
+            capabilities.require(("--suite-seed", "--autokernel-properties"))
+        except (OSError, ValueError, subprocess.TimeoutExpired,
+                t0_provider.InstrumentCapabilityError) as exc:
+            return Verdict("oracle_unavailable", False,
+                           f"selected test-backend-ops lacks a reviewed metric receipt: {exc}")
+        argv.extend(("--suite-seed", str(REFERENCE_SUITE_SEED),
+                     "--autokernel-properties"))
     done = subprocess.run(argv, capture_output=True, text=True,
                           timeout=CORRECTNESS_TIMEOUT_S,
                           env=environment)
     output = done.stdout + done.stderr
+    if require_reference and len(output.encode()) > MAX_REFERENCE_OUTPUT_BYTES:
+        return Verdict("oracle_unavailable", False,
+                       "seeded reference suite output exceeds inspection bound")
     plain = re.sub(r"\x1b\[[0-9;]*m", "", output)
     block = re.search(
         rf"(?ms)^Backend \d+/\d+: {re.escape(backend)}\b(.*?)"
@@ -259,6 +288,46 @@ def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
                        f"test-backend-ops gave contradictory {backend} status and exit/tally; "
                        "this is a harness fault, NOT evidence about the patch",
                        output[-2000:])
+    if require_reference:
+        from ..execution import t0_provider
+        try:
+            parsed = t0_provider.parse_backend_ops_console(output)
+            parsed.reconcile()
+        except (ValueError, t0_provider.OutputParseError) as exc:
+            return Verdict("oracle_unavailable", False,
+                           f"seeded reference suite is unreadable: {exc}")
+        selected = [case for frame in parsed.backends
+                    if frame.name == backend and not frame.skipped
+                    for case in frame.cases
+                    if case.op == op and case.status != "not_supported"]
+        if (not selected or any(not case.passed or case.reference is None
+                                for case in selected)):
+            return Verdict("oracle_unavailable", False,
+                           f"{op} did not emit a reference metric for every selected {backend} case")
+        if any(case.reference.oracle_id != "ggml_cpu_reference/v1" for case in selected):
+            return Verdict("oracle_unavailable", False,
+                           f"{op} emitted an unrecognized reference oracle")
+        if any(case.reference.observed > case.reference.tolerance for case in selected):
+            return Verdict("correctness", False,
+                           f"{op} exceeds a declared native reference tolerance")
+        ratios = [(case.reference.observed / case.reference.tolerance
+                   if case.reference.tolerance else 0.0, case) for case in selected]
+        worst_ratio, worst = max(ratios, key=lambda row: row[0])
+        ref = worst.reference
+        receipt = {
+            "schema": "epyc.autokernel.native_op_metric.v1", "op": op,
+            "backend": backend, "suite_seed": REFERENCE_SUITE_SEED,
+            "cases": len(selected), "oracle": ref.oracle_id,
+            "metrics": sorted({case.reference.metric_id for case in selected}),
+            "worst_metric": ref.metric_id,
+            "worst_fraction_of_tolerance": worst_ratio,
+            "worst_case": worst.params[:256],
+            "worst_case_sha256": hashlib.sha256(worst.params.encode()).hexdigest(),
+            "observed": ref.observed,
+            "tolerance": ref.tolerance,
+            "raw_output_sha256": hashlib.sha256(output.encode()).hexdigest(),
+        }
+        return Verdict("correctness", True, detail=json.dumps(receipt, sort_keys=True))
     return Verdict("correctness", True, detail=done.stdout[-500:])
 
 

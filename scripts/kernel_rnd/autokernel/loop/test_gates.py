@@ -320,18 +320,22 @@ class AffectedOpAndIndependentReference(unittest.TestCase):
             self.assertEqual(verdict.gate, gate)
             self.assertEqual(verdict.passed, status == "pass")
 
-    def test_the_unsupported_flag_is_gone_from_the_INVOCATION(self):
-        """The docstring still names the flag on purpose -- it records the defect.
-        What must not contain it is the argv actually handed to the binary."""
-        import inspect
-        body = inspect.getsource(gates.op_correctness)
-        body = body.split('"""', 2)[-1]          # drop the docstring
-        self.assertIn("argv = [", body)
-        self.assertNotIn("--suite-seed", body)
+    def test_default_invocation_does_not_use_optional_metric_flags(self):
+        """Legacy instrument compatibility remains the default route."""
+        output = ("Testing 1 devices\n\nBackend 1/1: ROCm0\n"
+                  "  MUL_MAT(type=f32): OK\n  1/1 tests passed\n"
+                  "  Backend ROCm0: OK\n1/1 backends passed\nOK\n")
+        with mock.patch.object(Path, "is_file", return_value=True), \
+             mock.patch.object(gates.residency, "loader_env", return_value={}), \
+             mock.patch.object(gates.subprocess, "run", return_value=mock.Mock(
+                 returncode=0, stdout=output, stderr="")) as invoke:
+            self.assertTrue(gates.op_correctness(Path("/build")).passed)
+        argv = invoke.call_args.args[0]
+        self.assertNotIn("--suite-seed", argv)
+        self.assertNotIn("--autokernel-properties", argv)
 
     def test_the_invocation_is_the_one_proven_to_work_on_the_anchor(self):
-        """`test-backend-ops test -o MUL_MAT -b ROCm0 -j 1` exits 0 on the anchor;
-        adding --suite-seed makes it exit 1. Pin the proven form."""
+        """The original op-selection argv remains the default form."""
         import inspect
         body = inspect.getsource(gates.op_correctness).split('"""', 2)[-1]
         for token in ('"test"', '"-o", op', '"-b", backend', '"-j", "1"'):

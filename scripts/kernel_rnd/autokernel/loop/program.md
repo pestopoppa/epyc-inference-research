@@ -86,7 +86,13 @@ logging cannot prove an edited quant function ran on a passing selected case.
 x86 `quants.c` is shared by both
 arms and is not admitted. Other CPU source families need a supported route
 before admission. GPU matmul routes use the native CPU-reference suite;
-the selected device block must report a nonempty passing count. Do not infer a
+the selected device block must report a nonempty passing count. On admitted GPU
+source candidates, the gate checks that the selected `test-backend-ops` binary
+supports seeded properties, then requires `AK_REF_V1` on every selected case.
+Its compact metric receipt carries the suite's own per-case thresholds; missing
+support or receipts are `oracle_unavailable`, not wrong-kernel evidence. This
+does not admit CPU IQK source edits: their candidate-local CPU reference is not
+independent. Do not infer a
 universal cosine, PSNR, max-abs or MSE tolerance from this policy. Low-precision
 comparison requires its own validated reference and threshold.
 

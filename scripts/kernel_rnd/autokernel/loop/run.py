@@ -1452,6 +1452,7 @@ def main(argv: list[str] | None = None) -> int:
                                        **({"targets": gates.PROMOTION_TARGETS} if direct_launch else {})),
             ]
             checks.extend(lambda op=op: gates.op_correctness(worker.build_dir, op=op,
+                          require_reference=not cpu_launch,
                           **({"backend": "CPU",
                               "resolved_recipe": _cpu_arm(direct_launch, worker.build_dir)}
                              if cpu_launch else {})) for op in scope)
