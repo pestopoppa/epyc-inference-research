@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Mapping
+import json
 import math
 import os
 import re
@@ -20,6 +21,7 @@ import tempfile
 
 
 MARKER = "AK_CPU_QUANT_REFERENCE_V1"
+METRIC_MARKER = "AK_CPU_QUANT_METRIC_V1"
 PROBE = Path(__file__).with_name("cpu_quant_reference_probe.cpp")
 QUANTS = ("Q4_K", "Q5_K", "Q8_0")
 OPS = ("MUL_MAT", "MUL_MAT_ID")
@@ -145,24 +147,44 @@ def _parse_and_compare(output: str, quant: str, op: str) -> QuantResult:
             raise ValueError("unknown probe line")
     if len(rows) != experts * ROWS or len(observed) != TOKENS * ROWS:
         raise ValueError("incomplete probe payload")
+    max_quant_abs_error = 0.0
     for (expert, row), encoded in rows.items():
         for column, decoded in enumerate(_decode_row(quant, encoded)):
             source = _source_weight(expert, row, column)
-            if not math.isfinite(decoded) or abs(decoded - source) > QUANT_ABS_TOL[quant]:
+            quant_abs_error = abs(decoded - source)
+            if not math.isfinite(decoded) or quant_abs_error > QUANT_ABS_TOL[quant]:
                 return QuantResult("wrong", f"{quant} quant encoding mismatch "
                                    f"expert={expert} row={row} column={column}",
                                    f"decoded={decoded:.9g}, source={source:.9g}, "
                                    f"abs_tol={QUANT_ABS_TOL[quant]}")
+            max_quant_abs_error = max(max_quant_abs_error, quant_abs_error)
+    max_output_abs_error = 0.0
+    max_output_limit_fraction = 0.0
     for token in range(TOKENS):
         for row in range(ROWS):
             actual = observed[token, row]
             expected = _reference(quant, op, rows, token, row)
+            output_abs_error = abs(actual - expected)
             if not math.isclose(actual, expected, abs_tol=ABS_TOL, rel_tol=REL_TOL):
                 return QuantResult("wrong", f"{quant} {op} mismatch token={token} row={row}",
                                    f"actual={actual:.9g}, scalar={expected:.9g}, "
                                    f"abs_tol={ABS_TOL}, rel_tol={REL_TOL}")
+            # This is the exact combined limit used by math.isclose above;
+            # max-abs alone is telemetry, not a separate acceptance rule.
+            limit = max(ABS_TOL, REL_TOL * max(abs(actual), abs(expected)))
+            max_output_abs_error = max(max_output_abs_error, output_abs_error)
+            max_output_limit_fraction = max(max_output_limit_fraction,
+                                            output_abs_error / limit)
+    metric = {"schema": "epyc.autokernel.cpu_quant_metric.v1", "quant": quant,
+              "op": op, "outputs": TOKENS * ROWS,
+              "max_quant_abs_error": max_quant_abs_error,
+              "quant_abs_tol": QUANT_ABS_TOL[quant],
+              "max_output_abs_error": max_output_abs_error,
+              "max_output_limit_fraction": max_output_limit_fraction,
+              "output_abs_tol": ABS_TOL, "output_rel_tol": REL_TOL}
     return QuantResult("pass", f"{quant} {op}: {TOKENS * ROWS} scalar outputs agree; "
-                       "optimized dispatch not proven")
+                       "optimized dispatch not proven",
+                       METRIC_MARKER + " " + json.dumps(metric, sort_keys=True))
 
 
 def check_cpu_quant_suite(build_dir: Path, source_root: Path, *,
@@ -199,6 +221,7 @@ def check_cpu_quant_suite(build_dir: Path, source_root: Path, *,
             if built.returncode:
                 return QuantResult("unavailable", "CPU quant probe compile failed",
                                    built.stderr[-2000:])
+            metrics = []
             for quant in quants:
                 for op in ops:
                     run = subprocess.run([*topology_prefix, str(binary), quant, op],
@@ -213,10 +236,11 @@ def check_cpu_quant_suite(build_dir: Path, source_root: Path, *,
                                            str(exc))
                     if result.status != "pass":
                         return result
+                    metrics.append(result.detail)
     except (OSError, subprocess.TimeoutExpired) as exc:
         return QuantResult("unavailable", "CPU quant probe infrastructure fault", str(exc))
     return QuantResult("pass", f"{len(quants) * len(ops)} quant/op cases passed; "
-                       "optimized dispatch not proven")
+                       "optimized dispatch not proven", "\n".join(metrics))
 
 
 __all__ = ["QuantResult", "check_cpu_quant_suite"]

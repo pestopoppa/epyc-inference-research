@@ -57,7 +57,8 @@ class IQKWitnessTests(TestCase):
         with mock.patch.object(witness, "_check_one", side_effect=(
                 witness.Result("pass", "q4"), witness.Result("pass", "q5"))) as hit, \
              mock.patch.object(cpu_quant_reference, "check_cpu_quant_suite",
-                return_value=cpu_quant_reference.QuantResult("pass", "scalar")) as scalar:
+                return_value=cpu_quant_reference.QuantResult(
+                    "pass", "scalar", "AK_CPU_QUANT_METRIC_V1 {\"quant\":\"Q4_K\"}")) as scalar:
             recipe = mock.Mock(launch_env={"GGML_IQK": "1"}, topology_prefix=())
             result = witness.check(Path("/build"), resolved_recipe=recipe,
                                    source_root=Path("/source"))
@@ -65,6 +66,7 @@ class IQKWitnessTests(TestCase):
         self.assertEqual(hit.call_count, 2)
         self.assertEqual(scalar.call_args.kwargs["quants"], ("Q4_K", "Q5_K"))
         self.assertEqual(scalar.call_args.kwargs["ops"], ("MUL_MAT_ID",))
+        self.assertIn("AK_CPU_QUANT_METRIC_V1", result.detail)
 
     def test_first_quant_failure_skips_other_quant_and_scalar(self):
         from . import cpu_quant_reference

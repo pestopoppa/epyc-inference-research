@@ -155,4 +155,4 @@ def check(build_dir: Path, *, resolved_recipe, source_root: Path) -> Result:
         return Result(scalar.status, scalar.reason, scalar.detail)
     return Result("pass", "Q4_K/Q5_K helper-entry witnesses and independent "
                   "40-row scalar output comparisons passed; branch-level coverage "
-                  "is not claimed", "\n".join(hits))
+                  "is not claimed", "\n".join((scalar.detail, *hits)))

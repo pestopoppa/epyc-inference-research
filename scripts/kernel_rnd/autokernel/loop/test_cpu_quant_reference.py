@@ -1,6 +1,10 @@
 """Hardware-free tests for the independent fixed CPU quant oracle."""
+import json
 import struct
+import subprocess
 import unittest
+from pathlib import Path
+from unittest import mock
 
 from autokernel.loop import cpu_quant_reference as fixture
 
@@ -31,6 +35,38 @@ def q8_output(op: str = "MUL_MAT_ID") -> str:
 
 
 class QuantReferenceTest(unittest.TestCase):
+    def test_existing_cpu_fixture_reports_observed_error_without_new_gate(self):
+        lines = q8_output().splitlines()
+        index = next(i for i, line in enumerate(lines) if line.startswith("O 0 0 "))
+        baseline = float.fromhex(lines[index].split()[3])
+        lines[index] = f"O 0 0 {(baseline + 0.009).hex()}"
+        result = fixture._parse_and_compare("\n".join(lines), "Q8_0", "MUL_MAT_ID")
+        self.assertEqual(result.status, "pass")
+        marker, receipt = result.detail.split(" ", 1)
+        self.assertEqual(marker, fixture.METRIC_MARKER)
+        metric = json.loads(receipt)
+        self.assertEqual((metric["quant"], metric["op"], metric["outputs"]),
+                         ("Q8_0", "MUL_MAT_ID", 80))
+        self.assertEqual(metric["max_quant_abs_error"], 0)
+        self.assertAlmostEqual(metric["max_output_abs_error"], 0.009)
+        self.assertAlmostEqual(metric["max_output_limit_fraction"], 0.9)
+        self.assertEqual((metric["output_abs_tol"], metric["output_rel_tol"]),
+                         (fixture.ABS_TOL, fixture.REL_TOL))
+
+    def test_suite_carries_each_existing_case_metric(self):
+        completed = [subprocess.CompletedProcess([], 0, "", "")]
+        completed += [subprocess.CompletedProcess([], 0, q8_output(op), "")
+                      for op in fixture.OPS]
+        with mock.patch.object(Path, "is_file", return_value=True), \
+             mock.patch.object(subprocess, "run", side_effect=completed):
+            result = fixture.check_cpu_quant_suite(
+                Path("/build"), Path("/source"), quants=("Q8_0",), ops=fixture.OPS)
+        self.assertEqual(result.status, "pass")
+        rows = [json.loads(line.split(" ", 1)[1]) for line in result.detail.splitlines()]
+        self.assertEqual([row["op"] for row in rows], list(fixture.OPS))
+        self.assertTrue(all(row["schema"] == "epyc.autokernel.cpu_quant_metric.v1"
+                            for row in rows))
+
     def test_q8_scalar_oracle_accepts_both_ops_without_claiming_dispatch(self):
         for op in fixture.OPS:
             with self.subTest(op=op):
