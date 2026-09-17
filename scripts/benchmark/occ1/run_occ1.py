@@ -11,7 +11,6 @@ Needs Pillow 12.3.0 for plan/run (`uv run --with pillow==12.3.0 ...`; recorded i
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import os
 import statistics
@@ -27,6 +26,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
     __package__ = "scripts.benchmark.occ1"
 
+from .. import belief_capture  # noqa: E402
 from . import costs, fixture, prompts, render, stats  # noqa: E402
 
 DEFAULT_ARMS = "text,img-6x10-bw,img-6x10-color,img-8x13-bw,img-8x8u-bw,img-12x12u-bw"
@@ -36,7 +36,7 @@ EXPECTED_BUILD = "ef81196d5"
 DEFAULT_PORT = int(os.environ.get("OCC1_PORT", "18431"))
 # Where the belief-kernel write-side vocabulary lives. It is hosted in epyc-root so the writer and
 # the strict reader cannot drift into two dialects of one schema (SC85; the SC67/CT-8 precedent).
-ROOT_CANDIDATES = (os.environ.get("EPYC_ROOT", ""), "/mnt/raid0/llm/epyc-root", "/workspace")
+# The root comes from EPYC_ROOT only (belief_capture); no checkout is guessed (VB-RUNNER-PATHS-2).
 CAPTURE_MODULE = "occ1_optical_compression_capture"
 # Pre-registered decision parameters (do not change after the first `run`).
 PREREG = {
@@ -562,23 +562,12 @@ def cmd_report(args) -> int:
 
 
 def _load_belief_capture():
-    """Import epyc-root's OCC-1 capture module, or explain why it is unavailable."""
-    tried = []
-    for root in ROOT_CANDIDATES:
-        if not root:
-            continue
-        module = Path(root) / "scripts" / "vidya" / "adapters" / f"{CAPTURE_MODULE}.py"
-        tried.append(str(module))
-        if not module.is_file():
-            continue
-        spec = importlib.util.spec_from_file_location(CAPTURE_MODULE, module)
-        if spec is None or spec.loader is None:  # pragma: no cover - defensive
-            continue
-        loaded = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(loaded)
-        return loaded
-    raise SystemExit(f"belief sidecar: epyc-root's {CAPTURE_MODULE}.py not found (set EPYC_ROOT, "
-                     "or pass --no-belief-measurements). Looked in: " + ", ".join(tried))
+    """Import epyc-root's OCC-1 capture module from the ``EPYC_ROOT`` checkout, or refuse loudly."""
+    try:
+        return belief_capture.load_capture(CAPTURE_MODULE)
+    except belief_capture.CaptureUnavailable as exc:
+        raise SystemExit(f"belief sidecar: epyc-root's {CAPTURE_MODULE}.py is unavailable ({exc}); "
+                         "set EPYC_ROOT, or pass --no-belief-measurements") from exc
 
 
 def write_belief_sidecar(args, out: Path, summary: dict, loader=None) -> int:

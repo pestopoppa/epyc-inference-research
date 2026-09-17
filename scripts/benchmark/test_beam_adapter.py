@@ -454,21 +454,39 @@ def test_score_judged_payload_checks_records_against_the_dataset(tmp_path):
 
 
 def _root_with_capture():
-    for root in (os.environ.get("EPYC_ROOT"), "/mnt/raid0/llm/epyc-root", "/workspace"):
-        if root and (Path(root) / "scripts/vidya/adapters/beam_memory_capture.py").is_file():
-            return root
+    """The ``EPYC_ROOT`` checkout, if it has the capture module; nothing is guessed."""
+    root = os.environ.get("EPYC_ROOT")
+    if root and (Path(root) / "scripts/vidya/adapters/beam_memory_capture.py").is_file():
+        return root
     return None
 
 
+def test_load_belief_capture_refuses_when_epyc_root_is_unset(monkeypatch):
+    """VB-RUNNER-PATHS-2: no fallback to /mnt/raid0/llm/epyc-root or /workspace."""
+    monkeypatch.delenv("EPYC_ROOT", raising=False)
+    with pytest.raises(SystemExit, match="beam_memory_capture.*EPYC_ROOT is not set"):
+        score_beam_run._load_belief_capture()
+    assert not hasattr(score_beam_run, "_ROOT_CANDIDATES")
+
+
 def test_load_belief_capture_explains_a_missing_root(tmp_path, monkeypatch):
-    monkeypatch.setattr(score_beam_run, "_ROOT_CANDIDATES", (str(tmp_path / "nope"),))
-    with pytest.raises(SystemExit, match="beam_memory_capture"):
+    monkeypatch.setenv("EPYC_ROOT", str(tmp_path / "nope"))
+    with pytest.raises(SystemExit, match="beam_memory_capture.*has no scripts/vidya/adapters"):
         score_beam_run._load_belief_capture()
 
 
-@pytest.mark.skipif(_root_with_capture() is None, reason="epyc-root beam capture not on this host")
+def test_load_belief_capture_loads_from_epyc_root(tmp_path, monkeypatch):
+    adapters = tmp_path / "scripts" / "vidya" / "adapters"
+    adapters.mkdir(parents=True)
+    (adapters / "beam_memory_capture.py").write_text(
+        "MARKER = 'stub'\n\ndef write_belief_measurements(path, **kw):\n    return path\n")
+    monkeypatch.setenv("EPYC_ROOT", str(tmp_path))
+    assert score_beam_run._load_belief_capture().MARKER == "stub"
+
+
+@pytest.mark.skipif(_root_with_capture() is None, reason="EPYC_ROOT unset or lacks beam_memory_capture")
 def test_belief_sidecar_round_trips_through_the_root_writer(tmp_path, monkeypatch):
-    monkeypatch.setattr(score_beam_run, "_ROOT_CANDIDATES", (_root_with_capture(),))
+    monkeypatch.setenv("EPYC_ROOT", _root_with_capture())
     capture = score_beam_run._load_belief_capture()
     payload = {**_judged_payload(), "context_mode_by_row": {"full": 40}}
     scored = score_beam_run.score_judged_payload(payload)

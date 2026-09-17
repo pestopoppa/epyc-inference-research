@@ -41,12 +41,11 @@ including re-scores of them, whose arm identity was never recorded.
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
-import os
 from pathlib import Path
 from typing import Any
 
+import belief_capture
 from tulving_episodic_adapter import (
     _DEFAULT_VARIANT,
     CHRONOLOGICAL_GET_STYLE,
@@ -555,34 +554,18 @@ def render_markdown(scored: dict[str, Any], result_path: Path) -> str:
 #: Where the belief-kernel write-side vocabulary lives. It is hosted in epyc-root so the
 #: writer and the strict reader cannot drift into two dialects of one schema; the scorer
 #: imports it rather than re-deriving the row shape here (SC67, the CT-8 precedent).
-_ROOT_CANDIDATES = (
-    os.environ.get("EPYC_ROOT", ""),
-    "/mnt/raid0/llm/epyc-root",
-    "/workspace",
-)
+#: The root comes from ``EPYC_ROOT`` only (``belief_capture``); no checkout is guessed
+#: (VB-RUNNER-PATHS-2).
+_CAPTURE_MODULE = "tulving_episodic_capture"
 
 
 def _load_belief_capture():
-    """Import ``tulving_episodic_capture`` from epyc-root, or explain why it is unavailable."""
-    tried = []
-    for root in _ROOT_CANDIDATES:
-        if not root:
-            continue
-        adapters = Path(root) / "scripts" / "vidya" / "adapters"
-        module = adapters / "tulving_episodic_capture.py"
-        tried.append(str(module))
-        if not module.is_file():
-            continue
-        spec = importlib.util.spec_from_file_location("tulving_episodic_capture", module)
-        if spec is None or spec.loader is None:  # pragma: no cover - defensive
-            continue
-        loaded = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(loaded)
-        return loaded
-    raise SystemExit(
-        "--belief-measurements needs epyc-root's tulving_episodic_capture.py "
-        "(set EPYC_ROOT). Looked in: " + ", ".join(tried)
-    )
+    """Import ``tulving_episodic_capture`` from the ``EPYC_ROOT`` checkout, or refuse loudly."""
+    try:
+        return belief_capture.load_capture(_CAPTURE_MODULE)
+    except belief_capture.CaptureUnavailable as exc:
+        raise SystemExit(
+            f"--belief-measurements needs epyc-root's {_CAPTURE_MODULE}.py: {exc}") from exc
 
 
 def _recorded_variant(payload: dict[str, Any]) -> str | None:

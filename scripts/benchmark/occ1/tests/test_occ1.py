@@ -411,6 +411,32 @@ class PortTests(unittest.TestCase):
         self.assertNotIn(":-8090", text)
 
 
+class CaptureRootTests(unittest.TestCase):
+    """VB-RUNNER-PATHS-2: the capture root is EPYC_ROOT only, never a guessed checkout."""
+
+    def test_unset_epyc_root_is_refused_not_guessed(self):
+        env = {k: v for k, v in os.environ.items() if k != "EPYC_ROOT"}
+        with mock.patch.dict(os.environ, env, clear=True):
+            with self.assertRaisesRegex(SystemExit, "EPYC_ROOT is not set.*--no-belief-measurements"):
+                run_occ1._load_belief_capture()
+        self.assertFalse(hasattr(run_occ1, "ROOT_CANDIDATES"))
+
+    def test_wrong_epyc_root_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with mock.patch.dict(os.environ, {"EPYC_ROOT": str(Path(tmp) / "nope")}):
+                with self.assertRaisesRegex(SystemExit, "has no scripts/vidya/adapters"):
+                    run_occ1._load_belief_capture()
+
+    def test_epyc_root_capture_is_loaded_from_that_checkout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            adapters = Path(tmp) / "scripts" / "vidya" / "adapters"
+            adapters.mkdir(parents=True)
+            (adapters / f"{run_occ1.CAPTURE_MODULE}.py").write_text(
+                "MARKER = 'stub'\n\ndef write_belief_measurements(path, **kw):\n    return path\n")
+            with mock.patch.dict(os.environ, {"EPYC_ROOT": tmp}):
+                self.assertEqual(run_occ1._load_belief_capture().MARKER, "stub")
+
+
 if __name__ == "__main__":
     unittest.main()
 

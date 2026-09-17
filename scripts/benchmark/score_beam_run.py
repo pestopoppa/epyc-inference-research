@@ -36,12 +36,11 @@ the arm claims warrant the run never captured.
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
-import os
 from pathlib import Path
 from typing import Any, Mapping
 
+import belief_capture
 from beam_scoring import (
     FOLD_VERSION,
     JUDGE_PROMPT_VERSION,
@@ -114,31 +113,18 @@ def score_judged_payload(payload: Mapping[str, Any],
     return {"summary": summary, "per_question": per_question}
 
 
-_ROOT_CANDIDATES = (
-    os.environ.get("EPYC_ROOT", ""),
-    "/mnt/raid0/llm/epyc-root",
-    "/workspace",
-)
+#: The capture writer lives in the epyc-root checkout named by ``EPYC_ROOT``
+#: (``belief_capture``); no checkout is guessed (VB-RUNNER-PATHS-2).
+_CAPTURE_MODULE = "beam_memory_capture"
 
 
 def _load_belief_capture():
-    """Import ``beam_memory_capture`` from epyc-root, or explain why it is unavailable."""
-    tried = []
-    for root in _ROOT_CANDIDATES:
-        if not root:
-            continue
-        module = Path(root) / "scripts" / "vidya" / "adapters" / "beam_memory_capture.py"
-        tried.append(str(module))
-        if not module.is_file():
-            continue
-        spec = importlib.util.spec_from_file_location("beam_memory_capture", module)
-        if spec is None or spec.loader is None:  # pragma: no cover - defensive
-            continue
-        loaded = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(loaded)
-        return loaded
-    raise SystemExit("--belief-measurements needs epyc-root's beam_memory_capture.py "
-                     "(set EPYC_ROOT). Looked in: " + ", ".join(tried))
+    """Import ``beam_memory_capture`` from the ``EPYC_ROOT`` checkout, or refuse loudly."""
+    try:
+        return belief_capture.load_capture(_CAPTURE_MODULE)
+    except belief_capture.CaptureUnavailable as exc:
+        raise SystemExit(
+            f"--belief-measurements needs epyc-root's {_CAPTURE_MODULE}.py: {exc}") from exc
 
 
 def main() -> int:
