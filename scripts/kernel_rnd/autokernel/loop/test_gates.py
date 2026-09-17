@@ -298,6 +298,25 @@ class AffectedOpAndIndependentReference(unittest.TestCase):
             self.assertIsInstance(refused, gates.Verdict)
             self.assertFalse(refused.passed)
 
+    def test_cpu_fused_iqk_route_is_body_confined_and_op_specific(self):
+        source = ('extern "C" IQK_API bool iqk_mul_mat_moe_rows(long n) {\n'
+                  '    sibling();\n}\n'
+                  'extern "C" IQK_API bool iqk_moe_fused_up_gate(long n) {\n'
+                  '    changed();\n}\n'
+                  '#if defined __x86_64__\n')
+        path = "ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp"
+        scope = gates.affected_op_scope(
+            (path,), target_surface=path, target_symbol="iqk_moe_fused_up_gate",
+            source_text=source, patch_text="@@ -5 +5 @@\n-old\n+changed();\n")
+        self.assertEqual(scope, ("MUL_MAT_ID",))
+        for hunk in ("@@ -2 +2 @@\n-old\n+sibling();\n",
+                     "@@ -7 +7 @@\n-old\n+#if defined __x86_64__\n"):
+            refused = gates.affected_op_scope(
+                (path,), target_surface=path, target_symbol="iqk_moe_fused_up_gate",
+                source_text=source, patch_text=hunk)
+            self.assertIsInstance(refused, gates.Verdict)
+            self.assertFalse(refused.passed)
+
     def test_cpu_iqk_reference_distinguishes_wrong_and_unavailable(self):
         from autokernel.loop import iqk_witness
         for status, gate in (("pass", "reference_comparison"),
@@ -306,9 +325,17 @@ class AffectedOpAndIndependentReference(unittest.TestCase):
             with mock.patch.object(iqk_witness, "check",
                     return_value=iqk_witness.Result(status, "reason", "detail")):
                 verdict = gates.check_cpu_iqk_reference(
-                    Path("/build"), Path("/source"), resolved_recipe=object())
+                    Path("/build"), Path("/source"), resolved_recipe=object(),
+                    target_symbol="iqk_mul_mat_moe_rows")
             self.assertEqual(verdict.gate, gate)
             self.assertEqual(verdict.passed, status == "pass")
+        with mock.patch.object(iqk_witness, "check_fused",
+                               return_value=iqk_witness.Result("pass", "fused")) as fused:
+            verdict = gates.check_cpu_iqk_reference(
+                Path("/build"), Path("/source"), resolved_recipe=object(),
+                target_symbol="iqk_moe_fused_up_gate")
+        self.assertTrue(verdict.passed)
+        fused.assert_called_once()
 
     def test_wrong_vs_unavailable_reference_are_distinct(self):
         for status, gate in (("pass", "reference_comparison"),

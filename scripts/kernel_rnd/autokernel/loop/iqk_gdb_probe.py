@@ -29,7 +29,7 @@ def _record():
                                   dso=os.path.realpath(actual))
                 else:
                     result["reason"] = "CPU reference was not set to use_ref=true"
-            elif symbol == "iqk_mul_mat_moe_rows":
+            elif symbol in {"iqk_mul_mat_moe_rows", "iqk_moe_fused_up_gate"}:
                 result.update(status="hit", role="candidate_helper",
                               dso=os.path.realpath(actual))
             else:

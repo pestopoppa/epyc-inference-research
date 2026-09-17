@@ -18,6 +18,23 @@ def q8_encoded_row(expert: int, row: int) -> bytes:
     return b"".join(blocks)
 
 
+def q8_fused_output() -> str:
+    op = fixture.FUSED_OP
+    lines = [f"{fixture.MARKER} Q8_0 {op} 256 40 2 272"]
+    up, gate = {}, {}
+    for expert in range(2):
+        for row in range(fixture.ROWS):
+            up[expert, row] = q8_encoded_row(expert, row)
+            gate[expert, row] = q8_encoded_row(expert + 3, row + 5)
+            lines.append(f"A {expert} {row} {up[expert, row].hex()}")
+            lines.append(f"G {expert} {row} {gate[expert, row].hex()}")
+    for token in range(fixture.TOKENS):
+        for row in range(fixture.ROWS):
+            value = fixture._reference("Q8_0", op, up, token, row, gate)
+            lines.append(f"O {token} {row} {value.hex()}")
+    return "\n".join(lines) + "\n"
+
+
 def q8_output(op: str = "MUL_MAT_ID") -> str:
     experts = 2 if op == "MUL_MAT_ID" else 1
     lines = [f"{fixture.MARKER} Q8_0 {op} 256 40 2 272"]
@@ -35,6 +52,25 @@ def q8_output(op: str = "MUL_MAT_ID") -> str:
 
 
 class QuantReferenceTest(unittest.TestCase):
+    def test_fused_reference_checks_both_matrices_and_output(self):
+        output = q8_fused_output()
+        self.assertEqual(fixture._parse_and_compare(output, "Q8_0", fixture.FUSED_OP).status,
+                         "pass")
+        lines = output.splitlines()
+        lines = [line for line in lines if not line.startswith("G 1 39 ")]
+        with self.assertRaisesRegex(ValueError, "incomplete"):
+            fixture._parse_and_compare("\n".join(lines), "Q8_0", fixture.FUSED_OP)
+        lines = output.splitlines()
+        index = next(i for i, line in enumerate(lines) if line.startswith("O 0 0 "))
+        lines[index] = "O 0 0 0x1.0p+10"
+        self.assertEqual(fixture._parse_and_compare(
+            "\n".join(lines), "Q8_0", fixture.FUSED_OP).status, "wrong")
+        lines = output.splitlines()
+        index = next(i for i, line in enumerate(lines) if line.startswith("G 0 0 "))
+        lines[index] = "G 0 0 " + bytes(fixture.ROW_BYTES["Q8_0"]).hex()
+        self.assertEqual(fixture._parse_and_compare(
+            "\n".join(lines), "Q8_0", fixture.FUSED_OP).status, "wrong")
+
     def test_existing_cpu_fixture_reports_observed_error_without_new_gate(self):
         lines = q8_output().splitlines()
         index = next(i for i, line in enumerate(lines) if line.startswith("O 0 0 "))

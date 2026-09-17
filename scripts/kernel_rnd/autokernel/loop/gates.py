@@ -114,16 +114,24 @@ def _gdn_hunks_confined(source_text: str | None, patch_text: str | None) -> bool
 
 
 def _iqk_moe_rows_hunks_confined(source_text: str | None,
-                                  patch_text: str | None) -> bool:
-    """Only the real exported helper body, never sibling helpers or its stub."""
+                                  patch_text: str | None,
+                                  target_symbol: str = "iqk_mul_mat_moe_rows") -> bool:
+    """Only the named real exported helper body, never siblings or stubs."""
     if not source_text or not patch_text:
         return False
     lines = source_text.splitlines()
     starts = [i + 1 for i, line in enumerate(lines)
-              if line.startswith('extern "C" IQK_API bool iqk_mul_mat_moe_rows(')]
+              if line.startswith(f'extern "C" IQK_API bool {target_symbol}(')]
+    next_symbol = ("iqk_moe_fused_up_gate" if target_symbol == "iqk_mul_mat_moe_rows"
+                   else "#if defined __x86_64__")
     ends = [i + 1 for i, line in enumerate(lines)
-            if line.startswith('extern "C" IQK_API bool iqk_moe_fused_up_gate(')]
-    if not starts or not ends or starts[0] >= ends[0]:
+            if line.startswith('extern "C" IQK_API bool iqk_moe_fused_up_gate(')
+            or (target_symbol == "iqk_moe_fused_up_gate" and
+                line.startswith(next_symbol))]
+    if not starts:
+        return False
+    ends = [end for end in ends if end > starts[0]]
+    if not ends:
         return False
     body_start = next((i + 1 for i in range(starts[0] - 1, ends[0] - 1)
                        if lines[i].rstrip().endswith('{')), None)
@@ -168,6 +176,13 @@ def affected_op_scope(paths: tuple[str, ...], *, target_surface: str,
             target_symbol == "iqk_mul_mat_moe_rows" and \
             _iqk_moe_rows_hunks_confined(source_text, patch_text):
         return ("MUL_MAT_ID",)
+    if changed == {"ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp"} and \
+            target_symbol == "iqk_moe_fused_up_gate" and \
+            _iqk_moe_rows_hunks_confined(source_text, patch_text, target_symbol):
+        # The native GLU selector currently reports 0/0 CPU cases. The
+        # independent fused graph fixture below exercises the actual GLU and
+        # exact edited helper, after the nonempty MUL_MAT_ID host/op suite.
+        return ("MUL_MAT_ID",)
     if any(path.startswith("ggml/src/ggml-cpu/iqk/") for path in changed):
         return Verdict("op_scope", False,
                        "CPU IQK source refused before build: the selected MUL_MAT/MUL_MAT_ID "
@@ -195,12 +210,19 @@ def check_cpu_gdn_reference(build_dir: Path, source_root: Path, *,
 
 
 def check_cpu_iqk_reference(build_dir: Path, source_root: Path, *,
-                            resolved_recipe) -> Verdict:
-    """One passing Q4_K case with a trusted inner-function debugger witness."""
+                            resolved_recipe, target_symbol: str) -> Verdict:
+    """Run the exact helper's independent numerical and engagement witness."""
     from . import iqk_witness
 
-    result = iqk_witness.check(build_dir, resolved_recipe=resolved_recipe,
-                               source_root=source_root)
+    if target_symbol == "iqk_mul_mat_moe_rows":
+        result = iqk_witness.check(build_dir, resolved_recipe=resolved_recipe,
+                                   source_root=source_root)
+    elif target_symbol == "iqk_moe_fused_up_gate":
+        result = iqk_witness.check_fused(build_dir, resolved_recipe=resolved_recipe,
+                                         source_root=source_root)
+    else:
+        return Verdict("oracle_unavailable", False,
+                       "unsupported CPU IQK helper has no independent reference")
     return Verdict("reference_comparison" if result.status == "wrong" else
                    "oracle_unavailable" if result.status == "unavailable" else
                    "reference_comparison", result.status == "pass",

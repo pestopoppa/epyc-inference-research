@@ -32,7 +32,7 @@ FULL_RESULT_RECOVERY_LIMIT = 512 * 1024 * 1024
 SERIAL_CHILD_LOG_SCHEMA = "epyc.autokernel.serial_child_output.v1"
 MAX_SERIAL_CHILD_LOG_BYTES_PER_STREAM = 1024 * 1024
 _DOCUMENT_FLAGS = ("--resolved-campaign", "--cpu-serving-launch", "--gpu-serving-launch",
-                   "--frozen-prompts", "--serving-recipe", "--runtime-recipe-reference",
+                   "--frozen-prompts", "--heldout-frozen-prompts", "--serving-recipe", "--runtime-recipe-reference",
                    "--runtime-recovery-reference")
 _CHANGING_FLAGS = frozenset({"--out", "--iterations", "--resume-run", "--anchor-build",
                             "--cor-build", "--cpu-calibrate-serving", "--gpu-calibrate-serving",

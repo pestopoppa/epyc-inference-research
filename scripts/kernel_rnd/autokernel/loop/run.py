@@ -35,7 +35,7 @@ HEARTBEAT_STOP_TIMEOUT_S = 10
 
 from . import (accumulate, actors, anchor, archive, bench, champion, claim, gates,
                dispatch_guard, heartbeat, hotspots, loop, serving, serving_beliefs,
-               integrity, lineage_beliefs, pipeline, pool, production, status, surface_fold,
+               integrity, heldout_serving, lineage_beliefs, pipeline, pool, production, status, surface_fold,
                surface_validation)
 
 
@@ -341,6 +341,27 @@ def _load_source_floor(store: Path, recipe, anchor, *, frozen_requests,
     return floor_store, reading
 
 
+def _load_heldout_floor(store: Path, recipe, launch, *, tip_build: Path,
+                        reference_build: Path, frozen_requests,
+                        instrument: str, pairs: int):
+    """Use the current tip floor or the protected calibration reference.
+
+    A source keep changes the tip executable identity. The held-out A/A is
+    explicitly calibrated on the protected COR build, so the same valid
+    process-unit frame remains available to later source treatments.
+    """
+    tip = _cpu_arm(launch, tip_build)
+    floor_store, reading = _load_source_floor(
+        store, recipe, tip, frozen_requests=frozen_requests,
+        instrument=instrument, pairs=pairs)
+    if reading.floor_pct is None and instrument == serving.MATCHED_INSTRUMENT \
+            and Path(reference_build) != Path(tip_build):
+        floor_store, reading = _load_source_floor(
+            store, recipe, _cpu_arm(launch, reference_build),
+            frozen_requests=frozen_requests, instrument=instrument, pairs=pairs)
+    return floor_store, reading
+
+
 def _gate_floor(reading) -> tuple[float | None, str | None]:
     """A floor reading AS THE BAR for this loop's serving comparisons: (pct, unit).
 
@@ -589,6 +610,12 @@ def main(argv: list[str] | None = None) -> int:
                         help="explicit enrolled GPU target's canonical resolved serving launch JSON")
     parser.add_argument("--frozen-prompts", type=Path,
                         help="original FrozenPromptManifest for explicitly selected serving measurement")
+    parser.add_argument("--heldout-frozen-prompts", type=Path,
+                        help="separate frozen serving prompts for integrity-flagged keep candidates")
+    parser.add_argument("--cpu-calibrate-heldout", type=int,
+                        help="explicit startup A/A pair count for the held-out request-bound floor")
+    parser.add_argument("--heldout-calibration-only", action="store_true",
+                        help="finish after explicit held-out A/A calibration; draw no proposal")
     parser.add_argument("--experimental-branch",
                         help="explicit serving candidate branch; never the canonical champion")
     parser.add_argument("--cpu-calibrate-serving", type=int,
@@ -816,6 +843,7 @@ def main(argv: list[str] | None = None) -> int:
 
     direct_launch = None
     frozen_requests = None
+    heldout_requests = None
     launch_path = args.cpu_serving_launch or args.gpu_serving_launch
     if launch_path is not None:
         from .planned_serving import FrozenPromptManifest
@@ -860,6 +888,18 @@ def main(argv: list[str] | None = None) -> int:
                                            direct_launch.template)
         if len(frozen_requests) != direct_launch.template.np:
             parser.error("frozen requests must describe exactly the selected serving concurrency")
+        if args.heldout_frozen_prompts is not None:
+            heldout_manifest = FrozenPromptManifest.from_dict(
+                _read_cpu_document(args.heldout_frozen_prompts))
+            heldout_requests = heldout_manifest.requests(
+                tuple(p.prompt_id for p in heldout_manifest.prompts), direct_launch.template)
+            if len(heldout_requests) != direct_launch.template.np:
+                parser.error("held-out requests must describe exactly the selected serving concurrency")
+            try:
+                heldout_serving.validate_requests(direct_launch.template,
+                                                  frozen_requests, heldout_requests)
+            except ValueError as exc:
+                parser.error(str(exc))
         if selected_target is not None:
             try:
                 legacy_targets.validate_serving_workload(selected_target, direct_launch)
@@ -867,9 +907,18 @@ def main(argv: list[str] | None = None) -> int:
                 parser.error(f"target selection refused: {exc}")
         if args.experimental_branch:
             args.champion_branch = args.experimental_branch
-    elif (args.frozen_prompts or args.experimental_branch or args.cpu_calibrate_serving
+    elif (args.frozen_prompts or args.heldout_frozen_prompts or args.cpu_calibrate_heldout
+          or args.experimental_branch or args.cpu_calibrate_serving
           or args.gpu_calibrate_serving):
         parser.error("serving options require --cpu-serving-launch or --gpu-serving-launch")
+    if args.cpu_calibrate_heldout is not None:
+        if not args.cpu_serving_launch or heldout_requests is None:
+            parser.error("--cpu-calibrate-heldout requires CPU serving and --heldout-frozen-prompts")
+        if args.cpu_calibrate_heldout < (serving.MATCHED_CALIBRATION_PAIRS
+                                       if args.serving_instrument == serving.MATCHED_INSTRUMENT else 2):
+            parser.error("held-out calibration count is below the selected instrument minimum")
+    if args.heldout_calibration_only and args.cpu_calibrate_heldout is None:
+        parser.error("--heldout-calibration-only requires --cpu-calibrate-heldout")
     cpu_launch = direct_launch if args.cpu_serving_launch else None
     # The selected canonical serving route, not the spelling of its campaign ID,
     # carries runtime capability. Enrolled targets were checked for ready status,
@@ -1146,6 +1195,16 @@ def main(argv: list[str] | None = None) -> int:
             # Exact retained-anchor floors are immutable and reused on restart;
             # an explicit calibration option may not overwrite their evidence.
             calibration_samples = None
+        if heldout_requests is not None and args.cpu_calibrate_heldout is None:
+            _heldout_store, heldout_reading = _load_heldout_floor(
+                args.store, serving_recipe, direct_launch,
+                tip_build=args.anchor_build,
+                reference_build=args.cor_build or args.anchor_build,
+                frozen_requests=heldout_requests,
+                instrument=args.serving_instrument, pairs=args.serving_pairs)
+            if _gate_floor(heldout_reading)[0] is None:
+                parser.error("held-out serving floor absent for these exact request bytes and "
+                             "anchor execution; run explicit --cpu-calibrate-heldout first")
         if floor is None:
             # Every selected workload needs its OWN request-bound source floor,
             # including a first full-target visit and a reduced common screen.
@@ -1434,7 +1493,8 @@ def main(argv: list[str] | None = None) -> int:
                         worker.build_dir, worker.worktree, resolved_recipe=arm))
                 if cpu_launch and changed == (iqk_rows_path,):
                     checks.append(lambda: gates.check_cpu_iqk_reference(
-                        worker.build_dir, worker.worktree, resolved_recipe=arm))
+                        worker.build_dir, worker.worktree, resolved_recipe=arm,
+                        target_symbol=hypothesis.target_symbol))
                 return gates.run_all(*checks)
             # Callables, so a failed build actually short-circuits: an eagerly
             # evaluated op_correctness ran the suite against a stale binary and blamed
@@ -1463,7 +1523,8 @@ def main(argv: list[str] | None = None) -> int:
             if cpu_launch and changed == (iqk_rows_path,):
                 checks.append(lambda: gates.check_cpu_iqk_reference(
                     worker.build_dir, worker.worktree,
-                    resolved_recipe=_cpu_arm(direct_launch, worker.build_dir)))
+                    resolved_recipe=_cpu_arm(direct_launch, worker.build_dir),
+                    target_symbol=hypothesis.target_symbol))
             if not direct_launch:
                 checks.extend((
                     lambda: gates.deterministic(worker.build_dir, args.model),
@@ -2526,7 +2587,7 @@ def main(argv: list[str] | None = None) -> int:
             # keep_candidate, never kept). The SERVING gate is NO LONGER per-keep: it cannot
             # resolve a 1-3% keep against the ~3.5% serving floor, so it fires on the BUNDLE in
             # accumulate_after_keep once the compounded gain clears the floor.
-            if checked.needs_confirm and confirm is None:
+            if checked.needs_confirm and confirm is None and heldout_requests is None:
                 kinds = sorted({finding.kind for finding in checked.findings})
                 raise loop.ConfirmVetoed(
                     "KEEP_CANDIDATE-needs-confirm: integrity screen flagged "
@@ -2547,6 +2608,47 @@ def main(argv: list[str] | None = None) -> int:
                     evidence["public_to_held_out_speedup_gap"] = [
                         comparison.effect - effect for effect in confirm_effects
                         if isinstance(effect, (int, float))]
+                if not verdict["promoted"]:
+                    raise loop.ConfirmVetoed(verdict["reason"])
+            if checked.needs_confirm and heldout_requests is not None:
+                public_digest, heldout_digest = heldout_serving.validate_requests(
+                    serving_recipe, frozen_requests, heldout_requests)
+                heldout_anchor = _cpu_arm(direct_launch, anchor_build[0])
+                heldout_floor_store, heldout_floor = _load_heldout_floor(
+                    args.store, serving_recipe, direct_launch,
+                    tip_build=anchor_build[0], reference_build=cor_build[0],
+                    frozen_requests=heldout_requests,
+                    instrument=args.serving_instrument, pairs=args.serving_pairs)
+                heldout_pct, heldout_unit = _gate_floor(heldout_floor)
+                if heldout_pct is None:
+                    raise loop.ConfirmVetoed(
+                        "KEEP_CANDIDATE-needs-confirm: held-out request-bound serving floor is absent; "
+                        "run explicit --cpu-calibrate-heldout before candidate measurement")
+                heldout_row = _serving_comparison(lambda: measured_serving_compare(
+                    serving_recipe, anchor_build[0], worker.build_dir,
+                    pairs=args.serving_pairs, floor_pct=heldout_pct,
+                    floor_unit=heldout_unit, port=direct_launch.port,
+                    anchor_resolved_recipe=heldout_anchor,
+                    candidate_resolved_recipe=_cpu_arm(direct_launch, worker.build_dir),
+                    frozen_requests=heldout_requests,
+                    floor_request_digest=heldout_digest,
+                    **({"instrument": args.serving_instrument,
+                        "floor_record": heldout_floor.row}
+                       if source_instrument else {})),
+                    "integrity_heldout_candidate_not_champion")
+                verdict = heldout_serving.decide(
+                    store=args.store, mechanism_id=hypothesis.mechanism_id,
+                    screen=comparison, heldout=heldout_row,
+                    public_digest=public_digest, heldout_digest=heldout_digest,
+                    floor_path=heldout_floor.path)
+                evidence.update(integrity.require_unseen_confirmation(
+                    checked, screen_surface=comparison.surface,
+                    screen_model=comparison.row.get("model"),
+                    confirm_surfaces=("serving:heldout:" + heldout_digest,),
+                    confirm_model=str(args.model)))
+                evidence["held_out_confirm"] = verdict
+                evidence["public_to_held_out_speedup_gap"] = [
+                    comparison.effect - heldout_row.effect]
                 if not verdict["promoted"]:
                     raise loop.ConfirmVetoed(verdict["reason"])
             source_fold_candidate = experimental and cpu_launch \
@@ -3013,6 +3115,29 @@ def main(argv: list[str] | None = None) -> int:
                 serving_floor_provenance = floor_reading.provenance
                 floor_request_digest = floor_reading.request_digest
 
+            if (cpu_launch and heldout_requests is not None
+                    and args.cpu_calibrate_heldout is not None
+                    and validation_identity_error is None
+                    and validation_reused_comparison is None
+                    and validation_gate_failure is None):
+                heldout_anchor = (args.cor_build or args.anchor_build)
+                heldout_launch = _cpu_arm(direct_launch, heldout_anchor)
+                heldout_floor_store, heldout_reading = _load_source_floor(
+                    args.store, serving_recipe, heldout_launch,
+                    frozen_requests=heldout_requests,
+                    instrument=args.serving_instrument, pairs=args.serving_pairs)
+                if heldout_reading.floor_pct is None:
+                    publish("running", step="CPU serving: explicit held-out request calibration")
+                    heldout_calibration = measured_serving_calibrate(
+                        serving_recipe, heldout_anchor,
+                        samples=args.cpu_calibrate_heldout, port=direct_launch.port,
+                        resolved_recipe=heldout_launch,
+                        frozen_requests=heldout_requests, **source_instrument)
+                    _write_new_source_floor(
+                        heldout_floor_store, serving_recipe, heldout_launch,
+                        heldout_calibration, frozen_requests=heldout_requests,
+                        instrument=args.serving_instrument, pairs=args.serving_pairs)
+
             if args.validate_source_continuation and direct_launch is not None:
                 candidate_commit = source_resumed["current_anchor"]["commit"]
                 original_commit = validation_original_commit
@@ -3105,7 +3230,10 @@ def main(argv: list[str] | None = None) -> int:
                         args.out, validation_row)
 
             publish("running", hotspot_rows=hotspot_rows)
-            if args.validate_source_continuation:
+            if args.heldout_calibration_only:
+                pooled = pool.PoolResult(outcomes=[], wall_seconds=time.time() - started)
+                outcomes = []
+            elif args.validate_source_continuation:
                 validation_body = surface_validation.reopen_reference(
                     source_validation_reference)
                 if args.validate_source_loo and validation_body["disposition"] == "passed":

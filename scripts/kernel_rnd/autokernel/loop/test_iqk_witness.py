@@ -78,3 +78,24 @@ class IQKWitnessTests(TestCase):
         self.assertEqual(result.status, "unavailable")
         hit.assert_called_once()
         scalar.assert_not_called()
+
+    def test_fused_route_requires_exact_two_quant_graph_and_helper_hit(self):
+        from . import cpu_quant_reference
+        recipe = mock.Mock(backend="cpu", launch_env={"GGML_IQK": "1"},
+                           topology_prefix=(), template=object(), port=1)
+        with mock.patch.object(Path, "is_file", return_value=True), \
+             mock.patch.object(cpu_quant_reference, "check_cpu_quant_suite",
+                return_value=cpu_quant_reference.QuantResult(
+                    "pass", "trusted fused helper hit proven", path_verified=True)) as scalar:
+            result = witness.check_fused(Path("/build"), resolved_recipe=recipe,
+                                         source_root=Path("/source"))
+        self.assertEqual(result.status, "pass")
+        self.assertEqual(scalar.call_args.kwargs["quants"], ("Q4_K", "Q5_K"))
+        self.assertEqual(scalar.call_args.kwargs["ops"], ("FUSED_UP_GATE",))
+        self.assertTrue(scalar.call_args.kwargs["require_fused_hit"])
+
+    def test_fused_route_rejects_wrong_resolved_recipe(self):
+        recipe = mock.Mock(backend="cpu", launch_env={"GGML_IQK": "0"})
+        result = witness.check_fused(Path("/build"), resolved_recipe=recipe,
+                                     source_root=Path("/source"))
+        self.assertEqual(result.status, "unavailable")
