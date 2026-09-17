@@ -59,7 +59,7 @@ import sqlite3
 import time
 from typing import Any, Iterable, Mapping, Sequence
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS experiments (
@@ -80,6 +80,10 @@ CREATE TABLE IF NOT EXISTS experiments (
     target_effect     REAL,
     refusal_reason    TEXT,
     result_sha256     TEXT,
+    spawn_parent      TEXT,
+    branch_id         TEXT,
+    width             INTEGER,
+    depth             INTEGER,
     payload           TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS experiments_epoch ON experiments (epoch_sha256);
@@ -306,6 +310,14 @@ class ExperimentStore:
         self._connection.row_factory = sqlite3.Row
         if not read_only:
             self._connection.executescript(_DDL)
+            # Existing append-only stores predate lineage telemetry. Add nullable
+            # columns in place; historic rows remain explicitly unknown.
+            columns = {row[1] for row in self._connection.execute(
+                "PRAGMA table_info(experiments)")}
+            for name, kind in (("spawn_parent", "TEXT"), ("branch_id", "TEXT"),
+                               ("width", "INTEGER"), ("depth", "INTEGER")):
+                if name not in columns:
+                    self._connection.execute(f"ALTER TABLE experiments ADD COLUMN {name} {kind}")
             self._connection.commit()
 
     def close(self) -> None:
@@ -343,11 +355,19 @@ class ExperimentStore:
             _real(attempt.get("target_runtime_effect_fraction")),
             _text(attempt.get("reason")),
             _text(attempt.get("result_sha256")),
+            _text(attempt.get("spawn_parent")),
+            _text(attempt.get("branch_id")),
+            _positive_int(attempt.get("width")),
+            _positive_int(attempt.get("depth")),
             json.dumps(_jsonable(attempt), sort_keys=True),
         )
         cursor = self._connection.execute(
-            "INSERT OR IGNORE INTO experiments VALUES "
-            "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", row)
+            "INSERT OR IGNORE INTO experiments ("
+            "attempt_id,recorded_at,campaign_id,deployment,epoch_sha256,"
+            "hypothesis_id,mechanism_id,target_surface,target_symbol,statement,"
+            "falsifier,status,effect_fraction,exact_effect,target_effect,"
+            "refusal_reason,result_sha256,spawn_parent,branch_id,width,depth,payload"
+            ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", row)
         self._connection.commit()
         return cursor.rowcount == 1
 
@@ -591,6 +611,12 @@ def _real(value: Any) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
     return float(value)
+
+
+def _positive_int(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return None
+    return value
 
 
 def _cell(value: Any) -> str:

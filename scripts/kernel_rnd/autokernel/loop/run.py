@@ -3028,6 +3028,13 @@ def main(argv: list[str] | None = None) -> int:
                 "noise_floor_pct": floor, "elapsed_s": round(elapsed, 1),
                 "workers": args.workers,
                 "iterations": [outcome.to_attempt() for outcome in outcomes],
+                # Ordered completion points, not a proposed/adaptive policy. The
+                # same facts are captured in each attempt's durable journal row.
+                "width_depth_trajectory": [
+                    {"spawn_parent": outcome.spawn_parent,
+                     "branch_id": outcome.branch_id,
+                     "width": outcome.width, "depth": outcome.depth}
+                    for outcome in outcomes],
                 "phase_seconds": pooled_body.pop("phase_lane_seconds"),
                 "phase_seconds_are_lane_seconds": True,
                 "pool": pooled_body,

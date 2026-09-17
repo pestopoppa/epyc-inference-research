@@ -452,6 +452,37 @@ class TheBudgetIsExact(unittest.TestCase):
         self.assertEqual(budget.remaining, 0)
 
 
+# ---------------------------------------------------------------- lineage telemetry
+
+
+class SpawnLineageIsObserved(unittest.TestCase):
+    def test_each_draw_carries_its_actual_parent_and_depth(self):
+        outcomes, _ = _drive(
+            workers=_workers(1), iterations=3,
+            measure=lambda _worker: lambda _hypothesis, _paths: _comparison(0.05))
+        self.assertEqual([o.spawn_parent for o in outcomes],
+                         [_sha(0), _sha(1), _sha(2)])
+        self.assertEqual([o.depth for o in outcomes], [1, 2, 3])
+        self.assertEqual([o.width for o in outcomes], [1, 1, 1])
+        self.assertEqual([o.branch_id for o in outcomes], ["detached:lane0"] * 3)
+        self.assertEqual(outcomes[0].to_attempt()["spawn_parent"], _sha(0))
+
+    def test_failed_reset_does_not_inherit_a_previous_parent(self):
+        calls = 0
+
+        def reset(_worker):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise RuntimeError("reset failed")
+            return _sha(0)
+
+        outcomes, _ = _drive(workers=_workers(1), iterations=2, reset=reset)
+        self.assertEqual([o.spawn_parent for o in outcomes], [_sha(0), None])
+        self.assertEqual([o.depth for o in outcomes], [1, 2])
+        self.assertEqual(outcomes[1].branch_id, "detached:lane0")
+
+
 # ---------------------------------------------------------------- (d) superseded
 
 

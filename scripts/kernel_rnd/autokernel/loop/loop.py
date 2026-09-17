@@ -222,6 +222,12 @@ class Outcome:
     patch_round: int = 0
     prior_rejection_prompt: bool = False
     validator_provenance: list[dict] = field(default_factory=list)
+    # Observed formation lineage only. Detached lanes are logical branches, not
+    # additional Git champion refs; none of these fields selects work.
+    spawn_parent: str | None = None
+    branch_id: str | None = None
+    width: int | None = None
+    depth: int | None = None
 
     def to_attempt(self) -> dict:
         row = {"status": self.status, "turn_recorded_at": _now()}
@@ -253,6 +259,9 @@ class Outcome:
         })
         if self.validator_provenance:
             row["validator_provenance"] = self.validator_provenance
+        for key in ("spawn_parent", "branch_id", "width", "depth"):
+            if getattr(self, key) is not None:
+                row[key] = getattr(self, key)
         if self.hypothesis is not None:
             from . import claims
             split = claims.keep_claims(
