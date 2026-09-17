@@ -18,8 +18,8 @@ sidecar. The cell semantics are carried over verbatim:
     --no-enable-thinking --endpoint chat --questions-in <pinned olympiadbench_hard>`;
   * capacity: a startup OOM signature, n_ctx_slot < L, or VRAM > 61 GiB => SKIP (recorded).
   * metric: the runner's `throughput.aggregate_decode_tok_s` (completion tokens / suite wall).
-Deltas, stated: host-thread containment is `taskset` + a per-thread affinity check rather
-than the v8 cgroup; GPU residency is SAMPLED across each launch (autokernel
+Deltas, stated: host-thread containment is `taskset` + the codified v8 `fence_threads` re-pin
+(`taskset -apc`, twice) + a per-thread affinity check rather than the v8 cgroup; GPU residency is SAMPLED across each launch (autokernel
 `residency.Sampler`) and a cell read non-resident is refused; the GPU claim is held.
 
 n: `--passes` launches per cell (pass order alternates ascending/descending) so each cell
@@ -74,7 +74,8 @@ def affinity_check(pid: int) -> dict:
         aff = next(l.split(":", 1)[1].strip() for l in status.splitlines() if l.startswith("Cpus_allowed_list:"))
         rows.append(aff)
     ok = bool(rows) and all(cpu_list_set(a) == cpu_list_set(CORES) for a in rows)
-    return {"threads": len(rows), "all_pinned": ok}
+    return {"threads": len(rows), "all_pinned": ok,
+            "unpinned_masks": sorted({a for a in rows if cpu_list_set(a) != cpu_list_set(CORES)})}
 
 
 def stop(proc: subprocess.Popen) -> str:
@@ -130,6 +131,13 @@ def run_cell(out: Path, np_: int, L: int, pas: int, pin: Path = PIN) -> dict:
                 row.update(status="skip" if m else "failed",
                            reason=f"capacity_start:{m.group(0)[:80]}" if m else "server not healthy")
                 return row
+            # Codified v8 `fence_threads`: the runtime spawns threads with their own affinity after
+            # launch, so re-apply the host-thread mask to every task twice, then verify.
+            row["affinity_before_fence"] = affinity_check(proc.pid)
+            for _ in range(2):
+                subprocess.run(["taskset", "-apc", CORES, str(proc.pid)], stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL)
+                time.sleep(1)
             row["affinity"] = affinity_check(proc.pid)
             if not row["affinity"]["all_pinned"]:
                 row.update(status="failed", reason="host threads not pinned to " + CORES)
