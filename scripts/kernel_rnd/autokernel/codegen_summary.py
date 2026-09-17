@@ -25,11 +25,12 @@ MAX_OBJECT_BYTES = 8 * 1024 * 1024
 MAX_OUTPUT_BYTES = 1024 * 1024
 MAX_SCAN_FILES = 2048
 TIMEOUT_S = 8.0
+MAX_TOTAL_S = 12.0
 LLVM_OBJDUMP = Path("/opt/rocm/llvm/bin/llvm-objdump")
 _INSTRUCTION = re.compile(r"^\s*[0-9a-f]+:\s+([a-z][a-z0-9_.]*)\b", re.I)
 
 
-def _disassemble(path: Path) -> tuple[str | None, str]:
+def _disassemble(path: Path, *, timeout_s: float = TIMEOUT_S) -> tuple[str | None, str]:
     """Read at most MAX_OUTPUT_BYTES; kill a noisy or stalled tool."""
     if not LLVM_OBJDUMP.is_file():
         return None, "llvm-objdump unavailable"
@@ -38,7 +39,7 @@ def _disassemble(path: Path) -> tuple[str | None, str]:
         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     chunks: list[bytes] = []
     total = 0
-    deadline = time.monotonic() + TIMEOUT_S
+    deadline = time.monotonic() + timeout_s
     try:
         assert proc.stdout is not None
         while True:
@@ -115,6 +116,7 @@ def summarize_codegen(backend: str, build_dir: str | Path) -> dict[str, Any]:
                 "no standalone AMD code object; embedded HIP fatbin extraction unavailable")
             return result
         totals = {"scalar": 0, "vector": 0, "matrix": 0, "memory": 0, "other": 0}
+        deadline = time.monotonic() + MAX_TOTAL_S
         for path in objects:
             with path.open("rb") as stream:
                 raw = stream.read(MAX_OBJECT_BYTES + 1)
@@ -126,7 +128,10 @@ def summarize_codegen(backend: str, build_dir: str | Path) -> dict[str, Any]:
             row: dict[str, Any] = {
                 "relative_path": str(path.relative_to(root)),
                 "sha256": hashlib.sha256(raw).hexdigest(), "bytes": len(raw)}
-            disassembly, reason = _disassemble(path)
+            remaining = deadline - time.monotonic()
+            disassembly, reason = (
+                _disassemble(path, timeout_s=min(TIMEOUT_S, remaining))
+                if remaining > 0 else (None, "total collector time budget exhausted"))
             row["disassembly_status"] = reason
             if disassembly is not None:
                 counts = dict.fromkeys(totals, 0)
