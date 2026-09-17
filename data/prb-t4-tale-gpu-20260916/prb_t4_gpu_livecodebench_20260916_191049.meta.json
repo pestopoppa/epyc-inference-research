@@ -1,0 +1,79 @@
+{
+  "schema": "tale_budget_run.v2",
+  "started_at": "2026-09-17T02:05:17",
+  "argv": [
+    "scripts/benchmark/eval_tale_budget.py",
+    "--endpoint",
+    "http://127.0.0.1:18383",
+    "--suites",
+    "livecodebench",
+    "--n-questions",
+    "100",
+    "--conditions",
+    "baseline",
+    "static",
+    "tale",
+    "--budget-unit",
+    "tokens",
+    "--temperature",
+    "0.1",
+    "--seed",
+    "42",
+    "--chat-template-kwargs",
+    "{\"enable_thinking\": false}",
+    "--output",
+    "/mnt/raid0/llm/tmp/sub-gpu-runner-20260916/prbt4/prb_t4_gpu_livecodebench_20260916_191049.jsonl"
+  ],
+  "suites": [
+    "livecodebench"
+  ],
+  "n_questions": 100,
+  "conditions": [
+    "baseline",
+    "static",
+    "tale"
+  ],
+  "budget_unit": "tokens",
+  "temperature": 0.1,
+  "seed": 42,
+  "max_tokens": 8192,
+  "estimator_max_tokens": 32,
+  "chat_template_kwargs": {
+    "enable_thinking": false
+  },
+  "serving": {
+    "base_url": "http://127.0.0.1:18383",
+    "v1_models": [
+      "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf"
+    ],
+    "props": {
+      "model_path": "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+      "build_info": "b10125-0db32c06e",
+      "total_slots": 2,
+      "chat_template_caps": {
+        "supports_object_arguments": true,
+        "supports_parallel_tool_calls": true,
+        "supports_preserve_reasoning": true,
+        "supports_string_content": true,
+        "supports_system_role": true,
+        "supports_tool_calls": true,
+        "supports_tools": true,
+        "supports_typed_content": false
+      },
+      "n_ctx": 32768
+    },
+    "model_id": "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+    "model_id_source": "v1_models",
+    "gguf_path": "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+    "gguf_path_source": "props",
+    "gguf": {
+      "path": "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+      "size_bytes": 29047086048,
+      "mtime": "2026-08-14T17:04:31"
+    }
+  },
+  "finished_at": "2026-09-17T02:22:22",
+  "served_models_seen": [
+    "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf"
+  ]
+}
