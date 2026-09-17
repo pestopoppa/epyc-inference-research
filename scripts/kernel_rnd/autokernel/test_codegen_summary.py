@@ -5,6 +5,7 @@ import ast
 import hashlib
 import json
 from pathlib import Path
+import struct
 import sys
 import tempfile
 import time
@@ -16,13 +17,76 @@ from .loop import loop as loop_module, run as loop_run
 
 
 class TestCodegenSummary(unittest.TestCase):
+    @staticmethod
+    def _embedded_hip_dso(target: bytes = b"hipv4-amdgcn-amd-amdhsa--gfx90a",
+                          object_bytes: bytes = b"\x7fELFfixture") -> tuple[bytes, int]:
+        """Minimal ELF64 DSO with one clang offload bundle in .hip_fatbin."""
+        names = b"\0.shstrtab\0.hip_fatbin\0"
+        bundle = (codegen_summary._BUNDLE_MAGIC + struct.pack("<Q", 1)
+                  + struct.pack("<QQQ", 256, len(object_bytes), len(target))
+                  + target)
+        fatbin = bundle + bytes(256 - len(bundle)) + object_bytes
+        elf = bytearray(512 + len(fatbin))
+        elf[:6] = b"\x7fELF\x02\x01"
+        struct.pack_into("<Q", elf, 40, 64)
+        struct.pack_into("<HHH", elf, 58, 64, 3, 1)
+        struct.pack_into("<IIQQQQIIQQ", elf, 64 + 64,
+                         1, 3, 0, 0, 256, len(names), 0, 0, 1, 0)
+        struct.pack_into("<IIQQQQIIQQ", elf, 64 + 128,
+                         11, 1, 0, 0, 512, len(fatbin), 0, 0, 1, 0)
+        elf[256:256 + len(names)] = names
+        elf[512:] = fatbin
+        return bytes(elf), 512 + 256
+
+    def test_embedded_gfx90a_summary_binds_container_and_object(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            build = Path(directory)
+            (build / "bin").mkdir()
+            raw, offset = self._embedded_hip_dso()
+            (build / "bin" / "libggml-hip.so").write_bytes(raw)
+            with mock.patch.object(codegen_summary, "_disassemble",
+                                   return_value=(
+                                       "\ts_nop 0 // ABCDEF: BF800000\n"
+                                       "\tv_mfma_f32_16x16x16f16 v0, v1 // ABCDEF: DEADBEEF\n"
+                                       "\tglobal_load_dword v0, v1 // ABCDEF: DEADBEEF\n",
+                                       "ok")):
+                summary = codegen_summary.summarize_codegen("llama_gpu", build)
+            self.assertEqual(summary["status"], "partial")
+            self.assertEqual(summary["instruction_mix"]["matrix"], 1)
+            self.assertEqual(summary["instruction_mix"]["memory"], 1)
+            self.assertEqual(summary["instruction_mix"]["scalar"], 1)
+            self.assertEqual(len(summary["objects"]), 1)
+            row = summary["objects"][0]
+            self.assertEqual(row["container_path"], "bin/libggml-hip.so")
+            self.assertEqual(row["container_bytes"], len(raw))
+            self.assertEqual(row["container_offset"], offset)
+            self.assertEqual(row["container_sha256"], hashlib.sha256(raw).hexdigest())
+            self.assertEqual(row["sha256"], hashlib.sha256(b"\x7fELFfixture").hexdigest())
+            self.assertTrue(row["relative_path"].endswith(f"#fatbin-{offset}.co"))
+            self.assertIsNone(summary["occupancy"])
+            self.assertIsNone(summary["register_spills"])
+
+    def test_embedded_non_gfx_or_oversized_container_stays_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            build = Path(directory)
+            (build / "bin").mkdir()
+            library = build / "bin" / "libggml-hip.so"
+            raw, _ = self._embedded_hip_dso(target=b"hipv4-amdgcn-amd-amdhsa--gfx1100")
+            library.write_bytes(raw)
+            self.assertEqual(codegen_summary.summarize_codegen(
+                "llama_gpu", build)["status"], "unavailable")
+            with mock.patch.object(codegen_summary, "MAX_HIP_LIBRARY_BYTES", len(raw) - 1):
+                summary = codegen_summary.summarize_codegen("llama_gpu", build)
+            self.assertEqual(summary["status"], "unavailable")
+            self.assertIn("exceeds inspection bound", summary["reason"])
+
     def test_cpu_and_missing_hip_object_are_explicitly_unavailable(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             cpu = codegen_summary.summarize_codegen("llama_cpu", directory)
             self.assertEqual(cpu["status"], "unavailable")
             self.assertIsNone(cpu["instruction_mix"])
             hip = codegen_summary.summarize_codegen("llama_gpu", directory)
-            self.assertIn("embedded HIP fatbin", hip["reason"])
+            self.assertIn("candidate HIP library missing", hip["reason"])
             self.assertIsNone(hip["occupancy"])
             self.assertIsNone(hip["register_spills"])
 

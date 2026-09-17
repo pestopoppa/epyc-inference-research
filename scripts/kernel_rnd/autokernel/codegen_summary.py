@@ -9,10 +9,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import mmap
 import os
 from pathlib import Path
 import re
 import select
+import struct
 import subprocess
 import tempfile
 import time
@@ -31,6 +33,12 @@ MAX_TOTAL_S = 12.0
 LLVM_OBJDUMP = Path("/opt/rocm/llvm/bin/llvm-objdump")
 CPU_OBJDUMP = Path("/usr/bin/objdump")
 CPU_LIBRARY = "libggml-cpu.so"
+HIP_LIBRARY = "libggml-hip.so"
+MAX_HIP_LIBRARY_BYTES = 96 * 1024 * 1024
+MAX_HIP_FATBIN_BYTES = 64 * 1024 * 1024
+MAX_BUNDLE_HEADERS = 2048
+MAX_EMBEDDED_CANDIDATES = 64
+_BUNDLE_MAGIC = b"__CLANG_OFFLOAD_BUNDLE__"
 # Exported wrappers relevant to the current CPU GDN / quant-dot search. This
 # is a diagnostic sample, not a claim that every inlined helper was inspected.
 CPU_SYMBOLS = (
@@ -40,6 +48,8 @@ CPU_SYMBOLS = (
     "ggml_vec_dot_q6_K_q8_K",
 )
 _INSTRUCTION = re.compile(r"^\s*[0-9a-f]+:\s+([a-z][a-z0-9_.]*)\b", re.I)
+_AMD_INSTRUCTION = re.compile(
+    r"^\s*([a-z][a-z0-9_.]*)\b.*//\s*[0-9a-f]+:\s*[0-9a-f]+\s*$", re.I)
 _CPU_SYMBOL_HEADER = re.compile(r"^\s*[0-9a-f]+\s+<([^>]+)>:\s*$", re.I | re.M)
 
 
@@ -118,6 +128,182 @@ def _cpu_library(build_dir: Path) -> tuple[Path | None, str]:
         return library, "ok"
     except (OSError, ValueError):
         return None, "candidate CPU library missing or outside build bin"
+
+
+def _hip_library(build_dir: Path) -> tuple[Path | None, str]:
+    """Use only this build's DSO; a huge or external binary is unavailable."""
+    try:
+        root = build_dir.resolve(strict=True)
+        library = (root / "bin" / HIP_LIBRARY).resolve(strict=True)
+        library.relative_to(root / "bin")
+        if not library.is_file():
+            return None, "candidate HIP library is not a regular file"
+        if library.stat().st_size > MAX_HIP_LIBRARY_BYTES:
+            return None, "candidate HIP library exceeds inspection bound"
+        return library, "ok"
+    except (OSError, ValueError):
+        return None, "candidate HIP library missing or outside build bin"
+
+
+def _hip_fatbin_section(binary: mmap.mmap) -> tuple[int, int] | None:
+    """Locate a bounded .hip_fatbin in a little-endian ELF64 DSO."""
+    if len(binary) < 64 or binary[:6] != b"\x7fELF\x02\x01":
+        return None
+    section_offset = struct.unpack_from("<Q", binary, 40)[0]
+    entry_size, count, names_index = struct.unpack_from("<HHH", binary, 58)
+    if (entry_size != 64 or count == 0 or count > 256 or names_index >= count
+            or section_offset + count * entry_size > len(binary)):
+        return None
+    headers = [struct.unpack_from("<IIQQQQIIQQ", binary,
+                                  section_offset + index * entry_size)
+               for index in range(count)]
+    names = headers[names_index]
+    if names[4] + names[5] > len(binary) or names[5] > 1024 * 1024:
+        return None
+    for header in headers:
+        name_offset = header[0]
+        if name_offset >= names[5]:
+            continue
+        start = names[4] + name_offset
+        end = binary.find(b"\0", start, names[4] + names[5])
+        if end < 0 or binary[start:end] != b".hip_fatbin":
+            continue
+        offset, size = header[4:6]
+        if size <= MAX_HIP_FATBIN_BYTES and offset + size <= len(binary):
+            return offset, size
+    return None
+
+
+def _embedded_hip_objects(binary: mmap.mmap, section: tuple[int, int]
+                          ) -> tuple[list[tuple[int, int]], str | None]:
+    """Parse clang bundle descriptors; never scan or copy outside the section."""
+    start, size = section
+    end = start + size
+    cursor = start
+    headers_seen = 0
+    objects: list[tuple[int, int]] = []
+    while cursor < end:
+        marker = binary.find(_BUNDLE_MAGIC, cursor, end)
+        if marker < 0:
+            break
+        headers_seen += 1
+        if headers_seen > MAX_BUNDLE_HEADERS:
+            return objects, "embedded bundle header count exceeds bound"
+        descriptor = marker + len(_BUNDLE_MAGIC)
+        if descriptor + 8 > end:
+            break
+        count = struct.unpack_from("<Q", binary, descriptor)[0]
+        if count == 0 or count > 16:
+            cursor = marker + len(_BUNDLE_MAGIC)
+            continue
+        descriptor += 8
+        valid = True
+        for _ in range(count):
+            if descriptor + 24 > end:
+                valid = False
+                break
+            relative, length, target_length = struct.unpack_from(
+                "<QQQ", binary, descriptor)
+            descriptor += 24
+            if target_length > 256 or descriptor + target_length > end:
+                valid = False
+                break
+            target = binary[descriptor:descriptor + target_length]
+            descriptor += target_length
+            object_offset = marker + relative
+            if (b"gfx90a" in target and b"amdgcn" in target
+                    and 0 < length <= MAX_OBJECT_BYTES
+                    and object_offset >= descriptor and object_offset + length <= end
+                    and binary[object_offset:object_offset + 4] == b"\x7fELF"):
+                objects.append((object_offset, length))
+                if len(objects) >= MAX_EMBEDDED_CANDIDATES:
+                    return objects, "embedded candidate scan reaches bound"
+        cursor = max(marker + len(_BUNDLE_MAGIC), descriptor) if valid else marker + len(_BUNDLE_MAGIC)
+    return objects, None
+
+
+def _embedded_hip_summary(build_dir: Path, result: dict[str, Any]) -> dict[str, Any]:
+    library, reason = _hip_library(build_dir)
+    if library is None:
+        result["reason"] = reason
+        return result
+    initial_stat = library.stat()
+    totals = {"scalar": 0, "vector": 0, "matrix": 0, "memory": 0, "other": 0}
+    deadline = time.monotonic() + MAX_TOTAL_S
+    with library.open("rb") as stream:
+        with mmap.mmap(stream.fileno(), 0, access=mmap.ACCESS_READ) as binary:
+            section = _hip_fatbin_section(binary)
+            if section is None:
+                result["reason"] = "bounded embedded HIP fatbin unavailable"
+                return result
+            objects, limit_reason = _embedded_hip_objects(binary, section)
+            if not objects:
+                result["reason"] = limit_reason or "no bounded gfx90a ELF code object in HIP fatbin"
+                return result
+            stream.seek(0)
+            container_hash = hashlib.sha256()
+            while chunk := stream.read(1024 * 1024):
+                container_hash.update(chunk)
+            relative_library = str(library.relative_to(build_dir.resolve()))
+            skipped = 0
+            for offset, length in objects:
+                if len(result["objects"]) >= MAX_OBJECTS:
+                    break
+                raw = binary[offset:offset + length]
+                row: dict[str, Any] = {
+                    "relative_path": f"{relative_library}#fatbin-{offset}.co",
+                    "sha256": hashlib.sha256(raw).hexdigest(), "bytes": length,
+                    "container_path": relative_library,
+                    "container_sha256": container_hash.hexdigest(),
+                    "container_bytes": initial_stat.st_size,
+                    "container_offset": offset, "disassembly_status": "unavailable"}
+                remaining = deadline - time.monotonic()
+                if remaining > 0:
+                    with tempfile.TemporaryDirectory(prefix="ak-codegen-") as temporary:
+                        object_path = Path(temporary) / "embedded.co"
+                        object_path.write_bytes(raw)
+                        disassembly, status = _disassemble(
+                            object_path, timeout_s=min(TIMEOUT_S, remaining))
+                else:
+                    disassembly, status = None, "total collector time budget exhausted"
+                row["disassembly_status"] = status
+                if disassembly is not None:
+                    counts = dict.fromkeys(totals, 0)
+                    for line in disassembly.splitlines():
+                        match = _INSTRUCTION.match(line) or _AMD_INSTRUCTION.match(line)
+                        if not match:
+                            continue
+                        op = match.group(1)
+                        kind = ("matrix" if "mfma" in op or "wmma" in op else
+                                "memory" if any(term in op for term in
+                                                ("load", "store", "buffer", "flat_", "ds_")) else
+                                "vector" if op.startswith("v_") else
+                                "scalar" if op.startswith("s_") else "other")
+                        counts[kind] += 1
+                        totals[kind] += 1
+                    if any(counts.values()):
+                        row["instruction_mix"] = counts
+                    else:
+                        skipped += 1
+                        continue
+                else:
+                    skipped += 1
+                    continue
+                result["objects"].append(row)
+    final_stat = library.stat()
+    if ((final_stat.st_dev, final_stat.st_ino, final_stat.st_size, final_stat.st_mtime_ns)
+            != (initial_stat.st_dev, initial_stat.st_ino, initial_stat.st_size,
+                initial_stat.st_mtime_ns)):
+        result["objects"] = []
+        result["reason"] = "candidate HIP library changed during inspection"
+        return result
+    result["instruction_mix"] = totals if any(totals.values()) else None
+    result["status"] = "partial" if result["instruction_mix"] else "unavailable"
+    result["reason"] = (
+        f"bounded sample of embedded gfx90a objects; {skipped} unparsed candidates skipped; "
+        "spills, occupancy and vectorization require separate verified evidence"
+        + (f"; {limit_reason}" if limit_reason else ""))
+    return result
 
 
 def _disassemble_cpu(path: Path, symbol: str, *, timeout_s: float) -> tuple[str | None, str]:
@@ -241,9 +427,11 @@ def summarize_codegen(backend: str, build_dir: str | Path) -> dict[str, Any]:
     try:
         objects, limit_reason = _objects(root)
         if not objects:
-            result["reason"] = limit_reason or (
-                "no standalone AMD code object; embedded HIP fatbin extraction unavailable")
-            return result
+            embedded = _embedded_hip_summary(root, result)
+            if limit_reason:
+                embedded["reason"] = (embedded["reason"] or "") + (
+                    "; standalone object scan: " + limit_reason)
+            return embedded
         totals = {"scalar": 0, "vector": 0, "matrix": 0, "memory": 0, "other": 0}
         deadline = time.monotonic() + MAX_TOTAL_S
         for path in objects:
