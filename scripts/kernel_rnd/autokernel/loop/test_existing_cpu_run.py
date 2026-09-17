@@ -10,6 +10,7 @@ from unittest import mock
 import pytest
 
 from . import campaign, campaign_cli, claim, cpu_profile, gates, pool, resolved_recipe as rr, run, serving
+from . import measurement_capture as mc, runtime_calibration as runtime_cal
 from .test_glm_frozen_requests import _canonical_launch, _manifest, _request
 from .test_campaign import _manifest as _campaign_manifest, _registry, _target
 from . import test_promotion_targets as promotion_fixture
@@ -19,7 +20,7 @@ from . import test_promotion_targets as promotion_fixture
 def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
         dry_run, feedback_root=None, profile_observer=None, profile_contexts=None, runtime_only=False,
         invalid_once=False, enrolled_pair=False, runtime_transition=None,
-        expected_claim_cycles=None, result_expectation=None):
+        expected_claim_cycles=None, result_expectation=None, runtime_declaration=True):
     fixture = promotion_fixture.TheKeepBuildsAProductionCompleteAnchor()
     fixture.setUp()
     try:
@@ -82,6 +83,16 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
                 campaign.CampaignManifest.from_dict(declaration), registry_snapshot=registry)
             resolved_file.write_text(json.dumps(campaign_cli.build_output(
                 resolved, verify_artifacts=False)))
+        if runtime_declaration:
+            statistical_store = mc.ArtifactStore(fixture.root / "statistics-material")
+            try:
+                statistical = runtime_cal.declare_statistics(store=statistical_store,
+                    campaign_id=resolved.campaign_id if enrolled_pair else "ak-loop",
+                    epoch="fixture-prospective-statistics")
+            finally:
+                statistical_store.close()
+            statistical_file = fixture.root / "runtime-statistics.json"
+            statistical_file.write_text(json.dumps(statistical.to_dict()))
         expected_requests = manifest.requests(("glm-fixed2029",), template)
         held, issued, measured, builds, oracles = [], [], [], [], []
         invalidated = []
@@ -169,8 +180,9 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
                     if "runtime_anchor" in context:
                         assert context["target"]["recipe"] == context["runtime_anchor"]
                     else:
-                        # The historical aku-* enrolled pair remains source-only.
-                        assert enrolled_pair and not runtime_only and runtime_transition is None
+                        # Missing prospective statistics leaves source research available.
+                        assert (enrolled_pair or not runtime_declaration) and not runtime_only \
+                            and runtime_transition is None
                     if runtime_only or (runtime_transition is not None and not issued):
                         treatment = run.actors._runtime_pair(
                             {"kind": "threads", "candidate": template.threads + 1},
@@ -200,6 +212,9 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
             argv += ["--cpu-serving-launch", str(launch_file), "--frozen-prompts", str(prompt_file),
                      "--experimental-branch", branch, "--iterations", "5", "--serving-pairs", "2",
                      "--cpu-calibrate-serving", "3", "--out", str(fixture.root / "result")]
+            if runtime_declaration:
+                argv += ["--runtime-statistics", str(statistical_file),
+                         "--runtime-calibration-max-launches", "800"]
             if enrolled_pair:
                 argv += ["--resolved-campaign", str(resolved_file), "--target-id", "target-a"]
             if dry_run:

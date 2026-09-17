@@ -567,7 +567,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cpu-calibrate-serving", type=int,
                         help="collect this many original serving calibration launches before iterations")
     parser.add_argument("--runtime-statistics", type=Path,
-                        help="optional original ServingStatisticsDeclaration; otherwise direct campaign input defaults")
+                        help="prospective original ServingStatisticsDeclaration for runtime work")
+    parser.add_argument("--runtime-calibration-max-launches", type=int,
+                        help="explicit upper bound for the complete A/A plus neutral runtime calibration")
     parser.add_argument("--runtime-recipe-reference", type=Path,
                         help="original serial-owned retained recipe reference; never a floor or launch permit")
     parser.add_argument("--runtime-recovery-reference", type=Path,
@@ -847,12 +849,19 @@ def main(argv: list[str] | None = None) -> int:
     # backend and exact serving-workload compatibility above; legacy CPU serving
     # retains its established ak-loop identity. Reduced source screens do not
     # select runtime recipes.
-    runtime_enabled = _runtime_serving_capable(direct_launch, selected_target,
+    runtime_capable = _runtime_serving_capable(direct_launch, selected_target,
         screen_scope=args.cpu_screen_scope, confirm_from=args.cpu_confirm_from)
+    runtime_enabled = runtime_capable and args.runtime_statistics is not None
     if (args.calibrate_runtime or args.runtime_statistics is not None
-            or args.runtime_recipe_reference is not None) and not runtime_enabled:
+            or args.runtime_recipe_reference is not None) and not runtime_capable:
         parser.error("prospective runtime campaigns require an eligible original full serving "
                      "target; source-only and reduced-screen campaigns remain unchanged")
+    if args.calibrate_runtime and args.runtime_statistics is None:
+        parser.error("runtime calibration requires explicit prospective --runtime-statistics")
+    if args.runtime_recipe_reference is not None and args.runtime_statistics is None:
+        parser.error("retained runtime recipe requires its explicit prospective --runtime-statistics")
+    if args.runtime_statistics is None and args.runtime_calibration_max_launches is not None:
+        parser.error("runtime calibration launch budget requires --runtime-statistics")
     experimental = direct_launch is not None and args.experimental_branch is not None
     owned_cpu_list = None
     build_cpu_list = cpu_launch.template.cpu_list if cpu_launch else "96-183"
@@ -1016,6 +1025,21 @@ def main(argv: list[str] | None = None) -> int:
     epoch = archive.epoch_for(anchor_commit=anchor_commit,
                               build_recipe=recipe.to_dict(),
                               **({"host_state": epoch_inputs} if epoch_inputs else {}))
+    runtime_statistical = None
+    runtime_epoch = None
+    runtime_calibration_launches = None
+    if args.runtime_statistics is not None:
+        from . import runtime_calibration
+        from .serving_preparation import ServingStatisticsDeclaration
+        try:
+            runtime_statistical = ServingStatisticsDeclaration.from_dict(
+                _read_cpu_document(args.runtime_statistics))
+            runtime_epoch, runtime_calibration_launches = runtime_calibration.prospective_budget(
+                campaign_id=resolved_campaign.campaign_id if selected_target is not None else "ak-loop",
+                source_epoch=epoch, statistical=runtime_statistical,
+                max_launches=args.runtime_calibration_max_launches)
+        except (OSError, ValueError, runtime_calibration.RuntimeCalibrationRefused) as exc:
+            parser.error(f"runtime calibration preflight refused before resource claim: {exc}")
     print(f"anchor    {anchor_commit[:12]}   epoch {epoch[:12]}")
 
     pp, tg, ubatch = bench.SURFACES[args.surface]
@@ -1157,7 +1181,9 @@ def main(argv: list[str] | None = None) -> int:
     if (args.calibrate_runtime or args.runtime_statistics is not None) and not direct_launch:
         parser.error("direct runtime calibration requires the original serving launch")
     runtime_preparation = ({} if runtime_enabled else {"status": "unavailable",
-        "reason": "strict runtime needs a prospective ak-* full serving frame; source research is unchanged"})
+        "reason": ("runtime calibration needs explicit prospective statistics and complete-launch budget; "
+                   "source research is unchanged") if runtime_capable else
+                  "strict runtime requires an eligible full serving target; source research is unchanged"})
     runtime_owner = [None]
     source_floor_refresh = [False]
     runtime_recipe_reference = [None]
@@ -1259,9 +1285,10 @@ def main(argv: list[str] | None = None) -> int:
             # rationale for both lives on `controller.inbox.read_inbox`'s docstring.
             "inbox": inbox.read_inbox(args.store / "inbox"),
             **({"runtime_anchor": feedback_anchor[0].to_dict(),
-                "runtime_preparation": dict(runtime_preparation),
                 "runtime_env_keys": sorted(runtime_env_keys)}
                if direct_launch and screen_state is None and runtime_enabled else {}),
+            **({"runtime_preparation": dict(runtime_preparation)}
+               if direct_launch and screen_state is None else {}),
             **({"target": {"scope": "experimental candidate, NOT canonical champion",
                             "recipe": feedback_anchor[0].to_dict(),
                             "requests": str(args.frozen_prompts),
@@ -2529,12 +2556,10 @@ def main(argv: list[str] | None = None) -> int:
     def install_runtime_owner():
         nonlocal direct_launch, cpu_launch, serving_recipe
         from . import runtime_admission, runtime_calibration
-        from .serving_preparation import ServingStatisticsDeclaration
         from ..evaluator import controls
         campaign_id = resolved_campaign.campaign_id if selected_target is not None else "ak-loop"
         statistical = runtime_calibration.declare_statistics(store=runtime_store,
-            campaign_id=campaign_id, epoch=epoch, supplied=None if args.runtime_statistics is None
-            else ServingStatisticsDeclaration.from_dict(_read_cpu_document(args.runtime_statistics)))
+            campaign_id=campaign_id, epoch=runtime_epoch, supplied=runtime_statistical)
         escalation = None if args.runtime_control_escalation is None else controls.OperatorEscalation(
             **_read_cpu_document(args.runtime_control_escalation))
         original = _cpu_arm(direct_launch, anchor_build[0])
@@ -2550,7 +2575,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"runtime recovery unavailable: {exc}", file=sys.stderr)
                 recovery = None
         runtime_owner[0] = runtime_admission.RuntimeAdmission(store=runtime_store,
-            held_claim=original_claims[0], campaign_id=campaign_id, epoch=epoch,
+            held_claim=original_claims[0], campaign_id=campaign_id, epoch=runtime_epoch,
             **({"gpu_claim": original_claims[-1]} if not cpu_launch else {}),
             original=original, prompts=manifest, statistical=statistical,
             host_state={**epoch_inputs, "nominal_khz": args.runtime_nominal_khz},
@@ -2568,12 +2593,12 @@ def main(argv: list[str] | None = None) -> int:
             default_recipe=runtime_owner[0].default.to_dict(),
             selected_recipe=runtime_owner[0].state["selected"],
             statistics=statistical.to_dict(),
-            calibration_launches=4 * statistical.controls.calibration_block_count,
+            calibration_launches=runtime_calibration_launches,
             historical_replay="original backend control owner supplies its separate declared frame")
         runtime_recipe_reference[0] = runtime_owner[0].selection_reference(selected,
             current_source_commit=current_anchor_commit[0], origin=runtime_recipe_reference[0])
         report_runtime_progress()
-        print(f"runtime   optional first-treatment setup: {4 * statistical.controls.calibration_block_count} "
+        print(f"runtime   optional first-treatment setup: {runtime_calibration_launches} "
               "original calibration server launches plus controls; source proposals do not require it")
     held_claim_evidence = None
     held_claim_error = None

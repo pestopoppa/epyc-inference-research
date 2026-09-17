@@ -665,6 +665,10 @@ class AgentPlanner:
         abstention = _abstention(body)
         if abstention is not None:
             return abstention
+        if "runtime_treatment" in body and context.get("runtime_anchor") is None:
+            preparation = context.get("runtime_preparation") or {}
+            return Abstain("runtime treatment unavailable before authoring: "
+                + str(preparation.get("reason") or "no prospective runtime frame is installed"))
         missing = {"mechanism_id", "statement", "falsifier", "target_surface",
                    "target_symbol"} - set(body)
         if missing:

@@ -44,6 +44,32 @@ class RuntimeLaunchBudgetExhausted(RuntimeCalibrationRefused):
     """No new launch after the original invocation bound; completed rows remain."""
 
 
+def prospective_budget(*, campaign_id, source_epoch, statistical, max_launches):
+    """Check a new runtime protocol before claiming hardware or writing its declaration.
+
+    The source epoch remains unchanged: a different prospective statistical
+    declaration gets a separate runtime epoch, never a rewrite of an old frame.
+    A launch cap is an operator-supplied *total calibration* budget, not a way to
+    truncate the owning A/A and neutral solver or reinterpret a partial prefix.
+    """
+    from .serving_preparation import ServingStatisticsDeclaration
+    if type(statistical) is not ServingStatisticsDeclaration:
+        raise RuntimeCalibrationRefused("explicit original runtime statistics are required")
+    statistical = ServingStatisticsDeclaration.from_dict(statistical.to_dict())
+    if statistical.commitment.campaign_id != campaign_id:
+        raise RuntimeCalibrationRefused("runtime statistics belong to a different campaign")
+    if type(source_epoch) is not str or len(source_epoch) != 64 or any(
+            char not in "0123456789abcdef" for char in source_epoch):
+        raise RuntimeCalibrationRefused("source epoch identity is malformed")
+    n = statistical.controls.calibration_block_count
+    if type(max_launches) is not int or max_launches < 4 * n:
+        raise RuntimeCalibrationRefused(
+            f"runtime calibration declares {4 * n} launches (A/A plus neutral); "
+            "supply an explicit total calibration launch budget at least that large")
+    return _digest({"source_epoch": source_epoch,
+                    "runtime_statistics_sha256": _digest(statistical.to_dict())}), 4 * n
+
+
 def declare_statistics(*, store, campaign_id, epoch, supplied=None):
     """Freeze campaign inputs once, before any direct candidate is measured.
 
