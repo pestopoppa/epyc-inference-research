@@ -1394,6 +1394,9 @@ def main(argv: list[str] | None = None) -> int:
                                            "--exclude-standard", "--", "ggml/src/", "src/").splitlines())
             cpu_ops = worker.worktree / "ggml/src/ggml-cpu/ops.cpp"
             iqk_rows_path = "ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp"
+            if changed == (iqk_rows_path,) and not cpu_launch:
+                return False, [gates.Verdict(
+                    "op_scope", False, "CPU IQK helper route requires a CPU target recipe")]
             scope_source = (cpu_ops if changed == ("ggml/src/ggml-cpu/ops.cpp",) else
                             worker.worktree / iqk_rows_path if changed == (iqk_rows_path,) else None)
             scope = gates.affected_op_scope(changed + untracked,

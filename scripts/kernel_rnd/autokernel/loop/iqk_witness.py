@@ -11,6 +11,7 @@ from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
+import platform
 import re
 import shutil
 import signal
@@ -74,6 +75,8 @@ def _check_one(build_dir: Path, *, resolved_recipe, source_root: Path,
     dso = build_dir / "bin/libggml-cpu.so.0"
     gdb = shutil.which("gdb")
     script = Path(__file__).with_name("iqk_gdb_probe.py")
+    if platform.machine().lower() not in {"x86_64", "amd64"}:
+        return Result("unavailable", "IQK use_ref register witness requires SysV AMD64")
     if not gdb or not binary.is_file() or not dso.is_file() or not script.is_file():
         return Result("unavailable", "IQK case witness binary, DSO, GDB or trusted script missing")
     resolved_recipe.validate_launch(resolved_recipe.template, build_dir,
