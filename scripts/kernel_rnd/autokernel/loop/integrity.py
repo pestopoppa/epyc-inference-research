@@ -282,6 +282,12 @@ def validate_candidate(worktree: Path, declared_paths: Sequence[str], *,
         scan.async_escape_findings,
         scan.instrument_frame_findings,
         scan.pointer_memoization_findings,
+        # Explicit benchmark/capture-phase probes are forbidden. Counter-derived
+        # findings can also describe legitimate hot-path state (e.g. ``calls``);
+        # those already receive the held-out confirmation below, not a blanket
+        # pre-build refusal.
+        tuple(row for row in scan.phase_detection_findings
+              if ":phase_detection:" in row),
         scan.capture_replay_findings,
         scan.content_specialization_findings,
     ) for finding in value)
