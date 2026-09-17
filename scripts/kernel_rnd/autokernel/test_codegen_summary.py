@@ -44,6 +44,88 @@ class TestCodegenSummary(unittest.TestCase):
             self.assertIn("non-CUDA", summary["ptx_sass_cubin"])
             self.assertIsNone(summary["occupancy"])
 
+    def test_cpu_symbol_summary_is_bounded_and_hashes_exact_library(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = root / "build"
+            bin_dir = build / "bin"
+            bin_dir.mkdir(parents=True)
+            elf = bin_dir / "libggml-cpu.so.0.16.0"
+            elf.write_bytes(b"fixture-cpu-elf")
+            (bin_dir / "libggml-cpu.so").symlink_to(elf.name)
+
+            def disassembly(_path, symbol, *, timeout_s):
+                self.assertGreater(timeout_s, 0)
+                if symbol != "ggml_compute_forward_gated_delta_net":
+                    return None, "CPU symbol absent from disassembly"
+                return ("00000100 <ggml_compute_forward_gated_delta_net>:\n"
+                        " 100: vmovaps %xmm0,%xmm1\n"
+                        " 104: mov (%rax),%ebx\n"
+                        " 108: add %ebx,%ecx\n"), "ok"
+
+            with mock.patch.object(codegen_summary, "_disassemble_cpu",
+                                   side_effect=disassembly):
+                result = codegen_summary.summarize_codegen("llama_cpu", build)
+            self.assertEqual(result["status"], "partial")
+            self.assertEqual(result["objects"][0]["relative_path"],
+                             "bin/libggml-cpu.so.0.16.0")
+            self.assertEqual(result["objects"][0]["sha256"],
+                             hashlib.sha256(b"fixture-cpu-elf").hexdigest())
+            self.assertEqual(result["objects"][0]["symbols"][0]["name"],
+                             "ggml_compute_forward_gated_delta_net")
+            self.assertEqual(result["instruction_mix"]["vector"], 1)
+            self.assertEqual(result["instruction_mix"]["memory"], 1)
+            self.assertEqual(result["instruction_mix"]["scalar"], 1)
+            self.assertIsNone(result["occupancy"])
+            self.assertIsNone(result["register_spills"])
+
+    def test_cpu_library_outside_build_or_symbols_absent_is_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = root / "build"
+            bin_dir = build / "bin"
+            bin_dir.mkdir(parents=True)
+            outside = root / "external.so"
+            outside.write_bytes(b"not this build")
+            (bin_dir / "libggml-cpu.so").symlink_to(outside)
+            self.assertEqual(codegen_summary.summarize_codegen(
+                "llama_cpu", build)["status"], "unavailable")
+            (bin_dir / "libggml-cpu.so").unlink()
+            (bin_dir / "libggml-cpu.so").write_bytes(b"stripped-fixture")
+            with mock.patch.object(codegen_summary, "_disassemble_cpu",
+                                   return_value=(None, "CPU symbol absent from disassembly")):
+                result = codegen_summary.summarize_codegen("llama_cpu", build)
+            self.assertEqual(result["status"], "unavailable")
+            self.assertEqual(result["objects"][0]["symbols"], [])
+            self.assertIsNone(result["instruction_mix"])
+
+    def test_cpu_retained_tuple_binds_library_and_disassembled_symbols(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = root / "build"
+            bin_dir = build / "bin"
+            bin_dir.mkdir(parents=True)
+            (bin_dir / "libggml-cpu.so.0.16.0").write_bytes(b"fixture-cpu-elf")
+            (bin_dir / "libggml-cpu.so").symlink_to("libggml-cpu.so.0.16.0")
+            symbol = "ggml_compute_forward_gated_delta_net"
+            disassembly = (f"00000100 <{symbol}>:\n"
+                           " 100: add %ebx,%ecx\n")
+            with mock.patch.object(codegen_summary, "_disassemble_cpu",
+                                   side_effect=lambda _path, name, **_kw: (
+                                       (disassembly, "ok") if name == symbol else
+                                       (None, "CPU symbol absent from disassembly"))):
+                summary = codegen_summary.retain_summary(
+                    root / "store", "a" * 40, backend="llama_cpu",
+                    build_dir=build, recipe={"kind": "fixture"},
+                    attempt_identity="cpu-keep", source_tree_oid="b" * 40)
+            self.assertEqual(summary["belief_claim_tuple"]["value"], 1)
+            self.assertEqual(summary["belief_claim_tuple"]["extra"]["disassembled_symbols"],
+                             [symbol])
+            self.assertEqual(summary["belief_claim_tuple"]["extra"]["code_objects"], [
+                {"relative_path": "bin/libggml-cpu.so.0.16.0",
+                 "sha256": hashlib.sha256(b"fixture-cpu-elf").hexdigest()}])
+            self.assertIn("cpu_objdump_stat", summary["build_frame"]["toolchain"])
+
     def test_disassembler_timeout_is_a_real_wall_bound(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             executable = Path(directory) / "stall"

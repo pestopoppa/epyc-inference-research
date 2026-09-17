@@ -29,7 +29,18 @@ MAX_CMAKE_CACHE_BYTES = 2 * 1024 * 1024
 TIMEOUT_S = 8.0
 MAX_TOTAL_S = 12.0
 LLVM_OBJDUMP = Path("/opt/rocm/llvm/bin/llvm-objdump")
+CPU_OBJDUMP = Path("/usr/bin/objdump")
+CPU_LIBRARY = "libggml-cpu.so"
+# Exported wrappers relevant to the current CPU GDN / quant-dot search. This
+# is a diagnostic sample, not a claim that every inlined helper was inspected.
+CPU_SYMBOLS = (
+    "ggml_compute_forward_gated_delta_net",
+    "ggml_vec_dot_q4_K_q8_K",
+    "ggml_vec_dot_q5_K_q8_K",
+    "ggml_vec_dot_q6_K_q8_K",
+)
 _INSTRUCTION = re.compile(r"^\s*[0-9a-f]+:\s+([a-z][a-z0-9_.]*)\b", re.I)
+_CPU_SYMBOL_HEADER = re.compile(r"^\s*[0-9a-f]+\s+<([^>]+)>:\s*$", re.I | re.M)
 
 
 def _disassemble(path: Path, *, timeout_s: float = TIMEOUT_S) -> tuple[str | None, str]:
@@ -94,6 +105,121 @@ def _objects(build_dir: Path) -> tuple[list[Path], str | None]:
     return found, None
 
 
+def _cpu_library(build_dir: Path) -> tuple[Path | None, str]:
+    """Resolve the bounded installed ggml CPU DSO, never an ambient library."""
+    try:
+        root = build_dir.resolve(strict=True)
+        library = (root / "bin" / CPU_LIBRARY).resolve(strict=True)
+        library.relative_to(root / "bin")
+        if not library.is_file():
+            return None, "candidate CPU library is not a regular file"
+        if library.stat().st_size > MAX_OBJECT_BYTES:
+            return None, "candidate CPU library exceeds inspection bound"
+        return library, "ok"
+    except (OSError, ValueError):
+        return None, "candidate CPU library missing or outside build bin"
+
+
+def _disassemble_cpu(path: Path, symbol: str, *, timeout_s: float) -> tuple[str | None, str]:
+    """Disassemble one allowlisted CPU symbol with a wall/output bound."""
+    if symbol not in CPU_SYMBOLS:
+        return None, "CPU symbol is not allowlisted"
+    if not CPU_OBJDUMP.is_file():
+        return None, "CPU objdump unavailable"
+    proc = subprocess.Popen(
+        (str(CPU_OBJDUMP), "--disassemble=" + symbol,
+         "--no-show-raw-insn", str(path)),
+        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    chunks: list[bytes] = []
+    total = 0
+    deadline = time.monotonic() + timeout_s
+    try:
+        assert proc.stdout is not None
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return None, "CPU disassembly timeout"
+            ready, _, _ = select.select([proc.stdout], [], [], remaining)
+            if not ready:
+                return None, "CPU disassembly timeout"
+            chunk = os.read(proc.stdout.fileno(), min(65536, MAX_OUTPUT_BYTES + 1 - total))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > MAX_OUTPUT_BYTES:
+                return None, "CPU disassembly output exceeds bound"
+        if proc.wait(timeout=max(0.1, deadline - time.monotonic())) != 0:
+            return None, "CPU objdump failed"
+        output = b"".join(chunks).decode("utf-8", "replace")
+        if symbol not in _CPU_SYMBOL_HEADER.findall(output):
+            return None, "CPU symbol absent from disassembly"
+        return output, "ok"
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
+        if proc.stdout is not None:
+            proc.stdout.close()
+
+
+def _cpu_summary(build_dir: Path, result: dict[str, Any]) -> dict[str, Any]:
+    library, reason = _cpu_library(build_dir)
+    if library is None:
+        result["reason"] = reason
+        return result
+    with library.open("rb") as stream:
+        raw = stream.read(MAX_OBJECT_BYTES + 1)
+    if len(raw) > MAX_OBJECT_BYTES:
+        result["reason"] = "candidate CPU library grew beyond inspection bound"
+        return result
+    row: dict[str, Any] = {
+        "relative_path": str(library.relative_to(build_dir.resolve())),
+        "sha256": hashlib.sha256(raw).hexdigest(), "bytes": len(raw),
+        "disassembly_status": "unavailable", "symbols": []}
+    totals = {"scalar": 0, "vector": 0, "matrix": 0, "memory": 0, "other": 0}
+    deadline = time.monotonic() + MAX_TOTAL_S
+    failures = []
+    for symbol in CPU_SYMBOLS:
+        remaining = deadline - time.monotonic()
+        disassembly, status = (
+            _disassemble_cpu(library, symbol, timeout_s=min(TIMEOUT_S, remaining))
+            if remaining > 0 else (None, "total collector time budget exhausted"))
+        if disassembly is None:
+            failures.append(f"{symbol}: {status}")
+            continue
+        counts = dict.fromkeys(totals, 0)
+        in_symbol = False
+        for line in disassembly.splitlines():
+            header = _CPU_SYMBOL_HEADER.match(line)
+            if header:
+                in_symbol = header.group(1) == symbol
+                continue
+            if not in_symbol:
+                continue
+            match = _INSTRUCTION.match(line)
+            if not match:
+                continue
+            op = match.group(1)
+            kind = "memory" if "(%" in line or "[" in line else \
+                   "vector" if op.startswith("v") else "scalar"
+            counts[kind] += 1
+            totals[kind] += 1
+        if any(counts.values()):
+            row["symbols"].append({"name": symbol, "instruction_mix": counts})
+        else:
+            failures.append(f"{symbol}: no parsed instructions")
+    if row["symbols"]:
+        row["instruction_mix"] = totals
+        row["disassembly_status"] = "ok"
+        result["instruction_mix"] = totals
+        result["status"] = "partial"
+    result["objects"] = [row]
+    result["reason"] = "; ".join(failures) if failures else (
+        "spills, occupancy and vectorization require separate verified evidence")
+    return result
+
+
 def summarize_codegen(backend: str, build_dir: str | Path) -> dict[str, Any]:
     """Return a bounded summary; unavailable evidence is explicit, never fabricated."""
     result: dict[str, Any] = {
@@ -104,8 +230,7 @@ def summarize_codegen(backend: str, build_dir: str | Path) -> dict[str, Any]:
         "objects": [], "status": "unavailable", "reason": None,
     }
     if backend == "llama_cpu":
-        result["reason"] = "CPU machine-code analysis is not implemented"
-        return result
+        return _cpu_summary(Path(build_dir), result)
     if backend != "llama_gpu":
         result["reason"] = "unsupported backend"
         return result
@@ -218,6 +343,28 @@ def _belief_claim_tuple(summary: Mapping[str, Any], *, attempt_identity: str,
                         source_tree_oid: str, observed_at: str) -> dict[str, Any]:
     """Producer-authored ClaimTuple-shaped observation; no local grading rule."""
     available = summary["status"] == "partial" and summary["instruction_mix"] is not None
+    extra = {
+        "authority": "diagnostic_only", "not_throughput_or_correctness": True,
+        "not_occupancy_evidence": True,
+        "attempt_identity": attempt_identity,
+        "retained_source_commit": summary["champion_head"],
+        "retained_source_tree_oid": source_tree_oid,
+        "backend": summary["backend"], "toolchain": summary["toolchain"],
+        "build_frame_sha256": summary["build_frame_sha256"],
+        "summary_core_sha256": summary["summary_core_sha256"],
+        "code_objects": [{"relative_path": row["relative_path"],
+                          "sha256": row["sha256"]}
+                         for row in summary["objects"] if "sha256" in row],
+        "instruction_mix": summary["instruction_mix"],
+        "unavailable_fields": [name for name in
+                               ("register_spills", "occupancy", "vectorization")
+                               if summary[name] is None],
+        "ptx_sass_cubin": summary["ptx_sass_cubin"],
+    }
+    if summary["backend"] == "llama_cpu":
+        extra["disassembled_symbols"] = [
+            symbol["name"] for row in summary["objects"]
+            for symbol in row.get("symbols", [])]
     return {
         "measurement_id": "ak-codegen:" + attempt_identity + ":" + summary["build_frame_sha256"],
         "metric": "codegen_disassembly_availability",
@@ -235,24 +382,7 @@ def _belief_claim_tuple(summary: Mapping[str, Any], *, attempt_identity: str,
         # impossible. The reader re-derives the core digest below instead.
         "attestation_sha256": "", "attestation_verified": None,
         "source_class": "measurement",
-        "extra": {
-            "authority": "diagnostic_only", "not_throughput_or_correctness": True,
-            "not_occupancy_evidence": True,
-            "attempt_identity": attempt_identity,
-            "retained_source_commit": summary["champion_head"],
-            "retained_source_tree_oid": source_tree_oid,
-            "backend": summary["backend"], "toolchain": summary["toolchain"],
-            "build_frame_sha256": summary["build_frame_sha256"],
-            "summary_core_sha256": summary["summary_core_sha256"],
-            "code_objects": [{"relative_path": row["relative_path"],
-                              "sha256": row["sha256"]}
-                             for row in summary["objects"] if "sha256" in row],
-            "instruction_mix": summary["instruction_mix"],
-            "unavailable_fields": [name for name in
-                                   ("register_spills", "occupancy", "vectorization")
-                                   if summary[name] is None],
-            "ptx_sass_cubin": summary["ptx_sass_cubin"],
-        },
+        "extra": extra,
     }
 
 
@@ -276,6 +406,15 @@ def retain_summary(store: Path, champion_head: str, *, backend: str,
     if attempt_identity is not None and not attempt_identity.strip():
         raise ValueError("attempt identity must be nonempty")
     summary["toolchain"] = _toolchain_identity(Path(build_dir))
+    if backend == "llama_cpu":
+        try:
+            stat = CPU_OBJDUMP.stat()
+            summary["toolchain"]["cpu_objdump_stat"] = {
+                "path": str(CPU_OBJDUMP.resolve()), "device": stat.st_dev,
+                "inode": stat.st_ino, "bytes": stat.st_size,
+                "mtime_ns": stat.st_mtime_ns}
+        except OSError:
+            summary["toolchain"]["cpu_objdump_stat"] = None
     binary = Path(build_dir) / "bin" / "llama-bench"
     try:
         stat = binary.stat()

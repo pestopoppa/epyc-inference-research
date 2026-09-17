@@ -47,9 +47,11 @@ Every committed source keep (GPU or direct CPU) also gets a bounded diagnostic a
 `<store>/codegen/<champion-commit>.<backend>.<build-frame-sha256>.json`; its contents are embedded in that
 keep's experiment row. The collector hashes up to eight standalone AMD
 `.hsaco`/`.co` objects and, when ROCm `llvm-objdump` can disassemble them,
-counts scalar/vector/matrix/memory instructions. CPU builds currently record
-an explicit unavailable machine-code summary. This is **not** an additional
-keep gate. The current `llama.cpp` HIP build may contain only an embedded
+counts scalar/vector/matrix/memory instructions. CPU builds inspect only the
+bounded installed `libggml-cpu.so` and allowlisted GDN/quant-dot wrapper symbols;
+their x86 disassembly is a diagnostic sample, not proof that an edited helper
+executed. A missing/stripped symbol reports unavailable rather than an inferred
+instruction mix. This is **not** an additional keep gate. The current `llama.cpp` HIP build may contain only an embedded
 fatbin; on this host `roc-obj-extract` is unusable (missing `File::Which`), so
 the artifact must then say `unavailable` instead of inventing a disassembly.
 Spills, occupancy, vectorization and CUDA PTX/SASS/CUBIN are likewise never
