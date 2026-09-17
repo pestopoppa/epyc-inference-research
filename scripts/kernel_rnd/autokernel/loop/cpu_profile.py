@@ -1151,6 +1151,41 @@ def ranked_levers(symbol_periods, total, *, limit=8):
     return ranked[:limit]
 
 
+def loop_observation(reference, *, store_root):
+    """Reopen one original request profile for planning, never as an A/B claim."""
+    with closing(mc.ArtifactStore(Path(store_root) / "cpu-profiles")) as store:
+        body = reopen_loop_profile(reference, store=store)
+    measured = body["phases"][1]["samples"]
+    total = measured["sampled_period_total"]
+    symbols = sorted(measured["symbol_periods"],
+        key=lambda row: (-row["period"], row["dso"], row["symbol"]))
+    return {"status": "observed",
+        "record": str(Path(store_root) / "cpu-profiles" / reference["locator"]),
+        "record_sha256": reference["sha256"],
+        "execution_digest": body["request"]["execution_digest"],
+        "prompt_manifest_digest": body["request"]["prompt_manifest_digest"],
+        "sampled_period_total": total, "samples": measured["samples"],
+        "limitations": list(LIMITATIONS),
+        "hotspots": [{**_plain(row), "sampled_period_fraction": row["period"] / total}
+                     for row in symbols[:12]],
+        "ranked_levers": ranked_levers(symbols, total)}
+
+
+def cached_loop_observation(reference, *, store_root, anchor_commit,
+                            execution_digest, prompt_manifest_digest, scope):
+    """Reuse only the same source, binary/DSOs, request and CPU allocation."""
+    if reference is None or any((reference["anchor_commit"] != anchor_commit,
+            reference["execution_digest"] != execution_digest,
+            reference["prompt_manifest_digest"] != prompt_manifest_digest,
+            reference["scope"] != scope)):
+        return None
+    observed = loop_observation(reference["record"], store_root=store_root)
+    if (observed["execution_digest"] != execution_digest
+            or observed["prompt_manifest_digest"] != prompt_manifest_digest):
+        raise CpuProfileRefused("retained CPU profile differs from exact original launch/request")
+    return observed
+
+
 def profile_loop(recipe, prompts, *, store_root, perf_path="/usr/bin/perf",
                  timeout_s=1800, server_interpreter=None):
     """Separate observational launch using the loop's actual current binary and requests."""
@@ -1181,18 +1216,7 @@ def profile_loop(recipe, prompts, *, store_root, perf_path="/usr/bin/perf",
                 "profile_claim_tuple": _loop_claim(body, artifact.to_dict(),
                     datetime.now(timezone.utc).date().isoformat())}
             exported = store.write(record["run_id"], record)
-            original = reopen_loop_profile(exported.to_dict(), store=store)
-            measured = original["phases"][1]["samples"]
-            total = measured["sampled_period_total"]
-            symbols = sorted(measured["symbol_periods"],
-                key=lambda row: (-row["period"], row["dso"], row["symbol"]))
-            return {"status": "observed", "record": str(store.root / exported.locator),
-                "record_sha256": exported.sha256, "execution_digest": recipe.execution_digest,
-                "prompt_manifest_digest": prompts.digest, "sampled_period_total": total,
-                "samples": measured["samples"], "limitations": list(LIMITATIONS),
-                "hotspots": [{**_plain(row), "sampled_period_fraction": row["period"] / total}
-                             for row in symbols[:12]],
-                "ranked_levers": ranked_levers(symbols, total)}
+            return loop_observation(exported.to_dict(), store_root=store_root)
         except BaseException as exc:
             if capture is not None:
                 capture.abort(f"{type(exc).__name__}: {exc}")

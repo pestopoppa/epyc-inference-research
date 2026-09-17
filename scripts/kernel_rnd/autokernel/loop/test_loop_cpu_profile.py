@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from . import actors, cpu_profile as cp, measurement_capture as mc, planned_serving as ps, resolved_recipe as rr
+from . import actors, cpu_profile as cp, measurement_capture as mc, planned_serving as ps, resolved_recipe as rr, serial_run as sr, status
 from .test_cpu_profile_runtime import fixture
 from .test_glm_frozen_requests import _request
 from .test_existing_cpu_run import test_existing_main_cpu_five_iterations_preserves_canonical_champion as _run
@@ -62,6 +62,66 @@ def test_direct_original_token_cache_request_and_raw_reopen(tmp_path):
     for line in events.read_text().splitlines():
         with pytest.raises(ProcessLookupError):
             os.kill(int(line.split()[1]), 0)
+
+
+def test_original_profile_reference_reuses_only_exact_identity_and_refuses_tamper(tmp_path):
+    result, _config, _events = produce(tmp_path)
+    commit = "a" * 40
+    result["anchor_commit"] = commit
+    reference = sr.cpu_profile_reference(result, store=tmp_path / "direct",
+        anchor_commit=commit, scope="half")
+    assert reference["record"]["sha256"] == result["record_sha256"]
+    assert sr.cpu_profile_reference(result, store=tmp_path / "direct",
+        anchor_commit="b" * 40, scope="half") is None
+    assert sr.cpu_profile_reference(result, store=tmp_path / "direct",
+        anchor_commit=commit, scope="full_confirmation")["scope"] == "full_confirmation"
+    kwargs = {"store_root": tmp_path / "direct", "anchor_commit": commit,
+        "execution_digest": result["execution_digest"],
+        "prompt_manifest_digest": result["prompt_manifest_digest"], "scope": "half"}
+    assert cp.cached_loop_observation(reference, **kwargs)["ranked_levers"] == result["ranked_levers"]
+    for changed in ({"anchor_commit": "b" * 40},
+                    {"execution_digest": "b" * 64},
+                    {"prompt_manifest_digest": "b" * 64},
+                    {"scope": "full"}):
+        with patch.object(cp, "loop_observation", side_effect=AssertionError("stale profile reopened")):
+            assert cp.cached_loop_observation(reference, **(kwargs | changed)) is None
+    with pytest.raises(sr.SerialRefused, match="identity"):
+        sr._cpu_profile_reference(reference, store=tmp_path / "direct",
+            anchor_commit="b" * 40, scope="half")
+    path = Path(result["record"])
+    path.write_bytes(path.read_bytes() + b"\n")
+    with pytest.raises(sr.SerialRefused, match="original record changed"):
+        sr._cpu_profile_reference(reference, store=tmp_path / "direct",
+            anchor_commit=commit, scope="half")
+
+
+def test_profile_continuation_is_optional_and_old_batch_still_reopens(tmp_path):
+    result, config, _events = produce(tmp_path)
+    result["anchor_commit"] = "a" * 40
+    recipe = rr.resolved_recipe_from_dict(config["resolved_recipe"])
+    launch, prompts, out = (tmp_path / name for name in
+                            ("launch.json", "prompts.json", "batch"))
+    launch.write_text(json.dumps(recipe.to_dict()))
+    prompts.write_text(json.dumps(config["prompt_manifest"]))
+    argv = ["--worktree", str(tmp_path), "--model", recipe.model.path,
+        "--anchor-build", str(recipe.build_dir), "--store", str(tmp_path / "direct"),
+        "--experimental-branch", "ak/experimental/profile-fixture",
+        "--cpu-serving-launch", str(launch), "--frozen-prompts", str(prompts),
+        "--iterations", "1", "--out", str(out)]
+    reference = sr.cpu_profile_reference(result, store=tmp_path / "direct",
+        anchor_commit="a" * 40, scope="full")
+    row = sr.continuation(argv=argv, binding=sr.input_binding(argv), terminal="complete",
+        worktree=tmp_path, branch="ak/experimental/profile-fixture",
+        model=recipe.model.path, selected_target=None,
+        anchor_build=recipe.build_dir, anchor_commit="a" * 40,
+        iterations_requested=1, outcomes=[type("Outcome", (), {"status": "abstained"})()],
+        cpu_profile_reference=reference)
+    status.write_json(out, "loop-run.json", {"continuation": row})
+    status.write_json(out, "loop-continuation.json", row)
+    assert sr.load_completed(out / "loop-continuation.json")[0]["cpu_profile_reference"] == reference
+    old = {key: value for key, value in row.items() if key != "cpu_profile_reference"}
+    status.write_json(out, "loop-continuation.json", old)
+    assert "cpu_profile_reference" not in sr.load_completed(out / "loop-continuation.json")[0]
 
 
 def test_permission_denial_has_no_live_child(tmp_path):

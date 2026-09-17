@@ -324,6 +324,7 @@ def preview_batch(original, prior, *, batch_iterations=1):
     if serial_run.option(original, "--cpu-serving-launch") is None:
         return {"scope": "full", "candidate": None}
     recent = None
+    prior_profile = None
     if prior is not None:
         receipt, sha = serial_run.load_completed(Path(prior["path"]))
         if sha != prior["sha256"]:
@@ -336,10 +337,31 @@ def preview_batch(original, prior, *, batch_iterations=1):
             return {"scope": "full_confirmation", "candidate": screen["candidate"],
                     "confirm_from": prior["path"]}
         recent = receipt.get("last_outcome_reference")
+        prior_profile = receipt.get("cpu_profile_reference")
     if batch_iterations != 1 or serial_run.option(original, "--resolved-campaign") is None:
         return {"scope": "full", "candidate": None}
     full = rr.CanonicalResolvedRecipe.from_dict(serial_run._json(Path(
         serial_run.option(original, "--cpu-serving-launch")))[0])
+    if prior_profile is not None:
+        from . import cpu_profile
+        try:
+            observed = cpu_profile.loop_observation(prior_profile["record"],
+                store_root=serial_run.option(original, "--store"))
+            if (observed["execution_digest"] != prior_profile["execution_digest"]
+                    or observed["prompt_manifest_digest"] != prior_profile["prompt_manifest_digest"]):
+                raise ScreenRefused("retained CPU profile differs from its original launch/request")
+            ranked = observed["ranked_levers"]
+        except (OSError, ValueError, KeyError) as exc:
+            # Unknown profile evidence cannot justify a reduced screen. The
+            # child will collect a new observation on the original full scope.
+            return {"scope": "full", "candidate": None,
+                "reason": f"prior CPU profile cannot be reopened: {type(exc).__name__}: {exc}"[:512]}
+        if ranked and ranked[0]["family"] == "thread-synchronization-and-work-balance":
+            return {"scope": "full", "candidate": None,
+                "mechanism_family": "scale_sensitive",
+                "basis": "top sampled-cycle family in the prior sealed original-request CPU profile; "
+                         "scope selection only, not full-target timing or a gain",
+                "profile_record_sha256": prior_profile["record"]["sha256"]}
     hint = mechanism_hint(Path(serial_run.option(original, "--store")), full, recent=recent)
     if hint["scope"] == "full":
         return {**hint, "candidate": None}

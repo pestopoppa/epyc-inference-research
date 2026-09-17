@@ -1587,11 +1587,28 @@ def main(argv: list[str] | None = None) -> int:
             from . import cpu_profile
             cpu_profile_observation.clear()
             cpu_profile_observation["status"] = "unavailable"
+            profile_arm = _cpu_arm(direct_launch, anchor_build[0])
+            retained = resumed.get("cpu_profile_reference") if resumed is not None else None
+            if retained is not None:
+                try:
+                    observed = cpu_profile.cached_loop_observation(retained,
+                        store_root=args.store, anchor_commit=current_anchor_commit[0],
+                        execution_digest=profile_arm.execution_digest,
+                        prompt_manifest_digest=manifest.digest,
+                        scope=(screen_state or {}).get("scope", "full"))
+                except (cpu_profile.CpuProfileRefused, OSError, ValueError) as exc:
+                    print(f"profile   retained CPU observation unavailable ({exc}); reprofile")
+                else:
+                    if observed is not None:
+                        cpu_profile_observation.update(observed)
+                        cpu_profile_observation["anchor_commit"] = current_anchor_commit[0]
+                        print(f"profile   reused original CPU observation; record {observed['record']}")
+                        return
             publish("running", latest, step="CPU original-request observational profiling")
             try:
                 with cpu_measurement_window():
                     observed = cpu_profile.profile_loop(
-                        _cpu_arm(direct_launch, anchor_build[0]), manifest,
+                        profile_arm, manifest,
                         store_root=args.store, perf_path=args.cpu_profiler,
                         timeout_s=min(1800, resolved_campaign.resources.stage_timeout_s)
                         if selected_identity else 1800)
@@ -1602,6 +1619,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"profile   CPU UNAVAILABLE ({exc})")
             else:
                 cpu_profile_observation.update(observed)
+                cpu_profile_observation["anchor_commit"] = current_anchor_commit[0]
                 print(f"profile   CPU {len(observed['hotspots'])} sampled symbols; "
                       f"record {observed['record']}")
             return
@@ -3024,6 +3042,11 @@ def main(argv: list[str] | None = None) -> int:
                     cor_commit=serial_run.full_commit(args.worktree, cor_commit[0])
                     if not experimental else None,
                     **({"cpu_screen": screen_state} if screen_state is not None else {}),
+                    **({"cpu_profile_reference": serial_run.cpu_profile_reference(
+                        cpu_profile_observation, store=args.store,
+                        anchor_commit=current_anchor_commit[0],
+                        scope=(screen_state or {}).get("scope", "full"))}
+                       if cpu_profile_observation.get("status") == "observed" else {}),
                     **({"experimental_source_keeps": keep_references}
                        if keep_references else {}),
                     **({"source_lineage_keeps": source_lineage_references + keep_references}
