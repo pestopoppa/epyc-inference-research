@@ -51,9 +51,11 @@ counts scalar/vector/matrix/memory instructions. CPU builds inspect only the
 bounded installed `libggml-cpu.so` and allowlisted GDN/quant-dot wrapper symbols;
 their x86 disassembly is a diagnostic sample, not proof that an edited helper
 executed. A missing/stripped symbol reports unavailable rather than an inferred
-instruction mix. This is **not** an additional keep gate. The current `llama.cpp` HIP build may contain only an embedded
-fatbin; on this host `roc-obj-extract` is unusable (missing `File::Which`), so
-the artifact must then say `unavailable` instead of inventing a disassembly.
+instruction mix. This is **not** an additional keep gate. If the current HIP
+library has no standalone code object, the producer can inspect a bounded sample
+of gfx90a ELF objects in its embedded fatbin and bind each extracted object to
+the candidate library hash and byte offset. This is not a complete fatbin census
+or per-kernel attribution; unavailable bytes/tools remain explicitly unavailable.
 Spills, occupancy, vectorization and CUDA PTX/SASS/CUBIN are likewise never
 inferred from this MI210 diagnostic. A separate verified compiler/profiler
 receipt is required before any of those become a mechanism claim.
