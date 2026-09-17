@@ -1,0 +1,13 @@
+{
+  "build": "/mnt/raid0/llm/worktrees/sub-gpu-prep-stable-diffusion.cpp/build-rocm-variants-20260916",
+  "sd_server_sha256": "d33cbe6f064ae306f4bacd84a854a4539f47dd7d3b41901f3451b24f84d05b50",
+  "sd_server_mtime": "2026-09-16T15:07:26.604102+00:00",
+  "knobs_compiled_in": true,
+  "linkage_exit": 0,
+  "linkage_output": "binary : /mnt/raid0/llm/worktrees/sub-gpu-prep-stable-diffusion.cpp/build-rocm-variants-20260916/bin/sd-server\nexpect : libraries under /mnt/raid0/llm/worktrees/sub-gpu-prep-stable-diffusion.cpp/build-rocm-variants-20260916\n\n  OK   libggml.so.0                 -> /mnt/raid0/llm/worktrees/sub-gpu-prep-stable-diffusion.cpp/build-rocm-variants-20260916/bin/libggml.so.0\n  OK   libggml-cpu.so.0             -> /mnt/raid0/llm/worktrees/sub-gpu-prep-stable-diffusion.cpp/build-rocm-variants-20260916/bin/libggml-cpu.so.0\n  OK   libggml-base.so.0            -> /mnt/raid0/llm/worktrees/sub-gpu-prep-stable-diffusion.cpp/build-rocm-variants-20260916/bin/libggml-base.so.0\n  OK   libggml-hip.so.0             -> /mnt/raid0/llm/worktrees/sub-gpu-prep-stable-diffusion.cpp/build-rocm-variants-20260916/bin/libggml-hip.so.0\n\nLD_LIBRARY_PATH order as the loader sees it:\n         1\t/mnt/raid0/llm/worktrees/sub-gpu-prep-stable-diffusion.cpp/build-rocm-variants-20260916/bin\n         2\t/opt/rocm/lib\n\nPASS: all linked ggml libraries resolve inside /mnt/raid0/llm/worktrees/sub-gpu-prep-stable-diffusion.cpp/build-rocm-variants-20260916\nNOTE: ggml backends (ggml-hip, ggml-cpu-<arch>) are dlopened at RUNTIME and\n      are not covered by ldd. Confirm the intended device appears in the\n      program's own startup log (e.g. 'Device 0: AMD Instinct MI210') and\n      do not trust a 'use gpu = 1' flag alone \u2014 that flag reports what was\n      REQUESTED, not what was loaded.\n",
+  "port_free": true,
+  "vram_used_b": 13062144,
+  "vram_total_b": 68702699520,
+  "vram_free_b": 68689637376,
+  "prod_cpu_pid_alive": true
+}
