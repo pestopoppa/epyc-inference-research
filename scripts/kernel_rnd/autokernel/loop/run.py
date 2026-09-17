@@ -879,6 +879,10 @@ def main(argv: list[str] | None = None) -> int:
     runtime_capable = _runtime_serving_capable(direct_launch, selected_target,
         screen_scope=args.cpu_screen_scope, confirm_from=args.cpu_confirm_from)
     runtime_enabled = runtime_capable and args.runtime_statistics is not None
+    # A full CPU launch can test a topology/NUMA hypothesis without claiming the
+    # strict runtime protocol has admitted a recipe. Reduced source screens cannot.
+    runtime_probe_enabled = (runtime_capable and args.runtime_statistics is None
+                             and direct_launch.backend == "cpu")
     if (args.calibrate_runtime or args.runtime_statistics is not None
             or args.runtime_recipe_reference is not None) and not runtime_capable:
         parser.error("prospective runtime campaigns require an eligible original full serving "
@@ -1207,9 +1211,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if (args.calibrate_runtime or args.runtime_statistics is not None) and not direct_launch:
         parser.error("direct runtime calibration requires the original serving launch")
-    runtime_preparation = ({} if runtime_enabled else {"status": "unavailable",
+    runtime_preparation = ({} if runtime_enabled else {"status": (
+        "observation_only" if runtime_probe_enabled else "unavailable"),
         "reason": ("runtime calibration needs explicit prospective statistics and complete-launch budget; "
-                   "source research is unchanged") if runtime_capable else
+                   "runtime probes cannot select a recipe or keep") if runtime_probe_enabled else
                   "strict runtime requires an eligible full serving target; source research is unchanged"})
     runtime_owner = [None]
     source_floor_refresh = [False]
@@ -1251,7 +1256,9 @@ def main(argv: list[str] | None = None) -> int:
                 "request-scoped sampled user-cycle attribution (or its unavailable reason); "
                 "fractions are not wall-time shares or optimization gains. Do not invent "
                 "hotspots or reuse GPU timing evidence as CPU evidence. "
-                "Author/review source only: the existing loop owns compilation, the CPU "
+                "Author/review source only for source hypotheses; runtime treatments "
+                "have no source edit and are observation-only unless separately admitted. "
+                "The existing loop owns compilation, the CPU "
                 "oracle, resource locking and paired serving measurements. Preserve the "
                 "selected request, cache/seed/speculation and placement conditions. "
                 "Keeps remain on the explicitly selected experimental candidate branch; "
@@ -1312,8 +1319,10 @@ def main(argv: list[str] | None = None) -> int:
             # rationale for both lives on `controller.inbox.read_inbox`'s docstring.
             "inbox": inbox.read_inbox(args.store / "inbox"),
             **({"runtime_anchor": feedback_anchor[0].to_dict(),
-                "runtime_env_keys": sorted(runtime_env_keys)}
-               if direct_launch and screen_state is None and runtime_enabled else {}),
+                "runtime_env_keys": sorted(runtime_env_keys),
+                "runtime_observation_only": not runtime_enabled}
+               if direct_launch and screen_state is None
+               and (runtime_enabled or runtime_probe_enabled) else {}),
             **({"runtime_preparation": dict(runtime_preparation)}
                if direct_launch and screen_state is None else {}),
             **({"target": {"scope": "experimental candidate, NOT canonical champion",
@@ -1362,7 +1371,7 @@ def main(argv: list[str] | None = None) -> int:
                 return False, [gates.Verdict("cpu_screen", False,
                                             "common-scope source screen does not select runtime recipes")]
             if hypothesis.runtime_pair is not None:
-                if not runtime_enabled:
+                if not runtime_enabled and not runtime_probe_enabled:
                     return False, [gates.Verdict("runtime_preparation", False,
                         runtime_preparation.get("reason", "strict runtime frame is unavailable"))]
                 pair = hypothesis.runtime_pair
@@ -1552,25 +1561,26 @@ def main(argv: list[str] | None = None) -> int:
             if hypothesis.runtime_pair is not None:
                 pair = hypothesis.runtime_pair
                 from . import runtime_calibration
-                try:
-                    def strict_compare():
-                        row = runtime_owner[0].compare(pair)
-                        if row.get("belief_export_receipt"):
-                            feedback.exported(Path(row["belief_export_receipt"]))
-                        return row
-                    return _serving_comparison(strict_compare,
-                        "experimental_runtime_treatment_not_source_champion",
-                        measurement_window=cpu_measurement_window)
-                except runtime_calibration.RuntimeCalibrationRefused as exc:
-                    if isinstance(exc, runtime_calibration.RuntimeLaunchBudgetExhausted):
-                        runtime_enabled = False
-                        runtime_preparation.update(status="budget_exhausted", reason=str(exc))
+                if runtime_enabled:
+                    try:
+                        def strict_compare():
+                            row = runtime_owner[0].compare(pair)
+                            if row.get("belief_export_receipt"):
+                                feedback.exported(Path(row["belief_export_receipt"]))
+                            return row
+                        return _serving_comparison(strict_compare,
+                            "experimental_runtime_treatment_not_source_champion",
+                            measurement_window=cpu_measurement_window)
+                    except runtime_calibration.RuntimeCalibrationRefused as exc:
+                        if isinstance(exc, runtime_calibration.RuntimeLaunchBudgetExhausted):
+                            runtime_enabled = False
+                            runtime_preparation.update(status="budget_exhausted", reason=str(exc))
+                            report_runtime_progress()
+                            raise loop.TailRefused("runtime preparation budget ended; original prefix retained, "
+                                                   "source research and other targets remain available") from exc
+                        runtime_preparation.update(status="observed_not_admitted", reason=str(exc))
                         report_runtime_progress()
-                        raise loop.TailRefused("runtime preparation budget ended; original prefix retained, "
-                                               "source research and other targets remain available") from exc
-                    runtime_preparation.update(status="observed_not_admitted", reason=str(exc))
-                    report_runtime_progress()
-                    print(f"runtime admission unavailable: {exc}; retaining unqualified observation")
+                        print(f"runtime admission unavailable: {exc}; retaining unqualified observation")
                 return _serving_comparison(lambda: serving.compare(
                     pair.anchor.template, anchor_build[0], anchor_build[0],
                     pairs=args.serving_pairs, floor_pct=None, port=pair.anchor.port,

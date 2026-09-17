@@ -90,8 +90,9 @@ def test_source_research_continues_without_implicit_800_launch_runtime_frame(mon
     monkeypatch.setattr(run.status, "write_json", written)
     test_existing_main_cpu_five_iterations_preserves_canonical_champion(
         False, runtime_declaration=False)
-    assert observed and observed[0]["runtime_preparation"]["status"] == "unavailable"
+    assert observed and observed[0]["runtime_preparation"]["status"] == "observation_only"
     assert "explicit prospective statistics" in observed[0]["runtime_preparation"]["reason"]
+    assert "cannot select a recipe or keep" in observed[0]["runtime_preparation"]["reason"]
     assert all(row.get("runtime_pair") is None for row in observed[0]["iterations"])
 
 

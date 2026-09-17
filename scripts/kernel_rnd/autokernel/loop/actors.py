@@ -657,6 +657,10 @@ class AgentPlanner:
                        "the runtime field. The host derives the original anchor value and validates "
                        "the sole difference; do not author a patch for a runtime treatment.")
             prompt += "\nInstalled runtime_env_keys: " + json.dumps(context.get("runtime_env_keys", []))
+            if context.get("runtime_observation_only"):
+                prompt += ("\nRuntime treatments here are observation-only diagnostics. "
+                           "Their A/B result cannot select a recipe, keep a candidate, "
+                           "or establish a causal explanation for a sampled hotspot.")
         raw, streak = _with_backoff(
             lambda: _run_agent(prompt, workspace=self.workspace,
                                timeout_s=self.timeout_s, backend=self.backend))

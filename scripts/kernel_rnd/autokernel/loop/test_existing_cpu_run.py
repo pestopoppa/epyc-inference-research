@@ -180,9 +180,12 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
                     hypothesis = replace(base_propose(context), mechanism_id=f"cpu-{len(issued) + 1}")
                     if "runtime_anchor" in context:
                         assert context["target"]["recipe"] == context["runtime_anchor"]
+                        if runtime_only and not runtime_declaration:
+                            assert context["runtime_observation_only"] is True
+                            assert context["runtime_preparation"]["status"] == "observation_only"
                     else:
-                        # Missing prospective statistics leaves source research available.
-                        assert (enrolled_pair or not runtime_declaration) and not runtime_only \
+                        # Reduced/source-only routes still have no runtime treatment.
+                        assert enrolled_pair and not runtime_only \
                             and runtime_transition is None
                     if runtime_only or (runtime_transition is not None and not issued):
                         treatment = run.actors._runtime_pair(
@@ -319,6 +322,9 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
                 assert run.status.read(fixture.store)["measurements_reached"] == 5
                 assert [row["status"] for row in result["iterations"]] == ["runtime_observed"] * 5
                 assert all(row["comparison"]["decisive"] is None for row in result["iterations"])
+                assert all(row["comparison"].get("admission") ==
+                           "observation_only_original_strict_evidence_unavailable"
+                           for row in result["iterations"])
                 assert all(row["runtime_pair"]["anchor"]["build_dir"] == str(fixture.startup_anchor)
                            for row in result["iterations"])
                 assert run._git(fixture.repo, "rev-parse", branch) == original_head
