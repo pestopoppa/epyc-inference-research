@@ -1182,8 +1182,6 @@ def main(argv=None) -> int:
                 and args.resolved_campaign is None:
             raise SerialRefused("source validation priorities require scheduled serial mode")
         if args.scheduler_manifest is not None:
-            if args.batch_iterations != 1:
-                raise SerialRefused("scheduled serial mode requires one iteration per child")
             from . import serial_scheduling
             manifest_body, _manifest_sha = _json(args.scheduler_manifest, limit=256 * 1024)
             scheduler_manifest = serial_scheduling.SerialSchedulerManifest.from_dict(manifest_body)
@@ -1195,6 +1193,8 @@ def main(argv=None) -> int:
                 targets, args.resolved_campaign, args.rounds)
             serial_scheduling.validate_target_bindings(
                 scheduler_manifest, _scheduler_bindings(targets))
+        if scheduler_manifest is not None and args.batch_iterations != 1:
+            raise SerialRefused("scheduled serial mode requires one iteration per child")
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
     if args.retention_plan_only:

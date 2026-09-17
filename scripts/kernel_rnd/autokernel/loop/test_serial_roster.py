@@ -116,6 +116,17 @@ def test_generated_dry_run_reaches_actual_owner_without_side_effects(
     assert not (tmp_path / "router").exists()
 
 
+def test_resolved_campaign_refuses_batched_scheduled_child_before_launch(tmp_path, monkeypatch, capsys):
+    _, _, argv = _inputs(tmp_path, backends=("cpu",))
+    argv[argv.index("--batch-iterations") + 1] = "2"
+    _forbid_execution(monkeypatch)
+    with pytest.raises(SystemExit) as caught:
+        sr.main(argv + ["--dry-run"])
+    assert caught.value.code == 2
+    assert "scheduled serial mode requires one iteration per child" in capsys.readouterr().err
+    assert not (tmp_path / "router").exists()
+
+
 @pytest.mark.parametrize("experimental_gpu", [False, True])
 def test_generated_roster_drives_actual_children_and_completed_restart(tmp_path, monkeypatch, experimental_gpu):
     _, _, argv = _inputs(tmp_path, experimental_gpu=experimental_gpu)
