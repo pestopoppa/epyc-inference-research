@@ -2,8 +2,11 @@
 
 from pathlib import Path
 from types import SimpleNamespace
+from dataclasses import replace
 import hashlib
+from unittest import mock
 
+from autokernel.loop import bench
 from autokernel.loop import fresh_correctness as fresh
 from autokernel.loop.integrity import CandidateIntegrity
 
@@ -160,3 +163,96 @@ def test_skipped_backend_cannot_satisfy_reference_vacuously(tmp_path):
     assert row["status"] == "oracle_unavailable"
     assert row["verdict"] == "unavailable"
     assert row["compared_cases"] == 0
+
+
+def test_gpu_compare_opt_in_runs_fresh_suite_after_each_ranked_arm(tmp_path):
+    selected = plan(tmp_path)
+    runner = FakeRunner(REFERENCE)
+    timed = []
+
+    def fake_run_once(binary, model, **kwargs):
+        timed.append(str(binary))
+        return (100.0 if str(binary) == "/anchor" else 110.0,
+                {"resident": True, "peak_vram_bytes": 1 << 31,
+                 "peak_kfd_processes": 1})
+
+    def check(arm, pair, hardening_seed):
+        # New, declared suite seed per measured arm. The benchmark hardening
+        # seed is a join identity, not the independent op-suite seed.
+        assert isinstance(hardening_seed, int)
+        arm_plan = replace(selected, arm_id=f"{arm.name}/{pair}",
+                           suite_seed=selected.suite_seed + len(runner.calls))
+        return fresh.collect(arm_plan, invoke=runner, env={})
+
+    with mock.patch.object(bench, "run_once", side_effect=fake_run_once):
+        row = bench.compare(bench.Arm("anchor", Path("/anchor")),
+                            bench.Arm("candidate", Path("/candidate")),
+                            Path("/model.gguf"), pp=0, tg=128, pairs=2,
+                            warmup_pairs=1, fresh_check=check, calibrated=False)
+    assert len(timed) == 6  # Two warmups, then four ranked invocations.
+    assert len(runner.calls) == 8  # Help + seeded suite for each ranked arm.
+    assert len(row.fresh_correctness) == 4
+    assert [receipt["arm"] for receipt in row.fresh_correctness] == [
+        "anchor", "candidate", "anchor", "candidate"]
+    assert [receipt["pair"] for receipt in row.fresh_correctness] == [1, 1, 2, 2]
+    assert all(receipt["status"] == "reference_valid"
+               for receipt in row.fresh_correctness)
+    assert all("raw_stdout" not in receipt for receipt in row.fresh_correctness)
+    assert abs(row.effect - 0.1) < 1e-12
+    assert row.decisive is None
+
+
+def test_gpu_compare_default_off_and_observer_failure_cannot_change_effect():
+    def fake_run_once(binary, model, **kwargs):
+        return (100.0 if str(binary) == "/anchor" else 110.0,
+                {"resident": True, "peak_vram_bytes": 1 << 31,
+                 "peak_kfd_processes": 1})
+
+    args = (bench.Arm("anchor", Path("/anchor")),
+            bench.Arm("candidate", Path("/candidate")), Path("/model.gguf"))
+    with mock.patch.object(bench, "run_once", side_effect=fake_run_once):
+        plain = bench.compare(*args, pp=0, tg=128, pairs=1, warmup_pairs=0,
+                              calibrated=False)
+        failed = bench.compare(*args, pp=0, tg=128, pairs=1, warmup_pairs=0,
+                               calibrated=False, fresh_check=lambda *_: 1 / 0)
+    assert plain.to_dict().get("fresh_correctness") is None
+    assert len(failed.fresh_correctness) == 2
+    assert all(receipt["status"] == "oracle_unavailable"
+               for receipt in failed.fresh_correctness)
+    assert failed.effect == plain.effect
+    assert failed.decisive == plain.decisive
+
+
+def test_gpu_fresh_check_refuses_promotable_comparison_before_running():
+    with mock.patch.object(bench, "run_once") as timed:
+        try:
+            bench.compare(bench.Arm("anchor", Path("/anchor")),
+                          bench.Arm("candidate", Path("/candidate")),
+                          Path("/model.gguf"), pp=0, tg=128, pairs=1,
+                          fresh_check=lambda *_: {})
+        except ValueError as exc:
+            assert "report-only" in str(exc)
+        else:
+            raise AssertionError("fresh check admitted a promotable comparison")
+        timed.assert_not_called()
+
+
+def test_gpu_fresh_summary_caps_caller_text():
+    def fake_run_once(binary, model, **kwargs):
+        return (100.0, {"resident": True, "peak_vram_bytes": 1 << 31,
+                        "peak_kfd_processes": 1})
+
+    def oversized(*_):
+        return {"schema": fresh.SCHEMA, "authority": "report_only",
+                "ranked_sample": False, "arm_id": "x" * 10000,
+                "recipe_hash": "b" * 64, "suite_seed": 71,
+                "status": "oracle_unavailable", "verdict": "unavailable",
+                "reason": "y" * 10000, "raw_stdout": "z" * 10000}
+
+    with mock.patch.object(bench, "run_once", side_effect=fake_run_once):
+        row = bench.compare(bench.Arm("anchor", Path("/anchor")),
+                            bench.Arm("candidate", Path("/candidate")),
+                            Path("/model.gguf"), pp=0, tg=128, pairs=1,
+                            warmup_pairs=0, calibrated=False, fresh_check=oversized)
+    assert all(len(receipt["arm_id"]) == len(receipt["reason"]) == 512
+               and "raw_stdout" not in receipt for receipt in row.fresh_correctness)

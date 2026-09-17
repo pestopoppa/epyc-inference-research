@@ -27,7 +27,7 @@ import secrets
 import statistics as st
 import subprocess
 import time
-from typing import Sequence
+from typing import Callable, Sequence
 
 from ..execution import microbench
 from . import residency
@@ -138,6 +138,9 @@ class Comparison:
     #: (§5.3): with two rungs, an effect without its model is a number without its
     #: instrument, and run histories across rungs must never merge.
     model: str | None = None
+    # Opt-in, report-only summaries. Full op-suite stdout belongs in the
+    # caller's bounded sidecar, not in the ranked comparison/status payload.
+    fresh_correctness: tuple[dict, ...] = ()
 
     @property
     def drift_explains_the_effect(self) -> bool:
@@ -200,7 +203,7 @@ class Comparison:
         return abs(self.effect * 100.0) > self.noise_floor_pct
 
     def to_dict(self) -> dict:
-        return {
+        row = {
             "surface": self.surface, "model": self.model, "effect": self.effect,
             "effect_pct": self.effect * 100.0, "estimator": self.estimator,
             "pairs": self.pairs, "noise_floor_pct": self.noise_floor_pct,
@@ -218,6 +221,9 @@ class Comparison:
             "candidate_samples": self.candidate_samples,
             "residency": self.residency,
         }
+        if self.fresh_correctness:
+            row["fresh_correctness"] = list(self.fresh_correctness)
+        return row
 
 
 #: An EXTERNAL kill is retryable; a crash in the binary is not. Run 12 died on
@@ -303,16 +309,27 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
             pairs: int = MIN_PAIRS, reps: int = 9,
             noise_floor_pct: float | None = None,
             warmup_pairs: int = WARMUP_PAIRS, surface: str | None = None,
-            ubatch: int | None = None, calibrated: bool = True) -> Comparison:
+            ubatch: int | None = None, calibrated: bool = True,
+            fresh_check: Callable[[Arm, int, int], dict] | None = None) -> Comparison:
     """Alternating paired A/B. The arms swap every pair, never run as two blocks.
 
     `warmup_pairs` are run and DISCARDED first. Without them the first measured pair
     carries each binary's first-use cost, and that cost is not symmetric: the force-MMQ
     probe's candidate was 4.3% slower on pair 1 than on pair 5 while the anchor was
     flat, which alone produced a decisive-looking -1.469%.
+
+    `fresh_check` is a caller-owned, default-off observer. It runs after each
+    measured process (not warmups) and returns a report-only seeded-op receipt.
+    The caller owns the compute claim and full receipt sidecar. Its summary is
+    attached for audit, never consulted by the effect or keep arithmetic. An
+    opt-in comparison with intervening GPU work needs its own A/A calibration;
+    the ordinary floor does not become transferable merely because this observer
+    was enabled.
     """
     if pairs < 1:
         raise ValueError("compare needs at least one pair")
+    if fresh_check is not None and calibrated:
+        raise ValueError("fresh-check comparisons are report-only; pass calibrated=False")
     hardening_seed = _candidate_seed()
     for _ in range(max(0, warmup_pairs)):
         for arm in (anchor, candidate):
@@ -322,12 +339,48 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
     candidate_samples: list[float] = []
     proofs: list[dict] = []
     started = time.monotonic()
-    for _ in range(pairs):
+    fresh_summaries: list[dict] = []
+    for pair_index in range(pairs):
         for arm, sink in ((anchor, anchor_samples), (candidate, candidate_samples)):
             value, proof = run_once(arm.binary, model, pp=pp, tg=tg, ubatch=ubatch,
                                     reps=reps, hardening_seed=hardening_seed)
             sink.append(value)
             proofs.append(proof)
+            if fresh_check is not None:
+                # The ranked llama-bench invocation has ended. This optional
+                # fresh-input op suite cannot change its value, floor, or gate.
+                try:
+                    from .fresh_correctness import SCHEMA as FRESH_SCHEMA
+                    receipt = fresh_check(arm, pair_index + 1, hardening_seed)
+                    if (not isinstance(receipt, dict)
+                            or receipt.get("schema") != FRESH_SCHEMA
+                            or receipt.get("authority") != "report_only"
+                            or receipt.get("ranked_sample") is not False
+                            or receipt.get("status") not in (
+                                "reference_valid", "property_only", "oracle_unavailable")
+                            or receipt.get("verdict") not in (
+                                "passed", "failed", "unavailable")
+                            or not isinstance(receipt.get("arm_id"), str)
+                            or not isinstance(receipt.get("recipe_hash"), str)
+                            or not isinstance(receipt.get("suite_seed"), int)):
+                        raise ValueError("fresh check returned no report-only receipt")
+                    summary = {key: (value[:512] if isinstance(value, str)
+                                     else value if isinstance(value, (int, float, bool))
+                                     else str(value)[:512])
+                               for key in (
+                        "schema", "authority", "ranked_sample", "arm_id",
+                        "recipe_hash", "binary_sha256", "suite_seed", "status",
+                        "verdict", "reason", "raw_output_sha256", "raw_output_bytes",
+                        "receipt_path") if (value := receipt.get(key)) is not None}
+                except Exception as exc:
+                    # A report-only observer cannot veto a ranked measurement.
+                    summary = {"schema": "epyc.autokernel.fresh_correctness.v1",
+                               "authority": "report_only", "ranked_sample": False,
+                               "status": "oracle_unavailable", "verdict": "unavailable",
+                               "reason": f"fresh check observer failed: {type(exc).__name__}"}
+                fresh_summaries.append({"arm": arm.name, "pair": pair_index + 1,
+                                        "ranked_hardening_seed": hardening_seed,
+                                        **summary})
 
     if not anchor_samples or not candidate_samples:
         raise BenchFailed("comparison produced no samples")
@@ -363,6 +416,7 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
         device_seconds=time.monotonic() - started,
         anchor_drift_pct=drift_pct(anchor_samples),
         candidate_drift_pct=drift_pct(candidate_samples),
+        fresh_correctness=tuple(fresh_summaries),
     )
 
 
