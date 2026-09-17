@@ -1,0 +1,360 @@
+diff --git a/ggml/src/ggml-cpu/binary-ops.cpp b/ggml/src/ggml-cpu/binary-ops.cpp
+index 75e3829..a2ac68d 100644
+--- a/ggml/src/ggml-cpu/binary-ops.cpp
++++ b/ggml/src/ggml-cpu/binary-ops.cpp
+@@ -34,13 +34,13 @@ static inline void vec_binary_op_contiguous(const int64_t n, dst_t * z, const sr
+ }
+ 
+ template <float (*op)(float, float), typename src0_t, typename src1_t, typename dst_t>
+-static inline void vec_binary_op_non_contiguous(const int64_t n, const int64_t ne10, const int64_t nb10, dst_t * z, const src0_t * x, const src1_t * y) {
++static inline void vec_binary_op_non_contiguous(const int64_t n, const int64_t ne10, const int64_t nb10, dst_t * z, const src0_t * x, const src1_t * y, const int64_t i0_off = 0) {
+     constexpr auto src0_to_f32 = type_conversion_table<src0_t>::to_f32;
+     constexpr auto src1_to_f32 = type_conversion_table<src1_t>::to_f32;
+     constexpr auto f32_to_dst  = type_conversion_table<dst_t >::from_f32;
+ 
+     for (int i = 0; i < n; i++) {
+-        int i10 = i % ne10;
++        int i10 = (int)((i + i0_off) % ne10);
+         const src1_t * y_ptr = (const src1_t *)((const char *)y + i10*nb10);
+         z[i] = f32_to_dst(op(src0_to_f32(x[i]), src1_to_f32(*y_ptr)));
+     }
+@@ -58,7 +58,10 @@ static void apply_binary_op(const ggml_compute_params * params, ggml_tensor * ds
+     GGML_ASSERT( nb0 == sizeof(dst_t));
+     GGML_ASSERT(nb00 == sizeof(src0_t));
+ 
+-    const auto [ir0, ir1] = get_thread_range(params, src0);
++    // split over (row, column-chunk), not rows alone -- at batch 1
++    // nr == 1 and a row-only split leaves every element on thread 0.
++    const int64_t nrows = ggml_nrows(src0);
++    const ggml_rowcol_split split = get_rowcol_split(params, nrows, ne0, MAX(sizeof(dst_t), sizeof(src0_t)));
+     const bool is_src1_contiguous_rows = ggml_is_contiguous_rows(src1);
+ 
+ #ifdef GGML_USE_ACCELERATE
+@@ -77,7 +80,13 @@ static void apply_binary_op(const ggml_compute_params * params, ggml_tensor * ds
+     }
+ #endif
+ 
+-    for (int64_t ir = ir0; ir < ir1; ++ir) {
++    for (int64_t t = split.t0; t < split.t1; ++t) {
++        int64_t ir, gc0, gc1;
++        split.unpack(t, ne0, ir, gc0, gc1);
++        if (gc0 >= gc1) {
++            continue;
++        }
++
+         const int64_t i03 = ir/(ne02*ne01);
+         const int64_t i02 = (ir - i03*ne02*ne01)/ne01;
+         const int64_t i01 = (ir - i03*ne02*ne01 - i02*ne01);
+@@ -91,22 +100,28 @@ static void apply_binary_op(const ggml_compute_params * params, ggml_tensor * ds
+         const src1_t * src1_ptr = (const src1_t *) ((const char *) src1->data + i13*nb13 + i12*nb12 + i11*nb11);
+ 
+         if (is_src1_contiguous_rows) {
+-            // src1 is broadcastable across src0 and dst in i1, i2, i3
+-            const int64_t nr0 = ne00 / ne10;
+-
+-            for (int64_t r = 0; r < nr0; ++r) {
++            // src1 is broadcastable across src0 and dst in i1, i2, i3.
++            // The row is nr0 = ne00/ne10 consecutive copies of the src1 row; the column
++            // chunk [gc0,gc1) may straddle several of them, so walk the intersection.
++            const int64_t r_first = gc0/ne10;
++            const int64_t r_last  = (gc1 - 1)/ne10;
++
++            for (int64_t r = r_first; r <= r_last; ++r) {
++                const int64_t c0 = MAX(gc0, r*ne10) - r*ne10;      // within the src1 row
++                const int64_t c1 = MIN(gc1, (r + 1)*ne10) - r*ne10;
++                const int64_t n  = c1 - c0;
+ #ifdef GGML_USE_ACCELERATE
+                 if constexpr (std::is_same_v<src0_t, float> && std::is_same_v<src1_t, float> && std::is_same_v<dst_t, float>) {
+                     if (vDSP_op != nullptr) {
+-                        vDSP_op(src1_ptr, 1, src0_ptr + r*ne10, 1, dst_ptr + r*ne10, 1, ne10);
++                        vDSP_op(src1_ptr + c0, 1, src0_ptr + r*ne10 + c0, 1, dst_ptr + r*ne10 + c0, 1, n);
+                         continue;
+                     }
+                 }
+ #endif
+-                vec_binary_op_contiguous<op>(ne10, dst_ptr + r*ne10, src0_ptr + r*ne10, src1_ptr);
++                vec_binary_op_contiguous<op>(n, dst_ptr + r*ne10 + c0, src0_ptr + r*ne10 + c0, src1_ptr + c0);
+             }
+         } else {
+-            vec_binary_op_non_contiguous<op>(ne0, ne10, nb10, dst_ptr, src0_ptr, src1_ptr);
++            vec_binary_op_non_contiguous<op>(gc1 - gc0, ne10, nb10, dst_ptr + gc0, src0_ptr + gc0, src1_ptr, gc0);
+         }
+     }
+ }
+diff --git a/ggml/src/ggml-cpu/common.h b/ggml/src/ggml-cpu/common.h
+index abbadc3..c399d76 100644
+--- a/ggml/src/ggml-cpu/common.h
++++ b/ggml/src/ggml-cpu/common.h
+@@ -87,6 +87,87 @@ static std::pair<int64_t, int64_t> get_thread_range(const struct ggml_compute_pa
+     return {ir0, ir1};
+ }
+ 
++// ---------------------------------------------------------------------------
++// (row, column-chunk) work split for elementwise kernels.
++//
++// get_thread_range() above splits ONLY over rows. At batch 1 (decode) every
++// elementwise tensor in a typical graph is [nc,1,1], so nr == 1 and thread 0
++// does all the work while every other thread falls straight through to the
++// barrier having done nothing -- i.e. the parallelism the caller asked for by
++// setting n_threads > 1 is simply unavailable to these ops at batch 1.
++//
++// Elementwise ops compute each output element from the input element(s) at
++// the same index, so cutting a row into column chunks and dealing the
++// (row, chunk) pairs out to the threads is BIT-IDENTICAL to the single-
++// threaded-per-row result by construction: every output element is still
++// produced by exactly one thread from the same input bytes, just not
++// necessarily the same thread as before. This is the same shape as the
++// existing GET_ROWS (row, column-chunk) split (ggml_get_rows_split_init()).
++//
++// ggml_rowcol_min_elems() is the smallest row length worth cutting up -- below
++// it the chunking overhead is not worth paying and the split degenerates to
++// exactly the old row-only range (ncc == 1).
++
++static inline int64_t ggml_rowcol_min_elems(void) {
++    return 512;
++}
++
++struct ggml_rowcol_split {
++    int64_t ncc;    // column chunks per row
++    int64_t cstep;  // elements per column chunk
++    int64_t t0;     // first (row, chunk) task of this thread
++    int64_t t1;     // one past the last
++
++    // decode task t into (row, [c0,c1))
++    inline void unpack(int64_t t, int64_t nc, int64_t & ir, int64_t & c0, int64_t & c1) const {
++        ir = t/ncc;
++        c0 = (t - ir*ncc)*cstep;
++        c1 = MIN(c0 + cstep, nc);
++    }
++};
++
++// nr: rows to process, nc: elements per row, esz: element size in bytes of the
++// widest tensor touched (chunks are aligned to a cache line of it so two
++// threads never write the same line).
++static inline ggml_rowcol_split get_rowcol_split(const struct ggml_compute_params * params,
++                                                 int64_t nr, int64_t nc, size_t esz) {
++    const int64_t ith = params->ith;
++    const int64_t nth = params->nth;
++
++    int64_t ncc   = 1;
++    int64_t cstep = nc;
++
++    if (nth > 1 && nr < nth && nc >= ggml_rowcol_min_elems()) {
++        // one cache line of the element type, at least 16 elements
++        int64_t align = esz ? (int64_t)(64/esz) : 16;
++        if (align < 1) {
++            align = 1;
++        }
++        const int64_t min_chunk = MAX(align, (int64_t) 64);
++
++        ncc   = (nth + nr - 1)/nr;                       // enough chunks to occupy every thread
++        cstep = (nc + ncc - 1)/ncc;
++        cstep = MAX(cstep, min_chunk);
++        cstep = ((cstep + align - 1)/align)*align;       // keep chunks cache-line aligned
++        ncc   = (nc + cstep - 1)/cstep;                  // drop chunks the rounding emptied
++        if (ncc < 1) {
++            ncc   = 1;
++            cstep = nc;
++        }
++    }
++
++    const int64_t nt = nr*ncc;
++    const int64_t dt = (nt + nth - 1)/nth;
++
++    ggml_rowcol_split split;
++    split.ncc   = ncc;
++    split.cstep = cstep;
++    split.t0    = MIN(dt*ith, nt);
++    split.t1    = MIN(split.t0 + dt, nt);
++
++    return split;
++}
++
+ struct ggml_fa_tile_config {
+     static constexpr size_t Q  = GGML_FA_TILE_Q;
+     static constexpr size_t KV = GGML_FA_TILE_KV;
+diff --git a/ggml/src/ggml-cpu/ops.cpp b/ggml/src/ggml-cpu/ops.cpp
+index 266261c..ef3b38e 100644
+--- a/ggml/src/ggml-cpu/ops.cpp
++++ b/ggml/src/ggml-cpu/ops.cpp
+@@ -1701,10 +1701,6 @@ static void ggml_compute_forward_repeat_f32(
+ 
+     const ggml_tensor * src0 = dst->src[0];
+ 
+-    if (params->ith != 0) {
+-        return;
+-    }
+-
+     GGML_ASSERT(ggml_can_repeat(src0, dst));
+ 
+     GGML_TENSOR_UNARY_OP_LOCALS
+@@ -1719,23 +1715,30 @@ static void ggml_compute_forward_repeat_f32(
+     GGML_ASSERT(nb0  == sizeof(float));
+     GGML_ASSERT(nb00 == sizeof(float));
+ 
+-    // TODO: maybe this is not optimal?
+-    for                         (int i3 = 0; i3 < nr3;  i3++) {
+-        for                     (int k3 = 0; k3 < ne03; k3++) {
+-            for                 (int i2 = 0; i2 < nr2;  i2++) {
+-                for             (int k2 = 0; k2 < ne02; k2++) {
+-                    for         (int i1 = 0; i1 < nr1;  i1++) {
+-                        for     (int k1 = 0; k1 < ne01; k1++) {
+-                            for (int i0 = 0; i0 < nr0;  i0++) {
+-                                ggml_vec_cpy_f32(ne00,
+-                                        (float *) ((char *)  dst->data + (i3*ne03 + k3)*nb3  + (i2*ne02 + k2)*nb2  + (i1*ne01 + k1)*nb1  + (i0*ne00)*nb0),
+-                                        (float *) ((char *) src0->data + (          k3)*nb03 + (          k2)*nb02 + (          k1)*nb01));
+-                            }
+-                        }
+-                    }
+-                }
+-            }
++    // Every destination copy is disjoint, so dealing (copy, column-chunk) pairs
++    // out to the threads is bit-identical to the single-threaded loop below --
++    // see get_rowcol_split() in common.h.
++    const int64_t nu = (int64_t) nr3*ne03*nr2*ne02*nr1*ne01*nr0;
++    const ggml_rowcol_split split = get_rowcol_split(params, nu, ne00, sizeof(float));
++
++    for (int64_t t = split.t0; t < split.t1; ++t) {
++        int64_t u, c0, c1;
++        split.unpack(t, ne00, u, c0, c1);
++        if (c0 >= c1) {
++            continue;
+         }
++
++        const int64_t i0 =  u % nr0;  u /= nr0;
++        const int64_t k1 =  u % ne01; u /= ne01;
++        const int64_t i1 =  u % nr1;  u /= nr1;
++        const int64_t k2 =  u % ne02; u /= ne02;
++        const int64_t i2 =  u % nr2;  u /= nr2;
++        const int64_t k3 =  u % ne03; u /= ne03;
++        const int64_t i3 =  u;
++
++        ggml_vec_cpy_f32(c1 - c0,
++                (float *) ((char *)  dst->data + (i3*ne03 + k3)*nb3  + (i2*ne02 + k2)*nb2  + (i1*ne01 + k1)*nb1  + (i0*ne00)*nb0) + c0,
++                (float *) ((char *) src0->data + (          k3)*nb03 + (          k2)*nb02 + (          k1)*nb01) + c0);
+     }
+ }
+ 
+@@ -1745,10 +1748,6 @@ static void ggml_compute_forward_repeat_f16(
+ 
+     const ggml_tensor * src0 = dst->src[0];
+ 
+-    if (params->ith != 0) {
+-        return;
+-    }
+-
+     GGML_ASSERT(ggml_can_repeat(src0, dst));
+ 
+     GGML_TENSOR_UNARY_OP_LOCALS
+@@ -1763,25 +1762,29 @@ static void ggml_compute_forward_repeat_f16(
+     GGML_ASSERT(nb0  == sizeof(ggml_fp16_t));
+     GGML_ASSERT(nb00 == sizeof(ggml_fp16_t));
+ 
+-    // TODO: maybe this is not optimal?
+-    for                         (int i3 = 0; i3 < nr3;  i3++) {
+-        for                     (int k3 = 0; k3 < ne03; k3++) {
+-            for                 (int i2 = 0; i2 < nr2;  i2++) {
+-                for             (int k2 = 0; k2 < ne02; k2++) {
+-                    for         (int i1 = 0; i1 < nr1;  i1++) {
+-                        for     (int k1 = 0; k1 < ne01; k1++) {
+-                            for (int i0 = 0; i0 < nr0;  i0++) {
+-                                ggml_fp16_t * y = (ggml_fp16_t *) ((char *)  dst->data + (i3*ne03 + k3)*nb3  + (i2*ne02 + k2)*nb2  + (i1*ne01 + k1)*nb1  + (i0*ne00)*nb0);
+-                                ggml_fp16_t * x = (ggml_fp16_t *) ((char *) src0->data + (          k3)*nb03 + (          k2)*nb02 + (          k1)*nb01);
+-                                // ggml_vec_cpy_f16(ne00, y, x)
+-                                for (int i = 0; i < ne00; ++i) {
+-                                    y[i]  = x[i];
+-                                }
+-                            }
+-                        }
+-                    }
+-                }
+-            }
++    // See ggml_compute_forward_repeat_f32 above -- same (copy, column-chunk) split.
++    const int64_t nu = (int64_t) nr3*ne03*nr2*ne02*nr1*ne01*nr0;
++    const ggml_rowcol_split split = get_rowcol_split(params, nu, ne00, sizeof(ggml_fp16_t));
++
++    for (int64_t t = split.t0; t < split.t1; ++t) {
++        int64_t u, c0, c1;
++        split.unpack(t, ne00, u, c0, c1);
++        if (c0 >= c1) {
++            continue;
++        }
++
++        const int64_t i0 =  u % nr0;  u /= nr0;
++        const int64_t k1 =  u % ne01; u /= ne01;
++        const int64_t i1 =  u % nr1;  u /= nr1;
++        const int64_t k2 =  u % ne02; u /= ne02;
++        const int64_t i2 =  u % nr2;  u /= nr2;
++        const int64_t k3 =  u % ne03; u /= ne03;
++        const int64_t i3 =  u;
++
++        ggml_fp16_t * y = (ggml_fp16_t *) ((char *)  dst->data + (i3*ne03 + k3)*nb3  + (i2*ne02 + k2)*nb2  + (i1*ne01 + k1)*nb1  + (i0*ne00)*nb0);
++        ggml_fp16_t * x = (ggml_fp16_t *) ((char *) src0->data + (          k3)*nb03 + (          k2)*nb02 + (          k1)*nb01);
++        for (int64_t i = c0; i < c1; ++i) {
++            y[i] = x[i];
+         }
+     }
+ }
+diff --git a/ggml/src/ggml-cpu/unary-ops.cpp b/ggml/src/ggml-cpu/unary-ops.cpp
+index 1d83444..63d1273 100644
+--- a/ggml/src/ggml-cpu/unary-ops.cpp
++++ b/ggml/src/ggml-cpu/unary-ops.cpp
+@@ -118,9 +118,18 @@ static void apply_unary_op(const ggml_compute_params * params, ggml_tensor * dst
+     GGML_ASSERT( nb0 == sizeof(dst_t));
+     GGML_ASSERT(nb00 == sizeof(src0_t));
+ 
+-    const auto [ir0, ir1] = get_thread_range(params, src0);
++    // split over (row, column-chunk), not rows alone -- at batch 1
++    // nr == 1 and a row-only split leaves every element on thread 0.
++    const int64_t nrows = ggml_nrows(src0);
++    const ggml_rowcol_split split = get_rowcol_split(params, nrows, ne0, MAX(sizeof(dst_t), sizeof(src0_t)));
++
++    for (int64_t t = split.t0; t < split.t1; ++t) {
++        int64_t ir, c0, c1;
++        split.unpack(t, ne0, ir, c0, c1);
++        if (c0 >= c1) {
++            continue;
++        }
+ 
+-    for (int64_t ir = ir0; ir < ir1; ++ir) {
+         const int64_t i03 = ir/(ne02*ne01);
+         const int64_t i02 = (ir - i03*ne02*ne01)/ne01;
+         const int64_t i01 = (ir - i03*ne02*ne01 - i02*ne01);
+@@ -128,7 +137,7 @@ static void apply_unary_op(const ggml_compute_params * params, ggml_tensor * dst
+         dst_t        * dst_ptr  = (dst_t  *)       ((char *)       dst->data  + i03*nb3  + i02*nb2  + i01*nb1 );
+         const src0_t * src0_ptr = (const src0_t *) ((const char *) src0->data + i03*nb03 + i02*nb02 + i01*nb01);
+ 
+-        vec_unary_op<op>(ne0, dst_ptr, src0_ptr);
++        vec_unary_op<op>(c1 - c0, dst_ptr + c0, src0_ptr + c0);
+     }
+ }
+ 
+@@ -198,9 +207,17 @@ static void apply_unary_op_functor(const ggml_compute_params * params, ggml_tens
+     GGML_ASSERT( nb0 == sizeof(dst_t));
+     GGML_ASSERT(nb00 == sizeof(src0_t));
+ 
+-    const auto [ir0, ir1] = get_thread_range(params, src0);
++    // see apply_unary_op above.
++    const int64_t nrows = ggml_nrows(src0);
++    const ggml_rowcol_split split = get_rowcol_split(params, nrows, ne0, MAX(sizeof(dst_t), sizeof(src0_t)));
++
++    for (int64_t t = split.t0; t < split.t1; ++t) {
++        int64_t ir, c0, c1;
++        split.unpack(t, ne0, ir, c0, c1);
++        if (c0 >= c1) {
++            continue;
++        }
+ 
+-    for (int64_t ir = ir0; ir < ir1; ++ir) {
+         const int64_t i03 = ir/(ne02*ne01);
+         const int64_t i02 = (ir - i03*ne02*ne01)/ne01;
+         const int64_t i01 = (ir - i03*ne02*ne01 - i02*ne01);
+@@ -208,7 +225,7 @@ static void apply_unary_op_functor(const ggml_compute_params * params, ggml_tens
+         dst_t        * dst_ptr  = (dst_t  *)       ((char *)       dst->data  + i03*nb3  + i02*nb2  + i01*nb1 );
+         const src0_t * src0_ptr = (const src0_t *) ((const char *) src0->data + i03*nb03 + i02*nb02 + i01*nb01);
+ 
+-        vec_unary_op_functor(ne0, dst_ptr, src0_ptr, op);
++        vec_unary_op_functor(c1 - c0, dst_ptr + c0, src0_ptr + c0, op);
+     }
+ }
+ 

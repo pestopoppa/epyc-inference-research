@@ -1,0 +1,81 @@
+diff --git a/ggml/src/ggml-cpu/ops.cpp b/ggml/src/ggml-cpu/ops.cpp
+index 266261c..6d12347 100644
+--- a/ggml/src/ggml-cpu/ops.cpp
++++ b/ggml/src/ggml-cpu/ops.cpp
+@@ -11606,6 +11606,20 @@ void ggml_compute_forward_rwkv_wkv7(
+     }
+ }
+ 
++// The caller-requested n_tasks (ggml_map_customN(..., n_tasks, ...), documented
++// in ggml.h) is honoured by the planner (ggml_get_n_tasks(), ggml-cpu.c) when
++// scheduling the graph, but params->ith/params->nth reflect the graph's actual
++// n_threads for every node (ggml_graph_compute_thread() overwrites nth
++// unconditionally). Without this clamp a callback registered with n_tasks < nth
++// -- n_tasks == 1 to request single-threaded execution being the extreme case
++// -- runs on every one of the nth worker threads instead of just the n_tasks
++// it was told to expect, which is a public-API contract violation: any caller
++// that follows the documented contract (e.g. sizing its own per-thread scratch
++// by n_tasks) is handed more concurrent callers than it provisioned for.
++static inline int ggml_custom_op_effective_n_tasks(int requested_n_tasks, int nth) {
++    return requested_n_tasks == GGML_N_TASKS_MAX ? nth : MIN(requested_n_tasks, nth);
++}
++
+ // ggml_compute_forward_map_custom1
+ 
+ void ggml_compute_forward_map_custom1(
+@@ -11617,7 +11631,12 @@ void ggml_compute_forward_map_custom1(
+     struct ggml_map_custom1_op_params p;
+     memcpy(&p, dst->op_params, sizeof(p));
+ 
+-    p.fun(dst, a, params->ith, params->nth, p.userdata);
++    const int n_tasks = ggml_custom_op_effective_n_tasks(p.n_tasks, params->nth);
++    if (params->ith >= n_tasks) {
++        return;
++    }
++
++    p.fun(dst, a, params->ith, n_tasks, p.userdata);
+ }
+ 
+ // ggml_compute_forward_map_custom2
+@@ -11632,7 +11651,12 @@ void ggml_compute_forward_map_custom2(
+     struct ggml_map_custom2_op_params p;
+     memcpy(&p, dst->op_params, sizeof(p));
+ 
+-    p.fun(dst, a, b, params->ith, params->nth, p.userdata);
++    const int n_tasks = ggml_custom_op_effective_n_tasks(p.n_tasks, params->nth);
++    if (params->ith >= n_tasks) {
++        return;
++    }
++
++    p.fun(dst, a, b, params->ith, n_tasks, p.userdata);
+ }
+ 
+ // ggml_compute_forward_map_custom3
+@@ -11648,7 +11672,12 @@ void ggml_compute_forward_map_custom3(
+     struct ggml_map_custom3_op_params p;
+     memcpy(&p, dst->op_params, sizeof(p));
+ 
+-    p.fun(dst, a, b, c, params->ith, params->nth, p.userdata);
++    const int n_tasks = ggml_custom_op_effective_n_tasks(p.n_tasks, params->nth);
++    if (params->ith >= n_tasks) {
++        return;
++    }
++
++    p.fun(dst, a, b, c, params->ith, n_tasks, p.userdata);
+ }
+ 
+ // ggml_compute_forward_custom
+@@ -11660,7 +11689,12 @@ void ggml_compute_forward_custom(
+     struct ggml_custom_op_params p;
+     memcpy(&p, dst->op_params, sizeof(p));
+ 
+-    p.fun(dst, params->ith, params->nth, p.userdata);
++    const int n_tasks = ggml_custom_op_effective_n_tasks(p.n_tasks, params->nth);
++    if (params->ith >= n_tasks) {
++        return;
++    }
++
++    p.fun(dst, params->ith, n_tasks, p.userdata);
+ }
+ 
+ // ggml_compute_forward_cross_entropy_loss

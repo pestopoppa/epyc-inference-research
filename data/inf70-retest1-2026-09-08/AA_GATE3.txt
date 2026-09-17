@@ -1,0 +1,35 @@
+  ARM Q1: tw=25.89243925669185 pp=219.92488829256632 screen=CLEAN other_p50=51.2 other_max=58.8 announced_max=0.0
+  ARM Q2: tw=24.462377043331298 pp=201.7228934861878 screen=DROPPED other_p50=45.1 other_max=933.4 announced_max=0.0
+  ARM Q3: tw=25.65009808379088 pp=218.6623654939407 screen=CLEAN other_p50=45.8 other_max=56.4 announced_max=0.0
+  ARM Q4: tw=25.621733100637655 pp=220.39389058303607 screen=CLEAN other_p50=41.7 other_max=53.8 announced_max=0.0
+  ARM Q5: tw=25.64655336841421 pp=220.67413075721583 screen=CLEAN other_p50=42.4 other_max=48.2 announced_max=0.0
+  ARM Q6: tw=25.665515254554798 pp=219.41490548055506 screen=CLEAN other_p50=41.5 other_max=49.2 announced_max=0.0
+{
+ "labels": [
+  "Q1",
+  "Q2",
+  "Q3",
+  "Q4",
+  "Q5",
+  "Q6"
+ ],
+ "values": [
+  25.8924,
+  24.4624,
+  25.6501,
+  25.6217,
+  25.6466,
+  25.6655
+ ],
+ "n": 6,
+ "mean": 25.4898,
+ "sd": 0.5131,
+ "cv_pct": 2.013,
+ "spread_pct": 5.61,
+ "n_pairs": 15,
+ "pair_p95_pct": 4.8,
+ "pair_median_pct": 0.94,
+ "pair_max_pct": 5.68
+}
+AA_GATE=STOP pair_p95=4.8%  (PASS<=1.20, DEGRADED<=2.00, else STOP)
+POWER: sd=2.013%  detectable at n=3/side: 4.602%  n=5/side: 3.565%  n=8/side: 2.818%

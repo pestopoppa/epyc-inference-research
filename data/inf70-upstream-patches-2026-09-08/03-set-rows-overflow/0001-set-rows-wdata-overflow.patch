@@ -1,0 +1,21 @@
+diff --git a/ggml/src/ggml-cpu/ggml-cpu.c b/ggml/src/ggml-cpu/ggml-cpu.c
+index 87a329f..765ee6a 100644
+--- a/ggml/src/ggml-cpu/ggml-cpu.c
++++ b/ggml/src/ggml-cpu/ggml-cpu.c
+@@ -2922,7 +2922,15 @@ struct ggml_cplan ggml_graph_plan(
+                 case GGML_OP_SET_ROWS:
+                     {
+                         if (node->src[0]->type == GGML_TYPE_F16 && node->type != GGML_TYPE_F16) {
+-                            cur = ggml_type_size(GGML_TYPE_F32) * node->src[0]->ne[0] * n_tasks;
++                            // NOTE: the kernel (ggml_compute_forward_set_rows_impl) row-splits over
++                            // params->nth == n_threads regardless of the n_tasks this op is planned
++                            // with (n_tasks is fixed at 1 below, for scheduling only -- see the
++                            // GGML_OP_SET_ROWS case in ggml_get_n_tasks()). Every one of the up to
++                            // n_threads worker threads that gets a non-empty row range dereferences
++                            // its own `wdata + (nc + CACHE_LINE_SIZE_F32) * ith` slice on the
++                            // F16-source -> non-F16-destination path, so the buffer must be sized by
++                            // n_threads, not by this op's advisory n_tasks.
++                            cur = ggml_type_size(GGML_TYPE_F32) * node->src[0]->ne[0] * n_threads;
+                         }
+                     } break;
+                 case GGML_OP_SOFT_MAX:
