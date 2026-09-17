@@ -15,6 +15,9 @@ by this process, with GPU residency sampled across its lifetime and the GPU clai
           184-191; the Qwen judge keeps its MTP self-draft (n-max 4, the serving recipe's value).
           Each judge is calibrated first (positive/negative controls >= 95%); an invalid judge's
           scored leg is still recorded but marked invalid.
+  beliefs Sidecars are written by epyc-root's `review_f1_capture.py`, resolved from `EPYC_ROOT`. The driver
+          refuses to start without it (exit 2, before the GPU claim). A failed capture is printed,
+          recorded under `belief_capture` in run_record.json, and makes the exit code 3.
 """
 from __future__ import annotations
 
@@ -31,7 +34,9 @@ import urllib.request
 
 WT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(WT / "scripts/kernel_rnd"))
+sys.path.insert(0, str(WT / "scripts/benchmark"))
 from autokernel.loop import claim, residency  # noqa: E402
+import belief_capture  # noqa: E402
 
 ORCH = Path("/workspace/repos/epyc-orchestrator")
 V9 = Path("/mnt/raid0/llm/llama.cpp/build-hip/bin")
@@ -139,6 +144,13 @@ def main() -> int:
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--runs", type=int, default=3)
     args = ap.parse_args()
+    # VB-RUNNER-PATHS: resolve the root capture writer from EPYC_ROOT before any server starts.
+    try:
+        cap = belief_capture.preflight("review_f1_capture")["review_f1_capture"]
+    except belief_capture.CaptureUnavailable as exc:
+        print(f"refusing to run: {exc}", file=sys.stderr)
+        return 2
+    captures = belief_capture.CaptureLog()
     out = args.out
     out.mkdir(parents=True, exist_ok=True)
     rq = f"{READER[0]}__{READER[1]}"
@@ -193,11 +205,9 @@ def main() -> int:
             "--swap-judge-key", f"{other[0]}__{other[1]}"], out / "score.log")
         summ = reader_root / f"_summary.semantic.{name}__{quant}.json"
         # Belief kernel write side (VB-REVIEW-F1): emitted at write time, never backfilled.
-        try:
-            sys.path.insert(0, "/workspace/scripts/vidya")
-            from adapters import review_f1_capture as cap
+        def _capture(summ=summ, name=name, quant=quant):
             cal = json.loads((out / f"judge_calibration.{name}__{quant}.json").read_text())
-            side = cap.write_belief_measurements(
+            return cap.write_belief_measurements(
                 summ, run_id=f"ev13b-{time.strftime('%Y%m%d')}-{name}",
                 producer="epyc-inference-research/scripts/benchmark/review_f1/ev13b_run.py",
                 served={"reader": record["servers"].get("reader", {}).get("props_model_path"),
@@ -205,12 +215,11 @@ def main() -> int:
                         "judge_positive_rate": cal.get("positive_rate"),
                         "judge_negative_rate": cal.get("negative_rate"),
                         "v9_llama_server_sha256": record["v9_llama_server_sha256"]})
-            record["steps"][f"beliefs_{name}"] = str(side)
-        except Exception as exc:
-            record["steps"][f"beliefs_{name}"] = f"REFUSED {type(exc).__name__}: {exc}"
+        record["steps"][f"beliefs_{name}"] = captures.run(f"beliefs_{name}", _capture)
+    record["belief_capture"] = captures.as_record()
     (out / "run_record.json").write_text(json.dumps(record, indent=2))
     print("done", flush=True)
-    return 0
+    return captures.exit_code()
 
 
 if __name__ == "__main__":
