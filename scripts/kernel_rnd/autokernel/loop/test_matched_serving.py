@@ -10,12 +10,18 @@ from unittest import mock
 
 import pytest
 
-from . import archive, bench, cpu_profile, loop, pool, run, serving
+from . import archive, bench, claim, cpu_profile, loop, pool, run, serving
 from .test_resolved_recipe import BUILD, _resolve
 from .test_legacy_cpu_serving import _requests, _server
 from .test_serving_residency import _proof, _sampler_class
 
 MODE = {"instrument": serving.MATCHED_INSTRUMENT, "pairs": 5}
+
+
+@pytest.fixture(autouse=True)
+def _isolated_gpu_exclusion(tmp_path, monkeypatch):
+    """Synthetic CPU windows must not wait on the host's real MI210 runner."""
+    monkeypatch.setattr(claim, "DEVICE_LOCK", tmp_path / "mi210.lock")
 
 
 def _inputs():

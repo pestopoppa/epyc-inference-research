@@ -164,10 +164,13 @@ def _inputs(fixture):
 
 
 @pytest.mark.parametrize("confirm_gain", [True, False])
-def test_actual_owner_reduced_positive_automatically_confirms_same_source_build(confirm_gain):
+def test_actual_owner_reduced_positive_automatically_confirms_same_source_build(
+        confirm_gain, monkeypatch):
     fixture = fixtures.TheKeepBuildsAProductionCompleteAnchor()
     fixture.setUp()
     try:
+        from . import claim
+        monkeypatch.setattr(claim, "DEVICE_LOCK", fixture.root / "test-mi210.lock")
         full, prompts, options, install = _inputs(fixture)
         requests = prompts.requests(("glm-fixed2029",), full.template)
         original_main = run.main

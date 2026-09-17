@@ -15,9 +15,10 @@ memory that outlives this process.
 from __future__ import annotations
 
 import argparse
-from contextlib import ExitStack
+from contextlib import ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass, replace
 import hashlib
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -73,15 +74,49 @@ class ServingComparison:
                 "baseline_scope": self.baseline_scope}
 
 
-def _serving_comparison(invoke, baseline_scope):
+def _serving_comparison(invoke, baseline_scope, *, measurement_window=nullcontext):
     """Keep native original-arm continuations behind the same existing view."""
     try:
-        return ServingComparison(invoke(), baseline_scope)
+        with measurement_window():
+            return ServingComparison(invoke(), baseline_scope)
     except loop.MeasurementInvalid as exc:
         if exc.reschedule is not None:
             original = exc.reschedule
-            exc.reschedule = lambda: _serving_comparison(original, baseline_scope)
+            exc.reschedule = lambda: _serving_comparison(
+                original, baseline_scope, measurement_window=measurement_window)
         raise
+
+
+@contextmanager
+def _q3_cpu_gpu_quiet_window(launch, *, on_wait, should_stop):
+    """Exclude a GPU item only while a q3 CPU measurement is active."""
+    if launch is None or launch.backend != "cpu":
+        yield
+        return
+    from ..execution.cpu_region_claim import cpu_list_to_regions
+    cpu_list = launch.template.cpu_list
+    if cpu_list is not None and "q3" not in cpu_list_to_regions(cpu_list):
+        yield
+        return
+    lock = claim.DEVICE_LOCK
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    with lock.open("a") as handle:
+        next_report = 0.0
+        while True:
+            if should_stop():
+                raise loop.TailRefused("stopped before q3 CPU measurement acquired GPU quiet window")
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= next_report:
+                    on_wait()
+                    next_report = time.monotonic() + HEARTBEAT_S
+                time.sleep(0.5)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
 
 
 def _candidate_quant_tokens(dominant_quant: str | None) -> list[str]:
@@ -1415,7 +1450,8 @@ def main(argv: list[str] | None = None) -> int:
                             feedback.exported(Path(row["belief_export_receipt"]))
                         return row
                     return _serving_comparison(strict_compare,
-                        "experimental_runtime_treatment_not_source_champion")
+                        "experimental_runtime_treatment_not_source_champion",
+                        measurement_window=cpu_measurement_window)
                 except runtime_calibration.RuntimeCalibrationRefused as exc:
                     if isinstance(exc, runtime_calibration.RuntimeLaunchBudgetExhausted):
                         runtime_enabled = False
@@ -1431,7 +1467,8 @@ def main(argv: list[str] | None = None) -> int:
                     pairs=args.serving_pairs, floor_pct=None, port=pair.anchor.port,
                     anchor_resolved_recipe=pair.anchor, candidate_resolved_recipe=pair.candidate,
                     frozen_requests=frozen_requests, runtime_pair=pair),
-                    "experimental_runtime_treatment_not_source_champion")
+                    "experimental_runtime_treatment_not_source_champion",
+                    measurement_window=cpu_measurement_window)
             if direct_launch:
                 return cpu_compare(anchor_build[0], worker.build_dir)
             # The anchor build is SHARED across lanes and only ever read, so it needs
@@ -1457,7 +1494,7 @@ def main(argv: list[str] | None = None) -> int:
             frozen_requests=frozen_requests, instrument=args.serving_instrument,
             pairs=args.serving_pairs, dynamic=True)
         if reading.floor_pct is None:
-            value = serving.calibrate_floor(serving_recipe, a_build,
+            value = measured_serving_calibrate(serving_recipe, a_build,
                 samples=serving.MATCHED_CALIBRATION_PAIRS if source_instrument else max(2, args.serving_pairs),
                 port=direct_launch.port, resolved_recipe=anchor_recipe, frozen_requests=frozen_requests,
                 **source_instrument)
@@ -1498,7 +1535,8 @@ def main(argv: list[str] | None = None) -> int:
             **({"instrument": args.serving_instrument, "floor_record": floor_record}
                if source_instrument else {})),
             "experimental_candidate_not_champion" if experimental
-            else "canonical_candidate_vs_current_anchor")
+            else "canonical_candidate_vs_current_anchor",
+            measurement_window=cpu_measurement_window)
 
     def cpu_anchor_guard_compare(a_build, c_build):
         """Measure the promoted-anchor integrity A/A without consuming a source floor.
@@ -1518,7 +1556,8 @@ def main(argv: list[str] | None = None) -> int:
             candidate_resolved_recipe=candidate_recipe,
             frozen_requests=frozen_requests,
             **({"instrument": args.serving_instrument} if source_instrument else {})),
-            "promoted_anchor_integrity_not_source_candidate")
+            "promoted_anchor_integrity_not_source_candidate",
+            measurement_window=cpu_measurement_window)
 
     def confirm_measure(worker):
         """The confirm rung's A/B for one keep-candidate (§5.3): same arms, the
@@ -1550,11 +1589,12 @@ def main(argv: list[str] | None = None) -> int:
             cpu_profile_observation["status"] = "unavailable"
             publish("running", latest, step="CPU original-request observational profiling")
             try:
-                observed = cpu_profile.profile_loop(
-                    _cpu_arm(direct_launch, anchor_build[0]), manifest,
-                    store_root=args.store, perf_path=args.cpu_profiler,
-                    timeout_s=min(1800, resolved_campaign.resources.stage_timeout_s)
-                    if selected_identity else 1800)
+                with cpu_measurement_window():
+                    observed = cpu_profile.profile_loop(
+                        _cpu_arm(direct_launch, anchor_build[0]), manifest,
+                        store_root=args.store, perf_path=args.cpu_profiler,
+                        timeout_s=min(1800, resolved_campaign.resources.stage_timeout_s)
+                        if selected_identity else 1800)
             except cpu_profile.CpuProfileCleanupUncertain:
                 raise  # An unproven terminal child must not overlap the next A/B.
             except (cpu_profile.CpuProfileRefused, serving.ServerDied, OSError) as exc:
@@ -1596,6 +1636,20 @@ def main(argv: list[str] | None = None) -> int:
 
     def should_stop() -> bool:
         return stopping["asked"] or pool.stop_requested(args.store)
+
+    def cpu_measurement_window():
+        return _q3_cpu_gpu_quiet_window(
+            cpu_launch, should_stop=should_stop,
+            on_wait=lambda: publish("running", latest,
+                step="q3 CPU measurement waiting for MI210 GPU item to release"))
+
+    def measured_serving_compare(*args_, **kwargs_):
+        with cpu_measurement_window():
+            return serving.compare(*args_, **kwargs_)
+
+    def measured_serving_calibrate(*args_, **kwargs_):
+        with cpu_measurement_window():
+            return serving.calibrate_floor(*args_, **kwargs_)
 
     anchor_guard_seen: list = []
 
@@ -1932,7 +1986,7 @@ def main(argv: list[str] | None = None) -> int:
         if trigger is None:
             return
         # The gate is being spent -- once, on the whole bundle.
-        sv_row = serving.compare(serving_recipe, cor_build[0], anchor_build[0],
+        sv_row = measured_serving_compare(serving_recipe, cor_build[0], anchor_build[0],
                                  pairs=args.serving_pairs, floor_pct=serving_floor_pct,
                                  floor_unit=serving_floor_unit,
                                  **({"port": direct_launch.port,
@@ -2596,7 +2650,8 @@ def main(argv: list[str] | None = None) -> int:
                         print(f"runtime calibration not started: {exc}")
                     else:
                         publish("running", step=f"{direct_launch.backend.upper()} runtime: original anchor A/A and neutral calibration")
-                        preparation, reference = runtime_owner[0].calibration(feedback_anchor[0])
+                        with cpu_measurement_window():
+                            preparation, reference = runtime_owner[0].calibration(feedback_anchor[0])
                         solved = preparation.reopen(reference)
                         runtime_preparation.update(calibration=reference.to_dict(),
                             status="numeric_calibration_accepted" if solved.accepted else "calibration_failed")
@@ -2740,7 +2795,7 @@ def main(argv: list[str] | None = None) -> int:
                 calibration_anchor = (validation_anchor_build
                                       if args.validate_source_continuation else args.anchor_build)
                 calibration_recipe = _cpu_arm(direct_launch, calibration_anchor)
-                calibration = serving.calibrate_floor(
+                calibration = measured_serving_calibrate(
                     serving_recipe, calibration_anchor, samples=calibration_samples,
                     port=direct_launch.port,
                     resolved_recipe=calibration_recipe,
@@ -2804,7 +2859,7 @@ def main(argv: list[str] | None = None) -> int:
                     if serving_floor_pct is None:
                         publish("running", step=(f"{direct_launch.backend.upper()} whole-source "
                                                 "validation: original request-bound calibration"))
-                        calibration = serving.calibrate_floor(
+                        calibration = measured_serving_calibrate(
                             serving_recipe, validation_anchor_build,
                             samples=serving.MATCHED_CALIBRATION_PAIRS if source_instrument else max(2, args.serving_pairs),
                             port=direct_launch.port,
@@ -2825,7 +2880,7 @@ def main(argv: list[str] | None = None) -> int:
                                              "validation: original anchor vs propagated source"))
                     original_launch = _cpu_arm(direct_launch, validation_anchor_build)
                     try:
-                        validation_comparison = serving.compare(
+                        validation_comparison = measured_serving_compare(
                             serving_recipe, validation_anchor_build, validation_candidate_build,
                             pairs=args.serving_pairs, floor_pct=serving_floor_pct,
                             floor_unit=serving_floor_unit,
