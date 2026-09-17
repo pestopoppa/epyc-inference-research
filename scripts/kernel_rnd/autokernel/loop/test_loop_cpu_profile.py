@@ -24,6 +24,19 @@ def produce(tmp_path, *, failure=""):
     return result, config, events
 
 
+def test_direct_loop_budget_covers_observed_glm53_perf_expansion():
+    # The 2026-09-17 v20 warmup record was 93,760,128 bytes, but its complete
+    # perf-script rendering was 114,397,198 bytes. The old 96 MiB parser cap
+    # rejected the otherwise completed observation after exactly 96 MiB.
+    budgets = cp.LOOP_BUDGETS
+    assert budgets["max_raw_file_bytes"] > 93_760_128
+    assert budgets["max_parser_bytes"] > 114_397_198
+    reserved = (2 * budgets["max_raw_file_bytes"] + 2 * budgets["max_parser_bytes"]
+        + 2 * (cp.ns.MAX_REQUEST_BYTES + cp.ns.MAX_RESPONSE_BYTES)
+        + 9 * cp.MAX_DIAGNOSTIC_BYTES + budgets["max_metadata_bytes"])
+    assert budgets["max_total_raw_bytes"] >= reserved
+
+
 def test_direct_original_token_cache_request_and_raw_reopen(tmp_path):
     result, config, events = produce(tmp_path)
     assert result["status"] == "observed"
