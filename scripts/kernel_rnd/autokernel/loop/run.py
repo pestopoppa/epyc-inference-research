@@ -34,7 +34,7 @@ HEARTBEAT_STOP_TIMEOUT_S = 10
 
 from . import (accumulate, actors, anchor, archive, bench, champion, claim, gates,
                dispatch_guard, heartbeat, hotspots, loop, serving, serving_beliefs,
-               integrity, pipeline, pool, production, status, surface_fold,
+               integrity, lineage_beliefs, pipeline, pool, production, status, surface_fold,
                surface_validation)
 
 
@@ -2232,6 +2232,8 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:
             print(f"runtime progress unavailable: {type(exc).__name__}: {exc}", file=sys.stderr)
 
+    lineage_recorded_outcomes = []
+
     def run_pooled() -> pool.PoolResult:
         """Drive the loop across N detached lanes. THE run path -- the sequential
         `loop.run` wiring was deleted 2026-08-31, and the `loop.run` seam itself on
@@ -2315,9 +2317,17 @@ def main(argv: list[str] | None = None) -> int:
             if screen_state is not None:
                 attempt["cpu_screen"] = dict(screen_state)
                 attempt["research_scope"]["cpu_screen"] = dict(screen_state)
-            archive.record(args.store, attempt, epoch=epoch,
-                           recorded_at=loop._now(), campaign_id="ak-loop",
-                           on_serving_export=feedback.exported)
+            journal_receipts = []
+            try:
+                archive.record(args.store, attempt, epoch=epoch,
+                               recorded_at=loop._now(), campaign_id="ak-loop",
+                               on_serving_export=feedback.exported,
+                               journal_receipt_out=journal_receipts)
+            finally:
+                # A later markdown/export fault cannot erase an already-committed
+                # row receipt. Missing receipts remain explicit in the sidecar.
+                outcome.journal_receipt = journal_receipts[0] if journal_receipts else None
+                lineage_recorded_outcomes.append(outcome)
             if outcome.attempt_identity is not None:
                 registry = dispatch_guard.Registry(args.store)
                 try:
@@ -2592,6 +2602,23 @@ def main(argv: list[str] | None = None) -> int:
         finally:
             if original_store is not None:
                 original_store.close()
+
+    def publish_lineage(observed, run_artifact=None):
+        # The write side is retrospective to this run only. It is never an input
+        # to the planner, evaluator, promotion gate, or resource scheduler.
+        try:
+            source_root = Path(__file__).resolve().parents[4]
+            source_revision = subprocess.run(
+                ["git", "-C", str(source_root), "rev-parse", "HEAD"],
+                capture_output=True, text=True, check=True, timeout=5).stdout.strip()
+            lineage_beliefs.publish(
+                args.store, observed, epoch=epoch, anchor_commit=anchor_commit,
+                producer_commit=source_revision,
+                producer_file_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+                run_artifact=run_artifact)
+        except Exception as exc:
+            print(f"warning: lineage belief export unavailable: {type(exc).__name__}: "
+                  f"{exc}", file=sys.stderr)
 
     if direct_launch:
         report_runtime_progress()
@@ -3078,8 +3105,16 @@ def main(argv: list[str] | None = None) -> int:
                     "floor_request_digest": floor_request_digest} if direct_launch else {}),
             }
             status.write_json(args.out, "loop-run.json", body, prefix=".loop-run-")
+        # Reporting only: a failed sidecar cannot change a measured outcome or
+        # relaunch a candidate, and absence of a receipt cannot be graded on read.
+        publish_lineage(outcomes, args.out / "loop-run.json" if args.out else None)
     except BaseException as exc:
         publish_held_claims()
+        # An interrupted pooled run can have durable journal rows without a
+        # terminal loop-run.json. Capture those exact committed rows, never a
+        # reconstructed result or a synthetic zero-rate claim.
+        if lineage_recorded_outcomes:
+            publish_lineage(lineage_recorded_outcomes)
         # Starting, claim acquisition, reprofiling, and the run body all terminate
         # through the same ordered lifecycle. A failed status write cannot mask `exc`.
         status_publisher.close_failed(

@@ -228,6 +228,9 @@ class Outcome:
     branch_id: str | None = None
     width: int | None = None
     depth: int | None = None
+    # Populated only after the append-only experiment store commits this outcome.
+    # Kept out of to_attempt() so the receipt cannot recursively hash itself.
+    journal_receipt: dict | None = None
 
     def to_attempt(self) -> dict:
         row = {"status": self.status, "turn_recorded_at": _now()}

@@ -351,7 +351,8 @@ def keep(repo: Path, *, branch: str, message: str, paths: tuple[str, ...]) -> st
 
 
 def record(store_root: Path, attempt: Mapping[str, Any], *, epoch: str,
-           recorded_at: str, campaign_id: str, on_serving_export=None) -> bool:
+           recorded_at: str, campaign_id: str, on_serving_export=None,
+           journal_receipt_out: list[dict[str, Any]] | None = None) -> bool:
     """Append one attempt to durable memory and refresh `experiments.md`.
 
     Idempotent on attempt identity, so a resumed loop re-recording its own rows
@@ -359,7 +360,8 @@ def record(store_root: Path, attempt: Mapping[str, Any], *, epoch: str,
     """
     with experiments.ExperimentStore(store_root) as store:
         added = store.record(attempt, epoch=epoch, recorded_at=recorded_at,
-                             campaign_id=campaign_id)
+                             campaign_id=campaign_id,
+                             receipt_out=journal_receipt_out)
         store.write_markdown(epoch=epoch)
         if added:
             try:

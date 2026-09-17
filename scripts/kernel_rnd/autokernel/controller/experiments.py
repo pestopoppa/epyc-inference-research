@@ -333,7 +333,8 @@ class ExperimentStore:
 
     def record(self, attempt: Mapping[str, Any], *, epoch: str,
                recorded_at: str, campaign_id: str,
-               deployment: str | None = None) -> bool:
+               deployment: str | None = None,
+               receipt_out: list[dict[str, Any]] | None = None) -> bool:
         """Persist one attempt. Returns False if it was already recorded.
 
         Idempotent on `attempt_id` so a resumed controller re-recording its own
@@ -369,6 +370,18 @@ class ExperimentStore:
             "refusal_reason,result_sha256,spawn_parent,branch_id,width,depth,payload"
             ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", row)
         self._connection.commit()
+        if cursor.rowcount == 1 and receipt_out is not None:
+            # The hash is over the exact TEXT bytes handed to SQLite, after the
+            # commit acknowledged them. Duplicate rows never get a fresh receipt.
+            receipt_out.append({
+                "attempt_id": attempt_id,
+                "campaign_id": campaign_id,
+                "epoch_sha256": epoch,
+                "recorded_at": recorded_at,
+                "payload_sha256": hashlib.sha256(row[-1].encode("utf-8")).hexdigest(),
+                "spawn_parent": row[-5], "branch_id": row[-4],
+                "width": row[-3], "depth": row[-2],
+            })
         return cursor.rowcount == 1
 
     def record_all(self, attempts: Iterable[Mapping[str, Any]], **kwargs: Any) -> int:
