@@ -138,10 +138,6 @@ def affected_op_scope(paths: tuple[str, ...], *, target_surface: str,
     if changed == {"ggml/src/ggml-cuda/mmq.cu"} and \
             ("mul_mat_q" in target_symbol or "should_use_mmq" in target_symbol):
         return ("MUL_MAT", "MUL_MAT_ID")
-    if changed <= {"ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp",
-                   "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp"} and \
-            ("mul_mat" in target_symbol or "gemm" in target_symbol):
-        return ("MUL_MAT", "MUL_MAT_ID")
     return Verdict("op_scope", False,
                    "affected native op/reference is unresolved for actual changed source; "
                    "MUL_MAT is not a universal correctness oracle")
@@ -160,19 +156,6 @@ def check_cpu_gdn_reference(build_dir: Path, source_root: Path, *,
                    "oracle_unavailable" if result.status == "unavailable" else
                    "reference_comparison", result.status == "pass",
                    result.reason, result.detail)
-
-
-def cpu_matmul_reference_coverage(paths: tuple[str, ...] = (),
-                                  op_verdicts: tuple[Verdict, ...] = ()) -> Verdict:
-    """Only independently covered CPU matmul work may advance to timing."""
-    iqk_only = bool(paths) and set(paths) <= {
-        "ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp",
-        "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp"}
-    if iqk_only and op_verdicts and any("iqk_active=True" in row.detail for row in op_verdicts):
-        return Verdict("oracle_unavailable", False,
-                       "IQK dispatch engaged, but edited quant/function case is not proved")
-    return Verdict("oracle_unavailable", False,
-                   "independent CPU matmul reference/edited-case engagement unavailable")
 
 
 def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
@@ -231,8 +214,7 @@ def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
                        f"test-backend-ops gave contradictory {backend} status and exit/tally; "
                        "this is a harness fault, NOT evidence about the patch",
                        output[-2000:])
-    return Verdict("correctness", True,
-                   detail=f"iqk_active={'[iqk] ACTIVE:' in output}\n" + output[-500:])
+    return Verdict("correctness", True, detail=done.stdout[-500:])
 
 
 def deterministic(build_dir: Path, model: Path, *, runs: int = 3) -> Verdict:

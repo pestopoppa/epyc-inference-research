@@ -1384,16 +1384,9 @@ def main(argv: list[str] | None = None) -> int:
                 # Original candidate executable/DSOs already proved, source restored
                 # exactly. Re-run the ordinary oracle at FULL conditions, no rebuild.
                 arm = _cpu_arm(direct_launch, worker.build_dir)
-                op_verdicts = []
-                def check_op(op):
-                    verdict = gates.op_correctness(
-                        worker.build_dir, op=op, backend="CPU", resolved_recipe=arm)
-                    op_verdicts.append(verdict)
-                    return verdict
-                checks = [lambda op=op: check_op(op) for op in scope]
-                if "MUL_MAT" in scope:
-                    checks.append(lambda: gates.cpu_matmul_reference_coverage(
-                        changed + untracked, tuple(op_verdicts)))
+                checks = [lambda op=op: gates.op_correctness(
+                    worker.build_dir, op=op, backend="CPU", resolved_recipe=arm)
+                    for op in scope]
                 if "GATED_DELTA_NET" in scope:
                     checks.append(lambda: gates.check_cpu_gdn_reference(
                         worker.build_dir, worker.worktree, resolved_recipe=arm))
@@ -1413,18 +1406,10 @@ def main(argv: list[str] | None = None) -> int:
                                        jobs=build_jobs, cpu_list=build_cpu_list,
                                        **({"targets": gates.PROMOTION_TARGETS} if direct_launch else {})),
             ]
-            op_verdicts = []
-            def check_op(op):
-                verdict = gates.op_correctness(worker.build_dir, op=op,
-                    **({"backend": "CPU",
-                        "resolved_recipe": _cpu_arm(direct_launch, worker.build_dir)}
-                       if cpu_launch else {}))
-                op_verdicts.append(verdict)
-                return verdict
-            checks.extend(lambda op=op: check_op(op) for op in scope)
-            if cpu_launch and "MUL_MAT" in scope:
-                checks.append(lambda: gates.cpu_matmul_reference_coverage(
-                    changed + untracked, tuple(op_verdicts)))
+            checks.extend(lambda op=op: gates.op_correctness(worker.build_dir, op=op,
+                          **({"backend": "CPU",
+                              "resolved_recipe": _cpu_arm(direct_launch, worker.build_dir)}
+                             if cpu_launch else {})) for op in scope)
             if cpu_launch and "GATED_DELTA_NET" in scope:
                 checks.append(lambda: gates.check_cpu_gdn_reference(
                     worker.build_dir, worker.worktree,

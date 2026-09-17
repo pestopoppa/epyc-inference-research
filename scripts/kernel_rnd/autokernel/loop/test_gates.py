@@ -270,27 +270,15 @@ class AffectedOpAndIndependentReference(unittest.TestCase):
             self.assertIsInstance(verdict, gates.Verdict)
             self.assertFalse(verdict.passed)
 
-    def test_cpu_quant_routes_refuse_without_edited_case_reference(self):
+    def test_cpu_quant_routes_refuse_before_build_without_edited_case_reference(self):
         for path, symbol in (("ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp", "iqk_mul_mat"),
-                             ("ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp", "iqk_gemm")):
-            self.assertEqual(gates.affected_op_scope(
-                (path,), target_surface=path, target_symbol=symbol),
-                ("MUL_MAT", "MUL_MAT_ID"))
-        marker = gates.cpu_matmul_reference_coverage()
-        self.assertFalse(marker.passed)
-        self.assertEqual(marker.gate, "oracle_unavailable")
-        self.assertIn("unavailable", marker.reason)
-        iqk = ("ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp",)
-        self.assertEqual(gates.cpu_matmul_reference_coverage(iqk).gate,
-                         "oracle_unavailable")
-        proved = gates.cpu_matmul_reference_coverage(
-            iqk, (gates.Verdict("correctness", True, detail="iqk_active=True"),))
-        self.assertFalse(proved.passed)
-        self.assertIn("edited quant/function", proved.reason)
-        self.assertFalse(gates.affected_op_scope(
-            ("ggml/src/ggml-cpu/arch/x86/quants.c",),
-            target_surface="ggml/src/ggml-cpu/arch/x86/quants.c",
-            target_symbol="ggml_vec_dot_q8_0_q8_0").passed)
+                             ("ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp", "iqk_gemm"),
+                             ("ggml/src/ggml-cpu/arch/x86/quants.c",
+                              "ggml_vec_dot_q8_0_q8_0")):
+            verdict = gates.affected_op_scope(
+                (path,), target_surface=path, target_symbol=symbol)
+            self.assertIsInstance(verdict, gates.Verdict)
+            self.assertFalse(verdict.passed)
 
     def test_wrong_vs_unavailable_reference_are_distinct(self):
         for status, gate in (("pass", "reference_comparison"),
