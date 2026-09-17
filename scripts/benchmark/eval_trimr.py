@@ -44,24 +44,22 @@ RESULTS_DIR = SCRIPT_DIR.parent.parent / "data" / "trimr"
 SCORER_PATH = SCRIPT_DIR / "debug_scorer.py"
 
 
-def load_questions(suites: list[str], n_questions: int) -> list[dict[str, Any]]:
-    """Load questions from question_pool.jsonl filtered by suite.
+def load_questions(suites: list[str], n_questions: int, seed: int = 42) -> list[dict[str, Any]]:
+    """Seeded, source-stratified sample of ``n_questions`` per suite.
 
-    Args:
-        suites: Suite names to include.
-        n_questions: Max questions per suite.
-
-    Returns:
-        List of question dicts.
+    PRB-T4 (2026-09-17): this used to take the first ``n`` rows in file order,
+    which for ``math`` is 100% ``gsm8k`` (the 2026-04-09 TrimR "math" result
+    was GSM8K-only for that reason). Same sampler as ``eval_tale_budget``.
     """
+    sys.path.insert(0, str(SCRIPT_DIR))
+    from question_pool import stratified_sample
+
     if not POOL_PATH.exists():
         log.error("Question pool not found: %s", POOL_PATH)
         log.error("Run: python question_pool.py --build")
         sys.exit(1)
 
-    questions: list[dict[str, Any]] = []
-    suite_counts: dict[str, int] = {s: 0 for s in suites}
-
+    by_suite: dict[str, list[dict[str, Any]]] = {s: [] for s in suites}
     with open(POOL_PATH) as f:
         for line in f:
             line = line.strip()
@@ -71,28 +69,20 @@ def load_questions(suites: list[str], n_questions: int) -> list[dict[str, Any]]:
                 q = json.loads(line)
             except json.JSONDecodeError:
                 continue
-
-            # Skip metadata line
             if q.get("__pool_metadata__"):
                 continue
-
             suite = q.get("suite", "")
-            if suite not in suites:
-                continue
-            if suite_counts[suite] >= n_questions:
-                continue
+            if suite in by_suite:
+                by_suite[suite].append(q)
 
-            questions.append(q)
-            suite_counts[suite] += 1
-
-            # Check if we have enough
-            if all(c >= n_questions for c in suite_counts.values()):
-                break
+    questions: list[dict[str, Any]] = []
+    for suite in suites:
+        questions.extend(stratified_sample(by_suite[suite], n_questions, seed))
 
     log.info(
         "Loaded %d questions: %s",
         len(questions),
-        ", ".join(f"{s}={c}" for s, c in suite_counts.items()),
+        ", ".join(f"{s}={min(len(by_suite[s]), n_questions)}" for s in suites),
     )
     return questions
 

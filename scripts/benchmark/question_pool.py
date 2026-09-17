@@ -21,6 +21,7 @@ import json
 import logging
 import os
 import random
+import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -214,6 +215,101 @@ def build_pool(output_path: Path | None = None) -> dict[str, int]:
     return stats
 
 
+def refresh_suites(
+    suites: list[str],
+    source_path: Path | None = None,
+    output_path: Path | None = None,
+    *,
+    allow_live_overwrite: bool = False,
+) -> dict[str, dict[str, int]]:
+    """Re-extract only ``suites`` from their adapters; copy every other row verbatim.
+
+    Why (PRB-T4, 2026-09-17): the live pool was built 2026-07-27 and never
+    rebuilt, so adapter fixes that landed afterwards (the livecodebench
+    executable oracle, 2026-08-12; the MMLU-Pro label range, 2026-09-17) never
+    reached the rows every harness actually reads. A full ``--build`` rewrites
+    all 38 suites — the eval tower's instrument included — so this splices only
+    the named suites. Other rows are byte-preserved and keep their order;
+    refreshed rows are appended.
+
+    Refuses to overwrite the live pool unless ``allow_live_overwrite``: swapping
+    the tower's input is an instrument-era change for its owner, not a side
+    effect of a harness fix. Written atomically.
+    """
+    from dataset_adapters import get_adapter
+
+    source_path = source_path or POOL_FILE
+    output_path = output_path or POOL_FILE
+    if output_path.resolve() == POOL_FILE.resolve() and not allow_live_overwrite:
+        raise PoolBuildInvariantError(
+            f"refusing to overwrite the live pool {POOL_FILE} without allow_live_overwrite"
+        )
+    targets = set(suites)
+    fresh: list[dict] = []
+    report: dict[str, dict[str, int]] = {}
+    for suite in sorted(targets):
+        adapter = get_adapter(suite)
+        if adapter is None:
+            raise PoolBuildInvariantError(f"no adapter for suite {suite!r}")
+        rows = adapter.extract_all()
+        if not rows:
+            raise PoolBuildInvariantError(f"adapter {suite!r} produced zero rows; refusing")
+        for q in rows:
+            q.setdefault("suite", suite)
+            q.setdefault("dataset_source", "hf_adapter")
+        report[suite] = {"added": len(rows), "removed": 0,
+                         "dropped_by_adapter": int(getattr(adapter, "dropped_rows", 0))}
+        fresh.extend(rows)
+
+    header: dict[str, Any] | None = None
+    kept = 0
+    with open(source_path, encoding="utf-8") as src:
+        for line in src:
+            if not line.strip():
+                continue
+            if header is None and _HEADER_KEY in line[:64]:
+                header = json.loads(line)
+                continue
+            suite = json.loads(line).get("suite")
+            if suite in targets:
+                report[suite]["removed"] += 1
+            else:
+                kept += 1
+    if header is None:
+        raise PoolBuildInvariantError(f"{source_path} has no pool header")
+
+    header = dict(header)
+    header["suites"] = dict(header.get("suites") or {})
+    for suite in targets:
+        header["suites"][suite] = report[suite]["added"]
+    header["total_questions"] = kept + len(fresh)
+    header.setdefault("refreshed_suites", {})
+    now = datetime.now(timezone.utc).isoformat()
+    for suite in sorted(targets):
+        header["refreshed_suites"][suite] = {"refreshed_at": now, **report[suite]}
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = output_path.with_name(output_path.name + ".tmp")
+    with open(source_path, encoding="utf-8") as src, open(tmp_path, "w", encoding="utf-8") as out:
+        out.write(json.dumps(header) + "\n")
+        seen_header = False
+        for line in src:
+            if not line.strip():
+                continue
+            if not seen_header and _HEADER_KEY in line[:64]:
+                seen_header = True
+                continue
+            if json.loads(line).get("suite") in targets:
+                continue
+            out.write(line if line.endswith("\n") else line + "\n")
+        for q in fresh:
+            out.write(json.dumps(q, ensure_ascii=False) + "\n")
+        out.flush()
+        os.fsync(out.fileno())
+    os.replace(tmp_path, output_path)
+    return report
+
+
 def load_pool(
     pool_path: Path | None = None, warn_stale: bool = True,
 ) -> dict[str, list[dict]]:
@@ -316,6 +412,81 @@ def _check_staleness(header: dict) -> None:
         pass
 
 
+_ID_INDEX_TAIL = re.compile(r"_\d+$")
+
+
+def source_stratum(row: dict[str, Any]) -> str:
+    """Source/sub-source key of a pool row, used for stratified sampling.
+
+    The adapters encode provenance in the row id: ``gsm8k_00012`` ->
+    ``gsm8k``, ``math500_Algebra_00003`` -> ``math500_Algebra``,
+    ``olympiadbench_geometry_00007`` -> ``olympiadbench_geometry``,
+    ``mmlu_pro_law_01424`` -> ``mmlu_pro_law``. Ids without a numeric tail
+    (``leetcode_two-sum``) collapse to their first token, so a suite of
+    slug-keyed rows is one stratum rather than one stratum per row.
+    """
+    qid = str(row.get("id") or row.get("question_id") or "")
+    if not qid:
+        return "unknown"
+    stripped = _ID_INDEX_TAIL.sub("", qid)
+    if stripped != qid and stripped:
+        return stripped
+    return qid.split("_", 1)[0]
+
+
+def stratified_sample(
+    rows: list[dict[str, Any]], n: int, seed: int,
+    stratum: Any = source_stratum,
+) -> list[dict[str, Any]]:
+    """Seeded sample of ``n`` rows, allocated proportionally across strata.
+
+    Why this exists (PRB-T4, 2026-09-17): harnesses that took the FIRST ``n``
+    rows of a suite in file order drew 100% ``gsm8k`` from the ``math`` suite,
+    whose file order is 1,319 gsm8k rows followed by 500 MATH-500 rows.
+
+    Deterministic in (row set, n, seed) and independent of file order: rows
+    are keyed by id inside each stratum before drawing. Allocation is
+    largest-remainder proportional with seeded tie-breaks; every stratum with a
+    non-zero share keeps at least its floor. The result is shuffled with the
+    same seed so suites interleave their sources.
+    """
+    if n <= 0 or not rows:
+        return []
+    if n >= len(rows):
+        out = sorted(rows, key=lambda r: str(r.get("id", "")))
+        random.Random(seed).shuffle(out)
+        return out
+
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        groups.setdefault(stratum(row), []).append(row)
+    keys = sorted(groups)
+    total = len(rows)
+    rng = random.Random(seed)
+    quotas = {k: n * len(groups[k]) / total for k in keys}
+    alloc = {k: int(quotas[k]) for k in keys}
+    remaining = n - sum(alloc.values())
+    tiebreak = {k: rng.random() for k in keys}
+    order = sorted(keys, key=lambda k: (-(quotas[k] - alloc[k]), tiebreak[k]))
+    for k in order[:remaining]:
+        alloc[k] += 1
+
+    picked: list[dict[str, Any]] = []
+    for k in keys:
+        members = sorted(groups[k], key=lambda r: str(r.get("id", "")))
+        picked.extend(rng.sample(members, min(alloc[k], len(members))))
+    rng.shuffle(picked)
+    return picked
+
+
+def stratum_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        key = source_stratum(row)
+        counts[key] = counts.get(key, 0) + 1
+    return dict(sorted(counts.items()))
+
+
 def sample_from_pool(
     pool: dict[str, list[dict]],
     suites: list[str],
@@ -416,7 +587,30 @@ def main():
         "--output", type=str, default=None,
         help=f"Output path (default: {POOL_FILE})",
     )
+    parser.add_argument(
+        "--refresh-suites", nargs="+", default=None, metavar="SUITE",
+        help="Re-extract only these suites into a copy of the pool (needs --output "
+             "unless --allow-live-overwrite)",
+    )
+    parser.add_argument(
+        "--source", type=str, default=None,
+        help=f"Pool to copy non-refreshed suites from (default: {POOL_FILE})",
+    )
+    parser.add_argument(
+        "--allow-live-overwrite", action="store_true",
+        help="Permit --refresh-suites to replace the live pool (instrument-era change)",
+    )
     args = parser.parse_args()
+
+    if args.refresh_suites:
+        report = refresh_suites(
+            args.refresh_suites,
+            source_path=Path(args.source) if args.source else None,
+            output_path=Path(args.output) if args.output else None,
+            allow_live_overwrite=args.allow_live_overwrite,
+        )
+        print(json.dumps(report, indent=2))
+        return
 
     if args.build:
         out = Path(args.output) if args.output else POOL_FILE

@@ -188,7 +188,7 @@ def test_fetch_serving_identity_overrides_hash_and_errors(tmp_path):
 
 
 def test_main_end_to_end_writes_rows_meta_and_summary(tmp_path, monkeypatch):
-    monkeypatch.setattr(tb, "load_questions", lambda suites, n: list(QUESTIONS))
+    monkeypatch.setattr(tb, "load_questions", lambda suites, n, **kw: list(QUESTIONS))
     server = FakeServer()
     fetched = []
 
@@ -221,7 +221,7 @@ def test_main_end_to_end_writes_rows_meta_and_summary(tmp_path, monkeypatch):
 
 
 def test_main_dry_run_makes_no_requests(monkeypatch, capsys):
-    monkeypatch.setattr(tb, "load_questions", lambda suites, n: list(QUESTIONS))
+    monkeypatch.setattr(tb, "load_questions", lambda suites, n, **kw: list(QUESTIONS))
 
     def boom(*a, **k):
         raise AssertionError("network used in dry run")

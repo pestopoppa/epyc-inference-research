@@ -28,6 +28,8 @@ Usage:
 """
 
 # Scoring: delegates to orchestrator B7 debug_scorer (2026-08-23) — no pre-B7 semantics
+# Sampling: seeded + source-stratified; oracles preflighted before any inference
+# (PRB-T4 defects, 2026-09-17).
 
 from __future__ import annotations
 
@@ -155,6 +157,7 @@ class TrialResult:
     temperature: float | None = None
     seed: int | None = None
     served_model: str | None = None  # "model" field echoed by the server
+    source: str | None = None  # question_pool.source_stratum (e.g. gsm8k, math500_Algebra)
 
 
 @dataclass
@@ -172,17 +175,9 @@ class GenConfig:
     poster: Poster | None = None
 
 
-def load_questions(suites: list[str], n_questions: int) -> list[dict[str, Any]]:
-    """Load questions from question_pool.jsonl filtered by suite."""
-    if not POOL_PATH.exists():
-        log.error("Question pool not found: %s", POOL_PATH)
-        log.error("Run: python question_pool.py --build")
-        sys.exit(1)
-
-    questions: list[dict[str, Any]] = []
-    suite_counts: dict[str, int] = {s: 0 for s in suites}
-
-    with open(POOL_PATH) as f:
+def _read_suite_rows(suites: list[str], pool_path: Path) -> dict[str, list[dict[str, Any]]]:
+    rows: dict[str, list[dict[str, Any]]] = {s: [] for s in suites}
+    with open(pool_path) as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -194,21 +189,100 @@ def load_questions(suites: list[str], n_questions: int) -> list[dict[str, Any]]:
             if q.get("__pool_metadata__"):
                 continue
             suite = q.get("suite", "")
-            if suite not in suites:
-                continue
-            if suite_counts[suite] >= n_questions:
-                continue
-            questions.append(q)
-            suite_counts[suite] += 1
-            if all(c >= n_questions for c in suite_counts.values()):
-                break
+            if suite in rows:
+                rows[suite].append(q)
+    return rows
+
+
+def load_questions(
+    suites: list[str],
+    n_questions: int,
+    seed: int = 42,
+    pool_path: Path | None = None,
+    composition: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Seeded, source-stratified sample of ``n_questions`` per suite.
+
+    PRB-T4 (2026-09-17): this used to take the FIRST ``n`` rows of each suite in
+    file order, so the ``math`` sample was 100% ``gsm8k`` (the pool lists 1,319
+    gsm8k rows before its 500 MATH-500 rows) and olympiadbench under-drew
+    geometry 5% vs 19%. Rows are now allocated proportionally across the
+    suite's sources (``question_pool.source_stratum``). If ``composition`` is
+    given it receives, per suite, the population and sample stratum counts.
+    """
+    from question_pool import stratified_sample, stratum_counts
+
+    pool_path = pool_path or POOL_PATH
+    if not pool_path.exists():
+        log.error("Question pool not found: %s", pool_path)
+        log.error("Run: python question_pool.py --build")
+        sys.exit(1)
+
+    by_suite = _read_suite_rows(suites, pool_path)
+    questions: list[dict[str, Any]] = []
+    for suite in suites:
+        population = by_suite[suite]
+        picked = stratified_sample(population, n_questions, seed)
+        questions.extend(picked)
+        if composition is not None:
+            composition[suite] = {
+                "population": stratum_counts(population),
+                "sample": stratum_counts(picked),
+            }
 
     log.info(
-        "Loaded %d questions: %s",
-        len(questions),
-        ", ".join(f"{s}={c}" for s, c in suite_counts.items()),
+        "Loaded %d questions (seed %d): %s",
+        len(questions), seed,
+        ", ".join(f"{s}={sum(1 for q in questions if q.get('suite') == s)}" for s in suites),
     )
     return questions
+
+
+def oracle_defect(question: dict[str, Any]) -> str | None:
+    """Why this row cannot yield a correctness verdict, or None if it can.
+
+    Checked for every sampled row BEFORE any inference, so a broken oracle
+    refuses the run instead of producing numbers (PRB-T4, 2026-09-16: the
+    livecodebench arm ran on a ``substring 'def '`` oracle and mmlu_pro died
+    at question 1).
+
+    * ``substring`` on a row that declares a programming ``language`` is the
+      pre-2026-08-12 livecodebench oracle: every Python answer contains
+      ``def ``. It is not a correctness check.
+    * a ``multiple_choice`` row must accept its own gold letter/text (known-right
+      passes) and resolve it at all (no ``ScoringUnavailableError``).
+    """
+    method = question.get("scoring_method")
+    config = question.get("scoring_config") or {}
+    if not isinstance(config, dict):
+        return "scoring_config is not an object"
+    if method == "substring" and config.get("language"):
+        return (f"vacuous code oracle: substring {question.get('expected')!r} on a "
+                f"{config.get('language')} row")
+    if method == "multiple_choice":
+        sys.path.insert(0, str(SCRIPT_DIR))
+        import debug_scorer
+
+        gold = str(question.get("expected", ""))
+        try:
+            ok = debug_scorer.score_answer(gold, gold, "multiple_choice", config)
+        except debug_scorer.ScoringUnavailableError as exc:
+            return f"unscoreable multiple_choice gold: {exc}"
+        if not ok:
+            return f"multiple_choice gold {gold!r} does not score as correct against itself"
+    return None
+
+
+def preflight_oracles(questions: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Per-suite defect tally for the sampled rows (empty dict == all clear)."""
+    bad: dict[str, dict[str, Any]] = {}
+    for q in questions:
+        reason = oracle_defect(q)
+        if reason is None:
+            continue
+        cell = bad.setdefault(q.get("suite", "unknown"), {"rows": 0, "example": reason})
+        cell["rows"] += 1
+    return bad
 
 
 def generate_response(
@@ -285,17 +359,26 @@ def strip_think_blocks(text: str) -> str:
     return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
 
-def score_question(answer: str, question: dict[str, Any]) -> bool:
-    """Score an answer against expected. Uses debug_scorer if available."""
-    sys.path.insert(0, str(SCRIPT_DIR))
-    from debug_scorer import score_answer
+def score_question(answer: str, question: dict[str, Any]) -> bool | None:
+    """Score an answer against expected via the shared (orchestrator B7) scorer.
 
-    return score_answer(
-        answer=strip_think_blocks(answer),
-        expected=question.get("expected", ""),
-        scoring_method=question.get("scoring_method", "exact_match"),
-        scoring_config=question.get("scoring_config"),
-    )
+    Three-valued: ``None`` when the scorer refuses the row
+    (``ScoringUnavailableError``). An undecidable row is EXCLUDED from accuracy,
+    never counted wrong and never allowed to abort the suite.
+    """
+    sys.path.insert(0, str(SCRIPT_DIR))
+    import debug_scorer
+
+    try:
+        return debug_scorer.score_answer(
+            answer=strip_think_blocks(answer),
+            expected=question.get("expected", ""),
+            scoring_method=question.get("scoring_method", "exact_match"),
+            scoring_config=question.get("scoring_config"),
+        )
+    except debug_scorer.ScoringUnavailableError as exc:
+        log.warning("unscoreable %s: %s", question.get("id"), exc)
+        return None
 
 
 @dataclass
@@ -400,7 +483,14 @@ def run_trial(
         temperature=cfg.temperature,
         seed=cfg.seed,
         served_model=meta.get("served_model"),
+        source=_source_of(question),
     )
+
+
+def _source_of(question: dict[str, Any]) -> str:
+    from question_pool import source_stratum
+
+    return source_stratum(question)
 
 
 def run_evaluation(
@@ -433,7 +523,8 @@ def run_evaluation(
         for cond in conditions:
             result = run_trial(q, cond, cfg, estimate)
             results.append(result)
-            status = "correct" if result.correct else "wrong"
+            status = ("unscoreable" if result.correct is None
+                      else "correct" if result.correct else "wrong")
             log.info(
                 "  %s: %s, %d tokens (%d incl. est), %.1fs",
                 cond, status, result.total_tokens,
@@ -538,8 +629,20 @@ def summarize(results: list[TrialResult]) -> dict[str, Any]:
         groups.setdefault(("__all__", r.condition), []).append(r)
     for (suite, cond), rows in sorted(groups.items()):
         scored = [r for r in rows if r.correct is not None]
+        by_source: dict[str, dict[str, Any]] = {}
+        for r in rows:
+            src = by_source.setdefault(r.source or "unknown", {"n": 0, "n_scored": 0, "correct": 0})
+            src["n"] += 1
+            if r.correct is not None:
+                src["n_scored"] += 1
+                src["correct"] += 1 if r.correct else 0
+        for src in by_source.values():
+            src["accuracy"] = src["correct"] / src["n_scored"] if src["n_scored"] else None
         cell = {
             "n": len(rows),
+            "n_scored": len(scored),
+            "n_unscoreable": len(rows) - len(scored),
+            "by_source": dict(sorted(by_source.items())),
             "accuracy": _mean([1.0 if r.correct else 0.0 for r in scored]),
             "mean_tokens_answer_only": _mean([r.total_tokens for r in rows]),
             "mean_tokens_incl_estimator": _mean([r.total_tokens_incl_estimator for r in rows]),
@@ -713,6 +816,15 @@ def build_parser() -> argparse.ArgumentParser:
              "writes .meta.json and .summary.json sidecars",
     )
     parser.add_argument(
+        "--pool", type=Path, default=None,
+        help=f"Question pool JSONL (default: {POOL_PATH}); e.g. a pool made with "
+             "`question_pool.py --refresh-suites livecodebench mmlu_pro --output ...`",
+    )
+    parser.add_argument(
+        "--sample-seed", type=int, default=42,
+        help="Seed for the source-stratified question sample (default: 42)",
+    )
+    parser.add_argument(
         "--dry-run", action="store_true",
         help="Load questions and show prompts without sending to model",
     )
@@ -740,10 +852,26 @@ def main(argv: list[str] | None = None, poster: Poster | None = None,
     args = build_parser().parse_args(argv)
     cfg = build_config(args, poster)
 
-    questions = load_questions(args.suites, args.n_questions)
+    composition: dict[str, Any] = {}
+    questions = load_questions(
+        args.suites, args.n_questions, seed=args.sample_seed,
+        pool_path=args.pool, composition=composition,
+    )
     if not questions:
         log.error("No questions loaded. Check suite names and question_pool.jsonl.")
         sys.exit(1)
+    for suite, comp in composition.items():
+        log.info("  %s sample by source: %s", suite, comp.get("sample"))
+
+    defects = preflight_oracles(questions)
+    if defects:
+        for suite, cell in sorted(defects.items()):
+            log.error("REFUSING suite %s: %d sampled row(s) have no valid oracle, e.g. %s",
+                      suite, cell["rows"], cell["example"])
+        log.error("No inference was sent. Rebuild the rows (question_pool.py "
+                  "--refresh-suites %s --output <new pool>) and pass --pool.",
+                  " ".join(sorted(defects)))
+        sys.exit(2)
 
     if args.dry_run:
         log.info("DRY RUN — %d questions, conditions: %s, endpoint: %s",
@@ -775,6 +903,9 @@ def main(argv: list[str] | None = None, poster: Poster | None = None,
         "argv": sys.argv if argv is None else list(argv),
         "suites": args.suites,
         "n_questions": args.n_questions,
+        "pool": str(args.pool or POOL_PATH),
+        "sample_seed": args.sample_seed,
+        "sample_composition": composition,
         "conditions": args.conditions,
         "budget_unit": cfg.budget_unit,
         "temperature": cfg.temperature,
