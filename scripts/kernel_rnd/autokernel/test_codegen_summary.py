@@ -6,6 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -42,6 +43,32 @@ class TestCodegenSummary(unittest.TestCase):
             self.assertIn("non-CUDA", summary["ptx_sass_cubin"])
             self.assertIsNone(summary["occupancy"])
 
+    def test_disassembler_timeout_is_a_real_wall_bound(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / "stall"
+            executable.write_text("#!/usr/bin/env python3\nimport time\ntime.sleep(2)\n")
+            executable.chmod(0o700)
+            with mock.patch.object(codegen_summary, "LLVM_OBJDUMP", executable):
+                start = time.monotonic()
+                output, reason = codegen_summary._disassemble(
+                    Path(directory) / "unused.hsaco", timeout_s=0.05)
+                elapsed = time.monotonic() - start
+            self.assertIsNone(output)
+            self.assertEqual(reason, "disassembly timeout")
+            self.assertLess(elapsed, 0.5)
+
+    def test_total_disassembly_budget_is_shared_across_objects(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            for index in range(2):
+                (Path(directory) / f"{index}.hsaco").write_bytes(b"fixture")
+            with mock.patch.object(codegen_summary, "_disassemble",
+                                   return_value=("", "ok")) as inspect:
+                with mock.patch.object(codegen_summary.time, "monotonic",
+                                       side_effect=[0.0, 1.0, 11.0]):
+                    codegen_summary.summarize_codegen("llama_gpu", directory)
+            self.assertEqual(inspect.call_args_list[0].kwargs["timeout_s"], 8.0)
+            self.assertEqual(inspect.call_args_list[1].kwargs["timeout_s"], 1.0)
+
     def test_only_keep_attaches_and_summary_does_not_change_keep(self) -> None:
         spec = campaign.CampaignSpec(campaign_id="ak-codegen-test",
                                      candidate_id="akc-codegen-test",
@@ -68,7 +95,7 @@ class TestCodegenSummary(unittest.TestCase):
             first = codegen_summary.retain_summary(
                 root / "store", head, backend="llama_gpu", build_dir=build)
             self.assertEqual(first["status"], "unavailable")
-            sidecar = root / "store" / "codegen" / f"{head}.json"
+            sidecar = root / "store" / first["artifact_ref"]
             self.assertEqual(json.loads(sidecar.read_text()), first)
             self.assertEqual(codegen_summary.retain_summary(
                 root / "store", head, backend="llama_gpu", build_dir=build), first)
@@ -76,6 +103,11 @@ class TestCodegenSummary(unittest.TestCase):
                 root / "store", "b" * 40, backend="llama_cpu", build_dir=build)
             self.assertEqual(cpu["status"], "unavailable")
             self.assertEqual(cpu["backend"], "llama_cpu")
+            self.assertNotEqual(first["artifact_ref"], cpu["artifact_ref"])
+            changed_recipe = codegen_summary.retain_summary(
+                root / "store", head, backend="llama_gpu", build_dir=build,
+                recipe={"flags": "different"})
+            self.assertNotEqual(first["artifact_ref"], changed_recipe["artifact_ref"])
             with self.assertRaises(ValueError):
                 codegen_summary.retain_summary(
                     root / "store", "../not-a-commit", backend="llama_gpu",
@@ -91,6 +123,26 @@ class TestCodegenSummary(unittest.TestCase):
         self.assertNotIn("codegen_summary", loop_run.attempt_with_codegen(
             rejected, {head: summary}))
 
+    def test_concurrent_sidecar_create_never_overwrites_winner(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build = root / "build"
+            build.mkdir()
+            winner = b"other writer's immutable artifact\n"
+
+            def rival(_source, destination):
+                Path(destination).write_bytes(winner)
+                raise FileExistsError(destination)
+
+            with mock.patch.object(codegen_summary.os, "link", side_effect=rival):
+                with self.assertRaisesRegex(ValueError, "existing codegen sidecar"):
+                    codegen_summary.retain_summary(
+                        root / "store", "c" * 40, backend="llama_gpu",
+                        build_dir=build)
+            sidecars = list((root / "store" / "codegen").glob("*.json"))
+            self.assertEqual(len(sidecars), 1)
+            self.assertEqual(sidecars[0].read_bytes(), winner)
+
     def test_live_commit_hook_covers_gpu_and_direct_cpu_source_keeps(self) -> None:
         """Static seam test; executing main would claim the shared GPU."""
         source = Path(loop_run.__file__).read_text()
@@ -99,6 +151,7 @@ class TestCodegenSummary(unittest.TestCase):
         self.assertTrue(any(isinstance(call.func, ast.Attribute)
                             and call.func.attr == "retain_summary" for call in calls))
         self.assertIn('backend="llama_cpu" if cpu_launch else "llama_gpu"', source)
+        self.assertIn("recipe=recipe.to_dict()", source)
         self.assertIn("attempt_with_codegen(outcome, codegen_by_head)", source)
 
 

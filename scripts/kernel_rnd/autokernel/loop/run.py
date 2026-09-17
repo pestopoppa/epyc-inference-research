@@ -2533,7 +2533,7 @@ def main(argv: list[str] | None = None) -> int:
                 codegen_by_head[head] = codegen_summary.retain_summary(
                     args.store, head,
                     backend="llama_cpu" if cpu_launch else "llama_gpu",
-                    build_dir=worker.build_dir)
+                    build_dir=worker.build_dir, recipe=recipe.to_dict())
             except Exception as exc:  # diagnostics cannot undo an accepted commit
                 codegen_by_head[head] = {
                     "schema": codegen_summary.SCHEMA, "status": "unavailable",

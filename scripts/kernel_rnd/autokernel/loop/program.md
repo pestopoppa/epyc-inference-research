@@ -44,7 +44,7 @@ CRITIC PASS 2 on the committed diff, before the build   · budget 2 rounds
 ```
 
 Every committed source keep (GPU or direct CPU) also gets a bounded diagnostic artifact at
-`<store>/codegen/<champion-commit>.json`; its contents are embedded in that
+`<store>/codegen/<champion-commit>.<backend>.<build-frame-sha256>.json`; its contents are embedded in that
 keep's experiment row. The collector hashes up to eight standalone AMD
 `.hsaco`/`.co` objects and, when ROCm `llvm-objdump` can disassemble them,
 counts scalar/vector/matrix/memory instructions. CPU builds currently record

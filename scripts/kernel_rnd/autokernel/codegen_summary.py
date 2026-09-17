@@ -16,7 +16,7 @@ import select
 import subprocess
 import tempfile
 import time
-from typing import Any
+from typing import Any, Mapping
 
 
 SCHEMA = "epyc.autokernel.codegen_summary.v1"
@@ -63,6 +63,8 @@ def _disassemble(path: Path, *, timeout_s: float = TIMEOUT_S) -> tuple[str | Non
         if proc.poll() is None:
             proc.kill()
             proc.wait()
+        if proc.stdout is not None:
+            proc.stdout.close()
 
 
 def _objects(build_dir: Path) -> tuple[list[Path], str | None]:
@@ -160,7 +162,7 @@ def summarize_codegen(backend: str, build_dir: str | Path) -> dict[str, Any]:
 
 
 def retain_summary(store: Path, champion_head: str, *, backend: str,
-                   build_dir: Path) -> dict[str, Any]:
+                   build_dir: Path, recipe: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Write one fsynced, content-stable sidecar for a committed variant.
 
     The caller also embeds the returned object in its attempt row. It should
@@ -170,21 +172,43 @@ def retain_summary(store: Path, champion_head: str, *, backend: str,
         raise ValueError("champion head must be a full SHA-1 commit id")
     summary = summarize_codegen(backend, build_dir)
     summary["champion_head"] = champion_head
+    binary = Path(build_dir) / "bin" / "llama-bench"
+    try:
+        stat = binary.stat()
+        binary_stat = {"device": stat.st_dev, "inode": stat.st_ino,
+                       "bytes": stat.st_size, "mtime_ns": stat.st_mtime_ns}
+    except OSError:
+        binary_stat = None
+    # This is a build-frame identity, not a content hash of an embedded fatbin.
+    # The bounded standalone object hashes are already in the summary; a missing
+    # binary/object remains visible and cannot silently become codegen evidence.
+    frame = {"backend": backend, "build_dir": str(Path(build_dir).resolve()),
+             "recipe": dict(recipe or {}), "binary_stat": binary_stat,
+             "object_sha256s": [row["sha256"] for row in summary["objects"]
+                                if "sha256" in row]}
+    frame_digest = hashlib.sha256(json.dumps(
+        frame, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    summary["build_frame"] = frame
+    summary["build_frame_sha256"] = frame_digest
     directory = store / "codegen"
     directory.mkdir(parents=True, exist_ok=True)
-    destination = directory / f"{champion_head}.json"
+    name = f"{champion_head}.{backend}.{frame_digest}.json"
+    summary["artifact_ref"] = f"codegen/{name}"
+    destination = directory / name
     payload = (json.dumps(summary, sort_keys=True, separators=(",", ":")) + "\n").encode()
-    if destination.exists():
-        if destination.read_bytes() != payload:
-            raise ValueError("existing codegen sidecar differs for champion head")
-        return summary
     descriptor, temporary = tempfile.mkstemp(prefix=f".{champion_head}.", dir=directory)
     try:
         with os.fdopen(descriptor, "wb") as stream:
             stream.write(payload)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary, destination)
+        try:
+            # create-only: a concurrent same-head writer may win, but cannot be
+            # overwritten between an exists check and a rename.
+            os.link(temporary, destination)
+        except FileExistsError:
+            if destination.read_bytes() != payload:
+                raise ValueError("existing codegen sidecar differs for build frame")
         dir_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
         try:
             os.fsync(dir_fd)
