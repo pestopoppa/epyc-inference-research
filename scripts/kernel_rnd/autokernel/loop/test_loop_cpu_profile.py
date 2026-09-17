@@ -1,5 +1,7 @@
 """Direct original-request profiling; synthetic perf and tiny HTTP server only."""
 from contextlib import closing
+import copy
+from io import BytesIO
 import json
 import os
 from pathlib import Path
@@ -42,6 +44,9 @@ def test_direct_original_token_cache_request_and_raw_reopen(tmp_path):
     assert result["status"] == "observed"
     assert result["hotspots"][0]["symbol"] == "synthetic_kernel"
     assert result["hotspots"][0]["sampled_period_fraction"] == 1.0
+    assert result["location_attribution"]["sampled_tid_count"] == 1
+    assert result["location_attribution"]["execution_nodes"]
+    assert result["location_attribution"]["low_high_sync_threads"][0]["sampled_cpus"]
     path = Path(result["record"])
     reference = {"locator": path.name, "sha256": result["record_sha256"], "verified": True}
     with closing(mc.ArtifactStore(path.parent)) as store:
@@ -52,6 +57,11 @@ def test_direct_original_token_cache_request_and_raw_reopen(tmp_path):
             assert json.loads(bytes.fromhex(phase["response"]["request_hex"])) == _request()
             assert phase["observed_predicted_n"] == 512
             assert phase["tools"][0]["identity"]["pid"] != body["processes"]["server"]["pid"]
+        forged = copy.deepcopy(cp._plain(body))
+        forged["phases"][1]["topology"]["cpu_to_numa_node"][str(
+            result["location_attribution"]["low_high_sync_threads"][0]["sampled_cpus"][0])] += 1
+        with pytest.raises(cp.CpuProfileRefused, match="topology digest"):
+            cp._reopen_phases(forged, forged["settings"])
         record = json.loads(path.read_text())
         assert record["profile_claim_tuple"]["protocol_id"] == ""
         assert "validation_claim_tuple" not in record
@@ -178,7 +188,13 @@ def test_actual_planner_prompt_contains_sampled_symbols_or_unavailable_reason(tm
             "period": 400, "sampled_period_fraction": 0.25}],
         "ranked_levers": [{"family": "quantized-matmul-q4", "period": 400,
             "sampled_period_fraction": 0.25, "symbols": [],
-            "evidence_kind": "current-request-sampled-user-cycles"}]}}
+            "evidence_kind": "current-request-sampled-user-cycles"}],
+        "location_attribution": {"sampled_tid_count": 2, "active_tid_count": 2,
+            "active_period_cutoff": 50.0,
+            "execution_nodes": [{"numa_node": 1, "sampled_period_fraction": 0.6,
+                "sync_fraction_within_node": 0.3}],
+            "low_high_sync_threads": [{"tid": 12, "sampled_cpus": [7],
+                "execution_nodes": [1], "sync_fraction_within_tid": 0.3}]}}}
     with patch.object(actors, "_run_agent", side_effect=provider):
         actors.AgentPlanner(tmp_path).propose(context)
         context["cpu_profile"] = {"status": "unavailable", "reason": "perf permission denied"}
@@ -186,10 +202,39 @@ def test_actual_planner_prompt_contains_sampled_symbols_or_unavailable_reason(tm
     assert "synthetic_kernel" in emitted[0] and "25.00% | 400" in emitted[0]
     assert "quantized-matmul-q4" in emitted[0]
     assert "highest-share unresolved causal mechanism" in emitted[0]
+    assert "Where sampled threads executed" in emitted[0]
+    assert "not measure remote-memory traffic" in emitted[0]
     assert "/original/cpu-profile.json" in emitted[0]
     assert "not exact CPU cost, wall-time share" in emitted[0]
     assert "| share | ns | calls |" not in emitted[0] and "no profile yet" not in emitted[0]
     assert "CPU profile unavailable: perf permission denied" in emitted[1]
+
+
+def test_sampled_cpu_reduction_is_request_scoped_and_rejects_missing_location():
+    rows = (b"11/12 [007] 1.000000000: 100 cycles:u: abc ggml_barrier (/tmp/lib.so)\n"
+            b"11/12 [007] 2.000000000: 200 cycles:u: abc ggml_vec_dot_q8_0_q8_0 (/tmp/lib.so)\n"
+            b"11/13 [009] 2.100000000: 300 cycles:u: abc ggml_barrier (/tmp/lib.so)\n"
+            b"11/13 [009] 4.000000000: 400 cycles:u: abc ggml_barrier (/tmp/lib.so)\n")
+    kwargs = {"pid": 11, "tids": {12, 13}, "interval": [1.0, 3.0],
+        "max_bytes": 4096, "max_rows": 16, "max_symbols": 16}
+    result = cp.reduce_perf_script(BytesIO(rows), cpu_to_node={"7": 0, "9": 1}, **kwargs)
+    assert result["sampled_period_total"] == 600
+    assert result["outside_request_samples"] == 1
+    assert result["location_periods"] == [
+        {"tid": 12, "cpu": 7, "numa_node": 0,
+         "family": "dense-q8-dot-matmul", "period": 200},
+        {"tid": 12, "cpu": 7, "numa_node": 0,
+         "family": "thread-synchronization-and-work-balance", "period": 100},
+        {"tid": 13, "cpu": 9, "numa_node": 1,
+         "family": "thread-synchronization-and-work-balance", "period": 300}]
+    projection = cp.location_attribution(result)
+    assert [x["numa_node"] for x in projection["execution_nodes"]] == [0, 1]
+    assert projection["execution_nodes"][1]["sync_fraction_within_node"] == 1.0
+    with pytest.raises(cp.CpuProfileRefused, match="no captured NUMA mapping"):
+        cp.reduce_perf_script(BytesIO(rows), cpu_to_node={"7": 0}, **kwargs)
+    with pytest.raises(cp.CpuProfileRefused, match="unsupported/lost/malformed"):
+        cp.reduce_perf_script(BytesIO(rows.replace(b" [007]", b"")),
+                              cpu_to_node={"7": 0, "9": 1}, **kwargs)
 
 
 def test_ranked_levers_aggregate_symbols_without_model_hardcoding():

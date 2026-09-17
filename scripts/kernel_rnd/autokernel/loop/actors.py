@@ -326,6 +326,29 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
                 for rank, row in enumerate(ranked[:limit], 1):
                     lines.append(f"| {rank} | {row['sampled_period_fraction'] * 100:.2f}% | "
                                  f"`{row['family']}` | {row['evidence_kind']} |")
+            locations = observation.get("location_attribution")
+            if locations:
+                lines.append("")
+                lines.append("### Where sampled threads executed")
+                lines.append("These are user-cycle sample periods on sampled execution CPUs. They do "
+                             "not measure remote-memory traffic, completed work per thread, "
+                             "wall-time imbalance, or a causal NUMA penalty.")
+                lines.append(f"Active TIDs: {locations['active_tid_count']} of "
+                             f"{locations['sampled_tid_count']} sampled (activity cutoff "
+                             f"{locations['active_period_cutoff']:.0f} periods).")
+                lines.append("| execution NUMA node | sampled-period share | sync fraction within node |")
+                lines.append("|---|---|---|")
+                for row in locations["execution_nodes"][:limit]:
+                    lines.append(f"| {row['numa_node']} | "
+                                 f"{row['sampled_period_fraction'] * 100:.2f}% | "
+                                 f"{row['sync_fraction_within_node'] * 100:.2f}% |")
+                lines.append("Low/high synchronization-fraction active TIDs (descriptive extremes):")
+                lines.append("| TID | sampled CPUs | execution nodes | sync fraction |")
+                lines.append("|---|---|---|---|")
+                for row in locations["low_high_sync_threads"][:limit]:
+                    lines.append(f"| {row['tid']} | {row['sampled_cpus']} | "
+                                 f"{row['execution_nodes']} | "
+                                 f"{row['sync_fraction_within_tid'] * 100:.2f}% |")
             lines.extend(observation.get("limitations", []))
         else:
             lines.append(f"CPU profile {observation.get('status')}: "
