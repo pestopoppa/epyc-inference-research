@@ -5,6 +5,20 @@ The loop's shape is normative and lives in
 strategy the loop runs *inside* that shape: what to attack, what the hardware makes
 possible, and what has already been settled.
 
+## Prospective lineage capture (default off)
+
+`lineage_capture.capture` can seal original patch and complete post-authoring
+source bytes at `run.py:keep_the_diff`, before a lane reset overwrites its
+`<mechanism>.<lane>.patch`. It is intentionally not called by the active loop.
+Future authorization must first mint one durable attempt/capture ID and carry
+that same ID into the native outcome row; only then can the patch-capture seam
+call `capture(store, capture_id=attempt_id, parent_id=parent_attempt_id,
+base_commit=base_head, patch_bytes=diff_bytes, source_files=source_bytes)`.
+The source file set must be fixed before scoring. Historic patch filenames and
+tree-level snapshot hashes do not establish this join; the offline exporter
+must refuse them. The helper makes no candidate, benchmark, champion, or
+promotion decision.
+
 ---
 
 ## The loop
