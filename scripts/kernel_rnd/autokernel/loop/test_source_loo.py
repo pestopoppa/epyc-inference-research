@@ -134,6 +134,10 @@ def _hardware_edges(monkeypatch, inputs, *, rates=(100.0, 90.0, 100.0, 110.0), f
         assert kwargs["backend"] == expected
         assert kwargs["resolved_recipe"].backend == inputs["full_launch"].backend
         return gates.Verdict("op_correctness", True, "fixture oracle")
+    def gdn_reference(build, source, *, resolved_recipe):
+        calls.append(("gdn_reference", build, source))
+        assert resolved_recipe.backend == "cpu"
+        return gates.Verdict("reference_comparison", True, "synthetic independent GDN fixture")
     values = iter(rates)
     def measure(recipe, build, port, **kwargs):
         calls.append(("measure", build, kwargs))
@@ -148,6 +152,7 @@ def _hardware_edges(monkeypatch, inputs, *, rates=(100.0, 90.0, 100.0, 110.0), f
         return next(values)
     monkeypatch.setattr(gates, "compiles", compile)
     monkeypatch.setattr(gates, "op_correctness", oracle)
+    monkeypatch.setattr(gates, "check_cpu_gdn_reference", gdn_reference)
     monkeypatch.setattr(serving, "_measure_once", measure)
     return calls
 
@@ -178,8 +183,10 @@ def test_detached_omission_rebaseline_native_archive_and_export(tmp_path, monkey
         assert native["comparison"] == retained["comparison"]
         capture = native["comparison"]["belief_capture"]
         assert serving_beliefs.finish(native["comparison"], capture["inputs"]) == capture
-    assert [call[0] for call in calls] == ["build", "oracle", "measure", "measure",
-                                          "oracle", "measure", "measure"]
+    expected_gates = (["oracle", "oracle", "gdn_reference"] if backend == "cpu"
+                      else ["oracle"])
+    assert [call[0] for call in calls] == (["build", *expected_gates, "measure", "measure",
+                                           *expected_gates, "measure", "measure"])
     assert _git(inputs["repo"], "rev-parse", "HEAD") == inputs["assembled_commit"]
     assert _git(inputs["repo"], "status", "--porcelain") == ""
     assert (inputs["repo"] / "kernel.c").read_text() == "int keep = 1;\n"

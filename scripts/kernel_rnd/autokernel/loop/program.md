@@ -38,10 +38,35 @@ CRITIC PASS 1 on H, before any patch exists     · budget 3 rounds
 CRITIC PASS 2 on the committed diff, before the build   · budget 2 rounds
     reject → reason returned VERBATIM; H untouched, planner rewrites the patch
 
-    build → test-backend-ops → A/B alternating, n≥5   ← the only GPU spend
+    build → affected-op units → independent reference → A/B alternating, n≥5
     keep → commit onto the champion branch
     else → negative, with mechanism and sample vector, into experiments.md
 ```
+
+---
+
+## Porting gate order (AK-PORT-1/2)
+
+For source changes, retain the actual diff and resolve its affected native op before
+spending on a build. An unknown or shared source route is a gate refusal, never an
+implicit `MUL_MAT` pass. Then compile the candidate, run `test-backend-ops -o` for
+the affected op on the selected backend (host wiring and kernel-unit coverage),
+compare with an independent reference where one is installed, and only then time
+the candidate. Keep compile, op suite, and reference failures distinct in the
+receipt. A fast but wrong candidate is discarded.
+
+The experimental CPU `GATED_DELTA_NET` route has a deterministic F32 scalar
+reference fixture with exactly representable outputs. The native CPU suite alone
+compares CPU against CPU and is not independent evidence. It must be followed by
+that scalar fixture. IQK kernel-body paths have a known native `MUL_MAT`/
+`MUL_MAT_ID` screen, but currently refuse before timing: the CPU `use_ref` path
+bypasses IQK, yet generic active-dispatch logging does not prove that the edited
+quant function ran on a passing selected case. x86 `quants.c` is shared by both
+arms and is not admitted. Other CPU source families need a supported route
+before admission. GPU matmul routes use the native CPU-reference suite;
+the selected device block must report a nonempty passing count. Do not infer a
+universal cosine, PSNR, max-abs or MSE tolerance from this policy. Low-precision
+comparison requires its own validated reference and threshold.
 
 ---
 

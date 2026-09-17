@@ -163,6 +163,24 @@ def execute_surface(*, directory, store_root, repo, assembled_commit, assembled_
                       disposition=omission_disposition(comparison) if kind == "loo" else
                       surface_validation.classify(comparison, intended_target=False))
 
+    def source_oracles(build, source, arm):
+        """Both native execution and independent GDN parity precede LOO timing."""
+        verdicts = []
+        ops = ("MUL_MAT", "GATED_DELTA_NET") if arm.backend == "cpu" else ("MUL_MAT",)
+        for op in ops:
+            verdict = gates.op_correctness(build, op=op,
+                backend="CPU" if arm.backend == "cpu" else arm.template.device,
+                resolved_recipe=arm)
+            verdicts.append(verdict.to_dict())
+            if not verdict.passed:
+                return False, verdicts
+        if arm.backend == "cpu":
+            verdict = gates.check_cpu_gdn_reference(build, source, resolved_recipe=arm)
+            verdicts.append(verdict.to_dict())
+            if not verdict.passed:
+                return False, verdicts
+        return True, verdicts
+
     previous_affinity = os.sched_getaffinity(0)
     try:
         # Confine this thread and future child processes; not pre-existing threads.
@@ -201,24 +219,21 @@ def execute_surface(*, directory, store_root, repo, assembled_commit, assembled_
                 raise RunAborted("omission source changed during its original build")
             candidate = _cpu_arm(full_launch, build)
             boundary()
-            oracle = gates.op_correctness(build, op="MUL_MAT",
-                backend="CPU" if candidate.backend == "cpu" else candidate.template.device,
-                resolved_recipe=candidate)
-            verdicts.append(oracle.to_dict())
-            if not oracle.passed:
+            correct, oracle_verdicts = source_oracles(build, source, candidate)
+            verdicts.extend(oracle_verdicts)
+            if not correct:
                 results["loo"].append(retain("loo", identity, verdicts=verdicts, reason="correctness_failed"))
                 continue
             results["loo"].append(measure("loo", identity, full_launch, candidate, verdicts))
         if baseline is not None:
             boundary()
-            oracle = gates.op_correctness(Path(full_launch.build_dir), op="MUL_MAT",
-                backend="CPU" if full_launch.backend == "cpu" else full_launch.template.device,
-                resolved_recipe=full_launch)
+            correct, oracle_verdicts = source_oracles(
+                Path(full_launch.build_dir), repo, full_launch)
             identity = {"baseline_commit": baseline[0], "baseline_build": baseline[1].build_dir,
                         "candidate_build": full_launch.build_dir}
             results["rebaseline"] = (measure("rebaseline", identity, baseline[1], full_launch,
-                [oracle.to_dict()]) if oracle.passed else retain("rebaseline", identity,
-                verdicts=[oracle.to_dict()], reason="correctness_failed"))
+                oracle_verdicts) if correct else retain("rebaseline", identity,
+                verdicts=oracle_verdicts, reason="correctness_failed"))
         return results
     finally:
         os.sched_setaffinity(0, previous_affinity)

@@ -1362,13 +1362,42 @@ def main(argv: list[str] | None = None) -> int:
             # The diff first: a build that fails still leaves a patch worth reading,
             # and this is the last moment it exists on disk.
             keep_the_diff(worker, hypothesis)
+            changed = tuple(archive._git(worker.worktree, "diff", "HEAD", "--name-only").splitlines())
+            untracked = tuple(archive._git(worker.worktree, "ls-files", "--others",
+                                           "--exclude-standard", "--", "ggml/src/", "src/").splitlines())
+            cpu_ops = worker.worktree / "ggml/src/ggml-cpu/ops.cpp"
+            scope = gates.affected_op_scope(changed + untracked,
+                                             target_surface=hypothesis.target_surface,
+                                             target_symbol=hypothesis.target_symbol,
+                                             source_text=(cpu_ops.read_text(encoding="utf-8")
+                                                          if changed == ("ggml/src/ggml-cpu/ops.cpp",)
+                                                          else None),
+                                             patch_text=(archive._git(worker.worktree, "diff", "-U0",
+                                                                      "HEAD", "--", "ggml/src/ggml-cpu/ops.cpp")
+                                                         if changed == ("ggml/src/ggml-cpu/ops.cpp",)
+                                                         else None))
+            if isinstance(scope, gates.Verdict):
+                return False, [scope]
             if screen_confirmation is not None:
                 cpu_screen.verify_restored(screen_confirmation, worker, screen_prepared["launch"],
                                            args.store, hypothesis)
                 # Original candidate executable/DSOs already proved, source restored
                 # exactly. Re-run the ordinary oracle at FULL conditions, no rebuild.
-                return gates.run_all(lambda: gates.op_correctness(worker.build_dir,
-                    backend="CPU", resolved_recipe=_cpu_arm(direct_launch, worker.build_dir)))
+                arm = _cpu_arm(direct_launch, worker.build_dir)
+                op_verdicts = []
+                def check_op(op):
+                    verdict = gates.op_correctness(
+                        worker.build_dir, op=op, backend="CPU", resolved_recipe=arm)
+                    op_verdicts.append(verdict)
+                    return verdict
+                checks = [lambda op=op: check_op(op) for op in scope]
+                if "MUL_MAT" in scope:
+                    checks.append(lambda: gates.cpu_matmul_reference_coverage(
+                        changed + untracked, tuple(op_verdicts)))
+                if "GATED_DELTA_NET" in scope:
+                    checks.append(lambda: gates.check_cpu_gdn_reference(
+                        worker.build_dir, worker.worktree, resolved_recipe=arm))
+                return gates.run_all(*checks)
             # Callables, so a failed build actually short-circuits: an eagerly
             # evaluated op_correctness ran the suite against a stale binary and blamed
             # this patch.
@@ -1383,9 +1412,23 @@ def main(argv: list[str] | None = None) -> int:
                                        cmake_defines=recipe.cmake_defines(),
                                        jobs=build_jobs, cpu_list=build_cpu_list,
                                        **({"targets": gates.PROMOTION_TARGETS} if direct_launch else {})),
-                lambda: gates.op_correctness(worker.build_dir,
-                                            **({"backend": "CPU"} if cpu_launch else {})),
             ]
+            op_verdicts = []
+            def check_op(op):
+                verdict = gates.op_correctness(worker.build_dir, op=op,
+                    **({"backend": "CPU",
+                        "resolved_recipe": _cpu_arm(direct_launch, worker.build_dir)}
+                       if cpu_launch else {}))
+                op_verdicts.append(verdict)
+                return verdict
+            checks.extend(lambda op=op: check_op(op) for op in scope)
+            if cpu_launch and "MUL_MAT" in scope:
+                checks.append(lambda: gates.cpu_matmul_reference_coverage(
+                    changed + untracked, tuple(op_verdicts)))
+            if cpu_launch and "GATED_DELTA_NET" in scope:
+                checks.append(lambda: gates.check_cpu_gdn_reference(
+                    worker.build_dir, worker.worktree,
+                    resolved_recipe=_cpu_arm(direct_launch, worker.build_dir)))
             if not direct_launch:
                 checks.extend((
                     lambda: gates.deterministic(worker.build_dir, args.model),
@@ -2854,11 +2897,22 @@ def main(argv: list[str] | None = None) -> int:
                             cmake_defines=recipe.cmake_defines(), jobs=build_jobs,
                             cpu_list=build_cpu_list, targets=gates.PROMOTION_TARGETS),
                         lambda: gates.op_correctness(
-                            validation_candidate_build,
+                            validation_candidate_build, op="MUL_MAT",
                             **({"backend": "CPU",
                                 "resolved_recipe": _cpu_arm(
                                     direct_launch, validation_candidate_build)}
                                if direct_launch.backend == "cpu" else {})))
+                    if build_ok and direct_launch.backend == "cpu":
+                        validation_arm = _cpu_arm(direct_launch, validation_candidate_build)
+                        gdn_ok, gdn_verdicts = gates.run_all(
+                            lambda: gates.op_correctness(
+                                validation_candidate_build, op="GATED_DELTA_NET",
+                                backend="CPU", resolved_recipe=validation_arm),
+                            lambda: gates.check_cpu_gdn_reference(
+                                validation_candidate_build, checked_source,
+                                resolved_recipe=validation_arm))
+                        build_ok = gdn_ok
+                        build_verdicts.extend(gdn_verdicts)
                     if not build_ok:
                         validation_gate_failure = {
                             "type": "target_recipe_gate_refused",

@@ -252,7 +252,8 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
         out = io.StringIO()
         with mock.patch.object(gates, "compiles", fake_compiles), \
              mock.patch.object(gates, "op_correctness",
-                               lambda _b: gates.Verdict("op_correctness", True)), \
+                               lambda _b, **_k: gates.Verdict("op_correctness", True)), \
+             mock.patch.object(gates, "affected_op_scope", return_value=("MUL_MAT",)), \
              mock.patch.object(gates, "deterministic",
                                lambda *_a, **_k: gates.Verdict("determinism", True)), \
              mock.patch.object(gates, "no_fallback_dispatch",

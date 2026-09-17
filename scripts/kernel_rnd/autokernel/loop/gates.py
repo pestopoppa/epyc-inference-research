@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from typing import Callable
 import subprocess
 
@@ -85,6 +86,93 @@ def compiles(source_root: Path, build_dir: Path, *, cmake_defines: tuple,
 #: Proof the suite actually EXECUTED. `test-backend-ops` prints this summary whether
 #: it passes or fails, so its ABSENCE means the run never happened.
 RAN_MARKER = "backends passed"
+TEST_COUNT = re.compile(r"(\d+)/(\d+) tests passed")
+
+
+def _gdn_hunks_confined(source_text: str | None, patch_text: str | None) -> bool:
+    """The shared ops.cpp file is GDN-only only when every new hunk is in its block."""
+    if not source_text or not patch_text:
+        return False
+    lines = source_text.splitlines()
+    markers = [i + 1 for i, line in enumerate(lines)
+               if line.startswith("// ggml_compute_forward_")]
+    starts = [i for i in markers if lines[i - 1] == "// ggml_compute_forward_gated_delta_net"]
+    if len(starts) != 1:
+        return False
+    start = starts[0]
+    end = next((i - 1 for i in markers if i > start), None)
+    if end is None:
+        return False
+    hunks = re.findall(r"(?m)^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", patch_text)
+    return bool(hunks) and all(start <= int(line) and
+                               int(line) + max(int(count or 1), 1) - 1 <= end
+                               for line, count in hunks)
+
+
+def affected_op_scope(paths: tuple[str, ...], *, target_surface: str,
+                      target_symbol: str, source_text: str | None = None,
+                      patch_text: str | None = None) -> tuple[str, ...] | Verdict:
+    """Resolve known changed-source routes; never inherit MUL_MAT by default.
+
+    Paths are read from Git by the owner, not taken from the actor's response.
+    Unknown/shared edits must acquire a native op map and reference before timing.
+    """
+    changed = set(paths)
+    if not changed or len(changed) != len(paths) or target_surface not in changed:
+        return Verdict("op_scope", False,
+                       "actual changed paths are empty, repeated or omit the target surface")
+    if changed <= {"ggml/src/ggml-cuda/gated_delta_net.cu",
+                   "ggml/src/ggml-cuda/gated_delta_net.cuh"} and \
+            "gated_delta_net" in target_symbol.lower():
+        return ("GATED_DELTA_NET",)
+    if changed == {"ggml/src/ggml-cpu/ops.cpp"} and \
+            "gated_delta_net" in target_symbol.lower() and \
+            _gdn_hunks_confined(source_text, patch_text):
+        return ("GATED_DELTA_NET",)
+    if changed == {"ggml/src/ggml-cuda/vecdotq.cuh"} and \
+            target_symbol.startswith("vec_dot_"):
+        return ("MUL_MAT", "MUL_MAT_ID")
+    if changed == {"ggml/src/ggml-cuda/mmvq.cu"} and \
+            (target_symbol.startswith("vec_dot_") or "mul_mat_vec" in target_symbol):
+        return ("MUL_MAT", "MUL_MAT_ID")
+    if changed == {"ggml/src/ggml-cuda/mmq.cu"} and \
+            ("mul_mat_q" in target_symbol or "should_use_mmq" in target_symbol):
+        return ("MUL_MAT", "MUL_MAT_ID")
+    if changed <= {"ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp",
+                   "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp"} and \
+            ("mul_mat" in target_symbol or "gemm" in target_symbol):
+        return ("MUL_MAT", "MUL_MAT_ID")
+    return Verdict("op_scope", False,
+                   "affected native op/reference is unresolved for actual changed source; "
+                   "MUL_MAT is not a universal correctness oracle")
+
+
+def check_cpu_gdn_reference(build_dir: Path, source_root: Path, *,
+                            resolved_recipe=None) -> Verdict:
+    """Independent scalar fixture, after the native CPU suite's host/unit check."""
+    from . import gdn_reference
+
+    options = ({"launch_env": resolved_recipe.launch_env,
+                "topology_prefix": tuple(resolved_recipe.topology_prefix)}
+               if resolved_recipe is not None else {})
+    result = gdn_reference.check_cpu_gdn(build_dir, source_root, **options)
+    return Verdict("reference_comparison" if result.status == "wrong" else
+                   "oracle_unavailable" if result.status == "unavailable" else
+                   "reference_comparison", result.status == "pass",
+                   result.reason, result.detail)
+
+
+def cpu_matmul_reference_coverage(paths: tuple[str, ...] = (),
+                                  op_verdicts: tuple[Verdict, ...] = ()) -> Verdict:
+    """Only independently covered CPU matmul work may advance to timing."""
+    iqk_only = bool(paths) and set(paths) <= {
+        "ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp",
+        "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp"}
+    if iqk_only and op_verdicts and any("iqk_active=True" in row.detail for row in op_verdicts):
+        return Verdict("oracle_unavailable", False,
+                       "IQK dispatch engaged, but edited quant/function case is not proved")
+    return Verdict("oracle_unavailable", False,
+                   "independent CPU matmul reference/edited-case engagement unavailable")
 
 
 def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
@@ -122,18 +210,29 @@ def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
                           timeout=CORRECTNESS_TIMEOUT_S,
                           env=environment)
     output = done.stdout + done.stderr
-    if RAN_MARKER not in output:
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", output)
+    block = re.search(
+        rf"(?ms)^Backend \d+/\d+: {re.escape(backend)}\b(.*?)"
+        rf"^  Backend {re.escape(backend)}: (OK|FAIL)\b", plain)
+    counts = TEST_COUNT.findall(block.group(1)) if block else []
+    if RAN_MARKER not in plain or not counts or not any(int(total) > 0 for _, total in counts):
         # Usage text, a missing backend, a loader failure -- anything that means the
         # suite did not execute. Blaming the patch for this is how a harness fault
         # becomes a fabricated scientific result.
         return Verdict("oracle_unavailable", False,
-                       f"test-backend-ops did not run (no {RAN_MARKER!r} in output); "
-                       f"this is a harness fault, NOT evidence about the patch",
+                       f"test-backend-ops did not prove a nonempty {backend} op suite; "
+                       "this is a harness fault, NOT evidence about the patch",
                        output[-2000:])
-    if done.returncode != 0:
+    if block.group(2) == "FAIL":
         return Verdict("correctness", False, f"{op} failed on {backend}",
                        done.stdout[-2000:] + done.stderr[-1000:])
-    return Verdict("correctness", True, detail=done.stdout[-500:])
+    if done.returncode != 0 or any(int(passed) != int(total) for passed, total in counts):
+        return Verdict("oracle_unavailable", False,
+                       f"test-backend-ops gave contradictory {backend} status and exit/tally; "
+                       "this is a harness fault, NOT evidence about the patch",
+                       output[-2000:])
+    return Verdict("correctness", True,
+                   detail=f"iqk_active={'[iqk] ACTIVE:' in output}\n" + output[-500:])
 
 
 def deterministic(build_dir: Path, model: Path, *, runs: int = 3) -> Verdict:
@@ -232,4 +331,5 @@ def run_all(*checks: "Callable[[], Verdict]") -> tuple[bool, list[Verdict]]:
 
 __all__ = ["BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S", "DEFAULT_TARGETS",
            "PROMOTION_TARGETS", "Verdict", "compiles", "deterministic",
-           "no_fallback_dispatch", "op_correctness", "run_all"]
+           "affected_op_scope", "check_cpu_gdn_reference", "no_fallback_dispatch",
+           "op_correctness", "run_all"]

@@ -20,7 +20,8 @@ from . import test_promotion_targets as promotion_fixture
 def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
         dry_run, feedback_root=None, profile_observer=None, profile_contexts=None, runtime_only=False,
         invalid_once=False, enrolled_pair=False, runtime_transition=None,
-        expected_claim_cycles=None, result_expectation=None, runtime_declaration=True):
+        expected_claim_cycles=None, result_expectation=None, runtime_declaration=True,
+        reference_verdict=None, route_verdict=None):
     fixture = promotion_fixture.TheKeepBuildsAProductionCompleteAnchor()
     fixture.setUp()
     try:
@@ -201,7 +202,7 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
                 actor.propose, actor.author = propose, author
                 return actor
 
-            def oracle(build, *, backend, resolved_recipe=None):
+            def oracle(build, *, op="MUL_MAT", backend, resolved_recipe=None):
                 assert held[-1] is True and backend == "CPU"
                 if runtime_only:
                     assert resolved_recipe.template.threads == template.threads + 1
@@ -223,6 +224,12 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
                 argv += ["--belief-root-repo", str(feedback_root)]
             with mock.patch.object(gates, "compiles", compile_cpu), \
                     mock.patch.object(gates, "op_correctness", oracle), \
+                    mock.patch.object(gates, "affected_op_scope", return_value=(
+                        route_verdict if route_verdict is not None else ("GATED_DELTA_NET",))), \
+                    mock.patch.object(gates, "check_cpu_gdn_reference",
+                                      return_value=reference_verdict or gates.Verdict(
+                                          "reference_comparison", True,
+                                          "synthetic fixture observation")), \
                     mock.patch.object(run.actors, "AgentPlanner", planner), \
                     mock.patch.object(run.workload_contract, "read_census", run.workload_contract.verify_workload), \
                     mock.patch.object(claim, "hold_cpu", cpu_hold), \
@@ -243,6 +250,13 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
             rc, _calls, _planners, _scratch, log = fixture._run_one_keep()
         assert rc == 0, log
         assert run._git(fixture.repo, "rev-parse", run.champion.CANONICAL_BRANCH) == original_head
+        if reference_verdict is not None or route_verdict is not None:
+            assert issued and not any(Path(build).name == "lane0-build" for build, *_ in measured)
+            if route_verdict is not None:
+                assert builds == [] and oracles == []
+            else:
+                assert builds and oracles
+            return
         if dry_run:
             assert not any((held, issued, measured, builds, oracles))
             assert "DRY RUN" in log
@@ -349,3 +363,17 @@ def test_gpu_actor_program_and_epoch_inputs_remain_legacy_exact():
         assert planners[0].contexts[0]["program"] == run.loop.PROGRAM.read_text(encoding="utf-8")
     finally:
         fixture.doCleanups()
+
+
+@pytest.mark.parametrize("gate,reason", [
+    ("reference_comparison", "scalar mismatch"),
+    ("oracle_unavailable", "probe could not run"),
+])
+def test_cpu_gdn_reference_refusal_prevents_candidate_timing(gate, reason):
+    test_existing_main_cpu_five_iterations_preserves_canonical_champion(
+        False, reference_verdict=gates.Verdict(gate, False, reason))
+
+
+def test_unknown_cpu_source_route_refuses_before_compile_or_timing():
+    test_existing_main_cpu_five_iterations_preserves_canonical_champion(
+        False, route_verdict=gates.Verdict("op_scope", False, "unresolved source route"))
