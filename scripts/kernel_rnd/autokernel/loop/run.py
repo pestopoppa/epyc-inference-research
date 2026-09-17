@@ -291,6 +291,16 @@ def _cpu_arm(original, build: Path):
                     "experimental_parent_snapshot": original.snapshot_digest})
 
 
+def _runtime_serving_capable(direct_launch, selected_target, *, screen_scope, confirm_from):
+    """Admit only the already-bound full serving route, independent of ID spelling."""
+    if direct_launch is None or screen_scope or confirm_from:
+        return False
+    if selected_target is None:
+        return direct_launch.backend == "cpu"  # Established legacy CPU serving route.
+    return (selected_target.status == "ready" and
+            selected_target.execution.backend == direct_launch.backend)
+
+
 def _source_floor_store(store: Path, recipe, anchor, *, instrument: str,
                         dynamic: bool = False) -> Path:
     """Key matched source floors by the exact executable/DSO execution identity."""
@@ -832,13 +842,17 @@ def main(argv: list[str] | None = None) -> int:
           or args.gpu_calibrate_serving):
         parser.error("serving options require --cpu-serving-launch or --gpu-serving-launch")
     cpu_launch = direct_launch if args.cpu_serving_launch else None
-    runtime_campaign_id = resolved_campaign.campaign_id if selected_target is not None else "ak-loop"
-    runtime_enabled = bool(direct_launch and runtime_campaign_id.startswith("ak-")
-                           and not (args.cpu_screen_scope or args.cpu_confirm_from))
+    # The selected canonical serving route, not the spelling of its campaign ID,
+    # carries runtime capability. Enrolled targets were checked for ready status,
+    # backend and exact serving-workload compatibility above; legacy CPU serving
+    # retains its established ak-loop identity. Reduced source screens do not
+    # select runtime recipes.
+    runtime_enabled = _runtime_serving_capable(direct_launch, selected_target,
+        screen_scope=args.cpu_screen_scope, confirm_from=args.cpu_confirm_from)
     if (args.calibrate_runtime or args.runtime_statistics is not None
             or args.runtime_recipe_reference is not None) and not runtime_enabled:
-        parser.error("prospective runtime campaigns require campaign_id beginning 'ak-' and "
-                     "an original full serving target; source-only aku-* campaigns remain supported unchanged")
+        parser.error("prospective runtime campaigns require an eligible original full serving "
+                     "target; source-only and reduced-screen campaigns remain unchanged")
     experimental = direct_launch is not None and args.experimental_branch is not None
     owned_cpu_list = None
     build_cpu_list = cpu_launch.template.cpu_list if cpu_launch else "96-183"

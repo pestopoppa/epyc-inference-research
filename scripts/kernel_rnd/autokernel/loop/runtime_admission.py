@@ -31,6 +31,19 @@ def _ref(value):
     return f"{value.locator}#sha256={value.sha256}"
 
 
+def _evaluation_campaign_join(parent_campaign_id, epoch, window_frame):
+    """Bind the evaluator's legacy ID to the original runtime window, not a rename."""
+    if (window_frame["campaign_id"] != parent_campaign_id or
+            window_frame["epoch"] != epoch):
+        raise rc.RuntimeCalibrationRefused("runtime evaluator subcampaign differs from original window")
+    subcampaign = (parent_campaign_id if parent_campaign_id.startswith("ak-") else
+        "ak-runtime-" + rc._digest({"parent_campaign_id": parent_campaign_id,
+                                    "epoch": epoch})[:32])
+    return {"parent_campaign_id": parent_campaign_id,
+            "evaluator_campaign_id": subcampaign,
+            "original_window_frame_sha256": rc._digest(window_frame)}
+
+
 def _check(condition, reason, *, unavailable=False):
     return schemas.Check(schemas.PASS if condition else
         schemas.COULD_NOT_CHECK if unavailable else schemas.FAIL, (reason,))
@@ -267,8 +280,8 @@ class RuntimeAdmission:
         self.gpu_claim = gpu_claim
         self.deadline_monotonic_s = deadline_monotonic_s
         self._on_progress, self._progress_operation = on_progress, "preparation"
-        if type(campaign_id) is not str or not campaign_id.startswith("ak-"):
-            raise rc.RuntimeCalibrationRefused("prospective runtime campaign_id must use owning 'ak-' grammar; do not rename old records")
+        if type(campaign_id) is not str or not campaign_id.strip():
+            raise rc.RuntimeCalibrationRefused("prospective runtime requires the original nonempty campaign identity")
         self.campaign_id, self.epoch, self.prompts = campaign_id, epoch, prompts
         self.statistical, self.host_state = statistical, host_state
         self.worktree, self.source_commit, self.escalation = worktree, source_commit, escalation
@@ -457,7 +470,9 @@ class RuntimeAdmission:
         # One repeat is the whole original request vector, not individual slots.
         determinism = api.DeterminismReport("not_measured" if count_runs < 2 else
             "bitwise_stable" if len(set(vectors)) == 1 else "bitwise_unstable", count_runs)
-        request = api.EvaluationRequest("ake-" + original.sha256, self.campaign_id, candidate_id,
+        campaign_join = _evaluation_campaign_join(self.campaign_id, self.epoch, window.frame)
+        request = api.EvaluationRequest("ake-" + original.sha256,
+            campaign_join["evaluator_campaign_id"], candidate_id,
             "T1", "llama_" + pair.anchor.backend, "decode", "serving", api.PROTOCOL_VERSIONED_ID,
             api.ArtifactIdentity(source_body["tree_manifest_sha256"], pair.candidate.executable.sha256,
                 rc._digest([row.to_dict() for row in pair.candidate.dsos])), anchor,
@@ -474,7 +489,8 @@ class RuntimeAdmission:
         runner = DirectGates(rows=rows, operations=operations, raw_ref=_ref(original), original_prompts=self.prompts)
         outcome = api.TierDispatcher(gate_runners={"T1": runner}).dispatch(request, attestations, effect=reduction.estimate)
         # Preserve the emitted per-case vector, not just the summary verdict.
-        event = {"original_window": original.to_dict(), "event": outcome.event,
+        event = {"original_window": original.to_dict(), "campaign_join": campaign_join,
+                 "event": outcome.event,
                  "evaluation": outcome.durable_payload}
         if reopening is None:
             self.store.write("direct-runtime-evaluation", event)

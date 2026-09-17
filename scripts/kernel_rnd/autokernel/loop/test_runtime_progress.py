@@ -1,12 +1,32 @@
 """Existing runtime/startup publishers; no hardware or new measurement grade."""
 import json
+from types import SimpleNamespace
 from unittest import mock
 
 from . import runtime_admission as admission, runtime_calibration as calibration, status
+from .run import _runtime_serving_capable
 from .test_existing_cpu_run import test_existing_main_cpu_five_iterations_preserves_canonical_champion as cpu_run
 from .test_runtime_calibration import test_actual_calibration_original_prefix_reopens_without_relaunch as original_calibration
 from .test_runtime_calibration import original_claim
 from .test_runtime_admission import installed_fixture
+
+
+def test_runtime_route_depends_on_serving_capability_not_campaign_name():
+    cpu = SimpleNamespace(backend="cpu")
+    gpu = SimpleNamespace(backend="gpu")
+    ready_cpu = SimpleNamespace(status="ready", execution=SimpleNamespace(backend="cpu"))
+    ready_gpu = SimpleNamespace(status="ready", execution=SimpleNamespace(backend="gpu"))
+    unavailable = SimpleNamespace(status="missing_artifact",
+                                  execution=SimpleNamespace(backend="cpu"))
+    eligible = lambda launch, target=None, screen=None, confirm=None: _runtime_serving_capable(
+        launch, target, screen_scope=screen, confirm_from=confirm)
+    assert eligible(cpu, ready_cpu) and eligible(gpu, ready_gpu)
+    assert eligible(cpu)  # Established legacy CPU serving route.
+    assert not eligible(gpu)  # GPU serving needs an enrolled target.
+    assert not eligible(None, ready_cpu)  # Source-only campaign.
+    assert not eligible(cpu, ready_gpu) and not eligible(cpu, unavailable)
+    assert not eligible(cpu, ready_cpu, screen="half")
+    assert not eligible(cpu, ready_cpu, confirm="prior-confirmation")
 
 
 def test_actual_launch_checkpoints_publish_counts_and_callback_fault_is_nonfatal(tmp_path, monkeypatch):
