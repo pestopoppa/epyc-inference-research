@@ -99,3 +99,55 @@ class IQKWitnessTests(TestCase):
         result = witness.check_fused(Path("/build"), resolved_recipe=recipe,
                                      source_root=Path("/source"))
         self.assertEqual(result.status, "unavailable")
+
+    def test_dot_hit_requires_matching_quant_width_and_candidate_dso(self):
+        records = [json.loads(_record("candidate_helper", "iqk_moe_fused_up_gate")),
+                   json.loads(_record("candidate_dot", "mul_mat_qX_K_q8_2_X4_T"))]
+        records[1].update(quant="Q4_K", width=3,
+                          frame_symbol="mul_mat_qX_K_q8_2_X4_T<DequantizerQ4K_AVX2, 3>")
+        with mock.patch.object(Path, "resolve", return_value=DSO):
+            self.assertEqual(witness._assess_fused_hit_records(
+                records, DSO, dot_quant="Q4_K", width=3).status, "pass")
+            for key, wrong in (("quant", "Q5_K"), ("width", 2),
+                               ("dso", "/other/libggml-cpu.so.0")):
+                bad = [dict(row) for row in records]
+                bad[1][key] = wrong
+                self.assertEqual(witness._assess_fused_hit_records(
+                    bad, DSO, dot_quant="Q4_K", width=3).status, "unavailable")
+            self.assertEqual(witness._assess_fused_hit_records(
+                records[:1], DSO, dot_quant="Q4_K", width=3).status,
+                "unavailable")
+
+    def test_q45_dot_reference_requires_all_widths_direct_then_fused(self):
+        from . import cpu_quant_reference
+        recipe = mock.Mock(backend="cpu", launch_env={"GGML_IQK": "1"},
+                           topology_prefix=(), template=object(), port=1)
+        passed = cpu_quant_reference.QuantResult("pass", "scalar", "metric")
+        with mock.patch.object(Path, "is_file", return_value=True), \
+             mock.patch.object(cpu_quant_reference, "check_cpu_quant_suite",
+                               return_value=passed) as scalar:
+            result = witness.check_q45_dot(Path("/build"), resolved_recipe=recipe,
+                                            source_root=Path("/source"))
+        self.assertEqual(result.status, "pass")
+        self.assertEqual(scalar.call_count, 2)
+        direct, fused = scalar.call_args_list
+        self.assertEqual(direct.kwargs["ops"], ("MUL_MAT", "MUL_MAT_ID"))
+        self.assertEqual(fused.kwargs["ops"], ("FUSED_UP_GATE",))
+        for call in (direct, fused):
+            self.assertEqual(call.kwargs["quants"], ("Q4_K", "Q5_K"))
+            self.assertEqual(call.kwargs["widths"], tuple(range(1, 9)))
+            self.assertEqual(call.kwargs["expert_mode"], "single")
+        self.assertTrue(fused.kwargs["require_dot_hit"])
+        self.assertTrue(fused.kwargs["require_fused_hit"])
+
+    def test_q45_dot_refuses_before_fused_when_direct_wrong(self):
+        from . import cpu_quant_reference
+        recipe = mock.Mock(backend="cpu", launch_env={"GGML_IQK": "1"},
+                           topology_prefix=(), template=object(), port=1)
+        with mock.patch.object(Path, "is_file", return_value=True), \
+             mock.patch.object(cpu_quant_reference, "check_cpu_quant_suite",
+                return_value=cpu_quant_reference.QuantResult("wrong", "direct wrong")) as scalar:
+            result = witness.check_q45_dot(Path("/build"), resolved_recipe=recipe,
+                                            source_root=Path("/source"))
+        self.assertEqual(result.status, "wrong")
+        scalar.assert_called_once()
