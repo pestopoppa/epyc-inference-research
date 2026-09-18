@@ -444,6 +444,10 @@ def test_postclaim_publication_failure_cannot_use_preclaim_settlement(tmp_path, 
     with pytest.raises(ss.SerialSchedulingRefused,
                        match="issued selection awaits settlement"):
         sr.main(argv)
+    published = json.loads((state / "loop-status.json").read_text())
+    assert published["state"] == "failed"
+    assert published["step"].startswith("SerialSchedulingRefused: ")
+    assert "issued selection awaits settlement" in published["step"]
     saved = json.loads((state / "serial-state.json").read_text())
     scheduler_state = scheduling.SchedulerState.from_dict(saved["scheduler_state"])
     assert scheduler_state.issued_selection_digests
@@ -451,6 +455,22 @@ def test_postclaim_publication_failure_cannot_use_preclaim_settlement(tmp_path, 
     assert scheduler_state.receipts == ()
     assert len(saved["failed_targets"]) == 1
     assert not list((state / "batches").glob("*/loop-preclaim-failure.json"))
+
+
+def test_scheduler_refusal_between_batches_publishes_terminal_failure(tmp_path, monkeypatch):
+    state, argv = _inputs(tmp_path, monkeypatch, mode="abstained", rounds=1)
+    argv = _scheduled(tmp_path, argv)
+
+    def refuse(*_args, **_kwargs):
+        raise ss.SerialSchedulingRefused("fixture scheduler refusal")
+
+    monkeypatch.setattr(ss, "select_target", refuse)
+    with pytest.raises(ss.SerialSchedulingRefused, match="fixture scheduler refusal"):
+        sr.main(argv)
+    published = json.loads((state / "loop-status.json").read_text())
+    assert published["state"] == "failed"
+    assert published["step"] == "SerialSchedulingRefused: fixture scheduler refusal"
+    assert not (state / "seen.jsonl").exists()
 
 
 def test_scheduled_restart_accounts_original_completed_child_before_new_selection(

@@ -2361,6 +2361,15 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
             save()
         publish("complete", {"stop_requested": stopped(), "failed_targets": state["failed_targets"]})
         return 1 if state["failed_targets"] else 0
+    except Exception as exc:
+        # A scheduler refusal can escape between batches, outside the child
+        # failure handler. Publish the terminal truth before the owner exits;
+        # retaining the exception preserves its traceback and restart state.
+        try:
+            publish("failed", reason=f"{type(exc).__name__}: {exc}"[:400])
+        except (OSError, ValueError):
+            pass  # A broken status writer must not hide the original failure.
+        raise
     finally:
         try:
             if service is not None:
