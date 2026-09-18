@@ -6,16 +6,17 @@
 #include "ggml-cpu.h"
 
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <vector>
 
 static constexpr int K = 256;
 static constexpr int ROWS = 40;  // Crosses the Q8_0 32-row dispatch boundary.
-static constexpr int TOKENS = 2;
+static constexpr int DEFAULT_TOKENS = 2;
 
 static float activation(int token, int column) {
     for (int slot = 0; slot < 4; ++slot) {
-        if (column == 3 + token * 11 + slot * 64) {
+        if (column == 3 + (token * 11) % 64 + slot * 64) {
             return (slot & 1) ? -0.5f : 1.0f;
         }
     }
@@ -27,7 +28,14 @@ static float weight(int expert, int row, int column) {
 }
 
 int main(int argc, char ** argv) {
-    if (argc != 3) return 2;
+    if (argc != 3 && argc != 4 && argc != 5) return 2;
+    char * width_end = nullptr;
+    const long parsed_width = argc >= 4 ? std::strtol(argv[3], &width_end, 10) : DEFAULT_TOKENS;
+    if (argc >= 4 && (!argv[3][0] || *width_end)) return 2;
+    if (parsed_width < 1 || parsed_width > 8) return 2;
+    const int tokens = static_cast<int>(parsed_width);
+    const bool single_expert = argc == 5 && std::strcmp(argv[4], "--single-expert") == 0;
+    if (argc == 5 && !single_expert) return 2;
     ggml_type type;
     if (std::strcmp(argv[1], "Q4_K") == 0) type = GGML_TYPE_Q4_K;
     else if (std::strcmp(argv[1], "Q5_K") == 0) type = GGML_TYPE_Q5_K;
@@ -68,9 +76,9 @@ int main(int argc, char ** argv) {
     ggml_tensor * a = id_op ? ggml_new_tensor_3d(ctx, type, K, ROWS, experts)
                             : ggml_new_tensor_2d(ctx, type, K, ROWS);
     ggml_tensor * gate_a = fused ? ggml_new_tensor_3d(ctx, type, K, ROWS, experts) : nullptr;
-    ggml_tensor * b = id_op ? ggml_new_tensor_3d(ctx, GGML_TYPE_F32, K, TOKENS, 1)
-                            : ggml_new_tensor_2d(ctx, GGML_TYPE_F32, K, TOKENS);
-    ggml_tensor * ids = id_op ? ggml_new_tensor_2d(ctx, GGML_TYPE_I32, TOKENS, 1) : nullptr;
+    ggml_tensor * b = id_op ? ggml_new_tensor_3d(ctx, GGML_TYPE_F32, K, tokens, 1)
+                            : ggml_new_tensor_2d(ctx, GGML_TYPE_F32, K, tokens);
+    ggml_tensor * ids = id_op ? ggml_new_tensor_2d(ctx, GGML_TYPE_I32, tokens, 1) : nullptr;
     ggml_tensor * up = id_op ? ggml_mul_mat_id(ctx, a, b, ids)
                              : ggml_mul_mat(ctx, a, b);
     ggml_tensor * gate = fused ? ggml_mul_mat_id(ctx, gate_a, b, ids) : nullptr;
@@ -86,22 +94,26 @@ int main(int argc, char ** argv) {
     if (!backend) return 5;
     ggml_backend_buffer_t buffer = ggml_backend_alloc_ctx_tensors(ctx, backend);
     if (!buffer) return 6;
-    std::vector<float> activations(K * TOKENS);
-    for (int token = 0; token < TOKENS; ++token)
+    std::vector<float> activations(K * tokens);
+    for (int token = 0; token < tokens; ++token)
         for (int column = 0; column < K; ++column)
             activations[column + K * token] = activation(token, column);
-    const int32_t expert_ids[TOKENS] = {1, 0};
+    std::vector<int32_t> expert_ids(tokens);
+    for (int token = 0; token < tokens; ++token)
+        expert_ids[token] = single_expert || token % 2 == 0 ? 1 : 0;
     ggml_backend_tensor_set(a, quantized.data(), 0, quantized.size());
     if (fused) ggml_backend_tensor_set(gate_a, gate_quantized.data(), 0,
                                        gate_quantized.size());
     ggml_backend_tensor_set(b, activations.data(), 0, activations.size() * sizeof(float));
-    if (ids) ggml_backend_tensor_set(ids, expert_ids, 0, sizeof(expert_ids));
+    if (ids) ggml_backend_tensor_set(ids, expert_ids.data(), 0,
+                                     expert_ids.size() * sizeof(int32_t));
     if (ggml_backend_graph_compute(backend, graph) != GGML_STATUS_SUCCESS) return 7;
     std::vector<float> output(ggml_nelements(out));
     ggml_backend_tensor_get(out, output.data(), 0, output.size() * sizeof(float));
 
-    std::printf("AK_CPU_QUANT_REFERENCE_V1 %s %s %d %d %d %zu\n",
-                argv[1], argv[2], K, ROWS, TOKENS, row_bytes);
+    std::printf("AK_CPU_QUANT_REFERENCE_V1 %s %s %d %d %d %zu%s\n",
+                argv[1], argv[2], K, ROWS, tokens, row_bytes,
+                single_expert ? " single_expert" : "");
     for (int expert = 0; expert < experts; ++expert)
         for (int row = 0; row < ROWS; ++row) {
             std::printf("A %d %d ", expert, row);
@@ -118,7 +130,7 @@ int main(int argc, char ** argv) {
                 for (size_t index = 0; index < row_bytes; ++index) std::printf("%02x", bytes[index]);
                 std::putchar('\n');
             }
-    for (int token = 0; token < TOKENS; ++token)
+    for (int token = 0; token < tokens; ++token)
         for (int row = 0; row < ROWS; ++row)
             std::printf("O %d %d %a\n", token, row, output[row + ROWS * token]);
     ggml_backend_buffer_free(buffer);

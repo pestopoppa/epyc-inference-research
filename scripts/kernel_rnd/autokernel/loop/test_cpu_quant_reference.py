@@ -18,9 +18,11 @@ def q8_encoded_row(expert: int, row: int) -> bytes:
     return b"".join(blocks)
 
 
-def q8_fused_output() -> str:
+def q8_fused_output(width: int = fixture.TOKENS,
+                    expert_mode: str = "alternating") -> str:
     op = fixture.FUSED_OP
-    lines = [f"{fixture.MARKER} Q8_0 {op} 256 40 2 272"]
+    suffix = " single_expert" if expert_mode == "single" else ""
+    lines = [f"{fixture.MARKER} Q8_0 {op} 256 40 {width} 272{suffix}"]
     up, gate = {}, {}
     for expert in range(2):
         for row in range(fixture.ROWS):
@@ -28,30 +30,113 @@ def q8_fused_output() -> str:
             gate[expert, row] = q8_encoded_row(expert + 3, row + 5)
             lines.append(f"A {expert} {row} {up[expert, row].hex()}")
             lines.append(f"G {expert} {row} {gate[expert, row].hex()}")
-    for token in range(fixture.TOKENS):
+    for token in range(width):
         for row in range(fixture.ROWS):
-            value = fixture._reference("Q8_0", op, up, token, row, gate)
+            value = fixture._reference("Q8_0", op, up, token, row, gate, expert_mode)
             lines.append(f"O {token} {row} {value.hex()}")
     return "\n".join(lines) + "\n"
 
 
-def q8_output(op: str = "MUL_MAT_ID") -> str:
+def q8_output(op: str = "MUL_MAT_ID", width: int = fixture.TOKENS,
+              expert_mode: str = "alternating") -> str:
     experts = 2 if op == "MUL_MAT_ID" else 1
-    lines = [f"{fixture.MARKER} Q8_0 {op} 256 40 2 272"]
+    suffix = " single_expert" if expert_mode == "single" else ""
+    lines = [f"{fixture.MARKER} Q8_0 {op} 256 40 {width} 272{suffix}"]
     rows = {}
     for expert in range(experts):
         for row in range(fixture.ROWS):
             encoded = q8_encoded_row(expert, row)
             rows[expert, row] = encoded
             lines.append(f"A {expert} {row} {encoded.hex()}")
-    for token in range(fixture.TOKENS):
+    for token in range(width):
         for row in range(fixture.ROWS):
-            value = fixture._reference("Q8_0", op, rows, token, row)
+            value = fixture._reference("Q8_0", op, rows, token, row,
+                                       expert_mode=expert_mode)
             lines.append(f"O {token} {row} {value.hex()}")
     return "\n".join(lines) + "\n"
 
 
 class QuantReferenceTest(unittest.TestCase):
+    def test_all_activation_widths_cover_dynamic_expert_and_fused_rows(self):
+        for width in fixture.SUPPORTED_WIDTHS:
+            for expert_mode in ("alternating", "single"):
+                for op in (*fixture.OPS, fixture.FUSED_OP):
+                    with self.subTest(width=width, op=op, expert_mode=expert_mode):
+                        output = (q8_fused_output(width, expert_mode)
+                                  if op == fixture.FUSED_OP else
+                                  q8_output(op, width, expert_mode))
+                        result = fixture._parse_and_compare(output, "Q8_0", op, width,
+                                                            expert_mode)
+                        self.assertEqual(result.status, "pass")
+                        metric = json.loads(result.detail.split(" ", 1)[1])
+                        self.assertEqual((metric["width"], metric["outputs"],
+                                          metric["expert_mode"]),
+                                         (width, width * fixture.ROWS, expert_mode))
+
+    def test_single_expert_mode_is_identity_bound(self):
+        output = q8_fused_output(4, "single")
+        with self.assertRaisesRegex(ValueError, "identity"):
+            fixture._parse_and_compare(output, "Q8_0", fixture.FUSED_OP, 4)
+        with self.assertRaisesRegex(ValueError, "identity"):
+            fixture._parse_and_compare(q8_fused_output(4), "Q8_0",
+                                       fixture.FUSED_OP, 4, "single")
+
+    def test_width_mismatch_missing_last_output_and_extra_output_refused(self):
+        output = q8_output(width=8)
+        with self.assertRaisesRegex(ValueError, "identity"):
+            fixture._parse_and_compare(output, "Q8_0", "MUL_MAT_ID", 4)
+        with self.assertRaisesRegex(ValueError, "incomplete"):
+            fixture._parse_and_compare("\n".join(output.splitlines()[:-1]),
+                                       "Q8_0", "MUL_MAT_ID", 8)
+        lines = q8_output(width=4).splitlines()
+        lines.append("O 4 0 0x0p+0")
+        with self.assertRaisesRegex(ValueError, "out-of-range"):
+            fixture._parse_and_compare("\n".join(lines), "Q8_0", "MUL_MAT_ID", 4)
+
+    def test_width_suite_passes_width_to_probe_and_preserves_default(self):
+        completed = [subprocess.CompletedProcess([], 0, "", "")]
+        completed += [subprocess.CompletedProcess([], 0, q8_output(width=width), "")
+                      for width in (1, 2, 4, 8)]
+        with mock.patch.object(Path, "is_file", return_value=True), \
+             mock.patch.object(subprocess, "run", side_effect=completed) as run:
+            result = fixture.check_cpu_quant_suite(
+                Path("/build"), Path("/source"), quants=("Q8_0",),
+                ops=("MUL_MAT_ID",), widths=(1, 2, 4, 8))
+        self.assertEqual(result.status, "pass")
+        self.assertEqual([call.args[0][-1] for call in run.call_args_list[1:]],
+                         ["1", "2", "4", "8"])
+        rows = [json.loads(line.split(" ", 1)[1]) for line in result.detail.splitlines()]
+        self.assertEqual([row["width"] for row in rows], [1, 2, 4, 8])
+
+    def test_single_expert_suite_passes_cli_mode(self):
+        completed = [subprocess.CompletedProcess([], 0, "", ""),
+                     subprocess.CompletedProcess([], 0,
+                                                 q8_output(width=4, expert_mode="single"), "")]
+        with mock.patch.object(Path, "is_file", return_value=True), \
+             mock.patch.object(subprocess, "run", side_effect=completed) as run:
+            result = fixture.check_cpu_quant_suite(
+                Path("/build"), Path("/source"), quants=("Q8_0",),
+                ops=("MUL_MAT_ID",), widths=(4,), expert_mode="single")
+        self.assertEqual(result.status, "pass")
+        self.assertEqual(run.call_args.args[0][-2:], ["4", "--single-expert"])
+
+    def test_dot_witness_forces_single_expert_and_rowexact_off(self):
+        from autokernel.loop import iqk_witness
+        with mock.patch.object(Path, "is_file", return_value=True), \
+             mock.patch.object(subprocess, "run",
+                               return_value=subprocess.CompletedProcess([], 0, "", "")), \
+             mock.patch.object(iqk_witness, "run_fused_probe",
+                               return_value=(mock.Mock(status="pass"), "invalid")) as witness:
+            result = fixture.check_cpu_quant_suite(
+                Path("/build"), Path("/source"), quants=("Q4_K",),
+                ops=(fixture.FUSED_OP,), widths=(4,), require_dot_hit=True)
+        self.assertEqual(result.status, "unavailable")
+        self.assertEqual(result.reason, "Q4_K FUSED_UP_GATE width=4 probe output invalid")
+        self.assertEqual(witness.call_args.kwargs["expected_width"], 4)
+        self.assertTrue(witness.call_args.kwargs["single_expert"])
+        self.assertEqual(witness.call_args.kwargs["dot_quant"], "Q4_K")
+        self.assertEqual(witness.call_args.kwargs["launch_env"]["GGML_ROWEXACT_N"], "0")
+
     def test_fused_reference_checks_both_matrices_and_output(self):
         output = q8_fused_output()
         self.assertEqual(fixture._parse_and_compare(output, "Q8_0", fixture.FUSED_OP).status,
@@ -100,6 +185,8 @@ class QuantReferenceTest(unittest.TestCase):
         self.assertEqual(result.status, "pass")
         rows = [json.loads(line.split(" ", 1)[1]) for line in result.detail.splitlines()]
         self.assertEqual([row["op"] for row in rows], list(fixture.OPS))
+        self.assertTrue(all(row["width"] == 2 and
+                            row["expert_mode"] == "alternating" for row in rows))
         self.assertTrue(all(row["schema"] == "epyc.autokernel.cpu_quant_metric.v1"
                             for row in rows))
 

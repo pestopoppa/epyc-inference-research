@@ -27,6 +27,7 @@ QUANTS = ("Q4_K", "Q5_K", "Q8_0")
 OPS = ("MUL_MAT", "MUL_MAT_ID")
 FUSED_OP = "FUSED_UP_GATE"
 K, ROWS, TOKENS = 256, 40, 2
+SUPPORTED_WIDTHS = tuple(range(1, 9))
 ROW_BYTES = {"Q4_K": 144, "Q5_K": 176, "Q8_0": 272}
 # Also constrain the encoding against the fixed F32 input. Otherwise a broken
 # quantizer that writes all zeroes could agree with its own all-zero matmul.
@@ -62,7 +63,7 @@ class QuantResult:
 
 def _activation(token: int, column: int) -> float:
     for slot in range(4):
-        if column == 3 + token * 11 + slot * 64:
+        if column == 3 + (token * 11) % 64 + slot * 64:
             return -0.5 if slot & 1 else 1.0
     return 0.0
 
@@ -112,8 +113,10 @@ def _decode_row(quant: str, row: bytes) -> tuple[float, ...]:
 
 def _reference(quant: str, op: str, rows: Mapping[tuple[int, int], bytes],
                token: int, row: int,
-               gate_rows: Mapping[tuple[int, int], bytes] | None = None) -> float:
-    expert = (1, 0)[token] if op != "MUL_MAT" else 0
+               gate_rows: Mapping[tuple[int, int], bytes] | None = None,
+               expert_mode: Literal["alternating", "single"] = "alternating") -> float:
+    expert = (1 if expert_mode == "single" or token % 2 == 0 else 0) \
+        if op != "MUL_MAT" else 0
     weights = _decode_row(quant, rows[expert, row])
     up = math.fsum(weight * _activation(token, column)
                    for column, weight in enumerate(weights))
@@ -127,13 +130,20 @@ def _reference(quant: str, op: str, rows: Mapping[tuple[int, int], bytes],
     return up * gate / (1.0 + math.exp(-gate))
 
 
-def _parse_and_compare(output: str, quant: str, op: str) -> QuantResult:
+def _parse_and_compare(output: str, quant: str, op: str, width: int = TOKENS,
+                       expert_mode: Literal["alternating", "single"] = "alternating") -> QuantResult:
+    if width not in SUPPORTED_WIDTHS:
+        raise ValueError("unsupported activation width")
+    if expert_mode not in ("alternating", "single"):
+        raise ValueError("unsupported expert mode")
     lines = output.splitlines()
     headers = [i for i, line in enumerate(lines) if line.startswith(MARKER + " ")]
     if len(headers) != 1:
         raise ValueError("probe marker missing or duplicated")
     parts = lines[headers[0]].split()
-    if len(parts) != 7 or parts[1:6] != [quant, op, str(K), str(ROWS), str(TOKENS)]:
+    if len(parts) != (8 if expert_mode == "single" else 7) or \
+            parts[1:6] != [quant, op, str(K), str(ROWS), str(width)] or \
+            (expert_mode == "single" and parts[7] != "single_expert"):
         raise ValueError("probe identity or shape mismatch")
     if int(parts[6]) != ROW_BYTES[quant]:
         raise ValueError("probe row-byte layout mismatch")
@@ -157,7 +167,7 @@ def _parse_and_compare(output: str, quant: str, op: str) -> QuantResult:
             target[expert, row] = bytes.fromhex(item[3])
         elif item[0] == "O":
             token, row = int(item[1]), int(item[2])
-            if not (0 <= token < TOKENS and 0 <= row < ROWS) or (token, row) in observed:
+            if not (0 <= token < width and 0 <= row < ROWS) or (token, row) in observed:
                 raise ValueError("out-of-range or duplicate output")
             value = float.fromhex(item[3])
             if not math.isfinite(value):
@@ -165,7 +175,7 @@ def _parse_and_compare(output: str, quant: str, op: str) -> QuantResult:
             observed[token, row] = value
         else:
             raise ValueError("unknown probe line")
-    if len(rows) != experts * ROWS or len(observed) != TOKENS * ROWS or \
+    if len(rows) != experts * ROWS or len(observed) != width * ROWS or \
             len(gate_rows) != (experts * ROWS if op == "FUSED_UP_GATE" else 0):
         raise ValueError("incomplete probe payload")
     max_quant_abs_error = 0.0
@@ -185,10 +195,10 @@ def _parse_and_compare(output: str, quant: str, op: str) -> QuantResult:
     max_output_limit_fraction = 0.0
     abs_tol, rel_tol = ((FUSED_ABS_TOL, FUSED_REL_TOL)
                         if op == FUSED_OP else (ABS_TOL, REL_TOL))
-    for token in range(TOKENS):
+    for token in range(width):
         for row in range(ROWS):
             actual = observed[token, row]
-            expected = _reference(quant, op, rows, token, row, gate_rows)
+            expected = _reference(quant, op, rows, token, row, gate_rows, expert_mode)
             output_abs_error = abs(actual - expected)
             if not math.isclose(actual, expected, abs_tol=abs_tol, rel_tol=rel_tol):
                 return QuantResult("wrong", f"{quant} {op} mismatch token={token} row={row}",
@@ -201,13 +211,14 @@ def _parse_and_compare(output: str, quant: str, op: str) -> QuantResult:
             max_output_limit_fraction = max(max_output_limit_fraction,
                                             output_abs_error / limit)
     metric = {"schema": "epyc.autokernel.cpu_quant_metric.v1", "quant": quant,
-              "op": op, "outputs": TOKENS * ROWS,
+              "op": op, "width": width, "expert_mode": expert_mode,
+              "outputs": width * ROWS,
               "max_quant_abs_error": max_quant_abs_error,
               "quant_abs_tol": QUANT_ABS_TOL[quant],
               "max_output_abs_error": max_output_abs_error,
               "max_output_limit_fraction": max_output_limit_fraction,
               "output_abs_tol": abs_tol, "output_rel_tol": rel_tol}
-    return QuantResult("pass", f"{quant} {op}: {TOKENS * ROWS} scalar outputs agree; "
+    return QuantResult("pass", f"{quant} {op}: {width * ROWS} scalar outputs agree; "
                        "optimized dispatch not proven",
                        METRIC_MARKER + " " + json.dumps(metric, sort_keys=True))
 
@@ -217,17 +228,29 @@ def check_cpu_quant_suite(build_dir: Path, source_root: Path, *,
                           topology_prefix: tuple[str, ...] = (),
                           quants: tuple[str, ...] = QUANTS,
                           ops: tuple[str, ...] = OPS,
-                          require_fused_hit: bool = False) -> QuantResult:
+                          widths: tuple[int, ...] = (TOKENS,),
+                          expert_mode: Literal["alternating", "single"] = "alternating",
+                          require_fused_hit: bool = False,
+                          require_dot_hit: bool = False) -> QuantResult:
     """Compile once and run requested candidate-bound quant cases.
 
     Infrastructure/malformed-output failures are `unavailable`, never numerical
     `wrong`. The caller must separately establish dispatch-path engagement.
     """
     if not quants or not ops or any(q not in QUANTS for q in quants) or \
-            any(op not in (*OPS, FUSED_OP) for op in ops):
-        raise ValueError("unsupported or empty quant/op selection")
-    if require_fused_hit and ops != ("FUSED_UP_GATE",):
+            any(op not in (*OPS, FUSED_OP) for op in ops) or \
+            not widths or any(width not in SUPPORTED_WIDTHS for width in widths):
+        raise ValueError("unsupported or empty quant/op/width selection")
+    if (require_fused_hit or require_dot_hit) and ops != (FUSED_OP,):
         raise ValueError("fused helper witness requires only FUSED_UP_GATE")
+    if expert_mode not in ("alternating", "single"):
+        raise ValueError("unsupported expert mode")
+    if require_dot_hit and any(quant not in ("Q4_K", "Q5_K") for quant in quants):
+        raise ValueError("dot-template witness supports only Q4_K/Q5_K")
+    # A grouped expert-ID op with alternating IDs sees roughly half the
+    # requested width at each dot call. The exact-width dot witness therefore
+    # uses one expert for all activation rows, without changing legacy arms.
+    effective_expert_mode = "single" if require_dot_hit else expert_mode
     build_dir, source_root = Path(build_dir), Path(source_root)
     lib_dir = build_dir / "bin"
     needed = (lib_dir / "libggml.so", lib_dir / "libggml-base.so",
@@ -252,34 +275,50 @@ def check_cpu_quant_suite(build_dir: Path, source_root: Path, *,
             metrics = []
             for quant in quants:
                 for op in ops:
-                    if require_fused_hit:
-                        from . import iqk_witness
-                        hit, output = iqk_witness.run_fused_probe(
-                            binary, quant, dso=lib_dir / "libggml-cpu.so.0",
-                            launch_env=env, topology_prefix=topology_prefix)
-                        if hit.status != "pass":
-                            return QuantResult(hit.status, hit.reason, hit.detail)
-                    else:
-                        run = subprocess.run([*topology_prefix, str(binary), quant, op],
-                                             capture_output=True, text=True, timeout=120, env=env)
-                        if run.returncode:
-                            return QuantResult("unavailable", f"{quant} {op} probe did not complete",
-                                               f"exit={run.returncode}; {run.stderr[-1800:]}")
-                        output = run.stdout
-                    try:
-                        result = _parse_and_compare(output, quant, op)
-                    except (ValueError, KeyError, OverflowError) as exc:
-                        return QuantResult("unavailable", f"{quant} {op} probe output invalid",
-                                           str(exc))
-                    if result.status != "pass":
-                        return result
-                    metrics.append(result.detail)
+                    for width in widths:
+                        arm_env = dict(env)
+                        if require_dot_hit:
+                            # The specialization sweep must not silently take
+                            # the row-exact alternative instead of the dot path.
+                            arm_env["GGML_ROWEXACT_N"] = "0"
+                        if require_fused_hit or require_dot_hit:
+                            from . import iqk_witness
+                            hit, output = iqk_witness.run_fused_probe(
+                                binary, quant, dso=lib_dir / "libggml-cpu.so.0",
+                                launch_env=arm_env, topology_prefix=topology_prefix,
+                                expected_width=width,
+                                single_expert=effective_expert_mode == "single",
+                                **({"dot_quant": quant} if require_dot_hit else {}))
+                            if hit.status != "pass":
+                                return QuantResult(hit.status, hit.reason, hit.detail)
+                        else:
+                            command = [*topology_prefix, str(binary), quant, op, str(width)]
+                            if effective_expert_mode == "single":
+                                command.append("--single-expert")
+                            run = subprocess.run(command, capture_output=True, text=True,
+                                                 timeout=120, env=arm_env)
+                            if run.returncode:
+                                return QuantResult("unavailable", f"{quant} {op} width={width} "
+                                                   "probe did not complete",
+                                                   f"exit={run.returncode}; {run.stderr[-1800:]}")
+                            output = run.stdout
+                        try:
+                            result = _parse_and_compare(output, quant, op, width,
+                                                        effective_expert_mode)
+                        except (ValueError, KeyError, OverflowError) as exc:
+                            return QuantResult("unavailable", f"{quant} {op} width={width} "
+                                               "probe output invalid", str(exc))
+                        if result.status != "pass":
+                            return result
+                        metrics.append(result.detail)
     except (OSError, subprocess.TimeoutExpired) as exc:
         return QuantResult("unavailable", "CPU quant probe infrastructure fault", str(exc))
-    return QuantResult("pass", f"{len(quants) * len(ops)} quant/op cases passed; " +
-                       ("trusted fused helper hit proven" if require_fused_hit else
+    return QuantResult("pass", f"{len(quants) * len(ops) * len(widths)} "
+                       "quant/op/width cases passed; " +
+                       ("trusted fused and dot-template hits proven" if require_dot_hit else
+                        "trusted fused helper hit proven" if require_fused_hit else
                         "optimized dispatch not proven"), "\n".join(metrics),
-                       path_verified=require_fused_hit)
+                       path_verified=require_fused_hit or require_dot_hit)
 
 
 __all__ = ["QuantResult", "check_cpu_quant_suite"]
