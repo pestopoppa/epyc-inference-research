@@ -2010,7 +2010,9 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
     state["serving_instruments"] = instruments
     if scheduler_manifest is not None:
         from . import scheduling
-        scheduling.SchedulerState.from_dict(state.get("scheduler_state"))
+        state["scheduler_state"] = scheduling.recover_abstained_overrun_fence(
+            scheduler_manifest.config,
+            scheduling.SchedulerState.from_dict(state.get("scheduler_state"))).to_dict()
     elif "scheduler_state" in state:
         raise SerialRefused("unscheduled session contains scheduler state")
     # Diagnostic configuration only. The original digest above still controls

@@ -11,7 +11,7 @@ import heapq
 import json
 import math
 from bisect import bisect_left, insort
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
@@ -39,6 +39,7 @@ OUTAGE_KINDS = frozenset({"authority", "resource"})
 BACKENDS = frozenset({"cpu", "gpu", "both"})
 OUTCOMES = frozenset({"valid_comparison", "abstained", "invalid", "failed", "prerequisite",
                       "calibration", "validation", "reject_audit", "maintenance"})
+_DURATION_OVERRUN_FENCE = "actual held interval exceeded configured stage-plus-teardown D"
 
 
 class SchedulingRefused(ValueError):
@@ -1866,11 +1867,12 @@ class SchedulerEngine:
         violations = []
         # D is an admission forecast, not a reason to poison an otherwise valid
         # continuous campaign after the resources have already been released.
-        # Charge the complete observed duration below.  Keep fencing overruns
-        # that did not produce a valid comparison, because those still indicate
-        # an unresolved execution path rather than merely expensive setup.
-        if duration > self.config.max_stage_seconds and outcome != "valid_comparison":
-            violations.append("actual held interval exceeded configured stage-plus-teardown D")
+        # Charge the complete observed duration below. A completed abstention
+        # can include one-time calibration before the planner authors anything;
+        # it is a settled science outcome, not an unresolved execution path.
+        if (duration > self.config.max_stage_seconds
+                and outcome not in {"valid_comparison", "abstained"}):
+            violations.append(_DURATION_OVERRUN_FENCE)
         if any(receipt.physical_region_fraction > self.capacity.physical_region_fraction
                or not set(receipt.gpu_device_ids).issubset(self.capacity.gpu_devices)
                or receipt.memory_reservation_bytes > self.capacity.memory_reservation_bytes
@@ -2000,6 +2002,44 @@ def account_stage_components(
     engine = SchedulerEngine(config, state)
     engine.account_stage_components(selection, receipts, outcome=outcome)
     return engine.export_state()
+
+
+def recover_abstained_overrun_fence(
+        config: SchedulerConfig | Mapping[str, Any],
+        state: SchedulerState | Mapping[str, Any]) -> SchedulerState:
+    """Remove the old D fence only when settled receipts prove an abstained overrun.
+
+    This is an idempotent restart migration, not a waiver of held-time charges,
+    failed/invalid overruns, capacity violations, or an outstanding selection.
+    """
+    config = _normalize(config, SchedulerConfig)
+    state = _normalize(state, SchedulerState)
+    _validate_state_for_config(config, state)
+    if (_DURATION_OVERRUN_FENCE not in state.successor_fences
+            or state.issued_selection_digests):
+        return state
+    records = {record.receipt_id: record for record in state.accounted_receipts}
+    groups: dict[str, list[HeldClaimReceipt]] = {}
+    for receipt in state.receipts:
+        groups.setdefault(records[receipt.receipt_id].selection_digest, []).append(receipt)
+    found_abstained_overrun = False
+    for receipts in groups.values():
+        duration = max(item.ended_at for item in receipts) - min(
+            item.started_at for item in receipts)
+        if duration <= config.max_stage_seconds:
+            continue
+        outcomes = {records[item.receipt_id].outcome for item in receipts}
+        if (len(outcomes) != 1 or not outcomes <= {"valid_comparison", "abstained"}
+                or any(item.physical_region_fraction > config.capacity.physical_region_fraction
+                       or not set(item.gpu_device_ids).issubset(config.capacity.gpu_devices)
+                       or item.memory_reservation_bytes > config.capacity.memory_reservation_bytes
+                       for item in receipts)):
+            return state
+        found_abstained_overrun |= "abstained" in outcomes
+    if not found_abstained_overrun:
+        return state
+    return replace(state, successor_fences=tuple(
+        fence for fence in state.successor_fences if fence != _DURATION_OVERRUN_FENCE))
 
 
 def fail_stage_before_claim(

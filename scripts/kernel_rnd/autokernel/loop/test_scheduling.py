@@ -562,6 +562,43 @@ def test_valid_comparison_overrun_is_charged_without_poisoning_successors():
     assert successor.status == "selected"
 
 
+def test_abstained_calibration_overrun_is_charged_without_poisoning_successors():
+    cfg = S.SchedulerConfig.from_dict(config(noncoverage_slots=1))
+    state = S.initial_state(cfg, "scheduler")
+    prop = proposal("first", duration=5)
+    state, selected = choose(cfg, state, [prop])
+    state = account(cfg, state, selected, prop, end=15, outcome="abstained")
+    assert state.campaign_attempts == 1
+    assert state.campaign_charged_seconds == 15
+    assert state.accounted_receipts[0].outcome == "abstained"
+    assert not state.successor_fences
+    _, successor = choose(cfg, state, [prop], now=16)
+    assert successor.status == "selected"
+
+
+def test_recover_only_legacy_abstained_overrun_fence_from_exact_receipts():
+    cfg = S.SchedulerConfig.from_dict(config(noncoverage_slots=1))
+    prop = proposal("first", duration=5)
+    state, selected = choose(cfg, S.initial_state(cfg, "scheduler"), [prop])
+    old = account(cfg, state, selected, prop, end=15, outcome="invalid")
+    assert old.successor_fences == (S._DURATION_OVERRUN_FENCE,)
+    # An older scheduler produced this fence for the same completed abstention.
+    prior = old.to_dict()
+    prior["accounted_receipts"][0]["outcome"] = "abstained"
+    recovered = S.recover_abstained_overrun_fence(cfg, prior)
+    assert recovered.successor_fences == ()
+    assert recovered.campaign_charged_seconds == 15
+    assert recovered.receipts == old.receipts
+    assert recovered.accounted_receipts[0].outcome == "abstained"
+    assert S.recover_abstained_overrun_fence(cfg, recovered) == recovered
+    _, successor = choose(cfg, recovered, [prop], now=16)
+    assert successor.status == "selected"
+    assert S.recover_abstained_overrun_fence(cfg, old) == old
+    prior["successor_fences"].append("actual held claims exceeded configured capacity")
+    assert S.recover_abstained_overrun_fence(cfg, prior).successor_fences == (
+        "actual held claims exceeded configured capacity",)
+
+
 def test_indexed_engine_hot_path_does_not_export_or_rescan_receipt_history(monkeypatch):
     cfg = S.SchedulerConfig.from_dict(config(noncoverage_slots=1))
     engine = S.SchedulerEngine(cfg, S.initial_state(cfg, "scheduler"))
