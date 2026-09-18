@@ -173,6 +173,15 @@ class TheProgramReachesTheActors(unittest.TestCase):
         for probe in ("32 banks", "8 phase cliques", "fp8_fp8", "bit-identical"):
             self.assertIn(probe, text, probe)
 
+    def test_the_fused_iqk_route_and_its_limits_reach_the_actors(self):
+        text = actors.render_context(
+            {"program": loop.PROGRAM.read_text(encoding="utf-8")})
+        for constraint in ("iqk_moe_fused_up_gate", "body-only edits",
+                           "Q4_K and Q5_K", "0/0 CPU cases",
+                           "exact candidate-DSO helper hits", "v26 abstentions",
+                           "historical nulls and abstentions"):
+            self.assertIn(constraint, text)
+
     def test_an_absent_program_does_not_break_the_bundle(self):
         text = actors.render_context({"program": ""})
         self.assertNotIn("Standing constraints", text)

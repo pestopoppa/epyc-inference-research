@@ -75,15 +75,26 @@ receipt. A fast but wrong candidate is discarded.
 The experimental CPU `GATED_DELTA_NET` route has a deterministic F32 scalar
 reference fixture with exactly representable outputs. The native CPU suite alone
 compares CPU against CPU and is not independent evidence. It must be followed by
-that scalar fixture. One CPU IQK helper route is admitted narrowly:
-`iqk_mul_mat_moe_rows` body-only edits in `iqk_mul_mat.cpp` run the native
-`MUL_MAT_ID` suite, then two exact Q4_K/Q5_K cases under the resolved CPU
-recipe. A trusted one-shot GDB child proves `use_ref=true` was set on the
-reference and the exported helper executed in the candidate DSO in each
-passing case. The separate independent scalar fixture compares Q4_K/Q5_K
-`MUL_MAT_ID` outputs at its fixed 40-row, two-token shape. This proves helper
-entry and those numerical shapes, not every branch or production shape.
-Other prospective IQK edits still refuse before build: generic active-dispatch
+that scalar fixture. Two CPU IQK helper routes are admitted narrowly, each
+requiring body-only edits to its named helper in `iqk_mul_mat.cpp` and the
+nonempty native `MUL_MAT_ID` host/op suite under the resolved CPU recipe:
+
+- `iqk_mul_mat_moe_rows`: trusted one-shot GDB witnesses prove `use_ref=true`
+  on the reference and exact exported-helper entry in the candidate DSO for
+  passing Q4_K/Q5_K cases. An independent scalar fixture compares their
+  `MUL_MAT_ID` outputs at the fixed 40-row, two-token shape.
+- `iqk_moe_fused_up_gate`: the native GLU selector currently has 0/0 CPU cases,
+  so it is **not** a correctness witness. A separate fused up-gate graph fixture
+  requires exact candidate-DSO helper hits and independent scalar agreement for
+  both Q4_K and Q5_K, also at the fixed 40-row, two-token shape. The preceding
+  `MUL_MAT_ID` suite checks host/op wiring; it does not prove fused execution.
+
+These receipts prove exact helper entry and those numerical shapes, not every
+branch or production shape. The new fused route supersedes v26 abstentions
+*only* where their reason was that `iqk_moe_fused_up_gate` had no witness;
+historical nulls and abstentions for their actual measured mechanisms remain
+evidence and must not be discarded. Other prospective IQK edits still refuse
+before build: generic active-dispatch
 logging cannot prove an edited quant function ran on a passing selected case.
 x86 `quants.c` is shared by both
 arms and is not admitted. Other CPU source families need a supported route
