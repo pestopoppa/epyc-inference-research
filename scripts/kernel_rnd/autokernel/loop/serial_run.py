@@ -279,6 +279,27 @@ def load_resume(path: Path, current_argv):
     return row, sha
 
 
+def _initial_continuation(path: Path, targets):
+    """Validate one old completed child as input to a distinct serial epoch.
+
+    This carries source/anchor context forward, never the old scheduler's
+    unsettled selection or an inferred held-claim receipt.
+    """
+    if not path.is_absolute():
+        raise SerialRefused("initial continuation path must be absolute")
+    path = path.resolve(strict=True)
+    prior, _sha = load_completed(path)
+    if prior["terminal"] != "complete":
+        raise SerialRefused("initial continuation must be complete, not stopped")
+    matches = [(index, target) for index, target in enumerate(targets)
+               if _selected_identity(target) == prior["selected_target"]]
+    if len(matches) != 1:
+        raise SerialRefused("initial continuation must identify exactly one enrolled target")
+    index, target = matches[0]
+    prior, sha = load_resume(path, target)
+    return {"target_index": index, "path": str(path), "sha256": sha}
+
+
 def _held_reference(value):
     if not isinstance(value, dict) or set(value) != {"schema", "selection_digest", "evidence"} \
             or value.get("schema") != HELD_REFERENCE_SCHEMA:
@@ -1099,6 +1120,9 @@ def main(argv=None) -> int:
     parser.add_argument("--target-root", type=Path,
                         help="derived per-target store/lane roots (default: state-dir/targets)")
     parser.add_argument("--common-args", type=Path, help="optional shared actor/measurement argv JSON")
+    parser.add_argument("--initial-continuation", type=Path,
+                        help="completed child continuation to seed a new serial state; "
+                             "repeat unchanged on restart")
     parser.add_argument("--scheduler-manifest", type=Path,
                         help="closed resource-time budget and exact target proposals")
     parser.add_argument("--source-validation-priority-dir", type=Path,
@@ -1132,7 +1156,8 @@ def main(argv=None) -> int:
             or not 0 <= args.retention_trigger_free_gb <= args.retention_target_free_gb
             or args.retention_recent_state_caches < 0
             or args.retention_max_build_dirs < 1
-            or (args.retention_plan_only and args.retention_dry_run)):
+            or (args.retention_plan_only and (args.retention_dry_run
+                                              or args.initial_continuation is not None))):
         parser.error("batch/round or build-retention policy is invalid")
     try:
         if args.control_listen:
@@ -1195,6 +1220,8 @@ def main(argv=None) -> int:
                 scheduler_manifest, _scheduler_bindings(targets))
         if scheduler_manifest is not None and args.batch_iterations != 1:
             raise SerialRefused("scheduled serial mode requires one iteration per child")
+        initial_continuation = (_initial_continuation(args.initial_continuation, targets)
+                                if args.initial_continuation is not None else None)
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
     if args.retention_plan_only:
@@ -1210,6 +1237,7 @@ def main(argv=None) -> int:
         return 0
     if args.dry_run:
         print(json.dumps({"targets": targets, "skipped": skipped, "child_prefix": child_prefix,
+                          "initial_continuation": initial_continuation,
                           "scheduler": (scheduler_manifest.to_dict()
                                         if scheduler_manifest is not None else None)}, indent=2))
         from . import run
@@ -1266,7 +1294,8 @@ def main(argv=None) -> int:
             result = _drive(root, targets, args.batch_iterations, args.rounds, child_prefix=child_prefix,
                             scheduler_manifest=scheduler_manifest,
                             source_validation_priority_dir=args.source_validation_priority_dir,
-                            control_listen=args.control_listen, control_origin=args.control_origin)
+                            control_listen=args.control_listen, control_origin=args.control_origin,
+                            initial_continuation=initial_continuation)
             terminal_phase = "complete" if result == 0 else "failed"
             return result
         finally:
@@ -1966,7 +1995,7 @@ def _scheduled_failure_account(state, manifest, active, batch_dir, original):
 
 def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
            scheduler_manifest=None, source_validation_priority_dir=None,
-           control_listen=None, control_origin=None):
+           control_listen=None, control_origin=None, initial_continuation=None):
     # Preserve the existing scheduler contract unless the operator/campaign
     # explicitly enrolls the AKX priority producer.  Making an absent optional
     # producer a new default launch dependency would stop every existing
@@ -1975,6 +2004,8 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                               if source_validation_priority_dir is not None else None)
     config = _digest({"targets": targets, "batch_iterations": batch_iterations, "rounds": rounds,
                       **({"child_prefix": list(child_prefix)} if child_prefix else {}),
+                      **({"initial_continuation": initial_continuation}
+                         if initial_continuation is not None else {}),
                       **({"scheduler_manifest": scheduler_manifest.digest}
                          if scheduler_manifest is not None else {}),
                       **({"source_validation_priority_dir":
@@ -1997,6 +2028,14 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
             from . import scheduling
             state["scheduler_state"] = scheduling.initial_state(
                 scheduler_manifest.config, scheduler_manifest.scheduler_id).to_dict()
+        if initial_continuation is not None:
+            index = initial_continuation["target_index"]
+            reference = {key: initial_continuation[key] for key in ("path", "sha256")}
+            body, sha = load_resume(Path(reference["path"]), targets[index])
+            if sha != reference["sha256"] or body["terminal"] != "complete":
+                raise SerialRefused("initial continuation changed before serial state creation")
+            state["last_results"][str(index)] = reference
+            _remember_source_result(state, body, targets[index], reference)
     state.setdefault("source_results", {})
     state.setdefault("runtime_recovery", {})
     state.setdefault("source_validations", {})

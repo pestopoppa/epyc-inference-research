@@ -341,6 +341,71 @@ def test_scheduled_actual_children_bind_fresh_selection_and_account_original_int
     assert sr.input_binding(seen[0]) == sr.input_binding(seen[1])
 
 
+def test_new_serial_epoch_seeds_only_completed_prior_target_continuation(
+        tmp_path, monkeypatch):
+    old, argv = _inputs(tmp_path, monkeypatch, rounds=1)
+    argv = _scheduled(tmp_path, argv[2:])  # one GPU target; no CPU screen or hardware
+    assert sr.main(argv) == 0
+    prior = old / "batches/batch-000000/loop-continuation.json"
+    old_state_bytes = (old / "serial-state.json").read_bytes()
+    old_receipt, old_sha = sr.load_completed(prior)
+    fresh = tmp_path / "fresh"
+    restarted = list(argv)
+    restarted[restarted.index("--state-dir") + 1] = str(fresh)
+    restarted += ["--initial-continuation", str(prior)]
+    assert sr.main(restarted) == 0
+    saved = json.loads((fresh / "serial-state.json").read_text())
+    seen = [json.loads(line)["argv"] for line in (fresh / "seen.jsonl").read_text().splitlines()]
+    assert len(seen) == 1
+    assert sr.option(seen[0], "--resume-run") == str(prior)
+    assert sr.option(seen[0], "--anchor-build") == str(old_receipt["current_anchor"]["path"])
+    assert sr.input_binding(seen[0]) == sr.input_binding(old_receipt["input_argv"])
+    assert saved["next_batch"] == 1 and saved["failed_targets"] == {}
+    assert saved["last_results"]["0"]["path"] != str(prior)
+    assert old_sha == hashlib.sha256(prior.read_bytes()).hexdigest()
+    assert (old / "serial-state.json").read_bytes() == old_state_bytes
+    scheduler = scheduling.SchedulerState.from_dict(saved["scheduler_state"])
+    assert scheduler.campaign_attempts == 1
+    assert len({row.selection_digest for row in scheduler.accounted_receipts}) == 1
+    old_scheduler = scheduling.SchedulerState.from_dict(
+        json.loads(old_state_bytes)["scheduler_state"])
+    assert not ({row.receipt_id for row in scheduler.accounted_receipts}
+                & {row.receipt_id for row in old_scheduler.accounted_receipts})
+    assert scheduler.issued_selection_digests == ()
+
+
+def test_initial_continuation_refuses_stopped_or_other_target_without_new_state(
+        tmp_path, monkeypatch):
+    old, argv = _inputs(tmp_path, monkeypatch, mode="stop", rounds=1)
+    gpu = _scheduled(tmp_path, argv[2:])
+    assert sr.main(gpu) == 0
+    prior = old / "batches/batch-000000/loop-continuation.json"
+    assert sr.load_completed(prior)[0]["terminal"] == "stopped"
+    fresh = tmp_path / "fresh"
+    stopped = list(gpu)
+    stopped[stopped.index("--state-dir") + 1] = str(fresh)
+    stopped += ["--initial-continuation", str(prior)]
+    with pytest.raises(SystemExit):
+        sr.main(stopped)
+    assert not fresh.exists()
+
+    # Reopen a complete GPU continuation against a CPU-only roster: exact
+    # selected target and stable arguments must both match before any state.
+    (old / "mode").write_text("good")
+    (old / "STOP").unlink()
+    complete_dir = tmp_path / "complete"
+    complete = list(gpu)
+    complete[complete.index("--state-dir") + 1] = str(complete_dir)
+    assert sr.main(complete) == 0
+    gpu_prior = complete_dir / "batches/batch-000000/loop-continuation.json"
+    cpu = list(argv[:2] + argv[4:])
+    cpu[cpu.index("--state-dir") + 1] = str(fresh)
+    cpu += ["--initial-continuation", str(gpu_prior)]
+    with pytest.raises(SystemExit):
+        sr.main(cpu)
+    assert not fresh.exists()
+
+
 def test_scheduled_failed_child_accounts_only_original_released_claim(tmp_path, monkeypatch):
     state, argv = _inputs(tmp_path, monkeypatch, mode="fail_held", rounds=1)
     argv = _scheduled(tmp_path, argv)
