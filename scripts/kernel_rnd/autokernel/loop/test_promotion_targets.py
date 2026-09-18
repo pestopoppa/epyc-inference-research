@@ -46,7 +46,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from autokernel.loop import (anchor, bench, champion, gates, hotspots, loop,
+from autokernel.loop import (accumulate, anchor, bench, champion, gates, hotspots, loop,
                              pipeline, pool)
 from autokernel.loop import run as run_mod
 
@@ -146,8 +146,10 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
         for key, value in (("user.email", "t@t"), ("user.name", "t")):
             subprocess.run(["git", "-C", str(self.repo), "config", key, value],
                            capture_output=True, text=True, timeout=60)
-        (self.repo / "kernel.c").write_text("base\n", encoding="utf-8")
-        _sh(self.repo, "add", "kernel.c")
+        kernel = self.repo / "ggml/src/kernel.c"
+        kernel.parent.mkdir(parents=True)
+        kernel.write_text("base\n", encoding="utf-8")
+        _sh(self.repo, "add", "ggml/src/kernel.c")
         _sh(self.repo, "commit", "-q", "-m", "champion tip")
         self.tip = _sh(self.repo, "rev-parse", "HEAD")
 
@@ -169,6 +171,7 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
 
     def _run_one_keep(self):
         """Drive `run.main` through exactly one kept iteration; return the record."""
+        accumulate.Bundle(champion_of_record=self.tip, tip=self.tip).save(self.store)
         compile_calls: list[dict] = []
         planners: list = []
         scratch = self.root / "scratch-verify"
@@ -193,13 +196,13 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
             def propose(self, context):
                 self.contexts.append(dict(context))
                 return loop.Hypothesis(mechanism_id="akm-e2e-keep", statement="s",
-                                       falsifier="f", target_surface="kernel.c",
+                                       falsifier="f", target_surface="ggml/src/kernel.c",
                                        target_symbol="sym")
 
             def author(self, hypothesis, context):
-                (self.workspace / "kernel.c").write_text("patched\n",
-                                                         encoding="utf-8")
-                return ("kernel.c",)
+                (self.workspace / "ggml/src/kernel.c").write_text(
+                    "patched\n", encoding="utf-8")
+                return ("ggml/src/kernel.c",)
 
         class _Critic:
             def __init__(self, workspace):
@@ -249,7 +252,13 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
         out = io.StringIO()
         with mock.patch.object(gates, "compiles", fake_compiles), \
              mock.patch.object(gates, "op_correctness",
-                               lambda _b: gates.Verdict("op_correctness", True)), \
+                               lambda _b, **_k: gates.Verdict("op_correctness", True)), \
+             mock.patch.object(gates, "affected_op_scope", return_value=("MUL_MAT",)), \
+             mock.patch.object(gates, "deterministic",
+                               lambda *_a, **_k: gates.Verdict("determinism", True)), \
+             mock.patch.object(gates, "no_fallback_dispatch",
+                               lambda *_a, **_k: gates.Verdict(
+                                   "no_fallback_dispatch", True)), \
              mock.patch.object(run_mod.bench, "compare", fake_compare), \
              mock.patch.object(run_mod.actors, "AgentPlanner",
                                lambda workspace, **_: _Planner(workspace)), \
@@ -300,6 +309,25 @@ class TheKeepBuildsAProductionCompleteAnchor(unittest.TestCase):
         # Every build was compiled AT the directory it serves (never relocated).
         self.assertEqual(promotion[0]["source"], self.repo)
 
+    def test_legacy_keep_prunes_with_original_current_and_protected_anchor(self):
+        """Legacy keeps must not select the intentionally disabled unified pruner.
+
+        Exercise the real run.main keep path, but intercept cleanup before any
+        deletion. The hardened legacy pruner and its safety tests stay unchanged.
+        """
+        with mock.patch.object(
+                run_mod.pool, "prune_anchor_generations", autospec=True,
+                return_value=pool.PruneReport(status="complete")) as prune:
+            rc, _calls, _planners, _scratch, log = self._run_one_keep()
+
+        self.assertEqual(rc, 0, log)
+        self.assertIn("kept", log)
+        prune.assert_called_once_with(
+            self.store, current=self.store / "anchor-gen-002",
+            protect=[self.startup_anchor])
+        self.assertTrue(self.startup_anchor.is_dir())
+        self.assertTrue((self.store / "anchor-gen-002").is_dir())
+
     def test_the_unreadable_inbox_files_could_not_kill_the_keep(self):
         """R22-6 end-to-end: same run, poisoned live-shaped inbox. BROKEN READS
         (bare reader): zero keeps, three lane_errors, breaker abort, rc != 0."""
@@ -337,19 +365,6 @@ class TheRunWiringSeams(unittest.TestCase):
         source = (Path(__file__).resolve().parent / "run.py").read_text()
         self.assertNotIn("inbox_dir.glob", source)
         self.assertIn("inbox.read_inbox(args.store", source)
-
-    def test_build_champion_forwards_its_targets(self):
-        """`build_champion(dest, targets)` that ignores `targets` and calls
-        `gates.compiles` bare would give every promotion a bench-only anchor while
-        the e2e's fake still records what the closure was HANDED... it does not:
-        the e2e records what `gates.compiles` RECEIVED, so this seam test is the
-        redundant second lock, kept because it is free and names the line."""
-        source = (Path(__file__).resolve().parent / "run.py").read_text()
-        block = source.split("def build_champion(", 1)[1]
-        block = block.split("def ", 1)[0]
-        self.assertIn("targets=targets", block)
-        self.assertIn("gates.DEFAULT_TARGETS", block.split(")", 1)[0])
-
 
 if __name__ == "__main__":
     unittest.main()

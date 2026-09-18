@@ -31,21 +31,40 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import subprocess
 import sys
 import time
 
-from . import accumulate, instruments, serving, status
+from . import accumulate, instruments, pool, serving, status
 
 
 def measure(recipe: serving.Recipe, cor_build: Path, tip_build: Path, *,
-            pairs: int, floor_pct: float) -> dict:
+            pairs: int, floor_pct: float, floor_unit: str) -> dict:
     """THE MEASUREMENT SEAM -- the only thing here that touches the GPU.
 
     A thin wrapper on purpose: everything above it (floor identity, the scheduling
     decision, the resolve/record/apply chain) is then testable without hardware, and a
     test that stubs this cannot accidentally launch a server.
+
+    `floor_unit` is the loaded floor's own unit and is passed straight through, so the
+    unit check happens where the comparison does and cannot be skipped by a caller that
+    forgot (R23-55). This gate's effect is `process`-unit: `serving.compare` relaunches
+    the server for every sample of every arm.
     """
-    return serving.compare(recipe, cor_build, tip_build, pairs=pairs, floor_pct=floor_pct)
+    return serving.compare(recipe, cor_build, tip_build, pairs=pairs, floor_pct=floor_pct,
+                           floor_unit=floor_unit)
+
+
+def _is_ancestor(worktree: Path, ancestor: str, descendant: str) -> bool:
+    """Read-only lineage check for the explicitly pinned serving-gate tip."""
+    done = subprocess.run(
+        ["git", "-C", str(worktree), "merge-base", "--is-ancestor",
+         ancestor, descendant], capture_output=True, text=True)
+    if done.returncode not in (0, 1):
+        raise RuntimeError(
+            f"git ancestry check failed in {worktree}: {done.stderr.strip()}"
+        )
+    return done.returncode == 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -57,6 +76,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="build of the champion OF RECORD (the anchor arm)")
     parser.add_argument("--tip-build", type=Path, required=True,
                         help="build of the accumulator TIP (the candidate arm)")
+    parser.add_argument("--tip", required=True,
+                        help="source commit exactly represented by --tip-build")
+    parser.add_argument("--champion-worktree", type=Path, default=pool.CHAMPION_TREE,
+                        help="read-only source topology for Bundle ancestry checks")
     parser.add_argument("--pairs", type=int, default=5)
     parser.add_argument("--fire-multiple", type=float, default=2.5)
     instruments.add_posture_args(
@@ -76,17 +99,29 @@ def main(argv: list[str] | None = None) -> int:
     try:
         recipe = serving.Recipe.load(args.recipe)
         print(f"recipe    {recipe.describe()}")
-        reading = instruments.read_floor(args.store, recipe)
+        # The effect this gate produces is between-PROCESS (a fresh server per sample), so
+        # only a process-unit floor can be its bar; a legacy unit-less floor refuses here,
+        # before any GPU time is spent (R23-55).
+        reading = instruments.read_floor(args.store, recipe,
+                                         effect_unit=serving.COMPARE_EFFECT_UNIT)
         floor = reading.floor_pct
-        bundle = accumulate.Bundle.from_dict(
-            json.loads((Path(args.store) / accumulate.Bundle.FILENAME).read_text()))
+        bundle, _ = accumulate.load_bundle(
+            Path(args.store), anchor_commit=args.tip,
+            is_ancestor=lambda older, newer: _is_ancestor(
+                args.champion_worktree, older, newer),
+            read_only=posture.dry_run)
         policy = accumulate.AccumulatorPolicy(fire_multiple=args.fire_multiple)
         thr = policy.fire_threshold_pct(floor)
-        print(f"floor     {floor:.3f}% [{reading.provenance}] from {reading.path.name} | "
-              f"fire threshold {thr:.2f}%")
+        print(f"floor     {floor:.3f}% [{reading.provenance}] unit={reading.unit} "
+              f"n={reading.n} from {reading.path.name} | fire threshold {thr:.2f}%")
+        magnitude_label = (
+            "current combined measurement"
+            if bundle.measurement_validity == accumulate.MEASUREMENT_CURRENT
+            else "historical-only magnitude; threshold disabled"
+        )
         print(f"bundle    cor {bundle.champion_of_record[:12]} tip {bundle.tip[:12]} "
               f"keeps {len(bundle.keeps)} compounded {bundle.compounded_bench_pct:+.3f}% "
-              f"(MEASURED by seed_bundle)")
+              f"validity={bundle.measurement_validity} ({magnitude_label})")
         decision = accumulate.decide_after_keep(bundle, floor, policy)
         print(f"schedule  decide_after_keep -> {decision}  (fire_multiple x floor = "
               f"{thr:.2f}% is only the loop's SCHEDULING heuristic)")
@@ -109,8 +144,9 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         started = time.time()
         row = measure(recipe, args.cor_build, args.tip_build,
-                      pairs=args.pairs, floor_pct=floor)
-    except (instruments.InstrumentRefusal, serving.ServingFloorMismatch) as refusal:
+                      pairs=args.pairs, floor_pct=floor, floor_unit=reading.unit)
+    except (instruments.InstrumentRefusal, serving.ServingFloorMismatch,
+            accumulate.BundleRecoveryRequired) as refusal:
         # A floor calibrated under a DIFFERENT recipe is a refusal, not a verdict: it
         # exits REFUSED with the message rather than a traceback, so the caller can tell
         # "no reading" from "a bad reading".
@@ -123,7 +159,11 @@ def main(argv: list[str] | None = None) -> int:
               "hand_run": "autokernel.loop.serving_gate",
               # The provenance of the bar travels with the verdict: a reader cannot
               # otherwise tell a checked floor from an assumed one (run.py does the same).
-              "floor_provenance": reading.provenance, **row}
+              "floor_provenance": reading.provenance,
+              # The bar's unit and n travel with the verdict for the same reason its
+              # provenance does: a reader cannot otherwise tell which dispersion this
+              # effect was judged against (R23-55 / R23-61).
+              "floor_unit": reading.unit, "floor_n": reading.n, **row}
     written = status.write_json(Path(args.store) / "serving",
                                 f"bundle-{bundle.tip[:12]}.json", record, prefix=".sv-")
     print(f"serving   {plan['reason']}  [{time.time() - started:.0f}s]  record: {written}")

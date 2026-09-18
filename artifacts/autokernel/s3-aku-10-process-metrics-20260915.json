@@ -1,0 +1,73 @@
+{
+  "schema": "epyc.autokernel.process_metrics_artifact.v1",
+  "generated_at": "2026-09-15T19:01:28Z",
+  "scope": "Read-only retrospective over every genuine AutoKernel ExperimentStore discovered from canonical memory, loop status, and continuation paths; pytest fixtures are excluded.",
+  "inventory": {
+    "method": "find experiments.db under /mnt/raid0/llm, then require a canonical campaign location or corroborating loop-status/loop-continuation record",
+    "excluded_classes": ["pytest-of-node and test-named fixture databases", "autokernel implementation/preparation proof fixture copies"],
+    "note": "The full-roster dry-run store is retained and labelled because it is a real controller campaign store with loop-status provenance, although it reached no measurement."
+  },
+  "inputs": [
+    {
+      "label": "canonical-loop-memory", "classification": "genuine-canonical-campaign-store",
+      "path": "/mnt/raid0/llm/autokernel/loop-memory/experiments.db", "size_bytes": 9011200,
+      "mtime_utc": "2026-09-09T12:37:48.651657658Z", "sha256": "7f0509beada296550a229c8c8e5ab8587df9442a7743d8f7349caabc4a6a96ee",
+      "snapshot_identity": {"row_count": 2397, "min_recorded_at": "2026-08-28T19:23:12.193041Z", "max_recorded_at": "2026-09-09T12:40:00Z", "max_rowid": 2397}
+    },
+    {
+      "label": "live-glm53-continuous", "classification": "genuine-live-campaign-store",
+      "path": "/mnt/raid0/llm/tmp/aku12a-glm53-five-loop-store/experiments.db", "size_bytes": 4628819968,
+      "mtime_utc": "2026-09-15T17:55:14.661386945Z", "sha256": null,
+      "sha256_unavailable_reason": "Avoided a non-atomic 4.63 GB full-file read against a live SQLite producer; the transaction-consistent scalar snapshot identity below is authoritative for this result.",
+      "snapshot_identity": {"row_count": 174, "min_recorded_at": "2026-09-09T23:11:21.535646Z", "max_recorded_at": "2026-09-15T17:55:06.783209Z", "max_rowid": 174}
+    },
+    {
+      "label": "original-gpu-verification", "classification": "genuine-bounded-verification-campaign-store",
+      "path": "/mnt/raid0/llm/tmp/aku-gpu-original-verification-20260910/fresh-store/experiments.db", "size_bytes": 24576,
+      "mtime_utc": "2026-09-10T09:00:09.237104225Z", "sha256": "12d7085a8c75685bbc656b6de9514517870eb5213a704fd428579b2958603cf4",
+      "snapshot_identity": {"row_count": 1, "min_recorded_at": "2026-09-10T09:00:09.233503Z", "max_recorded_at": "2026-09-10T09:00:09.233503Z", "max_rowid": 1}
+    },
+    {
+      "label": "full-roster-architect-dry-run", "classification": "genuine-dry-run-campaign-store",
+      "path": "/mnt/raid0/llm/tmp/aku-full-roster-dryrun-inputs-20260910/stores/architect_general-8083/experiments.db", "size_bytes": 40960,
+      "mtime_utc": "2026-09-11T01:10:28.231417803Z", "sha256": "283c29f3a0b4332a139aadf9f5adde42677adab56fff6fd730ae3d58e5c5c2ee",
+      "snapshot_identity": {"row_count": 5, "min_recorded_at": "2026-09-10T11:12:24.949761Z", "max_recorded_at": "2026-09-11T01:10:28.229567Z", "max_rowid": 5}
+    }
+  ],
+  "input_contract": {
+    "table": "experiments", "per_store_ordering": "recorded_at ASC, rowid ASC",
+    "aggregate_ordering": "recorded_at ASC across scalar-projected rows from all stores",
+    "sqlite_projection": ["recorded_at", "status", "effect_fraction", "json_extract(payload, '$.critic_pass_1_rejected')", "json_extract(payload, '$.critic_pass_1')"],
+    "critic_projection": "only the two named bounded JSON paths; the full payload value is never returned to Python",
+    "payload_full_column_materialized": false, "payloads_embedded": false
+  },
+  "metric_definitions": {
+    "first_improvement_step": {"formula": "min i where status is measured, effect_fraction is finite, and effect_fraction > 0", "unit": "1-based attempt row"},
+    "auc_best_so_far_effect_over_steps": {"formula": "sum i=1..N of max(0, finite effect_fraction on measured rows at steps <= i)", "unit": "effect fraction times attempt row"},
+    "valid_step_ratio": {"formula": "measured / (measured + refused_at_formation + planner_transient + bench_failed)", "measured_statuses": ["kept", "keep_candidate", "measured_null", "runtime_observed"], "unit": "dimensionless fraction"},
+    "critic_pass_1_rejection_rate": {"formula": "explicit pass-1 rejected decisions / all explicit pass-1 decisions", "unit": "dimensionless fraction", "missingness_rule": "null with zero explicit decisions"},
+    "critic_cohort_measured_null_rate": {"formula": "measured_null / eventual measured outcomes in each explicitly lineaged accepted-after-rejection and accepted-first-pass cohort", "unit": "dimensionless fraction", "missingness_rule": "absence of a rejection is never first-pass acceptance"}
+  },
+  "per_store_results": [
+    {"label": "canonical-loop-memory", "attempt_steps": 2397, "first_improvement_step": 29, "auc_best_so_far_effect_over_steps": 279.64539908472096, "final_best_so_far_effect_fraction": 0.23339188950431944, "numeric_effect_steps": 859, "valid_step_counts": {"measured": 863, "denominator": 2074}, "valid_step_ratio": 0.41610414657666345, "critic_pass_1_comparison_available": false},
+    {"label": "live-glm53-continuous", "attempt_steps": 174, "first_improvement_step": 4, "auc_best_so_far_effect_over_steps": 2.53352368144501, "final_best_so_far_effect_fraction": 0.03178676254199342, "numeric_effect_steps": 75, "valid_step_counts": {"measured": 75, "denominator": 151}, "valid_step_ratio": 0.4966887417218543, "critic_pass_1_comparison_available": false},
+    {"label": "original-gpu-verification", "attempt_steps": 1, "first_improvement_step": null, "auc_best_so_far_effect_over_steps": 0.0, "final_best_so_far_effect_fraction": 0.0, "numeric_effect_steps": 1, "valid_step_counts": {"measured": 1, "denominator": 1}, "valid_step_ratio": 1.0, "critic_pass_1_comparison_available": false},
+    {"label": "full-roster-architect-dry-run", "attempt_steps": 5, "first_improvement_step": null, "auc_best_so_far_effect_over_steps": 0.0, "final_best_so_far_effect_fraction": 0.0, "numeric_effect_steps": 0, "valid_step_counts": {"measured": 0, "denominator": 5}, "valid_step_ratio": 0.0, "critic_pass_1_comparison_available": false}
+  ],
+  "aggregate_result": {
+    "attempt_steps": 2577, "first_improvement_step": 29,
+    "auc_best_so_far_effect_over_steps": 321.6559391955008,
+    "final_best_so_far_effect_fraction": 0.23339188950431944, "numeric_effect_steps": 935,
+    "valid_step_counts": {"measured": 939, "denominator": 2231}, "valid_step_ratio": 0.42088749439713136,
+    "critic_pass_1_comparison": {
+      "available": false, "pass_1_decisions": {"rejected": 0, "accepted": 0}, "pass_1_rejection_rate": null,
+      "accepted_after_rejection_eventual_measured": 0, "accepted_after_rejection_measured_null_rate": null,
+      "accepted_first_pass_eventual_measured": 0, "accepted_first_pass_measured_null_rate": null,
+      "measured_null_rate_difference_after_rejection_minus_first_pass": null,
+      "unavailable_reason": "The two bounded critic JSON-path projections are null across all four stores: none preserves explicit pass-1 decisions or explicit pass-1 lineage on eventual measured outcomes. Absence does not prove acceptance, so the rejection rate and both cohort comparisons remain unavailable."
+    }
+  },
+  "reproduce": "python3 -m scripts.kernel_rnd.autokernel.loop.process_metrics --pretty /mnt/raid0/llm/autokernel/loop-memory/experiments.db /mnt/raid0/llm/tmp/aku12a-glm53-five-loop-store/experiments.db /mnt/raid0/llm/tmp/aku-gpu-original-verification-20260910/fresh-store/experiments.db /mnt/raid0/llm/tmp/aku-full-roster-dryrun-inputs-20260910/stores/architect_general-8083/experiments.db",
+  "observed_resource_bound": {"maximum_resident_set_kib": 596644, "elapsed_seconds": 6.30, "input_payload_bytes": 4628819968, "note": "Peak RSS stayed below 13% of the largest input file while SQLite projected two critic JSON paths and Python retained only bounded scalar rows."},
+  "safety": {"database_open_mode": "SQLite URI mode=ro", "hardware_launched": false, "shared_store_modified": false}
+}

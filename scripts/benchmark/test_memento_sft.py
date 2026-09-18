@@ -34,6 +34,10 @@ def _load_module():
     return module
 
 
+# memento_sft imports pyarrow at module scope; pyarrow is in the optional
+# `benchmark` extra, so skip (with the reason) rather than erroring collection
+# in an env built without it.
+pytest.importorskip("pyarrow", reason="memento_sft needs the `benchmark` extra (pyarrow)")
 msft = _load_module()
 
 

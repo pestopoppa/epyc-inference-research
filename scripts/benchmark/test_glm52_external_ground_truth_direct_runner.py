@@ -17,6 +17,27 @@ sys.modules["glm52_external_ground_truth_direct_runner"] = runner
 _SPEC.loader.exec_module(runner)
 
 
+
+@pytest.fixture(autouse=True)
+def stub_experimental_binary(tmp_path, monkeypatch):
+    """Plan building resolves the default experimental llama-server even for a
+    dry run; that tree's HIP build is host state and is absent between builds.
+    Point the default at an executable stub (outside the production root, so
+    the production-binary refusal still applies to real paths)."""
+    binary = tmp_path / "stub-build" / "bin" / "llama-server"
+    binary.parent.mkdir(parents=True)
+    binary.write_text("#!/bin/sh\nexit 0\n")
+    binary.chmod(0o755)
+    monkeypatch.setattr(runner.base, "DEFAULT_BINARY", binary)
+    # Likewise the default GLM-5.2 shard directory: the model was removed from
+    # this host, and the readiness scan only counts non-cache .gguf shards.
+    model_dir = tmp_path / "stub-model"
+    model_dir.mkdir()
+    for index in range(runner.base.REQUIRED_NON_CACHE_SHARDS):
+        (model_dir / f"shard-{index + 1:05d}.gguf").write_bytes(b"")
+    monkeypatch.setattr(runner.base, "MODEL_DIR", model_dir)
+    return binary
+
 def _row(row_id: str, gold: str = "A") -> dict:
     return {
         "row_id": row_id,

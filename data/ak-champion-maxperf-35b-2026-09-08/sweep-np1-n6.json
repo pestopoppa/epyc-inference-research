@@ -1,0 +1,39 @@
+{
+  "1": {
+    "median_aggregate_tok_s": 112.67616411563986,
+    "per_slot_tok_s": 112.67616411563986,
+    "runs": [
+      112.96087817669377,
+      110.5935359230269,
+      112.39145005458595,
+      115.71343206943529,
+      110.20770133712938,
+      114.01770481172528
+    ],
+    "cv_pct": 1.684,
+    "p95_dev_pct": 2.696,
+    "sd_pct": 1.8979178971844743,
+    "min": 110.20770133712938,
+    "max": 115.71343206943529,
+    "residency": {
+      "schema": "epyc.autokernel.serving_residency.v1",
+      "status": "proven",
+      "invocations": 6,
+      "resident": 6,
+      "proven": 6,
+      "resident_floor_bytes": 1073741824,
+      "peak_vram_bytes": 39305715712,
+      "median_vram_bytes": 38167494656,
+      "peak_kfd_processes": 1,
+      "sclk_min_mhz": 1700,
+      "sclk_max_mhz": 1700,
+      "clock_stable": true,
+      "samples": 375,
+      "covers_request_phase": true,
+      "window_start": 1788898346.6883576,
+      "window_end": 1788898440.0075665
+    },
+    "recipe_hash": "89556d8f43bda310f45d9a85b85b6d8d19ef1331fb88be530b8f007d3025a815",
+    "seconds": 93.3
+  }
+}

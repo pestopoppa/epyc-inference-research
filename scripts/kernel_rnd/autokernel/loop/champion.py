@@ -36,7 +36,10 @@ WHAT IS CHECKED, before any claim is taken or GPU work starts:
 from __future__ import annotations
 
 import json
+import hashlib
+import os
 from pathlib import Path
+import stat
 import subprocess
 
 #: THE single champion branch, as of the 2026-08-31 reconciliation. This name changes
@@ -82,8 +85,70 @@ def verify_worktree(worktree: Path, branch: str) -> str:
     return head
 
 
+def _verify_experimental_identity(anchor_build: Path, worktree: Path, head: str) -> None:
+    """Verify the existing manual CPU build receipt without relabelling it provenance."""
+    identity_path = anchor_build / "IDENTITY.json"
+    try:
+        fd = os.open(identity_path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+        with os.fdopen(fd, "rb") as stream:
+            before = os.fstat(stream.fileno())
+            if not stat.S_ISREG(before.st_mode) or before.st_size > 1024 * 1024:
+                raise StartupRefused("REFUSED: experimental anchor identity is not a bounded regular file")
+            raw = stream.read(1024 * 1024 + 1)
+            after = os.fstat(stream.fileno())
+        if len(raw) > 1024 * 1024 or (before.st_dev, before.st_ino, before.st_size,
+                                     before.st_mtime_ns) != (after.st_dev, after.st_ino,
+                                                            after.st_size, after.st_mtime_ns):
+            raise StartupRefused("REFUSED: experimental anchor identity changed while read")
+        row = json.loads(raw)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise StartupRefused(f"REFUSED: cannot reopen experimental anchor identity: {exc}") from exc
+    required = {"schema", "kind", "head", "source", "source_status", "build",
+                "build_dir", "files"}
+    if not isinstance(row, dict) or set(row) != required \
+            or row.get("schema") != "epyc.champion-candidate-build.v1" \
+            or row.get("kind") != "serving" or row.get("head") != head \
+            or Path(str(row.get("source"))).resolve() != worktree.resolve() \
+            or row.get("source_status") not in {"", "clean"}:
+        raise StartupRefused("REFUSED: experimental anchor identity differs from selected source/head")
+    if _git(worktree, "status", "--porcelain").stdout:
+        raise StartupRefused("REFUSED: experimental source worktree is not clean")
+    files = row.get("files")
+    if not isinstance(files, list) or not (1 <= len(files) <= 64):
+        raise StartupRefused("REFUSED: experimental anchor identity has invalid file inventory")
+    root = anchor_build.resolve()
+    seen: set[str] = set()
+    for item in files:
+        if not isinstance(item, dict) or set(item) != {"path", "sha256", "size"} \
+                or not isinstance(item["path"], str) or not isinstance(item["sha256"], str) \
+                or len(item["sha256"]) != 64 or not isinstance(item["size"], int) \
+                or isinstance(item["size"], bool) or item["size"] < 0:
+            raise StartupRefused("REFUSED: malformed experimental anchor file identity")
+        path = Path(item["path"])
+        try:
+            if path.resolve().parent != root / "bin" or path.name in seen:
+                raise StartupRefused("REFUSED: experimental anchor inventory escapes or repeats bin files")
+            seen.add(path.name)
+            descriptor = os.open(path, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+            with os.fdopen(descriptor, "rb") as stream:
+                before = os.fstat(stream.fileno())
+                if not stat.S_ISREG(before.st_mode) or before.st_size != item["size"]:
+                    raise StartupRefused("REFUSED: experimental anchor file size/type differs")
+                digest = hashlib.file_digest(stream, "sha256").hexdigest()
+                after = os.fstat(stream.fileno())
+            if digest != item["sha256"] or (before.st_dev, before.st_ino, before.st_size,
+                                            before.st_mtime_ns) != (after.st_dev, after.st_ino,
+                                                                   after.st_size, after.st_mtime_ns):
+                raise StartupRefused("REFUSED: experimental anchor file identity differs")
+        except OSError as exc:
+            raise StartupRefused(f"REFUSED: cannot reopen experimental anchor file: {exc}") from exc
+    if "llama-server" not in seen:
+        raise StartupRefused("REFUSED: experimental anchor identity omits llama-server")
+
+
 def verify_anchor(anchor_build: Path, worktree: Path, head: str, *,
-                  allow_unverified: bool = False) -> None:
+                  allow_unverified: bool = False,
+                  experimental_identity: bool = False) -> None:
     """The anchor binary must descend from THIS champion, or be waived by name.
 
     `provenance.json` is written by `pool.promote_anchor` beside every build it makes,
@@ -99,6 +164,9 @@ def verify_anchor(anchor_build: Path, worktree: Path, head: str, *,
     """
     prov = Path(anchor_build) / "provenance.json"
     if not prov.is_file():
+        if experimental_identity:
+            _verify_experimental_identity(Path(anchor_build), Path(worktree), head)
+            return
         # anchor-gen-* dirs carry provenance BY CONTRACT; absence there is a defect,
         # not a hand-built anchor, and no flag talks past it.
         if Path(anchor_build).name.startswith("anchor-gen-"):
@@ -150,13 +218,15 @@ def warn_divergence(worktree: Path, branch: str) -> None:
 
 
 def verify_startup(*, worktree: Path, branch: str, anchor_build: Path,
-                   allow_unverified_anchor: bool = False) -> str:
+                   allow_unverified_anchor: bool = False,
+                   experimental_identity: bool = False) -> str:
     """The whole gate. Runs before the claim, the census, even the dry run's wiring
     proof — a refusal that costs four git reads must never queue behind anything.
     Returns the verified champion head."""
     head = verify_worktree(worktree, branch)
     warn_divergence(worktree, branch)
-    verify_anchor(anchor_build, worktree, head, allow_unverified=allow_unverified_anchor)
+    verify_anchor(anchor_build, worktree, head, allow_unverified=allow_unverified_anchor,
+                  experimental_identity=experimental_identity)
     return head
 
 

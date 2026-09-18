@@ -4,6 +4,7 @@ The two things that must hold before this touches a real API: consecutive failur
 back off (a codex 401 produced 284 failures in 23 minutes with zero delay), and the
 context bundle actually carries what the old planner never received.
 """
+import json
 from pathlib import Path
 import unittest
 from unittest import mock
@@ -107,8 +108,99 @@ class ContextBundle(unittest.TestCase):
         self.assertIn("IQ4_XS", text)
         self.assertIn("Operator suggestions", text)
 
+    def test_repeated_family_failures_force_a_higher_level_diagnostic(self):
+        rows = [
+            {"status": "measured_null", "mechanism_id": f"akm-barrier-{name}",
+             "statement": "change the OpenMP barrier implementation"}
+            for name in ("spin", "yield", "tree")
+        ]
+        text = actors.render_context({"prior_experiments": rows})
+        self.assertIn("DIMINISHING-RETURNS ESCAPE", text)
+        self.assertIn("synchronization/barrier", text)
+        self.assertIn("MUST target one of graph scheduling", text)
+        self.assertIn("expert/load balance", text)
+
+    def test_two_family_failures_do_not_force_an_early_escape(self):
+        rows = [
+            {"status": "refused_at_formation", "mechanism_id": f"akm-q4k-{name}"}
+            for name in ("a", "b")
+        ]
+        text = actors.render_context({"prior_experiments": rows})
+        self.assertNotIn("DIMINISHING-RETURNS ESCAPE", text)
+
+    def test_harness_failures_do_not_exhaust_a_mechanism_family(self):
+        rows = [
+            {"status": "bench_failed", "mechanism_id": f"akm-barrier-{name}"}
+            for name in ("a", "b", "c")
+        ]
+        text = actors.render_context({"prior_experiments": rows})
+        self.assertNotIn("DIMINISHING-RETURNS ESCAPE", text)
+
 
 class PlannerContract(unittest.TestCase):
+
+    def test_original_cpu_target_reaches_planner_author_and_critic_without_gpu_constraints(self):
+        from .test_glm_frozen_requests import _canonical_launch
+
+        _template, selected = _canonical_launch(18311)
+        target = {"scope": "experimental candidate, NOT canonical champion",
+                  "recipe": selected.to_dict(), "requests": "/original/frozen-prompts.json",
+                  "hotspot_status": "CPU profile unavailable; do not infer GPU hotspots"}
+        context = {"target": target, "program": "Preserve original target; source edits only."}
+        hypothesis = {"mechanism_id": "akm-cpu", "statement": "inspect CPU loop",
+                      "falsifier": "paired serving regresses",
+                      "target_surface": "ggml/src/ggml-cpu/ggml-cpu.cpp", "target_symbol": "cpu_loop"}
+        captured = []
+
+        def reply(prompt, **kwargs):
+            captured.append(prompt)
+            if prompt.startswith("Implement"):
+                return json.dumps({"paths": [hypothesis["target_surface"]]})
+            if prompt.startswith("Review"):
+                return '{"accepted": true, "reason": "fixture reply"}'
+            return json.dumps(hypothesis)
+
+        planner = actors.AgentPlanner(workspace=Path("/tmp"))
+        critic = actors.AgentCritic(workspace=Path("/tmp"))
+        with mock.patch.object(actors, "_run_agent", side_effect=reply), \
+                mock.patch.object(actors.subprocess, "run", return_value=mock.Mock(
+                    stdout=" M " + hypothesis["target_surface"])):
+            proposed = planner.propose(context)
+            self.assertEqual(planner.author(proposed, context), (hypothesis["target_surface"],))
+            self.assertTrue(critic.review_hypothesis(proposed, context).accepted)
+            for prompt in captured:
+                self.assertIn(json.dumps(target, indent=2, sort_keys=True), prompt)
+                self.assertNotIn("AMD MI210", prompt)
+                self.assertNotIn("ggml/src/ggml-cuda/", prompt)
+            self.assertTrue(captured[0].startswith(
+                "You are proposing ONE kernel optimisation for llama.cpp on the CPUs"))
+            self.assertIn("do not invent timing evidence", captured[0])
+            self.assertIn("DO NOT BUILD, COMPILE, BENCHMARK OR TEST", captured[1])
+            self.assertIn(json.dumps({"paths": [hypothesis["target_surface"]]}), captured[1])
+            self.assertIn("invents unavailable evidence as an established fact", captured[2])
+            captured.clear()
+            planner.propose({})
+            planner.author(proposed, {})
+            critic.review_hypothesis(proposed, {})
+        self.assertTrue(captured[0].startswith(
+            "You are proposing ONE kernel optimisation for llama.cpp on an AMD MI210 (gfx90a, ROCm 6.2)."))
+        self.assertIn('"target_surface": "<one path under ggml/src/ggml-cuda/>"', captured[0])
+        self.assertIn('{"paths": ["ggml/src/ggml-cuda/<file>"]}', captured[1])
+        self.assertIn("negligible device-time share", captured[2])
+
+    def test_cpu_planner_uses_existing_ab_instead_of_promising_unsupported_trace(self):
+        context = {"target": {"resource_class": "cpu"},
+                   "prior_hypothesis_rejections": [
+                       "no frozen trace establishes the eligible-call fraction"]}
+        payload = ('{"mechanism_id": "akm-row", "statement": "bound row loop", '
+                   '"falsifier": "matched A/B is non-positive", '
+                   '"target_surface": "ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp", '
+                   '"target_symbol": "mul_mat"}')
+        with mock.patch.object(actors, "_run_agent", return_value=payload) as run:
+            actors.AgentPlanner(workspace=Path("/tmp")).propose(context)
+        prompt = run.call_args.args[0]
+        self.assertIn("Do not make an unsupported trace or counter a prerequisite", prompt)
+        self.assertIn("existing matched A/B can test", prompt)
 
     def test_a_complete_hypothesis_parses(self):
         planner = actors.AgentPlanner(workspace=Path("/tmp"))
@@ -128,15 +220,83 @@ class PlannerContract(unittest.TestCase):
                 planner.propose({})
         self.assertIn("missing", str(caught.exception))
 
-    def test_authoring_with_no_paths_is_a_transient(self):
+    def test_proposal_can_abstain_with_a_reason(self):
+        planner = actors.AgentPlanner(workspace=Path("/tmp"))
+        with mock.patch.object(actors, "_run_agent",
+                               return_value='{"abstain": "profile has no reachable hot path"}'):
+            got = planner.propose({})
+        self.assertIsInstance(got, actors.Abstain)
+        self.assertEqual(got.reason, "profile has no reachable hot path")
+
+    def test_unconfigured_runtime_treatment_is_not_a_provider_transient(self):
+        planner = actors.AgentPlanner(workspace=Path("/tmp"))
+        context = {"target": {"resource_class": "cpu"},
+                   "runtime_preparation": {"status": "unavailable",
+                       "reason": "explicit prospective statistics are missing"}}
+        payload = ('{"mechanism_id": "akm-threads", "statement": "s", '
+                   '"falsifier": "f", "target_surface": "threads", '
+                   '"target_symbol": "threads", '
+                   '"runtime_treatment": {"kind": "threads", "candidate": 32}}')
+        with mock.patch.object(actors, "_run_agent", return_value=payload) as invoked:
+            got = planner.propose(context)
+        self.assertIsInstance(got, actors.Abstain)
+        self.assertIn("explicit prospective statistics", got.reason)
+        self.assertNotIn("Alternatively propose ONE runtime treatment", invoked.call_args.args[0])
+
+    def test_reasonless_abstention_is_a_malformed_provider_reply(self):
+        planner = actors.AgentPlanner(workspace=Path("/tmp"))
+        with mock.patch.object(actors, "_run_agent", return_value='{"abstain": ""}'):
+            with self.assertRaises(actors.ProviderTransient):
+                planner.propose({})
+
+    def test_legacy_empty_author_paths_are_an_abstention(self):
         planner = actors.AgentPlanner(workspace=Path("/tmp"))
         with mock.patch.object(actors, "_run_agent", return_value='{"paths": []}'):
-            with self.assertRaises(actors.ProviderTransient):
-                planner.author(
-                    Hypothesis("akm-x", "s", "f", "a.cu", "sym"), {})
+            got = planner.author(Hypothesis("akm-x", "s", "f", "a.cu", "sym"), {})
+        self.assertIsInstance(got, actors.Abstain)
+        self.assertEqual(got.reason, "authoring returned no changed paths")
+
+    def test_authoring_can_abstain_without_dirty_path_check(self):
+        planner = actors.AgentPlanner(workspace=Path("/tmp"))
+        with mock.patch.object(actors, "_run_agent",
+                               return_value='{"abstain": "required API is unavailable"}'), \
+                mock.patch.object(actors.subprocess, "run") as status:
+            got = planner.author(Hypothesis("akm-x", "s", "f", "a.cu", "sym"), {})
+        self.assertIsInstance(got, actors.Abstain)
+        status.assert_not_called()
+
+    def test_author_prompt_names_abstention_as_a_correct_result(self):
+        planner = actors.AgentPlanner(workspace=Path("/tmp"))
+        with mock.patch.object(actors, "_run_agent",
+                               return_value='{"abstain": "infeasible"}') as run:
+            planner.author(Hypothesis("akm-x", "s", "f", "a.cu", "sym"), {})
+        prompt = run.call_args.args[0]
+        self.assertIn("abstaining is a correct science result", prompt)
+        self.assertIn('{"abstain":', prompt)
+
+    def test_abstention_history_feeds_the_next_planner_context(self):
+        text = actors.render_context({"prior_experiments": [{
+            "status": "abstained", "mechanism_id": "akm-infeasible",
+            "refusal_reason": "required primitive is absent"}]})
+        self.assertIn("`akm-infeasible` → abstained", text)
+        self.assertIn("required primitive is absent", text)
 
 
 class CriticContract(unittest.TestCase):
+
+    def test_cpu_payoff_evidence_is_post_authoring_not_a_formation_gate(self):
+        context = {"target": {"recipe": {"backend": "cpu"}},
+                   "cpu_profile": {"status": "unavailable", "reason": "fixture"}}
+        with mock.patch.object(actors, "_run_agent",
+                               return_value='{"accepted": true}') as run:
+            review = actors.AgentCritic(workspace=Path("/tmp")).review_hypothesis(
+                Hypothesis("akm-row", "bound row loop", "matched A/B is non-positive",
+                           "ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp", "mul_mat"), context)
+        self.assertTrue(review.accepted)
+        prompt = run.call_args.args[0]
+        self.assertIn("Do NOT reject", prompt)
+        self.assertIn("ordinary post-authoring falsifiers", prompt)
+        self.assertIn("source reachability or safety", prompt)
 
     def test_a_reasonless_rejection_is_made_explicit_not_crashed_on(self):
         """The loop refuses a reasonless rejection; the critic must not hand it one."""
@@ -154,6 +314,22 @@ class CriticContract(unittest.TestCase):
                                return_value='{"accepted": true}'):
             self.assertTrue(critic.review_hypothesis(
                 Hypothesis("akm-x", "s", "f", "a.cu", "sym"), {}).accepted)
+
+    def test_critic_names_identity_independence_and_evidence(self):
+        critic = actors.AgentCritic(workspace=Path("/tmp"))
+        context = {"actor_provenance": {
+            "planner": actors.PLANNER_DEFAULT.describe(),
+            "critic": critic.backend.describe(),
+        }}
+        with mock.patch.object(actors, "_run_agent",
+                               return_value='{"accepted": true}'):
+            review = critic.review_hypothesis(
+                Hypothesis("akm-x", "s", "f", "a.cu", "sym"), context)
+        self.assertEqual(review.validator_identity, critic.backend.describe())
+        self.assertEqual(review.validator_kind, "llm_critic")
+        self.assertEqual(review.independence, "different_family")
+        self.assertEqual(review.evidence_inspected,
+                         ("review subject", "rejection grounds", "planner context"))
 
 
 class PlaceholderEchoes(unittest.TestCase):
@@ -285,6 +461,18 @@ class Backends(unittest.TestCase):
         self.assertIn("DETACHED git worktree", note)
         self.assertIn("Never build", note)
         self.assertEqual(argv[-1], "PROMPT")
+
+    def test_critic_backends_are_constructed_read_only(self):
+        claude = actors.backend_for("claude-opus-5", "high").argv(
+            "PROMPT", Path("/ws"), read_only=True)
+        self.assertNotIn("--dangerously-skip-permissions", claude)
+        self.assertEqual(claude[claude.index("--permission-mode") + 1], "plan")
+        critic_note = claude[claude.index("--append-system-prompt") + 1]
+        self.assertIn("read-only AutoKernel critic", critic_note)
+        self.assertIn("Do not edit", critic_note)
+        codex = actors.backend_for("gpt-5.6-sol", "high").argv(
+            "PROMPT", Path("/ws"), read_only=True)
+        self.assertEqual(codex[codex.index("-s") + 1], "read-only")
 
     def test_any_other_model_routes_to_codex_with_quoted_toml_effort(self):
         b = actors.backend_for("gpt-5.6-sol", "high")

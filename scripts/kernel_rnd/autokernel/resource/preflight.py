@@ -477,77 +477,85 @@ _MAX_ANCESTOR_DEPTH = 64
 
 
 def read_own_scope(proc: Optional[ProcSource] = None) -> OwnedScope:
-    """Enumerate self + ancestors + descendants, with our cgroup.
-
-    ANCESTORS COUNT. The canonical bench runs under `region-lock run -- ...`,
-    which acquires the region locks in the PARENT and execs the workload as a
-    child; the holder of our own claim is therefore an ancestor, and a preflight
-    that ignored ancestors would report its own wrapper as concurrent inference.
-    PID 1 is excluded: it is everyone's ancestor, so treating it as ours would
-    make an init-held claim structurally invisible.
-    """
+    """Read the original ancestor/descendant facts, then reduce without I/O."""
     proc = proc or ProcSource()
     self_pid = proc.self_pid
     if self_pid <= 1:
-        # The mirror image of the PID-1 exclusion below, and the more dangerous
-        # half. If WE are pid 1 (a container entrypoint in its own PID
-        # namespace) then every process in the namespace is our descendant, so
-        # the descendant walk would mark the entire machine as owned and no
-        # claim could ever be foreign — a guaranteed PASS. Ownership is not
-        # decidable from that vantage point, so say so.
-        raise PreflightUnavailable(
-            f"cannot separate owned from foreign processes while running as pid {self_pid}: "
-            "every process in this PID namespace is a descendant of pid 1, so ownership "
-            "would swallow every foreign claim"
-        )
-    incomplete: list = []
-    reasons: dict = {self_pid: "self"}
-    owned: set = {self_pid}
-
-    # Ancestors: walk ppid upward. A malformed or unreadable link truncates the
-    # chain and is recorded rather than assumed benign.
+        return reduce_owned_scope(self_pid=self_pid, ancestor_stats={},
+                                  pid_stats={}, cgroup=None)
+    ancestors = {}
     current = self_pid
     for _ in range(_MAX_ANCESTOR_DEPTH):
         try:
-            stat_text = _read_proc_text(proc.pid_dir(current) / "stat")
+            raw = _read_proc_text(proc.pid_dir(current) / "stat")
         except PreflightUnavailable as exc:
-            incomplete.append(f"ancestor chain truncated at pid {current}: {exc}")
+            ancestors[current] = (None, str(exc))
             break
-        if stat_text is None:
+        ancestors[current] = (raw, None)
+        parsed = None if raw is None else _parse_stat(raw)
+        if parsed is None or parsed["ppid"] <= 1 or parsed["ppid"] in ancestors:
+            break
+        current = parsed["ppid"]
+    rows = {}
+    for pid in _list_pids(proc):
+        try:
+            rows[pid] = (_read_proc_text(proc.pid_dir(pid) / "stat"), None)
+        except PreflightUnavailable as exc:
+            rows[pid] = (None, str(exc))
+    cgroup_error = None
+    try:
+        cgroup = _read_cgroup(proc, self_pid)
+    except PreflightUnavailable as exc:
+        cgroup, cgroup_error = None, str(exc)
+    return reduce_owned_scope(self_pid=self_pid, ancestor_stats=ancestors,
+                              pid_stats=rows, cgroup=cgroup, cgroup_error=cgroup_error)
+
+
+def reduce_owned_scope(*, self_pid: int, ancestor_stats: Mapping,
+                       pid_stats: Mapping, cgroup: Optional[str],
+                       cgroup_error: Optional[str] = None) -> OwnedScope:
+    """Original ancestry policy over captured (raw stat, read error) pairs."""
+    if self_pid <= 1:
+        raise PreflightUnavailable(
+            f"cannot separate owned from foreign processes while running as pid {self_pid}: "
+            "every process in this PID namespace is a descendant of pid 1, so ownership "
+            "would swallow every foreign claim")
+    incomplete: list = []
+    reasons: dict = {self_pid: "self"}
+    owned: set = {self_pid}
+    current = self_pid
+    for _ in range(_MAX_ANCESTOR_DEPTH):
+        raw, error = ancestor_stats.get(current, (None, None))
+        if error is not None:
+            incomplete.append(f"ancestor chain truncated at pid {current}: {error}")
+            break
+        if raw is None:
             incomplete.append(f"ancestor chain truncated at pid {current}: entry vanished")
             break
-        parsed = _parse_stat(stat_text)
+        parsed = _parse_stat(raw)
         if parsed is None:
             incomplete.append(f"ancestor chain truncated at pid {current}: unparseable stat")
             break
         ppid = parsed["ppid"]
-        if ppid <= 1:
-            break
-        if ppid in owned:
-            incomplete.append(f"ancestor chain cycle at pid {ppid}")
+        if ppid <= 1 or ppid in owned:
             break
         owned.add(ppid)
         reasons[ppid] = "ancestor"
         current = ppid
     else:
         incomplete.append(f"ancestor chain exceeded {_MAX_ANCESTOR_DEPTH} levels")
-
-    # Descendants: one pass over the pid table to build a child map, then BFS.
     children: dict = {}
-    for pid in _list_pids(proc):
-        try:
-            stat_text = _read_proc_text(proc.pid_dir(pid) / "stat")
-        except PreflightUnavailable as exc:
-            incomplete.append(f"cannot read stat of pid {pid}: {exc}")
+    for pid, (raw, error) in pid_stats.items():
+        if error is not None:
+            incomplete.append(f"cannot read stat of pid {pid}: {error}")
             continue
-        if stat_text is None:
+        if raw is None:
             continue
-        parsed = _parse_stat(stat_text)
+        parsed = _parse_stat(raw)
         if parsed is None:
             incomplete.append(f"unparseable stat for pid {pid}")
             continue
         children.setdefault(parsed["ppid"], []).append(pid)
-
     frontier = [self_pid]
     while frontier:
         parent = frontier.pop()
@@ -557,20 +565,10 @@ def read_own_scope(proc: Optional[ProcSource] = None) -> OwnedScope:
             owned.add(child)
             reasons[child] = "descendant"
             frontier.append(child)
-
-    try:
-        cgroup = _read_cgroup(proc, self_pid)
-    except PreflightUnavailable as exc:
-        cgroup = None
-        incomplete.append(f"cannot read own cgroup: {exc}")
-
-    return OwnedScope(
-        self_pid=self_pid,
-        cgroup=cgroup,
-        pids=frozenset(owned),
-        reasons=dict(reasons),
-        incomplete=tuple(incomplete),
-    )
+    if cgroup_error is not None:
+        incomplete.append(f"cannot read own cgroup: {cgroup_error}")
+    return OwnedScope(self_pid=self_pid, cgroup=cgroup, pids=frozenset(owned),
+                      reasons=dict(reasons), incomplete=tuple(incomplete))
 
 
 # =============================================================================
@@ -641,6 +639,11 @@ def _read_proc_locks(proc: ProcSource) -> dict:
     text = _read_proc_text(proc.root / "locks")
     if text is None:
         raise PreflightUnavailable(f"{proc.root / 'locks'} does not exist")
+    return parse_proc_locks(text)
+
+
+def parse_proc_locks(text: str) -> dict:
+    """Parse captured /proc/locks bytes without reopening any source."""
     holders: dict = {}
     waiters: dict = {}
     unattributed: dict = {}
@@ -796,78 +799,78 @@ def read_region_claims(
             unparsed.append(lock_file.name)
             continue
         holders = lock_table.get(key, LockHolders())
-        notes: list = []
-        payload: Optional[Mapping] = None
         raw = _read_proc_text(lock_file)
-        if raw is not None and raw.strip():
-            try:
-                loaded = json.loads(raw)
-            except json.JSONDecodeError:
-                notes.append("attribution payload is not valid JSON")
-                loaded = None
-            if isinstance(loaded, dict) and _has_non_finite(loaded):
-                # Occupancy does not depend on attribution, so the flock still
-                # counts; the payload is dropped rather than carried into an
-                # attestation that could not then be written.
-                notes.append(
-                    "attribution payload contains a non-finite number (NaN/Infinity) or is "
-                    "nested too deeply; dropped so the attestation stays canonical-JSON safe"
-                )
-                loaded = None
-            if isinstance(loaded, dict):
-                payload = loaded
-                version = loaded.get("schema_version")
-                if version not in _KNOWN_PAYLOAD_SCHEMA_VERSIONS:
-                    # The flock still counts — attribution degrades, occupancy
-                    # does not.
-                    notes.append(f"unknown payload schema_version {version!r}")
-            elif loaded is not None:
-                notes.append("attribution payload is not an object")
-        # A holder killed with SIGKILL never runs its cleanup, so its JSON
-        # outlives its lock. The flock is the fact; a payload without a live
-        # holder is debris, and reporting it as a claim would block every future
-        # run on this host forever.
-        stale = payload is not None and not holders.held
-        if stale:
-            notes.append("attribution payload present but no live holder (stale debris)")
-        if (
-            payload is not None
-            and not stale
-            and isinstance(payload.get("pid"), int)
-            and holders.holder_pids
-            and payload["pid"] not in holders.holder_pids
-        ):
-            # The flock and the JSON disagree about who is here. The flock wins
-            # (it is the fact), but `_whose_from_claim` would otherwise quote a
-            # `request_tag` written by a DIFFERENT process than the live holder,
-            # putting a wrong attribution into a permanent evidence record.
-            notes.append(
-                f"attribution payload names pid {payload['pid']} but the live flock is held "
-                f"by {list(holders.holder_pids)}; attribution is not trustworthy"
-            )
-        claims.append(
-            RegionClaim(
-                role=role,
-                region=region,
-                lock_path=str(lock_file),
-                holders=holders,
-                payload=payload,
-                payload_is_stale=stale,
-                notes=tuple(notes),
-            )
-        )
+        claims.append(parse_region_claim(
+            role=role, region=region, lock_path=str(lock_file), holders=holders, raw=raw))
     if lock_files and not claims:
-        # Every file matched the glob and NONE of them yielded a claim. That is
-        # not "no claims" — it is a namespace whose NAME SHAPE we no longer
-        # understand (contract drift), and returning [] here would manufacture a
-        # PASS out of it. `require_nonempty_namespace` only catches a namespace
-        # that is empty; this catches one that is unreadable in the other sense.
         raise PreflightUnavailable(
             f"region-lock namespace {lock_dir} has {len(lock_files)} matching file(s) but none "
             f"parse as cpu_region.<role>.<region>.lock ({unparsed[:5]}); refusing to read a "
             "namespace whose naming contract has drifted as 'no claims'"
         )
     return claims
+
+
+def parse_region_claim(*, role: str, region: str, lock_path: str,
+                       holders: LockHolders, raw: Optional[str]) -> RegionClaim:
+    """Project original captured payload and original inode-joined holders."""
+    notes: list = []
+    payload: Optional[Mapping] = None
+    if raw is not None and raw.strip():
+        try:
+            loaded = json.loads(raw)
+        except json.JSONDecodeError:
+            notes.append("attribution payload is not valid JSON")
+            loaded = None
+        if isinstance(loaded, dict) and _has_non_finite(loaded):
+            # Occupancy does not depend on attribution, so the flock still
+            # counts; the payload is dropped rather than carried into an
+            # attestation that could not then be written.
+            notes.append(
+                "attribution payload contains a non-finite number (NaN/Infinity) or is "
+                "nested too deeply; dropped so the attestation stays canonical-JSON safe"
+            )
+            loaded = None
+        if isinstance(loaded, dict):
+            payload = loaded
+            version = loaded.get("schema_version")
+            if version not in _KNOWN_PAYLOAD_SCHEMA_VERSIONS:
+                # The flock still counts — attribution degrades, occupancy
+                # does not.
+                notes.append(f"unknown payload schema_version {version!r}")
+        elif loaded is not None:
+            notes.append("attribution payload is not an object")
+    # A holder killed with SIGKILL never runs its cleanup, so its JSON
+    # outlives its lock. The flock is the fact; a payload without a live
+    # holder is debris, and reporting it as a claim would block every future
+    # run on this host forever.
+    stale = payload is not None and not holders.held
+    if stale:
+        notes.append("attribution payload present but no live holder (stale debris)")
+    if (
+        payload is not None
+        and not stale
+        and isinstance(payload.get("pid"), int)
+        and holders.holder_pids
+        and payload["pid"] not in holders.holder_pids
+    ):
+        # The flock and the JSON disagree about who is here. The flock wins
+        # (it is the fact), but `_whose_from_claim` would otherwise quote a
+        # `request_tag` written by a DIFFERENT process than the live holder,
+        # putting a wrong attribution into a permanent evidence record.
+        notes.append(
+            f"attribution payload names pid {payload['pid']} but the live flock is held "
+            f"by {list(holders.holder_pids)}; attribution is not trustworthy"
+        )
+    return RegionClaim(
+            role=role,
+            region=region,
+            lock_path=lock_path,
+            holders=holders,
+            payload=payload,
+            payload_is_stale=stale,
+            notes=tuple(notes),
+        )
 
 
 @dataclass(frozen=True)
@@ -1339,6 +1342,26 @@ class PreflightResult:
 # =============================================================================
 
 
+@dataclass(frozen=True)
+class CapturedClaimWitness:
+    """Read-side inputs, not a grant or a trusted scientific receipt.
+
+    An owning collector must retain the original raw lock/inode/process evidence.
+    This carrier merely lets the existing predicate operate without further I/O.
+    Errors retain the old reader's full diagnostic; an absent reader is distinct
+    from an observed empty claim set.
+    """
+
+    owned: Optional[OwnedScope]
+    ownership_error: Optional[str] = None
+    region_claims: tuple = ()
+    region_error: Optional[str] = "region namespace was not captured"
+    gpu_claims: tuple = ()
+    gpu_error: Optional[str] = None
+    gpu_reader_present: bool = False
+    holder_descriptions: Mapping = field(default_factory=dict)
+
+
 def claim_witness_preflight(
     scope: PreflightScope,
     sources: ClaimSources,
@@ -1354,41 +1377,67 @@ def claim_witness_preflight(
             GPU device and no device-claim reader was supplied (§2.5: that
             substrate does not exist yet, so its silence means nothing).
     """
+    if owned is None:
+        try:
+            owned = read_own_scope(sources.proc)
+        except PreflightUnavailable as exc:
+            return reduce_claim_witness(scope, CapturedClaimWitness(
+                owned=None, ownership_error=str(exc)), observed_at=now())
+    claims, gpu_claims = (), ()
+    region_error = gpu_error = None
+    descriptions = {}
+    if scope.covers_cpu:
+        try:
+            claims = tuple(read_region_claims(
+                sources.region_lock_dir, sources.proc,
+                require_nonempty_namespace=sources.require_nonempty_namespace))
+        except PreflightUnavailable as exc:
+            region_error = str(exc)
+        else:
+            for claim in claims:
+                if scope.covers_region(claim.region) and claim.held:
+                    for pid in claim.holders.holder_pids:
+                        if not owned.owns(pid):
+                            descriptions[pid] = _describe_pid(sources.proc, pid)
+    if scope.gpu_devices and sources.gpu_claim_reader is not None:
+        try:
+            gpu_claims = tuple(sources.gpu_claim_reader())
+        except PreflightUnavailable as exc:
+            gpu_error = f"GPU device claim witness unavailable: {exc}"
+        except Exception as exc:  # noqa: BLE001 - reader failure remains unknown
+            gpu_error = f"GPU device claim reader raised {type(exc).__name__}: {exc}"
+    return reduce_claim_witness(scope, CapturedClaimWitness(
+        owned=owned, region_claims=claims, region_error=region_error,
+        gpu_claims=gpu_claims, gpu_error=gpu_error,
+        gpu_reader_present=sources.gpu_claim_reader is not None,
+        holder_descriptions=descriptions), observed_at=now())
+
+
+def reduce_claim_witness(scope: PreflightScope, captured: CapturedClaimWitness,
+                         *, observed_at: str) -> PreflightResult:
+    """Apply the original claim-witness predicate to captured inputs; zero I/O."""
+    if type(captured) is not CapturedClaimWitness:
+        raise TypeError("claim reduction requires CapturedClaimWitness")
+    owned = captured.owned
+    if owned is None:
+        return PreflightResult(
+            verdict=COULD_NOT_CHECK, basis=BASIS_CLAIM_WITNESS,
+            scope=scope, observed_at=observed_at,
+            reasons=(f"cannot enumerate own process scope: {captured.ownership_error}",))
     reasons: list = []
     notes: list = []
     findings: list = []
     verdicts: list = []
     claims: tuple = ()
     gpu_claims: tuple = ()
-
-    if owned is None:
-        try:
-            owned = read_own_scope(sources.proc)
-        except PreflightUnavailable as exc:
-            # Without ownership we cannot separate our own wrapper's claim from
-            # a foreign one, so nothing downstream is decidable.
-            return PreflightResult(
-                verdict=COULD_NOT_CHECK,
-                basis=BASIS_CLAIM_WITNESS,
-                scope=scope,
-                observed_at=now(),
-                reasons=(f"cannot enumerate own process scope: {exc}",),
-            )
     notes.extend(f"owned-scope enumeration incomplete: {r}" for r in owned.incomplete)
 
     if scope.covers_cpu:
-        try:
-            claims = tuple(
-                read_region_claims(
-                    sources.region_lock_dir,
-                    sources.proc,
-                    require_nonempty_namespace=sources.require_nonempty_namespace,
-                )
-            )
-        except PreflightUnavailable as exc:
+        if captured.region_error is not None:
             verdicts.append(COULD_NOT_CHECK)
-            reasons.append(f"CPU region claim witness unavailable: {exc}")
+            reasons.append(f"CPU region claim witness unavailable: {captured.region_error}")
         else:
+            claims = captured.region_claims
             cpu_verdict = PASS
             for claim in claims:
                 notes.extend(f"{claim.role}.{claim.region}: {n}" for n in claim.notes)
@@ -1410,10 +1459,11 @@ def claim_witness_preflight(
                         Finding(
                             kind="cpu_region_claim",
                             what=what,
-                            whose=_whose_from_claim(claim, pid, sources.proc),
+                            whose=_whose_from_description(
+                                claim, pid, captured.holder_descriptions[pid]),
                             detail={
                                 "claim": claim.to_dict(),
-                                "holder": _describe_pid(sources.proc, pid),
+                                "holder": dict(captured.holder_descriptions[pid]),
                             },
                         )
                     )
@@ -1437,7 +1487,7 @@ def claim_witness_preflight(
                 )
 
     if scope.gpu_devices:
-        if sources.gpu_claim_reader is None:
+        if not captured.gpu_reader_present:
             verdicts.append(COULD_NOT_CHECK)
             reasons.append(
                 "no GPU device-claim reader supplied, so nothing inspected the device claim "
@@ -1446,15 +1496,11 @@ def claim_witness_preflight(
                 "CPU-only and src/gpu_lease.py is a process-local lease, so neither answers this)"
             )
         else:
-            try:
-                gpu_claims = tuple(sources.gpu_claim_reader())
-            except PreflightUnavailable as exc:
+            if captured.gpu_error is not None:
                 verdicts.append(COULD_NOT_CHECK)
-                reasons.append(f"GPU device claim witness unavailable: {exc}")
-            except Exception as exc:  # noqa: BLE001 - a broken reader is a blind spot
-                verdicts.append(COULD_NOT_CHECK)
-                reasons.append(f"GPU device claim reader raised {type(exc).__name__}: {exc}")
+                reasons.append(captured.gpu_error)
             else:
+                gpu_claims = captured.gpu_claims
                 gpu_verdict = PASS
                 for gpu_claim in gpu_claims:
                     if gpu_claim.device_id not in scope.gpu_devices:
@@ -1486,7 +1532,7 @@ def claim_witness_preflight(
         verdict=combine_verdicts(*verdicts),
         basis=BASIS_CLAIM_WITNESS,
         scope=scope,
-        observed_at=now(),
+        observed_at=observed_at,
         reasons=tuple(reasons),
         findings=tuple(findings),
         notes=tuple(notes),
@@ -1498,9 +1544,12 @@ def claim_witness_preflight(
 
 def _whose_from_claim(claim: RegionClaim, pid: int, proc: ProcSource) -> str:
     """Human-readable attribution for a foreign region-lock holder."""
+    return _whose_from_description(claim, pid, _describe_pid(proc, pid))
+
+
+def _whose_from_description(claim: RegionClaim, pid: int, described: Mapping) -> str:
     payload = claim.payload if isinstance(claim.payload, Mapping) else {}
     tag = payload.get("request_tag") if not claim.payload_is_stale else None
-    described = _describe_pid(proc, pid)
     comm = described.get("argv0_basename") or described.get("comm") or "unknown"
     parts = [f"pid {pid}", f"exe {comm}", f"role {claim.role!r}"]
     if tag:

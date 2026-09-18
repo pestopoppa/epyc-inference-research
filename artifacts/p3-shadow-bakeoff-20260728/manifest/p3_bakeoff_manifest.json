@@ -115,7 +115,7 @@
           },
           "scorer": {
             "id": "answer_scoring.code_execution (executable pass@1, scored at capture; offline re-scorable from captures)",
-            "runner_sha256": "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e",
+            "runner_sha256": "20a97fbd4aecc6f3887299243362d5315b76f819aa1cbc4b8fd92f33b307b45a",
             "deferred": false
           }
         }
@@ -159,7 +159,7 @@
   "capture": {
     "runner": {
       "path": "/mnt/raid0/llm/epyc-inference-research/scripts/benchmark/v7_quality_gate_runner.py",
-      "sha256": "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e"
+      "sha256": "20a97fbd4aecc6f3887299243362d5315b76f819aa1cbc4b8fd92f33b307b45a"
     },
     "capture_schema_version": "v7_quality_gate_capture.v4",
     "per_question_incremental": true

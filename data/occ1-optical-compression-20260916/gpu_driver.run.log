@@ -1,0 +1,7 @@
+GPU claim held: {'device_id': 'mi210_0', 'lock_path': '/mnt/raid0/llm/tmp/gpu_device.mi210_0.lock', 'pid': 1250370}
+VRAM baseline 0.01 GiB
+reader pid 1250371
+healthy; VRAM 19.87 GiB
+pilot: {'run_rc': 0, 'verdict': ('NEGATIVE', [])}
+full: {'run_rc': 0, 'verdict': ('NEGATIVE', [])}
+reader 1250371 stopped rc=0 alive=False

@@ -19,15 +19,37 @@ Two rules carry everything here:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from contextlib import nullcontext
 import json
 from pathlib import Path
 import random
+import secrets
 import statistics as st
 import subprocess
 import time
-from typing import Sequence
+from typing import Callable, Sequence
 
+from ..execution import microbench
 from . import residency
+
+#: The unit EVERY number in this module is measured in, floors and effects alike: a
+#: sample is one `llama-bench` INVOCATION, and the arms alternate across those
+#: invocations (see the module docstring), so both the effect and the A/A dispersion it
+#: is judged against are between-PROCESS. Derived from the harness, never configured.
+#: Why it has to be said out loud: the same host reads sd 0.501% within one session and
+#: 2.793% between launches (~13x), and the arm-unit reading once under-sized an
+#: experiment 1200-fold (R23-55 / INF-70 RETEST-1).
+#:
+#: The vocabulary's home is `serving.FLOOR_UNITS`; the literal is repeated here because
+#: `serving` imports `loop` which imports `bench`, so a module-level import of `serving`
+#: here is a cycle. `test_bench` asserts the two cannot drift.
+FLOOR_UNIT = "process"
+
+#: The one writer of a store bench-floor record: `benchmark/autokernel_aa_campaign.py`.
+#: A record carrying this schema is process-unit BY CONSTRUCTION -- that writer runs
+#: `bench.compare`/`bench.run_once`, i.e. alternating llama-bench invocations -- so the
+#: unit of a pre-R23-55 record is DERIVED from its schema, not assumed from its silence.
+CALIBRATION_SCHEMA = "epyc.autokernel.surface_calibration.v1"
 
 #: Host threads for the GPU lane. NOT 88-95 -- these are the SMT siblings the
 #: production GPU recipe uses, and taking others contends with the CPU baseline.
@@ -51,6 +73,9 @@ MEASURED_FLOOR_PCT = {
 #: to serve it to any other model -- a floor borrowed across rungs manufactures
 #: exactly the fake-decisive keeps the `calibrated` flag exists to prevent.
 MEASURED_FLOOR_MODEL_STEM = "DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M"
+#: ...and the n it was estimated from. A floor is an extreme order statistic, so its
+#: precision is a function of n and a floor that cannot state one must not gate (R23-61).
+MEASURED_FLOOR_N = 20
 
 #: Every surface the loop can drive: name -> (pp, tg, ubatch). The dec-b* rows are the
 #: run-22 small-batch decode-regime surfaces the injected seed families (05 MTP verify,
@@ -113,6 +138,9 @@ class Comparison:
     #: (§5.3): with two rungs, an effect without its model is a number without its
     #: instrument, and run histories across rungs must never merge.
     model: str | None = None
+    # Opt-in, report-only summaries. Full op-suite stdout belongs in the
+    # caller's bounded sidecar, not in the ranked comparison/status payload.
+    fresh_correctness: tuple[dict, ...] = ()
 
     @property
     def drift_explains_the_effect(self) -> bool:
@@ -175,10 +203,14 @@ class Comparison:
         return abs(self.effect * 100.0) > self.noise_floor_pct
 
     def to_dict(self) -> dict:
-        return {
+        row = {
             "surface": self.surface, "model": self.model, "effect": self.effect,
             "effect_pct": self.effect * 100.0, "estimator": self.estimator,
             "pairs": self.pairs, "noise_floor_pct": self.noise_floor_pct,
+            # Both units, stated: `floor_rows` admits only a FLOOR_UNIT floor, so they
+            # always agree here -- and a reader must never have to infer that (R23-55).
+            "effect_unit": FLOOR_UNIT,
+            "floor_unit": None if self.noise_floor_pct is None else FLOOR_UNIT,
             "decisive": self.decisive, "device_seconds": self.device_seconds,
             "drifting": self.drifting, "calibrated": self.calibrated,
             "anchor_drift_pct": self.anchor_drift_pct,
@@ -189,6 +221,9 @@ class Comparison:
             "candidate_samples": self.candidate_samples,
             "residency": self.residency,
         }
+        if self.fresh_correctness:
+            row["fresh_correctness"] = list(self.fresh_correctness)
+        return row
 
 
 #: An EXTERNAL kill is retryable; a crash in the binary is not. Run 12 died on
@@ -204,8 +239,34 @@ KILL_RETRIES = 3
 KILL_BACKOFF_S = (5.0, 20.0, 60.0)
 
 
+def _candidate_seed() -> int:
+    """Draw one per-candidate seed, shared by both arms and retained in argv."""
+    return secrets.randbits(63)
+
+
+def hardened_row(stdout: str, *, pp: int, tg: int, reps: int):
+    """Parse and fail closed on the hardened llama-bench receipt for one surface."""
+    try:
+        rows = microbench.parse_llama_bench_json(stdout)
+    except (microbench.BenchOutputError, ValueError, TypeError,
+            json.JSONDecodeError) as exc:
+        raise BenchFailed(f"llama-bench emitted an invalid receipt: {exc}") from exc
+    key = f"pp{pp}" if pp else f"tg{tg}"
+    for row in rows:
+        name = f"pp{row.n_prompt}" if row.n_prompt else f"tg{row.n_gen}"
+        if name != key:
+            continue
+        reasons = microbench._check_autokernel_hardening(
+            row, reps=reps, n_gpu_layers=row.n_gpu_layers)
+        if reasons:
+            raise BenchFailed("hardened llama-bench receipt refused: " + "; ".join(reasons))
+        return row
+    raise BenchFailed(f"llama-bench produced no {key} row")
+
+
 def run_once(binary: Path, model: Path, *, pp: int, tg: int, ubatch: int | None = None,
-             reps: int = 9, timeout_s: int = 3600, sleep=time.sleep) -> tuple[float, dict]:
+             reps: int = 9, timeout_s: int = 3600, sleep=time.sleep,
+             capture=None, hardening_seed: int | None = None) -> tuple[float, dict]:
     """One llama-bench invocation with residency proven while it runs.
 
     Retries an EXTERNAL kill, because losing a whole run to a memory-pressure reaper
@@ -216,14 +277,20 @@ def run_once(binary: Path, model: Path, *, pp: int, tg: int, ubatch: int | None 
     carries exactly that many sequential tokens -- see the SURFACES note. The JSON row
     is still keyed pp{pp}/tg{tg} by llama-bench regardless of batch flags.
     """
+    seed = _candidate_seed() if hardening_seed is None else hardening_seed
     argv = ["taskset", "-c", CPU_LIST, "numactl", "--interleave=all",
             str(binary), "-m", str(model), "-p", str(pp), "-n", str(tg),
-            "-r", str(reps), "-ngl", "99", "-fa", "1", "-o", "json"
+            "-r", str(reps), "-ngl", "99", "-fa", "1", "-o", "json",
+            "--autokernel-harden", str(seed)
             ] + (["-b", str(ubatch), "-ub", str(ubatch)] if ubatch else [])
     for attempt in range(KILL_RETRIES + 1):
-        with residency.Sampler() as sampler:
-            done = subprocess.run(argv, capture_output=True, text=True,
-                                  timeout=timeout_s, env=residency.loader_env(binary))
+        env = residency.loader_env(binary)
+        with (nullcontext() if capture is None else capture.invocation(argv, env, attempt)):
+            with residency.Sampler() as sampler:
+                done = subprocess.run(argv, capture_output=True, text=True,
+                                      timeout=timeout_s, env=env)
+            if capture is not None:
+                capture.completed(done, sampler.proof)
         if done.returncode in EXTERNAL_KILL_CODES and attempt < KILL_RETRIES:
             sleep(KILL_BACKOFF_S[min(attempt, len(KILL_BACKOFF_S) - 1)])
             continue
@@ -234,45 +301,86 @@ def run_once(binary: Path, model: Path, *, pp: int, tg: int, ubatch: int | None 
                   if done.returncode in EXTERNAL_KILL_CODES else "")
         raise BenchFailed(
             f"llama-bench rc={done.returncode}{killed}: {done.stderr[-400:]}")
-    try:
-        rows = json.loads(done.stdout)
-    except json.JSONDecodeError as exc:
-        raise BenchFailed(f"llama-bench emitted non-JSON: {done.stdout[:200]}") from exc
-    key = f"pp{pp}" if pp else f"tg{tg}"
-    for row in rows:
-        name = f"pp{row['n_prompt']}" if row["n_prompt"] else f"tg{row['n_gen']}"
-        if name == key:
-            return float(row["avg_ts"]), sampler.proof
-    raise BenchFailed(f"llama-bench produced no {key} row")
+    row = hardened_row(done.stdout, pp=pp, tg=tg, reps=reps)
+    return float(row.avg_ts), sampler.proof
 
 
 def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
             pairs: int = MIN_PAIRS, reps: int = 9,
             noise_floor_pct: float | None = None,
             warmup_pairs: int = WARMUP_PAIRS, surface: str | None = None,
-            ubatch: int | None = None, calibrated: bool = True) -> Comparison:
+            ubatch: int | None = None, calibrated: bool = True,
+            fresh_check: Callable[[Arm, int, int], dict] | None = None) -> Comparison:
     """Alternating paired A/B. The arms swap every pair, never run as two blocks.
 
     `warmup_pairs` are run and DISCARDED first. Without them the first measured pair
     carries each binary's first-use cost, and that cost is not symmetric: the force-MMQ
     probe's candidate was 4.3% slower on pair 1 than on pair 5 while the anchor was
     flat, which alone produced a decisive-looking -1.469%.
+
+    `fresh_check` is a caller-owned, default-off observer. It runs after each
+    measured process (not warmups) and returns a report-only seeded-op receipt.
+    The caller owns the compute claim and full receipt sidecar. Its summary is
+    attached for audit, never consulted by the effect or keep arithmetic. An
+    opt-in comparison with intervening GPU work needs its own A/A calibration;
+    the ordinary floor does not become transferable merely because this observer
+    was enabled.
     """
     if pairs < 1:
         raise ValueError("compare needs at least one pair")
+    if fresh_check is not None and calibrated:
+        raise ValueError("fresh-check comparisons are report-only; pass calibrated=False")
+    hardening_seed = _candidate_seed()
     for _ in range(max(0, warmup_pairs)):
         for arm in (anchor, candidate):
-            run_once(arm.binary, model, pp=pp, tg=tg, ubatch=ubatch, reps=reps)
+            run_once(arm.binary, model, pp=pp, tg=tg, ubatch=ubatch, reps=reps,
+                     hardening_seed=hardening_seed)
     anchor_samples: list[float] = []
     candidate_samples: list[float] = []
     proofs: list[dict] = []
     started = time.monotonic()
-    for _ in range(pairs):
+    fresh_summaries: list[dict] = []
+    for pair_index in range(pairs):
         for arm, sink in ((anchor, anchor_samples), (candidate, candidate_samples)):
             value, proof = run_once(arm.binary, model, pp=pp, tg=tg, ubatch=ubatch,
-                                    reps=reps)
+                                    reps=reps, hardening_seed=hardening_seed)
             sink.append(value)
             proofs.append(proof)
+            if fresh_check is not None:
+                # The ranked llama-bench invocation has ended. This optional
+                # fresh-input op suite cannot change its value, floor, or gate.
+                try:
+                    from .fresh_correctness import SCHEMA as FRESH_SCHEMA
+                    receipt = fresh_check(arm, pair_index + 1, hardening_seed)
+                    if (not isinstance(receipt, dict)
+                            or receipt.get("schema") != FRESH_SCHEMA
+                            or receipt.get("authority") != "report_only"
+                            or receipt.get("ranked_sample") is not False
+                            or receipt.get("status") not in (
+                                "reference_valid", "property_only", "oracle_unavailable")
+                            or receipt.get("verdict") not in (
+                                "passed", "failed", "unavailable")
+                            or not isinstance(receipt.get("arm_id"), str)
+                            or not isinstance(receipt.get("recipe_hash"), str)
+                            or not isinstance(receipt.get("suite_seed"), int)):
+                        raise ValueError("fresh check returned no report-only receipt")
+                    summary = {key: (value[:512] if isinstance(value, str)
+                                     else value if isinstance(value, (int, float, bool))
+                                     else str(value)[:512])
+                               for key in (
+                        "schema", "authority", "ranked_sample", "arm_id",
+                        "recipe_hash", "binary_sha256", "suite_seed", "status",
+                        "verdict", "reason", "raw_output_sha256", "raw_output_bytes",
+                        "receipt_path") if (value := receipt.get(key)) is not None}
+                except Exception as exc:
+                    # A report-only observer cannot veto a ranked measurement.
+                    summary = {"schema": "epyc.autokernel.fresh_correctness.v1",
+                               "authority": "report_only", "ranked_sample": False,
+                               "status": "oracle_unavailable", "verdict": "unavailable",
+                               "reason": f"fresh check observer failed: {type(exc).__name__}"}
+                fresh_summaries.append({"arm": arm.name, "pair": pair_index + 1,
+                                        "ranked_hardening_seed": hardening_seed,
+                                        **summary})
 
     if not anchor_samples or not candidate_samples:
         raise BenchFailed("comparison produced no samples")
@@ -308,6 +416,7 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
         device_seconds=time.monotonic() - started,
         anchor_drift_pct=drift_pct(anchor_samples),
         candidate_drift_pct=drift_pct(candidate_samples),
+        fresh_correctness=tuple(fresh_summaries),
     )
 
 
@@ -409,6 +518,11 @@ def floor_rows(surface: str, model: Path | str,
     each recording it) keep working with no store mutation. A recorded-model
     mismatch on either filename returns None (uncalibrated -> keeps refused),
     never the other model's rows.
+
+    A record whose UNIT is not this instrument's REFUSES (R23-55): floors and effects here
+    are both between-process, and a bar measured within a session is ~13x tighter -- a
+    difference that sized one experiment 1200-fold wrong. A pre-R23-55 record has its unit
+    derived from `CALIBRATION_SCHEMA` rather than guessed; anything else cannot gate.
     """
     stem = Path(model).stem
     if surface in MEASURED_FLOOR_PCT and stem == MEASURED_FLOOR_MODEL_STEM:
@@ -421,8 +535,56 @@ def floor_rows(surface: str, model: Path | str,
             body = json.loads(path.read_text(encoding="utf-8"))
             if Path(str(body.get("model") or "")).stem != stem:
                 return None
+            unit = record_unit(body)
+            if unit != FLOOR_UNIT:
+                # Imported here, not at module scope: `serving` imports `loop` which
+                # imports this module, so a top-level import would be a cycle.
+                from .serving import FloorUnitMismatch
+                raise FloorUnitMismatch(
+                    f"bench floor {path} states unit {unit!r}, but every effect this "
+                    f"instrument measures is unit {FLOOR_UNIT!r} (arms alternate across "
+                    f"llama-bench invocations). REFUSING to gate against it: within-session "
+                    f"dispersion is ~13x tighter than between-launch (INF-70 RETEST-1: "
+                    f"0.501% vs 2.793%) and the wrong one under-sized an experiment "
+                    f"1200-fold. Fix: recalibrate this surface "
+                    f"(`run.py --calibrate-surface`, which stamps `unit` and `n`); the "
+                    f"existing file is left as it is.")
+            if record_n(body) is None:
+                from .serving import FloorUnitMismatch
+                raise FloorUnitMismatch(
+                    f"bench floor {path} does not state the `n` it was estimated from. A "
+                    f"floor is an extreme order statistic: at small n the point estimate "
+                    f"carries no usable precision (R23-61), so it must not gate. "
+                    f"Recalibrate this surface at n >= 24.")
             return {int(count): float(value) for count, value in
                     body["floor_pct"].items()}
+    return None
+
+
+def record_unit(body: dict) -> str | None:
+    """The unit of a store bench-floor record, or None when nothing can establish it.
+
+    An explicit `unit` field wins. Failing that, `CALIBRATION_SCHEMA` pins it: that schema
+    has exactly one writer and that writer alternates llama-bench INVOCATIONS, so such a
+    record is process-unit by construction. Silence with no recognised schema is NOT
+    resolved by assumption -- the two candidate answers differ by ~13x.
+    """
+    from .serving import FLOOR_UNITS  # leaf import: see FLOOR_UNIT above
+    unit = body.get("unit")
+    if unit in FLOOR_UNITS:
+        return unit
+    if unit is None and body.get("schema") == CALIBRATION_SCHEMA:
+        return FLOOR_UNIT
+    return None
+
+
+def record_n(body: dict) -> int | None:
+    """The sample count a store bench-floor record was estimated from, under any of the
+    names this schema has used for it."""
+    for key in ("n", "pairs_per_condition", "pairs"):
+        value = body.get(key)
+        if type(value) is int and value > 0:
+            return value
     return None
 
 
@@ -451,7 +613,8 @@ def bootstrap_floor(anchor: Sequence[float], candidate: Sequence[float],
     return rows
 
 
-__all__ = ["Arm", "BenchFailed", "CPU_LIST", "Comparison",
-           "MEASURED_FLOOR_MODEL_STEM", "MEASURED_FLOOR_PCT", "MIN_PAIRS",
+__all__ = ["Arm", "BenchFailed", "CALIBRATION_SCHEMA", "CPU_LIST", "Comparison",
+           "FLOOR_UNIT", "MEASURED_FLOOR_MODEL_STEM", "MEASURED_FLOOR_N",
+           "MEASURED_FLOOR_PCT", "MIN_PAIRS",
            "SURFACES", "WARMUP_PAIRS", "bootstrap_floor", "compare", "drift_pct",
-           "floor_rows", "run_once", "spread_is_suspect"]
+           "floor_rows", "record_n", "record_unit", "run_once", "spread_is_suspect"]

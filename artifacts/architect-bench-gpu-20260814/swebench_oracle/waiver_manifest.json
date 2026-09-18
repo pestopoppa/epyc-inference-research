@@ -1,0 +1,24 @@
+{
+ "schema_version": 1,
+ "arm": "qwen3.8-27b",
+ "pq_path": "artifacts/architect-bench-gpu-20260814/swebench_oracle/per_question.jsonl",
+ "pq_sha256": "0ae7ec703eb08ef777f9d536bcf44014ec154a5215b9306e553f86c7369df927",
+ "runner_source_sha256": "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e",
+ "gate": "convert_sr_to_patch.summary_status (UNMODIFIED)",
+ "waiver_scope": "skipped_parseable_blocks_only",
+ "waived_instances": {
+  "django__django-11477": {
+   "count": 1,
+   "sha256": "1c6a03c048d552016c5c59c331e691dbf7d32636a3d5116dd205fe342f7f0ad7",
+   "blocks": [
+    {
+     "path": "django/urls/resolvers.py",
+     "search_sha256": "26377ead1851cf76fe94a891e926619db738f7f84725bd98f9961289153a688b",
+     "outcome": "skipped_search_not_found"
+    }
+   ]
+  }
+ },
+ "prediction_count": 40,
+ "conversion_status_without_waiver": "provisional_converter_or_contract"
+}

@@ -19,6 +19,7 @@ import ast
 import dataclasses
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -38,6 +39,7 @@ def _floor_row(recipe: serving.Recipe, floor_pct: float = 3.536) -> dict:
             "recipe_hash": recipe.recipe_hash, "recipe_env": dict(recipe.env or {}),
             "recipe_describe": recipe.describe(), "metric": recipe.metric,
             "np": recipe.np, "samples": 5, "median_tok_s": 71.2,
+            "unit": serving.CALIBRATION_UNIT, "n": 5,
             "floor_pct": floor_pct, "cv_pct": 1.2, "runs": [71.0, 71.2, 71.4],
             "spread": {"p95_dev_pct": floor_pct}}
 
@@ -89,14 +91,16 @@ class Posture(unittest.TestCase):
 
     def test_apply_implies_execute(self):
         parser = serving_gate.build_parser()
-        args = parser.parse_args(["--cor-build", "/a", "--tip-build", "/b", "--apply"])
+        args = parser.parse_args(
+            ["--cor-build", "/a", "--tip-build", "/b", "--tip", "abc", "--apply"])
         posture = instruments.resolve_posture(args)
         self.assertTrue(posture.execute)
         self.assertTrue(posture.apply)
 
     def test_execute_alone_does_not_apply(self):
         parser = serving_gate.build_parser()
-        args = parser.parse_args(["--cor-build", "/a", "--tip-build", "/b", "--execute"])
+        args = parser.parse_args(
+            ["--cor-build", "/a", "--tip-build", "/b", "--tip", "abc", "--execute"])
         posture = instruments.resolve_posture(args)
         self.assertTrue(posture.execute)
         self.assertFalse(posture.apply)
@@ -162,13 +166,17 @@ class FloorIdentityRefusal(unittest.TestCase):
         serving.floor_path(self.store, RECIPE).write_text(
             json.dumps(_floor_row(other)), encoding="utf-8")
         with self.assertRaises(serving.ServingFloorMismatch):
-            instruments.read_floor(self.store, RECIPE, echo=lambda *_: None)
+            instruments.read_floor(self.store, RECIPE,
+                                   effect_unit=serving.COMPARE_EFFECT_UNIT,
+                                   echo=lambda *_: None)
 
     def test_an_absent_floor_is_refused_rather_than_bought_with_a_full_gate(self):
         """`decisive` would come back None, `classify_serving` would read that as
         DIVERGED: a verdict decided before the measurement started."""
         with self.assertRaises(instruments.InstrumentRefusal):
-            instruments.read_floor(self.store, RECIPE, echo=lambda *_: None)
+            instruments.read_floor(self.store, RECIPE,
+                                   effect_unit=serving.COMPARE_EFFECT_UNIT,
+                                   echo=lambda *_: None)
 
     def test_an_unstamped_floor_is_used_but_announced(self):
         row = _floor_row(RECIPE)
@@ -176,14 +184,18 @@ class FloorIdentityRefusal(unittest.TestCase):
         serving.floor_path(self.store, RECIPE).write_text(json.dumps(row),
                                                           encoding="utf-8")
         said = []
-        reading = instruments.read_floor(self.store, RECIPE, echo=said.append)
+        reading = instruments.read_floor(self.store, RECIPE,
+                                         effect_unit=serving.COMPARE_EFFECT_UNIT,
+                                         echo=said.append)
         self.assertEqual(reading.provenance, "unverified")
         self.assertEqual(reading.floor_pct, 3.536)
         self.assertTrue(any("recipe_hash" in line for line in said), said)
 
     def test_a_matching_floor_is_verified(self):
-        serving.write_floor(self.store, RECIPE, _floor_row(RECIPE))
-        reading = instruments.read_floor(self.store, RECIPE, echo=lambda *_: None)
+        serving.write_floor(self.store, RECIPE, _floor_row(RECIPE), unit=serving.CALIBRATION_UNIT)
+        reading = instruments.read_floor(self.store, RECIPE,
+                                   effect_unit=serving.COMPARE_EFFECT_UNIT,
+                                   echo=lambda *_: None)
         self.assertTrue(reading.verified)
 
 
@@ -238,7 +250,7 @@ class RecalibrationWritesThroughWriteFloor(unittest.TestCase):
 
     def test_the_previous_floor_is_backed_up_not_overwritten_blind(self):
         target = serving.floor_path(self.store, self.recipe)
-        serving.write_floor(self.store, self.recipe, _floor_row(self.recipe, 3.536))
+        serving.write_floor(self.store, self.recipe, _floor_row(self.recipe, 3.536), unit=serving.CALIBRATION_UNIT)
         self._run("--apply")
         backups = list(self.store.glob("*.bak"))
         self.assertEqual(len(backups), 1, backups)
@@ -293,7 +305,7 @@ class ServingGate(unittest.TestCase):
         self.store = self.root / "store"
         self.store.mkdir()
         self.recipe = serving.Recipe.load(SHIPPED_RECIPE)
-        serving.write_floor(self.store, self.recipe, _floor_row(self.recipe, 3.536))
+        serving.write_floor(self.store, self.recipe, _floor_row(self.recipe, 3.536), unit=serving.CALIBRATION_UNIT)
         self.cor = _build(self.root / "cor", "llama-server")
         self.tip = _build(self.root / "tip", "llama-server")
         self._bundle(compounded=12.0, keeps=["akm-a", "akm-b"])
@@ -304,7 +316,8 @@ class ServingGate(unittest.TestCase):
 
     def _argv(self, *extra):
         return ["--store", str(self.store), "--recipe", str(SHIPPED_RECIPE),
-                "--cor-build", str(self.cor), "--tip-build", str(self.tip), *extra]
+                "--cor-build", str(self.cor), "--tip-build", str(self.tip),
+                "--tip", "t" * 40, "--champion-worktree", str(self.root), *extra]
 
     def _run(self, *extra, row=None):
         row = row if row is not None else _serving_row(5.0, True)
@@ -315,6 +328,7 @@ class ServingGate(unittest.TestCase):
             return row
 
         with mock.patch.object(serving_gate, "measure", seam), \
+             mock.patch.object(serving_gate, "_is_ancestor", return_value=True), \
              mock.patch("builtins.print"):
             rc = serving_gate.main(self._argv(*extra))
         return rc, calls
@@ -324,6 +338,47 @@ class ServingGate(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertEqual(calls, [])
         self.assertFalse((self.store / "serving").exists())
+
+    def test_bundle_output_names_validity_without_inventing_measurement_source(self):
+        source = Path(serving_gate.__file__).read_text(encoding="utf-8")
+        self.assertNotIn("(MEASURED by seed_bundle)", source)
+        self.assertIn("validity={bundle.measurement_validity}", source)
+        self.assertIn("historical-only magnitude; threshold disabled", source)
+
+    def test_dry_legacy_replay_does_not_import_or_rewrite(self):
+        shutil.rmtree(self.store / accumulate.JOURNAL_DIRNAME)
+        legacy = {
+            "schema": accumulate.Bundle.LEGACY_SCHEMA,
+            "champion_of_record": "c" * 40,
+            "tip": "t" * 40,
+            "keeps": ["akm-a", "akm-b"],
+            "compounded_bench_pct": 12.0,
+            "keeps_since_serving_gate": 2,
+        }
+        path = self.store / accumulate.Bundle.FILENAME
+        original = json.dumps(legacy)
+        path.write_text(original, encoding="utf-8")
+        rc, calls = self._run("--force")
+        self.assertEqual(rc, 0)
+        self.assertEqual(calls, [])
+        self.assertFalse((self.store / accumulate.JOURNAL_DIRNAME).exists())
+        self.assertEqual(path.read_text(), original)
+
+    def test_missing_bundle_state_refuses_without_measuring(self):
+        shutil.rmtree(self.store / accumulate.JOURNAL_DIRNAME)
+        (self.store / accumulate.Bundle.FILENAME).unlink()
+        rc, calls = self._run("--execute")
+        self.assertEqual(rc, instruments.REFUSED)
+        self.assertEqual(calls, [])
+
+    def test_corrupt_journal_refuses_instead_of_trusting_projection(self):
+        events = (self.store / accumulate.JOURNAL_DIRNAME
+                  / "events.jsonl")
+        with events.open("a", encoding="utf-8") as stream:
+            stream.write("{corrupt}\n")
+        rc, calls = self._run("--execute")
+        self.assertEqual(rc, instruments.REFUSED)
+        self.assertEqual(calls, [])
 
     def test_execute_writes_the_record_but_does_not_advance_the_champion(self):
         rc, calls = self._run("--execute")

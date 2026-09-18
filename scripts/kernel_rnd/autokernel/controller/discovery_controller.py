@@ -1974,7 +1974,7 @@ def _recall_experiments(state: Mapping[str, Any],
                 (row for row in state.get("iterations", []) if isinstance(row, Mapping)),
                 epoch=epoch, recorded_at=_now(), campaign_id=config.campaign_id)
             store.write_markdown(epoch=epoch)
-            return store.recall(epoch=epoch)
+            return store.recall(epoch=epoch, include_claims=True)
     except (sqlite3.Error, OSError, ValueError):
         return []
 

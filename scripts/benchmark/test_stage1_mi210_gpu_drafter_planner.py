@@ -194,7 +194,12 @@ class Stage1Mi210GpuDrafterPlannerTests(unittest.TestCase):
             args.target_model.write_text("target", encoding="utf-8")
             args.draft_model.write_text("draft", encoding="utf-8")
 
-            plan = planner.build_execute_plan(args, planner.EXPERIMENTAL_SERVER.resolve(), 33111, 33112)
+            # The plan runs `<binary> --version`; the experimental HIP build is
+            # host state that comes and goes between builds, so use a stub.
+            binary = Path(tmpdir) / "llama-server"
+            binary.write_text("#!/bin/sh\necho 'version: 0 (stub)'\n", encoding="utf-8")
+            binary.chmod(0o755)
+            plan = planner.build_execute_plan(args, binary, 33111, 33112)
 
             self.assertEqual(plan["mode"], "execute")
             self.assertEqual(plan["arms"][0]["port"], 33111)

@@ -1,0 +1,55 @@
+{
+  "schema": "epyc.autokernel.gpu_control_fixture.v1",
+  "win_id": "cdna2-q8-single-x4-load-fe881-bff30",
+  "approved_reference_band": {
+    "low": 0.004831498653230959,
+    "high": 0.04435475921984722
+  },
+  "reference_direction": "higher_better",
+  "backend": "llama_gpu",
+  "phase": "decode",
+  "magnitude_quantity": "median of per-process-pair effects (candidate_avg_ts / anchor_avg_ts - 1)",
+  "tolerance_rationale": "Prospectively approved fixed engineering replay tolerance equal to the range of the original 20 observed paired effects. It is not a confidence interval, error-control guarantee, or candidate gain threshold. Actual T0–T2 promotion and this range are independently required; it must not be widened after prospective replay.",
+  "original_paired_effect_median": 0.025496918214263697,
+  "original_ratio_of_medians": 0.02582985586620512,
+  "original_payload_sha256": "73e857b272e30d67212adcf0897d925f03f9cd3b1ca24752e00132ad91418603",
+  "original_payload": "{\"champion_head\": \"bff30cebee0de4440dd7a6ef3607e59b970268ce\", \"comparison\": {\"anchor_drift_pct\": 0.27053435576001467, \"anchor_samples\": [31.020432, 30.23617, 30.635626, 30.583068, 30.301366, 30.258221, 30.523879, 30.475477, 30.150025, 30.399282, 30.630852, 30.700807, 30.489417, 30.368727, 30.545371, 30.552011, 30.360284, 30.030216, 30.513556, 30.526237], \"anchor_trend_rho\": -0.11428571428571428, \"calibrated\": true, \"candidate_drift_pct\": -0.4814579715187649, \"candidate_samples\": [31.271778, 31.447734, 31.362069, 31.013731, 30.993955, 30.93846, 31.492152, 31.306893, 31.3697, 31.314204, 30.997838, 31.064401, 31.32279, 31.255406, 31.544171, 30.699623, 30.876868, 31.362199, 31.408008, 30.908314], \"candidate_trend_rho\": -0.14285714285714285, \"decisive\": true, \"device_seconds\": 1698.72062225407, \"drifting\": false, \"effect\": 0.02582985586620512, \"effect_pct\": 2.582985586620512, \"estimator\": \"median_over_median\", \"model\": \"/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf\", \"noise_floor_pct\": 0.638, \"pairs\": 20, \"residency\": {\"clock_stable\": false, \"invocations\": 40, \"peak_kfd_processes\": 1, \"peak_vram_bytes\": 28089847808, \"resident\": 40, \"sclk_max_mhz\": 1700, \"sclk_min_mhz\": 1690}, \"surface\": \"tg128\"}, \"effect_fraction\": 0.02582985586620512, \"falsifier\": \"Post-patch llvm-objdump must show one global_load_dwordx4 and no overlapping global_load_dword for each main/gate qs stream; otherwise the mechanism was not emitted. If confirmed, a direct 20-pair alternating tg128 A/B against the champion that fails to exceed the 0.638% floor disproves the speed claim; any test-backend-ops -o MUL_MAT -b ROCm0 mismatch disproves bit-identical correctness.\", \"gates\": [{\"detail\": null, \"gate\": \"compile\", \"passed\": true, \"reason\": null}, {\"detail\": \"8,3],nr=[4,1],per=[0,2,1,3],k_v=0,o=1): \\u001b[1;32mOK\\u001b[0m\\n  MUL_MAT(type_a=bf16,type_b=f32,m=129,n=1,k=1057,bs=[8,3],nr=[4,1],per=[0,1,2,3],k_v=2113,o=1): \\u001b[1;32mOK\\u001b[0m\\n  MUL_MAT(type_a=f32,type_b=f32,m=1057,n=1,k=129,bs=[8,3],nr=[4,1],per=[0,2,1,3],k_v=0,o=1): \\u001b[1;32mOK\\u001b[0m\\n  MUL_MAT(type_a=f32,type_b=f32,m=129,n=1,k=1057,bs=[8,3],nr=[4,1],per=[0,1,2,3],k_v=2113,o=1): \\u001b[1;32mOK\\u001b[0m\\n  1139/1139 tests passed\\n  Backend ROCm0: \\u001b[1;32mOK\\u001b[0m\\nBackend 2/2: CPU\\n  Skipping\\n2/2 backends passed\\n\\u001b[1;32mOK\\u001b[0m\\n\", \"gate\": \"correctness\", \"passed\": true, \"reason\": null}], \"mechanism_id\": \"akm-cdna2-q8-single-x4-load\", \"statement\": \"In mmvq.cu's eight_warp_q8_cdna2 branch, replace the four get_int_b2 calls with one 16-byte unaligned __builtin_memcpy into an ext_vector_type(4) int vector and feed its four words unchanged to vec_dot_q8_0_q8_1_impl. Champion objdump shows each weight row currently issues global_load_dwordx4 offset:2 plus an overlapping global_load_dword offset:2 whose first word duplicates the vector load; the fused kernel repeats this for the gate stream. Using the first component of the single x4 load removes one VMEM instruction and redundant word per weight row from kernels holding 76% of device time, reducing load-request and scoreboard pressure. Numerics remain bit-identical because the same 16 qs bytes, word order, scales, and dp4a operations are retained.\", \"status\": \"kept\", \"target_surface\": \"ggml/src/ggml-cuda/mmvq.cu\", \"target_symbol\": \"mul_mat_vec_q eight_warp_q8_cdna2 branch\", \"turn_recorded_at\": \"2026-09-07T21:51:41.200877Z\"}",
+  "frame": {
+    "source_root": "/mnt/raid0/llm/llama.cpp-experimental",
+    "anchor_commit": "fe881991f4652fdcd97b825583730e263fa7de0e",
+    "candidate_commit": "bff30cebee0de4440dd7a6ef3607e59b970268ce",
+    "anchor_build": "/mnt/raid0/llm/autokernel/loop-memory/anchor-gen-020",
+    "candidate_build": "/mnt/raid0/llm/autokernel/loop-memory/anchor-gen-021",
+    "model": "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+    "cpu_list": "184-191",
+    "device": "ROCm0",
+    "pp": 0,
+    "tg": 128,
+    "reps": 9,
+    "constructor": "autokernel.loop.bench.run_once",
+    "topology": [
+      "taskset",
+      "-c",
+      "184-191",
+      "numactl",
+      "--interleave=all"
+    ],
+    "explicit_flags": [
+      "-p",
+      "0",
+      "-n",
+      "128",
+      "-r",
+      "9",
+      "-ngl",
+      "99",
+      "-fa",
+      "1",
+      "-o",
+      "json"
+    ],
+    "omitted_flags": "Original executable defaults remain original; no substitution of the microbench GPU builder's explicit mmap/thread settings.",
+    "metric": "decode_tokens_per_s",
+    "direction": "higher_better"
+  }
+}

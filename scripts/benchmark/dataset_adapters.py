@@ -76,6 +76,8 @@ ADAPTER_SUITES = {
     "tulving_episodic",
     # K-LCM-1: LongCoT-Mini easy-split deterministic reasoning (intake-386/RE-4)
     "longcot_mini",
+    # CME-1: BEAM conversational long-term memory, 100K split (intake-1330)
+    "beam",
 }
 
 # Suites that stay YAML-based (no public dataset or intentionally synthetic)
@@ -90,7 +92,7 @@ def _get_long_context_adapter(class_name: str):
     try:
         from long_context_adapters import (
             LongBenchAdapter, ZeroSCROLLSAdapter, LEvalAdapter,
-            RULERAdapter, NeedleAdapter,
+            RULERAdapter, NeedleAdapter, BEAMAdapter,
         )
         return {
             "LongBenchAdapter": LongBenchAdapter,
@@ -98,6 +100,7 @@ def _get_long_context_adapter(class_name: str):
             "LEvalAdapter": LEvalAdapter,
             "RULERAdapter": RULERAdapter,
             "NeedleAdapter": NeedleAdapter,
+            "BEAMAdapter": BEAMAdapter,
         }[class_name]
     except ImportError:
         return None
@@ -184,6 +187,8 @@ def get_adapter(suite: str) -> Optional["BaseAdapter"]:
         "leval": _get_long_context_adapter("LEvalAdapter"),
         "ruler": _get_long_context_adapter("RULERAdapter"),
         "needle_parameterized": _get_long_context_adapter("NeedleAdapter"),
+        # CME-1: BEAM conversational long-term memory (intake-1330)
+        "beam": _get_long_context_adapter("BEAMAdapter"),
         # EV-3: verifier benchmarks (NVIDIA Scoring-Verifiers / HE-R+)
         "scoring_verifiers": _get_scoring_verifiers_adapter(),
         # P3b: episodic memory (Tulving Benchmark, arXiv 2501.13121)
@@ -1353,22 +1358,60 @@ class MMLUProAdapter(BaseAdapter):
     # Tier 1: business + other
     EASY_CATEGORIES = {"business", "other"}
 
+    #: Pinned local snapshot of the test split (revision b189ec76…, sha256
+    #: 0e24a191…). Read directly when present so the gold is re-derived from a
+    #: fixed source, offline, without the `datasets` package.
+    SNAPSHOT_PARQUET = Path(
+        "/mnt/raid0/llm/cache/huggingface/hub/datasets--TIGER-Lab--MMLU-Pro/"
+        "snapshots/b189ec765aa7ed75c8acfea42df31fdae71f97be/data/"
+        "test-00000-of-00001.parquet"
+    )
+
     def _ensure_loaded(self):
         if self._dataset is not None:
             return
         try:
-            import datasets as hf
-            self._dataset = hf.load_dataset(
-                "TIGER-Lab/MMLU-Pro", split="test",
-            )
+            if self.SNAPSHOT_PARQUET.is_file():
+                import pyarrow.parquet as pq
+                self._dataset = pq.read_table(self.SNAPSHOT_PARQUET).to_pylist()
+            else:
+                import datasets as hf
+                self._dataset = hf.load_dataset(
+                    "TIGER-Lab/MMLU-Pro", split="test",
+                )
         except Exception as e:
             print(f"  [adapter] MMLU-Pro load failed: {e}")
             self._dataset = []
 
+    @classmethod
+    def gold_letter(cls, row: dict) -> str:
+        """Derive the gold letter from ``answer_index`` and cross-check ``answer``.
+
+        ``answer_index`` (0-based into ``options``) is the canonical key; the
+        upstream ``answer`` letter must agree with it. Any disagreement or an
+        index outside the options list is a corpus defect and raises — the row
+        is dropped rather than emitted with a gold nobody can score.
+        """
+        options = row.get("options")
+        if not isinstance(options, (list, tuple)) or not 1 <= len(options) <= len(cls.CHOICE_LABELS):
+            raise ValueError(f"mmlu_pro options malformed: {options!r}")
+        idx = row.get("answer_index")
+        if isinstance(idx, bool) or not isinstance(idx, int):
+            raise ValueError(f"mmlu_pro answer_index missing/non-int: {idx!r}")
+        if not 0 <= idx < len(options):
+            raise ValueError(f"mmlu_pro answer_index {idx} outside {len(options)} options")
+        derived = cls.CHOICE_LABELS[idx]
+        letter = str(row.get("answer") or "").strip().upper()
+        if letter and letter != derived:
+            raise ValueError(
+                f"mmlu_pro answer letter {letter!r} disagrees with answer_index {idx} ({derived!r})"
+            )
+        return derived
+
     def _row_to_prompt(self, idx: int, row: dict) -> dict:
         question = row["question"]
-        options = row["options"]
-        answer = row["answer"]
+        options = list(row["options"])
+        answer = self.gold_letter(row)
         category = row.get("category", "other")
 
         prompt_lines = [question, ""]
@@ -1387,7 +1430,14 @@ class MMLUProAdapter(BaseAdapter):
             "image_path": "",
             "tier": self._get_tier_for_index(idx),
             "scoring_method": "multiple_choice",
-            "scoring_config": {},
+            # PRB-T4 (2026-09-17): the shared scorer's default letter range is
+            # A-H, so the ~17% of rows whose gold is I or J were unscoreable
+            # with an empty config. Declare the row's real label range and its
+            # options so every letter resolves and out-of-range gold is caught.
+            "scoring_config": {
+                "choices": options,
+                "choice_labels": "".join(self.CHOICE_LABELS[: len(options)]),
+            },
         }
 
     def _get_tier_for_index(self, idx: int) -> int:
@@ -1644,14 +1694,26 @@ class LiveCodeBenchAdapter(BaseAdapter):
         "hard": 3,
     }
 
+    #: Pinned local snapshot (the same file the oracle manifest was built and
+    #: validated against). Read directly when present: offline, and the rows
+    #: are exactly the ones the manifest's slugs refer to.
+    SNAPSHOT_JSONL = Path(
+        "/mnt/raid0/llm/hf-home/hub/datasets--greengerong--leetcode/snapshots/"
+        "00f2d466dc0f00f65a0b6938c4c11a57f721db81/leetcode-train.jsonl"
+    )
+
     def _ensure_loaded(self):
         if self._dataset is not None:
             return
         try:
-            import datasets as hf
-            self._dataset = hf.load_dataset(
-                "greengerong/leetcode", split="train",
-            )
+            if self.SNAPSHOT_JSONL.is_file():
+                with self.SNAPSHOT_JSONL.open(encoding="utf-8") as handle:
+                    self._dataset = [json.loads(line) for line in handle if line.strip()]
+            else:
+                import datasets as hf
+                self._dataset = hf.load_dataset(
+                    "greengerong/leetcode", split="train",
+                )
         except Exception as e:
             print(f"  [adapter] LiveCodeBench (LeetCode) load failed: {e}")
             self._dataset = []

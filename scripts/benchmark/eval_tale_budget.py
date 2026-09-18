@@ -5,24 +5,37 @@ Compares three brevity strategies on existing eval suites:
 
 1. Baseline — no brevity constraint
 2. Static word limits — Action 12 format templates (50w math, 60w general)
-3. TALE self-estimated budget — model estimates its own word budget, then
-   generates with "Answer in under {beta} words" constraint
+3. TALE-EP self-estimated budget — model estimates its own budget (zero-shot
+   pre-pass), then answers "{question} Let's think step by step and use less
+   than {beta} tokens". ``--budget-unit words`` restores the legacy
+   "Answer in under {beta} words" variant.
 
-Measures accuracy, token count, and OAA/PTI per condition.
+Measures accuracy, token count, latency and OAA/PTI per condition. The TALE
+estimator call is charged: every row carries answer-only cost
+(``total_tokens``/``elapsed_s``, comparable with pre-PRB-T4 rows) and
+``*_incl_estimator`` totals. Run metadata (endpoint, served model/GGUF identity,
+temperature, seed, budget unit) goes to ``<output>.meta.json``; per suite x
+condition aggregates to ``<output>.summary.json``.
 
-Reference: TALE (arXiv:2412.18547) — "use less than {beta} tokens" gives
-+3.1pp on GSM8K while cutting 76% of tokens.
+Reference: TALE (Han et al., "Token-Budget-Aware LLM Reasoning",
+arXiv:2412.18547).
 
 Usage:
     python eval_tale_budget.py --suites math general --n-questions 20
     python eval_tale_budget.py --suites math --model-port 8080 --dry-run
+    python eval_tale_budget.py --endpoint http://127.0.0.1:8083 \
+        --suites math --temperature 0.2 --chat-template-kwargs '{"enable_thinking": false}'
 """
 
 # Scoring: delegates to orchestrator B7 debug_scorer (2026-08-23) — no pre-B7 semantics
+# Sampling: seeded + source-stratified; oracles preflighted before any inference
+# (PRB-T4 defects, 2026-09-17).
 
 from __future__ import annotations
 
 import argparse
+import hashlib
+import os
 import json
 import logging
 import re
@@ -30,7 +43,7 @@ import sys
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -50,14 +63,75 @@ STATIC_LIMITS = {
     "coder": "Output code only.",
 }
 
-TALE_PREPASS_PROMPT = (
+# Legacy word-unit prompts (pre-PRB-T4). Kept behind ``--budget-unit words`` so
+# earlier numbers stay reproducible; they are NOT the published intervention.
+TALE_PREPASS_PROMPT_WORDS = (
     "Estimate how many words you need to answer this question correctly.\n"
     "Reply with ONLY a number.\n\n"
     "Question: {question}\n\n"
     "Words needed:"
 )
+TALE_CONSTRAINT_TEMPLATE_WORDS = "Answer in under {beta} words.\n\n"
 
-TALE_CONSTRAINT_TEMPLATE = "Answer in under {beta} words.\n\n"
+# Token-unit prompts following TALE-EP (Han et al., "Token-Budget-Aware LLM
+# Reasoning", arXiv:2412.18547): zero-shot token-budget estimate, then the
+# question followed by "Let's think step by step and use less than {budget}
+# tokens". Default since PRB-T4.
+TALE_PREPASS_PROMPT_TOKENS = (
+    "Task: Analyze the given question and estimate the minimum number of "
+    "tokens required to generate a complete and accurate response. "
+    "Please give the response by strictly following this format: [[budget]], "
+    "for example, Budget: [[12]].\n\n"
+    "Question: {question}"
+)
+TALE_CONSTRAINT_TEMPLATE_TOKENS = (
+    "\n\nLet's think step by step and use less than {beta} tokens."
+)
+
+# Back-compat aliases (legacy names referred to the word prompts).
+TALE_PREPASS_PROMPT = TALE_PREPASS_PROMPT_WORDS
+TALE_CONSTRAINT_TEMPLATE = TALE_CONSTRAINT_TEMPLATE_WORDS
+
+BUDGET_UNITS = ("tokens", "words")
+# (min, max, fallback) per unit. Words keeps the original [10, 500] / 60.
+BUDGET_CLAMPS = {"words": (10, 500, 60), "tokens": (10, 4096, 100)}
+ESTIMATOR_MAX_TOKENS = 32
+
+# Injectable HTTP seams: poster(url, json_body, timeout) -> response dict;
+# fetcher(url, timeout) -> response dict. Defaults use httpx lazily.
+Poster = Callable[[str, dict, float], dict]
+Fetcher = Callable[[str, float], dict]
+
+
+def _httpx_post(url: str, body: dict, timeout: float) -> dict:
+    import httpx
+
+    resp = httpx.post(url, json=body, timeout=timeout)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def _httpx_get(url: str, timeout: float) -> dict:
+    import httpx
+
+    resp = httpx.get(url, timeout=timeout)
+    resp.raise_for_status()
+    return resp.json()
+
+
+def resolve_base_url(endpoint: str | None, host: str = "localhost", port: int = 8080) -> str:
+    """Return an OpenAI-compatible base URL without trailing ``/`` or ``/v1``.
+
+    ``--endpoint`` wins; otherwise ``http://{host}:{port}`` (legacy flags).
+    """
+    if not endpoint:
+        return f"http://{host}:{port}"
+    url = endpoint.rstrip("/")
+    if url.endswith("/v1"):
+        url = url[: -len("/v1")]
+    if "://" not in url:
+        url = f"http://{url}"
+    return url
 
 
 @dataclass
@@ -68,22 +142,42 @@ class TrialResult:
     prompt: str
     response: str
     correct: bool | None = None
+    # Answer-only cost (unchanged meaning; comparable with pre-PRB-T4 rows).
     total_tokens: int = 0
     elapsed_s: float = 0.0
     tale_budget: int | None = None  # Only for TALE condition
+    budget_unit: str | None = None  # "tokens"|"words" for TALE, else None
+    # Estimator pre-pass cost (TALE only; 0 for other arms).
+    estimator_tokens: int = 0
+    estimator_s: float = 0.0
+    estimator_response: str | None = None
+    # Total cost incl. the estimator call (== answer-only for non-TALE arms).
+    total_tokens_incl_estimator: int = 0
+    elapsed_s_incl_estimator: float = 0.0
+    temperature: float | None = None
+    seed: int | None = None
+    served_model: str | None = None  # "model" field echoed by the server
+    source: str | None = None  # question_pool.source_stratum (e.g. gsm8k, math500_Algebra)
 
 
-def load_questions(suites: list[str], n_questions: int) -> list[dict[str, Any]]:
-    """Load questions from question_pool.jsonl filtered by suite."""
-    if not POOL_PATH.exists():
-        log.error("Question pool not found: %s", POOL_PATH)
-        log.error("Run: python question_pool.py --build")
-        sys.exit(1)
+@dataclass
+class GenConfig:
+    """Request configuration shared by every call in a run."""
 
-    questions: list[dict[str, Any]] = []
-    suite_counts: dict[str, int] = {s: 0 for s in suites}
+    base_url: str = "http://localhost:8080"
+    temperature: float = 0.0
+    seed: int | None = 42
+    max_tokens: int = 8192
+    model: str | None = None
+    chat_template_kwargs: dict | None = None
+    budget_unit: str = "tokens"
+    timeout: float = 1200.0
+    poster: Poster | None = None
 
-    with open(POOL_PATH) as f:
+
+def _read_suite_rows(suites: list[str], pool_path: Path) -> dict[str, list[dict[str, Any]]]:
+    rows: dict[str, list[dict[str, Any]]] = {s: [] for s in suites}
+    with open(pool_path) as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -95,21 +189,100 @@ def load_questions(suites: list[str], n_questions: int) -> list[dict[str, Any]]:
             if q.get("__pool_metadata__"):
                 continue
             suite = q.get("suite", "")
-            if suite not in suites:
-                continue
-            if suite_counts[suite] >= n_questions:
-                continue
-            questions.append(q)
-            suite_counts[suite] += 1
-            if all(c >= n_questions for c in suite_counts.values()):
-                break
+            if suite in rows:
+                rows[suite].append(q)
+    return rows
+
+
+def load_questions(
+    suites: list[str],
+    n_questions: int,
+    seed: int = 42,
+    pool_path: Path | None = None,
+    composition: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Seeded, source-stratified sample of ``n_questions`` per suite.
+
+    PRB-T4 (2026-09-17): this used to take the FIRST ``n`` rows of each suite in
+    file order, so the ``math`` sample was 100% ``gsm8k`` (the pool lists 1,319
+    gsm8k rows before its 500 MATH-500 rows) and olympiadbench under-drew
+    geometry 5% vs 19%. Rows are now allocated proportionally across the
+    suite's sources (``question_pool.source_stratum``). If ``composition`` is
+    given it receives, per suite, the population and sample stratum counts.
+    """
+    from question_pool import stratified_sample, stratum_counts
+
+    pool_path = pool_path or POOL_PATH
+    if not pool_path.exists():
+        log.error("Question pool not found: %s", pool_path)
+        log.error("Run: python question_pool.py --build")
+        sys.exit(1)
+
+    by_suite = _read_suite_rows(suites, pool_path)
+    questions: list[dict[str, Any]] = []
+    for suite in suites:
+        population = by_suite[suite]
+        picked = stratified_sample(population, n_questions, seed)
+        questions.extend(picked)
+        if composition is not None:
+            composition[suite] = {
+                "population": stratum_counts(population),
+                "sample": stratum_counts(picked),
+            }
 
     log.info(
-        "Loaded %d questions: %s",
-        len(questions),
-        ", ".join(f"{s}={c}" for s, c in suite_counts.items()),
+        "Loaded %d questions (seed %d): %s",
+        len(questions), seed,
+        ", ".join(f"{s}={sum(1 for q in questions if q.get('suite') == s)}" for s in suites),
     )
     return questions
+
+
+def oracle_defect(question: dict[str, Any]) -> str | None:
+    """Why this row cannot yield a correctness verdict, or None if it can.
+
+    Checked for every sampled row BEFORE any inference, so a broken oracle
+    refuses the run instead of producing numbers (PRB-T4, 2026-09-16: the
+    livecodebench arm ran on a ``substring 'def '`` oracle and mmlu_pro died
+    at question 1).
+
+    * ``substring`` on a row that declares a programming ``language`` is the
+      pre-2026-08-12 livecodebench oracle: every Python answer contains
+      ``def ``. It is not a correctness check.
+    * a ``multiple_choice`` row must accept its own gold letter/text (known-right
+      passes) and resolve it at all (no ``ScoringUnavailableError``).
+    """
+    method = question.get("scoring_method")
+    config = question.get("scoring_config") or {}
+    if not isinstance(config, dict):
+        return "scoring_config is not an object"
+    if method == "substring" and config.get("language"):
+        return (f"vacuous code oracle: substring {question.get('expected')!r} on a "
+                f"{config.get('language')} row")
+    if method == "multiple_choice":
+        sys.path.insert(0, str(SCRIPT_DIR))
+        import debug_scorer
+
+        gold = str(question.get("expected", ""))
+        try:
+            ok = debug_scorer.score_answer(gold, gold, "multiple_choice", config)
+        except debug_scorer.ScoringUnavailableError as exc:
+            return f"unscoreable multiple_choice gold: {exc}"
+        if not ok:
+            return f"multiple_choice gold {gold!r} does not score as correct against itself"
+    return None
+
+
+def preflight_oracles(questions: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Per-suite defect tally for the sampled rows (empty dict == all clear)."""
+    bad: dict[str, dict[str, Any]] = {}
+    for q in questions:
+        reason = oracle_defect(q)
+        if reason is None:
+            continue
+        cell = bad.setdefault(q.get("suite", "unknown"), {"rows": 0, "example": reason})
+        cell["rows"] += 1
+    return bad
 
 
 def generate_response(
@@ -118,36 +291,67 @@ def generate_response(
     port: int = 8080,
     max_tokens: int = 8192,
     temperature: float = 0.0,
+    *,
+    base_url: str | None = None,
+    seed: int | None = None,
+    model: str | None = None,
+    chat_template_kwargs: dict | None = None,
+    poster: Poster | None = None,
+    timeout: float = 1200.0,
+    meta: dict | None = None,
 ) -> tuple[str, int, float]:
-    """Generate a response from a llama-server.
+    """Generate a response from an OpenAI-compatible server.
 
-    Returns (response_text, token_count, elapsed_seconds).
+    Returns (response_text, completion_tokens, elapsed_seconds). If ``meta``
+    is given it receives ``served_model`` and ``usage`` from the response.
     """
-    import httpx
+    url = f"{base_url or resolve_base_url(None, host, port)}/v1/chat/completions"
+    body: dict[str, Any] = {
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+    if seed is not None:
+        body["seed"] = seed
+    if model:
+        body["model"] = model
+    if chat_template_kwargs:
+        body["chat_template_kwargs"] = chat_template_kwargs
 
+    post = poster or _httpx_post
     t0 = time.monotonic()
-    resp = httpx.post(
-        f"http://{host}:{port}/v1/chat/completions",
-        json={
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-        },
-        timeout=1200.0,
-    )
-    resp.raise_for_status()
+    data = post(url, body, timeout)
     elapsed = time.monotonic() - t0
 
-    data = resp.json()
-    text = data["choices"][0]["message"].get("content", "")
-    reasoning = data["choices"][0]["message"].get("reasoning_content", "")
-    usage = data.get("usage", {})
+    message = data["choices"][0]["message"]
+    text = message.get("content") or ""
+    reasoning = message.get("reasoning_content") or ""
+    usage = data.get("usage") or {}
     completion_tokens = usage.get("completion_tokens", len(text) // 4)
 
     if reasoning:
         text = f"<think>\n{reasoning}\n</think>\n{text}"
+    if meta is not None:
+        meta["served_model"] = data.get("model")
+        meta["usage"] = usage
 
     return text, completion_tokens, elapsed
+
+
+def _gen(prompt: str, cfg: GenConfig, max_tokens: int | None = None,
+         meta: dict | None = None) -> tuple[str, int, float]:
+    return generate_response(
+        prompt,
+        max_tokens=cfg.max_tokens if max_tokens is None else max_tokens,
+        temperature=cfg.temperature,
+        base_url=cfg.base_url,
+        seed=cfg.seed,
+        model=cfg.model,
+        chat_template_kwargs=cfg.chat_template_kwargs,
+        poster=cfg.poster,
+        timeout=cfg.timeout,
+        meta=meta,
+    )
 
 
 def strip_think_blocks(text: str) -> str:
@@ -155,17 +359,68 @@ def strip_think_blocks(text: str) -> str:
     return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
 
-def score_question(answer: str, question: dict[str, Any]) -> bool:
-    """Score an answer against expected. Uses debug_scorer if available."""
-    sys.path.insert(0, str(SCRIPT_DIR))
-    from debug_scorer import score_answer
+def score_question(answer: str, question: dict[str, Any]) -> bool | None:
+    """Score an answer against expected via the shared (orchestrator B7) scorer.
 
-    return score_answer(
-        answer=strip_think_blocks(answer),
-        expected=question.get("expected", ""),
-        scoring_method=question.get("scoring_method", "exact_match"),
-        scoring_config=question.get("scoring_config"),
-    )
+    Three-valued: ``None`` when the scorer refuses the row
+    (``ScoringUnavailableError``). An undecidable row is EXCLUDED from accuracy,
+    never counted wrong and never allowed to abort the suite.
+    """
+    sys.path.insert(0, str(SCRIPT_DIR))
+    import debug_scorer
+
+    try:
+        return debug_scorer.score_answer(
+            answer=strip_think_blocks(answer),
+            expected=question.get("expected", ""),
+            scoring_method=question.get("scoring_method", "exact_match"),
+            scoring_config=question.get("scoring_config"),
+        )
+    except debug_scorer.ScoringUnavailableError as exc:
+        log.warning("unscoreable %s: %s", question.get("id"), exc)
+        return None
+
+
+@dataclass
+class BudgetEstimate:
+    budget: int
+    unit: str
+    tokens: int
+    elapsed_s: float
+    raw: str
+
+
+def parse_budget(text: str, unit: str = "tokens") -> int | None:
+    """Extract a budget: prefer ``[[N]]`` (TALE format), else first integer."""
+    lo, hi, _ = BUDGET_CLAMPS[unit]
+    clean = strip_think_blocks(text)
+    match = re.search(r"\[\[\s*(\d+)\s*\]\]", clean) or re.search(r"\d+", clean)
+    if not match:
+        return None
+    value = int(match.group(1) if match.groups() else match.group())
+    return max(lo, min(value, hi))
+
+
+def build_tale_prompt(question_text: str, beta: int, unit: str = "tokens") -> str:
+    if unit == "tokens":
+        return question_text + TALE_CONSTRAINT_TEMPLATE_TOKENS.format(beta=beta)
+    if unit == "words":
+        return TALE_CONSTRAINT_TEMPLATE_WORDS.format(beta=beta) + question_text
+    raise ValueError(f"Unknown budget unit: {unit}")
+
+
+def estimate_tale_budget_full(question_text: str, cfg: GenConfig) -> BudgetEstimate:
+    """Run the TALE pre-pass and keep its cost (tokens + wall time)."""
+    unit = cfg.budget_unit
+    template = TALE_PREPASS_PROMPT_TOKENS if unit == "tokens" else TALE_PREPASS_PROMPT_WORDS
+    prompt = template.format(question=question_text)
+    text, tokens, elapsed = _gen(prompt, cfg, max_tokens=ESTIMATOR_MAX_TOKENS)
+    budget = parse_budget(text, unit)
+    if budget is None:
+        budget = BUDGET_CLAMPS[unit][2]
+        log.warning("TALE pre-pass returned no number: %r, defaulting to %d %s",
+                    strip_think_blocks(text), budget, unit)
+    return BudgetEstimate(budget, unit, int(tokens), elapsed, text)
 
 
 def estimate_tale_budget(
@@ -173,29 +428,17 @@ def estimate_tale_budget(
     host: str = "localhost",
     port: int = 8080,
 ) -> int:
-    """Run TALE pre-pass: ask model to estimate word budget.
-
-    Returns estimated word count, clamped to [10, 500].
-    """
-    prompt = TALE_PREPASS_PROMPT.format(question=question_text)
-    text, _, _ = generate_response(prompt, host, port, max_tokens=32, temperature=0.0)
-
-    # Extract first number from response
-    text_clean = strip_think_blocks(text)
-    match = re.search(r"\d+", text_clean)
-    if match:
-        budget = int(match.group())
-        return max(10, min(budget, 500))
-    log.warning("TALE pre-pass returned no number: %r, defaulting to 60", text_clean)
-    return 60
+    """Legacy word-unit API: returns only the clamped budget (cost discarded)."""
+    cfg = GenConfig(base_url=resolve_base_url(None, host, port),
+                    temperature=0.0, seed=None, budget_unit="words")
+    return estimate_tale_budget_full(question_text, cfg).budget
 
 
 def run_trial(
     question: dict[str, Any],
     condition: str,
-    host: str,
-    port: int,
-    tale_budget: int | None = None,
+    cfg: GenConfig,
+    estimate: BudgetEstimate | None = None,
 ) -> TrialResult:
     """Run a single trial (one question, one condition)."""
     q_text = question.get("prompt", question.get("question", ""))
@@ -208,14 +451,19 @@ def run_trial(
         limit = STATIC_LIMITS.get(suite, STATIC_LIMITS["general"])
         prompt = f"{limit}\n\n{q_text}"
     elif condition == "tale":
-        constraint = TALE_CONSTRAINT_TEMPLATE.format(beta=tale_budget)
-        prompt = f"{constraint}{q_text}"
+        if estimate is None:
+            raise ValueError("tale condition requires a budget estimate")
+        prompt = build_tale_prompt(q_text, estimate.budget, estimate.unit)
     else:
         raise ValueError(f"Unknown condition: {condition}")
 
-    text, tokens, elapsed = generate_response(prompt, host, port)
+    meta: dict[str, Any] = {}
+    text, tokens, elapsed = _gen(prompt, cfg, meta=meta)
     correct = score_question(text, question)
 
+    is_tale = condition == "tale"
+    est_tok = estimate.tokens if is_tale else 0
+    est_s = estimate.elapsed_s if is_tale else 0.0
     return TrialResult(
         question_id=str(q_id),
         suite=suite,
@@ -223,17 +471,32 @@ def run_trial(
         prompt=prompt,
         response=text,
         correct=correct,
-        total_tokens=tokens,
+        total_tokens=int(tokens),
         elapsed_s=round(elapsed, 2),
-        tale_budget=tale_budget,
+        tale_budget=estimate.budget if is_tale else None,
+        budget_unit=estimate.unit if is_tale else None,
+        estimator_tokens=est_tok,
+        estimator_s=round(est_s, 2),
+        estimator_response=estimate.raw if is_tale else None,
+        total_tokens_incl_estimator=int(tokens) + est_tok,
+        elapsed_s_incl_estimator=round(elapsed + est_s, 2),
+        temperature=cfg.temperature,
+        seed=cfg.seed,
+        served_model=meta.get("served_model"),
+        source=_source_of(question),
     )
+
+
+def _source_of(question: dict[str, Any]) -> str:
+    from question_pool import source_stratum
+
+    return source_stratum(question)
 
 
 def run_evaluation(
     questions: list[dict[str, Any]],
     conditions: list[str],
-    host: str,
-    port: int,
+    cfg: GenConfig,
     dry_run: bool = False,
 ) -> list[TrialResult]:
     """Run all trials across questions and conditions."""
@@ -250,30 +513,177 @@ def run_evaluation(
                 log.info("  DRY-RUN %s: would send %d-char prompt", cond, len(q_text))
             continue
 
-        # Estimate TALE budget once per question (shared across TALE trials)
-        tale_budget = None
+        # Estimate TALE budget once per question; its cost is charged to the tale row.
+        estimate = None
         if "tale" in conditions:
-            tale_budget = estimate_tale_budget(q_text, host, port)
-            log.info("  TALE budget estimate: %d words", tale_budget)
+            estimate = estimate_tale_budget_full(q_text, cfg)
+            log.info("  TALE budget estimate: %d %s (%d tok, %.1fs)",
+                     estimate.budget, estimate.unit, estimate.tokens, estimate.elapsed_s)
 
         for cond in conditions:
-            result = run_trial(q, cond, host, port, tale_budget)
+            result = run_trial(q, cond, cfg, estimate)
             results.append(result)
-            status = "correct" if result.correct else "wrong"
+            status = ("unscoreable" if result.correct is None
+                      else "correct" if result.correct else "wrong")
             log.info(
-                "  %s: %s, %d tokens, %.1fs",
-                cond, status, result.total_tokens, result.elapsed_s,
+                "  %s: %s, %d tokens (%d incl. est), %.1fs",
+                cond, status, result.total_tokens,
+                result.total_tokens_incl_estimator, result.elapsed_s,
             )
 
     return results
 
 
-def save_results(results: list[TrialResult], output_path: Path) -> None:
-    """Save results as JSONL."""
+# ---------------------------------------------------------------------------
+# Serving identity
+# ---------------------------------------------------------------------------
+
+def stat_gguf(path: str, do_hash: bool = False) -> dict[str, Any]:
+    """Stat a local GGUF (size/mtime). SHA-256 only when explicitly asked."""
+    info: dict[str, Any] = {"path": path}
+    try:
+        st = os.stat(path)
+    except OSError as exc:
+        info["error"] = f"{type(exc).__name__}: {exc}"
+        return info
+    info["size_bytes"] = st.st_size
+    info["mtime"] = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(st.st_mtime))
+    if do_hash:
+        h = hashlib.sha256()
+        with open(path, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 24), b""):
+                h.update(chunk)
+        info["sha256"] = h.hexdigest()
+    return info
+
+
+def fetch_serving_identity(
+    base_url: str,
+    fetcher: Fetcher | None = None,
+    model_id: str | None = None,
+    gguf_path: str | None = None,
+    hash_gguf: bool = False,
+    timeout: float = 10.0,
+) -> dict[str, Any]:
+    """Record which model actually serves ``base_url``.
+
+    Queries ``/v1/models`` and llama-server ``/props`` (``model_path``);
+    failures are recorded, not raised. ``model_id``/``gguf_path`` override.
+    """
+    get = fetcher or _httpx_get
+    ident: dict[str, Any] = {"base_url": base_url, "errors": {}}
+
+    try:
+        models = get(f"{base_url}/v1/models", timeout)
+        ids = [m.get("id") for m in (models.get("data") or []) if isinstance(m, dict)]
+        ident["v1_models"] = ids
+    except Exception as exc:  # noqa: BLE001 - identity probing is best-effort
+        ident["errors"]["v1_models"] = f"{type(exc).__name__}: {exc}"
+        ids = []
+
+    props_path = None
+    try:
+        props = get(f"{base_url}/props", timeout)
+        props_path = props.get("model_path")
+        ident["props"] = {
+            k: props.get(k)
+            for k in ("model_path", "build_info", "total_slots", "chat_template_caps")
+            if k in props
+        }
+        dgs = props.get("default_generation_settings") or {}
+        if "n_ctx" in dgs:
+            ident["props"]["n_ctx"] = dgs["n_ctx"]
+    except Exception as exc:  # noqa: BLE001
+        ident["errors"]["props"] = f"{type(exc).__name__}: {exc}"
+
+    ident["model_id"] = model_id or (ids[0] if ids else None)
+    ident["model_id_source"] = "override" if model_id else ("v1_models" if ids else None)
+    path = gguf_path or props_path
+    ident["gguf_path"] = path
+    ident["gguf_path_source"] = "override" if gguf_path else ("props" if props_path else None)
+    if path:
+        ident["gguf"] = stat_gguf(path, do_hash=hash_gguf)
+    if not ident["errors"]:
+        del ident["errors"]
+    return ident
+
+
+# ---------------------------------------------------------------------------
+# Aggregation
+# ---------------------------------------------------------------------------
+
+def _mean(xs: list[float]) -> float:
+    return sum(xs) / len(xs) if xs else 0.0
+
+
+def summarize(results: list[TrialResult]) -> dict[str, Any]:
+    """Per suite x condition cost/accuracy, answer-only AND incl. estimator.
+
+    ``net_token_change_vs_baseline`` = mean(total incl. estimator) of the arm
+    minus mean(answer tokens) of baseline, as a fraction of the latter.
+    """
+    out: dict[str, Any] = {}
+    groups: dict[tuple[str, str], list[TrialResult]] = {}
+    for r in results:
+        groups.setdefault((r.suite, r.condition), []).append(r)
+        groups.setdefault(("__all__", r.condition), []).append(r)
+    for (suite, cond), rows in sorted(groups.items()):
+        scored = [r for r in rows if r.correct is not None]
+        by_source: dict[str, dict[str, Any]] = {}
+        for r in rows:
+            src = by_source.setdefault(r.source or "unknown", {"n": 0, "n_scored": 0, "correct": 0})
+            src["n"] += 1
+            if r.correct is not None:
+                src["n_scored"] += 1
+                src["correct"] += 1 if r.correct else 0
+        for src in by_source.values():
+            src["accuracy"] = src["correct"] / src["n_scored"] if src["n_scored"] else None
+        cell = {
+            "n": len(rows),
+            "n_scored": len(scored),
+            "n_unscoreable": len(rows) - len(scored),
+            "by_source": dict(sorted(by_source.items())),
+            "accuracy": _mean([1.0 if r.correct else 0.0 for r in scored]),
+            "mean_tokens_answer_only": _mean([r.total_tokens for r in rows]),
+            "mean_tokens_incl_estimator": _mean([r.total_tokens_incl_estimator for r in rows]),
+            "mean_elapsed_s_answer_only": _mean([r.elapsed_s for r in rows]),
+            "mean_elapsed_s_incl_estimator": _mean([r.elapsed_s_incl_estimator for r in rows]),
+            "mean_estimator_tokens": _mean([r.estimator_tokens for r in rows]),
+            "mean_estimator_s": _mean([r.estimator_s for r in rows]),
+        }
+        budgets = [r.tale_budget for r in rows if r.tale_budget is not None]
+        if budgets:
+            sb = sorted(budgets)
+            cell["budget"] = {"unit": rows[0].budget_unit, "min": sb[0], "max": sb[-1],
+                              "median": sb[len(sb) // 2], "mean": _mean(budgets)}
+        out.setdefault(suite, {})[cond] = cell
+    for suite, conds in out.items():
+        base = conds.get("baseline")
+        if not base or not base["mean_tokens_answer_only"]:
+            continue
+        b = base["mean_tokens_answer_only"]
+        for cond, cell in conds.items():
+            cell["net_token_change_vs_baseline"] = (cell["mean_tokens_incl_estimator"] - b) / b
+            cell["answer_token_change_vs_baseline"] = (cell["mean_tokens_answer_only"] - b) / b
+            cell["accuracy_delta_pp_vs_baseline"] = 100.0 * (cell["accuracy"] - base["accuracy"])
+    return out
+
+
+def save_results(
+    results: list[TrialResult],
+    output_path: Path,
+    run_meta: dict[str, Any] | None = None,
+) -> None:
+    """Save per-question JSONL plus ``.meta.json`` and ``.summary.json`` sidecars."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "w") as f:
         for r in results:
             f.write(json.dumps(asdict(r)) + "\n")
+    if run_meta is not None:
+        output_path.with_suffix(".meta.json").write_text(json.dumps(run_meta, indent=2) + "\n")
+    output_path.with_suffix(".summary.json").write_text(
+        json.dumps(summarize(results), indent=2) + "\n"
+    )
     log.info("Saved %d results to %s", len(results), output_path)
 
 
@@ -295,7 +705,11 @@ def print_summary(results: list[TrialResult]) -> None:
         print(f"    Accuracy:   {metrics['accuracy']:.1%}")
         print(f"    OAA (a=.5): {metrics['oaa']:.4f}")
         print(f"    PTI:        {metrics['pti']:.6f}")
-        print(f"    Avg tokens: {metrics['avg_tokens']:.0f}")
+        print(f"    Avg tokens: {metrics['avg_tokens']:.0f} (answer-only)")
+        tot = _mean([r["total_tokens_incl_estimator"] for r in cond_results])
+        print(f"    Avg tokens: {tot:.0f} (total incl. estimator)")
+        print(f"    Avg time:   {_mean([r['elapsed_s'] for r in cond_results]):.2f}s answer-only, "
+              f"{_mean([r['elapsed_s_incl_estimator'] for r in cond_results]):.2f}s incl. estimator")
         print(f"    Ref tokens: {metrics['reference_tokens']}")
 
     # Per-suite breakdown
@@ -317,22 +731,24 @@ def print_summary(results: list[TrialResult]) -> None:
                 print(
                     f"    {cond:10s}: acc={metrics['accuracy']:.0%} "
                     f"oaa={metrics['oaa']:.3f} "
-                    f"avg_tok={metrics['avg_tokens']:.0f}"
+                    f"avg_tok={metrics['avg_tokens']:.0f} "
+                    f"tot_tok={_mean([r['total_tokens_incl_estimator'] for r in subset]):.0f}"
                 )
 
     # TALE budget distribution
     tale_results = [r for r in results if r.condition == "tale" and r.tale_budget]
     if tale_results:
         budgets = [r.tale_budget for r in tale_results]
+        unit = tale_results[0].budget_unit or "words"
         print(f"\n{'─' * 70}")
-        print(f"TALE budget distribution: min={min(budgets)}, max={max(budgets)}, "
+        print(f"TALE budget distribution ({unit}): min={min(budgets)}, max={max(budgets)}, "
               f"median={sorted(budgets)[len(budgets)//2]}, "
               f"mean={sum(budgets)/len(budgets):.0f}")
 
     print()
 
 
-def main():
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="TALE dynamic budget estimation evaluation",
     )
@@ -350,31 +766,117 @@ def main():
         help="Conditions to run (default: all three)",
     )
     parser.add_argument(
+        "--endpoint", "--base-url", dest="endpoint", default=None,
+        help="OpenAI-compatible base URL, e.g. http://127.0.0.1:8083 "
+             "(overrides --model-host/--model-port; a trailing /v1 is accepted)",
+    )
+    parser.add_argument(
         "--model-host", default="localhost",
-        help="Model server host (default: localhost)",
+        help="Model server host (default: localhost; ignored with --endpoint)",
     )
     parser.add_argument(
         "--model-port", type=int, default=8080,
-        help="Model server port (default: 8080)",
+        help="Model server port (default: 8080; ignored with --endpoint)",
+    )
+    parser.add_argument(
+        "--model-id", default=None,
+        help="Model id to record (and send as request 'model'); default: from /v1/models",
+    )
+    parser.add_argument(
+        "--gguf-path", default=None,
+        help="Local GGUF path to record (stat only); default: /props model_path",
+    )
+    parser.add_argument(
+        "--hash-gguf", action="store_true",
+        help="Also SHA-256 the GGUF (slow on multi-GB files)",
+    )
+    parser.add_argument(
+        "--budget-unit", choices=BUDGET_UNITS, default="tokens",
+        help="TALE budget unit: tokens (published TALE-EP, default) or legacy words",
+    )
+    parser.add_argument(
+        "--temperature", type=float, default=0.0,
+        help="Sampling temperature for every call (default: 0.0)",
+    )
+    parser.add_argument(
+        "--seed", type=int, default=42,
+        help="Request seed (default: 42; pass -1 to omit)",
+    )
+    parser.add_argument(
+        "--max-tokens", type=int, default=8192,
+        help="max_tokens for answer calls (default: 8192; estimator uses %d)" % ESTIMATOR_MAX_TOKENS,
+    )
+    parser.add_argument(
+        "--chat-template-kwargs", default=None,
+        help='JSON object sent as chat_template_kwargs, e.g. \'{"enable_thinking": false}\'',
     )
     parser.add_argument(
         "--output", type=Path, default=None,
-        help="Output JSONL path (default: data/tale_budget/YYYYMMDD_HHMMSS.jsonl)",
+        help="Output JSONL path (default: data/tale_budget/YYYYMMDD_HHMMSS.jsonl); "
+             "writes .meta.json and .summary.json sidecars",
+    )
+    parser.add_argument(
+        "--pool", type=Path, default=None,
+        help=f"Question pool JSONL (default: {POOL_PATH}); e.g. a pool made with "
+             "`question_pool.py --refresh-suites livecodebench mmlu_pro --output ...`",
+    )
+    parser.add_argument(
+        "--sample-seed", type=int, default=42,
+        help="Seed for the source-stratified question sample (default: 42)",
     )
     parser.add_argument(
         "--dry-run", action="store_true",
         help="Load questions and show prompts without sending to model",
     )
-    args = parser.parse_args()
+    return parser
 
-    questions = load_questions(args.suites, args.n_questions)
+
+def build_config(args: argparse.Namespace, poster: Poster | None = None) -> GenConfig:
+    ctk = json.loads(args.chat_template_kwargs) if args.chat_template_kwargs else None
+    if ctk is not None and not isinstance(ctk, dict):
+        raise SystemExit("--chat-template-kwargs must be a JSON object")
+    return GenConfig(
+        base_url=resolve_base_url(args.endpoint, args.model_host, args.model_port),
+        temperature=args.temperature,
+        seed=None if args.seed is not None and args.seed < 0 else args.seed,
+        max_tokens=args.max_tokens,
+        model=args.model_id,
+        chat_template_kwargs=ctk,
+        budget_unit=args.budget_unit,
+        poster=poster,
+    )
+
+
+def main(argv: list[str] | None = None, poster: Poster | None = None,
+         fetcher: Fetcher | None = None) -> None:
+    args = build_parser().parse_args(argv)
+    cfg = build_config(args, poster)
+
+    composition: dict[str, Any] = {}
+    questions = load_questions(
+        args.suites, args.n_questions, seed=args.sample_seed,
+        pool_path=args.pool, composition=composition,
+    )
     if not questions:
         log.error("No questions loaded. Check suite names and question_pool.jsonl.")
         sys.exit(1)
+    for suite, comp in composition.items():
+        log.info("  %s sample by source: %s", suite, comp.get("sample"))
+
+    defects = preflight_oracles(questions)
+    if defects:
+        for suite, cell in sorted(defects.items()):
+            log.error("REFUSING suite %s: %d sampled row(s) have no valid oracle, e.g. %s",
+                      suite, cell["rows"], cell["example"])
+        log.error("No inference was sent. Rebuild the rows (question_pool.py "
+                  "--refresh-suites %s --output <new pool>) and pass --pool.",
+                  " ".join(sorted(defects)))
+        sys.exit(2)
 
     if args.dry_run:
-        log.info("DRY RUN — %d questions, conditions: %s", len(questions), args.conditions)
-        run_evaluation(questions, args.conditions, args.model_host, args.model_port, dry_run=True)
+        log.info("DRY RUN — %d questions, conditions: %s, endpoint: %s",
+                 len(questions), args.conditions, cfg.base_url)
+        run_evaluation(questions, args.conditions, cfg, dry_run=True)
 
         # Show sample prompts for each condition
         sample = questions[0]
@@ -384,16 +886,44 @@ def main():
         print(f"BASELINE:\n{q_text[:200]}...\n")
         limit = STATIC_LIMITS.get(suite, STATIC_LIMITS["general"])
         print(f"STATIC:\n{limit}\n\n{q_text[:200]}...\n")
-        print(f"TALE (assuming budget=45):\n{TALE_CONSTRAINT_TEMPLATE.format(beta=45)}{q_text[:200]}...\n")
+        demo = 45 if cfg.budget_unit == "words" else 200
+        print(f"TALE ({cfg.budget_unit}, assuming budget={demo}):\n"
+              f"{build_tale_prompt(q_text[:200], demo, cfg.budget_unit)}\n")
         return
 
-    results = run_evaluation(
-        questions, args.conditions, args.model_host, args.model_port,
+    identity = fetch_serving_identity(
+        cfg.base_url, fetcher, model_id=args.model_id,
+        gguf_path=args.gguf_path, hash_gguf=args.hash_gguf,
     )
+    log.info("Serving identity: model_id=%s gguf=%s",
+             identity.get("model_id"), identity.get("gguf_path"))
+    run_meta: dict[str, Any] = {
+        "schema": "tale_budget_run.v2",
+        "started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "argv": sys.argv if argv is None else list(argv),
+        "suites": args.suites,
+        "n_questions": args.n_questions,
+        "pool": str(args.pool or POOL_PATH),
+        "sample_seed": args.sample_seed,
+        "sample_composition": composition,
+        "conditions": args.conditions,
+        "budget_unit": cfg.budget_unit,
+        "temperature": cfg.temperature,
+        "seed": cfg.seed,
+        "max_tokens": cfg.max_tokens,
+        "estimator_max_tokens": ESTIMATOR_MAX_TOKENS,
+        "chat_template_kwargs": cfg.chat_template_kwargs,
+        "serving": identity,
+    }
+
+    results = run_evaluation(questions, args.conditions, cfg)
 
     if not results:
         log.warning("No results generated.")
         return
+
+    run_meta["finished_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    run_meta["served_models_seen"] = sorted({r.served_model for r in results if r.served_model})
 
     # Save
     if args.output:
@@ -401,7 +931,7 @@ def main():
     else:
         ts = time.strftime("%Y%m%d_%H%M%S")
         output_path = RESULTS_DIR / f"{ts}.jsonl"
-    save_results(results, output_path)
+    save_results(results, output_path, run_meta)
 
     # Print summary
     print_summary(results)

@@ -64,6 +64,49 @@ class Memory(unittest.TestCase):
             self.assertFalse(second, "a resumed controller must not inflate its history")
             self.assertEqual(store.count(), 1)
 
+    def test_lineage_columns_are_queryable_without_changing_attempt_identity(self):
+        with tempfile.TemporaryDirectory() as tmp, self.store(tmp) as store:
+            parent = "a" * 40
+            attempt = _attempt(spawn_parent=parent, branch_id="detached:lane0",
+                               width=4, depth=7)
+            self.assertTrue(store.record(attempt, epoch=EPOCH_A,
+                                         recorded_at="2026-09-17T00:00:00Z",
+                                         campaign_id="c1"))
+            row = store._connection.execute(
+                "SELECT spawn_parent,branch_id,width,depth,payload FROM experiments"
+            ).fetchone()
+            self.assertEqual(tuple(row[:4]), (parent, "detached:lane0", 4, 7))
+            self.assertEqual(json.loads(row["payload"])["spawn_parent"], parent)
+            self.assertFalse(store.record(attempt, epoch=EPOCH_A,
+                                          recorded_at="2026-09-17T00:00:01Z",
+                                          campaign_id="c1"))
+
+    def test_legacy_store_migrates_with_unknown_historic_lineage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "experiments.db"
+            legacy_ddl = ex._DDL.replace(
+                "    spawn_parent      TEXT,\n    branch_id         TEXT,\n"
+                "    width             INTEGER,\n    depth             INTEGER,\n", "")
+            connection = ex.sqlite3.connect(path)
+            connection.executescript(legacy_ddl)
+            connection.execute(
+                "INSERT INTO experiments "
+                "(attempt_id,recorded_at,campaign_id,epoch_sha256,status,payload) "
+                "VALUES (?,?,?,?,?,?)",
+                ("legacy", "2026-09-16T00:00:00Z", "c0", EPOCH_A,
+                 "measured_null", "{}"))
+            connection.commit()
+            connection.close()
+            with self.store(tmp) as store:
+                row = store._connection.execute(
+                    "SELECT spawn_parent,branch_id,width,depth FROM experiments "
+                    "WHERE attempt_id='legacy'"
+                ).fetchone()
+                self.assertEqual(tuple(row), (None, None, None, None))
+                self.assertTrue(store.record(_attempt(), epoch=EPOCH_A,
+                                             recorded_at="2026-09-17T00:00:00Z",
+                                             campaign_id="c1"))
+
     def test_memory_outlives_the_store_object(self):
         """The whole point: a new deployment is not a new set of facts."""
         with tempfile.TemporaryDirectory() as tmp:
@@ -73,6 +116,83 @@ class Memory(unittest.TestCase):
             with self.store(tmp) as reopened:
                 self.assertEqual(reopened.count(), 1)
                 self.assertEqual(reopened.mechanisms_tried(), ["akm-q5-bit-deposit"])
+
+    def test_a_reader_cannot_block_outcome_recording(self):
+        """Dashboard/operator reads must not poison the loop's journal writer."""
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.store(tmp) as initial:
+                initial.record(_attempt(), epoch=EPOCH_A,
+                               recorded_at="2026-08-28T00:00:00Z", campaign_id="c1")
+            reader = ex.sqlite3.connect(Path(tmp, "experiments.db"))
+            try:
+                reader.execute("BEGIN")
+                reader.execute("SELECT payload FROM experiments").fetchone()
+                with self.store(tmp) as writer:
+                    self.assertTrue(writer.record(
+                        _attempt(mechanism_id="akm-second", result_sha256="2" * 64),
+                        epoch=EPOCH_A,
+                        recorded_at="2026-08-28T00:00:01Z", campaign_id="c1"))
+            finally:
+                reader.close()
+
+    def test_scoped_recall_limits_rows_before_touching_large_payloads(self):
+        """Discarded giant rows cannot spend the bounded reader's JSON budget."""
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.store(tmp) as store:
+                for index in range(4):
+                    store.record(
+                        _attempt(status="measured_null",
+                                 result_sha256=f"{index + 1:064x}",
+                                 padding="x" * (2 * 1024 * 1024 + 1)),
+                        epoch=EPOCH_A,
+                        recorded_at=f"2026-08-28T00:00:0{index}Z",
+                        campaign_id="large-payloads")
+            with ex.ExperimentStore(Path(tmp), read_only=True) as reader:
+                touched = 0
+
+                def bounded_length(value):
+                    nonlocal touched
+                    touched += 1
+                    if touched > 1:
+                        raise ex.sqlite3.OperationalError(
+                            "payload projection ran before recency LIMIT")
+                    return len(value)
+
+                reader._connection.create_function("octet_length", 1, bounded_length)
+                rows = reader.recall(
+                    epoch=EPOCH_A, limit=1, include_source_scope=True,
+                    statuses=("measured_null",))
+
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["result_sha256"], f"{4:064x}")
+            self.assertEqual(touched, 1)
+            self.assertIsNone(rows[0]["research_scope"])
+
+    def test_append_order_hint_does_not_sort_the_journal(self):
+        """A large store's 200 ms reader must not sort every historical row."""
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.store(tmp) as store:
+                for index, timestamp in enumerate(("02", "01", "00"), start=1):
+                    store.record(
+                        _attempt(status="measured_null",
+                                 mechanism_id=f"mechanism-{index}",
+                                 result_sha256=f"{index:064x}"),
+                        epoch=EPOCH_A,
+                        recorded_at=f"2026-08-28T00:00:{timestamp}Z",
+                        campaign_id="append-order")
+            with ex.ExperimentStore(Path(tmp), read_only=True) as reader:
+                sql = []
+                reader._connection.set_trace_callback(sql.append)
+                rows = reader.recall(epoch=EPOCH_A, limit=2,
+                                     include_source_scope=True, append_order=True,
+                                     statuses=("measured_null",))
+                self.assertEqual([r["mechanism_id"] for r in rows],
+                                 ["mechanism-3", "mechanism-2"])
+                self.assertIn("ORDER BY rowid DESC LIMIT", sql[-1])
+                self.assertNotIn("ORDER BY recorded_at", sql[-1])
+                self.assertIn("octet_length(payload)", sql[-1])
+                with self.assertRaisesRegex(ValueError, "unranked scoped hints"):
+                    reader.recall(epoch=EPOCH_A, append_order=True)
 
     def test_a_refused_attempt_with_no_result_is_still_remembered(self):
         """A refusal the planner cannot see is a refusal it will earn again.

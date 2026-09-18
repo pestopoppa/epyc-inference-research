@@ -47,6 +47,8 @@ class Question:
     needle_position: Optional[str] = None
     # Vision fields (optional)
     image_path: Optional[str] = None
+    # Dataset/arm identity an adapter wants recorded in the result row (M-12 B1).
+    provenance: Optional[dict[str, Any]] = None
 
 
 @dataclass
@@ -189,17 +191,25 @@ def _load_adapter_suite(name: str) -> Optional[Suite]:
                 needle=item.get("needle"),
                 needle_position=item.get("needle_position"),
                 image_path=item.get("image_path"),
+                provenance=dict(item["provenance"]) if item.get("provenance") else None,
             )
         )
 
-    questions.sort(key=lambda q: (-q.tier, q.id))
+    # Prefix-sharing suites (BEAM: every question of a conversation shares its
+    # transcript) keep the adapter's order, so consecutive requests hit the server's
+    # prompt cache instead of alternating between prefixes (M-12 B5).
+    if not getattr(adapter, "preserve_order", False):
+        questions.sort(key=lambda q: (-q.tier, q.id))
+    # M-12 B3: adapters may pin their own generation parameters. Anything they do not pin
+    # falls through to get_inference_params' defaults, which the harness records per row.
+    inference_params = dict(getattr(adapter, "inference_params", None) or {})
     return Suite(
         name=name,
         version=1,
         domain=name,
         description=f"{name} dataset adapter suite",
         questions=questions,
-        inference_params={},
+        inference_params=inference_params,
     )
 
 
@@ -267,11 +277,17 @@ def get_inference_params(suite: Suite, timeout_multiplier: float = 1.0) -> dict[
         - temperature: float (default 0.6)
         - max_tokens: int (default 512)
         - timeout: int (default 180, scaled by multiplier)
+        - enable_thinking: Optional[bool] (default None = the registry decides). A bool
+          forces the chat-completions path and sends
+          ``chat_template_kwargs={"enable_thinking": <bool>}`` (Qwen3.6+ honour it only there).
+        - cache_prompt: Optional[bool] (default None = the path's own default)
     """
     params = suite.inference_params.copy()
     params.setdefault("temperature", 0.6)
     params.setdefault("max_tokens", 512)
     params.setdefault("timeout", 180)
+    params.setdefault("enable_thinking", None)
+    params.setdefault("cache_prompt", None)
 
     # Apply timeout multiplier for slow models
     if timeout_multiplier > 1.0:
@@ -299,8 +315,8 @@ ROLE_SUITE_MAP = {
     "architect": ["thinking", "coder", "agentic", "general", "instruction_precision", "math", "long_context", "longbench", "needle_parameterized", "omniscience", "aa_lcr", "scoring_verifiers"],
 
     # Context specialists — full long-context battery
-    "ingest": ["long_context", "general", "agentic", "longbench", "zeroscrolls", "leval", "ruler", "needle_parameterized", "aa_lcr", "tulving_episodic"],
-    "long_context": ["long_context", "general", "agentic", "longbench", "zeroscrolls", "leval", "ruler", "needle_parameterized", "aa_lcr", "tulving_episodic"],
+    "ingest": ["long_context", "general", "agentic", "longbench", "zeroscrolls", "leval", "ruler", "needle_parameterized", "aa_lcr", "tulving_episodic", "beam"],
+    "long_context": ["long_context", "general", "agentic", "longbench", "zeroscrolls", "leval", "ruler", "needle_parameterized", "aa_lcr", "tulving_episodic", "beam"],
 
     # Workers - general purpose
     "worker": ["general", "thinking", "agentic"],

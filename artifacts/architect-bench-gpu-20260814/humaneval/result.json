@@ -1,0 +1,741 @@
+{
+  "meta": {
+    "kernel": "production-consolidated-v9",
+    "binary": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+    "models": "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+    "arm": "qwen3.8-27b",
+    "timestamp": "2026-08-15T09:07:55.907354+00:00",
+    "elapsed_s": 697.2,
+    "n_per_suite": 164,
+    "seed": 42,
+    "stratify": false,
+    "endpoint": "chat",
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 20,
+    "enable_thinking": false,
+    "repeats": 1,
+    "max_tokens": 2048,
+    "questions_pinned": "artifacts/architect-code-eval-20260724/questions_humaneval.json",
+    "capture_schema_version": "v7_quality_gate_capture.v4",
+    "runner_source_sha256": "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e"
+  },
+  "suites": [
+    {
+      "suite": "humaneval",
+      "accuracy": 0.9634146341463414,
+      "n": 164,
+      "n_questions": 164,
+      "repeats": 1,
+      "correct": 158,
+      "errors": 0,
+      "truncated": 1,
+      "per_tier": {
+        "2": {
+          "accuracy": 0.9634146341463414,
+          "n": 164,
+          "correct": 158
+        }
+      },
+      "per_item": {
+        "HumanEval_0": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_1": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_2": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_3": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_4": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_5": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_6": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_7": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_8": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_9": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_10": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_11": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_12": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_13": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_14": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_15": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_16": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_17": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_18": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_19": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_20": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_21": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_22": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_23": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_24": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_25": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_26": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_27": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_28": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_29": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_30": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_31": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_32": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_33": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_34": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_35": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_36": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_37": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_38": {
+          "correct": 0,
+          "n": 1
+        },
+        "HumanEval_39": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_40": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_41": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_42": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_43": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_44": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_45": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_46": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_47": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_48": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_49": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_50": {
+          "correct": 0,
+          "n": 1
+        },
+        "HumanEval_51": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_52": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_53": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_54": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_55": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_56": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_57": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_58": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_59": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_60": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_61": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_62": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_63": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_64": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_65": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_66": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_67": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_68": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_69": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_70": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_71": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_72": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_73": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_74": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_75": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_76": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_77": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_78": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_79": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_80": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_81": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_82": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_83": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_84": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_85": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_86": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_87": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_88": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_89": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_90": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_91": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_92": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_93": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_94": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_95": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_96": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_97": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_98": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_99": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_100": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_101": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_102": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_103": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_104": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_105": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_106": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_107": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_108": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_109": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_110": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_111": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_112": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_113": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_114": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_115": {
+          "correct": 0,
+          "n": 1
+        },
+        "HumanEval_116": {
+          "correct": 0,
+          "n": 1
+        },
+        "HumanEval_117": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_118": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_119": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_120": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_121": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_122": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_123": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_124": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_125": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_126": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_127": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_128": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_129": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_130": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_131": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_132": {
+          "correct": 0,
+          "n": 1
+        },
+        "HumanEval_133": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_134": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_135": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_136": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_137": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_138": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_139": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_140": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_141": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_142": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_143": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_144": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_145": {
+          "correct": 0,
+          "n": 1
+        },
+        "HumanEval_146": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_147": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_148": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_149": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_150": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_151": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_152": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_153": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_154": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_155": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_156": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_157": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_158": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_159": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_160": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_161": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_162": {
+          "correct": 1,
+          "n": 1
+        },
+        "HumanEval_163": {
+          "correct": 1,
+          "n": 1
+        }
+      },
+      "capture": {
+        "schema_version": "v7_quality_gate_capture.v4",
+        "new_rows": 164,
+        "request_error_rows": 0,
+        "length_cap_rows": 1,
+        "response_chars": 118450,
+        "response_utf8_bytes": 118522,
+        "reasoning_chars": 0,
+        "reasoning_utf8_bytes": 0,
+        "swebench_search_replace": {
+          "applicable": false,
+          "new_rows": 0,
+          "resumed_rows": 0,
+          "resumed_rows_without_diagnostics": 0,
+          "resumed_rows_without_provenance": 0,
+          "resumed_rows_source_sha_mismatch": 0,
+          "rows_with_markers": 0,
+          "parseable_blocks": 0,
+          "malformed_rows": 0,
+          "zero_strict_block_rows": 0,
+          "partial_strict_block_rows": 0,
+          "state_counts": {
+            "strict_ready": 0,
+            "prompt_contract_candidate": 0,
+            "model_truncation_no_patch": 0,
+            "model_truncation_partial_patch": 0,
+            "request_error": 0
+          },
+          "summary_complete": true,
+          "converter_contract_ready": false,
+          "score_status": "not_applicable"
+        }
+      },
+      "throughput": {
+        "concurrency": 1,
+        "wall_s": 697.2,
+        "completion_tokens": 37456,
+        "prompt_tokens": 29192,
+        "aggregate_decode_tok_s": 53.7,
+        "aggregate_total_tok_s": 95.6
+      }
+    }
+  ]
+}

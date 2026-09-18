@@ -1,0 +1,25 @@
+{
+  "mutants": {
+    "request": [
+      "\"stream\": False,",
+      "\"stream\": False, \"n_probs\": 0,"
+    ],
+    "scoring": [
+      "\"correct\": bool(is_correct),",
+      "\"correct\": not bool(is_correct),"
+    ]
+  },
+  "results": {
+    "request": {
+      "detected": true,
+      "outputs_identical_after_volatile_strip": false,
+      "requests_byte_identical": false
+    },
+    "scoring": {
+      "detected": true,
+      "outputs_identical_after_volatile_strip": false,
+      "requests_byte_identical": true
+    }
+  },
+  "schema": "v7_runner_repin_negative_control.v1"
+}

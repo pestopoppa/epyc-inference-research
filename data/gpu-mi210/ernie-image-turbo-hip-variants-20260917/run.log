@@ -1,0 +1,71 @@
+2026-09-17T02:30:35Z plan (55 requests incl. warm-ups): {"off": [["g768", 768, 768, 1], ["c896", 896, 896, 3], ["m960", 960, 960, 3], ["t1024", 1024, 1024, 3], ["t832x1248", 832, 1248, 3]], "f32": [["t1024", 1024, 1024, 3], ["t832x1248", 832, 1248, 3]], "wide": [["g768", 768, 768, 1], ["c896", 896, 896, 3], ["g960", 960, 960, 1], ["t1024", 1024, 1024, 3], ["t832x1248", 832, 1248, 3]], "outscale": [["g768", 768, 768, 1], ["c896", 896, 896, 3], ["g960", 960, 960, 1], ["t1024", 1024, 1024, 3], ["t832x1248", 832, 1248, 3]], "wide+outscale": [["g768", 768, 768, 1], ["g896", 896, 896, 1], ["g960", 960, 960, 1], ["t1024", 1024, 1024, 3], ["t832x1248", 832, 1248, 3]]}
+2026-09-17T02:30:35Z preflight: sha d33cbe6f064a linkage PASS port_free=True vram_free=64.0GiB
+2026-09-17T02:30:35Z GPU claim held: {'schema': 'epyc.autokernel.device_claim_receipt.v1', 'claim_id': 'akd-8e5d8374cdab48be', 'device_id': 'mi210_0', 'lock_path': '/mnt/raid0/llm/tmp/gpu_device.mi210_0.lock', 'state': 'held', 'holder_pid': 2446280, 'holder_start_ticks': 299758276, 'holder_boot_id': 'ffa56b5e-1da4-42e7-ac5d-d233ff830b65', 'host': 'Beelzebub', 'holder_label': None, 'purpose': 'ERNIE-Image-Turbo ROCm precision-variant A/B (sd-server :18190)', 'campaign_id': 'sub-ernie-variants-20260916', 'acquired_at': '2026-09-17T02:30:35.833243+00:00', 'expires_at': None, 'released_at': None, 'reclaimed_from': None}
+2026-09-17T02:30:35Z [off] launched pid 2446471 env {'SD_ERNIE_ROCM_F32': '0'}
+2026-09-17T02:30:46Z [off] warm512_r0: http 200 6.325s sd 41.145082652761324 blank=False gen 6.29 pid-in-kfd 6/6
+2026-09-17T02:31:00Z [off] g768_r0: http 200 13.852s sd 61.064302270241264 blank=False gen 13.77 pid-in-kfd 14/14
+2026-09-17T02:31:20Z [off] c896_r0: http 200 19.524s sd 45.527497771175824 blank=False gen 19.42 pid-in-kfd 20/20
+2026-09-17T02:31:40Z [off] c896_r1: http 200 19.539s sd 45.527497771175824 blank=False gen 19.44 pid-in-kfd 20/20
+2026-09-17T02:32:00Z [off] c896_r2: http 200 19.598s sd 45.527497771175824 blank=False gen 19.5 pid-in-kfd 20/20
+2026-09-17T02:32:23Z [off] m960_r0: http 200 22.626s sd 0.0 blank=True gen 22.59 pid-in-kfd 22/22
+2026-09-17T02:32:46Z [off] m960_r1: http 200 22.697s sd 0.0 blank=True gen 22.67 pid-in-kfd 23/23
+2026-09-17T02:33:09Z [off] m960_r2: http 200 22.703s sd 0.0 blank=True gen 22.67 pid-in-kfd 22/22
+2026-09-17T02:33:35Z [off] t1024_r0: http 200 25.684s sd 0.0 blank=True gen 25.65 pid-in-kfd 25/25
+2026-09-17T02:34:01Z [off] t1024_r1: http 200 25.743s sd 0.0 blank=True gen 25.71 pid-in-kfd 25/25
+2026-09-17T02:34:27Z [off] t1024_r2: http 200 25.798s sd 0.0 blank=True gen 25.69 pid-in-kfd 25/25
+2026-09-17T02:34:53Z [off] t832x1248_r0: http 200 25.777s sd 0.0 blank=True gen 25.74 pid-in-kfd 25/25
+2026-09-17T02:35:19Z [off] t832x1248_r1: http 200 25.8s sd 0.0 blank=True gen 25.76 pid-in-kfd 25/25
+2026-09-17T02:35:45Z [off] t832x1248_r2: http 200 25.785s sd 0.0 blank=True gen 25.75 pid-in-kfd 25/25
+2026-09-17T02:35:45Z [off] teardown=terminated resident=True knob_matches=True peak_vram=20583763968
+2026-09-17T02:35:45Z [f32] launched pid 2465058 env {'SD_ERNIE_ROCM_F32': '1'}
+2026-09-17T02:35:56Z [f32] warm512_r0: http 200 7.468s sd 41.074891226898295 blank=False gen 7.43 pid-in-kfd 8/8
+2026-09-17T02:36:25Z [f32] t1024_r0: http 200 28.905s sd 0.0 blank=True gen 28.87 pid-in-kfd 28/28
+2026-09-17T02:36:54Z [f32] t1024_r1: http 200 28.907s sd 0.0 blank=True gen 28.87 pid-in-kfd 29/29
+2026-09-17T02:37:24Z [f32] t1024_r2: http 200 28.891s sd 0.0 blank=True gen 28.85 pid-in-kfd 28/28
+2026-09-17T02:37:53Z [f32] t832x1248_r0: http 200 29.061s sd 0.0 blank=True gen 29.02 pid-in-kfd 28/28
+2026-09-17T02:38:22Z [f32] t832x1248_r1: http 200 29.106s sd 0.0 blank=True gen 29.07 pid-in-kfd 29/29
+2026-09-17T02:38:52Z [f32] t832x1248_r2: http 200 29.039s sd 0.0 blank=True gen 29.0 pid-in-kfd 29/29
+2026-09-17T02:38:52Z [f32] teardown=terminated resident=True knob_matches=True peak_vram=21202042880
+2026-09-17T02:38:52Z [wide] launched pid 2472140 env {'SD_ERNIE_ROCM_F32': 'wide'}
+2026-09-17T02:39:05Z [wide] warm512_r0: http 200 9.286s sd 41.03500361674014 blank=False gen 9.25 pid-in-kfd 9/9
+2026-09-17T02:39:25Z [wide] g768_r0: http 200 20.322s sd 61.046614888515656 blank=False gen 20.25 pid-in-kfd 20/20
+2026-09-17T02:39:53Z [wide] c896_r0: http 200 27.834s sd 45.54538454344444 blank=False gen 27.66 pid-in-kfd 27/27
+2026-09-17T02:40:21Z [wide] c896_r1: http 200 27.749s sd 45.54538454344444 blank=False gen 27.65 pid-in-kfd 27/27
+2026-09-17T02:40:50Z [wide] c896_r2: http 200 27.818s sd 45.54538454344444 blank=False gen 27.71 pid-in-kfd 28/28
+2026-09-17T02:41:23Z [wide] g960_r0: http 200 32.628s sd 0.0 blank=True gen 32.6 pid-in-kfd 33/33
+2026-09-17T02:42:00Z [wide] t1024_r0: http 200 36.967s sd 0.0 blank=True gen 36.93 pid-in-kfd 37/37
+2026-09-17T02:42:37Z [wide] t1024_r1: http 200 37.005s sd 0.0 blank=True gen 36.97 pid-in-kfd 37/37
+2026-09-17T02:43:15Z [wide] t1024_r2: http 200 37.07s sd 0.0 blank=True gen 37.03 pid-in-kfd 37/37
+2026-09-17T02:43:52Z [wide] t832x1248_r0: http 200 37.095s sd 0.0 blank=True gen 37.06 pid-in-kfd 37/37
+2026-09-17T02:44:29Z [wide] t832x1248_r1: http 200 37.164s sd 0.0 blank=True gen 37.13 pid-in-kfd 37/37
+2026-09-17T02:45:07Z [wide] t832x1248_r2: http 200 37.19s sd 0.0 blank=True gen 37.15 pid-in-kfd 37/37
+2026-09-17T02:45:07Z [wide] teardown=terminated resident=True knob_matches=True peak_vram=20369743872
+2026-09-17T02:45:07Z [outscale] launched pid 2484867 env {'SD_ERNIE_ROCM_F32': '0', 'SD_ERNIE_ROCM_OUTSCALE': '1'}
+2026-09-17T02:45:17Z [outscale] warm512_r0: http 200 6.418s sd 41.05737449520923 blank=False gen 6.39 pid-in-kfd 6/6
+2026-09-17T02:45:31Z [outscale] g768_r0: http 200 14.039s sd 61.12610718924555 blank=False gen 13.96 pid-in-kfd 14/14
+2026-09-17T02:45:51Z [outscale] c896_r0: http 200 19.809s sd 45.59190925995375 blank=False gen 19.7 pid-in-kfd 19/19
+2026-09-17T02:46:12Z [outscale] c896_r1: http 200 19.806s sd 45.59190925995375 blank=False gen 19.71 pid-in-kfd 19/19
+2026-09-17T02:46:32Z [outscale] c896_r2: http 200 19.789s sd 45.59190925995375 blank=False gen 19.69 pid-in-kfd 19/19
+2026-09-17T02:46:55Z [outscale] g960_r0: http 200 22.726s sd 0.0 blank=True gen 22.69 pid-in-kfd 23/23
+2026-09-17T02:47:21Z [outscale] t1024_r0: http 200 25.886s sd 0.0 blank=True gen 25.85 pid-in-kfd 26/26
+2026-09-17T02:47:47Z [outscale] t1024_r1: http 200 25.821s sd 0.0 blank=True gen 25.78 pid-in-kfd 26/26
+2026-09-17T02:48:13Z [outscale] t1024_r2: http 200 25.832s sd 0.0 blank=True gen 25.79 pid-in-kfd 26/26
+2026-09-17T02:48:39Z [outscale] t832x1248_r0: http 200 25.996s sd 0.0 blank=True gen 25.96 pid-in-kfd 26/26
+2026-09-17T02:49:06Z [outscale] t832x1248_r1: http 200 25.922s sd 0.0 blank=True gen 25.89 pid-in-kfd 25/25
+2026-09-17T02:49:32Z [outscale] t832x1248_r2: http 200 26.035s sd 0.0 blank=True gen 26.0 pid-in-kfd 25/25
+2026-09-17T02:49:32Z [outscale] teardown=terminated resident=True knob_matches=True peak_vram=20583661568
+2026-09-17T02:49:32Z [wide+outscale] launched pid 2492933 env {'SD_ERNIE_ROCM_F32': 'wide', 'SD_ERNIE_ROCM_OUTSCALE': '1'}
+2026-09-17T02:49:45Z [wide+outscale] warm512_r0: http 200 9.427s sd 41.03500361674014 blank=False gen 9.39 pid-in-kfd 10/10
+2026-09-17T02:50:06Z [wide+outscale] g768_r0: http 200 20.451s sd 61.046614888515656 blank=False gen 20.38 pid-in-kfd 20/20
+2026-09-17T02:50:34Z [wide+outscale] g896_r0: http 200 27.991s sd 45.54538454344444 blank=False gen 27.89 pid-in-kfd 27/27
+2026-09-17T02:51:07Z [wide+outscale] g960_r0: http 200 32.94s sd 0.0 blank=True gen 32.91 pid-in-kfd 33/33
+2026-09-17T02:51:45Z [wide+outscale] t1024_r0: http 200 37.303s sd 0.0 blank=True gen 37.27 pid-in-kfd 38/38
+2026-09-17T02:52:23Z [wide+outscale] t1024_r1: http 200 37.32s sd 0.0 blank=True gen 37.28 pid-in-kfd 37/37
+2026-09-17T02:53:00Z [wide+outscale] t1024_r2: http 200 37.248s sd 0.0 blank=True gen 37.21 pid-in-kfd 36/36
+2026-09-17T02:53:38Z [wide+outscale] t832x1248_r0: http 200 37.212s sd 0.0 blank=True gen 37.17 pid-in-kfd 37/37
+2026-09-17T02:54:15Z [wide+outscale] t832x1248_r1: http 200 37.164s sd 0.0 blank=True gen 37.13 pid-in-kfd 37/37
+2026-09-17T02:54:53Z [wide+outscale] t832x1248_r2: http 200 37.148s sd 0.0 blank=True gen 37.11 pid-in-kfd 37/37
+2026-09-17T02:54:53Z [wide+outscale] teardown=terminated resident=True knob_matches=True peak_vram=20369641472
+2026-09-17T02:54:53Z GPU claim released: akd-8e5d8374cdab48be
+2026-09-17T02:54:53Z verdict: {"off": {"target_nonblank": "0/6", "guard_nonblank": "4/7", "server_valid": true, "verdict": "BASELINE", "off_960_nonblank": [false, false, false], "defect_reproduced_1024": true}, "f32": {"target_nonblank": "0/6", "guard_nonblank": "0/0", "server_valid": true, "verdict": "DOES-NOT-FIX"}, "wide": {"target_nonblank": "0/6", "guard_nonblank": "4/5", "server_valid": true, "verdict": "DOES-NOT-FIX", "cost_896_generate_s": {"off": 19.44, "wide": 27.66, "ratio": 1.4228}}, "outscale": {"target_nonblank": "0/6", "guard_nonblank": "4/5", "server_valid": true, "verdict": "DOES-NOT-FIX", "cost_896_generate_s": {"off": 19.44, "outscale": 19.7, "ratio": 1.0134}}, "wide+outscale": {"target_nonblank": "0/6", "guard_nonblank": "2/3", "server_valid": true, "verdict": "DOES-NOT-FIX"}}
+2026-09-17T02:54:53Z evidence: /mnt/raid0/llm/tmp/sub-gpu-runner-20260916/ernie-variants

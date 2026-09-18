@@ -1,0 +1,31 @@
+INFO: Loaded 150 questions: mmlu_pro=150
+INFO: HTTP Request: GET http://127.0.0.1:18383/v1/models "HTTP/1.1 200 OK"
+INFO: HTTP Request: GET http://127.0.0.1:18383/props "HTTP/1.1 200 OK"
+INFO: Serving identity: model_id=/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf gguf=/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
+INFO: [1/150] mmlu_pro q=mmlu_pro_business_00000
+INFO: HTTP Request: POST http://127.0.0.1:18383/v1/chat/completions "HTTP/1.1 200 OK"
+INFO:   TALE budget estimate: 10 tokens (4 tok, 0.9s)
+INFO: HTTP Request: POST http://127.0.0.1:18383/v1/chat/completions "HTTP/1.1 200 OK"
+Traceback (most recent call last):
+  File "/mnt/raid0/llm/worktrees/sub-gpu-runner-tale-a454b7fd/scripts/benchmark/eval_tale_budget.py", line 810, in <module>
+    main()
+    ~~~~^^
+  File "/mnt/raid0/llm/worktrees/sub-gpu-runner-tale-a454b7fd/scripts/benchmark/eval_tale_budget.py", line 788, in main
+    results = run_evaluation(questions, args.conditions, cfg)
+  File "/mnt/raid0/llm/worktrees/sub-gpu-runner-tale-a454b7fd/scripts/benchmark/eval_tale_budget.py", line 434, in run_evaluation
+    result = run_trial(q, cond, cfg, estimate)
+  File "/mnt/raid0/llm/worktrees/sub-gpu-runner-tale-a454b7fd/scripts/benchmark/eval_tale_budget.py", line 379, in run_trial
+    correct = score_question(text, question)
+  File "/mnt/raid0/llm/worktrees/sub-gpu-runner-tale-a454b7fd/scripts/benchmark/eval_tale_budget.py", line 293, in score_question
+    return score_answer(
+        answer=strip_think_blocks(answer),
+    ...<2 lines>...
+        scoring_config=question.get("scoring_config"),
+    )
+  File "/mnt/raid0/llm/epyc-orchestrator/scripts/benchmark/debug_scorer.py", line 132, in score_answer
+    return scorer(answer, expected, config)
+  File "/mnt/raid0/llm/epyc-orchestrator/scripts/benchmark/debug_scorer.py", line 260, in _score_multiple_choice
+    raise ScoringUnavailableError(
+    ...<5 lines>...
+    )
+epyc_orch_debug_scorer_b7.ScoringUnavailableError: multiple_choice gold is unusable: expected='I' is neither a choice letter nor one of the 0 configured choices, so no verdict can be reached. Fix the corpus join or supply scoring_config['choices']; refusing to score the model wrong against a gold that cannot be resolved.

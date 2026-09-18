@@ -1,0 +1,192 @@
+{
+  "schema": "epyc.instrument_repin.v1",
+  "decision": "V7-RUNNER-RESEAL",
+  "gate_id": "RATIFY-V7-RUNNER-REPIN-20260916",
+  "status": "ratified",
+  "ratified_at": "2026-09-16T15:01:54Z",
+  "operator": "pestopoppa",
+  "operator_decision": "2026-09-16: RE-SEAL the two sealed pins that no longer match scripts/benchmark/v7_quality_gate_runner.py",
+  "research_head": "8957d7ccbcb7fe7014f3d5fe85fbfb6f4591c619",
+  "instrument": {
+    "path": "scripts/benchmark/v7_quality_gate_runner.py",
+    "sha256_now": "20a97fbd4aecc6f3887299243362d5315b76f819aa1cbc4b8fd92f33b307b45a"
+  },
+  "pins": [
+    {
+      "old": "6dea92dd9e374f79691f5df502fa11035ffd484906754f20190a4189111ae7dc",
+      "new": "20a97fbd4aecc6f3887299243362d5315b76f819aa1cbc4b8fd92f33b307b45a",
+      "consumer": "scripts/benchmark/dflash2_followups.py EXPECTED.runner_sha256",
+      "test": "scripts/benchmark/test_dflash2_followups.py::test_exact_runner_bytes_are_unchanged",
+      "commits_crossed": [
+        "da06b371"
+      ]
+    },
+    {
+      "old": "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e",
+      "new": "20a97fbd4aecc6f3887299243362d5315b76f819aa1cbc4b8fd92f33b307b45a",
+      "consumer": "artifacts/p3-shadow-bakeoff-20260728/manifest/p3_bakeoff_manifest.json capture.runner.sha256 + duties.coder.suites.livecodebench_hard.scorer.runner_sha256 (+ .sha256 sidecar)",
+      "test": "scripts/benchmark/test_p3_bakeoff.py::test_real_manifest_verifies",
+      "commits_crossed": [
+        "baf36757",
+        "da06b371"
+      ]
+    }
+  ],
+  "justification": {
+    "da06b371": "2026-08-26 purely additive: opt-in --belief-category (default None) and --belief-config (default ''); finalize block guarded by `if args.belief_category is not None`; absent flag -> return 0 as before",
+    "baf36757": "2026-08-19 NOT named in the operator decision but crossed by the 79721927 re-seal: request bytes and scoring unchanged; ADDS output keys per_question.effective_request and meta.sampling_fields_are_requested_not_effective. No P3 bake-off capture exists under the manifest, so no banked output is re-labelled"
+  },
+  "equivalence_evidence": {
+    "directory": "data/v7-runner-repin-20260916",
+    "sha256sums": {
+      "README.md": "48387c2200a841d3f4e74087a8ddd5364ae0c8bdfb637b893bc9fbe4085d8ce4",
+      "equivalence_harness.py": "617009387cb254777150cac0601b7e1fcf507bacddb4c36b8e669f4fba811ba4",
+      "equivalence_summary.json": "3a61477864bb3143a92a3c3d4d5415e5ddd3a54f0e1f8fc8982da6ac4224dd88",
+      "negative_control.json": "c530a199330ea37ec64ec4ea2bc48bdf3a59f34162d5e5a2594e8933ed5ff075",
+      "offline_tests.sh": "1719b729686388865dcd73392f09eb4fd30619d81241babb3252bd1c46a0ad2c",
+      "offline_tests.tsv": "171e4059562935ff1644d4a2d714d11fbb894dbd575ca2238eef03adeea6f000",
+      "runner_6dea92dd_to_20a97fbd.diff": "8fc84a1e8ca858e4c43dcdeff3c14144a8eb2f9fde8114a7facfd665535eda2c",
+      "runner_79721927_to_6dea92dd.diff": "1354b23236fa7a1b0272a57bcf506a32afc1c044dcc3d01321f1da0f723e55b7"
+    },
+    "verdict": "EQUIVALENT",
+    "scenarios": {
+      "critic_chat_nothink_rep2": {
+        "6dea92dd": {
+          "requests_byte_identical": true,
+          "outputs_identical_after_volatile_strip": true,
+          "residual_paths": []
+        },
+        "79721927": {
+          "requests_byte_identical": true,
+          "outputs_identical_after_volatile_strip": false,
+          "residual_paths": [
+            "+per_question[]/effective_request",
+            "+result/meta/sampling_fields_are_requested_not_effective"
+          ]
+        }
+      },
+      "lcb_chat_c1": {
+        "6dea92dd": {
+          "requests_byte_identical": true,
+          "outputs_identical_after_volatile_strip": true,
+          "residual_paths": []
+        },
+        "79721927": {
+          "requests_byte_identical": true,
+          "outputs_identical_after_volatile_strip": false,
+          "residual_paths": [
+            "+per_question[]/effective_request",
+            "+result/meta/sampling_fields_are_requested_not_effective"
+          ]
+        }
+      },
+      "olymp_chat_sampled_c1": {
+        "6dea92dd": {
+          "requests_byte_identical": true,
+          "outputs_identical_after_volatile_strip": true,
+          "residual_paths": []
+        },
+        "79721927": {
+          "requests_byte_identical": true,
+          "outputs_identical_after_volatile_strip": false,
+          "residual_paths": [
+            "+per_question[]/effective_request",
+            "+result/meta/sampling_fields_are_requested_not_effective"
+          ]
+        }
+      },
+      "olymp_completion_greedy_c4": {
+        "6dea92dd": {
+          "requests_byte_identical": true,
+          "outputs_identical_after_volatile_strip": true,
+          "residual_paths": []
+        },
+        "79721927": {
+          "requests_byte_identical": true,
+          "outputs_identical_after_volatile_strip": false,
+          "residual_paths": [
+            "+per_question[]/effective_request",
+            "+result/meta/sampling_fields_are_requested_not_effective"
+          ]
+        }
+      },
+      "swe_chat_c1": {
+        "6dea92dd": {
+          "requests_byte_identical": true,
+          "outputs_identical_after_volatile_strip": true,
+          "residual_paths": []
+        },
+        "79721927": {
+          "requests_byte_identical": true,
+          "outputs_identical_after_volatile_strip": false,
+          "residual_paths": [
+            "+per_question[]/effective_request",
+            "+result/meta/sampling_fields_are_requested_not_effective"
+          ]
+        }
+      },
+      "synthetic_scored_chat_c2": {
+        "6dea92dd": {
+          "requests_byte_identical": true,
+          "outputs_identical_after_volatile_strip": true,
+          "residual_paths": []
+        },
+        "79721927": {
+          "requests_byte_identical": true,
+          "outputs_identical_after_volatile_strip": false,
+          "residual_paths": [
+            "+per_question[]/effective_request",
+            "+result/meta/sampling_fields_are_requested_not_effective"
+          ]
+        }
+      }
+    },
+    "negative_control": {
+      "request": true,
+      "scoring": true
+    },
+    "offline_suites": [
+      "version\tsuite\texit\tsummary\tfailed_tests",
+      "79721927\ttest_v7_quality_gate_runner.py\t1\t1 failed, 23 passed in 0.37s\ttest_v7_quality_gate_runner.py::test_effective_request_records_what_was_sent_not_what_was_asked ",
+      "79721927\ttest_capture_contract_guard.py\t0\t5 passed in 0.03s\t",
+      "79721927\ttest_cj_gpqa_sample.py\t0\t19 passed in 0.06s\t",
+      "6dea92dd\ttest_v7_quality_gate_runner.py\t0\t24 passed in 0.09s\t",
+      "6dea92dd\ttest_capture_contract_guard.py\t0\t5 passed in 0.03s\t",
+      "6dea92dd\ttest_cj_gpqa_sample.py\t0\t19 passed in 0.06s\t",
+      "20a97fbd\ttest_v7_quality_gate_runner.py\t0\t24 passed in 0.08s\t",
+      "20a97fbd\ttest_capture_contract_guard.py\t0\t5 passed in 0.03s\t",
+      "20a97fbd\ttest_cj_gpqa_sample.py\t0\t19 passed in 0.06s\t"
+    ],
+    "method": "zero inference: each runner version (git blob) run as a subprocess against a deterministic 127.0.0.1 stub; validations re-run at apply time are in the consolidated receipt"
+  },
+  "not_repinned": {
+    "banked captures and sealed bundles (artifacts/**, data/kernel-v9-candidate/**)": "history; record the runner that produced them",
+    "scripts/benchmark/replay_tc_nothink_v4.py": "validates banked rows against 79721927; correct as-is",
+    "scripts/benchmark/laguna_q4_cpu_bench_runner.py": "pins the completed Laguna Q4 CPU campaign evaluator; out of this decision's scope"
+  },
+  "critic_tasks_v1": "NOT committed: embeds 120 LiveCodeBench problem statements (third-party, unclear redistribution licence) and banked responses whose sources are deliberately untracked; stays banked, hash-pinned d97692840da2. Test failure was a cwd-relative locator defect, fixed by resolving relative manifest pins against RESEARCH_ROOT",
+  "patch": {
+    "path": "artifacts/operator/v7-runner-repin-20260916.patch",
+    "sha256": "8008dc986e9139094f97b69f99df8110ad11ede82b24ec3be1ed4d05c83cc79d"
+  },
+  "state": {
+    "scripts/benchmark/dflash2_followups.py": {
+      "sha256_before": "9dc48324ce54184a2bb826dbcba9bc4300e248af05514de0141b2660a0930586",
+      "sha256_after": "9f8baf829140232e5c6a34c48b9a3c33dd68a55c95cfbb0447da62f018d39c0d"
+    },
+    "scripts/benchmark/test_dflash2_followups.py": {
+      "sha256_before": "610d27dea09eabafe427f479a8739d3be5e6a7e37f87bacbd4bbc6b511561dc6",
+      "sha256_after": "d4d54b724c5700a67863b0532214b8f91ef5296d455bc0a86c6784855860ea71"
+    },
+    "artifacts/p3-shadow-bakeoff-20260728/manifest/p3_bakeoff_manifest.json": {
+      "sha256_before": "3bb31a7a5fb38dfc90d463855db7af02cd1b8843ab72ded59b261e543ff4dbea",
+      "sha256_after": "0ce1f2c3a1911b068486a37841de80e8f241e50c40017acaeec3d01bc1cb14cf"
+    },
+    "artifacts/p3-shadow-bakeoff-20260728/manifest/p3_bakeoff_manifest.json.sha256": {
+      "sha256_before": "041e898e32dbdaf446fb56f2276f641d686c9e3f7c5ee48696685eab623e9311",
+      "sha256_after": "3b0ab2da74a85d4dc9a4704223c9db0cd339ef4f81834a5b7a7e25fa3a8aeffb"
+    }
+  },
+  "consolidated_receipt": "artifacts/operator/ratify_v7_runner_repin_20260916.receipt.json",
+  "applied_by": "scripts/operator/ratify_v7_runner_repin_20260916.sh"
+}

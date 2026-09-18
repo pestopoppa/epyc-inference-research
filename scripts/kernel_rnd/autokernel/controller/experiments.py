@@ -56,9 +56,10 @@ import hashlib
 import json
 from pathlib import Path
 import sqlite3
+import time
 from typing import Any, Iterable, Mapping, Sequence
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS experiments (
@@ -79,6 +80,10 @@ CREATE TABLE IF NOT EXISTS experiments (
     target_effect     REAL,
     refusal_reason    TEXT,
     result_sha256     TEXT,
+    spawn_parent      TEXT,
+    branch_id         TEXT,
+    width             INTEGER,
+    depth             INTEGER,
     payload           TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS experiments_epoch ON experiments (epoch_sha256);
@@ -128,6 +133,7 @@ _MAGNITUDE_FIELDS = ("effect_fraction", "exact_attribution_effect_fraction",
 _STATUS_MERIT = {
     "kept": 5.0,
     "measured_null": 5.0,
+    "regression": 5.0,
     "superseded": 4.0,
     "refused_at_formation": 3.0,
     "bench_failed": 1.0,
@@ -279,15 +285,40 @@ def epoch_sha256(*, anchor_commit: str | None, build_recipe: Mapping[str, Any] |
 class ExperimentStore:
     """Append-only experiment memory keyed by attempt identity."""
 
-    def __init__(self, root: Path | str) -> None:
+    def __init__(self, root: Path | str, *, read_only: bool = False) -> None:
         self.root = Path(root)
-        self.root.mkdir(parents=True, exist_ok=True)
         self.path = self.root / "experiments.db"
         self.markdown_path = self.root / "experiments.md"
-        self._connection = sqlite3.connect(self.path)
+        if read_only:
+            if not self.path.is_file():
+                raise ValueError("shared experiment source is not an existing regular database")
+            self._connection = sqlite3.connect(self.path.resolve().as_uri() + "?mode=ro",
+                                              uri=True, timeout=0.2)
+            self._connection.execute("PRAGMA query_only=ON")
+            deadline = time.monotonic() + 0.2
+            self._connection.set_progress_handler(lambda: time.monotonic() > deadline, 1000)
+        else:
+            self.root.mkdir(parents=True, exist_ok=True)
+            self._connection = sqlite3.connect(self.path, timeout=30.0)
+            # The dashboard and operator tooling read this append-only journal
+            # while the loop records outcomes.  DELETE journaling lets a long
+            # reader prevent the scientific owner from committing; WAL keeps
+            # those readers on their snapshot instead of turning an otherwise
+            # valid outcome into a lane_error.
+            self._connection.execute("PRAGMA journal_mode=WAL")
+            self._connection.execute("PRAGMA busy_timeout=30000")
         self._connection.row_factory = sqlite3.Row
-        self._connection.executescript(_DDL)
-        self._connection.commit()
+        if not read_only:
+            self._connection.executescript(_DDL)
+            # Existing append-only stores predate lineage telemetry. Add nullable
+            # columns in place; historic rows remain explicitly unknown.
+            columns = {row[1] for row in self._connection.execute(
+                "PRAGMA table_info(experiments)")}
+            for name, kind in (("spawn_parent", "TEXT"), ("branch_id", "TEXT"),
+                               ("width", "INTEGER"), ("depth", "INTEGER")):
+                if name not in columns:
+                    self._connection.execute(f"ALTER TABLE experiments ADD COLUMN {name} {kind}")
+            self._connection.commit()
 
     def close(self) -> None:
         self._connection.close()
@@ -302,7 +333,8 @@ class ExperimentStore:
 
     def record(self, attempt: Mapping[str, Any], *, epoch: str,
                recorded_at: str, campaign_id: str,
-               deployment: str | None = None) -> bool:
+               deployment: str | None = None,
+               receipt_out: list[dict[str, Any]] | None = None) -> bool:
         """Persist one attempt. Returns False if it was already recorded.
 
         Idempotent on `attempt_id` so a resumed controller re-recording its own
@@ -324,12 +356,32 @@ class ExperimentStore:
             _real(attempt.get("target_runtime_effect_fraction")),
             _text(attempt.get("reason")),
             _text(attempt.get("result_sha256")),
+            _text(attempt.get("spawn_parent")),
+            _text(attempt.get("branch_id")),
+            _positive_int(attempt.get("width")),
+            _positive_int(attempt.get("depth")),
             json.dumps(_jsonable(attempt), sort_keys=True),
         )
         cursor = self._connection.execute(
-            "INSERT OR IGNORE INTO experiments VALUES "
-            "(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", row)
+            "INSERT OR IGNORE INTO experiments ("
+            "attempt_id,recorded_at,campaign_id,deployment,epoch_sha256,"
+            "hypothesis_id,mechanism_id,target_surface,target_symbol,statement,"
+            "falsifier,status,effect_fraction,exact_effect,target_effect,"
+            "refusal_reason,result_sha256,spawn_parent,branch_id,width,depth,payload"
+            ") VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", row)
         self._connection.commit()
+        if cursor.rowcount == 1 and receipt_out is not None:
+            # The hash is over the exact TEXT bytes handed to SQLite, after the
+            # commit acknowledged them. Duplicate rows never get a fresh receipt.
+            receipt_out.append({
+                "attempt_id": attempt_id,
+                "campaign_id": campaign_id,
+                "epoch_sha256": epoch,
+                "recorded_at": recorded_at,
+                "payload_sha256": hashlib.sha256(row[-1].encode("utf-8")).hexdigest(),
+                "spawn_parent": row[-5], "branch_id": row[-4],
+                "width": row[-3], "depth": row[-2],
+            })
         return cursor.rowcount == 1
 
     def record_all(self, attempts: Iterable[Mapping[str, Any]], **kwargs: Any) -> int:
@@ -338,7 +390,12 @@ class ExperimentStore:
     # ---------------------------------------------------------------- recall
 
     def recall(self, *, epoch: str, limit: int = 40,
-               ranking_authorized: bool = False) -> list[dict[str, Any]]:
+               ranking_authorized: bool = False,
+               include_source_scope: bool = False,
+               include_claims: bool = False,
+               statuses: Sequence[str] | None = None,
+               exclude_statuses: bool = False,
+               append_order: bool = False) -> list[dict[str, Any]]:
         """Prior attempts, each marked same-epoch or stale.
 
         `ranking_authorized` is the `P-AK-SEARCH-1` denial-4 boundary, narrowed by
@@ -354,11 +411,64 @@ class ExperimentStore:
         validity penalty AND their magnitudes redacted -- see `_MAGNITUDE_FIELDS`.
         Ranking is all it turns on: nothing here banks, composes, contributes to
         readiness, or relaxes a threshold the campaign derives for itself.
+
+        `append_order` is for qualitative hints only: reverse rowid order avoids
+        sorting an unindexed, multi-GB journal by recorded_at. It does not claim
+        timestamp order and must not be used for evidence selection or ranking.
         """
+        if append_order and (ranking_authorized or not include_source_scope):
+            raise ValueError("append-order recall is only for unranked scoped hints")
         pool = max(int(limit), RANKING_POOL) if ranking_authorized else int(limit)
-        rows = self._connection.execute(
-            "SELECT * FROM experiments ORDER BY recorded_at DESC, rowid DESC LIMIT ?",
-            (pool,)).fetchall()
+        projection = "*"
+        if include_source_scope:
+            # Shared formation recall never materializes full lifecycle payloads.
+            # Large/old records keep explicit unknown scope, not current-run facts.
+            projection = ("attempt_id,recorded_at,campaign_id,epoch_sha256,hypothesis_id,"
+                          "mechanism_id,target_surface,target_symbol,statement,falsifier,status,"
+                          "effect_fraction,exact_effect,target_effect,refusal_reason,result_sha256,"
+                          "CASE WHEN octet_length(payload)<=2097152 THEN "
+                          "CASE WHEN json_valid(payload) THEN coalesce("
+                          "json_extract(payload,'$.research_scope'),json_object("
+                          "'model',coalesce(json_extract(payload,'$.comparison.model'),"
+                          "json_extract(payload,'$.comparison.belief_capture.inputs.recipe.model')),"
+                          "'quant',NULL,'backend',NULL,"
+                          "'measurement_surface',json_extract(payload,'$.comparison.surface'),"
+                          "'request_digest',json_extract(payload,'$.comparison.request_digest'),"
+                          "'recipe',json_object("
+                          "'name',json_extract(payload,'$.comparison.recipe'),"
+                          "'hash',json_extract(payload,'$.comparison.recipe_hash'),"
+                          "'environment',json_extract(payload,'$.comparison.recipe_env'),"
+                          "'description',json_extract(payload,'$.comparison.recipe_describe'),"
+                          "'original_serving_arms',json_extract(payload,'$.comparison.belief_capture.inputs.resolved_arms')),"
+                          "'unknown_reason','legacy record: only original captured fields shown; nulls remain unknown'"
+                          ")) END "
+                          "END AS research_scope")
+        elif include_claims:
+            projection = ("*, CASE WHEN length(payload)<=2097152 AND json_valid(payload) "
+                          "THEN json_extract(payload,'$.claims') END AS claims_projection")
+        predicate, parameters = "", []
+        if statuses:
+            placeholders = ",".join("?" for _ in statuses)
+            predicate = f" WHERE status {'NOT IN' if exclude_statuses else 'IN'} ({placeholders})"
+            parameters.extend(statuses)
+        if include_source_scope:
+            # Limit on scalar columns before touching payload overflow pages.  Some
+            # lifecycle records are tens of MiB. Project only selected rows;
+            # octet_length reads TEXT size metadata without scanning each payload.
+            ordering = "rowid DESC" if append_order else "recorded_at DESC, rowid DESC"
+            query = (
+                "WITH selected AS MATERIALIZED ("
+                f"SELECT rowid FROM experiments{predicate} "
+                f"ORDER BY {ordering} LIMIT ?"
+                ") "
+                f"SELECT {projection} FROM experiments "
+                "WHERE rowid IN (SELECT rowid FROM selected) "
+                f"ORDER BY {ordering}"
+            )
+        else:
+            query = (f"SELECT {projection} FROM experiments{predicate} "
+                     "ORDER BY recorded_at DESC, rowid DESC LIMIT ?")
+        rows = self._connection.execute(query, (*parameters, pool)).fetchall()
         recalled = []
         for row in rows:
             same_epoch = row["epoch_sha256"] == epoch
@@ -385,6 +495,19 @@ class ExperimentStore:
                 "comparable_measurement": same_epoch,
                 "ranking_authorized": bool(ranking_authorized),
             })
+            if include_claims:
+                raw_claims = row["claims_projection"]
+                try:
+                    claim_record = (json.loads(raw_claims)
+                                    if isinstance(raw_claims, str) else raw_claims)
+                except json.JSONDecodeError:
+                    claim_record = None
+                recalled[-1]["claims"] = (claim_record
+                                           if isinstance(claim_record, dict) else None)
+            if include_source_scope:
+                scope = json.loads(row["research_scope"]) if row["research_scope"] else None
+                recalled[-1].update(original_epoch=row["epoch_sha256"],
+                                    research_scope=scope if isinstance(scope, dict) else None)
         if not ranking_authorized:
             return recalled
         return rank(recalled)[:int(limit)]
@@ -437,12 +560,18 @@ class ExperimentStore:
             effect = ("—" if row["effect_fraction"] is None
                       else f"{row['effect_fraction'] * 100:+.3f}%")
             note = row["refusal_reason"] or row["statement"] or ""
+            try:
+                payload = json.loads(row["payload"])
+            except (json.JSONDecodeError, TypeError):
+                payload = {}
+            from ..loop import claims as claim_contract
+            mechanism_claim = claim_contract.mechanism_status(payload)
             lines.append(
                 f"| {row['recorded_at']} | {row['status']} | "
                 f"{row['mechanism_id'] or '—'} | "
                 f"{row['target_symbol'] or row['target_surface'] or '—'} | "
                 f"{effect} | {row['epoch_sha256'][:12]}{stale} | "
-                f"{_cell(note)} |")
+                f"{_cell(note)} [mechanism claim: {mechanism_claim}] |")
         lines.append("")
         return "\n".join(lines)
 
@@ -495,6 +624,12 @@ def _real(value: Any) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
     return float(value)
+
+
+def _positive_int(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return None
+    return value
 
 
 def _cell(value: Any) -> str:

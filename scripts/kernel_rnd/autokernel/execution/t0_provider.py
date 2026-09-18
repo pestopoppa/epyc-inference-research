@@ -112,6 +112,7 @@ from .. import schemas
 from ..evaluator import api, correctness, recipes
 from . import reward_hack_scan
 from . import sandbox as process_sandbox
+from .server_generation import ServerGenerationEvidence, collect_server_coherence
 
 __all__ = [
     # errors
@@ -1431,7 +1432,7 @@ class T0ExecutionPlan:
     op_suite: OpSuitePlan
     dispatch: DispatchTracePlan
     anchor: Optional[AnchorBuild] = None
-    generation: Optional[GenerationPlan] = None
+    generation: GenerationPlan | ServerGenerationEvidence | None = None
     determinism_runs: int = 0
     holdout: Optional[HoldoutPlan] = None
     sanitizer_target: Optional[str] = None
@@ -1489,8 +1490,11 @@ class T0ExecutionPlan:
             raise TypeError("plan.dispatch must be a DispatchTracePlan")
         if self.anchor is not None and not isinstance(self.anchor, AnchorBuild):
             raise TypeError("plan.anchor must be an AnchorBuild or None")
-        if self.generation is not None and not isinstance(self.generation, GenerationPlan):
-            raise TypeError("plan.generation must be a GenerationPlan or None")
+        if (self.generation is not None and not isinstance(self.generation, GenerationPlan)
+                and type(self.generation) is not ServerGenerationEvidence):
+            raise TypeError("plan.generation must be GenerationPlan, ServerGenerationEvidence or None")
+        if type(self.generation) is ServerGenerationEvidence:
+            self.generation.__post_init__()
         if self.holdout is not None and not isinstance(self.holdout, HoldoutPlan):
             raise TypeError("plan.holdout must be a HoldoutPlan or None")
         if self.cache_state not in correctness.CACHE_STATES:
@@ -3154,6 +3158,9 @@ class ExecutedT0EvidenceProvider:
         """Collect `GGML_SCHED_DEBUG` output. `None` when there is nothing to trace."""
         plan = self._plan.dispatch
         generation = self._plan.generation
+        if type(generation) is ServerGenerationEvidence:
+            collected.notes.append("server v1 retained no original same-server dispatch trace")
+            return None
         if generation is None:
             return None
         require_claim(self._claim, what="the dispatch trace", cpu_list=self._pinned_cpus())
@@ -3437,6 +3444,9 @@ class ExecutedT0EvidenceProvider:
     def collect_coherence(self, collected: _Collected):
         """Candidate generation vs the anchor's, with the anchor named honestly."""
         plan = self._plan.generation
+        if type(plan) is ServerGenerationEvidence:
+            collected.refs.append(plan.receipt_ref)
+            return collect_server_coherence(plan, self._anchor)
         if plan is None:
             return None
         require_claim(self._claim, what="the coherence generation", cpu_list=self._pinned_cpus())
@@ -3482,6 +3492,9 @@ class ExecutedT0EvidenceProvider:
     def collect_determinism(self, collected: _Collected):
         """Same-seed repeats on the candidate; anchor digests from the anchor capture."""
         plan = self._plan.generation
+        if type(plan) is ServerGenerationEvidence:
+            collected.notes.append("server v1 has no original declared same-seed repeat proof")
+            return None
         runs = self._plan.determinism_runs
         if plan is None or runs < 1:
             return None
@@ -3791,6 +3804,8 @@ class ExecutedT0EvidenceProvider:
         delivered less work than the anchor" FAIL manufactured by a storage
         choice.
         """
+        if type(self._plan.generation) is ServerGenerationEvidence:
+            return self._plan.generation.delivered_n
         for capture in reversed(collected.captures):
             tokens = parse_delivered_tokens(capture.combined)
             if tokens is not None:

@@ -100,6 +100,11 @@ PYTEST_SMOKE += scripts/kernel_rnd/autokernel/test_campaign.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/test_campaign_footprint.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/test_program_md.py
 PYTEST_SMOKE += scripts/kernel_rnd/autokernel/test_readme.py
+# INF-70 PROD-1 — the Qwen3.8-Flash-Next CPU serving recipe. In the smoke set because
+# the recipe is DATA and these are its anti-drift guards: the `--fa 1` flag form that
+# cost SYNC-10 seven MTP arms, the two THP knobs that must never collapse into one, the
+# per-surface shim, and the binary pin that must refuse to certify the current champion.
+PYTEST_SMOKE += scripts/lib/test_qwen38_flash_next_recipe.py
 
 help:
 	@printf '%s\n' 'Targets: setup lint test health docs docs-check analysis analysis-check security-check evidence-check autopilot-gate'

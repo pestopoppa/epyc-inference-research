@@ -1,0 +1,27 @@
+GPU claim held: {'device_id': 'mi210_0', 'lock_path': '/mnt/raid0/llm/tmp/gpu_device.mi210_0.lock', 'pid': 3427013}; llama-server ed72d9d185e6c1cb
+[11:13:11] none_A
+  mode=[] route_lines=0 vram=28.6G
+[11:14:58] simple_unset
+  mode=[] route_lines=0 vram=32.7G
+[11:19:56] dflash_unset
+  mode=[] route_lines=0 vram=33.9G
+[11:20:57] simple_serial
+  mode=['serial'] route_lines=0 vram=32.7G
+[11:24:36] dflash_serial
+  mode=['serial'] route_lines=0 vram=33.9G
+[11:26:39] none_B
+  mode=[] route_lines=0 vram=28.6G
+{
+ "aa_identical": true,
+ "serial_arms_12_of_12_drafted_and_mode_confirmed": true,
+ "unset_arm_failures": [
+  7,
+  6
+ ],
+ "hypothesis_supported": true
+}
+  none_B~none_A          12/12 drafted_all=False fails=[]
+  simple_unset~none_A    5/12 drafted_all=True fails=[('1882', 62, None), ('1659', 128, None), ('1938', 247, None), ('1818', 193, None), ('2415', 36, None), ('1664', 238, None), ('1662', 250, None)]
+  dflash_unset~none_A    6/12 drafted_all=True fails=[('1882', 34, 0.02392), ('1659', 128, 0.044771), ('1938', 247, 0.078693), ('1869', 182, 0.079391), ('1664', 238, 0.004648), ('1662', 212, 0.022514)]
+  simple_serial~none_A   12/12 drafted_all=True fails=[]
+  dflash_serial~none_A   12/12 drafted_all=True fails=[]

@@ -1,0 +1,23 @@
+# SOURCE TEMPLATE ONLY — deployment is blocked pending the named launch/drain seam.
+[Unit]
+Description=AutoKernel management-only campaign service
+After=local-fs.target
+ConditionPathExists=@STATE_DIRECTORY@/launch-bridge-approved
+
+[Service]
+Type=simple
+User=@SERVICE_USER@
+Group=@SERVICE_GROUP@
+WorkingDirectory=@PINNED_CHECKOUT@
+EnvironmentFile=@SECRET_ENVIRONMENT_FILE@
+ExecStart=@PYTHON@ -m scripts.kernel_rnd.autokernel.loop.campaign_service --resolved-campaign @RESOLVED_CAMPAIGN@ --store @CAMPAIGN_STORE@ --config-generation @CONFIG_GENERATION@ --snapshot-version @SNAPSHOT_VERSION@ --listen 127.0.0.1:@PORT@
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+SendSIGKILL=no
+KillMode=process
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=@CAMPAIGN_STORE@

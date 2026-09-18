@@ -122,12 +122,11 @@ def test_a_cadence_firing_cannot_pass_vacuously():
 
 
 def test_a_bundle_written_before_the_field_existed_loads_with_zero():
-    """Additive field, so the schema id does NOT bump: a pre-2026-09-08 bundle is still a
-    valid v1 bundle, must pass load_bundle's validity checks, and must restore with the
-    counter at 0 rather than firing an unscheduled gate on restore."""
+    """A pre-validity v1 bundle stays readable as unknown legacy history."""
     store = Path(tempfile.mkdtemp())
     try:
-        old = {"schema": A.Bundle.SCHEMA, "champion_of_record": "cor0", "tip": "k1",
+        old = {"schema": A.Bundle.LEGACY_SCHEMA,
+               "champion_of_record": "cor0", "tip": "k1",
                "keeps": ["m1", "m2"], "compounded_bench_pct": 5.19}   # no counter field
         (store / A.Bundle.FILENAME).write_text(json.dumps(old), encoding="utf-8")
         b = A.Bundle.from_dict(old)
@@ -135,6 +134,7 @@ def test_a_bundle_written_before_the_field_existed_loads_with_zero():
         got, note = A.load_bundle(store, anchor_commit="k1",
                                   is_ancestor=lambda a, c: True)
         assert got.keeps == ["m1", "m2"] and got.keeps_since_serving_gate == 0
+        assert got.measurement_validity == A.MEASUREMENT_UNKNOWN_LEGACY
         assert "restored 2 keep(s)" in note
         assert A.gate_trigger(got, FLOOR, P) is None   # no unscheduled gate on restore
     finally:
@@ -151,7 +151,7 @@ def test_the_counter_round_trips_through_save_and_load():
         b.save(store)
         on_disk = json.loads((store / A.Bundle.FILENAME).read_text())
         assert on_disk["keeps_since_serving_gate"] == 2
-        assert on_disk["schema"] == "epyc.autokernel.accumulator_bundle.v1"  # NOT bumped
+        assert on_disk["schema"] == "epyc.autokernel.accumulator_bundle.v2"
         got, _ = A.load_bundle(store, anchor_commit="k2", is_ancestor=lambda a, c: True)
         assert got.keeps_since_serving_gate == 2
         # and it survives a restart mid-cadence: two more keeps, then it fires.

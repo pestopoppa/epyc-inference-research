@@ -5,6 +5,20 @@ The loop's shape is normative and lives in
 strategy the loop runs *inside* that shape: what to attack, what the hardware makes
 possible, and what has already been settled.
 
+## Prospective lineage capture (default off)
+
+`lineage_capture.capture` can seal original patch and complete post-authoring
+source bytes at `run.py:keep_the_diff`, before a lane reset overwrites its
+`<mechanism>.<lane>.patch`. It is intentionally not called by the active loop.
+Future authorization must first mint one durable attempt/capture ID and carry
+that same ID into the native outcome row; only then can the patch-capture seam
+call `capture(store, capture_id=attempt_id, parent_id=parent_attempt_id,
+base_commit=base_head, patch_bytes=diff_bytes, source_files=source_bytes)`.
+The source file set must be fixed before scoring. Historic patch filenames and
+tree-level snapshot hashes do not establish this join; the offline exporter
+must refuse them. The helper makes no candidate, benchmark, champion, or
+promotion decision.
+
 ---
 
 ## The loop
@@ -24,10 +38,90 @@ CRITIC PASS 1 on H, before any patch exists     · budget 3 rounds
 CRITIC PASS 2 on the committed diff, before the build   · budget 2 rounds
     reject → reason returned VERBATIM; H untouched, planner rewrites the patch
 
-    build → test-backend-ops → A/B alternating, n≥5   ← the only GPU spend
+    build → affected-op units → independent reference → A/B alternating, n≥5
     keep → commit onto the champion branch
     else → negative, with mechanism and sample vector, into experiments.md
 ```
+
+Every committed source keep (GPU or direct CPU) also gets a bounded diagnostic artifact at
+`<store>/codegen/<champion-commit>.<backend>.<build-frame-sha256>.json`; its contents are embedded in that
+keep's experiment row. The collector hashes up to eight standalone AMD
+`.hsaco`/`.co` objects and, when ROCm `llvm-objdump` can disassemble them,
+counts scalar/vector/matrix/memory instructions. CPU builds inspect only the
+bounded installed `libggml-cpu.so` and allowlisted GDN/quant-dot wrapper symbols;
+their x86 disassembly is a diagnostic sample, not proof that an edited helper
+executed. A missing/stripped symbol reports unavailable rather than an inferred
+instruction mix. This is **not** an additional keep gate. If the current HIP
+library has no standalone code object, the producer can inspect a bounded sample
+of gfx90a ELF objects in its embedded fatbin and bind each extracted object to
+the candidate library hash and byte offset. This is not a complete fatbin census
+or per-kernel attribution; unavailable bytes/tools remain explicitly unavailable.
+Spills, occupancy, vectorization and CUDA PTX/SASS/CUBIN are likewise never
+inferred from this MI210 diagnostic. A separate verified compiler/profiler
+receipt is required before any of those become a mechanism claim.
+
+---
+
+## Porting gate order (AK-PORT-1/2)
+
+For source changes, retain the actual diff and resolve its affected native op before
+spending on a build. An unknown or shared source route is a gate refusal, never an
+implicit `MUL_MAT` pass. Then compile the candidate, run `test-backend-ops -o` for
+the affected op on the selected backend (host wiring and kernel-unit coverage),
+compare with an independent reference where one is installed, and only then time
+the candidate. Keep compile, op suite, and reference failures distinct in the
+receipt. A fast but wrong candidate is discarded.
+
+The experimental CPU `GATED_DELTA_NET` route has a deterministic F32 scalar
+reference fixture with exactly representable outputs. The native CPU suite alone
+compares CPU against CPU and is not independent evidence. It must be followed by
+that scalar fixture. Two CPU IQK helper routes are admitted narrowly, each
+requiring body-only edits to its named helper in `iqk_mul_mat.cpp` and the
+nonempty native `MUL_MAT_ID` host/op suite under the resolved CPU recipe:
+
+- `iqk_mul_mat_moe_rows`: trusted one-shot GDB witnesses prove `use_ref=true`
+  on the reference and exact exported-helper entry in the candidate DSO for
+  passing Q4_K/Q5_K cases. An independent scalar fixture compares their
+  `MUL_MAT_ID` outputs at the fixed 40-row, two-token shape.
+- `iqk_moe_fused_up_gate`: the native GLU selector currently has 0/0 CPU cases,
+  so it is **not** a correctness witness. A separate fused up-gate graph fixture
+  requires exact candidate-DSO helper hits and independent scalar agreement for
+  both Q4_K and Q5_K, also at the fixed 40-row, two-token shape. The preceding
+  `MUL_MAT_ID` suite checks host/op wiring; it does not prove fused execution.
+
+The Q4_K/Q5_K dot-computation route is separate. For
+`ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp`, target
+`mul_mat_qX_K_q8_2_X4_T` and edit only the Q4_K/Q5_K-private dequantizers,
+their private scale-unpack helpers, or that Q4_K/Q5_K-only template body.
+The loop checks actual Git hunks against both the original and candidate
+source; it refuses selector, shared Q6_K helper, header, sibling and other-file
+edits. The native `MUL_MAT` and `MUL_MAT_ID` suite is followed by independent scalar
+`MUL_MAT`, `MUL_MAT_ID` and fused up-gate comparisons for both quants across activation
+widths 1–8. Each fused case requires a trusted hit on the matching template specialization
+inside the candidate CPU DSO. A missing specialization, wrong output or
+unproven path refuses timing. This route addresses the material dot work that
+the v27 planner correctly found outside the older fused-helper-body boundary.
+
+These receipts prove exact helper or specialization entry and those numerical
+shapes, not every branch or production shape. The fused-helper and dot routes
+supersede older abstentions only where their stated missing witness or edit
+boundary is now satisfied;
+historical nulls and abstentions for their actual measured mechanisms remain
+evidence and must not be discarded. Other prospective IQK edits still refuse
+before build: generic active-dispatch
+logging cannot prove an edited quant function ran on a passing selected case.
+x86 `quants.c` is shared by both
+arms and is not admitted. Other CPU source families need a supported route
+before admission. GPU matmul routes use the native CPU-reference suite;
+the selected device block must report a nonempty passing count. On admitted GPU
+source candidates, the gate checks that the selected `test-backend-ops` binary
+supports seeded properties, then requires `AK_REF_V1` on every selected case.
+Its compact metric receipt carries the suite's own per-case thresholds; missing
+support or receipts are `oracle_unavailable`, not wrong-kernel evidence. This
+does not admit CPU IQK source edits: their candidate-local CPU reference is not
+independent. Do not infer a
+universal cosine, PSNR, max-abs or MSE tolerance from this policy. Low-precision
+comparison requires its own validated reference and threshold.
 
 ---
 

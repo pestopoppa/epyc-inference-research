@@ -1,0 +1,2 @@
+verified_utc=2026-07-18T16:44:52Z
+method=pgrep -ax llama-bench; pgrep -ax llama-server

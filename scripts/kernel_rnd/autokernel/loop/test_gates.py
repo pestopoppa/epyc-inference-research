@@ -1,10 +1,33 @@
 """The gates, and the one property that makes them gates: order."""
+import ast
+import inspect
 from pathlib import Path
 import tempfile
 import unittest
 from unittest import mock
+from types import SimpleNamespace
 
-from autokernel.loop import gates
+from autokernel.loop import archive, gates, gdn_reference
+
+
+def _function_node(source, name):
+    """Return one complete function node without coupling tests to source spelling."""
+    nodes = [node for node in ast.walk(ast.parse(source))
+             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+             and node.name == name]
+    assert len(nodes) == 1, f"expected one {name}, found {len(nodes)}"
+    return nodes[0]
+
+
+def _function(source, name):
+    return ast.unparse(_function_node(source, name))
+
+
+def _calls(node, name):
+    """Find semantic calls by final function name, independent of call formatting."""
+    return [call for call in ast.walk(node) if isinstance(call, ast.Call)
+            and ((isinstance(call.func, ast.Name) and call.func.id == name)
+                 or (isinstance(call.func, ast.Attribute) and call.func.attr == name))]
 
 
 def _champion_build(dest, targets=gates.DEFAULT_TARGETS):
@@ -61,11 +84,52 @@ class TheShortCircuitMustBeReal(unittest.TestCase):
         self.assertEqual(ran, ["compile", "correctness"])
         self.assertEqual(len(verdicts), 2)
 
+
+class HardenedCandidateGates(unittest.TestCase):
+    def test_determinism_compares_output_hashes_not_return_codes(self):
+        rows = iter((SimpleNamespace(autokernel_output_hashes="a/a"),
+                     SimpleNamespace(autokernel_output_hashes="b/b")))
+        with mock.patch.object(Path, "is_file", return_value=True), \
+             mock.patch.object(gates.subprocess, "run", return_value=mock.Mock(
+                 returncode=0, stdout="[]", stderr="")), \
+             mock.patch.object(gates.residency, "loader_env", return_value={}), \
+             mock.patch.object(gates.bench, "hardened_row", side_effect=lambda *a, **k: next(rows)):
+            verdict = gates.deterministic(Path("/build"), Path("/model"), runs=2)
+        self.assertFalse(verdict.passed)
+        self.assertIn("outputs changed", verdict.reason)
+
+    def test_no_fallback_dispatch_rejects_cpu_assignment(self):
+        row = {"state": gates.census.OBSERVED, "nodes_total": 2000,
+               "op_backend": {"MUL_MAT": {"ROCm0": 20, "CPU": 1}}}
+        with mock.patch.object(Path, "is_file", return_value=True), \
+             mock.patch.object(gates.census, "run_dispatch_probe", return_value=row), \
+             mock.patch.object(gates.residency, "loader_env", return_value={}):
+            verdict = gates.no_fallback_dispatch(
+                Path("/build"), Path("/model"), pp=512, tg=0)
+        self.assertFalse(verdict.passed)
+        self.assertIn("fallback event", verdict.reason)
+
+    def test_live_gate_chain_names_both_hardenings(self):
+        source = (Path(__file__).resolve().parent / "run.py").read_text()
+        gate_node = next(node for node in ast.walk(ast.parse(source))
+                         if isinstance(node, ast.FunctionDef) and node.name == "gate")
+        body = ast.unparse(gate_node)
+        self.assertIn("gates.deterministic", body)
+        self.assertIn("gates.no_fallback_dispatch", body)
+
     def test_the_runner_passes_callables_not_evaluated_verdicts(self):
         source = (Path(__file__).resolve().parent / "run.py").read_text()
-        block = source.split("gates.run_all(", 1)[1][:320]
-        self.assertIn("lambda: gates.compiles", block)
-        self.assertIn("lambda: gates.op_correctness", block)
+        # Select every source-build chain, not the runtime-only oracles. Whole-source
+        # target validation intentionally adds a second compile/correctness chain.
+        chains = [node for node in ast.walk(ast.parse(source)) if isinstance(node, ast.Call)
+                  and ast.unparse(node.func) == "gates.run_all"
+                  and any(isinstance(arg, ast.Lambda) and isinstance(arg.body, ast.Call)
+                          and ast.unparse(arg.body.func) == "gates.compiles" for arg in node.args)]
+        self.assertTrue(chains)
+        for chain in chains:
+            self.assertTrue(all(isinstance(arg, ast.Lambda) for arg in chain.args))
+            self.assertEqual([ast.unparse(arg.body.func) for arg in chain.args],
+                             ["gates.compiles", "gates.op_correctness"])
 
 
 class ARefusedPatchMustSurviveTheReset(unittest.TestCase):
@@ -82,22 +146,24 @@ class ARefusedPatchMustSurviveTheReset(unittest.TestCase):
         self.assertIn("def keep_the_diff(", source)
         # It must run BEFORE the gate, because a failed build still leaves a patch
         # worth reading and that is the last moment it exists on disk.
-        gate_body = source.split("def gate(hypothesis, paths):", 1)[1][:900]
+        gate_node = next(node for node in ast.walk(ast.parse(source))
+                         if isinstance(node, ast.FunctionDef) and node.name == "gate")
         # `keep_the_diff` takes the LANE as well as the hypothesis since the gate
         # became per-worker: with concurrent lanes a bare `<mechanism>.patch` is two
         # lanes overwriting one file, which loses diffs the same way run 9 did. The
         # property under test is the ORDER, so match the call, not one spelling of
         # its argument list.
-        self.assertIn("keep_the_diff(", gate_body)
-        before = gate_body.index("keep_the_diff(")
-        self.assertLess(before, gate_body.index("gates.run_all"))
+        calls = {ast.unparse(node.func): node.lineno for node in ast.walk(gate_node)
+                 if isinstance(node, ast.Call)}
+        self.assertLess(calls["keep_the_diff"], calls["gates.compiles"])
 
     def test_an_empty_diff_writes_nothing(self):
         """An actor that changed nothing must not leave an empty patch file that
         later reads as a real attempt."""
         source = (Path(__file__).resolve().parent / "run.py").read_text()
-        body = source.split("def keep_the_diff(", 1)[1][:1200]
-        self.assertIn("if not diff.strip():", body)
+        self.assertIn("archive.retain_patch", _function(source, "keep_the_diff"))
+        body = inspect.getsource(archive.retain_patch)
+        self.assertIn("if not patch:", body)
         self.assertIn("return None", body)
 
 
@@ -129,7 +195,8 @@ class AnOracleThatCannotRunIsNotAFailedPatch(unittest.TestCase):
         self.assertNotIn("MUL_MAT failed", verdict.reason)
 
     def test_a_real_failure_is_still_a_correctness_verdict(self):
-        ran = "  1100/1139 tests passed\n  Backend ROCm0: FAIL\n1/2 backends passed\n"
+        ran = ("Backend 1/2: ROCm0\n  1100/1139 tests passed\n"
+               "  Backend ROCm0: FAIL\n1/2 backends passed\n")
         with mock.patch.object(Path, "is_file", return_value=True), \
                 self._fake_run(ran, 1):
             verdict = gates.op_correctness(Path("/nonexistent"))
@@ -138,7 +205,8 @@ class AnOracleThatCannotRunIsNotAFailedPatch(unittest.TestCase):
         self.assertIn("MUL_MAT failed", verdict.reason)
 
     def test_a_pass_requires_proof_the_suite_executed(self):
-        ran = "  1139/1139 tests passed\n2/2 backends passed\nOK\n"
+        ran = ("Backend 1/2: ROCm0\n  1139/1139 tests passed\n"
+               "  Backend ROCm0: \033[1;32mOK\033[0m\n2/2 backends passed\nOK\n")
         with mock.patch.object(Path, "is_file", return_value=True), \
                 self._fake_run(ran, 0):
             self.assertTrue(gates.op_correctness(Path("/nonexistent")).passed)
@@ -151,18 +219,201 @@ class AnOracleThatCannotRunIsNotAFailedPatch(unittest.TestCase):
         self.assertFalse(verdict.passed)
         self.assertEqual(verdict.gate, "oracle_unavailable")
 
-    def test_the_unsupported_flag_is_gone_from_the_INVOCATION(self):
-        """The docstring still names the flag on purpose -- it records the defect.
-        What must not contain it is the argv actually handed to the binary."""
-        import inspect
-        body = inspect.getsource(gates.op_correctness)
-        body = body.split('"""', 2)[-1]          # drop the docstring
-        self.assertIn("argv = [", body)
-        self.assertNotIn("--suite-seed", body)
+    def test_other_backend_or_zero_target_cases_cannot_pass(self):
+        for output in (
+            "Backend 1/1: CPU\n  3/3 tests passed\n  Backend CPU: OK\n1/1 backends passed\n",
+            "Backend 1/2: ROCm0\n  0/0 tests passed\n  Backend ROCm0: OK\n2/2 backends passed\n",
+        ):
+            with mock.patch.object(Path, "is_file", return_value=True), \
+                    self._fake_run(output, 0):
+                verdict = gates.op_correctness(Path("/nonexistent"), op="GATED_DELTA_NET")
+            self.assertEqual(verdict.gate, "oracle_unavailable")
+
+
+class AffectedOpAndIndependentReference(unittest.TestCase):
+    def test_cpu_gdn_route_has_independent_reference(self):
+        source = "// ggml_compute_forward_gated_delta_net\nold\nnew\n// ggml_compute_forward_next\n"
+        patch = "@@ -2 +2 @@\n-old\n+new\n"
+        self.assertEqual(gates.affected_op_scope(
+            ("ggml/src/ggml-cpu/ops.cpp",),
+            target_surface="ggml/src/ggml-cpu/ops.cpp",
+            target_symbol="ggml_compute_forward_gated_delta_net_f32",
+            source_text=source, patch_text=patch),
+            ("GATED_DELTA_NET",))
+        self.assertFalse(gates.affected_op_scope(
+            ("ggml/src/ggml-cpu/ops.cpp",),
+            target_surface="ggml/src/ggml-cpu/ops.cpp",
+            target_symbol="ggml_compute_forward_gated_delta_net_f32",
+            source_text=source, patch_text="@@ -4 +4 @@\n-old\n+new\n").passed)
+
+    def test_cuda_gdn_and_vecdot_routes(self):
+        self.assertEqual(gates.affected_op_scope(
+            ("ggml/src/ggml-cuda/gated_delta_net.cu",),
+            target_surface="ggml/src/ggml-cuda/gated_delta_net.cu",
+            target_symbol="gated_delta_net_cuda"), ("GATED_DELTA_NET",))
+        self.assertEqual(gates.affected_op_scope(
+            ("ggml/src/ggml-cuda/vecdotq.cuh",),
+            target_surface="ggml/src/ggml-cuda/vecdotq.cuh",
+            target_symbol="vec_dot_q5_0_q8_1_impl"), ("MUL_MAT", "MUL_MAT_ID"))
+        for path, symbol in (("ggml/src/ggml-cuda/mmvq.cu", "vec_dot_q4_K_q8_1"),
+                             ("ggml/src/ggml-cuda/mmq.cu", "ggml_cuda_should_use_mmq")):
+            self.assertEqual(gates.affected_op_scope(
+                (path,), target_surface=path, target_symbol=symbol),
+                ("MUL_MAT", "MUL_MAT_ID"))
+
+    def test_unknown_and_shared_source_refuse(self):
+        for paths in (("ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp",),
+                      ("ggml/src/ggml-cpu/ops.cpp", "ggml/src/ggml-cpu/ggml-cpu.c")):
+            verdict = gates.affected_op_scope(
+                paths, target_surface=paths[0],
+                target_symbol="ggml_compute_forward_gated_delta_net_f32")
+            self.assertIsInstance(verdict, gates.Verdict)
+            self.assertFalse(verdict.passed)
+
+    def test_cpu_quant_routes_refuse_before_build_without_edited_case_reference(self):
+        for path, symbol in (("ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp", "iqk_mul_mat"),
+                             ("ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp", "iqk_gemm"),
+                             ("ggml/src/ggml-cpu/arch/x86/quants.c",
+                              "ggml_vec_dot_q8_0_q8_0")):
+            verdict = gates.affected_op_scope(
+                (path,), target_surface=path, target_symbol=symbol)
+            self.assertIsInstance(verdict, gates.Verdict)
+            self.assertFalse(verdict.passed)
+
+    def test_cpu_iqk_moe_rows_route_requires_actual_function_body_hunks(self):
+        source = ('extern "C" IQK_API bool iqk_mul_mat_moe_rows(long n) {\n'
+                  '    changed();\n}\n'
+                  'extern "C" IQK_API bool iqk_moe_fused_up_gate(long n) {\n'
+                  '    sibling();\n}\n')
+        path = "ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp"
+        scope = gates.affected_op_scope(
+            (path,), target_surface=path, target_symbol="iqk_mul_mat_moe_rows",
+            source_text=source, patch_text="@@ -2 +2 @@\n-old\n+changed();\n")
+        self.assertEqual(scope, ("MUL_MAT_ID",))
+        for patch in ("@@ -4 +4 @@\n-old\n+sibling();\n",
+                      "@@ -1 +1 @@\n-old\n+extern foo\n", ""):
+            refused = gates.affected_op_scope(
+                (path,), target_surface=path, target_symbol="iqk_mul_mat_moe_rows",
+                source_text=source, patch_text=patch)
+            self.assertIsInstance(refused, gates.Verdict)
+            self.assertFalse(refused.passed)
+
+    def test_cpu_fused_iqk_route_is_body_confined_and_op_specific(self):
+        source = ('extern "C" IQK_API bool iqk_mul_mat_moe_rows(long n) {\n'
+                  '    sibling();\n}\n'
+                  'extern "C" IQK_API bool iqk_moe_fused_up_gate(long n) {\n'
+                  '    changed();\n}\n'
+                  '#if defined __x86_64__\n')
+        path = "ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp"
+        scope = gates.affected_op_scope(
+            (path,), target_surface=path, target_symbol="iqk_moe_fused_up_gate",
+            source_text=source, patch_text="@@ -5 +5 @@\n-old\n+changed();\n")
+        self.assertEqual(scope, ("MUL_MAT_ID",))
+        for hunk in ("@@ -2 +2 @@\n-old\n+sibling();\n",
+                     "@@ -7 +7 @@\n-old\n+#if defined __x86_64__\n"):
+            refused = gates.affected_op_scope(
+                (path,), target_surface=path, target_symbol="iqk_moe_fused_up_gate",
+                source_text=source, patch_text=hunk)
+            self.assertIsInstance(refused, gates.Verdict)
+            self.assertFalse(refused.passed)
+
+    def test_q45_dot_route_requires_pre_and_post_body_confinement(self):
+        path = "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp"
+        source = ("struct Q4Bits_AVX2 {\n    shared();\n};\n"
+                  "struct DequantizerQ4K_AVX2 final : Base {\n    q4();\n};\n"
+                  "struct DequantizerQ5K_AVX2 final : Base {\n    q5();\n};\n"
+                  "inline __m128i unpack_q4_scales(const uint8_t * x) {\n    scale();\n}\n"
+                  "inline __m256i unpack_q4_scales_2(const uint8_t * x) {\n    scale2();\n}\n"
+                  "template <typename Dequantizer, int nrc_y>\n"
+                  "static void mul_mat_qX_K_q8_2_X4_T() {\n    dot();\n}\n"
+                  "struct DequantizerQ6K_AVX2 final : Base {\n    q6();\n};\n"
+                  "case GGML_TYPE_Q4_K:\n"
+                  "IQK_SET_MUL_MAT_FUNCTIONS_T(mul_mat_qX_K_q8_2_X4_T, DequantizerQ4K_AVX2, kernels)\n"
+                  "case GGML_TYPE_Q5_K:\n"
+                  "IQK_SET_MUL_MAT_FUNCTIONS_T(mul_mat_qX_K_q8_2_X4_T, DequantizerQ5K_AVX2, kernels)\n")
+        def patch_at(token):
+            line = source.splitlines().index(token) + 1
+            return f"@@ -{line} +{line} @@\n-old\n+new\n"
+        for token in ("    q4();", "    q5();", "    scale();",
+                      "    scale2();", "    dot();"):
+            self.assertEqual(gates.affected_op_scope(
+                (path,), target_surface=path,
+                target_symbol="mul_mat_qX_K_q8_2_X4_T",
+                source_text=source, pre_source_text=source,
+                patch_text=patch_at(token)), ("MUL_MAT", "MUL_MAT_ID"))
+        for token in ("    shared();", "    q6();",
+                      "case GGML_TYPE_Q4_K:",
+                      "static void mul_mat_qX_K_q8_2_X4_T() {"):
+            self.assertFalse(gates.affected_op_scope(
+                (path,), target_surface=path,
+                target_symbol="mul_mat_qX_K_q8_2_X4_T",
+                source_text=source, pre_source_text=source,
+                patch_text=patch_at(token)).passed)
+        self.assertFalse(gates.affected_op_scope(
+            (path,), target_surface=path,
+            target_symbol="mul_mat_qX_K_q8_2_X4_T",
+            source_text=source, patch_text=patch_at("    dot();")).passed)
+        changed_signature = source.replace("static void mul_mat_qX_K_q8_2_X4_T() {",
+                                           "static void mul_mat_qX_K_q8_2_X4_T(int x) {")
+        self.assertFalse(gates.affected_op_scope(
+            (path,), target_surface=path,
+            target_symbol="mul_mat_qX_K_q8_2_X4_T",
+            source_text=changed_signature, pre_source_text=source,
+            patch_text=patch_at("    dot();")).passed)
+
+    def test_cpu_iqk_reference_distinguishes_wrong_and_unavailable(self):
+        from autokernel.loop import iqk_witness
+        for status, gate in (("pass", "reference_comparison"),
+                             ("wrong", "reference_comparison"),
+                             ("unavailable", "oracle_unavailable")):
+            with mock.patch.object(iqk_witness, "check",
+                    return_value=iqk_witness.Result(status, "reason", "detail")):
+                verdict = gates.check_cpu_iqk_reference(
+                    Path("/build"), Path("/source"), resolved_recipe=object(),
+                    target_symbol="iqk_mul_mat_moe_rows")
+            self.assertEqual(verdict.gate, gate)
+            self.assertEqual(verdict.passed, status == "pass")
+        with mock.patch.object(iqk_witness, "check_fused",
+                               return_value=iqk_witness.Result("pass", "fused")) as fused:
+            verdict = gates.check_cpu_iqk_reference(
+                Path("/build"), Path("/source"), resolved_recipe=object(),
+                target_symbol="iqk_moe_fused_up_gate")
+        self.assertTrue(verdict.passed)
+        fused.assert_called_once()
+        with mock.patch.object(iqk_witness, "check_q45_dot",
+                               return_value=iqk_witness.Result("pass", "dot")) as dot:
+            verdict = gates.check_cpu_iqk_reference(
+                Path("/build"), Path("/source"), resolved_recipe=object(),
+                target_symbol="mul_mat_qX_K_q8_2_X4_T")
+        self.assertTrue(verdict.passed)
+        dot.assert_called_once()
+
+    def test_wrong_vs_unavailable_reference_are_distinct(self):
+        for status, gate in (("pass", "reference_comparison"),
+                             ("wrong", "reference_comparison"),
+                             ("unavailable", "oracle_unavailable")):
+            with mock.patch.object(gdn_reference, "check_cpu_gdn",
+                    return_value=gdn_reference.GDNResult(status, "reason", "detail")):
+                verdict = gates.check_cpu_gdn_reference(Path("/build"), Path("/source"))
+            self.assertEqual(verdict.gate, gate)
+            self.assertEqual(verdict.passed, status == "pass")
+
+    def test_default_invocation_does_not_use_optional_metric_flags(self):
+        """Legacy instrument compatibility remains the default route."""
+        output = ("Testing 1 devices\n\nBackend 1/1: ROCm0\n"
+                  "  MUL_MAT(type=f32): OK\n  1/1 tests passed\n"
+                  "  Backend ROCm0: OK\n1/1 backends passed\nOK\n")
+        with mock.patch.object(Path, "is_file", return_value=True), \
+             mock.patch.object(gates.residency, "loader_env", return_value={}), \
+             mock.patch.object(gates.subprocess, "run", return_value=mock.Mock(
+                 returncode=0, stdout=output, stderr="")) as invoke:
+            self.assertTrue(gates.op_correctness(Path("/build")).passed)
+        argv = invoke.call_args.args[0]
+        self.assertNotIn("--suite-seed", argv)
+        self.assertNotIn("--autokernel-properties", argv)
 
     def test_the_invocation_is_the_one_proven_to_work_on_the_anchor(self):
-        """`test-backend-ops test -o MUL_MAT -b ROCm0 -j 1` exits 0 on the anchor;
-        adding --suite-seed makes it exit 1. Pin the proven form."""
+        """The original op-selection argv remains the default form."""
         import inspect
         body = inspect.getsource(gates.op_correctness).split('"""', 2)[-1]
         for token in ('"test"', '"-o", op', '"-b", backend', '"-j", "1"'):
@@ -184,9 +435,11 @@ class TheAnchorMustAdvanceWithTheChampion(unittest.TestCase):
 
     def test_the_anchor_arm_is_not_the_immutable_cli_argument(self):
         source = self._source()
-        block = source.split("def measure_for(", 1)[1][:600]
-        self.assertIn('bench.Arm("anchor", anchor_build[0]', block)
-        self.assertNotIn('bench.Arm("anchor", args.anchor_build', block,
+        measure_node = next(node for node in ast.walk(ast.parse(source))
+                            if isinstance(node, ast.FunctionDef) and node.name == "measure_for")
+        block = ast.unparse(measure_node)
+        self.assertIn("bench.Arm('anchor', anchor_build[0]", block)
+        self.assertNotIn("bench.Arm('anchor', args.anchor_build", block,
                          "a static anchor makes every effect cumulative, not marginal")
 
     def test_it_advances_only_after_the_commit_succeeds(self):
@@ -194,8 +447,7 @@ class TheAnchorMustAdvanceWithTheChampion(unittest.TestCase):
         bar for everything after it. Since the sequential path's deletion the one
         commit is `commit_pooled`: the champion ref moves, THEN the anchor builds."""
         source = self._source()
-        block = source.split(
-            "def commit_pooled(worker, hypothesis, paths, comparison)", 1)[1][:2900]
+        block = _function(source, "commit_pooled")
         self.assertIn("advance_champion", block)
         self.assertIn("promote_anchor", block)
         self.assertLess(block.index("advance_champion"),
@@ -221,12 +473,19 @@ class TheAnchorMustAdvanceWithTheChampion(unittest.TestCase):
         the champion-of-record snapshot. Pinned here the same way the order is."""
         source = self._source()
         # promote_anchor advances the accumulator + guards, and must NOT publish.
-        promote = source.split("def promote_anchor()", 1)[1].split("\n    def ", 1)[0]
-        self.assertIn("verify_anchor()", promote)
+        promote_node = _function_node(source, "promote_anchor")
+        promote = ast.unparse(promote_node)
+        verify_calls = _calls(promote_node, "verify_anchor")
+        self.assertEqual(len(verify_calls), 1)
+        guard_keywords = {item.arg: ast.unparse(item.value)
+                          for item in verify_calls[0].keywords}
+        self.assertEqual(guard_keywords, {"guard_floor": "prior_floor"})
         # 2026-09-07: per-keep headline RESTORED in promote_anchor (guard first, then
         # headline) -- R23-44 had frozen the headline for the whole accumulation phase.
-        self.assertIn("publish_headline()", promote)
-        self.assertLess(promote.index("verify_anchor()"), promote.index("publish_headline()"),
+        headline_calls = _calls(promote_node, "publish_headline")
+        self.assertEqual(len(headline_calls), 1)
+        self.assertLess((verify_calls[0].lineno, verify_calls[0].col_offset),
+                        (headline_calls[0].lineno, headline_calls[0].col_offset),
                         "the headline must never publish ahead of the guard")
         # the headline lives in accumulate_after_keep, after the cor snapshot.
         accum = source.split("def _accumulate_after_keep(", 1)[1].split("\n    def ", 1)[0]
@@ -246,10 +505,11 @@ class TheAnchorMustAdvanceWithTheChampion(unittest.TestCase):
         and run 18's mismatch costs 20 pairs again -- while every injected-double
         test stays green. Same wiring-only blind spot as the ordering test above."""
         source = self._source()
-        # `verify_anchor` nests `keep_verdict`, so cut at the NEXT top-level def.
-        block = source.split("def verify_anchor()", 1)[1]
-        block = block.split("def promote_anchor", 1)[0]
-        self.assertIn("digest=anchor_integrity.object_digest", block)
+        verify_node = _function_node(source, "verify_anchor")
+        calls = _calls(verify_node, "verify")
+        self.assertEqual(len(calls), 1)
+        keywords = {item.arg: ast.unparse(item.value) for item in calls[0].keywords}
+        self.assertEqual(keywords.get("digest"), "anchor_integrity.object_digest")
 
     def test_an_excursion_note_reaches_the_headline_refresh(self):
         """The excursion-flagged promotion still publishes -- the anchor is
@@ -306,7 +566,7 @@ class ThePooledPathMustAdvanceTheAnchorToo(unittest.TestCase):
 
     def _pooled_block(self):
         source = (Path(__file__).resolve().parent / "run.py").read_text()
-        return source.split("def commit_pooled(", 1)[1][:2900]  # widened for the R23-43 serving gate
+        return _function(source, "commit_pooled")
 
     def test_it_advances_the_champion_then_the_anchor(self):
         block = self._pooled_block()
@@ -412,7 +672,7 @@ class TwoTierChampionWiring(unittest.TestCase):
         src = self._source()
         accum = src.split("def _accumulate_after_keep(", 1)[1].split("\n    def ", 1)[0]
         # the serving A-arm is the champion-of-record build, B-arm the accumulator anchor
-        self.assertIn("serving.compare(serving_recipe, cor_build[0], anchor_build[0]", accum)
+        self.assertIn("measured_serving_compare(serving_recipe, cor_build[0], anchor_build[0]", accum)
         # it fires only on a named trigger (R23-54: threshold OR the 4-keep cadence), and
         # the trigger is recorded — never left for a reader to infer from the compounded
         # number the 2026-09-08 divergence discredited.
@@ -435,7 +695,7 @@ class TwoTierChampionWiring(unittest.TestCase):
         # step. So: no copy, and the gen is handed to prune as `protect`.
         self.assertNotIn("snapshot_cor(", src)
         self.assertNotIn("shutil.copytree", src)
-        self.assertIn("cor_build = [args.anchor_build]", src)
+        self.assertIn("cor_build = [args.cor_build or args.anchor_build]", src)
         self.assertIn("protect=[cor_build[0]]", src)
         # a serving PROMOTE re-points cor at the verified accumulator gen
         self.assertIn("cor_build[0] = anchor_build[0]", src)
@@ -446,6 +706,19 @@ class TwoTierChampionWiring(unittest.TestCase):
         self.assertIn("except Exception", wrapper)
         self.assertIn("accum     FAILED", wrapper)
         self.assertIn("accum-error-", wrapper)
+
+    def test_experimental_serving_uses_the_durable_accumulator(self):
+        src = self._source()
+        setup = src.split("def _is_ancestor", 1)[1].split("last_gate = [None]", 1)[0]
+        self.assertIn("accumulate.load_bundle(", setup)
+        self.assertNotIn("if experimental:", setup)
+        wrapper = src.split("def accumulate_after_keep(", 1)[1].split("\n    def ", 1)[0]
+        self.assertNotIn("or experimental", wrapper)
+        compounded = src.split("def _accumulate_after_keep(", 1)[1].split("\n    def ", 1)[0]
+        self.assertIn("cpu_compare(cor_build[0], anchor_build[0], rebind_feedback=False)", compounded)
+        drive = src.split("return pool.drive(", 1)[1].split("\n        )", 1)[0]
+        self.assertIn(
+            "accumulate_valid_positive=experimental", drive)
     def test_fire_multiple_arg_defaults_to_operator_range(self):
         src = self._source()
         arg = src.split('"--fire-multiple"', 1)[1][:120]
@@ -462,4 +735,3 @@ class TwoTierChampionWiring(unittest.TestCase):
         for field in ("compounded_bench_pct", "fire_threshold_pct", "n_keeps",
                       "progress_fraction", "champion_of_record"):
             self.assertIn(field, acc)
-

@@ -1,0 +1,20 @@
+django__django-11095: done turns=22 edits=2/2 patch_chars=789 capture=complete
+django__django-11119: turns_exhausted turns=30 edits=1/1 patch_chars=485 capture=complete
+django__django-11149: turns_exhausted turns=30 edits=0/0 patch_chars=0 capture=complete
+django__django-11211: turns_exhausted turns=30 edits=1/1 patch_chars=513 capture=complete
+django__django-11265: turns_exhausted turns=30 edits=2/2 patch_chars=651 capture=complete
+django__django-11292: turns_exhausted turns=30 edits=0/0 patch_chars=0 capture=complete
+django__django-11299: turns_exhausted turns=30 edits=0/0 patch_chars=0 capture=complete
+django__django-11477: turns_exhausted turns=30 edits=0/0 patch_chars=0 capture=complete
+matplotlib__matplotlib-14623: turns_exhausted turns=30 edits=0/0 patch_chars=0 capture=complete
+matplotlib__matplotlib-20488: turns_exhausted turns=30 edits=0/0 patch_chars=0 capture=complete
+matplotlib__matplotlib-20676: turns_exhausted turns=30 edits=0/0 patch_chars=0 capture=complete
+scikit-learn__scikit-learn-10297: done turns=14 edits=2/2 patch_chars=1434 capture=complete
+scikit-learn__scikit-learn-11310: done turns=16 edits=2/2 patch_chars=1076 capture=complete
+sphinx-doc__sphinx-10435: turns_exhausted turns=30 edits=2/2 patch_chars=857 capture=complete
+sphinx-doc__sphinx-10449: turns_exhausted turns=30 edits=0/0 patch_chars=0 capture=complete
+sphinx-doc__sphinx-10466: done turns=9 edits=1/1 patch_chars=792 capture=complete
+sympy__sympy-11618: done turns=20 edits=2/2 patch_chars=838 capture=complete
+sympy__sympy-12419: turns_exhausted turns=30 edits=1/3 patch_chars=688 capture=complete
+predictions -> /mnt/raid0/llm/epyc-inference-research/artifacts/architect-bench-gpu-20260814/agentic4/predictions.json
+capture status -> /mnt/raid0/llm/epyc-inference-research/artifacts/architect-bench-gpu-20260814/agentic4/capture-status.json (scoring eligible)

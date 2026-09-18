@@ -1,0 +1,7 @@
+[runner] Waiting for server at http://127.0.0.1:18072...
+[runner] Server healthy
+
+[runner] Evaluating olympiadbench_hard (n=12, seed=42)...
+[runner] olympiadbench_hard: 0.0% (0/12)
+
+[runner] Results written to /workspace/repos/epyc-inference-research/artifacts/architect-bench-gpu-20260814/dflash2_np1_20260820/dflash2_n8/result.json

@@ -1,0 +1,8 @@
+[runner] Waiting for server at http://127.0.0.1:18072...
+[runner] Server healthy
+
+[runner] Evaluating swebench_oracle (n=1, seed=42)...
+[runner] WARNING swebench_oracle capture not converter-ready id=django__django-11477 state=prompt_contract_candidate anomalies=zero_strict_blocks markers={'search': 0, 'divider': 0, 'replace': 0} parseable=0
+[runner] swebench_oracle: 0.0% (0/1)
+
+[runner] Results written to /mnt/raid0/llm/epyc-inference-research/artifacts/architect-bench-gpu-20260814/swebench_oracle/regen_jinja_only/regen_result.json

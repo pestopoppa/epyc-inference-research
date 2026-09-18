@@ -15,8 +15,9 @@ model that does not use speculative decode carries `none` and its own optimal `n
 about DFlash2 is baked into the framework; today's champion just happens to serve the 27B on
 gfx90a with DFlash2 at np4 (the aggregate-throughput knee measured by DF2-5).
 
-THE METRIC. `aggregate_tok_s` = sum of predicted tokens across `np` concurrent requests /
-wall time -- what a busy server sustains, which is what the operator chose to optimise.
+THE METRIC. `aggregate_tok_s` is the sum of each concurrent slot's reported
+`predicted_per_second`. It is not common-window wall throughput; changing to that estimator would
+require a new metric identity and calibration.
 
 This module is backend-blind about the kernel: it takes two BUILD DIRECTORIES (champion vs
 candidate) and the recipe, and returns a paired A/B `Comparison`-shaped result the loop's
@@ -26,26 +27,187 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, replace
+from functools import lru_cache
 import concurrent.futures as cf
+import base64
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
+import random
 import statistics
 import subprocess
 import time
+from typing import TYPE_CHECKING
 import urllib.request
+import urllib.error
 
-from . import residency
+from . import headline_admissibility, lifecycle_observation, residency, status
+from . import native_server_response as server_response
+from .loop import MeasurementFailed, MeasurementInvalid
+
+if TYPE_CHECKING:
+    from .resolved_recipe import ResolvedRecipe
 
 #: Schema of the on-disk recipe file, and part of the recipe's identity: a schema bump
 #: changes what the fields MEAN, so it must change the hash too.
 RECIPE_SCHEMA = "epyc.autokernel.canonical_recipe.v1"
+LEGACY_INSTRUMENT = "legacy_v1"
+MATCHED_INSTRUMENT = "matched_process_v2"
+MATCHED_ESTIMATOR = "median(candidate)/median(anchor)-1;paired-bootstrap-p95.v1"
+MATCHED_ORDER = "autokernel.evaluator.statistics.OrderSchedule.v1"
+MATCHED_CALIBRATION_PAIRS = 24
 
-#: Variables the LOADER owns. A recipe may not set these, and the refusal is a hard error
-#: rather than a silent override: `LD_LIBRARY_PATH` is what pins the build's OWN ggml, and
-#: three ggml generations live on this host -- a binary that inherits another tree's ggml
-#: runs silently wrong and no exit code reports it. `HSA_OVERRIDE_GFX_VERSION` is
+# ---------------------------------------------------------------------------
+# THE UNIT OF A FLOOR (R23-55 / INF-73 U2). A floor is a dispersion, and a
+# dispersion only exists relative to WHAT WAS RESAMPLED between two readings.
+# INF-70's RETEST-1 measured the same host on the same day in two units:
+#
+#   * `arm`     -- two readings inside ONE server session (an arm-scoped knob
+#                  toggled between requests):            sd 0.501%
+#   * `session` -- two readings from two sessions of one process
+#   * `process` -- two readings from two SEPARATE launches: sd 2.793%
+#
+# ~13x coarser between processes than within a session. Sizing against the wrong
+# unit is not a rounding error: INF-70's 0.171% ARM floor sized CHAMP-2 THP at 4
+# sessions/side where the session-unit answer is 4,780 -- a 1200-fold
+# underestimate that would have been spent as real host time. So the unit is a
+# REQUIRED field of every floor record, and a gate handed a floor of a different
+# unit than the effect REFUSES: it does not warn, and it does not rescale.
+UNIT_ARM = "arm"
+UNIT_SESSION = "session"
+UNIT_PROCESS = "process"
+#: The only admissible units, narrowest first.
+FLOOR_UNITS = (UNIT_ARM, UNIT_SESSION, UNIT_PROCESS)
+
+#: The unit `compare` itself measures in: every sample of every arm is a FRESH
+#: server launch (`_measure_once` launches, fires `np` requests, tears down), so
+#: between-process variance is inside every effect this module produces. DERIVED
+#: from the harness, never configured -- a caller cannot relabel it.
+COMPARE_EFFECT_UNIT = UNIT_PROCESS
+#: Same reasoning for the A/A: `calibrate_floor` relaunches per sample.
+CALIBRATION_UNIT = UNIT_PROCESS
+
+
+def _digest(value):
+    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":"),
+                                    allow_nan=False).encode()).hexdigest()
+
+
+def _instrument(instrument, pairs):
+    if instrument not in (LEGACY_INSTRUMENT, MATCHED_INSTRUMENT):
+        raise RecipeError("unknown serving instrument")
+    if instrument == MATCHED_INSTRUMENT and (type(pairs) is not int or not 1 <= pairs <= 64):
+        raise RecipeError("matched serving requires 1–64 predeclared pairs")
+    return instrument == MATCHED_INSTRUMENT
+
+
+def _matched_plan(pairs, *, seed=None):
+    from ..evaluator.statistics import OrderSchedule, ORDER_ANCHOR_FIRST
+    # Draw before the first observation and retain the draw. A reschedule is the
+    # same declared missing arm, not an outcome-dependent new schedule.
+    seed = seed or os.urandom(16).hex()
+    schedule = OrderSchedule.derive(campaign_seed=seed, candidate_id="serving-process",
+                                    base_blocks=pairs)
+    orders = [["anchor", "candidate"] if schedule.order_for(i) == ORDER_ANCHOR_FIRST
+              else ["candidate", "anchor"] for i in range(pairs)]
+    return {"instrument": MATCHED_INSTRUMENT, "estimator": MATCHED_ESTIMATOR,
+            "unit": "process", "pairs": pairs, "stopping": "fixed_pairs",
+            "order_algorithm": MATCHED_ORDER, "seed": seed, "orders": orders}
+
+
+def comparison_instrument_matches(comparison, *, instrument, pairs):
+    """Reuse an original observation only on its original instrument, never upgrade it."""
+    if not isinstance(comparison, Mapping):
+        return False
+    if instrument == LEGACY_INSTRUMENT:
+        return comparison.get("schema") == "epyc.autokernel.serving_ab.v1"
+    if instrument != MATCHED_INSTRUMENT or type(pairs) is not int or not 1 <= pairs <= 64:
+        return False
+    plan = comparison.get("measurement_plan")
+    return (comparison.get("schema") == "epyc.autokernel.serving_ab.v2"
+            and comparison.get("pairs") == pairs and isinstance(plan, dict)
+            and isinstance(plan.get("seed"), str) and len(plan["seed"]) == 32
+            and all(c in "0123456789abcdef" for c in plan["seed"])
+            and plan == _matched_plan(pairs, seed=plan["seed"]))
+
+
+def _matched_frame(recipe, resolved, frozen_requests):
+    if resolved is None:
+        raise RecipeError("matched serving requires the original resolved launch")
+    return {"recipe_hash": recipe.recipe_hash,
+            "request_digest": request_digest(recipe, frozen_requests),
+            "backend": resolved.backend,
+            "model": resolved.model.to_dict(),
+            "drafter": None if resolved.drafter is None else resolved.drafter.to_dict(),
+            "environment": {k: v for k, v in resolved.launch_env if k not in LOADER_OWNED_ENV},
+            "topology_prefix": list(resolved.argv[:resolved.argv.index(resolved.executable.path)]),
+            "applicability": "same_workload_source_build_treatment_only"}
+
+
+def _matched_summary(anchor, candidate, pairs):
+    return json.loads(_matched_summary_cached(tuple(anchor), tuple(candidate), pairs))
+
+
+@lru_cache(maxsize=8)
+def _matched_summary_cached(anchor, candidate, pairs):
+    from .bench import bootstrap_floor
+    from ..evaluator.statistics import percentile
+    # Reuse the existing paired-index scalar exactly. The outer bootstrap is an
+    # explicitly descriptive interval, never a replacement gate endpoint.
+    scalar = bootstrap_floor(anchor, candidate, ks=(pairs,))[pairs]
+    rng = random.Random(20260910)
+    estimates = []
+    for _ in range(256):
+        indices = [rng.randrange(len(anchor)) for _ in anchor]
+        estimates.append(bootstrap_floor([anchor[i] for i in indices],
+            [candidate[i] for i in indices], ks=(pairs,), draws=2000)[pairs])
+    return json.dumps({"floor_pct": scalar,
+            "interval": {"level": 0.95, "low_pct": percentile(estimates, .025),
+                         "high_pct": percentile(estimates, .975),
+                         "method": "paired_outer_bootstrap.v1", "outer_draws": 256,
+                         "inner_draws": 2000, "seed": 20260910,
+                         "use": "descriptive_only_not_gate_endpoint"},
+            "scalar_method": {"owner": "autokernel.loop.bench.bootstrap_floor",
+                              "draws": 20000, "seed": 20260829,
+                              "quantile": .95, "round_digits": 3}}, allow_nan=False)
+
+
+def _validate_matched_floor(row, recipe, frozen_requests, pairs, *, resolved=None):
+    if (row.get("schema") != "epyc.autokernel.serving_floor.v2"
+            or row.get("instrument") != MATCHED_INSTRUMENT
+            or row.get("estimator") != MATCHED_ESTIMATOR or row.get("unit") != "process"
+            or row.get("comparison_pairs") != pairs or row.get("order_algorithm") != MATCHED_ORDER
+            or row.get("recipe_hash") != recipe.recipe_hash
+            or row.get("request_digest") != request_digest(recipe, frozen_requests)):
+        raise ServingFloorMismatch("matched floor instrument/unit/count/workload differs")
+    count = row.get("calibration_pairs")
+    a, c = row.get("anchor_samples"), row.get("candidate_samples")
+    if (type(count) is not int or not MATCHED_CALIBRATION_PAIRS <= count <= 256
+            or not isinstance(a, list) or not isinstance(c, list) or len(a) != count or len(c) != count
+            or any(type(x) not in (int, float) or not math.isfinite(x) or x <= 0 for x in a + c)
+            or row.get("process_launches") != 2 * count
+            or row.get("calibration_plan") != _matched_plan(count, seed=row.get("calibration_plan", {}).get("seed"))):
+        raise ServingFloorMismatch("matched floor original pair membership differs")
+    replay = _matched_summary(a, c, pairs)
+    if (any(row.get(key) != value for key, value in replay.items())
+            or row.get("content_sha256") != _digest({k: v for k, v in row.items()
+                                                    if k not in {"content_sha256", "conditions"}})):
+        raise ServingFloorMismatch("matched floor reducer replay or original content differs")
+    interval = row.get("interval", {})
+    if (interval.get("level") != .95 or interval.get("use") != "descriptive_only_not_gate_endpoint"
+            or not all(type(interval.get(k)) in (int, float) and math.isfinite(interval[k])
+                       for k in ("low_pct", "high_pct"))
+            or not 0 <= interval["low_pct"] <= interval["high_pct"]):
+        raise ServingFloorMismatch("matched floor descriptive interval differs")
+    if resolved is not None and row.get("frame") != _matched_frame(recipe, resolved, frozen_requests):
+        raise ServingFloorMismatch("matched floor placement/model/environment frame differs")
+
+#: Variables the LOADER owns. A recipe may neither set nor unset these, and the refusal is
+#: a hard error rather than a silent override: `LD_LIBRARY_PATH` is what pins the build's
+#: OWN ggml, and three ggml generations live on this host -- a binary that inherits another
+#: tree's ggml runs silently wrong and no exit code reports it. `HSA_OVERRIDE_GFX_VERSION` is
 #: deliberately UNSET by the loader env for the same reason. An arm that needs either of
 #: these is not an env arm; it is a different build or a different device.
 LOADER_OWNED_ENV = ("LD_LIBRARY_PATH", "HSA_OVERRIDE_GFX_VERSION")
@@ -65,6 +227,8 @@ RESIDENCY_PROVEN = "proven"
 #: INSTRUMENT failure, and refusing every launch on one would stop the campaign on a
 #: fault that says nothing about the measurement.
 RESIDENCY_UNPROVEN = "unproven"
+#: CPU launches neither require nor earn a GPU residency warrant.
+RESIDENCY_NOT_APPLICABLE = "not_applicable"
 
 #: Characters a recipe name may carry VERBATIM into `serving-floor.<name>.json`: safe in a
 #: filename and as an unquoted shell word -- no `/`, no whitespace, no glob metacharacter,
@@ -147,10 +311,18 @@ class Recipe:
     #: check: a control arm whose readback was never declared is a control that was never
     #: checked, and a control that is secretly the treatment cannot be detected afterwards.
     env_readback: tuple = ()
+    #: Environment variables explicitly REMOVED from the launched process after the
+    #: inherited and loader environments are assembled.  This is deliberately separate
+    #: from `env`: absence from `env` means "inherit", while presence here means "unset".
+    #: A tuple keeps the declaration immutable; construction canonicalises its order so
+    #: equivalent recipes have one serialized identity. Kept last to preserve the legacy
+    #: positional constructor shape for every pre-existing field.
+    explicit_unsets: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         for key, value in (self.env or {}).items():
-            if not isinstance(key, str) or not isinstance(value, str):
+            self._validate_env_key(key, "env")
+            if not isinstance(value, str):
                 raise RecipeError(
                     f"env {key!r}={value!r}: environment variables are strings. Quote the "
                     f"value in the recipe JSON -- coercing it here would let the record "
@@ -161,9 +333,39 @@ class Recipe:
                     f"overriding it would break the three-ggml-generations linkage "
                     f"guarantee the residency check depends on. An arm that needs a "
                     f"different {key} is a different BUILD, not an env arm.")
+        if isinstance(self.explicit_unsets, str):
+            raise RecipeError("explicit_unsets must be a sequence of environment keys, not a string")
+        try:
+            unsets = tuple(self.explicit_unsets)
+        except TypeError as exc:
+            raise RecipeError("explicit_unsets must be a sequence of environment keys") from exc
+        for key in unsets:
+            self._validate_env_key(key, "explicit_unsets")
+            if key in LOADER_OWNED_ENV:
+                raise RecipeError(
+                    f"recipe env may not unset {key!r}: it is owned by the loader env, and "
+                    f"removing it would break the loader's linkage/device guarantee. An arm "
+                    f"that needs a different {key} is not an env arm.")
+        if len(set(unsets)) != len(unsets):
+            duplicates = sorted(key for key in set(unsets) if unsets.count(key) > 1)
+            raise RecipeError(f"explicit_unsets contains duplicate keys: {duplicates}")
+        unsets = tuple(sorted(unsets))
+        conflict = sorted(set(self.env or {}).intersection(unsets))
+        if conflict:
+            raise RecipeError(
+                f"recipe env keys cannot be both set and explicitly unset: {conflict}")
+        object.__setattr__(self, "explicit_unsets", unsets)
         # Resolve the readback declaration NOW, so an uncovered env state fails at
         # construction (including through `with_env`) rather than mid-measurement.
         self.readback_expectations()
+
+    @staticmethod
+    def _validate_env_key(key: object, source: str) -> None:
+        """Reject keys that cannot be passed faithfully through an OS environment."""
+        if not isinstance(key, str) or not key or "=" in key or "\0" in key:
+            raise RecipeError(
+                f"{source} key {key!r}: environment variable names must be non-empty "
+                f"strings containing neither '=' nor NUL")
 
     @classmethod
     def load(cls, path: Path | str) -> "Recipe":
@@ -176,22 +378,28 @@ class Recipe:
         d["extra_flags"] = tuple(d.get("extra_flags", ()))
         if d.get("env") is not None:
             d["env"] = dict(d["env"])
+        d["explicit_unsets"] = d.get("explicit_unsets") or ()
         d["env_readback"] = tuple(dict(c) for c in (d.get("env_readback") or ()))
         return cls(**d)
 
     def to_dict(self) -> dict:
         """Every field, in the shape `from_dict` reads back. There are no cosmetic fields:
         each one either changes what is launched or changes what the number means."""
-        return {"schema": RECIPE_SCHEMA, "name": self.name, "model": self.model,
-                "device": self.device, "ngl": self.ngl,
-                "spec_decode": dict(self.spec_decode), "np": self.np, "ctx": self.ctx,
-                "threads": self.threads, "batch": self.batch, "ubatch": self.ubatch,
-                "ctk": self.ctk, "ctv": self.ctv, "fa": self.fa,
-                "kv_unified": self.kv_unified, "extra_flags": list(self.extra_flags),
-                "cpu_list": self.cpu_list, "n_predict": self.n_predict,
-                "temperature": self.temperature, "top_p": self.top_p, "top_k": self.top_k,
-                "metric": self.metric, "env": dict(self.env or {}),
-                "env_readback": [dict(c) for c in self.env_readback]}
+        out = {"schema": RECIPE_SCHEMA, "name": self.name, "model": self.model,
+               "device": self.device, "ngl": self.ngl,
+               "spec_decode": dict(self.spec_decode), "np": self.np, "ctx": self.ctx,
+               "threads": self.threads, "batch": self.batch, "ubatch": self.ubatch,
+               "ctk": self.ctk, "ctv": self.ctv, "fa": self.fa,
+               "kv_unified": self.kv_unified, "extra_flags": list(self.extra_flags),
+               "cpu_list": self.cpu_list, "n_predict": self.n_predict,
+               "temperature": self.temperature, "top_p": self.top_p, "top_k": self.top_k,
+               "metric": self.metric, "env": dict(self.env or {}),
+               "env_readback": [dict(c) for c in self.env_readback]}
+        # Additive only when the new semantic is used: legacy recipe serialization and
+        # hashes remain byte-for-byte identical, so old floors are not reinterpreted.
+        if self.explicit_unsets:
+            out["explicit_unsets"] = list(self.explicit_unsets)
+        return out
 
     @property
     def recipe_hash(self) -> str:
@@ -204,8 +412,10 @@ class Recipe:
         a measurement whose recipe does not match the one the floor was calibrated under,
         instead of silently comparing two conditions.
 
-        It covers `to_dict()`, i.e. every field including `env` and `env_readback`. `None`
-        and `{}` env normalise to the same digest, because "no extra env" is one condition.
+        It covers `to_dict()`, i.e. every field including `env`, `explicit_unsets`, and
+        `env_readback`. `None` and `{}` env normalise to the same digest, because "no extra
+        env" is one condition. The explicit-unset field is omitted when empty to preserve
+        every legacy digest.
         """
         return hashlib.sha256(
             json.dumps(self.to_dict(), sort_keys=True,
@@ -242,22 +452,28 @@ class Recipe:
     def server_env(self, build_dir: Path, *,
                    base: Mapping[str, str] | None = None) -> dict[str, str]:
         """The exact environment the server is launched with: inherited env, then the
-        loader pin, then the recipe's own `env` LAST.
+        loader pin, then the recipe's own `env`, then its explicit unsets LAST.
 
-        Precedence is recipe > loader > inherited, and it is total only because the loader's
-        own variables are refused to `env` outright (`LOADER_OWNED_ENV`) -- so the recipe
-        can override any host variable it likes without ever being able to silently drop
-        the linkage pin the residency check depends on.
+        Precedence is explicit unset > recipe set > loader > inherited, and it is total only
+        because the loader's own variables are refused to both recipe states
+        (`LOADER_OWNED_ENV`) -- so the recipe can override any host variable it likes
+        without ever being able to silently drop the linkage pin the residency check
+        depends on.
         """
         env = dict(os.environ if base is None else base)
+        env.pop("HSA_OVERRIDE_GFX_VERSION", None)
         env["LD_LIBRARY_PATH"] = str(Path(build_dir) / "bin")
         env.update(self.env or {})
+        for key in self.explicit_unsets:
+            env.pop(key, None)
         return env
 
     def with_env(self, *, name: str | None = None, **overrides: str | None) -> "Recipe":
         """A sibling recipe differing only in `env` -- the two arms of a paired env A/B from
-        ONE recipe file, with no JSON editing. A `None` value REMOVES a variable, so the
-        control arm of an ON recipe is `with_env(KNOB=None)`.
+        ONE recipe file, with no JSON editing. A `None` value explicitly UNSETS a variable
+        after inherited env is assembled, so the control arm of an ON recipe is
+        `with_env(KNOB=None)`. Setting a value replaces an unset marker, and unsetting a
+        value removes any recipe override; the source recipe is never mutated.
 
         The name gets the override appended by default, because the serving floor FILE is
         keyed by recipe name (`serving-floor.<name>.json`) and a different env is a
@@ -271,15 +487,18 @@ class Recipe:
         env VALUE reaches the name here and may carry `/` or whitespace.
         """
         merged = dict(self.env or {})
+        unsets = set(self.explicit_unsets)
         for key, value in overrides.items():
             if value is None:
                 merged.pop(key, None)
+                unsets.add(key)
             else:
                 merged[key] = value
+                unsets.discard(key)
         if name is None:
             name = self.name + "".join(
                 f"+{k}={UNSET if v is None else v}" for k, v in sorted(overrides.items()))
-        return replace(self, name=name, env=merged)
+        return replace(self, name=name, env=merged, explicit_unsets=tuple(sorted(unsets)))
 
     def server_argv(self, build_dir: Path, port: int) -> list[str]:
         argv = ["taskset", "-c", self.cpu_list] if self.cpu_list else []
@@ -292,8 +511,15 @@ class Recipe:
                 "--host", "127.0.0.1", "--port", str(port), "--metrics", "--slots"]
         sd = self.spec_decode
         if sd.get("type", "none") != "none":
-            argv += ["-md", sd["drafter"], "-ngld", str(sd.get("ngld", self.ngl)),
-                     "--spec-type", sd["type"]]
+            # A SELF-DRAFTING model carries its draft head inside the weights (MTP, and any
+            # future variant of it), so there is no second GGUF and `-md` must NOT be passed.
+            # Requiring `drafter` unconditionally made every self-drafting model inexpressible
+            # as a recipe -- found 2026-09-08 trying to sweep Qwen3.6-35B-A3B-MTP. `drafter`
+            # is therefore OPTIONAL, and its absence is the declaration that the model drafts
+            # for itself; `ngld` is likewise only meaningful with a separate drafter.
+            if sd.get("drafter"):
+                argv += ["-md", sd["drafter"], "-ngld", str(sd.get("ngld", self.ngl))]
+            argv += ["--spec-type", sd["type"]]
             if "draft_n_max" in sd:
                 argv += ["--spec-draft-n-max", str(sd["draft_n_max"])]
         argv += ["--kv-unified" if self.kv_unified else "--no-kv-unified"]
@@ -310,8 +536,9 @@ class Recipe:
         sd = self.spec_decode.get("type", "none")
         pin = f" cpu={self.cpu_list}" if self.cpu_list else " cpu=unpinned"
         env = self.env or {}
-        envs = (" env=" + ",".join(f"{k}={v}" for k, v in sorted(env.items()))
-                if env else " env=none")
+        env_states = ([f"{k}={v}" for k, v in sorted(env.items())]
+                      + [f"{k}=<unset>" for k in self.explicit_unsets])
+        envs = " env=" + ",".join(env_states) if env_states else " env=none"
         rb = self.readback_expectations()
         rbs = " readback=" + ",".join(f"{f}={v}" for f, v in rb) if rb else ""
         return (f"{self.name} [np{self.np} {sd} {self.metric}{pin}{envs}{rbs} "
@@ -331,7 +558,7 @@ class EnvReadbackFailed(RuntimeError):
     """
 
 
-class ServerDied(RuntimeError):
+class ServerDied(MeasurementFailed):
     """The server exited during load or measurement -- a build/config fault, not noise."""
 
 
@@ -362,6 +589,59 @@ class ServingFloorMismatch(RuntimeError):
     """
 
 
+class FloorUnitMismatch(ServingFloorMismatch):
+    """The floor's UNIT is absent, unknown, or not the effect's unit (R23-55).
+
+    A subclass so every caller that already refuses on `ServingFloorMismatch` refuses on
+    this too -- an effect judged against a floor of another unit is not a weaker verdict,
+    it is a verdict about a different question (0.501% arm vs 2.793% process, ~13x, and a
+    1200-fold sizing error on the one occasion it was worked through end to end).
+    """
+
+
+def unit_refusal(floor_unit: str | None, effect_unit: str | None, *,
+                 path: object = None, what: str = "floor") -> str:
+    """The refusal text, in one place so every gate says the same thing.
+
+    Names BOTH units (or the missing one) and the file, because "units differ" without the
+    two names is a message nobody can act on.
+    """
+    where = "" if path is None else f" {path}"
+    if floor_unit is None:
+        return (f"{what}{where} carries no admissible `unit`: it is a legacy record "
+                f"written before R23-55, so NOTHING says whether its dispersion was "
+                f"measured within one server session (`arm`, INF-70 sd 0.501%) or across "
+                f"process launches (`process`, sd 2.793% -- ~13x coarser). REFUSING to "
+                f"gate an effect measured in unit {effect_unit!r} against it: on the one "
+                f"occasion this was worked through, the arm-unit reading under-sized the "
+                f"experiment 1200-fold. Fix: recalibrate this floor "
+                f"(serving.calibrate_floor + serving.write_floor(..., unit=...)); the "
+                f"legacy file is left exactly as it is.")
+    if effect_unit is None:
+        return (f"effect declares no measurement `unit`, so it cannot be judged against "
+                f"{what}{where} (unit {floor_unit!r}). Pass the unit the effect was "
+                f"actually measured in, one of {FLOOR_UNITS}; guessing is what R23-55 "
+                f"exists to stop.")
+    return (f"UNIT MISMATCH: effect measured in unit {effect_unit!r}, {what}{where} "
+            f"calibrated in unit {floor_unit!r}. A floor is a dispersion over what was "
+            f"RESAMPLED between readings, so these are bars on different questions "
+            f"(INF-70 RETEST-1: arm sd 0.501% vs process-launch sd 2.793%, ~13x coarser). "
+            f"REFUSING rather than warning or rescaling: recalibrate a "
+            f"{effect_unit}-unit floor for this condition.")
+
+
+def check_unit(floor_unit: str | None, effect_unit: str | None, *,
+               path: object = None, what: str = "floor") -> str:
+    """Admit a floor as the bar for an effect, or raise. Returns the agreed unit."""
+    if (floor_unit not in FLOOR_UNITS or effect_unit not in FLOOR_UNITS
+            or floor_unit != effect_unit):
+        raise FloorUnitMismatch(unit_refusal(
+            floor_unit if floor_unit in FLOOR_UNITS else None,
+            effect_unit if effect_unit in FLOOR_UNITS else None,
+            path=path, what=what))
+    return floor_unit
+
+
 def _status_fields(text: str) -> dict[str, str]:
     """`/proc/<pid>/status` as a mapping. `THP_enabled:\t1` -> {"THP_enabled": "1"}."""
     out: dict[str, str] = {}
@@ -373,7 +653,9 @@ def _status_fields(text: str) -> dict[str, str]:
 
 
 def verify_env_readback(recipe: Recipe, pid: int, *,
-                        status_text: str | None = None) -> dict[str, str | None]:
+                        status_text: str | None = None,
+                        expectations: Sequence[tuple[str, str]] | None = None
+                        ) -> dict[str, str | None]:
     """Prove the recipe's env arm took effect on the LAUNCHED process, or refuse.
 
     Fail-closed in both directions and in every failure mode: a mismatch raises, a field the
@@ -384,7 +666,8 @@ def verify_env_readback(recipe: Recipe, pid: int, *,
     `pid` is `Popen.pid`, which is the SERVER even under `taskset`: taskset `exec`s the
     binary in place rather than forking, and `PR_SET_THP_DISABLE` survives `exec`.
     """
-    expectations = recipe.readback_expectations()
+    expectations = (recipe.readback_expectations() if expectations is None
+                    else tuple(expectations))
     if not expectations:
         return {}
     if status_text is None:
@@ -440,7 +723,7 @@ def covers_request_phase(record: Mapping) -> bool:
 
 def _residency_record(sampler, *, window_start: float, window_end: float,
                       request_start: float | None,
-                      request_end: float | None) -> dict:
+                      request_end: float | None, backend: str = "gpu") -> dict:
     """One launch's residency evidence: what bench records, plus the window it covers.
 
     `status` is three-valued in effect: `proven`, `unproven`, or -- when the window DID
@@ -450,7 +733,7 @@ def _residency_record(sampler, *, window_start: float, window_end: float,
     """
     proof = dict(sampler.proof)
     sampled = bool(proof.get("samples")) and bool(proof.get("vram_reads"))
-    record = {"schema": RESIDENCY_SCHEMA, **proof,
+    record = {"schema": RESIDENCY_SCHEMA, "backend": backend, **proof,
               # Distinguishes an unreadable instrument from a device read as empty.
               "sampled": sampled,
               "resident_floor_bytes": residency.RESIDENT_FLOOR_BYTES,
@@ -458,14 +741,19 @@ def _residency_record(sampler, *, window_start: float, window_end: float,
               "window_s": round(window_end - window_start, 3),
               "request_start": request_start, "request_end": request_end}
     record["covers_request_phase"] = covers_request_phase(record)
-    record["status"] = (
-        RESIDENCY_PROVEN
-        if sampled and record["covers_request_phase"] and proof.get("resident")
-        else RESIDENCY_UNPROVEN)
+    record["status"] = (RESIDENCY_NOT_APPLICABLE if backend == "cpu" else
+                        RESIDENCY_PROVEN
+                        if sampled and record["covers_request_phase"] and proof.get("resident")
+                        else RESIDENCY_UNPROVEN)
+    record["gpu_residency"] = record["status"]
+    if backend == "cpu":
+        # These need a CPU lifecycle sampler; absence is never a clean observation.
+        record["cpu_placement"] = "unproven"
+        record["contention"] = "unproven"
     return record
 
 
-def _refuse_if_not_resident(recipe: Recipe, record: Mapping) -> None:
+def _refuse_if_not_resident(recipe: Recipe, record: Mapping, *, backend: str = "gpu") -> None:
     """Abort a launch MEASURED non-resident. Record, but do not abort, an unsampled one.
 
     The asymmetry is the same one `verify_env_readback` enforces, and it is not a
@@ -476,6 +764,9 @@ def _refuse_if_not_resident(recipe: Recipe, record: Mapping) -> None:
     with the whole record in hand.
     """
     if record.get("status") == RESIDENCY_PROVEN:
+        return
+    if (record.get("status") == RESIDENCY_NOT_APPLICABLE and backend == "cpu"
+            and recipe.ngl == 0 and recipe.device == "none"):
         return
     if not (record.get("sampled") and record.get("covers_request_phase")):
         return
@@ -497,15 +788,22 @@ def _residency_fold(records: Sequence[Mapping]) -> dict:
     unproven no matter how the rest sampled.
     """
     rows = [dict(record) for record in records]
+    cpu_only = bool(rows) and all(row.get("backend") == "cpu" for row in rows)
     fold = {"schema": RESIDENCY_SCHEMA,
-            "status": RESIDENCY_UNPROVEN if not rows else (
+            "backend": "cpu" if cpu_only else "gpu",
+            "status": RESIDENCY_NOT_APPLICABLE if cpu_only else (
+                RESIDENCY_UNPROVEN if not rows else (
                 RESIDENCY_PROVEN
                 if all(r.get("status") == RESIDENCY_PROVEN for r in rows)
-                else RESIDENCY_UNPROVEN),
+                else RESIDENCY_UNPROVEN)),
             "invocations": len(rows),
             "resident": sum(1 for r in rows if r.get("resident")),
             "proven": sum(1 for r in rows if r.get("status") == RESIDENCY_PROVEN),
             "resident_floor_bytes": residency.RESIDENT_FLOOR_BYTES}
+    fold["gpu_residency"] = fold["status"]
+    if cpu_only:
+        fold["cpu_placement"] = "unproven"
+        fold["contention"] = "unproven"
     if not rows:
         return fold
     fold.update({
@@ -525,7 +823,14 @@ def _residency_fold(records: Sequence[Mapping]) -> dict:
 
 def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                   boot_timeout_s: int = 360, *,
-                  evidence: list | None = None) -> float:
+                  evidence: list | None = None,
+                  resolved_recipe: "ResolvedRecipe | None" = None,
+                  frozen_requests: Sequence[tuple[str, bytes]] | None = None,
+                  observation: list | None = None,
+                  observation_session: lifecycle_observation.ObservationSession | None = None,
+                  response_capture: server_response.ServerResponseCapture | None = None,
+                  cpu_profile_capture=None
+                  ) -> float:
     """Launch the server under `recipe`, fire `np` concurrent requests, return aggregate
     tok/s. The server is always stopped, even on error.
 
@@ -542,78 +847,390 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
     measured non-resident raises `ServingNotResident` whether or not anyone asked for
     the record.
     """
-    argv = recipe.server_argv(build_dir, port)
-    sampler = residency.Sampler()
+    request_rows: list[dict] = []
+    process_pid: int | None = None
+    teardown = "not_started"
+    failure: str | None = None
+    observer_finish_ok = observation_session is None
+    cpu_observer = None
+    cpu_observer_error = None
+    cpu_invalidity = []
+    response_reference = None
+    serving_exception: Exception | None = None
+    if cpu_profile_capture is not None:
+        from .cpu_profile import CpuProfileCapture
+        if (type(cpu_profile_capture) is not CpuProfileCapture or resolved_recipe is None
+                or resolved_recipe.backend != "cpu" or frozen_requests is None):
+            raise RecipeError("CPU profiling requires concrete capture and frozen CPU launch")
+        cpu_profile_capture.validate_launch(resolved_recipe, frozen_requests)
+    if response_capture is not None and type(response_capture) is not server_response.ServerResponseCapture:
+        raise RecipeError("response capture must be the concrete native server recorder")
+    if response_capture is not None and (resolved_recipe is None or frozen_requests is None):
+        raise RecipeError("server response capture requires the frozen resolved launch")
+    if response_capture is not None:
+        response_capture.validate_launch(resolved_recipe, frozen_requests)
+
+    def observe(method: str, *args) -> bool:
+        if cpu_observer is not None:
+            try:
+                getattr(cpu_observer, method)(*args)
+            except Exception as exc:
+                # Factual telemetry cannot alter serving or owned teardown.
+                try:
+                    cpu_observer.note_hook_failure(method, exc)
+                except Exception:
+                    pass
+        if observation_session is None:
+            return True
+        try:
+            getattr(observation_session, method)(*args)
+            return True
+        except Exception as exc:
+            # The session retains its own diagnostic whenever it can. Observation is
+            # auxiliary: it must never skip owned teardown or replace a serving error.
+            try:
+                observation_session.note_hook_failure(method, exc)
+            except Exception:
+                pass
+            return False
+    if frozen_requests is not None:
+        if len(frozen_requests) != recipe.np:
+            raise RecipeError("frozen request count must equal recipe.np")
+        for prompt_id, body in frozen_requests:
+            if not isinstance(prompt_id, str) or not prompt_id.strip() \
+                    or not isinstance(body, bytes) or not body:
+                raise RecipeError("frozen requests need non-empty prompt IDs and body bytes")
+        if len({item[0] for item in frozen_requests}) != len(frozen_requests):
+            raise RecipeError("frozen request prompt IDs must be unique within a launch")
+    backend = "cpu" if recipe.device == "none" and recipe.ngl == 0 else "gpu"
+    if resolved_recipe is not None:
+        # Refuse unsupported capabilities or moved inputs before sampler/Popen.
+        resolved_recipe.validate_launch(recipe, build_dir, port)
+        argv = list(resolved_recipe.argv)
+        launch_env = dict(resolved_recipe.launch_env)
+        backend = resolved_recipe.backend
+    else:
+        argv = recipe.server_argv(build_dir, port)
+        launch_env = recipe.server_env(build_dir)
+    if (backend == "cpu" and resolved_recipe is not None
+            and observation_session is None and cpu_profile_capture is None):
+        # Native observed/profile paths already own their collectors. The legacy
+        # CPU path needs raw facts, not a fabricated sealed native context.
+        try:
+            cpu_observer = residency.CpuLifecycleSampler()
+        except Exception as exc:
+            cpu_observer_error = f"{type(exc).__name__}: {exc}"[:256]
+    observe("start", "setup")
+    sampler = None
     window_start = time.time()
     request_start: float | None = None
     request_end: float | None = None
     try:
+        if cpu_profile_capture is None:
+            sampler = residency.Sampler()
+        else:
+            from .cpu_profile import CpuOnlySampler
+            sampler = CpuOnlySampler()
         with sampler:
+            observe("phase", "load")
             srv = subprocess.Popen(argv, stdout=subprocess.DEVNULL,
                                    stderr=subprocess.DEVNULL,
-                                   env=recipe.server_env(build_dir))
+                                   env=launch_env)
+            process_pid = srv.pid
+            observe("attach_target", srv.pid)
+            # Placement is an overlapping launcher marker inside the load window;
+            # load itself remains open until the health marker below.
+            observe("phase", "placement")
             try:
+                if cpu_profile_capture is not None:
+                    cpu_profile_capture.attach_target(srv.pid)
                 for _ in range(boot_timeout_s // 2):
                     if srv.poll() is not None:
                         raise ServerDied(f"server exited {srv.returncode} during load ({recipe.describe()})")
                     try:
-                        urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=2)
+                        health = urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=2)
+                        if callable(getattr(health, "close", None)):
+                            health.close()
                         break
+                    except urllib.error.HTTPError as exc:
+                        exc.close()
+                        time.sleep(2)
                     except Exception:
                         time.sleep(2)
                 else:
                     raise ServerDied("server not healthy within boot timeout")
+                observe("phase", "health")
                 # The env arm is verified on the LIVE process, before a single token is measured.
-                verify_env_readback(recipe, srv.pid)
+                if resolved_recipe is None:
+                    verify_env_readback(recipe, srv.pid)
+                else:
+                    verify_env_readback(
+                        recipe, srv.pid,
+                        expectations=resolved_recipe.readback_expectations)
 
-                def one(i: int) -> tuple[int, float]:
-                    body = json.dumps({"prompt": _PROMPTS[i % len(_PROMPTS)],
-                                       "n_predict": recipe.n_predict, "temperature": recipe.temperature,
-                                       "top_p": recipe.top_p, "top_k": recipe.top_k,
-                                       "cache_prompt": False}).encode()
-                    req = urllib.request.Request(f"http://127.0.0.1:{port}/completion", data=body,
-                                                 headers={"Content-Type": "application/json"})
-                    t = json.loads(urllib.request.urlopen(req, timeout=600).read()).get("timings", {})
-                    # per-request decode rate, NOT wall-clock: each slot reports its own
-                    # predicted_n / predicted_ms, so the aggregate is the sum of the concurrent
-                    # slots' rates and is immune to the scheduling-tail jitter that made the
-                    # wall-clock aggregate ~5-10% noisy even at greedy (R23-43).
-                    return int(t.get("predicted_n", 0)), float(t.get("predicted_per_second", 0.0))
+                def one(i: int, phase: str) -> tuple:
+                    if frozen_requests is None:
+                        prompt_id = f"legacy-slot-{i}"
+                        body = json.dumps({"prompt": _PROMPTS[i % len(_PROMPTS)],
+                                           "n_predict": recipe.n_predict,
+                                           "temperature": recipe.temperature,
+                                           "top_p": recipe.top_p, "top_k": recipe.top_k,
+                                           "cache_prompt": False}).encode()
+                    else:
+                        prompt_id, body = frozen_requests[i]
+                    record = {"phase": phase, "slot_index": i, "prompt_id": prompt_id,
+                              "request_sha256": hashlib.sha256(body).hexdigest(),
+                              "predicted_n": None, "predicted_per_second": None,
+                              "terminal": False, "error": None}
+                    response_bytes = None
+                    started_monotonic = time.monotonic()
+                    ended_monotonic = started_monotonic
+                    result = (0, 0.0, False)
+                    try:
+                        req = urllib.request.Request(
+                            f"http://127.0.0.1:{port}/completion", data=body,
+                            headers={"Content-Type": "application/json"})
+                        http_error = None
+                        try:
+                            opened = urllib.request.urlopen(req, timeout=600)
+                        except urllib.error.HTTPError as exc:
+                            if response_capture is None and cpu_profile_capture is None:
+                                exc.close()
+                                raise
+                            opened, http_error = exc, exc
+                        try:
+                            if response_capture is None and cpu_profile_capture is None:
+                                response_bytes = opened.read()
+                            else:
+                                response_bytes = opened.read(server_response.MAX_RESPONSE_BYTES + 1)
+                                if len(response_bytes) > server_response.MAX_RESPONSE_BYTES:
+                                    response_bytes = None
+                                    raise ValueError("server response exceeds raw capture byte budget")
+                        finally:
+                            if callable(getattr(opened, "close", None)):
+                                opened.close()
+                        ended_monotonic = time.monotonic()
+                        if http_error is not None:
+                            raise http_error
+                        response = json.loads(response_bytes)
+                        timings = response.get("timings", {})
+                        # per-request decode rate, NOT wall-clock: each slot reports its own
+                        # predicted_n / predicted_ms; the aggregate remains the sum of rates.
+                        if frozen_requests is not None:
+                            if not isinstance(timings, Mapping):
+                                raise ValueError("response timings must be an object")
+                            tokens = timings.get("predicted_n")
+                            rate = timings.get("predicted_per_second")
+                            if isinstance(tokens, bool) or not isinstance(tokens, int) \
+                                    or tokens < 0:
+                                raise ValueError("predicted_n must be a non-negative integer")
+                            if isinstance(rate, bool) or not isinstance(rate, (int, float)) \
+                                    or not math.isfinite(float(rate)) or rate < 0:
+                                raise ValueError(
+                                    "predicted_per_second must be a finite non-negative number")
+                            rate = float(rate)
+                        else:
+                            tokens = int(timings.get("predicted_n", 0))
+                            rate = float(timings.get("predicted_per_second", 0.0))
+                        terminal = response.get("stop") is True
+                        record.update(predicted_n=tokens, predicted_per_second=rate,
+                                      terminal=terminal)
+                        result = (tokens, rate, terminal)
+                    except Exception as exc:
+                        ended_monotonic = time.monotonic()
+                        record["error"] = f"{type(exc).__name__}: {exc}"
+                    captured = None if response_capture is None and cpu_profile_capture is None else server_response.RawServerResponse(
+                        phase, i, prompt_id, body, response_bytes, started_monotonic,
+                        ended_monotonic, record["error"])
+                    return (*result, record, captured)
 
                 # The request phase proper starts HERE, warmup included: the
                 # residency window must overlap the work, not merely the boot.
                 request_start = time.time()
+                request_started_monotonic = time.monotonic()
                 # Warmup: one full np-wide round discarded, so cold-cache/clock-ramp does not
                 # land in the measured sample (the first calibration run read high, then settled).
+                observe("phase", "warmup")
+                if cpu_profile_capture is not None:
+                    cpu_profile_capture.begin_round("warmup")
                 with cf.ThreadPoolExecutor(recipe.np) as ex:
-                    list(ex.map(one, range(recipe.np)))
+                    warmup_rows = list(ex.map(lambda i: one(i, "warmup"), range(recipe.np)))
+                if cpu_profile_capture is not None:
+                    cpu_profile_capture.end_round("warmup")
+                observe("phase", "measurement")
+                if cpu_profile_capture is not None:
+                    cpu_profile_capture.begin_round("measurement")
                 with cf.ThreadPoolExecutor(recipe.np) as ex:
-                    rows = list(ex.map(one, range(recipe.np)))
+                    rows = list(ex.map(lambda i: one(i, "measurement"), range(recipe.np)))
+                if cpu_profile_capture is not None:
+                    cpu_profile_capture.end_round("measurement")
+                    cpu_profile_capture.retain_responses(tuple(row[4] for row in warmup_rows + rows))
+                observe("checkpoint", "measurement_end")
                 request_end = time.time()
-                toks = [n for n, _ in rows]
-                if min(toks) < recipe.n_predict // 2:
+                request_ended_monotonic = time.monotonic()
+                request_rows = [row[3] for row in warmup_rows + rows]
+                if response_capture is not None:
+                    # Persistence is outside both timed rounds and still inside the
+                    # existing owned lifecycle, before its finally-driven teardown.
+                    response_reference = response_capture.seal(
+                        tuple(row[4] for row in warmup_rows + rows), process_pid=srv.pid,
+                        request_started_monotonic_s=request_started_monotonic,
+                        request_ended_monotonic_s=request_ended_monotonic)
+                toks = [row[0] for row in rows]
+                if any(row[3]["error"] for row in warmup_rows + rows):
+                    raise ServerDied("one or more serving slots failed; see collected observation")
+                if frozen_requests is None and min(toks) < recipe.n_predict // 2:
                     raise ServerDied(f"degenerate measurement: tokens={toks}")
-                value = sum(rate for _, rate in rows)
+                if frozen_requests is not None and not all(row[2] for row in warmup_rows + rows):
+                    raise ServerDied("frozen request lacks explicit terminal completion")
+                value = sum(row[1] for row in rows)
             finally:
+                observe("phase", "teardown")
+                if cpu_profile_capture is not None:
+                    # Perf cleanup cannot skip the serving owner's server teardown.
+                    try:
+                        if cpu_profile_capture.active:
+                            cpu_profile_capture.abort("serving teardown with unfinished perf")
+                    except Exception as exc:
+                        cpu_profile_capture.failed = str(exc)
                 srv.terminate()
                 try:
                     srv.wait(30)
+                    teardown = "terminated"
                 except Exception:
                     srv.kill()
                     srv.wait(10)
+                    teardown = "killed"
+    except Exception as exc:
+        serving_exception = exc
+        failure = f"{type(exc).__name__}: {exc}"
+        raise
     finally:
+        if cpu_observer is not None:
+            try:
+                cpu_observer.finish()
+            except Exception as exc:
+                cpu_observer_error = f"{type(exc).__name__}: {exc}"[:256]
         window_end = time.time()
-        record = _residency_record(sampler, window_start=window_start,
-                                   window_end=window_end,
-                                   request_start=request_start,
-                                   request_end=request_end)
-        if evidence is not None:
-            evidence.append(record)
+        try:
+            if sampler is not None:
+                try:
+                    record = _residency_record(sampler, window_start=window_start,
+                                               window_end=window_end,
+                                               request_start=request_start,
+                                               request_end=request_end, backend=backend)
+                    if cpu_observer is not None:
+                        try:
+                            record["cpu_lifecycle"] = cpu_observer.observation
+                            cpu_invalidity = residency.cpu_lifecycle_invalidity(
+                                record["cpu_lifecycle"], recipe.cpu_list)
+                            record["measurement_validity"] = {
+                                "status": "invalid" if cpu_invalidity else "unproven",
+                                "failed_conditions": cpu_invalidity}
+                        except Exception as exc:
+                            cpu_observer_error = f"{type(exc).__name__}: {exc}"[:256]
+                    if cpu_observer_error is not None:
+                        record["cpu_lifecycle_error"] = cpu_observer_error
+                    if evidence is not None:
+                        evidence.append(record)
+                    exported = {
+                        "schema": "epyc.autokernel.serving_observation.v1",
+                        "process_pid": process_pid, "requests": request_rows,
+                        "residency": record, "teardown": teardown, "failure": failure}
+                    if response_reference is not None:
+                        exported["server_responses"] = response_reference
+                    if isinstance(serving_exception, ServerDied):
+                        serving_exception.record = exported
+                    if observation is not None:
+                        observation.append(exported)
+                except Exception:
+                    if failure is None:
+                        raise
+                    # Preserve the serving exception already in flight. The auxiliary
+                    # export failure cannot replace the launch/readback/request cause.
+        finally:
+            observer_finish_ok = observe("finish")
+            if cpu_profile_capture is not None:
+                cpu_profile_capture.finish()
     # Success path only. An exception already in flight carries its own reason, and
     # replacing it with a residency refusal would hide the real fault -- while the
     # record above is appended either way, so a failed launch still leaves its window.
-    _refuse_if_not_resident(recipe, record)
+    _refuse_if_not_resident(recipe, record, backend=backend)
+    if observation_session is not None and (
+            not observer_finish_ok or not observation_session.shutdown_resolved):
+        raise lifecycle_observation.ObserverShutdownUnresolved(
+            "lifecycle observer ownership remains unresolved; refusing a successor unit")
+    if cpu_invalidity:
+        raise MeasurementInvalid("CPU arm invalid: " + ", ".join(sorted(
+            {item["condition"] for item in cpu_invalidity})), {
+                "schema": "epyc.autokernel.serving_invalid_arm.v1",
+                "status": "measurement_invalid", "failed_conditions": cpu_invalidity,
+                "recipe": recipe.to_dict(), "recipe_hash": recipe.recipe_hash,
+                "resolved_recipe": resolved_recipe.to_dict(), "build_dir": str(build_dir),
+                "request_digest": request_digest(recipe, frozen_requests),
+                "frozen_requests": None if frozen_requests is None else [
+                    {"prompt_id": prompt_id, "body_base64": base64.b64encode(body).decode("ascii"),
+                     "sha256": hashlib.sha256(body).hexdigest()} for prompt_id, body in frozen_requests],
+                "process_pid": process_pid, "teardown": teardown,
+                "requests": request_rows, "residency": record,
+                "observed_rate_not_admissible_tok_s": value})
     return value
+
+
+def _sorted_devs(runs: Sequence[float]) -> list[float]:
+    """|deviation from median| in percent, ascending. The ONE definition `floor_pct`,
+    `_spread` and `floor_ci` share, so a CI can never describe a different statistic."""
+    med = statistics.median(runs)
+    return sorted(abs(r / med - 1.0) * 100.0 for r in runs) if med else [0.0] * len(runs)
+
+
+def _p95_of_sorted(devs: Sequence[float]) -> float:
+    return devs[min(len(devs) - 1, int(round(0.95 * (len(devs) - 1))))]
+
+
+#: Identity of the legacy floor's interval. Changing the draws, the seed or the statistic
+#: is a different CI, so the method string is versioned and written with the numbers.
+FLOOR_CI_METHOD = "percentile_bootstrap.p95_dev_from_median.resample_n.v1"
+FLOOR_CI_LEVEL = 0.95
+FLOOR_CI_DRAWS = 20000
+FLOOR_CI_SEED = 2361
+
+
+def floor_ci(runs: Sequence[float], *, level: float = FLOOR_CI_LEVEL,
+             draws: int = FLOOR_CI_DRAWS, seed: int = FLOOR_CI_SEED) -> dict:
+    """Bootstrap interval for the legacy floor's own statistic (R23-61).
+
+    `floor_pct` is p95 |deviation from median| -- an EXTREME order statistic. At n=10 the
+    5th-95th percentile of its sampling distribution spanned 4.200%-7.821% on the champion,
+    so the point estimate alone carries no usable precision and every gate built on it
+    inherits that. This resamples the launches WITH replacement at the calibration's own
+    `n`, recomputes the identical statistic, and reports the percentile interval.
+
+    DESCRIPTIVE, NOT A GATE ENDPOINT. A percentile bootstrap of a tail order statistic is
+    biased toward the observed sample's own tail (a resample only ever redraws launches
+    that were observed, never a more extreme one), so the upper bound is optimistic at
+    small n. It exists so a reader
+    can see how wide the bar is; no decision rule reads it. Deterministic: fixed seed.
+    """
+    values = [float(value) for value in runs]
+    if (len(values) < 2 or any(not math.isfinite(v) or v <= 0 for v in values)):
+        raise RecipeError("floor CI needs >= 2 finite positive launch values")
+    if not 0.0 < level < 1.0 or type(draws) is not int or draws < 100:
+        raise RecipeError("floor CI needs 0 < level < 1 and >= 100 draws")
+    rng = random.Random(seed)
+    n = len(values)
+    estimates = sorted(_p95_of_sorted(_sorted_devs([values[rng.randrange(n)] for _ in range(n)]))
+                       for _ in range(draws))
+    tail = (1.0 - level) / 2.0
+
+    def quantile(q: float) -> float:
+        return estimates[min(draws - 1, max(0, int(round(q * (draws - 1)))))]
+
+    return {"level": level, "low_pct": round(quantile(tail), 3),
+            "median_pct": round(quantile(0.5), 3),
+            "high_pct": round(quantile(1.0 - tail), 3), "n": n,
+            "method": FLOOR_CI_METHOD, "draws": draws, "seed": seed,
+            "use": "descriptive_only_not_gate_endpoint"}
 
 
 def _spread(runs: Sequence[float]) -> dict:
@@ -631,8 +1248,8 @@ def _spread(runs: Sequence[float]) -> dict:
     """
     runs = list(runs)
     med = statistics.median(runs)
-    devs = sorted(abs(r / med - 1.0) * 100.0 for r in runs) if med else [0.0] * len(runs)
-    p95 = devs[min(len(devs) - 1, int(round(0.95 * (len(devs) - 1))))]
+    devs = _sorted_devs(runs)
+    p95 = _p95_of_sorted(devs)
     sd = statistics.pstdev(runs)
     return {"n": len(runs), "median": med, "mean": statistics.fmean(runs), "sd": sd,
             "cv_pct": round(sd / med * 100.0, 3) if med else None,
@@ -644,65 +1261,330 @@ def _spread(runs: Sequence[float]) -> dict:
             "runs": runs}
 
 
+def _frozen_requests(recipe: Recipe, rows) -> tuple | None:
+    if rows is None:
+        return None
+    try:
+        frozen = tuple((prompt_id, body) for prompt_id, body in rows)
+    except (TypeError, ValueError) as exc:
+        raise RecipeError("frozen requests must be prompt-ID/body pairs") from exc
+    if (len(frozen) != recipe.np or any(
+            not isinstance(prompt_id, str) or not prompt_id.strip()
+            or not isinstance(body, bytes) or not body for prompt_id, body in frozen)
+            or len({prompt_id for prompt_id, _ in frozen}) != len(frozen)):
+        raise RecipeError("frozen requests must cover every slot with unique IDs and body bytes")
+    return frozen
+
+
+def request_digest(recipe: Recipe, frozen_requests=None) -> str | None:
+    """Identity of the exact ordered request bytes; None retains the legacy workload."""
+    rows = _frozen_requests(recipe, frozen_requests)
+    if rows is None:
+        return None
+    return hashlib.sha256(json.dumps(
+        [[prompt_id, hashlib.sha256(body).hexdigest()] for prompt_id, body in rows],
+        ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
+
+
+def _resolved_launch_options(recipe, build_dir, port, resolved):
+    if resolved is None:
+        return {}
+    from .resolved_recipe import CanonicalResolvedRecipe, ResolvedRecipe
+    if type(resolved) not in (CanonicalResolvedRecipe, ResolvedRecipe):
+        raise RecipeError("resolved launch must be an existing concrete recipe")
+    resolved.validate_launch(recipe, build_dir, port)
+    return {"resolved_recipe": resolved}
+
+
 def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs: int,
-            floor_pct: float | None, port: int = 18311) -> dict:
+            floor_pct: float | None, port: int = 18311,
+            anchor_resolved_recipe=None, candidate_resolved_recipe=None,
+            frozen_requests=None, floor_request_digest: str | None = None,
+            runtime_pair=None, instrument=LEGACY_INSTRUMENT, floor_record=None,
+            floor_unit: str | None = None) -> dict:
     """Paired, alternating serving A/B: anchor vs candidate, `pairs` times, each pair a
     fresh server per side (drift control). Effect = median(candidate)/median(anchor) - 1.
-    `decisive` is None when uncalibrated (no floor), so the keep gate fails closed."""
+    `decisive` is None when uncalibrated (no floor), so the keep gate fails closed.
+
+    `floor_unit` is the unit of the bar in `floor_pct` and is REQUIRED whenever a bar is
+    given (R23-55): the effect here is `process`-unit by construction, and a floor
+    measured in another unit -- or one that cannot say -- is refused, never rescaled.
+    """
+    matched = _instrument(instrument, pairs)
+    if matched and runtime_pair is not None:
+        raise ServingFloorMismatch("matched source floor cannot qualify a runtime treatment")
+    candidate_recipe = recipe
+    if runtime_pair is not None:
+        from .unified_planner import RuntimeArmPair
+        runtime_pair = RuntimeArmPair.from_dict(runtime_pair.to_dict())
+        if anchor_resolved_recipe is None or candidate_resolved_recipe is None \
+                or runtime_pair.anchor.backend not in {"cpu", "gpu"} \
+                or runtime_pair.anchor.template.to_dict() != recipe.to_dict() \
+                or runtime_pair.anchor.to_dict() != anchor_resolved_recipe.to_dict() \
+                or runtime_pair.candidate.to_dict() != candidate_resolved_recipe.to_dict():
+            raise RecipeError("runtime comparison differs from its original serving arm pair")
+        if floor_pct is not None or floor_request_digest is not None:
+            raise ServingFloorMismatch("runtime treatment needs original strict frame admission, not a source floor")
+        candidate_recipe = runtime_pair.candidate.template
+    # The bar's UNIT, checked after the frame refusals above (a runtime treatment may not
+    # carry a source floor at all) and before anything is launched. The effect below is
+    # between-PROCESS by construction, so a bar of any other unit -- or one that cannot say
+    # which it is -- REFUSES: within-session dispersion is ~13x tighter and picking the
+    # wrong one under-sized an experiment 1200-fold (R23-55).
+    if floor_pct is None:
+        if floor_unit is not None:
+            raise FloorUnitMismatch(
+                "a floor unit was given with no floor: nothing is being gated, so there "
+                "is no comparison for the unit to describe")
+    else:
+        check_unit(floor_unit, COMPARE_EFFECT_UNIT, what="serving floor")
+        if isinstance(floor_record, dict) and floor_record.get("unit") != floor_unit:
+            raise FloorUnitMismatch(
+                f"floor record states unit {floor_record.get('unit')!r} but the caller "
+                f"passed {floor_unit!r}: the record is the authority on its own unit")
+    frozen_requests = _frozen_requests(recipe, frozen_requests)
+    _frozen_requests(candidate_recipe, frozen_requests)
+    requests_digest = request_digest(recipe, frozen_requests)
+    if floor_request_digest != (requests_digest if floor_pct is not None else None):
+        raise ServingFloorMismatch("serving floor does not identify these exact request bytes")
+    if (anchor_resolved_recipe is None) != (candidate_resolved_recipe is None):
+        raise RecipeError("resolved comparison requires both original arm launches")
+    a_options = _resolved_launch_options(recipe, anchor_build, port, anchor_resolved_recipe)
+    c_options = _resolved_launch_options(candidate_recipe, candidate_build, port, candidate_resolved_recipe)
+    measurement_plan = _matched_plan(pairs) if matched else None
+    if matched:
+        frame = _matched_frame(recipe, anchor_resolved_recipe, frozen_requests)
+        if frame != _matched_frame(candidate_recipe, candidate_resolved_recipe, frozen_requests):
+            raise ServingFloorMismatch("matched source arms differ beyond their source/build treatment")
+        if floor_pct is not None:
+            if not isinstance(floor_record, dict):
+                raise ServingFloorMismatch("matched comparison requires its original v2 floor, not a scalar")
+            _validate_matched_floor(floor_record, recipe, frozen_requests, pairs,
+                                    resolved=anchor_resolved_recipe)
+            if floor_record["floor_pct"] != floor_pct:
+                raise ServingFloorMismatch("matched floor scalar differs from its original record")
+        elif floor_record is not None:
+            raise ServingFloorMismatch("uncalibrated matched comparison cannot carry an unused floor")
+    if frozen_requests is not None:
+        a_options["frozen_requests"] = c_options["frozen_requests"] = frozen_requests
+    belief_inputs = None
+    belief_error = None
+    try:
+        from . import serving_beliefs
+        belief_inputs = serving_beliefs.prepare(
+            recipe, anchor=anchor_resolved_recipe, candidate=candidate_resolved_recipe,
+            anchor_build=anchor_build, candidate_build=candidate_build,
+            frozen_requests=frozen_requests, pairs=pairs,
+            **({"candidate_recipe": candidate_recipe, "runtime_pair": runtime_pair}
+               if runtime_pair is not None else {}),
+            **({"measurement_plan": measurement_plan} if matched else {}))
+    except Exception as exc:
+        belief_error = f"{type(exc).__name__}: {exc}"[:256]
     a_runs, c_runs = [], []
     # Per-launch residency evidence, one record per server launch, per arm. Written by
     # `_measure_once`; a launch it could not sample lands here as `unproven` and a launch
     # it sampled as non-resident never gets here at all -- it raises.
     a_residency: list[dict] = []
     c_residency: list[dict] = []
-    for _ in range(pairs):
-        a_runs.append(_measure_once(recipe, anchor_build, port, evidence=a_residency))
-        c_runs.append(_measure_once(recipe, candidate_build, port, evidence=c_residency))
-    a_med, c_med = statistics.median(a_runs), statistics.median(c_runs)
-    effect = c_med / a_med - 1.0
-    decisive = None if floor_pct is None else (abs(effect) * 100.0 >= floor_pct)
-    return {"schema": "epyc.autokernel.serving_ab.v1", "recipe": recipe.name,
-            # The recipe is part of the artifact, so its identity travels with the number:
-            # a reader (or a gate) can tell whether this row and the floor it was judged
-            # against were even produced under the same launch conditions (R23-59).
-            "recipe_hash": recipe.recipe_hash, "recipe_env": dict(recipe.env or {}),
-            "recipe_describe": recipe.describe(),
-            "metric": recipe.metric, "np": recipe.np, "pairs": pairs,
-            "anchor_tok_s": a_med, "candidate_tok_s": c_med,
-            "effect": effect, "effect_pct": effect * 100.0,
-            "noise_floor_pct": floor_pct, "decisive": decisive,
-            "anchor_samples": a_runs, "candidate_samples": c_runs,
-            # Reporting only -- no decision rule reads these (see `_spread`).
-            "anchor_spread": _spread(a_runs), "candidate_spread": _spread(c_runs),
-            # PROVENANCE, not a decision input: no gate reads these. The row states
-            # whether its own launches were shown to run on the device, so a later
-            # reader never has to assume it -- and cannot be handed a tuple invented
-            # after the fact, which is the one thing no re-analysis can supply.
-            "residency": _residency_fold(a_residency + c_residency),
-            "anchor_residency": a_residency, "candidate_residency": c_residency}
+    next_launch = [0]
+    reschedules = [0]
+    invalid_history = []
+    launch_membership = []
+
+    def resume_original():
+        if reschedules[0]:
+            raise RuntimeError("original comparison reschedule already consumed")
+        reschedules[0] += 1
+        return complete()
+
+    def complete():
+        nonlocal belief_error
+        for pair_index in range(pairs):
+            arms = {"anchor": (recipe, anchor_build, a_options, a_runs, a_residency),
+                    "candidate": (candidate_recipe, candidate_build, c_options, c_runs, c_residency)}
+            order = measurement_plan["orders"][pair_index] if matched else ("anchor", "candidate")
+            for position, arm in enumerate(order):
+                arm_recipe, build, options, runs, records = arms[arm]
+                ordinal = 2 * pair_index + position
+                if ordinal < next_launch[0]:
+                    continue
+                records_before = len(records)
+                try:
+                    runs.append(_measure_once(arm_recipe, build, port, evidence=records, **options))
+                    if matched:
+                        launch_membership.append({"ordinal": ordinal, "pair_index": pair_index,
+                            "arm": arm, "arm_sample_index": len(runs) - 1,
+                            "residency_sha256": _digest(records[records_before:])})
+                    next_launch[0] += 1
+                except MeasurementInvalid as exc:
+                    # This attempt is invalid, never a null. Only the explicit
+                    # same-tail continuation may preserve its completed valid arms.
+                    exc.record = {"schema": "epyc.autokernel.serving_invalid_comparison.v1",
+                        "status": "measurement_invalid", "failed_arm": arm,
+                        "pair_index": pair_index, "pairs_requested": pairs,
+                        "invalid_arm": exc.record, "request_digest": requests_digest,
+                        "anchor_resolved_recipe": anchor_resolved_recipe.to_dict(),
+                        "candidate_resolved_recipe": candidate_resolved_recipe.to_dict(),
+                        "anchor_raw_samples": a_runs, "candidate_raw_samples": c_runs,
+                        "anchor_residency": a_residency, "candidate_residency": c_residency,
+                        "runtime_pair": None if runtime_pair is None else runtime_pair.to_dict(),
+                        "reschedule": "original in-memory continuation only; no restart replay"}
+                    if matched:
+                        exc.record.update(schema="epyc.autokernel.serving_invalid_comparison.v2",
+                            measurement_plan=measurement_plan, failed_ordinal=ordinal,
+                            launch_membership=launch_membership,
+                            floor_sha256=None if floor_record is None else floor_record["content_sha256"])
+                    exc.record = json.loads(json.dumps(exc.record))
+                    # Retained in the immutable invalid attempt above, not silently
+                    # included among the final valid launch vector's evidence.
+                    del records[records_before:]
+                    invalid_history.append({"failed_arm": arm, "pair_index": pair_index,
+                        "invalid_record_sha256": hashlib.sha256(json.dumps(
+                            exc.record, sort_keys=True, separators=(",", ":")).encode()).hexdigest()})
+                    if not reschedules[0]:
+                        exc.reschedule = resume_original
+                    raise
+                except ServerDied as exc:
+                    exc.record = {"schema": "epyc.autokernel.serving_failed_comparison.v1",
+                        "status": "bench_failed", "failed_arm": arm,
+                        "pair_index": pair_index, "pairs_requested": pairs,
+                        "failed_launch": dict(exc.record), "request_digest": requests_digest,
+                        "anchor_resolved_recipe": anchor_resolved_recipe.to_dict(),
+                        "candidate_resolved_recipe": candidate_resolved_recipe.to_dict(),
+                        "anchor_raw_samples": a_runs, "candidate_raw_samples": c_runs,
+                        "anchor_residency": a_residency, "candidate_residency": c_residency,
+                        "runtime_pair": None if runtime_pair is None else runtime_pair.to_dict()}
+                    if matched:
+                        exc.record.update(schema="epyc.autokernel.serving_failed_comparison.v2",
+                            measurement_plan=measurement_plan, failed_ordinal=ordinal,
+                            launch_membership=launch_membership,
+                            floor_sha256=None if floor_record is None else floor_record["content_sha256"])
+                    exc.record = json.loads(json.dumps(exc.record))
+                    raise
+        a_med, c_med = statistics.median(a_runs), statistics.median(c_runs)
+        effect = c_med / a_med - 1.0
+        decisive = None if floor_pct is None else (abs(effect) * 100.0 >= floor_pct)
+        out = {"schema": "epyc.autokernel.serving_ab.v1", "recipe": recipe.name,
+                # The recipe is part of the artifact, so its identity travels with the number:
+                # a reader (or a gate) can tell whether this row and the floor it was judged
+                # against were even produced under the same launch conditions (R23-59).
+                "recipe_hash": recipe.recipe_hash, "recipe_env": dict(recipe.env or {}),
+                "recipe_describe": recipe.describe(),
+                "metric": recipe.metric, "np": recipe.np, "pairs": pairs,
+                "anchor_tok_s": a_med, "candidate_tok_s": c_med,
+                "effect": effect, "effect_pct": effect * 100.0,
+                # The unit the EFFECT was measured in, and the unit of the bar it was
+                # judged against. Written even when they agree: a reader must never have
+                # to infer which dispersion a verdict was decided against (R23-55).
+                "effect_unit": COMPARE_EFFECT_UNIT, "floor_unit": floor_unit,
+                "noise_floor_pct": floor_pct, "decisive": decisive,
+                "anchor_samples": a_runs, "candidate_samples": c_runs,
+                # Reporting only -- no decision rule reads these (see `_spread`).
+                "anchor_spread": _spread(a_runs), "candidate_spread": _spread(c_runs),
+                # PROVENANCE, not a decision input: no gate reads these. The row states
+                # whether its own launches were shown to run on the device, so a later
+                # reader never has to assume it -- and cannot be handed a tuple invented
+                # after the fact, which is the one thing no re-analysis can supply.
+                "residency": _residency_fold(a_residency + c_residency),
+                "anchor_residency": a_residency, "candidate_residency": c_residency}
+        if matched:
+            out.update(schema="epyc.autokernel.serving_ab.v2",
+                       measurement_plan=measurement_plan, launch_membership=launch_membership,
+                       floor_sha256=None if floor_record is None else floor_record["content_sha256"])
+        if requests_digest is not None:
+            out.update(request_digest=requests_digest, floor_request_digest=floor_request_digest)
+        if runtime_pair is not None:
+            out.update(schema="epyc.autokernel.serving_runtime_ab.v1",
+                       runtime_pair=runtime_pair.to_dict(),
+                       candidate_recipe_hash=candidate_recipe.recipe_hash,
+                       admission="observation_only_original_strict_evidence_unavailable")
+        if invalid_history:
+            out["rescheduled_invalid_arms"] = list(invalid_history)
+        if belief_inputs is not None:
+            try:
+                out["belief_capture"] = serving_beliefs.finish(out, belief_inputs)
+            except Exception as exc:
+                belief_error = f"{type(exc).__name__}: {exc}"[:256]
+        if belief_error is not None:
+            out["belief_capture_error"] = belief_error
+        return out
+
+    return complete()
 
 
-def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int = 18311) -> dict:
+def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int = 18311,
+                    resolved_recipe=None, frozen_requests=None,
+                    instrument=LEGACY_INSTRUMENT, pairs=None) -> dict:
     """A/A the serving metric `samples` times on ONE build: the run-to-run spread IS the
     noise floor a keep must clear. floor = p95 of |pairwise effect| against the median,
     reported at a few sample counts so a keep at N pairs is judged against the N-pair bar."""
+    frozen_requests = _frozen_requests(recipe, frozen_requests)
+    options = _resolved_launch_options(recipe, build_dir, port, resolved_recipe)
+    if frozen_requests is not None:
+        options["frozen_requests"] = frozen_requests
+    if _instrument(instrument, pairs):
+        if type(samples) is not int or not MATCHED_CALIBRATION_PAIRS <= samples <= 256:
+            raise RecipeError("matched calibration requires 24–256 independent A/A pairs (two launches each)")
+        frame = _matched_frame(recipe, resolved_recipe, frozen_requests)
+        plan = _matched_plan(samples)
+        values = {"anchor": [], "candidate": []}
+        windows = {"anchor": [], "candidate": []}
+        for order in plan["orders"]:
+            for arm in order:
+                values[arm].append(_measure_once(recipe, build_dir, port,
+                                   evidence=windows[arm], **options))
+        row = {"schema": "epyc.autokernel.serving_floor.v2", "instrument": instrument,
+               "recipe": recipe.name, "recipe_hash": recipe.recipe_hash,
+               "recipe_env": dict(recipe.env or {}), "recipe_describe": recipe.describe(),
+               "metric": recipe.metric, "np": recipe.np,
+               "request_digest": request_digest(recipe, frozen_requests),
+               "estimator": MATCHED_ESTIMATOR, "unit": CALIBRATION_UNIT,
+               # `n` is the sample count the floor was estimated from, under its own name
+               # so no reader has to know which of this schema's count fields is the n.
+               # A floor estimated from an extreme order statistic at n=10 carries no
+               # usable precision (R23-61), so a floor that cannot state its n must not
+               # gate -- `write_floor` refuses one that cannot.
+               "n": samples,
+               "headline_admissibility": headline_admissibility.contract(),
+               "comparison_pairs": pairs, "calibration_pairs": samples,
+               "process_launches": 2 * samples, "order_algorithm": MATCHED_ORDER,
+               "calibration_plan": plan, "frame": frame,
+               "baseline_resolved_recipe": resolved_recipe.to_dict(),
+               "anchor_samples": values["anchor"], "candidate_samples": values["candidate"],
+               "anchor_residency": windows["anchor"], "candidate_residency": windows["candidate"],
+               "residency": _residency_fold(windows["anchor"] + windows["candidate"]),
+               **_matched_summary(values["anchor"], values["candidate"], pairs)}
+        row["content_sha256"] = _digest(row)
+        return row
     launch_residency: list[dict] = []
-    runs = [_measure_once(recipe, build_dir, port, evidence=launch_residency)
+    runs = [_measure_once(recipe, build_dir, port, evidence=launch_residency, **options)
             for _ in range(samples)]
     # `floor_pct` IS this arm's p95 deviation from its own median -- taken from `_spread`
     # so the floor and the per-arm spread reported by `compare` can never drift apart.
     sp = _spread(runs)
-    return {"schema": "epyc.autokernel.serving_floor.v1", "recipe": recipe.name,
+    out = {"schema": "epyc.autokernel.serving_floor.v1", "recipe": recipe.name,
             "recipe_hash": recipe.recipe_hash, "recipe_env": dict(recipe.env or {}),
             "recipe_describe": recipe.describe(),
             "metric": recipe.metric, "np": recipe.np, "samples": samples,
+            # The unit is DERIVED from the harness that just ran, not configured: every
+            # sample above is its own server launch, so this dispersion is between
+            # PROCESSES. An arm-unit floor would be ~13x tighter and would size an
+            # experiment 1200-fold wrong (R23-55).
+            "unit": CALIBRATION_UNIT, "n": samples,
+            "headline_admissibility": headline_admissibility.contract(),
             "median_tok_s": sp["median"], "floor_pct": sp["p95_dev_pct"],
+            # How wide the bar itself is (R23-61). Descriptive; `write_floor` re-derives
+            # it from `runs` and refuses a row whose stated interval disagrees.
+            "floor_ci": floor_ci(runs) if len(runs) >= 2 else None,
             "runs": runs, "cv_pct": sp["cv_pct"], "spread": sp,
             # A floor is a bar every future keep is judged against, so the row records
             # whether the launches that DEFINED it were proven resident. `write_floor`
             # carries this to disk.
             "residency": _residency_fold(launch_residency),
             "launch_residency": launch_residency}
+    if frozen_requests is not None:
+        out["request_digest"] = request_digest(recipe, frozen_requests)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -735,10 +1617,15 @@ def floor_key(name: str) -> str:
     return f"{cleaned}-{digest}"
 
 
-def floor_path(store: Path | str, recipe: Recipe) -> Path:
+def floor_path(store: Path | str, recipe: Recipe, *, frozen_requests=None,
+               instrument=LEGACY_INSTRUMENT, pairs=None) -> Path:
     """Where THIS recipe's serving floor lives. One place, so a reader and a writer can
     never disagree about the filename."""
-    return Path(store) / f"serving-floor.{floor_key(recipe.name)}.json"
+    identity = request_digest(recipe, frozen_requests)
+    suffix = "" if identity is None else f".requests-{identity}"
+    if _instrument(instrument, pairs):
+        suffix += f".{MATCHED_INSTRUMENT}.pairs-{pairs}"
+    return Path(store) / f"serving-floor.{floor_key(recipe.name)}{suffix}.json"
 
 
 @dataclass(frozen=True)
@@ -768,6 +1655,66 @@ class FloorReading:
         return self.provenance == "verified"
 
     @property
+    def request_digest(self) -> str | None:
+        return self.row.get("request_digest")
+
+    @property
+    def unit(self) -> str | None:
+        """The unit this floor's dispersion was measured in, or None.
+
+        None means the file cannot say -- it predates R23-55 or carries something that is
+        not one of `FLOOR_UNITS`. None is NEVER filled in by inference: the two candidate
+        answers differ by ~13x, so a guess is worth less than a refusal.
+        """
+        value = self.row.get("unit")
+        return value if value in FLOOR_UNITS else None
+
+    @property
+    def legacy(self) -> bool:
+        """True for a floor on disk that carries no admissible `unit`. Such a floor is
+        READ (nothing on disk is rewritten) and REFUSED as a gate bar."""
+        return self.provenance != "absent" and self.unit is None
+
+    @property
+    def n(self) -> int | None:
+        """The sample count the floor was estimated from, or None when the file cannot
+        say. `samples`/`calibration_pairs` are this schema's older names for it."""
+        for key in ("n", "samples", "calibration_pairs"):
+            value = self.row.get(key)
+            if type(value) is int and value > 0:
+                return value
+        return None
+
+    @property
+    def ci(self) -> dict | None:
+        """The floor's interval, or None when the file carries none (every floor written
+        before R23-61a). A legacy floor states it as `floor_ci`; a matched (v2) floor as
+        its sealed `interval`. Descriptive only: `gate_floor` does not read it."""
+        for key in ("floor_ci", "interval"):
+            value = self.row.get(key)
+            if isinstance(value, Mapping) and value:
+                return dict(value)
+        return None
+
+    def gate_floor(self, *, effect_unit: str) -> float | None:
+        """This floor AS A GATE BAR for an effect measured in `effect_unit`, or raise.
+
+        The ONE admission point: a legacy unit-less floor and a floor of another unit both
+        refuse here, naming the file and both units. `None` (absent) passes through
+        untouched -- uncalibrated already fails closed everywhere downstream.
+        """
+        if self.provenance == "absent" and self.floor_pct is None:
+            return None
+        check_unit(self.unit, effect_unit, path=self.path, what="serving floor")
+        if self.n is None:
+            raise FloorUnitMismatch(
+                f"serving floor {self.path} does not state its `n`. A floor is an extreme "
+                f"order statistic; at small n its point estimate carries no usable "
+                f"precision (R23-61: the n=10 5th-95th pct spanned 4.200%-7.821%), so a "
+                f"floor that cannot state its n must not gate. Recalibrate at n >= 24.")
+        return self.floor_pct
+
+    @property
     def residency_status(self) -> str:
         """`proven` only when the file says so. Absent evidence reads as `unproven`,
         never as proven -- the same fail-closed direction `provenance` takes."""
@@ -788,7 +1735,9 @@ def _stamped_residency(block: object) -> dict:
 
 
 def write_floor(store: Path | str, recipe: Recipe, row: Mapping, *,
-                conditions: Mapping | None = None) -> Path:
+                unit: str | None = None,
+                conditions: Mapping | None = None, frozen_requests=None,
+                instrument=LEGACY_INSTRUMENT, pairs=None) -> Path:
     """Persist a calibrated floor WITH the identity of the recipe it was calibrated under.
 
     THE ONE WRITER. `calibrate_floor` already returns `recipe_hash` / `recipe_describe` /
@@ -800,8 +1749,60 @@ def write_floor(store: Path | str, recipe: Recipe, row: Mapping, *,
 
     `conditions` is free-form provenance for humans (host state, harness, timestamp); it
     is merged, never allowed to overwrite the identity keys.
+
+    `unit` has NO default and must be stated by the caller (R23-55). It is not a formality:
+    the same host on the same day reads sd 0.501% within a session and sd 2.793% between
+    process launches, so a floor whose unit nobody recorded is a bar on an unknown
+    question -- and the one time that was worked through end to end it under-sized an
+    experiment 1200-fold. The caller states what its harness actually resampled; a row that
+    already carries a unit must AGREE with it.
     """
+    frozen_requests = _frozen_requests(recipe, frozen_requests)
     body = dict(row)
+    canonical_headline_contract = headline_admissibility.contract()
+    stated_headline_contract = body.get("headline_admissibility")
+    if (stated_headline_contract is not None
+            and stated_headline_contract != canonical_headline_contract):
+        raise ServingFloorMismatch(
+            "floor row carries a non-canonical headline admissibility contract")
+    # v1 is not sealed, so the one writer supplies the required schema field for
+    # callers constructed before S3-AKU-03. v2 must have carried it before sealing.
+    if body.get("schema") != "epyc.autokernel.serving_floor.v2":
+        body["headline_admissibility"] = canonical_headline_contract
+    if unit not in FLOOR_UNITS:
+        raise FloorUnitMismatch(
+            f"refusing to write a floor for {recipe.name!r} with unit={unit!r}: every "
+            f"floor record must state the unit its dispersion was measured in, one of "
+            f"{FLOOR_UNITS}. A missing unit IS the defect (R23-55) -- `arm` and `process` "
+            f"differ ~13x on this host (0.501% vs 2.793%) and picked the wrong sizing by "
+            f"1200x once already. Pass the unit the harness actually resampled: "
+            f"serving.calibrate_floor relaunches per sample, so its rows are "
+            f"unit={CALIBRATION_UNIT!r}.")
+    stamped_unit = body.get("unit")
+    if stamped_unit is not None and stamped_unit != unit:
+        raise FloorUnitMismatch(unit_refusal(
+            stamped_unit if stamped_unit in FLOOR_UNITS else None, unit,
+            path=recipe.name, what="floor row"))
+    # `n` under its own name, from whichever count this schema actually recorded. A floor
+    # that cannot state its n must not gate (R23-61), and the cheapest place to guarantee
+    # it is the one writer -- it cannot be added after the fact.
+    count = next((body[key] for key in ("n", "samples", "calibration_pairs")
+                  if type(body.get(key)) is int and body[key] > 0), None)
+    if count is None:
+        raise FloorUnitMismatch(
+            f"refusing to write a floor for {recipe.name!r} with no sample count: a floor "
+            f"is an extreme order statistic and its precision is a function of `n`, so a "
+            f"record that cannot state its n must not gate (R23-61). Write the row "
+            f"`serving.calibrate_floor` returns, or state `n` explicitly.")
+    if _instrument(instrument, pairs):
+        _validate_matched_floor(body, recipe, frozen_requests, pairs)
+    elif body.get("schema") == "epyc.autokernel.serving_floor.v2":
+        raise ServingFloorMismatch("matched floor cannot overwrite a legacy floor")
+    requests_digest = request_digest(recipe, frozen_requests)
+    if body.get("request_digest") != requests_digest:
+        raise ServingFloorMismatch("floor row does not identify the exact calibrated requests")
+    if requests_digest is not None and body.get("recipe_hash") != recipe.recipe_hash:
+        raise ServingFloorMismatch("explicit-request floor lacks its original recipe identity")
     stamped = body.get("recipe_hash")
     if stamped is not None and stamped != recipe.recipe_hash:
         raise ServingFloorMismatch(
@@ -819,19 +1820,44 @@ def write_floor(store: Path | str, recipe: Recipe, row: Mapping, *,
     # with no residency block is stamped `unproven` EXPLICITLY -- it is not a claim that
     # the calibration ran on the CPU, it is a refusal to let the absence pass unremarked.
     body["residency"] = _stamped_residency(body.get("residency"))
-    target = floor_path(store, recipe)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    temporary = target.with_name(f".sv-floor-{os.getpid()}-{target.name}")
-    try:
-        temporary.write_text(json.dumps(body, indent=2, sort_keys=True), encoding="utf-8")
-        os.replace(temporary, target)
-    except BaseException:
-        temporary.unlink(missing_ok=True)
-        raise
-    return target
+    if body.get("schema") == "epyc.autokernel.serving_floor.v2":
+        # A matched floor is SEALED by `content_sha256`, so its unit and n must already be
+        # inside that digest. Stamping them here would put the two fields a gate depends on
+        # OUTSIDE the seal, where an edit leaves no trace.
+        if (body.get("unit") != unit or body.get("n") != count
+                or body.get("headline_admissibility") != canonical_headline_contract):
+            raise FloorUnitMismatch(
+                f"matched floor must carry `unit` ({unit!r}), `n` ({count!r}), and the "
+                f"canonical headline admissibility contract inside its sealed content; "
+                f"this row carries unit={body.get('unit')!r} n={body.get('n')!r}. "
+                f"Recalibrate with serving.calibrate_floor; sealed fields cannot be "
+                f"added afterwards.")
+    else:
+        body["unit"] = unit
+        body["n"] = count
+        # The CI travels next to the percentage whenever the launches that defined it are
+        # in the row (R23-61). Re-derived here rather than trusted from the row: the writer
+        # is the one place a stated interval can be checked against its own runs.
+        runs = body.get("runs")
+        if (isinstance(runs, list) and len(runs) == count and count >= 2
+                and all(type(v) in (int, float) and math.isfinite(v) and v > 0 for v in runs)):
+            derived = floor_ci(runs)
+            stated = body.get("floor_ci")
+            if stated is not None and stated != derived:
+                raise ServingFloorMismatch(
+                    f"refusing to write a floor for {recipe.name!r}: its stated floor_ci "
+                    f"{stated!r} does not re-derive from its own {count} runs ({derived!r})")
+            body["floor_ci"] = derived
+        elif body.get("floor_ci") is not None:
+            raise ServingFloorMismatch(
+                f"refusing to write a floor for {recipe.name!r}: it states a floor_ci but "
+                f"not the n={count} runs it would be derived from, so nothing can check it")
+    target = floor_path(store, recipe, frozen_requests=frozen_requests, instrument=instrument, pairs=pairs)
+    return status.write_json(target.parent, target.name, body, prefix=".sv-floor-")
 
 
-def load_floor(store: Path | str, recipe: Recipe) -> FloorReading:
+def load_floor(store: Path | str, recipe: Recipe, *, frozen_requests=None,
+               instrument=LEGACY_INSTRUMENT, pairs=None) -> FloorReading:
     """Load the serving floor for `recipe`, or REFUSE one calibrated under another.
 
     Fail-closed, and deliberately NOT by degrading to "no floor": an absent floor already
@@ -839,11 +1865,27 @@ def load_floor(store: Path | str, recipe: Recipe) -> FloorReading:
     bug -- the gate quietly never firing -- rather than as the stale floor it is. The
     caller gets an exception naming both hashes, or a reading it can trust the provenance
     of.
+
+    A file written before R23-55 carries no `unit`: it is returned as it is, with
+    `reading.unit is None` and `reading.legacy is True`, and nothing on disk is rewritten.
+    Such a floor CANNOT gate -- `FloorReading.gate_floor` refuses it, naming the file and
+    the fix -- because its dispersion could be the within-session one (0.501%) or the
+    between-launch one (2.793%) and the two differ by ~13x.
     """
-    path = floor_path(store, recipe)
+    frozen_requests = _frozen_requests(recipe, frozen_requests)
+    requests_digest = request_digest(recipe, frozen_requests)
+    matched = _instrument(instrument, pairs)
+    path = floor_path(store, recipe, frozen_requests=frozen_requests, instrument=instrument, pairs=pairs)
     if not path.is_file():
         return FloorReading(None, "absent", path, {})
     row = json.loads(path.read_text(encoding="utf-8"))
+    if matched:
+        _validate_matched_floor(row, recipe, frozen_requests, pairs)
+        return FloorReading(row["floor_pct"], "verified", path, row)
+    if row.get("request_digest") != requests_digest:
+        raise ServingFloorMismatch("stored floor request identity differs or is missing")
+    if requests_digest is not None and row.get("recipe_hash") != recipe.recipe_hash:
+        raise ServingFloorMismatch("explicit-request floor recipe identity differs or is missing")
     stamped = row.get("recipe_hash")
     if stamped is None:
         # Grandfathered: written before floors carried an identity. Proceed -- hard-failing
@@ -863,9 +1905,12 @@ def load_floor(store: Path | str, recipe: Recipe) -> FloorReading:
     return FloorReading(row.get("floor_pct"), "verified", path, row)
 
 
-__all__ = ["FLOOR_KEY_MAX", "LOADER_OWNED_ENV", "RECIPE_SCHEMA", "RESIDENCY_PROVEN",
-           "RESIDENCY_SCHEMA", "RESIDENCY_UNPROVEN", "UNSET",
-           "EnvReadbackFailed", "FloorReading", "Recipe", "RecipeError", "ServerDied",
-           "ServingFloorMismatch", "ServingNotResident", "calibrate_floor", "compare",
-           "covers_request_phase", "floor_key", "floor_path", "load_floor",
-           "verify_env_readback", "write_floor"]
+__all__ = ["CALIBRATION_UNIT", "COMPARE_EFFECT_UNIT", "FLOOR_KEY_MAX", "FLOOR_UNITS",
+           "LOADER_OWNED_ENV", "RECIPE_SCHEMA", "RESIDENCY_PROVEN",
+           "RESIDENCY_NOT_APPLICABLE", "RESIDENCY_SCHEMA", "RESIDENCY_UNPROVEN",
+           "UNIT_ARM", "UNIT_PROCESS", "UNIT_SESSION", "UNSET",
+           "EnvReadbackFailed", "FloorReading", "FloorUnitMismatch", "Recipe",
+           "RecipeError", "ServerDied",
+           "ServingFloorMismatch", "ServingNotResident", "calibrate_floor", "check_unit",
+           "compare", "covers_request_phase", "floor_key", "floor_path", "load_floor",
+           "request_digest", "unit_refusal", "verify_env_readback", "write_floor"]

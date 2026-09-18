@@ -1,0 +1,14 @@
+{
+  "arm": "plain",
+  "claim_id": "akd-f1440129a63c4c66",
+  "claim_released": true,
+  "failure": null,
+  "finished_at": "2026-08-20T13:43:35.654934+00:00",
+  "inference_window_released": true,
+  "runner_pid": 3805453,
+  "runner_returncode": 0,
+  "schema": "epyc.df2.arm_transport.v1",
+  "server_pid": 3805226,
+  "server_returncode": 0,
+  "started_at": "2026-08-20T13:29:36.052215+00:00"
+}

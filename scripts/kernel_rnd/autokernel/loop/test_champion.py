@@ -24,6 +24,7 @@ gate must not rely on that field, and this fixture proves it cannot.
 from __future__ import annotations
 
 from contextlib import contextmanager, redirect_stdout
+import hashlib
 import io
 import json
 from pathlib import Path
@@ -32,7 +33,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from autokernel.loop import archive, bench, champion, claim, pipeline, pool
+from autokernel.loop import accumulate, archive, bench, champion, claim, pipeline, pool
 from autokernel.loop import run as run_mod
 
 CANONICAL = champion.CANONICAL_BRANCH
@@ -145,6 +146,8 @@ class TheIncidentStateRefusesToStart(_Incident):
         claim before the verify (refusal after device acquisition)."""
         events: list[str] = []
         real = champion.verify_startup
+        accumulate.Bundle(champion_of_record=self.champion_tip,
+                          tip=self.champion_tip).save(self.store)
 
         @contextmanager
         def hold(*a, **k):
@@ -209,6 +212,19 @@ class TheWorktreeGate(_Incident):
 
 
 class TheAnchorGate(_Incident):
+    def _experimental_identity(self, anchor: Path) -> Path:
+        binary = anchor / "bin" / "llama-server"
+        binary.parent.mkdir(parents=True, exist_ok=True)
+        binary.write_bytes(b"original-cpu-server")
+        (anchor / "IDENTITY.json").write_text(json.dumps({
+            "schema": "epyc.champion-candidate-build.v1", "kind": "serving",
+            "head": self.champion_tip, "source": str(self.repo), "source_status": "",
+            "build": "CPU", "build_dir": str(anchor),
+            "files": [{"path": str(binary), "size": binary.stat().st_size,
+                       "sha256": hashlib.sha256(binary.read_bytes()).hexdigest()}],
+        }), encoding="utf-8")
+        return binary
+
     def test_provenance_at_the_tip_passes(self):
         champion.verify_anchor(self.anchor, self.repo, self.champion_tip)
 
@@ -265,6 +281,31 @@ class TheAnchorGate(_Incident):
         with self.assertRaises(champion.StartupRefused):
             champion.verify_anchor(hand, self.repo, self.champion_tip,
                                    allow_unverified=True)
+
+    def test_original_experimental_identity_is_explicit_and_hash_checked(self):
+        hand = self.store / "manual-cpu-build"
+        binary = self._experimental_identity(hand)
+        with self.assertRaises(champion.StartupRefused):
+            champion.verify_anchor(hand, self.repo, self.champion_tip)
+        champion.verify_anchor(hand, self.repo, self.champion_tip,
+                               experimental_identity=True)
+        binary.write_bytes(b"changed-cpu-server!")
+        with self.assertRaises(champion.StartupRefused, msg="changed binary must refuse"):
+            champion.verify_anchor(hand, self.repo, self.champion_tip,
+                                   experimental_identity=True)
+
+    def test_experimental_identity_refuses_foreign_source_or_head(self):
+        hand = self.store / "manual-cpu-build"
+        self._experimental_identity(hand)
+        for key, value in (("source", str(self.root / "foreign")),
+                           ("head", self.base)):
+            row = json.loads((hand / "IDENTITY.json").read_text())
+            row[key] = value
+            (hand / "IDENTITY.json").write_text(json.dumps(row), encoding="utf-8")
+            with self.assertRaises(champion.StartupRefused):
+                champion.verify_anchor(hand, self.repo, self.champion_tip,
+                                       experimental_identity=True)
+            self._experimental_identity(hand)
 
 
 class TheGateIsAssembledWhole(_Incident):

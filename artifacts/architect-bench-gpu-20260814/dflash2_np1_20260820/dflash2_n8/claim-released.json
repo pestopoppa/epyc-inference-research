@@ -1,0 +1,18 @@
+{
+  "acquired_at": "2026-08-20T13:51:16.990948+00:00",
+  "campaign_id": "df2-4-qwen38-np1-20260820",
+  "claim_id": "akd-e69ea6faf73a4441",
+  "device_id": "mi210_0",
+  "expires_at": "2026-08-20T14:31:16.990963+00:00",
+  "holder_boot_id": "ffa56b5e-1da4-42e7-ac5d-d233ff830b65",
+  "holder_label": "df2-4-dflash2_n8",
+  "holder_pid": 3824332,
+  "holder_start_ticks": 61922417,
+  "host": "Beelzebub",
+  "lock_path": "/mnt/raid0/llm/tmp/gpu_device.mi210_0.lock",
+  "purpose": "DF2-4 matched np=1 dflash2_n8",
+  "reclaimed_from": null,
+  "released_at": "2026-08-20T13:57:12.851882+00:00",
+  "schema": "epyc.autokernel.device_claim_receipt.v1",
+  "state": "held"
+}

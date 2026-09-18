@@ -1,0 +1,124 @@
+{
+  "arms": {
+    "dflash2_n8": {
+      "acceptance": {
+        "accepted_tokens": 19960,
+        "generated_tokens": 32168,
+        "reported_fraction_mean": 0.6280425,
+        "reported_mean_len_mean": 5.389166666666667,
+        "request_rows": 12,
+        "weighted_fraction": 0.6204924148221835
+      },
+      "acceptance_lines": 12,
+      "aggregate_decode_tok_s": 70.0,
+      "aggregate_total_tok_s": 75.6,
+      "arm": "dflash2_n8",
+      "claim_id": "akd-e69ea6faf73a4441",
+      "claim_released": true,
+      "completion_tokens": 24576,
+      "effective_draft_tokens_per_block": 7,
+      "kfd_resident_samples": 1417,
+      "peak_vram_used_bytes": 37353566208,
+      "positive_vram_samples": 1417,
+      "requested_spec_draft_n_max": 8,
+      "resource_sample_count": 1418,
+      "runtime_authority": "server startup: n_max=8; block_size=8; clamped to 7 draft tokens because the target token occupies one block position",
+      "schema": "epyc.df2.matched_np1_arm.v1",
+      "wall_s": 351.3
+    },
+    "mtp_n8": {
+      "acceptance": {
+        "accepted_tokens": 19220,
+        "generated_tokens": 40190,
+        "reported_fraction_mean": 0.4824583333333334,
+        "reported_mean_len_mean": 4.854166666666667,
+        "request_rows": 12,
+        "weighted_fraction": 0.4782284150286141
+      },
+      "acceptance_lines": 12,
+      "aggregate_decode_tok_s": 55.2,
+      "aggregate_total_tok_s": 59.6,
+      "arm": "mtp_n8",
+      "claim_id": "akd-ec0811cfa8df4898",
+      "claim_released": true,
+      "completion_tokens": 24262,
+      "kfd_resident_samples": 1768,
+      "peak_vram_used_bytes": 33999409152,
+      "positive_vram_samples": 1768,
+      "requested_spec_draft_n_max": 8,
+      "resource_sample_count": 1769,
+      "schema": "epyc.df2.matched_np1_arm.v1",
+      "wall_s": 439.7
+    },
+    "plain": {
+      "acceptance_lines": 0,
+      "aggregate_decode_tok_s": 29.4,
+      "aggregate_total_tok_s": 31.7,
+      "arm": "plain",
+      "claim_id": "akd-f1440129a63c4c66",
+      "claim_released": true,
+      "completion_tokens": 24576,
+      "kfd_resident_samples": 3349,
+      "peak_vram_used_bytes": 31084326912,
+      "positive_vram_samples": 3349,
+      "requested_spec_draft_n_max": null,
+      "resource_sample_count": 3350,
+      "schema": "epyc.df2.matched_np1_arm.v1",
+      "wall_s": 836.3
+    }
+  },
+  "comparisons": {
+    "dflash2_n8_vs_historical_v9_mtp_n8_55_46_speedup_fraction": 0.26217093400649105,
+    "dflash2_n8_vs_mtp_n8_speedup_fraction": 0.26811594202898537,
+    "dflash2_n8_vs_plain_speedup_fraction": 1.380952380952381,
+    "historical_v9_mtp_n8_decode_tok_s": 55.46,
+    "mtp_n8_vs_plain_speedup_fraction": 0.8775510204081634
+  },
+  "harness": {
+    "path": "/workspace/tmp/run_df2_np1_arm.py",
+    "sha256": "eb57857930c4464fc92191055fad17c57259d525abf3ed133c1bf95827b9b46f"
+  },
+  "headline": {
+    "dflash2_beats_historical_v9_mtp_n8": true,
+    "dflash2_beats_matched_mtp_n8": true,
+    "dflash2_n8_decode_tok_s": 70.0,
+    "mtp_n8_decode_tok_s": 55.2,
+    "plain_decode_tok_s": 29.4
+  },
+  "paired_identity": {
+    "all_request_errors_empty": true,
+    "all_seed_42_rep_0": true,
+    "effective_request_exact_for_all_36_rows": {
+      "enable_thinking": false,
+      "endpoint": "chat",
+      "request_path": "/v1/chat/completions",
+      "temperature": 0.6,
+      "top_k": 20,
+      "top_p": 0.95
+    },
+    "same_12_prompt_fingerprints_in_order": true,
+    "same_12_question_ids_in_order": true
+  },
+  "protocol": {
+    "batch": 2048,
+    "concurrency": 1,
+    "context": 32768,
+    "dflash_n_max": 8,
+    "dflash_n_max_authority": "model dflash.block_size=8; common clamps requested n-max to trained block size",
+    "enable_thinking": false,
+    "endpoint": "chat",
+    "kv": "f16/f16",
+    "max_tokens": 2048,
+    "np": 1,
+    "repeats": 1,
+    "seed": 42,
+    "temperature": 0.6,
+    "threads": 8,
+    "top_k": 20,
+    "top_p": 0.95,
+    "ubatch": 2048
+  },
+  "schema": "epyc.df2.matched_np1_campaign.v1",
+  "scope": "DF2-4 np=1 speed/acceptance evidence; no np=8 or promotion conclusion",
+  "sealed_at": "2026-08-20T13:58:36.035708+00:00"
+}

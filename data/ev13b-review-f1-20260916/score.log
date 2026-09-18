@@ -1,0 +1,72 @@
+{
+  "duplicate_fp": 35,
+  "generated_at": "2026-09-16T15:38:02.900637+00:00",
+  "golden_checksum": "fa0aba78c3006a878edea07fd08a51790aca4c8e00a59369acd6070b97d1bd97",
+  "golden_manifest_checksum": "fa0aba78c3006a878edea07fd08a51790aca4c8e00a59369acd6070b97d1bd97",
+  "judge_config": {
+    "cross_family_ok": true,
+    "judge_distinct_from_reader": true,
+    "judge_model": "gemma-4-26B-A4B-it-ORIG",
+    "judge_quant": "Q4_K_M",
+    "reader_model": "Qwen3.8-27B",
+    "reader_quant": "Q8_0",
+    "swap_tolerance_pp": 2.0
+  },
+  "judge_key": "gemma-4-26B-A4B-it-ORIG__Q4_K_M",
+  "judge_parse_fail_rate": 0.007874015748031496,
+  "judge_swap": {
+    "gate_ok": false,
+    "gate_pp": 2.0,
+    "judge_swap_delta_pp": 2.942987297012589,
+    "other_judge_key": "Qwen3.6-35B-A3B-MTP__Q8_0",
+    "other_mean_f1": 0.36731069036329816,
+    "other_n_runs": 3,
+    "other_std_f1": 0.02097955809013606
+  },
+  "location_validity_rate": 1.0,
+  "matcher": "semantic-judge.v1",
+  "mean_f1": 0.3378808173931723,
+  "n_findings": 370,
+  "n_runs": 3,
+  "neutral_low": 28,
+  "note": "internal-only F1; not comparable to Factory/Augment leaderboards",
+  "protocol_ok": true,
+  "spec_sha256": "d5a6a9bb9fbd14988f9d351fe25d48d42721afffe93abdb32cb1c053b70e890d",
+  "std_f1": 0.01438696672508202
+}
+{
+  "duplicate_fp": 46,
+  "generated_at": "2026-09-16T15:38:02.958642+00:00",
+  "golden_checksum": "fa0aba78c3006a878edea07fd08a51790aca4c8e00a59369acd6070b97d1bd97",
+  "golden_manifest_checksum": "fa0aba78c3006a878edea07fd08a51790aca4c8e00a59369acd6070b97d1bd97",
+  "judge_config": {
+    "cross_family_ok": false,
+    "judge_distinct_from_reader": true,
+    "judge_model": "Qwen3.6-35B-A3B-MTP",
+    "judge_quant": "Q8_0",
+    "reader_model": "Qwen3.8-27B",
+    "reader_quant": "Q8_0",
+    "swap_tolerance_pp": 2.0
+  },
+  "judge_key": "Qwen3.6-35B-A3B-MTP__Q8_0",
+  "judge_parse_fail_rate": 0.0,
+  "judge_swap": {
+    "gate_ok": false,
+    "gate_pp": 2.0,
+    "judge_swap_delta_pp": 2.942987297012589,
+    "other_judge_key": "gemma-4-26B-A4B-it-ORIG__Q4_K_M",
+    "other_mean_f1": 0.3378808173931723,
+    "other_n_runs": 3,
+    "other_std_f1": 0.01438696672508202
+  },
+  "location_validity_rate": 1.0,
+  "matcher": "semantic-judge.v1",
+  "mean_f1": 0.36731069036329816,
+  "n_findings": 370,
+  "n_runs": 3,
+  "neutral_low": 30,
+  "note": "internal-only F1; not comparable to Factory/Augment leaderboards",
+  "protocol_ok": true,
+  "spec_sha256": "d5a6a9bb9fbd14988f9d351fe25d48d42721afffe93abdb32cb1c053b70e890d",
+  "std_f1": 0.02097955809013606
+}

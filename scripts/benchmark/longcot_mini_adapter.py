@@ -341,10 +341,16 @@ class LongCoTMiniAdapter(BaseAdapter):
             return
         try:
             from datasets import load_from_disk
-        except ImportError:
-            print("  [adapter] LongCoTMini: `datasets` not importable")
-            self._dataset = []
-            return
+        except ImportError as exc:
+            # Fail CLOSED: the data is present but unreadable here. Returning an
+            # empty dataset would read as a valid "0 rows" suite and silently
+            # drop LongCoT-Mini from a run.
+            raise RuntimeError(
+                f"LongCoTMini: dataset present at {self._data_dir} but the "
+                f"`datasets` package is not importable ({exc}); install "
+                "`datasets` (with its pyarrow backend) in this interpreter "
+                "to load LongCoT-Mini."
+            ) from exc
 
         try:
             ds = load_from_disk(str(self._data_dir))

@@ -1248,7 +1248,7 @@ def _measure(*, label: str, blocks: int, claim: object,
              output_root: Path,
              host_state: Callable[..., microbench.HostState],
              identity: LiveCampaignIdentity,
-             resume_existing: bool = False) -> LiveMaterial:
+             resume_existing: bool = False, held_claim=None) -> LiveMaterial:
     # A Python default captures the object at function-definition time.  The
     # CLI selects its recipe after argument parsing, so ``= PROMPT_TOKENS``
     # here would retain pp512 even after ``configure_recipe`` selects tg128.
@@ -1320,8 +1320,14 @@ def _measure(*, label: str, blocks: int, claim: object,
     sandbox_root = output_root / "candidate-sandbox"
     sandbox_root.mkdir(mode=0o700, exist_ok=True)
     sandbox_policy = sandbox.SandboxPolicy(writable_root=str(sandbox_root))
+    if held_claim is not None:
+        from ..loop.runtime_window import DirectHeldClaimAdapter
+        if (type(held_claim) is not DirectHeldClaimAdapter or held_claim.owner is not claim
+                or held_claim.cpu_list != CPU_LIST):
+            raise TypeError("historical control requires its exact already-held CPU adapter")
     runner = microbench.MicrobenchRunner(
-        claim=microbench.CpuRegionClaimAdapter(claim, cpu_list=CPU_LIST),
+        claim=(microbench.CpuRegionClaimAdapter(claim, cpu_list=CPU_LIST)
+               if held_claim is None else held_claim),
         policy=microbench.HostStatePolicy(
             nominal_khz=NOMINAL_KHZ, require_load=False,
             require_package_power=True),

@@ -1,0 +1,32 @@
+GPU claim held: {'device_id': 'mi210_0', 'lock_path': '/mnt/raid0/llm/tmp/gpu_device.mi210_0.lock', 'pid': 1137257}
+[10:53:30] run A: /usr/bin/python3 /mnt/raid0/llm/worktrees/sub-gpu-runner-epyc-inference-research/scripts/benchmark/df2_greedy_parity.py --build-bin /mnt/raid0/llm/tmp/build-fold-ef81196d5/bin --out /mnt/raid0/llm/tmp/sub-gpu-runner-20260916/sl5/runA --pin-host-cores 184-191 --only-arm baseline --only-arm dflash2 --only-arm draft_simple
+[10:53:30] arm baseline
+[10:55:19] arm dflash2
+[10:56:33] arm draft_simple
+
+=== DF2-6 per-arm parity (per-prompt verdicts in parity_report.json) ===
+  baseline negative control (drafted nothing): OK
+  dflash2       PASS=6   FAIL=6   drafted=True
+  draft_simple  PASS=5   FAIL=7   drafted=True
+[11:01:23] run B: /usr/bin/python3 /mnt/raid0/llm/worktrees/sub-gpu-runner-epyc-inference-research/scripts/benchmark/df2_greedy_parity.py --build-bin /mnt/raid0/llm/tmp/build-fold-ef81196d5/bin --out /mnt/raid0/llm/tmp/sub-gpu-runner-20260916/sl5/runB --pin-host-cores 184-191 --only-arm baseline --only-arm dflash2 --only-arm draft_simple
+[11:01:23] arm baseline
+[11:03:09] arm dflash2
+[11:04:04] arm draft_simple
+
+=== DF2-6 per-arm parity (per-prompt verdicts in parity_report.json) ===
+  baseline negative control (drafted nothing): OK
+  dflash2       PASS=6   FAIL=6   drafted=True
+  draft_simple  PASS=5   FAIL=7   drafted=True
+
+=== SL-5 A/A (PASS/n, per-prompt detail in aa_report.json) ===
+  baseline_A~baseline_B            12/12  fails=[]
+  dflash2_A~dflash2_B              12/12  fails=[]
+  draft_simple_A~draft_simple_B    12/12  fails=[]
+  dflash2_A~baseline_A             6/12  fails=[('olympiadbench_hard_combinatorics_1882', 34), ('olympiadbench_hard_algebra_1659', 128), ('olympiadbench_hard_algebra_1938', 247), ('olympiadbench_hard_number_theory_1869', 182), ('olympiadbench_hard_combinatorics_1664', 238), ('olympiadbench_hard_combinatorics_1662', 212)]
+  dflash2_A~baseline_B             6/12  fails=[('olympiadbench_hard_combinatorics_1882', 34), ('olympiadbench_hard_algebra_1659', 128), ('olympiadbench_hard_algebra_1938', 247), ('olympiadbench_hard_number_theory_1869', 182), ('olympiadbench_hard_combinatorics_1664', 238), ('olympiadbench_hard_combinatorics_1662', 212)]
+  dflash2_B~baseline_A             6/12  fails=[('olympiadbench_hard_combinatorics_1882', 34), ('olympiadbench_hard_algebra_1659', 128), ('olympiadbench_hard_algebra_1938', 247), ('olympiadbench_hard_number_theory_1869', 182), ('olympiadbench_hard_combinatorics_1664', 238), ('olympiadbench_hard_combinatorics_1662', 212)]
+  dflash2_B~baseline_B             6/12  fails=[('olympiadbench_hard_combinatorics_1882', 34), ('olympiadbench_hard_algebra_1659', 128), ('olympiadbench_hard_algebra_1938', 247), ('olympiadbench_hard_number_theory_1869', 182), ('olympiadbench_hard_combinatorics_1664', 238), ('olympiadbench_hard_combinatorics_1662', 212)]
+  draft_simple_A~baseline_A        5/12  fails=[('olympiadbench_hard_combinatorics_1882', 62), ('olympiadbench_hard_algebra_1659', 128), ('olympiadbench_hard_algebra_1938', 247), ('olympiadbench_hard_combinatorics_1818', 193), ('olympiadbench_hard_number_theory_2415', 36), ('olympiadbench_hard_combinatorics_1664', 238), ('olympiadbench_hard_combinatorics_1662', 250)]
+  draft_simple_A~baseline_B        5/12  fails=[('olympiadbench_hard_combinatorics_1882', 62), ('olympiadbench_hard_algebra_1659', 128), ('olympiadbench_hard_algebra_1938', 247), ('olympiadbench_hard_combinatorics_1818', 193), ('olympiadbench_hard_number_theory_2415', 36), ('olympiadbench_hard_combinatorics_1664', 238), ('olympiadbench_hard_combinatorics_1662', 250)]
+  draft_simple_B~baseline_A        5/12  fails=[('olympiadbench_hard_combinatorics_1882', 62), ('olympiadbench_hard_algebra_1659', 128), ('olympiadbench_hard_algebra_1938', 247), ('olympiadbench_hard_combinatorics_1818', 193), ('olympiadbench_hard_number_theory_2415', 36), ('olympiadbench_hard_combinatorics_1664', 238), ('olympiadbench_hard_combinatorics_1662', 250)]
+  draft_simple_B~baseline_B        5/12  fails=[('olympiadbench_hard_combinatorics_1882', 62), ('olympiadbench_hard_algebra_1659', 128), ('olympiadbench_hard_algebra_1938', 247), ('olympiadbench_hard_combinatorics_1818', 193), ('olympiadbench_hard_number_theory_2415', 36), ('olympiadbench_hard_combinatorics_1664', 238), ('olympiadbench_hard_combinatorics_1662', 250)]

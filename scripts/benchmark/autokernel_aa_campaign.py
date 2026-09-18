@@ -46,7 +46,7 @@ import time
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "kernel_rnd"))
 
 from autokernel.controller import build_recipe                      # noqa: E402
-from autokernel.loop import bench, claim, gates                     # noqa: E402
+from autokernel.loop import bench, claim, gates, headline_admissibility  # noqa: E402
 
 PAIRS = 20
 SETTLE_S = 300
@@ -217,11 +217,19 @@ def main(argv: list[str] | None = None) -> int:
         target = (args.write_calibration / "calibration"
                   / f"{args.surface}.{args.model.stem}.json")
         target.parent.mkdir(parents=True, exist_ok=True)
-        body = {"schema": "epyc.autokernel.surface_calibration.v1",
+        body = {"schema": bench.CALIBRATION_SCHEMA,
                 "surface": args.surface, "model": args.model.name,
                 "anchor_commit": head,
                 "bench_args": {"pp": pp, "tg": tg, "ubatch": ubatch},
                 "pairs_per_condition": args.pairs,
+                # The UNIT of this floor and the `n` it was estimated from, as REQUIRED
+                # fields (R23-55 / R23-61). Every sample is its own llama-bench invocation
+                # and the arms alternate across them, so this dispersion is between-PROCESS
+                # -- ~13x coarser than a within-session one, and the one time that
+                # distinction went unrecorded it cost a 1200-fold sizing error.
+                "unit": bench.FLOOR_UNIT,
+                "n": args.pairs,
+                "headline_admissibility": headline_admissibility.contract(),
                 "recorded_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "method": "aa-bootstrap-3-condition (D8 2026-08-29)",
                 "floor_pct": {str(k): v for k, v in boot.items()},

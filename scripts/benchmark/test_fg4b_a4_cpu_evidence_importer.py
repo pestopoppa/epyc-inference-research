@@ -12,6 +12,31 @@ sys.path.insert(0, str(Path(__file__).parent))
 import fg4b_a4_cpu_evidence_importer as importer
 
 
+_REVIEWED_CURRENT = {
+    Path(importer.EXPECTED_BINARY): importer.EXPECTED_BINARY_SHA256,
+    importer.PROJECT_ROOT / "scripts/benchmark/bench_canonical.sh": importer.EXPECTED_BENCH_CANONICAL_SHA256,
+    importer.PROJECT_ROOT / "scripts/lib/canonical_recipe.py": importer.EXPECTED_CANONICAL_RECIPE_SHA256,
+}
+
+
+@pytest.fixture(autouse=True)
+def reviewed_current_inputs(monkeypatch: pytest.MonkeyPatch) -> dict:
+    """The importer also re-hashes the LIVE host inputs it was reviewed against
+    (v8 llama-bench, bench_canonical.sh, canonical_recipe.py). The host has since
+    moved to v9 and the recipe has been amended, so on this host that check
+    refuses before any artifact check below is reached. Pin the three live
+    digests to their reviewed values here (the artifact-digest checks are
+    untouched); `test_refuses_drifted_current_host_input` keeps that check's
+    own signal."""
+    if not Path(importer.EXPECTED_BINARY).is_file():
+        pytest.skip(f"{importer.EXPECTED_BINARY} is not on this host")
+    digests = dict(_REVIEWED_CURRENT)
+    real = importer._sha256
+    monkeypatch.setattr(importer, "_sha256",
+                        lambda path: digests.get(Path(path)) or real(path))
+    return digests
+
+
 def write_fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
     artifact = tmp_path / "artifact"
     artifact.mkdir(parents=True)
@@ -154,3 +179,11 @@ def test_cli_validates_both_destinations_before_writing_either(tmp_path: Path) -
     ])
     assert result == 2
     assert not evidence.exists()
+
+
+def test_refuses_drifted_current_host_input(tmp_path: Path, reviewed_current_inputs: dict) -> None:
+    artifact, research, orchestrator = write_fixture(tmp_path)
+    recipe = importer.PROJECT_ROOT / "scripts/lib/canonical_recipe.py"
+    reviewed_current_inputs[recipe] = "0" * 64
+    with pytest.raises(importer.EvidenceError, match="current reviewed input hash does not match"):
+        importer.import_evidence(artifact, research, orchestrator)

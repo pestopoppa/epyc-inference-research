@@ -1,0 +1,16 @@
+[
+ {
+  "proven": true,
+  "problems": [],
+  "n_samples": 102,
+  "n_high": 102,
+  "n_kfd": 102,
+  "baseline_bytes": 13062144,
+  "peak_bytes": 21772980224,
+  "peak_rise_gib": 20.266,
+  "min_rise_bytes": 17179869184,
+  "server_pid": 1250371,
+  "started_utc": "2026-09-16T15:38:16Z",
+  "requests_sent": 18
+ }
+]

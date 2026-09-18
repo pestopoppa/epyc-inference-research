@@ -1,0 +1,123 @@
+{
+  "meta": {
+    "kernel": "production-consolidated-v9",
+    "binary": "/mnt/raid0/llm/llama.cpp/build-hip/bin/llama-server",
+    "models": "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+    "arm": "q38_mtp8_np8_L32768_p0",
+    "timestamp": "2026-09-16T17:43:32.946523+00:00",
+    "elapsed_s": 494.7,
+    "n_per_suite": 155,
+    "seed": 42,
+    "stratify": false,
+    "endpoint": "chat",
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "top_k": 20,
+    "enable_thinking": false,
+    "sampling_fields_are_requested_not_effective": true,
+    "repeats": 1,
+    "max_tokens": 32768,
+    "questions_pinned": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-bench-gpu-20260720/questions_olympiadbench_hard.json",
+    "capture_schema_version": "v7_quality_gate_capture.v4",
+    "runner_source_sha256": "20a97fbd4aecc6f3887299243362d5315b76f819aa1cbc4b8fd92f33b307b45a"
+  },
+  "suites": [
+    {
+      "suite": "olympiadbench_hard",
+      "accuracy": 0.625,
+      "n": 8,
+      "n_questions": 8,
+      "repeats": 1,
+      "correct": 5,
+      "errors": 0,
+      "truncated": 0,
+      "per_tier": {
+        "2": {
+          "accuracy": 0.75,
+          "n": 4,
+          "correct": 3
+        },
+        "3": {
+          "accuracy": 0.5,
+          "n": 4,
+          "correct": 2
+        }
+      },
+      "per_item": {
+        "olympiadbench_hard_algebra_2574": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_algebra_2171": {
+          "correct": 1,
+          "n": 1
+        },
+        "olympiadbench_hard_number_theory_1869": {
+          "correct": 1,
+          "n": 1
+        },
+        "olympiadbench_hard_algebra_1938": {
+          "correct": 1,
+          "n": 1
+        },
+        "olympiadbench_hard_combinatorics_2127": {
+          "correct": 1,
+          "n": 1
+        },
+        "olympiadbench_hard_algebra_1659": {
+          "correct": 1,
+          "n": 1
+        },
+        "olympiadbench_hard_combinatorics_2230": {
+          "correct": 0,
+          "n": 1
+        },
+        "olympiadbench_hard_combinatorics_1882": {
+          "correct": 0,
+          "n": 1
+        }
+      },
+      "capture": {
+        "schema_version": "v7_quality_gate_capture.v4",
+        "new_rows": 8,
+        "request_error_rows": 0,
+        "length_cap_rows": 0,
+        "response_chars": 111012,
+        "response_utf8_bytes": 111022,
+        "reasoning_chars": 0,
+        "reasoning_utf8_bytes": 0,
+        "swebench_search_replace": {
+          "applicable": false,
+          "new_rows": 0,
+          "resumed_rows": 0,
+          "resumed_rows_without_diagnostics": 0,
+          "resumed_rows_without_provenance": 0,
+          "resumed_rows_source_sha_mismatch": 0,
+          "rows_with_markers": 0,
+          "parseable_blocks": 0,
+          "malformed_rows": 0,
+          "zero_strict_block_rows": 0,
+          "partial_strict_block_rows": 0,
+          "state_counts": {
+            "strict_ready": 0,
+            "prompt_contract_candidate": 0,
+            "model_truncation_no_patch": 0,
+            "model_truncation_partial_patch": 0,
+            "request_error": 0
+          },
+          "summary_complete": true,
+          "converter_contract_ready": false,
+          "score_status": "not_applicable"
+        }
+      },
+      "throughput": {
+        "concurrency": 8,
+        "wall_s": 494.7,
+        "completion_tokens": 48256,
+        "prompt_tokens": 1167,
+        "aggregate_decode_tok_s": 97.6,
+        "aggregate_total_tok_s": 99.9
+      }
+    }
+  ]
+}

@@ -33,7 +33,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
-from . import bench, gates
+from . import bench, gates, integrity
 
 HYPOTHESIS_ROUNDS = 3
 PATCH_ROUNDS = 2
@@ -51,6 +51,28 @@ STOPPED_MID_FORMATION = (
 
 class RunAborted(RuntimeError):
     """The run stopped because iterations were failing systematically."""
+
+
+class MeasurementInvalid(RuntimeError):
+    """An original arm contradicted its instrument; not a candidate null.
+
+    The serving owner supplies original raw facts after owned teardown. No measured
+    comparison exists, and rescheduling must retain the candidate before lane reset.
+    """
+
+    def __init__(self, reason: str, record: dict):
+        super().__init__(reason)
+        self.record = record
+        # Created by the original serving invocation only, never from stored JSON.
+        self.reschedule = None
+
+
+class MeasurementFailed(RuntimeError):
+    """The instrument failed after collecting original facts; not a measured null."""
+
+    def __init__(self, reason: str, record: dict | None = None):
+        super().__init__(reason)
+        self.record = {} if record is None else record
 
 
 #: The standing strategy, constraints and settled list. It is rendered into EVERY
@@ -83,6 +105,10 @@ class ConfirmVetoed(RuntimeError):
     """
 
 
+class InteractionRegression(RuntimeError):
+    """A kept source change reproduced a whole-bundle regression and was rolled back."""
+
+
 class ActorTransient(RuntimeError):
     """The actor provider failed in a way worth retrying.
 
@@ -91,6 +117,17 @@ class ActorTransient(RuntimeError):
     ITERATION, never the run: the superseded controller let provider faults escape as
     terminal, so a codex 401 on 2026-08-26 took down 284 attempts in 23 minutes.
     """
+
+
+@dataclass(frozen=True)
+class Abstain:
+    """A planner's truthful conclusion that this turn has no feasible answer."""
+
+    reason: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.reason, str) or not self.reason.strip():
+            raise ValueError("a planner abstention must carry a reason")
 
 
 def _now() -> str:
@@ -104,11 +141,22 @@ class Hypothesis:
     falsifier: str
     target_surface: str
     target_symbol: str
+    runtime_pair: Any = None
+
+    def __post_init__(self) -> None:
+        if self.runtime_pair is not None:
+            from .unified_planner import RuntimeArmPair
+            body = (self.runtime_pair.to_dict() if isinstance(self.runtime_pair, RuntimeArmPair)
+                    else self.runtime_pair)
+            object.__setattr__(self, "runtime_pair", RuntimeArmPair.from_dict(body))
 
     def to_dict(self) -> dict:
-        return {"mechanism_id": self.mechanism_id, "statement": self.statement,
+        row = {"mechanism_id": self.mechanism_id, "statement": self.statement,
                 "falsifier": self.falsifier, "target_surface": self.target_surface,
                 "target_symbol": self.target_symbol}
+        if self.runtime_pair is not None:
+            row["runtime_pair"] = self.runtime_pair.to_dict()
+        return row
 
 
 @dataclass(frozen=True)
@@ -116,6 +164,10 @@ class Review:
     """A critic verdict. A rejection without a reason is a bug, so reason is required."""
     accepted: bool
     reason: str = ""
+    validator_identity: str = ""
+    validator_kind: str = ""
+    independence: str = ""
+    evidence_inspected: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.accepted and not self.reason.strip():
@@ -123,12 +175,18 @@ class Review:
                 "a critic rejection must carry a reason: the reason is what goes back "
                 "to the planner, and a rejection with no destination is the defect "
                 "that blinded 22 of 23 authoring failures")
+        if self.validator_kind and self.validator_kind not in {
+                "script", "oracle", "llm_critic"}:
+            raise ValueError(f"unknown validator kind {self.validator_kind!r}")
+        if self.independence and self.independence not in {
+                "same_fleet", "same_family", "different_family", "non_model"}:
+            raise ValueError(f"unknown validator independence {self.independence!r}")
 
 
 class Planner(Protocol):
-    def propose(self, context: Mapping[str, Any]) -> Hypothesis: ...
+    def propose(self, context: Mapping[str, Any]) -> Hypothesis | Abstain: ...
     def author(self, hypothesis: Hypothesis,
-               context: Mapping[str, Any]) -> tuple[str, ...]: ...
+               context: Mapping[str, Any]) -> tuple[str, ...] | Abstain: ...
 
 
 class Critic(Protocol):
@@ -147,6 +205,32 @@ class Outcome:
     comparison: bench.Comparison | None = None
     gate_verdicts: list[gates.Verdict] = field(default_factory=list)
     champion_head: str | None = None
+    invalid_measurement: dict | None = None
+    instrument_failure: dict | None = None
+    integrity_screen: dict | None = None
+    attempt_identity: str | None = None
+    exact_repeat_dispatch_count: int | None = None
+    duplicate_of: str | None = None
+    prior_effect: float | None = None
+    prior_epoch: str | None = None
+    refusal_gate: str | None = None
+    candidate_diff_sha256: str | None = None
+    mechanism_ablation: dict | None = None
+    # Observe-only planner telemetry.  These fields describe the formation path
+    # which produced the outcome; they do not alter either budget or selection.
+    hypothesis_round: int = 0
+    patch_round: int = 0
+    prior_rejection_prompt: bool = False
+    validator_provenance: list[dict] = field(default_factory=list)
+    # Observed formation lineage only. Detached lanes are logical branches, not
+    # additional Git champion refs; none of these fields selects work.
+    spawn_parent: str | None = None
+    branch_id: str | None = None
+    width: int | None = None
+    depth: int | None = None
+    # Populated only after the append-only experiment store commits this outcome.
+    # Kept out of to_attempt() so the receipt cannot recursively hash itself.
+    journal_receipt: dict | None = None
 
     def to_attempt(self) -> dict:
         row = {"status": self.status, "turn_recorded_at": _now()}
@@ -161,7 +245,72 @@ class Outcome:
             row["gates"] = [verdict.to_dict() for verdict in self.gate_verdicts]
         if self.champion_head:
             row["champion_head"] = self.champion_head
+        if self.invalid_measurement is not None:
+            row["invalid_measurement"] = self.invalid_measurement
+        if self.instrument_failure is not None:
+            row["instrument_failure"] = self.instrument_failure
+        if self.integrity_screen is not None:
+            row["integrity_screen"] = self.integrity_screen
+        for key in ("attempt_identity", "exact_repeat_dispatch_count", "duplicate_of",
+                    "prior_effect", "prior_epoch", "refusal_gate", "candidate_diff_sha256"):
+            if getattr(self, key) is not None:
+                row[key] = getattr(self, key)
+        row.update({
+            "hypothesis_round": self.hypothesis_round,
+            "patch_round": self.patch_round,
+            "prior_rejection_prompt": self.prior_rejection_prompt,
+        })
+        if self.validator_provenance:
+            row["validator_provenance"] = self.validator_provenance
+        for key in ("spawn_parent", "branch_id", "width", "depth"):
+            if getattr(self, key) is not None:
+                row[key] = getattr(self, key)
+        if self.hypothesis is not None:
+            from . import claims
+            split = claims.keep_claims(
+                status=self.status,
+                mechanism_id=self.hypothesis.mechanism_id,
+                statement=self.hypothesis.statement,
+                comparison=(self.comparison.to_dict()
+                            if self.comparison is not None else None),
+                gates=[verdict.to_dict() for verdict in self.gate_verdicts],
+                ablation=self.mechanism_ablation)
+            if split is not None:
+                row["claims"] = split
         return row
+
+
+def _critic_provenance(critic: Critic, review: Review, *, decision: str,
+                       evidence: tuple[str, ...]) -> dict:
+    """Project a critic verdict into the common provenance carrier."""
+    identity = (review.validator_identity or
+                f"{type(critic).__module__}.{type(critic).__qualname__}")
+    kind = review.validator_kind or "script"
+    independence = review.independence or "non_model"
+    return {
+        "decision": decision,
+        "validator_identity": identity,
+        "validator_kind": kind,
+        "independence": independence,
+        "evidence_inspected": list(review.evidence_inspected or evidence),
+        "accepted": review.accepted,
+        "reason": review.reason or None,
+        "changed_subsequent_search": False,
+    }
+
+
+def _gate_provenance(verdict: gates.Verdict) -> dict:
+    kind = "oracle" if verdict.gate in {"correctness", "determinism"} else "script"
+    return {
+        "decision": f"gate:{verdict.gate}",
+        "validator_identity": f"autokernel.gates.{verdict.gate}",
+        "validator_kind": kind,
+        "independence": "non_model",
+        "evidence_inspected": ["candidate build artifact", verdict.gate],
+        "accepted": verdict.passed,
+        "reason": verdict.reason or None,
+        "changed_subsequent_search": not verdict.passed,
+    }
 
 
 def _safe_step(hook):
@@ -204,6 +353,10 @@ def _null_reason(comparison: bench.Comparison) -> str:
                 f"{comparison.effect * 100:+.3f}%, but an arm that is still moving "
                 f"resolves nothing. This mechanism is UNTESTED, not unpromising — "
                 f"re-run it rather than abandoning it")
+    if comparison.decisive and comparison.effect < 0:
+        return (f"DECISIVE REGRESSION — effect {comparison.effect * 100:+.3f}% "
+                f"exceeded the {comparison.noise_floor_pct:.3f}% noise floor; "
+                "candidate rejected, champion unchanged")
     return (f"effect {comparison.effect * 100:+.3f}% did not clear the "
             f"{comparison.noise_floor_pct:.3f}% noise floor")
 
@@ -217,7 +370,12 @@ def iterate(*, planner: Planner, critic: Critic,
             patch_rounds: int = PATCH_ROUNDS,
             on_step: Callable[[str], None] | None = None,
             tail_session: Callable[[], Any] = nullcontext,
-            should_abandon: Callable[[], bool] | None = None) -> Outcome:
+            should_abandon: Callable[[], bool] | None = None,
+            record_reschedule: Callable[[Outcome], bool] | None = None,
+            accumulate_valid_positive: bool = False,
+            validate_candidate: Callable[[Hypothesis, Sequence[str]], Any] | None = None,
+            formation_guard=None, reserve_candidate=None
+            ) -> Outcome:
     """One full turn. Pure control flow: every side effect is an injected callable.
 
     `should_abandon` is the DRAIN TIER for a lane that does not hold the serialized
@@ -228,25 +386,55 @@ def iterate(*, planner: Planner, critic: Critic,
     """
     working = dict(context)
     hypothesis_reasons: list[str] = []
+    round_telemetry = {
+        "hypothesis_round": 0,
+        "patch_round": 0,
+        "prior_rejection_prompt": False,
+    }
+    validator_provenance: list[dict] = []
+
+    def observed(outcome: Outcome) -> Outcome:
+        outcome.hypothesis_round = int(round_telemetry["hypothesis_round"])
+        outcome.patch_round = int(round_telemetry["patch_round"])
+        outcome.prior_rejection_prompt = bool(
+            round_telemetry["prior_rejection_prompt"])
+        # An admissible A/B result is fed to campaign memory regardless of sign:
+        # keeps move the anchor, while nulls/regressions close that exact attempt.
+        # Record that causal use, rather than leaving every measurement validator
+        # falsely marked as having no effect on subsequent search.
+        for row in validator_provenance:
+            if row.get("decision") == "measurement:paired_ab":
+                row["changed_subsequent_search"] = outcome.status in {
+                    "kept", "keep_candidate", "measured_null", "regression",
+                    "confirm_vetoed"}
+        outcome.validator_provenance = list(validator_provenance)
+        return outcome
 
     try:
-        return _iterate(planner=planner, critic=critic, working=working,
+        return observed(_iterate(planner=planner, critic=critic, working=working,
                         hypothesis_reasons=hypothesis_reasons, measure=measure,
                         gate=gate, commit=commit,
                         hypothesis_rounds=hypothesis_rounds,
                         patch_rounds=patch_rounds, on_step=_safe_step(on_step),
                         tail_session=tail_session,
-                        should_abandon=should_abandon or (lambda: False))
+                        should_abandon=should_abandon or (lambda: False),
+                        record_reschedule=record_reschedule,
+                        accumulate_valid_positive=accumulate_valid_positive,
+                        validate_candidate=validate_candidate or (lambda _h, _p: None),
+                        formation_guard=formation_guard or (lambda _h, _c: None),
+                        reserve_candidate=reserve_candidate,
+                        round_telemetry=round_telemetry,
+                        validator_provenance=validator_provenance))
     except TailRefused as exc:
         # The candidate was formed and never measured. Carry the hypothesis: the
         # patch may well still help against the champion that displaced it, and the
         # planner is told to look at these FIRST.
-        return Outcome("superseded", getattr(exc, "hypothesis", None), [str(exc)])
+        return observed(Outcome("superseded", getattr(exc, "hypothesis", None), [str(exc)]))
     except ActorTransient as exc:
         # The provider failed, not the science. This ends the ITERATION and is
         # recorded as such; the run continues, and a streak becomes visible in
         # experiments.md rather than taking the campaign down with it.
-        return Outcome("planner_transient", None, [str(exc)])
+        return observed(Outcome("planner_transient", None, [str(exc)]))
     except bench.BenchFailed as exc:
         # The INSTRUMENT failed, not the science, and it gets the same treatment for
         # the same reason. Run 12 died on iteration 1 because `llama-bench` was
@@ -258,60 +446,148 @@ def iterate(*, planner: Planner, critic: Critic,
         # Recorded distinctly from a provider transient: "the benchmark could not be
         # taken" is a different fact from "the actor would not answer", and merging
         # them would hide an instrument failing behind an API being flaky.
-        return Outcome("bench_failed", None, [str(exc)])
+        return observed(Outcome("bench_failed", None, [str(exc)]))
 
 
 def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, commit,
              hypothesis_rounds, patch_rounds, on_step=lambda _label: None,
              tail_session=nullcontext,
-             should_abandon=lambda: False) -> Outcome:
+             should_abandon=lambda: False, record_reschedule=None,
+             accumulate_valid_positive=False,
+             validate_candidate=lambda _hypothesis, _paths: None,
+             formation_guard=lambda _hypothesis, _context: None,
+             reserve_candidate=None, round_telemetry=None,
+             validator_provenance=None) -> Outcome:
     last_proposed: Hypothesis | None = None
+    round_telemetry = round_telemetry if round_telemetry is not None else {}
+    validator_provenance = (validator_provenance if validator_provenance is not None
+                            else [])
+
+    def mark_search_changed(decision: str) -> None:
+        for row in reversed(validator_provenance):
+            if row["decision"] == decision and not row["accepted"]:
+                row["changed_subsequent_search"] = True
+                return
 
     def stopped() -> Outcome:
         # Names whatever was in flight, exactly as a refusal row must.
         return Outcome("stopped_mid_formation", last_proposed,
                        [STOPPED_MID_FORMATION])
 
-    for _ in range(hypothesis_rounds):
+    for hypothesis_index in range(hypothesis_rounds):
         # Polled BEFORE each actor call, never after: the whole point is that no
         # further multi-minute call is drawn once the run has been told to stop.
         if should_abandon():
             return stopped()
         working["prior_hypothesis_rejections"] = list(hypothesis_reasons)
+        round_telemetry["hypothesis_round"] = hypothesis_index + 1
+        round_telemetry["patch_round"] = 0
+        if hypothesis_reasons:
+            round_telemetry["prior_rejection_prompt"] = True
+            mark_search_changed("critic:hypothesis")
         on_step("proposing a hypothesis")
         hypothesis = planner.propose(working)
+        if isinstance(hypothesis, Abstain):
+            return Outcome("abstained", None, [hypothesis.reason])
         last_proposed = hypothesis
+        repeat_reason = formation_guard(hypothesis, working)
+        if repeat_reason:
+            return Outcome("refused_at_formation", hypothesis, [repeat_reason],
+                           refusal_gate="do_not_repeat")
 
         # ---- CRITIC PASS 1: the hypothesis, before any patch exists ----------
         if should_abandon():
             return stopped()
-        on_step("critic pass 1: reviewing the hypothesis")
-        verdict = critic.review_hypothesis(hypothesis, working)
-        if not verdict.accepted:
-            # Verbatim, so the planner can answer the objection rather than guess.
-            hypothesis_reasons.append(verdict.reason)
-            continue
+        # Only the installed canonical runtime options get the deterministic fast
+        # path. A serialized pair is not itself installation or launch authority:
+        # the exact current anchor/options must also be in this owner's context,
+        # and the tail gate still rechecks ownership and correctness before launch.
+        pair = hypothesis.runtime_pair
+        prevalidated_runtime = (
+            pair is not None and pair.anchor.backend in {"cpu", "gpu"}
+            and pair.anchor.to_dict() == working.get("runtime_anchor")
+            and pair.dimension.kind in {"threads", "cpu_list", "numa_policy", "env"}
+            and (pair.dimension.kind != "env" or pair.dimension.candidate["key"]
+                 in working.get("runtime_env_keys", ())))
+        if prevalidated_runtime:
+            on_step("prevalidated runtime option: deterministic checks, no critic call")
+        else:
+            on_step("critic pass 1: reviewing the hypothesis")
+            verdict = critic.review_hypothesis(hypothesis, working)
+            validator_provenance.append(_critic_provenance(
+                critic, verdict, decision="critic:hypothesis",
+                evidence=("hypothesis", "planner context")))
+            if not verdict.accepted:
+                # Verbatim, so the planner can answer the objection rather than guess.
+                hypothesis_reasons.append(verdict.reason)
+                continue
 
         patch_reasons: list[str] = []
-        for _ in range(patch_rounds):
+        for patch_index in range(1 if hypothesis.runtime_pair is not None else patch_rounds):
             if should_abandon():
                 return stopped()
             working["prior_patch_rejections"] = list(patch_reasons)
-            on_step("authoring the patch")
-            paths = planner.author(hypothesis, working)
+            round_telemetry["patch_round"] = patch_index + 1
+            if patch_reasons:
+                round_telemetry["prior_rejection_prompt"] = True
+                mark_search_changed("critic:patch")
+            paths = ()
+            integrity_screen = None
+            if hypothesis.runtime_pair is None:
+                on_step("authoring the patch")
+                paths = planner.author(hypothesis, working)
+                if isinstance(paths, Abstain):
+                    return Outcome("abstained", hypothesis, [paths.reason])
+                # A declared path list is a claim, not an isolation boundary.  The
+                # injected host check resolves the full worktree before review/build.
+                try:
+                    checked = validate_candidate(hypothesis, paths)
+                    integrity_screen = (checked.to_dict() if hasattr(checked, "to_dict")
+                                        else checked)
+                except integrity.IntegrityRefused as exc:
+                    return Outcome(
+                        "integrity_refused", hypothesis, [str(exc)],
+                        integrity_screen={"refusal_class": exc.refusal_class})
 
             # ---- CRITIC PASS 2: the diff, BEFORE the build ------------------
             if should_abandon():
                 return stopped()
-            on_step("critic pass 2: reviewing the diff")
-            patch_verdict = critic.review_patch(hypothesis, paths, working)
-            if not patch_verdict.accepted:
-                # The hypothesis is untouched: a bad patch is not evidence against
-                # the idea it was trying to implement.
-                patch_reasons.append(patch_verdict.reason)
-                continue
+            if hypothesis.runtime_pair is None:
+                on_step("critic pass 2: reviewing the diff")
+                patch_verdict = critic.review_patch(hypothesis, paths, working)
+                validator_provenance.append(_critic_provenance(
+                    critic, patch_verdict, decision="critic:patch",
+                    evidence=("candidate diff", "declared paths", "planner context")))
+                if not patch_verdict.accepted:
+                    # The hypothesis is untouched: a bad patch is not evidence against
+                    # the idea it was trying to implement.
+                    patch_reasons.append(patch_verdict.reason)
+                    continue
+                # The critic is a verifier, not a second author. Re-run the host-owned
+                # whole-tree validation after its call and before entering the build
+                # tail. A critic that mutates even a declared file changes the tree
+                # reviewed by the first integrity pass and hard-refuses the candidate.
+                try:
+                    post_critic = validate_candidate(hypothesis, paths)
+                except integrity.IntegrityRefused as exc:
+                    return Outcome(
+                        "integrity_refused", hypothesis, [str(exc)],
+                        integrity_screen={"refusal_class": exc.refusal_class})
+                before_tree = ((integrity_screen or {}).get("measured_tree")
+                               if isinstance(integrity_screen, Mapping) else None)
+                after_tree = ((post_critic or {}).get("measured_tree")
+                              if isinstance(post_critic, Mapping) else None)
+                if before_tree is not None and after_tree != before_tree:
+                    return Outcome(
+                        "integrity_refused", hypothesis,
+                        ["critic mutated the candidate worktree: "
+                         f"tree changed {before_tree} -> {after_tree}"],
+                        integrity_screen={"refusal_class": "critic_tree_mutation",
+                                          "measured_tree": before_tree,
+                                          "post_critic_tree": after_tree})
 
-            on_step("building and gating")
+            on_step("checking runtime treatment and correctness" if hypothesis.runtime_pair
+                    is not None else "building and gating")
             # Build, oracle, A/B and commit are ONE atomic step for this candidate.
             # Split across three separate acquisitions, a concurrent peer's keep
             # landing in a gap turns an ALREADY-MEASURED candidate into a stale one:
@@ -327,8 +603,26 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             # around the call that builds it.
             try:
                 with tail_session():
+                    if reserve_candidate is not None and hypothesis.runtime_pair is None:
+                        try:
+                            reserve_candidate(hypothesis, paths)
+                        except Exception as exc:
+                            if type(exc).__name__ != "DispatchRefused":
+                                raise
+                            return Outcome("refused_duplicate", hypothesis, [str(exc)],
+                                           attempt_identity=getattr(
+                                               exc, "attempt_identity", None),
+                                           duplicate_of=getattr(exc, "duplicate_of", None),
+                                           prior_effect=getattr(exc, "prior_effect", None),
+                                           prior_epoch=getattr(exc, "prior_epoch", None),
+                                           refusal_gate="exact_attempt_identity")
                     passed, verdicts = gate(hypothesis, paths)
+                    validator_provenance.extend(_gate_provenance(v) for v in verdicts)
                     if not passed:
+                        if hypothesis.runtime_pair is not None:
+                            return Outcome("runtime_refused", hypothesis,
+                                           [verdicts[-1].reason if verdicts else "gate refused"],
+                                           gate_verdicts=verdicts)
                         # Compile and correctness failures loop back the same way; the
                         # toolchain's own message is the reason, so no critic is needed.
                         patch_reasons.append(
@@ -336,8 +630,59 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                         continue
 
                     on_step("measuring A/B on the device")
-                    comparison = measure(hypothesis, paths)
-                    if comparison.decisive and comparison.effect > 0:
+                    measure_original = lambda: measure(hypothesis, paths)
+                    rescheduled = False
+                    while True:
+                        try:
+                            comparison = measure_original()
+                            validator_provenance.append({
+                                "decision": "measurement:paired_ab",
+                                "validator_identity": "autokernel.bench.paired_ab",
+                                "validator_kind": "script",
+                                "independence": "non_model",
+                                "evidence_inspected": [
+                                    "anchor samples", "candidate samples",
+                                    "noise-floor calibration", "residency evidence"],
+                                "accepted": bool(comparison.decisive),
+                                "reason": None,
+                                "changed_subsequent_search": False,
+                            })
+                            break
+                        except MeasurementInvalid as exc:
+                            invalid = Outcome("measurement_invalid", hypothesis, [str(exc)],
+                                gate_verdicts=verdicts, invalid_measurement=exc.record)
+                            if (rescheduled or exc.reschedule is None or record_reschedule is None
+                                    or (should_abandon is not None and should_abandon())
+                                    or not record_reschedule(invalid)):
+                                return invalid
+                            # Already archived and charged by the pool; no reset,
+                            # reauthor, rebuild, or valid-arm repetition. The same
+                            # serialized tail still owns the original candidate.
+                            rescheduled = True
+                            on_step("rescheduling original invalid CPU server arm (one bounded retry)")
+                            if should_abandon is not None and should_abandon():
+                                return Outcome("stopped_before_reschedule", hypothesis,
+                                    ["STOP after invalid arm archival; no replacement server launched"],
+                                    gate_verdicts=verdicts)
+                            measure_original = exc.reschedule
+                        except MeasurementFailed as exc:
+                            return Outcome("bench_failed", hypothesis, [str(exc)],
+                                gate_verdicts=verdicts, instrument_failure=exc.record)
+                    # R23-44 compound-then-gate: an experimental serving source
+                    # candidate may be smaller than the process-unit floor and still
+                    # belong in the working accumulator.  It must still be a valid,
+                    # calibrated, non-drifting positive observation.  Runtime recipe
+                    # selection remains decisive-only: it has no source tree to
+                    # compound and cannot be recovered by a later bundle gate.
+                    accumulatable_positive = (
+                        accumulate_valid_positive
+                        and hypothesis.runtime_pair is None
+                        and comparison.decisive is False
+                        and comparison.noise_floor_pct is not None
+                        and not comparison.drifting
+                        and comparison.effect > 0)
+                    if ((comparison.decisive and comparison.effect > 0)
+                            or accumulatable_positive):
                         # A screen keep is a KEEP_CANDIDATE; with a confirm rung
                         # configured, `commit` measures it on the production shape
                         # and vetoes rather than committing (§5.3). Unconfigured,
@@ -347,18 +692,35 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                             head = commit(hypothesis, paths, comparison)
                         except ConfirmVetoed as veto:
                             return Outcome("keep_candidate", hypothesis,
-                                           [str(veto)], comparison, verdicts)
-                        return Outcome("kept", hypothesis, [], comparison, verdicts, head)
+                                           [str(veto)], comparison, verdicts,
+                                           integrity_screen=integrity_screen)
+                        except InteractionRegression as regression:
+                            return Outcome("interaction_regression", hypothesis,
+                                           [str(regression)], comparison, verdicts,
+                                           integrity_screen=integrity_screen)
+                        return Outcome("kept", hypothesis, [], comparison, verdicts, head,
+                                       integrity_screen=integrity_screen)
+            except MeasurementInvalid as exc:
+                return Outcome("measurement_invalid", hypothesis, [str(exc)],
+                               gate_verdicts=verdicts, invalid_measurement=exc.record)
+            except MeasurementFailed as exc:
+                return Outcome("bench_failed", hypothesis, [str(exc)],
+                               gate_verdicts=verdicts, instrument_failure=exc.record)
             except TailRefused as exc:
                 # Formed and never measured. Carry the hypothesis out so the planner
                 # can reconsider it against the champion that displaced it.
                 exc.hypothesis = hypothesis
                 raise
-            # A null result IS a result. It is recorded with its mechanism and its
+            # A negative result IS a result. It is recorded with its mechanism and its
             # sample vector, because a loop whose record of failure is thinner than
             # its record of success teaches its planner to repeat the failures.
-            return Outcome("measured_null", hypothesis,
-                           [_null_reason(comparison)],
+            return Outcome("runtime_observed" if hypothesis.runtime_pair is not None
+                           else "regression" if comparison.decisive and comparison.effect < 0
+                           else "measured_null", hypothesis,
+                           ["Runtime observation retained; recipe selection requires original "
+                            "strict anchor/instrument calibration and admission, not a source floor"
+                            if hypothesis.runtime_pair is not None and comparison.decisive is None
+                            else _null_reason(comparison)],
                            comparison, verdicts)
 
         # Patch budget spent. Control returns to the HYPOTHESIS loop, so the planner
@@ -383,6 +745,6 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
 # `archive.record` as `run.py`'s injected `record`. `iterate` is the whole of this
 # module's control flow now, and the pool is its only driver.
 
-__all__ = ["ActorTransient", "ConfirmVetoed", "TailRefused", "RunAborted", "Critic",
+__all__ = ["Abstain", "ActorTransient", "ConfirmVetoed", "InteractionRegression", "TailRefused", "RunAborted", "MeasurementInvalid", "MeasurementFailed", "Critic",
            "HYPOTHESIS_ROUNDS", "Hypothesis", "Outcome", "PATCH_ROUNDS",
            "Planner", "Review", "STOPPED_MID_FORMATION", "iterate"]

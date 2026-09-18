@@ -1,0 +1,7 @@
+[runner] Waiting for server at http://127.0.0.1:18072...
+[runner] Server healthy
+
+[runner] Evaluating olympiadbench_hard (n=12, seed=42)...
+[runner] olympiadbench_hard: 0.0% (0/12)
+
+[runner] Results written to /mnt/raid0/llm/epyc-inference-research/artifacts/architect-bench-gpu-20260814/mtp_nmax_sweep_20260819/n2/result.json

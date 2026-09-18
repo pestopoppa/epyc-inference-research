@@ -9,7 +9,7 @@ class DFlash2FollowupContractTests(unittest.TestCase):
     def test_exact_runner_bytes_are_unchanged(self):
         self.assertEqual(F.sha256(F.RUNNER), F.EXPECTED["runner_sha256"])
         self.assertEqual(F.EXPECTED["runner_sha256"],
-                         "6dea92dd9e374f79691f5df502fa11035ffd484906754f20190a4189111ae7dc")
+                         "20a97fbd4aecc6f3887299243362d5315b76f819aa1cbc4b8fd92f33b307b45a")
 
     def test_six_matched_cells_and_only_drafter_diff(self):
         self.assertEqual(F.CELLS["concurrency"], (

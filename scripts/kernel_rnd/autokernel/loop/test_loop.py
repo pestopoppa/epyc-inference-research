@@ -136,6 +136,9 @@ class TheLoopback(unittest.TestCase):
         self.assertEqual(planner.seen_hypothesis_rejections[1],
                          ["already measured null in epoch 4de6"])
         self.assertEqual(outcome.hypothesis.mechanism_id, "akm-good")
+        self.assertEqual(outcome.hypothesis_round, 2)
+        self.assertEqual(outcome.patch_round, 1)
+        self.assertTrue(outcome.prior_rejection_prompt)
         self.assertEqual(committed["head"], "abc1234")
 
     def test_pass_two_rejection_reaches_the_planner_and_leaves_the_hypothesis_alone(self):
@@ -150,6 +153,53 @@ class TheLoopback(unittest.TestCase):
         # A bad patch is not evidence against the idea: one hypothesis, reproposed
         # zero times.
         self.assertEqual(planner.proposals, 1)
+        self.assertEqual(outcome.hypothesis_round, 1)
+        self.assertEqual(outcome.patch_round, 2)
+        self.assertTrue(outcome.prior_rejection_prompt)
+
+    def test_first_round_outcome_records_no_prior_rejection_prompt(self):
+        outcome, _ = _run(_Planner(), _Critic([], []))
+        row = outcome.to_attempt()
+        self.assertEqual(row["hypothesis_round"], 1)
+        self.assertEqual(row["patch_round"], 1)
+        self.assertFalse(row["prior_rejection_prompt"])
+
+    def test_keep_records_validator_provenance_and_loopback_effect(self):
+        planner = _Planner([_hypothesis("akm-bad"), _hypothesis("akm-good")])
+        critic = _Critic(
+            [loop.Review(False, "unsupported", validator_identity="critic-a",
+                         validator_kind="llm_critic", independence="different_family",
+                         evidence_inspected=("hypothesis", "profile")),
+             loop.Review(True, validator_identity="critic-a",
+                         validator_kind="llm_critic", independence="different_family",
+                         evidence_inspected=("hypothesis", "profile"))],
+            [loop.Review(True, validator_identity="critic-a",
+                         validator_kind="llm_critic", independence="different_family",
+                         evidence_inspected=("candidate diff",))])
+
+        outcome, _ = _run(planner, critic)
+        rows = outcome.to_attempt()["validator_provenance"]
+
+        self.assertEqual(outcome.status, "kept")
+        self.assertTrue(rows[0]["changed_subsequent_search"])
+        self.assertFalse(rows[1]["changed_subsequent_search"])
+        self.assertEqual(rows[0]["validator_identity"], "critic-a")
+        self.assertEqual(rows[0]["validator_kind"], "llm_critic")
+        self.assertEqual(rows[0]["independence"], "different_family")
+        self.assertEqual(rows[0]["evidence_inspected"], ["hypothesis", "profile"])
+        self.assertEqual(
+            [row["decision"] for row in rows],
+            ["critic:hypothesis", "critic:hypothesis", "critic:patch",
+             "gate:compile", "measurement:paired_ab"])
+        self.assertTrue(rows[-1]["changed_subsequent_search"])
+
+    def test_compatibility_critic_is_never_anonymous(self):
+        outcome, _ = _run(_Planner(), _Critic([], []))
+        critic_rows = [row for row in outcome.validator_provenance
+                       if row["decision"].startswith("critic:")]
+        self.assertTrue(all(row["validator_identity"] for row in critic_rows))
+        self.assertTrue(all(row["validator_kind"] == "script" for row in critic_rows))
+        self.assertTrue(all(row["independence"] == "non_model" for row in critic_rows))
 
     def test_a_gate_failure_loops_back_with_the_toolchain_message(self):
         planner = _Planner()
@@ -157,6 +207,56 @@ class TheLoopback(unittest.TestCase):
         outcome, _ = _run(planner, critic, gate_ok=False)
         self.assertEqual(outcome.status, "refused_at_formation")
         self.assertIn("build failed: undefined symbol", " ".join(outcome.reasons))
+
+    def test_characterised_guard_runs_before_critic_pass_one(self):
+        critic = mock.Mock()
+        outcome = loop.iterate(
+            planner=_Planner(), critic=critic, context={}, measure=mock.Mock(),
+            gate=mock.Mock(), commit=mock.Mock(),
+            formation_guard=lambda _h, _c: "do_not_repeat characterised target")
+        self.assertEqual(outcome.status, "refused_at_formation")
+        self.assertEqual(outcome.to_attempt()["refusal_gate"], "do_not_repeat")
+        critic.review_hypothesis.assert_not_called()
+
+    def test_duplicate_reservation_refuses_before_build(self):
+        from autokernel.loop.dispatch_guard import DispatchRefused
+        def refuse(_h, _p):
+            raise DispatchRefused("exact candidate already answered", duplicate_of="d1",
+                                  prior_effect=-.02, prior_epoch="e0")
+        gate = mock.Mock()
+        outcome = loop.iterate(planner=_Planner(), critic=_Critic([], []), context={},
+                               measure=mock.Mock(), gate=gate, commit=mock.Mock(),
+                               reserve_candidate=refuse)
+        self.assertEqual(outcome.status, "refused_duplicate")
+        self.assertEqual(outcome.to_attempt()["duplicate_of"], "d1")
+        self.assertEqual(outcome.to_attempt()["refusal_gate"], "exact_attempt_identity")
+        gate.assert_not_called()
+
+    def test_proposal_abstention_is_a_science_outcome_not_a_transient(self):
+        planner = mock.Mock()
+        planner.propose.return_value = loop.Abstain("no supported mechanism remains")
+        outcome, _ = _run(planner, _Critic([], []))
+        self.assertEqual(outcome.status, "abstained")
+        self.assertEqual(outcome.reasons, ["no supported mechanism remains"])
+        self.assertIsNone(outcome.hypothesis)
+        planner.author.assert_not_called()
+
+    def test_author_abstention_keeps_the_hypothesis_and_skips_all_judges(self):
+        planner = _Planner()
+        planner.author = mock.Mock(return_value=loop.Abstain("edit would violate scope"))
+        critic = _Critic([], [])
+        measure = mock.Mock(side_effect=AssertionError("abstention must not measure"))
+        gate = mock.Mock(side_effect=AssertionError("abstention must not build"))
+        outcome = loop.iterate(planner=planner, critic=critic, context={},
+                               measure=measure, gate=gate, commit=mock.Mock())
+        self.assertEqual(outcome.status, "abstained")
+        self.assertEqual(outcome.hypothesis.mechanism_id, "akm-q5-bit-deposit")
+        self.assertEqual(outcome.reasons, ["edit would violate scope"])
+        self.assertEqual(outcome.to_attempt()["status"], "abstained")
+        self.assertEqual(outcome.to_attempt()["reason"], "edit would violate scope")
+        self.assertEqual(critic.patch_verdicts, [])
+        gate.assert_not_called()
+        measure.assert_not_called()
 
 
 class BudgetsAreIndependent(unittest.TestCase):
@@ -215,8 +315,16 @@ class TheDecision(unittest.TestCase):
 
     def test_a_slower_candidate_is_never_kept(self):
         outcome, committed = _run(_Planner(), _Critic([], []), effect=-0.05, floor=1.0)
-        self.assertEqual(outcome.status, "measured_null")
+        self.assertEqual(outcome.status, "regression")
+        self.assertIn("DECISIVE REGRESSION", outcome.reasons[0])
+        self.assertIn("-5.000%", outcome.reasons[0])
         self.assertEqual(committed, {}, "a regression must not advance the champion")
+
+    def test_sub_floor_negative_is_still_unresolved_null(self):
+        outcome, committed = _run(_Planner(), _Critic([], []), effect=-0.005, floor=1.0)
+        self.assertEqual(outcome.status, "measured_null")
+        self.assertIn("did not clear", outcome.reasons[0])
+        self.assertEqual(committed, {})
 
     def test_an_effect_inside_the_noise_floor_is_not_a_win(self):
         """The defect in one assertion.
@@ -424,6 +532,21 @@ class AnInstrumentFailureEndsTheIterationNotTheRun(unittest.TestCase):
         self.assertEqual(outcome.status, "bench_failed")
         self.assertIn("rc=-9", " ".join(outcome.reasons))
 
+    def test_serving_failure_retains_structured_facts_and_is_not_a_null(self):
+        retained = {"schema": "epyc.autokernel.serving_failed_comparison.v2",
+                    "failed_arm": "candidate", "failed_ordinal": 1}
+
+        def measure(_hypothesis, _paths):
+            raise loop.MeasurementFailed("serving slot failed", retained)
+
+        outcome = drive_single_lane(
+            planner=_Planner(), critic=_Critic([], []), measure=measure,
+            gate=lambda *a: (True, [gates.Verdict("compile", True)]),
+            commit=lambda *a: "abc1234", iterations=1)[0]
+        self.assertEqual(outcome.status, "bench_failed")
+        self.assertEqual(outcome.instrument_failure, retained)
+        self.assertEqual(outcome.to_attempt()["instrument_failure"], retained)
+
     def test_it_is_not_conflated_with_a_provider_transient(self):
         """Merging them would hide a failing instrument behind a flaky API."""
         def measure(hypothesis, paths):
@@ -541,3 +664,52 @@ class AnUncalibratedMeasurementCannotBecomeAKeep(unittest.TestCase):
             noise_floor_pct=1.0, residency={})
         self.assertNotIn("UNDECIDABLE", loop._null_reason(comparison))
         self.assertIn("did not clear", loop._null_reason(comparison))
+
+
+class ValidSubFloorServingCandidatesCanAccumulate(unittest.TestCase):
+    """R23-44 applies to experimental CPU source research too: a valid positive
+    process-level observation may enter the working accumulator even when it is too
+    small for the full-serving floor.  The compounded gate, not the individual arm,
+    decides whether it advances the champion of record."""
+
+    def _comparison(self, *, effect=0.008, drifting=False, calibrated=True):
+        anchor = ([10.0, 20.0, 30.0, 40.0, 50.0,
+                   60.0, 70.0, 80.0, 90.0, 100.0]
+                  if drifting else [100.0] * 5)
+        return bench.Comparison(
+            surface="serving:glm53", anchor_samples=anchor,
+            candidate_samples=[100.0 * (1 + effect)] * 5, effect=effect,
+            estimator="matched_process_v2", pairs=5, noise_floor_pct=6.351,
+            residency={}, anchor_drift_pct=(90.0 if drifting else 0.0),
+            calibrated=calibrated)
+
+    def _run(self, comparison, **kwargs):
+        commits = []
+        outcome = loop.iterate(
+            planner=_Planner(), critic=_Critic([], []), context={},
+            measure=lambda h, p: comparison,
+            gate=lambda h, p: (True, [gates.Verdict("compile", True)]),
+            commit=lambda h, p, c: commits.append("tip") or "tip",
+            **kwargs)
+        return outcome, commits
+
+    def test_valid_positive_below_floor_enters_accumulator_when_enabled(self):
+        outcome, commits = self._run(
+            self._comparison(), accumulate_valid_positive=True)
+        self.assertEqual(outcome.status, "kept")
+        self.assertEqual(commits, ["tip"])
+        self.assertFalse(outcome.comparison.decisive,
+                         "the original measurement remains honestly sub-floor")
+
+    def test_default_path_remains_decisive_only(self):
+        outcome, commits = self._run(self._comparison())
+        self.assertEqual(outcome.status, "measured_null")
+        self.assertEqual(commits, [])
+
+    def test_drifting_or_uncalibrated_positive_never_accumulates(self):
+        for comparison in (self._comparison(drifting=True),
+                           self._comparison(calibrated=False)):
+            outcome, commits = self._run(
+                comparison, accumulate_valid_positive=True)
+            self.assertEqual(outcome.status, "measured_null")
+            self.assertEqual(commits, [])

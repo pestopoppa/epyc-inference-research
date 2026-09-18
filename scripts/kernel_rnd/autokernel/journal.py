@@ -85,8 +85,12 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import json
+import math
 import os
 import re
+import secrets
+import stat
+import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -140,6 +144,10 @@ class CursorError(JournalError):
     """A cursor operation would rewind, forge, or invent a reader."""
 
 
+class CursorProofPending(CursorError):
+    """A bounded cursor proof made progress but needs another owner call."""
+
+
 # =============================================================================
 # Layout and vocabulary
 # =============================================================================
@@ -150,6 +158,11 @@ BASE_SHARD_NAME = "events.jsonl"
 ARCHIVE_DIRNAME = "archive"
 CURSOR_DIRNAME = "cursors"
 LOCK_NAME = ".write.lock"
+FEED_PUBLICATION_NAME = ".feed-publication.json"
+FEED_PUBLICATION_SCHEMA = "epyc.autokernel.feed_publication.v2"
+FEED_CURSOR_SCHEMA = "epyc.autokernel.feed_cursor.v2"
+FEED_SHARD_DIRNAME = ".feed-shards"
+FEED_SHARD_SEAL_SCHEMA = "epyc.autokernel.feed_shard_seal.v1"
 
 # Canonical shard names only: `events.jsonl` is index 0, `events_<n>.jsonl` for
 # n >= 1 with NO leading zeros. `events_007.jsonl` is deliberately unmatched —
@@ -164,6 +177,35 @@ _SHARD_LOOKALIKE_RE = re.compile(r"^events.*\.jsonl$")
 _READER_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 DEFAULT_MAX_SHARD_BYTES = 64 * 1024 * 1024
+MAX_FEED_METADATA_BYTES = 64 * 1024
+
+
+def _read_feed_metadata(path: str, label: str) -> bytes:
+    """Read one small regular metadata object through one stable descriptor."""
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    try:
+        fd = os.open(path, flags)
+        try:
+            before = os.fstat(fd)
+            if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                    or before.st_size > MAX_FEED_METADATA_BYTES):
+                raise ValueError(f"{label} is not bounded regular metadata")
+            raw = os.read(fd, MAX_FEED_METADATA_BYTES + 1)
+            after = os.fstat(fd)
+            if (len(raw) > MAX_FEED_METADATA_BYTES or len(raw) != before.st_size
+                    or (before.st_dev, before.st_ino, before.st_size,
+                        before.st_ctime_ns, before.st_mode, before.st_nlink)
+                    != (after.st_dev, after.st_ino, after.st_size,
+                        after.st_ctime_ns, after.st_mode, after.st_nlink)):
+                raise ValueError(f"{label} changed during bounded read")
+            path_stat = os.stat(path, follow_symlinks=False)
+            if (path_stat.st_dev, path_stat.st_ino) != (after.st_dev, after.st_ino):
+                raise ValueError(f"{label} path changed during bounded read")
+            return raw
+        finally:
+            os.close(fd)
+    except (OSError, ValueError) as exc:
+        raise CursorError(f"{label} is unavailable: {exc}") from exc
 
 # Kinds whose payload IS one of the §7 records. `append()` validates these with
 # schemas.py, so an invalid record cannot enter the primary journal at all.
@@ -234,6 +276,53 @@ KIND_OPERATOR_RELEASE_DRY_RUN_TERMINATED = "OPERATOR_RELEASE_DRY_RUN_TERMINATED"
 # invariant 7 exists for had nowhere durable to go. Two modules wrote two halves
 # of one contract and neither half was wrong on its own.
 KIND_PREFLIGHT_ATTESTATION = "PREFLIGHT_ATTESTATION"
+# Operational accumulator state, not a §7 evidence record.  Persisting or
+# importing this snapshot grants no measurement or claim eligibility.
+KIND_LOOP_BUNDLE_SAVED = "LOOP_BUNDLE_SAVED"
+KIND_CAMPAIGN_SUPERVISOR_EVENT = "CAMPAIGN_SUPERVISOR_EVENT"
+CAMPAIGN_SUPERVISOR_EVENT_SCHEMA = "epyc.autokernel.campaign_supervisor_event.v1"
+CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V2 = "epyc.autokernel.campaign_supervisor_event.v2"
+CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V3 = "epyc.autokernel.campaign_supervisor_event.v3"
+CAMPAIGN_SUPERVISOR_EVENTS = frozenset({
+    "START", "CONTROL_ACCEPTED",
+})
+KIND_CANDIDATE_TRANSACTION = "CANDIDATE_TRANSACTION"
+CANDIDATE_TRANSACTION_SCHEMA = "epyc.autokernel.candidate_transaction_event.v1"
+CANDIDATE_TRANSACTION_PHASES = frozenset({"INTENT", "PREPARED", "COMMITTED"})
+CANDIDATE_TRANSACTION_OPERATIONS = frozenset({
+    "init", "integrate", "start_batch", "record_row", "complete_batch",
+    "advance_validated",
+})
+KIND_PLANNED_SERVING_ARM_CAPTURED = "PLANNED_SERVING_ARM_CAPTURED"
+PLANNED_SERVING_ARM_CAPTURE_SCHEMA = "epyc.autokernel.unified_arm_capture.v1"
+PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V2 = "epyc.autokernel.unified_arm_capture.v2"
+PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V3 = "epyc.autokernel.unified_arm_capture.v3"
+KIND_WORKER_LIFECYCLE = "WORKER_LIFECYCLE"
+WORKER_LIFECYCLE_SCHEMA = "epyc.autokernel.worker_lifecycle_event.v1"
+KIND_WORKER_ACQUISITION = "WORKER_ACQUISITION"
+KIND_ACTOR_PREPARATION = "ACTOR_PREPARATION"
+WORKER_ACQUISITION_SCHEMA = "epyc.autokernel.worker_acquisition_transition.v1"
+KIND_CAMPAIGN_COMMAND_V2 = "CAMPAIGN_COMMAND_V2"
+CAMPAIGN_COMMAND_V2_SCHEMA = "epyc.autokernel.campaign_command_transition.v2"
+KIND_CAMPAIGN_COMMAND_V3 = "CAMPAIGN_COMMAND_V3"
+CAMPAIGN_COMMAND_V3_SCHEMA = "epyc.autokernel.campaign_command_transition.v3"
+KIND_MAINTENANCE_EXECUTION = "MAINTENANCE_EXECUTION"
+KIND_RETENTION_CATALOG_INSTALLED = "RETENTION_CATALOG_INSTALLED"
+KIND_UNIFIED_DRIVER_ISSUED = "UNIFIED_DRIVER_ISSUED"
+UNIFIED_DRIVER_ISSUED_SCHEMA = "epyc.autokernel.unified_driver_issued.v1"
+KIND_UNIFIED_DRIVER_SETTLED = "UNIFIED_DRIVER_SETTLED"
+UNIFIED_DRIVER_SETTLED_SCHEMA = "epyc.autokernel.unified_driver_settled.v1"
+KIND_A2_RUNTIME_EXECUTION = "A2_RUNTIME_EXECUTION"
+A2_RUNTIME_EXECUTION_SCHEMA = "epyc.autokernel.a2_runtime_execution_transition.v1"
+LOOP_BUNDLE_SAVED_SCHEMA = "epyc.autokernel.loop_bundle_saved.v1"
+LOOP_BUNDLE_SNAPSHOT_SCHEMA_V1 = "epyc.autokernel.accumulator_bundle.v1"
+LOOP_BUNDLE_SNAPSHOT_SCHEMA_V2 = "epyc.autokernel.accumulator_bundle.v2"
+LOOP_BUNDLE_PROVENANCES = frozenset({
+    "current_snapshot", "imported_legacy_state",
+})
+LOOP_BUNDLE_MEASUREMENT_VALIDITIES = frozenset({
+    "current_snapshot", "unknown_legacy", "stale_external_tip_advance",
+})
 
 # §19.4 bootstrap-knowledge event types. Their payloads are campaign-specific
 # structures owned by the bootstrap corpus task, so they are checked only for
@@ -249,6 +338,20 @@ NATIVE_KINDS = frozenset({
     KIND_SUPERSEDED, KIND_RETRIEVAL_SUPERSEDED, KIND_TOMBSTONE,
     KIND_TORN_APPEND_DISCARDED, KIND_OPERATOR_CONTROL_ACK, KIND_VIEW_REBASED,
     KIND_PROPOSAL_SKIPPED, KIND_STOP_STATE, KIND_PREFLIGHT_ATTESTATION,
+    KIND_LOOP_BUNDLE_SAVED,
+    KIND_CAMPAIGN_SUPERVISOR_EVENT,
+    KIND_CANDIDATE_TRANSACTION,
+    KIND_PLANNED_SERVING_ARM_CAPTURED,
+    KIND_WORKER_LIFECYCLE,
+    KIND_WORKER_ACQUISITION,
+    KIND_ACTOR_PREPARATION,
+    KIND_CAMPAIGN_COMMAND_V2,
+    KIND_CAMPAIGN_COMMAND_V3,
+    KIND_MAINTENANCE_EXECUTION,
+    KIND_RETENTION_CATALOG_INSTALLED,
+    KIND_UNIFIED_DRIVER_ISSUED,
+    KIND_UNIFIED_DRIVER_SETTLED,
+    KIND_A2_RUNTIME_EXECUTION,
     KIND_MICROBENCH_RUN_COMPLETED,
     KIND_T0_REFUSAL,
     KIND_POST_T0_QUIET_BOUNDARY,
@@ -277,6 +380,7 @@ RECORD_ID_KEY_BY_KIND = {
     KIND_OPERATOR_RELEASE_DRY_RUN_REQUESTED: "request_id",
     KIND_OPERATOR_RELEASE_DRY_RUN_TERMINATED: "terminal_sha256",
     KIND_POST_T0_QUIET_BOUNDARY: "receipt_id",
+    KIND_PLANNED_SERVING_ARM_CAPTURED: "measurement_id",
 }
 
 # §5.8 storage classes. Only the expirable class may ever be tombstoned:
@@ -314,6 +418,118 @@ NARRATIVE_KEYS = frozenset({"narrative"})
 #: validator in this package started with, and two of those forgot to also refuse
 #: a placeholder. See the `require` header in `schemas.py`.
 _SHA256_RE = schemas.SHA256_RE
+
+
+def loop_bundle_snapshot_digest(snapshot: Mapping[str, Any]) -> str:
+    """Content-address one Bundle snapshot with the journal's canonical JSON."""
+    return schemas.content_hash(snapshot)
+
+
+def validate_loop_bundle_saved_payload(payload: Mapping[str, Any]) -> list:
+    """Validate operational Bundle state without granting evidence authority."""
+    out: list[str] = []
+    allowed_payload = {"schema", "snapshot", "snapshot_sha256", "provenance"}
+    extra_payload = sorted(set(payload) - allowed_payload)
+    if extra_payload:
+        out.append(f"payload: unknown field(s) {extra_payload}")
+    if payload.get("schema") != LOOP_BUNDLE_SAVED_SCHEMA:
+        out.append(f"schema: must be {LOOP_BUNDLE_SAVED_SCHEMA!r}")
+    provenance = payload.get("provenance")
+    if provenance not in LOOP_BUNDLE_PROVENANCES:
+        out.append(
+            f"provenance: required, one of {sorted(LOOP_BUNDLE_PROVENANCES)}"
+        )
+    snapshot = payload.get("snapshot")
+    if not isinstance(snapshot, Mapping):
+        out.append("snapshot: required Bundle mapping")
+        return out
+
+    schema = snapshot.get("schema")
+    common = {"schema", "champion_of_record", "tip", "keeps",
+              "compounded_bench_pct"}
+    if schema == LOOP_BUNDLE_SNAPSHOT_SCHEMA_V1:
+        allowed_snapshot = common | {"keeps_since_serving_gate"}
+        required_snapshot = common
+        if provenance != "imported_legacy_state":
+            out.append("snapshot.schema: v1 is admitted only as imported legacy state")
+    elif schema == LOOP_BUNDLE_SNAPSHOT_SCHEMA_V2:
+        allowed_snapshot = common | {
+            "keeps_since_serving_gate", "measurement_validity",
+            "comparison_evidence",
+        }
+        # comparison_evidence was added after v2 had already been published.  It
+        # is optional on recovery, but every new keep writes it.
+        required_snapshot = allowed_snapshot - {"comparison_evidence"}
+        if provenance != "current_snapshot":
+            out.append("snapshot.schema: v2 must use current_snapshot provenance")
+    else:
+        allowed_snapshot = set(snapshot)
+        required_snapshot = set()
+        out.append(
+            "snapshot.schema: unsupported; expected legacy v1 or current v2"
+        )
+    extra_snapshot = sorted(set(snapshot) - allowed_snapshot)
+    missing_snapshot = sorted(required_snapshot - set(snapshot))
+    if extra_snapshot:
+        out.append(f"snapshot: unknown field(s) {extra_snapshot}")
+    if missing_snapshot:
+        out.append(f"snapshot: missing required field(s) {missing_snapshot}")
+    for key in ("champion_of_record", "tip"):
+        value = snapshot.get(key)
+        if not isinstance(value, str) or not value.strip():
+            out.append(f"snapshot.{key}: required and non-empty")
+    keeps = snapshot.get("keeps")
+    if (not isinstance(keeps, list)
+            or any(not isinstance(value, str) or not value.strip()
+                   for value in keeps)):
+        out.append("snapshot.keeps: required list of non-empty strings")
+    gain = snapshot.get("compounded_bench_pct")
+    if (not isinstance(gain, (int, float)) or isinstance(gain, bool)
+            or not math.isfinite(float(gain))):
+        out.append("snapshot.compounded_bench_pct: required finite number")
+    cadence = snapshot.get("keeps_since_serving_gate")
+    if schema == LOOP_BUNDLE_SNAPSHOT_SCHEMA_V2 and cadence is None:
+        out.append(
+            "snapshot.keeps_since_serving_gate: required non-negative integer in v2"
+        )
+    elif cadence is not None and (
+            not isinstance(cadence, int) or isinstance(cadence, bool)
+            or cadence < 0):
+        out.append(
+            "snapshot.keeps_since_serving_gate: must be a non-negative integer"
+        )
+    validity = snapshot.get("measurement_validity")
+    if schema == LOOP_BUNDLE_SNAPSHOT_SCHEMA_V2:
+        if validity not in LOOP_BUNDLE_MEASUREMENT_VALIDITIES:
+            out.append(
+                "snapshot.measurement_validity: required, one of "
+                f"{sorted(LOOP_BUNDLE_MEASUREMENT_VALIDITIES)}"
+            )
+    elif validity is not None:
+        out.append("snapshot.measurement_validity: not defined by legacy v1")
+    evidence = snapshot.get("comparison_evidence")
+    if evidence is not None:
+        if not isinstance(evidence, Mapping):
+            out.append("snapshot.comparison_evidence: must be a mapping")
+        else:
+            allowed_evidence = {"path", "sha256"}
+            if set(evidence) != allowed_evidence:
+                out.append("snapshot.comparison_evidence: requires exactly path and sha256")
+            for key in allowed_evidence:
+                value = evidence.get(key)
+                if not isinstance(value, str) or not value.strip():
+                    out.append(f"snapshot.comparison_evidence.{key}: required non-empty string")
+    try:
+        expected_digest = loop_bundle_snapshot_digest(snapshot)
+    except (TypeError, ValueError) as exc:
+        out.append(f"snapshot: cannot be content-hashed: {exc}")
+    else:
+        digest = payload.get("snapshot_sha256")
+        if not isinstance(digest, str) or not _SHA256_RE.match(digest):
+            out.append("snapshot_sha256: required lowercase hex sha256")
+        elif digest != expected_digest:
+            out.append("snapshot_sha256: must be the content hash of snapshot")
+    return out
 
 
 def _iso_now() -> str:
@@ -402,6 +618,33 @@ class Cursor:
     reader_id: str
     last_seq: int
     updated_at: str
+
+
+@dataclass(frozen=True)
+class DurablePublication:
+    era: str
+    durable_frontier: int
+    root_device: int
+    root_inode: int
+    shard_index: int
+    shard_device: int
+    shard_inode: int
+    shard_size: int
+    shard_ctime_ns: int
+    shard_mode: int
+    shard_nlink: int
+    seal_count: int
+    seal_head: str
+
+
+@dataclass(frozen=True)
+class DurableFeedBatch:
+    entries: tuple[JournalEntry, ...]
+    positions: tuple[tuple[int, int, int], ...]
+    bytes_read: int
+    cursor_frontier: int
+    publication: DurablePublication
+    proof_pending: bool = False
 
 
 # =============================================================================
@@ -945,7 +1188,292 @@ def retrieval_filter(
 
 def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
     out: list = []
-    if kind in (KIND_SUPERSEDED, KIND_RETRIEVAL_SUPERSEDED):
+    if not isinstance(payload, Mapping):
+        return ["payload: required mapping"]
+    if kind == KIND_A2_RUNTIME_EXECUTION:
+        try:
+            if __package__:
+                from .loop.a2_execution_state import validate_transition
+            else:
+                from autokernel.loop.a2_execution_state import validate_transition
+            validate_transition(payload)
+        except Exception as exc:
+            out.append(f"A2 runtime execution transition: {exc}")
+    elif kind in {KIND_UNIFIED_DRIVER_ISSUED, KIND_UNIFIED_DRIVER_SETTLED}:
+        expected = {"schema", "catalog_id", "campaign_id", "config_generation",
+                    "config_digest", "supervisor_incarnation", "catalog", "selection",
+                    "prior_projection_digest", "after_projection_digest", "transition_id"}
+        if kind == KIND_UNIFIED_DRIVER_SETTLED:
+            expected = (expected - {"catalog"}) | {"receipt", "outcome", "terminal_refs"}
+        if set(payload) != expected:
+            out.append("payload: unified driver transition has missing/unknown fields")
+        wanted_schema = (UNIFIED_DRIVER_ISSUED_SCHEMA if kind == KIND_UNIFIED_DRIVER_ISSUED
+                         else UNIFIED_DRIVER_SETTLED_SCHEMA)
+        if payload.get("schema") != wanted_schema:
+            out.append(f"schema: must be {wanted_schema!r}")
+        for name in ("catalog_id", "config_digest", "prior_projection_digest",
+                     "after_projection_digest", "transition_id"):
+            if not isinstance(payload.get(name), str) or not _SHA256_RE.fullmatch(payload[name]):
+                out.append(f"{name}: required lowercase SHA-256")
+        if not isinstance(payload.get("campaign_id"), str) or not payload.get("campaign_id"):
+            out.append("campaign_id: required non-empty text")
+        for name in ("config_generation", "supervisor_incarnation"):
+            if (not isinstance(payload.get(name), int) or isinstance(payload.get(name), bool)
+                    or payload[name] < 1):
+                out.append(f"{name}: required positive integer")
+        if kind == KIND_UNIFIED_DRIVER_ISSUED and not isinstance(payload.get("catalog"), Mapping):
+            out.append("catalog: required mapping")
+        if not isinstance(payload.get("selection"), Mapping):
+            out.append("selection: required mapping")
+        if kind == KIND_UNIFIED_DRIVER_SETTLED:
+            if not isinstance(payload.get("receipt"), Mapping):
+                out.append("receipt: required mapping")
+            if payload.get("outcome") not in {"valid_comparison", "invalid", "failed",
+                                               "prerequisite", "calibration", "validation",
+                                               "reject_audit", "maintenance"}:
+                out.append("outcome: unsupported")
+            refs = payload.get("terminal_refs")
+            if (not isinstance(refs, list) or not refs
+                    or any(not isinstance(item, str) or not item for item in refs)
+                    or len(refs) != len(set(refs))):
+                out.append("terminal_refs: required unique nonempty strings")
+        try:
+            json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        except (TypeError, ValueError) as exc:
+            out.append(f"payload: non-canonical JSON value: {exc}")
+    elif kind == KIND_ACTOR_PREPARATION:
+        try:
+            if __package__:
+                from .loop.actor_preparation_state import validate_event
+            else:
+                from autokernel.loop.actor_preparation_state import validate_event
+            validate_event(payload)
+        except Exception as exc:
+            out.append(f"payload: invalid actor preparation event: {exc}")
+    elif kind in {KIND_WORKER_LIFECYCLE, KIND_WORKER_ACQUISITION,
+                  KIND_CAMPAIGN_COMMAND_V2, KIND_CAMPAIGN_COMMAND_V3}:
+        try:
+            if __package__:
+                from .loop.worker_lifecycle import (
+                    validate_acquisition_transition, validate_command_transition_v2,
+                    validate_event,
+                )
+            else:
+                from autokernel.loop.worker_lifecycle import (
+                    validate_acquisition_transition, validate_command_transition_v2,
+                    validate_event,
+                )
+            if kind == KIND_WORKER_LIFECYCLE:
+                validate_event(payload)
+            elif kind == KIND_WORKER_ACQUISITION:
+                validate_acquisition_transition(payload)
+            elif kind == KIND_CAMPAIGN_COMMAND_V2:
+                validate_command_transition_v2(payload)
+            else:
+                if __package__:
+                    from .loop.campaign_command_v2 import validate_transition
+                else:
+                    from autokernel.loop.campaign_command_v2 import validate_transition
+                validate_transition(payload)
+        except Exception as exc:
+            out.append(f"lifecycle/control event: {exc}")
+    elif kind == KIND_MAINTENANCE_EXECUTION:
+        try:
+            if __package__:
+                from .loop.maintenance_execution import validate_event
+            else:
+                from autokernel.loop.maintenance_execution import validate_event
+            validate_event(payload)
+        except Exception as exc:
+            out.append(f"maintenance execution event: {exc}")
+    elif kind == KIND_RETENTION_CATALOG_INSTALLED:
+        try:
+            if __package__:
+                from .loop.native_retention_catalog import validate_install_event
+            else:
+                from autokernel.loop.native_retention_catalog import validate_install_event
+            validate_install_event(payload)
+        except Exception as exc:
+            out.append(f"retention catalog event: {exc}")
+    elif kind == KIND_PLANNED_SERVING_ARM_CAPTURED:
+        capture_schema = payload.get("schema")
+        is_v2 = capture_schema == PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V2
+        is_v3 = capture_schema == PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V3
+        expected = {"schema", "measurement_id", "carrier", "artifact"}
+        if set(payload) != expected:
+            out.append("payload: native capture has missing/unknown fields")
+        if capture_schema not in {
+                PLANNED_SERVING_ARM_CAPTURE_SCHEMA,
+                PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V2,
+                PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V3}:
+            out.append(
+                "schema: must be a supported planned-serving capture schema")
+        measurement_id = payload.get("measurement_id")
+        if not isinstance(measurement_id, str) or not _SHA256_RE.fullmatch(measurement_id):
+            out.append("measurement_id: required lowercase SHA-256")
+        artifact = payload.get("artifact")
+        if (not isinstance(artifact, Mapping)
+                or set(artifact) != {"locator", "sha256", "verified"}
+                or not isinstance(artifact.get("locator"), str)
+                or not artifact.get("locator")
+                or not isinstance(artifact.get("sha256"), str)
+                or not _SHA256_RE.fullmatch(artifact.get("sha256", ""))
+                or artifact.get("verified") is not True):
+            out.append("artifact: requires exact locator/sha256/verified receipt")
+        carrier = payload.get("carrier")
+        carrier_fields = {
+            "schema", "producer", "measurement_id", "arm", "arm_locator", "plan",
+            "prompt_manifest", "prompt_manifest_digest", "lineage_id",
+            "comparison_identities", "source_identity", "capture_context",
+            "admissible_view", "raw_artifacts", "environment_verdicts", "status",
+            "diagnostic_reason", "measurement", "claim", "category", "phase",
+            "record_class", "intended_use", "protocol_id", "protocol_status",
+            "instrument_id", "interval", "carrier_digest",
+        }
+        if is_v2 or is_v3:
+            carrier_fields |= {"loaded_instrument", "lifecycle_observations"}
+        if is_v3:
+            carrier_fields |= {"original_arm_capture", "parent_final_trial"}
+        if not isinstance(carrier, Mapping) or set(carrier) != carrier_fields:
+            out.append("carrier: native carrier has missing/unknown fields")
+        else:
+            if (carrier.get("schema") != capture_schema
+                    or carrier.get("measurement_id") != measurement_id):
+                out.append("carrier: schema/measurement_id binding mismatch")
+            producer = ("epyc.autokernel.measurement_capture/v3" if is_v3 else
+                        "epyc.autokernel.measurement_capture/v2" if is_v2 else
+                        "epyc.autokernel.measurement_capture/v1")
+            if carrier.get("producer") != producer:
+                out.append("carrier.producer: unsupported producer")
+            final_digest = None
+            original = carrier.get("original_arm_capture")
+            if is_v3:
+                final = carrier.get("parent_final_trial")
+                if (not isinstance(final, Mapping)
+                        or set(final) != {"schema", "artifact", "digest"}
+                        or final.get("schema") != "epyc.autokernel.parent_final_trial_reference.v1"
+                        or not isinstance(final.get("digest"), str)
+                        or not _SHA256_RE.fullmatch(final.get("digest", ""))):
+                    out.append("carrier.parent_final_trial: invalid closed reference")
+                else:
+                    final_digest = final["digest"]
+                if (not isinstance(original, Mapping)
+                        or set(original) != {"measurement_id", "carrier_digest", "artifact"}
+                        or any(not isinstance(original.get(field), str)
+                               or not _SHA256_RE.fullmatch(original.get(field, ""))
+                               for field in ("measurement_id", "carrier_digest"))):
+                    out.append("carrier.original_arm_capture: invalid closed reference")
+                # Shape checks only: the native final owner separately reopens
+                # original issuance/artifact bytes before any new append.
+                for name, reference in (("parent_final_trial", final),
+                                        ("original_arm_capture", original)):
+                    receipt = reference.get("artifact") if isinstance(reference, Mapping) else None
+                    if (not isinstance(receipt, Mapping)
+                            or set(receipt) != {"locator", "sha256", "verified"}
+                            or not isinstance(receipt.get("locator"), str)
+                            or not receipt.get("locator")
+                            or not isinstance(receipt.get("sha256"), str)
+                            or not _SHA256_RE.fullmatch(receipt.get("sha256", ""))
+                            or receipt.get("verified") is not True):
+                        out.append(f"carrier.{name}.artifact: invalid closed receipt")
+            if (not isinstance(carrier.get("arm"), str)
+                    or carrier.get("arm") not in {"anchor", "candidate"}):
+                out.append("carrier.arm: must be anchor or candidate")
+            context = carrier.get("capture_context")
+            plan = carrier.get("plan")
+            if not isinstance(context, Mapping) or not isinstance(plan, Mapping):
+                out.append("carrier: plan and capture_context must be objects")
+            else:
+                context_fields = {
+                    "campaign_id", "config_digest", "supervisor_id",
+                    "supervisor_incarnation", "config_generation", "worker_id",
+                    "worker_incarnation", "grant_id", "container_id", "lineage_id",
+                    "instrument_id", "protocol_id", "protocol_status",
+                    "source_identities",
+                }
+                if set(context) != context_fields:
+                    out.append("carrier.capture_context: missing/unknown fields")
+                campaign_id = context.get("campaign_id")
+                generation = context.get("config_generation")
+                incarnation = context.get("supervisor_incarnation")
+                if (not isinstance(campaign_id, str) or not campaign_id
+                        or plan.get("campaign_id") != campaign_id):
+                    out.append("carrier: plan/capture campaign binding is invalid")
+                if (not isinstance(generation, int) or isinstance(generation, bool)
+                        or generation < 1 or not isinstance(incarnation, int)
+                        or isinstance(incarnation, bool) or incarnation < 1):
+                    out.append("carrier: config/supervisor generation is invalid")
+                arm = carrier.get("arm")
+                lineage = carrier.get("lineage_id")
+                try:
+                    plan_digest = schemas.content_hash(dict(plan))
+                    identity = {"producer": producer,
+                                "plan_digest": plan_digest, "lineage_id": lineage,
+                                "arm": arm}
+                    if is_v2 or is_v3:
+                        loaded = carrier.get("loaded_instrument")
+                        identity |= {"capture_schema": capture_schema,
+                                     "instrument_identity_sha256": (
+                                         loaded.get("identity_sha256")
+                                         if isinstance(loaded, Mapping) else None)}
+                    if is_v3:
+                        original_identity = identity | {
+                            "producer": "epyc.autokernel.measurement_capture/v2",
+                            "capture_schema": PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V2}
+                        if (not isinstance(original, Mapping)
+                                or original.get("measurement_id") != schemas.content_hash(original_identity)):
+                            out.append("carrier.original_arm_capture: original identity binding is invalid")
+                        identity["parent_final_trial_digest"] = final_digest
+                    expected_measurement_id = schemas.content_hash(identity)
+                except Exception:
+                    expected_measurement_id = None
+                    plan_digest = None
+                expected_locator = (f"parent-final-serving:{plan_digest}:{lineage}:{arm}:{final_digest}"
+                                    if is_v3 else f"planned-serving:{plan_digest}:{lineage}:{arm}")
+                if (not isinstance(lineage, str) or not lineage
+                        or context.get("lineage_id") != lineage
+                        or expected_measurement_id != measurement_id
+                        or carrier.get("arm_locator") != expected_locator):
+                    out.append("carrier: measurement/arm locator binding is invalid")
+                manifest = carrier.get("prompt_manifest")
+                manifest_digest = carrier.get("prompt_manifest_digest")
+                if isinstance(manifest, Mapping):
+                    manifest_body = dict(manifest)
+                    declared = manifest_body.pop("digest", None)
+                    try:
+                        actual_manifest_digest = schemas.content_hash(manifest_body)
+                    except Exception:
+                        actual_manifest_digest = None
+                else:
+                    declared = actual_manifest_digest = None
+                if (not isinstance(manifest_digest, str)
+                        or manifest_digest != declared
+                        or manifest_digest != actual_manifest_digest):
+                    out.append("carrier: prompt manifest digest is invalid")
+            if (not isinstance(carrier.get("comparison_identities"), Mapping)
+                    or set(carrier["comparison_identities"]) != {"anchor", "candidate"}
+                    or not isinstance(carrier.get("plan"), Mapping)
+                    or not isinstance(carrier.get("raw_artifacts"), list)
+                    or not carrier["raw_artifacts"]
+                    or not isinstance(carrier.get("admissible_view"), Mapping)
+                    or not isinstance(carrier.get("environment_verdicts"), list)):
+                out.append("carrier: identity/view/raw/environment structure is invalid")
+            elif (carrier["comparison_identities"].get("anchor") !=
+                  carrier["plan"].get("anchor_identity")
+                  or carrier["comparison_identities"].get("candidate") !=
+                  carrier["plan"].get("candidate_identity")):
+                out.append("carrier: comparison identities differ from frozen plan")
+            digest = carrier.get("carrier_digest")
+            body = dict(carrier)
+            body.pop("carrier_digest", None)
+            try:
+                expected_digest = schemas.content_hash(body)
+            except Exception:
+                expected_digest = None
+            if (not isinstance(digest, str) or not _SHA256_RE.fullmatch(digest)
+                    or digest != expected_digest):
+                out.append("carrier_digest: does not bind canonical carrier")
+    elif kind in (KIND_SUPERSEDED, KIND_RETRIEVAL_SUPERSEDED):
         target = payload.get("target_event_id")
         if not isinstance(target, str) or not target:
             out.append("target_event_id: required, must be a non-empty event id")
@@ -1038,6 +1566,461 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
                 "reasons: a COULD_NOT_CHECK attestation must say why it could "
                 "not check — inability to evaluate is a third outcome, not a pass"
             )
+    elif kind == KIND_CAMPAIGN_SUPERVISOR_EVENT:
+        required = {"schema", "event", "campaign_id", "config_generation",
+                    "config_digest", "supervisor_incarnation", "stream_epoch",
+                    "control_revision", "data"}
+        missing = sorted(required - set(payload))
+        extra = sorted(set(payload) - required)
+        if missing:
+            out.append(f"missing required field(s) {missing}")
+        if extra:
+            out.append(f"unknown field(s) {extra}")
+        event = payload.get("event")
+        if not isinstance(event, str) or event not in CAMPAIGN_SUPERVISOR_EVENTS:
+            out.append(f"event: must be one of {sorted(CAMPAIGN_SUPERVISOR_EVENTS)}")
+        schema = payload.get("schema")
+        if schema in {CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V2,
+                      CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V3}:
+            if event != "START":
+                out.append("schema: versioned supervisor schema is restricted to START")
+        elif schema != CAMPAIGN_SUPERVISOR_EVENT_SCHEMA:
+            out.append(
+                "schema: must be the v1 supervisor schema or a versioned START schema")
+        for key in ("campaign_id", "config_digest"):
+            value = payload.get(key)
+            if not isinstance(value, str) or not value.strip():
+                out.append(f"{key}: required and non-empty")
+        digest_value = payload.get("config_digest")
+        if isinstance(digest_value, str) and not _SHA256_RE.match(digest_value):
+            out.append("config_digest: required lowercase hex sha256")
+        for key in ("config_generation", "supervisor_incarnation", "stream_epoch"):
+            value = payload.get(key)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                out.append(f"{key}: required positive integer")
+        revision = payload.get("control_revision")
+        if not isinstance(revision, int) or isinstance(revision, bool) or revision < 0:
+            out.append("control_revision: required non-negative integer")
+        data = payload.get("data")
+        if not isinstance(data, Mapping):
+            out.append("data: required mapping")
+        elif payload.get("event") == "START":
+            expected = {"desired_state", "observed_state", "prerequisite_reason",
+                        "lock_identity"}
+            if set(data) != expected:
+                out.append("data: START requires exactly desired_state, observed_state, "
+                           "prerequisite_reason, lock_identity")
+            desired_state = data.get("desired_state")
+            if not isinstance(desired_state, str) or desired_state not in {
+                    "paused", "running", "drained"}:
+                out.append("data.desired_state: invalid")
+            observed_state = data.get("observed_state")
+            allowed_observed = {
+                "paused", "running", "drained", "waiting_prerequisite"}
+            if schema == CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V2:
+                allowed_observed |= {"pausing", "draining", "ownership_unresolved"}
+            if not isinstance(observed_state, str) \
+                    or observed_state not in allowed_observed:
+                out.append("data.observed_state: invalid")
+            reason = data.get("prerequisite_reason")
+            if reason is not None and (not isinstance(reason, str) or not reason.strip()):
+                out.append("data.prerequisite_reason: must be null or non-empty string")
+            identity = data.get("lock_identity")
+            identity_fields = {"dev", "ino", "uid", "nlink", "mode", "size"}
+            if not isinstance(identity, Mapping) or set(identity) != identity_fields:
+                out.append("data.lock_identity: malformed object identity")
+            elif any(not isinstance(identity.get(key), int)
+                     or isinstance(identity.get(key), bool) or identity[key] < 0
+                     for key in identity_fields):
+                out.append("data.lock_identity: fields must be non-negative integers")
+        elif payload.get("event") == "CONTROL_ACCEPTED":
+            expected = {"request_id", "command", "desired_state", "observed_state",
+                        "prerequisite_reason", "result"}
+            if set(data) != expected:
+                out.append(f"data: CONTROL_ACCEPTED fields differ from {sorted(expected)}")
+            command = data.get("command")
+            command_fields = {"schema", "campaign_id", "config_generation", "request_id",
+                              "operation", "payload", "payload_digest",
+                              "expected_control_revision"}
+            if not isinstance(command, Mapping) or set(command) != command_fields:
+                out.append("data.command: malformed strict command object")
+            else:
+                if command.get("schema") != "epyc.autokernel.campaign_command.v1":
+                    out.append("data.command.schema: unsupported")
+                operation = command.get("operation")
+                valid_operation = (isinstance(operation, str)
+                                   and operation in {"pause", "resume", "drain"})
+                if not valid_operation:
+                    out.append("data.command.operation: invalid")
+                if not isinstance(command.get("payload"), Mapping) or command.get("payload"):
+                    out.append("data.command.payload: must be empty mapping")
+                for key in ("campaign_id", "request_id", "payload_digest"):
+                    value = command.get(key)
+                    if not isinstance(value, str) or not value.strip():
+                        out.append(f"data.command.{key}: required non-empty string")
+                command_digest = command.get("payload_digest")
+                if isinstance(command_digest, str) and not _SHA256_RE.match(command_digest):
+                    out.append("data.command.payload_digest: required lowercase hex sha256")
+                for key, minimum in (("config_generation", 1),
+                                     ("expected_control_revision", 0)):
+                    value = command.get(key)
+                    if not isinstance(value, int) or isinstance(value, bool) or value < minimum:
+                        out.append(f"data.command.{key}: invalid integer")
+                if valid_operation \
+                        and isinstance(command.get("payload"), Mapping) \
+                        and not command.get("payload") \
+                        and isinstance(command.get("campaign_id"), str) \
+                        and isinstance(command.get("config_generation"), int) \
+                        and not isinstance(command.get("config_generation"), bool):
+                    digest = schemas.content_hash({
+                        "operation": operation, "payload": dict(command.get("payload", {})),
+                        "campaign_id": command["campaign_id"],
+                        "config_generation": command["config_generation"],
+                    })
+                    if command.get("payload_digest") != digest:
+                        out.append("data.command.payload_digest: semantic digest mismatch")
+                if command.get("campaign_id") != payload.get("campaign_id"):
+                    out.append("data.command.campaign_id: does not match event")
+                if command.get("config_generation") != payload.get("config_generation"):
+                    out.append("data.command.config_generation: does not match event")
+            result = data.get("result")
+            result_fields = {"request_id", "operation", "payload_digest", "accepted",
+                             "completed", "control_revision", "desired_state",
+                             "observed_state", "prerequisite_reason"}
+            if not isinstance(result, Mapping) or set(result) != result_fields:
+                out.append("data.result: malformed strict result object")
+            else:
+                for key in ("accepted", "completed"):
+                    if not isinstance(result.get(key), bool):
+                        out.append(f"data.result.{key}: required boolean")
+                if result.get("accepted") is not True:
+                    out.append("data.result.accepted: CONTROL_ACCEPTED must be true")
+                revision = result.get("control_revision")
+                if not isinstance(revision, int) or isinstance(revision, bool) or revision < 1:
+                    out.append("data.result.control_revision: invalid")
+                for key in ("request_id", "operation", "payload_digest", "desired_state",
+                            "observed_state"):
+                    if result.get(key) != data.get(key) and key in data:
+                        out.append(f"data.result.{key}: does not match transition")
+                if isinstance(command, Mapping):
+                    for key in ("request_id", "operation", "payload_digest"):
+                        if result.get(key) != command.get(key):
+                            out.append(f"data.result.{key}: does not match command")
+                    operation = command.get("operation")
+                    expected_desired = ({"pause": "paused", "resume": "running",
+                                         "drain": "drained"}.get(operation)
+                                        if isinstance(operation, str) else None)
+                    if data.get("desired_state") != expected_desired:
+                        out.append("data.desired_state: does not match operation")
+                    observed = data.get("observed_state")
+                    valid_observed = (
+                        isinstance(observed, str)
+                        and ((operation == "pause" and observed == "paused")
+                             or (operation == "drain" and observed == "drained")
+                             or (operation == "resume"
+                                 and observed in {"running", "waiting_prerequisite"}))
+                    )
+                    if not valid_observed:
+                        out.append("data.observed_state: does not match operation")
+                    expected_completed = (isinstance(operation, str)
+                                          and (operation in {"pause", "drain"}
+                                               or (operation == "resume"
+                                                   and data.get("observed_state") == "running")))
+                    if result.get("completed") is not expected_completed:
+                        out.append("data.result.completed: inconsistent with transition")
+                    reason = data.get("prerequisite_reason")
+                    expects_reason = (operation == "resume"
+                                      and observed == "waiting_prerequisite")
+                    if ((expects_reason and
+                         (not isinstance(reason, str) or not reason.strip()))
+                            or (not expects_reason and reason is not None)):
+                        out.append(
+                            "data.prerequisite_reason: inconsistent with transition")
+                if result.get("prerequisite_reason") != data.get("prerequisite_reason"):
+                    out.append("data.result.prerequisite_reason: does not match transition")
+            if data.get("request_id") != (command.get("request_id")
+                                           if isinstance(command, Mapping) else None):
+                out.append("data.request_id: does not match command")
+            for key in ("desired_state", "observed_state"):
+                state = data.get(key)
+                allowed = ({"paused", "running", "drained"}
+                           if key == "desired_state" else
+                           {"paused", "running", "drained", "waiting_prerequisite"})
+                if not isinstance(state, str) or state not in allowed:
+                    out.append(f"data.{key}: invalid")
+            reason = data.get("prerequisite_reason")
+            if reason is not None and (not isinstance(reason, str) or not reason.strip()):
+                out.append("data.prerequisite_reason: must be null or non-empty string")
+    elif kind == KIND_CANDIDATE_TRANSACTION:
+        required = {"schema", "phase", "campaign_id", "config_generation",
+                    "config_digest", "supervisor_incarnation", "transaction_id",
+                    "operation", "payload_digest", "data"}
+        missing = sorted(required - set(payload))
+        extra = sorted(set(payload) - required)
+        if missing:
+            out.append(f"missing required field(s) {missing}")
+        if extra:
+            out.append(f"unknown field(s) {extra}")
+        if payload.get("schema") != CANDIDATE_TRANSACTION_SCHEMA:
+            out.append(f"schema: must be {CANDIDATE_TRANSACTION_SCHEMA!r}")
+        phase = payload.get("phase")
+        if not isinstance(phase, str) or phase not in CANDIDATE_TRANSACTION_PHASES:
+            out.append(f"phase: must be one of {sorted(CANDIDATE_TRANSACTION_PHASES)}")
+        operation = payload.get("operation")
+        if (not isinstance(operation, str)
+                or operation not in CANDIDATE_TRANSACTION_OPERATIONS):
+            out.append(
+                f"operation: must be one of {sorted(CANDIDATE_TRANSACTION_OPERATIONS)}")
+        for key in ("campaign_id", "transaction_id"):
+            value = payload.get(key)
+            if not isinstance(value, str) or not value.strip():
+                out.append(f"{key}: required non-empty string")
+        for key in ("config_digest", "payload_digest"):
+            value = payload.get(key)
+            if not isinstance(value, str) or not _SHA256_RE.match(value):
+                out.append(f"{key}: required lowercase hex sha256")
+        for key in ("config_generation", "supervisor_incarnation"):
+            value = payload.get(key)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                out.append(f"{key}: required positive integer")
+        data = payload.get("data")
+        if not isinstance(data, Mapping):
+            out.append("data: required mapping")
+        elif phase == "INTENT":
+            expected = {"expected_state_digest", "operation_payload",
+                        "prepared_objects", "prepared_refs"}
+            if set(data) != expected:
+                out.append(f"data: INTENT fields differ from {sorted(expected)}")
+            expected_state = data.get("expected_state_digest")
+            if (expected_state is not None and
+                    (not isinstance(expected_state, str)
+                     or not _SHA256_RE.match(expected_state))):
+                out.append("data.expected_state_digest: must be null or sha256")
+            operation_payload = data.get("operation_payload")
+            if not isinstance(operation_payload, Mapping):
+                out.append("data.operation_payload: required mapping")
+            elif isinstance(operation, str) \
+                    and operation in CANDIDATE_TRANSACTION_OPERATIONS:
+                operation_fields = {
+                    "init": {"state", "manifest"},
+                    "integrate": {"previous", "candidate", "threshold_signal",
+                                  "integration_request_id"},
+                    "start_batch": {"batch", "row_set", "candidate", "comparator"},
+                    "record_row": {"batch_id", "row_set", "row_state"},
+                    "complete_batch": {"batch"},
+                    "advance_validated": {"verifier_id", "batch", "row_set",
+                                          "candidate", "comparator", "loo_plans",
+                                          "loo_results"},
+                }[operation]
+                if set(operation_payload) != operation_fields:
+                    out.append(
+                        f"data.operation_payload: {operation} fields differ from "
+                        f"{sorted(operation_fields)}")
+                mapping_fields = operation_fields - {
+                    "threshold_signal", "integration_request_id", "batch_id",
+                    "verifier_id",
+                }
+                for key in mapping_fields:
+                    if not isinstance(operation_payload.get(key), Mapping):
+                        out.append(f"data.operation_payload.{key}: required mapping")
+                for key in operation_fields & {
+                        "integration_request_id", "batch_id", "verifier_id"}:
+                    value = operation_payload.get(key)
+                    if not isinstance(value, str) or not value.strip():
+                        out.append(f"data.operation_payload.{key}: invalid")
+                if operation == "integrate" \
+                        and not isinstance(operation_payload.get("threshold_signal"), bool):
+                    out.append(
+                        "data.operation_payload.threshold_signal: required boolean")
+            objects = data.get("prepared_objects")
+            if not isinstance(objects, list):
+                out.append("data.prepared_objects: required list")
+            else:
+                allowed_object_kinds = {
+                    "manifest", "row-set", "batch", "row-state", "loo-plan",
+                    "loo-result", "state",
+                }
+                for index, item in enumerate(objects):
+                    if (not isinstance(item, Mapping)
+                            or set(item) != {"kind", "digest"}
+                            or not isinstance(item.get("kind"), str)
+                            or item["kind"] not in allowed_object_kinds
+                            or not isinstance(item.get("digest"), str)
+                            or not _SHA256_RE.match(item["digest"])):
+                        out.append(f"data.prepared_objects[{index}]: malformed")
+            refs = data.get("prepared_refs")
+            if not isinstance(refs, list):
+                out.append("data.prepared_refs: required list")
+            else:
+                ref_fields = {"repo_id", "ref", "commit", "tree", "object_format"}
+                for index, ref in enumerate(refs):
+                    if not isinstance(ref, Mapping) or set(ref) != ref_fields:
+                        out.append(f"data.prepared_refs[{index}]: malformed")
+                        continue
+                    for key in ref_fields:
+                        if not isinstance(ref.get(key), str) or not ref[key]:
+                            out.append(f"data.prepared_refs[{index}].{key}: invalid")
+                    ref_name = ref.get("ref")
+                    if isinstance(ref_name, str) \
+                            and not ref_name.startswith("refs/autokernel/candidates/"):
+                        out.append(
+                            f"data.prepared_refs[{index}].ref: outside owned namespace")
+                    object_format = ref.get("object_format")
+                    if object_format not in {"sha1", "sha256"}:
+                        out.append(
+                            f"data.prepared_refs[{index}].object_format: invalid")
+                    elif all(isinstance(ref.get(key), str)
+                             for key in ("commit", "tree")):
+                        oid_length = 40 if object_format == "sha1" else 64
+                        for key in ("commit", "tree"):
+                            oid = ref[key]
+                            if len(oid) != oid_length or any(
+                                    char not in "0123456789abcdef" for char in oid):
+                                out.append(
+                                    f"data.prepared_refs[{index}].{key}: invalid object id")
+                repo_ids = [ref.get("repo_id") for ref in refs
+                            if isinstance(ref, Mapping)
+                            and isinstance(ref.get("repo_id"), str)]
+                if len(repo_ids) != len(set(repo_ids)):
+                    out.append("data.prepared_refs: duplicate repo_id")
+            if (isinstance(operation, str)
+                    and isinstance(operation_payload, Mapping)
+                    and isinstance(refs, list)):
+                try:
+                    expected_digest = schemas.content_hash({
+                        "operation": operation,
+                        "expected_state_digest": expected_state,
+                        "operation_payload": dict(operation_payload),
+                        "prepared_objects": objects,
+                        "prepared_refs": refs,
+                    })
+                except (TypeError, ValueError):
+                    out.append("data: intent is not canonical finite JSON")
+                else:
+                    if payload.get("payload_digest") != expected_digest:
+                        out.append("payload_digest: does not match intent semantics")
+        elif phase == "PREPARED":
+            expected = {"prepared_objects", "prepared_refs"}
+            if set(data) != expected:
+                out.append(f"data: PREPARED fields differ from {sorted(expected)}")
+            objects = data.get("prepared_objects")
+            refs = data.get("prepared_refs")
+            if not isinstance(objects, list):
+                out.append("data.prepared_objects: required list")
+            else:
+                allowed_object_kinds = {
+                    "manifest", "row-set", "batch", "row-state", "loo-plan",
+                    "loo-result", "state",
+                }
+                for index, item in enumerate(objects):
+                    if (not isinstance(item, Mapping)
+                            or set(item) != {"kind", "digest"}
+                            or item.get("kind") not in allowed_object_kinds
+                            or not isinstance(item.get("digest"), str)
+                            or not _SHA256_RE.match(item["digest"])):
+                        out.append(f"data.prepared_objects[{index}]: malformed")
+            if not isinstance(refs, list):
+                out.append("data.prepared_refs: required list")
+            else:
+                ref_fields = {"repo_id", "ref", "commit", "tree", "object_format"}
+                for index, ref in enumerate(refs):
+                    if not isinstance(ref, Mapping) or set(ref) != ref_fields:
+                        out.append(f"data.prepared_refs[{index}]: malformed")
+                        continue
+                    object_format = ref.get("object_format")
+                    if (any(not isinstance(ref.get(key), str) or not ref[key]
+                            for key in ref_fields)
+                            or not ref["ref"].startswith(
+                                "refs/autokernel/candidates/")
+                            or object_format not in {"sha1", "sha256"}):
+                        out.append(f"data.prepared_refs[{index}]: invalid")
+                        continue
+                    oid_length = 40 if object_format == "sha1" else 64
+                    if any(len(ref[key]) != oid_length or any(
+                            char not in "0123456789abcdef" for char in ref[key])
+                           for key in ("commit", "tree")):
+                        out.append(
+                            f"data.prepared_refs[{index}]: invalid object id")
+                repo_ids = [ref.get("repo_id") for ref in refs
+                            if isinstance(ref, Mapping)
+                            and isinstance(ref.get("repo_id"), str)]
+                if len(repo_ids) != len(set(repo_ids)):
+                    out.append("data.prepared_refs: duplicate repo_id")
+            try:
+                schemas.content_hash(dict(data))
+            except (TypeError, ValueError):
+                out.append("data: preparation is not canonical finite JSON")
+        elif phase == "COMMITTED":
+            expected = {"state", "state_digest", "result", "transition_receipt"}
+            if set(data) != expected:
+                out.append(f"data: COMMITTED fields differ from {sorted(expected)}")
+            state_value = data.get("state")
+            if not isinstance(state_value, Mapping):
+                out.append("data.state: required mapping")
+            state_digest = data.get("state_digest")
+            if not isinstance(state_digest, str) or not _SHA256_RE.match(state_digest):
+                out.append("data.state_digest: required lowercase hex sha256")
+            elif isinstance(state_value, Mapping):
+                try:
+                    actual = schemas.content_hash(dict(state_value))
+                except (TypeError, ValueError):
+                    out.append("data.state: must be canonical finite JSON")
+                else:
+                    if actual != state_digest:
+                        out.append("data.state_digest: does not match state")
+            result = data.get("result")
+            result_fields = {"state_digest", "integration_tip", "validated_candidate",
+                             "gate_due", "validation_debt"}
+            if not isinstance(result, Mapping) or set(result) != result_fields:
+                out.append("data.result: required mapping")
+            else:
+                for key in ("state_digest", "integration_tip"):
+                    value = result.get(key)
+                    if not isinstance(value, str) or not _SHA256_RE.match(value):
+                        out.append(f"data.result.{key}: required sha256")
+                if result.get("state_digest") != state_digest:
+                    out.append("data.result.state_digest: does not match committed state")
+                validated = result.get("validated_candidate")
+                if validated is not None and (
+                        not isinstance(validated, str) or not _SHA256_RE.match(validated)):
+                    out.append("data.result.validated_candidate: must be null or sha256")
+                if not isinstance(result.get("gate_due"), bool):
+                    out.append("data.result.gate_due: required boolean")
+                debt = result.get("validation_debt")
+                if (not isinstance(debt, list)
+                        or any(not isinstance(item, str) or not item for item in debt)
+                        or len(debt) != len(set(debt))):
+                    out.append("data.result.validation_debt: invalid string list")
+            receipt = data.get("transition_receipt")
+            receipt_fields = {
+                "schema", "operation", "payload_digest", "expected_state_digest",
+                "resulting_state_digest", "decision", "verifier_id",
+            }
+            if not isinstance(receipt, Mapping) or set(receipt) != receipt_fields:
+                out.append("data.transition_receipt: required exact mapping")
+            else:
+                if receipt.get("schema") != \
+                        "epyc.autokernel.candidate_transition_receipt.v1":
+                    out.append("data.transition_receipt.schema: invalid")
+                if receipt.get("operation") != operation:
+                    out.append("data.transition_receipt.operation: does not match")
+                if receipt.get("payload_digest") != payload.get("payload_digest"):
+                    out.append("data.transition_receipt.payload_digest: does not match")
+                prior = receipt.get("expected_state_digest")
+                if prior is not None and (
+                        not isinstance(prior, str) or not _SHA256_RE.match(prior)):
+                    out.append("data.transition_receipt.expected_state_digest: invalid")
+                if receipt.get("resulting_state_digest") != state_digest:
+                    out.append("data.transition_receipt.resulting_state_digest: does not match")
+                decision = receipt.get("decision")
+                verifier_id = receipt.get("verifier_id")
+                if operation == "advance_validated":
+                    if decision != "trusted_verifiers_accepted":
+                        out.append("data.transition_receipt.decision: invalid trusted decision")
+                    if not isinstance(verifier_id, str) or not verifier_id.strip():
+                        out.append("data.transition_receipt.verifier_id: required")
+                elif decision != "pure_transition" or verifier_id is not None:
+                    out.append("data.transition_receipt: invalid pure transition receipt")
     elif kind == KIND_TORN_APPEND_DISCARDED:
         for key in ("discarded_byte_count", "shard_index"):
             value = payload.get(key)
@@ -1062,6 +2045,8 @@ def _validate_native_payload(kind: str, payload: Mapping[str, Any]) -> list:
         state = payload.get("state")
         if not isinstance(state, str) or not state.strip():
             out.append("state: required and non-empty")
+    elif kind == KIND_LOOP_BUNDLE_SAVED:
+        out.extend(validate_loop_bundle_saved_payload(payload))
     elif kind == KIND_MICROBENCH_RUN_COMPLETED:
         for key in ("campaign_id", "candidate_id", "run_id", "completed_at"):
             value = payload.get(key)
@@ -1277,12 +2262,17 @@ class Journal:
         self._archive_dir = os.path.join(self.root, ARCHIVE_DIRNAME)
         self._cursor_dir = os.path.join(self.root, CURSOR_DIRNAME)
         self._lock_path = os.path.join(self.root, LOCK_NAME)
+        self._feed_publication_path = os.path.join(
+            self.root, FEED_PUBLICATION_NAME)
+        self._feed_shard_dir = os.path.join(self.root, FEED_SHARD_DIRNAME)
         # flock is per open-file-description, so a second flock from this same
         # process on a NEW fd would block forever. Re-entrancy is therefore
         # tracked explicitly instead of being an accident waiting for the first
         # nested call.
         self._lock_fd: Optional[int] = None
         self._lock_depth = 0
+        self._lock_owner: Optional[int] = None
+        self._thread_lock = threading.RLock()
 
     # ---- layout -----------------------------------------------------------
 
@@ -1327,13 +2317,17 @@ class Journal:
         os.makedirs(self._cursor_dir, exist_ok=True)
         os.makedirs(self._archive_dir, exist_ok=True)
         base = os.path.join(self.root, BASE_SHARD_NAME)
-        if not self._any_shard_exists():
+        created = not self._any_shard_exists()
+        if created:
             fd = os.open(base, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
             try:
                 os.fsync(fd)
             finally:
                 os.close(fd)
         _fsync_dir(self.root)
+        if created and not os.path.exists(self._feed_publication_path):
+            with self.write_lock():
+                self._write_publication_locked(0, 0, base)
 
     def _shard_name(self, index: int) -> str:
         return BASE_SHARD_NAME if index == 0 else f"events_{index}.jsonl"
@@ -1413,34 +2407,300 @@ class Journal:
     # ---- locking ----------------------------------------------------------
 
     @contextmanager
-    def write_lock(self):
+    def write_lock(self, *, blocking: bool = True):
         """Exclusive journal lock.
 
         Public because invariant 19 requires the operator-control latch to be
         re-read from disk at the top of each iteration UNDER the write lock. The
         latch itself belongs to the control plane; the lock belongs here.
         """
-        if self._lock_depth == 0:
-            os.makedirs(self.root, exist_ok=True)
-            fd = os.open(self._lock_path, os.O_RDWR | os.O_CREAT, 0o644)
-            try:
-                fcntl.flock(fd, fcntl.LOCK_EX)
-            except BaseException:
-                os.close(fd)
-                raise
-            self._lock_fd = fd
-        self._lock_depth += 1
+        if not isinstance(blocking, bool):
+            raise TypeError("blocking must be boolean")
+        if not self._thread_lock.acquire(blocking=blocking):
+            raise BlockingIOError("Journal instance is owned by another thread")
+        ident = threading.get_ident()
         try:
-            yield
-        finally:
-            self._lock_depth -= 1
             if self._lock_depth == 0:
-                fd, self._lock_fd = self._lock_fd, None
-                if fd is not None:
-                    try:
-                        fcntl.flock(fd, fcntl.LOCK_UN)
-                    finally:
-                        os.close(fd)
+                os.makedirs(self.root, exist_ok=True)
+                fd = os.open(self._lock_path, os.O_RDWR | os.O_CREAT, 0o644)
+                try:
+                    operation = fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB)
+                    fcntl.flock(fd, operation)
+                except BaseException:
+                    os.close(fd)
+                    raise
+                self._lock_fd = fd
+                self._lock_owner = ident
+            elif self._lock_owner != ident:  # pragma: no cover - RLock guarantees this
+                raise JournalError("Journal lock reentrancy crossed thread ownership")
+            self._lock_depth += 1
+            try:
+                yield
+            finally:
+                self._lock_depth -= 1
+                if self._lock_depth == 0:
+                    fd, self._lock_fd = self._lock_fd, None
+                    self._lock_owner = None
+                    if fd is not None:
+                        try:
+                            fcntl.flock(fd, fcntl.LOCK_UN)
+                        finally:
+                            os.close(fd)
+        finally:
+            self._thread_lock.release()
+
+    def _write_publication_locked(
+        self, frontier: int, shard_index: int, shard_path: str, *, era: str | None = None,
+        seal_count: int = 0, seal_head: str = "0" * 64
+    ) -> DurablePublication:
+        root_stat = os.stat(self.root, follow_symlinks=False)
+        shard_stat = os.stat(shard_path, follow_symlinks=False)
+        body = {
+            "schema": FEED_PUBLICATION_SCHEMA,
+            "era": era or secrets.token_hex(16),
+            "durable_frontier": frontier,
+            "root_device": root_stat.st_dev,
+            "root_inode": root_stat.st_ino,
+            "shard_index": shard_index,
+            "shard_device": shard_stat.st_dev,
+            "shard_inode": shard_stat.st_ino,
+            "shard_size": shard_stat.st_size,
+            "shard_ctime_ns": shard_stat.st_ctime_ns,
+            "shard_mode": shard_stat.st_mode,
+            "shard_nlink": shard_stat.st_nlink,
+            "seal_count": seal_count,
+            "seal_head": seal_head,
+        }
+        body["checksum"] = schemas.content_hash(body)
+        _atomic_write_json(self._feed_publication_path, body)
+        return DurablePublication(**{key: body[key] for key in (
+            "era", "durable_frontier", "root_device", "root_inode", "shard_index",
+            "shard_device", "shard_inode", "shard_size", "shard_ctime_ns",
+            "shard_mode", "shard_nlink", "seal_count", "seal_head")})
+
+    def _seal_feed_shard_locked(
+        self, shard_index: int, shard_path: str, era: str, seal_count: int,
+        seal_head: str
+    ) -> tuple[int, str]:
+        stat_result = os.stat(shard_path, follow_symlinks=False)
+        body = {"schema": FEED_SHARD_SEAL_SCHEMA, "era": era,
+                "ordinal": seal_count, "prior_head": seal_head,
+                "shard_index": shard_index, "device": stat_result.st_dev,
+                "inode": stat_result.st_ino, "size": stat_result.st_size,
+                "ctime_ns": stat_result.st_ctime_ns, "mode": stat_result.st_mode,
+                "nlink": stat_result.st_nlink}
+        body["checksum"] = schemas.content_hash(body)
+        _atomic_write_json(
+            os.path.join(self._feed_shard_dir, f"shard_{shard_index}.json"), body)
+        return seal_count + 1, body["checksum"]
+
+    def _publication_locked(self, *, required: bool = True,
+                            allow_torn: bool = False) -> DurablePublication | None:
+        if not os.path.exists(self._feed_publication_path):
+            if required:
+                raise CursorError(
+                    "Journal has no proved durable feed frontier; explicit recovery required")
+            return None
+        try:
+            data = json.loads(_read_feed_metadata(
+                self._feed_publication_path, "durable feed publication").decode("utf-8"))
+            expected = {
+                "schema", "era", "durable_frontier", "root_device", "root_inode",
+                "shard_index", "shard_device", "shard_inode", "shard_size",
+                "shard_ctime_ns", "shard_mode", "shard_nlink", "seal_count",
+                "seal_head", "checksum",
+            }
+            if not isinstance(data, dict) or set(data) != expected:
+                raise ValueError("closed publication fields disagree")
+            checksum = data.pop("checksum")
+            if data["schema"] != FEED_PUBLICATION_SCHEMA:
+                raise ValueError("publication schema is unsupported")
+            if (checksum != schemas.content_hash(data)
+                    or not isinstance(data["era"], str) or not data["era"]):
+                raise ValueError("publication identity/checksum disagrees")
+            numeric = tuple(data[key] for key in (
+                "durable_frontier", "root_device", "root_inode", "shard_index",
+                "shard_device", "shard_inode", "shard_size", "shard_ctime_ns",
+                "shard_mode", "shard_nlink", "seal_count"))
+            if any(not isinstance(value, int) or isinstance(value, bool) or value < 0
+                   for value in numeric):
+                raise ValueError("publication numeric fields are malformed")
+            if (not isinstance(data["seal_head"], str)
+                    or not re.fullmatch(r"[0-9a-f]{64}", data["seal_head"])):
+                raise ValueError("publication seal head is malformed")
+            root_stat = os.stat(self.root, follow_symlinks=False)
+            if (root_stat.st_dev, root_stat.st_ino) != (
+                    data["root_device"], data["root_inode"]):
+                raise ValueError("source incarnation changed")
+            live = self._shard_path(data["shard_index"])
+            archived = self._shard_path(data["shard_index"], archived=True)
+            paths = [path for path in (live, archived) if os.path.exists(path)]
+            if len(paths) != 1:
+                raise ValueError("publication shard disappeared")
+            shard_path = paths[0]
+            shard_stat = os.stat(shard_path, follow_symlinks=False)
+            exact_shard = (shard_stat.st_dev, shard_stat.st_ino, shard_stat.st_size,
+                    shard_stat.st_ctime_ns, shard_stat.st_mode, shard_stat.st_nlink) != (
+                    data["shard_device"], data["shard_inode"], data["shard_size"],
+                    data["shard_ctime_ns"], data["shard_mode"], data["shard_nlink"])
+            torn = _trailing_fragment(shard_path) if allow_torn else b""
+            permitted_torn = (allow_torn and bool(torn)
+                              and shard_stat.st_dev == data["shard_device"]
+                              and shard_stat.st_ino == data["shard_inode"]
+                              and shard_stat.st_mode == data["shard_mode"]
+                              and shard_stat.st_nlink == data["shard_nlink"]
+                              and shard_stat.st_size == data["shard_size"] + len(torn))
+            if exact_shard and not permitted_torn:
+                raise ValueError("publication shard moved or changed outside the owner")
+            next_paths = (self._shard_path(data["shard_index"] + 1),
+                          self._shard_path(data["shard_index"] + 1, archived=True))
+            if any(os.path.exists(path) and os.path.getsize(path) for path in next_paths):
+                raise ValueError("unowned bytes exist after the publication shard")
+            return DurablePublication(**{key: data[key] for key in (
+                "era", "durable_frontier", "root_device", "root_inode", "shard_index",
+                "shard_device", "shard_inode", "shard_size", "shard_ctime_ns",
+                "shard_mode", "shard_nlink", "seal_count", "seal_head")})
+        except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+            raise CursorError(f"durable feed publication is unavailable: {exc}") from exc
+
+    def durable_publication(self) -> DurablePublication:
+        """Return the append-success frontier, refusing visible unowned bytes."""
+        with self.write_lock(blocking=False):
+            publication = self._publication_locked()
+            assert publication is not None
+            return publication
+
+    def _feed_shard_ref(self, index: int) -> ShardRef:
+        live = self._shard_path(index)
+        archived = self._shard_path(index, archived=True)
+        found = [(path, is_archived) for path, is_archived in (
+            (live, False), (archived, True)) if os.path.exists(path)]
+        if len(found) != 1:
+            raise CursorError(f"durable shard {index} is missing or duplicated")
+        return ShardRef(index, found[0][0], found[0][1])
+
+    def durable_shard_identity(self, index: int) -> tuple[int, int, int, int, int, int]:
+        """Return the exact descriptor identity for one owned shard."""
+        shard = self._feed_shard_ref(index)
+        stat_result = os.stat(shard.path, follow_symlinks=False)
+        return (stat_result.st_dev, stat_result.st_ino, stat_result.st_size,
+                stat_result.st_ctime_ns, stat_result.st_mode, stat_result.st_nlink)
+
+    def _retired_feed_shard_identity(
+        self, publication: DurablePublication, index: int
+    ) -> tuple[int, int, int, int, int, int]:
+        if index < 0 or index >= publication.shard_index:
+            raise CursorError("retired shard is outside the captured publication")
+        sidecar = os.path.join(self._feed_shard_dir, f"shard_{index}.json")
+        try:
+            seal = json.loads(_read_feed_metadata(
+                sidecar, f"durable shard seal {index}").decode("utf-8"))
+            expected = {"schema", "era", "ordinal", "prior_head", "shard_index",
+                        "device", "inode", "size", "ctime_ns", "mode", "nlink",
+                        "checksum"}
+            if not isinstance(seal, dict) or set(seal) != expected:
+                raise ValueError("closed seal fields disagree")
+            checksum = seal.pop("checksum")
+            if (checksum != schemas.content_hash(seal)
+                    or seal["schema"] != FEED_SHARD_SEAL_SCHEMA
+                    or seal["era"] != publication.era
+                    or seal["ordinal"] != index or seal["shard_index"] != index):
+                raise ValueError("seal identity/checksum disagrees")
+            identity = tuple(seal[name] for name in (
+                "device", "inode", "size", "ctime_ns", "mode", "nlink"))
+            if any(not isinstance(item, int) or isinstance(item, bool) or item < 0
+                   for item in identity):
+                raise ValueError("sealed descriptor identity is malformed")
+            return identity  # type: ignore[return-value]
+        except (OSError, ValueError, KeyError, TypeError,
+                json.JSONDecodeError) as exc:
+            raise CursorError(f"durable shard seal {index} is invalid: {exc}") from exc
+
+    def validate_durable_history(self) -> DurablePublication:
+        """Stream all immutable shard seals once, outside the Journal lock."""
+        with self.write_lock(blocking=False):
+            publication = self._publication_locked()
+            assert publication is not None
+            shards = self.shards()
+        prior_head = "0" * 64
+        count = 0
+        for shard in shards:
+            if shard.index >= publication.shard_index:
+                continue
+            sidecar = os.path.join(self._feed_shard_dir, f"shard_{shard.index}.json")
+            try:
+                seal = json.loads(_read_feed_metadata(
+                    sidecar, f"durable shard seal {shard.index}").decode("utf-8"))
+                expected = {"schema", "era", "ordinal", "prior_head", "shard_index",
+                            "device", "inode", "size", "ctime_ns", "mode", "nlink",
+                            "checksum"}
+                if not isinstance(seal, dict) or set(seal) != expected:
+                    raise ValueError("closed seal fields disagree")
+                checksum = seal.pop("checksum")
+                stat_result = os.stat(shard.path, follow_symlinks=False)
+                if (checksum != schemas.content_hash(seal)
+                        or seal["schema"] != FEED_SHARD_SEAL_SCHEMA
+                        or seal["era"] != publication.era
+                        or seal["ordinal"] != count or seal["prior_head"] != prior_head
+                        or seal["shard_index"] != shard.index
+                        or (seal["device"], seal["inode"], seal["size"], seal["ctime_ns"],
+                            seal["mode"], seal["nlink"])
+                        != (stat_result.st_dev, stat_result.st_ino, stat_result.st_size,
+                            stat_result.st_ctime_ns, stat_result.st_mode,
+                            stat_result.st_nlink)):
+                    raise ValueError("seal content or shard identity disagrees")
+            except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+                raise CursorError(f"durable shard seal {shard.index} is invalid: {exc}") from exc
+            prior_head = checksum
+            count += 1
+        if (count != publication.seal_count or prior_head != publication.seal_head):
+            raise CursorError("durable shard seal chain disagrees with publication head")
+        with self.write_lock(blocking=False):
+            if self._publication_locked() != publication:
+                raise CursorError("durable publication changed during seal validation")
+        return publication
+
+    def _rebuild_feed_seals_locked(
+        self, publication: DurablePublication
+    ) -> DurablePublication:
+        """Refresh the seal chain after an intentional archive rename."""
+        seal_count = 0
+        seal_head = "0" * 64
+        for shard in self.shards():
+            if shard.index >= publication.shard_index:
+                continue
+            seal_count, seal_head = self._seal_feed_shard_locked(
+                shard.index, shard.path, publication.era, seal_count, seal_head)
+        current = self._feed_shard_ref(publication.shard_index)
+        return self._write_publication_locked(
+            publication.durable_frontier, publication.shard_index, current.path,
+            era=publication.era, seal_count=seal_count, seal_head=seal_head)
+
+    def _reanchor_feed_cursors_locked(self, publication: DurablePublication) -> None:
+        """Move v2 proof heads across an owner-performed archive reseal."""
+        for name in sorted(os.listdir(self._cursor_dir)):
+            if not name.endswith(".json"):
+                continue
+            reader_id = name[:-5]
+            _, raw = self._feed_cursor(reader_id)
+            if raw.get("schema") != FEED_CURSOR_SCHEMA:
+                continue
+            next_shard = raw["feed_proof_next"]
+            if next_shard == 0:
+                head = "0" * 64
+            else:
+                sidecar = os.path.join(
+                    self._feed_shard_dir, f"shard_{next_shard - 1}.json")
+                seal = json.loads(_read_feed_metadata(
+                    sidecar, f"durable shard seal {next_shard - 1}").decode("utf-8"))
+                head = seal.get("checksum")
+                if not isinstance(head, str) or not _SHA256_RE.fullmatch(head):
+                    raise CursorError("archive reseal produced an invalid cursor anchor")
+            updated = dict(raw)
+            updated["feed_proof_head"] = head
+            updated["feed_era"] = publication.era
+            updated["feed_source"] = [publication.root_device, publication.root_inode]
+            _atomic_write_json(self._cursor_path(reader_id), updated)
 
     # ---- append -----------------------------------------------------------
 
@@ -1522,10 +2782,10 @@ class Journal:
                 "belongs in a schema-bound record that marks it non-retrievable "
                 "(§5.5 item 6)"
             )
-
         # Supersession is the one append that pays for a full read: a dangling
         # target is a permanent, unfixable dangling reference in an append-only
         # log, and these events are rare enough that O(n) is the right price.
+
         with self.write_lock():
             if kind in (KIND_SUPERSEDED, KIND_RETRIEVAL_SUPERSEDED):
                 self._assert_supersession_target_exists(payload["target_event_id"])
@@ -1556,6 +2816,13 @@ class Journal:
         campaign_id: Optional[str],
         record_id: Optional[str],
     ) -> JournalEntry:
+        try:
+            publication = self._publication_locked(required=False)
+        except CursorError:
+            # Ordinary Journal writers retain their historical behavior, but
+            # cannot silently restore a feed capability invalidated by an
+            # unaware/out-of-band mutation. Only explicit recovery can do that.
+            publication = None
         seq = self._next_seq_locked()
         written_at = _iso_now()
         # The id embeds the write-lock-serialised seq, so uniqueness is a
@@ -1581,7 +2848,12 @@ class Journal:
         index = self.active_shard_index()
         path = self._shard_path(index)
         size = os.path.getsize(path)
+        seal_count = publication.seal_count if publication is not None else 0
+        seal_head = publication.seal_head if publication is not None else "0" * 64
         if size and size + len(line) > self.max_shard_bytes:
+            if publication is not None:
+                seal_count, seal_head = self._seal_feed_shard_locked(
+                    index, path, publication.era, seal_count, seal_head)
             index = self._rotate_locked(index)
             path = self._shard_path(index)
 
@@ -1598,6 +2870,10 @@ class Journal:
             os.close(fd)
         if is_new:
             _fsync_dir(self.root)
+        if publication is not None:
+            self._write_publication_locked(
+                seq, index, path, era=publication.era,
+                seal_count=seal_count, seal_head=seal_head)
         return JournalEntry(
             event_id=entry.event_id,
             seq=entry.seq,
@@ -1640,8 +2916,28 @@ class Journal:
         followed by one `rotate()` would otherwise destroy the whole journal.
         """
         with self.write_lock():
+            try:
+                publication = self._publication_locked(required=False)
+            except CursorError:
+                publication = None
             self._repair_torn_tail_locked()
-            return self._rotate_locked(self.active_shard_index())
+            if publication is not None:
+                publication = self._publication_locked()
+                assert publication is not None
+                current = self.active_shard_index()
+                seal_count, seal_head = self._seal_feed_shard_locked(
+                    current, self._shard_path(current), publication.era,
+                    publication.seal_count, publication.seal_head)
+            index = self._rotate_locked(self.active_shard_index())
+            if publication is not None:
+                # Torn-tail repair may itself advance the frontier, so reload
+                # after repair rather than publishing the stale pre-repair one.
+                publication = self._publication_locked()
+                assert publication is not None
+                self._write_publication_locked(
+                    publication.durable_frontier, index, self._shard_path(index),
+                    era=publication.era, seal_count=seal_count, seal_head=seal_head)
+            return index
 
     def _next_seq_locked(self) -> int:
         """Next sequence number, read from the journal itself.
@@ -1682,6 +2978,10 @@ class Journal:
         torn = self.torn_tail()
         if torn is None:
             return None
+        try:
+            publication = self._publication_locked(required=False, allow_torn=True)
+        except CursorError:
+            publication = None
         path = self._shard_path(torn.shard_index)
         size = os.path.getsize(path)
         fd = os.open(path, os.O_WRONLY)
@@ -1690,6 +2990,11 @@ class Journal:
             os.fsync(fd)
         finally:
             os.close(fd)
+        if publication is not None:
+            self._write_publication_locked(
+                publication.durable_frontier, torn.shard_index, path,
+                era=publication.era, seal_count=publication.seal_count,
+                seal_head=publication.seal_head)
         return self._write_entry_locked(
             KIND_TORN_APPEND_DISCARDED,
             {
@@ -1932,6 +3237,53 @@ class Journal:
             )
         return list(report.entries)
 
+    def recover_durable_publication(self) -> DurablePublication:
+        """Explicitly fsync and adopt verified history into a fresh ownership era.
+
+        This is intentionally not called by ``initialize`` or a feed reader: an
+        old/unaware writer and an append whose fsync raised are unknown until an
+        explicit recovery operation chooses to verify and publish them.
+        """
+        with self.write_lock(blocking=False):
+            before = []
+            for shard in self.shards():
+                stat_result = os.stat(shard.path, follow_symlinks=False)
+                before.append((shard.index, shard.path, stat_result.st_dev,
+                               stat_result.st_ino, stat_result.st_size,
+                               stat_result.st_ctime_ns, stat_result.st_mode,
+                               stat_result.st_nlink))
+        report = self.scan()
+        if report.defects or report.torn_tail is not None:
+            raise JournalCorruption("durable publication recovery requires clean history")
+        with self.write_lock(blocking=False):
+            after = []
+            for shard in self.shards():
+                stat_result = os.stat(shard.path, follow_symlinks=False)
+                after.append((shard.index, shard.path, stat_result.st_dev,
+                              stat_result.st_ino, stat_result.st_size,
+                              stat_result.st_ctime_ns, stat_result.st_mode,
+                              stat_result.st_nlink))
+            if after != before:
+                raise CursorError("Journal changed during durable publication recovery")
+            for _, path, *_ in after:
+                descriptor = os.open(path, os.O_RDONLY)
+                try:
+                    os.fsync(descriptor)
+                finally:
+                    os.close(descriptor)
+            _fsync_dir(self.root)
+            frontier = report.entries[-1].seq if report.entries else 0
+            index, path, *_ = after[-1]
+            era = secrets.token_hex(16)
+            seal_count = 0
+            seal_head = "0" * 64
+            for prior_index, prior_path, *_ in after[:-1]:
+                seal_count, seal_head = self._seal_feed_shard_locked(
+                    prior_index, prior_path, era, seal_count, seal_head)
+            return self._write_publication_locked(
+                frontier, index, path, era=era,
+                seal_count=seal_count, seal_head=seal_head)
+
     def retrieve(
         self,
         *,
@@ -1991,10 +3343,9 @@ class Journal:
         path = self._cursor_path(reader_id)
         if not os.path.exists(path):
             return None
-        with open(path, "rb") as fh:
-            raw = fh.read()
         try:
-            data = json.loads(raw.decode("utf-8"))
+            data = json.loads(_read_feed_metadata(
+                path, f"cursor {reader_id!r}").decode("utf-8"))
             return Cursor(
                 reader_id=data["reader_id"],
                 last_seq=int(data["last_seq"]),
@@ -2005,6 +3356,424 @@ class Journal:
             # read as "fully caught up": either default silently corrupts the
             # archive decision.
             raise CursorError(f"{path}: cursor is unreadable: {exc}") from exc
+
+    def _feed_cursor(self, reader_id: str) -> tuple[Cursor, dict[str, Any]]:
+        path = self._cursor_path(reader_id)
+        if not os.path.exists(path):
+            raise CursorError(
+                f"reader {reader_id!r} is not registered; call register_reader() first")
+        try:
+            data = json.loads(_read_feed_metadata(
+                path, f"cursor {reader_id!r}").decode("utf-8"))
+            if data.get("schema") == FEED_CURSOR_SCHEMA:
+                expected = {"schema", "reader_id", "last_seq", "updated_at",
+                            "feed_era", "feed_source", "feed_position",
+                            "feed_shard_identity", "feed_position_sealed_identity",
+                            "feed_proof_next", "feed_proof_head"}
+                if set(data) != expected:
+                    raise ValueError("durable cursor v2 fields are open or incomplete")
+            elif "schema" in data:
+                raise ValueError("durable cursor schema is unsupported")
+            cursor = Cursor(str(data["reader_id"]), int(data["last_seq"]),
+                            str(data["updated_at"]))
+        except Exception as exc:
+            raise CursorError(f"{path}: cursor is unreadable: {exc}") from exc
+        if cursor.reader_id != reader_id:
+            raise CursorError("cursor reader identity disagrees with its path")
+        return cursor, data
+
+    def durable_cursor_position(self, reader_id: str) -> tuple[Cursor, dict[str, Any]]:
+        """Return the public owned cursor/checkpoint fields without interpretation."""
+        cursor, data = self._feed_cursor(reader_id)
+        return cursor, {key: data.get(key) for key in (
+            "feed_era", "feed_source", "feed_position", "feed_shard_identity")}
+
+    def _advance_durable_proof(
+        self, reader_id: str, publication: DurablePublication, raw_cursor: Mapping[str, Any],
+        *, max_shards: int
+    ) -> tuple[bool, int, dict[int, tuple[int, int, int, int, int, int]]]:
+        """Validate and durably checkpoint at most ``max_shards`` seal links."""
+        if raw_cursor.get("schema") == FEED_CURSOR_SCHEMA:
+            next_shard = raw_cursor.get("feed_proof_next")
+            head = raw_cursor.get("feed_proof_head")
+            position = raw_cursor.get("feed_position")
+            identity = raw_cursor.get("feed_shard_identity")
+            sealed_identity = raw_cursor.get("feed_position_sealed_identity")
+            if (raw_cursor.get("feed_era") != publication.era
+                    or raw_cursor.get("feed_source") != [
+                        publication.root_device, publication.root_inode]):
+                raise CursorError("cursor durable proof ownership/source changed")
+        else:
+            next_shard, head = 0, "0" * 64
+            position = raw_cursor.get("feed_position", [0, 0, 0])
+            identity = raw_cursor.get("feed_shard_identity")
+            sealed_identity = None
+        if (not isinstance(next_shard, int) or isinstance(next_shard, bool)
+                or next_shard < 0 or next_shard > publication.shard_index
+                or not isinstance(head, str) or not _SHA256_RE.fullmatch(head)
+                or not isinstance(position, (list, tuple)) or len(position) != 3
+                or any(not isinstance(item, int) or isinstance(item, bool) or item < 0
+                       for item in position)):
+            raise CursorError("cursor durable seal proof is malformed")
+        if identity is None:
+            start_ref = self._feed_shard_ref(position[0])
+            stat_result = os.stat(start_ref.path, follow_symlinks=False)
+            identity = [stat_result.st_dev, stat_result.st_ino, stat_result.st_size,
+                        stat_result.st_ctime_ns, stat_result.st_mode,
+                        stat_result.st_nlink]
+        if (not isinstance(identity, (list, tuple)) or len(identity) != 6
+                or any(not isinstance(item, int) or isinstance(item, bool) or item < 0
+                       for item in identity)):
+            raise CursorError("cursor durable shard identity is malformed")
+        if (sealed_identity is not None
+                and (not isinstance(sealed_identity, (list, tuple))
+                     or len(sealed_identity) != 6
+                     or any(not isinstance(item, int) or isinstance(item, bool)
+                            or item < 0 for item in sealed_identity))):
+            raise CursorError("cursor durable sealed identity is malformed")
+        used = 0
+        proved_identities: dict[int, tuple[int, int, int, int, int, int]] = {}
+        while next_shard < publication.shard_index and used < max_shards:
+            shard = self._feed_shard_ref(next_shard)
+            sidecar = os.path.join(
+                self._feed_shard_dir, f"shard_{next_shard}.json")
+            try:
+                seal = json.loads(_read_feed_metadata(
+                    sidecar, f"durable shard seal {next_shard}").decode("utf-8"))
+                expected = {"schema", "era", "ordinal", "prior_head", "shard_index",
+                            "device", "inode", "size", "ctime_ns", "mode", "nlink",
+                            "checksum"}
+                if not isinstance(seal, dict) or set(seal) != expected:
+                    raise ValueError("closed seal fields disagree")
+                checksum = seal.pop("checksum")
+                stat_result = os.stat(shard.path, follow_symlinks=False)
+                actual = (stat_result.st_dev, stat_result.st_ino, stat_result.st_size,
+                          stat_result.st_ctime_ns, stat_result.st_mode,
+                          stat_result.st_nlink)
+                sealed = tuple(seal[name] for name in (
+                    "device", "inode", "size", "ctime_ns", "mode", "nlink"))
+                if (checksum != schemas.content_hash(seal)
+                        or seal["schema"] != FEED_SHARD_SEAL_SCHEMA
+                        or seal["era"] != publication.era
+                        or seal["ordinal"] != next_shard
+                        or seal["shard_index"] != next_shard
+                        or seal["prior_head"] != head or actual != sealed):
+                    raise ValueError("seal content, chain, or shard identity disagrees")
+            except (OSError, ValueError, KeyError, TypeError,
+                    json.JSONDecodeError) as exc:
+                raise CursorError(
+                    f"durable shard seal {next_shard} is invalid: {exc}") from exc
+            if next_shard == position[0]:
+                sealed_identity = list(actual)
+            proved_identities[next_shard] = actual
+            head = checksum
+            next_shard += 1
+            used += 1
+        if next_shard == publication.shard_index and head != publication.seal_head:
+            raise CursorError("durable seal proof disagrees with publication head")
+        with self.write_lock(blocking=False):
+            current = self._publication_locked()
+            assert current is not None
+            if (current.era != publication.era
+                    or (current.root_device, current.root_inode)
+                    != (publication.root_device, publication.root_inode)
+                    or current.seal_count < next_shard):
+                raise CursorError("durable publication changed during seal proof")
+            cursor, latest = self._feed_cursor(reader_id)
+            if (cursor.last_seq != int(raw_cursor["last_seq"])
+                    or (raw_cursor.get("schema") == FEED_CURSOR_SCHEMA
+                        and (latest.get("feed_proof_next"),
+                             latest.get("feed_proof_head"))
+                        != (raw_cursor.get("feed_proof_next"),
+                            raw_cursor.get("feed_proof_head")))
+                    or (current.seal_count == next_shard
+                        and current.seal_head != head)):
+                raise CursorError("durable cursor changed during seal proof")
+            _atomic_write_json(self._cursor_path(reader_id), {
+                "schema": FEED_CURSOR_SCHEMA,
+                "reader_id": reader_id,
+                "last_seq": cursor.last_seq,
+                "updated_at": _iso_now(),
+                "feed_era": current.era,
+                "feed_source": [current.root_device, current.root_inode],
+                "feed_position": list(position),
+                "feed_shard_identity": list(identity),
+                "feed_position_sealed_identity": sealed_identity,
+                "feed_proof_next": next_shard,
+                "feed_proof_head": head,
+            })
+        return next_shard >= publication.shard_index, used, proved_identities
+
+    def advance_durable_proof(self, reader_id: str, *, max_shards: int) -> bool:
+        if (not isinstance(max_shards, int) or isinstance(max_shards, bool)
+                or max_shards < 1):
+            raise ValueError("durable proof bound must be a positive integer")
+        with self.write_lock(blocking=False):
+            publication = self._publication_locked()
+            assert publication is not None
+            _, raw_cursor = self._feed_cursor(reader_id)
+        complete, _, _ = self._advance_durable_proof(
+            reader_id, publication, raw_cursor, max_shards=max_shards)
+        return complete
+
+    def read_durable_batch(
+        self, reader_id: str, *, max_events: int, max_bytes: int,
+        max_shards: int = 64
+    ) -> DurableFeedBatch:
+        """Read a bounded append-success-owned tail without prefix replay."""
+        if (not isinstance(max_events, int) or isinstance(max_events, bool)
+                or max_events < 1 or not isinstance(max_bytes, int)
+                or isinstance(max_bytes, bool) or max_bytes < 1
+                or not isinstance(max_shards, int) or isinstance(max_shards, bool)
+                or max_shards < 1):
+            raise ValueError("durable read bounds must be positive integers")
+        with self.write_lock(blocking=False):
+            publication = self._publication_locked()
+            assert publication is not None
+            cursor, raw_cursor = self._feed_cursor(reader_id)
+            if cursor.last_seq == 0 and "feed_position" not in raw_cursor:
+                start = (0, 0, 0)
+                position_identity = None
+            else:
+                required = {"feed_era", "feed_source", "feed_position",
+                            "feed_shard_identity"}
+                if not required.issubset(raw_cursor):
+                    raise CursorError(
+                        "cursor lacks a durable position; explicit reader recovery required")
+                if (raw_cursor["feed_era"] != publication.era
+                        or raw_cursor["feed_source"] != [publication.root_device,
+                                                         publication.root_inode]):
+                    raise CursorError("cursor durable ownership era/source changed")
+                start = tuple(raw_cursor["feed_position"])
+                position_identity = tuple(raw_cursor["feed_shard_identity"])
+                if (len(start) != 3 or len(position_identity) != 6
+                        or any(not isinstance(value, int) or isinstance(value, bool)
+                               or value < 0 for value in (*start, *position_identity))):
+                    raise CursorError("cursor durable position is malformed")
+        proof_complete, proof_used, proved_identities = self._advance_durable_proof(
+            reader_id, publication, raw_cursor, max_shards=max_shards)
+        if not proof_complete or proof_used >= max_shards:
+            return DurableFeedBatch((), (), 0, cursor.last_seq, publication, True)
+        _, proved_cursor = self._feed_cursor(reader_id)
+        sealed_position_identity = proved_cursor.get("feed_position_sealed_identity")
+        start_ref = self._feed_shard_ref(start[0])
+        start_stat = os.stat(start_ref.path, follow_symlinks=False)
+        if position_identity is not None:
+            basic = (start_stat.st_dev, start_stat.st_ino,
+                     start_stat.st_mode, start_stat.st_nlink)
+            captured_basic = (position_identity[0], position_identity[1],
+                              position_identity[4], position_identity[5])
+            authorized_growth = (
+                start_stat.st_size > position_identity[2]
+                and ((publication.shard_index == start[0]
+                      and (publication.shard_device, publication.shard_inode,
+                           publication.shard_size, publication.shard_ctime_ns,
+                           publication.shard_mode, publication.shard_nlink)
+                      == (start_stat.st_dev, start_stat.st_ino, start_stat.st_size,
+                          start_stat.st_ctime_ns, start_stat.st_mode,
+                          start_stat.st_nlink))
+                     or (publication.shard_index > start[0]
+                         and tuple(sealed_position_identity or ())
+                         == (start_stat.st_dev, start_stat.st_ino,
+                             start_stat.st_size, start_stat.st_ctime_ns,
+                             start_stat.st_mode, start_stat.st_nlink))))
+            unchanged = (start_stat.st_size == position_identity[2]
+                         and start_stat.st_ctime_ns == position_identity[3])
+            if basic != captured_basic or not (unchanged or authorized_growth):
+                raise CursorError("cursor durable shard identity changed")
+        entries: list[JournalEntry] = []
+        positions: list[tuple[int, int, int]] = []
+        used = 0
+        expected = cursor.last_seq + 1
+        shard_budget = max_shards - proof_used
+        empty_scan_position: tuple[int, int, int] | None = None
+        for shard_index in range(start[0], publication.shard_index + 1):
+            if shard_budget <= 0:
+                break
+            shard_budget -= 1
+            shard = self._feed_shard_ref(shard_index)
+            offset = start[1] if shard.index == start[0] else 0
+            line_number = start[2] if shard.index == start[0] else 0
+            expected_identity = (
+                proved_identities.get(shard.index)
+                or self._retired_feed_shard_identity(publication, shard.index)
+                if shard.index < publication.shard_index else
+                (publication.shard_device, publication.shard_inode,
+                 publication.shard_size, publication.shard_ctime_ns,
+                 publication.shard_mode, publication.shard_nlink))
+            descriptor = os.open(
+                shard.path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+                | getattr(os, "O_NONBLOCK", 0))
+            with os.fdopen(descriptor, "rb") as handle:
+                opened = os.fstat(handle.fileno())
+                opened_identity = (opened.st_dev, opened.st_ino, opened.st_size,
+                                   opened.st_ctime_ns, opened.st_mode, opened.st_nlink)
+                active_extension = (
+                    shard.index == publication.shard_index
+                    and (opened.st_dev, opened.st_ino, opened.st_mode,
+                         opened.st_nlink)
+                    == (publication.shard_device, publication.shard_inode,
+                        publication.shard_mode, publication.shard_nlink)
+                    and opened.st_size >= publication.shard_size)
+                if ((opened_identity != expected_identity and not active_extension)
+                        or not stat.S_ISREG(opened.st_mode)):
+                    raise CursorError("durable shard differs from its proved identity")
+                handle.seek(offset)
+                while len(entries) < max_events and expected <= publication.durable_frontier:
+                    remaining = max_bytes - used
+                    if remaining <= 0:
+                        break
+                    raw = handle.readline(remaining + 1)
+                    if len(raw) > remaining:
+                        if not entries:
+                            raise CursorError("next durable record exceeds max_bytes")
+                        break
+                    if not raw:
+                        if not entries and shard.index < publication.shard_index:
+                            empty_scan_position = (shard.index + 1, 0, 0)
+                        break
+                    if not raw.endswith(b"\n"):
+                        raise JournalCorruption("durable frontier contains an incomplete record")
+                    line_number += 1
+                    entry, defect = _parse_line(raw[:-1], shard.index, line_number)
+                    if defect is not None or entry is None or entry.seq != expected:
+                        raise JournalCorruption(
+                            f"durable tail sequence {expected} is missing or malformed")
+                    entries.append(entry)
+                    positions.append((shard.index, handle.tell(), line_number))
+                    used += len(raw)
+                    expected += 1
+                after_read = os.fstat(handle.fileno())
+                named = os.stat(shard.path, follow_symlinks=False)
+                stable_or_active_growth = (
+                    (after_read.st_dev, after_read.st_ino, after_read.st_size,
+                     after_read.st_ctime_ns, after_read.st_mode, after_read.st_nlink)
+                    == opened_identity
+                    or (shard.index == publication.shard_index
+                        and (after_read.st_dev, after_read.st_ino,
+                             after_read.st_mode, after_read.st_nlink)
+                        == (opened.st_dev, opened.st_ino,
+                            opened.st_mode, opened.st_nlink)
+                        and after_read.st_size >= opened.st_size))
+                if (not stable_or_active_growth or (named.st_dev, named.st_ino) != (
+                        after_read.st_dev, after_read.st_ino)):
+                    raise CursorError("durable shard changed during bounded read")
+            if len(entries) >= max_events or used >= max_bytes:
+                break
+        if not entries and empty_scan_position is not None:
+            next_ref = self._feed_shard_ref(empty_scan_position[0])
+            next_stat = os.stat(next_ref.path, follow_symlinks=False)
+            next_identity = (next_stat.st_dev, next_stat.st_ino, next_stat.st_size,
+                             next_stat.st_ctime_ns, next_stat.st_mode,
+                             next_stat.st_nlink)
+            with self.write_lock(blocking=False):
+                current = self._publication_locked()
+                assert current is not None
+                latest_cursor, latest = self._feed_cursor(reader_id)
+                if (current.era != publication.era
+                        or (current.root_device, current.root_inode)
+                        != (publication.root_device, publication.root_inode)
+                        or latest_cursor.last_seq != cursor.last_seq
+                        or tuple(latest.get("feed_position", ())) != start):
+                    raise CursorError("durable source changed during empty-shard progress")
+                _atomic_write_json(self._cursor_path(reader_id), {
+                    "schema": FEED_CURSOR_SCHEMA,
+                    "reader_id": reader_id,
+                    "last_seq": cursor.last_seq,
+                    "updated_at": _iso_now(),
+                    "feed_era": current.era,
+                    "feed_source": [current.root_device, current.root_inode],
+                    "feed_position": list(empty_scan_position),
+                    "feed_shard_identity": list(next_identity),
+                    "feed_position_sealed_identity": (
+                        list(next_identity)
+                        if empty_scan_position[0] < publication.shard_index else None),
+                    "feed_proof_next": proved_cursor["feed_proof_next"],
+                    "feed_proof_head": proved_cursor["feed_proof_head"],
+                })
+        with self.write_lock(blocking=False):
+            after = self._publication_locked()
+            same_active_extension = (
+                after is not None
+                and after.era == publication.era
+                and (after.root_device, after.root_inode)
+                == (publication.root_device, publication.root_inode)
+                and after.shard_index == publication.shard_index
+                and after.durable_frontier >= publication.durable_frontier
+                and after.seal_count == publication.seal_count
+                and after.seal_head == publication.seal_head
+                and (after.shard_device, after.shard_inode,
+                     after.shard_mode, after.shard_nlink)
+                == (publication.shard_device, publication.shard_inode,
+                    publication.shard_mode, publication.shard_nlink)
+                and after.shard_size >= publication.shard_size)
+            if after != publication and not same_active_extension:
+                raise CursorError("durable publication changed during unlocked bounded read")
+        return DurableFeedBatch(tuple(entries), tuple(positions), used,
+                                cursor.last_seq, publication,
+                                not entries and expected <= publication.durable_frontier)
+
+    def ack_durable_cursor(
+        self, reader_id: str, seq: int, position: tuple[int, int, int], *,
+        era: str, source_identity: tuple[int, int],
+        shard_identity: tuple[int, int, int, int, int, int], max_shards: int = 64
+    ) -> Cursor:
+        """Commit an exact owned position under nonblocking native exclusion."""
+        if not self.advance_durable_proof(reader_id, max_shards=max_shards):
+            raise CursorProofPending("durable ACK seal proof is pending")
+        with self.write_lock(blocking=False):
+            publication = self._publication_locked()
+            assert publication is not None
+            if (era != publication.era
+                    or source_identity != (publication.root_device, publication.root_inode)
+                    or seq > publication.durable_frontier):
+                raise CursorError("durable ACK ownership/source/frontier changed")
+            cursor, raw_cursor = self._feed_cursor(reader_id)
+            if seq < cursor.last_seq:
+                raise CursorError("durable ACK would rewind")
+            shard = self._feed_shard_ref(position[0])
+            stat_result = os.stat(shard.path, follow_symlinks=False)
+            basic = (stat_result.st_dev, stat_result.st_ino,
+                     stat_result.st_mode, stat_result.st_nlink)
+            captured_basic = (shard_identity[0], shard_identity[1],
+                              shard_identity[4], shard_identity[5])
+            authorized_growth = (
+                stat_result.st_size > shard_identity[2]
+                and ((publication.shard_index == position[0]
+                      and (publication.shard_device, publication.shard_inode,
+                           publication.shard_size, publication.shard_ctime_ns,
+                           publication.shard_mode, publication.shard_nlink)
+                      == (stat_result.st_dev, stat_result.st_ino,
+                          stat_result.st_size, stat_result.st_ctime_ns,
+                          stat_result.st_mode, stat_result.st_nlink))
+                     or (publication.shard_index > position[0]
+                         and tuple(raw_cursor.get(
+                             "feed_position_sealed_identity") or ())
+                         == (stat_result.st_dev, stat_result.st_ino,
+                             stat_result.st_size, stat_result.st_ctime_ns,
+                             stat_result.st_mode, stat_result.st_nlink))))
+            unchanged = (stat_result.st_size == shard_identity[2]
+                         and stat_result.st_ctime_ns == shard_identity[3])
+            if (basic != captured_basic or stat_result.st_size < position[1]
+                    or not (unchanged or authorized_growth)):
+                raise CursorError("durable ACK position/source identity changed")
+            result = Cursor(reader_id, seq, _iso_now())
+            _atomic_write_json(self._cursor_path(reader_id), {
+                "schema": FEED_CURSOR_SCHEMA,
+                "reader_id": reader_id, "last_seq": seq,
+                "updated_at": result.updated_at, "feed_era": era,
+                "feed_source": list(source_identity),
+                "feed_position": list(position),
+                "feed_shard_identity": list(shard_identity),
+                "feed_position_sealed_identity": (
+                    list((stat_result.st_dev, stat_result.st_ino,
+                          stat_result.st_size, stat_result.st_ctime_ns,
+                          stat_result.st_mode, stat_result.st_nlink))
+                    if publication.shard_index > position[0] else None),
+                "feed_proof_next": raw_cursor["feed_proof_next"],
+                "feed_proof_head": raw_cursor["feed_proof_head"],
+            })
+            return result
 
     def cursors(self) -> dict:
         if not os.path.isdir(self._cursor_dir):
@@ -2033,7 +3802,7 @@ class Journal:
             raise ValueError("last_seq must be a non-negative integer")
         path = self._cursor_path(reader_id)
         with self.write_lock():
-            existing = self.cursor(reader_id)
+            existing, raw_cursor = self._feed_cursor(reader_id)
             if existing is None:
                 raise CursorError(
                     f"reader {reader_id!r} is not registered; call "
@@ -2045,6 +3814,9 @@ class Journal:
                     f"{existing.last_seq} to {last_seq}; pass allow_rewind=True to "
                     "mean it"
                 )
+            if raw_cursor.get("schema") == FEED_CURSOR_SCHEMA:
+                raise CursorError(
+                    "durable cursor v2 must advance through its owned ACK API")
             cursor = Cursor(reader_id, last_seq, _iso_now())
             _atomic_write_json(path, {
                 "reader_id": cursor.reader_id,
@@ -2081,6 +3853,10 @@ class Journal:
         archive directory too, so `read_all()` still returns their events.
         """
         with self.write_lock():
+            try:
+                publication = self._publication_locked(required=False)
+            except CursorError:
+                publication = None
             cursors = self.cursors()
             if not cursors:
                 raise CursorError(
@@ -2118,6 +3894,9 @@ class Journal:
             if archived:
                 _fsync_dir(self.root)
                 _fsync_dir(self._archive_dir)
+                if publication is not None:
+                    rebuilt = self._rebuild_feed_seals_locked(publication)
+                    self._reanchor_feed_cursors_locked(rebuilt)
             return archived
 
     # ---- bootstrap --------------------------------------------------------
@@ -2310,6 +4089,7 @@ def _atomic_write_json(path: str, obj: Mapping[str, Any]) -> None:
 
 __all__ = [
     "JOURNAL_ENTRY_SCHEMA", "BASE_SHARD_NAME", "ARCHIVE_DIRNAME", "CURSOR_DIRNAME",
+    "FEED_PUBLICATION_NAME", "FEED_PUBLICATION_SCHEMA", "FEED_SHARD_SEAL_SCHEMA",
     "DEFAULT_MAX_SHARD_BYTES", "KINDS", "NATIVE_KINDS", "SCHEMA_BOUND_KINDS",
     "ACCEPTED_SCHEMAS_BY_KIND",
     "BOOTSTRAP_KNOWLEDGE_KINDS", "RECORD_ID_KEY_BY_KIND", "STORAGE_CLASSES",
@@ -2325,11 +4105,31 @@ __all__ = [
     "KIND_COMPOSITION_FAILED", "KIND_COMPOSITION_REJECTED",
     "KIND_OPERATOR_RELEASE_DRY_RUN_REQUESTED",
     "KIND_OPERATOR_RELEASE_DRY_RUN_TERMINATED",
+    "KIND_CAMPAIGN_SUPERVISOR_EVENT", "CAMPAIGN_SUPERVISOR_EVENT_SCHEMA",
+    "CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V2",
+    "CAMPAIGN_SUPERVISOR_EVENT_SCHEMA_V3",
+    "CAMPAIGN_SUPERVISOR_EVENTS", "KIND_CANDIDATE_TRANSACTION",
+    "KIND_WORKER_LIFECYCLE", "WORKER_LIFECYCLE_SCHEMA",
+    "KIND_WORKER_ACQUISITION", "WORKER_ACQUISITION_SCHEMA",
+    "KIND_ACTOR_PREPARATION",
+    "KIND_CAMPAIGN_COMMAND_V2", "CAMPAIGN_COMMAND_V2_SCHEMA",
+    "KIND_CAMPAIGN_COMMAND_V3", "CAMPAIGN_COMMAND_V3_SCHEMA",
+    "KIND_MAINTENANCE_EXECUTION",
+    "KIND_RETENTION_CATALOG_INSTALLED",
+    "KIND_UNIFIED_DRIVER_ISSUED", "UNIFIED_DRIVER_ISSUED_SCHEMA",
+    "KIND_UNIFIED_DRIVER_SETTLED", "UNIFIED_DRIVER_SETTLED_SCHEMA",
+    "KIND_A2_RUNTIME_EXECUTION", "A2_RUNTIME_EXECUTION_SCHEMA",
+    "CANDIDATE_TRANSACTION_SCHEMA", "CANDIDATE_TRANSACTION_PHASES",
+    "CANDIDATE_TRANSACTION_OPERATIONS",
+    "KIND_PLANNED_SERVING_ARM_CAPTURED", "PLANNED_SERVING_ARM_CAPTURE_SCHEMA",
+    "PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V2",
+    "PLANNED_SERVING_ARM_CAPTURE_SCHEMA_V3",
     "tombstone_view_key",
     "Journal", "JournalEntry", "JournalDefect", "ShardRef", "TornTail",
-    "ReadReport", "Cursor", "Views",
+    "ReadReport", "Cursor", "DurablePublication", "DurableFeedBatch", "Views",
     "JournalError", "JournalCorruption", "ShardGapError", "ViewConsistencyError",
     "SupersessionError", "RetrievalCitationError", "CursorError",
+    "CursorProofPending",
     "rebuild_views", "check_view_consistency", "assert_views_consistent",
     "events_digest", "retrieval_filter", "strip_narrative",
 ]

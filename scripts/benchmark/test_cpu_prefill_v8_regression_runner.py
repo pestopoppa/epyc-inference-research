@@ -294,6 +294,10 @@ def test_matrix_has_exact_28_runs_and_14_unique_pairs_with_q8_waived() -> None:
 def test_q8_waiver_fails_closed_on_missing_hash_and_semantic_drift(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    # The real waiver is read from the runner's OWN configured path (absolute,
+    # canonical epyc-root), not re-derived from this checkout's location — a
+    # sibling-relative path only resolved when run from the canonical clone.
+    real_waiver = runner.Q8_WAIVER_PATH
     missing = tmp_path / "missing.json"
     monkeypatch.setattr(runner, "Q8_WAIVER_PATH", missing)
     with pytest.raises(RuntimeError, match="required file missing"):
@@ -301,9 +305,9 @@ def test_q8_waiver_fails_closed_on_missing_hash_and_semantic_drift(
     with pytest.raises(RuntimeError, match="required file missing"):
         runner.manifest()
 
-    waiver = json.loads(Path(runner.__file__).parents[3].joinpath(
-        "epyc-root/artifacts/operator/waive_q8_cpu_prefill_v8_20260725.json"
-    ).read_text())
+    if not real_waiver.is_file():
+        pytest.skip(f"{real_waiver} (operator waiver) is not on this host")
+    waiver = json.loads(real_waiver.read_text())
     candidate = tmp_path / "waiver.json"
     candidate.write_text(json.dumps(waiver))
     monkeypatch.setattr(runner, "Q8_WAIVER_PATH", candidate)

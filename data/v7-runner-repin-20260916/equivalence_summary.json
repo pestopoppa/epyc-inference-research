@@ -1,0 +1,349 @@
+{
+  "inputs": {
+    "critic": {
+      "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/p3-shadow-bakeoff-20260728/manifest/critic_tasks_v1.json",
+      "sha256": "d97692840da23a316c0277f76522c7081650679787bb0caff4fa126d6c63537c"
+    },
+    "lcb": {
+      "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-code-eval-20260724/questions_livecodebench_hard.json",
+      "sha256": "d51e56f601e3d153910d086b35c6aea94f4d903bab0427c8a49ffe895a6287c4"
+    },
+    "olymp": {
+      "path": "/workspace/tmp/questions_mtp_ab.json",
+      "sha256": "2088d2c0bf2c66a4a76d67359d4cfcebdbeb19eefd6161b5a309e94ce6a5476d"
+    },
+    "swe": {
+      "path": "/mnt/raid0/llm/epyc-inference-research/artifacts/architect-code-eval-20260724/questions_swebench_oracle.json",
+      "sha256": "f82a5191274048f2fdf432df7a0ebf4017ad982b954d6aa075326a1302df1c3c"
+    }
+  },
+  "scenarios": {
+    "critic_chat_nothink_rep2": {
+      "current": {
+        "correct": [
+          0
+        ],
+        "exit_code": 0,
+        "n_requests": 40,
+        "n_rows": 40,
+        "request_stream_sha256": "583b9ec5d7e1b27e615dc37956af01223f0a60d690f37989964583f6c9083aa4",
+        "status_codes_forced": "HTTP 500 on ~1/11, length on ~1/7"
+      },
+      "vs": {
+        "6dea92dd": {
+          "exit_code": 0,
+          "outputs_identical_after_volatile_strip": true,
+          "requests_byte_identical": true,
+          "residual_is_expected_additive_set": true,
+          "residual_paths": [],
+          "volatile_keys_seen": [
+            "aggregate_decode_tok_s",
+            "aggregate_total_tok_s",
+            "elapsed_s",
+            "questions_pinned",
+            "runner_source_sha256",
+            "timestamp",
+            "wall_s"
+          ]
+        },
+        "79721927": {
+          "exit_code": 0,
+          "outputs_identical_after_volatile_strip": false,
+          "requests_byte_identical": true,
+          "residual_is_expected_additive_set": true,
+          "residual_paths": [
+            "+per_question[]/effective_request",
+            "+result/meta/sampling_fields_are_requested_not_effective"
+          ],
+          "volatile_keys_seen": [
+            "aggregate_decode_tok_s",
+            "aggregate_total_tok_s",
+            "elapsed_s",
+            "questions_pinned",
+            "runner_source_sha256",
+            "timestamp",
+            "wall_s"
+          ]
+        }
+      }
+    },
+    "lcb_chat_c1": {
+      "current": {
+        "correct": [
+          0
+        ],
+        "exit_code": 0,
+        "n_requests": 4,
+        "n_rows": 4,
+        "request_stream_sha256": "1c5348642878f5823e78735f1ec41646ecbc3d9e8f327e6c8869ec1ee38a3b14",
+        "status_codes_forced": "HTTP 500 on ~1/11, length on ~1/7"
+      },
+      "vs": {
+        "6dea92dd": {
+          "exit_code": 0,
+          "outputs_identical_after_volatile_strip": true,
+          "requests_byte_identical": true,
+          "residual_is_expected_additive_set": true,
+          "residual_paths": [],
+          "volatile_keys_seen": [
+            "aggregate_decode_tok_s",
+            "aggregate_total_tok_s",
+            "elapsed_s",
+            "questions_pinned",
+            "runner_source_sha256",
+            "timestamp",
+            "wall_s"
+          ]
+        },
+        "79721927": {
+          "exit_code": 0,
+          "outputs_identical_after_volatile_strip": false,
+          "requests_byte_identical": true,
+          "residual_is_expected_additive_set": true,
+          "residual_paths": [
+            "+per_question[]/effective_request",
+            "+result/meta/sampling_fields_are_requested_not_effective"
+          ],
+          "volatile_keys_seen": [
+            "aggregate_decode_tok_s",
+            "aggregate_total_tok_s",
+            "elapsed_s",
+            "questions_pinned",
+            "runner_source_sha256",
+            "timestamp",
+            "wall_s"
+          ]
+        }
+      }
+    },
+    "olymp_chat_sampled_c1": {
+      "current": {
+        "correct": [
+          0
+        ],
+        "exit_code": 0,
+        "n_requests": 12,
+        "n_rows": 12,
+        "request_stream_sha256": "159288a6234980aebfe588131f2fe70f5f88436f4617ccd7ab6cddbaa8471e37",
+        "status_codes_forced": "HTTP 500 on ~1/11, length on ~1/7"
+      },
+      "vs": {
+        "6dea92dd": {
+          "exit_code": 0,
+          "outputs_identical_after_volatile_strip": true,
+          "requests_byte_identical": true,
+          "residual_is_expected_additive_set": true,
+          "residual_paths": [],
+          "volatile_keys_seen": [
+            "aggregate_decode_tok_s",
+            "aggregate_total_tok_s",
+            "elapsed_s",
+            "questions_pinned",
+            "runner_source_sha256",
+            "timestamp",
+            "wall_s"
+          ]
+        },
+        "79721927": {
+          "exit_code": 0,
+          "outputs_identical_after_volatile_strip": false,
+          "requests_byte_identical": true,
+          "residual_is_expected_additive_set": true,
+          "residual_paths": [
+            "+per_question[]/effective_request",
+            "+result/meta/sampling_fields_are_requested_not_effective"
+          ],
+          "volatile_keys_seen": [
+            "aggregate_decode_tok_s",
+            "aggregate_total_tok_s",
+            "elapsed_s",
+            "questions_pinned",
+            "runner_source_sha256",
+            "timestamp",
+            "wall_s"
+          ]
+        }
+      }
+    },
+    "olymp_completion_greedy_c4": {
+      "current": {
+        "correct": [
+          0
+        ],
+        "exit_code": 0,
+        "n_requests": 12,
+        "n_rows": 12,
+        "request_stream_sha256": "60cc93e14f20ca30ab0c470960cb203c25bb84c55ac35d8d2ae57488da8eb39f",
+        "status_codes_forced": "HTTP 500 on ~1/11, length on ~1/7"
+      },
+      "vs": {
+        "6dea92dd": {
+          "exit_code": 0,
+          "outputs_identical_after_volatile_strip": true,
+          "requests_byte_identical": true,
+          "residual_is_expected_additive_set": true,
+          "residual_paths": [],
+          "volatile_keys_seen": [
+            "aggregate_decode_tok_s",
+            "aggregate_total_tok_s",
+            "elapsed_s",
+            "questions_pinned",
+            "runner_source_sha256",
+            "timestamp",
+            "wall_s"
+          ]
+        },
+        "79721927": {
+          "exit_code": 0,
+          "outputs_identical_after_volatile_strip": false,
+          "requests_byte_identical": true,
+          "residual_is_expected_additive_set": true,
+          "residual_paths": [
+            "+per_question[]/effective_request",
+            "+result/meta/sampling_fields_are_requested_not_effective"
+          ],
+          "volatile_keys_seen": [
+            "aggregate_decode_tok_s",
+            "aggregate_total_tok_s",
+            "elapsed_s",
+            "questions_pinned",
+            "runner_source_sha256",
+            "timestamp",
+            "wall_s"
+          ]
+        }
+      }
+    },
+    "swe_chat_c1": {
+      "current": {
+        "correct": [
+          0
+        ],
+        "exit_code": 0,
+        "n_requests": 4,
+        "n_rows": 4,
+        "request_stream_sha256": "79476fe7faa3f6f91c4c599b3ad8463612152b4464601a76303c325aebf41a16",
+        "status_codes_forced": "HTTP 500 on ~1/11, length on ~1/7"
+      },
+      "vs": {
+        "6dea92dd": {
+          "exit_code": 0,
+          "outputs_identical_after_volatile_strip": true,
+          "requests_byte_identical": true,
+          "residual_is_expected_additive_set": true,
+          "residual_paths": [],
+          "volatile_keys_seen": [
+            "aggregate_decode_tok_s",
+            "aggregate_total_tok_s",
+            "elapsed_s",
+            "questions_pinned",
+            "runner_source_sha256",
+            "timestamp",
+            "wall_s"
+          ]
+        },
+        "79721927": {
+          "exit_code": 0,
+          "outputs_identical_after_volatile_strip": false,
+          "requests_byte_identical": true,
+          "residual_is_expected_additive_set": true,
+          "residual_paths": [
+            "+per_question[]/effective_request",
+            "+result/meta/sampling_fields_are_requested_not_effective"
+          ],
+          "volatile_keys_seen": [
+            "aggregate_decode_tok_s",
+            "aggregate_total_tok_s",
+            "elapsed_s",
+            "questions_pinned",
+            "runner_source_sha256",
+            "timestamp",
+            "wall_s"
+          ]
+        }
+      }
+    },
+    "synthetic_scored_chat_c2": {
+      "current": {
+        "correct": [
+          12
+        ],
+        "exit_code": 0,
+        "n_requests": 28,
+        "n_rows": 28,
+        "request_stream_sha256": "f8b35576e017f95b18e4c63a25a950ae92507a78932a3233536f8f80a2737860",
+        "status_codes_forced": "HTTP 500 on ~1/11, length on ~1/7"
+      },
+      "vs": {
+        "6dea92dd": {
+          "exit_code": 0,
+          "outputs_identical_after_volatile_strip": true,
+          "requests_byte_identical": true,
+          "residual_is_expected_additive_set": true,
+          "residual_paths": [],
+          "volatile_keys_seen": [
+            "aggregate_decode_tok_s",
+            "aggregate_total_tok_s",
+            "elapsed_s",
+            "questions_pinned",
+            "runner_source_sha256",
+            "timestamp",
+            "wall_s"
+          ]
+        },
+        "79721927": {
+          "exit_code": 0,
+          "outputs_identical_after_volatile_strip": false,
+          "requests_byte_identical": true,
+          "residual_is_expected_additive_set": true,
+          "residual_paths": [
+            "+per_question[]/effective_request",
+            "+result/meta/sampling_fields_are_requested_not_effective"
+          ],
+          "volatile_keys_seen": [
+            "aggregate_decode_tok_s",
+            "aggregate_total_tok_s",
+            "elapsed_s",
+            "questions_pinned",
+            "runner_source_sha256",
+            "timestamp",
+            "wall_s"
+          ]
+        }
+      }
+    }
+  },
+  "schema": "v7_runner_repin_equivalence.v1",
+  "verdict": "EQUIVALENT",
+  "versions": {
+    "20a97fbd": "20a97fbd4aecc6f3887299243362d5315b76f819aa1cbc4b8fd92f33b307b45a",
+    "6dea92dd": "6dea92dd9e374f79691f5df502fa11035ffd484906754f20190a4189111ae7dc",
+    "79721927": "79721927e95293d070aba294bf422a24b1182dde07310d461d9e3ddaf6c84b0e"
+  },
+  "volatile_keys_removed": [
+    "aggregate_decode_tok_s",
+    "aggregate_tok_s",
+    "aggregate_total_tok_s",
+    "created_utc",
+    "duration_s",
+    "elapsed",
+    "elapsed_s",
+    "finished_at",
+    "latency_s",
+    "per_request_tok_s",
+    "questions_pinned",
+    "request_wall_s",
+    "runner_source_sha256",
+    "started_at",
+    "suite_elapsed_s",
+    "t_end",
+    "t_start",
+    "tasks_per_hour",
+    "timestamp",
+    "updated_at",
+    "updated_utc",
+    "wall_s",
+    "wall_time_s",
+    "written_at"
+  ]
+}
