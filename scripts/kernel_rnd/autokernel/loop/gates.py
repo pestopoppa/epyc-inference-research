@@ -114,16 +114,24 @@ def _gdn_hunks_confined(source_text: str | None, patch_text: str | None) -> bool
 
 
 def _iqk_moe_rows_hunks_confined(source_text: str | None,
-                                  patch_text: str | None) -> bool:
-    """Only the real exported helper body, never sibling helpers or its stub."""
+                                  patch_text: str | None,
+                                  target_symbol: str = "iqk_mul_mat_moe_rows") -> bool:
+    """Only the named real exported helper body, never siblings or stubs."""
     if not source_text or not patch_text:
         return False
     lines = source_text.splitlines()
     starts = [i + 1 for i, line in enumerate(lines)
-              if line.startswith('extern "C" IQK_API bool iqk_mul_mat_moe_rows(')]
+              if line.startswith(f'extern "C" IQK_API bool {target_symbol}(')]
+    next_symbol = ("iqk_moe_fused_up_gate" if target_symbol == "iqk_mul_mat_moe_rows"
+                   else "#if defined __x86_64__")
     ends = [i + 1 for i, line in enumerate(lines)
-            if line.startswith('extern "C" IQK_API bool iqk_moe_fused_up_gate(')]
-    if not starts or not ends or starts[0] >= ends[0]:
+            if line.startswith('extern "C" IQK_API bool iqk_moe_fused_up_gate(')
+            or (target_symbol == "iqk_moe_fused_up_gate" and
+                line.startswith(next_symbol))]
+    if not starts:
+        return False
+    ends = [end for end in ends if end > starts[0]]
+    if not ends:
         return False
     body_start = next((i + 1 for i in range(starts[0] - 1, ends[0] - 1)
                        if lines[i].rstrip().endswith('{')), None)
@@ -135,9 +143,90 @@ def _iqk_moe_rows_hunks_confined(source_text: str | None,
                                for line, count in hunks)
 
 
+def _iqk_q45_dot_hunks_confined(source_text: str | None,
+                                pre_source_text: str | None,
+                                patch_text: str | None) -> bool:
+    """Admit only the Q4_K/Q5_K private dot implementation, never siblings.
+
+    The x86 dispatch instantiates this template for Q4_K and Q5_K only.  The
+    Q4Bits_AVX2 helper immediately before it is also used by Q6_K and is
+    deliberately outside the edit boundary.  A missing/duplicated marker
+    refuses rather than silently expanding the boundary after source drift.
+    """
+    if not source_text or not pre_source_text or not patch_text:
+        return False
+    prefixes = ("struct DequantizerQ4K_AVX2 final :",
+                "struct DequantizerQ5K_AVX2 final :",
+                "inline __m128i unpack_q4_scales(",
+                "inline __m256i unpack_q4_scales_2(",
+                "static void mul_mat_qX_K_q8_2_X4_T(",
+                "struct DequantizerQ6K_AVX2 final :")
+
+    def bounds(text: str):
+        lines = text.splitlines()
+        positions = []
+        for prefix in prefixes:
+            hits = [i + 1 for i, line in enumerate(lines) if line.startswith(prefix)]
+            if len(hits) != 1:
+                return None
+            positions.append(hits[0])
+        q4, q5, scale, scale2, dot, q6 = positions
+        if not (q4 < q5 < scale < scale2 < dot < q6):
+            return None
+        # A duplicated or rewritten selector no longer warrants Q4/Q5-only
+        # scope.  Q6 must remain on the different qY template.
+        for quant, dequant in (("Q4_K", "DequantizerQ4K_AVX2"),
+                               ("Q5_K", "DequantizerQ5K_AVX2")):
+            dispatch = f"IQK_SET_MUL_MAT_FUNCTIONS_T(mul_mat_qX_K_q8_2_X4_T, {dequant}, kernels)"
+            if text.count(dispatch) != 1 or text.count(f"case GGML_TYPE_{quant}:") < 1:
+                return None
+
+        def closing(start: int, stop: int, token: str, *, last=False):
+            hits = [i for i in range(start + 1, stop) if lines[i - 1].strip() == token]
+            return (hits[-1] if last else hits[0]) if hits else None
+
+        ends = (closing(q4, q5, "};"), closing(q5, scale, "};"),
+                closing(scale, scale2, "}"), closing(scale2, dot, "}"),
+                closing(dot, q6, "}", last=True))
+        if any(end is None for end in ends):
+            return None
+        # A candidate must not close the named body early and smuggle a new
+        # sibling definition between its original markers.  This allowlist
+        # contains no brace-bearing strings/comments in its reviewed base.
+        for start, end in zip(positions[:5], ends):
+            depth = 0
+            for pos in range(start, end + 1):
+                depth += lines[pos - 1].count("{") - lines[pos - 1].count("}")
+                if depth <= 0 and pos < end:
+                    return None
+            if depth != 0:
+                return None
+        return tuple((start + 1, end - 1) for start, end in zip(positions[:5], ends)), \
+               tuple(lines[pos - 1] for pos in positions)
+
+    old = bounds(pre_source_text)
+    new = bounds(source_text)
+    if old is None or new is None or old[1] != new[1]:
+        return False
+    hunks = re.findall(r"(?m)^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", patch_text)
+    if not hunks:
+        return False
+
+    def within(line: str, count: str, regions) -> bool:
+        first, size = int(line), int(count) if count else 1
+        return any(start <= first and first + max(size, 1) - 1 <= end
+                   for start, end in regions)
+
+    return all(any(within(old_line, old_count, (old[0][i],)) and
+                   within(new_line, new_count, (new[0][i],))
+                   for i in range(len(old[0])))
+               for old_line, old_count, new_line, new_count in hunks)
+
+
 def affected_op_scope(paths: tuple[str, ...], *, target_surface: str,
                       target_symbol: str, source_text: str | None = None,
-                      patch_text: str | None = None) -> tuple[str, ...] | Verdict:
+                      patch_text: str | None = None,
+                      pre_source_text: str | None = None) -> tuple[str, ...] | Verdict:
     """Resolve known changed-source routes; never inherit MUL_MAT by default.
 
     Paths are read from Git by the owner, not taken from the actor's response.
@@ -168,6 +257,19 @@ def affected_op_scope(paths: tuple[str, ...], *, target_surface: str,
             target_symbol == "iqk_mul_mat_moe_rows" and \
             _iqk_moe_rows_hunks_confined(source_text, patch_text):
         return ("MUL_MAT_ID",)
+    if changed == {"ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp"} and \
+            target_symbol == "iqk_moe_fused_up_gate" and \
+            _iqk_moe_rows_hunks_confined(source_text, patch_text, target_symbol):
+        # The native GLU selector currently reports 0/0 CPU cases. The
+        # independent fused graph fixture below exercises the actual GLU and
+        # exact edited helper, after the nonempty MUL_MAT_ID host/op suite.
+        return ("MUL_MAT_ID",)
+    if changed == {"ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp"} and \
+            target_symbol == "mul_mat_qX_K_q8_2_X4_T" and \
+            _iqk_q45_dot_hunks_confined(source_text, pre_source_text, patch_text):
+        # Both quants and every nrc_y specialization are checked by the
+        # independent scalar suite plus exact candidate-DSO dot hits below.
+        return ("MUL_MAT", "MUL_MAT_ID")
     if any(path.startswith("ggml/src/ggml-cpu/iqk/") for path in changed):
         return Verdict("op_scope", False,
                        "CPU IQK source refused before build: the selected MUL_MAT/MUL_MAT_ID "
@@ -195,12 +297,22 @@ def check_cpu_gdn_reference(build_dir: Path, source_root: Path, *,
 
 
 def check_cpu_iqk_reference(build_dir: Path, source_root: Path, *,
-                            resolved_recipe) -> Verdict:
-    """One passing Q4_K case with a trusted inner-function debugger witness."""
+                            resolved_recipe, target_symbol: str) -> Verdict:
+    """Run the exact helper's independent numerical and engagement witness."""
     from . import iqk_witness
 
-    result = iqk_witness.check(build_dir, resolved_recipe=resolved_recipe,
-                               source_root=source_root)
+    if target_symbol == "iqk_mul_mat_moe_rows":
+        result = iqk_witness.check(build_dir, resolved_recipe=resolved_recipe,
+                                   source_root=source_root)
+    elif target_symbol == "iqk_moe_fused_up_gate":
+        result = iqk_witness.check_fused(build_dir, resolved_recipe=resolved_recipe,
+                                         source_root=source_root)
+    elif target_symbol == "mul_mat_qX_K_q8_2_X4_T":
+        result = iqk_witness.check_q45_dot(build_dir, resolved_recipe=resolved_recipe,
+                                            source_root=source_root)
+    else:
+        return Verdict("oracle_unavailable", False,
+                       "unsupported CPU IQK helper has no independent reference")
     return Verdict("reference_comparison" if result.status == "wrong" else
                    "oracle_unavailable" if result.status == "unavailable" else
                    "reference_comparison", result.status == "pass",

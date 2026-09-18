@@ -298,6 +298,69 @@ class AffectedOpAndIndependentReference(unittest.TestCase):
             self.assertIsInstance(refused, gates.Verdict)
             self.assertFalse(refused.passed)
 
+    def test_cpu_fused_iqk_route_is_body_confined_and_op_specific(self):
+        source = ('extern "C" IQK_API bool iqk_mul_mat_moe_rows(long n) {\n'
+                  '    sibling();\n}\n'
+                  'extern "C" IQK_API bool iqk_moe_fused_up_gate(long n) {\n'
+                  '    changed();\n}\n'
+                  '#if defined __x86_64__\n')
+        path = "ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp"
+        scope = gates.affected_op_scope(
+            (path,), target_surface=path, target_symbol="iqk_moe_fused_up_gate",
+            source_text=source, patch_text="@@ -5 +5 @@\n-old\n+changed();\n")
+        self.assertEqual(scope, ("MUL_MAT_ID",))
+        for hunk in ("@@ -2 +2 @@\n-old\n+sibling();\n",
+                     "@@ -7 +7 @@\n-old\n+#if defined __x86_64__\n"):
+            refused = gates.affected_op_scope(
+                (path,), target_surface=path, target_symbol="iqk_moe_fused_up_gate",
+                source_text=source, patch_text=hunk)
+            self.assertIsInstance(refused, gates.Verdict)
+            self.assertFalse(refused.passed)
+
+    def test_q45_dot_route_requires_pre_and_post_body_confinement(self):
+        path = "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp"
+        source = ("struct Q4Bits_AVX2 {\n    shared();\n};\n"
+                  "struct DequantizerQ4K_AVX2 final : Base {\n    q4();\n};\n"
+                  "struct DequantizerQ5K_AVX2 final : Base {\n    q5();\n};\n"
+                  "inline __m128i unpack_q4_scales(const uint8_t * x) {\n    scale();\n}\n"
+                  "inline __m256i unpack_q4_scales_2(const uint8_t * x) {\n    scale2();\n}\n"
+                  "template <typename Dequantizer, int nrc_y>\n"
+                  "static void mul_mat_qX_K_q8_2_X4_T() {\n    dot();\n}\n"
+                  "struct DequantizerQ6K_AVX2 final : Base {\n    q6();\n};\n"
+                  "case GGML_TYPE_Q4_K:\n"
+                  "IQK_SET_MUL_MAT_FUNCTIONS_T(mul_mat_qX_K_q8_2_X4_T, DequantizerQ4K_AVX2, kernels)\n"
+                  "case GGML_TYPE_Q5_K:\n"
+                  "IQK_SET_MUL_MAT_FUNCTIONS_T(mul_mat_qX_K_q8_2_X4_T, DequantizerQ5K_AVX2, kernels)\n")
+        def patch_at(token):
+            line = source.splitlines().index(token) + 1
+            return f"@@ -{line} +{line} @@\n-old\n+new\n"
+        for token in ("    q4();", "    q5();", "    scale();",
+                      "    scale2();", "    dot();"):
+            self.assertEqual(gates.affected_op_scope(
+                (path,), target_surface=path,
+                target_symbol="mul_mat_qX_K_q8_2_X4_T",
+                source_text=source, pre_source_text=source,
+                patch_text=patch_at(token)), ("MUL_MAT", "MUL_MAT_ID"))
+        for token in ("    shared();", "    q6();",
+                      "case GGML_TYPE_Q4_K:",
+                      "static void mul_mat_qX_K_q8_2_X4_T() {"):
+            self.assertFalse(gates.affected_op_scope(
+                (path,), target_surface=path,
+                target_symbol="mul_mat_qX_K_q8_2_X4_T",
+                source_text=source, pre_source_text=source,
+                patch_text=patch_at(token)).passed)
+        self.assertFalse(gates.affected_op_scope(
+            (path,), target_surface=path,
+            target_symbol="mul_mat_qX_K_q8_2_X4_T",
+            source_text=source, patch_text=patch_at("    dot();")).passed)
+        changed_signature = source.replace("static void mul_mat_qX_K_q8_2_X4_T() {",
+                                           "static void mul_mat_qX_K_q8_2_X4_T(int x) {")
+        self.assertFalse(gates.affected_op_scope(
+            (path,), target_surface=path,
+            target_symbol="mul_mat_qX_K_q8_2_X4_T",
+            source_text=changed_signature, pre_source_text=source,
+            patch_text=patch_at("    dot();")).passed)
+
     def test_cpu_iqk_reference_distinguishes_wrong_and_unavailable(self):
         from autokernel.loop import iqk_witness
         for status, gate in (("pass", "reference_comparison"),
@@ -306,9 +369,24 @@ class AffectedOpAndIndependentReference(unittest.TestCase):
             with mock.patch.object(iqk_witness, "check",
                     return_value=iqk_witness.Result(status, "reason", "detail")):
                 verdict = gates.check_cpu_iqk_reference(
-                    Path("/build"), Path("/source"), resolved_recipe=object())
+                    Path("/build"), Path("/source"), resolved_recipe=object(),
+                    target_symbol="iqk_mul_mat_moe_rows")
             self.assertEqual(verdict.gate, gate)
             self.assertEqual(verdict.passed, status == "pass")
+        with mock.patch.object(iqk_witness, "check_fused",
+                               return_value=iqk_witness.Result("pass", "fused")) as fused:
+            verdict = gates.check_cpu_iqk_reference(
+                Path("/build"), Path("/source"), resolved_recipe=object(),
+                target_symbol="iqk_moe_fused_up_gate")
+        self.assertTrue(verdict.passed)
+        fused.assert_called_once()
+        with mock.patch.object(iqk_witness, "check_q45_dot",
+                               return_value=iqk_witness.Result("pass", "dot")) as dot:
+            verdict = gates.check_cpu_iqk_reference(
+                Path("/build"), Path("/source"), resolved_recipe=object(),
+                target_symbol="mul_mat_qX_K_q8_2_X4_T")
+        self.assertTrue(verdict.passed)
+        dot.assert_called_once()
 
     def test_wrong_vs_unavailable_reference_are_distinct(self):
         for status, gate in (("pass", "reference_comparison"),

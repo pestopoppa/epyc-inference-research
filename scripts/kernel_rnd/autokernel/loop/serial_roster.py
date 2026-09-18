@@ -33,11 +33,13 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None, s
     if set(owners) - set(aliases):
         raise sr.SerialRefused(f"owned aliases are not enrolled: {sorted(set(owners) - set(aliases))}")
     required = {"worktree", "anchor_build", "branch", "frozen_prompts"}
-    optional = {"launch", "store", "cor_build", "calibrate_serving", "allow_unverified_anchor"}
+    optional = {"launch", "store", "cor_build", "calibrate_serving",
+                "heldout_frozen_prompts", "calibrate_heldout", "allow_unverified_anchor"}
     for alias, owner in owners.items():
         if not isinstance(owner, dict) or required - owner.keys() or owner.keys() - required - optional:
             raise sr.SerialRefused(f"{alias}: expected ownership fields {sorted(required)} plus {sorted(optional)}")
-        for key in required | (owner.keys() & {"launch", "store", "cor_build"}):
+        for key in required | (owner.keys() & {"launch", "store", "cor_build",
+                                              "heldout_frozen_prompts"}):
             value = owner[key]
             if not isinstance(value, str) or not value.strip() or "\0" in value:
                 raise sr.SerialRefused(f"{alias}: {key} must be nonempty text")
@@ -46,6 +48,11 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None, s
         count = owner.get("calibrate_serving")
         if count is not None and (type(count) is not int or count < 2):
             raise sr.SerialRefused(f"{alias}: calibrate_serving needs at least two launches")
+        heldout_count = owner.get("calibrate_heldout")
+        if heldout_count is not None and (type(heldout_count) is not int or heldout_count < 2):
+            raise sr.SerialRefused(f"{alias}: calibrate_heldout needs at least two launches")
+        if heldout_count is not None and "heldout_frozen_prompts" not in owner:
+            raise sr.SerialRefused(f"{alias}: held-out calibration needs heldout_frozen_prompts")
         if type(owner.get("allow_unverified_anchor", False)) is not bool:
             raise sr.SerialRefused(f"{alias}: allow_unverified_anchor must be boolean")
     common = ["--planner-model", dict(resolved.actors)["planner"],
@@ -116,6 +123,21 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None, s
             raise sr.SerialRefused(f"{alias}: {exc}") from exc
         if len(prompts.prompts) != launch.template.np:
             raise sr.SerialRefused(f"{alias}: requests differ from selected serving concurrency")
+        if owner.get("heldout_frozen_prompts"):
+            from . import heldout_serving
+            heldout_body, _ = sr._json(Path(owner["heldout_frozen_prompts"]))
+            heldout_manifest = planned_serving.FrozenPromptManifest.from_dict(heldout_body)
+            heldout = heldout_manifest.requests(
+                tuple(row.prompt_id for row in heldout_manifest.prompts), launch.template)
+            if len(heldout) != launch.template.np:
+                raise sr.SerialRefused(f"{alias}: held-out requests differ from serving concurrency")
+            try:
+                heldout_serving.validate_requests(
+                    launch.template,
+                    prompts.requests(tuple(row.prompt_id for row in prompts.prompts), launch.template),
+                    heldout)
+            except ValueError as exc:
+                raise sr.SerialRefused(f"{alias}: {exc}") from exc
         branch = owner["branch"]
         if branch.startswith("production-") or (backend == "cpu" and branch == champion.CANONICAL_BRANCH):
             raise sr.SerialRefused(f"{alias}: this serving target needs an experimental branch")
@@ -129,6 +151,8 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None, s
                 "--worker-root", str(root / "workers"), "--worker-build-root", str(root / "builds"),
                 f"--{backend}-serving-launch", str(launch_path),
                 "--frozen-prompts", owner["frozen_prompts"]]
+        if owner.get("heldout_frozen_prompts"):
+            argv += ["--heldout-frozen-prompts", owner["heldout_frozen_prompts"]]
         if owner.get("cor_build"):
             argv += ["--cor-build", owner["cor_build"]]
         if backend == "cpu":
@@ -150,6 +174,13 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None, s
                     and owner["calibrate_serving"] < serving.MATCHED_CALIBRATION_PAIRS:
                 raise sr.SerialRefused(f"{alias}: matched calibration requires >=24 A/A pairs (48 launches)")
             argv += [f"--{backend}-calibrate-serving", str(owner["calibrate_serving"])]
+        if owner.get("calibrate_heldout") is not None:
+            if backend != "cpu":
+                raise sr.SerialRefused(f"{alias}: held-out calibration is CPU serving only")
+            if instrument == serving.MATCHED_INSTRUMENT \
+                    and owner["calibrate_heldout"] < serving.MATCHED_CALIBRATION_PAIRS:
+                raise sr.SerialRefused(f"{alias}: matched held-out calibration requires >=24 A/A pairs")
+            argv += ["--cpu-calibrate-heldout", str(owner["calibrate_heldout"])]
         if owner.get("allow_unverified_anchor"):
             argv.append("--allow-unverified-anchor")
         targets.append(argv + common)

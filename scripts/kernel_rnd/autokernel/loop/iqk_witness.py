@@ -156,3 +156,169 @@ def check(build_dir: Path, *, resolved_recipe, source_root: Path) -> Result:
     return Result("pass", "Q4_K/Q5_K helper-entry witnesses and independent "
                   "40-row scalar output comparisons passed; branch-level coverage "
                   "is not claimed", "\n".join((scalar.detail, *hits)))
+
+
+def _assess_fused_hit_records(records: list[dict], dso: Path, *,
+                              dot_quant: str | None, width: int) -> Result:
+    expected = [{"schema": "epyc.autokernel.iqk_case_hit.v1", "status": "hit",
+                 "role": "candidate_helper", "symbol": "iqk_moe_fused_up_gate",
+                 "dso": str(dso.resolve())}]
+    if dot_quant is not None:
+        expected.append({"schema": "epyc.autokernel.iqk_case_hit.v1",
+                         "status": "hit", "role": "candidate_dot",
+                         "symbol": "mul_mat_qX_K_q8_2_X4_T",
+                         "quant": dot_quant, "width": width,
+                         "dso": str(dso.resolve())})
+    if len(records) != len(expected) or any(
+            any(record.get(key) != value for key, value in wanted.items())
+            for record, wanted in zip(records, expected)):
+        return Result("unavailable", "exact fused helper and dot specialization "
+                      "hits in candidate DSO not proven", str(records)[:1000])
+    return Result("pass", "trusted candidate DSO hits matched", str(records))
+
+
+def run_fused_probe(binary: Path, quant: str, *, dso: Path,
+                    launch_env: dict[str, str],
+                    topology_prefix: tuple[str, ...],
+                    expected_width: int = 2,
+                    dot_quant: str | None = None,
+                    single_expert: bool = False) -> tuple[Result, str]:
+    """Run the exact fused graph under a trusted one-shot helper breakpoint."""
+    if expected_width not in range(1, 9) or \
+            (dot_quant is not None and (dot_quant != quant or not single_expert)) or \
+            (dot_quant is not None and dot_quant not in {"Q4_K", "Q5_K"}):
+        return Result("unavailable", "unsupported IQK fused dot witness request"), ""
+    gdb = shutil.which("gdb")
+    script = Path(__file__).with_name("iqk_gdb_probe.py")
+    if not gdb or not dso.is_file() or not script.is_file():
+        return Result("unavailable", "fused IQK debugger or candidate DSO missing"), ""
+    read_fd, write_fd = os.pipe()
+    env = dict(launch_env)
+    env.update(AK_IQK_WITNESS_FD=str(write_fd),
+               AK_IQK_WITNESS_DSO=str(dso.resolve()), DEBUGINFOD_URLS="")
+    if dot_quant is not None:
+        env.update(AK_IQK_DOT_QUANT=dot_quant,
+                   AK_IQK_DOT_WIDTH=str(expected_width))
+    argv = [*topology_prefix, gdb, "-nx", "--return-child-result", "-batch", "-q",
+            "-ex", "set pagination off", "-ex", "set confirm off",
+            "-ex", "set debuginfod enabled off", "-ex", "set auto-load off",
+            "-ex", "set print thread-events off", "-ex", "set breakpoint pending on",
+            "-ex", "break iqk_moe_fused_up_gate",
+            "-ex", f"python import os; os.set_inheritable({write_fd}, False)",
+            "-ex", "unset environment AK_IQK_WITNESS_FD",
+            "-ex", "unset environment AK_IQK_WITNESS_DSO",
+            "-ex", "unset environment AK_IQK_DOT_QUANT",
+            "-ex", "unset environment AK_IQK_DOT_WIDTH",
+            "-ex", "run", "-x", str(script), "-ex", "disable 1"]
+    if dot_quant is not None:
+        # At this point the fused helper breakpoint has loaded the candidate
+        # CPU DSO.  rbreak can now resolve its local template specialization;
+        # before DSO load a regex breakpoint would not be pending reliably.
+        # Match all instantiations, then fail closed unless the *first* actual
+        # dot hit is exactly the expected quant and width.  This detects a
+        # fixture that unexpectedly takes a row-exact or dequantized route.
+        argv += ["-ex", "rbreak mul_mat_qX_K_q8_2_X4_T",
+                 "-ex", "continue", "-x", str(script), "-ex", "disable"]
+    argv += ["-ex", "continue", "--args", str(binary), quant,
+             "FUSED_UP_GATE", str(expected_width)]
+    if single_expert:
+        argv.append("--single-expert")
+    try:
+        child = subprocess.Popen(argv, env=env, stdin=subprocess.DEVNULL,
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                 pass_fds=(write_fd,), start_new_session=True, text=True)
+        os.close(write_fd)
+        write_fd = -1
+        try:
+            stdout, stderr = child.communicate(timeout=TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            os.killpg(child.pid, signal.SIGTERM)
+            try:
+                child.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                os.killpg(child.pid, signal.SIGKILL)
+                child.communicate()
+            return Result("unavailable", "fused IQK debugger timed out"), ""
+        with os.fdopen(read_fd, "r", encoding="utf-8") as pipe:
+            read_fd = -1
+            witness = pipe.read(4096)
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        return Result("unavailable", f"fused IQK debugger failed: {exc}"), ""
+    finally:
+        if write_fd >= 0:
+            os.close(write_fd)
+        if read_fd >= 0:
+            os.close(read_fd)
+    try:
+        records = [json.loads(line) for line in witness.splitlines()]
+    except json.JSONDecodeError:
+        records = []
+    assessed = _assess_fused_hit_records(records, dso,
+                                         dot_quant=dot_quant,
+                                         width=expected_width)
+    if assessed.status != "pass":
+        return assessed, ""
+    if child.returncode != 0 or "exited normally" not in stdout + stderr:
+        return Result("unavailable", "fused graph did not finish after helper hit",
+                      (stdout + stderr)[-1000:]), ""
+    probe_lines = [line for line in stdout.splitlines()
+                   if line.startswith(("AK_CPU_QUANT_REFERENCE_V1 ", "A ", "G ", "O "))]
+    return Result("pass", f"{quant} fused helper" +
+                  (f" and dot width {expected_width}" if dot_quant else "") +
+                  " executed in candidate DSO",
+                  str(records)), "\n".join(probe_lines)
+
+
+def check_fused(build_dir: Path, *, resolved_recipe, source_root: Path) -> Result:
+    """Both quantized fused graph cases need exact hits and scalar agreement."""
+    if resolved_recipe.backend != "cpu" or \
+            dict(resolved_recipe.launch_env).get("GGML_IQK") != "1":
+        return Result("unavailable", "fused IQK route requires resolved CPU GGML_IQK=1")
+    resolved_recipe.validate_launch(resolved_recipe.template, build_dir,
+                                    resolved_recipe.port)
+    if not (source_root / SOURCE).is_file():
+        return Result("unavailable", "candidate fused IQK source is missing")
+    from . import cpu_quant_reference
+    result = cpu_quant_reference.check_cpu_quant_suite(
+        build_dir, source_root, launch_env=resolved_recipe.launch_env,
+        topology_prefix=tuple(resolved_recipe.topology_prefix),
+        quants=("Q4_K", "Q5_K"), ops=("FUSED_UP_GATE",),
+        require_fused_hit=True)
+    reason = ("Q4_K/Q5_K exact fused up-gate graph scalar comparison and trusted "
+              "candidate-helper hits passed; native MUL_MAT_ID is a separate "
+              "preceding host/op gate, and GLU 0/0 is not claimed"
+              if result.status == "pass" else result.reason)
+    return Result(result.status, reason, result.detail)
+
+
+def check_q45_dot(build_dir: Path, *, resolved_recipe, source_root: Path) -> Result:
+    """Require direct and fused scalar agreement plus exact Q4/Q5 dot hits."""
+    if resolved_recipe.backend != "cpu" or \
+            dict(resolved_recipe.launch_env).get("GGML_IQK") != "1":
+        return Result("unavailable", "Q4/Q5 dot route requires resolved CPU GGML_IQK=1")
+    resolved_recipe.validate_launch(resolved_recipe.template, build_dir,
+                                    resolved_recipe.port)
+    if not (source_root / "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp").is_file():
+        return Result("unavailable", "candidate Q4/Q5 dot source is missing")
+    from . import cpu_quant_reference
+    widths = tuple(range(1, 9))
+    # A fused product can obscure a wrong gate or up intermediate. Check both
+    # public plain and expert matmul outputs independently before the fused
+    # consumer; the same template serves all three routes.
+    direct = cpu_quant_reference.check_cpu_quant_suite(
+        build_dir, source_root, launch_env=resolved_recipe.launch_env,
+        topology_prefix=tuple(resolved_recipe.topology_prefix),
+        quants=("Q4_K", "Q5_K"), ops=("MUL_MAT", "MUL_MAT_ID"), widths=widths,
+        expert_mode="single")
+    if direct.status != "pass":
+        return Result(direct.status, direct.reason, direct.detail)
+    fused = cpu_quant_reference.check_cpu_quant_suite(
+        build_dir, source_root, launch_env=resolved_recipe.launch_env,
+        topology_prefix=tuple(resolved_recipe.topology_prefix),
+        quants=("Q4_K", "Q5_K"), ops=("FUSED_UP_GATE",), widths=widths,
+        expert_mode="single", require_fused_hit=True, require_dot_hit=True)
+    if fused.status != "pass":
+        return Result(fused.status, fused.reason, fused.detail)
+    return Result("pass", "Q4_K/Q5_K widths 1-8 plain, expert, and fused scalar cases "
+                  "passed with exact dot-specialization hits in candidate DSO",
+                  "\n".join((direct.detail, fused.detail)))

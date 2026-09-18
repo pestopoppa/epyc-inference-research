@@ -6,6 +6,7 @@ this record.  This file lives with the loop, never in the actor's kernel tree.
 """
 import json
 import os
+import re
 
 import gdb
 
@@ -16,10 +17,20 @@ def _record():
               "status": "unavailable"}
     try:
         frame = gdb.selected_frame()
-        symbol = frame.name()
+        symbol = frame.name() or ""
         result["symbol"] = symbol
+        dot_quant = os.environ.get("AK_IQK_DOT_QUANT")
+        dot_width = os.environ.get("AK_IQK_DOT_WIDTH")
+        dot_dequant = {"Q4_K": "DequantizerQ4K_AVX2",
+                       "Q5_K": "DequantizerQ5K_AVX2"}.get(dot_quant)
+        dot_hit = (dot_dequant is not None and dot_width in {str(i) for i in range(1, 9)}
+                   and re.search(r"mul_mat_qX_K_q8_2_X4_T<.*" + dot_dequant +
+                                 r",\s*" + dot_width + r">", symbol) is not None)
         matches = [bp for bp in (gdb.breakpoints() or [])
-                   if bp.location == symbol and bp.hit_count == 1]
+                   if bp.hit_count == 1 and
+                   (bp.location == symbol or
+                    (dot_hit and "mul_mat_qX_K_q8_2_X4_T" in (bp.location or "") and
+                     dot_dequant in (bp.location or "")))]
         actual = gdb.solib_name(frame.pc())
         if len(matches) == 1 and actual and os.path.samefile(actual, expected):
             if symbol == "ggml_backend_cpu_set_use_ref":
@@ -29,8 +40,14 @@ def _record():
                                   dso=os.path.realpath(actual))
                 else:
                     result["reason"] = "CPU reference was not set to use_ref=true"
-            elif symbol == "iqk_mul_mat_moe_rows":
+            elif symbol in {"iqk_mul_mat_moe_rows", "iqk_moe_fused_up_gate"}:
                 result.update(status="hit", role="candidate_helper",
+                              dso=os.path.realpath(actual))
+            elif dot_hit:
+                result.update(status="hit", role="candidate_dot",
+                              symbol="mul_mat_qX_K_q8_2_X4_T",
+                              quant=dot_quant, width=int(dot_width),
+                              frame_symbol=symbol,
                               dso=os.path.realpath(actual))
             else:
                 result["reason"] = "unexpected breakpoint symbol"
