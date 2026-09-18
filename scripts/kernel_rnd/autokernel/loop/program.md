@@ -89,9 +89,23 @@ nonempty native `MUL_MAT_ID` host/op suite under the resolved CPU recipe:
   both Q4_K and Q5_K, also at the fixed 40-row, two-token shape. The preceding
   `MUL_MAT_ID` suite checks host/op wiring; it does not prove fused execution.
 
-These receipts prove exact helper entry and those numerical shapes, not every
-branch or production shape. The new fused route supersedes v26 abstentions
-*only* where their reason was that `iqk_moe_fused_up_gate` had no witness;
+The Q4_K/Q5_K dot-computation route is separate. For
+`ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp`, target
+`mul_mat_qX_K_q8_2_X4_T` and edit only the Q4_K/Q5_K-private dequantizers,
+their private scale-unpack helpers, or that Q4_K/Q5_K-only template body.
+The loop checks actual Git hunks against both the original and candidate
+source; it refuses selector, shared Q6_K helper, header, sibling and other-file
+edits. The native `MUL_MAT` and `MUL_MAT_ID` suite is followed by independent scalar
+`MUL_MAT`, `MUL_MAT_ID` and fused up-gate comparisons for both quants across activation
+widths 1–8. Each fused case requires a trusted hit on the matching template specialization
+inside the candidate CPU DSO. A missing specialization, wrong output or
+unproven path refuses timing. This route addresses the material dot work that
+the v27 planner correctly found outside the older fused-helper-body boundary.
+
+These receipts prove exact helper or specialization entry and those numerical
+shapes, not every branch or production shape. The fused-helper and dot routes
+supersede older abstentions only where their stated missing witness or edit
+boundary is now satisfied;
 historical nulls and abstentions for their actual measured mechanisms remain
 evidence and must not be discarded. Other prospective IQK edits still refuse
 before build: generic active-dispatch

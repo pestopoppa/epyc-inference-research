@@ -1462,17 +1462,24 @@ def main(argv: list[str] | None = None) -> int:
                                            "--exclude-standard", "--", "ggml/src/", "src/").splitlines())
             cpu_ops = worker.worktree / "ggml/src/ggml-cpu/ops.cpp"
             iqk_rows_path = "ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp"
-            if changed == (iqk_rows_path,) and not cpu_launch:
+            iqk_gemm_path = "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp"
+            iqk_paths = {iqk_rows_path, iqk_gemm_path}
+            if len(changed) == 1 and changed[0] in iqk_paths and not cpu_launch:
                 return False, [gates.Verdict(
-                    "op_scope", False, "CPU IQK helper route requires a CPU target recipe")]
+                    "op_scope", False, "CPU IQK source route requires a CPU target recipe")]
             scope_source = (cpu_ops if changed == ("ggml/src/ggml-cpu/ops.cpp",) else
-                            worker.worktree / iqk_rows_path if changed == (iqk_rows_path,) else None)
+                            worker.worktree / changed[0]
+                            if len(changed) == 1 and changed[0] in iqk_paths else None)
             scope = gates.affected_op_scope(changed + untracked,
                                              target_surface=hypothesis.target_surface,
                                              target_symbol=hypothesis.target_symbol,
                                              source_text=(scope_source.read_text(encoding="utf-8")
                                                           if scope_source is not None
                                                           else None),
+                                             pre_source_text=(archive._git(
+                                                 worker.worktree, "show",
+                                                 "HEAD:" + str(scope_source.relative_to(worker.worktree)))
+                                                 if scope_source is not None else None),
                                              patch_text=(archive._git(worker.worktree, "diff", "-U0",
                                                                       "HEAD", "--", str(scope_source.relative_to(worker.worktree)))
                                                          if scope_source is not None
@@ -1491,7 +1498,7 @@ def main(argv: list[str] | None = None) -> int:
                 if "GATED_DELTA_NET" in scope:
                     checks.append(lambda: gates.check_cpu_gdn_reference(
                         worker.build_dir, worker.worktree, resolved_recipe=arm))
-                if cpu_launch and changed == (iqk_rows_path,):
+                if cpu_launch and len(changed) == 1 and changed[0] in iqk_paths:
                     checks.append(lambda: gates.check_cpu_iqk_reference(
                         worker.build_dir, worker.worktree, resolved_recipe=arm,
                         target_symbol=hypothesis.target_symbol))
@@ -1520,7 +1527,7 @@ def main(argv: list[str] | None = None) -> int:
                 checks.append(lambda: gates.check_cpu_gdn_reference(
                     worker.build_dir, worker.worktree,
                     resolved_recipe=_cpu_arm(direct_launch, worker.build_dir)))
-            if cpu_launch and changed == (iqk_rows_path,):
+            if cpu_launch and len(changed) == 1 and changed[0] in iqk_paths:
                 checks.append(lambda: gates.check_cpu_iqk_reference(
                     worker.build_dir, worker.worktree,
                     resolved_recipe=_cpu_arm(direct_launch, worker.build_dir),
