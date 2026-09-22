@@ -794,18 +794,43 @@ class TestReadingFrozenProductionChangesNothing(unittest.TestCase):
     resolved HEAD are captured on both sides of a full anchor resolution.
     """
 
-    def test_resolving_the_v9_anchor_leaves_the_tree_byte_identical(self):
+    def test_resolving_the_production_anchor_leaves_the_tree_byte_identical(self):
+        """The property under test is READ-ONLINESS, not which freeze is current.
+
+        This ran against `production-consolidated-v9` and its literal commit and
+        began failing the moment the v10 freeze cut — a test about not mutating a
+        tree, broken by a promotion it does not care about. The branch is now
+        resolved from the tree the same way `loop/production.resolve_frozen` does
+        (contract prefix, live tip), so it follows v11 and beyond by itself; what
+        stays asserted is that reading changed nothing.
+        """
         repo = W.GitRepo("/mnt/raid0/llm/llama.cpp")
         before = W.fingerprint_tree(repo)
-        anchor = W.resolve_anchor(repo, "production-consolidated-v9")
+        self.assertIsNotNone(before.symbolic_ref, "frozen tree is detached")
+        self.assertTrue(
+            before.symbolic_ref.startswith("production-consolidated-"),
+            f"frozen tree is on {before.symbolic_ref!r}, not the production contract")
+        anchor = W.resolve_anchor(repo, before.symbolic_ref)
         after = W.fingerprint_tree(repo)
 
         proof = W.prove_unchanged(before, after)
         self.assertTrue(proof.holds, proof.differences)
         self.assertEqual(before.status_porcelain, after.status_porcelain)
-        self.assertEqual(anchor.commit,
-                         "0db32c06e3e550065b78311a6031ef3dd2c4f27c")
-        self.assertEqual(before.symbolic_ref, "production-consolidated-v9")
+        self.assertEqual(anchor.commit, before.head_commit)
+
+    def test_the_production_anchor_is_the_commit_the_campaign_believes_it_is(self):
+        """The repin itself, checked against the live tree.
+
+        Separate from the read-only test above ON PURPOSE: this one is SUPPOSED
+        to fail at a promotion, and its failure is the reminder to edit
+        `campaign.PRODUCTION_*`. Merging the two is how a promotion-detector gets
+        deleted for being noisy.
+        """
+        from .. import campaign
+        repo = W.GitRepo(campaign.PRODUCTION_REPO)
+        anchor = W.resolve_anchor(repo, campaign.PRODUCTION_BRANCH,
+                                  expected_commit=campaign.PRODUCTION_COMMIT)
+        self.assertEqual(anchor.commit, campaign.PRODUCTION_COMMIT)
 
     def test_the_frozen_tree_cannot_become_a_sandbox_path_on_the_real_host(self):
         with self.assertRaises(W.ProductionTreeViolation):

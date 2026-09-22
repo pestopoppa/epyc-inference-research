@@ -74,15 +74,15 @@ class C3EpycSuiteTest(unittest.TestCase):
                     surface=None, suffix="baseline") -> C.TimingObservation:
         implementation = digest(f"implementation-{suffix}")
         production_baseline = None
-        if provider == C.LLAMA_CPP_PRODUCTION_V9:
+        if provider == C.LLAMA_CPP_PRODUCTION:
             production_baseline = C.FrozenProductionBaseline(
-                branch=C.PRODUCTION_V9_BRANCH,
-                source_commit=C.PRODUCTION_V9_COMMIT,
-                version=C.PRODUCTION_V9_VERSION,
+                branch=C.PRODUCTION_BRANCH,
+                source_commit=C.PRODUCTION_COMMIT,
+                version=C.PRODUCTION_VERSION,
                 binary_sha256=implementation,
                 linkage_sha256=digest("production-v9-linkage"),
-                attestation_ref=C.PRODUCTION_V9_FREEZE_ATTESTATION_REF,
-                attestation_sha256=C.PRODUCTION_V9_FREEZE_ATTESTATION_SHA256)
+                attestation_ref=C.PRODUCTION_FREEZE_ATTESTATION_REF,
+                attestation_sha256=C.PRODUCTION_FREEZE_ATTESTATION_SHA256)
         return C.TimingObservation(
             provider=provider,
             surface=self.surface if surface is None else surface,
@@ -114,9 +114,9 @@ class C3EpycSuiteTest(unittest.TestCase):
                              (C.TORCH_ROCM_COMPILE,))
             self.assertFalse(case.to_dict()["baseline"]["eager_allowed"])
         self.assertEqual(self.cases[2].required_baseline_providers,
-                         (C.LLAMA_CPP_PRODUCTION_V9,))
+                         (C.LLAMA_CPP_PRODUCTION,))
 
-    def test_dequant_requires_exact_frozen_v9_baseline_identity(self):
+    def test_dequant_requires_exact_frozen_production_baseline_identity(self):
         case = self.cases[2]
         surface = C.ExactOpSurface.create(
             case_id=case.case_id, device_id="ROCm0", model_sha256=digest("model"),
@@ -126,18 +126,18 @@ class C3EpycSuiteTest(unittest.TestCase):
             factors={"graphs": "off", "stream_sync": "full_device", "warmup": 10,
                      "timed_outputs": "validated",
                      "input_rotation": "address_and_content"})
-        with self.assertRaisesRegex(C.C3ContractError, "exact frozen-v9"):
+        with self.assertRaisesRegex(C.C3ContractError, "exact frozen"):
             C.TimingObservation(
-                provider=C.LLAMA_CPP_PRODUCTION_V9, surface=surface,
+                provider=C.LLAMA_CPP_PRODUCTION, surface=surface,
                 implementation_sha256=digest("v9-binary"), samples_ns=(1.0, 1.1, 0.9),
                 evidence_ref="evidence://v9", evidence_sha256=digest("v9-evidence"))
         with self.assertRaisesRegex(C.IdentityMismatch, "identity drifted"):
             C.FrozenProductionBaseline(
-                branch=C.PRODUCTION_V9_BRANCH, source_commit="f" * 40,
-                version=C.PRODUCTION_V9_VERSION, binary_sha256=digest("v9-binary"),
+                branch=C.PRODUCTION_BRANCH, source_commit="f" * 40,
+                version=C.PRODUCTION_VERSION, binary_sha256=digest("v9-binary"),
                 linkage_sha256=digest("v9-linkage"),
-                attestation_ref=C.PRODUCTION_V9_FREEZE_ATTESTATION_REF,
-                attestation_sha256=C.PRODUCTION_V9_FREEZE_ATTESTATION_SHA256)
+                attestation_ref=C.PRODUCTION_FREEZE_ATTESTATION_REF,
+                attestation_sha256=C.PRODUCTION_FREEZE_ATTESTATION_SHA256)
         with self.assertRaisesRegex(C.C3ContractError, "one observation per provider"):
             C.select_vendor_floor(
                 case, surface,

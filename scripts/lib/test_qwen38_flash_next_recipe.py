@@ -280,7 +280,7 @@ class TestKernelIdentity(unittest.TestCase):
         carried the FOLD CANDIDATE branch, which is where the merge was staged, not
         where the consolidated champion lives."""
         self.assertEqual(R.CURRENT_CHAMPION["branch"],
-                         "ak/champion/llama-cpp-0db32c06e3e5")
+                         "ak/champion/llama-cpp-ffc1bac82eec")
         self.assertEqual(R.CURRENT_CHAMPION["fold_candidate_branch"],
                          "inf70/fold-candidate-20260908")
         # ef81196d5 = GPU tip bff30cebe + CPU champion3 9c4f73e29.

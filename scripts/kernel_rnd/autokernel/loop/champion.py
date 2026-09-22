@@ -44,7 +44,15 @@ import subprocess
 
 #: THE single champion branch, as of the 2026-08-31 reconciliation. This name changes
 #: at a production promotion and nowhere else.
-CANONICAL_BRANCH = "ak/champion/llama-cpp-0db32c06e3e5"
+#:
+#: RESEEDED 2026-09-22 at the v10 freeze. `ak/champion/llama-cpp-0db32c06e3e5`
+#: was promoted WHOLESALE -- its tip IS v10 -- so the new champion is cut from
+#: `production-consolidated-v10` @ `ffc1bac82` and its standing versus production
+#: is ZERO by construction. The retired branch is kept as the tag
+#: `retired/ak-champion-llama-cpp-0db32c06e3e5`. That zero is the testable
+#: success criterion of the reset: a headline gain published before the first
+#: keep of the new cycle proves the reseed did not happen.
+CANONICAL_BRANCH = "ak/champion/llama-cpp-ffc1bac82eec"
 
 #: Every refusal names its origin, so the reader six months from now knows this is a
 #: scar, not ceremony.

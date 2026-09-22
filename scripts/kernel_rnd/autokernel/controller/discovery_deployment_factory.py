@@ -477,8 +477,22 @@ _INSTRUMENT_PATH = Path("/mnt/raid0/llm/llama.cpp-experimental")
 # Production remains the PROMOTION reference: a composed champion still has to
 # earn its own T0/T1/T2 against the sealed production anchor before it means
 # anything, which is the drift catcher for a chain of small unreplicated wins.
-_INSTRUMENT_BRANCH = "ak/champion/llama-cpp-0db32c06e3e5"
-_INSTRUMENT_COMMIT = "270b48ed64d617db9128054f3bd0620bbb9371f5"
+# RESEEDED 2026-09-22 at the v10 freeze. The branch above was promoted WHOLESALE
+# into `production-consolidated-v10`, so the champion was re-cut from the new
+# production tip and the retired name kept as the tag
+# `retired/ak-champion-llama-cpp-0db32c06e3e5`.
+#
+# These two move TOGETHER and cannot be split: `_instrument_review_receipt`
+# requires `refs/heads/<branch>` to resolve to exactly `_INSTRUMENT_COMMIT`, and
+# the new branch is at `ffc1bac82`, not `270b48ed6`.
+#
+# The consequence to understand before reading further: the instrument IS
+# production for this cycle, so the reviewed delta below is EMPTY. That is
+# correct, and it is the whole point of the reset -- the champion's standing
+# versus production is zero by construction until the first keep of the new
+# cycle. See `_INSTRUMENT_DIFF_SHA256`.
+_INSTRUMENT_BRANCH = "ak/champion/llama-cpp-ffc1bac82eec"
+_INSTRUMENT_COMMIT = "ffc1bac82eeca6f9099e1ccd9ba49703c460a115"
 
 #: CH-2 champion seeding: the ratified production `llama-server` digests, per backend,
 #: copied from the single source of truth `scripts/session/verify_llama_cpp.sh`
@@ -490,8 +504,22 @@ _RATIFIED_PRODUCTION_SERVER_SHA256 = MappingProxyType({
     "llama_cpu": "8ebb1355593121a231735d7b58ad076f4539d2c5e3847fa09d2922fa8a980499",
     "llama_gpu": "21cfb750dc0ba4b3add0674fcb9dd061d77b3604ebf8e1d063ba0e2c51902feb",
 })
-_INSTRUMENT_DIFF_SHA256 = "d17c66f6edccf3574dcbd5679e4bc549c90c39bd7e7460fd2eebf3312e3ba71d"
-_INSTRUMENT_TEST_SOURCE_SHA256 = "7571a536ba1305ad078948de2920aea33f9261ab9bb1b5714e55bd485ff335e9"
+# EMPTY DIFF, 2026-09-22. `sha256("")` -- `git diff --binary <prod>..<instrument>`
+# produces no bytes because the instrument commit IS the production commit after
+# the wholesale v10 promotion. Not a placeholder and not a disabled check: it is
+# the exact digest `_instrument_review_receipt` will compute, and it will start
+# differing again the moment the champion takes its first keep, at which point
+# this constant and `_INSTRUMENT_DIFF_PATHS` are re-derived from the new tip.
+# (Was `d17c66f6e...`, the v9-champion delta.)
+_INSTRUMENT_DIFF_SHA256 = (
+    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+# REPINNED to v10's blob. This is the ONE reviewed blob whose bytes actually
+# moved across the promotion (llama-bench.cpp, its README and the ready-continue
+# contract are byte-identical at v10, so their constants below are unchanged):
+# v10 carries upstream's new `test-backend-ops` cases for GGML_OP_MEAN_D1 and
+# GGML_OP_MOE_TOPK_NORM. Was `7571a536b...` at the v9-era champion.
+_INSTRUMENT_TEST_SOURCE_SHA256 = (
+    "7ecd877080bbd8bc08d10861d815cdfc3d92676066b2289327c6cb59f31b6c5d")
 _READY_CONTINUE_CONTRACT_SHA256 = "1411f5e81c1b0b3db6952523922c672d88a78aaff5945865c9ccc2b4fc5fd99f"
 # CHANGED by the champion: MoE-Spec adds an 8-line env-var fallback so
 # llama-bench (which has its own arg parser) can read --moe-spec-budget.
@@ -500,62 +528,44 @@ _READY_CONTINUE_CONTRACT_SHA256 = "1411f5e81c1b0b3db6952523922c672d88a78aaff5945
 # that matters for verdicts.
 _INSTRUMENT_BENCH_SOURCE_SHA256 = "8d2bd4f6114e82553eef345183bf81f9c4969bf6a743579db2f45554cc70eefa"
 _INSTRUMENT_BENCH_README_SHA256 = "6429015fe5025d35b65e6271520ea668267910f82922e618b27b80c909cec33f"
-_INSTRUMENT_DIFF_PATHS = frozenset({
-    # CH-9 (2026-08-28): route instrumentation for the MoE dispatch, plus a
-    # verbosity LEVEL so an empty route log is unambiguous. These are measurement
-    # apparatus, not kernel behaviour -- they add logging only, gated on an env var
-    # that defaults to off.
-    "ggml/src/ggml-cuda/ggml-cuda.cu",
-    # The champion delta over frozen v9: the reviewed measurement apparatus
-    # (iqk sources, test-backend-ops, llama-bench) PLUS the admitted members
-    # MoE-Spec c7c37a0d9 and DFlash2 2046c64e9.
-    "common/arg.cpp",
-    "common/common.cpp",
-    "common/common.h",
-    "common/sampling.cpp",
-    "common/sampling.h",
-    "common/speculative.cpp",
-    "common/speculative.h",
-    "conversion/__init__.py",
-    "conversion/qwen.py",
-    "examples/speculative-simple/speculative-simple.cpp",
-    "ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp",
-    "ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp",
-    "ggml/src/ggml-cpu/iqk/iqk_quantize.h",
-    "ggml/src/ggml-cpu/iqk/iqk_quantize_min.cpp",
-    "gguf-py/gguf/constants.py",
-    "gguf-py/gguf/gguf_writer.py",
-    "gguf-py/gguf/tensor_mapping.py",
-    "include/llama.h",
-    "src/llama-arch.cpp",
-    "src/llama-arch.h",
-    "src/llama-context.cpp",
-    "src/llama-cparams.h",
-    "src/llama-graph.cpp",
-    "src/llama-graph.h",
-    "src/llama-hparams.h",
-    "src/llama-model.cpp",
-    "src/llama-model.h",
-    "src/models/dflash.cpp",
-    "src/models/models.h",
-    "tests/CMakeLists.txt",
-    "tests/test-autokernel-ready-continue-contract.py",
-    "tests/test-backend-ops.cpp",
-    "tools/llama-bench/README.md",
-    "tools/llama-bench/llama-bench.cpp",
-    "tools/server/server-context.cpp",
-})
+# EMPTY, 2026-09-22, for the same reason as `_INSTRUMENT_DIFF_SHA256`: the
+# instrument commit IS the production commit, so `git diff --name-only` between
+# them names nothing. `_instrument_review_receipt` compares the OBSERVED path set
+# against this one for equality, so an empty set here is an assertion ("the
+# champion changes nothing yet"), not an absent check. The v9-era set -- the iqk
+# sources, test-backend-ops, llama-bench, plus admitted members MoE-Spec
+# c7c37a0d9 and DFlash2 2046c64e9 -- is in git history at the commit that
+# retired it; it is all inside v10 now.
+_INSTRUMENT_DIFF_PATHS: frozenset[str] = frozenset()
+# REPINNED to v10, 2026-09-22, read-only from `ffc1bac82`. Six of the ten blobs
+# moved with the promotion (fattn.cu, mmvq.cu, rope.cu, norm.cu, quantize.cu,
+# vecdotq.cuh); fattn-common.cuh, fattn-tile.cu, fattn-tile.cuh and set-rows.cu
+# are byte-identical across it.
+#
+# WHAT THIS CHECK IS: `_reviewed_actor_source` materialises each file FROM the
+# instrument commit and refuses if it does not hash to the value here, so this
+# manifest is a CONSISTENCY pin between the planner's reviewed-source package and
+# the instrument it is generated against. Leaving v9 digests beside a v10
+# instrument does not preserve a review — it asserts an equality that is false and
+# hard-fails every deployment. Repinning restores the invariant the check exists
+# for.
+#
+# WHAT IT IS NOT: a statement that anyone has READ the six files at v10. The FILE
+# SET is unchanged and still the reviewed target set; the CONTENT of six of them
+# advanced with the promotion. If the reviewed-source package is meant to carry a
+# human reading of these bytes, that reading is outstanding and is tracked
+# separately — it is not something a digest can record.
 _TARGET_SOURCE_SHA256 = MappingProxyType({
-    "ggml/src/ggml-cuda/fattn.cu": "f6a61657387c153e88bde036e25684b512c7cf078b1d17c7e3b2d31ee73f28d3",
+    "ggml/src/ggml-cuda/fattn.cu": "2029cf6741771619544d31df024bef74634373b033b42399ba77612e279a3d54",
     "ggml/src/ggml-cuda/fattn-common.cuh": "47537d7980d81f7dc9daa18698f5fdbb990ef6b916fa75fed4bc0bbfd1aa08cb",
     "ggml/src/ggml-cuda/fattn-tile.cu": "f57657daf3c5209a32d182bb888ead02b1e806a26273cfa4df8b0a6345ae8247",
     "ggml/src/ggml-cuda/fattn-tile.cuh": "eaa043031cb9574ec4a0018fc0bea25d3cd7d43230bb23b37e63241e3101d9f0",
-    "ggml/src/ggml-cuda/mmvq.cu": "15d25d71c945de19e8efc9fbfc6b7e5e66f33bc7635f9dc648d9e1f231ba409e",
-    "ggml/src/ggml-cuda/rope.cu": "8286f7b57bb76ab490e05d42cb8262ad886b85a8fdaaef63d6538b7ff06940b2",
-    "ggml/src/ggml-cuda/norm.cu": "37e670ad50f8b0c3fb9acaaba54ad520b143b0e73994de5c10f8635e334ff0cd",
-    "ggml/src/ggml-cuda/quantize.cu": "9f0074ec27a46a78c4c4709d00163acc35dae772854c290ba9592574d30bd3d9",
+    "ggml/src/ggml-cuda/mmvq.cu": "7ca6eba8866839fdb65efaf9d86dea7854577bf44860f2e83a76a8b45bb4f468",
+    "ggml/src/ggml-cuda/rope.cu": "94f7aed2ff08b84302a23a3c8b792b9a77dd297acb1d772ddf35d46a75d55abc",
+    "ggml/src/ggml-cuda/norm.cu": "3c133eec8aab2cf54996d98c4150e2640b5a47af559c9eb5d16f520c03e237a5",
+    "ggml/src/ggml-cuda/quantize.cu": "375a233bdb803243dde1e39b1f02045ed991c2a20e11a26d8ccbc40e3b84eaf9",
     "ggml/src/ggml-cuda/set-rows.cu": "24654fe55234c12b0d4d1e9c78871509fc5348f7e3ff123e146838c861a8c8a9",
-    "ggml/src/ggml-cuda/vecdotq.cuh": "c418082b854a33339b99702b10062132595256478d99f5673a81adf403651eb5",
+    "ggml/src/ggml-cuda/vecdotq.cuh": "68395a6e448a00afad2a1fb9ebff6aed8b7b18d67c0d54ffecde4be121311e08",
 })
 _SAFE_ACTOR_ENVIRONMENT = MappingProxyType({
     "PATH": "/usr/local/bin:/usr/bin:/bin",

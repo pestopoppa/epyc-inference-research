@@ -123,7 +123,19 @@ DEFAULT_OUTPUT_DIR = RESEARCH_ROOT / "data/gpu-mi210/kv-quant-27b-v10-sweep"
 REPS = 5
 CONTEXT = 65536
 FLASH_ATTENTION = "on"
-MAX_TOKENS = common.DEFAULT_MAX_TOKENS
+#: MEASURED for this model, not inherited. The Laguna default is 512, which is too
+#: small for Qwen3.8-27B: with the fixed prompt pack it runs past the cap before
+#: emitting RESULT_JSON, so every replicate died on
+#: `response did not finish normally: 'length'` and the matrix emitted zero records.
+#: Probed 2026-09-22 on the v10 GPU build, temp 0 / top_k 1 / seed 424242, with the
+#: cap lifted so the natural length could be observed:
+#:     primes 754 tokens, nested_flatten 231, normalize 286 -- all finish='stop',
+#:     all carrying RESULT_JSON.
+#: 1536 is ~2x the observed worst case, leaving room for the deeper-prefill arms.
+#: This is a REQUEST-SIDE cap and does not bias the comparison: every arm sends the
+#: same body, decode throughput is a RATE, and a longer generation gives the decode
+#: measurement more signal, not less.
+MAX_TOKENS = 1536
 MIN_COMPLETION_TOKENS = common.DEFAULT_MIN_COMPLETION_TOKENS
 SEED = common.DEFAULT_SEED
 PORT_BASE = 19960

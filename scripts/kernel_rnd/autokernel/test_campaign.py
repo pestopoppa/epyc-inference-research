@@ -518,7 +518,17 @@ class TestTheDryRunComposesEndToEnd(unittest.TestCase):
         self.assertEqual(rendered["candidate"]["env"]["GGML_IQK"], "1")
         self.assertEqual(rendered["anchor"]["env"]["GGML_IQK"], "0")
 
-    def test_serving_and_measurement_anchors_are_distinct_and_v9_pinned(self):
+    def test_the_measurement_instrument_is_production_and_builds_out_of_tree(self):
+        """The v9 overlay was RETIRED into production at the v10 freeze.
+
+        This test asserted the opposite until 2026-09-22 — that the serving and
+        reward-instrument repos were DISTINCT, and that the instrument was pinned
+        to `f744cc220`. Both were true of the v9 era and neither survives the
+        promotion: `f744cc220` is an ancestor of `ffc1bac82`, and its worktree no
+        longer exists on disk. What has to stay true is the property that
+        separation was protecting — that no arm measures out of the frozen
+        production tree's own build — so that is what is asserted now.
+        """
         rendered = campaign.render_bench_commands(spec())
         anchor_binary = rendered["anchor"]["argv"][
             next(i for i, value in enumerate(rendered["anchor"]["argv"])
@@ -529,14 +539,25 @@ class TestTheDryRunComposesEndToEnd(unittest.TestCase):
         self.assertEqual(payload["anchor"]["expected_commit"], campaign.PRODUCTION_COMMIT)
         self.assertEqual(payload["measurement_instrument"]["expected_commit"],
                          campaign.MEASUREMENT_COMMIT)
-        self.assertNotEqual(payload["anchor"]["repo"],
-                            payload["measurement_instrument"]["repo"])
+        # One identity now, deliberately: the instrument ships in production.
+        self.assertEqual(payload["measurement_instrument"]["repo"],
+                         payload["anchor"]["repo"])
+        self.assertEqual(campaign.MEASUREMENT_COMMIT, campaign.PRODUCTION_COMMIT)
+        # Invariant 3: nobody builds in a frozen production tree. The build root
+        # used to live INSIDE the instrument worktree; now that the instrument is
+        # production, it may not.
+        self.assertNotIn(campaign.PRODUCTION_REPO + "/", campaign.MEASUREMENT_BUILD_ROOT)
+        for tree in worktree.frozen_tree_paths():
+            self.assertFalse(
+                campaign.MEASUREMENT_BUILD_ROOT.startswith(tree.rstrip("/") + "/"),
+                f"measurement build root is inside frozen tree {tree}")
+        # `live_controls` DERIVES these from `campaign`, so drift is
+        # unrepresentable rather than merely detected. Kept as a guard against
+        # someone re-typing the literals back in.
         from .execution import live_controls
         self.assertEqual(live_controls.PRODUCTION_COMMIT, campaign.PRODUCTION_COMMIT)
         self.assertEqual(live_controls.INSTRUMENT_BRANCH, campaign.MEASUREMENT_BRANCH)
         self.assertEqual(live_controls.INSTRUMENT_COMMIT, campaign.MEASUREMENT_COMMIT)
-        self.assertEqual(campaign.MEASUREMENT_COMMIT,
-                         "f744cc220e722d1bda93783959471d44f8e118b0")
 
     def test_the_ledger_released_everything(self):
         result, _ops, _text = self.compose()
@@ -3086,6 +3107,13 @@ class TestThePreflightIsWiredToSomethingThatExists(unittest.TestCase):
             @staticmethod
             def is_ancestor(_ancestor, _descendant):
                 return True
+
+            @staticmethod
+            def tracked_status_porcelain():
+                # Clean of TRACKED changes. The measurement tree is now the
+                # shared production checkout, whose untracked local tooling is
+                # deliberately not a refusal — see the call site.
+                return ""
 
         def resolved(_repo, branch, *, expected_commit):
             return mock.Mock(

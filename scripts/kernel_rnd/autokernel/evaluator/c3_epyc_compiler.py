@@ -82,13 +82,17 @@ RUNNER_BINDINGS = {
             "cli": "t1b.llama_gpu.llama_bench_decode.v1",
             "python_entrypoint": "autokernel.execution.microbench",
         },
+        # RESOLVED from `c3_epyc_suite`, never re-typed here: this block is the
+        # stamp that lands verbatim in every receipt, so a second copy of the
+        # freeze identity would be a second thing to forget at a promotion. The
+        # v9 -> v10 repin (2026-09-22) therefore touched only `c3_epyc_suite`.
         "baseline": {
-            "provider": c3.LLAMA_CPP_PRODUCTION_V9,
-            "branch": c3.PRODUCTION_V9_BRANCH,
-            "source_commit": c3.PRODUCTION_V9_COMMIT,
-            "version": c3.PRODUCTION_V9_VERSION,
-            "attestation_ref": c3.PRODUCTION_V9_FREEZE_ATTESTATION_REF,
-            "attestation_sha256": c3.PRODUCTION_V9_FREEZE_ATTESTATION_SHA256,
+            "provider": c3.LLAMA_CPP_PRODUCTION,
+            "branch": c3.PRODUCTION_BRANCH,
+            "source_commit": c3.PRODUCTION_COMMIT,
+            "version": c3.PRODUCTION_VERSION,
+            "attestation_ref": c3.PRODUCTION_FREEZE_ATTESTATION_REF,
+            "attestation_sha256": c3.PRODUCTION_FREEZE_ATTESTATION_SHA256,
             "binary_and_linkage_sha256": "receipt_required",
         },
         "boundary": "experimental tree/binary only; never patches frozen production",
@@ -238,10 +242,10 @@ def _timing(payload: Mapping[str, Any], surface: c3.ExactOpSurface,
     required = {"provider", "implementation_sha256", "samples_ns",
                 "evidence_ref", "evidence_sha256"}
     optional = ({"production_baseline"}
-                if provider == c3.LLAMA_CPP_PRODUCTION_V9 else set())
+                if provider == c3.LLAMA_CPP_PRODUCTION else set())
     _exact_keys(payload, required=required, optional=optional, label=label)
     production_baseline = None
-    if provider == c3.LLAMA_CPP_PRODUCTION_V9:
+    if provider == c3.LLAMA_CPP_PRODUCTION:
         identity = _mapping(payload.get("production_baseline"),
                             f"{label}.production_baseline")
         identity_fields = {"branch", "source_commit", "version", "binary_sha256",

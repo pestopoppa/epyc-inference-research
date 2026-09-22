@@ -1490,6 +1490,23 @@ class GitRepo:
     def status_porcelain(self) -> str:
         return self._git("status", "--porcelain")
 
+    def tracked_status_porcelain(self) -> str:
+        """Tracked/index changes only — the FREEZE's own definition of clean.
+
+        Added 2026-09-22 with the v10 repin. `status_porcelain` above is the
+        default `-unormal` status and is the right answer for a candidate
+        worktree, where an untracked source file would otherwise ride into a
+        snapshot digest. It is the WRONG answer for the shared frozen production
+        checkout, which legitimately carries pre-existing untracked local
+        tooling that is authority for nothing. `controller/
+        discovery_deployment.py::_verify_production` and
+        `scripts/session/verify_llama_cpp.sh` already draw exactly this line;
+        this is that line, callable, rather than a fourth copy of the argv.
+
+        Read-only: `status` is in `ALLOWED_VERBS` and this adds no capability.
+        """
+        return self._git("status", "--porcelain", "--untracked-files=no")
+
     def worktree_paths(self) -> tuple:
         out = self._git("worktree", "list", "--porcelain")
         return tuple(line.split(" ", 1)[1].strip()

@@ -67,10 +67,14 @@ from autokernel.loop import claim                                   # noqa: E402
 
 CHAMPION_TREE = Path("/mnt/raid0/llm/tmp/champ2")
 CHAMPION_BUILD = CHAMPION_TREE / "build-hip"
-CHAMPION_BRANCH = "ak/champion/llama-cpp-0db32c06e3e5"
+# Champion RESEEDED and production REPINNED at the 2026-09-22 v10 freeze. The
+# old champion branch was promoted wholesale, so the champion name and the
+# anchor identity necessarily move together -- repinning one without the other
+# would compare the new champion against the kernel it already contains.
+CHAMPION_BRANCH = "ak/champion/llama-cpp-ffc1bac82eec"
 ANCHOR_TREE = Path("/mnt/raid0/llm/llama.cpp")
-ANCHOR_BRANCH = "production-consolidated-v9"
-ANCHOR_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
+ANCHOR_BRANCH = "production-consolidated-v10"
+ANCHOR_COMMIT = "ffc1bac82eeca6f9099e1ccd9ba49703c460a115"
 ANCHOR_BIN = ANCHOR_TREE / "build-hip" / "bin"
 ARTIFACTS = Path("/mnt/raid0/llm/artifacts-df25")
 SURFACE = Path("/mnt/raid0/llm/autokernel/surface")

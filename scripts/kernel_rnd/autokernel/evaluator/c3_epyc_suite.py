@@ -32,9 +32,15 @@ EPYC_EXPERIMENTAL_BINARY = "epyc_experimental_binary"
 TORCH_ROCM_COMPILE = "torch_rocm_compile"
 ROCBLAS = "rocblas"
 HIPBLASLT = "hipblaslt"
-LLAMA_CPP_PRODUCTION_V9 = "llama_cpp_production_v9"
+# The provider id names a ROLE ("the frozen production llama.cpp"), not a
+# release. It carried `_v9` until 2026-09-22 and was re-pinned to v10 the moment
+# the role's occupant changed, which is exactly the wrong reason to have to touch
+# an identifier; the version now lives in `PRODUCTION_COMMIT`/`PRODUCTION_VERSION`
+# below and nowhere else. Safe to change the VALUE too: no receipt on disk names
+# `llama_cpp_production_v9` (checked repo-wide, 2026-09-22).
+LLAMA_CPP_PRODUCTION = "llama_cpp_production"
 BASELINE_PROVIDERS = frozenset({
-    TORCH_ROCM_COMPILE, ROCBLAS, HIPBLASLT, LLAMA_CPP_PRODUCTION_V9,
+    TORCH_ROCM_COMPILE, ROCBLAS, HIPBLASLT, LLAMA_CPP_PRODUCTION,
 })
 # Compatibility name for callers written before the EPYC-native exact baseline
 # joined the plan.  The set now contains every governed baseline provider, not
@@ -42,13 +48,29 @@ BASELINE_PROVIDERS = frozenset({
 VENDOR_PROVIDERS = BASELINE_PROVIDERS
 CANDIDATE_PROVIDER = "autokernel_candidate"
 
-PRODUCTION_V9_BRANCH = "production-consolidated-v9"
-PRODUCTION_V9_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
-PRODUCTION_V9_VERSION = "10125 (0db32c06e)"
-PRODUCTION_V9_FREEZE_ATTESTATION_REF = (
-    "artifacts/operator/ratify_v9_final_freeze_20260811.json")
-PRODUCTION_V9_FREEZE_ATTESTATION_SHA256 = (
-    "21c396477c1cdcc71dbaffd7452dd43e7bbf5941b1f199c8a5d217da830945ed")
+#: The stamped identity of the frozen production baseline this suite compares
+#: against. REPINNED 2026-09-22, v9 -> v10 final freeze. These five move together
+#: or not at all — an attestation ref from one freeze with a commit from another
+#: is a baseline nobody ratified — and `c3_epyc_compiler._BASELINE` stamps them
+#: verbatim into every receipt, so a stale set here silently backdates the
+#: baseline of every C3 verdict.
+#:
+#: The names are deliberately NOT version-branded: they were `PRODUCTION_V9_*`
+#: and had to be renamed at the first promotion that touched them, which is a
+#: rename the next promotion should not have to repeat.
+#:
+#: v9, the rollback anchor, was:
+#:   production-consolidated-v9 / 0db32c06e3e550065b78311a6031ef3dd2c4f27c
+#:   version "10125 (0db32c06e)"
+#:   artifacts/operator/ratify_v9_final_freeze_20260811.json
+#:   sha256 21c396477c1cdcc71dbaffd7452dd43e7bbf5941b1f199c8a5d217da830945ed
+PRODUCTION_BRANCH = "production-consolidated-v10"
+PRODUCTION_COMMIT = "ffc1bac82eeca6f9099e1ccd9ba49703c460a115"
+PRODUCTION_VERSION = "10303 (ffc1bac82)"
+PRODUCTION_FREEZE_ATTESTATION_REF = (
+    "artifacts/operator/ratify_v10_final_freeze_20260922.json")
+PRODUCTION_FREEZE_ATTESTATION_SHA256 = (
+    "4a0e6c832bb34cb587de38574e3e163be6b14f6ff598c2e3044a1815e99526d8")
 
 SEARCH_EXIT_AUTHORITY = "search_exit_diagnostic_only"
 NO_PROMOTION_AUTHORITY = "no_release_or_promotion_authority"
@@ -188,7 +210,7 @@ def epyc_op_suite() -> tuple[EpycOpCase, ...]:
             source_ref="epyc-native/q4_k-dequant-gemv/v1",
             source_revision="prospective_contract_v1",
             source_artifact_sha256=_DEQUANT_CONTRACT_SHA256,
-            required_baseline_providers=(LLAMA_CPP_PRODUCTION_V9,),
+            required_baseline_providers=(LLAMA_CPP_PRODUCTION,),
         ),
     )
 
@@ -269,7 +291,8 @@ class FrozenProductionBaseline:
     """Exact frozen llama.cpp identity behind an EPYC-native observation.
 
     A provider label alone is not provenance.  This record binds the timing
-    binary and its linkage closure to the operator-ratified v9 source identity.
+    binary and its linkage closure to the operator-ratified frozen source
+    identity of the CURRENT freeze (`PRODUCTION_*` above).
     No constructor default is provided because omission must fail closed.
     """
 
@@ -283,17 +306,17 @@ class FrozenProductionBaseline:
 
     def __post_init__(self) -> None:
         expected = {
-            "branch": PRODUCTION_V9_BRANCH,
-            "source_commit": PRODUCTION_V9_COMMIT,
-            "version": PRODUCTION_V9_VERSION,
-            "attestation_ref": PRODUCTION_V9_FREEZE_ATTESTATION_REF,
-            "attestation_sha256": PRODUCTION_V9_FREEZE_ATTESTATION_SHA256,
+            "branch": PRODUCTION_BRANCH,
+            "source_commit": PRODUCTION_COMMIT,
+            "version": PRODUCTION_VERSION,
+            "attestation_ref": PRODUCTION_FREEZE_ATTESTATION_REF,
+            "attestation_sha256": PRODUCTION_FREEZE_ATTESTATION_SHA256,
         }
         drift = [name for name, value in expected.items()
                  if getattr(self, name) != value]
         if drift:
             raise IdentityMismatch(
-                f"frozen production-v9 baseline identity drifted at {drift}")
+                f"frozen production baseline identity drifted at {drift}")
         _sha256(self.binary_sha256, "production_baseline.binary_sha256")
         _sha256(self.linkage_sha256, "production_baseline.linkage_sha256")
 
@@ -329,17 +352,17 @@ class TimingObservation:
             self.samples_ns, "timing observation"))
         _text(self.evidence_ref, "evidence_ref")
         _sha256(self.evidence_sha256, "evidence_sha256")
-        if self.provider == LLAMA_CPP_PRODUCTION_V9:
+        if self.provider == LLAMA_CPP_PRODUCTION:
             if not isinstance(self.production_baseline, FrozenProductionBaseline):
                 raise C3ContractError(
-                    "llama_cpp_production_v9 observation requires the exact frozen-v9 "
+                    "llama_cpp_production observation requires the exact frozen "
                     "production_baseline identity")
             if self.implementation_sha256 != self.production_baseline.binary_sha256:
                 raise IdentityMismatch(
-                    "timing implementation_sha256 differs from the frozen-v9 binary")
+                    "timing implementation_sha256 differs from the frozen production binary")
         elif self.production_baseline is not None:
             raise C3ContractError(
-                "production_baseline identity is valid only for llama_cpp_production_v9")
+                "production_baseline identity is valid only for llama_cpp_production")
 
     @property
     def median_ns(self) -> float:
@@ -763,13 +786,13 @@ def audit_no_execution_paths() -> schemas.Check:
 
 __all__ = [
     "APEX_PYTHON_OVERLAY", "CANDIDATE_PROVIDER", "EPYC_EXPERIMENTAL_BINARY",
-    "BASELINE_PROVIDERS", "HIPBLASLT", "LLAMA_CPP_PRODUCTION_V9",
+    "BASELINE_PROVIDERS", "HIPBLASLT", "LLAMA_CPP_PRODUCTION",
     "NO_PROMOTION_AUTHORITY",
     "PINNED_APEX_REVISION", "ROCBLAS", "SCHEMA", "SEARCH_EXIT_AUTHORITY",
     "TARGET_ARCH", "TARGET_DEVICE", "TORCH_ROCM_COMPILE", "VENDOR_PROVIDERS",
-    "PRODUCTION_V9_BRANCH", "PRODUCTION_V9_COMMIT", "PRODUCTION_V9_VERSION",
-    "PRODUCTION_V9_FREEZE_ATTESTATION_REF",
-    "PRODUCTION_V9_FREEZE_ATTESTATION_SHA256",
+    "PRODUCTION_BRANCH", "PRODUCTION_COMMIT", "PRODUCTION_VERSION",
+    "PRODUCTION_FREEZE_ATTESTATION_REF",
+    "PRODUCTION_FREEZE_ATTESTATION_SHA256",
     "C3ContractError", "IdentityMismatch", "EpycOpCase", "ExactOpSurface",
     "FrozenProductionBaseline", "TimingObservation", "VendorFloor", "FastPGate",
     "FastPSuiteReport",

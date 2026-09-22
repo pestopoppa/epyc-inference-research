@@ -98,8 +98,15 @@ def one_condition(name: str, anchor: Path, model: Path, *, pairs: int, warmup: i
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--anchor-build", type=Path,
-                        default=Path("/mnt/raid0/llm/tmp/build-anchor-j64"))
+    # REQUIRED, no default (2026-09-22). It defaulted to
+    # `/mnt/raid0/llm/tmp/build-anchor-j64`, which still exists and is build
+    # 10125 @ `0db32c06e` — v9. That directory does not announce its age, so an
+    # invocation that simply omitted the flag inherited a superseded anchor and
+    # produced a plausible A/A against the wrong kernel. A stale anchor must
+    # cost an argument, never an omission.
+    parser.add_argument("--anchor-build", type=Path, required=True,
+                        help="build directory of the anchor arm; no default, so a "
+                             "superseded anchor cannot be inherited by omission")
     parser.add_argument("--worktree", type=Path,
                         default=Path("/mnt/raid0/llm/tmp/ak-loop-tree"))
     parser.add_argument("--model", type=Path,

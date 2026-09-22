@@ -62,7 +62,9 @@ SURFACE_DIR="${BOUNDARY_SURFACE_DIR:-/mnt/raid0/llm/autokernel/surface}"
 REPORT="${BOUNDARY_REPORT:-/mnt/raid0/llm/tmp/boundary-20260831-report.md}"
 
 CHAMP_TREE="${BOUNDARY_CHAMP_TREE:-/mnt/raid0/llm/tmp/champ2}"
-CHAMPION_BRANCH="${BOUNDARY_CHAMPION_BRANCH:-ak/champion/llama-cpp-0db32c06e3e5}"
+# Champion reseeded at the 2026-09-22 v10 freeze (the old branch was promoted
+# wholesale); override with BOUNDARY_CHAMPION_BRANCH to replay the v9-era run.
+CHAMPION_BRANCH="${BOUNDARY_CHAMPION_BRANCH:-ak/champion/llama-cpp-ffc1bac82eec}"
 ADMISSION_TREE="${BOUNDARY_ADMISSION_TREE:-/mnt/raid0/llm/tmp/ak-admission-funsafe-20260831}"
 ADMISSION_REF="${BOUNDARY_ADMISSION_REF:-ak/admission/remove-funsafe-math-20260831}"
 PRE_MERGE_TAG="ak/pre-funsafe-merge-20260831"

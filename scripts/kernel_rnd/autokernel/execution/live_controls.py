@@ -40,16 +40,27 @@ PREFILL_RECIPE_ID = "t1b.llama_cpu.llama_bench_prefill.v1"
 DECODE_RECIPE_ID = "t1b.llama_cpu.llama_bench_decode.v1"
 RECIPE_ID = PREFILL_RECIPE_ID
 CPU_LIST = recipes.CANONICAL_PREFIX[recipes.CANONICAL_PREFIX.index("-c") + 1]
-PRODUCTION_ROOT = Path("/mnt/raid0/llm/llama.cpp")
-PRODUCTION_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
+# DERIVED from `campaign`, not re-typed here (2026-09-22, v9 -> v10 repin).
+# These five were four hand-copied literals that `test_campaign` asserted equal
+# to the campaign constants — which is a drift DETECTOR, and a detector only
+# fires after the drift. Binding them makes the drift unrepresentable, so a
+# promotion has exactly one place to edit (`campaign.PRODUCTION_*`) instead of
+# two that agree only because a test says so.
+PRODUCTION_ROOT = Path(campaign.PRODUCTION_REPO)
+PRODUCTION_COMMIT = campaign.PRODUCTION_COMMIT
+# The reward instrument now ships IN production (the v9 overlay was folded into
+# the v10 freeze; see `campaign.MEASUREMENT_REPO`), so the instrument identity is
+# the production identity. Both env knobs stay: they are the recovery-helper
+# escape hatch. They are now independent of one another, because the build root
+# is no longer a subdirectory of the source root — it cannot be, production
+# being frozen.
 INSTRUMENT_ROOT = Path(os.environ.get(
-    "AUTOKERNEL_INSTRUMENT_ROOT",
-    "/mnt/raid0/llm/autokernel/worktrees/ak-final-q6k-20260813"))
+    "AUTOKERNEL_INSTRUMENT_ROOT", campaign.MEASUREMENT_REPO))
 INSTRUMENT_BINARY = Path(os.environ.get(
     "AUTOKERNEL_INSTRUMENT_BINARY",
-    str(INSTRUMENT_ROOT / "build-ak-t0-cpu-f744cc220/bin/llama-bench")))
-INSTRUMENT_BRANCH = "experimental-v9-autokernel-t0-final-q6k-20260813"
-INSTRUMENT_COMMIT = "f744cc220e722d1bda93783959471d44f8e118b0"
+    str(Path(campaign.MEASUREMENT_BUILD_ROOT) / "bin" / "llama-bench")))
+INSTRUMENT_BRANCH = campaign.MEASUREMENT_BRANCH
+INSTRUMENT_COMMIT = campaign.MEASUREMENT_COMMIT
 MODEL = Path(
     "/mnt/raid0/llm/models/lmstudio-community/"
     "Qwen2.5-Coder-0.5B-GGUF/Qwen2.5-Coder-0.5B-Q4_K_M.gguf")

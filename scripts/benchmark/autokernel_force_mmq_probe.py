@@ -41,8 +41,13 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--worktree", type=Path,
                         default=Path("/mnt/raid0/llm/tmp/ak-loop-tree"))
-    parser.add_argument("--anchor-build", type=Path,
-                        default=Path("/mnt/raid0/llm/tmp/build-anchor-j64"))
+    # REQUIRED, no default (2026-09-22) — same reason as
+    # `autokernel_aa_campaign.py`: the old default
+    # `/mnt/raid0/llm/tmp/build-anchor-j64` is build 10125 @ `0db32c06e` (v9),
+    # exists, and is silently stale. Omission must not select an anchor.
+    parser.add_argument("--anchor-build", type=Path, required=True,
+                        help="build directory of the anchor arm; no default, so a "
+                             "superseded anchor cannot be inherited by omission")
     parser.add_argument("--candidate-build", type=Path,
                         default=Path("/mnt/raid0/llm/tmp/build-forcemmq"))
     parser.add_argument("--model", type=Path,

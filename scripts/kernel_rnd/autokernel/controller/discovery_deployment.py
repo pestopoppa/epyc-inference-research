@@ -26,8 +26,19 @@ from . import gpu_load_admission, workload_contract
 
 SCHEMA = "epyc.autokernel.discovery_deployment.v4"
 FROZEN_PRODUCTION_PATH = Path("/mnt/raid0/llm/llama.cpp")
-FROZEN_PRODUCTION_HEAD = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
-FROZEN_PRODUCTION_BRANCH = "production-consolidated-v9"
+# REPINNED 2026-09-22 to the v10 final freeze
+# (`artifacts/operator/ratify_v10_final_freeze_20260922.json`, binary 10303).
+# v9 was `0db32c06e3e550065b78311a6031ef3dd2c4f27c` on
+# `production-consolidated-v9`; it is the rollback anchor.
+#
+# Unlike `campaign.PRODUCTION_*`, a stale value HERE was loud, not silent:
+# `_verify_production` compares these against the live tree's `rev-parse HEAD`
+# and `branch --show-current`, so every sealed deployment hard-failed from the
+# moment the freeze cut. That is the intended failure mode, and the reason these
+# stay declared literals rather than a live read — a sealed config that names a
+# production identity the tree does not have must be REFUSED, never adopted.
+FROZEN_PRODUCTION_HEAD = "ffc1bac82eeca6f9099e1ccd9ba49703c460a115"
+FROZEN_PRODUCTION_BRANCH = "production-consolidated-v10"
 ALLOWED_DEVICE_IDS = frozenset({"mi210_0"})
 SHA = re.compile(r"^[0-9a-f]{64}$")
 GIT_SHA = re.compile(r"^[0-9a-f]{40}$")

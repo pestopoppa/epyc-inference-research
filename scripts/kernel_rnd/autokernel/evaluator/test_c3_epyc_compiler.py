@@ -51,18 +51,18 @@ class C3EpycCompilerTest(unittest.TestCase):
         }
 
     def observed_case(self, case, index: int) -> dict:
-        provider = (C.LLAMA_CPP_PRODUCTION_V9 if index == 2
+        provider = (C.LLAMA_CPP_PRODUCTION if index == 2
                     else C.TORCH_ROCM_COMPILE)
         implementation_sha256 = digest(f"vendor-{index}")
         production_baseline = ({
-            "branch": C.PRODUCTION_V9_BRANCH,
-            "source_commit": C.PRODUCTION_V9_COMMIT,
-            "version": C.PRODUCTION_V9_VERSION,
+            "branch": C.PRODUCTION_BRANCH,
+            "source_commit": C.PRODUCTION_COMMIT,
+            "version": C.PRODUCTION_VERSION,
             "binary_sha256": implementation_sha256,
             "linkage_sha256": digest("production-v9-linkage"),
-            "attestation_ref": C.PRODUCTION_V9_FREEZE_ATTESTATION_REF,
-            "attestation_sha256": C.PRODUCTION_V9_FREEZE_ATTESTATION_SHA256,
-        } if provider == C.LLAMA_CPP_PRODUCTION_V9 else None)
+            "attestation_ref": C.PRODUCTION_FREEZE_ATTESTATION_REF,
+            "attestation_sha256": C.PRODUCTION_FREEZE_ATTESTATION_SHA256,
+        } if provider == C.LLAMA_CPP_PRODUCTION else None)
         return {
             "case_id": case.case_id,
             "state": "observed",
@@ -107,7 +107,7 @@ class C3EpycCompilerTest(unittest.TestCase):
             "surface": surface,
             "integration": {
                 "candidate_branch": "ak/c3-integrated-test",
-                "production_base_commit": C.PRODUCTION_V9_COMMIT,
+                "production_base_commit": C.PRODUCTION_COMMIT,
                 "candidate_source_commit": digest("source-commit")[:40],
                 "patch_bundle_sha256": digest("patch"),
                 "candidate_source_sha256": digest(f"candidate-{target_index}"),
@@ -187,10 +187,10 @@ class C3EpycCompilerTest(unittest.TestCase):
         dequant = self.plan["cases"][2]
         self.assertEqual(dequant["runner_binding_id"], C.EPYC_EXPERIMENTAL_BINARY)
         baseline = self.plan["runner_bindings"][C.EPYC_EXPERIMENTAL_BINARY]["baseline"]
-        self.assertEqual(baseline["provider"], C.LLAMA_CPP_PRODUCTION_V9)
-        self.assertEqual(baseline["source_commit"], C.PRODUCTION_V9_COMMIT)
+        self.assertEqual(baseline["provider"], C.LLAMA_CPP_PRODUCTION)
+        self.assertEqual(baseline["source_commit"], C.PRODUCTION_COMMIT)
         self.assertEqual(baseline["attestation_sha256"],
-                         C.PRODUCTION_V9_FREEZE_ATTESTATION_SHA256)
+                         C.PRODUCTION_FREEZE_ATTESTATION_SHA256)
         rendered = json.dumps(self.plan)
         self.assertNotIn("samples_ns", rendered)
         self.assertNotIn('"speedup":', rendered)

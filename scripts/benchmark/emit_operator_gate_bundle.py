@@ -146,13 +146,17 @@ def _parity_gate(path: Path) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--champion-branch", default="ak/champion/llama-cpp-0db32c06e3e5")
+    # Champion reseeded and production repinned at the 2026-09-22 v10 freeze.
+    # These two defaults move together: the retired champion branch WAS promoted
+    # into v10, so pairing the new champion with the v9 production commit would
+    # seal a bundle whose anchor the champion already contains.
+    ap.add_argument("--champion-branch", default="ak/champion/llama-cpp-ffc1bac82eec")
     ap.add_argument("--champion-commit", default=None,
                     help="expected commit for --champion-branch; REFUSED on "
                          "mismatch so a bundle cannot silently seal a different "
                          "champion than the one the gates were run on")
     ap.add_argument("--production-commit",
-                    default="0db32c06e3e550065b78311a6031ef3dd2c4f27c")
+                    default="ffc1bac82eeca6f9099e1ccd9ba49703c460a115")
     ap.add_argument("--anchor-artifact", type=Path,
                     default=DEFAULT_ANCHOR_ARTIFACT)
     ap.add_argument("--concurrency-artifact", type=Path,

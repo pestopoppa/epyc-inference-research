@@ -242,7 +242,13 @@ CURRENT_CHAMPION = {
     # draft -- that was the FOLD CANDIDATE, the branch the merge was staged on, not the
     # branch the champion lives on. The consolidated champion is on the AutoKernel
     # champion branch; CURRENT-CAMPAIGN.md's banner is the source of truth.
-    "branch": "ak/champion/llama-cpp-0db32c06e3e5",
+    # ★ RENAMED 2026-09-22 at the v10 freeze: the branch this champion lives on
+    # was `ak/champion/llama-cpp-0db32c06e3e5` and is now
+    # `ak/champion/llama-cpp-ffc1bac82eec` (the old name was promoted wholesale
+    # into production-consolidated-v10 and retained as the tag
+    # `retired/ak-champion-llama-cpp-0db32c06e3e5`). ef81196d5 is still reachable
+    # from the new name -- same lineage, new label.
+    "branch": "ak/champion/llama-cpp-ffc1bac82eec",
     "fold_candidate_branch": "inf70/fold-candidate-20260908",  # provenance of the merge
     "recipe": "GGML_NOHUGEPAGE_PROCESS=1 at launch (see CHAMPION_GGML_ENV / THP_SHIM)",
     "recipe_surface": SURFACE,      # ★ CPU DECODE ONLY -- see SURFACE_RECIPES
@@ -332,7 +338,12 @@ CURRENT_CHAMPION = {
         "gpu_tip":            "bff30cebe",
         "champion_of_record": "445e93a8",
         "cpu_lineage":        "9c4f73e29",   # == CHAMPION_COMMIT above (now an ANCESTOR)
-        "frozen_production":  "0db32c06e",   # production v9, FROZEN, binary 10125
+        # NOT repinned to v10, and that is the point: this field names the frozen
+        # production ef81196d5 DESCENDS FROM, and ef81196d5 cannot descend from a
+        # freeze that descends from it. v10 (`ffc1bac82`, binary 10303) was cut
+        # FROM this champion lineage on 2026-09-22; v9 stays the ancestor of
+        # record here.
+        "frozen_production":  "0db32c06e",   # production v9 at fold time, binary 10125
     },
     "fold_properties": (
         "zero files deleted; exactly one --no-ff merge; NO cherry-picks; "

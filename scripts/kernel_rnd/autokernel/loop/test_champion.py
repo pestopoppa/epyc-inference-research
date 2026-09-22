@@ -136,7 +136,7 @@ class TheIncidentStateRefusesToStart(_Incident):
         """The incident test above passes NO --champion-branch: the refusal naming
         CANONICAL proves the default. This pins the constant's value too -- BROKEN
         READS: the sibling name, which is the incident recurring as a default."""
-        self.assertEqual(CANONICAL, "ak/champion/llama-cpp-0db32c06e3e5")
+        self.assertEqual(CANONICAL, "ak/champion/llama-cpp-ffc1bac82eec")
         self.assertNotEqual(pool.CHAMPION_BRANCH, SIBLING)
         self.assertEqual(pool.CHAMPION_BRANCH, CANONICAL)
 

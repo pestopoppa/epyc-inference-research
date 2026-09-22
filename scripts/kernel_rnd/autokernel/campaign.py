@@ -1144,21 +1144,50 @@ DEFAULT_RECIPE_BY_BACKEND = {
 }
 
 #: Serving production, frozen. `worktree.resolve_anchor(expected_commit=...)`
-#: turns "I believe production is at v9" into a checked precondition.
+#: turns "I believe production is at v10" into a checked precondition.
+#:
+#: REPINNED 2026-09-22, v9 -> v10 final freeze
+#: (`artifacts/operator/ratify_v10_final_freeze_20260922.json`). THIS PAIR IS
+#: WHAT THE NEXT PROMOTION EDITS.
+#:
+#: Deliberately declared, not resolved live off the tree: the point of
+#: `expected_commit=` is that the campaign states the baseline it believes it is
+#: measuring and the resolver refuses a tree that disagrees. That is also why
+#: this pair was DANGEROUS while stale rather than merely wrong — the v9 branch
+#: still exists at its old commit, so `resolve_anchor` kept succeeding after the
+#: v10 freeze and every campaign would have measured against v9 with no check
+#: ever failing. A stale anchor here is silent by construction.
 PRODUCTION_REPO = "/mnt/raid0/llm/llama.cpp"
-PRODUCTION_BRANCH = "production-consolidated-v9"
-PRODUCTION_COMMIT = "0db32c06e3e550065b78311a6031ef3dd2c4f27c"
+PRODUCTION_BRANCH = "production-consolidated-v10"
+PRODUCTION_COMMIT = "ffc1bac82eeca6f9099e1ccd9ba49703c460a115"
 
-#: Reviewed measurement source.  The hardened instrument commit is a clean
-#: descendant of the frozen v9 serving commit: candidate worktrees start here
-#: so evaluator-only and correctness fixes are present without modifying
-#: production.
-#: Kernel proposals may change kernel sources but RVP-C6-1 requires all reward
-#: translation units to remain byte-identical to this commit.
-MEASUREMENT_REPO = "/mnt/raid0/llm/autokernel/worktrees/ak-final-q6k-20260813"
-MEASUREMENT_BRANCH = "experimental-v9-autokernel-t0-final-q6k-20260813"
-MEASUREMENT_COMMIT = "f744cc220e722d1bda93783959471d44f8e118b0"
-MEASUREMENT_BUILD_ROOT = os.path.join(MEASUREMENT_REPO, "build-ak-t0-cpu-f744cc220")
+#: Reviewed measurement source.  RETIRED AS A SEPARATE IDENTITY, 2026-09-22.
+#:
+#: The v9-era hardening overlay (`/mnt/raid0/llm/autokernel/worktrees/
+#: ak-final-q6k-20260813`, branch `experimental-v9-autokernel-t0-final-q6k-
+#: 20260813`, commit `f744cc220`) is now an ANCESTOR of production:
+#: `git merge-base --is-ancestor f744cc220 ffc1bac82` is true, and v10's diff
+#: over it across the three reward translation units is +276/-4 where the four
+#: removed lines are an upstream `ggml_ssm_scan` signature port, not a revert of
+#: the hardening.  The overlay worktree no longer exists on disk either, so
+#: `prepare_sources` hard-failed on it regardless of intent.  The reward
+#: instrument therefore ships IN production, and the measurement identity IS the
+#: production identity.
+#:
+#: RVP-C6-1 (`execution/instrument_integrity.py`) is unchanged in force; only its
+#: anchor moved.  It now reads: a candidate may not edit what production ships.
+MEASUREMENT_REPO = PRODUCTION_REPO
+MEASUREMENT_BRANCH = PRODUCTION_BRANCH
+MEASUREMENT_COMMIT = PRODUCTION_COMMIT
+#: NOT under `MEASUREMENT_REPO` any more.  It used to be a build directory inside
+#: the overlay worktree; that worktree is now the FROZEN production tree, and
+#: invariant 3 (`worktree.PRODUCTION_TREES`) forbids any actor from building in
+#: one.  Keyed by the production commit under the loop's existing scratch root,
+#: so a promotion is a cache MISS that builds once rather than a stale directory
+#: silently reused under the new freeze's name — the same contract as
+#: `loop/production.baseline_slot`.
+MEASUREMENT_BUILD_ROOT = os.path.join(
+    "/mnt/raid0/llm/tmp", f"build-ak-t0-cpu-{PRODUCTION_COMMIT[:9]}")
 
 # ``llama-cli`` now starts an embedded HTTP server and talks to it over a
 # loopback socket. Candidate T0 is deliberately network-denied, so use the
@@ -3195,9 +3224,13 @@ class HostOps:
             repo = worktree.GitRepo(tree)
             self._fingerprints[tree] = worktree.fingerprint_tree(repo)
 
-        # Serving and reward-instrument identities are distinct.  The latter is
-        # an evaluator-only one-commit overlay on production and is the source
-        # from which both the T1 anchor and every candidate are built.
+        # Serving and reward-instrument identity are now THE SAME (2026-09-22):
+        # the evaluator-only overlay was folded into production at the v10
+        # freeze, so production is the source from which both the T1 anchor and
+        # every candidate are built.  The two resolutions are still performed
+        # separately, and still compared below, so that a future campaign that
+        # re-separates them (a new overlay branch) needs no structural change —
+        # only the MEASUREMENT_* constants.
         try:
             production_anchor = worktree.resolve_anchor(
                 worktree.GitRepo(PRODUCTION_REPO), PRODUCTION_BRANCH,
@@ -3219,10 +3252,20 @@ class HostOps:
                     f"measurement working tree is on "
                     f"{measurement_anchor.fingerprint.symbolic_ref!r}, required "
                     f"{MEASUREMENT_BRANCH!r}",)), "measurement_instrument", hard=True)
-            if measurement_anchor.fingerprint.status_porcelain:
+            # TRACKED changes only.  `fingerprint.status_porcelain` is the
+            # default `-unormal` status, and the measurement tree is now the
+            # SHARED production checkout, which legitimately carries untracked
+            # local tooling (`.gitnexusignore`, `tools/math-tools/`) that is not
+            # authority for anything and must not be deleted or prettified here.
+            # This is the same line `controller/discovery_deployment.py
+            # ::_verify_production` draws with `--untracked-files=no`, and the
+            # same one `scripts/session/verify_llama_cpp.sh` enforces on the
+            # freeze: tracked/index changes invalidate the pin, untracked files
+            # do not.  Source pinning still names committed bytes only.
+            if measurement_repo.tracked_status_porcelain():
                 fold(schemas.Check(schemas.FAIL, (
-                    "measurement working tree is dirty; source pinning must name committed "
-                    "bytes only",)), "measurement_instrument", hard=True)
+                    "measurement working tree has tracked changes; source pinning must "
+                    "name committed bytes only",)), "measurement_instrument", hard=True)
             parents = measurement_repo.commit_parents(MEASUREMENT_COMMIT)
             if not measurement_repo.is_ancestor(
                     production_anchor.commit, MEASUREMENT_COMMIT):
