@@ -11352,7 +11352,7 @@ deprecated_models:
     path_was: /mnt/raid0/llm/models/unsloth/GLM-4.7-Flash-GGUF/
     size_gb: 18
     reason: >-
-      Zero active consumer, verified 2026-09-01 against BOTH registries (no lean role), the retention-language sweep (no "rollback"/"retained"/"REMAIN ON DISK"/"kept per"/"preserved"), and all 177 active handoffs (no open-task dependency). Operator-approved zero-consumer purge. Master tier-B catalogue row. Superseded in the GLM line by GLM-5.3-Flash (INF-69), which is retained.
+      Zero active consumer, verified 2026-09-01 against BOTH registries (no lean role), the retention-language sweep (no "rollback"/"retained"/"REMAIN ON DISK"/"kept per"/"preserved"), and all 177 active handoffs (no open-task dependency). Operator-approved zero-consumer purge. Master tier-B catalogue row. Superseded in the GLM line by GLM-5.3-Flash (INF-69), which was itself deleted 2026-09-22 (operator-directed; superseded by the DeepSeek-V4.1-Flash evaluation).
     deleted: 2026-09-01
 
   - model: ternary-bonsai-27b (Q2_g64, Q2_0, dspark, mmproj)
