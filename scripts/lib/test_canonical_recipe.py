@@ -15,6 +15,7 @@ These tests catch the drift scenarios that bit the project on 2026-05-02 and
 
 from __future__ import annotations
 
+import hashlib
 import os
 import sys
 import tempfile
@@ -304,6 +305,42 @@ class TestBinaryDiscovery(unittest.TestCase):
         binary, libs = r.discover_canonical_bench_binary()
         self.assertEqual(binary, r.V6_IQK_BENCH)
         self.assertEqual(libs, r.EXPECTED_LIBS_V6_IQK)
+
+    def test_discovery_resolves_through_the_kernel_store_not_the_source_tree(self):
+        """The canonical bench must be the binary production SERVES.
+
+        Regression guard for the 2026-09-22 v10 cutover. v10 is the first
+        production kernel served from kernels/production/<backend> rather than
+        the frozen tree's own build/, and that tree's build/ still holds the
+        PREVIOUS kernel. Pointing discovery at the tree therefore measured v9
+        and labelled it production -- with no error, because a stale build is
+        internally consistent and passes linkage validation.
+
+        Asserting `binary == V6_IQK_BENCH` cannot catch that: it compares the
+        constant to itself and stays green however the constant is spelled.
+        This asserts the two properties that actually failed -- the binary is
+        byte-identical to what the store's production symlink resolves to, and
+        it does NOT come from the source tree's build directory.
+        """
+        store = "/mnt/raid0/llm/kernels/production/cpu/llama-bench"
+        if not os.path.isfile(store):
+            self.skipTest("kernel store production/cpu is not populated")
+        binary, libs = r.discover_canonical_bench_binary()
+
+        with open(binary, "rb") as f:
+            got = hashlib.sha256(f.read()).hexdigest()
+        with open(store, "rb") as f:
+            want = hashlib.sha256(f.read()).hexdigest()
+        self.assertEqual(
+            got, want,
+            "canonical bench is not the binary production serves: "
+            f"{binary} ({got[:16]}) vs store {want[:16]}")
+
+        for path in [binary, *libs]:
+            self.assertFalse(
+                path.startswith("/mnt/raid0/llm/llama.cpp/build"),
+                f"canonical bench resolved into the frozen SOURCE tree ({path}); "
+                "that directory holds the previous production kernel")
 
     def test_v4_fork_discovery_is_retired(self):
         with self.assertRaises(r.CanonicalRecipeViolation) as ctx:

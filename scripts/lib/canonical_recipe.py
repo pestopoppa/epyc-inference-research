@@ -343,10 +343,34 @@ EXPECTED_LIBS_V5_CLEAN: list[str] = [
 # deprecated; the IK_LLAMA_* constants above are retained ONLY as historical
 # fallbacks. v6-iqk is the SELECTED canonical bench binary so the gate measures
 # the production kernel (iqk-ON) — NOT v5-clean and NOT a stale ik_llama build.
-V6_IQK_BENCH: str = "/mnt/raid0/llm/llama.cpp/build/bin/llama-bench"
-V6_IQK_SERVER: str = "/mnt/raid0/llm/llama.cpp/build/bin/llama-server"
+# 2026-09-22 v10 cutover: RESOLVE THROUGH THE KERNEL STORE, NOT THE SOURCE TREE.
+#
+# These three constants used to name /mnt/raid0/llm/llama.cpp/build/bin directly.
+# That was correct while the frozen tree built its own serving binaries, and it
+# became SILENTLY WRONG at the v10 promotion, which is the first one served from
+# kernels/production/<backend>. The tree's build/ was never rebuilt, so it still
+# holds the v9 binaries: on 2026-09-22 the tree's llama-bench was byte-identical
+# (sha256 56ebb2ae...) to kernels/archive/cpu-20260810-0db32c06e/bin/llama-bench
+# while production served 10303 (ffc1bac82). Every canonical bench taken through
+# this module in that window measured v9 and attributed it to production.
+#
+# Nothing failed, which is the point: the path existed, the binary ran, and
+# assert_binary_resolves_correctly passed because a stale build IS internally
+# consistent. Linkage validation proves a binary loads its OWN libraries; it
+# cannot prove the binary is the one production serves.
+#
+# FAIL-CLOSED BY CONSTRUCTION. If the store symlink does not resolve, these keep
+# the unresolved store path rather than falling back to the tree. The candidate
+# is then skipped as a missing file and discovery raises, because a loud refusal
+# is the correct outcome and a silent v9 measurement is not.
+_PRODUCTION_CPU_BIN: str = os.path.realpath("/mnt/raid0/llm/kernels/production/cpu")
+
+V6_IQK_BENCH: str = os.path.join(_PRODUCTION_CPU_BIN, "llama-bench")
+V6_IQK_SERVER: str = os.path.join(_PRODUCTION_CPU_BIN, "llama-server")
 EXPECTED_LIBS_V6_IQK: list[str] = [
-    "/mnt/raid0/llm/llama.cpp/build/bin/libggml-cpu.so.0.15.2",
+    # Matched on the basename STEM by assert_binary_resolves_correctly, so the
+    # soname suffix is documentation, not a pin. Kept for readability.
+    os.path.join(_PRODUCTION_CPU_BIN, "libggml-cpu.so.0.16.0"),
 ]
 
 # Retired Strategy-B fork for the deleted antirez DeepSeek-V4 artifact.  Kept as
@@ -664,8 +688,14 @@ def discover_canonical_bench_binary(
     raise FileNotFoundError(
         f"No llama-bench binary found at any candidate path:\n"
         f"  {V6_IQK_BENCH}\n  {IK_LLAMA_BENCH}\n  {V5_CLEAN_BENCH}\n"
-        f"Check that the v6 canonical tree is built (cmake --build "
-        f"/mnt/raid0/llm/llama.cpp/build).\n"  # 2026-06-26 v6 cutover
+        f"The production candidate resolves through the KERNEL STORE "
+        f"(/mnt/raid0/llm/kernels/production/cpu -> {_PRODUCTION_CPU_BIN}); a "
+        f"missing candidate there means the store symlink is broken or the "
+        f"promoted build is incomplete. Check with "
+        f"scripts/session/verify_kernel_store.sh in epyc-root. Do NOT point "
+        f"this back at /mnt/raid0/llm/llama.cpp/build — that tree holds the "
+        f"PREVIOUS production kernel and measuring it silently mislabels the "
+        f"result.\n"  # 2026-09-22 v10 cutover
     )
 
 
