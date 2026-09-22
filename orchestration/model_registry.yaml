@@ -11828,6 +11828,27 @@ runtime_quirks:
 # Models deleted 2026-01-18 during MiniMax M2.1 download cleanup
 # Based on BLIND_RESCORE_2026-01-16.md analysis
 deprecated_models:
+  - model: GLM-5.3-Flash-UD-Q4_K_XL (unsloth, 6 shards)
+    path_was: /mnt/raid0/llm/models/unsloth/GLM-5.3-Flash-GGUF/UD-Q4_K_XL/
+    size_gb: 186
+    blind_score: {pct: null, note: "never admitted; INF-69 candidate c463f601b was not accepted, T2/T4 closed unrun"}
+    reason: "Operator-directed 2026-09-22: retired in favour of DeepSeek-V4.1-Flash (INF-77). Never in the lineup, no registry role. glm5next port source survives as pushed fork branches experimental/glm53-text-mtp-20260908 (f8e2668b6), ak/champion-glm53-candidate-20260909 (c463f601b), experimental/glm53-mtp-longprefill-fix-20260909 (7c78663de); its 28 AutoKernel CPU keeps are ported onto v10 as experimental/glm53-keeps-on-v10-20260922 pending INF-77 DS41-K1. Cited evidence is tracked in epyc-root commit 68919e5c (glm53-evidence-20260922 under its autokernel artifacts dir)."
+    deleted: 2026-09-22
+
+  - model: GLM-5.3-Flash-DFlash2-bf16.gguf
+    path_was: /mnt/raid0/llm/models/GLM-5.3-Flash-DFlash2-bf16.gguf
+    size_gb: 2.2
+    blind_score: {pct: null, note: "drafter; target deleted"}
+    reason: "DFlash2 block drafter for GLM-5.3-Flash; deleted with its target 2026-09-22 (operator-directed)."
+    deleted: 2026-09-22
+
+  - model: GLM-5.3-Flash-DFlash2-Q8_0.gguf
+    path_was: /mnt/raid0/llm/models/GLM-5.3-Flash-DFlash2-Q8_0.gguf
+    size_gb: 1.2
+    blind_score: {pct: null, note: "drafter; target deleted"}
+    reason: "DFlash2 block drafter for GLM-5.3-Flash; deleted with its target 2026-09-22 (operator-directed)."
+    deleted: 2026-09-22
+
   - model: Meta-Llama-3-70B-Instruct-Q4_K_M
     path_was: /mnt/raid0/llm/lmstudio/models/lmstudio-community/Meta-Llama-3-70B-Instruct-GGUF/
     size_gb: 40
