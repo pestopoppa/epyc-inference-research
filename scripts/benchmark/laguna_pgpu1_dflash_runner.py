@@ -363,6 +363,17 @@ def mapped_identity_matches(mapped: dict[str, Any], expected: dict[str, Any]) ->
     )
 
 
+#: The libraries that MUST be resident for a run to have happened at all. The subset check
+#: below is one-directional, so on its own it would pass a process that loaded nothing or
+#: loaded only a peripheral library; residency is therefore asserted positively too.
+#: Stems, because filenames carry version suffixes that move with every build
+#: (libggml.so.0.16.0, libllama.so.0.0.10303).
+#: Deliberately NOT including libggml-base: that is a packaging detail of the current
+#: ggml generation, and this host runs three of them (llama.cpp 0.16.0, whisper.cpp
+#: 0.18.0, qwentts.cpp 0.17.0). Requiring it would over-fit to one tree.
+REQUIRED_RESIDENT_LIBRARY_STEMS = ("libggml.so", "libllama.so")
+
+
 def live_artifacts_valid(pid: int, expected_binding: dict[str, Any], require_drafter: bool) -> tuple[bool, str]:
     server = expected_binding.get("server") or {}
     binary = server.get("artifact") or {}
@@ -388,8 +399,44 @@ def live_artifacts_valid(pid: int, expected_binding: dict[str, Any], require_dra
         (str(Path(str(entry.get("resolved_path") or entry.get("path") or "")).resolve()), entry.get("dev"), entry.get("inode")): entry
         for entry in expected_libs
     }
-    if len(unique_actual_libs) != len(unique_expected_libs) or set(unique_actual_libs) != set(unique_expected_libs):
-        return False, "mapped local libllama/libggml artifacts differ from preflight identities"
+    # SUBSET, not equality. Corrected 2026-09-22 after it failed 6/6 replicates of the
+    # v10 KV-quant sweep and emitted zero records.
+    #
+    # Equality asserts "the set of libraries LOADED is exactly the set PINNED", and that
+    # is not a property llama.cpp has. Two measured reasons:
+    #
+    #   1. A pinned library need not be loaded. The v10 GPU receipt pins 8 libraries;
+    #      a text-only run maps 7, because libmtmd is only loaded with a multimodal
+    #      projector. Equality reads that legitimate absence as tampering.
+    #   2. The pin source and the load set are gathered by different mechanisms.
+    #      llama.cpp DLOPENS its ggml backend, so `ldd` on llama-server reports no
+    #      libggml/libllama lines at all for a store-resolved binary -- measured: ldd
+    #      yields 0, /proc/<pid>/maps yields 7. An equality check against an
+    #      ldd-derived set can therefore never pass, which is exactly the trap
+    #      CLAUDE.md names: ldd cannot prove residency, /proc/maps is the proof.
+    #
+    # The property worth enforcing is the one-directional one: EVERY library actually
+    # loaded from the binary's own directory must carry a pinned, matching identity, so
+    # no unpinned or substituted artifact can be resident. That is strictly stronger
+    # than equality in the direction that matters and no longer fails on a pinned but
+    # unused library. Both sides must be non-empty -- an empty pin set proves nothing,
+    # and an empty mapped set means nothing was demonstrated to be loaded.
+    if not unique_expected_libs:
+        return False, "no preflight library identities were pinned, so residency cannot be proven"
+    if not unique_actual_libs:
+        return False, "no local libllama/libggml artifacts are mapped by the process"
+    unpinned = set(unique_actual_libs) - set(unique_expected_libs)
+    if unpinned:
+        names = sorted(Path(path).name for path, _dev, _inode in unpinned)
+        return False, f"mapped local libllama/libggml artifacts are not pinned by preflight: {names}"
+    mapped_names = {Path(path).name for path, _dev, _inode in unique_actual_libs}
+    missing_core = [
+        soname for soname in REQUIRED_RESIDENT_LIBRARY_STEMS
+        if not any(name.startswith(soname) for name in mapped_names)
+    ]
+    if missing_core:
+        return False, (f"required local libllama/libggml artifacts are not resident: "
+                      f"{missing_core} (mapped: {sorted(mapped_names)})")
     models = expected_binding.get("models") or {}
     target = models.get("target") or {}
     drafter = models.get("drafter") or {}

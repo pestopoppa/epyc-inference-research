@@ -868,6 +868,81 @@ def test_stable_file_identity_rejects_hash_race(monkeypatch) -> None:
         assert runner.stable_file_identity(artifact)["stable"] is False
 
 
+def test_live_artifacts_allow_pinned_but_unmapped_library(monkeypatch) -> None:
+    """A pinned library that is not loaded is NOT tampering.
+
+    Regression guard for 2026-09-22, when this check cost a 30-launch GPU window:
+    it required the mapped set to EQUAL the pinned set, and every replicate of the
+    v10 KV-quant sweep failed with zero records. The v10 GPU linkage receipt pins 8
+    libraries; a text-only run maps 7, because libmtmd is only loaded with a
+    multimodal projector. Equality read that legitimate absence as a violation.
+
+    The property that matters is one-directional -- every library actually LOADED
+    must be pinned -- and it is asserted by its sibling test below.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        binary, llama, ggml, peripheral, target, drafter = (
+            root / name for name in
+            ("llama-server", "libllama.so", "libggml.so", "libggml-extra.so", "target.gguf", "drafter.gguf"))
+        for path in (binary, llama, ggml, peripheral, target, drafter):
+            path.write_bytes(path.name.encode())
+        binding = {
+            "server": {"artifact": runner.stable_file_identity(binary),
+                       "local_llama_ggml_libraries": [runner.stable_file_identity(x)
+                                                      for x in (llama, ggml, peripheral)]},
+            "models": {"target": runner.stable_file_identity(target),
+                       "drafter": runner.stable_file_identity(drafter)}}
+        expected_exe = binary.stat()
+        original_stat = runner.os.stat
+        monkeypatch.setattr(runner.os, "stat", lambda path, *a, **k:
+                            expected_exe if str(path) == "/proc/1234/exe" else original_stat(path, *a, **k))
+
+        def maps(*paths: Path) -> dict:
+            lines = []
+            for path in paths:
+                value = path.stat()
+                lines.append(f"00400000-00401000 r--p 00000000 "
+                             f"{os.major(value.st_dev):02x}:{os.minor(value.st_dev):02x} "
+                             f"{value.st_ino} {path}\n")
+            return {"returncode": 0, "stdout": "".join(lines)}
+
+        # A pinned library NOT mapped -- the exact shape that failed the window.
+        # (In the real case it was libmtmd, which additionally never reaches the
+        # actual set at all: the filter matches libllama*/libggml* only, so the
+        # pinned set was 8 and the mapped set 7 and equality could not hold.)
+        monkeypatch.setattr(runner, "proc_maps", lambda _pid: maps(llama, ggml, target, drafter))
+        assert runner.live_artifacts_valid(1234, binding, True) == (True, "ok")
+
+        # An UNPINNED library that IS mapped must still be refused.
+        stranger = root / "libggml-stranger.so"
+        stranger.write_bytes(b"not pinned")
+        monkeypatch.setattr(runner, "proc_maps",
+                            lambda _pid: maps(llama, ggml, stranger, target, drafter))
+        ok, reason = runner.live_artifacts_valid(1234, binding, True)
+        assert ok is False and "not pinned by preflight" in reason
+
+        # Nothing pinned at all proves nothing, and must not pass vacuously.
+        empty = {**binding, "server": {**binding["server"], "local_llama_ggml_libraries": []}}
+        monkeypatch.setattr(runner, "proc_maps", lambda _pid: maps(llama, ggml, target, drafter))
+        ok, reason = runner.live_artifacts_valid(1234, empty, True)
+        assert ok is False and "no preflight library identities" in reason
+
+        # A process that maps no local ggml/llama artifact at all must be refused.
+        # The empty-mapped guard fires before the required-core one, which is the
+        # right order: "nothing was loaded" is a more precise answer than "libggml
+        # is missing from the nothing that was loaded".
+        monkeypatch.setattr(runner, "proc_maps", lambda _pid: maps(target, drafter))
+        ok, reason = runner.live_artifacts_valid(1234, binding, True)
+        assert ok is False and "no local libllama/libggml artifacts are mapped" in reason
+
+        # ... and a process that maps a pinned but PERIPHERAL library only, with no
+        # core library resident, is refused by the required-core check.
+        monkeypatch.setattr(runner, "proc_maps", lambda _pid: maps(peripheral, target, drafter))
+        ok, reason = runner.live_artifacts_valid(1234, binding, True)
+        assert ok is False and "not resident" in reason
+
+
 def test_live_artifacts_reject_wrong_binary_libs_and_model_mappings(monkeypatch) -> None:
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
