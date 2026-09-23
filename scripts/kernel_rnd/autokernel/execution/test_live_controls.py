@@ -396,6 +396,54 @@ class BetweenLegPolicy(unittest.TestCase):
                 "recorded_as_noise_not_a_gate")
             self.assertFalse(receipt["inference_witness"]["competing"])
 
+    def test_resident_idle_server_is_admitted_and_what_was_tolerated_is_journalled(self):
+        """The whole point of the v2 policy: present but idle is admissible.
+
+        The production stack stays up, so every between-leg boundary sees
+        unowned llama-servers. They are admitted only with a closed, idle span,
+        and the record names each one and the core-seconds it was allowed.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            adapter = mock.Mock()
+            adapter.attest.return_value = self._attestation()
+            tolerated = [{"pid": 2021760, "cpu_core_seconds": 0.03, "span_s": 279.06,
+                          "cores_equivalent": 0.0001,
+                          "cmdline_head": "llama-server --port 8074"}]
+            with mock.patch.object(
+                    live_controls.microbench, "CpuRegionClaimAdapter",
+                    return_value=adapter), \
+                 mock.patch.object(
+                    live_controls.screening_baseline, "competing_inference_witness",
+                    return_value={
+                        "basis": live_controls.screening_baseline.IDLENESS_BASIS,
+                        "competing": False,
+                        "findings": [{"argv0_basename": "llama-server", "pid": 2021760}],
+                        "ordinary_processes_ignored": True,
+                        "resident_unowned_servers": 1,
+                        "idleness": {"span": "closed", "busy": False,
+                                     "tolerated": tolerated, "violations": []},
+                        "cpu_ledger": {"schema": "x", "entries": {"2021760": {}}},
+                    }):
+                receipt = live_controls._observe_between_legs(
+                    root, boundary="aa_to_neutral", claim=object())
+            self.assertFalse(receipt["inference_witness"]["competing"])
+            self.assertEqual(
+                receipt["inference_witness"]["idleness"]["tolerated"], tolerated)
+            self.assertEqual(
+                receipt["policy"]["blocking_condition"],
+                "witnessed_unowned_inference_cpu_work_in_span_only")
+            # And the ledger is durable, so the NEXT boundary closes this span.
+            records = [json.loads(line) for line in (
+                root / "between_leg_observations.jsonl").read_text().splitlines()]
+            self.assertEqual(
+                live_controls._previous_inference_ledger(root),
+                records[0]["inference_witness"]["cpu_ledger"])
+
+    def test_previous_ledger_is_none_before_any_observation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertIsNone(live_controls._previous_inference_ledger(Path(tmp)))
+
     def test_competing_llama_is_recorded_and_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -407,12 +455,19 @@ class BetweenLegPolicy(unittest.TestCase):
                  mock.patch.object(
                     live_controls.screening_baseline, "competing_inference_witness",
                     return_value={
-                        "basis": "interim_inference_executable_scan",
+                        "basis": live_controls.screening_baseline.IDLENESS_BASIS,
                         "competing": True,
                         "findings": [{"argv0_basename": "llama-server"}],
                         "ordinary_processes_ignored": True,
+                        "idleness": {"span": "closed", "busy": True, "tolerated": [],
+                                     "violations": [{"pid": 4242, "reason": "cpu_work",
+                                                     "cpu_core_seconds": 91.5,
+                                                     "cmdline_head": "llama-server -m m.gguf"}]},
+                        "cpu_ledger": {"entries": {}},
                     }):
-                with self.assertRaisesRegex(RuntimeError, "competing model inference"):
+                # The refusal must NAME the process and the work it did, so the
+                # operator is not left guessing which server broke the window.
+                with self.assertRaisesRegex(RuntimeError, "pid 4242.*91.500 core-s"):
                     live_controls._observe_between_legs(
                         root, boundary="aa_to_neutral", claim=object())
             records = [json.loads(line) for line in (

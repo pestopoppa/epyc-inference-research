@@ -97,14 +97,23 @@ LEGACY_ANCHOR_MOTION_SETTLING = {
     "required_samples": campaign.POST_T0_QUIET_SAMPLES,
     "sample_interval_s": campaign.POST_T0_QUIET_SAMPLE_INTERVAL_S,
 }
+# v2 (2026-09-23): the blocking condition is no longer the PRESENCE of an
+# unowned inference server but WORK done by one inside the span between two
+# consecutive boundaries, proved from the cumulative /proc CPU-time counters.
+# This dict is sealed into the campaign declaration and re-compared against
+# every sample (`campaign.py` declared_between_leg_policy), so a campaign
+# declared under v1 cannot be resumed under v2 -- which is the intended
+# journalling: what a run tolerated is recorded in the run's own declaration.
 BETWEEN_LEG_POLICY = {
-    "schema": "epyc.autokernel.between_leg_policy.v1",
+    "schema": "epyc.autokernel.between_leg_policy.v2",
     "ordinary_load": "recorded_as_measurement_noise_never_waited_or_refused",
-    "blocking_condition": "witnessed_competing_model_inference_only",
-    "inference_witness": "interim_inference_executable_scan",
+    "blocking_condition": "witnessed_unowned_inference_cpu_work_in_span_only",
+    "inference_witness": screening_baseline.IDLENESS_BASIS,
+    "idle_allowance_core_s": screening_baseline.IDLE_SPAN_ALLOWANCE_CORE_S,
+    "idle_allowance_cores": screening_baseline.IDLE_SPAN_ALLOWANCE_CORES,
 }
 ANCHOR_MOTION_SETTLING = {
-    "schema": "epyc.autokernel.anchor_motion_transition.v2",
+    "schema": "epyc.autokernel.anchor_motion_transition.v3",
     "kind": "claim_held_inference_exclusion",
     "required_samples": 1,
     "ordinary_load_policy": BETWEEN_LEG_POLICY["ordinary_load"],
@@ -1195,6 +1204,25 @@ def _import_interrupted_raw(
     _preserve_interrupted_file(output_root, raw_path, label=f"raw-{label}")
 
 
+def _previous_inference_ledger(output_root: Path) -> dict[str, Any] | None:
+    """The last durable CPU-time ledger, so each leg closes the prior span.
+
+    Chaining through the observation file rather than through process memory is
+    deliberate: a resumed campaign re-anchors from the same durable record the
+    reader sees, and there is no in-memory state to drift from the journal.
+    """
+    path = output_root / "between_leg_observations.jsonl"
+    try:
+        lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    except FileNotFoundError:
+        return None
+    for line in reversed(lines):
+        ledger = ((json.loads(line).get("inference_witness") or {}).get("cpu_ledger"))
+        if ledger:
+            return ledger
+    return None
+
+
 def _observe_between_legs(
         output_root: Path, *, boundary: str, claim: object) -> dict[str, Any]:
     """Record ordinary load and refuse only witnessed competing inference.
@@ -1213,7 +1241,8 @@ def _observe_between_legs(
         load_error = f"{type(exc).__name__}: {exc}"
     witness_error = None
     try:
-        witness = screening_baseline.competing_inference_witness()
+        witness = screening_baseline.competing_inference_witness(
+            previous_ledger=_previous_inference_ledger(output_root))
     except screening_baseline.BaselineBankError as exc:
         witness = None
         witness_error = str(exc)
@@ -1247,7 +1276,9 @@ def _observe_between_legs(
             f"{witness_error}")
     if witness["competing"]:
         raise RuntimeError(
-            f"between-leg boundary {boundary!r} witnessed competing model inference")
+            f"between-leg boundary {boundary!r} witnessed unowned model inference "
+            "doing work inside the measured span: "
+            + screening_baseline.violation_summary(witness))
     return record
 
 

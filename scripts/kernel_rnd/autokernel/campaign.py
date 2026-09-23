@@ -4239,6 +4239,28 @@ class HostOps:
         return recipes.construct(spec.recipe_id, binding=binding,
                                  params=spec.params_for_arm(arm), arm=arm)
 
+    def _witness_inference_idle(self, *, boundary: str,
+                                raise_on_competing: bool = True) -> dict[str, Any]:
+        """Chain the unowned-inference idleness ledger across campaign boundaries.
+
+        Each consecutive pair of boundaries brackets one measurement window, so
+        no window goes unobserved: the /proc CPU-time counters are cumulative,
+        and a server that did work between two boundaries still carries that
+        work in the closing read.  The full ledger (what was tolerated, how
+        many core-seconds, and the allowance it was measured against) rides in
+        the receipt that is journalled at each boundary.
+        """
+        witness = screening_baseline.competing_inference_witness(
+            previous_ledger=getattr(self, "_idle_ledger", None))
+        witness["boundary"] = boundary
+        self._idle_ledger = witness["cpu_ledger"]
+        if raise_on_competing and witness["competing"]:
+            raise RuntimeError(
+                f"unowned model inference did work inside the {boundary!r} window "
+                "under a held claim: "
+                + screening_baseline.violation_summary(witness))
+        return witness
+
     def create_screening_baseline(self, spec: CampaignSpec, *, output: str | Path) -> dict[str, Any]:
         """Execute and seal exactly three bound anchor calls for a discovery batch."""
         if self._claim_binding is None:
@@ -4261,19 +4283,19 @@ class HostOps:
                  "reps": spec.reps,
                  "n_prompt": (spec.n_prompt if spec.recipe.phase == "prefill" else 0),
                  "n_gen": spec.n_gen}
-        witness = screening_baseline.competing_inference_witness()
-        if witness["competing"]:
-            raise RuntimeError("competing model inference occupies claimed screening compute")
+        witness = self._witness_inference_idle(boundary="screening-baseline-open")
         bank = screening_baseline.create(
             frame=frame, anchor_command=anchor.to_dict(),
             invoke_anchor=lambda: screening_baseline.invoke_command(
                 command=anchor, spawner=spawner), anchor_count=3)
+        closing = self._witness_inference_idle(boundary="screening-baseline-anchor-calls")
         target.parent.mkdir(parents=True, exist_ok=True)
         temporary = target.with_suffix(target.suffix + ".tmp")
         temporary.write_text(json.dumps(bank.to_dict(), sort_keys=True) + "\n", encoding="utf-8")
         os.replace(temporary, target)
         return {"path": str(target), "baseline_sha256": bank.to_dict()["baseline_sha256"],
                 "anchor_invocations": 3, "inference_witness": witness,
+                "closing_inference_witness": closing,
                 "non_promotable": True}
 
     # -- 5. the paired blocks ---------------------------------------------
@@ -4361,9 +4383,7 @@ class HostOps:
                     f"{'; '.join(attestation.check.reasons)}")
             state = self._read_host_state(cpu_list=spec.cpu_list)
             load = policy.check_load(state, cpu_count=len(state.khz_by_cpu) or 1)
-            witness = screening_baseline.competing_inference_witness()
-            if witness["competing"]:
-                raise RuntimeError("competing model inference occupies claimed AutoKernel compute")
+            witness = self._witness_inference_idle(boundary="post-t0-quiet")
             samples.append({
                 "index": index + 1,
                 "host_state": state.to_dict(),
@@ -4446,13 +4466,15 @@ class HostOps:
                      "reps": spec.reps,
                      "n_prompt": (spec.n_prompt if spec.recipe.phase == "prefill" else 0),
                      "n_gen": spec.n_gen}
-            witness = screening_baseline.competing_inference_witness()
+            witness = self._witness_inference_idle(boundary="screen-open")
             report = screening_baseline.screen(
                 bank=spec.screening_baseline, frame=frame,
                 invoke_candidate=lambda: screening_baseline.invoke_command(
                     command=candidate_cmd, spawner=spawner),
                 competing_inference=bool(witness["competing"]),
-                candidate_command=candidate_cmd.to_dict())
+                candidate_command=candidate_cmd.to_dict(),
+                close_span=lambda: self._witness_inference_idle(
+                    boundary="screen-candidate-calls", raise_on_competing=False))
             report["inference_witness"] = witness
             self._screening_report = report
             center = float(report["baseline_center"])

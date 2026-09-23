@@ -820,7 +820,8 @@ class TestPostT0QuietBoundary(unittest.TestCase):
                     mock.patch.object(campaign.screening_baseline,
                                       "competing_inference_witness",
                                       return_value={"competing": False,
-                                                    "findings": []}), \
+                                                    "findings": [],
+                                                    "cpu_ledger": {"schema": campaign.screening_baseline.IDLENESS_SCHEMA, "entries": {}}}), \
                     mock.patch.object(campaign.storage, "assert_not_scratch",
                                       side_effect=lambda root, **_kw: root):
                 receipt = ops.settle_after_t0(
@@ -865,7 +866,8 @@ class TestPostT0QuietBoundary(unittest.TestCase):
             with mock.patch.object(campaign.microbench, "CpuRegionClaimAdapter",
                                    return_value=witness), \
                     mock.patch.object(campaign.screening_baseline, "competing_inference_witness",
-                                      return_value={"competing": False}), \
+                                      return_value={"competing": False,
+                                                    "cpu_ledger": {"schema": campaign.screening_baseline.IDLENESS_SCHEMA, "entries": {}}}), \
                     mock.patch.object(campaign.storage, "assert_not_scratch", side_effect=lambda root, **_kw: root):
                 ops.settle_after_t0(spec(journal_root=journal_root), object())
         self.assertEqual(witness.attest.call_count, 1)
@@ -2367,7 +2369,8 @@ class TestExecuteRefusesAnOpsThatCannotFinishARun(unittest.TestCase):
                 mock.patch.object(ops, "_candidate_sandbox_policy"), \
                 mock.patch.object(campaign.screening_baseline,
                                   "competing_inference_witness",
-                                  return_value={"competing": False}), \
+                                  return_value={"competing": False,
+                                                "cpu_ledger": {"schema": campaign.screening_baseline.IDLENESS_SCHEMA, "entries": {}}}), \
                 mock.patch.object(campaign.screening_baseline, "screen",
                                   return_value=dict(report)):
             observed = ops.run_paired_blocks(built, object(), object())

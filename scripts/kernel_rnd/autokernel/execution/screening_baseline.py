@@ -7,9 +7,12 @@ from __future__ import annotations
 
 import json
 import hashlib
+import os
+import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping, Optional
 
 from .. import schemas
 from ..evaluator import recipes
@@ -142,7 +145,8 @@ def _semantic_command(command: Mapping[str, Any]) -> dict[str, Any]:
 
 def screen(*, bank: BaselineBank, frame: Mapping[str, Any], invoke_candidate,
            competing_inference: bool,
-           candidate_command: Mapping[str, Any]) -> dict[str, Any]:
+           candidate_command: Mapping[str, Any],
+           close_span: Optional[Callable[[], Mapping[str, Any]]] = None) -> dict[str, Any]:
     """Three candidate-only calls; ordinary host load is intentionally not input.
 
     The caller must provide the claim-scoped competing-inference witness. That
@@ -167,8 +171,16 @@ def screen(*, bank: BaselineBank, frame: Mapping[str, Any], invoke_candidate,
             f"semantic_equal={anchor_semantic == candidate_semantic}, "
             f"artifact_equal={dict(bank.anchor_artifacts) == candidate_artifacts}")
     samples = tuple(float(invoke_candidate()) for _ in range(3))
+    # Close the bracket.  `competing_inference` above only proved the host was
+    # quiet BEFORE the three calls; this proves it stayed quiet ACROSS them.
+    closing = close_span() if close_span is not None else None
+    if closing is not None and closing.get("competing"):
+        raise BaselineBankError(
+            "unowned model inference did work during the screening window: "
+            + violation_summary(closing))
     report = bank.nominate(samples)
     report.update({"candidate_invocations": 3, "anchor_invocations": 0,
+                   "closing_inference_witness": closing,
                    "host_noise_policy": "recorded_not_blocking",
                    "candidate_command_sha256": schemas.content_hash(candidate_command),
                    "sole_intended_factor": {"name": "GGML_IQK",
@@ -194,8 +206,189 @@ def invoke_command(*, command: recipes.ConstructedCommand, spawner: microbench.S
     return sum(values) / len(values)
 
 
-def competing_inference_witness() -> dict[str, Any]:
-    """Read only model-inference identities; ordinary CPU activity is excluded."""
+# =============================================================================
+# Unowned-inference idleness — what this gate measures, and why it changed
+# =============================================================================
+#
+# The original rule was: an UNOWNED `llama-server` exists  ->  refuse.
+# On this host that makes every campaign unrunnable whenever the serving stack
+# is up, and the operator's position is that the stack stays up.  Ignoring
+# those pids (an allowlist, a flag, a "known pids" file) would give up exactly
+# the property the gate exists for: concurrent inference poisons measurement.
+#
+# So the safety property is kept and the MEASURED QUANTITY is changed.  An
+# unowned inference process is admissible only while it is proven to be doing
+# NO WORK, and it is refused the moment it does any.
+#
+# The instrument is the per-process CPU-time counter in /proc/<pid>/stat
+# (utime + stime).  It is MONOTONE and CUMULATIVE, so two reads that BRACKET a
+# measurement window observe the WHOLE window and not an instant inside it:
+# work done between the two samples cannot hide, because the counter that
+# recorded it is still there when the closing sample is read.  That is the one
+# property a sampled liveness probe lacks, and it is what CLAUDE.md's
+# "Observation Windows" rule demands - a measurement whose window does not
+# overlap the phenomenon is not evidence of its absence.
+#
+# Endpoint state (`/health`, `/slots`, `/metrics`) was considered and rejected
+# as a GATE input: it needs a port map the campaign does not have, it is
+# optional per server (`--metrics`), an unreachable endpoint would have to
+# fail open, and issuing an HTTP request into another session's server is an
+# action on a shared host.  The /proc counter needs no network, no privilege
+# and no configuration, and it fails closed.
+#
+# There is no flag, no allowlist and nothing for the operator to remember.
+
+IDLENESS_SCHEMA = "epyc.autokernel.unowned_inference_idleness.v1"
+IDLENESS_BASIS = "interim_inference_executable_scan+unowned_cpu_time_idleness"
+
+# Fixed cost tolerated per span whatever its length: a health scrape, a log
+# line, an accept()/close() on an idle listener, one timer wakeup.
+IDLE_SPAN_ALLOWANCE_CORE_S = 0.5
+# Sustained rate tolerated, as a fraction of ONE core.
+# Measured basis (2026-09-23, this host, all 13 resident unowned servers -- the
+# six bge embedders, the three Qwen3.6-35B instances, Qwen3.8-27B, VL-30B, the
+# :8074 AutoKernel planner and sd-server, with the stack up and idle): over a
+# 279.06 s span the LARGEST accrual by any one of them was 6 ticks = 0.06
+# core-seconds, i.e. 0.000215 cores; seven of the thirteen moved at all and
+# none by more than that.  0.02 cores is ~93x that measured idle rate, while
+# ONE busy decode thread is 1.0 -- fifty times over the line.  The gate
+# therefore has no realistic false refusal and no realistic false admission.
+# Re-derive these two numbers if the stack's launch flags change: a server
+# started with a spinning wait policy would burn cores while idle, and this
+# gate would then refuse -- correctly, because a spinning server really does
+# consume the cores the campaign claimed.
+IDLE_SPAN_ALLOWANCE_CORES = 0.02
+
+_CLOCK_TICKS_PER_S = os.sysconf("SC_CLK_TCK")
+
+
+def _read_process_cpu(pid: int) -> tuple[int, int] | None:
+    """`(cpu_ticks, starttime_ticks)` for one pid, or None if it vanished.
+
+    `comm` may contain spaces and parentheses, so every field is taken after
+    the LAST ')': utime/stime/starttime are fields 14/15/22 of stat, i.e.
+    offsets 11/12/19 in that tail.
+    """
+    try:
+        text = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    except OSError as exc:  # present but unreadable is NOT absent
+        raise BaselineBankError(
+            f"unowned inference pid {pid} is present but unreadable: {exc}") from exc
+    try:
+        tail = text[text.rindex(")") + 2:].split()
+        return int(tail[11]) + int(tail[12]), int(tail[19])
+    except (ValueError, IndexError) as exc:
+        raise BaselineBankError(
+            f"unowned inference pid {pid} has an unparsable /proc stat line") from exc
+
+
+def read_cpu_ledger(findings: Any) -> dict[str, Any]:
+    """Snapshot the CPU-time counter of every UNOWNED inference process."""
+    entries: dict[str, Any] = {}
+    for item in findings:
+        pid = int(item.pid) if hasattr(item, "pid") else int(item["pid"])
+        sample = _read_process_cpu(pid)
+        if sample is None:
+            # It was enumerated a moment ago and is gone now.  Its final
+            # accrual is unknowable, so it cannot be certified idle.
+            raise BaselineBankError(
+                f"unowned inference pid {pid} vanished between enumeration and "
+                "its CPU-time read; the span cannot be certified idle")
+        cpu_ticks, starttime_ticks = sample
+        cmdline = tuple(getattr(item, "cmdline", ()) or ())
+        entries[str(pid)] = {
+            "cpu_ticks": cpu_ticks,
+            "starttime_ticks": starttime_ticks,
+            "argv0_basename": getattr(item, "argv0_basename", None),
+            "cmdline_head": " ".join(cmdline)[:200],
+        }
+    return {
+        "schema": IDLENESS_SCHEMA,
+        "clock_ticks_per_s": _CLOCK_TICKS_PER_S,
+        "read_at_monotonic_s": time.monotonic(),
+        "read_at": datetime.now(timezone.utc).isoformat(),
+        "entries": entries,
+    }
+
+
+def idleness_verdict(previous: Mapping[str, Any] | None,
+                     current: Mapping[str, Any]) -> dict[str, Any]:
+    """Decide the span between two ledgers.  Unknown is always a violation."""
+    allowance_cores = IDLE_SPAN_ALLOWANCE_CORES
+    base_core_s = IDLE_SPAN_ALLOWANCE_CORE_S
+    if previous is None:
+        # Nothing is asserted about a span with no start.  The window that
+        # matters is closed by the NEXT call, which will have this ledger.
+        return {"schema": IDLENESS_SCHEMA, "span": "opened", "span_s": None,
+                "busy": False, "tolerated": [], "violations": [],
+                "allowance_core_s": base_core_s, "allowance_cores": allowance_cores,
+                "bracketed_pids": sorted(int(p) for p in current["entries"])}
+    span_s = float(current["read_at_monotonic_s"]) - float(previous["read_at_monotonic_s"])
+    ticks = float(current["clock_ticks_per_s"])
+    allowance = base_core_s + allowance_cores * max(span_s, 0.0)
+    tolerated: list[dict[str, Any]] = []
+    violations: list[dict[str, Any]] = []
+    if span_s <= 0.0 or float(previous["clock_ticks_per_s"]) != ticks:
+        violations.append({"pid": None, "reason": "non_monotonic_span", "span_s": span_s})
+    before = dict(previous["entries"])
+    after = dict(current["entries"])
+    for key, now in sorted(after.items(), key=lambda kv: int(kv[0])):
+        record = {"pid": int(key), "argv0_basename": now.get("argv0_basename"),
+                  "cmdline_head": now.get("cmdline_head")}
+        was = before.get(key)
+        if was is None:
+            violations.append({**record, "reason": "appeared_mid_span"})
+            continue
+        if was["starttime_ticks"] != now["starttime_ticks"]:
+            # Same pid number, different process: the original one's accrual
+            # was never closed out.
+            violations.append({**record, "reason": "pid_reused_mid_span"})
+            continue
+        delta = int(now["cpu_ticks"]) - int(was["cpu_ticks"])
+        core_s = delta / ticks
+        record.update({"cpu_core_seconds": core_s, "span_s": span_s,
+                       "cores_equivalent": (core_s / span_s) if span_s > 0 else None,
+                       "allowance_core_s": allowance})
+        if delta < 0 or core_s > allowance:
+            violations.append({**record, "reason": "cpu_work"})
+        else:
+            tolerated.append(record)
+    for key, was in sorted(before.items(), key=lambda kv: int(kv[0])):
+        if key not in after:
+            violations.append({"pid": int(key), "reason": "vanished_mid_span",
+                               "argv0_basename": was.get("argv0_basename"),
+                               "cmdline_head": was.get("cmdline_head")})
+    return {"schema": IDLENESS_SCHEMA, "span": "closed", "span_s": span_s,
+            "busy": bool(violations), "tolerated": tolerated,
+            "violations": violations, "allowance_core_s": allowance,
+            "allowance_cores": allowance_cores}
+
+
+def violation_summary(witness: Mapping[str, Any]) -> str:
+    """One readable line naming every unowned process that broke the span."""
+    parts = []
+    for item in witness.get("idleness", {}).get("violations", ()):
+        core_s = item.get("cpu_core_seconds")
+        measured = "" if core_s is None else f" {core_s:.3f} core-s"
+        parts.append(f"pid {item.get('pid')} ({item.get('reason')}{measured}): "
+                     f"{item.get('cmdline_head')}")
+    return " | ".join(parts) or "no violation recorded"
+
+
+def competing_inference_witness(
+        *, previous_ledger: Optional[Mapping[str, Any]] = None) -> dict[str, Any]:
+    """Read only model-inference identities; ordinary CPU activity is excluded.
+
+    `competing` is no longer "an unowned inference process EXISTS" but "an
+    unowned inference process DID WORK in the span since `previous_ledger`".
+    With no `previous_ledger` the call merely OPENS a span: it can refuse for
+    an unreadable or vanishing process, never for a busy one, because nothing
+    is known about a span with no start.  Chain the returned `cpu_ledger` into
+    the next call at the far side of the measurement and the whole window is
+    bracketed by a monotone counter.
+    """
     try:
         owned = preflight.read_own_scope()
         scan = preflight.interim_process_scan(owned=owned)
@@ -203,6 +396,11 @@ def competing_inference_witness() -> dict[str, Any]:
         raise BaselineBankError("screening inference witness unavailable") from exc
     if scan.unreadable_pids:
         raise BaselineBankError("screening inference witness unreadable")
-    findings = [item.to_dict() for item in scan.inference_like()]
-    return {"basis": "interim_inference_executable_scan", "competing": bool(findings),
-            "findings": findings, "ordinary_processes_ignored": True}
+    unowned = scan.inference_like()
+    findings = [item.to_dict() for item in unowned]
+    ledger = read_cpu_ledger(unowned)
+    verdict = idleness_verdict(previous_ledger, ledger)
+    return {"basis": IDLENESS_BASIS, "competing": bool(verdict["busy"]),
+            "findings": findings, "ordinary_processes_ignored": True,
+            "resident_unowned_servers": len(findings),
+            "idleness": verdict, "cpu_ledger": ledger}
