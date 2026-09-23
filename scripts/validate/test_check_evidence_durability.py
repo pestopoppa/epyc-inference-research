@@ -664,6 +664,134 @@ class TestWithheldIsNotMissing:
         assert ".WITHHELD.sha256" in c.hint
 
 
+# --------------------------------------------------- main-clone fallback (2026-09-23)
+#
+# SW-7: a fresh linked worktree reports MISSING for every citation whose `data/`/
+# `artifacts/` tree is gitignored, because `git worktree add` never checks out
+# gitignored paths -- only the shared main clone an agent actually `cp -a`'d the
+# artifact into has the bytes. `check()`/`classify()` know nothing about git; the
+# fallback shells out to `git rev-parse --git-common-dir`, so these tests exercise it
+# against a REAL git worktree pair built under `tmp_path` -- a mocked subprocess would
+# only prove the mock was called, not that the real command means what the code assumes.
+
+@pytest.fixture
+def git_main_and_worktree(tmp_path):
+    """A real git repo (`data/` gitignored, matching production) plus a real linked
+    worktree of it, both under `tmp_path`. Returns `(main, worktree)`."""
+    main = tmp_path / "main-clone"
+    main.mkdir()
+    for cmd in (["init", "-q"],
+                ["config", "user.email", "t@example.com"],
+                ["config", "user.name", "t"]):
+        subprocess.run(["git", *cmd], cwd=main, check=True, capture_output=True)
+    (main / ".gitignore").write_text("data/\n")
+    (main / "README.md").write_text("x\n")
+    subprocess.run(["git", "add", ".gitignore", "README.md"], cwd=main, check=True,
+                   capture_output=True)
+    subprocess.run(["git", "commit", "-q", "-m", "init"], cwd=main, check=True,
+                   capture_output=True)
+
+    wt = tmp_path / "lane-worktree"
+    subprocess.run(["git", "worktree", "add", "-q", str(wt), "-b", "lane-test"],
+                   cwd=main, check=True, capture_output=True)
+    return main, wt
+
+
+class TestMainCloneFallback:
+
+    def test_gitignored_citation_present_only_in_main_clone_is_not_missing(
+            self, git_main_and_worktree):
+        """The headline case: a citation absent from the worktree but real in the
+        main clone must get a distinct, honest, non-error verdict -- not MISSING."""
+        main, wt = git_main_and_worktree
+        (main / "data" / "campaign").mkdir(parents=True)
+        (main / "data" / "campaign" / "summary.json").write_text("{}")
+        reg = write_registry(wt, "evidence: data/campaign/summary.json\n")
+        res = check(reg, wt)
+        (c,) = res.citations
+        assert c.verdict == "PRESENT_IN_MAIN_CLONE"
+        assert c.severity == "warn"
+        assert not res.errors, "the worktree-only gap must not count as an error"
+
+    def test_absent_everywhere_is_still_missing(self, git_main_and_worktree):
+        """The complement: the main clone not having it either must not be masked."""
+        main, wt = git_main_and_worktree
+        reg = write_registry(wt, "evidence: data/campaign/nope.json\n")
+        (c,) = check(reg, wt).citations
+        assert (c.verdict, c.severity) == ("MISSING", "error")
+
+    def test_running_from_the_main_clone_itself_does_not_self_fallback(
+            self, git_main_and_worktree):
+        """Parity's other half: a citation missing in the main clone, checked FROM the
+        main clone, must not spuriously resolve against itself and must not print the
+        cannot-resolve note (a main clone was found -- it just IS this checkout)."""
+        main, _wt = git_main_and_worktree
+        reg = write_registry(main, "evidence: data/campaign/summary.json\n")
+        (c,) = check(reg, main).citations
+        assert (c.verdict, c.severity) == ("MISSING", "error")
+        assert "could not be resolved" not in c.hint
+
+    def test_absolute_citation_into_the_worktree_still_finds_the_main_clone(
+            self, git_main_and_worktree):
+        main, wt = git_main_and_worktree
+        (main / "data" / "campaign").mkdir(parents=True)
+        (main / "data" / "campaign" / "summary.json").write_text("{}")
+        reg = write_registry(wt, f"evidence: {wt}/data/campaign/summary.json\n")
+        (c,) = check(reg, wt).citations
+        assert c.verdict == "PRESENT_IN_MAIN_CLONE"
+
+    def test_withheld_sibling_only_in_main_clone_is_withheld_not_missing(
+            self, git_main_and_worktree):
+        """Same judgment as everywhere else in this file: a `.WITHHELD.sha256` sibling
+        resolves the citation even when it is only reachable via the main clone."""
+        main, wt = git_main_and_worktree
+        d = main / "data" / "withheld_campaign"
+        d.mkdir(parents=True)
+        (d / "secret.json.WITHHELD.sha256").write_text("a" * 64 + "  secret.json\n")
+        reg = write_registry(wt, "evidence: data/withheld_campaign/secret.json\n")
+        (c,) = check(reg, wt).citations
+        assert c.verdict == "WITHHELD"
+        assert c.severity == "info"
+
+    def test_scratch_in_the_main_clone_is_not_rescued(self, git_main_and_worktree):
+        """The ungrantable rule survives the fallback: a symlink in the main clone
+        pointing into scratch must not turn into a pass just because it resolves --
+        the worktree must never be MORE lenient than a direct main-clone check would be."""
+        main, wt = git_main_and_worktree
+        camp = main / "data" / "linked"
+        camp.mkdir(parents=True)
+        target = Path("/dev/shm") / f"evd_sw7_main_{os.getpid()}.json"
+        target.write_text("{}")
+        (camp / "summary.json").symlink_to(target)
+        try:
+            reg = write_registry(wt, "evidence: data/linked/summary.json\n")
+            (c,) = check(reg, wt).citations
+            assert c.verdict == "MISSING", (
+                "a scratch-linked main-clone artifact must not pass via the fallback")
+        finally:
+            target.unlink(missing_ok=True)
+
+    def test_cannot_resolve_main_clone_says_so_explicitly(self, tmp_path):
+        """Not a git checkout at all: the tool must SAY it cannot resolve a main clone,
+        not silently fall back to the ordinary MISSING wording (requirement: "or say it
+        cannot")."""
+        plain = tmp_path / "not-a-git-repo"
+        plain.mkdir()
+        reg = write_registry(plain, "evidence: data/campaign/summary.json\n")
+        (c,) = check(reg, plain).citations
+        assert c.verdict == "MISSING"
+        assert "could not be resolved" in c.hint
+
+    def test_bare_repo_also_says_it_cannot_resolve(self, tmp_path):
+        bare = tmp_path / "bare.git"
+        subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True,
+                       capture_output=True)
+        reg = write_registry(bare, "evidence: data/campaign/summary.json\n")
+        (c,) = check(reg, bare).citations
+        assert c.verdict == "MISSING"
+        assert "could not be resolved" in c.hint
+
+
 # --------------------------------------------------------------- the compliant path
 
 def test_compliant_registry_is_silent(repo):

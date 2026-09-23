@@ -78,20 +78,62 @@ inconvenient, and the one exemption that must never be grantable is the scratch 
 
 VERDICTS
 --------
-  OK            resolves to a readable artifact on a durable root. In-repo or not,
-                tracked or gitignored, relative or absolute -- all equally fine.
-  WITHHELD      INFO  -- the artifact is deliberately NOT carried, and a
-                         `<file>.WITHHELD.sha256` sibling records its hash instead.
-                         Permitted by `MEASUREMENT.md` §5. See WITHHELD below.
-  WAIVED_LOST   WARN  -- artifact is gone and the line says so, verbatim, with an
-                         `ARTIFACT LOST` marker. A recorded loss, not a silent one.
-  EPHEMERAL     ERROR -- cited from a scratch directory (symlinks followed). One
-                         cleanup from unverifiable. Never grantable.
-  MISSING       ERROR -- resolves nowhere. The hash has nothing to check.
-  UNREADABLE    ERROR -- the path exists but cannot be opened, so the hash still
-                         cannot be recomputed. Same failure, different cause.
+  OK                    resolves to a readable artifact on a durable root. In-repo
+                        or not, tracked or gitignored, relative or absolute -- all
+                        equally fine.
+  WITHHELD              INFO  -- the artifact is deliberately NOT carried, and a
+                        `<file>.WITHHELD.sha256` sibling records its hash instead.
+                        Permitted by `MEASUREMENT.md` §5. See WITHHELD below.
+  PRESENT_IN_MAIN_CLONE WARN  -- resolves nowhere in THIS checkout but resolves,
+                        durably and readably, in the MAIN clone this checkout's
+                        `.git` common-dir points at. See the section below.
+  WAIVED_LOST           WARN  -- artifact is gone and the line says so, verbatim,
+                        with an `ARTIFACT LOST` marker. A recorded loss, not a
+                        silent one.
+  EPHEMERAL             ERROR -- cited from a scratch directory (symlinks
+                        followed). One cleanup from unverifiable. Never grantable.
+  MISSING               ERROR -- resolves nowhere, anywhere this checker can find.
+                        The hash has nothing to check.
+  UNREADABLE            ERROR -- the path exists but cannot be opened, so the hash
+                        still cannot be recomputed. Same failure, different cause.
 
 Exit 0 when there are no errors. Warnings never fail unless `-W`/`--warnings-as-errors`.
+
+PRESENT_IN_MAIN_CLONE -- WORKTREES DO NOT CHECK OUT GITIGNORED FILES (added 2026-09-23)
+----------------------------------------------------------------------------------------
+Commit `5a701081` (NIB2-73a) fixed the symptom: it committed the 12 citations that were
+`MISSING` in every worktree but present as untracked files in the one shared clone
+(`/mnt/raid0/llm/epyc-inference-research`), and taught this file `WITHHELD`. It did not
+fix the MECHANISM. `data/` and `artifacts/` campaign trees are gitignored by design (the
+2026-08-03 ruling above), so `git worktree add` never materializes them -- a worktree's
+`.git` is a pointer into the shared repository's object store, not a second copy of
+whatever an agent `cp -a`'d onto the main clone's disk. Every FUTURE citation an agent adds
+from a worktree reproduces the same failure: `MISSING` there, invisible in the one clone
+that happens to hold the bytes -- and the fix on offer at that point is
+`EPYC_ALLOW_COMMIT_HYGIENE_BYPASS`, which is exactly the escape this file exists to make
+unnecessary.
+
+So: when a citation resolves nowhere in the checkout being validated, before calling it
+`MISSING` this checker asks where that checkout's OWN `.git` common-dir points (`git
+rev-parse --path-format=absolute --git-common-dir`) -- the standard, git-native way a
+linked worktree names its main checkout -- and, if that main clone is a *different*
+directory than the one being validated, re-resolves the SAME repo-relative citation
+against it. If the artifact is there, durable, and readable, the citation is
+`PRESENT_IN_MAIN_CLONE`, not `MISSING`: the evidence is real, it is only this checkout that
+cannot see it. It is a WARNING, never `OK` and never silent -- verification still needs the
+main clone, and that is a real, visible caveat on the claim, not a pass.
+
+This is NOT a second durability standard. The main-clone-resolved path is judged by the
+IDENTICAL rule as everything else in this file: it must exist, be readable, and not be
+scratch (`_is_scratch`, followed through symlinks, exactly as above), and an artifact that
+is only findable via a `<file>.WITHHELD.sha256` sibling there is still reported `WITHHELD`,
+not waved through as present. A citation the main clone itself cannot resolve is still
+`MISSING` -- this mechanism can only ADD a passing verdict a direct run against the main
+clone would also give; a worktree must never be MORE lenient than the main clone it defers
+to. And when the common-dir cannot be resolved at all (not a git repository, a bare repo,
+or some other layout this heuristic does not reason about), the tool says so explicitly in
+the `MISSING` hint instead of silently reporting the ordinary verdict -- the absence of a
+main-clone fallback is itself worth knowing.
 
 WITHHELD -- WHY IT IS NOT `MISSING` (added 2026-09-15)
 -----------------------------------------------------
@@ -136,9 +178,11 @@ USAGE
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import os
 import re
+import subprocess
 import sys
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
@@ -428,7 +472,7 @@ def classify(c: Citation, repo: Path) -> Citation:
         return c
 
     if not resolved.exists():
-        return _missing(c)
+        return _missing(c, repo)
 
     # Deliberately NOT waivable by `ARTIFACT LOST`: the marker asserts the artifact is
     # gone, and this one demonstrably is not. Letting the wrong marker silence this would
@@ -446,7 +490,120 @@ def classify(c: Citation, repo: Path) -> Citation:
     return c
 
 
-def _missing(c: Citation) -> Citation:
+@functools.lru_cache(maxsize=None)
+def _main_clone_root(repo: str) -> str | None:
+    """The MAIN checkout's root, derived from `repo`'s own `.git` common-dir.
+
+    A linked worktree's `.git` is a file pointing `--git-common-dir` at the main
+    checkout's `.git` DIRECTORY; that directory's parent is the main clone root
+    whenever the common-dir is unambiguously named `.git` (i.e. not a bare repo,
+    not a submodule's `.git/modules/<name>`, not some other layout this heuristic
+    does not reason about -- those return `None` and the caller says so explicitly
+    rather than pretending it found nothing durable).
+
+    `repo` is a `str`, not a `Path`, purely so this can be `lru_cache`d: it is
+    called once per `MISSING` citation, and a 421-citation registry with a bad
+    common-dir would otherwise shell out that many times for the same answer.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "-C", repo, "rev-parse",
+             "--path-format=absolute", "--git-common-dir"],
+            capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0:
+        return None
+    common_dir = out.stdout.strip()
+    if not common_dir or Path(common_dir).name != ".git":
+        return None
+    return str(Path(common_dir).parent)
+
+
+def _resolve_against_main_clone(c: Citation, repo: Path) -> tuple[Citation | None, str]:
+    """Try the citation against the MAIN clone when it resolves nowhere here.
+
+    Returns `(classified_citation, "")` when the main clone resolves it durably
+    -- `PRESENT_IN_MAIN_CLONE`, or `WITHHELD` if that is what the main clone's own
+    sibling convention says -- and `(None, note)` otherwise, where `note` is
+    empty unless the common-dir itself could not be resolved, in which case it is
+    text for `_missing` to fold into the ordinary `MISSING` hint so the absence of
+    a fallback is visible rather than silent.
+
+    Judgment on the main-clone-resolved path is IDENTICAL to judgment on any other
+    path in this file -- same existence/readability/scratch tests -- so this can
+    only grant a verdict a direct run against the main clone would also grant. A
+    worktree must never come out MORE lenient than the main clone it defers to.
+    """
+    main_root = _main_clone_root(str(repo))
+    if main_root is None:
+        return None, (
+            " This checkout's main clone could not be resolved (not a git "
+            "checkout, a bare repo, or a layout this heuristic does not cover) "
+            "-- a gitignored citation that would resolve there is reported "
+            "MISSING here instead of being checked against it.")
+
+    main_root_p = Path(main_root)
+    try:
+        repo_r = repo.resolve()
+    except (OSError, ValueError):
+        repo_r = repo
+    if main_root_p.resolve() == repo_r:
+        return None, ""      # this checkout IS the main clone; no fallback exists
+
+    p = c.path
+    if p.startswith("/"):
+        try:
+            rel = Path(p).resolve().relative_to(repo_r)
+        except (OSError, ValueError):
+            return None, ""  # absolute and outside this repo -- same path either way
+        main_resolved = main_root_p / rel
+    else:
+        main_resolved = main_root_p / p
+
+    # Same "inside the reference root defeats the scratch proxy" rule classify() applies
+    # to `repo`, applied here to `main_root` -- a main clone that itself happens to sit
+    # under a scratch mount (test fixtures; conceivably a real checkout) must not have
+    # its own contents misjudged, and a `../`-escaping relative citation must still be
+    # caught, exactly as it is against `repo`.
+    try:
+        main_inside = main_resolved.resolve().is_relative_to(main_root_p.resolve())
+    except (OSError, ValueError):
+        main_inside = False
+
+    if not main_inside and _is_scratch(str(main_resolved), main_resolved):
+        return None, ""      # never grantable, wherever it is judged from
+
+    if main_resolved.exists():
+        if not os.access(main_resolved, os.R_OK):
+            return None, ""  # unreadable there too -- no more durable than here
+        c.verdict, c.severity = "PRESENT_IN_MAIN_CLONE", "warn"
+        c.resolved = str(main_resolved)
+        c.hint = (
+            f"not checked out here: {p} is gitignored, and a worktree never "
+            f"materializes gitignored paths, so THIS checkout cannot verify it. "
+            f"It resolves to a readable, durable artifact in the main clone "
+            f"({main_root}) -- verify from there, or copy it into this checkout "
+            "if you need to read it directly here. Not OK: this is a real gap in "
+            "what this checkout can prove, not a pass.")
+        return c, ""
+
+    rec = _withheld_record(main_resolved)
+    if rec is not None:
+        c.verdict, c.severity = "WITHHELD", "info"
+        c.resolved = str(main_resolved)
+        c.hint = (
+            f"artifact deliberately not carried; hash recorded in {rec.name} in "
+            f"the main clone ({main_root}) (MEASUREMENT.md §5). Verification "
+            "needs the original on its durable local root — see the campaign "
+            "README for where it lives and why it is withheld.")
+        return c, ""
+
+    return None, ""           # main clone doesn't have it either -- genuinely MISSING
+
+
+def _missing(c: Citation, repo: Path) -> Citation:
     if LOST_MARKER in c.context:
         return _waive(c)
     rec = _withheld_record(Path(c.resolved))
@@ -457,6 +614,11 @@ def _missing(c: Citation) -> Citation:
             "(MEASUREMENT.md §5). Verification needs the original on its durable local "
             "root — see the campaign README for where it lives and why it is withheld.")
         return c
+
+    main_hit, main_note = _resolve_against_main_clone(c, repo)
+    if main_hit is not None:
+        return main_hit
+
     c.verdict, c.severity = "MISSING", "error"
     c.hint = (
         "citation resolves nowhere, so its hash has nothing to check against. "
@@ -465,7 +627,8 @@ def _missing(c: Citation) -> Citation:
         "unambiguously; record it hash-only with a "
         f"`<file>{WITHHELD_SUFFIX}` sibling if it exists but cannot be committed "
         "(PII, licence); or mark the line "
-        f"`# {LOST_MARKER} (...) — recorded <date>` if it is genuinely gone.")
+        f"`# {LOST_MARKER} (...) — recorded <date>` if it is genuinely gone."
+        + main_note)
     return c
 
 
@@ -542,9 +705,11 @@ def report(res: Result, show_ok: bool, fix_hint: bool) -> None:
     print(f"repository          :: {res.repo}")
     print(f"citations in scope  :: {len(res.citations)}")
     print()
-    for v in ("OK", "WITHHELD", "WAIVED_LOST", "EPHEMERAL", "MISSING", "UNREADABLE"):
+    for v in ("OK", "WITHHELD", "PRESENT_IN_MAIN_CLONE", "WAIVED_LOST",
+              "EPHEMERAL", "MISSING", "UNREADABLE"):
         if v in counts:
             mark = {"OK": "  ok  ", "WITHHELD": " held ",
+                    "PRESENT_IN_MAIN_CLONE": " warn ",
                     "WAIVED_LOST": " warn "}.get(v, " FAIL ")
             print(f"  [{mark}] {v:<18} {counts[v]:>4}")
     print()
@@ -598,6 +763,23 @@ def _group(cites):
 
 
 _FIX_PLAYBOOK = {
+    "PRESENT_IN_MAIN_CLONE": """
+  This checkout cannot resolve the citation, but its main clone can -- it is a linked
+  worktree and the artifact lives only in a gitignored tree, which `git worktree add`
+  never checks out. Nothing is missing; nothing needs re-measuring.
+
+    * If you only need this to pass: nothing to do. It already resolves in the main
+      clone, which is where the pre-commit hook and any real verification run from.
+    * If THIS checkout needs to read the bytes directly: copy them in --
+        mkdir -p <this-checkout>/<dirname of the citation>
+        cp -a <main-clone-path> <this-checkout>/<the citation path>
+      (a copy, not a symlink out to the main clone -- a symlink survives only as long
+      as the main clone's disk layout does not change under it).
+    * If the citation itself is wrong (a typo, a stale campaign name), fix the citation
+      the ordinary way; this verdict only means "found it elsewhere," not "found it."
+    * Do NOT reach for EPYC_ALLOW_COMMIT_HYGIENE_BYPASS for this -- that is for a
+      genuinely unresolvable state, and this state resolves.""",
+
     "EPHEMERAL": """
   A ratified claim is pointing at a scratch directory. Do this, in order:
 
