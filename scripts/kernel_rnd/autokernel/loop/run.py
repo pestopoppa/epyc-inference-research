@@ -250,8 +250,15 @@ def _rebind_build_dso(original: Path, binary_dir: Path) -> Path:
     return candidate
 
 
-def _cpu_arm(original, build: Path):
-    """Rebind only built executable/DSOs; preserve the selected target's launch."""
+def _cpu_arm(original, build: Path, *, extra_env: dict | None = None):
+    """Rebind only built executable/DSOs; preserve the selected target's launch.
+
+    `extra_env` exists for ONE caller: the out-of-band instrumented profiling sibling
+    (`node_profile`), whose launch needs the instrument's gates and dump paths. The
+    added keys are declared as inherited, never as measurement keys, so they cannot
+    silently become an arm; and they move `execution_digest`, so a sibling launch can
+    never be mistaken for the measured one. No measured arm ever passes this.
+    """
     from . import resolved_recipe as rr
 
     build = build.resolve()
@@ -277,6 +284,11 @@ def _cpu_arm(original, build: Path):
     ld_paths = tuple(str(binary_dir) if part == original_bin else part
                      for part in original.runtime_ld_paths)
     env["LD_LIBRARY_PATH"] = ":".join(ld_paths)
+    policy = original.environment_policy
+    if extra_env:
+        env.update({str(key): str(value) for key, value in extra_env.items()})
+        policy = replace(policy, allowed_inherit_keys=tuple(sorted(
+            set(policy.allowed_inherit_keys) | {str(key) for key in extra_env})))
     return rr.resolve_canonical_launch(
         original.template, build_dir=build, command_argv=command,
         topology_prefix=original.topology_prefix, launch_environment=env,
@@ -285,7 +297,7 @@ def _cpu_arm(original, build: Path):
                                          if original.drafter else None),
                              "executable": identity("executable", binary_dir / "llama-server"),
                              "dsos": dsos},
-        backend=original.backend, environment_policy=original.environment_policy,
+        backend=original.backend, environment_policy=policy,
         port=original.port, runtime_binary_dir=str(binary_dir),
         runtime_ld_paths=ld_paths,
         provenance={**dict(original.provenance),
@@ -637,6 +649,21 @@ def main(argv: list[str] | None = None) -> int:
                         help="declared host reference (installed live_controls reference by default), not current maxfreq")
     parser.add_argument("--cpu-profiler", type=Path, default=Path("/usr/bin/perf"),
                         help="perf executable for separate observational CPU request profiling")
+    # Opt-in, not default-on: enabling it adds a full instrumented llama.cpp build and a
+    # SECOND server launch to every reprofile. That cost, and an extra launch inside the
+    # profile window, must be asked for rather than appear in a run nobody configured for
+    # it. With it off the profile stage is byte-for-byte what it was.
+    parser.add_argument("--node-profile", action="store_true",
+                        help="also run the out-of-band instrumented sibling profile "
+                             "(per-node CPU wall, host phases, engram gather counters) "
+                             "after every anchor/keep; the perf capture is unaffected")
+    # Default 2, not 1: level 2 is the only level at which minflt/majflt are measured at
+    # all, and the fault mix is what decides the residency question the engram levers all
+    # hang on. Its ~0.2-0.5%/token overhead prices nothing here -- this sibling never
+    # produces a timing number.
+    parser.add_argument("--node-profile-level", type=int, default=2, choices=(1, 2),
+                        help="engram counter level for the instrumented sibling; 2 adds "
+                             "per-thread fault attribution and perturbs more")
     parser.add_argument("--cpu-screen-scope", choices=("quarter", "half"),
                         help="common reduced CPU source screen; positive requires separate full confirmation")
     parser.add_argument("--cpu-confirm-from", type=Path,
@@ -1313,7 +1340,13 @@ def main(argv: list[str] | None = None) -> int:
                 "Do not follow ROCm/rocprofv3, GPU residency, -ngl 99 or GPU-specific "
                 "kernel-probe instructions for this target. Read cpu_profile for original "
                 "request-scoped sampled user-cycle attribution (or its unavailable reason); "
-                "fractions are not wall-time shares or optimization gains. Do not invent "
+                "fractions are not wall-time shares or optimization gains. Read node_profile "
+                "for the same anchor's per-op wall SHARES (MUL_MAT dense vs MUL_MAT_ID "
+                "experts vs FLASH_ATTN vs RMS_NORM vs the engram row gather), host phases "
+                "and engram fault mix, measured on an INSTRUMENTED SIBLING build: shares "
+                "transfer to the measured binary, absolutes do not, and it is never a "
+                "baseline nor comparable to any measured number. An absent section is a "
+                "missing instrument, never a zero. Do not invent "
                 "hotspots or reuse GPU timing evidence as CPU evidence. "
                 "Author/review source only for source hypotheses; runtime treatments "
                 "have no source edit and are observation-only unless separately admitted. "
@@ -1358,6 +1391,7 @@ def main(argv: list[str] | None = None) -> int:
                                "full_target": full_cpu_target.to_dict()}} if screen_state else {}),
             "kernel_hotspots": [row.to_dict() for row in hotspot_rows],
             **({"cpu_profile": dict(cpu_profile_observation)} if cpu_launch else {}),
+            **({"node_profile": dict(node_profile_observation)} if cpu_launch else {}),
             "prior_experiments": prior_experiments(args, epoch),
             "current_regime": {
                 "model": {"path": str(args.model)}, "quant": census.dominant_quant,
@@ -1762,6 +1796,77 @@ def main(argv: list[str] | None = None) -> int:
 
     hotspot_rows: list = []
     cpu_profile_observation = {"status": "not_collected"}
+    node_profile_observation = {"status": "not_collected"}
+
+    def node_reprofile(profile_arm) -> None:
+        """The SECOND, out-of-band capture of the same anchor and the same requests.
+
+        The perf capture above samples the measured binary and names symbols. The three
+        in-tree instrumented profilers name OPS, host phases and engram faults -- and
+        they exist only in a build configured with `-DGGML_CPU_PROF=ON`, which the
+        measured binary must never be. So this builds a sibling of the current anchor,
+        launches it only here, and reads the shares. It is observation-only: a failure
+        anywhere in it leaves the perf capture standing and never fails the stage.
+        """
+        from . import node_profile
+        node_profile_observation.clear()
+        node_profile_observation["status"] = "not_collected"
+        # Checked even when the sibling is off, and it RAISES: an anchor arm carrying
+        # the instrument's environment is a contaminated measurement, not a profile
+        # that failed to collect.
+        node_profile.refuse_instrumented_measurement(profile_arm)
+        if not args.node_profile:
+            node_profile_observation["reason"] = "instrumented sibling profiling disabled"
+            return
+        scope = (screen_state or {}).get("scope", "full")
+        key = {"anchor_commit": current_anchor_commit[0],
+               "execution_digest": profile_arm.execution_digest,
+               "prompt_manifest_digest": manifest.digest, "scope": scope,
+               "level": args.node_profile_level}
+        retained = node_profile.cached_observation(store_root=args.store, **key)
+        if retained is not None:
+            node_profile_observation.update(retained)
+            node_profile_observation["anchor_commit"] = current_anchor_commit[0]
+            print("profile   reused original instrumented node/host/engram observation")
+            return
+        node_profile_observation.update(node_profile.absent("sibling build not completed"))
+        build_dir = node_profile.profiling_build_dir(anchor_build[0])
+        publish("running", latest, step="instrumented sibling node/host/engram profiling")
+        try:
+            verdict = gates.compiles(
+                args.worktree, build_dir,
+                cmake_defines=build_recipe.NATIVE_CPU_NODE_PROFILE_RECIPE.cmake_defines(),
+                # Only the server: this sibling is never benched and never validated,
+                # so llama-bench/test-backend-ops would be paid for and never read.
+                jobs=build_jobs, cpu_list=build_cpu_list, targets=("llama-server",))
+            if not verdict.passed:
+                node_profile_observation.update(node_profile.absent(
+                    f"instrumented sibling build refused at {verdict.gate}: {verdict.reason}"))
+                print(f"profile   NODE UNAVAILABLE ({verdict.gate}: {verdict.reason})")
+                return
+            build = {"dir": str(build_dir),
+                     "recipe": build_recipe.NATIVE_CPU_NODE_PROFILE_RECIPE.name,
+                     "recipe_sha256": build_recipe.NATIVE_CPU_NODE_PROFILE_RECIPE.sha256(),
+                     "anchor_commit": current_anchor_commit[0],
+                     "measured_build_dir": str(anchor_build[0])}
+            with cpu_measurement_window():
+                observed = node_profile.profile_loop(
+                    lambda env: _cpu_arm(direct_launch, build_dir, extra_env=env),
+                    manifest, store_root=args.store, build=build,
+                    level=args.node_profile_level,
+                    timeout_s=min(1800, resolved_campaign.resources.stage_timeout_s)
+                    if selected_identity else 1800)
+        except (node_profile.NodeProfileRefused, serving.ServerDied, loop.MeasurementInvalid,
+                OSError, ValueError, subprocess.SubprocessError) as exc:
+            node_profile_observation.update(node_profile.absent(
+                f"{type(exc).__name__}: {exc}"))
+            print(f"profile   NODE UNAVAILABLE ({exc})")
+            return
+        node_profile_observation.update(observed)
+        node_profile_observation["anchor_commit"] = current_anchor_commit[0]
+        node_profile.retain_observation(observed, store_root=args.store, **key)
+        print(f"profile   node/host/engram {observed['status']}; "
+              f"{len(observed.get('mechanism_shares', []))} grouped op mechanisms")
 
     def reprofile() -> None:
         """Re-derive the hotspots from the CURRENT champion.
@@ -1791,6 +1896,7 @@ def main(argv: list[str] | None = None) -> int:
                         cpu_profile_observation.update(observed)
                         cpu_profile_observation["anchor_commit"] = current_anchor_commit[0]
                         print(f"profile   reused original CPU observation; record {observed['record']}")
+                        node_reprofile(profile_arm)
                         return
             publish("running", latest, step="CPU original-request observational profiling")
             try:
@@ -1810,6 +1916,7 @@ def main(argv: list[str] | None = None) -> int:
                 cpu_profile_observation["anchor_commit"] = current_anchor_commit[0]
                 print(f"profile   CPU {len(observed['hotspots'])} sampled symbols; "
                       f"record {observed['record']}")
+            node_reprofile(profile_arm)
             return
         if direct_launch:
             print("profile   selected GPU serving profile unavailable; legacy bench profile not substituted")
@@ -2953,6 +3060,8 @@ def main(argv: list[str] | None = None) -> int:
                 reprofile()
             elif screen_confirmation is not None:
                 cpu_profile_observation.update(status="not_collected",
+                    reason="confirm original retained source/build; no new proposal or profiling requested")
+                node_profile_observation.update(status="not_collected",
                     reason="confirm original retained source/build; no new proposal or profiling requested")
 
             validation_original_commit = pre_source_anchor_commit

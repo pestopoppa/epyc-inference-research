@@ -241,11 +241,35 @@ HOUSE_GPU_COVERAGE_RECIPE = _coverage_variant(
     HOUSE_GPU_RECIPE, name="gfx90a-house-coverage-v1", include_hip=True)
 
 
+# Observation-only instrument variant, the same additive idiom as coverage above: keep
+# the base recipe's flags byte-for-byte and APPEND the define, so the measured recipe's
+# identity never moves.  `GGML_CPU_PROF` compiles the in-tree per-node CPU profiler and
+# the host-phase profiler; both stay off until their runtime env gate is set.  Like
+# coverage, this is NEVER a candidate or champion recipe: its counters perturb absolute
+# time, so only SHARES from it are readable and no throughput number from it is
+# admissible.
+def profiling_variant(base: BuildRecipe, *, name: str) -> BuildRecipe:
+    return BuildRecipe(
+        name=name,
+        notes=(f"Instrumented profiling sibling of {base.name}; observation only, "
+               "never a candidate, champion or throughput arm."),
+        flags=(*base.flags,
+               Flag("GGML_CPU_PROF", "ON", None,
+                    "Compile the in-tree per-node CPU and host-phase profilers for the "
+                    "out-of-band observational sibling; never built into a measured arm")),
+    )
+
+
+NATIVE_CPU_NODE_PROFILE_RECIPE = profiling_variant(
+    NATIVE_CPU_RECIPE, name="native-openmp-gcc15-cpu-nodeprof-v1")
+
+
 def recipe_for(name: str) -> BuildRecipe:
     recipes = {
         recipe.name: recipe for recipe in (
             HOUSE_GPU_RECIPE, NATIVE_CPU_RECIPE,
             HOUSE_GPU_COVERAGE_RECIPE, NATIVE_CPU_COVERAGE_RECIPE,
+            NATIVE_CPU_NODE_PROFILE_RECIPE,
         )
     }
     try:
@@ -268,6 +292,6 @@ def from_flags(name: str, flags: Sequence[Mapping[str, Any]], *,
 
 __all__ = ["BuildRecipe", "BuildRecipeError", "Flag", "HOUSE_GPU_RECIPE",
            "HOUSE_GPU_COVERAGE_RECIPE", "NATIVE_CPU_RECIPE",
-           "NATIVE_CPU_COVERAGE_RECIPE",
+           "NATIVE_CPU_COVERAGE_RECIPE", "NATIVE_CPU_NODE_PROFILE_RECIPE",
            "NonAdoption", "PRODUCTION_RECIPE_IS_VERIFIABLE", "RECIPE_SCHEMA",
-           "SETTLED_NON_ADOPTIONS", "from_flags", "recipe_for"]
+           "SETTLED_NON_ADOPTIONS", "from_flags", "profiling_variant", "recipe_for"]

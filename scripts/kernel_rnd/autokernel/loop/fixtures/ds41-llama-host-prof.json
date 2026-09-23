@@ -1,0 +1,19 @@
+{
+  "schema": "llama-host-prof/1",
+  "units": {"time": "us", "per": "token"},
+  "n_eval": 1,
+  "n_p_eval": 137,
+  "decode_us_per_token": 102243.000,
+  "prefill_us_per_token": 31187.175,
+  "phases": [
+    {"phase": "20llm_graph_input_embd", "decode_us_per_token": 7.000, "decode_calls": 3, "prefill_us_total": 661.000, "prefill_calls": 129},
+    {"phase": "19llm_graph_input_pos", "decode_us_per_token": 0.000, "decode_calls": 2, "prefill_us_total": 24.000, "prefill_calls": 97},
+    {"phase": "23llm_graph_input_out_ids", "decode_us_per_token": 1.000, "decode_calls": 1, "prefill_us_total": 17.000, "prefill_calls": 34},
+    {"phase": "20llm_graph_input_dsv4", "decode_us_per_token": 19.000, "decode_calls": 1, "prefill_us_total": 792.000, "prefill_calls": 34},
+    {"phase": "28llm_graph_input_dsv41_engram", "decode_us_per_token": 7.000, "decode_calls": 1, "prefill_us_total": 14445.000, "prefill_calls": 34},
+    {"phase": "ctx.mctx_apply", "decode_us_per_token": 2.000, "decode_calls": 3, "prefill_us_total": 173.000, "prefill_calls": 129},
+    {"phase": "ctx.build_alloc_set_inputs", "decode_us_per_token": 1635.000, "decode_calls": 3, "prefill_us_total": 61566.000, "prefill_calls": 129},
+    {"phase": "ctx.graph_compute", "decode_us_per_token": 101154.000, "decode_calls": 3, "prefill_us_total": 5557371.000, "prefill_calls": 129},
+    {"phase": "27llm_graph_input_attn_k_iswa", "decode_us_per_token": 0.000, "decode_calls": 1, "prefill_us_total": 128.000, "prefill_calls": 63}
+  ]
+}
