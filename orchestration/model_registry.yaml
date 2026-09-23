@@ -4089,6 +4089,23 @@ roles:
     notes: 256 total experts, 8 active. MoE reduction tests [4,6]. 3 shards. A1 status-quo self-review failed C-CRAB P-REV-1 patch-review admission on 2026-07-19.
   qwen35_122b_iq2m:
     tier: B
+    deprecated: true
+    deprecated_date: 2026-09-23
+    deprecated_reason: >
+      RETIRED in the 2026-09-22 operator-directed lineup change. The Qwen3.5-122B-A10B family left
+      the serving lineup when architect_critic — the family's only role — moved to Qwen3.8-Flash-Next
+      UD-IQ4_XS; the LIVE row that superseded it is roles.qwen38_flash_next_ud_iq4xs_local
+      (server_mode.architect_critic, :8074). The 2026-09-22 change marked the role-holding row
+      roles.qwen35_122b_q4km but not this exact-artifact catalogue row beneath it, which stayed live
+      and non-deprecated; marked 2026-09-23 to close that gap. Never role-bound: no server_mode row
+      and no live role resolves to it (verified 2026-09-23, retire-model enumerate_refs: 0 BLOCK).
+      GGUF REMAINS ON DISK at
+      /mnt/raid0/llm/models/Qwen3.5-122B-A10B-MTP-GGUF/UD-IQ2_M/Qwen3.5-122B-A10B-UD-IQ2_M.gguf
+      (40,377,862,848 B = 37.60 GiB, stat-verified 2026-09-23). DELETION IS A SEPARATE OPERATOR
+      ACTION; this marker records catalogue retirement, not disk reclamation.
+      The measured MI210 record below is retained, not superseded.
+      NOTE — this row is NOT the rollback anchor: the anchor named by roles.qwen35_122b_q4km is the
+      UD-Q4_K_M 3-shard set under the same MTP-GGUF tree, a different artifact, untouched here.
     description: Qwen3.5-122B-A10B UD-IQ2_M — GPU-resident architect/drafter research candidate
     model:
       name: Qwen3.5-122B-A10B
@@ -8346,6 +8363,20 @@ roles:
 
   qwen3_next_80b_a3b_instruct_iq2m_local:
     tier: C
+    deprecated: true
+    deprecated_date: 2026-09-23
+    deprecated_reason: >
+      RETIRED in the 2026-09-22 operator-directed lineup change. Qwen3-Next-80B-A3B-Instruct left the
+      serving lineup when ingest_long_context — the family's only role — moved to Qwen3.8-27B Q8_0 on
+      architect_general's :8083 process; the LIVE row that superseded it is roles.qwen38_27b_q8_local
+      (server_mode.ingest_long_context, alias_of architect_general). The 2026-09-22 change marked the
+      role-holding row roles.qwen3_next_80b_a3b_instruct_q4km_local but not this exact-artifact
+      catalogue row beneath it, which stayed live and non-deprecated; marked 2026-09-23 to close that
+      gap. Never role-bound — catalogue-only compression candidate, and no live role resolves to it
+      (verified 2026-09-23, retire-model enumerate_refs: 0 BLOCK).
+      GGUF REMAINS ON DISK at /mnt/raid0/llm/models/Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M.gguf
+      (26,056,028,768 B = 24.27 GiB, stat-verified 2026-09-23). DELETION IS A SEPARATE OPERATOR
+      ACTION; this marker records catalogue retirement, not disk reclamation.
     description: Qwen3-Next-80B-A3B-Instruct i1-IQ2_M - local compression candidate; catalogue-only until quality and replacement gates pass.
     model:
       name: Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M
@@ -10564,6 +10595,24 @@ roles:
 
   gemma4_26b_a4b_orig_q8_local:
     tier: C
+    deprecated: true
+    deprecated_date: 2026-09-23
+    deprecated_reason: >
+      RETIRED in the 2026-09-22 operator-directed lineup change. The gemma-4-26B-A4B family left the
+      serving lineup when worker_general (and its worker_explore / worker_math / toolrunner /
+      worker_summarize aliases) moved to Qwen3.6-35B-A3B-MTP-Q8_0; the LIVE row that superseded it is
+      roles.qwen36_35b_a3b_mtp_q8_local (server_mode.frontdoor / server_mode.worker). The 2026-09-22
+      change marked the role-holding rows (roles.gemma4_26b_a4b_orig_q4km_local,
+      roles.gemma4_26b_a4b_q4km_mtp, roles.draft_gemma4_26b_a4b_assistant_q8) but not this
+      exact-artifact catalogue row beneath them, which stayed live and non-deprecated; marked
+      2026-09-23 to close that gap. Never role-bound: the live worker used the ORIG Q4_K_M artifact,
+      never this Q8_0, and no live role resolves to it (verified 2026-09-23, retire-model
+      enumerate_refs: 0 BLOCK).
+      GGUF REMAINS ON DISK at /mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-Q8_0.gguf
+      (26,859,859,872 B = 25.02 GiB, stat-verified 2026-09-23). DELETION IS A SEPARATE OPERATOR
+      ACTION; this marker records catalogue retirement, not disk reclamation.
+      The eval recipe artifacts/serving-recipes/eval/gemma-4-26b-a4b-orig-q8-gpu-judge-np4.json still
+      names this artifact and will run against an absent file once the operator deletes it.
     description: Gemma 4 26B-A4B ORIG Q8_0 exact local artifact; catalogue-only precision row.
     model:
       name: gemma-4-26B-A4B-it-ORIG-Q8_0
@@ -10598,6 +10647,21 @@ roles:
 
   gemma4_26b_a4b_orig_bf16_local:
     tier: C
+    deprecated: true
+    deprecated_date: 2026-09-23
+    deprecated_reason: >
+      RETIRED in the 2026-09-22 operator-directed lineup change. The gemma-4-26B-A4B family left the
+      serving lineup when worker_general (and its worker_explore / worker_math / toolrunner /
+      worker_summarize aliases) moved to Qwen3.6-35B-A3B-MTP-Q8_0; the LIVE row that superseded it is
+      roles.qwen36_35b_a3b_mtp_q8_local (server_mode.frontdoor / server_mode.worker). The 2026-09-22
+      change marked the role-holding rows but not this exact-artifact catalogue row beneath them,
+      which stayed live and non-deprecated; marked 2026-09-23 to close that gap. Never role-bound —
+      quantization intermediate / quality reference — and no live role resolves to it (verified
+      2026-09-23, retire-model enumerate_refs: 0 BLOCK).
+      THE FILE IS ALREADY ABSENT: /mnt/raid0/llm/models/gemma-4-26B-A4B-it-ORIG-bf16.gguf was deleted
+      2026-08-09 in an operator-approved disk cleanup (see artifact_status.deleted below) and this row
+      went on naming a file that does not exist, which is what validate_model_registry.py was
+      reporting as MISSING_CATALOGUE_MODEL. Nothing remains on disk to reclaim for this row.
     description: Gemma 4 26B-A4B ORIG bf16 exact local artifact; catalogue-only precision row.
     model:
       name: gemma-4-26B-A4B-it-ORIG-bf16
@@ -10633,6 +10697,22 @@ roles:
 
   gemma4_26b_a4b_ud_iq4xs_local:
     tier: C
+    deprecated: true
+    deprecated_date: 2026-09-23
+    deprecated_reason: >
+      RETIRED in the 2026-09-22 operator-directed lineup change. The gemma-4-26B-A4B family left the
+      serving lineup when worker_general (and its worker_explore / worker_math / toolrunner /
+      worker_summarize aliases) moved to Qwen3.6-35B-A3B-MTP-Q8_0; the LIVE row that superseded it is
+      roles.qwen36_35b_a3b_mtp_q8_local (server_mode.frontdoor / server_mode.worker). The 2026-09-22
+      change marked the role-holding rows but not this exact-artifact catalogue row beneath them,
+      which stayed live and non-deprecated; marked 2026-09-23 to close that gap. Never role-bound —
+      compression/residency candidate, quality retention never measured — and no live role resolves to
+      it (verified 2026-09-23, retire-model enumerate_refs: 0 BLOCK).
+      THE FILE IS ALREADY ABSENT: /mnt/raid0/llm/models/gemma-4-26B-A4B-it-UD-IQ4_XS.gguf is not on
+      disk (stat-verified 2026-09-23), so this row was naming a file that does not exist —
+      `artifact_status.download: present` below is stale as of 2026-07-17 and is left unedited as the
+      historical observation. Nothing remains on disk to reclaim for this row; the MI210 speed and
+      coherence evidence below stands on its recorded artifacts.
     description: Gemma 4 26B-A4B UD-IQ4_XS exact local artifact; catalogue-only compression candidate.
     model:
       name: gemma-4-26B-A4B-it-UD-IQ4_XS
@@ -10678,6 +10758,20 @@ roles:
 
   gemma4_26b_a4b_q4km_current_local:
     tier: C
+    deprecated: true
+    deprecated_date: 2026-09-23
+    deprecated_reason: >
+      RETIRED in the 2026-09-22 operator-directed lineup change. The gemma-4-26B-A4B family left the
+      serving lineup when worker_general (and its worker_explore / worker_math / toolrunner /
+      worker_summarize aliases) moved to Qwen3.6-35B-A3B-MTP-Q8_0; the LIVE row that superseded it is
+      roles.qwen36_35b_a3b_mtp_q8_local (server_mode.frontdoor / server_mode.worker). The 2026-09-22
+      change marked the role-holding rows but not this exact-artifact catalogue row beneath them,
+      which stayed live and non-deprecated; marked 2026-09-23 to close that gap. Never role-bound:
+      this is the non-ORIG Q4_K_M regression-control artifact the live row deliberately did NOT use,
+      and no live role resolves to it (verified 2026-09-23, retire-model enumerate_refs: 0 BLOCK).
+      GGUF REMAINS ON DISK at /mnt/raid0/llm/models/gemma-4-26B-A4B-it-Q4_K_M-current.gguf
+      (14,249,045,120 B = 13.27 GiB, stat-verified 2026-09-23). DELETION IS A SEPARATE OPERATOR
+      ACTION; this marker records catalogue retirement, not disk reclamation.
     description: Gemma 4 26B-A4B Q4_K_M-current exact local artifact; catalogue-only row distinct from live ORIG Q4_K_M.
     model:
       name: gemma-4-26B-A4B-it-Q4_K_M-current
@@ -10712,6 +10806,21 @@ roles:
 
   draft_gemma4_26b_a4b_assistant_v6_f16_local:
     tier: C
+    deprecated: true
+    deprecated_date: 2026-09-23
+    deprecated_reason: >
+      RETIRED in the 2026-09-22 operator-directed lineup change. Its only possible target — the
+      gemma-4-26B-A4B worker — left the serving lineup, and the LIVE row that superseded that target is
+      roles.qwen36_35b_a3b_mtp_q8_local (server_mode.frontdoor / server_mode.worker), which self-drafts
+      from an embedded NEXTN/MTP head and takes no external drafter. Same orphaning as the already
+      deprecated roles.draft_gemma4_26b_a4b_assistant_q8; the 2026-09-22 change marked that row but not
+      this exact-artifact f16 catalogue row, which stayed live and non-deprecated. Marked 2026-09-23 to
+      close that gap. Never role-bound, and no live role resolves to it (verified 2026-09-23,
+      retire-model enumerate_refs: 0 BLOCK).
+      THE FILE IS ALREADY ABSENT: /mnt/raid0/llm/models/gemma-4-26B-A4B-it-assistant-v6-f16.gguf is not
+      on disk (stat-verified 2026-09-23), so this row was naming a file that does not exist —
+      `artifact_status.download: present` below is stale as of 2026-07-17 and is left unedited as the
+      historical observation. Nothing remains on disk to reclaim for this row.
     description: Gemma 4 26B-A4B assistant v6 f16 exact local draft artifact; catalogue-only precision row.
     model:
       name: gemma-4-26B-A4B-it-assistant-v6-f16
@@ -11828,6 +11937,42 @@ runtime_quirks:
 # Models deleted 2026-01-18 during MiniMax M2.1 download cleanup
 # Based on BLIND_RESCORE_2026-01-16.md analysis
 deprecated_models:
+  - model: gemma-4-26B-A4B-it (all quants + both MTP assistant heads)
+    path_was: /mnt/raid0/llm/models/gemma-4-26B-A4B-it-{ORIG-Q8_0,ORIG-Q4_K_M,Q4_K_M,Q4_K_M-current,assistant-Q8_0,assistant-v6-Q8_0}.gguf
+    size_gb: 70
+    reason: >-
+      RETIRED 2026-09-22 in the operator-directed lineup change and DELETED 2026-09-23 on explicit operator
+      confirmation. worker_general / worker_math / worker_explore / toolrunner all moved onto frontdoor's
+      Qwen3.6-35B-A3B-MTP-Q8_0 process via server_mode.frontdoor.shared_with, so ports :8072/:8082/:8182 were
+      vacated. The seven *_local catalogue rows were marked deprecated FIRST and the registry validated at 0
+      errors before a byte was removed. NOT retained as a rollback anchor: the operator's call was that a
+      re-download is acceptable if the 35B ever disappoints on worker traffic. NOTE the 35B swap has NO
+      measured quality on the worker battery -- recorded null in the lineup package -- so this deletion trades
+      an untested fallback for disk.
+    deleted: 2026-09-23
+  - model: Qwen3-Next-80B-A3B-Instruct (Q4_K_M and i1-IQ2_M)
+    path_was: /mnt/raid0/llm/models/{lmstudio-community/Qwen3-Next-80B-A3B-Instruct-GGUF/,Qwen3-Next-80B-A3B-Instruct.i1-IQ2_M.gguf}
+    size_gb: 69
+    reason: >-
+      RETIRED 2026-09-22 and DELETED 2026-09-23 on explicit operator confirmation. ingest_long_context moved
+      onto architect_general's Qwen3.8-27B GPU server at :8083 (n_ctx 196608), vacating :8085/:8185/:8285. The
+      role kept its NAME but lost its REASON: Next-80B held it for O(n) SSM scaling, whereas the 27B is the
+      fleet's KV-densest dense model. Recorded so nobody reads the surviving role name as continuity of
+      capability.
+    deleted: 2026-09-23
+  - model: Qwen3.5-122B-A10B (MTP UD-Q4_K_M 3-shard + UD-IQ2_M, and the unsloth Q4_K_M copy)
+    path_was: /mnt/raid0/llm/models/{Qwen3.5-122B-A10B-MTP-GGUF/,unsloth/Qwen3.5-122B-A10B-GGUF/}
+    size_gb: 180
+    reason: >-
+      RETIRED 2026-09-22 and DELETED 2026-09-23 on explicit operator confirmation. architect_critic moved to
+      Qwen3.8-Flash-Next UD-IQ4_XS on :8074. READ THIS BEFORE ASSUMING A ROLLBACK EXISTS: the UD-Q4_K_M
+      3-shard set (72.89 GiB) was the DECLARED ROLLBACK ANCHOR for this role -- roles.qwen35_122b_q4km said so
+      in its own deprecation text -- and it is gone. The assistant's deletion overview failed to surface that
+      before the operator confirmed; the operator's subsequent ruling was that no rollback path is needed and
+      a re-download is acceptable. Flash-Next holds the role with NO quality evidence (SSU-F2 open,
+      stack-change gate skipped with --allow-known-gaps), so until that closes the role is unmeasured AND
+      unbacked. The unsloth Q4_K_M copy was a second, never-deployed download of the same weights.
+    deleted: 2026-09-23
   - model: GLM-5.3-Flash-UD-Q4_K_XL (unsloth, 6 shards)
     path_was: /mnt/raid0/llm/models/unsloth/GLM-5.3-Flash-GGUF/UD-Q4_K_XL/
     size_gb: 186
