@@ -1166,7 +1166,12 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                         cpu_profile_capture.failed = str(exc)
                 srv.terminate()
                 try:
-                    srv.wait(30)
+                    # 180 s, not 30: a --no-mmap server unmaps ~0.5 TB of anonymous pages
+                    # on SIGTERM, and the node/host/engram profilers write their JSON dumps
+                    # from atexit AFTER that. A kill here silently costs the whole
+                    # instrumented capture (recorded as teardown="killed"), and a healthy
+                    # server never needs the extra window.
+                    srv.wait(180)
                     teardown = "terminated"
                 except Exception:
                     srv.kill()

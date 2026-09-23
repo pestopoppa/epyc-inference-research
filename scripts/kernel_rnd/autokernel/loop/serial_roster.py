@@ -64,11 +64,13 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None, s
         # Target/workload/resource identities are never overridden by common argv.
         valued = {"--workers", "--planner-model", "--planner-effort", "--critic-model",
                   "--critic-effort", "--pairs", "--serving-pairs", "--belief-root-repo",
-                  "--shared-history-root"}
+                  "--shared-history-root", "--node-profile-level"}
+        # Bare switches: instruments and rankers, never identities.
+        switches = {"--rank-prior-experiments", "--node-profile"}
         iterator = iter(extra)
         for arg in iterator:
             flag, equals, value = arg.partition("=")
-            if flag == "--rank-prior-experiments" and not equals:
+            if flag in switches and not equals:
                 continue
             if flag not in valued:
                 raise sr.SerialRefused(f"not a shared actor/measurement option: {flag}")
