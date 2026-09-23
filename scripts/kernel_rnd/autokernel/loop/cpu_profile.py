@@ -1174,6 +1174,18 @@ def _mechanism_family(dso, symbol):
         return "thread-synchronization-and-work-balance"
     if "vec_dot_f32" in lowered:
         return "dense-f32-dot"
+    # DS41/MoE families (INF-77 DS41-C7). Without these, MUL_MAT_ID -- 27.8% of the
+    # CPU decode wall on DeepSeek-V4.1 -- and the Engram row gather scatter across
+    # dozens of `symbol:<name>` singletons, so `ranked_levers`, the grouped view the
+    # planner actually reads, never names the two largest mechanisms on the target.
+    if "mul_mat_id" in lowered or "moe" in lowered:
+        return "moe-expert-matmul"
+    if "gather_rows" in lowered or "e4m3" in lowered or "e8m0" in lowered:
+        return "engram-row-gather"
+    if "flash_attn" in lowered or "fattn" in lowered:
+        return "flash-attention"
+    if "rms_norm" in lowered:
+        return "rms-normalization"
     if symbol == "[unknown]":
         return "unresolved-symbol:" + Path(dso).name
     return "symbol:" + symbol
