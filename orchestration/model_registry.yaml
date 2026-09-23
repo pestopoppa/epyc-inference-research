@@ -2974,6 +2974,39 @@ roles:
                                 # has ever been run on qwen4exp. This role's whole purpose is
                                 # adversarial critique quality; swapping it on speed alone
                                 # changes the thing the role exists to provide. See .md C5.
+      # ── General-suite quality, measured 2026-09-23. DELIBERATELY NOT `quality_score`. ──
+      # quality_score above is the CRITIC SUITE (adversarial critique, the thing this role
+      # exists to provide) and it stays null because that gate still has not been run on this
+      # model. mmlu_pro and gpqa are general-knowledge suites; recording them in that field
+      # would answer a different question than the field asks, which is the conflation this
+      # block exists to avoid. THIS DOES NOT CLOSE THE CRITIC-SUITE GAP.
+      general_suite_quality:
+        suite_mmlu_pro: {accuracy: 0.7550, n: 200, truncated: 0, max_tokens: 8192}
+        suite_gpqa:     {accuracy: 0.6513, n: 195, truncated: 0, max_tokens: 16384}
+        measured_on: 2026-09-23
+        kernel: "production-consolidated-v10 (ffc1bac82, build 10303)"
+        instrument_class: serving
+        scope: >-
+          Live :8074 IN ITS DEPLOYED CONFIGURATION (-t 96, -c 262144, -np 1, f16/f16,
+          --spec-draft-n-max 4, unsloth UD-IQ4_XS 3-shard). NOT a llama-bench arm and NOT the
+          recipe's measured shape -- the served process does not run its own recipe (SSU-F11:
+          threads 48 and the recipe env block are declared and never read). So these are never
+          comparable to optimized_tps above, which was taken at -t 48 on build 10241 with the
+          THP shim.
+        cap_convergence: >-
+          THE TOKEN CAP IS PART OF THE CLAIM, and these are the CONVERGED figures: the cap was
+          raised per suite until truncation reached zero, so pooled == untruncated and nothing
+          is scored wrong merely for being cut off. At the promotion gate's conventional
+          64-token cap this same model on these same 200 items scores 0.5650 with 46 truncated,
+          which reads as a regression against the retired Qwen3.5-122B's 0.6450 and is not one:
+          that model truncated 0/200 at the same cap because it answers with a letter while
+          this one derives in the visible channel. NEVER quote a capped figure against an
+          uncapped one. See promotion_gates.yaml gates.quality.truncation_audit.
+        incumbent_comparison: >-
+          Qwen3.5-122B (retired) recorded mmlu_pro 0.6450 / gpqa 0.5692 at max_tokens 64 with 0
+          truncated. Those are its GATE numbers and were never re-run at a raised cap, so the
+          comparison is like-for-like only in that both sides are untruncated; treat the
+          incumbent's as a lower bound of unknown tightness.
       measurement_category: OBSERVATION   # NOT OPTIMUM: pre-ratification, off-shape, off-kernel
       measurement_date: 2026-09-08
       # DO NOT resurrect 12.19 (2026-05-04 NO-MTP probe) or 8.21 (Qwen3-235B-A22B, a DIFFERENT
