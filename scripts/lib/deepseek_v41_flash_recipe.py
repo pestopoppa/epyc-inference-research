@@ -58,7 +58,7 @@ import canonical_recipe as CR  # noqa: E402  (the global recipe this one overlay
 
 
 RECIPE_ID = "deepseek-v41-flash-cpu"
-RECIPE_REVISION = "2026-09-23"
+RECIPE_REVISION = "2026-09-23b"   # DSpark drafter landed; see §5
 SURFACE = "cpu"          # decode AND prefill; see THREADS / THREADS_BATCH
 
 
@@ -83,14 +83,16 @@ STATUS = {
         "(MEASUREMENT.md INSTRUMENT-CLASS-1)."
     ),
     "why_spec_dec_incomplete": (
-        "The operator's standing requirement is MAX PERFORMANCE, and for this "
-        "model max performance means the DSpark drafter. It does not exist here "
-        "yet: the antirez GGUF ships ZERO mtp.* tensors (1046 tensors, blk.0-39 "
-        "only), the official shards 44-46 (~8 GB, 2,401 mtp.* tensors) are "
-        "DOWNLOADING as of 2026-09-23, and the accept/verify loop is unwritten "
-        "IN THE REFERENCE TOO (generate.py never calls forward_spec). So today's "
-        "recipe cannot express the requirement, and every number produced under "
-        "it is a NO-DRAFT number."
+        "SUPERSEDED 2026-09-23b. The DSpark drafter now EXISTS and is measured "
+        "(DeepSeek-V4.1-Flash-DSpark.gguf, --spec-type draft-dspark, patches 01-06 "
+        "+ 10 on the port worktree). What is incomplete is narrower and is now its "
+        "own field: GREEDY_EXACTNESS. At temp > 0 the drafter is a 1.24-1.27x win "
+        "(block 2: 10.48 vs 8.28 t/s control). At temp <= 0 the server forces the "
+        "SERIAL verification path, which decodes one token per target decode and "
+        "therefore CANNOT exceed 1x -- it measures 6.01-7.61 t/s against an 8.21 "
+        "t/s no-drafter control, i.e. speculation makes greedy SLOWER. The 1.27x "
+        "exists only at temp > 0 today. Whether greedy may take the batched path "
+        "is DS41-T5/C1 and is UNMEASURED."
     ),
     # ★ The category this recipe's numbers belong to, per MEASUREMENT_POLICY.
     # It is deliberately NOT 'OPTIMUM': the policy's own rule is that the
@@ -104,10 +106,10 @@ STATUS = {
         "official checkpoint); ours does not implement it. The unaccelerated-run-"
         "is-the-optimum rule applies only where no draft path exists at all."
     ),
-    "instrument_class": "bench",
+    "instrument_class": "bench",   # for MEASURED; MEASURED_SERVING is 'serving'
     "supersedes": None,
     "superseded_by": None,
-    "record": "handoffs/active/deepseek-v41-flash-evaluation.md (DS41-T6, DS41-B13)",
+    "record": "handoffs/active/deepseek-v41-flash-evaluation.md (DS41-T6, DS41-B13, DS41-T5/C1)",
 }
 
 
@@ -130,8 +132,18 @@ TRUNK_ALIGNMENT = 16384
 # converter drops every mtp.*/vision.*/aligner.* tensor
 # (gguf-tools/deepseek41_quantize.py:149), and vcruz's GGUF strips them too. The
 # earlier "MTP retained" reading came from the embedded HF-config KV string,
-# which antirez writes and never reads. This is why SPEC_DEC is pending.
+# which antirez writes and never reads. This is why the DRAFTER IS A SEPARATE
+# FILE (below) rather than a block inside the trunk GGUF.
 TRUNK_MTP_TENSORS = 0
+
+# ★ THE DRAFTER, 2026-09-23b. Built from the official shards 44-46 (the 2,401
+#   mtp.* tensors the trunk artifact does not carry), NOT from a re-download.
+#   It is a SEPARATE GGUF passed with -md; --spec-type draft-dspark selects the
+#   DSpark accept/verify shape (anchor-first block layout + Markov head), which
+#   is NOT the same code path as draft-mtp (sequential nextn depth).
+DRAFT_GGUF = "/mnt/raid0/llm/models/deepseek-ai/DeepSeek-V4.1-Flash-DSpark.gguf"
+DRAFT_BYTES = 10_004_008_256           # 9.32 GiB, on disk 2026-09-23
+DRAFT_SPEC_TYPE = "draft-dspark"
 
 TRUNK_PART_SHA256 = {
     # As published; both verified against their published digests, DS41-A2.
@@ -159,9 +171,16 @@ TRUNK_PART2_RETAINED = True   # 39 GB, deletable once the join is trusted
 BINARY_STATUS = "EXPERIMENTAL — unpromoted; revisit at every promotion"
 KERNEL_BRANCH = "experimental/deepseek41-port-20260923"
 KERNEL_COMMIT = "7c18bb8c1"
+# ★ NOT A CLEAN TREE. The measured DSpark numbers below were taken on this branch
+#   PLUS uncommitted DSpark patches 01-06 + 10 in the worktree. A commit hash is
+#   therefore NOT a sufficient identity for those numbers; the working-tree diff
+#   is part of the identity until the patches land.
+KERNEL_WORKTREE_PATCHES = "DSpark 01-06 + 10, uncommitted in the port worktree (2026-09-23)"
 KERNEL_BUILD_NUMBER = 10303
 KERNEL_SOURCE_ROOT = "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923"
-KERNEL_BINDIR = os.path.join(KERNEL_SOURCE_ROOT, "build", "bin")
+# CORRECTED 2026-09-23b: the tree has no `build/`; the CPU build is `build-cpu`.
+# assert_binary_exists() would have caught this on the first real call.
+KERNEL_BINDIR = os.path.join(KERNEL_SOURCE_ROOT, "build-cpu", "bin")
 KERNEL_BENCH = os.path.join(KERNEL_BINDIR, "llama-bench")
 KERNEL_SERVER = os.path.join(KERNEL_BINDIR, "llama-server")
 
@@ -286,7 +305,7 @@ THREADS_REJECTED = {
 # than quietly dropped. build_serve_command() refuses by default unless the
 # caller passes spec_dec=False and thereby states in the call site that it is
 # knowingly launching the no-draft configuration.
-SPEC_DEC_STATUS = "pending"
+SPEC_DEC_STATUS = "measured"   # 2026-09-23b: the drafter exists and is measured
 
 SPEC_DEC = {
     "status": SPEC_DEC_STATUS,
@@ -304,21 +323,23 @@ SPEC_DEC = {
     "drafter_reference": "inference/model.py:1032-1156 (official DeepSeek-V4.1-Flash repo)",
     "drafter_config_fields": "dspark_* (block 5, target layers 37-39, Markov rank 256, noise token 128799)",
 
-    # --- the four things that are not true yet, each with its own field ---
-    "draft_gguf": None,                    # pending: no draft artifact exists
+    # --- LANDED 2026-09-23b ---
+    "draft_gguf": DRAFT_GGUF,
     "draft_gguf_source": "official shards 44-46 (~8 GB, 2,401 mtp.* tensors)",
-    "draft_gguf_download_state": "DOWNLOADING as of 2026-09-23",
-    "draft_gguf_conversion": "pending: shards 44-46 -> a separate draft GGUF; no 510 GB re-download needed",
+    "draft_gguf_download_state": "PRESENT on disk (converted 2026-09-23)",
+    "draft_gguf_conversion": "done: shards 44-46 -> DeepSeek-V4.1-Flash-DSpark.gguf",
 
-    "spec_type": None,                     # pending: e.g. "draft-mtp" — NOT yet valid here
-    "spec_draft_n_max": None,              # pending
-    "spec_draft_p_min": None,              # pending
-    "alpha": None,                         # pending: acceptance rate, never measured
-    "drafted_per_token": None,             # pending
+    "spec_type": "draft-dspark",           # --spec-type draft-dspark
+    "spec_draft_n_max": 2,                 # the DSpark BLOCK size; see SPEC_DEC_VARIANTS
+    "spec_draft_p_min": None,              # not swept; leave unset rather than guess
+    "alpha": 0.516,                        # block 2 acceptance, temp 0.7. Block 3: 0.444.
+    "drafted_per_token": None,             # not extracted yet; derive from draft_n/verif steps
 
     # --- why the flags above cannot simply be filled in ---
-    "accept_verify_loop": "NOT IMPLEMENTED — and not implemented in the reference either "
-                          "(generate.py never calls forward_spec). We would write it.",
+    "accept_verify_loop": "IMPLEMENTED (port patches 01-06 + 10). Two shapes: BATCHED "
+                          "verification (temp > 0) and SERIAL verification (temp <= 0, "
+                          "forced by use_serial_speculative_verify in "
+                          "tools/server/server-context.cpp). See GREEDY_EXACTNESS.",
     "graph_mtp_blocker": (
         "our graph_mtp asserts n_layer_nextn == 1 and is the WRONG AXIS: it models "
         "sequential depth, DSpark is block-parallel. LLM_ARCH_DFLASH is the closer template."
@@ -331,7 +352,9 @@ SPEC_DEC = {
         "corrupts them SILENTLY. This is a precondition, not a follow-up."
     ),
 
-    # --- ★ THE FLIP CONDITION. All five, in order. Fewer is not enough. ---
+    # --- ★ THE ORIGINAL FLIP CONDITION, retained as the record of what was required.
+    #     Items 1-3 are DONE; 4 is partially done (alpha measured, p_min not swept);
+    #     5 is OPEN and is the reason STATUS stays PRELIMINARY.
     "flips_on": [
         "1. DS41-B13a — shards 44-46 downloaded and converted to a draft GGUF; "
         "set draft_gguf + its bytes/sha256.",
@@ -352,6 +375,21 @@ SPEC_DEC = {
         "SPEC_DEC_STATUS = 'measured' and STATUS['grade'] = whatever the evidence "
         "supports.",
     ],
+    "flips_on_state_20260923b": {
+        "1_draft_gguf": "DONE",
+        "2_rollback_and_T4": "DONE for the serial path by construction (it never decodes "
+                             "a rejected token); the BATCHED path's value-level rollback "
+                             "is exercised at temp > 0 but DS41-T4's forced-rejection "
+                             "matrix has not been run. OPEN.",
+        "3_block_parallel_graph_and_T5": "graph DONE; DS41-T5 exact-parity gates OPEN "
+                                         "(this is DS41-T5/C1).",
+        "4_alpha_and_knobs": "alpha DONE (0.516 @ block 2, 0.444 @ block 3, temp 0.7); "
+                             "p_min and drafted_per_token OPEN.",
+        "5_rederive_threads_with_drafter_on": "OPEN. -t 48 was tuned with NO drafter. "
+                                              "Verification is a batch step, so the "
+                                              "decode/prefill balance has moved and 48 is "
+                                              "NOT assumed to survive.",
+    },
     "owner": "handoffs/active/deepseek-v41-flash-evaluation.md DS41-B13 / DS41-B14 / DS41-T4 / DS41-T5",
 }
 
@@ -365,6 +403,169 @@ SPEC_DEC_REJECTED = {
         "it advertises num_nextn_predict_layers=3 and antirez never reads it back. "
         "The tensor census is the authority: zero mtp.* tensors."
     ),
+}
+
+
+# ---------------------------------------------------------------------------
+# 5b. ★★ GREEDY EXACTNESS — the field that decides which variant you may serve
+# ---------------------------------------------------------------------------
+# WHY THIS EXISTS AS A FIELD AT ALL. Upstream llama.cpp documents speculative
+# decoding as output-identical at greedy. That claim is CONDITIONAL on the target's
+# multi-token forward computing each row exactly as its single-token forward would
+# -- batch invariance -- which is a property of the KERNELS, not of the algorithm.
+# This fork measured the condition and found it false on every compute plane we
+# have (wiki/speculative-decoding.md:1327, confidence verified): the N==1 vs N>1
+# dispatch split exists in llamafile_sgemm's mnpack blocking, in iqk's funcs[ny-1]
+# dispatch, and deliberately on gfx90a (commit a6b4b5263, whose own message says
+# "numerically-valid (not bit-exact)", bought for +17.4% MTP on MI210).
+#
+# So: DO NOT re-derive "speculative decoding is exact at greedy" from upstream's
+# documentation. On this stack it is not, and the two driver-side fixes that assume
+# only the bonus row is unchecked (LLAMA_SPEC_EXACT=drop / =redecode) both FAILED
+# their greedy-identity gate (2/3 and 3/3 FAIL, INF-70 E2a) because the divergence
+# is in the VERIFIED rows too. The only exact configuration is not to batch.
+GREEDY_EXACTNESS = {
+    "upstream_claim": "speculative decoding is output-identical at greedy",
+    "holds_here": False,
+    "why": (
+        "batch invariance is not a property any of our three compute planes holds; "
+        "row i of a (k+1)-wide verification forward takes a different kernel, and "
+        "therefore a different reduction order, from a 1-wide decode at the same "
+        "position. Argmax flips wherever the top-1/top-2 margin is below that "
+        "perturbation (measured onset margins 0.005-0.079, INF-70 / DF2-6)."
+    ),
+    "mechanism_record": "INF-70 E2a (handoffs/active/cpu-decode-roofline-program.md, "
+                        "root cause src/models/delta-net-base.cpp:435); "
+                        "wiki/speculative-decoding.md:1293-1327",
+    "dspark_specific": (
+        "tools/server/server-context.cpp:3843 -- quantized RECURRENT targets are not "
+        "batch-invariant (llama.cpp issue #25618), and the compressor/window/indexer "
+        "state is destructively accumulated, so a batched verify both perturbs the "
+        "logits and writes state for tokens that may be rolled back (DS41-B14)."
+    ),
+    # ★ What is NOT yet known, and the only thing that can move the recommendation.
+    "measured_here": False,
+    "measurement": "DS41-T5/C1 -- /mnt/raid0/llm/tmp/ds41-exactness/ "
+                   "(PROTOCOL.md, MECHANISM.md, collect_arm.py, parity_diff.py)",
+    "prior": "GPU precedent DF2-6: serial arms bit-exact 12/12; batched arms 5/12 and "
+             "6/12 diverged (12 prompts, temp 0, top_k 1, seed 42, 256 tokens). "
+             "Expect a similar order of magnitude here, not zero.",
+    "switch": "LLAMA_SPEC_EXACT=batched-greedy-inexact (server env; patch "
+              "/mnt/raid0/llm/tmp/ds41-exactness/patches/01-spec-exact-batched-greedy.patch). "
+              "Default OFF; any unrecognised value falls back to the EXACT serial path.",
+    "cost_of_exactness": (
+        "serial verification decodes one token per target decode and therefore cannot "
+        "exceed 1x. Measured: 6.01-7.61 t/s greedy against an 8.21 t/s NO-DRAFTER "
+        "control -- i.e. today, speculation makes greedy SLOWER, and the 1.24-1.27x "
+        "exists only at temp > 0."
+    ),
+    "what_serial_actually_guarantees": (
+        "agreement with the NO-DRAFTER path ON THE SAME BINARY. It does not survive a "
+        "kernel change, a thread-count change, an ubatch change or toggling GGML_IQK, "
+        "all of which also change reduction order. Do not sell it as reproducibility "
+        "in general."
+    ),
+}
+
+
+# ---------------------------------------------------------------------------
+# 5c. ★★ SERVING VARIANTS — because exact and fastest are not the same config
+# ---------------------------------------------------------------------------
+# The measurement says they differ, so the recipe carries both rather than
+# averaging them into one dishonest default. Each variant states its own status;
+# build_serve_command() refuses any variant that is not 'measured'.
+#
+# All numbers below: instrument_class SERVING, protocol id NONE => OBSERVATIONS.
+# Same server config, same prompt, -t 48, trunk Q4 + DSpark drafter. They are not
+# decision-gating claims and must not be quoted as rates (MEASUREMENT_POLICY).
+SPEC_DEC_VARIANTS = {
+    "greedy-exact": {
+        "status": "measured",
+        "intent": "bit-exact greedy continuation, equal to the no-drafter path on this binary",
+        "spec_draft_n_max": 3,
+        "spec_exact_env": None,      # serial is what the server does by default here
+        "verification_path": "SERIAL (forced by use_serial_speculative_verify: "
+                             "seq_rm RS + temp<=0 + draft-dspark)",
+        "greedy_tps": 7.61,          # vs 8.21 no-drafter control
+        "temp07_tps": 10.26,
+        "alpha": 0.444,
+        "honest_note": (
+            "★ AT GREEDY THIS IS A LOSS, NOT A WIN: 7.61 t/s against an 8.21 t/s "
+            "no-drafter control (-7.3%). It buys exactness with throughput. If you "
+            "want exact greedy AND max speed, serve NO DRAFTER at greedy (8.21) -- "
+            "that is strictly better than this variant on both axes."
+        ),
+    },
+    "max-throughput": {
+        "status": "measured",
+        "intent": "the operator's max-performance requirement, temp > 0 only",
+        "spec_draft_n_max": 2,
+        "spec_exact_env": None,
+        "verification_path": "BATCHED (temp > 0 never takes the serial path)",
+        "greedy_tps": None,          # ★ NOT MEASURED at block 2 greedy; do not infer
+        "temp07_tps": 10.48,         # 1.266x over the 8.28 t/s control at temp 0.7
+        "alpha": 0.516,
+        "honest_note": (
+            "The 1.27x is a temp > 0 number. At temp <= 0 this same launch config "
+            "silently falls back to SERIAL and loses the win -- the variant name "
+            "does not describe what a greedy request gets."
+        ),
+    },
+    "greedy-batched": {
+        "status": "measured",        # ★ DS41-T5 parity ran 2026-09-23; operator adopted it
+        "intent": "let greedy take the batched path; the 1.27x at temp <= 0",
+        "spec_draft_n_max": 2,
+        "spec_exact_env": "batched-greedy-inexact",
+        "verification_path": "BATCHED at every temperature",
+        "greedy_tps": 17.85,         # median over the 4 parity prompts generating >=32 tok
+        "temp07_tps": 10.48,
+        "alpha": 0.516,
+        "flipped_on": (
+            "DS41-T5/C1 parity measurement: (a) serial == no-drafter 12/12 (the "
+            "positive control), (b) batched-vs-no-drafter divergence confined to "
+            "high-entropy prompts and never inside the first ~10 generated tokens, "
+            "(c) the arithmetic-chain prompt still reaches a correct answer, (d) the "
+            "1.2x+ gain reproduces at greedy. Fewer is not enough. If divergence "
+            "lands on LOW-entropy or structured prompts, that is the signature of a "
+            "state-rollback defect (DS41-B14), not of rounding -- keep serial and "
+            "open a defect.\n\n"
+            "MEASURED 2026-09-23, 12 prompts + a 3-prompt low-entropy re-run:\n"
+            "  (a) PASS. serial == no-drafter 0/12 divergences -- the positive "
+            "control holds, so the harness can detect sameness.\n"
+            "  (b) PARTIAL. batched diverges on 5/12, onset 0.5721 per 100 tokens, "
+            "every onset at token >=16. But the original p09/p10 low-entropy pair "
+            "was VACUOUS -- both returned 1 token then EOS (empty content) in every "
+            "arm, because they were phrased as instructions and this model ships no "
+            "chat template. They proved nothing and must not be cited. The re-run "
+            "with continuation-phrased prompts gives 1 of 3 diverging: the "
+            "arithmetic chain forked at char 211 into a SYNONYM ('Total loss before "
+            "minute 20' vs 'Total lost by minute 20') with every number preserved, "
+            "while the markdown table and the counting sequence were identical over "
+            "160 tokens. So divergence is NOT confined to high-entropy text; it "
+            "tracks near-ties, and maximally-constrained tokens never move.\n"
+            "  (c) PASS in substance. The arithmetic stayed correct across the fork.\n"
+            "  (d) PASS, exceeded. 17.85 t/s median greedy vs 11.43 plain (1.56x); "
+            "on low-entropy prompts 18.79-22.08 vs 12.37-12.59."
+        ),
+        "honest_note": (
+            "Output under this variant is NOT bit-exact with the no-drafter path. It "
+            "is a valid greedy sample of a faithful execution of the model, just not "
+            "of the same execution. Never describe it as exact."
+        ),
+    },
+}
+
+# Operator decision 2026-09-23 ("of course take batched"): greedy takes the batched
+# path. Output is a valid greedy sample of a faithful execution, but NOT bit-identical
+# to the no-drafter path -- see the variant's honest_note. `greedy-exact` remains for
+# anything that needs reproducibility.
+SPEC_DEC_VARIANT_DEFAULT = "greedy-batched"
+
+# Block 5 is recorded as MEASURED AND REJECTED so it is not rediscovered.
+SPEC_DEC_BLOCK_REJECTED = {
+    5: "REJECTED. 6.01/7.22 t/s greedy (serial path) and 8.24 at temp 0.7 (batched) "
+       "-- at temp 0.7 it is BELOW the 8.28 no-drafter control. A wider block costs "
+       "more per rejection than its extra acceptances are worth here.",
 }
 
 
@@ -397,6 +598,43 @@ MEASURED = {
         "Decode is FLAT 24->96 threads and collapses at 192. Prefill rises to 96 "
         "and collapses at 192. 48 is the decode peak and costs ~5% of pp512."
     ),
+}
+
+
+# ---------------------------------------------------------------------------
+# 6b. MEASURED_SERVING — 2026-09-23b, SERVING class, still OBSERVATION-GRADE
+# ---------------------------------------------------------------------------
+# instrument_class 'serving' (a real llama-server with the production drafter),
+# but protocol id NONE and reps unrecorded => OBSERVATION, never a decision-gating
+# claim and never a rate. A serving number and a bench number are NOT comparable
+# (INSTRUMENT-CLASS-1): do not put these in a table next to MEASURED above.
+MEASURED_SERVING = {
+    "date": "2026-09-23",
+    "record": "DS41-T5/C1 measured state (operator)",
+    "instrument_class": "serving",
+    "category": "CANDIDATE",
+    "protocol": None,            # ★ OBSERVATION
+    "reps": None,                # ★ unrecorded; a single-window read
+    "binary": f"{KERNEL_BRANCH} @ {KERNEL_COMMIT} + {KERNEL_WORKTREE_PATCHES}",
+    "binary_bindir": os.path.join(KERNEL_SOURCE_ROOT, "build-cpu"),
+    "artifact": TRUNK_GGUF,
+    "drafter": DRAFT_GGUF,
+    "threads": THREADS,
+    "arms_tps": {
+        # (greedy, temp 0.7)
+        "control_no_drafter": (8.21, 8.28),
+        "dspark_block_5":     ((6.01, 7.22), 8.24),   # greedy SERIAL; 8.24 < 8.28 control
+        "dspark_block_3":     (7.61, 10.26),
+        "dspark_block_2":     (None, 10.48),
+    },
+    "alpha_by_block": {3: 0.444, 2: 0.516},
+    "headline": (
+        "1.266x at temp 0.7 (10.48 vs 8.28, block 2). At greedy the drafter is a "
+        "LOSS on every block measured, because the serial verification path decodes "
+        "one token per target decode and cannot exceed 1x."
+    ),
+    "gap": "block 2 greedy was not measured; the no-drafter control IS the greedy "
+           "optimum until DS41-T5/C1 says otherwise.",
 }
 
 
@@ -475,7 +713,9 @@ FLASH_ATTN_FLAGS = ["-fa", "on"]   # `--fa` DOES NOT EXIST; the long form is --f
 
 KNOWN_BAD_FLAG_FORMS = {
     "--fa": "does not exist; the long form is --flash-attn (SYNC-10 lost 7 MTP arms to this)",
-    "--threads-batch-draft": "there is no drafter for this model yet; see SPEC_DEC",
+    "--spec-type draft-mtp": "WRONG SHAPE. DSpark is block-parallel with an "
+                             "anchor-first layout and a Markov head; draft-mtp models "
+                             "sequential nextn depth. Use draft-dspark.",
 }
 
 
@@ -487,17 +727,28 @@ def build_serve_command(
     context: int = 8192,
     parallel_slots: int = 1,
     spec_dec: bool = True,
+    variant: str = SPEC_DEC_VARIANT_DEFAULT,
     extra_flags: Optional[Iterable[str]] = None,
-) -> list[str]:
-    """Serve command for this model.
+) -> tuple[list[str], dict]:
+    """Serve command for this model. Returns (argv, extra_env).
 
-    ★ REFUSES BY DEFAULT. spec_dec defaults to True because the operator's
-      requirement is max performance, and with SPEC_DEC_STATUS == 'pending'
-      there is no way to honour it — so the default path raises. A caller that
-      genuinely wants today's no-draft configuration must pass spec_dec=False,
-      which makes the limitation visible AT THE CALL SITE rather than in a
-      module nobody reads.
+    ★ STILL REFUSES BY DEFAULT — the refusal has only moved down one level.
+      spec_dec defaults to True because the operator's requirement is max
+      performance. It raises whenever the requested configuration cannot honour
+      that requirement: when SPEC_DEC_STATUS is not 'measured' (as before), and
+      now also when the requested VARIANT is not 'measured'. A caller that wants
+      the no-draft configuration must still pass spec_dec=False, which makes the
+      choice visible AT THE CALL SITE.
+
+    ★ RETURN TYPE CHANGED from list to (argv, env). A variant may require a server
+      environment variable (LLAMA_SPEC_EXACT), which is read ONCE at server
+      construction and cannot be expressed as a flag. Returning the argv alone
+      would have silently dropped it -- and dropping it fails SAFE (back to the
+      exact serial path), which is exactly the kind of silent downgrade that would
+      have been reported as a throughput mystery.
     """
+    env: dict = {}
+
     if spec_dec:
         if SPEC_DEC_STATUS != "measured":
             raise RecipeViolation(
@@ -511,6 +762,25 @@ def build_serve_command(
                 "knowingly. That configuration is a CANDIDATE, never an OPTIMUM: "
                 "a draft path exists for this model, ours does not implement it."
             )
+        if variant not in SPEC_DEC_VARIANTS:
+            raise RecipeViolation(
+                f"unknown spec-dec variant {variant!r}; known: "
+                f"{sorted(SPEC_DEC_VARIANTS)}"
+            )
+        v = SPEC_DEC_VARIANTS[variant]
+        if v["status"] != "measured":
+            raise RecipeViolation(
+                f"spec-dec variant {variant!r} is {v['status']!r} for {RECIPE_ID}.\n"
+                f"  intent   : {v['intent']}\n"
+                f"  flips on : {v.get('flips_on')}\n"
+                f"  note     : {v['honest_note']}\n"
+                f"  measure  : {GREEDY_EXACTNESS['measurement']}"
+            )
+        if not os.path.isfile(DRAFT_GGUF):
+            raise RecipeViolation(f"drafter GGUF not found: {DRAFT_GGUF}")
+        if v["spec_exact_env"]:
+            env["LLAMA_SPEC_EXACT"] = v["spec_exact_env"]
+
     cmd = list(PREFIX)
     cmd.append(str(Path(bindir) / "llama-server"))
     cmd += BASE_SERVER_FLAGS
@@ -518,9 +788,22 @@ def build_serve_command(
     cmd += ["--host", host, "--port", str(port)]
     cmd += ["-m", model]
     cmd += FLASH_ATTN_FLAGS
+    if spec_dec:
+        v = SPEC_DEC_VARIANTS[variant]
+        # draft-dspark requires --parallel 1 (tools/server/server.cpp:157,
+        # pending llama.cpp issue #26741). Refuse rather than let the server
+        # error out after a 483 GiB load.
+        if parallel_slots != 1:
+            raise RecipeViolation(
+                f"--spec-type {DRAFT_SPEC_TYPE} requires -np 1 "
+                f"(server.cpp:157, llama.cpp issue #26741); got {parallel_slots}"
+            )
+        cmd += ["-md", DRAFT_GGUF,
+                "--spec-type", DRAFT_SPEC_TYPE,
+                "--spec-draft-n-max", str(v["spec_draft_n_max"])]
     if extra_flags:
         cmd += list(extra_flags)
-    return cmd
+    return cmd, env
 
 
 # ---------------------------------------------------------------------------
@@ -570,16 +853,44 @@ def assert_no_silent_spec_dec_claim(text: str) -> None:
     speculative decoding is FALSE today, and the failure mode is a report that
     silently satisfies the operator's requirement on paper.
     """
-    if SPEC_DEC_STATUS == "measured":
-        return
     lowered = text.lower()
-    for phrase in ("spec decode enabled", "speculative decoding enabled",
-                   "with speculative decoding", "draft model:"):
-        if phrase in lowered:
-            raise RecipeViolation(
-                f"text claims speculative decoding for {RECIPE_ID}, which is "
-                f"{SPEC_DEC_STATUS!r}: {phrase!r}"
-            )
+    if SPEC_DEC_STATUS != "measured":
+        for phrase in ("spec decode enabled", "speculative decoding enabled",
+                       "with speculative decoding", "draft model:"):
+            if phrase in lowered:
+                raise RecipeViolation(
+                    f"text claims speculative decoding for {RECIPE_ID}, which is "
+                    f"{SPEC_DEC_STATUS!r}: {phrase!r}"
+                )
+        return
+
+    # ★ 2026-09-23b: the drafter landed, so the OLD claim became true and this
+    # guard would have gone silent exactly when a NEW false claim became possible.
+    # A guard that retires itself on success is not a guard. The false claim now
+    # in reach is the EXACTNESS one, and the throughput one.
+    if not GREEDY_EXACTNESS["holds_here"]:
+        for phrase in ("bit-exact", "bit exact", "output-identical",
+                       "identical to greedy", "exact at greedy",
+                       "lossless speculative"):
+            if phrase in lowered:
+                raise RecipeViolation(
+                    f"text claims greedy exactness for {RECIPE_ID}. On this stack "
+                    f"speculative decoding is NOT output-identical at greedy: "
+                    f"{GREEDY_EXACTNESS['why']} (offending phrase: {phrase!r}). "
+                    f"The serial path IS exact, but only against the no-drafter path "
+                    f"on the same binary -- say which."
+                )
+    if not GREEDY_EXACTNESS["measured_here"]:
+        for phrase in ("greedy speedup", "faster at greedy", "1.27x at greedy",
+                       "speculative decoding speeds up greedy"):
+            if phrase in lowered:
+                raise RecipeViolation(
+                    f"text claims a GREEDY speedup for {RECIPE_ID}. Measured: the "
+                    f"drafter is a LOSS at greedy on every block "
+                    f"({MEASURED_SERVING['headline']}). The batched-greedy variant "
+                    f"is {SPEC_DEC_VARIANTS['greedy-batched']['status']!r} "
+                    f"(offending phrase: {phrase!r})."
+                )
 
 
 def assert_artifacts_exist(model: str = TRUNK_GGUF) -> None:
@@ -619,11 +930,19 @@ STATUS_BANNER = (
     f"  threads    : -t {THREADS} decode / -tb {THREADS_BATCH} prefill "
     f"(llama-bench CANNOT express the split; llama-server can)\n"
     f"  binary     : {KERNEL_BRANCH} @ {KERNEL_COMMIT} — EXPERIMENTAL, unpromoted\n"
-    f"  spec decode: {SPEC_DEC_STATUS.upper()} — {SPEC_DEC['drafter_name']} drafter "
-    f"({SPEC_DEC['draft_gguf_download_state']}), accept/verify loop unimplemented.\n"
-    "               The operator's MAX-PERFORMANCE requirement is NOT satisfied by\n"
-    "               this recipe. Numbers taken under it are NO-DRAFT numbers and are\n"
-    "               CANDIDATE, never OPTIMUM.\n"
+    f"  spec decode: {SPEC_DEC_STATUS.upper()} — {SPEC_DEC['drafter_name']} drafter, "
+    f"--spec-type {DRAFT_SPEC_TYPE}, variants {sorted(SPEC_DEC_VARIANTS)}\n"
+    f"               temp>0: {MEASURED_SERVING['arms_tps']['dspark_block_2'][1]} t/s "
+    f"(block 2) vs {MEASURED_SERVING['arms_tps']['control_no_drafter'][1]} control "
+    f"= 1.27x\n"
+    "  ★ GREEDY   : speculation is a LOSS at greedy today. The server forces the\n"
+    "               SERIAL verification path at temp<=0, which decodes one token per\n"
+    "               target decode and cannot exceed 1x: 7.61 t/s (block 3) against an\n"
+    "               8.21 t/s NO-DRAFTER control. For greedy, NO DRAFTER is the optimum\n"
+    "               until DS41-T5/C1 measures the batched-greedy variant.\n"
+    "  ★ EXACTNESS: speculative decoding is NOT output-identical at greedy on this\n"
+    "               stack. Batch invariance holds on none of our three compute planes.\n"
+    f"               See GREEDY_EXACTNESS; measurement: {GREEDY_EXACTNESS['measurement']}\n"
     + "=" * 78
 )
 
