@@ -171,7 +171,7 @@ __all__ = [
     # value types
     "SandboxPath", "SafeBranch", "Pathspec", "ProcessDisposition",
     # git plane
-    "GitRepo", "Worktree", "Anchor", "resolve_anchor",
+    "GitRepo", "Worktree", "Anchor", "resolve_anchor", "instrument_lineage_ok",
     "campaign_worktree_path", "snapshot_worktree_path",
     "create_campaign_worktree", "create_snapshot_worktree",
     # immutability proof
@@ -1763,6 +1763,32 @@ class Worktree:
                 "branch": self.branch.name if self.branch else None,
                 "source_commit": self.source_commit,
                 "clean": self.is_clean()}
+
+
+def instrument_lineage_ok(instrument_commit: str, production_commit: str,
+                          instrument_parents: Sequence[str]) -> tuple:
+    """Whether an instrument commit satisfies its production-lineage identity rule.
+
+    Two eras, two rules. Before the v10 freeze the reviewed measurement overlay
+    was a SEPARATE commit one hop above production, so its own parents had to be
+    exactly `(production_commit,)`. At v10 the overlay was folded INTO production
+    (`campaign.MEASUREMENT_COMMIT == campaign.PRODUCTION_COMMIT`), so the
+    instrument commit and the production commit became the literal same git
+    object -- a commit is never its own parent, so the old "parents ==
+    (production,)" test became permanently unsatisfiable and failed every
+    campaign that reached it. Same failure mode AK-INST-1 fixed for
+    `READY_CONTINUE_INSTRUMENT_COMMIT`, different constant.
+
+    When the two identities are folded, direct commit equality IS the whole
+    rule and the parent check is dropped (callers may pass `instrument_parents=()`
+    in that case, since there is nothing left to resolve). When a future cycle
+    reintroduces a separate reviewed overlay commit, the original "instrument is
+    one clean commit directly on production" rule applies again automatically.
+    """
+    if instrument_commit == production_commit:
+        return True, "folded: instrument commit equals production commit"
+    return (tuple(instrument_parents) == (production_commit,),
+            "unfolded: instrument must be exactly one clean commit directly on production")
 
 
 # =============================================================================

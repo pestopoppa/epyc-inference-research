@@ -146,6 +146,40 @@ class CandidateRecordCase(unittest.TestCase):
             self.record(actor=other, source_commit=unrelated,
                         build_result=self.failed_build(other))
 
+    def test_folded_instrument_equal_to_production_is_accepted(self):
+        """AK-INST-2 follow-up.
+
+        v10 folds the reviewed measurement overlay into production
+        (`campaign.MEASUREMENT_COMMIT == campaign.PRODUCTION_COMMIT`), so
+        `instrument_commit == production_base_commit` here. The old
+        `commit_parents(instrument_commit) != (production_base_commit,)` check
+        is then unsatisfiable -- a commit can never be its own parent -- and
+        refused every v10 candidate record. `self.actor` (detached at
+        `self.instrument`, one hop past `self.production`) still descends from
+        both, so the record must build.
+        """
+        record = self.record(
+            production_base_commit=self.production, instrument_commit=self.production,
+            source_commit=self.instrument)
+        self.assertEqual(schemas.validate_candidate(record), [])
+
+    def test_unfolded_instrument_not_a_direct_child_of_production_is_refused(self):
+        grandchild_dest = W.SandboxPath.create(
+            os.path.join(self.tmp.name, "grandchild"), sandbox_root=self.tmp.name,
+            production_trees=())
+        grandchild_actor = self.repo.add_worktree(grandchild_dest, self.instrument, detach=True)
+        self.addCleanup(
+            lambda: self.repo.remove_worktree(grandchild_dest, force=True)
+            if grandchild_dest.path in self.repo.worktree_paths() else None)
+        _git("commit", "--allow-empty", "-m", "grandchild", cwd=grandchild_dest.path)
+        grandchild = _git("rev-parse", "HEAD", cwd=grandchild_dest.path)
+        with self.assertRaisesRegex(
+                C.CandidateRecordError, "does not satisfy its production lineage rule"):
+            self.record(
+                production_base_commit=self.production, instrument_commit=grandchild,
+                actor=grandchild_actor, source_commit=grandchild,
+                build_result=self.failed_build(grandchild_actor))
+
     def test_parameter_bundle_identity_changes_with_semantic_binding(self):
         first = self.record()["source_snapshot"]["patch_bundle_sha256"]
         second = self.record(candidate_id="akc-parameter-2")["source_snapshot"]["patch_bundle_sha256"]

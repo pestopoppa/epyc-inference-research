@@ -2451,5 +2451,60 @@ class TestRedTeamAPlaceholderDigestIsNotAnIdentity(unittest.TestCase):
         self.assertIn("lowercase sha256 hex digest", str(ctx.exception))
 
 
+class InstrumentLineageOkTests(unittest.TestCase):
+    """AK-INST-2 follow-up.
+
+    v10 folded the reviewed measurement overlay into production itself, so the
+    instrument commit and the production commit are now the SAME git object.
+    `commit_parents(instrument_commit) != (production_commit,)` is then
+    permanently unsatisfiable -- a commit can never be its own parent -- which
+    silently FAILed `live_controls._write_preflight`'s "measurement_instrument"
+    check and `candidate_record.build_candidate_record`'s lineage check for
+    every v10 campaign. `instrument_lineage_ok` is the shared fix both callers
+    now use.
+    """
+
+    PRODUCTION = "a" * 40
+    CHILD = "b" * 40
+    UNRELATED = "c" * 40
+
+    def test_folded_instrument_equal_to_production_is_accepted(self):
+        ok, rule = W.instrument_lineage_ok(self.PRODUCTION, self.PRODUCTION, ())
+        self.assertTrue(ok)
+        self.assertIn("folded", rule)
+
+    def test_folded_case_ignores_whatever_parents_were_passed(self):
+        # The regression: this used to be `instrument_parents == [PRODUCTION_COMMIT]`,
+        # which a folded instrument (== production) can never satisfy because a
+        # commit is never its own parent.
+        ok, rule = W.instrument_lineage_ok(
+            self.PRODUCTION, self.PRODUCTION, (self.UNRELATED,))
+        self.assertTrue(ok)
+        self.assertIn("folded", rule)
+
+    def test_unfolded_instrument_directly_on_production_is_accepted(self):
+        ok, rule = W.instrument_lineage_ok(
+            self.CHILD, self.PRODUCTION, (self.PRODUCTION,))
+        self.assertTrue(ok)
+        self.assertIn("unfolded", rule)
+
+    def test_unfolded_instrument_not_directly_on_production_is_refused(self):
+        ok, rule = W.instrument_lineage_ok(
+            self.CHILD, self.PRODUCTION, (self.UNRELATED,))
+        self.assertFalse(ok)
+        self.assertIn("unfolded", rule)
+
+    def test_unfolded_instrument_with_no_parents_is_refused(self):
+        ok, _rule = W.instrument_lineage_ok(self.CHILD, self.PRODUCTION, ())
+        self.assertFalse(ok)
+
+    def test_unfolded_instrument_with_extra_parent_is_refused(self):
+        # A merge commit -- more than one parent -- is not "one clean commit
+        # directly on production" even if production is among the parents.
+        ok, _rule = W.instrument_lineage_ok(
+            self.CHILD, self.PRODUCTION, (self.PRODUCTION, self.UNRELATED))
+        self.assertFalse(ok)
+
+
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()

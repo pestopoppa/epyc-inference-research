@@ -149,9 +149,13 @@ def build_candidate_record(*, proposal: Mapping[str, Any], candidate_id: str,
             "a non-build-failed candidate requires a real BuildIdentity")
 
     schemas.require.commit(instrument_commit, "instrument_commit", error=CandidateRecordError)
-    if actor.repo.commit_parents(instrument_commit) != (production_base_commit,):
+    instrument_parents = (() if instrument_commit == production_base_commit
+                          else actor.repo.commit_parents(instrument_commit))
+    lineage_ok, lineage_rule = worktree.instrument_lineage_ok(
+        instrument_commit, production_base_commit, instrument_parents)
+    if not lineage_ok:
         raise CandidateRecordError(
-            "instrument commit is not the ratified single-child of the production base")
+            f"instrument commit does not satisfy its production lineage rule ({lineage_rule})")
     if not actor.is_ancestor(production_base_commit, source_commit) \
             or not actor.is_ancestor(instrument_commit, source_commit):
         raise CandidateRecordError(

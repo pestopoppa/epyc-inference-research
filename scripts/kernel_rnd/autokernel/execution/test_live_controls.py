@@ -7,6 +7,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from contextlib import redirect_stdout
+from types import SimpleNamespace
 from unittest import mock
 
 from ..evaluator import statistics
@@ -909,6 +910,101 @@ class ControlEffectReachability(unittest.TestCase):
         self.assertLess(base.e_running_max, 10.0)
         self.assertGreaterEqual(full.e_running_max, 10.0)
         self.assertEqual(full.first_crossing_block, 7)
+
+
+class MeasurementInstrumentPreflightTests(unittest.TestCase):
+    """AK-INST-2 follow-up: `_write_preflight`'s `measurement_instrument` check.
+
+    Before the fix, "clean INSTRUMENT_COMMIT directly on PRODUCTION_COMMIT" was
+    `instrument_parents == [PRODUCTION_COMMIT]` unconditionally. Once v10 folded
+    the instrument into production (`INSTRUMENT_COMMIT == PRODUCTION_COMMIT`),
+    that became unsatisfiable -- a commit is never its own parent -- and the
+    check FAILed every campaign that reached it. These exercise the fixed
+    `worktree.instrument_lineage_ok` wiring end to end, through real subprocess
+    call sites (mocked at the `subprocess.run` boundary).
+    """
+
+    def tearDown(self):
+        importlib.reload(live_controls)
+
+    def _preflight_checks(self, *, production_commit, instrument_commit,
+                          instrument_head, instrument_parents_stdout):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_root = Path(tmp)
+
+            # Keyed by CALL ORDER, not by argv pattern: post-fold, PRODUCTION_ROOT
+            # and INSTRUMENT_ROOT are the same path (the instrument now ships IN
+            # production), so the "rev-parse HEAD" argv is byte-identical for both
+            # the production and the instrument reads and cannot be told apart by
+            # matching the command tuple. `_write_preflight` issues its five git
+            # calls in one fixed order (source_head, instrument_head,
+            # instrument_branch, instrument_status, instrument_parents), so drive
+            # the fake off that order instead.
+            responses = iter([
+                production_commit, instrument_head, live_controls.INSTRUMENT_BRANCH,
+                "", instrument_parents_stdout,
+            ])
+
+            def fake_run(argv, **_kwargs):
+                try:
+                    stdout = next(responses)
+                except StopIteration:
+                    raise AssertionError(f"unexpected extra subprocess call: {argv!r}")
+                return SimpleNamespace(stdout=stdout)
+
+            def host_state(**_kwargs):
+                return live_controls.microbench.HostState(
+                    observed_at="2026-09-23T00:00:00+00:00", cpu_list=live_controls.CPU_LIST,
+                    khz_by_cpu=(), driver_min_khz=None, driver_max_khz=None,
+                    load1=None, source="test")
+
+            with mock.patch.object(live_controls, "PRODUCTION_COMMIT", production_commit), \
+                 mock.patch.object(live_controls, "INSTRUMENT_COMMIT", instrument_commit), \
+                 mock.patch.object(live_controls.subprocess, "run", side_effect=fake_run), \
+                 mock.patch.object(live_controls.cpu_region_claim, "verify_host_topology",
+                                   return_value=schemas.Check(schemas.PASS, ())):
+                try:
+                    live_controls._write_preflight(
+                        output_root, instrument_sha="x" * 64, copy_sha="x" * 64,
+                        host_state=host_state)
+                except RuntimeError:
+                    pass  # unrelated checks (model/storage/etc.) legitimately fail here
+            return json.loads((output_root / "preflight.json").read_text())["checks"]
+
+    def test_folded_instrument_equal_to_production_passes_with_matching_head(self):
+        commit = "a" * 40
+        checks = self._preflight_checks(
+            production_commit=commit, instrument_commit=commit,
+            instrument_head=commit, instrument_parents_stdout=f"{commit} deadbeef")
+        self.assertEqual(checks["measurement_instrument"]["outcome"], schemas.PASS)
+
+    def test_folded_instrument_fails_with_a_different_head(self):
+        commit = "a" * 40
+        other = "b" * 40
+        checks = self._preflight_checks(
+            production_commit=commit, instrument_commit=commit,
+            instrument_head=other, instrument_parents_stdout=f"{other} {commit}")
+        self.assertEqual(checks["measurement_instrument"]["outcome"], schemas.FAIL)
+
+    def test_unfolded_instrument_directly_on_production_passes(self):
+        production = "a" * 40
+        instrument = "b" * 40
+        checks = self._preflight_checks(
+            production_commit=production, instrument_commit=instrument,
+            instrument_head=instrument,
+            instrument_parents_stdout=f"{instrument} {production}")
+        self.assertEqual(checks["measurement_instrument"]["outcome"], schemas.PASS)
+
+    def test_unfolded_instrument_not_directly_on_production_fails(self):
+        production = "a" * 40
+        instrument = "b" * 40
+        unrelated = "c" * 40
+        checks = self._preflight_checks(
+            production_commit=production, instrument_commit=instrument,
+            instrument_head=instrument,
+            instrument_parents_stdout=f"{instrument} {unrelated}")
+        self.assertEqual(checks["measurement_instrument"]["outcome"], schemas.FAIL)
+        self.assertIn("unfolded", checks["measurement_instrument"]["reasons"][0])
 
 
 if __name__ == "__main__":

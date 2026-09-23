@@ -31,7 +31,7 @@ from .. import campaign, schemas
 from ..evaluator import api, controls, recipes, statistics
 from ..resource import device_claim
 from . import (control_runner, cpu_region_claim, inference_window, microbench,
-               physical_bounds, powercap_broker, sandbox, screening_baseline)
+               physical_bounds, powercap_broker, sandbox, screening_baseline, worktree)
 
 # ``RECIPE_ID`` remains the process-local active cell for compatibility with
 # the recovery helpers below.  ``configure_recipe`` is called once by the CLI
@@ -717,6 +717,8 @@ def _write_preflight(output_root: Path, *, instrument_sha: str, copy_sha: str,
     state = host_state(cpu_list=CPU_LIST)
     host_policy = microbench.HostStatePolicy(
         nominal_khz=NOMINAL_KHZ, require_package_power=True)
+    instrument_lineage_ok, instrument_lineage_rule = worktree.instrument_lineage_ok(
+        INSTRUMENT_COMMIT, PRODUCTION_COMMIT, instrument_parents)
     checks = {
         "topology": _check_payload(topology),
         "production_commit": _check_payload(schemas.Check(
@@ -727,11 +729,12 @@ def _write_preflight(output_root: Path, *, instrument_sha: str, copy_sha: str,
                 instrument_head == INSTRUMENT_COMMIT
                 and instrument_branch == INSTRUMENT_BRANCH
                 and not instrument_status
-                and instrument_parents == [PRODUCTION_COMMIT]
+                and instrument_lineage_ok
             ) else schemas.FAIL,
             (f"instrument head={instrument_head}, branch={instrument_branch}, "
-             f"dirty={bool(instrument_status)}, parents={instrument_parents}; required "
-             f"clean {INSTRUMENT_COMMIT} directly on {PRODUCTION_COMMIT}",))),
+             f"dirty={bool(instrument_status)}, parents={instrument_parents}; "
+             f"lineage_rule=[{instrument_lineage_rule}]; required clean "
+             f"{INSTRUMENT_COMMIT}",))),
         "binary_copy": _check_payload(schemas.Check(
             schemas.PASS if instrument_sha == copy_sha else schemas.FAIL,
             (f"instrument and evidence-copy SHA-256 are {instrument_sha}",))),
