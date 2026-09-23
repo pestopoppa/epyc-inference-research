@@ -434,3 +434,56 @@ def test_local_seed_cannot_reuse_opposite_backend_production_recipe(tmp_path: Pa
     config["local_seeds"] = {"targets": [target], "artifacts": {}}
     with pytest.raises(ProductionEnrollmentError, match="backend differs"):
         manifest_from_export(_export(tmp_path), campaign_config=config)
+
+
+def _mixed_export(tmp_path: Path, *, backend_scope: str | None = None) -> dict:
+    """A roster with one CPU and one GPU target, optionally scoped to CPU.
+
+    A CPU-scoped export omits the GPU row entirely (the producer never writes it);
+    `context.backend_scope` is the only thing saying the roster is deliberately short.
+    """
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    export = _export(tmp_path / "cpu", backend="cpu")
+    gpu = _export(tmp_path / "gpu", backend="gpu")["targets"][0]
+    gpu["target_id"] = "architect_general@8083"
+    gpu["primary_role"] = "architect_general"
+    gpu["aliases"] = []
+    gpu["obligations"] = ["architect_general"]
+    gpu["port"] = 8083
+    if backend_scope is None:
+        export["targets"].append(gpu)
+        export["disposition"]["ready"] = 2
+    else:
+        export["context"]["backend_scope"] = backend_scope
+    export["export_sha256"] = hashlib.sha256(json.dumps(
+        {key: value for key, value in export.items() if key != "export_sha256"},
+        sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return _seal_recipe_artifacts(export, tmp_path)
+
+
+def test_cpu_scoped_export_resolves_where_the_full_roster_refuses(tmp_path: Path):
+    """The operator's Option B: scope the enrollment, do not merely expect restraint."""
+    from . import campaign
+    config = _campaign_config()          # resources.gpu_ids == []
+    with pytest.raises(campaign.ManifestError,
+                       match="GPU/both targets require non-empty resources.gpu_ids"):
+        manifest_from_export(_mixed_export(tmp_path / "full"), campaign_config=config)
+    scoped = _mixed_export(tmp_path / "scoped", backend_scope="cpu")
+    manifest = manifest_from_export(scoped, campaign_config=config)
+    assert {row.backend for row in manifest.production} == {"cpu"}
+    assert not any(row.target_id == "architect_general@8083" for row in manifest.production)
+
+
+def test_backend_scope_is_an_accepted_additive_context_key(tmp_path: Path):
+    """The consumer validates the export body, not a closed context key set."""
+    scoped = _mixed_export(tmp_path, backend_scope="cpu")
+    loaded = load_export(scoped)
+    assert loaded["context"]["backend_scope"] == "cpu"
+    assert [row["target_id"] for row in loaded["targets"]] == ["frontdoor@8070"]
+    diagnostics = production_enrollment_diagnostics(scoped)
+    assert [row["enrolled_target_ids"] for row in diagnostics["targets"]] == [["frontdoor@8070"]]
+    # The scope is inside the sealed body: dropping it breaks the integrity check.
+    tampered = json.loads(json.dumps(scoped))
+    tampered["context"].pop("backend_scope")
+    with pytest.raises(pe.ProductionEnrollmentError, match="integrity check failed"):
+        load_export(tampered)
