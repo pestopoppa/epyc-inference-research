@@ -292,3 +292,36 @@ def test_a_cpu_dspark_recipe_with_gpu_draft_placement_is_unsupported():
     resolved = _resolve(_recipe(extra_flags=("--device-draft", "ROCm0")))
     assert not resolved.capability.supported
     assert "mixed_cpu_gpu_draft_unsupported" in {r.code for r in resolved.capability.reasons}
+
+
+# --------------------------------------------------------------------------- canonical launch
+
+def _canonical(recipe: serving.Recipe, launch_env: dict[str, str]):
+    """The frozen-command route serial_run consumes; env rides in launch_env, not argv."""
+    argv = recipe.server_argv(BUILD, 18317)
+    return rr.resolve_canonical_launch(
+        recipe, build_dir=BUILD, command_argv=argv[3:],
+        topology_prefix=["taskset", "-c", recipe.cpu_list, "numactl", "--interleave=all"],
+        launch_environment={"LD_LIBRARY_PATH": str(BUILD / "bin"), **launch_env},
+        artifact_identities=_artifacts(recipe), backend="cpu",
+        environment_policy=_policy(serving.SPEC_EXACT_ENV), port=18317,
+        runtime_binary_dir=str(BUILD / "bin"), runtime_ld_paths=[str(BUILD / "bin")],
+        provenance={"source:head": "test", "export_sha256": "0" * 64, "instance_mode": "full"})
+
+
+def test_a_greedy_dspark_template_is_expressible_as_a_canonical_launch():
+    # The canonical projection is env-less by construction, while the greedy guard REQUIRES
+    # the template to declare the exactness env: the two must meet in launch_env, or no
+    # canonical DSpark launch can exist at all (found assembling the DS41 campaign 2026-09-23).
+    recipe = _recipe(extra_flags=(), cpu_list="0-95")
+    launch = _canonical(recipe, {serving.SPEC_EXACT_ENV: EXACT})
+    assert dict(launch.launch_env)[serving.SPEC_EXACT_ENV] == EXACT
+    assert launch.template == recipe
+
+
+def test_a_canonical_launch_whose_env_drops_the_declared_exactness_path_is_refused():
+    recipe = _recipe(extra_flags=(), cpu_list="0-95")
+    with pytest.raises(rr.ResolutionError, match="template environment differs from frozen launch"):
+        _canonical(recipe, {})
+    with pytest.raises(rr.ResolutionError, match="template environment differs from frozen launch"):
+        _canonical(recipe, {serving.SPEC_EXACT_ENV: "serial"})

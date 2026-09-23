@@ -1239,7 +1239,15 @@ def _validate_canonical_consistency(resolved: CanonicalResolvedRecipe,
         topology_prefix=resolved.topology_prefix, n_predict=template.n_predict,
         temperature=template.temperature, top_p=template.top_p, top_k=template.top_k,
         metric=template.metric)
-    if projected.to_dict() != template.to_dict():
+    # The canonical grammar carries environment in launch_env, never in the command, so the
+    # projection is env-less by construction and is compared without the template's env
+    # declaration. That declaration (which _validate_exactness may REQUIRE, e.g.
+    # LLAMA_SPEC_EXACT for greedy draft-dspark) is enforced against the frozen launch
+    # environment below ("canonical template environment differs from frozen launch").
+    expected = template.to_dict()
+    expected["env"] = {}
+    expected.pop("explicit_unsets", None)
+    if projected.to_dict() != expected:
         raise ResolutionError("canonical command semantic projection differs from template")
     cpu_list = _canonical_prefix(resolved.topology_prefix)
     if cpu_list != template.cpu_list:
