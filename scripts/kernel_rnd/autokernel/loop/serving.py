@@ -10,10 +10,11 @@ surface moved DFlash2 serving decode by ~0% (71.22 t/s, flat). So the KEEP GATE 
 HEADLINE move to `llama-server` under the champion's CANONICAL RECIPE, which is also the
 recipe production needs at promotion -- built once, used for both.
 
-THE RECIPE IS GENERAL. `spec_decode.type` is one of {none, draft-dflash, draft-mtp, ...}; a
-model that does not use speculative decode carries `none` and its own optimal `np`. Nothing
-about DFlash2 is baked into the framework; today's champion just happens to serve the 27B on
-gfx90a with DFlash2 at np4 (the aggregate-throughput knee measured by DF2-5).
+THE RECIPE IS GENERAL. `spec_decode.type` is one of {none, draft-dflash, draft-mtp,
+draft-dspark, ...}; a model that does not use speculative decode carries `none` and its
+own optimal `np`. Nothing about DFlash2 is baked into the framework; today's champion
+just happens to serve the 27B on gfx90a with DFlash2 at np4 (the aggregate-throughput
+knee measured by DF2-5).
 
 THE METRIC. `aggregate_tok_s` is the sum of each concurrent slot's reported
 `predicted_per_second`. It is not common-window wall throughput; changing to that estimator would
@@ -215,6 +216,20 @@ LOADER_OWNED_ENV = ("LD_LIBRARY_PATH", "HSA_OVERRIDE_GFX_VERSION")
 #: `env_readback` key standing for "the recipe does not set this variable at all".
 UNSET = "unset"
 
+#: The verification-path selector for speculative decoding. NOT a tuning knob: it selects
+#: which VERIFICATION PATH the server runs, so it changes both the throughput and the
+#: EXACTNESS of the output. Left unset, a greedy speculative launch silently falls back to
+#: the SERIAL verification path, which accepts exactly one token per target decode and can
+#: therefore never exceed 1x -- measured 2026-09-23 on DeepSeek-V4.1-Flash-DSpark: 7.18 t/s
+#: with a drafter under serial verification against an 11.43 t/s NO-DRAFTER control, i.e.
+#: the drafter made it WORSE. That is why its absence is a refusal in the recipe layer and
+#: not a default (`resolved_recipe._validate_template`).
+SPEC_EXACT_ENV = "LLAMA_SPEC_EXACT"
+#: Verification paths this recipe layer knows how to name. `batched-greedy-inexact` is the
+#: batched path measured at 17.85 t/s median (block 2, acceptance 51.6%); it is "inexact"
+#: in the sense that batched verification may differ from the serial greedy sequence.
+SPEC_EXACT_MODES = ("batched-greedy-inexact",)
+
 #: Schema of the per-launch residency block. Additive: every consumer reads it via
 #: `.get()`, and a record written before R23-60 simply has no block.
 RESIDENCY_SCHEMA = "epyc.autokernel.serving_residency.v1"
@@ -263,8 +278,12 @@ class Recipe:
     model: str
     device: str = "ROCm0"
     ngl: int = 99
-    #: {"type": "none"} | {"type": "draft-dflash"|"draft-mtp", "drafter": path, "ngld": int,
-    #: "draft_n_max": int}
+    #: {"type": "none"} | {"type": "draft-dflash"|"draft-mtp"|"draft-dspark",
+    #: "drafter": path, "ngld": int, "draft_n_max": int}
+    #: `draft-dspark` is an EXTERNAL-drafter type (a second GGUF, arch deepseek41-dspark)
+    #: and the server refuses it at anything but `--parallel 1`, so a dspark recipe at
+    #: np>1 is refused by the recipe layer rather than silently launched -- see
+    #: `resolved_recipe._validate_template`.
     spec_decode: dict = field(default_factory=lambda: {"type": "none"})
     np: int = 4
     ctx: int = 16384
@@ -687,6 +706,58 @@ def verify_env_readback(recipe: Recipe, pid: int, *,
                 f"{recipe.describe()}: /proc/{pid}/status {field_name}={got!r}, but this "
                 f"recipe's env requires {expect!r}. Setting the variable is not evidence it "
                 f"took effect -- refusing the measurement.")
+    return observed
+
+
+def _environ_fields(blob: str) -> dict[str, str]:
+    """`/proc/<pid>/environ` (NUL-separated `K=V`) as a mapping."""
+    out: dict[str, str] = {}
+    for entry in blob.split("\0"):
+        key, sep, value = entry.partition("=")
+        if sep and key:
+            out[key] = value
+    return out
+
+
+def verify_process_environ(recipe: Recipe, pid: int, *,
+                           expectations: Sequence[tuple[str, str]],
+                           environ_text: str | None = None) -> dict[str, str | None]:
+    """Prove the LAUNCHED process carries the environment this recipe claims, or refuse.
+
+    This is the witness for a measurement-relevant variable that has no `/proc/<pid>/status`
+    field -- `LLAMA_SPEC_EXACT` is the case that forced it. `expectations` are
+    `("environ:<KEY>", <value> | UNSET)` pairs, exactly as
+    `resolved_recipe._witness_reports` derives them from the resolved launch, so nothing is
+    hand-declared twice.
+
+    WHAT THIS RECORDS, precisely: that the variable was DELIVERED to the process at exec
+    with that value (or was absent). It does not record that the server READ it. The
+    complementary half -- that the knob is compiled into the executing artifact at all -- is
+    the `strings <binary> | grep <KNOB>` check, which lives with the build provenance and is
+    not duplicated here. Fail-closed in both directions, like `verify_env_readback`.
+    """
+    expectations = tuple(expectations)
+    if not expectations:
+        return {}
+    if environ_text is None:
+        try:
+            environ_text = Path(f"/proc/{pid}/environ").read_text()
+        except OSError as exc:
+            raise EnvReadbackFailed(
+                f"{recipe.describe()}: cannot read /proc/{pid}/environ ({exc}), so the "
+                f"launch environment is unwitnessed -- refusing the measurement.") from exc
+    fields = _environ_fields(environ_text)
+    observed: dict[str, str | None] = {}
+    for field_name, expect in expectations:
+        key = field_name.partition("environ:")[2] or field_name
+        got = fields.get(key)
+        observed[field_name] = got
+        want = None if expect == UNSET else expect
+        if got != want:
+            raise EnvReadbackFailed(
+                f"{recipe.describe()}: /proc/{pid}/environ {key}={got!r}, but this recipe's "
+                f"launch requires {want!r}. Declaring the variable is not evidence the "
+                f"process received it -- refusing the measurement.")
     return observed
 
 
@@ -1907,6 +1978,7 @@ def load_floor(store: Path | str, recipe: Recipe, *, frozen_requests=None,
 
 __all__ = ["CALIBRATION_UNIT", "COMPARE_EFFECT_UNIT", "FLOOR_KEY_MAX", "FLOOR_UNITS",
            "LOADER_OWNED_ENV", "RECIPE_SCHEMA", "RESIDENCY_PROVEN",
+           "SPEC_EXACT_ENV", "SPEC_EXACT_MODES", "verify_process_environ",
            "RESIDENCY_NOT_APPLICABLE", "RESIDENCY_SCHEMA", "RESIDENCY_UNPROVEN",
            "UNIT_ARM", "UNIT_PROCESS", "UNIT_SESSION", "UNSET",
            "EnvReadbackFailed", "FloorReading", "FloorUnitMismatch", "Recipe",

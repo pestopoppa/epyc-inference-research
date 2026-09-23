@@ -10,6 +10,7 @@ from dataclasses import dataclass, replace
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import re
 from typing import Any
@@ -23,8 +24,18 @@ CAPABILITY_SCHEMA = "epyc.autokernel.recipe_capability.v1"
 RESOLVED_RECIPE_SCHEMA = "epyc.autokernel.resolved_recipe.v1"
 CANONICAL_RESOLVED_RECIPE_SCHEMA = "epyc.autokernel.canonical_launch.v1"
 SUPPORTED_BACKENDS = frozenset({"cpu", "gpu"})
-WITNESS_KINDS = frozenset({"recipe_readback", "runtime_set", "master_off"})
-SPECULATION_TYPES = frozenset({"none", "draft-dflash", "draft-mtp"})
+WITNESS_KINDS = frozenset({"recipe_readback", "runtime_set", "master_off",
+                           "process_environ"})
+SPECULATION_TYPES = frozenset({"none", "draft-dflash", "draft-mtp", "draft-dspark"})
+#: Speculation types the server refuses at anything but `--parallel 1` ("draft-dspark
+#: requires --parallel 1"). The recipe layer REFUSES np>1 rather than overriding it: a
+#: silently rewritten np is a recipe whose measured condition is not the one it declares,
+#: and every floor is keyed by `recipe_hash`. Same idiom as the `-tb != -t` refusal below.
+SINGLE_SLOT_SPECULATION_TYPES = frozenset({"draft-dspark"})
+#: Speculation types that REQUIRE a separate drafter GGUF (never self-drafting).
+EXTERNAL_DRAFTER_SPECULATION_TYPES = frozenset({"draft-dspark"})
+#: Speculation types whose greedy variant must name its verification path explicitly.
+EXACTNESS_REQUIRED_SPECULATION_TYPES = frozenset({"draft-dspark"})
 _GPU_DEVICE = re.compile(r"ROCm[0-9]+")
 _CREDENTIAL_MARKERS = ("PASSWORD", "PASSWD", "TOKEN", "SECRET", "CREDENTIAL",
                        "AUTHORIZATION", "API_KEY", "COOKIE", "PRIVATE_KEY")
@@ -382,6 +393,22 @@ class ResolvedRecipe:
             raise ResolutionError("resolved recipe does not match the passed template")
         if str(Path(build_dir)) != self.build_dir or port != self.port:
             raise ResolutionError("resolved recipe does not match the passed build/port")
+        if self.drafter is not None:
+            # The drafter is HALF the identity of a speculative measurement, and resolution
+            # is offline, so the only place the pinned path can be coupled to a file that
+            # exists is here. This checks presence and readability, NOT content: hashing the
+            # artifact set at launch is the separate build-provenance change (DS41 DSO
+            # identity) and is deliberately not duplicated.
+            drafter_path = Path(self.drafter.path)
+            try:
+                readable = drafter_path.is_file() and os.access(drafter_path, os.R_OK)
+            except OSError:
+                readable = False
+            if not readable:
+                raise ResolutionError(
+                    f"resolved drafter {self.drafter.path!r} is missing or unreadable: a "
+                    f"speculative launch whose drafter cannot be read is not the "
+                    f"measurement this recipe identifies")
         if tuple(template.server_argv(Path(build_dir), port)) != self.argv:
             raise ResolutionError("resolved launch argv no longer matches the template")
         if WorkloadSpec(template.n_predict, template.temperature, template.top_p,
@@ -810,6 +837,45 @@ def _validate_workload(workload: WorkloadSpec) -> None:
         raise ResolutionError("recipe temperature/top_p are outside their valid ranges")
 
 
+def _is_greedy(template: serving.Recipe) -> bool:
+    """Greedy decoding, i.e. the sampling regime whose verification path is selectable.
+
+    `top_k == 1` and `temperature == 0.0` both pin the argmax; either one puts the launch on
+    the path `LLAMA_SPEC_EXACT` selects between.
+    """
+    return float(template.temperature) == 0.0 or template.top_k == 1
+
+
+def _validate_exactness(template: serving.Recipe, spec_type: str) -> None:
+    """The verification path is part of the recipe, and silence is not a default.
+
+    Measured 2026-09-23: with `LLAMA_SPEC_EXACT` unset, a greedy DSpark launch fell back to
+    the SERIAL verification path and produced 7.18 t/s against an 11.43 t/s no-drafter
+    control -- a drafter that made throughput WORSE, with nothing in the record saying which
+    path ran. A recipe that cannot say which verification path it measured cannot own the
+    number, so the absence is a refusal.
+    """
+    env = dict(template.env or {})
+    declared = env.get(serving.SPEC_EXACT_ENV)
+    unset = serving.SPEC_EXACT_ENV in set(template.explicit_unsets)
+    if declared is not None and declared not in serving.SPEC_EXACT_MODES:
+        raise ResolutionError(
+            f"recipe env {serving.SPEC_EXACT_ENV}={declared!r} is not a verification path "
+            f"this recipe layer can name: {sorted(serving.SPEC_EXACT_MODES)}")
+    if spec_type == "none" and (declared is not None or unset):
+        raise ResolutionError(
+            f"recipe env declares {serving.SPEC_EXACT_ENV} with speculation type 'none': "
+            f"the variable selects a speculative verification path and claims a condition "
+            f"this launch does not have")
+    if spec_type in EXACTNESS_REQUIRED_SPECULATION_TYPES and _is_greedy(template) \
+            and declared is None:
+        raise ResolutionError(
+            f"greedy {spec_type!r} recipe does not declare {serving.SPEC_EXACT_ENV}: "
+            f"without it the server takes the SERIAL verification path (1 token per target "
+            f"decode, so never above 1x) and the record cannot say which path it measured. "
+            f"Declare the path explicitly -- an unset knob is a refusal, not a fallback")
+
+
 def _validate_template(template: serving.Recipe) -> None:
     integer_fields = ("ngl", "np", "ctx", "threads", "batch", "ubatch")
     for name in integer_fields:
@@ -843,6 +909,16 @@ def _validate_template(template: serving.Recipe) -> None:
         draft_n = spec["draft_n_max"]
         if isinstance(draft_n, bool) or not isinstance(draft_n, int) or draft_n <= 0:
             raise ResolutionError("recipe.spec_decode.draft_n_max must be a positive integer")
+    if spec_type in EXTERNAL_DRAFTER_SPECULATION_TYPES and not spec.get("drafter"):
+        raise ResolutionError(
+            f"speculation type {spec_type!r} needs a separate drafter GGUF: absence of "
+            f"'drafter' declares a SELF-drafting model, which this type is not")
+    if spec_type in SINGLE_SLOT_SPECULATION_TYPES and template.np != 1:
+        raise ResolutionError(
+            f"speculation type {spec_type!r} requires --parallel 1, but the recipe "
+            f"declares np={template.np}. Refusing rather than overriding np: a rewritten "
+            f"np is a different measured condition wearing this recipe's hash")
+    _validate_exactness(template, spec_type)
     flags = tuple(template.extra_flags)
     conflicts = sorted({flag.split("=", 1)[0] for flag in flags
                         if flag.split("=", 1)[0] in _STRUCTURED_FLAGS})
@@ -920,6 +996,15 @@ def _validate_resolved_consistency(resolved: ResolvedRecipe) -> None:
                    "external_draft" if drafter_path is not None else "self_draft")
     if resolved.capability.speculation != speculation:
         raise ResolutionError("resolved speculation disagrees with argv")
+    if spec_type in SINGLE_SLOT_SPECULATION_TYPES:
+        # Rechecked from ARGV, independently of the template: this is the flag the server
+        # actually refuses on ("requires --parallel 1"), and `-np`/`--parallel` are the
+        # same knob.
+        if _required_argv_value(resolved.argv, "-np") != "1":
+            raise ResolutionError(
+                f"resolved argv runs {spec_type} at --parallel != 1, which the server refuses")
+        if _flag_value(resolved.argv, "-md") is None:
+            raise ResolutionError(f"resolved argv runs {spec_type} without a drafter")
     if drafter_path is None and resolved.drafter is not None:
         raise ResolutionError("resolved drafter identity is absent from argv")
     if drafter_path is not None and resolved.drafter is None:
@@ -983,9 +1068,20 @@ def _validate_resolved_consistency(resolved: ResolvedRecipe) -> None:
         if witness_by_key[key].kind != kind:
             raise ResolutionError("capability witness kind disagrees with policy")
         witness = witness_by_key[key]
-        if witness.status == "declared" and (witness.field, witness.expected) not in \
-                resolved.readback_expectations:
+        if witness.kind == "recipe_readback" and witness.status == "declared" \
+                and (witness.field, witness.expected) not in resolved.readback_expectations:
             raise ResolutionError("declared capability witness is absent from readback checks")
+        # A `process_environ` witness is checked against a different surface
+        # (`/proc/<pid>/environ`, not `/proc/<pid>/status`), so its expectation is
+        # cross-checked against the frozen launch instead of the readback list.
+        if witness.kind == "process_environ" and witness.status == "declared":
+            expected_state = relevant.get(key)
+            if witness.field != f"environ:{key}" or witness.expected != (
+                    serving.UNSET if expected_state is None else expected_state):
+                raise ResolutionError(
+                    "process_environ witness disagrees with the frozen launch environment")
+            if expected_state is not None and launch.get(key) != expected_state:
+                raise ResolutionError("process_environ witness is absent from launch env")
 
 
 def _witness_reports(template: serving.Recipe, policy: EnvironmentPolicy,
@@ -1005,6 +1101,21 @@ def _witness_reports(template: serving.Recipe, policy: EnvironmentPolicy,
         elif kind == "recipe_readback":
             reports.append(WitnessReport(
                 key, kind, "unknown", reason="recipe_readback_not_declared"))
+        elif kind == "process_environ":
+            # Derived from the recipe, never hand-declared a second time: the expectation
+            # IS the value the recipe puts on the process. A key the recipe neither sets
+            # nor unsets is inherited, so its value is not knowable offline and the witness
+            # stays UNKNOWN rather than guessing -- an invented expectation would pass
+            # against whatever the parent happened to carry.
+            if key in (template.env or {}):
+                reports.append(WitnessReport(key, kind, "declared", f"environ:{key}",
+                                             (template.env or {})[key]))
+            elif key in set(template.explicit_unsets):
+                reports.append(WitnessReport(key, kind, "declared", f"environ:{key}",
+                                             serving.UNSET))
+            else:
+                reports.append(WitnessReport(
+                    key, kind, "unknown", reason="process_environ_not_declared"))
         else:
             reports.append(WitnessReport(
                 key, kind, "unknown", reason="witness_sampler_not_implemented"))
@@ -1080,6 +1191,19 @@ def _capability(template: serving.Recipe, backend: str, drafter: ArtifactDigest 
            for witness in witnesses):
         reasons.append(CapabilityReason(
             "recipe_readback_missing", "required process readback is not declared"))
+    if any(witness.kind == "process_environ" and witness.status == "unknown"
+           for witness in witnesses):
+        reasons.append(CapabilityReason(
+            "process_environ_witness_missing",
+            "a measurement key witnessed at /proc/<pid>/environ is not owned by the recipe"))
+    if spec_type in EXACTNESS_REQUIRED_SPECULATION_TYPES and _is_greedy(template) and not any(
+            witness.key == serving.SPEC_EXACT_ENV and witness.kind == "process_environ"
+            and witness.status == "declared" for witness in witnesses):
+        reasons.append(CapabilityReason(
+            "spec_exactness_witness_missing",
+            f"greedy {spec_type} needs a declared process_environ witness for "
+            f"{serving.SPEC_EXACT_ENV}: setting the verification path is not evidence the "
+            f"process received it"))
     return CapabilityReport(
         supported=not reasons, backend=backend, speculation=speculation,
         reasons=tuple(reasons), witnesses=witnesses,
@@ -1363,7 +1487,10 @@ def resolved_recipe_from_dict(value: Any) -> ResolvedRecipe | CanonicalResolvedR
 
 
 __all__ = ["ARTIFACT_SCHEMA", "CANONICAL_RESOLVED_RECIPE_SCHEMA", "CAPABILITY_SCHEMA",
-           "ENVIRONMENT_POLICY_SCHEMA", "RESOLVED_RECIPE_SCHEMA", "ArtifactDigest",
+           "ENVIRONMENT_POLICY_SCHEMA", "EXACTNESS_REQUIRED_SPECULATION_TYPES",
+           "EXTERNAL_DRAFTER_SPECULATION_TYPES", "RESOLVED_RECIPE_SCHEMA",
+           "SINGLE_SLOT_SPECULATION_TYPES", "SPECULATION_TYPES", "WITNESS_KINDS",
+           "ArtifactDigest",
            "CanonicalResolvedRecipe", "CapabilityReason", "CapabilityReport",
            "EnvironmentPolicy", "ResolutionError", "ResolvedRecipe",
            "UnsupportedRecipeCapability", "WitnessReport", "WorkloadSpec",
