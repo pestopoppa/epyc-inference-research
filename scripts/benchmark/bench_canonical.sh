@@ -260,6 +260,9 @@ RUN_TAG="$(date -u +%Y%m%dT%H%M%SZ)-$(basename "$MODEL" .gguf)"
 LOG_DIR="${LOG_DIR:-/mnt/raid0/llm/tmp/canonical-bench/${RUN_TAG}}"
 BENCH_LOG="${LOG_DIR}/bench.log"
 PLACEMENT_LOG="${LOG_DIR}/placement.log"
+# DS41-T6c: when no proof is captured the script must say WHY, not just that it
+# is missing. sample_placement_in_window always writes this file.
+PLACEMENT_REASON="${PLACEMENT_LOG}.reason"
 EVICT_LOG="${LOG_DIR}/pre-evict.log"
 
 echo "=== Canonical bench command ===" >&2
@@ -313,11 +316,26 @@ fi
 
 # --- INF-70/C7 step 2: helpers for the in-window placement proof -------------
 # Find the largest-RSS process in OUR OWN descendant tree. Never search by name
-# (shared host; a name pattern is a wildcard over other sessions' processes) —
-# walk /proc/<pid>/task/<pid>/children instead. The model loader is always the
-# biggest thing we started.
+# across the host (shared box; a name pattern is a wildcard over other sessions'
+# processes) — walk /proc/<pid>/task/<pid>/children instead. The model loader is
+# always the biggest thing we started.
+#
+# DS41-T6c ROOT CAUSE (2026-09-23) — read the next four lines before touching
+# this function. The previous version enqueued children with
+#     read -r kids < "$f" || kids=""
+# and /proc/<pid>/task/<tid>/children is emitted WITHOUT a trailing newline, so
+# `read` returns 1 at EOF *after having already assigned the pid list* — and the
+# `|| kids=""` guard then threw that list away. The walk consequently never
+# enqueued a single child and always returned the root bash subshell itself
+# (RSS ~2.3 MB), which never clears the 1 GiB floor in
+# sample_placement_in_window. Across five canonical runs on the 483 GiB
+# DeepSeek-V4.1-Flash artifact the sampler fired ZERO times: no placement.log,
+# no .rc, every run self-reported "OBSERVATION, not a measurement". Nothing
+# about the wrapper chain was at fault — region-lock Popen()s its child and
+# env/taskset/numactl all exec in place, so llama-bench sits exactly two levels
+# below $RUN_PID and the walk would have reached it in one hop.
 largest_rss_descendant() {
-    local root="$1" best="$1" bestrss=0 rss kids k
+    local root="$1" best="$1" bestrss=0 rss kids k f
     local -a queue=("$root")
     local i=0
     while [[ $i -lt ${#queue[@]} ]]; do
@@ -328,21 +346,53 @@ largest_rss_descendant() {
         if [[ "$rss" -gt "$bestrss" ]]; then bestrss="$rss"; best="$cur"; fi
         for f in /proc/"$cur"/task/*/children; do
             [[ -r "$f" ]] || continue
-            read -r kids < "$f" || kids=""
+            # Reset FIRST, read SECOND, and swallow the EOF-without-newline exit
+            # status without touching $kids. `|| kids=""` here is the bug above.
+            kids=""
+            read -r kids < "$f" || true
             for k in $kids; do queue+=("$k"); done
         done
     done
     echo "$best $bestrss"
 }
 
+# Diagnostic dump of our own descendant tree, for the loud-failure path only.
+# Still name-free and still confined to descendants of $1.
+descendant_tree_dump() {
+    local root="$1" cur kids k f
+    local -a queue=("$root")
+    local i=0
+    while [[ $i -lt ${#queue[@]} ]]; do
+        cur="${queue[$i]}"; i=$((i + 1))
+        [[ -r "/proc/$cur/statm" ]] || continue
+        printf '  pid=%-8s comm=%-16s rss_pages=%s\n' \
+            "$cur" "$(cat "/proc/$cur/comm" 2>/dev/null || echo '?')" \
+            "$(awk '{print $2}' "/proc/$cur/statm" 2>/dev/null || echo '?')"
+        for f in /proc/"$cur"/task/*/children; do
+            [[ -r "$f" ]] || continue
+            kids=""
+            read -r kids < "$f" || true
+            for k in $kids; do queue+=("$k"); done
+        done
+    done
+}
+
 # Sample placement once the resident set has stopped growing (i.e. the weights
 # are loaded) and the process is still alive. A sample taken after the run is
 # not evidence: the pages are gone.
+#
+# Selection stays structural (our own descendants only). The expected `comm` is
+# used as a CHECK on the pid the walk already chose — never as a search key: an
+# exact-comm scan of /proc would be a name pattern on a shared host, which this
+# script does not do.
 sample_placement_in_window() {
-    local root="$1" prev=0 stable=0 cand rss
+    local root="$1" prev=0 stable=0 cand rss best_seen=0 cand_comm expect_comm
     local floor_pages=$((1024 * 1024 * 1024 / 4096))   # 1 GiB
+    expect_comm="$(basename "$BINARY")"
+    expect_comm="${expect_comm:0:15}"   # /proc/<pid>/comm is 15 chars max
     while kill -0 "$root" 2>/dev/null; do
         read -r cand rss < <(largest_rss_descendant "$root")
+        [[ "$rss" -gt "$best_seen" ]] && best_seen="$rss"
         if [[ "$rss" -ge "$floor_pages" ]]; then
             if [[ "$rss" -le "$prev" ]]; then
                 stable=$((stable + 1))
@@ -351,15 +401,46 @@ sample_placement_in_window() {
             fi
             prev="$rss"
             if [[ "$stable" -ge 2 ]]; then
+                cand_comm="$(cat "/proc/$cand/comm" 2>/dev/null || echo '?')"
+                if [[ "$cand_comm" != "$expect_comm" ]]; then
+                    echo "WARNING: the largest resident process in our own tree is pid $cand" >&2
+                    echo "         with comm '$cand_comm', not the expected '$expect_comm'." >&2
+                    echo "         Sampling it anyway (it IS our descendant), but check the" >&2
+                    echo "         proof below names the process you think it does." >&2
+                fi
                 bash "$PLACEMENT_CHECK" "$cand" \
                     --threshold "$MAX_NODE_SHARE" \
                     --label "canonical:$(basename "$MODEL")" > "$PLACEMENT_LOG" 2>&1
                 echo "$?" > "${PLACEMENT_LOG}.rc"
+                printf 'captured: pid=%s comm=%s rss_pages=%s (%s GiB) expected_comm=%s\n' \
+                    "$cand" "$cand_comm" "$rss" "$((rss / 262144))" "$expect_comm" \
+                    > "$PLACEMENT_REASON"
                 return 0
             fi
         fi
         sleep 3
     done
+
+    # LOUD failure: say WHY there is no proof, not merely that it is missing.
+    {
+        echo "NO in-window placement sample was captured."
+        echo "  root pid                   : $root (exited before any sample qualified)"
+        echo "  expected process comm      : $expect_comm"
+        echo "  largest descendant RSS seen: ${best_seen} pages ($((best_seen / 262144)) GiB)"
+        echo "  required floor             : ${floor_pages} pages (1 GiB)"
+        echo "  consecutive-stable samples : ${stable} (2 required)"
+        if [[ "$best_seen" -lt "$floor_pages" ]]; then
+            echo "  DIAGNOSIS: the descendant walk never saw a process above the 1 GiB floor."
+            echo "             Either the run died during load, or the walk is broken again —"
+            echo "             re-read the DS41-T6c note above largest_rss_descendant()."
+        else
+            echo "  DIAGNOSIS: RSS never went two consecutive samples without growing before"
+            echo "             the run ended. The load was still in progress at exit, or the"
+            echo "             3 s cadence is too coarse for this artifact."
+        fi
+        echo "  descendant tree at give-up time (may already be empty):"
+        descendant_tree_dump "$root"
+    } > "$PLACEMENT_REASON" 2>&1
     return 1
 }
 
@@ -394,6 +475,13 @@ if [[ ! -s "$PLACEMENT_LOG" ]]; then
     echo "ERROR: no placement proof was captured for this run." >&2
     echo "       $PLACEMENT_LOG is missing or empty — the run is an OBSERVATION," >&2
     echo "       not a measurement (a window that misses the phenomenon proves nothing)." >&2
+    echo "       WHY (from $PLACEMENT_REASON):" >&2
+    if [[ -s "$PLACEMENT_REASON" ]]; then
+        sed 's/^/         /' "$PLACEMENT_REASON" >&2
+    else
+        echo "         no reason recorded — sample_placement_in_window never ran." >&2
+    fi
+    echo "       Bench log (timings, if any): $BENCH_LOG" >&2
     exit 1
 fi
 cat "$PLACEMENT_LOG" >&2
