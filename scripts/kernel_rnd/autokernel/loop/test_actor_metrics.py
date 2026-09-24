@@ -140,6 +140,68 @@ class Collect(unittest.TestCase):
             self.assertEqual(actor_metrics.list_session_ids(self.workspace), set())
 
 
+    def test_list_session_ids_keeps_only_this_workspace_sessions(self):
+        """`opencode session list` is project-scoped: a DS41 lane's listing carried
+        run-5/7/8 lanes and the seat A/B lane together (2026-09-24)."""
+        rows = [{"id": "ses_here", "directory": str(self.workspace)},
+                {"id": "ses_other_lane", "directory": "/elsewhere/workers/lane1"},
+                {"id": "ses_old_opencode"}]
+        with mock.patch.object(actor_metrics.subprocess, "run",
+                               return_value=subprocess.CompletedProcess(
+                                   [], 0, stdout=json.dumps(rows))):
+            self.assertEqual(actor_metrics.list_session_ids(self.workspace),
+                             {"ses_here", "ses_old_opencode"})
+
+    def test_list_session_ids_matches_a_symlinked_workspace_by_its_real_path(self):
+        real = self.workspace.parent / "real-lane"
+        real.mkdir()
+        link = self.workspace.parent / "link-lane"
+        link.symlink_to(real, target_is_directory=True)
+        rows = [{"id": "ses_resolved", "directory": str(real)}]
+        with mock.patch.object(actor_metrics.subprocess, "run",
+                               return_value=subprocess.CompletedProcess(
+                                   [], 0, stdout=json.dumps(rows))):
+            self.assertEqual(actor_metrics.list_session_ids(link), {"ses_resolved"})
+
+
+class BundleAccess(unittest.TestCase):
+    """Variable-mode context: which bundle files the actor's tools named."""
+
+    def _export(self, tools):
+        parts = [{"type": "tool", "tool": name, "state": {"input": args, "output": "x"}}
+                 for name, args in tools]
+        return {"messages": [{"info": {"role": "assistant", "sessionID": "ses_1",
+                                       "tokens": {"input": 10, "output": 5,
+                                                  "cache": {"read": 0, "write": 0}}},
+                              "parts": parts}]}
+
+    def test_reads_greps_and_bash_on_bundle_files_are_counted_by_tool_and_path(self):
+        bundle = "/w/actor-context/20260925T010203-planner-abc123"
+        data = self._export([
+            ("read", {"filePath": f"{bundle}/INDEX.md"}),
+            ("read", {"filePath": f"{bundle}/sections/05-node_profile.md", "offset": 1}),
+            ("grep", {"pattern": "MUL_MAT", "path": f"{bundle}/sections/09-inbox.md"}),
+            ("bash", {"command": f"sed -n 1,40p {bundle}/json/target/recipe.json | head"}),
+            ("read", {"filePath": "/w/lane/ggml/src/ggml-cpu/ops.cpp"}),
+            ("glob", {"pattern": "**/*.md", "path": bundle}),
+        ])
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "e.json"
+            path.write_text(json.dumps(data))
+            stats = actor_metrics.parse_export(path)
+        self.assertEqual(stats["bundle_tool_calls"], 4)
+        self.assertEqual(stats["bundle_tools"], {"read": 2, "grep": 1, "bash": 1})
+        self.assertEqual(stats["bundle_paths"], ["INDEX.md", "json/target/recipe.json",
+                                                 "sections/05-node_profile.md",
+                                                 "sections/09-inbox.md"])
+        self.assertEqual(stats["tool_calls"], 6)
+
+    def test_an_inline_call_touches_no_bundle(self):
+        stats = actor_metrics.parse_export(PLAIN_EXPORT)
+        self.assertEqual((stats["bundle_tool_calls"], stats["bundle_tools"],
+                          stats["bundle_paths"]), (0, {}, []))
+
+
 class Summarize(unittest.TestCase):
 
     def setUp(self):
@@ -191,6 +253,20 @@ class Summarize(unittest.TestCase):
         self.assertEqual(critic["schema_invalid"], 1)
         self.assertEqual(critic["repair_ran"], 1)
         self.assertEqual(len(report["files"]), 2)
+
+    def test_rows_with_a_seat_arm_are_also_grouped_per_role_and_arm(self):
+        worker = self.state_dir / "actor-replies/actor-calls.jsonl"
+        self._write(worker, [
+            self._row("planner", 100.0, 10, 5, 1000, 1, seat_arm="plain"),
+            self._row("planner", 50.0, 6, 4, 800, 0, seat_arm="plain+ctx-variable"),
+            self._row("planner", 70.0, 8, 4, 900, 0, seat_arm="plain+ctx-variable"),
+            self._row("critic", 10.0, 1, 0, 10, 0),
+        ])
+        report = actor_metrics.summarize(self.state_dir)
+        self.assertEqual(sorted(report["role_arms"]),
+                         ["planner|plain", "planner|plain+ctx-variable"])
+        self.assertEqual(report["role_arms"]["planner|plain+ctx-variable"]["wall_s_median"], 60.0)
+        self.assertEqual(report["roles"]["planner"]["calls"], 3)
 
     def test_empty_state_dir_reports_no_roles(self):
         report = actor_metrics.summarize(self.state_dir)

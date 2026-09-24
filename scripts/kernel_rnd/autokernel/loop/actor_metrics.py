@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import subprocess
 from pathlib import Path
 from typing import Any, Mapping
@@ -67,12 +68,27 @@ EXPORT_TIMEOUT_S = 60.0
 #: AND any read-only fan-out scouts) -- "the GPU paid for every one of them", mirroring
 #: ROOT's VB-AK-SEAT `derive_totals` convention for the seat A/B arm record.
 TOTAL_FIELDS = ("steps", "tool_calls", "compactions", "decoded_tokens", "prompt_tokens",
-                "cache_read_tokens", "cache_write_tokens", "tool_output_chars")
+                "cache_read_tokens", "cache_write_tokens", "tool_output_chars",
+                "bundle_tool_calls")
+
+#: A tool call's input that names a file under a variable-mode context bundle
+#: (`actor_context.BUNDLE_DIR`, one directory per call): the path relative to that
+#: per-call directory is captured, e.g. `sections/05-node_profile.md` or `INDEX.md`.
+#: Kept as a literal so this module stays import-free of `actor_context`.
+BUNDLE_PATH = re.compile(r"actor-context/[^/\s\"'`]+/([^\s\"'`;|&<>)]+)")
 
 
 def list_session_ids(workspace: Path, *, timeout_s: float = SESSION_LIST_TIMEOUT_S) -> set[str]:
-    """The opencode session ids visible from `workspace`, or an empty set on ANY
+    """The opencode session ids created IN `workspace`, or an empty set on ANY
     failure (opencode not installed, empty lane, malformed output, timeout, ...).
+
+    `opencode session list` is scoped to the PROJECT (the repository's root commit),
+    not the directory: one listing from a DS41 lane returned sessions of run-5, run-7
+    and run-8 lanes and of the seat A/B lane side by side (2026-09-24). Every llama.cpp
+    worktree is the same project, so without this filter a call's "new sessions" would
+    include any other lane's or campaign's call that started in the same window. A row
+    is kept when its `directory` is the workspace (as given or resolved); a row with no
+    `directory` field (an older opencode) is kept, as before.
 
     Mirrors the seat A/B driver's `sessions()`. Never raises -- this is called both
     before and after the actor's own call, and a failure here must never be mistaken
@@ -82,7 +98,9 @@ def list_session_ids(workspace: Path, *, timeout_s: float = SESSION_LIST_TIMEOUT
             ["opencode", "session", "list", "--format", "json", "-n", "50"],
             cwd=str(workspace), capture_output=True, text=True, timeout=timeout_s)
         rows = json.loads(out.stdout or "[]")
-        return {row["id"] for row in rows if isinstance(row, Mapping) and "id" in row}
+        here = {str(workspace), str(Path(workspace).resolve())}
+        return {row["id"] for row in rows if isinstance(row, Mapping) and "id" in row
+                and (row.get("directory") is None or str(row["directory"]) in here)}
     except Exception:  # noqa: BLE001 -- evidence, never a reason to fail the caller
         return set()
 
@@ -126,10 +144,17 @@ def parse_export(path: Path) -> dict[str, Any]:
     parts = [p for m in msgs for p in m.get("parts", [])]
     tools = [p for p in parts if p.get("type") == "tool"]
     tool_names: dict[str, int] = {}
+    bundle_tools: dict[str, int] = {}
+    bundle_paths: set[str] = set()
     for p in tools:
         name = p.get("tool")
         if name:
             tool_names[name] = tool_names.get(name, 0) + 1
+        state = p.get("state") if isinstance(p.get("state"), Mapping) else {}
+        touched = BUNDLE_PATH.findall(json.dumps(state.get("input") or {}))
+        if touched:
+            bundle_tools[name or "?"] = bundle_tools.get(name or "?", 0) + 1
+            bundle_paths.update(path.rstrip(".,") for path in touched)
     context = [_tokens(a, "input") + _tokens(a, "cache", "read") for a in assistant]
     return {
         "session_id": (msgs[0]["info"].get("sessionID") if msgs else None),
@@ -145,6 +170,13 @@ def parse_export(path: Path) -> dict[str, Any]:
         "context_max_tokens": max(context) if context else None,
         "tool_output_chars": sum(len(json.dumps(p.get("state", {}).get("output", "")))
                                  for p in tools),
+        # Variable-mode context (`actor_context`): tool calls whose INPUT names a file
+        # in the per-call bundle, by tool, and the bundle-relative paths they named.
+        # Zero/empty for an inline call. A `glob`/`grep` over the bundle directory
+        # itself names no file and is counted only when its path reaches one.
+        "bundle_tool_calls": sum(bundle_tools.values()),
+        "bundle_tools": bundle_tools,
+        "bundle_paths": sorted(bundle_paths),
     }
 
 
@@ -237,31 +269,42 @@ def summarize(state_dir: Path) -> dict[str, Any]:
     `actor-calls.jsonl` per worker). No inference: this only reads jsonl already
     on disk."""
     by_role: dict[str, list[Mapping[str, Any]]] = {}
+    by_arm: dict[str, list[Mapping[str, Any]]] = {}
     files: set[str] = set()
     for path, row in _iter_metric_rows(state_dir):
         files.add(str(path))
         by_role.setdefault(str(row.get("role") or "unknown"), []).append(row)
+        if row.get("seat_arm"):
+            by_arm.setdefault(f"{row.get('role') or 'unknown'}|{row['seat_arm']}", []).append(row)
 
     report: dict[str, Any] = {"state_dir": str(state_dir), "files": sorted(files), "roles": {}}
+    if by_arm:
+        report["role_arms"] = {key: _summary(rows) for key, rows in sorted(by_arm.items())}
     for role, rows in sorted(by_role.items()):
-        wall = [float(r["wall_s"]) for r in rows if isinstance(r.get("wall_s"), (int, float))]
-        steps = [v for v in (_totals_of(r, "steps") for r in rows) if v is not None]
-        tool_calls = [v for v in (_totals_of(r, "tool_calls") for r in rows) if v is not None]
-        decoded = [v for v in (_totals_of(r, "decoded_tokens") for r in rows) if v is not None]
-        compactions = [v for v in (_totals_of(r, "compactions") for r in rows) if v is not None]
-        report["roles"][role] = {
-            "calls": len(rows),
-            "wall_s_median": _median(wall), "wall_s_total": sum(wall),
-            "steps_median": _median(steps), "steps_total": sum(steps),
-            "tool_calls_median": _median(tool_calls), "tool_calls_total": sum(tool_calls),
-            "decoded_tokens_median": _median(decoded), "decoded_tokens_total": sum(decoded),
-            "compactions_total": sum(compactions),
-            "schema_invalid": sum(1 for r in rows if r.get("schema_valid") is False),
-            "repair_ran": sum(1 for r in rows if r.get("repair_ran") is True),
-            "salvaged": sum(1 for r in rows if r.get("salvaged") is True),
-            "metrics_errors": sum(1 for r in rows if r.get("metrics_error")),
-        }
+        report["roles"][role] = _summary(rows)
     return report
+
+
+def _summary(rows: list[Mapping[str, Any]]) -> dict[str, Any]:
+    wall = [float(r["wall_s"]) for r in rows if isinstance(r.get("wall_s"), (int, float))]
+    steps = [v for v in (_totals_of(r, "steps") for r in rows) if v is not None]
+    tool_calls = [v for v in (_totals_of(r, "tool_calls") for r in rows) if v is not None]
+    decoded = [v for v in (_totals_of(r, "decoded_tokens") for r in rows) if v is not None]
+    compactions = [v for v in (_totals_of(r, "compactions") for r in rows) if v is not None]
+    bundle = [v for v in (_totals_of(r, "bundle_tool_calls") for r in rows) if v is not None]
+    return {
+        "calls": len(rows),
+        "wall_s_median": _median(wall), "wall_s_total": sum(wall),
+        "steps_median": _median(steps), "steps_total": sum(steps),
+        "tool_calls_median": _median(tool_calls), "tool_calls_total": sum(tool_calls),
+        "decoded_tokens_median": _median(decoded), "decoded_tokens_total": sum(decoded),
+        "compactions_total": sum(compactions),
+        "bundle_tool_calls_total": sum(bundle),
+        "schema_invalid": sum(1 for r in rows if r.get("schema_valid") is False),
+        "repair_ran": sum(1 for r in rows if r.get("repair_ran") is True),
+        "salvaged": sum(1 for r in rows if r.get("salvaged") is True),
+        "metrics_errors": sum(1 for r in rows if r.get("metrics_error")),
+    }
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -109,10 +109,21 @@ class NormalCall(_Lane):
                               schema=actors.HYPOTHESIS_SCHEMA)
         rows = self._rows()
         self.assertEqual(len(rows), 2)
+        self.assertIsNone(rows[-2]["seat_arm"], "no arm set, none invented")
         # The metrics row is written first, whatever `_record_call` produced (v1
         # or its pre-hook fallback) is last -- unaffected by this addition.
         self.assertEqual(rows[-2]["schema"], actor_metrics.METRICS_SCHEMA)
         self.assertNotEqual(rows[-1].get("schema"), actor_metrics.METRICS_SCHEMA)
+
+
+    def test_the_seat_arm_label_rides_on_the_metrics_row(self):
+        backend = actors.backend_for("qwen-gpu/qwen3.8-27b", "high")
+        with mock.patch.object(actors.subprocess, "run", return_value=self._done(HYP)), \
+             mock.patch.object(actor_metrics, "list_session_ids", return_value=set()):
+            actors._run_agent("the prompt", workspace=self.ws, backend=backend,
+                              schema=actors.HYPOTHESIS_SCHEMA,
+                              env={actors.SEAT_ENV_ARM: "plain+ctx-variable"})
+        self.assertEqual(self._metrics_rows()[-1]["seat_arm"], "plain+ctx-variable")
 
 
 class SalvagedCall(_Lane):
