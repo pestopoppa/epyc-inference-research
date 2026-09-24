@@ -1,0 +1,109 @@
+16:48:40 CONC[main40] stt t=24 cores=0-23 pid=898553 | tts t=16 cores=24-39 pid=898554
+16:48:47 {"kind": "stt", "clip": "short_11s.wav", "audio_s": 11.0, "wall_s": 2.081, "rtf": 0.1892, "status": 200, "text_head": "And so, my fellow Americans, ask not what your country can\n do for you, ask what you can do for your country.", "words": 22, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "solo-stt", "rep": 0}
+16:48:49 {"kind": "stt", "clip": "short_11s.wav", "audio_s": 11.0, "wall_s": 2.328, "rtf": 0.2117, "status": 200, "text_head": "And so, my fellow Americans, ask not what your country can\n do for you, ask what you can do for your country.", "words": 22, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "solo-stt", "rep": 0}
+16:49:06 {"kind": "stt", "clip": "long_85s.wav", "audio_s": 86.54, "wall_s": 16.843, "rtf": 0.1946, "status": 200, "text_head": "The United States asked from the Yemen to kill a day. These\n are very important information. Are these some of the\n info", "words": 328, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "solo-stt", "rep": 0}
+16:49:09 {"kind": "tts", "fmt": "pcm", "text": "short", "status": 200, "first_packet_s": 0.112, "wall_s": 2.782, "audio_s": 4.24, "prebuffer_needed_s": 0.191, "rtf": 0.6562, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "solo-tts", "rep": 0}
+16:49:30 {"kind": "tts", "fmt": "pcm", "text": "long", "status": 200, "first_packet_s": 0.213, "wall_s": 21.006, "audio_s": 35.68, "prebuffer_needed_s": 0.038, "rtf": 0.5887, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "solo-tts", "rep": 0}
+16:49:37 {"llm_timings": {"cache_n": 154, "prompt_n": 43, "prompt_ms": 201.499, "prompt_per_token_ms": 4.686023255813954, "prompt_per_second": 213.4005627819493, "predicted_n": 300, "predicted_ms": 7327.925, "predicted_per_token_ms": 24.426416666666668, "predicted_per_second": 40.9392836307686, "draft_n": 399, "draft_n_accepted": 199}, "llm": {"status": 200, "ttft_s": 0.229, "wall_s": 7.556, "content_chunks": 300, "usage": null}, "kind": "llm", "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "solo-llm", "rep": 0}
+16:49:40 {"kind": "stt", "clip": "short_11s.wav", "audio_s": 11.0, "wall_s": 2.206, "rtf": 0.2006, "status": 200, "text_head": "And so, my fellow Americans, ask not what your country can\n do for you, ask what you can do for your country.", "words": 22, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "solo-stt", "rep": 1}
+16:49:42 {"kind": "stt", "clip": "short_11s.wav", "audio_s": 11.0, "wall_s": 2.609, "rtf": 0.2372, "status": 200, "text_head": "And so, my fellow Americans, ask not what your country can\n do for you, ask what you can do for your country.", "words": 22, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "solo-stt", "rep": 1}
+16:49:58 {"kind": "stt", "clip": "long_85s.wav", "audio_s": 86.54, "wall_s": 15.561, "rtf": 0.1798, "status": 200, "text_head": "The United States asked from the Yemen to kill a day, this\n is a very important information. Is this a real information\n", "words": 363, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "solo-stt", "rep": 1}
+16:50:01 {"kind": "tts", "fmt": "pcm", "text": "short", "status": 200, "first_packet_s": 0.091, "wall_s": 3.089, "audio_s": 4.24, "prebuffer_needed_s": 0.47, "rtf": 0.7286, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "solo-tts", "rep": 1}
+16:50:23 {"kind": "tts", "fmt": "pcm", "text": "long", "status": 200, "first_packet_s": 0.299, "wall_s": 21.82, "audio_s": 35.68, "prebuffer_needed_s": 0.069, "rtf": 0.6115, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "solo-tts", "rep": 1}
+16:50:29 {"llm_timings": {"cache_n": 193, "prompt_n": 4, "prompt_ms": 59.887, "prompt_per_token_ms": 14.97175, "prompt_per_second": 66.79245913136407, "predicted_n": 300, "predicted_ms": 6563.102, "predicted_per_token_ms": 21.877006666666666, "predicted_per_second": 45.71009257512683, "draft_n": 380, "draft_n_accepted": 204}, "llm": {"status": 200, "ttft_s": 0.108, "wall_s": 6.673, "content_chunks": 300, "usage": null}, "kind": "llm", "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "solo-llm", "rep": 1}
+16:51:14 {"kind": "stt", "clip": "short_11s.wav", "audio_s": 11.0, "wall_s": 2.238, "rtf": 0.2035, "status": 200, "text_head": "And so, my fellow Americans, ask not what your country can\n do for you, ask what you can do for your country.", "words": 22, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "stt+tts", "rep": 0}
+16:51:14 {"kind": "tts", "fmt": "pcm", "text": "short", "status": 200, "first_packet_s": 0.166, "wall_s": 2.73, "audio_s": 4.24, "prebuffer_needed_s": 0.11, "rtf": 0.644, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "stt+tts", "rep": 0}
+16:51:14 {"kind": "stt", "clip": "long_85s.wav", "audio_s": 86.54, "wall_s": 17.42, "rtf": 0.2013, "status": 200, "text_head": "The United States asked from the Yemen to kill a day. This\n is a very difficult thing. Is this a very difficult thing?\n ", "words": 339, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "stt+tts", "rep": 0}
+16:51:14 {"kind": "stt", "clip": "short_11s.wav", "audio_s": 11.0, "wall_s": 2.088, "rtf": 0.1898, "status": 200, "text_head": "And so, my fellow Americans, ask not what your country can\n do for you, ask what you can do for your country.", "words": 22, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "stt+tts", "rep": 0}
+16:51:14 {"kind": "stt", "clip": "short_11s.wav", "audio_s": 11.0, "wall_s": 2.072, "rtf": 0.1884, "status": 200, "text_head": "And so, my fellow Americans, ask not what your country can\n do for you, ask what you can do for your country.", "words": 22, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "stt+tts", "rep": 0}
+16:51:14 {"kind": "tts", "fmt": "pcm", "text": "long", "status": 200, "first_packet_s": 0.333, "wall_s": 21.714, "audio_s": 35.68, "prebuffer_needed_s": 0.057, "rtf": 0.6086, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "stt+tts", "rep": 0}
+16:51:14 {"kind": "tts", "fmt": "pcm", "text": "short", "status": 200, "first_packet_s": 0.091, "wall_s": 2.381, "audio_s": 4.24, "prebuffer_needed_s": 0.131, "rtf": 0.5615, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "stt+tts", "rep": 0}
+16:51:14 {"kind": "stt", "clip": "long_85s.wav", "audio_s": 86.54, "wall_s": 21.016, "rtf": 0.2429, "status": 200, "text_head": "The US ordered from the Yemen to kill a day. These are very\n expensive. Are these the real information? I'm sure it is.\n", "words": 226, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "stt+tts", "rep": 0}
+16:51:42 {"kind": "stt", "clip": "short_11s.wav", "audio_s": 11.0, "wall_s": 2.192, "rtf": 0.1993, "status": 200, "text_head": "And so, my fellow Americans, ask not what your country can\n do for you, ask what you can do for your country.", "words": 22, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "stt+tts", "rep": 1}
+16:51:42 {"kind": "tts", "fmt": "pcm", "text": "short", "status": 200, "first_packet_s": 0.091, "wall_s": 2.43, "audio_s": 4.24, "prebuffer_needed_s": 0.054, "rtf": 0.5732, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "stt+tts", "rep": 1}
+16:51:42 {"kind": "stt", "clip": "long_85s.wav", "audio_s": 86.54, "wall_s": 21.984, "rtf": 0.254, "status": 200, "text_head": "The United States asked from the Yemen to kill a day, this\n is a very important thing. Is this a very important thing?\n ", "words": 236, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "stt+tts", "rep": 1}
+16:51:42 {"kind": "tts", "fmt": "pcm", "text": "long", "status": 200, "first_packet_s": 0.29, "wall_s": 21.557, "audio_s": 35.68, "prebuffer_needed_s": 0.053, "rtf": 0.6042, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "stt+tts", "rep": 1}
+16:51:42 {"kind": "tts", "fmt": "pcm", "text": "short", "status": 200, "first_packet_s": 0.091, "wall_s": 2.602, "audio_s": 4.24, "prebuffer_needed_s": 0.192, "rtf": 0.6137, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "stt+tts", "rep": 1}
+16:51:42 {"kind": "stt", "clip": "short_11s.wav", "audio_s": 11.0, "wall_s": 3.743, "rtf": 0.3403, "status": 200, "text_head": "And so, my fellow Americans, ask not what your country can\n do for you, ask what you can do for your country.", "words": 22, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "stt+tts", "rep": 1}
+Exception in thread Thread-3 (stt_loop):
+Traceback (most recent call last):
+  File "/usr/lib/python3.13/threading.py", line 1043, in _bootstrap_inner
+    self.run()
+    ~~~~~~~~^^
+  File "/usr/lib/python3.13/threading.py", line 994, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/raid0/llm/epyc-inference-research/artifacts/speech_cpu_realtime_20260924/speech_cpu_bench.py", line 278, in stt_loop
+    out.append(stt_request(clip))
+               ~~~~~~~~~~~^^^^^^
+  File "/mnt/raid0/llm/epyc-inference-research/artifacts/speech_cpu_realtime_20260924/speech_cpu_bench.py", line 128, in stt_request
+    r = c.getresponse(); out = r.read()
+  File "/usr/lib/python3.13/http/client.py", line 1450, in getresponse
+    response.begin()
+    ~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/http/client.py", line 336, in begin
+    version, status, reason = self._read_status()
+                              ~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/http/client.py", line 297, in _read_status
+    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+               ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/socket.py", line 719, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+TimeoutError: timed out
+17:06:48 {"kind": "stt", "clip": "short_11s.wav", "audio_s": 11.0, "wall_s": 12.469, "rtf": 1.1335, "status": 200, "text_head": "And so, my fellow Americans, ask not what your country can\n do for you, ask what you can do for your country.", "words": 22, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "stt+tts+llm", "rep": 0}
+17:06:48 {"kind": "tts", "fmt": "pcm", "text": "short", "status": 200, "first_packet_s": 2.052, "wall_s": 39.911, "audio_s": 4.24, "prebuffer_needed_s": 33.901, "rtf": 9.413, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "stt+tts+llm", "rep": 0}
+17:06:48 {"kind": "stt", "clip": "long_85s.wav", "audio_s": 86.54, "wall_s": 251.699, "rtf": 2.9086, "status": 200, "text_head": "The Emirates asked from the Yemen to ban a day. This is a\n key thing. Are these any specific information? I can't\n belie", "words": 185, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "stt+tts+llm", "rep": 0}
+17:06:48 {"kind": "stt", "clip": "short_11s.wav", "audio_s": 11.0, "wall_s": 20.588, "rtf": 1.8716, "status": 200, "text_head": "And so, my fellow Americans, ask not what your country can\n do for you, ask what you can do for your country.", "words": 22, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "stt+tts+llm", "rep": 0}
+17:06:48 {"kind": "stt", "clip": "short_11s.wav", "audio_s": 11.0, "wall_s": 16.912, "rtf": 1.5375, "status": 200, "text_head": "And so, my fellow Americans, ask not what your country can\n do for you, ask what you can do for your country.", "words": 22, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "stt+tts+llm", "rep": 0}
+17:06:48 {"kind": "tts", "fmt": "pcm", "text": "long", "status": 200, "first_packet_s": 1.515, "wall_s": 279.806, "audio_s": 35.68, "prebuffer_needed_s": 242.692, "rtf": 7.8421, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "stt+tts+llm", "rep": 0}
+17:06:48 {"kind": "tts", "fmt": "pcm", "text": "short", "status": 200, "first_packet_s": 1.599, "wall_s": 37.367, "audio_s": 4.24, "prebuffer_needed_s": 31.723, "rtf": 8.813, "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "stt+tts+llm", "rep": 0}
+17:06:48 {"llm_timings": {"cache_n": 193, "prompt_n": 4, "prompt_ms": 29130.973, "prompt_per_token_ms": 7282.74325, "prompt_per_second": 0.13731089586331358, "predicted_n": 300, "predicted_ms": 876912.955, "predicted_per_token_ms": 2923.043183333333, "predicted_per_second": 0.3421092119684787, "draft_n": 429, "draft_n_accepted": 190}, "llm": {"status": 200, "ttft_s": 29.212, "wall_s": 906.125, "content_chunks": 300, "usage": null}, "kind": "llm", "tag": "main40", "stt_threads": 24, "stt_cores": "0-23", "tts_threads": 16, "tts_cores": "24-39", "mode": "stt+tts+llm", "rep": 0}
+Exception in thread Thread-5 (stt_loop):
+Traceback (most recent call last):
+  File "/usr/lib/python3.13/threading.py", line 1043, in _bootstrap_inner
+    self.run()
+    ~~~~~~~~^^
+  File "/usr/lib/python3.13/threading.py", line 994, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/raid0/llm/epyc-inference-research/artifacts/speech_cpu_realtime_20260924/speech_cpu_bench.py", line 278, in stt_loop
+    out.append(stt_request(clip))
+               ~~~~~~~~~~~^^^^^^
+  File "/mnt/raid0/llm/epyc-inference-research/artifacts/speech_cpu_realtime_20260924/speech_cpu_bench.py", line 128, in stt_request
+    r = c.getresponse(); out = r.read()
+  File "/usr/lib/python3.13/http/client.py", line 1450, in getresponse
+    response.begin()
+    ~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/http/client.py", line 336, in begin
+    version, status, reason = self._read_status()
+                              ~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/http/client.py", line 305, in _read_status
+    raise RemoteDisconnected("Remote end closed connection without"
+                             " response")
+http.client.RemoteDisconnected: Remote end closed connection without response
+Traceback (most recent call last):
+  File "/mnt/raid0/llm/epyc-inference-research/artifacts/speech_cpu_realtime_20260924/speech_cpu_bench.py", line 312, in <module>
+    phase_concurrent(sys.argv[2], sys.argv[3], int(sys.argv[4]), sys.argv[5] if len(sys.argv) > 5 else "conc")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/raid0/llm/epyc-inference-research/artifacts/speech_cpu_realtime_20260924/speech_cpu_bench.py", line 295, in phase_concurrent
+    tts_loop()
+    ~~~~~~~~^^
+  File "/mnt/raid0/llm/epyc-inference-research/artifacts/speech_cpu_realtime_20260924/speech_cpu_bench.py", line 287, in tts_loop
+    out.append(tts_request(text, "pcm"))
+               ~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/mnt/raid0/llm/epyc-inference-research/artifacts/speech_cpu_realtime_20260924/speech_cpu_bench.py", line 144, in tts_request
+    chunk = r.read1(65536)
+  File "/usr/lib/python3.13/http/client.py", line 682, in read1
+    return self._read1_chunked(n)
+           ~~~~~~~~~~~~~~~~~~~^^^
+  File "/usr/lib/python3.13/http/client.py", line 723, in _read1_chunked
+    chunk_left = self._get_chunk_left()
+  File "/usr/lib/python3.13/http/client.py", line 584, in _get_chunk_left
+    chunk_left = self._read_next_chunk_size()
+  File "/usr/lib/python3.13/http/client.py", line 544, in _read_next_chunk_size
+    line = self.fp.readline(_MAXLINE + 1)
+  File "/usr/lib/python3.13/socket.py", line 719, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+KeyboardInterrupt

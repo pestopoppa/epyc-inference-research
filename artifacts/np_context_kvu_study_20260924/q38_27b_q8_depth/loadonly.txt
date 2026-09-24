@@ -1,0 +1,2 @@
+loadonly depth=8: n_ctx_slot=196608 kv_unified=true vram_mib=64582
+loadonly depth=4: n_ctx_slot=196608 kv_unified=true vram_mib=63568

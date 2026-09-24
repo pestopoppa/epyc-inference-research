@@ -1,0 +1,37 @@
+16:03:33 STT t=8 cores=0-7 pid=4065300 ready in 0.5s
+16:03:42 {"kind": "stt", "clip": "short_11s.wav", "audio_s": 11.0, "wall_s": 4.365, "rtf": 0.3968, "status": 200, "text_head": "And so, my fellow Americans, ask not what your country can\n do for you, ask what you can do for your country.", "words": 22, "threads": 8, "cores": "0-7", "mode": "solo"}
+16:03:47 {"kind": "stt", "clip": "short_11s.wav", "audio_s": 11.0, "wall_s": 4.441, "rtf": 0.4037, "status": 200, "text_head": "And so, my fellow Americans, ask not what your country can\n do for you, ask what you can do for your country.", "words": 22, "threads": 8, "cores": "0-7", "mode": "solo"}
+16:03:51 {"kind": "stt", "clip": "short_11s.wav", "audio_s": 11.0, "wall_s": 4.512, "rtf": 0.4102, "status": 200, "text_head": "And so, my fellow Americans, ask not what your country can\n do for you, ask what you can do for your country.", "words": 22, "threads": 8, "cores": "0-7", "mode": "solo"}
+16:04:19 {"kind": "stt", "clip": "long_85s.wav", "audio_s": 86.54, "wall_s": 28.441, "rtf": 0.3287, "status": 200, "text_head": "The United States asked from the Yemen to kill a day. These\n are very important information. Are these some of the\n info", "words": 328, "threads": 8, "cores": "0-7", "mode": "solo"}
+16:04:42 {"kind": "stt", "clip": "long_85s.wav", "audio_s": 86.54, "wall_s": 22.637, "rtf": 0.2616, "status": 200, "text_head": "The United States asked from the Yemen to kill a day, this\n is a very important information. Is this a real information\n", "words": 363, "threads": 8, "cores": "0-7", "mode": "solo"}
+16:04:43 STT t=16 cores=0-15 pid=4084689 ready in 0.5s
+16:04:48 {"kind": "stt", "clip": "short_11s.wav", "audio_s": 11.0, "wall_s": 2.781, "rtf": 0.2528, "status": 200, "text_head": "And so, my fellow Americans, ask not what your country can\n do for you, ask what you can do for your country.", "words": 22, "threads": 16, "cores": "0-15", "mode": "solo"}
+16:04:51 {"kind": "stt", "clip": "short_11s.wav", "audio_s": 11.0, "wall_s": 2.823, "rtf": 0.2566, "status": 200, "text_head": "And so, my fellow Americans, ask not what your country can\n do for you, ask what you can do for your country.", "words": 22, "threads": 16, "cores": "0-15", "mode": "solo"}
+16:04:54 {"kind": "stt", "clip": "short_11s.wav", "audio_s": 11.0, "wall_s": 2.69, "rtf": 0.2446, "status": 200, "text_head": "And so, my fellow Americans, ask not what your country can\n do for you, ask what you can do for your country.", "words": 22, "threads": 16, "cores": "0-15", "mode": "solo"}
+16:05:12 {"kind": "stt", "clip": "long_85s.wav", "audio_s": 86.54, "wall_s": 17.901, "rtf": 0.2069, "status": 200, "text_head": "The United States asked from the Yemen to kill a day. These\n are very important information. Are these some of the\n info", "words": 328, "threads": 16, "cores": "0-15", "mode": "solo"}
+16:05:26 {"kind": "stt", "clip": "long_85s.wav", "audio_s": 86.54, "wall_s": 14.785, "rtf": 0.1709, "status": 200, "text_head": "The United States asked from the Yemen to kill a day, this\n is a very important information. Is this a real information\n", "words": 363, "threads": 16, "cores": "0-15", "mode": "solo"}
+16:05:27 STT t=32 cores=0-31 pid=4118100 ready in 0.5s
+16:06:09 {"kind": "stt", "clip": "short_11s.wav", "audio_s": 11.0, "wall_s": 21.698, "rtf": 1.9725, "status": 200, "text_head": "And so, my fellow Americans, ask not what your country can\n do for you, ask what you can do for your country.", "words": 22, "threads": 32, "cores": "0-31", "mode": "solo"}
+16:06:29 {"kind": "stt", "clip": "short_11s.wav", "audio_s": 11.0, "wall_s": 19.99, "rtf": 1.8173, "status": 200, "text_head": "And so, my fellow Americans, ask not what your country can\n do for you, ask what you can do for your country.", "words": 22, "threads": 32, "cores": "0-31", "mode": "solo"}
+16:06:50 {"kind": "stt", "clip": "short_11s.wav", "audio_s": 11.0, "wall_s": 20.467, "rtf": 1.8606, "status": 200, "text_head": "And so, my fellow Americans, ask not what your country can\n do for you, ask what you can do for your country.", "words": 22, "threads": 32, "cores": "0-31", "mode": "solo"}
+Traceback (most recent call last):
+  File "/mnt/raid0/llm/epyc-inference-research/artifacts/speech_cpu_realtime_20260924/speech_cpu_bench.py", line 276, in <module>
+    phase_stt_sweep([int(x) for x in sys.argv[2].split(",")])
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/raid0/llm/epyc-inference-research/artifacts/speech_cpu_realtime_20260924/speech_cpu_bench.py", line 211, in phase_stt_sweep
+    r = stt_request(LONG_WAV); r.update(threads=t, cores=cores(0, t), mode="solo"); emit(r, fh, jl)
+  File "/mnt/raid0/llm/epyc-inference-research/artifacts/speech_cpu_realtime_20260924/speech_cpu_bench.py", line 128, in stt_request
+    r = c.getresponse(); out = r.read()
+  File "/usr/lib/python3.13/http/client.py", line 1450, in getresponse
+    response.begin()
+    ~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/http/client.py", line 336, in begin
+    version, status, reason = self._read_status()
+                              ~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/http/client.py", line 297, in _read_status
+    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+               ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/socket.py", line 719, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+KeyboardInterrupt

@@ -1,0 +1,28 @@
+{
+  "schema_version": "v7_quality_gate_capture.v4",
+  "runner_source_sha256": "20a97fbd4aecc6f3887299243362d5315b76f819aa1cbc4b8fd92f33b307b45a",
+  "suite": "olympiadbench_hard",
+  "arm": "q38_27b_q8_h_split_np1_L2048",
+  "updated_at": "2026-09-24T15:50:04.251185+00:00",
+  "completed_draws": 1,
+  "expected_draws": 1,
+  "complete": true,
+  "request_error_rows": 0,
+  "length_cap_rows": 1,
+  "swebench_search_replace": {
+    "applicable": false,
+    "state_counts": {
+      "strict_ready": 0,
+      "prompt_contract_candidate": 0,
+      "model_truncation_no_patch": 0,
+      "model_truncation_partial_patch": 0,
+      "request_error": 0
+    },
+    "zero_strict_block_rows": 0,
+    "partial_strict_block_rows": 0,
+    "summary_complete": true,
+    "score_status": "terminal_no_prompt_contract_candidate"
+  },
+  "provisional": false,
+  "artifact_integrity_fail_closed": false
+}

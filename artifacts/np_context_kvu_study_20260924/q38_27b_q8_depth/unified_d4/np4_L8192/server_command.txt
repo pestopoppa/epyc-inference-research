@@ -1,0 +1,1 @@
+/mnt/raid0/llm/kernels/production/gpu/llama-server -m /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf -np 4 -c 36864 --kv-unified --spec-draft-n-max 4 

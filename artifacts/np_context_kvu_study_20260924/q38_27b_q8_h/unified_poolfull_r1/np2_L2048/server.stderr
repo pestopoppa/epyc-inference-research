@@ -1,0 +1,92 @@
+0.00.059.530 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.059.883 W srv  llama_server: -----------------
+0.00.059.885 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.059.885 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.059.885 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.059.885 W srv  llama_server: -----------------
+0.00.061.085 I srv    load_model: loading model '/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf'
+0.03.494.540 I srv    load_model: initializing, n_slots = 2, n_ctx_slot = 4096, kv_unified = 'true'
+0.03.494.673 W llama_sampler_backend_support: device 'ROCm0' does not have support for op TOP_K needed for sampler 'top-k'
+0.03.494.677 W llama_sampler_backend_support: device 'ROCm0' does not have support for op TOP_K needed for sampler 'top-k'
+0.03.532.570 I srv          init: chat template supports preserving reasoning, consider enabling it via --reasoning-preserve
+0.03.532.617 I srv  llama_server: model loaded
+0.03.532.622 I srv  llama_server: listening on http://127.0.0.1:18072
+0.07.050.118 I slot get_availabl: id  1 | task -1 | selected slot by LRU, t_last = -1
+0.07.050.181 I slot launch_slot_: id  1 | task 0 | processing task, is_child = 0
+0.07.346.794 I slot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+0.07.346.872 I slot launch_slot_: id  0 | task 1 | processing task, is_child = 0
+0.11.471.687 I slot print_timing: id  1 | task 0 | n_decoded =    100, tg =  31.12 t/s, tg_3s =  31.12 t/s
+0.12.134.329 I slot print_timing: id  0 | task 1 | n_decoded =    101, tg =  27.21 t/s, tg_3s =  27.21 t/s
+0.14.485.126 I slot print_timing: id  1 | task 0 | n_decoded =    216, tg =  34.69 t/s, tg_3s =  38.49 t/s
+0.15.158.458 I slot print_timing: id  0 | task 1 | n_decoded =    215, tg =  31.92 t/s, tg_3s =  37.70 t/s
+0.17.563.405 I slot print_timing: id  1 | task 0 | n_decoded =    371, tg =  39.87 t/s, tg_3s =  50.35 t/s
+0.18.250.898 I slot print_timing: id  0 | task 1 | n_decoded =    330, tg =  33.58 t/s, tg_3s =  37.19 t/s
+0.20.645.947 I slot print_timing: id  1 | task 0 | n_decoded =    477, tg =  38.51 t/s, tg_3s =  34.39 t/s
+0.21.311.947 I slot print_timing: id  0 | task 1 | n_decoded =    426, tg =  33.05 t/s, tg_3s =  31.36 t/s
+0.23.654.671 I slot print_timing: id  1 | task 0 | n_decoded =    563, tg =  36.57 t/s, tg_3s =  28.58 t/s
+0.24.323.629 I slot print_timing: id  0 | task 1 | n_decoded =    521, tg =  32.77 t/s, tg_3s =  31.54 t/s
+0.26.669.285 I slot print_timing: id  1 | task 0 | n_decoded =    662, tg =  35.96 t/s, tg_3s =  32.84 t/s
+0.27.335.429 I slot print_timing: id  0 | task 1 | n_decoded =    629, tg =  33.26 t/s, tg_3s =  35.86 t/s
+0.29.708.124 I slot print_timing: id  1 | task 0 | n_decoded =    755, tg =  35.20 t/s, tg_3s =  30.60 t/s
+0.30.398.202 I slot print_timing: id  0 | task 1 | n_decoded =    767, tg =  34.90 t/s, tg_3s =  45.06 t/s
+0.32.777.580 I slot print_timing: id  1 | task 0 | n_decoded =    875, tg =  35.69 t/s, tg_3s =  39.09 t/s
+0.33.452.346 I slot print_timing: id  0 | task 1 | n_decoded =    877, tg =  35.04 t/s, tg_3s =  36.02 t/s
+0.35.799.011 I slot print_timing: id  1 | task 0 | n_decoded =   1033, tg =  37.51 t/s, tg_3s =  52.29 t/s
+0.36.472.128 I slot print_timing: id  0 | task 1 | n_decoded =   1021, tg =  36.40 t/s, tg_3s =  47.69 t/s
+0.38.862.774 I slot print_timing: id  1 | task 0 | n_decoded =   1200, tg =  39.21 t/s, tg_3s =  54.51 t/s
+0.39.537.773 I slot print_timing: id  0 | task 1 | n_decoded =   1078, tg =  34.65 t/s, tg_3s =  18.59 t/s
+0.41.886.140 I slot print_timing: id  1 | task 0 | n_decoded =   1311, tg =  38.99 t/s, tg_3s =  36.71 t/s
+0.42.576.202 I slot print_timing: id  0 | task 1 | n_decoded =   1208, tg =  35.37 t/s, tg_3s =  42.79 t/s
+0.44.988.319 I slot print_timing: id  1 | task 0 | n_decoded =   1412, tg =  38.44 t/s, tg_3s =  32.56 t/s
+0.45.676.601 I slot print_timing: id  0 | task 1 | n_decoded =   1304, tg =  35.00 t/s, tg_3s =  30.96 t/s
+0.48.103.268 I slot print_timing: id  1 | task 0 | n_decoded =   1565, tg =  39.28 t/s, tg_3s =  49.12 t/s
+0.48.789.160 I slot print_timing: id  0 | task 1 | n_decoded =   1435, tg =  35.55 t/s, tg_3s =  42.09 t/s
+0.51.219.719 I slot print_timing: id  1 | task 0 | n_decoded =   1669, tg =  38.85 t/s, tg_3s =  33.37 t/s
+0.51.796.272 I slot print_timing: id  0 | task 1 | n_decoded =   1503, tg =  34.65 t/s, tg_3s =  22.61 t/s
+0.54.221.538 I slot print_timing: id  1 | task 0 | n_decoded =   1782, tg =  38.77 t/s, tg_3s =  37.64 t/s
+0.54.700.896 W decode: failed to find a memory slot for batch of size 2
+0.54.700.900 E spec        draft: llama_decode[6] returned 1
+0.54.700.987 E init_batch: failed to prepare attention ubatches
+0.54.700.989 W decode: failed to find a memory slot for batch of size 14
+0.54.700.991 W srv        decode: failed to find free space in the KV cache, retrying with smaller batch size, off = 0, n_batch = 1024, ret = 1
+0.54.701.067 E init_batch: failed to prepare attention ubatches
+0.54.701.068 W decode: failed to find a memory slot for batch of size 14
+0.54.701.068 W srv        decode: failed to find free space in the KV cache, retrying with smaller batch size, off = 0, n_batch = 512, ret = 1
+0.54.701.137 E init_batch: failed to prepare attention ubatches
+0.54.701.138 W decode: failed to find a memory slot for batch of size 14
+0.54.701.138 W srv        decode: failed to find free space in the KV cache, retrying with smaller batch size, off = 0, n_batch = 256, ret = 1
+0.54.701.207 E init_batch: failed to prepare attention ubatches
+0.54.701.208 W decode: failed to find a memory slot for batch of size 14
+0.54.701.208 W srv        decode: failed to find free space in the KV cache, retrying with smaller batch size, off = 0, n_batch = 128, ret = 1
+0.54.701.278 E init_batch: failed to prepare attention ubatches
+0.54.701.278 W decode: failed to find a memory slot for batch of size 14
+0.54.701.279 W srv        decode: failed to find free space in the KV cache, retrying with smaller batch size, off = 0, n_batch = 64, ret = 1
+0.54.701.348 E init_batch: failed to prepare attention ubatches
+0.54.701.349 W decode: failed to find a memory slot for batch of size 14
+0.54.701.349 W srv        decode: failed to find free space in the KV cache, retrying with smaller batch size, off = 0, n_batch = 32, ret = 1
+0.54.701.419 E init_batch: failed to prepare attention ubatches
+0.54.701.419 W decode: failed to find a memory slot for batch of size 14
+0.54.701.420 W srv        decode: failed to find free space in the KV cache, retrying with smaller batch size, off = 0, n_batch = 16, ret = 1
+0.54.701.495 E init_batch: failed to prepare attention ubatches
+0.54.701.496 W decode: failed to find a memory slot for batch of size 14
+0.54.701.496 W srv        decode: failed to find free space in the KV cache, retrying with smaller batch size, off = 0, n_batch = 8, ret = 1
+0.54.807.065 E slot      iterate: id  1 | task 0 | got exception: speculative batch index 8 is not inside the current sub-batch [0, 8)
+0.54.807.074 E srv    send_error: task id = 0, error: got exception: speculative batch index 8 is not inside the current sub-batch [0, 8)
+0.54.807.087 I slot      release: id  1 | task 0 | stop processing: n_tokens = 2080, truncated = 0
+0.54.807.679 I slot print_timing: id  0 | task 1 | n_decoded =   1601, tg =  34.52 t/s, tg_3s =  32.54 t/s
+0.54.809.814 W srv          stop: cancel task, id_task = 0
+0.54.884.073 W decode: failed to find a memory slot for batch of size 1
+0.54.884.076 E spec        draft: llama_decode[2] returned 1
+0.54.884.174 E init_batch: failed to prepare attention ubatches
+0.54.884.176 W decode: failed to find a memory slot for batch of size 3
+0.54.884.177 W srv  try_clear_id: purging slot 1 with 2080 tokens
+0.54.887.264 W srv        decode: failed to find free space in the KV cache, retrying with smaller batch size, off = 0, n_batch = 2048, ret = 1
+0.57.838.634 I slot print_timing: id  0 | task 1 | n_decoded =   1750, tg =  35.41 t/s, tg_3s =  49.16 t/s
+1.00.887.409 I slot print_timing: id  0 | task 1 | n_decoded =   1921, tg =  36.62 t/s, tg_3s =  56.09 t/s
+1.03.687.806 I slot print_timing: id  0 | task 1 | prompt eval time =    1076.09 ms /   414 tokens (    2.60 ms per token,   384.73 tokens per second)
+1.03.687.810 I slot print_timing: id  0 | task 1 |        eval time =   55264.81 ms /  2048 tokens (   26.98 ms per token,    37.06 tokens per second)
+1.03.687.810 I slot print_timing: id  0 | task 1 |       total time =   56340.90 ms /  2462 tokens
+1.03.687.817 I slot print_timing: id  0 | task 1 |    graphs reused =        492
+1.03.687.823 I slot print_timing: id  0 | task 1 | draft acceptance = 0.37910 ( 1538 accepted /  4057 generated), mean len =  4.02
+1.03.687.905 I slot      release: id  0 | task 1 | stop processing: n_tokens = 2461, truncated = 0
+1.03.878.094 I srv    operator(): operator(): cleaning up before exit...

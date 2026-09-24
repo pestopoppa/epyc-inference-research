@@ -1,0 +1,32 @@
+t=16 cores=0-15 :: whisper_print_timings:   encode time =  2541.58 ms /     1 runs (  2541.58 ms per run)
+t=16 cores=16-31 :: whisper_print_timings:   encode time =  2254.07 ms /     1 runs (  2254.07 ms per run)
+t=16 cores=24-39 :: whisper_print_timings:   encode time =  2452.47 ms /     1 runs (  2452.47 ms per run)
+t=24 cores=0-23 :: whisper_print_timings:   encode time =  1864.97 ms /     1 runs (  1864.97 ms per run)
+t=32 cores=0-31 :: 
+t=32 cores=24-55 :: 
+t=20 cores=0-19 :: TIMEOUT(120s)
+t=28 cores=0-27 :: TIMEOUT(120s)
+t=32 cores=0-47 :: whisper_print_timings:   encode time =  1365.43 ms /     1 runs (  1365.43 ms per run)
+t=24 cores=0-23 :: whisper_print_timings:   encode time =  1865.35 ms /     1 runs (  1865.35 ms per run)
+--- repeat matrix (3x each, timeout 60s)
+t=8 cores=0-7 rep=1 :: encode time =  4124.84 ms
+t=8 cores=0-7 rep=2 :: encode time =  4284.98 ms
+t=8 cores=0-7 rep=3 :: encode time =  4139.33 ms
+t=8 cores=0-11 rep=1 :: encode time =  4193.42 ms
+t=8 cores=0-11 rep=2 :: encode time =  4240.90 ms
+t=8 cores=0-11 rep=3 :: encode time =  4119.08 ms
+t=16 cores=0-15 rep=1 :: encode time =  2533.79 ms
+t=16 cores=0-15 rep=2 :: encode time =  2528.47 ms
+t=16 cores=0-15 rep=3 :: encode time =  2537.93 ms
+t=16 cores=0-23 rep=1 :: encode time =  2369.21 ms
+t=16 cores=0-23 rep=2 :: encode time =  2372.69 ms
+t=16 cores=0-23 rep=3 :: encode time =  2438.26 ms
+t=24 cores=0-23 rep=1 :: encode time =  1864.50 ms
+t=24 cores=0-23 rep=2 :: encode time =  1933.40 ms
+t=24 cores=0-23 rep=3 :: encode time =  1937.21 ms
+t=24 cores=0-31 rep=1 :: TIMEOUT(60s)
+t=24 cores=0-31 rep=2 :: TIMEOUT(60s)
+t=24 cores=0-31 rep=3 :: TIMEOUT(60s)
+t=32 cores=0-39 rep=1 :: encode time =  1439.68 ms
+t=32 cores=0-39 rep=2 :: encode time =  1325.07 ms
+t=32 cores=0-39 rep=3 :: encode time =  1396.93 ms

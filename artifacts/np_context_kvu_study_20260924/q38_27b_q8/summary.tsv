@@ -1,0 +1,5 @@
+arm	np	L	c	agg_decode	perreq_med	errors	vram_gib	n_ctx_slot	kv_unified	draft_accept	extra
+split	1	2048	2048	44.1	45.2	0	53	2048	false	NA	
+unified	1	2048	2048	43.7	44.8	0	53	2048	true	NA	
+split	2	2048	4096	69.6	36.1	0	54	2048	false	NA	
+unified	2	2048	4096	36.1	37.2	1	54	4096	true	NA	

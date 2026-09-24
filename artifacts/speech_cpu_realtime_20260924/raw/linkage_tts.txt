@@ -1,0 +1,19 @@
+binary : /mnt/raid0/llm/qwentts.cpp/build/tts-server
+expect : libraries under /mnt/raid0/llm/qwentts.cpp
+
+  OK   libggml.so.0                 -> /mnt/raid0/llm/qwentts.cpp/build/libggml.so.0
+  OK   libggml-cpu.so.0             -> /mnt/raid0/llm/qwentts.cpp/build/libggml-cpu.so.0
+  OK   libggml-hip.so.0             -> /mnt/raid0/llm/qwentts.cpp/build/libggml-hip.so.0
+  OK   libggml-base.so.0            -> /mnt/raid0/llm/qwentts.cpp/build/libggml-base.so.0
+
+LD_LIBRARY_PATH order as the loader sees it:
+         1	/mnt/raid0/llm/qwentts.cpp/build
+         2	/opt/AMD/aocc-compiler-5.0.0/lib
+         3	/opt/rocm/lib
+
+PASS: all linked ggml libraries resolve inside /mnt/raid0/llm/qwentts.cpp
+NOTE: ggml backends (ggml-hip, ggml-cpu-<arch>) are dlopened at RUNTIME and
+      are not covered by ldd. Confirm the intended device appears in the
+      program's own startup log (e.g. 'Device 0: AMD Instinct MI210') and
+      do not trust a 'use gpu = 1' flag alone — that flag reports what was
+      REQUESTED, not what was loaded.

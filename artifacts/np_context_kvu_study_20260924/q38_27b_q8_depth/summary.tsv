@@ -1,0 +1,6 @@
+arm	np	L	c	agg_decode	perreq_med	errors	vram_gib	n_ctx_slot	kv_unified	draft_accept	extra
+unified_d4	2	2048	6144	77.6	40.0	0	53	6144	true	0.632	--spec-draft-n-max 4
+unified_d6	2	2048	6144	76.5	39.4	0	53	6144	true	0.478	--spec-draft-n-max 6
+unified_d4	2	8192	18432	68.3	40.3	0	53	18432	true	0.648	--spec-draft-n-max 4
+unified_d6	2	8192	18432	66.3	40.9	0	54	18432	true	0.500	--spec-draft-n-max 6
+unified_d4	4	8192	36864	96.2	29.7	0	56	36864	true	0.661	--spec-draft-n-max 4

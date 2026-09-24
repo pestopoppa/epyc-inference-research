@@ -1,0 +1,21 @@
+0.00.055.155 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.055.479 W srv  llama_server: -----------------
+0.00.055.480 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.055.480 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.055.480 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.055.480 W srv  llama_server: -----------------
+0.00.056.667 I srv    load_model: loading model '/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf'
+0.00.799.411 W common_fit_params: failed to fit params to free device memory: n_gpu_layers already set by user to -2, abort
+0.03.544.277 I srv    load_model: initializing, n_slots = 8, n_ctx_slot = 3072, kv_unified = 'false'
+0.03.544.555 W llama_sampler_backend_support: device 'ROCm0' does not have support for op TOP_K needed for sampler 'top-k'
+0.03.544.558 W llama_sampler_backend_support: device 'ROCm0' does not have support for op TOP_K needed for sampler 'top-k'
+0.03.544.559 W llama_sampler_backend_support: device 'ROCm0' does not have support for op TOP_K needed for sampler 'top-k'
+0.03.544.561 W llama_sampler_backend_support: device 'ROCm0' does not have support for op TOP_K needed for sampler 'top-k'
+0.03.544.563 W llama_sampler_backend_support: device 'ROCm0' does not have support for op TOP_K needed for sampler 'top-k'
+0.03.544.564 W llama_sampler_backend_support: device 'ROCm0' does not have support for op TOP_K needed for sampler 'top-k'
+0.03.544.565 W llama_sampler_backend_support: device 'ROCm0' does not have support for op TOP_K needed for sampler 'top-k'
+0.03.544.566 W llama_sampler_backend_support: device 'ROCm0' does not have support for op TOP_K needed for sampler 'top-k'
+0.03.582.603 I srv          init: chat template supports preserving reasoning, consider enabling it via --reasoning-preserve
+0.03.582.649 I srv  llama_server: model loaded
+0.03.582.654 I srv  llama_server: listening on http://127.0.0.1:18072
+0.06.271.788 I srv    operator(): operator(): cleaning up before exit...

@@ -1,0 +1,44 @@
+16:41:24 TTS t=8 cores=0-7 pid=548653 ready in 1.0s
+16:41:31 {"kind": "tts", "fmt": "pcm", "text": "short", "status": 200, "first_packet_s": 0.113, "wall_s": 3.054, "audio_s": 4.24, "rtf": 0.7203, "threads": 8, "cores": "0-7", "mode": "solo"}
+16:41:34 {"kind": "tts", "fmt": "pcm", "text": "short", "status": 200, "first_packet_s": 0.113, "wall_s": 3.161, "audio_s": 4.24, "rtf": 0.7455, "threads": 8, "cores": "0-7", "mode": "solo"}
+16:41:37 {"kind": "tts", "fmt": "pcm", "text": "short", "status": 200, "first_packet_s": 0.112, "wall_s": 3.083, "audio_s": 4.24, "rtf": 0.7271, "threads": 8, "cores": "0-7", "mode": "solo"}
+16:41:40 {"kind": "tts", "fmt": "wav", "text": "short", "status": 200, "first_packet_s": 3.014, "wall_s": 3.014, "audio_s": 4.24, "rtf": 0.7108, "threads": 8, "cores": "0-7", "mode": "solo"}
+16:41:43 {"kind": "tts", "fmt": "wav", "text": "short", "status": 200, "first_packet_s": 2.959, "wall_s": 2.96, "audio_s": 4.24, "rtf": 0.698, "threads": 8, "cores": "0-7", "mode": "solo"}
+16:41:46 {"kind": "tts", "fmt": "wav", "text": "short", "status": 200, "first_packet_s": 2.952, "wall_s": 2.952, "audio_s": 4.24, "rtf": 0.6961, "threads": 8, "cores": "0-7", "mode": "solo"}
+16:42:13 {"kind": "tts", "fmt": "pcm", "text": "long", "status": 200, "first_packet_s": 0.33, "wall_s": 27.64, "audio_s": 35.68, "rtf": 0.7747, "threads": 8, "cores": "0-7", "mode": "solo"}
+16:42:40 {"kind": "tts", "fmt": "pcm", "text": "long", "status": 200, "first_packet_s": 0.328, "wall_s": 26.54, "audio_s": 35.68, "rtf": 0.7438, "threads": 8, "cores": "0-7", "mode": "solo"}
+16:43:08 {"kind": "tts", "fmt": "wav", "text": "long", "status": 200, "first_packet_s": 28.409, "wall_s": 28.41, "audio_s": 35.68, "rtf": 0.7962, "threads": 8, "cores": "0-7", "mode": "solo"}
+16:43:37 {"kind": "tts", "fmt": "wav", "text": "long", "status": 200, "first_packet_s": 29.091, "wall_s": 29.092, "audio_s": 35.68, "rtf": 0.8153, "threads": 8, "cores": "0-7", "mode": "solo"}
+16:43:38 TTS t=16 cores=0-15 pid=581995 ready in 0.5s
+16:43:43 {"kind": "tts", "fmt": "pcm", "text": "short", "status": 200, "first_packet_s": 0.42, "wall_s": 2.626, "audio_s": 4.24, "rtf": 0.6194, "threads": 16, "cores": "0-15", "mode": "solo"}
+16:43:46 {"kind": "tts", "fmt": "pcm", "text": "short", "status": 200, "first_packet_s": 0.084, "wall_s": 2.319, "audio_s": 4.24, "rtf": 0.5469, "threads": 16, "cores": "0-15", "mode": "solo"}
+16:43:48 {"kind": "tts", "fmt": "pcm", "text": "short", "status": 200, "first_packet_s": 0.084, "wall_s": 2.266, "audio_s": 4.24, "rtf": 0.5344, "threads": 16, "cores": "0-15", "mode": "solo"}
+16:43:50 {"kind": "tts", "fmt": "wav", "text": "short", "status": 200, "first_packet_s": 2.018, "wall_s": 2.018, "audio_s": 4.24, "rtf": 0.4759, "threads": 16, "cores": "0-15", "mode": "solo"}
+16:43:52 {"kind": "tts", "fmt": "wav", "text": "short", "status": 200, "first_packet_s": 2.012, "wall_s": 2.012, "audio_s": 4.24, "rtf": 0.4746, "threads": 16, "cores": "0-15", "mode": "solo"}
+16:43:54 {"kind": "tts", "fmt": "wav", "text": "short", "status": 200, "first_packet_s": 2.232, "wall_s": 2.232, "audio_s": 4.24, "rtf": 0.5264, "threads": 16, "cores": "0-15", "mode": "solo"}
+16:44:16 {"kind": "tts", "fmt": "pcm", "text": "long", "status": 200, "first_packet_s": 0.215, "wall_s": 22.006, "audio_s": 35.68, "rtf": 0.6168, "threads": 16, "cores": "0-15", "mode": "solo"}
+16:44:37 {"kind": "tts", "fmt": "pcm", "text": "long", "status": 200, "first_packet_s": 0.261, "wall_s": 20.478, "audio_s": 35.68, "rtf": 0.5739, "threads": 16, "cores": "0-15", "mode": "solo"}
+16:44:57 {"kind": "tts", "fmt": "wav", "text": "long", "status": 200, "first_packet_s": 20.472, "wall_s": 20.473, "audio_s": 35.68, "rtf": 0.5738, "threads": 16, "cores": "0-15", "mode": "solo"}
+16:45:17 {"kind": "tts", "fmt": "wav", "text": "long", "status": 200, "first_packet_s": 20.24, "wall_s": 20.24, "audio_s": 35.68, "rtf": 0.5673, "threads": 16, "cores": "0-15", "mode": "solo"}
+16:45:18 TTS t=24 cores=0-23 pid=651851 ready in 0.5s
+16:45:24 {"kind": "tts", "fmt": "pcm", "text": "short", "status": 200, "first_packet_s": 0.075, "wall_s": 3.512, "audio_s": 4.24, "rtf": 0.8284, "threads": 24, "cores": "0-23", "mode": "solo"}
+16:45:26 {"kind": "tts", "fmt": "pcm", "text": "short", "status": 200, "first_packet_s": 0.076, "wall_s": 2.383, "audio_s": 4.24, "rtf": 0.562, "threads": 24, "cores": "0-23", "mode": "solo"}
+16:45:29 {"kind": "tts", "fmt": "pcm", "text": "short", "status": 200, "first_packet_s": 0.074, "wall_s": 2.583, "audio_s": 4.24, "rtf": 0.6092, "threads": 24, "cores": "0-23", "mode": "solo"}
+16:45:31 {"kind": "tts", "fmt": "wav", "text": "short", "status": 200, "first_packet_s": 1.99, "wall_s": 1.991, "audio_s": 4.24, "rtf": 0.4695, "threads": 24, "cores": "0-23", "mode": "solo"}
+16:45:33 {"kind": "tts", "fmt": "wav", "text": "short", "status": 200, "first_packet_s": 2.104, "wall_s": 2.104, "audio_s": 4.24, "rtf": 0.4962, "threads": 24, "cores": "0-23", "mode": "solo"}
+16:45:35 {"kind": "tts", "fmt": "wav", "text": "short", "status": 200, "first_packet_s": 1.782, "wall_s": 1.782, "audio_s": 4.24, "rtf": 0.4203, "threads": 24, "cores": "0-23", "mode": "solo"}
+16:45:56 {"kind": "tts", "fmt": "pcm", "text": "long", "status": 200, "first_packet_s": 0.182, "wall_s": 21.411, "audio_s": 35.68, "rtf": 0.6001, "threads": 24, "cores": "0-23", "mode": "solo"}
+16:46:17 {"kind": "tts", "fmt": "pcm", "text": "long", "status": 200, "first_packet_s": 0.189, "wall_s": 20.596, "audio_s": 35.68, "rtf": 0.5773, "threads": 24, "cores": "0-23", "mode": "solo"}
+16:46:36 {"kind": "tts", "fmt": "wav", "text": "long", "status": 200, "first_packet_s": 18.882, "wall_s": 18.882, "audio_s": 35.68, "rtf": 0.5292, "threads": 24, "cores": "0-23", "mode": "solo"}
+16:46:52 {"kind": "tts", "fmt": "wav", "text": "long", "status": 200, "first_packet_s": 16.174, "wall_s": 16.175, "audio_s": 35.68, "rtf": 0.4533, "threads": 24, "cores": "0-23", "mode": "solo"}
+16:46:53 TTS t=32 cores=0-39 pid=756892 ready in 1.0s
+16:46:58 {"kind": "tts", "fmt": "pcm", "text": "short", "status": 200, "first_packet_s": 0.134, "wall_s": 2.161, "audio_s": 4.24, "rtf": 0.5097, "threads": 32, "cores": "0-39", "mode": "solo"}
+16:47:01 {"kind": "tts", "fmt": "pcm", "text": "short", "status": 200, "first_packet_s": 0.079, "wall_s": 2.792, "audio_s": 4.24, "rtf": 0.6585, "threads": 32, "cores": "0-39", "mode": "solo"}
+16:47:04 {"kind": "tts", "fmt": "pcm", "text": "short", "status": 200, "first_packet_s": 0.085, "wall_s": 3.069, "audio_s": 4.24, "rtf": 0.7239, "threads": 32, "cores": "0-39", "mode": "solo"}
+16:47:06 {"kind": "tts", "fmt": "wav", "text": "short", "status": 200, "first_packet_s": 2.592, "wall_s": 2.592, "audio_s": 4.24, "rtf": 0.6113, "threads": 32, "cores": "0-39", "mode": "solo"}
+16:47:08 {"kind": "tts", "fmt": "wav", "text": "short", "status": 200, "first_packet_s": 1.859, "wall_s": 1.859, "audio_s": 4.24, "rtf": 0.4384, "threads": 32, "cores": "0-39", "mode": "solo"}
+16:47:10 {"kind": "tts", "fmt": "wav", "text": "short", "status": 200, "first_packet_s": 1.834, "wall_s": 1.834, "audio_s": 4.24, "rtf": 0.4326, "threads": 32, "cores": "0-39", "mode": "solo"}
+16:47:30 {"kind": "tts", "fmt": "pcm", "text": "long", "status": 200, "first_packet_s": 0.373, "wall_s": 19.871, "audio_s": 35.68, "rtf": 0.5569, "threads": 32, "cores": "0-39", "mode": "solo"}
+16:47:49 {"kind": "tts", "fmt": "pcm", "text": "long", "status": 200, "first_packet_s": 0.141, "wall_s": 19.461, "audio_s": 35.68, "rtf": 0.5454, "threads": 32, "cores": "0-39", "mode": "solo"}
+16:48:08 {"kind": "tts", "fmt": "wav", "text": "long", "status": 200, "first_packet_s": 18.524, "wall_s": 18.525, "audio_s": 35.68, "rtf": 0.5192, "threads": 32, "cores": "0-39", "mode": "solo"}
+16:48:27 {"kind": "tts", "fmt": "wav", "text": "long", "status": 200, "first_packet_s": 19.451, "wall_s": 19.452, "audio_s": 35.68, "rtf": 0.5452, "threads": 32, "cores": "0-39", "mode": "solo"}

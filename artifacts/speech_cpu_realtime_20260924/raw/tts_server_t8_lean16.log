@@ -1,0 +1,108 @@
+[Qwen] qwentts.cpp abab6b3 (2026-07-30)
+ggml_cuda_init: failed to initialize ROCm: no ROCm-capable device is detected
+[Load] Talker backend: CPU (CPU threads: 8)
+[GGUF] /mnt/raid0/llm/models/Qwen3-TTS-qwentts/qwen-talker-0.6b-base-Q8_0.gguf: 478 tensors, data at offset 5954368
+[WeightCtx] Loaded 316 tensors, 774.6 MB into backend
+[Talker] Loaded: 28 layers, hidden 1024, heads 16/8, head_dim 128, FFN 3072, RoPE theta 1000000, mrope sections [24,20,20] interleaved=0
+[WeightCtx] Loaded 86 tensors, 143.5 MB into backend
+[CodePredictor] Loaded: 5 layers, hidden 1024, heads 16/8, head_dim 128, FFN 3072, RoPE theta 1000000, 15 acoustic codebooks (vocab 2048 each), mtp_proj identity
+[GGUF] /mnt/raid0/llm/models/Qwen3-TTS-qwentts/qwen-tokenizer-12hz-Q8_0.gguf: 398 tensors, data at offset 29760
+[WeightCtx] Loaded 18 tensors, 33.0 MB into backend
+[Quantizer] Loaded: 16 codebooks (1 semantic + 15 acoustic), 2048 entries x 256 dim, hidden 512
+[WeightCtx] Loaded 93 tensors, 30.9 MB into backend
+[Transformer] Loaded: 8 layers, hidden 512, heads 16/16, head_dim 64, FFN 1024, RoPE theta 10000, sliding window 72
+[WeightCtx] Loaded 22 tensors, 33.1 MB into backend
+[Upsample] Loaded: 2 blocks (2x ratio per block), channels 1024, dwconv kernel 7
+[WeightCtx] Loaded 118 tensors, 142.9 MB into backend
+[DAC] Loaded: 4 blocks (strides 8/5/4/3), 24 kHz mono out, weights 142.9 MB
+[WeightCtx] Loaded 2 tensors, 3.0 MB into backend
+[Pipeline] Ready: hop 1920 samples @ 24000 Hz mono, 16 codebooks @ 12.5 Hz
+[KVCache] Allocated: 28 layers, 8 KV heads, head_dim 128, max_seq_len 4096, 1 sets -> 896 MB
+[KVCache] Allocated: 5 layers, 8 KV heads, head_dim 128, max_seq_len 16, 1 sets -> 0 MB
+[Pipeline] Loaded: arch=0b6 variant=base tokenizer=qwen3_tts_tokenizer_12hz codebooks=16 speaker_encoder=deferred speakers=0 fa=off clamp_fp16=off max_batch=1
+[BPE] Loaded from GGUF: 151676 vocab, 151291 merges, eos_id=151643
+[BPE] Registered 5 arch special tokens (total specials=6)
+[Server] model qwen3-tts-12hz-0.6b
+[Server] listening on 127.0.0.1:19102
+[Prompt] Built: 26 ids, N_text=18, N_instruct=0, T_ctx=27, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[KVCache] Allocated: 8 layers, 16 KV heads, head_dim 64, max_seq_len 128, 2 sets -> 16 MB
+[Pipeline] Codec stream state ready: 21 conv contexts, KV ring 128, 2 sets (1 staging)
+[Batch] Admit slot=0 T_ctx=27 prefill=66.3 ms build=1.9 ms (stall for 0 active slots)
+[Sample] step=0 c0=1221 u=0.6129598618 subseq=0
+[Sample] step=1 c0=1342 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 53, stopping (slot 0)
+[Pipeline] Generation done : 53 frames
+[Perf] PromptBuild 1.9 ms
+[Perf] Prefill 66.3 ms (T_ctx prefill)
+[Perf] TTFA 92.5 ms (first frame codes)
+[Perf] TalkerDecode 701.6 ms (53 frames, 13.24 ms/frame)
+[Perf] CodePredictor 1377.5 ms (25.99 ms/frame)
+[Perf] HostCompose 1.6 ms (c0 sample + next emb)
+[Perf] CodecDecode 1089.4 ms
+[Perf] Total 3240.0 ms (53 frames, 39.26 ms/frame AR, audio 4.24 s, RTF 0.764)
+[Prompt] Built: 26 ids, N_text=18, N_instruct=0, T_ctx=27, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=27 prefill=66.4 ms build=1.5 ms (stall for 0 active slots)
+[Sample] step=0 c0=1221 u=0.6129598618 subseq=0
+[Sample] step=1 c0=1342 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 53, stopping (slot 0)
+[Pipeline] Generation done : 53 frames
+[Perf] PromptBuild 1.5 ms
+[Perf] Prefill 66.4 ms (T_ctx prefill)
+[Perf] TTFA 91.2 ms (first frame codes)
+[Perf] TalkerDecode 694.5 ms (53 frames, 13.10 ms/frame)
+[Perf] CodePredictor 1227.6 ms (23.16 ms/frame)
+[Perf] HostCompose 11.0 ms (c0 sample + next emb)
+[Perf] CodecDecode 1003.2 ms
+[Perf] Total 3005.1 ms (53 frames, 36.47 ms/frame AR, audio 4.24 s, RTF 0.709)
+[Prompt] Built: 26 ids, N_text=18, N_instruct=0, T_ctx=27, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=27 prefill=66.3 ms build=1.4 ms (stall for 0 active slots)
+[Sample] step=0 c0=1221 u=0.6129598618 subseq=0
+[Sample] step=1 c0=1342 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 53, stopping (slot 0)
+[Pipeline] Generation done : 53 frames
+[Perf] PromptBuild 1.4 ms
+[Perf] Prefill 66.3 ms (T_ctx prefill)
+[Perf] TTFA 91.3 ms (first frame codes)
+[Perf] TalkerDecode 816.6 ms (53 frames, 15.41 ms/frame)
+[Perf] CodePredictor 1210.6 ms (22.84 ms/frame)
+[Perf] HostCompose 1.6 ms (c0 sample + next emb)
+[Perf] CodecDecode 1082.7 ms
+[Perf] Total 3180.2 ms (53 frames, 38.28 ms/frame AR, audio 4.24 s, RTF 0.750)
+[Prompt] Built: 26 ids, N_text=18, N_instruct=0, T_ctx=27, hidden=1024, lang=auto (id=-1), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Batch] Admit slot=0 T_ctx=27 prefill=235.5 ms build=12.5 ms (stall for 0 active slots)
+[Sample] step=0 c0=1221 u=0.6129598618 subseq=0
+[Sample] step=1 c0=1342 u=0.7741796374 subseq=16
+[Pipeline] Generated 8 frames (slot 0)
+[Pipeline] Generated 16 frames (slot 0)
+[Pipeline] Generated 24 frames (slot 0)
+[Pipeline] Generated 32 frames (slot 0)
+[Pipeline] Generated 40 frames (slot 0)
+[Pipeline] Generated 48 frames (slot 0)
+[Pipeline] EOS at step 53, stopping (slot 0)
+[Pipeline] Generation done : 53 frames
+[Perf] PromptBuild 12.5 ms
+[Perf] Prefill 235.5 ms (T_ctx prefill)
+[Perf] TTFA 399.3 ms (first frame codes)
+[Perf] TalkerDecode 11539.3 ms (53 frames, 217.72 ms/frame)
+[Perf] CodePredictor 18491.3 ms (348.89 ms/frame)
+[Perf] HostCompose 1.7 ms (c0 sample + next emb)
+[Perf] CodecDecode 3223.1 ms
+[Perf] Total 33504.6 ms (53 frames, 566.65 ms/frame AR, audio 4.24 s, RTF 7.902)

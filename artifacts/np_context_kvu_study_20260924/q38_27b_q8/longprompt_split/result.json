@@ -1,0 +1,1 @@
+{"ok": false, "status": 400, "wall_s": 0.2, "body": "{\"error\":{\"code\":400,\"message\":\"request (124174 tokens) exceeds the available context size (98304 tokens), try increasing it\",\"type\":\"exceed_context_size_error\",\"n_prompt_tokens\":124174,\"n_ctx\":98304}}"}

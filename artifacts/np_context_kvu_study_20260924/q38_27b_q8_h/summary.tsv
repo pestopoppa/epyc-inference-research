@@ -1,0 +1,33 @@
+arm	np	L	c	agg_decode	perreq_med	errors	vram_gib	n_ctx_slot	kv_unified	draft_accept	extra
+split	1	2048	3072	45.2	46.1	0	53	3072	false	0.368	
+unified	1	2048	3072	45.3	46.2	0	53	3072	true	0.368	
+split	2	2048	6144	69.1	37.0	0	54	3072	false	0.386	
+unified	2	2048	6144	69.7	37.1	0	54	6144	true	0.403	
+split	4	2048	12288	92.9	27.4	0	57	3072	false	0.426	
+unified	4	2048	12288	97.6	28.3	0	57	12288	true	0.429	
+split	8	2048	24576	SKIP_VRAM			63	3072	false		
+unified	8	2048	24576	SKIP_VRAM			63	24576	true		
+split	1	8192	9216	46.9	47.2	0	53	9216	false	0.385	
+unified	1	8192	9216	46.4	46.7	0	53	9216	true	0.385	
+split	2	8192	18432	66.8	40.7	0	54	9216	false	0.420	
+unified	2	8192	18432	66.1	41.3	0	54	18432	true	0.448	
+split	4	8192	36864	102.0	28.2	0	58	9216	false	0.455	
+unified	4	8192	36864	94.0	29.0	0	58	36864	true	0.443	
+split	8	8192	73728	SERVER_DIED							
+unified	8	8192	73728	SERVER_DIED							
+split	1	32768	33792	46.9	47.1	0	54	33792	false	0.385	
+unified	1	32768	33792	46.6	46.9	0	54	33792	true	0.385	
+split	2	32768	67584	66.9	40.8	0	56	33792	false	0.420	
+unified	2	32768	67584	66.3	41.5	0	57	67584	true	0.448	
+split	4	32768	135168	100.8	28.1	0	62	33792	false	0.456	
+unified	4	32768	135168	85.0	29.7	0	62	135168	true	0.460	
+split	8	32768	270336	SERVER_DIED							
+unified	8	32768	270336	SERVER_DIED							
+unified_o2	2	2048	6144	72.8	39.4	0	54	6144	true	0.428	-ctkd q8_0 -ctvd q8_0
+unified_o2	2	8192	18432	57.5	41.0	0	54	18432	true	0.420	-ctkd q8_0 -ctvd q8_0
+unified_poolfull_r1	2	2048	4096	36.1	37.1	1	54	4096	true	0.379	
+split_poolfull_r1	2	2048	4096	68.9	35.8	0	54	2048	false	0.375	
+unified_poolfull_r2	2	2048	4096	36.1	37.2	1	54	4096	true	0.379	
+split_poolfull_r2	2	2048	4096	68.8	35.8	0	54	2048	false	0.375	
+unified_poolfull_r3	2	2048	4096	35.7	36.6	1	54	4096	true	0.379	
+split_poolfull_r3	2	2048	4096	68.7	35.8	0	54	2048	false	0.375	
