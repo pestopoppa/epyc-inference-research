@@ -622,6 +622,33 @@ class RawReplyPersistenceAndStreamFallback(unittest.TestCase):
             self.assertIn("final:", replies[0].read_text())
             self.assertFalse(list(ws.iterdir()), "nothing may land inside the worker tree")
 
+    def test_incomplete_stdout_no_longer_suppresses_a_complete_stderr_reply(self):
+        """TD-21.30(a): the old schema-BLIND probe treated any parseable JSON on
+        stdout as "an answer is here", so an incomplete object on stdout (right
+        shape, wrong content) silently discarded a COMPLETE object on stderr
+        instead of handing both to `_parse_reply`."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp) / "workers" / "lane0"; ws.mkdir(parents=True)
+            incomplete_stdout = '{"type": "progress", "step": 3}'
+            complete_stderr = 'final: {"accepted": true, "reason": "looks correct"}'
+            with mock.patch.object(actors.subprocess, "run",
+                                   return_value=self._done(incomplete_stdout, complete_stderr)):
+                raw = actors._run_agent("p", workspace=ws, backend=actors.backend_for("prov/model", "high"),
+                                        read_only=True, schema=actors.REVIEW_SCHEMA)
+            self.assertEqual(actors._extract_json(raw), {"accepted": True, "reason": "looks correct"})
+
+    def test_schema_blind_probe_still_used_when_no_schema_is_known(self):
+        """`schema=None` (a call site with nothing to give) keeps the original
+        "any JSON found" behaviour rather than refusing to ever merge."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp) / "workers" / "lane0"; ws.mkdir(parents=True)
+            with mock.patch.object(actors.subprocess, "run",
+                                   return_value=self._done("chrome only\n", 'final: {"x": 1}')):
+                raw = actors._run_agent("p", workspace=ws, backend=actors.backend_for("prov/model", "high"))
+            self.assertIn('"x": 1', raw)
+
     def test_stdout_reply_is_returned_unchanged(self):
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
@@ -789,7 +816,7 @@ class SchemaRepairTurn(unittest.TestCase):
         import tempfile
         with tempfile.TemporaryDirectory() as tmp:
             ws = self._ws(tmp)
-            fixed = {"accepted": False, "reason": "r"}
+            fixed = {"accepted": False, "reason": "false"}  # "false" is literally in the raw reply
             with mock.patch.object(actors, "_provider_base_url", return_value="http://127.0.0.1:1/v1"), \
                  self._server_seq([json.dumps(fixed), json.dumps(fixed)]) as srv:
                 body = actors._parse_reply('{"accepted": false}', schema=actors.REVIEW_SCHEMA,
@@ -875,7 +902,120 @@ class SchemaRepairTurn(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             ws = self._ws(tmp)
             with mock.patch.object(actors, "_provider_base_url", return_value="http://127.0.0.1:1/v1"), \
-                 self._server_seq([json.dumps({"accepted": False, "reason": "invalid hoist"})]) as srv:
+                 self._server_seq([json.dumps({"accepted": False, "reason": "the hoist is invalid"})]) as srv:
                 body = actors._parse_reply("The hoist is invalid. I reject it.", schema=actors.REVIEW_SCHEMA,
                                            backend=actors.backend_for("prov/model", "high"), workspace=ws)
-            self.assertEqual(body, {"accepted": False, "reason": "invalid hoist"}); self.assertEqual(srv.call_count, 1)
+            self.assertEqual(body, {"accepted": False, "reason": "the hoist is invalid"})
+            self.assertEqual(srv.call_count, 1)
+
+    def test_wrong_typed_fished_value_is_not_short_circuited(self):
+        """TD-21.30(b): `{"accepted": "true", ...}` has both REVIEW_SCHEMA required
+        keys but the WRONG TYPE for `accepted` (a string, not a boolean) -- only
+        required-key presence used to gate the skip-repair decision, so this
+        would previously have been returned unrepaired and mistyped."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = self._ws(tmp)
+            fixed = {"accepted": True, "reason": "true stated explicitly"}
+            with mock.patch.object(actors, "_provider_base_url", return_value="http://127.0.0.1:1/v1"), \
+                 self._server(json.dumps(fixed)) as srv:
+                body = actors._parse_reply(
+                    '{"accepted": "true", "reason": "true stated explicitly"}',
+                    schema=actors.REVIEW_SCHEMA,
+                    backend=actors.backend_for("prov/model", "high"), workspace=ws)
+            self.assertEqual(body, fixed)
+            self.assertEqual(srv.call_count, 1, "a wrong-typed required field must trigger repair")
+            self.assertIs(type(body["accepted"]), bool)
+
+    def test_local_validator_matches_jsonschema_when_both_are_available(self):
+        """Whichever validator TD-21.30(b) actually uses, type errors on a
+        REQUIRED field are caught, not just its presence."""
+        wrong_type = {"accepted": "true", "reason": "r"}
+        right_type = {"accepted": True, "reason": "r"}
+        self.assertFalse(actors._schema_valid(wrong_type, actors.REVIEW_SCHEMA))
+        self.assertTrue(actors._schema_valid(right_type, actors.REVIEW_SCHEMA))
+        self.assertFalse(actors._schema_valid({"accepted": True, "reason": "r", "extra": 1},
+                                              actors.REVIEW_SCHEMA),
+                         "additionalProperties: False must be enforced too")
+
+    def test_repair_request_carries_the_model_field(self):
+        """TD-21.30(e): a multi-model local endpoint would 400 on a repair
+        request with no `model` field. The wire model is the bare name after
+        the opencode `provider/` prefix, matching what the endpoint serves."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = self._ws(tmp)
+            captured: dict = {}
+
+            class Resp:
+                def __init__(self, body): self._b = body
+                def read(self): return self._b
+                def __enter__(self): return self
+                def __exit__(self, *a): return False
+
+            def fake_urlopen(request, timeout=None):
+                captured["body"] = json.loads(request.data.decode())
+                content = json.dumps({"accepted": True, "reason": "ok stated"})
+                return Resp(json.dumps({"choices": [{"message": {"content": content}}]}).encode())
+
+            with mock.patch.object(actors, "_provider_base_url", return_value="http://127.0.0.1:1/v1"), \
+                 mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+                actors._parse_reply("ok stated explicitly", schema=actors.REVIEW_SCHEMA,
+                                    backend=actors.backend_for("myprovider/mymodel-7b", "high"),
+                                    workspace=ws)
+            self.assertEqual(captured["body"].get("model"), "mymodel-7b")
+
+    def test_repaired_number_the_report_never_stated_is_refused(self):
+        """The orchestrator's evidence guard (`structured_output/repair.py`)
+        exists because a repair turn INVENTS a required field the reply never
+        stated (live: an unstated `tier` repaired to `tier=2`). Mirrored here
+        in `_ungrounded_fields`, which `_parse_reply` already applies to every
+        repaired value -- kept local per the reference note, not imported."""
+        schema = {"type": "object",
+                 "properties": {"accepted": {"type": "boolean"}, "tier": {"type": "integer"}},
+                 "required": ["accepted", "tier"], "additionalProperties": False}
+        report = "I looked at this and it seems fine overall."
+        self.assertEqual(actors._ungrounded_fields({"accepted": True, "tier": 2}, report, schema),
+                         ["tier"])
+        self.assertEqual(
+            actors._ungrounded_fields({"accepted": True, "tier": 2},
+                                      "I'd call this tier 2 work.", schema),
+            [], "a number actually stated in the report is not invented")
+
+    def test_repaired_short_string_the_report_never_stated_is_refused(self):
+        schema = {"type": "object", "properties": {"accepted": {"type": "boolean"},
+                                                    "reason": {"type": "string"}},
+                 "required": ["accepted", "reason"], "additionalProperties": False}
+        self.assertEqual(
+            actors._ungrounded_fields({"accepted": False, "reason": "not applicable"},
+                                      "I decline this for other reasons.", schema),
+            ["reason"])
+        self.assertEqual(
+            actors._ungrounded_fields({"accepted": False, "reason": "other reasons"},
+                                      "I decline this for other reasons.", schema),
+            [])
+
+    def test_long_string_and_boolean_leaves_are_evidence_exempt(self):
+        schema = {"type": "object",
+                 "properties": {"accepted": {"type": "boolean"},
+                                "reason": {"type": "string"}},
+                 "required": ["accepted", "reason"], "additionalProperties": False}
+        long_paraphrase = "x" * 41  # over _MAX_EVIDENCE_LEAF_CHARS: a paraphrase, not a copy
+        self.assertEqual(
+            actors._ungrounded_fields({"accepted": True, "reason": long_paraphrase},
+                                      "totally unrelated report text", schema),
+            [])
+
+    def test_mechanism_id_may_be_derived_but_a_template_echo_is_still_refused(self):
+        """mechanism_id is the one field the extraction instruction explicitly
+        lets the model DERIVE as a slug -- exempt from grounding/evidence --
+        but our own template echoed back (`akm-<short-slug>`) is never a
+        derivation."""
+        report = "I looked at the drafter and found nothing worth changing yet."
+        derived = {"mechanism_id": "akm-drafter-idle", "statement": "s", "falsifier": "f",
+                  "target_surface": "a.cpp", "target_symbol": "fn"}
+        self.assertNotIn("mechanism_id",
+                        actors._ungrounded_fields(derived, report, actors.HYPOTHESIS_SCHEMA))
+        echoed = {**derived, "mechanism_id": "akm-<short-slug>"}
+        self.assertIn("mechanism_id",
+                      actors._ungrounded_fields(echoed, report, actors.HYPOTHESIS_SCHEMA))

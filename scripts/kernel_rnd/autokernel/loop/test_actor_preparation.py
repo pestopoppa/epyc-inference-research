@@ -10,10 +10,12 @@ import signal
 import stat
 import subprocess
 import time
+from unittest import mock
 
 import pytest
 
 from . import actor_preparation as preparation
+from . import actors
 from . import campaign
 from . import worker_lifecycle
 from .test_campaign import _manifest, _registry, _target
@@ -58,6 +60,18 @@ else:
     print(json.dumps({"mechanism": "tile loop", "target_surface": "src/x.cpp",
                       "target_symbol": "kernel_x", "implementation_plan": "edit one loop"}))
 """)
+    path.chmod(path.stat().st_mode | stat.S_IXUSR)
+    return path
+
+
+def _fake_static_executable(tmp_path: Path, name: str, output: str) -> Path:
+    """A fake actor binary that always prints `output` verbatim, ignoring its
+    invocation entirely. `FakeOwnedLifecycle.invoke` (unlike the real
+    `actors._run_agent`) never wires the prompt onto stdin for an opencode
+    backend, so a canned reply is the only honest fixture for exercising an
+    opencode planner through this test double."""
+    path = tmp_path / name
+    path.write_text(f"#!/usr/bin/env python3\nprint({output!r})\n")
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
     return path
 
@@ -463,3 +477,74 @@ def test_stale_or_non_cooldown_availability_cannot_trigger_fallback(tmp_path, mu
         _consumer(_resolved(), profiles, authority).prepare(
             _request(profiles["gpt-5.6-sol"]), stage_plan_digest="stage-1")
     assert len(authority.events) == 1
+
+
+# --------------------------------------------------------------------------- TD-21.29
+
+
+class _Resp:
+    def __init__(self, body: bytes): self._b = body
+    def read(self): return self._b
+    def __enter__(self): return self
+    def __exit__(self, *a): return False
+
+
+def test_incomplete_planner_json_is_repaired_instead_of_burning_the_reservation(tmp_path):
+    """TD-21.29: before routing through `actors._parse_reply`, a reply whose JSON
+    was present but INCOMPLETE for the schema made `_validate_output` raise
+    `PreparationRefused` immediately (`set(body) != required`); with a
+    single-profile chain (`fallback=False`) `prepare()` then treats that as
+    `invalid_output` and ends the run in `cooldown`, even though the SAME
+    reply's surrounding report already named every missing field. Routing
+    through `actors._parse_reply` recovers it with ONE repair turn on the
+    SAME reservation instead of burning it."""
+    raw = ('I investigated the tile loop and figured out a mechanism: '
+          '{"mechanism": "hoist the scale load"} '
+          'The file is src/x.cpp and the function is kernel_x; the plan is to '
+          'hoist the scale load outside the loop body.')
+    repaired = {"mechanism": "hoist the scale load", "target_surface": "src/x.cpp",
+               "target_symbol": "kernel_x",
+               "implementation_plan": "hoist the scale load outside the loop body"}
+    planner_binary = _fake_static_executable(tmp_path, "fake-opencode-planner", raw)
+    critic_binary = _fake_executable(tmp_path)
+    profiles = {
+        "gpt-5.6-sol": preparation.ActorProfile.from_dict({
+            "schema": preparation.PROFILE_SCHEMA, "profile_id": "gpt-5.6-sol",
+            "role": "planner", "provider": "fake-provider", "model": "fakeprov/fakemodel",
+            "effort": "low", "backend_kind": "opencode", "binary": str(planner_binary),
+            "binary_sha256": _sha(planner_binary)}),
+        "fable-5.1": _profile("fable-5.1", "critic", critic_binary),
+    }
+    authority = FakeOwnedLifecycle()
+    payload = json.dumps({"choices": [{"message": {"content": json.dumps(repaired)}}]}).encode()
+    with mock.patch.object(actors, "_provider_base_url", return_value="http://127.0.0.1:1/v1"), \
+         mock.patch("urllib.request.urlopen", return_value=_Resp(payload)) as urlopen:
+        result = _consumer(_resolved(fallback=False), profiles, authority).prepare(
+            _request(profiles["gpt-5.6-sol"], kind="source"), stage_plan_digest="stage-1")
+    assert result.status == "proposed"
+    assert result.proposed_output == repaired
+    assert urlopen.call_count == 1, "one repair turn on the same reservation, never a re-invocation"
+    assert [event[0] for event in authority.events] == [
+        "INTENT", "INVOKE", "FINISH", "INTENT", "INVOKE", "FINISH"]
+    assert authority.events[2][-1] == "proposal_ready", "the SAME reservation settled successfully"
+    # fallback=False: had the reservation been burned as `invalid_output`, the
+    # loop would have stopped there (no fallback profile to try) and the critic
+    # would never have been reached -- the 6-event sequence above already proves
+    # exactly one planner attempt led straight to the critic.
+
+
+def test_forbidden_field_alongside_required_ones_is_still_refused(tmp_path):
+    """A complete, schema-shaped reply that ALSO smuggles a parent-owned field
+    must still be refused -- routing through `actors._parse_reply` must not let
+    a directly-fished (non-repaired, non-opencode) object bypass `_FORBIDDEN`."""
+    body = {"mechanism": "m", "target_surface": "src/x.cpp", "target_symbol": "kernel_x",
+           "implementation_plan": "p", "compiled": True}
+    binary = tmp_path / "fake-forbidden"
+    binary.write_text(f"#!/usr/bin/env python3\nimport json\nprint(json.dumps({body!r}))\n")
+    binary.chmod(binary.stat().st_mode | stat.S_IXUSR)
+    profiles = _profiles(binary)
+    authority = FakeOwnedLifecycle()
+    result = _consumer(_resolved(fallback=False), profiles, authority).prepare(
+        _request(profiles["gpt-5.6-sol"], kind="source"), stage_plan_digest="stage-1")
+    assert result.status == "cooldown"
+    assert authority.events[-1][-1] == "invalid_output"

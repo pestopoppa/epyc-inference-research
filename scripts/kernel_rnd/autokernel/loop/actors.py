@@ -364,9 +364,7 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
         # finished, and its stdout can hold a compaction summary quoting our own
         # template (bounded-seat A/B, 2026-09-24: `{"abstain":"<reason>"}`).
         for text in (done.stdout, done.stdout + "\n" + done.stderr):
-            body = _first_json_or_none(text)
-            if (isinstance(body, dict) and not _is_template_echo(body)
-                    and ("abstain" in body or _complete(body, schema))):
+            if _has_answer(text, schema):
                 return text
     if done.returncode != 0:
         # Both tails. `claude -p` reports its own errors ("Not logged in", usage
@@ -380,7 +378,17 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
     # stderr tail too: a CLI that moves its final message between streams across
     # versions must not turn a complete reply into a transient (DS41 2026-09-24: a
     # 91-minute, fully formed hypothesis was retried from zero).
-    if _first_json_or_none(done.stdout) is None and _first_json_or_none(done.stderr) is not None:
+    #
+    # TD-21.30(a): this used to be a schema-BLIND `_first_json_or_none(...) is
+    # None` probe, which silently pre-decided what `_parse_reply` would see --
+    # an INCOMPLETE object on stdout (any parseable JSON, right or wrong) made
+    # the probe non-None and suppressed a COMPLETE object sitting on stderr,
+    # discarding it outright rather than letting `_parse_reply` see it. `_has_answer`
+    # makes the choice explicit: schema-complete-or-abstention when a schema is
+    # known (matching what `_parse_reply` will itself require), any parseable
+    # object when it is not (`schema=None`, preserving the original behaviour for
+    # the few call sites that do not thread one through).
+    if not _has_answer(done.stdout, schema) and _has_answer(done.stderr, schema):
         return done.stdout + "\n" + done.stderr
     return done.stdout
 
@@ -644,7 +652,9 @@ ABSTAIN_SCHEMA = {"type": "object",
                   "required": ["explicitly_declines", "reason"], "additionalProperties": False}
 REVIEW_SCHEMA = {"type": "object",
                  "properties": {"accepted": {"type": "boolean"}, "reason": {"type": "string"}},
-                 "required": ["accepted", "reason"]}
+                 "required": ["accepted", "reason"],
+                 # TD-21.30(d): closed, so a repair turn cannot legally return extra keys.
+                 "additionalProperties": False}
 SCHEMA_REPAIR_TIMEOUT_S = 300
 SCHEMA_REPAIR_TAIL_CHARS = 16000
 OPENCODE_CONFIG = Path.home() / ".config" / "opencode" / "opencode.jsonc"
@@ -717,6 +727,14 @@ def _schema_repair(raw: str, *, schema: Mapping[str, Any], backend: Backend,
         "temperature": 0, "max_tokens": 2048,
         "chat_template_kwargs": {"enable_thinking": False},
     }
+    # TD-21.30(e): the model id, when known, so a multi-model local endpoint does
+    # not 400 on an unaddressed request and silently degrade to `None`. `model` is
+    # always `provider/model` here (only reachable for `backend.kind == "opencode"`,
+    # and `backend_for` only routes to opencode when the id contains `/`); the wire
+    # request wants the bare model name the endpoint itself serves.
+    model_name = backend.model.split("/", 1)[1] if "/" in backend.model else backend.model
+    if model_name:
+        body["model"] = model_name
     request = urllib.request.Request(
         base + "/chat/completions", data=json.dumps(body).encode("utf-8"),
         headers={"Content-Type": "application/json"}, method="POST")
@@ -739,6 +757,72 @@ def _complete(body: Mapping[str, Any], schema: Mapping[str, Any]) -> bool:
     return set(schema.get("required", ())) <= set(body)
 
 
+try:
+    import jsonschema as _jsonschema
+except ImportError:  # pragma: no cover -- exercised only where the package is absent
+    _jsonschema = None
+
+
+def _type_ok(value: Any, expected: str) -> bool:
+    if expected == "object":
+        return isinstance(value, dict)
+    if expected == "array":
+        return isinstance(value, list)
+    if expected == "string":
+        return isinstance(value, str)
+    if expected == "boolean":
+        return isinstance(value, bool)
+    if expected == "number":
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if expected == "integer":
+        return isinstance(value, int) and not isinstance(value, bool)
+    if expected == "null":
+        return value is None
+    return True  # an unrecognised type keyword never fails the reply closed
+
+
+def _validates(value: Any, schema: Mapping[str, Any]) -> bool:
+    """A small structural validator used when the `jsonschema` package is not
+    installed in this environment (TD-21.30(b)): TYPE, not just required-key
+    presence, gates whether a fished value skips repair -- `{"accepted":
+    "true"}` used to short-circuit `_parse_reply` for REVIEW_SCHEMA on
+    required-key presence alone. Covers exactly what this module's own
+    schemas use -- object/array/string/boolean/number/integer, `properties`,
+    `required`, `items`, `additionalProperties: False` -- and is deliberately
+    not a general JSON Schema engine (no `oneOf`/`anyOf`/`const`/formats)."""
+    expected = schema.get("type")
+    if expected is not None and not _type_ok(value, expected):
+        return False
+    if isinstance(value, dict):
+        properties = schema.get("properties") or {}
+        if any(key not in value for key in schema.get("required", ())):
+            return False
+        if schema.get("additionalProperties") is False \
+                and any(key not in properties for key in value):
+            return False
+        return all(_validates(value[key], properties[key])
+                   for key in value if key in properties)
+    if isinstance(value, list):
+        items_schema = schema.get("items")
+        if isinstance(items_schema, Mapping):
+            return all(_validates(item, items_schema) for item in value)
+    return True
+
+
+def _schema_valid(value: Any, schema: Mapping[str, Any]) -> bool:
+    """Full-schema validation (TD-21.30(b)), preferring `jsonschema` when this
+    environment has it installed, else `_validates` above."""
+    if _jsonschema is not None:
+        try:
+            _jsonschema.Draft202012Validator(schema).validate(value)
+            return True
+        except _jsonschema.exceptions.ValidationError:
+            return False
+        except Exception:
+            pass  # malformed schema/validator setup: fall back to the local check
+    return _validates(value, schema)
+
+
 #: Below this, a reply is not a report a repair turn could copy from.
 REPAIR_MIN_REPORT_CHARS = 20
 #: Fields a repaired object must be able to point back to in the report. The
@@ -759,6 +843,55 @@ def _grounded(value: str, report: str) -> bool:
     return bool(idents) and idents[0] in report
 
 
+#: Required fields that may be a faithful PARAPHRASE of the report's own
+#: reasoning (never a literal fact to copy or a slug to derive), so neither
+#: the path/identifier grounding check nor the evidence check below applies
+#: to them: `statement`/`falsifier` (hypothesis prose), `mechanism`/
+#: `implementation_plan` (actor_preparation's TD-21.29 source-advice prose).
+_PROSE_EXEMPT_FIELDS = frozenset({"statement", "falsifier", "mechanism", "implementation_plan"})
+#: A schema-repair turn INVENTS a required field the reply never stated just as
+#: readily as it fabricates a file/symbol (live, orchestrator side: a `tier`
+#: with no stated tier repaired to `tier=2`). Mirrors
+#: `epyc-orchestrator:src/structured_output/repair.py` `_evidence_failures`
+#: (read there for the full semantics this reproduces, kept local and small
+#: rather than imported): a number, or a string of at most
+#: `_MAX_EVIDENCE_LEAF_CHARS` characters, must appear in the raw report
+#: (case-insensitive, whitespace-normalised; a number as a standalone token) --
+#: booleans and `None` are exempt (a yes/no judgement is not literally
+#: "in" the text), and a longer string is exempt as a legitimate paraphrase.
+_MAX_EVIDENCE_LEAF_CHARS = 40
+_NUM_LEFT_BOUNDARY = r"(?<!\w)(?<!\d\.)"
+_NUM_RIGHT_BOUNDARY = r"(?!\w)(?!\.\d)"
+
+
+def _normalize_for_evidence(text: str) -> str:
+    return re.sub(r"\s+", " ", text).strip().lower()
+
+
+def _number_has_evidence(value: float, normalized_report: str) -> bool:
+    candidates = {str(value)}
+    if isinstance(value, float) and value.is_integer():
+        candidates.add(str(int(value)))
+    elif isinstance(value, int):
+        candidates.add(str(float(value)))
+    alternation = "|".join(re.escape(c) for c in candidates)
+    pattern = f"{_NUM_LEFT_BOUNDARY}(?:{alternation}){_NUM_RIGHT_BOUNDARY}"
+    return re.search(pattern, normalized_report) is not None
+
+
+def _leaf_has_evidence(value: Any, normalized_report: str) -> bool:
+    if value is None or isinstance(value, bool):
+        return True
+    if isinstance(value, (int, float)):
+        return _number_has_evidence(value, normalized_report)
+    if isinstance(value, str):
+        if len(value) > _MAX_EVIDENCE_LEAF_CHARS:
+            return True  # a longer string may be a legitimate paraphrase
+        needle = _normalize_for_evidence(value)
+        return (not needle) or (needle in normalized_report)
+    return True
+
+
 def _ungrounded_fields(body: Mapping[str, Any], report: str,
                        schema: Mapping[str, Any]) -> list[str]:
     required = set(schema.get("required", ()))
@@ -767,14 +900,32 @@ def _ungrounded_fields(body: Mapping[str, Any], report: str,
     if "paths" in required and isinstance(body.get("paths"), list):
         bad += [f"paths[{i}]" for i, path in enumerate(body["paths"])
                 if not _grounded(str(path), report)]
+    # `mechanism_id` is the one field the extraction instruction explicitly lets
+    # the model DERIVE as a slug -- exempt from grounding/evidence -- but a
+    # template echo (e.g. `akm-<short-slug>`) is never a derivation, so it is
+    # still refused here rather than relying on a caller to repeat the check.
+    if "mechanism_id" in required and _is_placeholder(body.get("mechanism_id")):
+        bad.append("mechanism_id")
+    normalized_report = _normalize_for_evidence(report)
+    handled = set(_GROUNDED_FIELDS) | {"paths", "mechanism_id"} | _PROSE_EXEMPT_FIELDS
+    for key in sorted(required - handled):
+        value = body.get(key)
+        if isinstance(value, list):
+            bad += [f"{key}[{i}]" for i, item in enumerate(value)
+                    if not _leaf_has_evidence(item, normalized_report)]
+        elif not _leaf_has_evidence(value, normalized_report):
+            bad.append(key)
     return bad
 
 
 def _parse_reply(raw: str, *, schema: Mapping[str, Any], backend: Backend,
-                 workspace: Path) -> dict:
+                 workspace: Path, instruction: str = _EXTRACT_INSTRUCTION) -> dict:
     """`_extract_json`, then a schema repair turn when the object is missing or
     incomplete. Abstentions pass straight through -- they are complete by
-    construction."""
+    construction. `instruction` is forwarded to the extraction turn's system
+    prompt, so a caller whose schema does not share the hypothesis/paths field
+    names (e.g. actor_preparation.py's source-advice/build-recipe shapes,
+    TD-21.29) can describe its own fields instead of the default's."""
     try:
         body = _extract_json(raw)
     except ProviderTransient:
@@ -784,7 +935,10 @@ def _parse_reply(raw: str, *, schema: Mapping[str, Any], backend: Backend,
         # Our own template quoted back is not an answer; repair or fail.
         echoed = sorted(k for k, v in body.items() if isinstance(v, str) and _is_placeholder(v))
         body = None
-    if body is not None and ("abstain" in body or _complete(body, schema)):
+    if body is not None and ("abstain" in body or _schema_valid(body, schema)):
+        # TD-21.30(b): full-schema validation, not just required-key presence --
+        # a fished value with the right keys and the WRONG TYPES (e.g.
+        # `{"accepted": "true"}` for REVIEW_SCHEMA) must not short-circuit repair.
         return body
     if body is None and len(raw.strip()) < REPAIR_MIN_REPORT_CHARS:
         # Nothing to copy from. A schema-constrained completion over an empty
@@ -802,7 +956,8 @@ def _parse_reply(raw: str, *, schema: Mapping[str, Any], backend: Backend,
                                  instruction=_ABSTAIN_INSTRUCTION_TEMPLATE.format(question=question))
         if verdict is not None and verdict.get("explicitly_declines") is True:
             return {"abstain": str(verdict.get("reason") or "actor declined")}
-    repaired = _schema_repair(raw, schema=schema, backend=backend, workspace=workspace)
+    repaired = _schema_repair(raw, schema=schema, backend=backend, workspace=workspace,
+                              instruction=instruction)
     if repaired is not None:
         ungrounded = _ungrounded_fields(repaired, raw, schema)
         if ungrounded:
@@ -822,6 +977,22 @@ def _first_json_or_none(text: str):
         return _extract_json(text)
     except ProviderTransient:
         return None
+
+
+def _has_answer(text: str, schema: Mapping[str, Any] | None) -> bool:
+    """True when `text` alone carries something `_parse_reply` could accept
+    without a repair turn: a non-echo object that is an abstention or complete
+    against `schema` (TD-21.30(a) -- see the call sites in `_run_agent` for why
+    this replaced a schema-blind `_first_json_or_none(...) is not None` probe).
+    `schema=None` falls back to that original schema-blind check, for the rare
+    call that has none to give."""
+    body = _first_json_or_none(text)
+    if body is None:
+        return False
+    if schema is None:
+        return True
+    return isinstance(body, dict) and not _is_template_echo(body) and (
+        "abstain" in body or _complete(body, schema))
 
 
 def _with_backoff(call, *, attempts: int = len(BACKOFF_S),

@@ -12,6 +12,7 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import tempfile
 from types import MappingProxyType
 from typing import Any, Mapping, Protocol, Sequence
 
@@ -328,9 +329,72 @@ def _request_dict(request: Any) -> dict[str, Any]:
 _FORBIDDEN = {"compiled", "compile_succeeded", "verified_dispatch", "scientific_warrant",
               "experiment_plan_digest", "candidate_integrated", "allocation", "grant_id"}
 
+#: TD-21.29: `_validate_output`/`_validate_review` also re-validate an ALREADY
+#: chosen, previously-validated `proposed_output`/review at binding time
+#: (`source_build_preparation._common`), where no live actor identity is in
+#: scope. That path can never need a repair turn -- the bytes it hands back
+#: round-tripped through a prior successful validation -- so these are a
+#: never-opencode, never-written-to sentinel: `_schema_repair` no-ops for any
+#: non-opencode `backend.kind`, making the two optional params degrade to the
+#: pre-TD-21.29 direct-`_extract_json` behaviour whenever a caller has no real
+#: actor backend/workspace to give.
+_NO_REPAIR_BACKEND = actors.Backend("codex", "unused", "unused", "unused")
+_NO_REPAIR_WORKSPACE = Path(tempfile.gettempdir()) / "autokernel-actor-preparation" / "no-repair"
 
-def _validate_output(kind: str, raw: str) -> dict[str, Any]:
-    body = actors._extract_json(raw)
+#: TD-21.29: the shapes `_validate_output` consumes, derived from the required-set /
+#: type checks below so `actors._parse_reply` can validate (and, on a miss, repair)
+#: against the SAME contract this function has always enforced. `additionalProperties:
+#: False` closes both (TD-21.30(d) spirit): a repair turn may not smuggle in a field
+#: the caller never asked for.
+SOURCE_ADVICE_SCHEMA = {
+    "type": "object",
+    "properties": {name: {"type": "string"} for name in
+                   ("mechanism", "target_surface", "target_symbol", "implementation_plan")},
+    "required": ["mechanism", "target_surface", "target_symbol", "implementation_plan"],
+    "additionalProperties": False,
+}
+BUILD_RECIPE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "build_system": {"type": "string"},
+        "configured_options": {"type": "array", "items": {"type": "string"}},
+        "artifact_expectations": {"type": "string"},
+    },
+    "required": ["build_system", "configured_options", "artifact_expectations"],
+    "additionalProperties": False,
+}
+#: `actors._parse_reply`'s default `_EXTRACT_INSTRUCTION` names hypothesis/paths
+#: fields this consumer's schemas do not have; a custom instruction keeps the
+#: repair turn's guidance accurate for the fields it is actually filling.
+_SOURCE_EXTRACT_INSTRUCTION = (
+    "Convert the agent's final report into exactly one JSON object matching the given "
+    "schema. Copy the agent's own wording: mechanism and implementation_plan are the "
+    "report's own description of what changes and how; target_surface is the file path "
+    "it names; target_symbol is the function or symbol it names. Do not invent, judge or "
+    "improve anything not already present in the report.")
+_BUILD_RECIPE_EXTRACT_INSTRUCTION = (
+    "Convert the agent's final report into exactly one JSON object matching the given "
+    "schema. Copy the agent's own wording: build_system, configured_options and "
+    "artifact_expectations are exactly what the report itself states. Do not invent, "
+    "judge or improve anything not already present in the report.")
+
+
+def _validate_output(kind: str, raw: str, *, backend: actors.Backend = _NO_REPAIR_BACKEND,
+                     workspace: Path = _NO_REPAIR_WORKSPACE) -> dict[str, Any]:
+    """TD-21.29: route through `actors._parse_reply` (fish, then -- on a missing or
+    incomplete object -- ONE schema-constrained repair turn) before applying this
+    consumer's own strict contract (forbidden fields, exact field set, value types).
+    A reply that is merely malformed JSON no longer burns the one-shot reservation
+    on a `PreparationRefused` that a repair could have recovered from; a reply that
+    IS complete JSON but violates the contract (an extra field asserted, wrong
+    types) still raises `PreparationRefused` exactly as before -- that is a content
+    violation, not a parse failure. An unrecoverable reply (no JSON at all, even
+    after repair) raises `actors.ProviderTransient`, unchanged from the previous
+    direct `actors._extract_json` call."""
+    schema = SOURCE_ADVICE_SCHEMA if kind == "source" else BUILD_RECIPE_SCHEMA
+    instruction = _SOURCE_EXTRACT_INSTRUCTION if kind == "source" else _BUILD_RECIPE_EXTRACT_INSTRUCTION
+    body = actors._parse_reply(raw, schema=schema, backend=backend, workspace=workspace,
+                               instruction=instruction)
     forbidden = sorted(_FORBIDDEN.intersection(body))
     if forbidden:
         raise PreparationRefused(f"actor asserted parent-owned fields {forbidden}")
@@ -365,8 +429,13 @@ def _review_prompt(row: Mapping[str, Any], output: Mapping[str, Any]) -> str:
             f"request={_canonical(row)}\nproposal={_canonical(output)}")
 
 
-def _validate_review(raw: str) -> tuple[bool, str]:
-    body = actors._extract_json(raw)
+def _validate_review(raw: str, *, backend: actors.Backend = _NO_REPAIR_BACKEND,
+                     workspace: Path = _NO_REPAIR_WORKSPACE) -> tuple[bool, str]:
+    """TD-21.29: `:369` is literally `actors.REVIEW_SCHEMA` -- route through
+    `actors._parse_reply` (same fish-then-repair-once shape as `_validate_output`)
+    before this consumer's own exact-field/type check."""
+    body = actors._parse_reply(raw, schema=actors.REVIEW_SCHEMA, backend=backend,
+                               workspace=workspace)
     if set(body) != {"accepted", "reason"} or type(body["accepted"]) is not bool \
             or not isinstance(body["reason"], str):
         raise PreparationRefused("critic output fields differ")
@@ -381,7 +450,8 @@ class ActorPreparationConsumer:
     def __init__(self, *, resolved_campaign: campaign.ResolvedCampaign,
                  profiles: Mapping[str, ActorProfile | Mapping[str, Any]],
                  budgets: ActorBudgets, capability: ActorStageCapability | None,
-                 clock: Any, clock_domain: str, max_output_bytes: int) -> None:
+                 clock: Any, clock_domain: str, max_output_bytes: int,
+                 reply_dir: Path | None = None) -> None:
         self.campaign = campaign.ResolvedCampaign.from_dict(resolved_campaign.to_dict())
         self.profiles = MappingProxyType({
             key: item if isinstance(item, ActorProfile) else ActorProfile.from_dict(item)
@@ -396,6 +466,15 @@ class ActorPreparationConsumer:
                 or max_output_bytes <= 0):
             raise PreparationRefused("max_output_bytes must be a positive integer")
         self.max_output_bytes = max_output_bytes
+        # TD-21.29: `actors._parse_reply`'s repair turn persists its raw exchange as
+        # a sibling of a "workspace" path (`actors._persist_reply`/`_record_call`);
+        # this consumer has no real worktree of its own (invocation is fully owned
+        # by the injected `capability`), so `reply_dir` is just where that
+        # diagnostic record lands. Persistence failures are swallowed by
+        # `actors._persist_reply` itself, so an unwritable default never breaks a
+        # call -- only diagnosability degrades.
+        self.reply_dir = (Path(reply_dir) if reply_dir is not None else
+                          Path(tempfile.gettempdir()) / "autokernel-actor-preparation" / "workspace")
 
     def _chain(self, role: str) -> tuple[ActorProfile, ...]:
         configured = dict(self.campaign.actors)
@@ -501,7 +580,9 @@ class ActorPreparationConsumer:
                 self._finish(reservation, outcome, disposition)
                 continue
             try:
-                planner_output = _validate_output(row["actor_kind"], outcome.stdout)
+                planner_output = _validate_output(row["actor_kind"], outcome.stdout,
+                                                  backend=profile.backend(),
+                                                  workspace=self.reply_dir)
             except PreparationRefused:
                 self._finish(reservation, outcome, "invalid_output")
                 continue
@@ -527,7 +608,8 @@ class ActorPreparationConsumer:
                 self._finish(reservation, outcome, disposition)
                 continue
             try:
-                accepted, _ = _validate_review(outcome.stdout)
+                accepted, _ = _validate_review(outcome.stdout, backend=critic.backend(),
+                                               workspace=self.reply_dir)
             except PreparationRefused:
                 self._finish(reservation, outcome, "invalid_review")
                 continue
