@@ -98,3 +98,4 @@ data/hy3_current_v7/
 # citation MEASUREMENT.md §5 requires.
 data/judge_suite_headtohead_20260802/
 data/swe_verified_preliminary_20260724/
+.venv-test/
