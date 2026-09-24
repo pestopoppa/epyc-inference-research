@@ -1,0 +1,19 @@
+# Step 1 capacity — whisper.cpp, no llama.cpp-style KV formula applies
+
+Live VRAM residency, measured 2026-09-22 from /sys/class/kfd/kfd/proc/<pid>/vram_57300
+during the serving stack (source: artifacts/operator/lineup-change-20260922.md, and restated
+in epyc-inference-research orchestration/model_registry.yaml
+server_mode.architect_general.serving_shape comment):
+
+  whisper (whisper-server)                  2,210,533,376 B = 2.06 GiB
+  qwentts (tts-server, sibling registration) 2,815,950,848 B = 2.62 GiB
+  ---------------------------------------------------------------------
+  combined (both always-on speech services)                    4.68 GiB
+
+No -c-shaped KV growth axis applies: whisper.cpp pads every request to a fixed 30-second
+mel window internally, so context does not scale its resident footprint the way it does an
+attention-KV llama-server role. whisper.cpp is an aux_service, not a role_launch_meta/
+NUMA_CONFIG llama-server role, and carries no n_ctx or kv_kib_per_token_f16 in
+stack_manifest.py's KV formula. The capacity fact for this registration is the static
+resident figure above, consumed directly as headroom by stack_manifest.aux_gpu_reserved_gib()
+(INF-41 S-11/S-12 capacity-gate fix, epyc-orchestrator scripts/server/stack_manifest.py).

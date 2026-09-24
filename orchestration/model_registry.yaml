@@ -2115,9 +2115,14 @@ server_mode:
     # acceptable. Do NOT "consolidate" it into any future production-consolidated-vNN promotion — it
     # is not part of that kernel set's four-step experimental workflow (epyc-root CLAUDE.md); it is a
     # separate, independently-versioned tree with its own ggml fork and its own freeze ratification.
-    # Guard: scripts/utils/verify_qwentts_pin_isolation.sh (this repo) fails closed if the production
-    # llama.cpp tree ever gains qwentts-specific artifacts, or if this pin drifts from what the
-    # ratification + the live launch_manifest.yaml `tts` entry declare.
+    # Guard, two layers: (1) epyc-root scripts/session/verify_speech_kernels.sh's "INF-41 S-13"
+    # section — runs every session_init.sh, fails closed if llama.cpp and qwentts.cpp ever
+    # collapse to one git toplevel or if qwentts.cpp-specific source lands inside llama.cpp
+    # (checked by path, never a "qwentts" substring match); that same script's pre-existing
+    # `check qwentts_cpp` call catches branch/binary-sha256 drift. (2) this repo's
+    # scripts/utils/verify_qwentts_pin_isolation.sh — the fuller, on-demand check: same
+    # isolation markers plus the ggml SUBMODULE commit pin and a reachable-history grep for
+    # "qwentts" mentions inside llama.cpp. Run before any kernel promotion.
     kernel:
       tree: /mnt/raid0/llm/qwentts.cpp
       branch: production-speech-v1

@@ -1,0 +1,17 @@
+# Step 8 co-residency — whisper.cpp, informal (live production stack, not an isolated A/B)
+
+Co-resident throughout 2026-09 with:
+  architect_general (Qwen3.8-27B Q8_0, :8083)
+  worker_vision / vision_escalation (Qwen3-VL-30B-A3B Q4_K_M, :8086)
+  tts (qwentts.cpp, :9002, sibling registration)
+on the single MI210 (ROCm0).
+
+Source: artifacts/operator/lineup-change-20260922.md live vram_57300 sample — the same
+sample that established this registration's Step 1 capacity figure.
+
+No dedicated idle-vs-active co-residency probe has been run against this service. That is
+out of scope for this registration pass: it is a read-only, evidence-compiling registration
+(no inference run, per INF-41's RULES). The PASS verdict above is "measured resident in the
+live production stack, gate-visible", not "isolated idle-vs-active delta measured" — the two
+are different claims and this file only makes the first one. Same caveat as the qwentts.cpp
+sibling registration.
