@@ -209,6 +209,158 @@ def _text_of(value) -> str:
     return value.decode("utf-8", "replace") if isinstance(value, bytes) else str(value)
 
 
+# --------------------------------------------------------------------------- schema repair
+#
+# The agentic CLI returns free text with a JSON object somewhere in it, and
+# `_extract_json` fishes for the LAST object. When that fails or the object is
+# incomplete, the reply used to become a transient and the whole call was
+# retried from zero (DS41 2026-09-24: a 91-minute proposal, retried). The
+# typed-decision plane (handoffs/active/typed-decision-plane.md, TD-1) measured
+# the fix for exactly this shape: ONE schema-constrained completion, temperature
+# 0, client-side validation. Applied here as a REPAIR turn on the same local
+# server the agent used -- it copies the agent's own final report into the
+# declared object, it never invents a hypothesis. Only opencode backends have a
+# local server to ask; codex/claude replies keep the old path.
+# Single-branch grammars only, and NO judgment inside an extraction grammar.
+# Measured 2026-09-24 on the 27B: an optional `abstain` property gets filled beside
+# a full hypothesis; an `anyOf` abstain branch wins for real reports; an in-band
+# "mechanism_id": "abstain" marker over-abstains on reports that analyse without
+# saying "I propose". So repair is two constrained turns: (1) a boolean --
+# does the report EXPLICITLY decline? -- and (2) pure extraction, no abstain path.
+HYPOTHESIS_FIELDS = ("mechanism_id", "statement", "falsifier", "target_surface", "target_symbol")
+HYPOTHESIS_SCHEMA = {"type": "object",
+                     "properties": {name: {"type": "string"} for name in HYPOTHESIS_FIELDS},
+                     "required": list(HYPOTHESIS_FIELDS), "additionalProperties": False}
+PATHS_SCHEMA = {"type": "object",
+                "properties": {"paths": {"type": "array", "items": {"type": "string"}}},
+                "required": ["paths"], "additionalProperties": False}
+ABSTAIN_SCHEMA = {"type": "object",
+                  "properties": {"explicitly_declines": {"type": "boolean"},
+                                 "reason": {"type": "string"}},
+                  "required": ["explicitly_declines", "reason"], "additionalProperties": False}
+REVIEW_SCHEMA = {"type": "object",
+                 "properties": {"accepted": {"type": "boolean"}, "reason": {"type": "string"}},
+                 "required": ["accepted", "reason"]}
+SCHEMA_REPAIR_TIMEOUT_S = 300
+SCHEMA_REPAIR_TAIL_CHARS = 16000
+OPENCODE_CONFIG = Path.home() / ".config" / "opencode" / "opencode.jsonc"
+
+
+def _provider_base_url(model: str, config_path: Path = OPENCODE_CONFIG) -> str | None:
+    """The local server behind an opencode `provider/model`, from opencode.jsonc."""
+    if "/" not in model:
+        return None
+    provider = model.split("/", 1)[0]
+    try:
+        text = config_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    # jsonc: strip // comments (none of our config lines carry '//' inside strings
+    # except URLs, which sit after a ':' -- keep those).
+    import re
+    stripped = re.sub(r'^\s*//.*$', '', text, flags=re.M)
+    stripped = re.sub(r',(\s*[}\]])', r'\1', stripped)
+    try:
+        conf = json.loads(stripped)
+    except json.JSONDecodeError:
+        return None
+    entry = ((conf.get("provider") or {}).get(provider) or {})
+    url = (entry.get("options") or {}).get("baseURL")
+    return str(url).rstrip("/") if url else None
+
+
+_EXTRACT_INSTRUCTION = ("You convert an agent's final report into exactly one JSON object that "
+                        "matches the given schema. Copy the agent's own wording: statement is the "
+                        "report's central claim in its own sentences, falsifier is what the report "
+                        "says would disprove it, target_surface is the file path it names, "
+                        "target_symbol the function or symbol it names, paths are the files it says "
+                        "it edited. Only mechanism_id may be derived: a short kebab-case slug "
+                        "naming the mechanism when the report gives none. Do not invent, judge or "
+                        "improve anything.")
+#: Stage-1 questions are per schema and deliberately narrow: "I did not build" is
+#: not "I changed no files", and a critic's rejection is not an abstention.
+_DECLINE_QUESTIONS: dict[str, str] = {
+    "mechanism_id": ("Does the report EXPLICITLY state that it proposes NO change at all (it "
+                     "abstains, declines, or says it cannot propose)? A report that names any "
+                     "mechanism, file or symbol to change is a proposal, whatever caveats it adds."),
+    "paths": ("Does the report EXPLICITLY state that it edited NO files (left the tree untouched, "
+              "made no changes)? Not building, not testing, or partial work still counts as "
+              "having edited files if it names any file it changed."),
+}
+_ABSTAIN_INSTRUCTION_TEMPLATE = ("Answer one question about an agent's final report. {question} "
+                                 "Set explicitly_declines accordingly and quote the stated reason, "
+                                 "or an empty string.")
+
+
+def _schema_repair(raw: str, *, schema: Mapping[str, Any], backend: Backend,
+                   workspace: Path, timeout_s: int = SCHEMA_REPAIR_TIMEOUT_S,
+                   instruction: str = _EXTRACT_INSTRUCTION) -> dict | None:
+    """One constrained turn: the agent's final report -> exactly one schema object."""
+    if backend.kind != "opencode":
+        return None
+    base = _provider_base_url(backend.model)
+    if base is None:
+        return None
+    import urllib.request
+    import urllib.error
+    body = {
+        "messages": [
+            {"role": "system", "content": instruction},
+            {"role": "user", "content": raw[-SCHEMA_REPAIR_TAIL_CHARS:]},
+        ],
+        "response_format": {"type": "json_schema",
+                            "json_schema": {"name": "actor_reply", "schema": dict(schema)}},
+        "temperature": 0, "max_tokens": 2048,
+        "chat_template_kwargs": {"enable_thinking": False},
+    }
+    request = urllib.request.Request(
+        base + "/chat/completions", data=json.dumps(body).encode("utf-8"),
+        headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_s) as response:
+            payload = json.loads(response.read().decode("utf-8", "replace"))
+        content = payload["choices"][0]["message"]["content"]
+        repaired = json.loads(content)
+    except (urllib.error.URLError, OSError, KeyError, IndexError, TypeError,
+            ValueError) as exc:
+        _persist_reply(workspace, backend, subprocess.CompletedProcess(
+            args=["schema-repair"], returncode=-2, stdout="", stderr=f"{type(exc).__name__}: {exc}"))
+        return None
+    _persist_reply(workspace, backend, subprocess.CompletedProcess(
+        args=["schema-repair"], returncode=0, stdout=content, stderr=""))
+    return repaired if isinstance(repaired, dict) else None
+
+
+def _complete(body: Mapping[str, Any], schema: Mapping[str, Any]) -> bool:
+    return set(schema.get("required", ())) <= set(body)
+
+
+def _parse_reply(raw: str, *, schema: Mapping[str, Any], backend: Backend,
+                 workspace: Path) -> dict:
+    """`_extract_json`, then a schema repair turn when the object is missing or
+    incomplete. Abstentions pass straight through -- they are complete by
+    construction."""
+    try:
+        body = _extract_json(raw)
+    except ProviderTransient:
+        body = None
+    if body is not None and ("abstain" in body or _complete(body, schema)):
+        return body
+    question = next((q for key, q in _DECLINE_QUESTIONS.items()
+                     if key in schema.get("required", ())), None)
+    if question is not None:
+        verdict = _schema_repair(raw, schema=ABSTAIN_SCHEMA, backend=backend, workspace=workspace,
+                                 instruction=_ABSTAIN_INSTRUCTION_TEMPLATE.format(question=question))
+        if verdict is not None and verdict.get("explicitly_declines") is True:
+            return {"abstain": str(verdict.get("reason") or "actor declined")}
+    repaired = _schema_repair(raw, schema=schema, backend=backend, workspace=workspace)
+    if repaired is not None:
+        return repaired
+    if body is not None:
+        return body
+    raise ProviderTransient("actor produced no parseable JSON object")
+
+
 def _first_json_or_none(text: str):
     try:
         return _extract_json(text)
@@ -710,7 +862,7 @@ class AgentPlanner:
             lambda: _run_agent(prompt, workspace=self.workspace,
                                timeout_s=self.timeout_s, backend=self.backend))
         self.transient_streak = streak
-        body = _extract_json(raw)
+        body = _parse_reply(raw, schema=HYPOTHESIS_SCHEMA, backend=self.backend, workspace=self.workspace)
         abstention = _abstention(body)
         if abstention is not None:
             return abstention
@@ -763,7 +915,7 @@ class AgentPlanner:
             lambda: _run_agent(prompt, workspace=self.workspace,
                                timeout_s=self.timeout_s, backend=self.backend))
         self.transient_streak = streak
-        body = _extract_json(raw)
+        body = _parse_reply(raw, schema=PATHS_SCHEMA, backend=self.backend, workspace=self.workspace)
         abstention = _abstention(body)
         if abstention is not None:
             return abstention
@@ -814,7 +966,7 @@ class AgentCritic:
             lambda: _run_agent(prompt, workspace=self.workspace,
                                timeout_s=self.timeout_s, backend=self.backend,
                                read_only=True))
-        body = _extract_json(raw)
+        body = _parse_reply(raw, schema=REVIEW_SCHEMA, backend=self.backend, workspace=self.workspace)
         accepted = bool(body.get("accepted"))
         reason = str(body.get("reason") or "")
         if not accepted and not reason.strip():

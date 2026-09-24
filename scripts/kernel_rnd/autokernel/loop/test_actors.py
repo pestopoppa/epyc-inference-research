@@ -565,3 +565,101 @@ class RawReplyPersistenceAndStreamFallback(unittest.TestCase):
             files = sorted((ws.parent / actors.ACTOR_REPLY_DIR).iterdir())
             self.assertTrue(any(f.name.endswith("-rc-1.stdout") for f in files))
             self.assertIn("half a patch", [f.read_text() for f in files if f.suffix == ".stdout"][0])
+
+
+class SchemaRepairTurn(unittest.TestCase):
+    """A reply whose JSON is missing or incomplete gets ONE schema-constrained
+    repair turn on the agent's own local server (typed-decision-plane TD-1
+    idiom); it never invents, and non-local backends keep the old path."""
+
+    def _ws(self, tmp):
+        ws = Path(tmp) / "workers" / "lane0"; ws.mkdir(parents=True); return ws
+
+    def _server_seq(self, contents):
+        class Resp:
+            def __init__(self, body): self._b = body
+            def read(self): return self._b
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+        payloads = [Resp(json.dumps({"choices": [{"message": {"content": c}}]}).encode()) for c in contents]
+        return mock.patch("urllib.request.urlopen", side_effect=payloads)
+
+    def _server(self, content: str):
+        class Resp:
+            def __init__(self, body): self._b = body
+            def read(self): return self._b
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+        payload = json.dumps({"choices": [{"message": {"content": content}}]}).encode()
+        return mock.patch.object(actors.urllib.request, "urlopen", return_value=Resp(payload)) \
+            if hasattr(actors, "urllib") else mock.patch("urllib.request.urlopen", return_value=Resp(payload))
+
+    def test_prose_only_reply_is_repaired_into_the_schema(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = self._ws(tmp)
+            fixed = {"mechanism_id": "m", "statement": "s", "falsifier": "f",
+                     "target_surface": "t", "target_symbol": "y"}
+            with mock.patch.object(actors, "_provider_base_url", return_value="http://127.0.0.1:1/v1"), \
+                 self._server_seq([json.dumps({"explicitly_declines": False, "reason": ""}), json.dumps(fixed)]):
+                body = actors._parse_reply("I investigated and propose m on t.", schema=actors.HYPOTHESIS_SCHEMA,
+                                           backend=actors.backend_for("prov/model", "high"), workspace=ws)
+            self.assertEqual(body, fixed)
+            self.assertTrue(any("-rc0.stdout" in p.name for p in (ws.parent / actors.ACTOR_REPLY_DIR).iterdir()))
+
+    def test_incomplete_object_is_repaired_and_complete_object_is_not_touched(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = self._ws(tmp)
+            fixed = {"accepted": False, "reason": "r"}
+            with mock.patch.object(actors, "_provider_base_url", return_value="http://127.0.0.1:1/v1"), \
+                 self._server_seq([json.dumps(fixed), json.dumps(fixed)]) as srv:
+                body = actors._parse_reply('{"accepted": false}', schema=actors.REVIEW_SCHEMA,
+                                           backend=actors.backend_for("prov/model", "high"), workspace=ws)
+                self.assertEqual(body, fixed)
+                calls = srv.call_count
+                body2 = actors._parse_reply('{"accepted": true, "reason": ""}', schema=actors.REVIEW_SCHEMA,
+                                            backend=actors.backend_for("prov/model", "high"), workspace=ws)
+                self.assertEqual(srv.call_count, calls, "a complete object must not trigger a repair turn")
+                self.assertTrue(body2["accepted"])
+
+    def test_non_local_backend_keeps_the_transient(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = self._ws(tmp)
+            with self._server('{"never":1}') as srv:
+                with self.assertRaises(actors.ProviderTransient):
+                    actors._parse_reply("no json here", schema=actors.HYPOTHESIS_SCHEMA,
+                                        backend=actors.backend_for("gpt-6-sol", "high"), workspace=ws)
+                self.assertEqual(srv.call_count, 0)
+
+    def test_explicit_decline_is_mapped_by_the_boolean_stage(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = self._ws(tmp)
+            with mock.patch.object(actors, "_provider_base_url", return_value="http://127.0.0.1:1/v1"), \
+                 self._server(json.dumps({"explicitly_declines": True, "reason": "nothing reachable"})) as srv:
+                body = actors._parse_reply("I cannot propose anything here.", schema=actors.HYPOTHESIS_SCHEMA,
+                                           backend=actors.backend_for("prov/model", "high"), workspace=ws)
+            self.assertEqual(body, {"abstain": "nothing reachable"}); self.assertEqual(srv.call_count, 1)
+
+    def test_abstention_passes_through_without_a_repair(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = self._ws(tmp)
+            with mock.patch.object(actors, "_provider_base_url", return_value="http://127.0.0.1:1/v1"), \
+                 self._server('{"x":1}') as srv:
+                body = actors._parse_reply('{"abstain": "nothing reachable"}', schema=actors.HYPOTHESIS_SCHEMA,
+                                           backend=actors.backend_for("prov/model", "high"), workspace=ws)
+                self.assertEqual(body, {"abstain": "nothing reachable"}); self.assertEqual(srv.call_count, 0)
+
+
+    def test_review_parse_never_asks_the_decline_question(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = self._ws(tmp)
+            with mock.patch.object(actors, "_provider_base_url", return_value="http://127.0.0.1:1/v1"), \
+                 self._server_seq([json.dumps({"accepted": False, "reason": "invalid hoist"})]) as srv:
+                body = actors._parse_reply("The hoist is invalid. I reject it.", schema=actors.REVIEW_SCHEMA,
+                                           backend=actors.backend_for("prov/model", "high"), workspace=ws)
+            self.assertEqual(body, {"accepted": False, "reason": "invalid hoist"}); self.assertEqual(srv.call_count, 1)
