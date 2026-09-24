@@ -497,7 +497,93 @@ class Backends(unittest.TestCase):
         self.assertEqual(argv[argv.index("-m") + 1], "deepseek/deepseek-v4-flash")
         # opencode calls reasoning effort a "variant"; "max" must reach it.
         self.assertEqual(argv[argv.index("--variant") + 1], "max")
-        self.assertEqual(argv[-1], "PROMPT")
+        # The prompt rides stdin: opencode re-quotes and backslash-escapes any
+        # positional that contains a space (DS41 2026-09-24).
+        self.assertNotIn("PROMPT", argv)
+        self.assertEqual(b.stdin_payload("PROMPT"), "PROMPT")
+        self.assertNotIn("--agent", argv)
+        named = actors.Backend("opencode", "q/m", "high", actors.OPENCODE, agent="autokernel-planner")
+        agent_argv = named.argv("PROMPT", Path("/ws"))
+        self.assertEqual(agent_argv[agent_argv.index("--agent") + 1], "autokernel-planner")
+
+    def test_bounded_seat_writes_a_per_run_config_outside_the_worktree(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp) / "workers" / "lane0"; ws.mkdir(parents=True)
+            profiles = Path(tmp) / "store" / "cpu-profiles"
+            (profiles / "cpu-raw-abc").mkdir(parents=True)
+            context = {"cpu_profile": {"record": str(profiles / "cpu-raw-abc" / "measurement-record.data")}}
+            planner = actors.AgentPlanner(workspace=ws, backend=actors.backend_for("q/m", "high"),
+                                          seat=actors.ActorSeat(tools_python="/py"))
+            backend, env = planner._seated("planner", context)
+            self.assertEqual(backend.agent, "autokernel-planner")
+            config = Path(env["OPENCODE_CONFIG"])
+            self.assertEqual(config.parent, ws.parent, "the config must not ride into the diff")
+            self.assertFalse(list(ws.iterdir()))
+            body = json.loads(config.read_text())
+            command = next(iter(body["mcp"].values()))["command"]
+            self.assertEqual(command[0], "/py")
+            self.assertEqual(command[command.index("--root") + 1], str(ws))
+            self.assertEqual(command[command.index("--profiles") + 1], str(profiles))
+
+    def test_plain_seat_and_non_opencode_backends_are_untouched(self):
+        ws = Path("/ws")
+        for backend, seat in ((actors.backend_for("q/m", "high"), actors.ActorSeat(bounded=False)),
+                              (actors.backend_for("q/m", "high"), None),
+                              (actors.backend_for("gpt-5.6-sol", "high"), actors.ActorSeat())):
+            planner = actors.AgentPlanner(workspace=ws, backend=backend, seat=seat)
+            self.assertEqual(planner._seated("planner", {}), (backend, None))
+
+    def test_run_agent_passes_env_and_logs_the_call(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp) / "workers" / "lane0"; ws.mkdir(parents=True)
+            done = subprocess.CompletedProcess(args=["x"], returncode=0, stdout="{}", stderr="")
+            with mock.patch.object(actors.subprocess, "run", return_value=done) as ran:
+                actors._run_agent("p", workspace=ws, backend=actors.backend_for("q/m", "high"),
+                                  env={"OPENCODE_CONFIG": "/c.json"})
+            self.assertEqual(ran.call_args.kwargs["env"]["OPENCODE_CONFIG"], "/c.json")
+            self.assertIn("PATH", ran.call_args.kwargs["env"], "env extends, never replaces")
+            rows = (ws.parent / actors.ACTOR_REPLY_DIR / actors.ACTOR_CALL_LOG).read_text().splitlines()
+            row = json.loads(rows[-1])
+            self.assertEqual((row["returncode"], row["prompt_chars"], row["opencode_config"]), (0, 1, "/c.json"))
+
+    def test_target_dedupe_points_repeats_at_the_first_copy(self):
+        dsos = [{"path": f"/lib/lib{i}.so", "sha256": "a" * 64} for i in range(4)]
+        target = {"recipe": {"dsos": dsos, "threads": 48},
+                  "scope": {"full": {"dsos": dsos, "argv": ["-t", "48"]}}}
+        out = actors._dedupe_subtrees(target)
+        self.assertEqual(out["recipe"]["dsos"], dsos)
+        self.assertEqual(out["scope"]["full"]["dsos"], "<same as $.recipe.dsos>")
+        self.assertEqual(out["scope"]["full"]["argv"], ["-t", "48"], "small subtrees are never folded")
+        rendered = actors.render_context({"target": target})
+        self.assertIn("<same as $.recipe.dsos>", rendered)
+
+    def test_shared_history_drops_hashes_and_clips_prose_but_keeps_caveats(self):
+        shared = {"use": "suggestions only", "rows": [
+            {"mechanism_id": "akm-x", "status": "measured_null", "attempt_id": "f" * 64,
+             "result_sha256": "e" * 64, "refusal_reason": "r" * 2000,
+             "unknown_reason": "original window was cold"}]}
+        row = actors._slim_shared_history(shared)["rows"][0]
+        self.assertNotIn("attempt_id", row); self.assertNotIn("result_sha256", row)
+        self.assertEqual(row["unknown_reason"], "original window was cold")
+        self.assertTrue(row["refusal_reason"].endswith("[clipped 1500 chars]"))
+        self.assertEqual(actors._slim_shared_history({"no": "rows"}), {"no": "rows"})
+
+    def test_codex_and_claude_keep_the_prompt_in_argv(self):
+        for model in ("gpt-5.6-sol", "claude-fable-5-1"):
+            b = actors.backend_for(model, "high")
+            self.assertEqual(b.argv("PROMPT", Path("/ws"))[-1], "PROMPT")
+            self.assertIsNone(b.stdin_payload("PROMPT"))
+
+    def test_run_agent_feeds_the_opencode_prompt_on_stdin(self):
+        b = actors.backend_for("prov/model", "high")
+        done = mock.Mock(returncode=0, stdout="{}", stderr="")
+        with mock.patch.object(actors.subprocess, "run", return_value=done) as ran, \
+             mock.patch.object(actors, "_persist_reply"):
+            actors._run_agent('say "hi" to me', workspace=Path("/ws"), backend=b)
+        self.assertEqual(ran.call_args.kwargs["input"], 'say "hi" to me')
+        self.assertNotIn('say "hi" to me', ran.call_args.args[0])
 
     def test_an_unknown_kind_refuses_rather_than_guessing(self):
         with self.assertRaises(ValueError):
@@ -530,7 +616,8 @@ class RawReplyPersistenceAndStreamFallback(unittest.TestCase):
                                    return_value=self._done("chrome only\n", "final: " + body)):
                 raw = actors._run_agent("p", workspace=ws, backend=actors.backend_for("prov/model", "high"))
             self.assertEqual(actors._extract_json(raw)["mechanism_id"], "m")
-            replies = sorted((ws.parent / actors.ACTOR_REPLY_DIR).iterdir())
+            replies = sorted(p for p in (ws.parent / actors.ACTOR_REPLY_DIR).iterdir()
+                             if p.name != actors.ACTOR_CALL_LOG)
             self.assertEqual([p.suffix for p in replies], [".stderr", ".stdout"])
             self.assertIn("final:", replies[0].read_text())
             self.assertFalse(list(ws.iterdir()), "nothing may land inside the worker tree")
@@ -552,6 +639,96 @@ class RawReplyPersistenceAndStreamFallback(unittest.TestCase):
                 with self.assertRaises(actors.ProviderTransient):
                     actors._run_agent("p", workspace=ws, backend=actors.backend_for("prov/model", "high"))
             self.assertTrue(any(p.name.endswith("-rc3.stderr") for p in (ws.parent / actors.ACTOR_REPLY_DIR).iterdir()))
+
+    def test_nonzero_exit_with_a_complete_reply_is_salvaged(self):
+        """DS41 2026-09-24 09:55: opencode exited 1 after a recovered tool error and
+        its complete hypothesis was retried from zero."""
+        import tempfile
+        body = ('{"mechanism_id":"m","statement":"s","falsifier":"f",'
+                '"target_surface":"a/b.cpp","target_symbol":"fn"}')
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp) / "workers" / "lane0"; ws.mkdir(parents=True)
+            with mock.patch.object(actors.subprocess, "run",
+                                   return_value=self._done("report...\n" + body, "Error: trim", rc=1)):
+                raw = actors._run_agent("p", workspace=ws, backend=actors.backend_for("prov/model", "high"),
+                                        schema=actors.HYPOTHESIS_SCHEMA)
+            self.assertEqual(actors._extract_json(raw)["mechanism_id"], "m")
+            self.assertTrue(any(p.name.endswith("-rc1.stdout") for p in (ws.parent / actors.ACTOR_REPLY_DIR).iterdir()))
+
+    def test_nonzero_exit_with_an_incomplete_object_stays_a_transient(self):
+        """A crashed critic whose stray JSON lacks `accepted` must not become a rejection."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp) / "workers" / "lane0"; ws.mkdir(parents=True)
+            for out in ('{"type": "error", "message": "rate limited"}', ""):
+                with mock.patch.object(actors.subprocess, "run", return_value=self._done(out, "", rc=1)):
+                    with self.assertRaises(actors.ProviderTransient):
+                        actors._run_agent("p", workspace=ws, backend=actors.backend_for("gpt-6-sol", "high"),
+                                          read_only=True, schema=actors.REVIEW_SCHEMA)
+
+    def test_a_long_real_stdout_is_captured_whole_with_the_final_json_last(self):
+        """A real child process, no mock: 300 KB of chrome and then the reply. The
+        reply is the tail, which a truncating pipe would lose first."""
+        import sys
+        import tempfile
+        code = ("import sys; sys.stdout.write('x' * 300000 + '\\n'); "
+                "sys.stdout.write('{\"accepted\": true, \"reason\": \"ok\"}'); sys.stdout.flush()")
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp) / "workers" / "lane0"; ws.mkdir(parents=True)
+            backend = actors.backend_for("gpt-6-sol", "high")
+            with mock.patch.object(actors.Backend, "argv", return_value=[sys.executable, "-c", code]):
+                raw = actors._run_agent("p", workspace=ws, backend=backend, read_only=True,
+                                        schema=actors.REVIEW_SCHEMA)
+            self.assertGreater(len(raw), 300000)
+            self.assertEqual(actors._extract_json(raw), {"accepted": True, "reason": "ok"})
+
+    def test_signal_death_is_never_salvaged(self):
+        """A killed actor never finished: its stdout may be a compaction summary."""
+        import tempfile
+        body = ('{"mechanism_id":"m","statement":"s","falsifier":"f",'
+                '"target_surface":"a/b.cpp","target_symbol":"fn"}')
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp) / "workers" / "lane0"; ws.mkdir(parents=True)
+            with mock.patch.object(actors.subprocess, "run", return_value=self._done(body, "", rc=-15)):
+                with self.assertRaises(actors.ProviderTransient):
+                    actors._run_agent("p", workspace=ws, backend=actors.backend_for("prov/model", "high"),
+                                      schema=actors.HYPOTHESIS_SCHEMA)
+
+    def test_compaction_summary_quoting_the_template_is_not_a_reply(self):
+        """Bounded-seat A/B 2026-09-24: opencode's compaction summary on stdout quoted
+        the output contract, and `{"abstain":"<reason>"}` was taken as the answer."""
+        summary = ('## Important Details\n- **Output contract**: Reply with ONE json object '
+                   '`{"mechanism_id":"akm-<slug>","statement":"...","falsifier":"...",'
+                   '"target_surface":"<one source path>","target_symbol":"<function>"}` '
+                   'or `{"abstain":"<reason>"}`.\n')
+        real = ('{"mechanism_id":"akm-x","statement":"s","falsifier":"f",'
+                '"target_surface":"a/b.cpp","target_symbol":"fn"}')
+        self.assertEqual(actors._extract_json(real + "\n" + summary)["mechanism_id"], "akm-x",
+                         "a real object beats a later template echo")
+        self.assertTrue(actors._is_template_echo(actors._extract_json(summary)),
+                        "with nothing else, the echo is still surfaced for the guards")
+        with self.assertRaises(actors.ProviderTransient):
+            actors._abstention({"abstain": "<reason>"})
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp) / "workers" / "lane0"; ws.mkdir(parents=True)
+            with mock.patch.object(actors.subprocess, "run", return_value=self._done(summary, "", rc=1)):
+                with self.assertRaises(actors.ProviderTransient):
+                    actors._run_agent("p", workspace=ws, backend=actors.backend_for("prov/model", "high"),
+                                      schema=actors.HYPOTHESIS_SCHEMA)
+            with self.assertRaises(actors.ProviderTransient):
+                actors._parse_reply(summary, schema=actors.HYPOTHESIS_SCHEMA,
+                                    backend=actors.backend_for("gpt-6-sol", "high"), workspace=ws)
+
+    def test_nonzero_exit_abstention_is_salvaged(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp) / "workers" / "lane0"; ws.mkdir(parents=True)
+            with mock.patch.object(actors.subprocess, "run",
+                                   return_value=self._done('{"abstain": "nothing reachable"}', "", rc=1)):
+                raw = actors._run_agent("p", workspace=ws, backend=actors.backend_for("prov/model", "high"),
+                                        schema=actors.HYPOTHESIS_SCHEMA)
+            self.assertEqual(actors._extract_json(raw), {"abstain": "nothing reachable"})
 
 
     def test_timeout_persists_the_partial_output(self):
@@ -599,10 +776,11 @@ class SchemaRepairTurn(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             ws = self._ws(tmp)
             fixed = {"mechanism_id": "m", "statement": "s", "falsifier": "f",
-                     "target_surface": "t", "target_symbol": "y"}
+                     "target_surface": "ggml/src/ggml-cpu/ops.cpp", "target_symbol": "ggml_vec_dot_q4_K"}
+            report = "I investigated and propose hoisting the scale load in ggml_vec_dot_q4_K (ops.cpp)."
             with mock.patch.object(actors, "_provider_base_url", return_value="http://127.0.0.1:1/v1"), \
                  self._server_seq([json.dumps({"explicitly_declines": False, "reason": ""}), json.dumps(fixed)]):
-                body = actors._parse_reply("I investigated and propose m on t.", schema=actors.HYPOTHESIS_SCHEMA,
+                body = actors._parse_reply(report, schema=actors.HYPOTHESIS_SCHEMA,
                                            backend=actors.backend_for("prov/model", "high"), workspace=ws)
             self.assertEqual(body, fixed)
             self.assertTrue(any("-rc0.stdout" in p.name for p in (ws.parent / actors.ACTOR_REPLY_DIR).iterdir()))
@@ -653,6 +831,44 @@ class SchemaRepairTurn(unittest.TestCase):
                                            backend=actors.backend_for("prov/model", "high"), workspace=ws)
                 self.assertEqual(body, {"abstain": "nothing reachable"}); self.assertEqual(srv.call_count, 0)
 
+
+    def test_empty_reply_is_never_repaired(self):
+        """DS41 2026-09-24 10:09: an empty retry reply was repaired into an invented
+        hypothesis ("src/verify/replay.ts") that the critic then had to reject."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = self._ws(tmp)
+            with mock.patch.object(actors, "_provider_base_url", return_value="http://127.0.0.1:1/v1"), \
+                 self._server('{"x":1}') as srv:
+                for raw in ("", "   \n", "ok"):
+                    with self.assertRaises(actors.ProviderTransient):
+                        actors._parse_reply(raw, schema=actors.HYPOTHESIS_SCHEMA,
+                                            backend=actors.backend_for("prov/model", "high"), workspace=ws)
+                self.assertEqual(srv.call_count, 0, "no constrained turn may run over an empty report")
+
+    def test_repair_that_names_a_file_the_report_never_mentions_is_refused(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = self._ws(tmp)
+            invented = {"mechanism_id": "replay-verification", "statement": "s", "falsifier": "f",
+                        "target_surface": "src/verify/replay.ts", "target_symbol": "replay"}
+            report = ("Profiling shows mul_mat_qX_K_q8_2_X4_T in iqk_gemm_kquants.cpp dominates the "
+                      "drafter; I have not settled on a mechanism yet.")
+            with mock.patch.object(actors, "_provider_base_url", return_value="http://127.0.0.1:1/v1"), \
+                 self._server_seq([json.dumps({"explicitly_declines": False, "reason": ""}),
+                                   json.dumps(invented)]):
+                with self.assertRaises(actors.ProviderTransient) as caught:
+                    actors._parse_reply(report, schema=actors.HYPOTHESIS_SCHEMA,
+                                        backend=actors.backend_for("prov/model", "high"), workspace=ws)
+            self.assertIn("target_surface", str(caught.exception))
+
+    def test_grounding_accepts_the_real_09_55_target_fields(self):
+        report = ("... the drafter Q4_K iqk X4 gemm ... ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp "
+                  "mul_mat_qX_K_q8_2_X4_T<DequantizerQ4K_AVX2, 1> inner K-block loop ...")
+        body = {"target_surface": "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp :: mul_mat_qX_K_q8_2_X4_T "
+                                  "(template <typename Dequantizer, int nrc_y>, lines ~814-869)",
+                "target_symbol": "mul_mat_qX_K_q8_2_X4_T<(anonymous namespace)::DequantizerQ4K_AVX2, 1>"}
+        self.assertEqual(actors._ungrounded_fields(body, report, actors.HYPOTHESIS_SCHEMA), [])
 
     def test_review_parse_never_asks_the_decline_question(self):
         import tempfile
