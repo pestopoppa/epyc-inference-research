@@ -18,6 +18,15 @@ with cwd = the research repo root. The tool logic is plain stdlib functions
 
 Confinement: every source path must realpath inside ``--root``; every profile must
 realpath inside one of the ``--profiles`` dirs. Symlinks that leave are refused.
+
+DS41-C20d: ``profile_top`` and ``symbol_annotate`` (and the ``_dso_symbols`` short-name
+resolution ``symbol_annotate`` uses internally, DS41-C23) take an optional ``cache``
+(a ``perf_cache.PerfCache``); the live server (``build_server``) always constructs one,
+so real ``perf`` subprocesses run at most once per (profile, dso, sort/symbol) and every
+repeat call -- including every ``limit=`` variation, which is applied to the already-
+parsed rows and never touches perf's own argv -- is served from that cache without
+re-invoking perf. ``cache=None`` (the default for direct calls, e.g. every existing
+test) reproduces today's uncached behavior exactly, one real subprocess per call.
 """
 from __future__ import annotations
 
@@ -30,6 +39,8 @@ import subprocess
 import sys
 import time
 from typing import Any, Iterable, List, Optional, Sequence, Tuple
+
+from . import perf_cache
 
 # ---------------------------------------------------------------------------
 # Caps. The model sees these numbers in tool descriptions and truncation notices.
@@ -669,13 +680,27 @@ def _run_perf(cmd: List[str]) -> Tuple[int, str, str]:
     return proc.returncode, proc.stdout or "", proc.stderr or ""
 
 
+def _run_perf_cached(cmd: List[str], real: str,
+                     cache: "Optional[perf_cache.PerfCache]") -> Tuple[int, str, str]:
+    """`_run_perf`, but served from `cache` on a repeat (profile, argv) call.
+
+    A timeout/OSError from `_run_perf` raises ToolError *before* `get_or_compute`
+    would store anything, so a failed or timed-out call is never cached as if it
+    were an answer -- the next call tries perf again."""
+    if cache is None:
+        return _run_perf(cmd)
+    sig = perf_cache.sig_from_cmd(cmd, real)
+    return cache.get_or_compute(real, sig, lambda: _run_perf(cmd))
+
+
 def _no_samples(*texts: str) -> bool:
     joined = "\n".join(texts).lower()
     return "no samples" in joined or "has no samples" in joined
 
 
 def profile_top(profile_dirs: Sequence[str], profile: Optional[str] = None,
-                limit: int = PROFILE_DEFAULT_LIMIT, dso: Optional[str] = None) -> str:
+                limit: int = PROFILE_DEFAULT_LIMIT, dso: Optional[str] = None,
+                cache: "Optional[perf_cache.PerfCache]" = None) -> str:
     if not profile:
         items = list_profiles(profile_dirs)
         if not profile_dirs:
@@ -696,7 +721,7 @@ def profile_top(profile_dirs: Sequence[str], profile: Optional[str] = None,
            "--percent-limit", PROFILE_PERCENT_LIMIT, "--sort", "dso,symbol"]
     if dso:
         cmd += ["--dsos", dso]
-    rc, stdout, stderr = _run_perf(cmd)
+    rc, stdout, stderr = _run_perf_cached(cmd, real, cache)
     rows = [ln.rstrip() for ln in stdout.splitlines()
             if ln.strip() and not ln.lstrip().startswith("#")]
     meta = [ln.strip("# ").strip() for ln in stdout.splitlines()
@@ -759,11 +784,12 @@ def _symbol_core(name: str) -> str:
     return re.sub(r"\s+", "", bare[cut:])
 
 
-def _dso_symbols(real: str, dso: str) -> List[Tuple[float, str]]:
+def _dso_symbols(real: str, dso: str,
+                 cache: "Optional[perf_cache.PerfCache]" = None) -> List[Tuple[float, str]]:
     """(overhead %, full demangled name) for every sampled symbol of `dso`."""
     cmd = ["perf", "report", "--stdio", "--no-children", "--force", "-i", real,
            "--percent-limit", RESOLVE_PERCENT_LIMIT, "--sort", "symbol", "--dsos", dso]
-    _rc, stdout, _stderr = _run_perf(cmd)
+    _rc, stdout, _stderr = _run_perf_cached(cmd, real, cache)
     rows = []
     for ln in stdout.splitlines():
         m = _RX_SYMBOL_ROW.match(ln)
@@ -804,10 +830,12 @@ def resolve_symbol(requested: str, symbols: Sequence[Tuple[float, str]]) -> Tupl
     return "none", None
 
 
-def _annotate_once(real: str, dso: str, symbol: str) -> Tuple[int, str, str, List[str], list]:
+def _annotate_once(real: str, dso: str, symbol: str,
+                   cache: "Optional[perf_cache.PerfCache]" = None
+                   ) -> Tuple[int, str, str, List[str], list]:
     cmd = ["perf", "annotate", "--stdio", "--stdio-color", "never", "--force", "-i", real,
            "--dsos", dso, symbol]
-    rc, stdout, stderr = _run_perf(cmd)
+    rc, stdout, stderr = _run_perf_cached(cmd, real, cache)
     lines = stdout.splitlines()
     pct_idx = [(i, float(m.group(1))) for i, ln in enumerate(lines)
                for m in [_RX_ANN_PCT.match(ln)] if m]
@@ -815,7 +843,8 @@ def _annotate_once(real: str, dso: str, symbol: str) -> Tuple[int, str, str, Lis
 
 
 def symbol_annotate(profile_dirs: Sequence[str], profile: str, symbol: str, dso: str,
-                    max_lines: int = ANNOTATE_DEFAULT_LINES) -> str:
+                    max_lines: int = ANNOTATE_DEFAULT_LINES,
+                    cache: "Optional[perf_cache.PerfCache]" = None) -> str:
     if not symbol:
         raise ToolError("symbol must be non-empty")
     if not dso:
@@ -823,14 +852,14 @@ def symbol_annotate(profile_dirs: Sequence[str], profile: str, symbol: str, dso:
     notes: List[str] = []
     ml = _clamp(max_lines, 1, ANNOTATE_MAX_LINES, "max_lines", notes)
     real = resolve_profile(profile_dirs, profile)
-    rc, stdout, stderr, lines, pct_idx = _annotate_once(real, dso, symbol)
+    rc, stdout, stderr, lines, pct_idx = _annotate_once(real, dso, symbol, cache)
     if (_no_samples(stdout, stderr) or not pct_idx) and not (
             rc != 0 and not _no_samples(stdout, stderr) and stderr.strip()):
         # perf matches the symbol against the FULL demangled name and reports a filter
         # that matched nothing as "has no samples!" -- DS41 run 7's planner read a
         # 114K-sample profile as empty that way (DS41-C23). Resolve the typed name
         # against the DSO's own symbol list before concluding anything.
-        kind, found = resolve_symbol(symbol, _dso_symbols(real, dso))
+        kind, found = resolve_symbol(symbol, _dso_symbols(real, dso, cache))
         if kind == "ambiguous":
             out = [f"symbol {symbol!r} matches {len(found)} sampled symbols in dso {dso!r} "
                    f"({os.path.basename(real)}); pass one of these exactly:"]
@@ -842,7 +871,7 @@ def symbol_annotate(profile_dirs: Sequence[str], profile: str, symbol: str, dso:
         if kind == "resolved":
             notes.append(f"resolved {symbol!r} -> {found!r} (the profile's full name)")
             symbol = found
-            rc, stdout, stderr, lines, pct_idx = _annotate_once(real, dso, symbol)
+            rc, stdout, stderr, lines, pct_idx = _annotate_once(real, dso, symbol, cache)
     if _no_samples(stdout, stderr) or not pct_idx:
         if rc != 0 and not _no_samples(stdout, stderr) and stderr.strip():
             return f"perf annotate failed (exit {rc}): {_cut(stderr.strip(), 400)}"
@@ -895,13 +924,18 @@ def _safe(fn, *args, **kwargs) -> str:
         return f"ERROR: {type(e).__name__}: {e}"
 
 
-def build_server(root: str, profile_dirs: Sequence[str]):
+def build_server(root: str, profile_dirs: Sequence[str],
+                 perf_cache_dir: Optional[str] = None):
     try:
         from mcp.server.fastmcp import FastMCP
     except ImportError:
         from fastmcp import FastMCP  # type: ignore[no-redef]
     root_real = _real(root)
     pdirs = [_real(p) for p in profile_dirs]
+    # DS41-C20d: one PerfCache for the server's lifetime, so a repeat profile_top /
+    # symbol_annotate call -- including the resolve helper's own perf report call --
+    # never re-shells to perf for a (profile, dso, sort/symbol) it already has.
+    pcache = perf_cache.PerfCache(cache_root=perf_cache_dir)
     try:
         server = FastMCP("ak-actor-tools", log_level="WARNING")
     except TypeError:
@@ -937,7 +971,7 @@ def build_server(root: str, profile_dirs: Sequence[str]):
                     dso: Optional[str] = None) -> str:
         """Top rows of a perf profile (perf report --sort dso,symbol, --no-children, >=0.3%).
         limit capped at 80. With no profile, lists the available perf .data files."""
-        return _safe(globals()["profile_top"], pdirs, profile, limit, dso)
+        return _safe(globals()["profile_top"], pdirs, profile, limit, dso, pcache)
 
     @server.tool()
     def symbol_annotate(profile: str, symbol: str, dso: str,
@@ -946,7 +980,7 @@ def build_server(root: str, profile_dirs: Sequence[str]):
         source/asm order. A short or partial name (no return type, no argument list, no
         `(anonymous namespace)::`) is resolved against the dso's sampled symbols; an
         ambiguous one returns the candidates to choose from."""
-        return _safe(globals()["symbol_annotate"], pdirs, profile, symbol, dso, max_lines)
+        return _safe(globals()["symbol_annotate"], pdirs, profile, symbol, dso, max_lines, pcache)
 
     return server
 
@@ -956,6 +990,9 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     ap.add_argument("--root", required=True, help="lane worktree; all source paths confined here")
     ap.add_argument("--profiles", action="append", default=[],
                     help="directory of perf .data files (repeatable)")
+    ap.add_argument("--perf-cache-dir", default=None,
+                    help="override the perf report/annotate cache location (DS41-C20d); "
+                         "default is a .actor_tools_perf_cache/ dir beside each profile")
     return ap.parse_args(argv)
 
 
@@ -965,7 +1002,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(f"actor_tools_mcp: --root {args.root!r} is not a directory", file=sys.stderr)
         return 2
     try:
-        server = build_server(args.root, args.profiles)
+        server = build_server(args.root, args.profiles, perf_cache_dir=args.perf_cache_dir)
     except ImportError as e:
         print(f"actor_tools_mcp: MCP SDK not importable in {sys.executable}: {e}",
               file=sys.stderr)
