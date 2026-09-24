@@ -116,9 +116,9 @@
         "/mnt/raid0/llm/autokernel/vendor/arena-controllers/evoengineer"
       ],
       "source_root": "repository://.",
-      "source_commit": "381bc55e5eadb58763d86e0043da0884b26eea3a",
+      "source_commit": "9f55e94caacebfe23f26a97c5307f7a742a7c69c",
       "entrypoint_path": "scripts/kernel_rnd/autokernel/controller/evoengineer_arena.py",
-      "entrypoint_sha256": "d5544c2397da53770bb77897fdd0fdbff72baabd9839adca2a3f8350c58d4ef4",
+      "entrypoint_sha256": "d625647934be61aef5eb49cb1e3ce6689dd38825f02ac226e8631d1417189ed6",
       "model_ids": [
         "gpt-5.6-sol:high:upstream-controller"
       ],
