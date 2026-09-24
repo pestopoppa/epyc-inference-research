@@ -160,6 +160,17 @@ def tts_request(text, fmt, seed=42):
             "rtf": round(dt / audio_s, 4) if audio_s > 0 else None}
 
 
+LLM_CAP_S = float(os.environ.get("LLM_CAP_S", "900"))
+LLM_REPS = int(os.environ.get("LLM_REPS", "2"))
+
+
+def llm_tps(d):
+    t = d.get("llm_timings") or {}
+    if t.get("predicted_per_second"):
+        return round(t["predicted_per_second"], 1)
+    return (d.get("llm") or {}).get("chunks_per_s_after_first")
+
+
 def llm_request(results, key, cap_s=900):
     body = json.dumps({"model": "frontdoor", "max_tokens": 300, "temperature": 0.7, "stream": True,
                        "messages": [{"role": "user", "content":
@@ -275,8 +286,9 @@ def phase_concurrent(stt_spec, tts_spec, reps, tag="conc"):
                 put(tts_request(text, "pcm"), "solo-tts", rep)
             llm = {}; llm_request(llm, "llm"); llm["kind"] = "llm"; put(llm, "solo-llm", rep)
 
+        collapsed = [0]
         for mode in ("stt+tts", "stt+tts+llm"):
-            for rep in range(reps):
+            for rep in range(reps if mode == "stt+tts" else LLM_REPS):
                 stop = threading.Event(); out = []; llms = []
 
                 def stt_loop():
@@ -287,9 +299,10 @@ def phase_concurrent(stt_spec, tts_spec, reps, tag="conc"):
                             out.append(stt_request(clip))
 
                 def llm_loop():
-                    # ONE generation in flight at a time, back to back, for the whole window
+                    # ONE generation in flight at a time, back to back, for the whole window.
+                    # Capped at LLM_CAP_S so a collapsed production frontdoor is never held long.
                     while not stop.is_set():
-                        d = {}; llm_request(d, "llm"); d["kind"] = "llm"; llms.append(d)
+                        d = {}; llm_request(d, "llm", LLM_CAP_S); d["kind"] = "llm"; llms.append(d)
 
                 def tts_loop():
                     for text in (TEXT_SHORT, TEXT_LONG, TEXT_SHORT):
@@ -307,6 +320,15 @@ def phase_concurrent(stt_spec, tts_spec, reps, tag="conc"):
                     t_.join()
                 for r in out + llms:
                     put(r, mode, rep)
+                if mode.endswith("llm"):
+                    # production guard: stop once the frontdoor collapsed (<10 tok/s) in >1 repetition
+                    tps = [llm_tps(d) for d in llms]
+                    if any(t is not None and t < 10 for t in tps):
+                        collapsed[0] += 1
+                    log(f"guard: rep={rep} frontdoor tok/s={tps} collapsed_reps={collapsed[0]}", fh)
+                    if collapsed[0] > 1:
+                        log("guard: frontdoor <10 tok/s in more than one repetition -> stopping", fh)
+                        break
     finally:
         s.stop(); q.stop()
 

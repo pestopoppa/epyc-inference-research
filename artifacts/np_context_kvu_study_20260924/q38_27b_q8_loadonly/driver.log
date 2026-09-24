@@ -1,0 +1,7 @@
+=== start 2026-09-24T18:06:44Z ===
+current_np2_c196608_split_d8: base_mib=2139 total_mib=41157 server_mib=39018 n_ctx_slot=98304 kv_unified=false flags=[-np 2 -c 196608 --no-kv-unified]
+cand_np2_c196608: base_mib=2139 total_mib=41165 server_mib=39026 n_ctx_slot=196608 kv_unified=true flags=[-np 2 -c 196608 --kv-unified -ctkd q8_0 -ctvd q8_0 --spec-draft-n-max 4]
+cand_np4_c196608: base_mib=2139 total_mib=42661 server_mib=40522 n_ctx_slot=196608 kv_unified=true flags=[-np 4 -c 196608 --kv-unified -ctkd q8_0 -ctvd q8_0 --spec-draft-n-max 4]
+cand_np2_c262144: base_mib=2139 total_mib=44501 server_mib=42362 n_ctx_slot=262144 kv_unified=true flags=[-np 2 -c 262144 --kv-unified -ctkd q8_0 -ctvd q8_0 --spec-draft-n-max 4]
+cand_np4_c262144: base_mib=2139 total_mib=45997 server_mib=43858 n_ctx_slot=262144 kv_unified=true flags=[-np 4 -c 262144 --kv-unified -ctkd q8_0 -ctvd q8_0 --spec-draft-n-max 4]
+=== done 2026-09-24T18:08:31Z ===

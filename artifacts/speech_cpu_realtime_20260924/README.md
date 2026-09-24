@@ -179,3 +179,71 @@ Host context: the production CPU llama-servers :8070 and :8074 both run `-t 96` 
 in `top` snapshots, but it was not monitored continuously. An orchestrator
 Python job and megasync were active, the GPU sweep ran on 184-191, and the host was about 85%
 idle outside the measurements.
+
+## Addendum: option C, speech on SMT siblings (measured 2026-09-24, 17:53–18:15 UTC)
+
+The operator direction was to move speech to CPU only if it stays real time *while the
+frontdoor generates*. This addendum measures option C.
+
+**Sibling mapping.** Logical CPU `c+96` is the SMT sibling of physical core `c`. This was
+checked with `lscpu -e` and `thread_siblings_list`, for example `cpu96: 0,96` and
+`cpu135: 39,135`.
+
+**Whisper layout on siblings.** Encoder bench, frontdoor idle, three repetitions each
+(`raw/whisper_bench_encoder_matrix.txt`):
+
+| layout | encode times | verdict |
+|---|---|---|
+| 16@96-111 | 2.46–2.54 s | stable |
+| 24@96-119 | 3.65, 3.70, 1.93 s | jittery |
+| 32@96-135 | 2.23–2.34 s | no gain |
+
+**Layout used.** STT 16@96-111 (siblings of cores 0-15) and TTS 16@120-135 (siblings of cores
+24-39).
+
+**Frontdoor load.** Frontdoor generations were back to back with one in flight, each capped at
+120 s. A guard would stop the run once throughput fell below 10 tok/s in more than one
+repetition.
+
+| mode | STT 11 s RTF | STT 86.5 s RTF | TTS sentence: first pkt / RTF | TTS paragraph: first pkt / RTF / prebuffer | frontdoor tok/s |
+|---|---|---|---|---|---|
+| solo (other servers resident, idle) | 0.448 (0.413-0.473) | 0.378 | 0.173 s / 0.820 | 0.308 s / 0.896 / 0.39 s | 26.7 (24.1-29.3), n=2 |
+| STT + TTS, frontdoor idle | 0.383 (0.371-0.401) | 0.359 | 0.119 s / 0.791 | 0.312 s / 0.870 / 0.35 s | — |
+| STT + TTS + frontdoor generating | **1.20** (0.34-1.74) | **3.90** (0.25-6.08) | 0.69 s / **18.8** (0.72-36.8) | 7.94 s / **21.6** / 731 s | **16.9** (6.3-37.0), n=51 |
+
+**Result: option C is not real time.**
+
+- **Speech with the frontdoor generating.** TTS runs 20–37× slower than real time, and STT runs
+  1.2–6× slower. For about 16 minutes of repetition 0, 51 frontdoor generations ran back to back,
+  and the speech requests crawled through them.
+- **Spread.** The low ends of those ranges (TTS 0.72, STT 0.25) are requests that happened to
+  land in gaps between frontdoor decode bursts. The wide spread therefore reflects when the
+  collision happened, not a variable real-time margin.
+- **Speech without the frontdoor.** Even with the frontdoor idle, speech on siblings is slower
+  than on physical cores: STT RTF 0.36–0.45 against 0.19–0.25, and TTS RTF 0.79–0.90 against
+  0.55–0.60. That leaves TTS only about 1.1–1.3× headroom.
+
+**Frontdoor cost.**
+
+- **During generation.** The frontdoor fell to 16.9 tok/s median. That is 37% below this
+  window's baseline with speech idle (26.7 tok/s) and 61% below the earlier 41–46 tok/s. One
+  generation went below 10 tok/s (6.3), so the guard counted one collapsed repetition.
+- **Baseline confound.** This window's idle baseline (24–29 tok/s) was already below the earlier
+  41–46. The cause is not identified. In the `main40` run, having speech resident but idle cost
+  the frontdoor nothing on physical cores; whether that also holds on siblings was not isolated.
+- **Early stop.** I stopped the run early, during repetition 1, by sending SIGINT to my harness.
+  The guard had not tripped, but the verdict was already decisive and every further repetition
+  held production at about 40% throughput loss for more than 15 minutes.
+- **Cleanup.** Both servers stopped with rc=0 and were confirmed dead. The frontdoor slots were
+  idle afterwards.
+
+**Overall.** Neither disjoint physical cores inside 0-79 (option B-lite, `lean16`/`main40`) nor
+SMT siblings (option C) keeps speech real time while the frontdoor generates. **Stay on the GPU
+(option A).** The one path to CPU speech still untested is **real core partitioning**: reduce
+the frontdoor below `-t 96` and take its cores out of its mask, so that speech has cores whose
+siblings the frontdoor never touches. That needs a frontdoor relaunch, which is an operator
+decision.
+
+Command: `LLM_CAP_S=120 LLM_REPS=3 taskset -c 76-79 python3 speech_cpu_bench.py concurrent 16@96-111 16@120-135 2 smtC`.
+Raw output is in `raw/concurrent_smtC.stdout`, `raw/concurrent.jsonl` (tag `smtC`) and
+`raw/*_smtC.log`.

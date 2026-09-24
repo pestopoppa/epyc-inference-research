@@ -6,7 +6,8 @@ do the two modes behave at the edges (a prompt longer than one slot's share, a f
 `-c` in both arms, `np` ∈ {1, 2, 4, 8} × generation length `L` ∈ {2048, 8192, 32768}. Operator request,
 2026-09-24; successor to `../np_context_study_20260723/` (v7 kernel, pre-BIOS).
 
-**When measured.** 2026-09-24, 15:37Z–17:07Z (driver logs carry the exact start/stop stamps).
+**When measured.** 2026-09-24, 15:37Z–17:07Z for the 27B runs, 17:15Z–18:05Z for the 35B-A3B matrix,
+18:06Z–18:08Z for the 27B load-only footprints (driver logs carry the exact start/stop stamps).
 
 **Which claim it backs.** Discovery/decision evidence for the root stack-change package that makes
 `:8083` declare `--kv-unified` (package at `/mnt/raid0/llm/tmp/stack-change-kvu-20260924/PACKAGE.md`,
@@ -54,10 +55,14 @@ stack-change package above (§ root cause).
 | `q38_27b_q8/` (v1) | `driver/study_kvu_27b.sh` | **Edge-behaviour evidence, not a throughput surface.** Long-prompt probes, then the grid with `c = L × np`. That left no room for the prompt, so every pool was full: split silently truncated, unified np2 hit an MTP exception. Stopped after 4 cells (the 5th, `split/np4_L2048`, has no `done`/`r.json` and is not evidence). |
 | `q38_27b_q8_h/` (v2) | `driver/study_kvu_27b_headroom.sh` | **The headroom matrix.** `c = (L + 1024) × np`, so each request has 1024 tokens of prompt room. Then O-2 (`-ctkd/-ctvd q8_0`) and a 3× repeat of the v1 pool-full geometry (`HEADROOM=0`). |
 | `q38_27b_q8_depth/` | `driver/study_depth_27b.sh` | MTP draft depth 4 and 6 vs 8 (unified), plus load-only VRAM at the production shape `-np 2 -c 196608 --kv-unified`. |
-| `driver/` | — | All four drivers, including `study_kvu_35b_headroom.sh` for the 35B-A3B matrix. |
+| `q36_35b_a3b_q8_h/` | `driver/study_kvu_35b_headroom.sh` | The same headroom matrix for Qwen3.6-35B-A3B-MTP Q8_0 on the GPU, np 1–8 (see §7). |
+| `q38_27b_q8_loadonly/` | `driver/study_loadonly_27b_prod.sh` | Load-only VRAM of the candidate production shapes (np 2/4 × `-c` 196608/262144, unified, depth 4, O-2) vs the current split depth-8 shape (see §8). |
+| `m4_np4_concurrent_live.json` | `driver/m4_np4_concurrent_live.py` | M-4 (see §9). |
+| [`m3_depth_production.md`](m3_depth_production.md) | — | M-3: depth 4 vs 8 on production `:8083` traffic, from its server log (see §9). |
+| `driver/` | — | All drivers. |
 
-The Qwen3.6-35B-A3B matrix (`q36_35b_a3b_q8_h/`) was still being written when this was committed; it is
-excluded here and will be committed separately.
+The 35B-A3B matrix and the load-only run were committed after the first commit of this directory
+(`21cf444c`), together with M-3 and M-4.
 
 ## Results
 
@@ -164,7 +169,85 @@ This matters for deterministic-replay tooling and for any A/B that compares outp
   64,582 MiB at depth 8 vs 63,568 MiB at depth 4. Depth 4 uses **1014 MiB (1.0 GiB) less**.
 - The depth flag was passed after the base `--spec-draft-n-max 8`. The server warns that only the last
   value is used, and the acceptance shift confirms it took effect.
-- Olympiad-style reasoning only: confirm on production traffic before changing the recipe.
+- Olympiad-style reasoning only: confirm on production traffic before changing the recipe. The
+  production-traffic check is M-3 (§9): **not confirmed yet.**
+
+### 7. Qwen3.6-35B-A3B-MTP Q8_0 on the GPU (`q36_35b_a3b_q8_h/summary.tsv`)
+
+Same headroom geometry (`c = (L + 1024) × np`), port and pinning as v2. The model is the production
+frontdoor model, which is served on CPU today. The recipe follows live `:8070`: q8_0 KV, terse
+template, and **MTP draft depth 4** (`--spec-draft-n-max 4`), not 8. `:8083` and `:8086` were stopped.
+All 24 cells ran with 0 errors, and np 8 fits at every L.
+
+| L | np | c | split perreq | unified perreq | Δ | split agg | unified agg | Δ agg | accept s / u | dev GiB | unified `n_ctx_slot` |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 2048 | 1 | 3072 | 94.8 | 93.9 | −0.9% | 92.4 | 91.4 | −1.1% | .568 / .573 | 38 / 38 | 3072 |
+| 2048 | 2 | 6144 | 62.9 | 61.8 | −1.7% | 118.0 | 117.2 | −0.7% | .618 / .626 | 38 / 38 | 6144 |
+| 2048 | 4 | 12288 | 47.2 | 46.9 | −0.6% | 173.1 | 171.5 | −0.9% | .657 / .661 | 39 / 39 | 12288 |
+| 2048 | 8 | 24576 | 31.2 | 30.7 | −1.6% | 229.6 | 227.0 | −1.1% | .709 / .702 | 40 / 40 | 24576 |
+| 8192 | 1 | 9216 | 104.8 | 99.2 | −5.3% | 104.1 | 98.6 | −5.3% | .676 / .626 | 38 / 38 | 9216 |
+| 8192 | 2 | 18432 | 71.4 | 69.2 | −3.1% | 111.3 | 112.9 | +1.4% | .638 / .659 | 38 / 38 | 18432 |
+| 8192 | 4 | 36864 | 49.4 | 49.1 | −0.6% | 153.7 | 152.8 | −0.6% | .680 / .689 | 39 / 39 | 36864 |
+| 8192 | 8 | 73728 | 30.6 | 32.3 | +5.6% | 170.9 | 178.9 | +4.7% | .690 / .703 | 41 / 41 | 73728 |
+| 32768 | 1 | 33792 | 95.0 | 97.8 | +2.9% | 94.4 | 97.1 | +2.9% | .587 / .613 | 38 / 38 | 33792 |
+| 32768 | 2 | 67584 | 59.3 | 58.6 | −1.2% | 103.6 | 104.7 | +1.1% | .653 / .652 | 39 / 39 | 67584 |
+| 32768 | 4 | 135168 | 46.9 | 45.4 | −3.2% | 152.9 | 152.3 | −0.4% | .666 / .680 | 41 / 41 | 135168 |
+| 32768 | 8 | 270336 | 29.1 | 27.9 | −4.1% | 163.3 | 181.0 | +10.8% | .701 / .711 | 44 / 45 | 262144 (capped) |
+
+tok/s; n = 1 per cell.
+
+- **Where every request ran the same length (L 2048, all at the 2048 cap), unified is within 2% of
+  split in all 4 cells:** per-request −0.6% to −1.7%, aggregate −0.7% to −1.1%.
+- **At L 8192 and 32768 the spread is wider (per-request −5.3% to +5.6%) with no consistent sign.**
+  Unlike the 27B, the 35B arms produced **different completions in every cell, including np 1**
+  (0 matching `response_fingerprint`s). So these cells compare different sequences, and
+  answer-length variance dominates. Example: np 1 at 8k decoded 8046 vs 8192 tokens.
+- **Read the 35B result as "unified ≈ split, within about 2% where the comparison is clean".** No
+  cell shows a KV-mode cost that survives the fixed-length cells.
+- **np 8 fits on the 35B-A3B.** At 32k it used 44–45 GiB whole-device. Unified np 8 L 32768 asked
+  for `c = 270336`. The server capped the slot at the 262,144-token training context and warned
+  `n_ctx_seq (270336) > n_ctx_train (262144)`.
+
+### 8. Load-only footprint of the candidate production shapes (`q38_27b_q8_loadonly/loadonly.txt`)
+
+Production 27B model. Base recipe as in *Setup*. Each shape was loaded, measured and stopped, with
+no requests sent. `server MiB` = whole-device used VRAM after load minus the 2,139 MiB measured
+before the first load (`rocm-smi`). Candidates add `--kv-unified -ctkd q8_0 -ctvd q8_0
+--spec-draft-n-max 4` (unified, O-2, depth 4).
+
+| Shape | Flags | `n_ctx_slot` | server MiB | vs current |
+|---|---|---|---|---|
+| **current** | `-np 2 -c 196608 --no-kv-unified`, depth 8 | 98304 | **39,018** | — |
+| candidate | `-np 2 -c 196608`, unified, d4, O-2 | 196608 | **39,026** | +8 |
+| candidate | `-np 4 -c 196608`, unified, d4, O-2 | 196608 | **40,522** | +1,504 |
+| candidate | `-np 2 -c 262144`, unified, d4, O-2 | 262144 | **42,362** | +3,344 |
+| candidate | `-np 4 -c 262144`, unified, d4, O-2 | 262144 | **43,858** | +4,840 |
+
+- **The np 2 / 196k unified candidate costs the same VRAM as today's split shape (+8 MiB), and
+  doubles the per-request ceiling from 98,304 to 196,608 tokens.** This is consistent with, though not
+  itemised by, the package's buffer model: the depth-4 and O-2 savings roughly offset the larger
+  unified KQ mask.
+- **Each extra pair of slots adds about 1.5 GiB** (np 2 → 4: +1,496 MiB at either `-c`). That is
+  consistent with per-slot recurrent (GDN) state, not KV, being the cost (see §1, np 8).
+- **Going from 196k to 262k context adds about 3.3 GiB** at either np.
+- Single load per shape (n = 1), whole-device method. The 64,582 / 63,568 MiB depth figures in §6
+  were read with other GPU residents loaded, so they are not comparable to this table's
+  base-subtracted column.
+
+### 9. Production follow-ups: M-3 and M-4
+
+- **M-3: depth 4 vs 8 on production `:8083` traffic, log-only**
+  ([`m3_depth_production.md`](m3_depth_production.md)). **Not confirmed.** The depth-8 production
+  arm has n = 240: median mean len 4.86, acceptance 0.483, 38.2 tok/s. The depth-4 arm has 0 organic
+  requests so far; its 22 requests are all probes or M-4. A log-only truncation projection gives
+  depth 4 at 0.93× depth 8 for the median production request (1.01× aggregate), because production
+  traffic uses draft positions 5–8 more than the bench does. About 175 organic depth-4 requests
+  would resolve an effect of about 8%. A ±2.5% effect is out of reach of logs.
+- M-4: live np4/kvu/depth-4 aggregate at concurrency 1/2/4, fixed-length 1024-token generations
+  (ignore_eos), 2 waves each (`m4_np4_concurrent_live.json`, driver
+  `driver/m4_np4_concurrent_live.py`). Aggregate: 40.2 / 39.9 tok/s at concurrency 1, 71.4 / 67.8 at
+  concurrency 2, 95.3 / 93.1 at concurrency 4. Per-request median: 40.5 / 40.2, 36.4 / 34.9,
+  27.6 / 26.1.
 
 ## How acceptance was verified
 
@@ -202,7 +285,8 @@ All other numbers above were recomputed from `pq.jsonl` / `r.json` / `server.std
 
 ## Durability
 
-Carried in git: about 1.6 MB of text across the four committed subdirectories. No file exceeds 5 MB.
+Carried in git: about 3.3 MB of text across the six subdirectories and the top-level files. No file
+exceeds 5 MB.
 `SHA256SUMS` covers every file in this directory except itself, in `./path` form, generated with
 `sha256sum` from inside the directory. `*.pid` files are kept as a record of which process served each
 cell. They are not live handles.

@@ -26,3 +26,7 @@
 2026-09-24 17:12:07 tts_t8_lean16 pid=1213814 stopped rc=0 alive_after=False
 2026-09-24 17:12:41 stt_t24_utt3p5 pid=1219823 argv=taskset -c 0-23 whisper-server ... -t 24 -ng (HIP_VISIBLE_DEVICES=-1)
 2026-09-24 17:12:51 stt_t24_utt3p5 pid=1219823 stopped alive_after=False
+2026-09-24 17:53:50 stt_t16_smtC pid=1490030 argv=taskset -c 96-111 /mnt/raid0/llm/whisper.cpp/build/bin/whisper-server -m /mnt/raid0/llm/models/whisper-ggml/ggml-large-v3-turbo.bin --host 127.0.0.1 --port 19100 --inference-path /v1/audio/transcriptions -t 16 -ng env={'HIP_VISIBLE_DEVICES': '-1', 'LD_LIBRARY_PATH': '/mnt/raid0/llm/whisper.cpp/build/bin:/opt/rocm/lib'}
+2026-09-24 17:53:50 tts_t16_smtC pid=1490031 argv=taskset -c 120-135 /mnt/raid0/llm/qwentts.cpp/build/tts-server --model /mnt/raid0/llm/models/Qwen3-TTS-qwentts/qwen-talker-0.6b-base-Q8_0.gguf --codec /mnt/raid0/llm/models/Qwen3-TTS-qwentts/qwen-tokenizer-12hz-Q8_0.gguf --alias qwen3-tts-12hz-0.6b --host 127.0.0.1 --port 19102 env={'HIP_VISIBLE_DEVICES': '-1', 'GGML_BACKEND': 'CPU', 'SHIM_NPROCS': '32', 'LD_PRELOAD': '/mnt/raid0/llm/tmp/speech-cpu-20260924/nprocs_shim.so', 'LD_LIBRARY_PATH': '/mnt/raid0/llm/qwentts.cpp/build:/opt/rocm/lib'}
+2026-09-24 18:14:59 stt_t16_smtC pid=1490030 stopped rc=0 alive_after=False
+2026-09-24 18:14:59 tts_t16_smtC pid=1490031 stopped rc=0 alive_after=False

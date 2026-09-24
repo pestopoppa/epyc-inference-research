@@ -30,3 +30,13 @@ t=24 cores=0-31 rep=3 :: TIMEOUT(60s)
 t=32 cores=0-39 rep=1 :: encode time =  1439.68 ms
 t=32 cores=0-39 rep=2 :: encode time =  1325.07 ms
 t=32 cores=0-39 rep=3 :: encode time =  1396.93 ms
+--- SMT-sibling layouts (option C), frontdoor idle, 3x each, timeout 60s
+t=24 cores=96-119 rep=1 :: encode time =  3652.53 ms
+t=24 cores=96-119 rep=2 :: encode time =  3698.90 ms
+t=24 cores=96-119 rep=3 :: encode time =  1926.98 ms
+t=16 cores=96-111 rep=1 :: encode time =  2541.42 ms
+t=16 cores=96-111 rep=2 :: encode time =  2526.68 ms
+t=16 cores=96-111 rep=3 :: encode time =  2461.23 ms
+t=32 cores=96-135 rep=1 :: encode time =  2340.77 ms
+t=32 cores=96-135 rep=2 :: encode time =  2267.15 ms
+t=32 cores=96-135 rep=3 :: encode time =  2225.29 ms

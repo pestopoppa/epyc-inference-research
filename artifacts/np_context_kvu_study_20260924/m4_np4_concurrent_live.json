@@ -1,0 +1,70 @@
+[
+  {
+    "conc": 1,
+    "wave": 1,
+    "agg_tps": 40.2,
+    "perreq_med_tps": 40.5,
+    "tokens": [
+      1024
+    ],
+    "wall_s": 25.4
+  },
+  {
+    "conc": 1,
+    "wave": 2,
+    "agg_tps": 39.9,
+    "perreq_med_tps": 40.2,
+    "tokens": [
+      1024
+    ],
+    "wall_s": 25.7
+  },
+  {
+    "conc": 2,
+    "wave": 1,
+    "agg_tps": 71.4,
+    "perreq_med_tps": 36.4,
+    "tokens": [
+      1024,
+      1024
+    ],
+    "wall_s": 28.7
+  },
+  {
+    "conc": 2,
+    "wave": 2,
+    "agg_tps": 67.8,
+    "perreq_med_tps": 34.9,
+    "tokens": [
+      1024,
+      1024
+    ],
+    "wall_s": 30.2
+  },
+  {
+    "conc": 4,
+    "wave": 1,
+    "agg_tps": 95.3,
+    "perreq_med_tps": 27.6,
+    "tokens": [
+      1024,
+      1024,
+      1024,
+      1024
+    ],
+    "wall_s": 43.0
+  },
+  {
+    "conc": 4,
+    "wave": 2,
+    "agg_tps": 93.1,
+    "perreq_med_tps": 26.1,
+    "tokens": [
+      1024,
+      1024,
+      1024,
+      1024
+    ],
+    "wall_s": 44.0
+  }
+]

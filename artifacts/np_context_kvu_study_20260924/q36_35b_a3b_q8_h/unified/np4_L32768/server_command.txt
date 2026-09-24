@@ -1,0 +1,1 @@
+/mnt/raid0/llm/kernels/production/gpu/llama-server -m /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf -np 4 -c 135168 --kv-unified 

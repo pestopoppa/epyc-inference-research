@@ -1,0 +1,14 @@
+0.00.090.698 I cmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+0.00.091.258 W srv  llama_server: -----------------
+0.00.091.260 W srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+0.00.091.260 W srv  llama_server: this can be a security risk (cross-origin attacks)
+0.00.091.260 W srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+0.00.091.260 W srv  llama_server: -----------------
+0.00.092.602 I srv    load_model: loading model '/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf'
+0.05.391.942 I srv    load_model: initializing, n_slots = 2, n_ctx_slot = 98304, kv_unified = 'false'
+0.05.392.460 W llama_sampler_backend_support: device 'ROCm0' does not have support for op TOP_K needed for sampler 'top-k'
+0.05.392.466 W llama_sampler_backend_support: device 'ROCm0' does not have support for op TOP_K needed for sampler 'top-k'
+0.05.476.944 I srv          init: chat template supports preserving reasoning, consider enabling it via --reasoning-preserve
+0.05.477.035 I srv  llama_server: model loaded
+0.05.477.043 I srv  llama_server: listening on http://127.0.0.1:18072
+0.12.183.612 I srv    operator(): operator(): cleaning up before exit...
