@@ -27,6 +27,23 @@ def _record(root, index=0, **changes):
     return attempt
 
 
+def _durable_state(root):
+    """What a read-only recall must leave untouched: every file's bytes and mtime,
+    EXCEPT SQLite's WAL-mode side files. A `?mode=ro` reader of a WAL database has to
+    map the `-shm` shared-memory index (and SQLite creates it, plus an empty `-wal`,
+    when the writer checkpointed them away on close) -- that is SQLite's reader
+    protocol, not a write to the store. What read-only DOES guarantee is checked
+    separately: the database file is byte-identical and the WAL carries no frames."""
+    return {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in root.iterdir()
+            if not p.name.endswith(("-shm", "-wal"))}
+
+
+def _assert_wal_has_no_new_frames(root, wal_before):
+    wal = root / "experiments.db-wal"
+    if wal.exists():
+        assert wal.read_bytes() == wal_before.get(wal, b""), "a read-only reader wrote WAL frames"
+
+
 def test_shared_read_preserves_qualitative_scope_but_redacts_all_structured_magnitudes(tmp_path):
     source, current = tmp_path / "source", tmp_path / "current"
     originals = [_record(source, i, status=status) for i, status in enumerate(
@@ -34,7 +51,8 @@ def test_shared_read_preserves_qualitative_scope_but_redacts_all_structured_magn
     _record(current, 9)
     alias = tmp_path / "alias"
     alias.symlink_to(source, target_is_directory=True)
-    before = {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in source.iterdir()}
+    before = _durable_state(source)
+    wal_before = {p: p.read_bytes() for p in source.iterdir() if p.name.endswith("-wal")}
     view = archive.SharedHistory([source, current, alias], current_store=current).recall()
     assert view["queried_roots"] == [str(source)] and not view["errors"]
     assert len(view["rows"]) == 3
@@ -48,7 +66,8 @@ def test_shared_read_preserves_qualitative_scope_but_redacts_all_structured_magn
         assert not row["comparable_measurement"] and not row["same_epoch"]
         assert row["transfer"] == "unproven_not_local_gain_or_refutation"
         assert all(row[field] is None for field in experiments._MAGNITUDE_FIELDS)
-    assert before == {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in source.iterdir()}
+    assert before == _durable_state(source)
+    _assert_wal_has_no_new_frames(source, wal_before)
     # The optional shared projection did not change the existing owner's recall.
     with experiments.ExperimentStore(source) as store:
         local = store.recall(epoch="original-epoch")

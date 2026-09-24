@@ -205,8 +205,11 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
                 actor.propose, actor.author = propose, author
                 return actor
 
-            def oracle(build, *, op="MUL_MAT", backend, resolved_recipe=None):
-                assert held[-1] is True and backend == "CPU"
+            def oracle(build, *, op="MUL_MAT", backend, resolved_recipe=None,
+                       require_reference=False):
+                # run.py passes `require_reference=not cpu_launch` (37d326ac): the native
+                # ROCm reference-metric gate never applies to a CPU route.
+                assert held[-1] is True and backend == "CPU" and require_reference is False
                 if runtime_only:
                     assert resolved_recipe.template.threads == template.threads + 1
                     assert Path(build) == fixture.startup_anchor
