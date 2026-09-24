@@ -2853,6 +2853,7 @@ def main(argv: list[str] | None = None) -> int:
                 return cpu_screen.RetainedPlanner(screen_confirmation, worker, screen_prepared["launch"])
             ordinary = actors.AgentPlanner(workspace=worker.worktree, backend=planner_backend,
                                            timeout_s=args.actor_timeout_s,
+                                           should_stop=should_stop,
                                            seat=actors.ActorSeat(
                                                bounded=args.actor_seat == "bounded",
                                                fan_out=args.actor_fan_out,
@@ -2873,7 +2874,7 @@ def main(argv: list[str] | None = None) -> int:
                 cpu_screen.RetainedCritic(screen_confirmation)
                 if screen_confirmation else actors.AgentCritic(
                     workspace=worker.worktree, backend=critic_backend,
-                    timeout_s=args.actor_timeout_s)),
+                    timeout_s=args.actor_timeout_s, should_stop=should_stop)),
             build_context=build_context, make_gate=gate_for,
             make_measure=measure_for, record=record_pooled,
             iterations=(args.iterations or None), should_stop=should_stop,

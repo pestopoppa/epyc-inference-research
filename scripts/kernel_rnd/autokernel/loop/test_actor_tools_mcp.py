@@ -390,6 +390,114 @@ class Profiles(unittest.TestCase):
         self.assertIn("no samples for symbol 'nope'", out)
 
 
+# `perf report --sort symbol --dsos libggml-cpu.so.0.16.0` rows as DS41 run 7's real
+# profile prints them (cpu-raw-0316509f..., 2026-09-24; names verbatim).
+Q4K1 = ("void (anonymous namespace)::mul_mat_qX_K_q8_2_X4_T<(anonymous namespace)::"
+        "DequantizerQ4K_AVX2, 1>(int, void const*, unsigned long, DataInfo const&, int)")
+Q4K2 = Q4K1.replace("AVX2, 1>", "AVX2, 2>")
+Q4K3 = Q4K1.replace("AVX2, 1>", "AVX2, 3>")
+GEMM3 = ("void (anonymous namespace)::tinyBLAS_Q0_AVX<block_q8_0, block_q8_0, float>"
+         "::gemm4xN<3>(long, long, long, long)")
+GEMM2 = GEMM3.replace("gemm4xN<3>", "gemm4xN<2>")
+# perf 6.17 pads each `--sort symbol` row with `IPC  [IPC Coverage]` columns, which
+# read `-      -` without branch data (seen verbatim in the 2026-09-24 smoke).
+SYMBOL_REPORT = "# Samples: 114K of event 'cycles:u'\n#\n" + "".join(
+    f"    {pct:.2f}%  [.] {name}{' ' * 45}-      -\n" for pct, name in (
+        (19.28, Q4K1), (16.80, GEMM3), (3.93, Q4K2), (2.60, GEMM2), (2.14, Q4K3),
+        (1.71, "ggml_compute_forward_flash_attn_ext"), (1.20, "ggml_vec_dot_f16")))
+SYMBOLS = [(19.28, Q4K1), (16.80, GEMM3), (3.93, Q4K2), (2.60, GEMM2), (2.14, Q4K3),
+           (1.71, "ggml_compute_forward_flash_attn_ext"), (1.20, "ggml_vec_dot_f16")]
+NO_SAMPLES = subprocess.CompletedProcess(
+    [], 0, stdout="", stderr="Error:\nThe measurement-record.data data has no samples!\n")
+
+
+class SymbolResolution(unittest.TestCase):
+    """DS41-C23: the planner typed `mul_mat_qX_K_q8_2_X4_T<DequantizerQ4K_AVX2, 1>`; perf
+    matched it against the full demangled name, found nothing, and said the 114K-sample
+    profile "has no samples!"."""
+
+    def test_report_rows_drop_perfs_trailing_ipc_columns(self):
+        with mock.patch.object(t.subprocess, "run", return_value=subprocess.CompletedProcess(
+                [], 0, stdout=SYMBOL_REPORT, stderr="")):
+            rows = t._dso_symbols("/x/measurement-record.data", "libggml-cpu.so.0.16.0")
+        self.assertEqual(rows, SYMBOLS)
+
+    def test_the_run7_short_name_resolves_to_the_full_name(self):
+        self.assertEqual(t.resolve_symbol("mul_mat_qX_K_q8_2_X4_T<DequantizerQ4K_AVX2, 1>", SYMBOLS),
+                         ("resolved", Q4K1))
+
+    def test_spacing_and_namespace_do_not_matter(self):
+        for typed in ("(anonymous namespace)::mul_mat_qX_K_q8_2_X4_T<DequantizerQ4K_AVX2,1>",
+                      "mul_mat_qX_K_q8_2_X4_T<(anonymous namespace)::DequantizerQ4K_AVX2, 1>(int, "
+                      "void const*, unsigned long, DataInfo const&, int)"):
+            with self.subTest(typed=typed):
+                self.assertEqual(t.resolve_symbol(typed, SYMBOLS), ("resolved", Q4K1))
+
+    def test_template_instances_are_never_guessed_between(self):
+        kind, found = t.resolve_symbol("mul_mat_qX_K_q8_2_X4_T", SYMBOLS)
+        self.assertEqual(kind, "ambiguous")
+        self.assertEqual([name for _p, name in found], [Q4K1, Q4K2, Q4K3])
+
+    def test_exact_and_plain_c_names_and_misses(self):
+        self.assertEqual(t.resolve_symbol(Q4K1, SYMBOLS), ("exact", Q4K1))
+        self.assertEqual(t.resolve_symbol("ggml_vec_dot_f16", SYMBOLS), ("exact", "ggml_vec_dot_f16"))
+        self.assertEqual(t.resolve_symbol("gemm4xN<3>", SYMBOLS), ("resolved", GEMM3))
+        self.assertEqual(t.resolve_symbol("not_a_symbol", SYMBOLS), ("none", None))
+
+    def _profiles(self):
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        pdir = Path(td.name) / "profiles"
+        pdir.mkdir()
+        (pdir / "measurement-record.data").write_bytes(b"\0" * 2048)
+        return [str(pdir)]
+
+    def test_annotate_resolves_then_annotates_the_full_name(self):
+        dirs = self._profiles()
+        calls = [NO_SAMPLES,
+                 subprocess.CompletedProcess([], 0, stdout=SYMBOL_REPORT, stderr=""),
+                 subprocess.CompletedProcess([], 0, stdout=PERF_ANNOTATE, stderr="")]
+        with mock.patch.object(t.subprocess, "run", side_effect=calls) as run:
+            out = t.symbol_annotate(dirs, "measurement-record.data",
+                                    "mul_mat_qX_K_q8_2_X4_T<DequantizerQ4K_AVX2, 1>",
+                                    "libggml-cpu.so.0.16.0")
+        report_argv = run.call_args_list[1][0][0]
+        self.assertEqual(report_argv[report_argv.index("--sort") + 1], "symbol")
+        self.assertEqual(report_argv[report_argv.index("--dsos") + 1], "libggml-cpu.so.0.16.0")
+        self.assertEqual(run.call_args_list[2][0][0][-1], Q4K1)
+        self.assertIn("resolved", out)
+        self.assertIn("30.00", out)
+        self.assertNotIn("no samples", out)
+
+    def test_an_exact_name_costs_one_perf_call(self):
+        dirs = self._profiles()
+        with mock.patch.object(t.subprocess, "run", return_value=subprocess.CompletedProcess(
+                [], 0, stdout=PERF_ANNOTATE, stderr="")) as run:
+            t.symbol_annotate(dirs, "measurement-record.data", Q4K1, "libggml-cpu.so.0.16.0")
+        self.assertEqual(run.call_count, 1)
+
+    def test_ambiguous_returns_the_candidates_and_does_not_annotate(self):
+        dirs = self._profiles()
+        calls = [NO_SAMPLES, subprocess.CompletedProcess([], 0, stdout=SYMBOL_REPORT, stderr="")]
+        with mock.patch.object(t.subprocess, "run", side_effect=calls) as run:
+            out = t.symbol_annotate(dirs, "measurement-record.data", "mul_mat_qX_K_q8_2_X4_T",
+                                    "libggml-cpu.so.0.16.0")
+        self.assertEqual(run.call_count, 2)
+        self.assertIn("matches 3 sampled symbols", out)
+        for name in (Q4K1, Q4K2, Q4K3):
+            self.assertIn(name, out)
+        self.assertIn("19.28%", out)
+
+    def test_a_real_miss_says_so_after_checking_the_symbol_list(self):
+        dirs = self._profiles()
+        calls = [NO_SAMPLES, subprocess.CompletedProcess([], 0, stdout=SYMBOL_REPORT, stderr="")]
+        with mock.patch.object(t.subprocess, "run", side_effect=calls):
+            out = t.symbol_annotate(dirs, "measurement-record.data", "not_a_symbol",
+                                    "libggml-cpu.so.0.16.0")
+        self.assertIn("no samples for symbol 'not_a_symbol'", out)
+        self.assertIn("no sampled symbol of that dso matches", out)
+
+
 class ServerEntry(unittest.TestCase):
 
     def test_args_accept_repeated_profiles(self):

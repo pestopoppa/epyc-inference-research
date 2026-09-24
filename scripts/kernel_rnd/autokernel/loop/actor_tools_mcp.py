@@ -29,7 +29,7 @@ import shutil
 import subprocess
 import sys
 import time
-from typing import Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Iterable, List, Optional, Sequence, Tuple
 
 # ---------------------------------------------------------------------------
 # Caps. The model sees these numbers in tool descriptions and truncation notices.
@@ -718,6 +718,100 @@ def profile_top(profile_dirs: Sequence[str], profile: Optional[str] = None,
 
 
 _RX_ANN_PCT = re.compile(r"^\s*(\d+\.\d+)(?:\s+\d+\.\d+)*\s+:")
+_RX_SYMBOL_ROW = re.compile(r"^\s*(\d+\.\d+)%\s+\[.\]\s+(.*\S)\s*$")
+#: How far down the DSO's symbol list a short name is resolved, and how many
+#: candidates an ambiguous name lists.
+RESOLVE_PERCENT_LIMIT = "0.01"
+RESOLVE_MAX_CANDIDATES = 15
+_ANON_NS = "(anonymous namespace)::"
+
+
+def _drop_args(name: str) -> str:
+    """`void f<A, 1>(int, long)` -> `void f<A, 1>`: cut the trailing argument list."""
+    name = name.strip()
+    if not name.endswith(")"):
+        return name
+    depth = 0
+    for i in range(len(name) - 1, -1, -1):
+        if name[i] == ")":
+            depth += 1
+        elif name[i] == "(":
+            depth -= 1
+            if depth == 0:
+                return name[:i].rstrip()
+    return name
+
+
+def _symbol_core(name: str) -> str:
+    """The comparable core of a demangled name: no `(anonymous namespace)::`, no
+    argument list, no return type, no whitespace. `void (anonymous namespace)::
+    mul_mat_qX_K_q8_2_X4_T<(anonymous namespace)::DequantizerQ4K_AVX2, 1>(int, ...)`
+    and the planner's `mul_mat_qX_K_q8_2_X4_T<DequantizerQ4K_AVX2, 1>` share one."""
+    bare = _drop_args(name.replace(_ANON_NS, ""))
+    depth, cut = 0, 0
+    for i, ch in enumerate(bare):          # last depth-0 space ends the return type
+        if ch in "<(":
+            depth += 1
+        elif ch in ">)":
+            depth -= 1
+        elif ch == " " and depth == 0:
+            cut = i + 1
+    return re.sub(r"\s+", "", bare[cut:])
+
+
+def _dso_symbols(real: str, dso: str) -> List[Tuple[float, str]]:
+    """(overhead %, full demangled name) for every sampled symbol of `dso`."""
+    cmd = ["perf", "report", "--stdio", "--no-children", "--force", "-i", real,
+           "--percent-limit", RESOLVE_PERCENT_LIMIT, "--sort", "symbol", "--dsos", dso]
+    _rc, stdout, _stderr = _run_perf(cmd)
+    rows = []
+    for ln in stdout.splitlines():
+        m = _RX_SYMBOL_ROW.match(ln)
+        if m:
+            # perf 6.17 appends `IPC  [IPC Coverage]` columns to a `--sort symbol` row
+            # (`...DataInfo const&, int)          -      -` on the DS41 profile, smoke
+            # 2026-09-24). A demangled name never holds two consecutive spaces, so the
+            # name ends at the first run of them.
+            rows.append((float(m.group(1)), re.split(r"\s{2,}", m.group(2))[0]))
+    return rows
+
+
+def resolve_symbol(requested: str, symbols: Sequence[Tuple[float, str]]) -> Tuple[str, Any]:
+    """Map the name an agent typed to the profile's own full demangled name.
+
+    Returns ("exact", name) | ("resolved", name) | ("ambiguous", [(pct, name), ...])
+    | ("none", None). Order: exact full name; then one symbol whose core equals the
+    request's core; then one symbol whose whitespace-free, namespace-free name contains
+    the request's. More than one match at the first level that has any is ambiguous
+    -- never guess between template instances (`<Q4K, 1>` vs `<Q4K, 2>` are different
+    code)."""
+    names = [name for _pct, name in symbols]
+    if requested in names:
+        return "exact", requested
+    core = _symbol_core(requested)
+    same_core = [(pct, name) for pct, name in symbols if _symbol_core(name) == core]
+    if len(same_core) == 1:
+        return "resolved", same_core[0][1]
+    if len(same_core) > 1:
+        return "ambiguous", same_core
+    needle = re.sub(r"\s+", "", requested.replace(_ANON_NS, ""))
+    contains = [(pct, name) for pct, name in symbols
+                if needle and needle in re.sub(r"\s+", "", name.replace(_ANON_NS, ""))]
+    if len(contains) == 1:
+        return "resolved", contains[0][1]
+    if contains:
+        return "ambiguous", contains
+    return "none", None
+
+
+def _annotate_once(real: str, dso: str, symbol: str) -> Tuple[int, str, str, List[str], list]:
+    cmd = ["perf", "annotate", "--stdio", "--stdio-color", "never", "--force", "-i", real,
+           "--dsos", dso, symbol]
+    rc, stdout, stderr = _run_perf(cmd)
+    lines = stdout.splitlines()
+    pct_idx = [(i, float(m.group(1))) for i, ln in enumerate(lines)
+               for m in [_RX_ANN_PCT.match(ln)] if m]
+    return rc, stdout, stderr, lines, pct_idx
 
 
 def symbol_annotate(profile_dirs: Sequence[str], profile: str, symbol: str, dso: str,
@@ -729,17 +823,32 @@ def symbol_annotate(profile_dirs: Sequence[str], profile: str, symbol: str, dso:
     notes: List[str] = []
     ml = _clamp(max_lines, 1, ANNOTATE_MAX_LINES, "max_lines", notes)
     real = resolve_profile(profile_dirs, profile)
-    cmd = ["perf", "annotate", "--stdio", "--stdio-color", "never", "--force", "-i", real,
-           "--dsos", dso, symbol]
-    rc, stdout, stderr = _run_perf(cmd)
-    lines = stdout.splitlines()
-    pct_idx = [(i, float(m.group(1))) for i, ln in enumerate(lines)
-               for m in [_RX_ANN_PCT.match(ln)] if m]
+    rc, stdout, stderr, lines, pct_idx = _annotate_once(real, dso, symbol)
+    if (_no_samples(stdout, stderr) or not pct_idx) and not (
+            rc != 0 and not _no_samples(stdout, stderr) and stderr.strip()):
+        # perf matches the symbol against the FULL demangled name and reports a filter
+        # that matched nothing as "has no samples!" -- DS41 run 7's planner read a
+        # 114K-sample profile as empty that way (DS41-C23). Resolve the typed name
+        # against the DSO's own symbol list before concluding anything.
+        kind, found = resolve_symbol(symbol, _dso_symbols(real, dso))
+        if kind == "ambiguous":
+            out = [f"symbol {symbol!r} matches {len(found)} sampled symbols in dso {dso!r} "
+                   f"({os.path.basename(real)}); pass one of these exactly:"]
+            out += [f"  {pct:6.2f}%  {_cut(name, ANNOTATE_ROW_CHARS)}"
+                    for pct, name in found[:RESOLVE_MAX_CANDIDATES]]
+            if len(found) > RESOLVE_MAX_CANDIDATES:
+                out.append(f"[truncated: {len(found) - RESOLVE_MAX_CANDIDATES} more]")
+            return "\n".join(out)
+        if kind == "resolved":
+            notes.append(f"resolved {symbol!r} -> {found!r} (the profile's full name)")
+            symbol = found
+            rc, stdout, stderr, lines, pct_idx = _annotate_once(real, dso, symbol)
     if _no_samples(stdout, stderr) or not pct_idx:
         if rc != 0 and not _no_samples(stdout, stderr) and stderr.strip():
             return f"perf annotate failed (exit {rc}): {_cut(stderr.strip(), 400)}"
         return (f"no samples for symbol {symbol!r} in dso {dso!r} ({os.path.basename(real)}); "
-                f"check the exact name with profile_top(profile, dso=...)")
+                f"no sampled symbol of that dso matches it either -- list them with "
+                f"profile_top(profile, dso=...)")
     headers = [ln for ln in lines if "Percent |" in ln or "Source code & Disassembly" in ln]
     hot = sorted(pct_idx, key=lambda t: (-t[1], t[0]))
     keep = {i for i, p in hot[:ml] if p > 0}
@@ -834,7 +943,9 @@ def build_server(root: str, profile_dirs: Sequence[str]):
     def symbol_annotate(profile: str, symbol: str, dso: str,
                         max_lines: int = ANNOTATE_DEFAULT_LINES) -> str:
         """perf annotate one symbol; keeps only the hottest max_lines lines (cap 200) in
-        source/asm order. Take symbol and dso exactly from profile_top."""
+        source/asm order. A short or partial name (no return type, no argument list, no
+        `(anonymous namespace)::`) is resolved against the dso's sampled symbols; an
+        ambiguous one returns the candidates to choose from."""
         return _safe(globals()["symbol_annotate"], pdirs, profile, symbol, dso, max_lines)
 
     return server
