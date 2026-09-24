@@ -110,6 +110,29 @@ scripts/benchmark/bench_canonical.sh -m /path/to/model.gguf --dry-run
 scripts/benchmark/bench_canonical.sh -m /path/to/model.gguf -n 512 -r 2
 ```
 
+---
+
+## Running Tests
+
+Install the test environment and run the evaluation scorer tests:
+
+```bash
+# Install test dependencies (pinned to pytest==9.1.1)
+pip install -e ".[test]"
+
+# Run all eval-scorer tests
+python3 -m pytest scripts/benchmark/test_score_with_claude.py -v
+python3 -m pytest scripts/benchmark/test_debug_scorer.py -v
+python3 -m pytest scripts/benchmark/test_niah_scorer.py -v
+
+# Run all tests in the benchmark directory
+python3 -m pytest scripts/benchmark/test_*.py -v
+```
+
+The test environment is **not included in the base dependencies** — it is pinned as an optional extra (`[test]`) in `pyproject.toml` to keep the standard environment lean. Tests use pytest fixtures (`monkeypatch`, `tmp_path`, `capsys`) and run without external network or LLM calls.
+
+---
+
 Seeding / routing evaluation lives in **epyc-orchestrator**, not here — it was moved out of this repo with the monorepo split:
 
 ```bash
