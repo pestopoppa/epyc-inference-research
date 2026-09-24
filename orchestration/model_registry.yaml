@@ -912,6 +912,10 @@ server_mode:
     # and must equal the value of the role's primary (endpoint) instance, which is the
     # full one on :8070. The guard enforces that equality.
     slots: 4
+    # llama-server --cache-ram (MiB), operator-approved 2026-09-24 (default 8192). ROLE-LEVEL: the
+    # launcher has no per-instance serving flags, so the :8080/:8180 halves get it too (host RAM
+    # cap, allocated on demand; 3 x 32 GiB worst case against ~840 GiB available).
+    cache_ram: 32768
     serving_shape:
       n_ctx: 262144
       slots_by_shape: {full: 4, half: 1}   # 262144/4 = 65536 per slot on the full,
@@ -1327,9 +1331,20 @@ server_mode:
     url: http://localhost:8083
     port: 8083
     # 2026-08-02: was 2. Single GPU_HOST_LANE instance, so no per-shape split — the
-    # flat scalar IS the declaration and `slots_by_shape` is absent. KV is UNIFIED on
-    # this server, so slot count does not scale KV; -c does. 65536/2 = 32768 per slot.
-    slots: 2
+    # flat scalar IS the declaration and `slots_by_shape` is absent. Total attention KV
+    # cells = -c whether or not the pool is unified, so slot count does not scale the
+    # ATTENTION KV; it DOES scale the GDN recurrent state (see serving_shape). Per-request
+    # context is -c (unified, serving_shape.kv_unified) — NOT -c/slots.
+    # 2026-09-24 (GPU-residency change set, operator-directed): 2 -> 4. Affordable only
+    # because whisper leaves the card in the same change set and draft depth drops 8 -> 4
+    # (the GDN recurrent state is 156,893,184 B x np x (1+draft_max)). Load-only footprint
+    # np4/196608/kvu/q8-draft/d4 = 40,522 MiB (epyc-inference-research
+    # artifacts/np_context_kvu_study_20260924/q38_27b_q8_loadonly/loadonly.txt).
+    slots: 4
+    # llama-server --cache-ram (MiB): host-RAM prompt cache. Under kv_unified idle slots are
+    # saved here AND cleared from VRAM when a new task starts (server-context.cpp:2469-2482),
+    # so this is where warm prefixes survive. Default is 8192. Operator-approved 2026-09-24.
+    cache_ram: 65536
     serving_shape:
       # ── THE GPU CAP, RECOMPUTED 2026-09-22 ON A CORRECTED KV RATE ───────────────
       # ⚠ THE OLD BANNER'S ARITHMETIC WAS WRONG IN ITS INPUT, NOT IN ITS METHOD, AND
@@ -1401,14 +1416,47 @@ server_mode:
       # by the server's own buffer report (model 25972.29 + 1288.28 MiB = 26.62 GiB, plus
       # ~0.39 GiB compute).
       #
-      # ⚠ KV IS UNIFIED ON THIS SERVER, so slots do not scale KV; -c does. Dropping to
-      # slots: 1 buys per-slot context, not headroom, and would serialize all three roles.
+      # ✗ CORRECTED 2026-09-24 (stack-change-kvu). This banner used to read "KV IS UNIFIED
+      # ON THIS SERVER". IT NEVER WAS: every production launch logged
+      # `kv_unified = 'false'` (logs/llama-server-8083.log:21283, :21620). llama-server
+      # turns the unified pool on by DEFAULT only when -np is left on auto
+      # (llama.cpp tools/server/server.cpp:145-150; common/arg.cpp:1216 sets the server's
+      # n_parallel = -1; common/common.h:580 kv_unified = false), and the launcher ALWAYS
+      # passes -np from `slots`. The "unified" readings this banner leaned on were bench
+      # launches that either omitted -np (2026-07-31, 2026-09-17: n_slots = 4 = auto) or
+      # passed --kv-unified by hand (2026-08-20, q38_vram_shape_20260820/server_command.txt).
+      # The fact is now DECLARED below (`kv_unified: true`) and emitted EXPLICITLY as
+      # --kv-unified by the launcher, so it can never again depend on a default.
       #
       # 2026-09-22: RAISED 65536 -> 196608 to carry ingest_long_context (operator ruling
-      # C2). PER-SLOT CONTEXT IS 196608/2 = 98304. ingest_long_context declared 262144 on
-      # its retiring Qwen3-Next-80B process, so for THAT role this is a REDUCTION, not an
-      # increase — see server_mode.ingest_long_context and the companion .md, C2.
+      # C2). 2026-09-24: with kv_unified, ONE request may use all 196608 tokens; the 4
+      # concurrent slots SHARE the pool (none is capped at 196608/4, and together they can
+      # exhaust it — llama-server then purges idle slots, halves the
+      # batch, and finally fails BOTH in-flight requests with "Context size has been
+      # exceeded.", tools/server/server-context.cpp:3759-3799 + :2949-2951).
+      # ingest_long_context declared 262144 on its retired Qwen3-Next-80B process, so for
+      # THAT role 196608 is still a reduction — see server_mode.ingest_long_context, C2.
       n_ctx: 196608
+      # ── UNIFIED KV POOL — DECLARED 2026-09-24 (stack-change-kvu, operator-signed) ──
+      # true -> launcher emits `--kv-unified`; false would emit `--no-kv-unified`;
+      # absent -> nothing (kernel default = split whenever -np is explicit).
+      # Effect on THIS process: n_ctx_seq 98304 -> 196608 for both the target AND the MTP
+      # draft context (the draft inherits kv_unified: common/speculative.cpp:2808 copies the
+      # base params, :2867 -> common/common.cpp:1692 forwards the flag). KV bytes are UNCHANGED
+      # (same 196608 cells); the price is the KQ mask, which is sized
+      # [n_kv, n_ubatch/n_stream, 1, n_stream] (src/llama-graph.cpp:30-38) and so doubles
+      # from 384 to 768 MiB F16 in EACH of the two compute graphs: +0.75 GiB VRAM, derived
+      # from source; confirm from the -lv 4 sched_reserve lines at bring-up.
+      kv_unified: true
+      # ── MTP DRAFT-CONTEXT KV TYPES: DELIBERATELY UNDECLARED (draft KV stays F16) ──
+      # `draft_kv_quant: {k: q8_0, v: q8_0}` would emit -ctkd/-ctvd q8_0 (the launcher supports it).
+      # Speed-neutral on the 27B (np_context_kvu_study_20260924/q38_27b_q8_h, unified_o2 arms) but
+      # NOT a VRAM saving: KV drops 768 -> 408 MiB while a q8_0 draft KV makes the draft graph
+      # reserve the flash-attention F16 conversion scratch (196608 x 1024 x 2 B x K+V = 768 MiB;
+      # ggml-cuda fattn-common.cuh:68-71, sized into the FA tensor at ggml-cuda.cu:917-918): net
+      # ~ +0.40 GiB, DERIVED — the same model reproduces the load-only table (q38_27b_q8_loadonly)
+      # to within 29 MiB. At np 4 that 0.40 GiB is the difference between passing and failing the
+      # 2.0 GiB first-execution headroom gate (src/scheduling/device_model.py:97). Package N-A.
       kv_quant: {k: q8_0, v: q8_0}   # RECORDED, NOT CHANGED: the live :8083 process was
                                      # already running -ctk q8_0 -ctv q8_0 (verified from
                                      # /proc/2019908/cmdline, 2026-08-02). Declared only in
@@ -1423,7 +1471,25 @@ server_mode:
                                      # 3.2x the 35B's corrected 20.0 — but that density no
                                      # longer caps this process anywhere near where the
                                      # block_count form said it did.
-      vram_non_kv_gib: 27.33         # 29.36 GiB resident (/sys/class/kfd, pid 2019908, 2026-08-02)
+      # ── 2026-09-24 (GPU-residency change set): 27.33 -> 32.80. UNVALIDATED until bring-up. ──
+      # 27.33 was measured on a DIFFERENT artifact (Qwen3.6-27B-MTP, -c 16384, 2026-08-02) and
+      # ignored the GDN recurrent state, the MTP draft KV and the second compute graph (SSU-F3,
+      # /workspace/artifacts/operator/vram-gap-27b-20260923.md). This is a LOAD-TIME figure, the
+      # convention the capacity gate expects: vram_fit adds its own 2.0 GiB first-execution
+      # headroom on top (src/scheduling/device_model.py:81-97), so runtime growth is NOT added here.
+      # Shape: np 4, n_ctx 196608, kv_unified, draft KV F16, --spec-draft-n-max 4, -ub 2048.
+      #   load-only footprint, v10 binary, np4/196608/kvu/draft-q8/d4, MEASURED = 40,522 MiB
+      #     (epyc-inference-research artifacts/np_context_kvu_study_20260924/q38_27b_q8_loadonly)
+      #   - draft KV q8_0 -> F16 (+360) and no draft FA conversion scratch (-768), DERIVED = -408
+      #   = 40,114 MiB = 39.17 GiB load-time;  - attention KV 6.375  = 32.80 GiB
+      #   Re-read at bring-up from the -lv 4 buffer lines + KFD at load, and replace this line.
+      #   (Measured first-execution growth on the live split process was +0.55 GiB,
+      #   KFD 39,584.7 vs its load-only twin 39,018 MiB — inside the gate's 2.0 GiB.)
+      # ⚠ A SCALAR VALID AT ONE SHAPE ONLY. Each slot adds 0.73 GiB of GDN state at draft_max 4
+      # (1.315 at 8); each unit of draft depth adds 0.58 GiB at 4 slots.
+      vram_non_kv_gib: 32.80
+      # superseded provenance, kept for audit:
+      # (was) vram_non_kv_gib: 27.33 # 29.36 GiB resident (/sys/class/kfd, pid 2019908, 2026-08-02)
                                      # minus the 2.03 GiB of q8_0 KV it was then holding at -c 16384.
                                      # GGUF on disk is 27.05 GiB, so ~0.28 GiB is graph buffers.
                                      # NOT `vram_gib: 36.70` below — that figure is KV-INCLUSIVE.
@@ -1555,7 +1621,12 @@ server_mode:
       # 0db32c06e / build 10125, one flag varied): plain 27.78 / n2 39.77 / n3 46.61 / n4 51.03 /
       # n6 55.22 / n8 55.46 / n12 51.14 t/s; draft acceptance 0.842 -> 0.482 across depth 2->8.
       # Curve turns over: optimum 6-8 (n6 vs n8 inside noise), 8 chosen. MTP is worth 2.00x over
-      # plain at n-max 8. Evidence: epyc-inference-research/artifacts/architect-bench-gpu-20260814/
+      # plain at n-max 8.
+      # 2026-09-24: 8 -> 4 AT THE PRODUCTION SHAPE (np 2-4, unified KV). The 08-20 sweep was np=1.
+      # At np 2/4 depth 4 is speed-equal-or-better than 8 (acceptance 0.63-0.66 vs 0.40-0.46) and
+      # cuts the GDN rollback ring from 9 to 5 rows per slot (-1.0 GiB at np 2 alone):
+      # epyc-inference-research artifacts/np_context_kvu_study_20260924/q38_27b_q8_depth/.
+      # Olympiad workload only — confirm on production traffic (package M-3). Evidence: epyc-inference-research/artifacts/architect-bench-gpu-20260814/
       # mtp_nmax_sweep_20260819/ and mtp_ab_20260819/.
       # 2026-09-15 (NIB2-73a): that evidence was UNTRACKED — it resolved in one clone and read
       # MISSING in every worktree. The distilled per-arm results plus the provenance chain are now
@@ -1564,7 +1635,7 @@ server_mode:
       # only at the origin path. What was dropped and why:
       # artifacts/architect-bench-gpu-20260814/README.md.
       spec_type: draft-mtp
-      draft_max: 8
+      draft_max: 4   # 2026-09-24: 8 -> 4 (production shape; see server_mode.architect_general)
       draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
       lookup: false
     # 2026-07-31 GPU CUTOVER: no NUMA fanout. numa_instances/numa_ports are RETAINED as explicit
@@ -1617,6 +1688,9 @@ server_mode:
     # 2026-08-02: was 2. Compat scalar for `serving_shape.slots_by_shape`; the role has
     # exactly one instance and it is the full, so the two agree trivially.
     slots: 1
+    # llama-server --cache-ram (MiB), operator-approved range 16384-32768 (2026-09-24); upper end
+    # taken. Default 8192.
+    cache_ram: 32768
     serving_shape:
       n_ctx: 262144
       # ONE INSTANCE, ONE CLASS. `slots_by_shape` is written out rather than left to the
@@ -1834,7 +1908,8 @@ server_mode:
   # ⚠ WHAT THIS ROLE GIVES UP, AND ONE ITEM IS LARGER THAN THE OPERATOR'S PREMISE:
   #  (a) ★ CONTEXT. THIS IS A REDUCTION, NOT AN INCREASE. The role declared n_ctx 262144 at
   #      one slot per instance, i.e. 262144 PER SLOT. :8083 gives 196608 total over 2 slots
-  #      = 98304 PER SLOT — a 2.67x cut. The ruling's premise ("it now has a much larger
+  #      = 98304 PER SLOT — a 2.67x cut. (2026-09-24: :8083 now runs a UNIFIED pool, so a
+  #      lone request gets all 196608 — a 1.33x cut — but two concurrent requests share it.) The ruling's premise ("it now has a much larger
   #      context allowance") is true of the 27B relative to its OWN former 65536 cap, which
   #      this change triples; it is not true relative to what ingest_long_context had.
   #      ⚠ WHY NOT 262144, RESTATED 2026-09-22 ON THE CORRECTED KV RATE: an earlier draft
@@ -1869,10 +1944,10 @@ server_mode:
   ingest_long_context:
     url: http://localhost:8083
     port: 8083
-    slots: 2                       # compat scalar; inherited from architect_general's process
+    slots: 4                       # compat scalar; inherited from architect_general's process (2026-09-24: 2 -> 4)
     # NO `serving_shape` BLOCK — DELIBERATE. An alias launches no server, so it HAS no serving
     # shape of its own (same reasoning as coder_escalation and server_mode.worker). The served
-    # shape is server_mode.architect_general.serving_shape: n_ctx 196608, 2 slots, q8_0/q8_0.
+    # shape is server_mode.architect_general.serving_shape: n_ctx 196608 unified, 4 slots, q8_0/q8_0.
     kv_quant: {k: q8_0, v: q8_0}   # flat back-compat key (alias rows carry the flat form)
     alias_of: architect_general    # documentation; the load-bearing binding is
                                    # server_mode.architect_general.shared_with
@@ -1900,7 +1975,8 @@ server_mode:
       three dedicated CPU instances on :8085/:8185/:8285."
     alias_note: "⚠ THE ROLE'S DEFINING PROPERTY DOES NOT FULLY SURVIVE THE SWAP. The 27B's
       ctx_max is 262144, so the model can carry the role's declared context in principle, but
-      the DEPLOYED per-slot context on :8083 is 98304 (196608 over 2 slots). Raising it is
+      the DEPLOYED context on :8083 is a UNIFIED 196608-token pool (2026-09-24 -kvu): a lone
+      request may use all of it, two concurrent requests share it. Raising it is
       an OPERATOR call, not an arithmetic impossibility: on the 2026-09-22 corrected KV rate
       -c 262144 would fit with ~1.0 GiB of margin instead of 3.15 — see
       server_mode.architect_general.serving_shape. 196608 is the allocation the operator
@@ -1933,7 +2009,7 @@ server_mode:
       inherits_spec_from: architect_general
       spec_type: draft-mtp        # the INHERITED recipe, stated so a reader of this row alone
                                   # does not conclude the role serves without speculation
-      draft_max: 8
+      draft_max: 4   # 2026-09-24: 8 -> 4 (production shape; see server_mode.architect_general)
       lookup: false
     # ⚠ THROUGHPUT IS UNMEASURED FOR THIS ROLE ON THIS MODEL AND ON THIS DEVICE. 14.4-20.8
     # was Qwen3-Next-80B on CPU at ~12K context and is gone with the model. The 27B's own
@@ -2001,16 +2077,28 @@ server_mode:
     sha256: 1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69
     size_gb: 1.51    # 1,624,555,275 B, f16
     quant: f16
-    device: ROCm0
-    vram_gib: 2.06   # measured 2026-09-22, live /sys/class/kfd .../vram_57300 during serving, KV-free
+    # ── 2026-09-24 GPU-residency change set: MOVED TO CPU (operator-directed) ──
+    # Same frozen binary (production-speech-v1), run with `-ng` + HIP_VISIBLE_DEVICES=-1 and
+    # pinned by aux_services.whisper.cpuset in the orchestrator launch_manifest. Frees ~2.2 GB of
+    # MI210 VRAM for architect_general's 4 slots. COST, measured
+    # (epyc-inference-research artifacts/speech_cpu_realtime_20260924/README.md): RTF 0.12-0.20 at
+    # 24-32 threads, but ~2 s per utterance of ANY length (30 s window padding) vs 0.12 s on the
+    # GPU; and whisper HANGS on some core layouts, so only a MEASURED-SAFE (threads, cpuset) pair
+    # may be declared. Declared layout (operator decision ~18:35Z): 24 threads @ cores 0-23, with TTS
+    # 16 @ 24-39 — healthy 3/3 solo and real-time concurrently with TTS, frontdoor idle (STT RTF
+    # 0.20/0.24). ⚠ A generating CPU frontdoor collapses it (RTF 1.5-2.9): voice turns must reason on
+    # the GPU (architect_general), which is the voice-pipeline requirement.
+    device: cpu
+    vram_gib: 0      # was 2.06 (measured 2026-09-22, KFD during serving) while on ROCm0
                      # (this model has no `-c`-shaped KV growth axis — see MRG-1 Step 1 note above)
-    memory_gb: 0     # host RAM: GPU-resident, no meaningful host footprint beyond the aux process
+    memory_gb: 2     # host RAM on CPU: 1.51 GB f16 weights + buffers (was 0 while GPU-resident)
     tier: hot
     languages: [en, it, de, fr]
     acceleration:
       type: none    # no speculative decoding; MRG-1 R1-CHK carve-out for `type: none` roles applies
     throughput: null   # no tok/s-shaped metric; see WER/latency figures in `description` and `notes`
-    latency_target_ms: 124   # measured median wall-clock (multimodal-pipeline.md S-10, 2026-07-31)
+    latency_target_ms: 2000  # CPU: ~1.97 s for a 3.5 s utterance at 24 threads (speech_cpu_realtime_20260924).
+                             # Was 124 = GPU median wall-clock (multimodal-pipeline.md S-10, 2026-07-31).
     launch_script: scripts/voice/start_whisper_server.sh   # RETIRED launcher, see `retired_cpu_path`
     managed_by: orchestrator_stack    # aux_services.whisper in epyc-orchestrator orchestration/launch_manifest.yaml
     health_path: /health
@@ -2093,16 +2181,27 @@ server_mode:
     model_type: qwentts.cpp
     size_gb: 1.196   # 1,283,766,112 B combined talker + codec, Q8_0
     quant: Q8_0
-    device: ROCm0
-    vram_gib: 2.62   # measured 2026-09-22, live /sys/class/kfd .../vram_57300 during serving, KV-free
+    # ── 2026-09-24 GPU-residency change set: MOVED TO CPU (operator decision ~18:35Z) ──
+    # Same frozen production-speech-v1 binary with GGML_BACKEND=CPU + HIP_VISIBLE_DEVICES=-1, pinned
+    # 16 threads @ cores 24-39 (aux_services.tts.cpuset). The binary has NO thread flag
+    # (src/backend.h: hardware_concurrency()/2, affinity-blind = 96 threads here), so the thread
+    # count is set by an out-of-tree LD_PRELOAD shim (epyc-orchestrator scripts/voice/nprocs_shim.c,
+    # SHIM_NPROCS=32 -> 16 threads). Measured concurrent with STT 24@0-23, frontdoor idle: RTF
+    # 0.59-0.61, first packet 91 ms (sentence) / 311 ms (paragraph); GPU was RTF 0.169
+    # (epyc-inference-research artifacts/speech_cpu_realtime_20260924/README.md). Resolves the
+    # declared-but-unfittable GPU service (it could not start on the card).
+    # ⚠ A generating CPU frontdoor collapses it (RTF 7.8-9.4): voice turns must reason on the GPU.
+    device: cpu
+    vram_gib: 0      # was 2.62 (measured 2026-09-22, KFD during serving) while on ROCm0
                      # (this model has no `-c`-shaped KV growth axis — see MRG-1 Step 1 note above)
-    memory_gb: 0     # host RAM: GPU-resident, no meaningful host footprint beyond the aux process
+    memory_gb: 2     # host RAM on CPU: 0.92 GB weights + ~0.9 GB KV (was 0 while GPU-resident)
     tier: hot
     languages: [en, zh, ja, ko, de, fr, ru, pt, es, it]
     acceleration:
       type: none    # no speculative decoding; MRG-1 R1-CHK carve-out for `type: none` roles applies
     throughput: null   # no tok/s-shaped metric; see rtf/wer figures in `description`
-    latency_target_ms: 38   # TTFA, GPU, measured (multimodal-pipeline.md S-6, 2026-07-31)
+    latency_target_ms: 91   # first packet, CPU 16@24-39, sentence, concurrent with STT (2026-09-24).
+                            # Was 38 = TTFA on the GPU (multimodal-pipeline.md S-6, 2026-07-31).
     launch_script: null   # AUX_SERVICES `tts` in epyc-orchestrator launch_manifest.yaml; argv/cwd/env
                           # are launch data, no standalone shell launcher
     managed_by: orchestrator_stack    # start_tts() in orchestrator_stack.py (wired 2026-08-02, cba55d49)
@@ -2837,8 +2936,8 @@ roles:
                                     # (Corrected 2026-09-22 — was 260.0 KiB/token, 4.06x high.)
       attention_layers: 64
       mtp_capable: true             # blk.64.nextn.* embedded in the base (GGUF-header verified)
-      ctx_max: 262144               # MODEL capability. DEPLOYED PER-SLOT CONTEXT IS 98304
-                                    # (196608 over 2 slots on :8083) — the operator's 2026-09-22
+      ctx_max: 262144               # MODEL capability. DEPLOYED: a UNIFIED 196608-token pool
+                                    # on :8083 (2026-09-24 -kvu; was 98304/slot split) — the operator's 2026-09-22
                                     # allocation, not the card's limit. See
                                     # server_mode.architect_general.serving_shape.
       shared_gguf_with: architect_general
@@ -2859,7 +2958,7 @@ roles:
       type: none
       inherits_spec_from: architect_general
       spec_type: draft-mtp
-      draft_max: 8
+      draft_max: 4   # 2026-09-24: 8 -> 4 (production shape; see server_mode.architect_general)
     # ⚠ THE `constraints.forbid` BLOCK IS DELETED, AND THAT IS THE POINT OF THE SWAP.
     # It read `forbid: [speculative_decoding, eagle]`, reason "SSM incompatible with external
     # draft (state can't fork)". Every word was true of Qwen3-Next-80B and none of it is true
@@ -2984,11 +3083,14 @@ roles:
       # CANONICAL: see top-level `speculative_decoding_policy`. MTP self-draft ALONE.
       spec_type: draft-mtp
       draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf  # MTP self-draft = same file
-      draft_max: 8                                # MEASURED optimum for THIS artifact (Qwen3.8-27B,
+      draft_max: 4                                # 2026-09-24: 8 -> 4. 8 was the np=1 optimum (2026-08-20
+                                                  # sweep); at the np 2-4 production shape depth 4 is
+                                                  # equal-or-faster (np_context_kvu_study_20260924).
+                                                  # Was: MEASURED optimum for THIS artifact (Qwen3.8-27B,
                                                   # 2026-08-20 sweep; see the policy block above),
                                                   # not inherited — L8850 warns depth is per-model.
                                                   # Qwen3.6-27B-MTP-Q8_0's optimum was 4.
-      k: 8                                         # alias for draft_max (RegistryLoader)
+      k: 4                                         # alias for draft_max (RegistryLoader); 2026-09-24: 8 -> 4
       p_split: 0                                  # linear only — tree harmful on hybrid (27B is also hybrid)
       lookup: false                               # DISABLED: segfaults on Qwen3.5/3.6 hybrids (2026-03-24)
       notes: >
@@ -11231,6 +11333,8 @@ roles:
         device: MI210 (ROCm0)
         spec_type: draft-mtp
         spec_draft_n_max: 8       # sweep: n4 51.03 / n6 55.22 / n8 55.46 / n12 51.14 t/s.
+                                  # ⚠ np=1 recipe. The :8083 PRODUCTION shape (np 4, unified) runs 4
+                                  # since 2026-09-24 — np_context_kvu_study_20260924/q38_27b_q8_depth.
                                   # Curve turns over past 8; n6 vs n8 is inside noise.
         flags: >-
           -np 1 -c 32768 -t 8 -tb 8 -b 2048 -ub 2048 -ctk f16 -ctv f16
