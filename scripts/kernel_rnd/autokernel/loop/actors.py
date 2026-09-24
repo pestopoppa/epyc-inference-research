@@ -34,15 +34,21 @@ appended to the system prompt makes the scoping explicit rather than inferred.
 """
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
+import hashlib
 import json
+import os
 from pathlib import Path
+import re
+import signal
 import subprocess
+import tempfile
 import time
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 from . import integrity
-from .loop import Abstain, ActorTransient, Hypothesis, Review
+from .loop import Abstain, ActorStopped, ActorTransient, Hypothesis, Review
 
 CODEX = "/usr/local/share/npm-global/bin/codex"
 CLAUDE = "/home/node/.local/bin/claude"
@@ -50,6 +56,11 @@ OPENCODE = "/usr/local/share/npm-global/bin/opencode"
 DEFAULT_TIMEOUT_S = 1800
 #: 30s -> 1800s. The streak is what the operator needs to see, not each retry.
 BACKOFF_S = (30, 120, 480, 1800)
+#: How often an in-flight actor call polls the loop's stop predicate, and how long a
+#: TERM'd actor's process group gets before KILL. The stop predicate reads a STOP file
+#: as well as the signal flag, so the poll is deliberately not tighter than a second.
+STOP_POLL_S = 1.0
+STOP_GRACE_S = 15.0
 
 #: Appended to the Claude backend's system prompt. The lane worktree ships the
 #: production freeze overlay; this states the scoping that overlay itself declares.
@@ -72,13 +83,15 @@ _CLAUDE_CRITIC_NOTE = (
 class Backend:
     """One external coding agent: which binary, which model, how much reasoning.
 
-    `argv` is the whole contract -- everything else in this module is backend-blind
-    and only ever sees stdout. Keep the prompt LAST for both CLIs.
+    `argv` plus `stdin_payload` is the whole contract -- everything else in this
+    module is backend-blind and only ever sees stdout. codex/claude take the prompt
+    LAST in argv; opencode takes it on stdin.
     """
     kind: str       # "codex" | "claude" | "opencode"
     model: str      # bare id for codex/claude; "provider/model" for opencode
     effort: str
     binary: str
+    agent: str = ""  # opencode only: `--agent <name>` from the per-run actor config
 
     def argv(self, prompt: str, workspace: Path, *, read_only: bool = False) -> list[str]:
         if self.kind == "codex":
@@ -104,10 +117,23 @@ class Backend:
             # is the worktree. Final message lands on stdout, chrome on stderr, so the
             # JSON parser sees a clean object. No system-prompt flag exists here; the
             # actor prompt already carries the "edit only, do not build" contract.
+            #
+            # The prompt goes on STDIN, never in argv (see `stdin_payload`): opencode
+            # 1.18 re-quotes every positional containing a space --
+            # `G.includes(" ") ? `"${G.replace(/"/g, '\\"')}"` : G` -- so a prompt
+            # passed as an argument reached the model wrapped in quotes with every
+            # inner quote backslash-escaped (2,982 of them in the DS41 2026-09-24
+            # planner prompt, all JSON). Stdin is appended verbatim. It also keeps a
+            # ~100 KB prompt clear of the kernel's 128 KiB per-argument limit.
             return [self.binary, "run", *([] if read_only else ["--auto"]),
                     "--dir", str(workspace),
-                    "-m", self.model, "--variant", self.effort, prompt]
+                    "-m", self.model, "--variant", self.effort,
+                    *(["--agent", self.agent] if self.agent else [])]
         raise ValueError(f"unknown backend kind {self.kind!r}")
+
+    def stdin_payload(self, prompt: str) -> str | None:
+        """What the backend reads on stdin: the prompt for opencode, else nothing."""
+        return prompt if self.kind == "opencode" else None
 
     def describe(self) -> str:
         return f"{self.kind}:{self.model}@{self.effort}"
@@ -141,6 +167,41 @@ PLANNER_DEFAULT = backend_for("gpt-5.6-sol", "high")
 #: the critic side. Raise with --critic-effort high if pass-1 rejections get sloppy.
 CRITIC_DEFAULT = backend_for("claude-fable-5-1", "medium")
 
+#: The only interpreter on this host with the `mcp` package the actor tool server
+#: needs (the research venv has none). Cross-repo on purpose; override per seat.
+ORCHESTRATOR_PYTHON = "/mnt/raid0/llm/epyc-orchestrator/.venv/bin/python"
+
+
+@dataclass(frozen=True)
+class ActorSeat:
+    """How an opencode planner/author seat is configured for one run.
+
+    DS41 2026-09-24, first 27B proposal: 71 steps, 70 tool calls (54 bash), tool
+    results up to 58 KB, 2 compactions, 63.8k decoded tokens, 40 min. `bounded`
+    writes a per-run opencode config (`actor_opencode_config`): output-capped MCP
+    tools (outline / read_range / grep / profile_top / symbol_annotate /
+    code_search), a tool_output cap, a step cap and a tool-discipline agent prompt.
+    `fan_out` lets the agent spread independent reads over read-only scout
+    subagents (the GPU server has two slots). `bounded=False` is the plain seat --
+    the A/B control."""
+    bounded: bool = True
+    fan_out: bool = True
+    steps: int = 60
+    tools_python: str = ORCHESTRATOR_PYTHON
+
+
+def _profile_dirs(context: Mapping[str, Any]) -> tuple[Path, ...]:
+    """The directory holding the selected CPU profile's perf records, for the
+    actor's profile tools. Empty when there is no observed record."""
+    observation = context.get("cpu_profile")
+    record = observation.get("record") if isinstance(observation, Mapping) else None
+    if not record:
+        return ()
+    parent = Path(str(record)).parent
+    # store/cpu-profiles/cpu-raw-<digest>/measurement-record.data -> store/cpu-profiles
+    root = parent.parent if parent.name.startswith("cpu-raw-") else parent
+    return (root,) if root.is_dir() else ()
+
 
 class ProviderTransient(ActorTransient):
     """The actor provider failed in a way that is worth retrying.
@@ -150,22 +211,163 @@ class ProviderTransient(ActorTransient):
     """
 
 
-def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT_S,
-               backend: Backend = CRITIC_DEFAULT, read_only: bool = False) -> str:
-    argv = backend.argv(prompt, workspace, read_only=read_only)
+class _StoppedChild(Exception):
+    """Internal: `_run_stoppable` ended the actor because a stop was asked."""
+
+    def __init__(self, returncode: int):
+        super().__init__(returncode)
+        self.returncode = returncode
+
+
+def _signal_group(proc: subprocess.Popen, sig: int) -> None:
     try:
-        done = subprocess.run(argv, capture_output=True, text=True, timeout=timeout_s,
-                              cwd=str(workspace))
-    except subprocess.TimeoutExpired as exc:
-        # A hung container held a turn forever in v27; a bounded invocation is a
-        # transient, not a terminal fault. Keep whatever it had written: a 2-hour
-        # authoring call that dies at the budget is only diagnosable from its
-        # partial output (DS41 2026-09-24 08:05, nothing on disk).
-        _persist_reply(workspace, backend, subprocess.CompletedProcess(
-            args=argv, returncode=-1,
-            stdout=_text_of(exc.stdout), stderr=_text_of(exc.stderr)))
-        raise ProviderTransient(f"actor exceeded {timeout_s}s") from exc
-    _persist_reply(workspace, backend, done)
+        os.killpg(proc.pid, sig)
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
+def _end_group(proc: subprocess.Popen, *, grace_s: float) -> int:
+    """TERM the actor's whole process group, KILL it after `grace_s`, reap it.
+
+    The GROUP, not the pid: opencode runs its MCP tool server and Bun workers as
+    children, and a TERM to the parent alone leaves them orphaned holding the model
+    server's slot (the run-3 orphan shared the single-slot server for 40 min)."""
+    _signal_group(proc, signal.SIGTERM)
+    try:
+        return proc.wait(timeout=grace_s)
+    except subprocess.TimeoutExpired:
+        _signal_group(proc, signal.SIGKILL)
+        return proc.wait()
+
+
+def _run_stoppable(argv: list[str], *, out, err, timeout_s: int, cwd: Path,
+                   should_stop: Callable[[], bool], extra: Mapping[str, Any],
+                   poll_s: float | None = None,
+                   grace_s: float | None = None) -> subprocess.CompletedProcess:
+    """`subprocess.run` that also honours the loop's stop predicate.
+
+    The actor runs in its own session (process group) so a stop or a timeout can end
+    the whole tree. A stop asked mid-call TERMs the group and raises `_StoppedChild`;
+    so does an actor that died of a SIGNAL while a stop was asked (someone TERM'd it
+    directly as part of stopping the run). A signal death with NO stop asked is left
+    to the caller's ordinary transient path: an operator killing one hung actor
+    wants the call retried, not the run ended.
+    """
+    poll_s = STOP_POLL_S if poll_s is None else poll_s
+    grace_s = STOP_GRACE_S if grace_s is None else grace_s
+    payload = extra.get("input")
+    proc = subprocess.Popen(argv, stdout=out, stderr=err, text=True, cwd=str(cwd),
+                            stdin=subprocess.PIPE if payload is not None else subprocess.DEVNULL,
+                            env=extra.get("env"), start_new_session=True)
+    writer = None
+    if payload is not None:
+        import threading
+
+        def feed() -> None:
+            try:
+                proc.stdin.write(payload)
+            except (BrokenPipeError, OSError, ValueError):
+                pass
+            finally:
+                try:
+                    proc.stdin.close()
+                except (BrokenPipeError, OSError, ValueError):
+                    pass
+        writer = threading.Thread(target=feed, name="actor-stdin", daemon=True)
+        writer.start()
+    deadline = time.monotonic() + timeout_s
+    while True:
+        if should_stop():
+            raise _StoppedChild(_end_group(proc, grace_s=grace_s))
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            _end_group(proc, grace_s=grace_s)
+            raise subprocess.TimeoutExpired(argv, timeout_s)
+        try:
+            returncode = proc.wait(timeout=min(poll_s, remaining))
+            break
+        except subprocess.TimeoutExpired:
+            continue
+    if writer is not None:
+        writer.join(timeout=1.0)
+    if returncode < 0 and should_stop():
+        raise _StoppedChild(returncode)
+    return subprocess.CompletedProcess(args=argv, returncode=returncode)
+
+
+def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT_S,
+               backend: Backend = CRITIC_DEFAULT, read_only: bool = False,
+               schema: Mapping[str, Any] | None = None,
+               env: Mapping[str, str] | None = None,
+               should_stop: Callable[[], bool] | None = None) -> str:
+    argv = backend.argv(prompt, workspace, read_only=read_only)
+    payload = backend.stdin_payload(prompt)
+    started = time.monotonic()
+    extra: dict[str, Any] = {}
+    if payload is not None:
+        extra["input"] = payload
+    if env:
+        extra["env"] = {**os.environ, **env}
+    # Capture to FILES, not pipes. The reply is the LAST thing the CLI prints, and
+    # opencode (Bun) exits without draining a pipe: `opencode export` read through a
+    # pipe stopped at exactly 98,304 bytes (DS41 seat A/B, 2026-09-24) while the same
+    # export to a file was 316 KB. A long session's stdout (compaction summaries) past
+    # that point would lose exactly the JSON the loop needs.
+    with tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace") as out, \
+         tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace") as err:
+        try:
+            if should_stop is None:
+                done = subprocess.run(argv, stdout=out, stderr=err, text=True,
+                                      timeout=timeout_s, cwd=str(workspace), **extra)
+            else:
+                done = _run_stoppable(argv, out=out, err=err, timeout_s=timeout_s,
+                                      cwd=workspace, should_stop=should_stop, extra=extra)
+        except _StoppedChild as stop:
+            reply = _persist_reply(workspace, backend, subprocess.CompletedProcess(
+                args=argv, returncode=stop.returncode,
+                stdout=_captured(None, out), stderr=_captured(None, err)))
+            _record_call(workspace, backend, prompt, returncode=stop.returncode,
+                         wall_s=time.monotonic() - started, env=env, schema=schema,
+                         reply=reply)
+            raise ActorStopped(
+                f"stop asked during the actor call [{backend.describe()}]; actor process "
+                f"group ended (rc {stop.returncode}) after {time.monotonic() - started:.0f}s"
+                " -- not retried") from None
+        except subprocess.TimeoutExpired as exc:
+            # A hung container held a turn forever in v27; a bounded invocation is a
+            # transient, not a terminal fault. Keep whatever it had written: a 2-hour
+            # authoring call that dies at the budget is only diagnosable from its
+            # partial output (DS41 2026-09-24 08:05, nothing on disk).
+            reply = _persist_reply(workspace, backend, subprocess.CompletedProcess(
+                args=argv, returncode=-1,
+                stdout=_captured(exc.stdout, out), stderr=_captured(exc.stderr, err)))
+            _record_call(workspace, backend, prompt, returncode=-1,
+                         wall_s=time.monotonic() - started, env=env, schema=schema,
+                         reply=reply, timed_out=True)
+            raise ProviderTransient(f"actor exceeded {timeout_s}s") from exc
+        done = subprocess.CompletedProcess(
+            args=argv, returncode=done.returncode,
+            stdout=_captured(done.stdout, out), stderr=_captured(done.stderr, err))
+    reply = _persist_reply(workspace, backend, done)
+    _record_call(workspace, backend, prompt, returncode=done.returncode,
+                 wall_s=time.monotonic() - started, env=env, schema=schema, reply=reply)
+    if done.returncode > 0 and schema is not None:
+        # A non-zero exit is not proof the reply is bad. opencode exits 1 when one
+        # of its own tools threw mid-session and the agent recovered (DS41
+        # 2026-09-24 09:55: `(res.stderr || "").trim is not a function`), and the
+        # reply it printed was a complete, schema-valid hypothesis that this path
+        # threw away unread and retried from zero. Salvage ONLY a reply whose JSON
+        # is COMPLETE for the caller's schema (or an abstention): an incomplete
+        # object from a crashed actor must stay a transient -- a crashed critic
+        # whose stray JSON lacks `accepted` would otherwise read as a rejection.
+        # Only a process that EXITED (rc > 0): a signal death (rc < 0) never
+        # finished, and its stdout can hold a compaction summary quoting our own
+        # template (bounded-seat A/B, 2026-09-24: `{"abstain":"<reason>"}`).
+        for text in (done.stdout, done.stdout + "\n" + done.stderr):
+            body = _first_json_or_none(text)
+            if (isinstance(body, dict) and not _is_template_echo(body)
+                    and ("abstain" in body or _complete(body, schema))):
+                return text
     if done.returncode != 0:
         # Both tails. `claude -p` reports its own errors ("Not logged in", usage
         # limits, refusals) on STDOUT with a non-zero exit and an EMPTY stderr --
@@ -189,18 +391,220 @@ ACTOR_REPLY_DIR = "actor-replies"
 ACTOR_REPLY_KEEP_BYTES = 4 * 1024 * 1024
 
 
-def _persist_reply(workspace: Path, backend: Backend, done: subprocess.CompletedProcess) -> None:
+def _persist_reply(workspace: Path, backend: Backend,
+                   done: subprocess.CompletedProcess) -> dict[str, Any] | None:
     """Keep every raw actor exchange on disk so a bounced reply is diagnosable
-    from the store instead of from a pipe nobody can read."""
+    from the store instead of from a pipe nobody can read.
+
+    Returns the two files as `{stdout|stderr: {path, sha256, bytes}}` (bare names in
+    `actor-replies/`) so the call record can bind the exact bytes kept, or None."""
     try:
         target = Path(workspace).parent / ACTOR_REPLY_DIR
         target.mkdir(parents=True, exist_ok=True)
         stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime())
         stem = f"{stamp}-{backend.kind}-{backend.model.replace('/', '_')}-rc{done.returncode}"
-        (target / f"{stem}.stdout").write_text(done.stdout[-ACTOR_REPLY_KEEP_BYTES:], encoding="utf-8")
-        (target / f"{stem}.stderr").write_text(done.stderr[-ACTOR_REPLY_KEEP_BYTES:], encoding="utf-8")
+        refs: dict[str, Any] = {}
+        for stream, text in (("stdout", done.stdout), ("stderr", done.stderr)):
+            data = (text or "")[-ACTOR_REPLY_KEEP_BYTES:].encode("utf-8", "replace")
+            (target / f"{stem}.{stream}").write_bytes(data)
+            refs[stream] = {"path": f"{stem}.{stream}",
+                            "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}
+        return refs
     except OSError:
-        pass  # a reply record is evidence, never a reason to fail the actor call
+        return None  # a reply record is evidence, never a reason to fail the actor call
+
+
+ACTOR_CALL_LOG = "actor-calls.jsonl"
+
+
+def _record_call(workspace: Path, backend: Backend, prompt: str, *, returncode: int,
+                 wall_s: float, env: Mapping[str, str] | None,
+                 schema: Mapping[str, Any] | None = None,
+                 reply: Mapping[str, Any] | None = None, timed_out: bool = False) -> None:
+    """One line per actor call: wall time and prompt size, the numbers the seat A/B
+    compares (per-step tokens come from `opencode export` of the lane's session).
+
+    VB-AK-SEAT: the line is the `epyc.autokernel.actor_call.v1` record defined by
+    ROOT's `scripts/vidya/adapters/autokernel_actor_seat_capture.py`, built by that
+    module's own reference writer so producer and reader share one definition. When
+    the contract cannot be met (ROOT checkout missing, opencode version unreadable,
+    ...) the line keeps the pre-hook shape plus `v1_refused: <why>` -- it then
+    projects no claim, and says why, instead of inventing a field."""
+    finished = time.time()
+    legacy = {"ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(finished)),
+              "backend": backend.describe(), "agent": backend.agent or None,
+              "returncode": returncode, "wall_s": round(wall_s, 1),
+              "prompt_chars": len(prompt),
+              "opencode_config": (env or {}).get("OPENCODE_CONFIG")}
+    try:
+        row = _call_record_v1(workspace, backend, prompt, returncode=returncode,
+                              wall_s=wall_s, finished=finished, env=env, schema=schema,
+                              reply=reply, timed_out=timed_out)
+    except Exception as exc:     # noqa: BLE001 -- evidence, never a reason to fail the call
+        row = {**legacy, "v1_refused": f"{type(exc).__name__}: {exc}"[:500]}
+    try:
+        target = Path(workspace).parent / ACTOR_REPLY_DIR
+        target.mkdir(parents=True, exist_ok=True)
+        with open(target / ACTOR_CALL_LOG, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(row, sort_keys=True) + "\n")
+    except OSError:
+        pass  # evidence, never a reason to fail the actor call
+
+
+#: Where the VB-AK-SEAT write-side contract lives (the ROOT repo), and the module
+#: this producer names in its records.
+ROOT_REPO_ENV = "EPYC_ROOT_REPO"
+SEAT_CAPTURE_REL = "scripts/vidya/adapters/autokernel_actor_seat_capture.py"
+PRODUCER_MODULE = "scripts/kernel_rnd/autokernel/loop/actors.py"
+#: Env keys `AgentPlanner._seated` adds to a bounded opencode call so the record can
+#: name the seat arm without a second channel. Harmless to the child.
+SEAT_ENV_ARM, SEAT_ENV_FAN_OUT, SEAT_ENV_STEPS = (
+    "AK_ACTOR_SEAT_ARM", "AK_ACTOR_SEAT_FAN_OUT", "AK_ACTOR_SEAT_STEPS")
+_V1_CACHE: dict[str, Any] = {}
+
+
+def _seat_capture():
+    """ROOT's contract module, loaded by file (never via sys.path)."""
+    root = Path(os.environ.get(ROOT_REPO_ENV, "/workspace"))
+    path = (root / SEAT_CAPTURE_REL).resolve()
+    key = f"capture:{path}"
+    if key not in _V1_CACHE:
+        if not path.is_file():
+            raise FileNotFoundError(f"VB-AK-SEAT contract missing: {path}")
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("_ak_actor_seat_capture", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _V1_CACHE[key] = module
+    return _V1_CACHE[key]
+
+
+def _git_head(start: Path) -> str:
+    """HEAD's commit for the checkout holding `start`, read from the git files (no
+    subprocess: the call record must not add a process to every actor call, and must
+    not disturb tests that stub `subprocess.run`). Handles linked worktrees
+    (`.git` file), symbolic refs and packed refs; '' when unreadable."""
+    for folder in (start, *start.parents):
+        dotgit = folder / ".git"
+        if dotgit.is_dir():
+            gitdir = dotgit
+        elif dotgit.is_file():
+            text = dotgit.read_text(encoding="utf-8").strip()
+            if not text.startswith("gitdir:"):
+                return ""
+            gitdir = (folder / text.split(":", 1)[1].strip()).resolve()
+        else:
+            continue
+        common = gitdir
+        if (gitdir / "commondir").is_file():
+            common = (gitdir / (gitdir / "commondir").read_text(encoding="utf-8").strip()).resolve()
+        head = (gitdir / "HEAD").read_text(encoding="utf-8").strip()
+        if not head.startswith("ref:"):
+            return head
+        ref = head.split(":", 1)[1].strip()
+        for base in (gitdir, common):
+            if (base / ref).is_file():
+                return (base / ref).read_text(encoding="utf-8").strip()
+        packed = common / "packed-refs"
+        if packed.is_file():
+            for line in packed.read_text(encoding="utf-8").splitlines():
+                parts = line.split()
+                if len(parts) == 2 and parts[1] == ref:
+                    return parts[0]
+        return ""
+    return ""
+
+
+def _producer_commit() -> str:
+    if "commit" not in _V1_CACHE:
+        try:
+            _V1_CACHE["commit"] = _git_head(Path(__file__).resolve().parent)
+        except OSError:
+            _V1_CACHE["commit"] = ""
+    return _V1_CACHE["commit"]
+
+
+def _opencode_version(binary: str) -> str | None:
+    """The installed opencode version from its npm `package.json` (the binary is
+    `<pkg>/bin/opencode[.exe]` behind the npm symlink); None when unreadable."""
+    key = f"ocv:{binary}"
+    if key not in _V1_CACHE:
+        version = None
+        try:
+            package = Path(binary).resolve().parent.parent / "package.json"
+            version = json.loads(package.read_text(encoding="utf-8")).get("version") or None
+        except (OSError, ValueError):
+            version = None
+        _V1_CACHE[key] = str(version) if version else None
+    return _V1_CACHE[key]
+
+
+def _file_ref(path: str | Path | None) -> dict[str, Any] | None:
+    if not path:
+        return None
+    data = Path(path).read_bytes()
+    return {"path": str(path), "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}
+
+
+def _role_of(schema: Mapping[str, Any] | None) -> str:
+    if schema is HYPOTHESIS_SCHEMA:
+        return "planner"
+    if schema is PATHS_SCHEMA:
+        return "author"
+    if schema is REVIEW_SCHEMA:
+        return "critic"
+    raise ValueError("the call's role is unknown (no planner/author/critic schema)")
+
+
+def _call_record_v1(workspace: Path, backend: Backend, prompt: str, *, returncode: int,
+                    wall_s: float, finished: float, env: Mapping[str, str] | None,
+                    schema: Mapping[str, Any] | None, reply: Mapping[str, Any] | None,
+                    timed_out: bool) -> dict[str, Any]:
+    capture = _seat_capture()
+    env = env or {}
+    stamp = lambda t: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t))  # noqa: E731
+    config_path = env.get("OPENCODE_CONFIG")
+    bounded = bool(config_path) and backend.kind == "opencode"
+    instructions = None
+    if bounded:
+        conf = json.loads(Path(config_path).read_text(encoding="utf-8"))
+        listed = conf.get("instructions") or []
+        instructions = _file_ref(listed[0]) if listed else None
+    opencode = backend.kind == "opencode"
+    seat = {
+        "arm": env.get(SEAT_ENV_ARM) or ("bounded" if bounded else "plain"),
+        "bounded": bounded,
+        "fan_out": bounded and env.get(SEAT_ENV_FAN_OUT) == "1",
+        "steps": int(env[SEAT_ENV_STEPS]) if bounded and env.get(SEAT_ENV_STEPS) else None,
+        "opencode_version": _opencode_version(backend.binary) if opencode else None,
+        "global_config_sha256": (_file_ref(OPENCODE_CONFIG)["sha256"]
+                                 if opencode and OPENCODE_CONFIG.is_file() else None),
+        "config": _file_ref(config_path) if bounded else None,
+        "instructions": instructions,
+    }
+    endpoint = (_provider_base_url(backend.model) if opencode else None) or f"hosted:{backend.kind}"
+    import uuid
+    return capture.build_call_record(
+        call_id=uuid.uuid4().hex, role=_role_of(schema), workspace=str(workspace),
+        producer={"repo": "epyc-inference-research", "commit": _producer_commit(),
+                  "module": PRODUCER_MODULE},
+        seat=seat,
+        backend={"kind": backend.kind, "model": backend.model, "effort": backend.effort,
+                 "agent": backend.agent or None},
+        server={"endpoint": endpoint, "served_model": None, "build_info": None},
+        prompt=prompt, started_at=stamp(finished - wall_s), finished_at=stamp(finished),
+        wall_s=round(max(wall_s, 0.001), 3), returncode=returncode, timed_out=timed_out,
+        recorded_at=stamp(time.time()), reply=dict(reply) if reply else None)
+
+
+def _captured(stream_value, handle) -> str:
+    """The captured text: what the process wrote to `handle`, or -- when the call
+    already carries the text (a test double) -- that value."""
+    if stream_value is not None:
+        return _text_of(stream_value)
+    handle.flush()
+    handle.seek(0)
+    return handle.read()
 
 
 def _text_of(value) -> str:
@@ -335,6 +739,37 @@ def _complete(body: Mapping[str, Any], schema: Mapping[str, Any]) -> bool:
     return set(schema.get("required", ())) <= set(body)
 
 
+#: Below this, a reply is not a report a repair turn could copy from.
+REPAIR_MIN_REPORT_CHARS = 20
+#: Fields a repaired object must be able to point back to in the report. The
+#: prose fields (statement, falsifier) may be paraphrased; a file or symbol the
+#: report never names cannot have been copied.
+_GROUNDED_FIELDS = ("target_surface", "target_symbol")
+_PATH_TOKEN = re.compile(r"[\w.+-]+(?:/[\w.+-]+)+|[\w+-]+\.[A-Za-z]{1,4}\b")
+_IDENT_TOKEN = re.compile(r"[A-Za-z_]\w{2,}")
+
+
+def _grounded(value: str, report: str) -> bool:
+    """True when `value` names something the report itself names: any file path
+    it carries (or that path's basename), else its longest identifier."""
+    paths = _PATH_TOKEN.findall(value)
+    if paths:
+        return any(p in report or p.rsplit("/", 1)[-1] in report for p in paths)
+    idents = sorted(_IDENT_TOKEN.findall(value), key=len, reverse=True)
+    return bool(idents) and idents[0] in report
+
+
+def _ungrounded_fields(body: Mapping[str, Any], report: str,
+                       schema: Mapping[str, Any]) -> list[str]:
+    required = set(schema.get("required", ()))
+    bad = [key for key in _GROUNDED_FIELDS
+           if key in required and not _grounded(str(body.get(key) or ""), report)]
+    if "paths" in required and isinstance(body.get("paths"), list):
+        bad += [f"paths[{i}]" for i, path in enumerate(body["paths"])
+                if not _grounded(str(path), report)]
+    return bad
+
+
 def _parse_reply(raw: str, *, schema: Mapping[str, Any], backend: Backend,
                  workspace: Path) -> dict:
     """`_extract_json`, then a schema repair turn when the object is missing or
@@ -344,8 +779,22 @@ def _parse_reply(raw: str, *, schema: Mapping[str, Any], backend: Backend,
         body = _extract_json(raw)
     except ProviderTransient:
         body = None
+    echoed = None
+    if body is not None and _is_template_echo(body):
+        # Our own template quoted back is not an answer; repair or fail.
+        echoed = sorted(k for k, v in body.items() if isinstance(v, str) and _is_placeholder(v))
+        body = None
     if body is not None and ("abstain" in body or _complete(body, schema)):
         return body
+    if body is None and len(raw.strip()) < REPAIR_MIN_REPORT_CHARS:
+        # Nothing to copy from. A schema-constrained completion over an empty
+        # report MUST fill every required field, so it invents them: DS41
+        # 2026-09-24 10:09 a retry ended with empty stdout, the repair turn
+        # returned "replay-verification / src/verify/replay.ts", and the critic
+        # spent a pass rejecting a hypothesis no agent ever formed.
+        raise ProviderTransient(
+            f"actor produced no final report ({len(raw.strip())} chars); "
+            "refusing to repair an empty reply")
     question = next((q for key, q in _DECLINE_QUESTIONS.items()
                      if key in schema.get("required", ())), None)
     if question is not None:
@@ -355,9 +804,16 @@ def _parse_reply(raw: str, *, schema: Mapping[str, Any], backend: Backend,
             return {"abstain": str(verdict.get("reason") or "actor declined")}
     repaired = _schema_repair(raw, schema=schema, backend=backend, workspace=workspace)
     if repaired is not None:
+        ungrounded = _ungrounded_fields(repaired, raw, schema)
+        if ungrounded:
+            raise ProviderTransient(
+                f"schema repair named {ungrounded} that the agent's report never mentions; "
+                "an extraction may copy, never invent")
         return repaired
     if body is not None:
         return body
+    if echoed:
+        raise ProviderTransient(f"reply echoed the prompt template for {echoed}")
     raise ProviderTransient("actor produced no parseable JSON object")
 
 
@@ -369,18 +825,38 @@ def _first_json_or_none(text: str):
 
 
 def _with_backoff(call, *, attempts: int = len(BACKOFF_S),
-                  sleep=time.sleep) -> tuple[Any, int]:
-    """Retry a provider call, backing off. Returns (result, transient_streak)."""
+                  sleep=time.sleep,
+                  should_stop: Callable[[], bool] | None = None) -> tuple[Any, int]:
+    """Retry a provider call, backing off. Returns (result, transient_streak).
+
+    With `should_stop`, no attempt is drawn and no backoff is slept once a stop is
+    asked: the backoff sleeps in `STOP_POLL_S` slices and raises `ActorStopped`. An
+    `ActorStopped` from the call itself is never retried (it is not a
+    `ProviderTransient`, so it propagates untouched)."""
+    stop = should_stop or (lambda: False)
     streak = 0
     last: Exception | None = None
     for index in range(attempts):
+        if stop():
+            raise ActorStopped(f"stop asked before actor attempt {index + 1}"
+                               + (f"; last transient: {last}" if last else ""))
         try:
             return call(), streak
         except ProviderTransient as exc:
             last = exc
             streak += 1
             if index < attempts - 1:
-                sleep(BACKOFF_S[min(index, len(BACKOFF_S) - 1)])
+                pause = BACKOFF_S[min(index, len(BACKOFF_S) - 1)]
+                if should_stop is None:
+                    sleep(pause)
+                    continue
+                while pause > 0:
+                    if stop():
+                        raise ActorStopped(
+                            f"stop asked during the backoff after: {exc}") from exc
+                    step = min(STOP_POLL_S, pause)
+                    sleep(step)
+                    pause -= step
     raise ProviderTransient(
         f"actor failed {streak} consecutive times; last: {last}") from last
 
@@ -414,11 +890,24 @@ def _is_placeholder(value: Any) -> bool:
             or any(phrase in lowered for phrase in _TEMPLATE_PHRASES))
 
 
+def _is_template_echo(body: Any) -> bool:
+    """An object that quotes our own reply template back (any placeholder value)."""
+    return isinstance(body, dict) and any(
+        isinstance(value, str) and _is_placeholder(value) for value in body.values())
+
+
 def _extract_json(text: str) -> dict:
-    """Pull the last JSON object out of an agent's stdout."""
+    """Pull the last JSON object out of an agent's stdout, skipping template echoes.
+
+    opencode prints its compaction self-summary to stdout, and that summary quotes the
+    prompt's output contract -- `{"abstain":"<reason>"}` among it (DS41 2026-09-24,
+    bounded-seat A/B). Taking the last object blindly made the echo the reply. The last
+    NON-echo object wins; an echo is returned only when nothing else parsed, so the
+    placeholder guards downstream still see it and refuse it."""
     depth = 0
     start = None
     best = None
+    best_echo = None
     for index, char in enumerate(text):
         if char == "{":
             if depth == 0:
@@ -429,9 +918,15 @@ def _extract_json(text: str) -> dict:
             if depth == 0 and start is not None:
                 candidate = text[start:index + 1]
                 try:
-                    best = json.loads(candidate)
+                    parsed = json.loads(candidate)
                 except json.JSONDecodeError:
-                    pass
+                    continue
+                if _is_template_echo(parsed):
+                    best_echo = parsed
+                else:
+                    best = parsed
+    if best is None:
+        best = best_echo
     if best is None:
         raise ProviderTransient("actor produced no parseable JSON object")
     return best
@@ -449,6 +944,8 @@ def _abstention(body: Mapping[str, Any]) -> Abstain | None:
     reason = body["abstain"]
     if not isinstance(reason, str) or not reason.strip():
         raise ProviderTransient("planner abstention is missing a non-empty reason")
+    if _is_placeholder(reason):
+        raise ProviderTransient(f"planner abstention echoed the prompt template: {reason!r}")
     return Abstain(reason)
 
 
@@ -458,7 +955,9 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
     cpu = _cpu_target(context)
     if context.get("target"):
         lines.extend(["## Selected target (original launch, model, requests and build)",
-                      "```json", json.dumps(context["target"], indent=2, sort_keys=True),
+                      "Repeated subtrees are printed once; later copies read `<same as $.path>`.",
+                      "```json", json.dumps(_dedupe_subtrees(context["target"]), indent=2,
+                                            sort_keys=True),
                       "```", ""])
 
     # First, because it is the cheapest rejection: standing constraints and the
@@ -721,7 +1220,8 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
                      "local refutations or reasons to skip validation. Preserve their model, quant, "
                      "recipe, surface and caveats; unknown means not captured. Use ideas as suggestions "
                      "only. These rows are excluded from the characterised-mechanism pooling above.")
-        lines.extend(["```json", json.dumps(shared, sort_keys=True, indent=2), "```"])
+        lines.extend(["```json", json.dumps(_slim_shared_history(shared), sort_keys=True, indent=2),
+                      "```"])
 
     feedback = context.get("serving_observations")
     if feedback:
@@ -746,6 +1246,52 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
         lines.append("\n## Operator suggestions (async; use if relevant)")
         lines.extend(f"- {item}" for item in inbox)
     return "\n".join(lines)
+
+
+#: The actor context is the first ~46k tokens of every planner step on a 98k slot
+#: (DS41 2026-09-24: 95.7k chars). Two blocks were 55% of it: the target JSON, whose
+#: `recipe` and `common_cpu_scope.full_transfer_target` repeat the same launch
+#: subtrees (dsos, capability, template, ...), and the shared-history rows, whose
+#: bulk was refusal prose and content hashes. Neither trim drops a fact a reader
+#: could act on: a duplicate points at its first copy, a hash is not evidence to a
+#: planner, and clipped prose keeps its head and says it was clipped.
+DEDUPE_MIN_CHARS = 200
+SHARED_ROW_ID_FIELDS = frozenset({"attempt_id", "original_epoch", "result_sha256", "source_store",
+                                  "hypothesis_id", "recorded_at", "campaign_id"})
+SHARED_ROW_PROSE_CHARS = 500
+
+
+def _dedupe_subtrees(value: Any, *, _seen: dict[str, str] | None = None, _path: str = "$") -> Any:
+    """Replace every repeat of a large subtree with a pointer to its first copy."""
+    seen = {} if _seen is None else _seen
+    if isinstance(value, (dict, list)):
+        key = json.dumps(value, sort_keys=True)
+        if len(key) >= DEDUPE_MIN_CHARS:
+            if key in seen:
+                return f"<same as {seen[key]}>"
+            seen[key] = _path
+    if isinstance(value, dict):
+        return {k: _dedupe_subtrees(value[k], _seen=seen, _path=f"{_path}.{k}")
+                for k in sorted(value)}
+    if isinstance(value, list):
+        return [_dedupe_subtrees(item, _seen=seen, _path=f"{_path}[{i}]")
+                for i, item in enumerate(value)]
+    return value
+
+
+def _clip(value: Any, limit: int = SHARED_ROW_PROSE_CHARS) -> Any:
+    if isinstance(value, str) and len(value) > limit:
+        return value[:limit] + f" …[clipped {len(value) - limit} chars]"
+    return value
+
+
+def _slim_shared_history(shared: Any) -> Any:
+    """Shared-history rows without content-hash/id fields, prose clipped."""
+    if not isinstance(shared, Mapping) or not isinstance(shared.get("rows"), list):
+        return shared
+    rows = [{k: _clip(v) for k, v in row.items() if k not in SHARED_ROW_ID_FIELDS}
+            if isinstance(row, Mapping) else row for row in shared["rows"]]
+    return {**shared, "rows": rows}
 
 
 def _mechanism_family(row: Mapping[str, Any]) -> str | None:
@@ -832,6 +1378,28 @@ class AgentPlanner:
     backend: Backend = PLANNER_DEFAULT
     timeout_s: int = DEFAULT_TIMEOUT_S
     transient_streak: int = 0
+    seat: ActorSeat | None = None
+    #: The loop's stop predicate (STOP file or SIGTERM/SIGINT). When set, an in-flight
+    #: actor is TERM'd on stop and never retried (DS41-C22).
+    should_stop: Callable[[], bool] | None = None
+
+    def _stop_kw(self) -> dict[str, Any]:
+        return {} if self.should_stop is None else {"should_stop": self.should_stop}
+
+    def _seated(self, role: str, context: Mapping[str, Any]) -> tuple[Backend, dict[str, str] | None]:
+        """The backend and extra env for one call: a per-run opencode config when the
+        seat is bounded and the backend is opencode, else the plain backend."""
+        if self.seat is None or not self.seat.bounded or self.backend.kind != "opencode":
+            return self.backend, None
+        from . import actor_opencode_config as seat_config
+        path = Path(self.workspace).parent / f"actor-opencode-{role}.json"
+        seat_config.write_actor_config(
+            path, role=role, lane=Path(self.workspace), profiles=_profile_dirs(context),
+            python=self.seat.tools_python, steps=self.seat.steps, fan_out=self.seat.fan_out)
+        return (dataclasses.replace(self.backend, agent=seat_config.AGENT_NAMES[role]),
+                {"OPENCODE_CONFIG": str(path), SEAT_ENV_ARM: "bounded",
+                 SEAT_ENV_FAN_OUT: "1" if self.seat.fan_out else "0",
+                 SEAT_ENV_STEPS: str(self.seat.steps)})
 
     def propose(self, context: Mapping[str, Any]) -> Hypothesis | Abstain:
         cpu = _cpu_target(context)
@@ -858,9 +1426,12 @@ class AgentPlanner:
                 prompt += ("\nRuntime treatments here are observation-only diagnostics. "
                            "Their A/B result cannot select a recipe, keep a candidate, "
                            "or establish a causal explanation for a sampled hotspot.")
+        backend, env = self._seated("planner", context)
         raw, streak = _with_backoff(
             lambda: _run_agent(prompt, workspace=self.workspace,
-                               timeout_s=self.timeout_s, backend=self.backend))
+                               timeout_s=self.timeout_s, backend=backend,
+                               schema=HYPOTHESIS_SCHEMA, env=env, **self._stop_kw()),
+            should_stop=self.should_stop)
         self.transient_streak = streak
         body = _parse_reply(raw, schema=HYPOTHESIS_SCHEMA, backend=self.backend, workspace=self.workspace)
         abstention = _abstention(body)
@@ -911,9 +1482,12 @@ class AgentPlanner:
             "If the hypothesis cannot be implemented honestly within these constraints, "
             "abstaining is a correct science result. Make no edits and reply instead with:\n"
             '{"abstain": "<specific reason the hypothesis is infeasible>"}')
+        backend, env = self._seated("author", context)
         raw, streak = _with_backoff(
             lambda: _run_agent(prompt, workspace=self.workspace,
-                               timeout_s=self.timeout_s, backend=self.backend))
+                               timeout_s=self.timeout_s, backend=backend,
+                               schema=PATHS_SCHEMA, env=env, **self._stop_kw()),
+            should_stop=self.should_stop)
         self.transient_streak = streak
         body = _parse_reply(raw, schema=PATHS_SCHEMA, backend=self.backend, workspace=self.workspace)
         abstention = _abstention(body)
@@ -957,15 +1531,18 @@ class AgentCritic:
     workspace: Path
     backend: Backend = CRITIC_DEFAULT
     timeout_s: int = DEFAULT_TIMEOUT_S
+    should_stop: Callable[[], bool] | None = None
 
     def _review(self, subject: str, grounds: str,
                 context: Mapping[str, Any]) -> Review:
         prompt = _REVIEW_TASK.format(subject=subject, grounds=grounds,
                                      context=render_context(context))
+        stop_kw = {} if self.should_stop is None else {"should_stop": self.should_stop}
         raw, _ = _with_backoff(
             lambda: _run_agent(prompt, workspace=self.workspace,
                                timeout_s=self.timeout_s, backend=self.backend,
-                               read_only=True))
+                               read_only=True, schema=REVIEW_SCHEMA, **stop_kw),
+            should_stop=self.should_stop)
         body = _parse_reply(raw, schema=REVIEW_SCHEMA, backend=self.backend, workspace=self.workspace)
         accepted = bool(body.get("accepted"))
         reason = str(body.get("reason") or "")

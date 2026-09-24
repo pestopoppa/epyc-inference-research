@@ -119,6 +119,17 @@ class ActorTransient(RuntimeError):
     """
 
 
+class ActorStopped(ActorTransient):
+    """A stop was asked while an actor call was in flight, and the actor was ended.
+
+    NOT retryable. Before it existed a stop could not reach a planner call: the call
+    IS the forming stage, so `should_abandon` was only polled after it returned, and
+    the retry loop read the signal-killed actor (rc -15) as a provider transient and
+    launched a new one (DS41 run 7, 2026-09-24 10:17). `iterate` records it as
+    `stopped_mid_formation`, the outcome the stage-boundary poll already produces.
+    """
+
+
 @dataclass(frozen=True)
 class Abstain:
     """A planner's truthful conclusion that this turn has no feasible answer."""
@@ -430,6 +441,10 @@ def iterate(*, planner: Planner, critic: Critic,
         # patch may well still help against the champion that displaced it, and the
         # planner is told to look at these FIRST.
         return observed(Outcome("superseded", getattr(exc, "hypothesis", None), [str(exc)]))
+    except ActorStopped as exc:
+        # Raised outside the four formation calls (a wrapper planner): still a stop.
+        return observed(Outcome("stopped_mid_formation", getattr(exc, "hypothesis", None),
+                                [STOPPED_MID_FORMATION, str(exc)]))
     except ActorTransient as exc:
         # The provider failed, not the science. This ends the ITERATION and is
         # recorded as such; the run continues, and a streak becomes visible in
@@ -474,6 +489,15 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
         return Outcome("stopped_mid_formation", last_proposed,
                        [STOPPED_MID_FORMATION])
 
+    def actor_call(call, *args):
+        # A stop asked DURING an actor call ends the call (the actor module TERMs its
+        # child) and surfaces here as ActorStopped: the same outcome the boundary poll
+        # gives, still naming whatever was in flight -- never a provider transient.
+        try:
+            return call(*args), None
+        except ActorStopped:
+            return None, stopped()
+
     for hypothesis_index in range(hypothesis_rounds):
         # Polled BEFORE each actor call, never after: the whole point is that no
         # further multi-minute call is drawn once the run has been told to stop.
@@ -486,7 +510,9 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             round_telemetry["prior_rejection_prompt"] = True
             mark_search_changed("critic:hypothesis")
         on_step("proposing a hypothesis")
-        hypothesis = planner.propose(working)
+        hypothesis, halted = actor_call(planner.propose, working)
+        if halted is not None:
+            return halted
         if isinstance(hypothesis, Abstain):
             return Outcome("abstained", None, [hypothesis.reason])
         last_proposed = hypothesis
@@ -513,7 +539,9 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             on_step("prevalidated runtime option: deterministic checks, no critic call")
         else:
             on_step("critic pass 1: reviewing the hypothesis")
-            verdict = critic.review_hypothesis(hypothesis, working)
+            verdict, halted = actor_call(critic.review_hypothesis, hypothesis, working)
+            if halted is not None:
+                return halted
             validator_provenance.append(_critic_provenance(
                 critic, verdict, decision="critic:hypothesis",
                 evidence=("hypothesis", "planner context")))
@@ -535,7 +563,9 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             integrity_screen = None
             if hypothesis.runtime_pair is None:
                 on_step("authoring the patch")
-                paths = planner.author(hypothesis, working)
+                paths, halted = actor_call(planner.author, hypothesis, working)
+                if halted is not None:
+                    return halted
                 if isinstance(paths, Abstain):
                     return Outcome("abstained", hypothesis, [paths.reason])
                 # A declared path list is a claim, not an isolation boundary.  The
@@ -554,7 +584,10 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                 return stopped()
             if hypothesis.runtime_pair is None:
                 on_step("critic pass 2: reviewing the diff")
-                patch_verdict = critic.review_patch(hypothesis, paths, working)
+                patch_verdict, halted = actor_call(critic.review_patch, hypothesis, paths,
+                                                   working)
+                if halted is not None:
+                    return halted
                 validator_provenance.append(_critic_provenance(
                     critic, patch_verdict, decision="critic:patch",
                     evidence=("candidate diff", "declared paths", "planner context")))
@@ -745,6 +778,6 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
 # `archive.record` as `run.py`'s injected `record`. `iterate` is the whole of this
 # module's control flow now, and the pool is its only driver.
 
-__all__ = ["Abstain", "ActorTransient", "ConfirmVetoed", "InteractionRegression", "TailRefused", "RunAborted", "MeasurementInvalid", "MeasurementFailed", "Critic",
+__all__ = ["Abstain", "ActorStopped", "ActorTransient", "ConfirmVetoed", "InteractionRegression", "TailRefused", "RunAborted", "MeasurementInvalid", "MeasurementFailed", "Critic",
            "HYPOTHESIS_ROUNDS", "Hypothesis", "Outcome", "PATCH_ROUNDS",
            "Planner", "Review", "STOPPED_MID_FORMATION", "iterate"]

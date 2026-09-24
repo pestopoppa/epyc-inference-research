@@ -704,6 +704,20 @@ def main(argv: list[str] | None = None) -> int:
                         help="critic model, both passes; same routing as "
                              "--planner-model (default: %(default)s)")
     parser.add_argument("--critic-effort", default=actors.CRITIC_DEFAULT.effort)
+    parser.add_argument("--actor-seat", choices=("bounded", "plain"), default="plain",
+                        help="opencode planner/author seat: 'plain' is the bare `opencode run` "
+                             "seat; 'bounded' writes a per-run opencode config (output-capped MCP "
+                             "tools, tool_output cap, step cap, guidance added via `instructions`). "
+                             "Default plain per the DS41-C20 A/B (2026-09-24, one pair on the 27B): "
+                             "plain 31.9 min vs bounded 44.3 min per proposal, both schema-valid; "
+                             "bounded's proposal was better grounded (instruction-level annotate "
+                             "evidence) but its perf-backed tools cost minutes of wall. No effect "
+                             "on codex/claude (default: %(default)s)")
+    parser.add_argument("--actor-fan-out", action=argparse.BooleanOptionalAction, default=True,
+                        help="bounded seat: let the agent spread independent reads over "
+                             "read-only scout subagents (default: %(default)s)")
+    parser.add_argument("--actor-steps", type=int, default=actors.ActorSeat.steps,
+                        help="bounded seat: opencode step cap per call (default: %(default)s)")
     parser.add_argument("--actor-timeout-s", type=int, default=actors.DEFAULT_TIMEOUT_S,
                         help="wall budget per planner/critic call before it is a transient "
                              "(default: %(default)s). The default was sized for cloud actors; "
@@ -1284,7 +1298,8 @@ def main(argv: list[str] | None = None) -> int:
     planner_backend = actors.backend_for(args.planner_model, args.planner_effort)
     critic_backend = actors.backend_for(args.critic_model, args.critic_effort)
     print(f"actors    planner={planner_backend.describe()}  "
-          f"critic={critic_backend.describe()}")
+          f"critic={critic_backend.describe()}  "
+          f"seat={args.actor_seat}{' fan-out' if args.actor_fan_out else ''} steps={args.actor_steps}")
     # D4: with the two-rung gate on, the champion-vs-production headline is measured
     # on the confirm rung -- the standing +17.9% was the screen shape, which is the
     # "headline must be the production recipe" defect. Floor re-keyed to that model.
@@ -2840,7 +2855,12 @@ def main(argv: list[str] | None = None) -> int:
             if screen_confirmation:
                 return cpu_screen.RetainedPlanner(screen_confirmation, worker, screen_prepared["launch"])
             ordinary = actors.AgentPlanner(workspace=worker.worktree, backend=planner_backend,
-                                           timeout_s=args.actor_timeout_s)
+                                           timeout_s=args.actor_timeout_s,
+                                           should_stop=should_stop,
+                                           seat=actors.ActorSeat(
+                                               bounded=args.actor_seat == "bounded",
+                                               fan_out=args.actor_fan_out,
+                                               steps=args.actor_steps))
             return (runtime_recovery.PendingPlanner(ordinary, pending_slot)
                     if pending_pair is not None else ordinary)
 
@@ -2857,7 +2877,7 @@ def main(argv: list[str] | None = None) -> int:
                 cpu_screen.RetainedCritic(screen_confirmation)
                 if screen_confirmation else actors.AgentCritic(
                     workspace=worker.worktree, backend=critic_backend,
-                    timeout_s=args.actor_timeout_s)),
+                    timeout_s=args.actor_timeout_s, should_stop=should_stop)),
             build_context=build_context, make_gate=gate_for,
             make_measure=measure_for, record=record_pooled,
             iterations=(args.iterations or None), should_stop=should_stop,

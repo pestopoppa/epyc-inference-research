@@ -250,6 +250,11 @@ class ActorLifecycleAdapter:
             raise preparation.PreparationRefused("actor executable is unreadable") from exc
         if current_binary != profile.binary_sha256:
             raise preparation.PreparationRefused("actor executable changed after reservation")
+        if backend.stdin_payload(prompt) is not None:
+            # A worker stage carries argv only. opencode reads its prompt on stdin
+            # (actors.Backend.argv), so launching it here would run an empty prompt.
+            raise preparation.PreparationRefused(
+                f"{backend.kind} reads its prompt on stdin; the worker stage has no stdin channel")
         artifact_contract_digest = preparation._digest({
             "request_digest": reservation.request_digest,
             "actor_profile_digest": reservation.actor_profile_digest,
