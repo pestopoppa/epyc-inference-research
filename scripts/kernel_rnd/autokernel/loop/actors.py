@@ -706,10 +706,92 @@ _ABSTAIN_INSTRUCTION_TEMPLATE = ("Answer one question about an agent's final rep
                                  "or an empty string.")
 
 
+# --------------------------------------------------------------------------- TD-21.35: relax `required` on the wire
+#
+# A `required` field in a JSON-schema-to-GBNF grammar does not mean "the caller
+# wants this" -- it means "the grammar FORCES a value, real or not". Live on the
+# orchestrator side (2026-09-24): a `deep_eval` draft with no stated tier
+# repaired to a fabricated `tier=2`. Mirrors
+# `epyc-orchestrator:src/structured_output/repair.py` `_relax_required_for_wire`
+# / `_is_wire_discriminator` (read there for the full rationale; kept local and
+# small rather than imported -- this module is standalone). The schema sent on
+# the wire for the EXTRACTION turn has `required` dropped at every object level
+# -- except a `const`/single-`enum` discriminator key, which stays required so a
+# `oneOf`/`anyOf` union stays disambiguable -- while the RESULT is still
+# validated against the caller's original, unrelaxed schema (`_parse_reply`), so
+# an omitted required field now fails honestly instead of being invented. The
+# stage-1 decline probe (ABSTAIN_SCHEMA) is a judgment the model must state, not
+# a fact to copy, and is called with `relax_required=False` -- never touched.
+
+
+def _is_wire_discriminator(prop_schema: Any) -> bool:
+    """True for a property schema pinned to exactly one legal value -- a
+    `const`, or a single-element `enum` -- so keeping it required on the wire
+    forces nothing the caller did not already pin."""
+    if not isinstance(prop_schema, Mapping):
+        return False
+    if "const" in prop_schema:
+        return True
+    enum = prop_schema.get("enum")
+    return isinstance(enum, list) and len(enum) == 1
+
+
+def _relax_required_for_wire(schema: Any) -> Any:
+    """A copy of `schema` with `required` dropped at every object level,
+    recursively through `properties`, `oneOf`/`anyOf`/`allOf` branches, `items`
+    (list or single-schema form) and `$defs`/`definitions` -- except a
+    discriminator key (`_is_wire_discriminator`). Everything else (`type`,
+    `enum`, `const`, numeric bounds, `additionalProperties`, PROPERTY ORDER)
+    passes through unchanged -- this only ever touches `required`. Property
+    order matters: llama.cpp's grammar converter walks declared, non-required
+    properties in their `properties` dict order (json-schema-to-grammar.cpp),
+    so `properties` is rebuilt via a dict comprehension over the SAME
+    `.items()` iteration rather than any set/sorted operation. Never mutates
+    its input; always returns a new structure. This is the schema sent to
+    `complete()` for the extraction turn ONLY -- `_parse_reply` validates the
+    result against the original, unrelaxed schema regardless."""
+    if isinstance(schema, list):
+        return [_relax_required_for_wire(item) for item in schema]
+    if not isinstance(schema, Mapping):
+        return schema
+
+    relaxed: dict[str, Any] = {}
+    for key, value in schema.items():
+        if key == "required":
+            continue  # rebuilt below, once `properties` is known
+        if key in ("properties", "$defs", "definitions") and isinstance(value, Mapping):
+            relaxed[key] = {k: _relax_required_for_wire(v) for k, v in value.items()}
+        elif key in ("oneOf", "anyOf", "allOf") and isinstance(value, list):
+            relaxed[key] = [_relax_required_for_wire(v) for v in value]
+        elif key == "items":
+            relaxed[key] = _relax_required_for_wire(value)
+        elif key == "additionalProperties" and isinstance(value, Mapping):
+            relaxed[key] = _relax_required_for_wire(value)
+        else:
+            relaxed[key] = value
+
+    required = schema.get("required")
+    properties = schema.get("properties")
+    if isinstance(required, list) and isinstance(properties, Mapping):
+        kept = [key for key in required if _is_wire_discriminator(properties.get(key))]
+        if kept:
+            relaxed["required"] = kept
+    # A `required` list with no sibling `properties` map has nothing to check a
+    # discriminator against -- dropped entirely (nothing here could pin a value
+    # the grammar can point at).
+
+    return relaxed
+
+
 def _schema_repair(raw: str, *, schema: Mapping[str, Any], backend: Backend,
                    workspace: Path, timeout_s: int = SCHEMA_REPAIR_TIMEOUT_S,
-                   instruction: str = _EXTRACT_INSTRUCTION) -> dict | None:
-    """One constrained turn: the agent's final report -> exactly one schema object."""
+                   instruction: str = _EXTRACT_INSTRUCTION,
+                   relax_required: bool = True) -> dict | None:
+    """One constrained turn: the agent's final report -> exactly one schema
+    object. TD-21.35: unless `relax_required=False`, the schema sent on the
+    wire (the `response_format` json_schema, which becomes the GBNF grammar)
+    is `_relax_required_for_wire(schema)` -- `schema` itself, what the caller
+    validates the RESULT against, is never mutated."""
     if backend.kind != "opencode":
         return None
     base = _provider_base_url(backend.model)
@@ -717,13 +799,14 @@ def _schema_repair(raw: str, *, schema: Mapping[str, Any], backend: Backend,
         return None
     import urllib.request
     import urllib.error
+    wire_schema = _relax_required_for_wire(schema) if relax_required else schema
     body = {
         "messages": [
             {"role": "system", "content": instruction},
             {"role": "user", "content": raw[-SCHEMA_REPAIR_TAIL_CHARS:]},
         ],
         "response_format": {"type": "json_schema",
-                            "json_schema": {"name": "actor_reply", "schema": dict(schema)}},
+                            "json_schema": {"name": "actor_reply", "schema": dict(wire_schema)}},
         "temperature": 0, "max_tokens": 2048,
         "chat_template_kwargs": {"enable_thinking": False},
     }
@@ -952,13 +1035,25 @@ def _parse_reply(raw: str, *, schema: Mapping[str, Any], backend: Backend,
     question = next((q for key, q in _DECLINE_QUESTIONS.items()
                      if key in schema.get("required", ())), None)
     if question is not None:
+        # TD-21.35: the decline probe is a judgment the model must state, not a
+        # fact to copy -- never relaxed.
         verdict = _schema_repair(raw, schema=ABSTAIN_SCHEMA, backend=backend, workspace=workspace,
-                                 instruction=_ABSTAIN_INSTRUCTION_TEMPLATE.format(question=question))
+                                 instruction=_ABSTAIN_INSTRUCTION_TEMPLATE.format(question=question),
+                                 relax_required=False)
         if verdict is not None and verdict.get("explicitly_declines") is True:
             return {"abstain": str(verdict.get("reason") or "actor declined")}
     repaired = _schema_repair(raw, schema=schema, backend=backend, workspace=workspace,
                               instruction=instruction)
     if repaired is not None:
+        if not _schema_valid(repaired, schema):
+            # TD-21.35: the wire grammar no longer FORCES a value for a field
+            # the raw report never stated (`_relax_required_for_wire`);
+            # validating against the ORIGINAL, unrelaxed schema here is what
+            # turns an honest omission into a typed failure instead of a
+            # fabricated value reaching the caller.
+            raise ProviderTransient(
+                f"schema repair produced {sorted(repaired)}, invalid against the original "
+                "schema -- the report never stated a required field")
         ungrounded = _ungrounded_fields(repaired, raw, schema)
         if ungrounded:
             raise ProviderTransient(

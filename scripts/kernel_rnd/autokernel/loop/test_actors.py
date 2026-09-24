@@ -4,6 +4,7 @@ The two things that must hold before this touches a real API: consecutive failur
 back off (a codex 401 produced 284 failures in 23 minutes with zero delay), and the
 context bundle actually carries what the old planner never received.
 """
+import copy
 import json
 import subprocess
 from pathlib import Path
@@ -1019,3 +1020,233 @@ class SchemaRepairTurn(unittest.TestCase):
         echoed = {**derived, "mechanism_id": "akm-<short-slug>"}
         self.assertIn("mechanism_id",
                       actors._ungrounded_fields(echoed, report, actors.HYPOTHESIS_SCHEMA))
+
+
+# --------------------------------------------------------------------------- TD-21.35: relax_required wire schema
+#
+# A `required` field in a JSON-schema-to-GBNF grammar FORCES a value, real or
+# not (orchestrator-side live finding, 2026-09-24: an unstated `tier` repaired
+# to a fabricated `tier=2`). Mirrors
+# `epyc-orchestrator:src/structured_output/repair.py`
+# `TestRelaxRequiredForWireUnit`/`TestRelaxRequiredIntegration` -- read there
+# for the reference coverage this reproduces locally.
+
+NESTED_UNION_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "outer": {
+            "type": "object",
+            "properties": {
+                "kind": {"const": "widget"},
+                "size": {"type": "integer"},
+            },
+            "required": ["kind", "size"],
+            "additionalProperties": False,
+        },
+        "items": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"id": {"type": "string"}, "score": {"type": "number"}},
+                "required": ["id", "score"],
+                "additionalProperties": False,
+            },
+        },
+        "choice": {
+            "oneOf": [
+                {
+                    "type": "object",
+                    "properties": {"type": {"const": "a"}, "value": {"type": "string"}},
+                    "required": ["type", "value"],
+                    "additionalProperties": False,
+                },
+                {
+                    "type": "object",
+                    "properties": {"type": {"enum": ["b"]}, "count": {"type": "integer"}},
+                    "required": ["type", "count"],
+                    "additionalProperties": False,
+                },
+            ]
+        },
+    },
+    "required": ["outer", "items"],
+}
+SIMPLE_RELAX_SCHEMA = {"type": "object",
+                       "properties": {"name": {"type": "string"}, "count": {"type": "integer"}},
+                       "required": ["name", "count"], "additionalProperties": False}
+ORDERED_RELAX_SCHEMA = {"type": "object",
+                        "properties": {"zeta": {"type": "string"}, "alpha": {"type": "string"},
+                                      "mu": {"type": "string"}},
+                        "required": ["zeta", "alpha", "mu"], "additionalProperties": False}
+
+
+class RelaxRequiredForWireUnit(unittest.TestCase):
+    """Direct unit coverage of `_relax_required_for_wire` -- nested objects,
+    array `items`, `oneOf` branches and property order, with `const`/single-
+    `enum` discriminators kept and every other `required` entry dropped."""
+
+    def test_top_level_required_dropped(self):
+        relaxed = actors._relax_required_for_wire(NESTED_UNION_SCHEMA)
+        self.assertNotIn("required", relaxed)
+
+    def test_nested_object_required_dropped_but_const_kept(self):
+        relaxed = actors._relax_required_for_wire(NESTED_UNION_SCHEMA)
+        outer = relaxed["properties"]["outer"]
+        self.assertEqual(outer["required"], ["kind"])  # `size` dropped, `kind` (const) kept
+
+    def test_array_items_required_dropped(self):
+        relaxed = actors._relax_required_for_wire(NESTED_UNION_SCHEMA)
+        item_schema = relaxed["properties"]["items"]["items"]
+        self.assertNotIn("required", item_schema)
+
+    def test_oneof_branches_keep_only_their_discriminator(self):
+        relaxed = actors._relax_required_for_wire(NESTED_UNION_SCHEMA)
+        branch_a, branch_b = relaxed["properties"]["choice"]["oneOf"]
+        self.assertEqual(branch_a["required"], ["type"])  # `value` dropped
+        self.assertEqual(branch_b["required"], ["type"])  # single-enum discriminator kept
+
+    def test_non_required_content_untouched(self):
+        relaxed = actors._relax_required_for_wire(NESTED_UNION_SCHEMA)
+        self.assertEqual(relaxed["properties"]["outer"]["properties"]["size"], {"type": "integer"})
+        self.assertIs(relaxed["additionalProperties"], False)
+        self.assertEqual(relaxed["properties"]["choice"]["oneOf"][1]["properties"]["type"],
+                         {"enum": ["b"]})
+
+    def test_does_not_mutate_input(self):
+        original = copy.deepcopy(NESTED_UNION_SCHEMA)
+        actors._relax_required_for_wire(NESTED_UNION_SCHEMA)
+        self.assertEqual(NESTED_UNION_SCHEMA, original)
+
+    def test_all_non_discriminator_required_schema_loses_required_entirely(self):
+        relaxed = actors._relax_required_for_wire(SIMPLE_RELAX_SCHEMA)
+        self.assertNotIn("required", relaxed)
+
+    def test_required_with_no_sibling_properties_is_dropped(self):
+        relaxed = actors._relax_required_for_wire({"type": "object", "required": ["x"]})
+        self.assertNotIn("required", relaxed)
+
+    def test_non_mapping_and_scalar_schemas_pass_through(self):
+        self.assertIs(actors._relax_required_for_wire(True), True)
+        self.assertEqual(actors._relax_required_for_wire({"type": "string"}), {"type": "string"})
+
+    def test_property_declaration_order_is_preserved(self):
+        # llama.cpp's grammar converter walks optional properties in declared
+        # order (json-schema-to-grammar.cpp:688-725) -- relaxation must never
+        # reorder `properties`.
+        relaxed = actors._relax_required_for_wire(ORDERED_RELAX_SCHEMA)
+        self.assertEqual(list(relaxed["properties"]), ["zeta", "alpha", "mu"])
+
+
+class RelaxRequiredIntegration(unittest.TestCase):
+    """`_schema_repair`/`_parse_reply` end to end: the schema handed to the
+    server is relaxed (const/single-enum discriminators survive); the RESULT
+    is still validated against the ORIGINAL schema, so an omitted required
+    field fails honestly instead of being invented."""
+
+    def _ws(self, tmp):
+        ws = Path(tmp) / "workers" / "lane0"; ws.mkdir(parents=True); return ws
+
+    class _Resp:
+        def __init__(self, body): self._b = body
+        def read(self): return self._b
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    def _capturing_urlopen(self, captured, content):
+        def fake_urlopen(request, timeout=None):
+            captured.setdefault("bodies", []).append(json.loads(request.data.decode()))
+            payload = json.dumps({"choices": [{"message": {"content": content}}]}).encode()
+            return self._Resp(payload)
+        return fake_urlopen
+
+    def test_wire_schema_seen_by_server_has_required_relaxed_except_discriminator(self):
+        import tempfile
+        schema = {"type": "object",
+                 "properties": {"kind": {"const": "x"}, "detail": {"type": "string"}},
+                 "required": ["kind", "detail"], "additionalProperties": False}
+        captured: dict = {}
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = self._ws(tmp)
+            with mock.patch.object(actors, "_provider_base_url", return_value="http://127.0.0.1:1/v1"), \
+                 mock.patch("urllib.request.urlopen",
+                           side_effect=self._capturing_urlopen(
+                               captured, json.dumps({"kind": "x", "detail": "d stated in report"}))):
+                actors._schema_repair("report says detail: d stated in report", schema=schema,
+                                     backend=actors.backend_for("prov/model", "high"), workspace=ws)
+        wire_schema = captured["bodies"][0]["response_format"]["json_schema"]["schema"]
+        self.assertEqual(wire_schema.get("required"), ["kind"])
+
+    def test_relax_required_false_keeps_required_on_the_wire(self):
+        import tempfile
+        captured: dict = {}
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = self._ws(tmp)
+            with mock.patch.object(actors, "_provider_base_url", return_value="http://127.0.0.1:1/v1"), \
+                 mock.patch("urllib.request.urlopen",
+                           side_effect=self._capturing_urlopen(
+                               captured, json.dumps({"name": "widget", "count": 1}))):
+                actors._schema_repair("widget", schema=SIMPLE_RELAX_SCHEMA,
+                                     backend=actors.backend_for("prov/model", "high"), workspace=ws,
+                                     relax_required=False)
+        wire_schema = captured["bodies"][0]["response_format"]["json_schema"]["schema"]
+        self.assertEqual(wire_schema.get("required"), ["name", "count"])
+
+    def test_omitted_required_field_fails_instead_of_being_invented(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = self._ws(tmp)
+            captured: dict = {}
+            with mock.patch.object(actors, "_provider_base_url", return_value="http://127.0.0.1:1/v1"), \
+                 mock.patch("urllib.request.urlopen",
+                           side_effect=self._capturing_urlopen(captured, json.dumps({"name": "widget"}))):
+                with self.assertRaises(actors.ProviderTransient) as caught:
+                    actors._parse_reply("a widget, no count given anywhere in the text",
+                                        schema=SIMPLE_RELAX_SCHEMA,
+                                        backend=actors.backend_for("prov/model", "high"), workspace=ws)
+            # both were relaxed away on the wire (neither is a discriminator)
+            self.assertNotIn("required", captured["bodies"][0]["response_format"]["json_schema"]["schema"])
+            self.assertIn("invalid against the original", str(caught.exception))
+
+    def test_supplied_required_field_still_repairs(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = self._ws(tmp)
+            captured: dict = {}
+            with mock.patch.object(actors, "_provider_base_url", return_value="http://127.0.0.1:1/v1"), \
+                 mock.patch("urllib.request.urlopen",
+                           side_effect=self._capturing_urlopen(
+                               captured, json.dumps({"name": "widget", "count": 3}))):
+                body = actors._parse_reply("widget, and the count stated in the report is 3",
+                                           schema=SIMPLE_RELAX_SCHEMA,
+                                           backend=actors.backend_for("prov/model", "high"), workspace=ws)
+            self.assertEqual(body, {"name": "widget", "count": 3})
+
+    def test_decline_probe_schema_is_never_relaxed(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = self._ws(tmp)
+            captured: dict = {}
+
+            def fake_urlopen(request, timeout=None):
+                body = json.loads(request.data.decode())
+                captured.setdefault("bodies", []).append(body)
+                schema = body["response_format"]["json_schema"]["schema"]
+                if "explicitly_declines" in schema.get("properties", {}):
+                    content = json.dumps({"explicitly_declines": False, "reason": ""})
+                else:
+                    content = json.dumps({
+                        "mechanism_id": "widen-alignment", "statement": "s", "falsifier": "f",
+                        "target_surface": "a/b.cpp", "target_symbol": "align_fn"})
+                payload = json.dumps({"choices": [{"message": {"content": content}}]}).encode()
+                return self._Resp(payload)
+
+            with mock.patch.object(actors, "_provider_base_url", return_value="http://127.0.0.1:1/v1"), \
+                 mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+                actors._parse_reply(
+                    "I propose renaming the buffer align_fn to widen alignment in a/b.cpp.",
+                    schema=actors.HYPOTHESIS_SCHEMA,
+                    backend=actors.backend_for("prov/model", "high"), workspace=ws)
+            decline_wire_schema = captured["bodies"][0]["response_format"]["json_schema"]["schema"]
+            self.assertEqual(sorted(decline_wire_schema.get("required", [])),
+                             ["explicitly_declines", "reason"])
