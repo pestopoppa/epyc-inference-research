@@ -275,6 +275,28 @@ def _defer_timed_out_child(process: subprocess.Popen[str]) -> None:
     ).start()
 
 
+def _response_format_schema(response_format: Any) -> Mapping[str, Any] | None:
+    """Extract a JSON Schema from an OpenAI-style ``response_format`` kwarg.
+
+    Vendored Arena controllers speak the OpenAI SDK surface (``chat.completions
+    .create`` / ``responses.create``) against this shim; some pass a
+    ``response_format`` requesting structured output.  Only the
+    ``{"type": "json_schema", "json_schema": {"schema": {...}}}`` shape names
+    an actual schema that Codex's own ``--output-schema <FILE>`` can enforce
+    end to end; a bare ``{"type": "json_object"}`` (or anything else) carries
+    no schema to forward, so it is left alone rather than guessed at.
+    """
+    if not isinstance(response_format, Mapping):
+        return None
+    if response_format.get("type") != "json_schema":
+        return None
+    json_schema = response_format.get("json_schema")
+    if not isinstance(json_schema, Mapping):
+        return None
+    schema = json_schema.get("schema")
+    return schema if isinstance(schema, Mapping) else None
+
+
 @dataclass(frozen=True)
 class ControllerBudget:
     checkpoint_hours: float
@@ -344,17 +366,24 @@ class CodexTextModel:
     def remaining_seconds(self) -> float:
         return max(0.0, self._deadline - self._monotonic())
 
-    def _argv(self, output: Path) -> tuple[str, ...]:
-        return (
+    def _argv(
+        self, output: Path, *, schema_path: Path | None = None,
+    ) -> tuple[str, ...]:
+        argv = (
             str(self.executable), "exec", "--model", MODEL_ID,
             "--config", f'model_reasoning_effort="{MODEL_EFFORT}"',
             "--config", 'approval_policy="never"',
             "--sandbox", "read-only", "--ephemeral", "--ignore-user-config",
             "--ignore-rules", "--skip-git-repo-check", "--cd",
-            str(self.workspace), "--output-last-message", str(output), "-",
+            str(self.workspace),
         )
+        if schema_path is not None:
+            argv = argv + ("--output-schema", str(schema_path))
+        return argv + ("--output-last-message", str(output), "-")
 
-    def call(self, prompt: str) -> str:
+    def call(
+        self, prompt: str, *, output_schema: Mapping[str, Any] | None = None,
+    ) -> str:
         if not isinstance(prompt, str) or not prompt.strip():
             raise UpstreamControllerError("model prompt must be non-empty")
         remaining = self.remaining_seconds() - self.budget.reserve_seconds
@@ -363,10 +392,18 @@ class CodexTextModel:
         ordinal = len(self._calls) + 1
         output = self.artifact_root / f"{ordinal:04d}-model-output.txt"
         stderr_path = self.artifact_root / f"{ordinal:04d}-model-stderr.txt"
+        schema_path = None
+        if output_schema is not None:
+            schema_path = (
+                self.artifact_root / f"{ordinal:04d}-model-output-schema.json")
+            schema_path.write_text(
+                json.dumps(dict(output_schema), sort_keys=True),
+                encoding="utf-8")
+        argv = self._argv(output, schema_path=schema_path)
         model_broker = getattr(self, "_model_broker", None)
         if model_broker is not None:
             brokered = model_broker.call(
-                kind="codex_text", argv=self._argv(output), prompt=prompt,
+                kind="codex_text", argv=argv, prompt=prompt,
                 timeout_seconds=remaining)
             returncode = brokered.get("returncode")
             timed_out = bool(brokered.get("timed_out"))
@@ -374,7 +411,7 @@ class CodexTextModel:
             stderr = str(brokered.get("stderr", ""))
         else:
             process = subprocess.Popen(
-                self._argv(output), cwd=self.workspace, env=self.environment,
+                argv, cwd=self.workspace, env=self.environment,
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 text=True, start_new_session=True)
             timed_out = False
@@ -397,7 +434,7 @@ class CodexTextModel:
             "model": MODEL_ID,
             "effort": MODEL_EFFORT,
             "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
-            "argv": list(self._argv(output)),
+            "argv": list(argv),
             "returncode": returncode,
             "timed_out": timed_out,
             "stdout_sha256": hashlib.sha256(stdout.encode()).hexdigest(),
@@ -421,7 +458,9 @@ class CodexTextModel:
 
     def _responses_create(self, **kwargs: Any) -> Any:
         prompt = kwargs.get("input")
-        return SimpleNamespace(output_text=self.call(str(prompt or "")))
+        schema = _response_format_schema(kwargs.get("response_format"))
+        return SimpleNamespace(
+            output_text=self.call(str(prompt or ""), output_schema=schema))
 
     def _chat_create(self, **kwargs: Any) -> Any:
         messages = kwargs.get("messages")
@@ -430,7 +469,8 @@ class CodexTextModel:
         prompt = "\n\n".join(
             str(row.get("content", "")) for row in messages
             if isinstance(row, Mapping))
-        content = self.call(prompt)
+        schema = _response_format_schema(kwargs.get("response_format"))
+        content = self.call(prompt, output_schema=schema)
         return SimpleNamespace(
             choices=[SimpleNamespace(message=SimpleNamespace(content=content))])
 

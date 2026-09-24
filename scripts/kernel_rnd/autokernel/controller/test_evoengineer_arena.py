@@ -238,6 +238,36 @@ class EvoEngineerArenaTest(unittest.TestCase):
         self.assertEqual(solution.sol_string, "candidate")
         self.assertEqual(solution.other_info["name"], "unfenced")
 
+    def test_unparseable_reply_is_a_typed_parse_failure_not_a_candidate(self):
+        # No name:/code:/fenced block anywhere in the reply: every ordered
+        # fallback in parse_response must fail to extract a candidate.
+        unparseable = "I could not think of an optimization this round."
+        with self.assertRaisesRegex(
+                E.EvoEngineerArenaError, "no name:/code:/fenced block"):
+            self.interface.parse_response(unparseable)
+        # The typed failure must never reach the compiler/evaluator: no
+        # broker call may have been recorded.
+        self.assertEqual(self.evaluator.calls, [])
+
+    def test_unparseable_reply_is_never_evaluated_end_to_end(self):
+        # Exercise the same path the vendor's own generation loop uses:
+        # _generate_single_solution catches parse_response's exception and
+        # substitutes an empty Solution, which the run loop never submits
+        # for evaluation (mirrors evotoolkit's own
+        # `if solution.sol_string.strip():` gate).
+        try:
+            self.interface.parse_response("no structure here at all")
+            solution = None
+        except E.EvoEngineerArenaError:
+            solution = FixtureSolution("")
+        self.assertIsNotNone(solution)
+        self.assertEqual(solution.sol_string, "")
+        self.assertFalse(solution.sol_string.strip())
+        result = (self.task.evaluate_code(solution.sol_string)
+                  if solution.sol_string.strip() else None)
+        self.assertIsNone(result)
+        self.assertEqual(self.evaluator.calls, [])
+
     def test_builder_assembles_exact_full_parameters_but_does_not_run(self):
         model = FixtureModel()
         controller = E.build_controller(

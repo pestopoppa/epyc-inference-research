@@ -363,8 +363,22 @@ class EvoEngineerFullArenaInterface:
             return self.types.solution_type(
                 fallback_code, other_info={
                     "name": "extracted", "thought": "Fallback parsing"})
-        return self.types.solution_type(
-            content, other_info={"name": "raw", "thought": "Failed to parse"})
+        # No name:, code:, or fenced block survived every ordered fallback
+        # above: the reply is prose, not a candidate.  Raising here (instead
+        # of returning `self.types.solution_type(content, ...)`, which used
+        # to hand the whole raw reply to the compiler/evaluator as if it were
+        # source) makes this a typed parse failure using the arena's own
+        # failure type for this seam.  The upstream EvoEngineer loop already
+        # treats an exception from `parse_response` as a failed-generation
+        # candidate: `_generate_single_solution` catches it and returns
+        # `Solution("")`, which the run loop registers as an invalid,
+        # unevaluated solution (`sol_string.strip()` is empty, so it is never
+        # submitted to `task.evaluate_code`/the compiler) instead of
+        # crashing the arena or evaluating unparsed prose as a kernel.
+        raise EvoEngineerArenaError(
+            "EvoEngineer reply had no name:/code:/fenced block after every "
+            f"ordered fallback ({len(content)} chars); refusing to submit "
+            "unparsed prose as a candidate")
 
 
 def build_controller(

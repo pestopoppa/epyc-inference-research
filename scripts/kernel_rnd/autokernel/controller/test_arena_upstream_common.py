@@ -90,6 +90,88 @@ class ArenaUpstreamCommonTest(unittest.TestCase):
                 self.assertEqual(model.call("optimize"), "candidate")
             self.assertEqual(model.identity()["call_count"], 1)
 
+    def test_response_format_schema_extracts_only_the_json_schema_shape(self):
+        schema = {"type": "object", "properties": {"name": {"type": "string"}}}
+        self.assertEqual(
+            U._response_format_schema(
+                {"type": "json_schema",
+                 "json_schema": {"name": "kernel", "schema": schema}}),
+            schema)
+        # No schema payload to forward: left alone, not guessed at.
+        self.assertIsNone(U._response_format_schema({"type": "json_object"}))
+        self.assertIsNone(U._response_format_schema(None))
+        self.assertIsNone(U._response_format_schema("json_schema"))
+        self.assertIsNone(
+            U._response_format_schema({"type": "json_schema"}))
+        self.assertIsNone(U._response_format_schema(
+            {"type": "json_schema", "json_schema": {"name": "kernel"}}))
+
+    def _make_model(self, workspace: Path) -> U.CodexTextModel:
+        model = object.__new__(U.CodexTextModel)
+        model.workspace = workspace
+        model.budget = U.ControllerBudget(2.0, 7200)
+        model.environment = {"PATH": os.environ.get("PATH", "")}
+        model.executable = Path("/fixture/codex")
+        model.cli_sha256 = "0" * 64
+        model._monotonic = lambda: 1.0
+        model._deadline = 100.0
+        model.artifact_root = workspace / U.ARTIFACT_DIRNAME
+        model.artifact_root.mkdir()
+        model._calls = []
+        model._model_broker = None
+        completions = mock.MagicMock()
+        completions.create = model._chat_create
+        model.openai_compat = mock.MagicMock(
+            chat=mock.MagicMock(completions=completions),
+            responses=mock.MagicMock(create=model._responses_create))
+        return model
+
+    def test_chat_create_forwards_json_schema_response_format_to_codex(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            model = self._make_model(workspace)
+            schema = {"type": "object", "required": ["name"],
+                      "properties": {"name": {"type": "string"}}}
+            seen_argv: list[tuple[str, ...]] = []
+
+            def popen(argv, **kwargs):
+                del kwargs
+                seen_argv.append(tuple(argv))
+                return _CompletedProcess(tuple(argv))
+
+            with mock.patch.object(U.subprocess, "Popen", side_effect=popen):
+                response = model.openai_compat.chat.completions.create(
+                    messages=[{"role": "user", "content": "optimize"}],
+                    response_format={
+                        "type": "json_schema",
+                        "json_schema": {"name": "kernel", "schema": schema},
+                    })
+            self.assertEqual(
+                response.choices[0].message.content, "candidate")
+            (argv,) = seen_argv
+            self.assertIn("--output-schema", argv)
+            schema_path = Path(argv[argv.index("--output-schema") + 1])
+            self.assertEqual(
+                json.loads(schema_path.read_text(encoding="utf-8")), schema)
+
+    def test_chat_create_forwards_nothing_when_response_format_has_no_schema(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            workspace = Path(temporary)
+            model = self._make_model(workspace)
+            seen_argv: list[tuple[str, ...]] = []
+
+            def popen(argv, **kwargs):
+                del kwargs
+                seen_argv.append(tuple(argv))
+                return _CompletedProcess(tuple(argv))
+
+            with mock.patch.object(U.subprocess, "Popen", side_effect=popen):
+                model.openai_compat.chat.completions.create(
+                    messages=[{"role": "user", "content": "optimize"}],
+                    response_format={"type": "json_object"})
+            (argv,) = seen_argv
+            self.assertNotIn("--output-schema", argv)
+
 
 if __name__ == "__main__":
     unittest.main()
