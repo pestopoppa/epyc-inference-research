@@ -88,6 +88,16 @@ class CallRecordV1(_Lane, unittest.TestCase):
         self.assertEqual(seat["config"]["path"], str(config))
         self.assertEqual(seat["instructions"]["bytes"], len("tool discipline"))
 
+    def test_a_variable_context_call_is_a_valid_record_under_a_suffixed_arm(self):
+        """`--actor-context-mode variable` names itself in `seat.arm` (free text in the
+        contract), so the A/B reader separates the arms without a new field."""
+        row = self._call(actors.backend_for("qwen-gpu/qwen3.8-27b", "high"),
+                         schema=actors.HYPOTHESIS_SCHEMA,
+                         env={actors.SEAT_ENV_ARM: "plain+ctx-variable"})
+        self.assertEqual(self.capture.validate_call_record(row), [])
+        self.assertEqual((row["seat"]["arm"], row["seat"]["bounded"], row["seat"]["config"]),
+                         ("plain+ctx-variable", False, None))
+
     def test_a_hosted_critic_is_a_plain_seat_with_no_opencode_fields(self):
         row = self._call(actors.CRITIC_DEFAULT, schema=actors.REVIEW_SCHEMA,
                          stdout='{"accepted": true}')

@@ -716,6 +716,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--actor-fan-out", action=argparse.BooleanOptionalAction, default=True,
                         help="bounded seat: let the agent spread independent reads over "
                              "read-only scout subagents (default: %(default)s)")
+    parser.add_argument("--actor-context-mode", choices=("inline", "variable"), default="inline",
+                        help="opencode planner/author context bundle: 'inline' puts the whole "
+                             "rendered bundle in the prompt (every run through DS41 run 9: "
+                             "75.9k chars on run 8); 'variable' writes it to a per-call "
+                             "directory beside the lane (workers/actor-context/) and sends an "
+                             "index -- task, schema, table of contents with sizes, a resolved "
+                             "target card and the always-needed sections (~16k chars on the "
+                             "run-8 bundle). Works in either --actor-seat; the call record's "
+                             "seat.arm gains '+ctx-variable'. No effect on codex/claude, or on "
+                             "the critic (default: %(default)s)")
     parser.add_argument("--actor-steps", type=int, default=actors.ActorSeat.steps,
                         help="bounded seat: opencode step cap per call (default: %(default)s)")
     parser.add_argument("--actor-timeout-s", type=int, default=actors.DEFAULT_TIMEOUT_S,
@@ -1299,7 +1309,8 @@ def main(argv: list[str] | None = None) -> int:
     critic_backend = actors.backend_for(args.critic_model, args.critic_effort)
     print(f"actors    planner={planner_backend.describe()}  "
           f"critic={critic_backend.describe()}  "
-          f"seat={args.actor_seat}{' fan-out' if args.actor_fan_out else ''} steps={args.actor_steps}")
+          f"seat={args.actor_seat}{' fan-out' if args.actor_fan_out else ''} steps={args.actor_steps} "
+          f"context={args.actor_context_mode}")
     # D4: with the two-rung gate on, the champion-vs-production headline is measured
     # on the confirm rung -- the standing +17.9% was the screen shape, which is the
     # "headline must be the production recipe" defect. Floor re-keyed to that model.
@@ -2860,7 +2871,8 @@ def main(argv: list[str] | None = None) -> int:
                                            seat=actors.ActorSeat(
                                                bounded=args.actor_seat == "bounded",
                                                fan_out=args.actor_fan_out,
-                                               steps=args.actor_steps))
+                                               steps=args.actor_steps,
+                                               context_mode=args.actor_context_mode))
             return (runtime_recovery.PendingPlanner(ordinary, pending_slot)
                     if pending_pair is not None else ordinary)
 

@@ -183,11 +183,17 @@ class ActorSeat:
     code_search), a tool_output cap, a step cap and a tool-discipline agent prompt.
     `fan_out` lets the agent spread independent reads over read-only scout
     subagents (the GPU server has two slots). `bounded=False` is the plain seat --
-    the A/B control."""
+    the A/B control.
+
+    `context_mode` is orthogonal to `bounded`: "inline" (default) puts the whole
+    rendered context bundle in the prompt, as every run through DS41 run 9 did;
+    "variable" writes it to a per-call directory beside the lane and sends an index
+    (`actor_context`). opencode only: the codex/claude backends keep the inline prompt."""
     bounded: bool = True
     fan_out: bool = True
     steps: int = 60
     tools_python: str = ORCHESTRATOR_PYTHON
+    context_mode: str = "inline"
 
 
 def _profile_dirs(context: Mapping[str, Any]) -> tuple[Path, ...]:
@@ -1667,10 +1673,45 @@ class AgentPlanner:
                  SEAT_ENV_FAN_OUT: "1" if self.seat.fan_out else "0",
                  SEAT_ENV_STEPS: str(self.seat.steps)})
 
+    def _context_block(self, role: str, context: Mapping[str, Any]):
+        """The context text for one call, and the variable-mode bundle behind it.
+
+        Inline (the default, and every non-opencode backend): `render_context`
+        verbatim, no bundle. Variable: the bundle is written beside the lane and the
+        text is its index. A bundle that cannot be written degrades to inline and
+        the call is recorded under the unsuffixed arm -- an A/B must never count an
+        inline prompt as a variable-mode call."""
+        text = render_context(context)
+        if (self.seat is None or self.seat.context_mode != "variable"
+                or self.backend.kind != "opencode"):
+            return text, None
+        from . import actor_context
+        try:
+            bundle = actor_context.materialize(
+                text, Path(self.workspace).parent / actor_context.BUNDLE_DIR, role=role)
+        except (OSError, ValueError) as exc:
+            import sys
+            print(f"actor context: variable bundle refused ({type(exc).__name__}: {exc}); "
+                  "this call is inline", file=sys.stderr)
+            return text, None
+        return bundle.index, bundle
+
+    @staticmethod
+    def _sealed(prompt: str, bundle, env: dict[str, str] | None) -> dict[str, str] | None:
+        """Bind a variable-mode bundle to the exact prompt and name the arm on the call
+        record (`seat.arm` is free text in VB-AK-SEAT: `plain+ctx-variable`)."""
+        if bundle is None:
+            return env
+        from . import actor_context
+        bundle.seal(prompt)
+        arm = (env or {}).get(SEAT_ENV_ARM) or "plain"
+        return {**(env or {}), SEAT_ENV_ARM: arm + actor_context.ARM_SUFFIX}
+
     def propose(self, context: Mapping[str, Any]) -> Hypothesis | Abstain:
         cpu = _cpu_target(context)
+        context_text, bundle = self._context_block("planner", context)
         prompt = _HYPOTHESIS_TASK.format(
-            context=render_context(context),
+            context=context_text,
             platform=("the CPUs in the selected original serving launch" if cpu else
                       "an AMD MI210 (gfx90a, ROCm 6.2)"),
             target_path=("one source path on the selected CPU serving route" if cpu else
@@ -1693,6 +1734,7 @@ class AgentPlanner:
                            "Their A/B result cannot select a recipe, keep a candidate, "
                            "or establish a causal explanation for a sampled hotspot.")
         backend, env = self._seated("planner", context)
+        env = self._sealed(prompt, bundle, env)
         raw, streak = _with_backoff(
             lambda: _run_agent(prompt, workspace=self.workspace,
                                timeout_s=self.timeout_s, backend=backend,
@@ -1730,13 +1772,14 @@ class AgentPlanner:
         resource = "selected CPU resources" if cpu else "GPU"
         reply = (json.dumps({"paths": [hypothesis.target_surface]}) if cpu else
                  '{"paths": ["ggml/src/ggml-cuda/<file>"]}')
+        context_text, bundle = self._context_block("author", context)
         prompt = (
             f"Implement this hypothesis in the worktree at {self.workspace}.\n\n"
             f"mechanism: {hypothesis.mechanism_id}\n"
             f"statement: {hypothesis.statement}\n"
             f"file:      {hypothesis.target_surface}\n"
             f"symbol:    {hypothesis.target_symbol}\n\n"
-            f"{render_context(context)}\n\n"
+            f"{context_text}\n\n"
             "Edit the file directly. Keep the change minimal and confined to the "
             "named file.\n\n"
             "DO NOT BUILD, COMPILE, BENCHMARK OR TEST. The loop owns the build and "
@@ -1749,6 +1792,7 @@ class AgentPlanner:
             "abstaining is a correct science result. Make no edits and reply instead with:\n"
             '{"abstain": "<specific reason the hypothesis is infeasible>"}')
         backend, env = self._seated("author", context)
+        env = self._sealed(prompt, bundle, env)
         raw, streak = _with_backoff(
             lambda: _run_agent(prompt, workspace=self.workspace,
                                timeout_s=self.timeout_s, backend=backend,
