@@ -64,7 +64,7 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None, s
         # Target/workload/resource identities are never overridden by common argv.
         valued = {"--workers", "--planner-model", "--planner-effort", "--critic-model",
                   "--critic-effort", "--pairs", "--serving-pairs", "--belief-root-repo",
-                  "--shared-history-root", "--node-profile-level"}
+                  "--shared-history-root", "--node-profile-level", "--actor-timeout-s"}
         # Bare switches: instruments and rankers, never identities.
         switches = {"--rank-prior-experiments", "--node-profile"}
         iterator = iter(extra)

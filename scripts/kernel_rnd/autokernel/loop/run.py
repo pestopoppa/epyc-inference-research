@@ -704,6 +704,12 @@ def main(argv: list[str] | None = None) -> int:
                         help="critic model, both passes; same routing as "
                              "--planner-model (default: %(default)s)")
     parser.add_argument("--critic-effort", default=actors.CRITIC_DEFAULT.effort)
+    parser.add_argument("--actor-timeout-s", type=int, default=actors.DEFAULT_TIMEOUT_S,
+                        help="wall budget per planner/critic call before it is a transient "
+                             "(default: %(default)s). The default was sized for cloud actors; "
+                             "a local ~17 t/s planner running --auto at high needs more -- "
+                             "measured 2026-09-24: two consecutive 30-min kills at step ~80, "
+                             "zero proposals")
     parser.add_argument("--workers", type=int, default=pipeline.DEFAULT_WORKERS,
                         help="concurrent lanes (default: the measured tail-saturation "
                              "point; see pipeline.DEFAULT_WORKERS)")
@@ -2833,7 +2839,8 @@ def main(argv: list[str] | None = None) -> int:
         def make_planner(worker):
             if screen_confirmation:
                 return cpu_screen.RetainedPlanner(screen_confirmation, worker, screen_prepared["launch"])
-            ordinary = actors.AgentPlanner(workspace=worker.worktree, backend=planner_backend)
+            ordinary = actors.AgentPlanner(workspace=worker.worktree, backend=planner_backend,
+                                           timeout_s=args.actor_timeout_s)
             return (runtime_recovery.PendingPlanner(ordinary, pending_slot)
                     if pending_pair is not None else ordinary)
 
@@ -2849,7 +2856,8 @@ def main(argv: list[str] | None = None) -> int:
             make_critic=lambda worker: (
                 cpu_screen.RetainedCritic(screen_confirmation)
                 if screen_confirmation else actors.AgentCritic(
-                    workspace=worker.worktree, backend=critic_backend)),
+                    workspace=worker.worktree, backend=critic_backend,
+                    timeout_s=args.actor_timeout_s)),
             build_context=build_context, make_gate=gate_for,
             make_measure=measure_for, record=record_pooled,
             iterations=(args.iterations or None), should_stop=should_stop,
