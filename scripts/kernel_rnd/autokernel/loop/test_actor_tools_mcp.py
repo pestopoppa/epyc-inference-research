@@ -12,6 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 from autokernel.loop import actor_tools_mcp as t
+from autokernel.loop import perf_cache as pc
 
 CPP_FIXTURE = """\
 #include <vector>
@@ -496,6 +497,163 @@ class SymbolResolution(unittest.TestCase):
                                     "libggml-cpu.so.0.16.0")
         self.assertIn("no samples for symbol 'not_a_symbol'", out)
         self.assertIn("no sampled symbol of that dso matches", out)
+
+
+class PerfCacheIntegration(unittest.TestCase):
+    """DS41-C20d: `profile_top`/`symbol_annotate` served from a `PerfCache` must be
+    byte-identical to the uncached call, must never serve a changed profile from a
+    stale entry, and must lazily cache `symbol_annotate` per symbol -- all without
+    a real `perf` (every `perf` invocation here is `subprocess.run`, mocked)."""
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        self.addCleanup(self._td.cleanup)
+        base = Path(self._td.name)
+        self.pdir = base / "profiles"
+        self.pdir.mkdir()
+        self.prof = self.pdir / "measurement-record.data"
+        self.prof.write_bytes(b"\0" * 4096)
+        self.dirs = [str(self.pdir)]
+        self.cache_root = str(base / "cache")
+
+    def _cache(self):
+        return pc.PerfCache(cache_root=self.cache_root, perf_ver="perf version 6.17.13 (test)")
+
+    def test_cache_hit_is_byte_identical_to_the_uncached_call(self):
+        with mock.patch.object(t.subprocess, "run", return_value=subprocess.CompletedProcess(
+                [], 0, stdout=PERF_REPORT, stderr="")):
+            uncached = t.profile_top(self.dirs, "measurement-record.data", limit=50,
+                                     dso="libggml-cpu.so")
+        cache = self._cache()
+        with mock.patch.object(t.subprocess, "run", return_value=subprocess.CompletedProcess(
+                [], 0, stdout=PERF_REPORT, stderr="")) as run:
+            first = t.profile_top(self.dirs, "measurement-record.data", limit=50,
+                                  dso="libggml-cpu.so", cache=cache)
+            second = t.profile_top(self.dirs, "measurement-record.data", limit=50,
+                                   dso="libggml-cpu.so", cache=cache)
+        self.assertEqual(run.call_count, 1)          # second call never re-ran perf
+        self.assertEqual(first, uncached)             # identical to today's uncached output
+        self.assertEqual(second, uncached)
+
+    def test_bounds_still_hold_through_the_cache(self):
+        cache = self._cache()
+        with mock.patch.object(t.subprocess, "run", return_value=subprocess.CompletedProcess(
+                [], 0, stdout=PERF_REPORT, stderr="")):
+            out = t.profile_top(self.dirs, "measurement-record.data", limit=500,
+                                dso="libggml-cpu.so", cache=cache)
+            out2 = t.profile_top(self.dirs, "measurement-record.data", limit=500,
+                                 dso="libggml-cpu.so", cache=cache)  # served from cache
+        for text in (out, out2):
+            self.assertIn("limit clamped from 500 to max 80", text)
+            rows = [ln for ln in text.splitlines() if "[.] kernel_" in ln]
+            self.assertEqual(len(rows), 80)
+            self.assertIn("showing top 80 of 95 rows", text)
+
+    def test_a_new_limit_is_served_from_the_same_cached_report_call(self):
+        """`limit` never reaches perf's own argv, so varying it must cost zero
+        extra perf calls once the (profile, dso) report is cached."""
+        cache = self._cache()
+        with mock.patch.object(t.subprocess, "run", return_value=subprocess.CompletedProcess(
+                [], 0, stdout=PERF_REPORT, stderr="")) as run:
+            small = t.profile_top(self.dirs, "measurement-record.data", limit=5,
+                                  dso="libggml-cpu.so", cache=cache)
+            large = t.profile_top(self.dirs, "measurement-record.data", limit=40,
+                                  dso="libggml-cpu.so", cache=cache)
+        self.assertEqual(run.call_count, 1)
+        self.assertEqual(len([ln for ln in small.splitlines() if "[.] kernel_" in ln]), 5)
+        self.assertEqual(len([ln for ln in large.splitlines() if "[.] kernel_" in ln]), 40)
+
+    def test_a_changed_profile_is_never_served_stale(self):
+        cache = self._cache()
+        report_v2 = PERF_REPORT.replace("987654321", "111111111")
+        with mock.patch.object(t.subprocess, "run", return_value=subprocess.CompletedProcess(
+                [], 0, stdout=PERF_REPORT, stderr="")) as run:
+            first = t.profile_top(self.dirs, "measurement-record.data", cache=cache)
+        # The loop writes a NEW profile at the same path (a fresh measurement round).
+        import time
+        time.sleep(0.01)
+        self.prof.write_bytes(b"\1" * 8192)
+        with mock.patch.object(t.subprocess, "run", return_value=subprocess.CompletedProcess(
+                [], 0, stdout=report_v2, stderr="")) as run2:
+            second = t.profile_top(self.dirs, "measurement-record.data", cache=cache)
+        self.assertEqual(run.call_count, 1)
+        self.assertEqual(run2.call_count, 1)          # not zero: the change was NOT a hit
+        self.assertIn("987654321", first)
+        self.assertIn("111111111", second)
+        self.assertNotIn("111111111", first)
+
+    def test_symbol_annotate_lazily_caches_per_symbol(self):
+        cache = self._cache()
+        with mock.patch.object(t.subprocess, "run", return_value=subprocess.CompletedProcess(
+                [], 0, stdout=PERF_ANNOTATE, stderr="")) as run:
+            first = t.symbol_annotate(self.dirs, "measurement-record.data", "kernel_0",
+                                      "libggml-cpu.so", cache=cache)
+            second = t.symbol_annotate(self.dirs, "measurement-record.data", "kernel_0",
+                                       "libggml-cpu.so", cache=cache)
+        self.assertEqual(run.call_count, 1)
+        self.assertEqual(first, second)
+        self.assertIn("kernel_0", first)
+
+    def test_a_different_symbol_is_a_separate_lazy_entry(self):
+        cache = self._cache()
+        annotate_calls = []
+
+        def fake_run(cmd, **kw):
+            annotate_calls.append(cmd[-1])
+            return subprocess.CompletedProcess([], 0, stdout=PERF_ANNOTATE, stderr="")
+
+        with mock.patch.object(t.subprocess, "run", side_effect=fake_run):
+            t.symbol_annotate(self.dirs, "measurement-record.data", "kernel_0",
+                              "libggml-cpu.so", cache=cache)
+            t.symbol_annotate(self.dirs, "measurement-record.data", "kernel_1",
+                              "libggml-cpu.so", cache=cache)
+            t.symbol_annotate(self.dirs, "measurement-record.data", "kernel_0",
+                              "libggml-cpu.so", cache=cache)  # repeat: must not re-run
+        self.assertEqual(annotate_calls, ["kernel_0", "kernel_1"])
+
+    def test_the_resolve_helper_call_is_also_cached(self):
+        """symbol_annotate's short-name resolution (DS41-C23) shells to `perf report
+        --sort symbol` on its own; a repeat lookup for a DIFFERENT short name that
+        resolves against the same dso's symbol list must not re-run that report --
+        only the actual (per-symbol) annotate calls differ."""
+        cache = self._cache()
+        calls = {"report": 0, "annotate": 0}
+        no_samples = ("", "Error:\nThe measurement-record.data data has no samples!\n")
+
+        def fake_run(cmd, **kw):
+            if cmd[1] == "report":
+                calls["report"] += 1
+                return subprocess.CompletedProcess([], 0, stdout=SYMBOL_REPORT, stderr="")
+            calls["annotate"] += 1
+            symbol = cmd[-1]
+            if symbol in (Q4K1, Q4K2):  # perf's own full demangled names: real samples
+                return subprocess.CompletedProcess([], 0, stdout=PERF_ANNOTATE, stderr="")
+            stdout, stderr = no_samples   # a short/typed name perf cannot match verbatim
+            return subprocess.CompletedProcess([], 0, stdout=stdout, stderr=stderr)
+
+        with mock.patch.object(t.subprocess, "run", side_effect=fake_run):
+            t.symbol_annotate(self.dirs, "measurement-record.data",
+                              "mul_mat_qX_K_q8_2_X4_T<DequantizerQ4K_AVX2, 1>",
+                              "libggml-cpu.so.0.16.0", cache=cache)
+            t.symbol_annotate(self.dirs, "measurement-record.data",
+                              "mul_mat_qX_K_q8_2_X4_T<DequantizerQ4K_AVX2, 2>",
+                              "libggml-cpu.so.0.16.0", cache=cache)
+        # One `perf report --sort symbol` resolves BOTH short names from the cached
+        # symbol list. Four annotate calls (2 per symbol_annotate: the short-name
+        # probe that misses verbatim, then the resolved full name) are each a
+        # genuinely distinct perf argv -- caching cannot and should not collapse
+        # those, only the shared resolve-report call.
+        self.assertEqual(calls["report"], 1)
+        self.assertEqual(calls["annotate"], 4)
+
+    def test_no_cache_argument_is_unchanged_behavior(self):
+        """cache=None (every call site that predates DS41-C20d) must still run perf
+        every time -- the cache is opt-in per call, never a hidden global."""
+        with mock.patch.object(t.subprocess, "run", return_value=subprocess.CompletedProcess(
+                [], 0, stdout=PERF_REPORT, stderr="")) as run:
+            t.profile_top(self.dirs, "measurement-record.data", dso="libggml-cpu.so")
+            t.profile_top(self.dirs, "measurement-record.data", dso="libggml-cpu.so")
+        self.assertEqual(run.call_count, 2)
 
 
 class ServerEntry(unittest.TestCase):

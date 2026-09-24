@@ -1287,6 +1287,33 @@ def cached_loop_observation(reference, *, store_root, anchor_commit,
     return observed
 
 
+def _maybe_prewarm_perf_cache(measurement_record_path):
+    """DS41-C20d optional prewarm: parse the just-written perf.data into
+    `actor_tools_mcp`'s cache HERE, on the loop's own time, so the planner's first
+    `profile_top()` call is already a hit instead of paying the full `perf report`
+    pass inside its own tool-call budget.
+
+    Gated behind `AK_PERF_CACHE_PREWARM=1`, default OFF: this costs one full `perf
+    report --stdio` pass (CPU + wall time tracking the profile's sample count --
+    seconds, not minutes, for the ~25-30 MB profiles this campaign has produced so
+    far) on the SAME CPUs `profile_loop` just used to profile the server, at the
+    moment right after that measurement window closes. Only enable it when nothing
+    downstream is still inside an observation window that CPU burn could pollute
+    (e.g. a floor calibration reading noise immediately after) -- see
+    `agents/shared/OPERATING_CONSTRAINTS.md` Observation Windows and 'idle compute
+    is a reportable condition'. A prewarm failure/timeout is swallowed: it must
+    never fail the profile capture that already succeeded, and an un-prewarmed
+    cache just means the planner's first call pays the cost it always paid."""
+    if os.environ.get("AK_PERF_CACHE_PREWARM") != "1":
+        return
+    from . import perf_cache
+    try:
+        perf_cache.prewarm_profile(str(measurement_record_path),
+            cache_root=os.environ.get("AK_PERF_CACHE_DIR"))
+    except Exception:
+        pass
+
+
 def profile_loop(recipe, prompts, *, store_root, perf_path="/usr/bin/perf",
                  timeout_s=1800, server_interpreter=None):
     """Separate observational launch using the loop's actual current binary and requests."""
@@ -1317,6 +1344,7 @@ def profile_loop(recipe, prompts, *, store_root, perf_path="/usr/bin/perf",
                 "profile_claim_tuple": _loop_claim(body, artifact.to_dict(),
                     datetime.now(timezone.utc).date().isoformat())}
             exported = store.write(record["run_id"], record)
+            _maybe_prewarm_perf_cache(capture.directory / "measurement-record.data")
             return loop_observation(exported.to_dict(), store_root=store_root)
         except BaseException as exc:
             if capture is not None:
