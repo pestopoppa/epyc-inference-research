@@ -54,6 +54,13 @@ WHAT STAYS INLINE (`INLINE_SECTIONS`), from the DS41 run-7/8 prompts and replies
   the build tree the target names; the other ~22k chars of that JSON (digests,
   provenance, a repeated full-transfer target) are reference material.
 
+To files, with a SUMMARY inline (`SUMMARY_SECTIONS`): `node_profile` -- the per-op
+wall shares from the instrumented sibling build. `render_context` did not print it at
+all before 2026-09-24 although the CPU directive says "Read node_profile"; it now renders
+in both modes (~3.9k chars on the run-8 observation), and here its head (instrument
+caveat + mechanism-family share table) stays in the index while the per-op, weight-path,
+host-phase and engram tables are a file named as required reading.
+
 To files: the target JSON, program.md, shared history (12-21k chars, "suggestions
 only"), serving observations ("recall") and the operator inbox. The inbox is named as
 required reading in the index: run 7's hypothesis cited two of its figures, so the
@@ -88,6 +95,8 @@ SECTION_HEADERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("superseded", ("## Formed but never measured — consider these FIRST",)),
     ("profile", ("## CPU profile for the selected experimental target",
                  "## Where the device time actually goes (rocprofv3, current champion)")),
+    ("node_profile", ("## Node profile — per-op wall SHARES on an instrumented sibling "
+                      "of the same anchor",)),
     ("exhausted_families", ("## DIMINISHING-RETURNS ESCAPE — mandatory for this turn",)),
     ("stagnant_families", ("## Family-level diminishing returns — abstraction escape required",)),
     ("characterised", ("## Characterised — do NOT re-measure these",)),
@@ -104,6 +113,20 @@ JSON_SECTIONS = frozenset({"target", "shared_history", "serving_observations"})
 INLINE_SECTIONS = frozenset({"preamble", "program", "superseded", "profile",
                              "exhausted_families", "stagnant_families", "characterised",
                              "already_tried", "hypothesis_rejections", "patch_rejections"})
+#: File sections whose HEAD (everything before its second `### ` sub-heading) is also
+#: shown in the index, followed by a pointer to the full file. `node_profile` renders at
+#: ~3.9k chars on the run-8 observation (a quarter of the ~16k index): its head -- the
+#: instrument caveat and the mechanism-family wall-share table, ~1.2k -- is what orients
+#: a proposal (dense vs expert matmul), while the per-op / weight-path / host-phase /
+#: engram tables and the limitations are reference the planner pulls when it needs them.
+#: A section with fewer than two sub-headings (an absent profile: status + reason) is
+#: its own summary, shown whole.
+SUMMARY_SECTIONS = frozenset({"node_profile"})
+#: Required reading named in the index for a file section, beyond the heading heuristic.
+REQUIRED_SECTIONS = {
+    "node_profile": "node_profile -- the CPU directive says to read it: per-op, weight-path, "
+                    "host-phase and engram SHARES for this anchor",
+}
 #: A JSON container is split into a directory only past this size and above this depth;
 #: smaller ones stay one pretty-printed file. On the run-8 bundle that is one file per
 #: shared-history row (~2k chars) and per target key (<= 11.5k), 30 JSON files: a
@@ -129,6 +152,25 @@ class Section:
     @property
     def inline(self) -> bool:
         return self.key in INLINE_SECTIONS
+
+    @property
+    def summarized(self) -> bool:
+        return self.key in SUMMARY_SECTIONS
+
+
+def section_summary(section: Section) -> str:
+    """The head of a `SUMMARY_SECTIONS` section: its text up to the second `### `
+    line (outside code fences), or the whole section when it has fewer than two."""
+    starts = []
+    offset = 0
+    fence = False
+    for line in section.text.splitlines(keepends=True):
+        if line.startswith("```"):
+            fence = not fence
+        elif not fence and line.startswith("### "):
+            starts.append(offset)
+        offset += len(line)
+    return section.text if len(starts) < 2 else section.text[:starts[1]]
 
 
 def split_sections(text: str) -> list[Section]:
@@ -428,6 +470,8 @@ def _index_text(directory: Path, rows: list[tuple[Section, str]],
             continue
         if section.key == "inbox":
             must.append(f"- `{rel}` — operator suggestions for this campaign (read it all)")
+        if section.key in REQUIRED_SECTIONS:
+            must.append(f"- `{rel}` — {REQUIRED_SECTIONS[section.key]}")
         for line, heading in _headings(section.text):
             if section.key != "inbox" and _MUST_READ.search(heading):
                 must.append(f"- `{rel}` L{line}: {heading}")
@@ -443,8 +487,10 @@ def _index_text(directory: Path, rows: list[tuple[Section, str]],
         if section.key in payloads:
             extra = (f" (+ `json/{section.key}/`)" if _is_dir(payloads[section.key], 0)
                      else f" (+ `json/{section.key}.json`)")
+        placement = ("INLINE" if section.inline else
+                     "file + summary" if section.summarized else "file")
         out.append(f"| {n} | {section.key} | `{rel}`{extra} | {len(section.text):,} | "
-                   f"{section.text.count(chr(10))} | {'INLINE' if section.inline else 'file'} |")
+                   f"{section.text.count(chr(10))} | {placement} |")
     out.append("")
     headed = [(section, rel) for section, rel in rows
               if not section.inline and section.key not in payloads]
@@ -470,10 +516,23 @@ def _index_text(directory: Path, rows: list[tuple[Section, str]],
     out.append("=== INLINE sections (verbatim) ===")
     out.append("")
     index = "\n".join(out)
-    inline = "".join(section.text for section, _ in rows if section.inline)
-    return index + inline.rstrip("\n")
+    parts = []
+    for section, rel in rows:
+        if section.inline:
+            parts.append(section.text)
+        elif section.summarized:
+            head = section_summary(section)
+            if head == section.text:
+                parts.append(section.text)
+            else:
+                parts.append(head.rstrip("\n") + "\n"
+                             f"(summary -- the rest of this section, "
+                             f"{len(section.text) - len(head):,} chars, is "
+                             f"`{directory}/{rel}`)\n\n")
+    return index + "".join(parts).rstrip("\n")
 
 
 __all__ = ["ARM_SUFFIX", "BUNDLE_DIR", "Bundle", "INLINE_SECTIONS", "JSON_SECTIONS", "MODES",
-           "SECTION_HEADERS", "Section", "explode", "implode", "json_payload", "materialize",
-           "split_sections", "target_card"]
+           "REQUIRED_SECTIONS", "SECTION_HEADERS", "SUMMARY_SECTIONS", "Section", "explode",
+           "implode", "json_payload", "materialize", "section_summary", "split_sections",
+           "target_card"]

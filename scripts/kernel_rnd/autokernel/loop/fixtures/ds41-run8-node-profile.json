@@ -1,0 +1,795 @@
+{
+  "cache_key": {
+    "anchor_commit": "ebb68dc55d5f6af4a4a5dccdd2a013fa76c63bee",
+    "execution_digest": "cffc28474e3bafafabce7bbe0f9d865f394df68e2a292524aeec1be6bbce2a6b",
+    "level": 2,
+    "prompt_manifest_digest": "088608da579d74cff3d939978e1669b4efbb022c451d36b1ef0ca1df2d92a2ff",
+    "scope": "half"
+  },
+  "schema": "epyc.autokernel.loop_node_profile.v1",
+  "section": {
+    "basis": "instrumented sibling build of the current anchor, same commit and frozen requests",
+    "build": {
+      "anchor_commit": "ebb68dc55d5f6af4a4a5dccdd2a013fa76c63bee",
+      "dir": "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu-prof",
+      "measured_build_dir": "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu",
+      "recipe": "native-openmp-gcc15-cpu-nodeprof-v1",
+      "recipe_sha256": "a70f8badda4d09745b3c9caa53bbc3fef586acdeb1311253bf46f179f7f70ee4"
+    },
+    "engram": {
+      "fault_counts_are_measured": true,
+      "fault_source": "getrusage_thread",
+      "gather_share_of_decode": null,
+      "host": {
+        "n_decode_step_span": 0.0,
+        "us_decode_step_span": 0.0,
+        "us_hash": 391.0,
+        "us_observe": 3268.0
+      },
+      "layers": [
+        {
+          "cache_capacity_rows": [
+            4096.0,
+            65536.0,
+            1048576.0,
+            4194304.0
+          ],
+          "cache_hit_rate": [
+            0.0625,
+            0.4583333333333333,
+            0.4791666666666667,
+            0.4791666666666667
+          ],
+          "index": 0,
+          "intra_token_duplication": 0.0,
+          "n_gated": 0.0,
+          "n_tokens": 2.0,
+          "rows": 48.0,
+          "rows_same_as_prev": 0.0,
+          "rows_uniq_in_token": 48.0,
+          "table_rows": 384006168.0
+        },
+        {
+          "cache_capacity_rows": [
+            4096.0,
+            65536.0,
+            1048576.0,
+            4194304.0
+          ],
+          "cache_hit_rate": [
+            0.020833333333333332,
+            0.4583333333333333,
+            0.4791666666666667,
+            0.4791666666666667
+          ],
+          "index": 1,
+          "intra_token_duplication": 0.0,
+          "n_gated": 0.0,
+          "n_tokens": 2.0,
+          "rows": 48.0,
+          "rows_same_as_prev": 0.0,
+          "rows_uniq_in_token": 48.0,
+          "table_rows": 384016682.0
+        }
+      ],
+      "level": 2,
+      "majflt_per_decode_token": 0.0,
+      "minflt_per_decode_token": 0.0,
+      "n_col": 24.0,
+      "n_engram": 2.0,
+      "op_counts_are_measured": true,
+      "op_level": 2,
+      "op_profiler": "resolved",
+      "path": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store/node-profiles/run-52454a8aa3500448b198993c1474aae0/dsv41-engram-prof.json",
+      "schema": "dsv41-engram-profile/1",
+      "status": "observed",
+      "tables": [
+        {
+          "engram_layer": 0,
+          "majflt": 0.0,
+          "minflt": 0.0,
+          "n_calls": 2.0,
+          "n_rows": 48.0,
+          "n_thread_spans": 96.0,
+          "slot": 0,
+          "us_cpu": 198.0,
+          "us_span_ith0": 4.0
+        },
+        {
+          "engram_layer": 1,
+          "majflt": 0.0,
+          "minflt": 0.0,
+          "n_calls": 2.0,
+          "n_rows": 48.0,
+          "n_thread_spans": 96.0,
+          "slot": 1,
+          "us_cpu": 180.0,
+          "us_span_ith0": 3.0
+        }
+      ]
+    },
+    "engram_fault_mix": {
+      "fault_counts_are_measured": true,
+      "fault_source": "getrusage_thread",
+      "gather_share_of_decode": null,
+      "level": 2,
+      "majflt_per_decode_token": 0.0,
+      "minflt_per_decode_token": 0.0,
+      "op_counts_are_measured": true,
+      "op_level": 2
+    },
+    "host": {
+      "decode_denominator": "n_eval",
+      "decode_us_per_token": 105620.0,
+      "n_eval": 2.0,
+      "n_p_eval": 813.0,
+      "path": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store/node-profiles/run-52454a8aa3500448b198993c1474aae0/llama-host-prof.json",
+      "phase_families_overlap": true,
+      "phases": [
+        {
+          "decode_calls": 6.0,
+          "decode_fraction": 0.9919664836205264,
+          "decode_us_per_token": 104771.5,
+          "family": "context_phase",
+          "phase": "ctx.graph_compute",
+          "prefill_calls": 1028.0,
+          "prefill_us_total": 43023734.0
+        },
+        {
+          "decode_calls": 6.0,
+          "decode_fraction": 0.01510604052262829,
+          "decode_us_per_token": 1595.5,
+          "family": "context_phase",
+          "phase": "ctx.build_alloc_set_inputs",
+          "prefill_calls": 1028.0,
+          "prefill_us_total": 396724.0
+        },
+        {
+          "decode_calls": 2.0,
+          "decode_fraction": 0.0001751562204128006,
+          "decode_us_per_token": 18.5,
+          "family": "graph_input_class",
+          "phase": "20llm_graph_input_dsv4",
+          "prefill_calls": 259.0,
+          "prefill_us_total": 5160.0
+        },
+        {
+          "decode_calls": 2.0,
+          "decode_fraction": 7.574323044877864e-05,
+          "decode_us_per_token": 8.0,
+          "family": "graph_input_class",
+          "phase": "28llm_graph_input_dsv41_engram",
+          "prefill_calls": 259.0,
+          "prefill_us_total": 7253.0
+        },
+        {
+          "decode_calls": 6.0,
+          "decode_fraction": 5.680742283658398e-05,
+          "decode_us_per_token": 6.0,
+          "family": "graph_input_class",
+          "phase": "20llm_graph_input_embd",
+          "prefill_calls": 1028.0,
+          "prefill_us_total": 4049.0
+        },
+        {
+          "decode_calls": 6.0,
+          "decode_fraction": 2.840371141829199e-05,
+          "decode_us_per_token": 3.0,
+          "family": "context_phase",
+          "phase": "ctx.mctx_apply",
+          "prefill_calls": 1028.0,
+          "prefill_us_total": 1246.0
+        },
+        {
+          "decode_calls": 2.0,
+          "decode_fraction": 9.46790380609733e-06,
+          "decode_us_per_token": 1.0,
+          "family": "graph_input_class",
+          "phase": "23llm_graph_input_out_ids",
+          "prefill_calls": 259.0,
+          "prefill_us_total": 98.0
+        },
+        {
+          "decode_calls": 4.0,
+          "decode_fraction": 4.733951903048665e-06,
+          "decode_us_per_token": 0.5,
+          "family": "graph_input_class",
+          "phase": "19llm_graph_input_pos",
+          "prefill_calls": 771.0,
+          "prefill_us_total": 140.0
+        },
+        {
+          "decode_calls": 2.0,
+          "decode_fraction": 4.733951903048665e-06,
+          "decode_us_per_token": 0.5,
+          "family": "graph_input_class",
+          "phase": "27llm_graph_input_attn_k_iswa",
+          "prefill_calls": 512.0,
+          "prefill_us_total": 1258.0
+        }
+      ],
+      "prefill_us_per_token": 47390.428,
+      "schema": "llama-host-prof/1",
+      "status": "observed"
+    },
+    "host_phase_shares": [
+      {
+        "decode_calls": 6.0,
+        "decode_fraction": 0.9919664836205264,
+        "decode_us_per_token": 104771.5,
+        "family": "context_phase",
+        "phase": "ctx.graph_compute",
+        "prefill_calls": 1028.0,
+        "prefill_us_total": 43023734.0
+      },
+      {
+        "decode_calls": 6.0,
+        "decode_fraction": 0.01510604052262829,
+        "decode_us_per_token": 1595.5,
+        "family": "context_phase",
+        "phase": "ctx.build_alloc_set_inputs",
+        "prefill_calls": 1028.0,
+        "prefill_us_total": 396724.0
+      },
+      {
+        "decode_calls": 2.0,
+        "decode_fraction": 0.0001751562204128006,
+        "decode_us_per_token": 18.5,
+        "family": "graph_input_class",
+        "phase": "20llm_graph_input_dsv4",
+        "prefill_calls": 259.0,
+        "prefill_us_total": 5160.0
+      },
+      {
+        "decode_calls": 2.0,
+        "decode_fraction": 7.574323044877864e-05,
+        "decode_us_per_token": 8.0,
+        "family": "graph_input_class",
+        "phase": "28llm_graph_input_dsv41_engram",
+        "prefill_calls": 259.0,
+        "prefill_us_total": 7253.0
+      },
+      {
+        "decode_calls": 6.0,
+        "decode_fraction": 5.680742283658398e-05,
+        "decode_us_per_token": 6.0,
+        "family": "graph_input_class",
+        "phase": "20llm_graph_input_embd",
+        "prefill_calls": 1028.0,
+        "prefill_us_total": 4049.0
+      },
+      {
+        "decode_calls": 6.0,
+        "decode_fraction": 2.840371141829199e-05,
+        "decode_us_per_token": 3.0,
+        "family": "context_phase",
+        "phase": "ctx.mctx_apply",
+        "prefill_calls": 1028.0,
+        "prefill_us_total": 1246.0
+      },
+      {
+        "decode_calls": 2.0,
+        "decode_fraction": 9.46790380609733e-06,
+        "decode_us_per_token": 1.0,
+        "family": "graph_input_class",
+        "phase": "23llm_graph_input_out_ids",
+        "prefill_calls": 259.0,
+        "prefill_us_total": 98.0
+      },
+      {
+        "decode_calls": 4.0,
+        "decode_fraction": 4.733951903048665e-06,
+        "decode_us_per_token": 0.5,
+        "family": "graph_input_class",
+        "phase": "19llm_graph_input_pos",
+        "prefill_calls": 771.0,
+        "prefill_us_total": 140.0
+      },
+      {
+        "decode_calls": 2.0,
+        "decode_fraction": 4.733951903048665e-06,
+        "decode_us_per_token": 0.5,
+        "family": "graph_input_class",
+        "phase": "27llm_graph_input_attn_k_iswa",
+        "prefill_calls": 512.0,
+        "prefill_us_total": 1258.0
+      }
+    ],
+    "limitations": [
+      "measured on an INSTRUMENTED sibling build, never on the measured binary",
+      "per-op and per-phase SHARES transfer between the profiled and unprofiled builds; absolute times do not",
+      "never a baseline, never an arm, never compared against a measured number",
+      "node identity is the graph node INDEX, stable only within one graph shape",
+      "wall includes this node's barrier wait and straggler imbalance as seen by thread 0",
+      "prefill and decode are never pooled; profiled prefill timings are inadmissible",
+      "engram fault counts are meaningless without fault_source and op_level >= 2; below that a zero is UNMEASURED, not an absence of faults",
+      "the three dumps share no run id, only time: node values are per accumulated GRAPH EVAL, host decode values per token (and raw totals when n_eval is 0), engram values raw run totals -- normalise before dividing one by another",
+      "host phase rows are two overlapping families: the three ctx.* rows already contain the per-input-class rows and the two are never summed"
+    ],
+    "mechanism_shares": [
+      {
+        "evidence_kind": "instrumented-build per-op wall share",
+        "family": "dense-matmul",
+        "ops": [
+          {
+            "op": "MUL_MAT",
+            "wall_fraction": 0.4351281209392332,
+            "wall_us": 18059.162
+          }
+        ],
+        "wall_fraction": 0.4351281209392332,
+        "wall_us": 18059.162
+      },
+      {
+        "evidence_kind": "instrumented-build per-op wall share",
+        "family": "moe-expert-matmul",
+        "ops": [
+          {
+            "op": "MUL_MAT_ID",
+            "wall_fraction": 0.42054858034549764,
+            "wall_us": 17454.066
+          }
+        ],
+        "wall_fraction": 0.42054858034549764,
+        "wall_us": 17454.066
+      },
+      {
+        "evidence_kind": "instrumented-build per-op wall share",
+        "family": "flash-attention",
+        "ops": [
+          {
+            "op": "FLASH_ATTN_EXT",
+            "wall_fraction": 0.04343384930052559,
+            "wall_us": 1802.639
+          }
+        ],
+        "wall_fraction": 0.04343384930052559,
+        "wall_us": 1802.639
+      },
+      {
+        "evidence_kind": "instrumented-build per-op wall share",
+        "family": "rms-normalization",
+        "ops": [
+          {
+            "op": "RMS_NORM",
+            "wall_fraction": 0.01635425178331898,
+            "wall_us": 678.752
+          }
+        ],
+        "wall_fraction": 0.01635425178331898,
+        "wall_us": 678.752
+      },
+      {
+        "evidence_kind": "instrumented-build per-op wall share",
+        "family": "op:CONCAT",
+        "ops": [
+          {
+            "op": "CONCAT",
+            "wall_fraction": 0.013875183417061636,
+            "wall_us": 575.863
+          }
+        ],
+        "wall_fraction": 0.013875183417061636,
+        "wall_us": 575.863
+      },
+      {
+        "evidence_kind": "instrumented-build per-op wall share",
+        "family": "op:MUL",
+        "ops": [
+          {
+            "op": "MUL",
+            "wall_fraction": 0.009925646260901387,
+            "wall_us": 411.945
+          }
+        ],
+        "wall_fraction": 0.009925646260901387,
+        "wall_us": 411.945
+      },
+      {
+        "evidence_kind": "instrumented-build per-op wall share",
+        "family": "op:DSV4_HC_POST",
+        "ops": [
+          {
+            "op": "DSV4_HC_POST",
+            "wall_fraction": 0.008788212906841083,
+            "wall_us": 364.738
+          }
+        ],
+        "wall_fraction": 0.008788212906841083,
+        "wall_us": 364.738
+      },
+      {
+        "evidence_kind": "instrumented-build per-op wall share",
+        "family": "op:ADD",
+        "ops": [
+          {
+            "op": "ADD",
+            "wall_fraction": 0.007999958364546873,
+            "wall_us": 332.023
+          }
+        ],
+        "wall_fraction": 0.007999958364546873,
+        "wall_us": 332.023
+      }
+    ],
+    "node": {
+      "barriers": 1341.397,
+      "graph_evals_accumulated": 1034.0,
+      "n_nodes": 30.0,
+      "n_threads": 48.0,
+      "op_wall_fraction_sum": 0.9949651942791442,
+      "ops": [
+        {
+          "compute_us": 15880.024,
+          "count": 134.057,
+          "op": "MUL_MAT",
+          "wall_fraction": 0.4351281209392332,
+          "wall_us": 18059.162
+        },
+        {
+          "compute_us": 16439.624,
+          "count": 32.51,
+          "op": "MUL_MAT_ID",
+          "wall_fraction": 0.42054858034549764,
+          "wall_us": 17454.066
+        },
+        {
+          "compute_us": 1660.59,
+          "count": 10.837,
+          "op": "FLASH_ATTN_EXT",
+          "wall_fraction": 0.04343384930052559,
+          "wall_us": 1802.639
+        },
+        {
+          "compute_us": 623.085,
+          "count": 22.178,
+          "op": "RMS_NORM",
+          "wall_fraction": 0.01635425178331898,
+          "wall_us": 678.752
+        },
+        {
+          "compute_us": 364.044,
+          "count": 60.751,
+          "op": "CONCAT",
+          "wall_fraction": 0.013875183417061636,
+          "wall_us": 575.863
+        },
+        {
+          "compute_us": 192.104,
+          "count": 64.289,
+          "op": "MUL",
+          "wall_fraction": 0.009925646260901387,
+          "wall_us": 411.945
+        },
+        {
+          "compute_us": 267.061,
+          "count": 21.673,
+          "op": "DSV4_HC_POST",
+          "wall_fraction": 0.008788212906841083,
+          "wall_us": 364.738
+        },
+        {
+          "compute_us": 43.461,
+          "count": 136.231,
+          "op": "ADD",
+          "wall_fraction": 0.007999958364546873,
+          "wall_us": 332.023
+        },
+        {
+          "compute_us": 126.857,
+          "count": 46.712,
+          "op": "CONT",
+          "wall_fraction": 0.005472170735427874,
+          "wall_us": 227.112
+        },
+        {
+          "compute_us": 115.008,
+          "count": 54.942,
+          "op": "CLAMP",
+          "wall_fraction": 0.004573755723399011,
+          "wall_us": 189.825
+        },
+        {
+          "compute_us": 155.481,
+          "count": 10.837,
+          "op": "ARGSORT",
+          "wall_fraction": 0.003959150897941553,
+          "wall_us": 164.317
+        },
+        {
+          "compute_us": 63.298,
+          "count": 21.174,
+          "op": "DSV4_HC_PRE",
+          "wall_fraction": 0.0034967034142107632,
+          "wall_us": 145.124
+        },
+        {
+          "compute_us": 28.684,
+          "count": 61.803,
+          "op": "UNARY",
+          "wall_fraction": 0.0032393972776630056,
+          "wall_us": 134.445
+        },
+        {
+          "compute_us": 7.004,
+          "count": 58.423,
+          "op": "SCALE",
+          "wall_fraction": 0.002740880191309124,
+          "wall_us": 113.755
+        },
+        {
+          "compute_us": 35.251,
+          "count": 26.463,
+          "op": "ROPE",
+          "wall_fraction": 0.0023600169924693076,
+          "wall_us": 97.948
+        },
+        {
+          "compute_us": 10.461,
+          "count": 28.248,
+          "op": "SET_ROWS",
+          "wall_fraction": 0.0021541046183764963,
+          "wall_us": 89.402
+        },
+        {
+          "compute_us": 54.262,
+          "count": 20.116,
+          "op": "GLU",
+          "wall_fraction": 0.0020915791549116183,
+          "wall_us": 86.807
+        },
+        {
+          "compute_us": 36.96,
+          "count": 14.273,
+          "op": "SUM_ROWS",
+          "wall_fraction": 0.001428953809729497,
+          "wall_us": 59.306
+        },
+        {
+          "compute_us": 3.589,
+          "count": 18.895,
+          "op": "GET_ROWS",
+          "wall_fraction": 0.001300650113024112,
+          "wall_us": 53.981
+        },
+        {
+          "compute_us": 18.279,
+          "count": 10.837,
+          "op": "ROPE_BACK",
+          "wall_fraction": 0.0012333298259640467,
+          "wall_us": 51.187
+        },
+        {
+          "compute_us": 8.967,
+          "count": 21.673,
+          "op": "DSV4_HC_COMB",
+          "wall_fraction": 0.0010375371800620827,
+          "wall_us": 43.061
+        },
+        {
+          "compute_us": 4.065,
+          "count": 19.689,
+          "op": "FILL",
+          "wall_fraction": 0.0009130645233146611,
+          "wall_us": 37.895
+        },
+        {
+          "compute_us": 24.247,
+          "count": 2.272,
+          "op": "TOP_K",
+          "wall_fraction": 0.0006456868477579176,
+          "wall_us": 26.798
+        },
+        {
+          "compute_us": 5.144,
+          "count": 11.264,
+          "op": "SQRT",
+          "wall_fraction": 0.00056352429268461,
+          "wall_us": 23.388
+        },
+        {
+          "compute_us": 1.746,
+          "count": 10.759,
+          "op": "DIV",
+          "wall_fraction": 0.0004914091820293578,
+          "wall_us": 20.395
+        },
+        {
+          "compute_us": 18.954,
+          "count": 0.247,
+          "op": "ARGMAX",
+          "wall_fraction": 0.00045926699772795234,
+          "wall_us": 19.061
+        },
+        {
+          "compute_us": 4.834,
+          "count": 1.755,
+          "op": "REPEAT",
+          "wall_fraction": 0.000214321386327587,
+          "wall_us": 8.895
+        },
+        {
+          "compute_us": 3.548,
+          "count": 0.505,
+          "op": "GATHER_ROWS_E4M3_E8M0",
+          "wall_fraction": 0.0001815768372529169,
+          "wall_us": 7.536
+        },
+        {
+          "compute_us": 3.575,
+          "count": 0.757,
+          "op": "SOFT_MAX",
+          "wall_fraction": 0.00012719534552257806,
+          "wall_us": 5.279
+        },
+        {
+          "compute_us": 0.345,
+          "count": 2.017,
+          "op": "SUB",
+          "wall_fraction": 0.00010994361841627651,
+          "wall_us": 4.563
+        },
+        {
+          "compute_us": 1.428,
+          "count": 2.019,
+          "op": "CPY",
+          "wall_fraction": 0.00010408863282014345,
+          "wall_us": 4.32
+        },
+        {
+          "compute_us": 0.036,
+          "count": 0.252,
+          "op": "ARANGE",
+          "wall_fraction": 1.3083362875309697e-05,
+          "wall_us": 0.543
+        }
+      ],
+      "path": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store/node-profiles/run-52454a8aa3500448b198993c1474aae0/ggml-cpu-prof.json",
+      "schema": "ggml-cpu-prof/1",
+      "status": "observed",
+      "total_compute_us": 36365.492,
+      "total_wall_us": 41503.091,
+      "weight_paths": [
+        {
+          "bytes": 3858388029.0,
+          "calls": 32.51,
+          "compute_us": 16439.624,
+          "path": "expert_mul_mat_id",
+          "wall_fraction": 0.42054858034549764,
+          "wall_us": 17454.066
+        },
+        {
+          "bytes": 2182821961.0,
+          "calls": 133.066,
+          "compute_us": 13978.683,
+          "path": "dense_mul_mat",
+          "wall_fraction": 0.3834772932936489,
+          "wall_us": 15915.493
+        },
+        {
+          "bytes": 382928860.0,
+          "calls": 0.991,
+          "compute_us": 1901.341,
+          "path": "lm_head",
+          "wall_fraction": 0.05165082764558428,
+          "wall_us": 2143.669
+        }
+      ]
+    },
+    "ranked_op_shares": [
+      {
+        "compute_us": 15880.024,
+        "count": 134.057,
+        "op": "MUL_MAT",
+        "wall_fraction": 0.4351281209392332,
+        "wall_us": 18059.162
+      },
+      {
+        "compute_us": 16439.624,
+        "count": 32.51,
+        "op": "MUL_MAT_ID",
+        "wall_fraction": 0.42054858034549764,
+        "wall_us": 17454.066
+      },
+      {
+        "compute_us": 1660.59,
+        "count": 10.837,
+        "op": "FLASH_ATTN_EXT",
+        "wall_fraction": 0.04343384930052559,
+        "wall_us": 1802.639
+      },
+      {
+        "compute_us": 623.085,
+        "count": 22.178,
+        "op": "RMS_NORM",
+        "wall_fraction": 0.01635425178331898,
+        "wall_us": 678.752
+      },
+      {
+        "compute_us": 364.044,
+        "count": 60.751,
+        "op": "CONCAT",
+        "wall_fraction": 0.013875183417061636,
+        "wall_us": 575.863
+      },
+      {
+        "compute_us": 192.104,
+        "count": 64.289,
+        "op": "MUL",
+        "wall_fraction": 0.009925646260901387,
+        "wall_us": 411.945
+      },
+      {
+        "compute_us": 267.061,
+        "count": 21.673,
+        "op": "DSV4_HC_POST",
+        "wall_fraction": 0.008788212906841083,
+        "wall_us": 364.738
+      },
+      {
+        "compute_us": 43.461,
+        "count": 136.231,
+        "op": "ADD",
+        "wall_fraction": 0.007999958364546873,
+        "wall_us": 332.023
+      },
+      {
+        "compute_us": 126.857,
+        "count": 46.712,
+        "op": "CONT",
+        "wall_fraction": 0.005472170735427874,
+        "wall_us": 227.112
+      },
+      {
+        "compute_us": 115.008,
+        "count": 54.942,
+        "op": "CLAMP",
+        "wall_fraction": 0.004573755723399011,
+        "wall_us": 189.825
+      },
+      {
+        "compute_us": 155.481,
+        "count": 10.837,
+        "op": "ARGSORT",
+        "wall_fraction": 0.003959150897941553,
+        "wall_us": 164.317
+      },
+      {
+        "compute_us": 63.298,
+        "count": 21.174,
+        "op": "DSV4_HC_PRE",
+        "wall_fraction": 0.0034967034142107632,
+        "wall_us": 145.124
+      }
+    ],
+    "schema": "epyc.autokernel.loop_node_profile.v1",
+    "status": "observed",
+    "teardown": "terminated",
+    "weight_path_shares": [
+      {
+        "bytes": 3858388029.0,
+        "calls": 32.51,
+        "compute_us": 16439.624,
+        "path": "expert_mul_mat_id",
+        "wall_fraction": 0.42054858034549764,
+        "wall_us": 17454.066
+      },
+      {
+        "bytes": 2182821961.0,
+        "calls": 133.066,
+        "compute_us": 13978.683,
+        "path": "dense_mul_mat",
+        "wall_fraction": 0.3834772932936489,
+        "wall_us": 15915.493
+      },
+      {
+        "bytes": 382928860.0,
+        "calls": 0.991,
+        "compute_us": 1901.341,
+        "path": "lm_head",
+        "wall_fraction": 0.05165082764558428,
+        "wall_us": 2143.669
+      }
+    ]
+  }
+}

@@ -9,6 +9,17 @@ sample-period cells of the hotspot table read `[period redacted]`, because the r
 PII pre-commit hook classifies such digit runs as account numbers (a false positive,
 but the hook is not this lane's to change). Everything else is byte-for-byte. No
 inference is spent here.
+
+THE A/B CONTROL PROMPT IS NO LONGER THE RECORDED ONE (deliberate, 2026-09-24).
+`render_context` never printed `node_profile`, although run.py puts it in every CPU
+context and the CPU directive says "Read node_profile". Run 8's context carried the
+retained observation `fixtures/ds41-run8-node-profile.json` (the store file keyed to
+anchor ebb68dc55, scope half -- copied verbatim) and the prompt silently dropped it.
+`fixtures/ds41-run8-planner-prompt-node-profile.txt` is what run 8 WOULD have sent
+with the fix: the recorded prompt plus exactly one inserted section, the rendered
+node profile (3,878 chars), between the CPU profile and "## Already tried".
+`NodeProfileIsExactlyOneInsertedSection` proves that delta; the recorded fixture
+stays as the provenance anchor (its hash joins run 8's call record).
 """
 import hashlib
 import json
@@ -21,6 +32,10 @@ from autokernel.loop import actor_context, actors
 
 FIXTURE = Path(__file__).with_name("fixtures") / "ds41-run8-planner-prompt.txt"
 FIXTURE_SHA256 = "c7e8a321eb993c88779edc9186b075d733ecb370020e28dc6e05ade754f1c262"
+NODE_PROFILE_FIXTURE = Path(__file__).with_name("fixtures") / "ds41-run8-node-profile.json"
+CONTROL_FIXTURE = Path(__file__).with_name("fixtures") / "ds41-run8-planner-prompt-node-profile.txt"
+CONTROL_SHA256 = "a265a03a9f9a24b5feb438055385831a72a183884dfd6450bb945af7d596c993"
+NODE_PROFILE_SECTION_CHARS = 3878
 RUN8_RECORDED_SHA256 = "72c8677850d955b2598bd9d7254460b0fdead5c0ee2f150c80e897ae0ce47b99"
 CPU_FORMAT = dict(
     platform="the CPUs in the selected original serving launch",
@@ -32,15 +47,32 @@ HYPOTHESIS = json.dumps({"mechanism_id": "akm-x", "statement": "s", "falsifier":
                          "target_surface": "ggml/src/x.c", "target_symbol": "g"})
 
 
-def _real_prompt() -> str:
+def _recorded_prompt() -> str:
+    """Byte-for-byte what run 8 sent (less seven redactions)."""
     return FIXTURE.read_text(encoding="utf-8")
 
 
-def _real_context_text() -> str:
+def _real_prompt() -> str:
+    """The A/B control: run 8's prompt as the node_profile-rendering code builds it."""
+    return CONTROL_FIXTURE.read_text(encoding="utf-8")
+
+
+def _run8_node_profile() -> dict:
+    return json.loads(NODE_PROFILE_FIXTURE.read_text(encoding="utf-8"))["section"]
+
+
+def _node_profile_block() -> str:
+    """The section text `render_context` inserts: its lines after the leading blank
+    (which joins onto the CPU profile's own trailing blank line), plus the blank line
+    that separates it from the next header."""
+    return "\n".join(actors._render_node_profile(_run8_node_profile())[1:]) + "\n\n"
+
+
+def _real_context_text(prompt: str | None = None) -> str:
     """The rendered bundle inside the real prompt: everything the template wraps."""
     marker = "\x00CONTEXT\x00"
     prefix, suffix = actors._HYPOTHESIS_TASK.format(context=marker, **CPU_FORMAT).split(marker)
-    prompt = _real_prompt()
+    prompt = _real_prompt() if prompt is None else prompt
     assert prompt.startswith(prefix) and prompt.endswith(suffix)
     return prompt[len(prefix):len(prompt) - len(suffix)]
 
@@ -53,14 +85,77 @@ class TheFixtureIsTheRealPrompt(unittest.TestCase):
 
     def test_fixture_bytes_are_the_recorded_run8_prompt_less_seven_redactions(self):
         self.assertEqual(hashlib.sha256(FIXTURE.read_bytes()).hexdigest(), FIXTURE_SHA256)
-        self.assertEqual(_real_prompt().count("[period redacted]"), 7)
+        self.assertEqual(_recorded_prompt().count("[period redacted]"), 7)
+
+    def test_node_profile_fixture_is_the_run8_retained_observation(self):
+        body = json.loads(NODE_PROFILE_FIXTURE.read_text(encoding="utf-8"))
+        self.assertEqual(body["cache_key"]["anchor_commit"],
+                         "ebb68dc55d5f6af4a4a5dccdd2a013fa76c63bee")
+        self.assertEqual(body["cache_key"]["scope"], "half",
+                         "run 8 is common-scope 'half' work: the half-scope retention")
+        self.assertEqual(body["section"]["status"], "observed")
+
+
+class NodeProfileIsExactlyOneInsertedSection(unittest.TestCase):
+    """The ONE deliberate change to the inline prompt: the node profile is rendered."""
+
+    def test_control_fixture_is_the_recorded_prompt_plus_exactly_the_node_profile(self):
+        recorded, control, block = _recorded_prompt(), _real_prompt(), _node_profile_block()
+        self.assertEqual(hashlib.sha256(control.encode()).hexdigest(), CONTROL_SHA256)
+        self.assertEqual(len(block), NODE_PROFILE_SECTION_CHARS)
+        self.assertEqual(len(control) - len(recorded), NODE_PROFILE_SECTION_CHARS)
+        at = recorded.index("\n\n## Already tried\n") + 2
+        self.assertEqual(control, recorded[:at] + block + recorded[at:])
+        self.assertTrue(block.startswith(actors.NODE_PROFILE_HEADER + "\n"))
+
+    def test_render_context_inserts_exactly_that_section_and_nothing_else(self):
+        base = {"target": {"recipe": {"backend": "cpu"}},
+                "program": "directive",
+                "cpu_profile": {"status": "unavailable", "reason": "none"},
+                "prior_experiments": []}
+        without = actors.render_context(base)
+        with_np = actors.render_context({**base, "node_profile": _run8_node_profile()})
+        block = "\n".join(actors._render_node_profile(_run8_node_profile())) + "\n"
+        self.assertEqual(with_np.replace(block, "", 1), without)
+        self.assertEqual(with_np.count(actors.NODE_PROFILE_HEADER), 1)
+        self.assertLess(with_np.index("## CPU profile"), with_np.index(actors.NODE_PROFILE_HEADER))
+        self.assertLess(with_np.index(actors.NODE_PROFILE_HEADER), with_np.index("## Already tried"))
+
+    def test_shares_are_rendered_and_absolute_microseconds_are_not(self):
+        text = "\n".join(actors._render_node_profile(_run8_node_profile()))
+        for share in ("| 1 | 43.51% | `dense-matmul` | MUL_MAT |",
+                      "| 2 | 42.05% | `moe-expert-matmul` | MUL_MAT_ID |",
+                      "| 42.05% | `expert_mul_mat_id` |", "| 99.20% | `ctx.graph_compute` |"):
+            self.assertIn(share, text)
+        for absolute in ("18059", "17454", "104771", "41503"):
+            self.assertNotIn(absolute, text, "absolutes do not transfer from the sibling")
+
+    def test_an_absent_profile_prints_its_reason_never_a_zero(self):
+        text = actors.render_context({"target": {"recipe": {"backend": "cpu"}},
+                                      "node_profile": {"status": "not_collected",
+                                                       "reason": "sibling build not completed"}})
+        self.assertIn("Node profile not_collected: sibling build not completed", text)
+        self.assertNotIn("| rank | wall share", text)
+
+    def test_unmeasured_fault_counts_are_not_printed_as_zero(self):
+        observation = {**_run8_node_profile()}
+        observation["engram_fault_mix"] = {**observation["engram_fault_mix"],
+                                           "fault_counts_are_measured": False}
+        text = "\n".join(actors._render_node_profile(observation))
+        self.assertIn("UNMEASURED at this level", text)
+        self.assertNotIn("(minor / major): 0 / 0", text)
+
+    def test_a_gpu_context_never_renders_it(self):
+        text = actors.render_context({"node_profile": _run8_node_profile(), "kernel_hotspots": []})
+        self.assertNotIn(actors.NODE_PROFILE_HEADER, text)
 
 
 class InlineModeIsByteIdentical(unittest.TestCase):
     """Inline is the A/B control: it must be exactly what run 8 sent."""
 
-    def _captured(self, seat, backend=None):
+    def _captured(self, seat, backend=None, context_text=None):
         seen = {}
+        context_text = _real_context_text() if context_text is None else context_text
 
         def run(prompt, **kw):
             seen["prompt"], seen["env"] = prompt, kw.get("env")
@@ -72,36 +167,47 @@ class InlineModeIsByteIdentical(unittest.TestCase):
             planner = actors.AgentPlanner(
                 workspace=ws, backend=backend or actors.backend_for("qwen-gpu/qwen3.8-27b", "high"),
                 seat=seat)
-            with mock.patch.object(actors, "render_context", return_value=_real_context_text()), \
+            with mock.patch.object(actors, "render_context", return_value=context_text), \
                     mock.patch.object(actors, "_run_agent", side_effect=run):
                 planner.propose(_cpu_context())
             seen["bundle_dirs"] = list((ws.parent / actor_context.BUNDLE_DIR).glob("*"))
         return seen
 
-    def test_the_default_seat_reproduces_the_run8_prompt_byte_for_byte(self):
+    def test_the_default_seat_reproduces_the_control_prompt_byte_for_byte(self):
         for seat in (None, actors.ActorSeat(bounded=False), actors.ActorSeat(bounded=False,
                                                                              context_mode="inline")):
             seen = self._captured(seat)
-            self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), FIXTURE_SHA256)
+            self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), CONTROL_SHA256)
             self.assertIsNone(seen["env"], "plain inline adds no env and no arm suffix")
             self.assertEqual(seen["bundle_dirs"], [])
+
+    def test_the_template_still_wraps_the_recorded_run8_bundle_byte_for_byte(self):
+        """Only `render_context` changed: the recorded bundle still yields run 8's bytes."""
+        seen = self._captured(None, context_text=_real_context_text(_recorded_prompt()))
+        self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), FIXTURE_SHA256)
 
     def test_variable_mode_is_inline_for_non_opencode_backends(self):
         seen = self._captured(actors.ActorSeat(context_mode="variable"),
                               backend=actors.backend_for("gpt-5.6-sol", "high"))
-        self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), FIXTURE_SHA256)
+        self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), CONTROL_SHA256)
         self.assertEqual(seen["bundle_dirs"], [])
 
 
 class SectionSplit(unittest.TestCase):
 
     def test_sections_partition_the_real_bundle_exactly(self):
+        recorded = _real_context_text(_recorded_prompt())
+        self.assertEqual([s.key for s in actor_context.split_sections(recorded)],
+                         ["target", "program", "program_strategy", "profile", "already_tried",
+                          "shared_history", "serving_observations", "inbox"])
         text = _real_context_text()
         sections = actor_context.split_sections(text)
         self.assertEqual("".join(s.text for s in sections), text)
         self.assertEqual([s.key for s in sections],
-                         ["target", "program", "program_strategy", "profile", "already_tried",
-                          "shared_history", "serving_observations", "inbox"])
+                         ["target", "program", "program_strategy", "profile", "node_profile",
+                          "already_tried", "shared_history", "serving_observations", "inbox"])
+        self.assertEqual(next(s for s in sections if s.key == "node_profile").text,
+                         _node_profile_block())
         program = next(s for s in sections if s.key == "program")
         self.assertIn("CPU COMMON-SCOPE SOURCE WORK: half", program.text)
         self.assertNotIn("# AutoKernel loop", program.text,
@@ -118,6 +224,7 @@ class SectionSplit(unittest.TestCase):
             "target": {"recipe": {"backend": "cpu"}},
             "program": "directive\n\n# AutoKernel loop — strategy\n\n## Settled\n- x",
             "cpu_profile": {"status": "unavailable", "reason": "none"},
+            "node_profile": _run8_node_profile(),
             "prior_experiments": prior,
             "shared_prior_experiments": {"rows": [{"mechanism_id": "akm-s"}]},
             "serving_observations": {"rows": []},
@@ -127,7 +234,7 @@ class SectionSplit(unittest.TestCase):
         text = actors.render_context(context)
         keys = [s.key for s in actor_context.split_sections(text)]
         for key in ("target", "program", "program_strategy", "superseded", "profile",
-                    "exhausted_families", "stagnant_families", "already_tried",
+                    "node_profile", "exhausted_families", "stagnant_families", "already_tried",
                     "shared_history", "serving_observations", "hypothesis_rejections",
                     "patch_rejections", "inbox"):
             self.assertIn(key, keys)
@@ -194,6 +301,32 @@ class VariableModeIsLossless(unittest.TestCase):
         self.assertNotIn("## Measured gfx90a facts", index.split("=== INLINE")[1])
         self.assertIn("mul_mat_qX_K_q8_2_X4_T", index, "the hotspot table stays inline")
         self.assertIn(str(self.bundle.directory / "INDEX.md"), index)
+
+    def test_node_profile_is_a_required_file_with_its_share_table_inline(self):
+        index = self.bundle.index
+        n = [s.key for s in self.bundle.sections].index("node_profile") + 1
+        rel = f"sections/{n:02d}-node_profile.md"
+        self.assertEqual((self.bundle.directory / rel).read_text(encoding="utf-8"),
+                         _node_profile_block())
+        self.assertRegex(index, rf"\| {n} \| node_profile \| `{rel}` \| 3,878 \| \d+ \| "
+                                r"file \+ summary \|")
+        required = index.split("Read these before you propose")[1].split("| # |")[0]
+        self.assertIn(f"`{rel}` — node_profile", required)
+        inline = index.split("=== INLINE sections (verbatim) ===")[1]
+        self.assertIn(actors.NODE_PROFILE_HEADER, inline)
+        self.assertIn("| 1 | 43.51% | `dense-matmul` | MUL_MAT |", inline)
+        self.assertNotIn("### Ops by wall share", inline, "the per-op table is on disk")
+        self.assertNotIn("Limitations:", inline.split(actors.NODE_PROFILE_HEADER)[1]
+                         .split("## Already tried")[0])
+        self.assertIn(f"is `{self.bundle.directory}/{rel}`)", inline)
+        head = actor_context.section_summary(
+            next(s for s in self.bundle.sections if s.key == "node_profile"))
+        self.assertLess(len(head), 1500)
+
+    def test_an_absent_node_profile_is_its_own_summary(self):
+        section = actor_context.Section("node_profile", actors.NODE_PROFILE_HEADER
+                                        + "\ncaveat\nNode profile absent: no sibling\n\n")
+        self.assertEqual(actor_context.section_summary(section), section.text)
 
     def test_target_card_resolves_dedupe_pointers(self):
         card = "\n".join(actor_context.target_card(actor_context.json_payload(
@@ -277,7 +410,7 @@ class VariableModeThroughThePlanner(unittest.TestCase):
     def test_an_unwritable_bundle_degrades_to_an_honestly_labelled_inline_call(self):
         with mock.patch.object(actor_context, "materialize", side_effect=OSError("disk full")):
             seen = self._run(actors.ActorSeat(bounded=False, context_mode="variable"))
-        self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), FIXTURE_SHA256)
+        self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), CONTROL_SHA256)
         self.assertIsNone(seen["env"], "an inline call is never recorded as the variable arm")
 
 

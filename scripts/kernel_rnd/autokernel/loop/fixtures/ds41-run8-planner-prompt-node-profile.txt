@@ -1,0 +1,1549 @@
+You are proposing ONE kernel optimisation for llama.cpp on the CPUs in the selected original serving launch.
+
+## Selected target (original launch, model, requests and build)
+Repeated subtrees are printed once; later copies read `<same as $.path>`.
+```json
+{
+  "build_recipe": {
+    "divergences": [
+      "GGML_HIP",
+      "GGML_NATIVE",
+      "GGML_OPENMP",
+      "CMAKE_C_COMPILER",
+      "CMAKE_CXX_COMPILER"
+    ],
+    "flags": [
+      {
+        "diverges": true,
+        "name": "GGML_HIP",
+        "production_value": null,
+        "reason": "Explicit experimental CPU build recipe",
+        "value": "OFF"
+      },
+      {
+        "diverges": true,
+        "name": "GGML_NATIVE",
+        "production_value": null,
+        "reason": "Explicit experimental CPU build recipe",
+        "value": "ON"
+      },
+      {
+        "diverges": true,
+        "name": "GGML_OPENMP",
+        "production_value": null,
+        "reason": "Explicit experimental CPU build recipe",
+        "value": "ON"
+      },
+      {
+        "diverges": true,
+        "name": "CMAKE_C_COMPILER",
+        "production_value": null,
+        "reason": "Explicit experimental CPU build recipe",
+        "value": "/usr/bin/gcc-15"
+      },
+      {
+        "diverges": true,
+        "name": "CMAKE_CXX_COMPILER",
+        "production_value": null,
+        "reason": "Explicit experimental CPU build recipe",
+        "value": "/usr/bin/g++-15"
+      }
+    ],
+    "name": "native-openmp-gcc15-cpu-v1",
+    "notes": "Experimental CPU build; no production adoption or cross-model qualification.",
+    "production_reference_is_verifiable": false,
+    "schema": "epyc.autokernel.gpu_build_recipe.v1"
+  },
+  "common_cpu_scope": {
+    "candidate": null,
+    "full_execution_digest": "5989a38a2c1fcb4096334a79db33be70e78d472fafa5ba08583e225aa60294ab",
+    "full_transfer_target": {
+      "absent_environment": [],
+      "argv": [
+        "taskset",
+        "-c",
+        "0-95",
+        "numactl",
+        "--interleave=all",
+        "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/antirez/deepseek-v4.1-flash-gguf/DeepSeek-V4.1-Flash-Q4.gguf",
+        "-np",
+        "1",
+        "-c",
+        "8192",
+        "-t",
+        "48",
+        "-tb",
+        "48",
+        "-b",
+        "2048",
+        "-ub",
+        "512",
+        "-ctk",
+        "f16",
+        "-ctv",
+        "f16",
+        "--device",
+        "none",
+        "-ngl",
+        "0",
+        "-fa",
+        "on",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "18641",
+        "--metrics",
+        "--slots",
+        "-md",
+        "/mnt/raid0/llm/models/deepseek-ai/DeepSeek-V4.1-Flash-DSpark.gguf",
+        "-ngld",
+        "0",
+        "--spec-type",
+        "draft-dspark",
+        "--spec-draft-n-max",
+        "2",
+        "--no-kv-unified",
+        "--device-draft",
+        "none",
+        "--no-mmap",
+        "--no-webui"
+      ],
+      "backend": "cpu",
+      "build_dir": "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu",
+      "capability": {
+        "backend": "cpu",
+        "contention": "unproven",
+        "cpu_placement": "unproven",
+        "gpu_residency": "not_applicable",
+        "reasons": [],
+        "schema": "epyc.autokernel.recipe_capability.v1",
+        "speculation": "external_draft",
+        "supported": true,
+        "witnesses": [
+          {
+            "expected": "1",
+            "field": "environ:GGML_IQK",
+            "key": "GGML_IQK",
+            "kind": "process_environ",
+            "reason": null,
+            "status": "declared"
+          },
+          {
+            "expected": "batched-greedy-inexact",
+            "field": "environ:LLAMA_SPEC_EXACT",
+            "key": "LLAMA_SPEC_EXACT",
+            "kind": "process_environ",
+            "reason": null,
+            "status": "declared"
+          },
+          {
+            "expected": "false",
+            "field": "environ:OMP_DYNAMIC",
+            "key": "OMP_DYNAMIC",
+            "kind": "process_environ",
+            "reason": null,
+            "status": "declared"
+          },
+          {
+            "expected": "cores",
+            "field": "environ:OMP_PLACES",
+            "key": "OMP_PLACES",
+            "kind": "process_environ",
+            "reason": null,
+            "status": "declared"
+          },
+          {
+            "expected": "spread",
+            "field": "environ:OMP_PROC_BIND",
+            "key": "OMP_PROC_BIND",
+            "kind": "process_environ",
+            "reason": null,
+            "status": "declared"
+          },
+          {
+            "expected": "active",
+            "field": "environ:OMP_WAIT_POLICY",
+            "key": "OMP_WAIT_POLICY",
+            "kind": "process_environ",
+            "reason": null,
+            "status": "declared"
+          }
+        ]
+      },
+      "command_argv": [
+        "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/llama-server",
+        "-m",
+        "/mnt/raid0/llm/models/antirez/deepseek-v4.1-flash-gguf/DeepSeek-V4.1-Flash-Q4.gguf",
+        "-np",
+        "1",
+        "-c",
+        "8192",
+        "-t",
+        "48",
+        "-tb",
+        "48",
+        "-b",
+        "2048",
+        "-ub",
+        "512",
+        "-ctk",
+        "f16",
+        "-ctv",
+        "f16",
+        "--device",
+        "none",
+        "-ngl",
+        "0",
+        "-fa",
+        "on",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "18641",
+        "--metrics",
+        "--slots",
+        "-md",
+        "/mnt/raid0/llm/models/deepseek-ai/DeepSeek-V4.1-Flash-DSpark.gguf",
+        "-ngld",
+        "0",
+        "--spec-type",
+        "draft-dspark",
+        "--spec-draft-n-max",
+        "2",
+        "--no-kv-unified",
+        "--device-draft",
+        "none",
+        "--no-mmap",
+        "--no-webui"
+      ],
+      "drafter": {
+        "path": "/mnt/raid0/llm/models/deepseek-ai/DeepSeek-V4.1-Flash-DSpark.gguf",
+        "role": "drafter",
+        "schema": "epyc.autokernel.launch_artifact.v1",
+        "sha256": "522ce00dedffc369019a6f5917bcd3dfcb343cf7cfdd36c3758e471177b0f3c5"
+      },
+      "dsos": [
+        {
+          "path": "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/libggml-base.so",
+          "role": "dso",
+          "schema": "epyc.autokernel.launch_artifact.v1",
+          "sha256": "4847bcd5de217f5738adad2c6a925422de51dbf5c3003f116d6156b4d0a8c303"
+        },
+        {
+          "path": "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/libggml-base.so.0",
+          "role": "dso",
+          "schema": "epyc.autokernel.launch_artifact.v1",
+          "sha256": "4847bcd5de217f5738adad2c6a925422de51dbf5c3003f116d6156b4d0a8c303"
+        },
+        {
+          "path": "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/libggml-cpu.so",
+          "role": "dso",
+          "schema": "epyc.autokernel.launch_artifact.v1",
+          "sha256": "643129bc8c6a88c736f4d89bb7765ce3c12955f2898af2c96a64d868aa3d9f78"
+        },
+        {
+          "path": "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/libggml-cpu.so.0",
+          "role": "dso",
+          "schema": "epyc.autokernel.launch_artifact.v1",
+          "sha256": "643129bc8c6a88c736f4d89bb7765ce3c12955f2898af2c96a64d868aa3d9f78"
+        },
+        {
+          "path": "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/libggml.so",
+          "role": "dso",
+          "schema": "epyc.autokernel.launch_artifact.v1",
+          "sha256": "3016d041e3243b618bc97ab5581b8d81fec978b9fbf2cb4a981383cf258d7953"
+        },
+        {
+          "path": "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/libggml.so.0",
+          "role": "dso",
+          "schema": "epyc.autokernel.launch_artifact.v1",
+          "sha256": "3016d041e3243b618bc97ab5581b8d81fec978b9fbf2cb4a981383cf258d7953"
+        },
+        {
+          "path": "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/libllama-common.so",
+          "role": "dso",
+          "schema": "epyc.autokernel.launch_artifact.v1",
+          "sha256": "bb7af67fd6a58411cf541c4cd1948d24c6dba5191156af3011f93c2c92fbdb9d"
+        },
+        {
+          "path": "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/libllama-common.so.0",
+          "role": "dso",
+          "schema": "epyc.autokernel.launch_artifact.v1",
+          "sha256": "bb7af67fd6a58411cf541c4cd1948d24c6dba5191156af3011f93c2c92fbdb9d"
+        },
+        {
+          "path": "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/libllama-server-impl.so",
+          "role": "dso",
+          "schema": "epyc.autokernel.launch_artifact.v1",
+          "sha256": "2b2ff91f0bc36dd4a88bae7122d60741e530ec78d54b7efb4a59118e6c4767f9"
+        },
+        {
+          "path": "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/libllama.so",
+          "role": "dso",
+          "schema": "epyc.autokernel.launch_artifact.v1",
+          "sha256": "25e737c5a27ed8fe0e69b218e8b3cb2b3342228090845a1df44557964aac989f"
+        },
+        {
+          "path": "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/libllama.so.0",
+          "role": "dso",
+          "schema": "epyc.autokernel.launch_artifact.v1",
+          "sha256": "25e737c5a27ed8fe0e69b218e8b3cb2b3342228090845a1df44557964aac989f"
+        },
+        {
+          "path": "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/libmtmd.so",
+          "role": "dso",
+          "schema": "epyc.autokernel.launch_artifact.v1",
+          "sha256": "a6333651e009b159ca58c7df89f801b8aabbac068171a072abde8b5edcad69b0"
+        },
+        {
+          "path": "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/libmtmd.so.0",
+          "role": "dso",
+          "schema": "epyc.autokernel.launch_artifact.v1",
+          "sha256": "a6333651e009b159ca58c7df89f801b8aabbac068171a072abde8b5edcad69b0"
+        }
+      ],
+      "environment_policy": {
+        "allowed_inherit_keys": [],
+        "measurement_keys": [
+          "GGML_IQK",
+          "LLAMA_SPEC_EXACT",
+          "OMP_DYNAMIC",
+          "OMP_PLACES",
+          "OMP_PROC_BIND",
+          "OMP_WAIT_POLICY"
+        ],
+        "schema": "epyc.autokernel.environment_policy.v1",
+        "version": "ds41-cpu-t48-dspark-v1",
+        "witnesses": {
+          "GGML_IQK": "process_environ",
+          "LLAMA_SPEC_EXACT": "process_environ",
+          "OMP_DYNAMIC": "process_environ",
+          "OMP_PLACES": "process_environ",
+          "OMP_PROC_BIND": "process_environ",
+          "OMP_WAIT_POLICY": "process_environ"
+        }
+      },
+      "executable": {
+        "path": "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/llama-server",
+        "role": "executable",
+        "schema": "epyc.autokernel.launch_artifact.v1",
+        "sha256": "a6af7d3acc50cd810a9a8159d959596ec09cc259bd8067a9db7112f7debe44ee"
+      },
+      "execution_digest": "5989a38a2c1fcb4096334a79db33be70e78d472fafa5ba08583e225aa60294ab",
+      "launch_contract": "orchestrator-production/v1",
+      "launch_env": {
+        "GGML_IQK": "1",
+        "LD_LIBRARY_PATH": "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin",
+        "LLAMA_SPEC_EXACT": "batched-greedy-inexact",
+        "OMP_DYNAMIC": "false",
+        "OMP_PLACES": "cores",
+        "OMP_PROC_BIND": "spread",
+        "OMP_WAIT_POLICY": "active"
+      },
+      "model": {
+        "path": "/mnt/raid0/llm/models/antirez/deepseek-v4.1-flash-gguf/DeepSeek-V4.1-Flash-Q4.gguf",
+        "role": "model",
+        "schema": "epyc.autokernel.launch_artifact.v1",
+        "sha256": "a5e2e2c3ada4b2e98d9f9e4b50f6d9c2a12c2c96f5da165c07e13aff9264984e"
+      },
+      "port": 18641,
+      "provenance": {
+        "build": "hand-built build-cpu at ebb68dc55, IDENTITY.json receipt",
+        "export_sha256": "785ad61d7b89e4fa3c713f6e34bcd327d6e2c120fb385d62021bef6cea33c0de",
+        "instance_mode": "full",
+        "recipe_origin": "deepseek_v41_flash_recipe greedy-batched, 48 threads",
+        "source:branch": "experimental/deepseek41-port-20260923",
+        "source:head": "ebb68dc55d5f6af4a4a5dccdd2a013fa76c63bee"
+      },
+      "readback_expectations": [],
+      "relevant_environment": {
+        "GGML_IQK": {
+          "state": "value",
+          "value": "1"
+        },
+        "LLAMA_SPEC_EXACT": {
+          "state": "value",
+          "value": "batched-greedy-inexact"
+        },
+        "OMP_DYNAMIC": {
+          "state": "value",
+          "value": "false"
+        },
+        "OMP_PLACES": {
+          "state": "value",
+          "value": "cores"
+        },
+        "OMP_PROC_BIND": {
+          "state": "value",
+          "value": "spread"
+        },
+        "OMP_WAIT_POLICY": {
+          "state": "value",
+          "value": "active"
+        }
+      },
+      "runtime_binary_dir": "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin",
+      "runtime_ld_paths": [
+        "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin"
+      ],
+      "schema": "epyc.autokernel.canonical_launch.v1",
+      "snapshot_digest": "c083efeaaf59cf4b76342b3de569924c4b4d00aa406e913e453fdeceec8f34c4",
+      "template": {
+        "batch": 2048,
+        "cpu_list": "0-95",
+        "ctk": "f16",
+        "ctv": "f16",
+        "ctx": 8192,
+        "device": "none",
+        "env": {
+          "GGML_IQK": "1",
+          "LLAMA_SPEC_EXACT": "batched-greedy-inexact",
+          "OMP_DYNAMIC": "false",
+          "OMP_PLACES": "cores",
+          "OMP_PROC_BIND": "spread",
+          "OMP_WAIT_POLICY": "active"
+        },
+        "env_readback": [],
+        "extra_flags": [
+          "--device-draft",
+          "none"
+        ],
+        "fa": "on",
+        "kv_unified": false,
+        "metric": "aggregate_tok_s",
+        "model": "/mnt/raid0/llm/models/antirez/deepseek-v4.1-flash-gguf/DeepSeek-V4.1-Flash-Q4.gguf",
+        "n_predict": 256,
+        "name": "ds41-ebb68dc55-cpu-t48-dspark-b2",
+        "ngl": 0,
+        "np": 1,
+        "schema": "epyc.autokernel.canonical_recipe.v1",
+        "spec_decode": {
+          "draft_n_max": 2,
+          "drafter": "/mnt/raid0/llm/models/deepseek-ai/DeepSeek-V4.1-Flash-DSpark.gguf",
+          "ngld": 0,
+          "type": "draft-dspark"
+        },
+        "temperature": 0.0,
+        "threads": 48,
+        "top_k": 1,
+        "top_p": 0.95,
+        "ubatch": 512
+      },
+      "template_hash": "a93b6a48955becc0d17baa1faf7900200168835183479f173181969fed86c88f",
+      "topology_prefix": [
+        "taskset",
+        "-c",
+        "0-95",
+        "numactl",
+        "--interleave=all"
+      ],
+      "workload": {
+        "metric": "aggregate_tok_s",
+        "n_predict": 256,
+        "temperature": 0.0,
+        "top_k": 1,
+        "top_p": 0.95
+      }
+    },
+    "measured_execution_digest": "cffc28474e3bafafabce7bbe0f9d865f394df68e2a292524aeec1be6bbce2a6b",
+    "original_selection_hint": {
+      "candidate": null,
+      "cpu_list": "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47",
+      "mechanism_family": "unknown_source_screen",
+      "reason": "no scale-sensitive mechanism identified; use non-promotable half screen and require the existing full-target confirmation before keep",
+      "region_fraction": 0.5,
+      "scope": "half"
+    },
+    "scope": "half"
+  },
+  "enrollment": {
+    "campaign_id": "ak-ds41-cpu-decode-20260923",
+    "manifest_digest": "c9344b07fe1990d7cdc30763dcbf944c0a801655d9c23018bba99d8420e594ff",
+    "original_target": {
+      "baseline": {
+        "kind": "build",
+        "path": "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/llama-server",
+        "ref": "local:ds41:ebb68dc55:llama-server",
+        "schema": "epyc.autokernel.local_artifact.v1",
+        "sha256": "a6af7d3acc50cd810a9a8159d959596ec09cc259bd8067a9db7112f7debe44ee"
+      },
+      "baseline_ref": null,
+      "enrolled_as": [
+        "seed"
+      ],
+      "execution": {
+        "backend": "cpu",
+        "build": "<same as $.enrollment.original_target.baseline>",
+        "build_ref": "local:ds41:ebb68dc55:llama-server",
+        "concurrency": 1,
+        "context": 8192,
+        "drafter": {
+          "kind": "model",
+          "path": "/mnt/raid0/llm/models/deepseek-ai/DeepSeek-V4.1-Flash-DSpark.gguf",
+          "ref": "local:ds41:drafter-dspark",
+          "schema": "epyc.autokernel.local_artifact.v1",
+          "sha256": "522ce00dedffc369019a6f5917bcd3dfcb343cf7cfdd36c3758e471177b0f3c5"
+        },
+        "drafter_ref": "local:ds41:drafter-dspark",
+        "env": {
+          "GGML_IQK": "1",
+          "LLAMA_SPEC_EXACT": "batched-greedy-inexact",
+          "OMP_DYNAMIC": "false",
+          "OMP_PLACES": "cores",
+          "OMP_PROC_BIND": "spread",
+          "OMP_WAIT_POLICY": "active"
+        },
+        "metric": "aggregate_tok_s",
+        "metric_direction": "higher",
+        "model": {
+          "kind": "model",
+          "path": "/mnt/raid0/llm/models/antirez/deepseek-v4.1-flash-gguf/DeepSeek-V4.1-Flash-Q4.gguf",
+          "ref": "local:ds41:model-entry",
+          "schema": "epyc.autokernel.local_artifact.v1",
+          "sha256": "a5e2e2c3ada4b2e98d9f9e4b50f6d9c2a12c2c96f5da165c07e13aff9264984e"
+        },
+        "model_ref": "local:ds41:model-entry",
+        "recipe": {
+          "kind": "recipe",
+          "path": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/inputs/ds41-cpu-t48-dspark.recipe.json",
+          "ref": "local:ds41:ebb68dc55:recipe",
+          "schema": "epyc.autokernel.local_artifact.v1",
+          "sha256": "4f68a4783d1302c693e91e5336de3fc849e55b26725ab1c74186e1bbaa5aafa7"
+        },
+        "recipe_ref": "local:ds41:ebb68dc55:recipe",
+        "schema": "epyc.autokernel.resolved_execution.v1",
+        "speculation": "external_draft"
+      },
+      "missing": [],
+      "required_obligations": [],
+      "revision": 1,
+      "roles": [
+        "candidate"
+      ],
+      "schema": "epyc.autokernel.target_revision.v1",
+      "seed_boost_units": 1,
+      "spec_digests": [
+        "4c6e16d6a2fe815dbae208e485c6e3222e8e030b8bda2008f414d5d8363ed1d7"
+      ],
+      "status": "ready",
+      "target_ids": [
+        "ds41-ebb68dc55-cpu-t48-dspark-b2"
+      ],
+      "workload_signature": "4d41c0b97475ff33cd21f2599c37fe3472ebe1ac624aecc55ea8b3bf11807894"
+    },
+    "request_id": "ak-ds41-cpu-decode-20260923-r3",
+    "scope": "cpu_serving_selected_workload",
+    "selected_id": "ds41-ebb68dc55-cpu-t48-dspark-b2"
+  },
+  "hotspot_status": "observed",
+  "recipe": {
+    "absent_environment": [],
+    "argv": [
+      "taskset",
+      "-c",
+      "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47",
+      "numactl",
+      "--interleave=all",
+      "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/llama-server",
+      "-m",
+      "/mnt/raid0/llm/models/antirez/deepseek-v4.1-flash-gguf/DeepSeek-V4.1-Flash-Q4.gguf",
+      "-np",
+      "1",
+      "-c",
+      "8192",
+      "-t",
+      "48",
+      "-tb",
+      "48",
+      "-b",
+      "2048",
+      "-ub",
+      "512",
+      "-ctk",
+      "f16",
+      "-ctv",
+      "f16",
+      "--device",
+      "none",
+      "-ngl",
+      "0",
+      "-fa",
+      "on",
+      "--host",
+      "127.0.0.1",
+      "--port",
+      "18641",
+      "--metrics",
+      "--slots",
+      "-md",
+      "/mnt/raid0/llm/models/deepseek-ai/DeepSeek-V4.1-Flash-DSpark.gguf",
+      "-ngld",
+      "0",
+      "--spec-type",
+      "draft-dspark",
+      "--spec-draft-n-max",
+      "2",
+      "--no-kv-unified",
+      "--device-draft",
+      "none",
+      "--no-mmap",
+      "--no-webui"
+    ],
+    "backend": "cpu",
+    "build_dir": "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu",
+    "capability": "<same as $.common_cpu_scope.full_transfer_target.capability>",
+    "command_argv": "<same as $.common_cpu_scope.full_transfer_target.command_argv>",
+    "drafter": "<same as $.common_cpu_scope.full_transfer_target.drafter>",
+    "dsos": "<same as $.common_cpu_scope.full_transfer_target.dsos>",
+    "environment_policy": "<same as $.common_cpu_scope.full_transfer_target.environment_policy>",
+    "executable": "<same as $.common_cpu_scope.full_transfer_target.executable>",
+    "execution_digest": "cffc28474e3bafafabce7bbe0f9d865f394df68e2a292524aeec1be6bbce2a6b",
+    "launch_contract": "orchestrator-production/v1",
+    "launch_env": "<same as $.common_cpu_scope.full_transfer_target.launch_env>",
+    "model": "<same as $.common_cpu_scope.full_transfer_target.model>",
+    "port": 18641,
+    "provenance": {
+      "build": "hand-built build-cpu at ebb68dc55, IDENTITY.json receipt",
+      "cpu_screen_full_target": "c083efeaaf59cf4b76342b3de569924c4b4d00aa406e913e453fdeceec8f34c4",
+      "experimental_parent_snapshot": "6ac2ef29a9e66b803e879930c5a32b1e7c848e422d6197e63f41a34d31556044",
+      "export_sha256": "785ad61d7b89e4fa3c713f6e34bcd327d6e2c120fb385d62021bef6cea33c0de",
+      "instance_mode": "full",
+      "recipe_origin": "deepseek_v41_flash_recipe greedy-batched, 48 threads",
+      "source:branch": "experimental/deepseek41-port-20260923",
+      "source:head": "ebb68dc55d5f6af4a4a5dccdd2a013fa76c63bee"
+    },
+    "readback_expectations": [],
+    "relevant_environment": "<same as $.common_cpu_scope.full_transfer_target.relevant_environment>",
+    "runtime_binary_dir": "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin",
+    "runtime_ld_paths": [
+      "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin"
+    ],
+    "schema": "epyc.autokernel.canonical_launch.v1",
+    "snapshot_digest": "3e4b4592048a1bc2ec9f8fb219558f132ff38c268b4d2f651fdcf377bccd0c06",
+    "template": {
+      "batch": 2048,
+      "cpu_list": "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47",
+      "ctk": "f16",
+      "ctv": "f16",
+      "ctx": 8192,
+      "device": "none",
+      "env": {
+        "GGML_IQK": "1",
+        "LLAMA_SPEC_EXACT": "batched-greedy-inexact",
+        "OMP_DYNAMIC": "false",
+        "OMP_PLACES": "cores",
+        "OMP_PROC_BIND": "spread",
+        "OMP_WAIT_POLICY": "active"
+      },
+      "env_readback": [],
+      "extra_flags": [
+        "--device-draft",
+        "none"
+      ],
+      "fa": "on",
+      "kv_unified": false,
+      "metric": "aggregate_tok_s",
+      "model": "/mnt/raid0/llm/models/antirez/deepseek-v4.1-flash-gguf/DeepSeek-V4.1-Flash-Q4.gguf",
+      "n_predict": 256,
+      "name": "ds41-ebb68dc55-cpu-t48-dspark-b2.cpu-half-a93b6a48955becc0",
+      "ngl": 0,
+      "np": 1,
+      "schema": "epyc.autokernel.canonical_recipe.v1",
+      "spec_decode": {
+        "draft_n_max": 2,
+        "drafter": "/mnt/raid0/llm/models/deepseek-ai/DeepSeek-V4.1-Flash-DSpark.gguf",
+        "ngld": 0,
+        "type": "draft-dspark"
+      },
+      "temperature": 0.0,
+      "threads": 48,
+      "top_k": 1,
+      "top_p": 0.95,
+      "ubatch": 512
+    },
+    "template_hash": "fe52e7629d40f22418dc80c497da5a9c6e21062ac9e707cf51e1ce4b83d2b182",
+    "topology_prefix": [
+      "taskset",
+      "-c",
+      "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47",
+      "numactl",
+      "--interleave=all"
+    ],
+    "workload": {
+      "metric": "aggregate_tok_s",
+      "n_predict": 256,
+      "temperature": 0.0,
+      "top_k": 1,
+      "top_p": 0.95
+    }
+  },
+  "requests": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/inputs/ds41-decode.prompt-manifest.json",
+  "scope": "experimental candidate, NOT canonical champion"
+}
+```
+
+## Standing constraints and settled questions (read this first)
+Original common-scope selection hint: {"candidate": null, "cpu_list": "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47", "mechanism_family": "unknown_source_screen", "reason": "no scale-sensitive mechanism identified; use non-promotable half screen and require the existing full-target confirmation before keep", "region_fraction": 0.5, "scope": "half"}. Propose a source mechanism matching this stated family; the hint is advice, not evidence of full-target transfer.
+
+CPU COMMON-SCOPE SOURCE WORK: half. Both A/B arms share the listed threads and affinity; this is NOT an effect from changing those settings. Author source only, not a runtime treatment. Reduced positive is provisional until the SAME source/build clears the original full target; reduced null cannot globally retire a scaling-sensitive mechanism. No NUMA-local or full-scale transfer assumed.
+
+CPU EXPERIMENTAL TARGET — overrides inapplicable GPU instructions below.
+Use the selected CPU launch, frozen requests and build recipe in target. Do not follow ROCm/rocprofv3, GPU residency, -ngl 99 or GPU-specific kernel-probe instructions for this target. Read cpu_profile for original request-scoped sampled user-cycle attribution (or its unavailable reason); fractions are not wall-time shares or optimization gains. Read node_profile for the same anchor's per-op wall SHARES (MUL_MAT dense vs MUL_MAT_ID experts vs FLASH_ATTN vs RMS_NORM vs the engram row gather), host phases and engram fault mix, measured on an INSTRUMENTED SIBLING build: shares transfer to the measured binary, absolutes do not, and it is never a baseline nor comparable to any measured number. An absent section is a missing instrument, never a zero. Do not invent hotspots or reuse GPU timing evidence as CPU evidence. Author/review source only for source hypotheses; runtime treatments have no source edit and are observation-only unless separately admitted. The existing loop owns compilation, the CPU oracle, resource locking and paired serving measurements. Preserve the selected request, cache/seed/speculation and placement conditions. Keeps remain on the explicitly selected experimental candidate branch; they do not promote the canonical champion or production.
+
+# AutoKernel loop — strategy
+
+The loop's shape is normative and lives in
+`docs/guides/agent-workflows/agent-loop-design.md` (epyc-root). This file is the
+strategy the loop runs *inside* that shape: what to attack, what the hardware makes
+possible, and what has already been settled.
+
+## Prospective lineage capture (default off)
+
+`lineage_capture.capture` can seal original patch and complete post-authoring
+source bytes at `run.py:keep_the_diff`, before a lane reset overwrites its
+`<mechanism>.<lane>.patch`. It is intentionally not called by the active loop.
+Future authorization must first mint one durable attempt/capture ID and carry
+that same ID into the native outcome row; only then can the patch-capture seam
+call `capture(store, capture_id=attempt_id, parent_id=parent_attempt_id,
+base_commit=base_head, patch_bytes=diff_bytes, source_files=source_bytes)`.
+The source file set must be fixed before scoring. Historic patch filenames and
+tree-level snapshot hashes do not establish this join; the offline exporter
+must refuse them. The helper makes no candidate, benchmark, champion, or
+promotion decision.
+
+---
+
+## The loop
+
+```
+when the champion changes (at most weekly otherwise):
+    rocprofv3 the champion → ranked hotspots
+
+each iteration, planner works in a worktree with the full toolbox:
+    reads   champion · experiments.md · hotspots · hypotheses/inbox/
+    probes  FREELY — llama-bench, rocprofv3, test-backend-ops -o OP --perf,
+            llvm-objdump for VGPR/occupancy, env-flag sweeps. Nothing gated.
+    forms   hypothesis H, backed by evidence it gathered itself
+
+CRITIC PASS 1 on H, before any patch exists     · budget 3 rounds
+    reject → reason returned VERBATIM; planner refines or regenerates
+CRITIC PASS 2 on the committed diff, before the build   · budget 2 rounds
+    reject → reason returned VERBATIM; H untouched, planner rewrites the patch
+
+    build → affected-op units → independent reference → A/B alternating, n≥5
+    keep → commit onto the champion branch
+    else → negative, with mechanism and sample vector, into experiments.md
+```
+
+Every committed source keep (GPU or direct CPU) also gets a bounded diagnostic artifact at
+`<store>/codegen/<champion-commit>.<backend>.<build-frame-sha256>.json`; its contents are embedded in that
+keep's experiment row. The collector hashes up to eight standalone AMD
+`.hsaco`/`.co` objects and, when ROCm `llvm-objdump` can disassemble them,
+counts scalar/vector/matrix/memory instructions. CPU builds inspect only the
+bounded installed `libggml-cpu.so` and allowlisted GDN/quant-dot wrapper symbols;
+their x86 disassembly is a diagnostic sample, not proof that an edited helper
+executed. A missing/stripped symbol reports unavailable rather than an inferred
+instruction mix. This is **not** an additional keep gate. If the current HIP
+library has no standalone code object, the producer can inspect a bounded sample
+of gfx90a ELF objects in its embedded fatbin and bind each extracted object to
+the candidate library hash and byte offset. This is not a complete fatbin census
+or per-kernel attribution; unavailable bytes/tools remain explicitly unavailable.
+Spills, occupancy, vectorization and CUDA PTX/SASS/CUBIN are likewise never
+inferred from this MI210 diagnostic. A separate verified compiler/profiler
+receipt is required before any of those become a mechanism claim.
+
+---
+
+## Porting gate order (AK-PORT-1/2)
+
+For source changes, retain the actual diff and resolve its affected native op before
+spending on a build. An unknown or shared source route is a gate refusal, never an
+implicit `MUL_MAT` pass. Then compile the candidate, run `test-backend-ops -o` for
+the affected op on the selected backend (host wiring and kernel-unit coverage),
+compare with an independent reference where one is installed, and only then time
+the candidate. Keep compile, op suite, and reference failures distinct in the
+receipt. A fast but wrong candidate is discarded.
+
+The experimental CPU `GATED_DELTA_NET` route has a deterministic F32 scalar
+reference fixture with exactly representable outputs. The native CPU suite alone
+compares CPU against CPU and is not independent evidence. It must be followed by
+that scalar fixture. Two CPU IQK helper routes are admitted narrowly, each
+requiring body-only edits to its named helper in `iqk_mul_mat.cpp` and the
+nonempty native `MUL_MAT_ID` host/op suite under the resolved CPU recipe:
+
+- `iqk_mul_mat_moe_rows`: trusted one-shot GDB witnesses prove `use_ref=true`
+  on the reference and exact exported-helper entry in the candidate DSO for
+  passing Q4_K/Q5_K cases. An independent scalar fixture compares their
+  `MUL_MAT_ID` outputs at the fixed 40-row, two-token shape.
+- `iqk_moe_fused_up_gate`: the native GLU selector currently has 0/0 CPU cases,
+  so it is **not** a correctness witness. A separate fused up-gate graph fixture
+  requires exact candidate-DSO helper hits and independent scalar agreement for
+  both Q4_K and Q5_K, also at the fixed 40-row, two-token shape. The preceding
+  `MUL_MAT_ID` suite checks host/op wiring; it does not prove fused execution.
+
+The Q4_K/Q5_K dot-computation route is separate. For
+`ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp`, target
+`mul_mat_qX_K_q8_2_X4_T` and edit only the Q4_K/Q5_K-private dequantizers,
+their private scale-unpack helpers, or that Q4_K/Q5_K-only template body.
+The loop checks actual Git hunks against both the original and candidate
+source; it refuses selector, shared Q6_K helper, header, sibling and other-file
+edits. The native `MUL_MAT` and `MUL_MAT_ID` suite is followed by independent scalar
+`MUL_MAT`, `MUL_MAT_ID` and fused up-gate comparisons for both quants across activation
+widths 1–8. Each fused case requires a trusted hit on the matching template specialization
+inside the candidate CPU DSO. A missing specialization, wrong output or
+unproven path refuses timing. This route addresses the material dot work that
+the v27 planner correctly found outside the older fused-helper-body boundary.
+
+These receipts prove exact helper or specialization entry and those numerical
+shapes, not every branch or production shape. The fused-helper and dot routes
+supersede older abstentions only where their stated missing witness or edit
+boundary is now satisfied;
+historical nulls and abstentions for their actual measured mechanisms remain
+evidence and must not be discarded. Other prospective IQK edits still refuse
+before build: generic active-dispatch
+logging cannot prove an edited quant function ran on a passing selected case.
+x86 `quants.c` is shared by both
+arms and is not admitted. Other CPU source families need a supported route
+before admission. GPU matmul routes use the native CPU-reference suite;
+the selected device block must report a nonempty passing count. On admitted GPU
+source candidates, the gate checks that the selected `test-backend-ops` binary
+supports seeded properties, then requires `AK_REF_V1` on every selected case.
+Its compact metric receipt carries the suite's own per-case thresholds; missing
+support or receipts are `oracle_unavailable`, not wrong-kernel evidence. This
+does not admit CPU IQK source edits: their candidate-local CPU reference is not
+independent. Do not infer a
+universal cosine, PSNR, max-abs or MSE tolerance from this policy. Low-precision
+comparison requires its own validated reference and threshold.
+
+---
+
+## What the instrument can actually resolve
+
+Measured 2026-08-28, n=20 alternating A/A pairs, residency proven on 80/80
+invocations (`artifacts/autokernel-aa-noise-floor/`):
+
+| pairs | prefill p95 \|effect\| | decode p95 \|effect\| |
+|---|---|---|
+| 1 | 2.175% | 3.452% |
+| 3 | 1.432% | 2.527% |
+| 5 | **0.479%** | **1.502%** |
+| 9 | 0.168% | 1.175% |
+| 20 | 0.029% | 0.067% |
+
+p95 of \|median effect\| over **every** C(20,k) subset — exhaustive, so it re-derives
+exactly (`bench.MEASURED_FLOOR_PCT`). An earlier hand-written version of this table
+quoted 0.753% / 1.848% at k=5, which no method reproduces from the raw pairs; it is
+corrected here. The floors the loop **enforces** are 0.973% (prefill) and 1.544%
+(decode) — deliberately *above* the measured row, because 20 pairs is a thin sample of
+a heavy tail.
+
+**4 of 20 pure-noise decode pairs already exceeded a 3% bar.** So: `n≥5`, and never
+claim an effect smaller than the floor for the pair count used. Decode has heavier
+tails and converges slowly; prefill is the cheaper surface to detect on.
+
+## The workload
+
+`DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf` — n_embd 1536 (divisible by the
+256-element K-quant superblock), **Q4_K ×169, Q6_K ×29**. That is production's
+dispatch path at ~1 GB.
+
+The superseded workload was `Qwen2.5-Coder-0.5B-Q4_K_M.gguf`, which despite its name
+is **Q5_0 ×132, Q4_K ×12**: n_embd 896 is not divisible by 256, so llama.cpp fell
+back silently and a month of screening measured a kernel production never dispatches.
+`workload_contract.verify_workload` now refuses that class outright. **Never trust a
+filename; census the tensor table.**
+
+## The build recipe
+
+`controller/build_recipe.HOUSE_GPU_RECIPE`, versioned, with every flag naming its
+production counterpart. A flag that diverges without a stated reason is refused at
+construction. `GGML_HIP_ROCWMMA_FATTN=ON` is not optional on gfx90a: the CMake
+default OFF produces non-finite values at longer sequence lengths under `-fa on`, and
+a short smoke test hides it because prompt length is the discriminator.
+
+---
+
+## Where to attack
+
+Generate against the **live** profile of the current champion, not a frozen list.
+Every accepted patch moves the distribution.
+
+Standing seeds, carried because they are expensive to rediscover rather than because
+they are ranked:
+
+- **IQ4_XS / Q5_K and the 64-VGPR occupancy knee.** Every rung ≤64 VGPR (8 waves)
+  decodes ≥90 t/s; both rungs above it (6 waves) decode ≤83 t/s *while 27–46%
+  smaller*. IQ4_XS sits exactly on the boundary and is the fastest rung. Any IQ2/IQ3
+  lever must carry an explicit VGPR target — a reduction landing at 70 buys nothing.
+- **`iqk_gemm_1bit.cpp` and `iqk_flash_attn.cpp`** — vendored, audited clean
+  2026-07-29, omitted from CMake, never staged.
+- **The hypothesis inbox** (`<store>/inbox/*.md`, re-read every iteration): hypotheses
+  arrive asynchronously — from the operator, or harvested from the backlog by
+  `python3 -m autokernel.loop.seed`. Dropping a file in never blocks the loop.
+
+## Measured gfx90a facts — check a mechanism against these before proposing it
+
+These are receipts, not priors. A hypothesis that contradicts one is dead on arrival.
+
+- **gfx90a LDS is 32 banks with 8 phase cliques** — *not* the CDNA3 answer (64 banks,
+  2 phases of 32 lanes). Solved on our own silicon 2026-08-11 (372 bank / 6,048 phase
+  dispatches; receipt SHA-256 `ae1d833c…`). Any swizzle constant lifted from CDNA3
+  work — HipKittens' `>>7 <<3` among them — **does not transfer unexamined**.
+- **`__builtin_amdgcn_mfma_f32_16x16x32_fp8_fp8` does not exist on gfx90a.** Of the six
+  `__builtin_amdgcn_*` intrinsics HipKittens uses across 67 headers, exactly this one is
+  unavailable. Any fp8-MFMA mechanism is unimplementable here, not merely unmeasured.
+- **Our MFMA fragment layout is already the standard one.** `ggml/src/ggml-cuda/mma.cuh`
+  `tile<16,16>` (`:127,144` — `get_i = tid%16`, `get_j = 4*(tid/16)+l`, `ne=4`) is
+  **bit-identical** to HipKittens' `rt_base`. Fragment-level techniques from that
+  literature compose onto our existing tiles with **zero layout re-derivation** — this
+  is an enabling fact, and it means "we would have to re-derive the layout" is not a
+  reason to decline one.
+  (Source for all three: `handoffs/active/agentic-rocm-kernel-authoring.md`.)
+
+## Half of the prefill profile runs in a vendor kernel — BY OUR OWN DISPATCH
+
+Measured on the contracted surface (pp512, DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M,
+2026-08-28). Any hotspot whose signature begins **`Cijk_...`** is a **rocBLAS/Tensile
+GEMM** from a vendor library, so the loop cannot edit that kernel's *body*:
+
+**But it is reached by our own decision.** `ggml_cuda_should_use_mmq()`
+(`ggml/src/ggml-cuda/mmq.cu:240`) chooses between MMQ and dequant+GEMM, and for
+gfx90a/Q4_K it returns false purely because line :309 gates Q4_K/Q5_K at
+`ne11 <= 256` while pp512 has `ne11 = 512`. One constant, in our tree, routes ~76%
+of this surface into the vendor path. See seed `03-mmq-dispatch-threshold.md` —
+changing WHICH kernel runs is available even when changing that kernel is not.
+
+| share | patchable | kernel |
+|---|---|---|
+| 23.50% | **no** — Tensile | `Cijk_...MT64x64x64_MI32x32x8x1...` |
+| 21.67% | **no** — Tensile | `Cijk_...MT160x128x64_MI32x32x8x1...` |
+| 15.06% | yes | `dequantize_block_q4_K<__half>` |
+| 10.94% | yes | `flash_attn_ext_f16<128, 32, 4, 64, float, false>` |
+| 9.32% | yes | `convert_unary<float, __half>` |
+| 4.14% | **no** — Tensile | `Cijk_...MT64x128x64...` |
+
+**~51% vendor, ~47% ours.** So the addressable ceiling on this surface is roughly half
+the device time, and an effect must be scaled accordingly: a 10% win on
+`dequantize_block_q4_K` is 1.5% of the surface, which is above the 0.973% floor but not
+by much.
+
+**Read the shape, not just the rows.** Prefill here is a *dequantize-then-vendor-GEMM*
+path: `dequantize_block_q4_K` -> `convert_unary` -> Tensile GEMM is **75.7%** of device
+time. The weights are unpacked to f16 and multiplied by a library kernel. That is the
+structure a mechanism has to engage with, and the biggest patchable single target on
+this surface is the dequant itself.
+
+Note what this implies about the decode surface by contrast: `tg128` dispatches
+`mul_mat_vec_q` — quantized matmul, entirely our source, no Tensile at all. Decode has
+a far higher patchable fraction and a higher noise floor (enforced 1.544% vs 0.973%; measured 1.502% vs 0.479%).
+Neither surface is wrong; they are different bets, and the choice is the operator's.
+
+## Known hazards when patching the dequant path (learned the expensive way)
+
+Run 9 aimed correctly at the two biggest patchable slices — `dequantize_block_q4_K` (15.06%)
+and `convert_unary` (9.32%) — and lost both to the same two failures. Answer these before
+authoring, not after the build:
+
+- **`dequantize.cuh` is a SHARED header.** It is also included by `cpy.cu`, which does not
+  declare `ggml_cuda_cast`. A new kernel in that header calling `ggml_cuda_cast<half>` compiles
+  fine where you are looking and then fails the whole build with undeclared-identifier errors
+  from a translation unit you never opened. Check every includer of a header before adding a
+  call to it, and prefer putting new code in the `.cu` that needs it.
+- **The dequant kernels sit on the MUL_MAT path.** Two separate run-9 attempts died on
+  `MUL_MAT failed on ROCm0`. The anchor passes 1139/1139, so the failure was the patch, not the
+  baseline. A change to dequantize/convert changes how every quantized matmul reads its
+  weights: a hypothesis here must say what keeps the numerics identical, not only what makes
+  it faster.
+- **Claiming a path you did not change is a transient, not a patch.** The worktree is the
+  ground truth and is reset to the champion before every iteration, so "authoring returned no
+  changed paths" means the edit never landed. Re-read the file before reporting paths.
+
+## A DERIVED marginal is not measured against the same bar
+
+Two effects measured against a common anchor give an exact marginal:
+
+    tput(B)/tput(anchor) / [ tput(A)/tput(anchor) ] = tput(B)/tput(A)
+
+The arithmetic is exact. The UNCERTAINTY is not the same. Each input carries the
+floor's p95; their ratio carries roughly **sqrt(2) times** it, because two independent
+errors compose. Comparing a derived marginal against the ordinary floor asks it to
+clear a bar calibrated for a directly measured quantity, and rejects real gains.
+
+This is not hypothetical: `akm-q4k-q8-sum-sidecar` was demoted from the champion on
+exactly that mistake. Its marginal was +1.088% against a 1.188% floor -- but the
+correct interval is +/-1.680%, so the honest verdict was UNDEMONSTRATED, not refuted.
+It may be worth up to +2.8%.
+
+**So: if you want a marginal, MEASURE it.** With the anchor advancing, a candidate is
+already compared against the current champion, and that number is direct. Only infer a
+marginal from two cumulative figures when you cannot measure it -- and when you do,
+widen the bar to sqrt(2) x floor and say that you did.
+
+## What the correctness gate does NOT catch
+
+`test-backend-ops` is the gate, and it is necessary rather than sufficient. A real
+corruption has already passed a green test suite here: `b8ad9d292` incidentally
+reclassified Q2_K/Q3_K activations `Q8_2_X4` → `Q8_K`, which engaged never-validated
+iqk kquant kernels and corrupted Hy3 output. It was **caught on live output at 20:47Z,
+not by tests** (fixed same day by `1977a5d78` plus static_asserts).
+
+So: a patch that changes an activation quant type, a type-traits row, or a dispatch
+table entry is in a known-dangerous class whose failure mode the gate cannot see. Say
+so in the hypothesis, and prefer a mechanism that leaves type selection alone.
+
+## Not this loop's surface — do not propose these
+
+The backlog is full of measured levers that are NOT kernel-source patches. They are
+real work; they are simply not what this loop can build, gate and A/B:
+
+- **Serving and sampling flags** — spec-dec draft depth, `--spec-type ngram-*`,
+  `-ctk/-ctv` KV quant, batch/ubatch geometry. Config, not source.
+- **Drafter work** — MTP/EAGLE3 heads, tree-draft, drafter fine-tuning for acceptance
+  rate. A separate track with its own handoffs.
+- **Lossy model surgery** — vocabulary pruning, layer/depth removal. Out of scope by
+  the ratified lossless-only rule, and both contributed to a 15/40-point degradation.
+- **KT / trellis quants** — CPU-only, so the MI210 cannot participate at all. Also
+  dominated on the arithmetic that motivated them: `block_iq2_kt` is 68 B per 256
+  weights = **2.125 bpw** against **IQ2_XXS at 2.0625 bpw**, so it is *larger* than
+  what GLM-5.2 already uses and saves zero bandwidth while adding per-weight work. A
+  quality-at-equal-bpw play mis-framed as a speed play.
+
+## Settled — do not re-open without new evidence
+
+- **`MMQ_MFMA` OFF.** +23.09% on the 0.5B toy, **+0.50%** on Qwen3.8-27B. Real where
+  it was taken, worth nothing where the fleet runs.
+- **`ubatch 512→1024`.** A NULL ARM: llama.cpp clamps `n_ubatch = min(n_batch,
+  n_ubatch)`, so both arms ran at 512 on one identical binary. The +46.9% was a
+  bimodal sample whose median landed on the fast mode.
+- **ngram 2.8×.** Retracted — a warm-context self-copy artifact; −17.4% on 122B-IQ2.
+- **Already in v9:** `GGML_IQK` (since v8), MMQ `a6b4b5263`, HIP graphs (upstream
+  default ON).
+
+## Authority
+
+This package **screens**. It never promotes. Every result is non-promotable by
+construction, and promotion is `docs/reference/kernel-freeze-runbook.md` — seven
+steps, ~100 lines, and it shipped v7, v8 and v9.
+
+Under `P-AK-SEARCH-1` denial 4, prior records inform **hypothesis formation** only;
+`experiments.ExperimentStore.recall(ranking_authorized=False)` is the default until
+the operator amends it (decision D1,
+`handoffs/active/autokernel-rebuild-program.md`). Cross-epoch records are returned but
+marked `stale_epoch` — the fact that a mechanism was tried is formation; its *number*
+is not comparable.
+
+## CPU profile for the selected experimental target
+Sampled user-cycle attribution for the original request, not exact CPU cost, wall-time share, a speedup estimate or an acceptance A/B.
+Original record: /mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store/cpu-profiles/a40a6f96287ebad35593f25888f041edccfbff0ec789643ead550eb5f260fdd4-91d5f040e9cfd920303e321788fd363852004eca37fe5f088f2e6fe9acbacf43.json (SHA-256 9d2385d71cdc8e3a184c74ddd7459455acf1a8f5da8b472a226b50400f9bdb98)
+Execution: cffc28474e3bafafabce7bbe0f9d865f394df68e2a292524aeec1be6bbce2a6b; frozen prompts: 088608da579d74cff3d939978e1669b4efbb022c451d36b1ef0ca1df2d92a2ff
+| sampled-period fraction | observed periods | DSO | symbol |
+|---|---|---|---|
+| 50.02% | [period redacted] | `/usr/lib/x86_64-linux-gnu/libgomp.so.1.0.0` | `[unknown]` |
+| 16.99% | [period redacted] | `/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/libggml-cpu.so.0.16.0` | `void (anonymous namespace)::mul_mat_qX_K_q8_2_X4_T<(anonymous namespace)::DequantizerQ4K_AVX2, 1>(int, void const*, unsigned long, DataInfo const&, int)` |
+| 15.79% | [period redacted] | `/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/libggml-cpu.so.0.16.0` | `void (anonymous namespace)::tinyBLAS_Q0_AVX<block_q8_0, block_q8_0, float>::gemm4xN<3>(long, long, long, long)` |
+| 3.51% | [period redacted] | `/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/libggml-cpu.so.0.16.0` | `void (anonymous namespace)::mul_mat_qX_K_q8_2_X4_T<(anonymous namespace)::DequantizerQ4K_AVX2, 2>(int, void const*, unsigned long, DataInfo const&, int)` |
+| 2.29% | [period redacted] | `/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/libggml-cpu.so.0.16.0` | `void (anonymous namespace)::tinyBLAS_Q0_AVX<block_q8_0, block_q8_0, float>::gemm4xN<2>(long, long, long, long)` |
+| 2.19% | [period redacted] | `/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/libggml-cpu.so.0.16.0` | `void (anonymous namespace)::tinyBLAS<16, float __vector(16), float __vector(16), unsigned short, unsigned short, float>::gemm_bloc<4, 3>(long, long)` |
+| 1.98% | [period redacted] | `/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/libggml-cpu.so.0.16.0` | `void (anonymous namespace)::mul_mat_qX_K_q8_2_X4_T<(anonymous namespace)::DequantizerQ4K_AVX2, 3>(int, void const*, unsigned long, DataInfo const&, int)` |
+| 1.51% | 84310028068 | `/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/libggml-cpu.so.0.16.0` | `ggml_compute_forward_flash_attn_ext` |
+| 0.94% | 52738718906 | `/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/libggml-cpu.so.0.16.0` | `ggml_vec_dot_f16` |
+| 0.72% | 40542524846 | `/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/libggml-cpu.so.0.16.0` | `void (anonymous namespace)::tinyBLAS<16, float __vector(16), float __vector(16), float, float, float>::gemm_bloc<4, 3>(long, long)` |
+| 0.64% | 36046247333 | `/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/libggml-cpu.so.0.16.0` | `ggml_gemv_mxfp4_8x8_q8_0` |
+| 0.37% | 20766492477 | `/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/libggml-cpu.so.0.16.0` | `ggml_compute_forward_dsv4_hc_post` |
+
+### Ranked mechanism families from that same profile
+This is a lossless grouping of the sampled symbols above, not a speedup estimate. Start with the highest-share unresolved causal mechanism; do not spend the iteration on a lower-share cosmetic variant without explaining why.
+| rank | sampled-period fraction | mechanism family | evidence |
+|---|---|---|---|
+| 1 | 50.03% | `thread-synchronization-and-work-balance` | current-request-sampled-user-cycles |
+| 2 | 22.50% | `quantized-matmul-q4` | current-request-sampled-user-cycles |
+| 3 | 18.32% | `dense-q8-dot-matmul` | current-request-sampled-user-cycles |
+| 4 | 2.19% | `symbol:void (anonymous namespace)::tinyBLAS<16, float __vector(16), float __vector(16), unsigned short, unsigned short, float>::gemm_bloc<4, 3>(long, long)` | current-request-sampled-user-cycles |
+| 5 | 1.51% | `flash-attention` | current-request-sampled-user-cycles |
+| 6 | 0.94% | `symbol:ggml_vec_dot_f16` | current-request-sampled-user-cycles |
+| 7 | 0.72% | `symbol:void (anonymous namespace)::tinyBLAS<16, float __vector(16), float __vector(16), float, float, float>::gemm_bloc<4, 3>(long, long)` | current-request-sampled-user-cycles |
+| 8 | 0.64% | `symbol:ggml_gemv_mxfp4_8x8_q8_0` | current-request-sampled-user-cycles |
+
+### Where sampled threads executed
+These are user-cycle sample periods on sampled execution CPUs. They do not measure remote-memory traffic, completed work per thread, wall-time imbalance, or a causal NUMA penalty.
+Active TIDs: 48 of 51 sampled (activity cutoff 27446718274 periods).
+| execution NUMA node | sampled-period share | sync fraction within node |
+|---|---|---|
+| 0 | 49.61% | 46.82% |
+| 1 | 50.39% | 53.20% |
+Low/high synchronization-fraction active TIDs (descriptive extremes):
+| TID | sampled CPUs | execution nodes | sync fraction |
+|---|---|---|---|
+| 3360219 | [0] | [0] | 40.81% |
+| 3392970 | [1] | [0] | 42.46% |
+| 3392977 | [8] | [0] | 42.47% |
+| 3392971 | [2] | [0] | 43.04% |
+| 3393012 | [43] | [1] | 56.98% |
+| 3393014 | [45] | [1] | 57.73% |
+| 3393015 | [46] | [1] | 57.92% |
+| 3393016 | [47] | [1] | 61.95% |
+sampled-period totals are estimated user-cycle attribution, not exact CPU cost
+worker self attribution is not wall-time share or an optimization gain
+totals are not a comparable performance objective across windows, exposure or unknown sample loss
+full-request warmup/measurement only; setup/load are not profiled
+counter totals cover their own enable/disable window, not the exact request or sample window; no cross-window IPC
+no exact generated-token, MTP, correctness, contention or GPU warrant
+sampled CPU/NUMA attribution is execution location, not remote-memory traffic or a causal diagnosis
+no ratified measurement protocol or opportunity is supplied
+
+## Node profile — per-op wall SHARES on an instrumented sibling of the same anchor
+Per-op, host-phase and engram counters from an INSTRUMENTED SIBLING build of the current anchor (same commit, same frozen requests), never from the measured binary. Shares transfer to the measured binary; absolute times do not. Never a baseline, never an arm, never comparable to a measured number. An absent part is a missing instrument, never a zero.
+Sibling build: `/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu-prof` (recipe `native-openmp-gcc15-cpu-nodeprof-v1`, anchor `ebb68dc55d5f6af4a4a5dccdd2a013fa76c63bee`); teardown: terminated.
+
+### Mechanism families by wall share (the op-level view of the sampled CPU-profile families above)
+| rank | wall share | mechanism family | ops |
+|---|---|---|---|
+| 1 | 43.51% | `dense-matmul` | MUL_MAT |
+| 2 | 42.05% | `moe-expert-matmul` | MUL_MAT_ID |
+| 3 | 4.34% | `flash-attention` | FLASH_ATTN_EXT |
+| 4 | 1.64% | `rms-normalization` | RMS_NORM |
+| 5 | 1.39% | `op:CONCAT` | CONCAT |
+| 6 | 0.99% | `op:MUL` | MUL |
+| 7 | 0.88% | `op:DSV4_HC_POST` | DSV4_HC_POST |
+| 8 | 0.80% | `op:ADD` | ADD |
+
+### Ops by wall share (1034 accumulated graph evals, 48 threads; wall includes barrier wait and straggler imbalance, so compute/wall < 1 is time spent waiting)
+| wall share | compute/wall | op | calls per eval |
+|---|---|---|---|
+| 43.51% | 0.879 | `MUL_MAT` | 134 |
+| 42.05% | 0.942 | `MUL_MAT_ID` | 32.5 |
+| 4.34% | 0.921 | `FLASH_ATTN_EXT` | 10.8 |
+| 1.64% | 0.918 | `RMS_NORM` | 22.2 |
+| 1.39% | 0.632 | `CONCAT` | 60.8 |
+| 0.99% | 0.466 | `MUL` | 64.3 |
+| 0.88% | 0.732 | `DSV4_HC_POST` | 21.7 |
+| 0.80% | 0.131 | `ADD` | 136 |
+| 0.55% | 0.559 | `CONT` | 46.7 |
+| 0.46% | 0.606 | `CLAMP` | 54.9 |
+| 0.40% | 0.946 | `ARGSORT` | 10.8 |
+| 0.35% | 0.436 | `DSV4_HC_PRE` | 21.2 |
+
+### Weight paths by wall share
+| wall share | weight path | calls per eval |
+|---|---|---|
+| 42.05% | `expert_mul_mat_id` | 32.5 |
+| 38.35% | `dense_mul_mat` | 133 |
+| 5.17% | `lm_head` | 0.991 |
+
+### Host phases, share of decode (the `ctx.*` rows already contain the per-input-class rows; never sum the two families)
+| decode share | phase | family |
+|---|---|---|
+| 99.20% | `ctx.graph_compute` | context_phase |
+| 1.51% | `ctx.build_alloc_set_inputs` | context_phase |
+| 0.02% | `20llm_graph_input_dsv4` | graph_input_class |
+| 0.01% | `28llm_graph_input_dsv41_engram` | graph_input_class |
+| 0.01% | `20llm_graph_input_embd` | graph_input_class |
+| 0.00% | `ctx.mctx_apply` | context_phase |
+| 0.00% | `23llm_graph_input_out_ids` | graph_input_class |
+| 0.00% | `19llm_graph_input_pos` | graph_input_class |
+| 0.00% | `27llm_graph_input_attn_k_iswa` | graph_input_class |
+
+### Engram counters (level 2, op level 2, fault source getrusage_thread)
+- row-gather share of decode: not measured
+- faults per decode token (minor / major): 0 / 0
+
+Limitations: measured on an INSTRUMENTED sibling build, never on the measured binary; per-op and per-phase SHARES transfer between the profiled and unprofiled builds; absolute times do not; never a baseline, never an arm, never compared against a measured number; node identity is the graph node INDEX, stable only within one graph shape; wall includes this node's barrier wait and straggler imbalance as seen by thread 0; prefill and decode are never pooled; profiled prefill timings are inadmissible; engram fault counts are meaningless without fault_source and op_level >= 2; below that a zero is UNMEASURED, not an absence of faults; the three dumps share no run id, only time: node values are per accumulated GRAPH EVAL, host decode values per token (and raw totals when n_eval is 0), engram values raw run totals -- normalise before dividing one by another; host phase rows are two overlapping families: the three ctx.* rows already contain the per-input-class rows and the two are never summed.
+
+## Already tried
+(nothing yet)
+
+## Shared historical mechanisms — transfer NOT established
+These are original outcomes on other recorded scopes, not applicable gains, local refutations or reasons to skip validation. Preserve their model, quant, recipe, surface and caveats; unknown means not captured. Use ideas as suggestions only. These rows are excluded from the characterised-mechanism pooling above.
+```json
+{
+  "comparable_measurement": false,
+  "errors": [],
+  "omitted_roots": [],
+  "omitted_rows": 0,
+  "queried_roots": [
+    "/mnt/raid0/llm/autokernel/loop-memory"
+  ],
+  "rows": [
+    {
+      "comparable_measurement": false,
+      "effect_fraction": null,
+      "exact_attribution_effect_fraction": null,
+      "falsifier": "Post-patch llvm-objdump must show one global_load_dwordx4 and no overlapping global_load_dword for each main/gate qs stream; otherwise the mechanism was not emitted. If confirmed, a direct 20-pair alternating tg128 A/B against the champion that fails to exceed the 0.638% floor disproves the speed claim; any test-backend-ops -o MUL_MAT -b ROCm0 mismatch disproves bit-identical correctness.",
+      "magnitude_redacted": true,
+      "mechanism_id": "akm-cdna2-q8-single-x4-load",
+      "ranking_authorized": false,
+      "refusal_reason": null,
+      "research_scope": {
+        "backend": null,
+        "measurement_surface": "tg128",
+        "model": "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+        "quant": null,
+        "recipe": {
+          "description": null,
+          "environment": null,
+          "hash": null,
+          "name": null,
+          "original_serving_arms": null
+        },
+        "request_digest": null,
+        "unknown_reason": "legacy record: only original captured fields shown; nulls remain unknown"
+      },
+      "same_epoch": false,
+      "stale_epoch": true,
+      "statement": "In mmvq.cu's eight_warp_q8_cdna2 branch, replace the four get_int_b2 calls with one 16-byte unaligned __builtin_memcpy into an ext_vector_type(4) int vector and feed its four words unchanged to vec_dot_q8_0_q8_1_impl. Champion objdump shows each weight row currently issues global_load_dwordx4 offset:2 plus an overlapping global_load_dword offset:2 whose first word duplicates the vector load; the fused kernel repeats this for the gate stream. Using the first component of the single x4 load remove \u2026[clipped 258 chars]",
+      "status": "kept",
+      "target_runtime_effect_fraction": null,
+      "target_surface": "ggml/src/ggml-cuda/mmvq.cu",
+      "target_symbol": "mul_mat_vec_q eight_warp_q8_cdna2 branch",
+      "transfer": "unproven_not_local_gain_or_refutation"
+    },
+    {
+      "comparable_measurement": false,
+      "effect_fraction": null,
+      "exact_attribution_effect_fraction": null,
+      "falsifier": "Reopen only with new model-route evidence and an exact balanced full-model gain beyond the applicable noise floor.",
+      "magnitude_redacted": true,
+      "mechanism_id": "akm-glm53-cpy-outer-rows",
+      "ranking_authorized": false,
+      "refusal_reason": "Measured-null and reverted by f8e2668b6: model-route mismatch; commits 068db793f/a4ec393a9 are rejected experiments, not retained changes. Durable envelope: /mnt/raid0/llm/autokernel/loop-memory/external/glm53-core-c463-20260909/evidence-envelope.6ab1cd967603a6feb1ef369cc16a3756ea7eb3fd85e924ed847fff1a3cc9507f.json (sha256 6ab1cd967603a6feb1ef369cc16a3756ea7eb3fd85e924ed847fff1a3cc9507f); source pestopoppa/llama.cpp:ak/champion-glm53-candidate-20260909 commit c463f601bd39d0e313b744c214b8c22f9455 \u2026[clipped 64 chars]",
+      "research_scope": {
+        "backend": null,
+        "measurement_surface": null,
+        "model": null,
+        "quant": null,
+        "recipe": {
+          "description": null,
+          "environment": null,
+          "hash": null,
+          "name": null,
+          "original_serving_arms": null
+        },
+        "request_digest": null,
+        "unknown_reason": "legacy record: only original captured fields shown; nulls remain unknown"
+      },
+      "same_epoch": false,
+      "stale_epoch": true,
+      "statement": "The outer-row copy proposal accelerated a synthetic padded layout, but route tracing proved the costly GLM recurrent-state copies use the contiguous path already partitioned across workers. Durable envelope: /mnt/raid0/llm/autokernel/loop-memory/external/glm53-core-c463-20260909/evidence-envelope.6ab1cd967603a6feb1ef369cc16a3756ea7eb3fd85e924ed847fff1a3cc9507f.json (sha256 6ab1cd967603a6feb1ef369cc16a3756ea7eb3fd85e924ed847fff1a3cc9507f); source pestopoppa/llama.cpp:ak/champion-glm53-candidate-2 \u2026[clipped 115 chars]",
+      "status": "measured_null",
+      "target_runtime_effect_fraction": null,
+      "target_surface": "ggml/src/ggml-cpu/ggml-cpu.c",
+      "target_symbol": "GGML_OP_CPY outer-plane scheduling",
+      "transfer": "unproven_not_local_gain_or_refutation"
+    },
+    {
+      "comparable_measurement": false,
+      "effect_fraction": null,
+      "exact_attribution_effect_fraction": null,
+      "falsifier": "Reopen only with new model-route evidence and an exact balanced full-model gain beyond the applicable noise floor.",
+      "magnitude_redacted": true,
+      "mechanism_id": "akm-glm53-q8-rowexact-batch",
+      "ranking_authorized": false,
+      "refusal_reason": "Measured-null, default off: balanced five-request means 9.0863 mode2 versus 9.2318 mode0. Durable envelope: /mnt/raid0/llm/autokernel/loop-memory/external/glm53-core-c463-20260909/evidence-envelope.6ab1cd967603a6feb1ef369cc16a3756ea7eb3fd85e924ed847fff1a3cc9507f.json (sha256 6ab1cd967603a6feb1ef369cc16a3756ea7eb3fd85e924ed847fff1a3cc9507f); source pestopoppa/llama.cpp:ak/champion-glm53-candidate-20260909 commit c463f601bd39d0e313b744c214b8c22f9455bcd3; champion remains ef81196d5bdd4190b46dff4ae7 \u2026[clipped 15 chars]",
+      "research_scope": {
+        "backend": null,
+        "measurement_surface": null,
+        "model": null,
+        "quant": null,
+        "recipe": {
+          "description": null,
+          "environment": null,
+          "hash": null,
+          "name": null,
+          "original_serving_arms": null
+        },
+        "request_digest": null,
+        "unknown_reason": "legacy record: only original captured fields shown; nulls remain unknown"
+      },
+      "same_epoch": false,
+      "stale_epoch": true,
+      "statement": "Exact dense-Q8 verification-row batching passed byte and speculative replay gates but did not improve the balanced full-model screen. Durable envelope: /mnt/raid0/llm/autokernel/loop-memory/external/glm53-core-c463-20260909/evidence-envelope.6ab1cd967603a6feb1ef369cc16a3756ea7eb3fd85e924ed847fff1a3cc9507f.json (sha256 6ab1cd967603a6feb1ef369cc16a3756ea7eb3fd85e924ed847fff1a3cc9507f); source pestopoppa/llama.cpp:ak/champion-glm53-candidate-20260909 commit c463f601bd39d0e313b744c214b8c22f9455bcd3; \u2026[clipped 59 chars]",
+      "status": "measured_null",
+      "target_runtime_effect_fraction": null,
+      "target_surface": "ggml/src/ggml-cpu/arch/x86/quants.c",
+      "target_symbol": "Q8_0 exact multirow verification helper",
+      "transfer": "unproven_not_local_gain_or_refutation"
+    },
+    {
+      "comparable_measurement": false,
+      "effect_fraction": null,
+      "exact_attribution_effect_fraction": null,
+      "falsifier": "Reopen only with new model-route evidence and an exact balanced full-model gain beyond the applicable noise floor.",
+      "magnitude_redacted": true,
+      "mechanism_id": "akm-glm53-iqk-expert-multirow",
+      "ranking_authorized": false,
+      "refusal_reason": "Measured-null, default off: 9.730521 tok/s on versus 9.898528 off in one exact short screen; no balanced full-model gain established. Durable envelope: /mnt/raid0/llm/autokernel/loop-memory/external/glm53-core-c463-20260909/evidence-envelope.6ab1cd967603a6feb1ef369cc16a3756ea7eb3fd85e924ed847fff1a3cc9507f.json (sha256 6ab1cd967603a6feb1ef369cc16a3756ea7eb3fd85e924ed847fff1a3cc9507f); source pestopoppa/llama.cpp:ak/champion-glm53-candidate-20260909 commit c463f601bd39d0e313b744c214b8c22f9455bcd3; \u2026[clipped 59 chars]",
+      "research_scope": {
+        "backend": null,
+        "measurement_surface": null,
+        "model": null,
+        "quant": null,
+        "recipe": {
+          "description": null,
+          "environment": null,
+          "hash": null,
+          "name": null,
+          "original_serving_arms": null
+        },
+        "request_digest": null,
+        "unknown_reason": "legacy record: only original captured fields shown; nulls remain unknown"
+      },
+      "same_epoch": false,
+      "stale_epoch": true,
+      "statement": "Exact Q4_K/Q5_K expert-row batching improved its microbenchmark but did not improve the exact short full-model GLM screen. Durable envelope: /mnt/raid0/llm/autokernel/loop-memory/external/glm53-core-c463-20260909/evidence-envelope.6ab1cd967603a6feb1ef369cc16a3756ea7eb3fd85e924ed847fff1a3cc9507f.json (sha256 6ab1cd967603a6feb1ef369cc16a3756ea7eb3fd85e924ed847fff1a3cc9507f); source pestopoppa/llama.cpp:ak/champion-glm53-candidate-20260909 commit c463f601bd39d0e313b744c214b8c22f9455bcd3; champion r \u2026[clipped 48 chars]",
+      "status": "measured_null",
+      "target_runtime_effect_fraction": null,
+      "target_surface": "ggml/src/iqk/iqk_mul_mat_id.cpp",
+      "target_symbol": "IQK exact expert multirow dispatch",
+      "transfer": "unproven_not_local_gain_or_refutation"
+    },
+    {
+      "comparable_measurement": false,
+      "effect_fraction": null,
+      "exact_attribution_effect_fraction": null,
+      "falsifier": "On Qwen3.8-27B-Q8_0 tg128, reject if llvm-objdump still shows the sum-reduction instruction chain, rocprofv3 shows no material reduction in quantize_q8_1_1d duration, or 20 alternating pairs fail to clear the current calibrated decode floor. MUL_MAT Q8_0 results and a live-output comparison must be bit-identical to the champion; any difference proves ds.y has an unaccounted consumer or the specialization changed quantization arithmetic.",
+      "magnitude_redacted": true,
+      "mechanism_id": "akm-q8-actquant-no-sum",
+      "ranking_authorized": false,
+      "refusal_reason": "Already measured, and the dispatch-only change as stated is incorrect on the target instantiation. (1) Already measured: `akm-q8-0-static-gate-swiglu` (2026-09-07, epoch a6fdc513) implemented exactly this mechanism \u2014 'enables the existing gate_only_swiglu template for GGML_TYPE_Q8_0' in mul_mat_vec_q_switch_fusion \u2014 and measured +0.300% on tg128 over 20 calibrated, non-drifting pairs on Qwen3.8-27B-Q8_0 (floor 0.638%, anchor drift -0.002%, candidate drift -0.054%): a bounded null. Two further ru \u2026[clipped 6122 chars]",
+      "research_scope": {
+        "backend": null,
+        "measurement_surface": null,
+        "model": null,
+        "quant": null,
+        "recipe": {
+          "description": null,
+          "environment": null,
+          "hash": null,
+          "name": null,
+          "original_serving_arms": null
+        },
+        "request_digest": null,
+        "unknown_reason": "legacy record: only original captured fields shown; nulls remain unknown"
+      },
+      "same_epoch": false,
+      "stale_epoch": true,
+      "statement": "For the GGML_TYPE_Q8_0, ne11==1 path, instantiate quantize_q8_1_1d without the activation-sum accumulation or wave reduction and store zero in ds.y while preserving the existing block_q8_1 layout, scale, quantized bytes, graph cache, and MMVQ dispatch. vec_dot_q8_0_q8_1 consumes ds.x but not ds.y, so the two mul_mat_vec_q kernels owning 75.53% of device time remain numerically identical while the 3.71% quantization pass loses one reduction chain and its associated instructions. This is an intern \u2026[clipped 103 chars]",
+      "status": "refused_at_formation",
+      "target_runtime_effect_fraction": null,
+      "target_surface": "ggml/src/ggml-cuda/quantize.cu",
+      "target_symbol": "quantize_q8_1_1d",
+      "transfer": "unproven_not_local_gain_or_refutation"
+    }
+  ],
+  "selection": "bounded recent pools: 16 keeps, 16 measured/invalid, 16 other per root; up to 5 distinct mechanism/status suggestions, qualitative scope relevance only",
+  "status": "shared_history_nontransfer",
+  "use": "historical mechanism suggestions only; not local gain or refutation"
+}
+```
+
+## Original serving observations — recall, not qualified gains
+Same model/recipe/request/epoch and original anchor only. A null or uncalibrated result is worth remembering; belief status does not promote it to a gain, and CPU allowed lists do not prove placement or absence of contention. Prior experiment history above is independent.
+```json
+{
+  "as_of": "2026-09-24T13:12:03.737331+00:00",
+  "errors": [],
+  "frontier": 0,
+  "qualified_measurement": false,
+  "rows": [],
+  "scope": {
+    "anchor_build": "/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu",
+    "anchor_execution_digest": "cffc28474e3bafafabce7bbe0f9d865f394df68e2a292524aeec1be6bbce2a6b",
+    "epoch": "237d41446c6af8b864f1f28a45e58f04fc88e2e357bf3c6a8ab76c594c8c65dc",
+    "model": {
+      "path": "/mnt/raid0/llm/models/antirez/deepseek-v4.1-flash-gguf/DeepSeek-V4.1-Flash-Q4.gguf",
+      "role": "model",
+      "schema": "epyc.autokernel.launch_artifact.v1",
+      "sha256": "a5e2e2c3ada4b2e98d9f9e4b50f6d9c2a12c2c96f5da165c07e13aff9264984e"
+    },
+    "recipe_hash": "fe52e7629d40f22418dc80c497da5a9c6e21062ac9e707cf51e1ce4b83d2b182",
+    "request_digest": "e50732d9ce365259d5bb95fe31e36995f98bcd0986dc0e48d489f99390e42f58"
+  },
+  "status": "observations_only"
+}
+```
+
+## Operator suggestions (async; use if relevant)
+- # DS41 CPU decode — per-node profile (PROFILED BUILD, shares only)
+
+Provenance: `build-prof/` (`-DGGML_CPU_PROF=ON`), `GGML_CPU_PROF=1`, 33 graph evals, 5897 nodes,
+tg32, `-t 48`. This is a PROFILED binary, **not** the measured binary (`build-cpu/`).
+
+## Reconciliation rule — read before using any number here
+
+**Shares transfer between a profiled and an unprofiled run. Absolute times do not.**
+Every absolute below is from the profiled build and is NOT a measured result, NOT a baseline,
+and must never be compared against, or substituted for, a number the loop measured.
+Use the percentages. Ignore the milliseconds except as internal ratios.
+
+## Where the time goes (shares of wall — these transfer)
+
+| Op | Share of wall |
+|---|---|
+| `MUL_MAT` (dense) | 54.7% |
+| `MUL_MAT_ID` (MoE experts) | 27.8% |
+| `FLASH_ATTN_EXT` | 5.3% |
+| `RMS_NORM` | 2.4% |
+
+Dense + MoE GEMM = **82.5% of decode wall**. Everything else together is under 18%.
+
+## The bytes/efficiency split (profiled-build absolutes, ratios only)
+
+| Path | Bytes | Achieved BW | Time |
+|---|---|---|---|
+| `dense_mul_mat` | 8.031 GB | 176.3 GB/s | 45.5 ms |
+| `expert_mul_mat_id` | 4.778 GB | 199.2 GB/s | 24.0 ms |
+| `lm_head` | 0.703 GB | 431.1 GB/s | 1.6 ms |
+
+Total ~86.3 ms/token, **13.5 GB/token**, dense = 59% of bytes.
+
+## CONSEQUENCE — one lever class is RETIRED, one is confirmed
+
+This host's measured copy bandwidth is **212 GB/s**. Achieved is **176-199 GB/s = 83-94% of
+ceiling**. Therefore:
+
+- **Streaming efficiency / memory-level parallelism is DEAD as a lever class.** There is at most
+  6-17% of headroom in *fetch efficiency*, not the 1.7x that was previously assumed. Do not spend
+  iterations on prefetch distance, software pipelining, or MLP-depth tuning for their own sake.
+- **This supersedes `LEVERS.md` §2**, which was written against an earlier "~101 GB/s achieved, far
+  below roofline" reading. That reading is retired. Any plan citing "101 GB/s" or "nowhere near the
+  bandwidth roofline" is reasoning from a superseded measurement.
+- **The lever is BYTES.** 13.5 GB/token at ~90% of ceiling means time is very nearly linear in bytes
+  streamed. Halving dense bytes is worth ~0.5x on 59% of the traffic. Quantization of the dense Q8
+  path, pruning needless F32 tensors, and Engram-table requantization are the levers with headroom.
+  Price per-tensor against **residency**, not file size — a byte roofline overprices an L3-resident
+  tensor.
+
+## Still DEAD on arrival (unchanged, measured)
+
+Thread count (decode flat 24→96), barrier/sync/idle-spin, work-dispatch granularity, thread affinity
+and NUMA *thread* policy, `-b`/`-ub` as decode levers, GPU offload. NUMA *placement of weights*
+remains alive and is distinct from NUMA thread binding.
+- # DS41 — how to actually turn each instrument on
+
+Corrections to prepared docs. Each of these would otherwise produce a **silent null** that reads
+exactly like a negative result.
+
+## Speculative acceptance per position
+
+`LLAMA_SPEC_TRACE` **does not exist** — zero hits in the whole tree. `LLAMA_TRACE` exists but gates
+only an unrelated ngram-reset line and the server's request tracing; it does **not** gate the
+acceptance statistics.
+
+The `alpha/pos` and `cond/pos` line comes from `SPC_TRC` → `LOG_TRC`, gated on log verbosity >= 4.
+
+```
+LLAMA_ARG_LOG_VERBOSITY=4     # or -lv 4, or -v
+```
+
+At default verbosity you get only the scalar `draft acceptance = …` line. **A run launched with
+`LLAMA_SPEC_TRACE=1` emits no per-position data at all** — do not read that as "the drafter never
+fired".
+
+## Host-phase profiler
+
+`LLAMA_HOST_PROF_JSON_FILE` is **inert on its own** and has no stderr fallback. Both are required:
+
+```
+GGML_CPU_PROF=1  LLAMA_HOST_PROF_JSON_FILE=<path>
+```
+
+Forgetting `GGML_CPU_PROF` yields an empty host profile with no warning.
+
+## Per-node CPU profiler
+
+Needs the `build-prof/` tree (`-DGGML_CPU_PROF=ON`); it is **provably absent from `build-cpu/`**.
+`GGML_CPU_PROF=1` alone dumps to stderr; set `GGML_CPU_PROF_JSON_FILE` for the JSON.
+Do not set `GGML_CPU_PROF_THREADS` or `_VERBOSE` on a run whose timings you intend to use.
+
+## Engram counters
+
+Not applied anywhere yet; both patches `git apply --check` clean. `LLAMA_ENGRAM_PROFILE`,
+`LLAMA_ENGRAM_PROFILE_LEVEL`, `GGML_GATHER_PROF` all match their docs.
+**Level 1 emits `minflt`/`majflt` as literal `0` = UNMEASURED** with `fault_source: "none"`.
+`gather_share` is available at level 1; the fault follow-up is not. Re-collect at level 2 if
+`gather_share > ~1%`.
+
+## The standing rule
+
+A null from a knob that is not in the binary, or from an env var nothing reads, is **not evidence
+about the knob**. Prove the instrument is present before believing its silence.
+- # DS41 CPU decode — seeded hypotheses (ranked, with falsifiers)
+
+Basis: measured 2026-09-23 on this host, canonical recipe (48 threads, DSpark drafter block 2,
+greedy batched verification). Full write-up: `/mnt/raid0/llm/tmp/ds41-hypotheses/HYPOTHESES.md`.
+Numbers below are the operator-session measurements; the loop's own floor supersedes them.
+
+## The measured basis (what every hypothesis is checked against)
+
+- Host **read** bandwidth, measured directly (`readbw`, 16–24 GiB, interleaved): **220 GB/s at 48
+  and at 96 threads**. This is the ceiling. Not 460.8 (theoretical), not 212 (copy).
+- Per token, tg32: `dense MUL_MAT` (attn projections, Q8_0) **8.031 GB @ 176 GB/s = 80% of ceiling,
+  52.8% of wall**; `MUL_MAT_ID` experts (MXFP4) **4.778 GB @ 199 GB/s = 90% of ceiling, 27.8%**;
+  everything else 17.5% (FA 5.3, RMS_NORM 2.4, CONCAT 1.7, ~5.8% unattributed).
+- Both streaming paths are within 10–20% of the ceiling: **the whole streaming-efficiency prize is
+  ~7 ms of an 86 ms token. Bytes are the lever, not kernels.**
+- `lm_head` at 431 GB/s is L3 residency of a 703 MB tensor against 384 MB L3 — logical reads,
+  not DRAM traffic. Not a profiler defect; do not re-open.
+- Threads: decode FLAT 24→96 (12.8–13.2 t/s), collapses at 192. Thread lever is dead.
+- Speculation: acceptance 51.6% @ block 2, 44.4% @ 3, 31.3% @ 5. Verify cost fit
+  `t(N) ≈ 86 + 23.2·N ms`. Greedy batched **17.85 t/s** vs 11.43 no-drafter; serial verify 7.18.
+- Gate **30 t/s**; aim **45–50 t/s**.
+
+## H2 — Dense-path requantization ladder (Q8_0 → Q6_K / Q5_K_M / Q4_K_M) — RANK 1
+Dense projections carry 59.4% of all bytes at 8.5 bpw while experts sit at 4.25 bpw. Predicted
+(bytes scale as bpw/8.5, dense bandwidth 176–198 GB/s): R3 all-dense Q6_K **+14–20%**, R4 Q5_K_M
+**+23–29%**, R5 Q4_K_M **+32–38%**. Run **R3 first**: its achieved bandwidth resolves the
+falsifier for the whole ladder in one measurement.
+Falsifiers: coherence/perplexity gate at production prompt length regresses → that rung and
+below die; achieved dense bandwidth on the K-quant path < 140 GB/s → R5 is worse than R3;
+any rung missing half its predicted Δ falsifies the constant-bandwidth assumption above it.
+Kind: source/build (requantized artifact = a new target revision, not an in-place arm).
+
+## H1b — Attribute the 23.2 ms verify marginal — RANK 2 (arbiter for the aim band)
+Three mutually inconsistent marginals exist: 23.2 ms (fit), 17.8 ms (N=16 endpoint), ~6.9 ms
+(backed out of 17.85 t/s at 1.78 tokens/call). The marginal alone sets the speculative ceiling.
+Instrument the verify call (bytes moved vs N, per-op split at N=1,2,4,8) before ANY kernel work
+on the batched path. Falsifier: incremental bytes scale with N (KV/activation streaming) → the
+batched-GEMM microkernel hypothesis (H1) is dead. ~1 h, instrumentation only.
+
+## H3 — Retarget the rowexact keeps at the DENSE GEMM — RANK 3
+`akm-moe-rowexact-qact-2d-partition` (+18.2% on GLM-5.3 MoE) and `akm-moe-rowexact-weighted-slabs`
+(+3.2%) live on `experimental/glm53-keeps-on-v10-20260922`. They targeted MUL_MAT_ID; the dense
+MUL_MAT here is the larger, less efficient path (80% vs 90% of ceiling). Falsifier: dense
+achieved bandwidth does not exceed 185 GB/s after the port → the gap is not partitioning.
+
+## H4 — Entropy-gated adaptive block length — RANK 4
+Acceptance drops 51.6→31.3% from block 2→5, but low-entropy spans (tables, enumerations) ran at
+18.8–22.1 t/s. Gate the block length on draft confidence (the drafter has a confidence head).
+Falsifier: fails to beat fixed block-2 by ≥5% on a mixed set. Harness/runtime-recipe level.
+
+## H1 — AVX-512 MXFP4 batched (N>1) microkernel — RANK 5, DEMOTED, blocked on H1b
+Effect size unsupported until H1b shows the N=8 verify call moving <90% of the read ceiling.
+Do not dispatch before H1b.
+
+## H6 — Host-side per-ubatch rebuild in the 5.8% unattributed wall — RANK 6
+The dsv4 cache plan and engram hash are rebuilt per ubatch on the host. Timers exist in the
+profiled build (`build-prof/`, `GGML_CPU_PROF`) — prove the binary contains them (`strings`)
+before reading any number. Falsifier: <1 ms/token combined → residual is elsewhere.
+
+## H7 — Engram prefetch under speculation — RANK 7, conditional
+Refuted for plain decode (every column includes the just-sampled token). May become reachable
+when the drafter's block gives the hash a lookahead. Source read first (~1 h, may kill it free).
+
+## Standing rules for this campaign
+- Instrument classes never mix: llama-bench ≠ serving. The loop's serving floor is the baseline.
+- Placement proof in-window (sample DURING), vacuous controls refused, per-op figures above
+  220 GB/s mean cache residency, never a broken counter.
+- The engram table stays RAM-resident (`--no-mmap`); any proposal that maps it is out of scope.
+- The frozen production kernel is never touched; all work rides the experimental branch.
+
+Propose exactly one hypothesis. Reply with ONE json object and nothing else:
+{"mechanism_id": "akm-<short-slug>",
+  "statement": "<what changes, mechanically, and why it should be faster>",
+  "falsifier": "<the measurement that would prove this wrong>",
+  "target_surface": "<one source path on the selected CPU serving route>",
+  "target_symbol": "<the function you will change>"}
+
+Rules: use the original CPU launch/model and inspect its source route; if the CPU profile is unavailable, state that limit and do not invent timing evidence; name a MECHANISM, not a wish; state a falsifier that could actually fail. The loop itself owns source inspection, authoring, correctness gates and matched A/B measurement. Do not make an unsupported trace or counter a prerequisite that this loop cannot collect. After a rejection for missing evidence, either use an available diagnostic named in the context or choose the smallest source-consistent change whose payoff the existing matched A/B can test. If no honest, feasible hypothesis satisfies these constraints, abstaining is a correct science result; reply instead with {"abstain": "<specific reason>"}.

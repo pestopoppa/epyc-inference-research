@@ -321,6 +321,7 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
     # out to the real CLI. The "before" snapshot must happen here, ahead of the
     # actor's own call, so a session it creates is detectable as NEW afterward.
     collect_metrics = backend.kind == "opencode" and backend.binary == OPENCODE
+    arm = (env or {}).get(SEAT_ENV_ARM)
     before_session_ids: set[str] = set()
     if collect_metrics:
         try:
@@ -347,7 +348,7 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
                 stdout=_captured(None, out), stderr=_captured(None, err)))
             _record_metrics(workspace, backend, role=_safe_role(schema),
                             returncode=stop.returncode, wall_s=time.monotonic() - started,
-                            timed_out=False, before_ids=before_session_ids,
+                            timed_out=False, before_ids=before_session_ids, arm=arm,
                             collect_metrics=collect_metrics, schema=schema,
                             final_text=None, salvaged=False)
             _record_call(workspace, backend, prompt, returncode=stop.returncode,
@@ -367,7 +368,7 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
                 stdout=_captured(exc.stdout, out), stderr=_captured(exc.stderr, err)))
             _record_metrics(workspace, backend, role=_safe_role(schema), returncode=-1,
                             wall_s=time.monotonic() - started, timed_out=True,
-                            before_ids=before_session_ids, collect_metrics=collect_metrics,
+                            before_ids=before_session_ids, arm=arm, collect_metrics=collect_metrics,
                             schema=schema, final_text=None, salvaged=False)
             _record_call(workspace, backend, prompt, returncode=-1,
                          wall_s=time.monotonic() - started, env=env, schema=schema,
@@ -417,7 +418,7 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
         final_text = None   # about to raise below; nothing to hand `_parse_reply`
     _record_metrics(workspace, backend, role=_safe_role(schema), returncode=done.returncode,
                     wall_s=time.monotonic() - started, timed_out=False,
-                    before_ids=before_session_ids, collect_metrics=collect_metrics,
+                    before_ids=before_session_ids, arm=arm, collect_metrics=collect_metrics,
                     schema=schema, final_text=final_text, salvaged=salvage_text is not None)
     _record_call(workspace, backend, prompt, returncode=done.returncode,
                  wall_s=time.monotonic() - started, env=env, schema=schema, reply=reply)
@@ -514,7 +515,7 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
                     returncode: int, wall_s: float, timed_out: bool,
                     before_ids: set[str], collect_metrics: bool,
                     schema: Mapping[str, Any] | None, final_text: str | None,
-                    salvaged: bool) -> None:
+                    salvaged: bool, arm: str | None = None) -> None:
     """A sibling line in `actor-calls.jsonl`, ahead of the `_record_call` line so a
     reader taking "the last line" for the v1 record (as the existing tests and any
     VB-AK-SEAT consumer do) is unaffected by this addition: the per-call
@@ -546,6 +547,10 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
         record = {
             "schema": actor_metrics.METRICS_SCHEMA,
             "role": role,
+            # The seat arm as the caller labelled it (`plain+ctx-variable`, ...), or
+            # None for a call that set no arm: the same free-text label the v1 record
+            # derives its `seat.arm` from, so an A/B groups these rows without joining.
+            "seat_arm": arm,
             "backend_kind": backend.kind,
             "backend_model": backend.model,
             "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(finished)),
@@ -559,7 +564,7 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
             "metrics_error": (opencode_stats or {}).get("metrics_error") if collect_metrics else None,
         }
     except Exception as exc:   # noqa: BLE001 -- evidence, never a reason to fail the call
-        record = {"schema": actor_metrics.METRICS_SCHEMA, "role": role,
+        record = {"schema": actor_metrics.METRICS_SCHEMA, "role": role, "seat_arm": arm,
                   "backend_kind": backend.kind, "backend_model": backend.model,
                   "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                   "metrics_error": f"{type(exc).__name__}: {exc}"[:500]}
@@ -1349,6 +1354,111 @@ def _abstention(body: Mapping[str, Any]) -> Abstain | None:
     return Abstain(reason)
 
 
+#: Section header of the rendered node profile; `actor_context.SECTION_HEADERS` names
+#: it too, so the variable-mode splitter files it as its own section.
+NODE_PROFILE_HEADER = ("## Node profile — per-op wall SHARES on an instrumented sibling "
+                       "of the same anchor")
+
+
+def _pct(value: Any) -> str:
+    return (f"{value * 100:.2f}%" if isinstance(value, (int, float))
+            and not isinstance(value, bool) else "n/a")
+
+
+def _num(value: Any) -> str:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return "n/a"
+    return f"{value:g}" if float(value).is_integer() else f"{value:.3g}"
+
+
+def _render_node_profile(observation: Mapping[str, Any], *, limit: int = 12) -> list[str]:
+    """`node_profile.section()` as the planner reads it: SHARES and ratios only.
+
+    Absolute microseconds are deliberately not printed -- the instrument's own first
+    limitation is that absolutes do not transfer from the instrumented sibling to the
+    measured binary. An absent part prints its reason, never a zero."""
+    lines = ["", NODE_PROFILE_HEADER]
+    status = observation.get("status")
+    lines.append("Per-op, host-phase and engram counters from an INSTRUMENTED SIBLING build "
+                 "of the current anchor (same commit, same frozen requests), never from the "
+                 "measured binary. Shares transfer to the measured binary; absolute times do "
+                 "not. Never a baseline, never an arm, never comparable to a measured number. "
+                 "An absent part is a missing instrument, never a zero.")
+    build = observation.get("build") if isinstance(observation.get("build"), Mapping) else {}
+    if build:
+        lines.append(f"Sibling build: `{build.get('dir')}` (recipe `{build.get('recipe')}`, "
+                     f"anchor `{build.get('anchor_commit')}`); teardown: "
+                     f"{observation.get('teardown')}.")
+    if status != "observed":
+        lines.append(f"Node profile {status or 'absent'}: "
+                     f"{observation.get('reason', 'no instrumented observation collected')}")
+    families = observation.get("mechanism_shares") or []
+    if families:
+        lines.append("")
+        lines.append("### Mechanism families by wall share (the op-level view of the "
+                     "sampled CPU-profile families above)")
+        lines.append("| rank | wall share | mechanism family | ops |")
+        lines.append("|---|---|---|---|")
+        for rank, row in enumerate(families[:limit], 1):
+            ops = ", ".join(str(op.get("op")) for op in row.get("ops") or [])
+            lines.append(f"| {rank} | {_pct(row.get('wall_fraction'))} | "
+                         f"`{row.get('family')}` | {ops} |")
+    ops = observation.get("ranked_op_shares") or []
+    if ops:
+        node = observation.get("node") if isinstance(observation.get("node"), Mapping) else {}
+        lines.append("")
+        lines.append(f"### Ops by wall share ({_num(node.get('graph_evals_accumulated'))} "
+                     f"accumulated graph evals, {_num(node.get('n_threads'))} threads; wall "
+                     "includes barrier wait and straggler imbalance, so compute/wall < 1 is "
+                     "time spent waiting)")
+        lines.append("| wall share | compute/wall | op | calls per eval |")
+        lines.append("|---|---|---|---|")
+        for row in ops[:limit]:
+            wall, compute = row.get("wall_us"), row.get("compute_us")
+            ratio = (compute / wall if isinstance(wall, (int, float)) and wall
+                     and isinstance(compute, (int, float)) else None)
+            lines.append(f"| {_pct(row.get('wall_fraction'))} | {_num(ratio)} | "
+                         f"`{row.get('op')}` | {_num(row.get('count'))} |")
+    paths = observation.get("weight_path_shares") or []
+    if paths:
+        lines.append("")
+        lines.append("### Weight paths by wall share")
+        lines.append("| wall share | weight path | calls per eval |")
+        lines.append("|---|---|---|")
+        for row in paths[:limit]:
+            lines.append(f"| {_pct(row.get('wall_fraction'))} | `{row.get('path')}` | "
+                         f"{_num(row.get('calls'))} |")
+    phases = observation.get("host_phase_shares") or []
+    if phases:
+        lines.append("")
+        lines.append("### Host phases, share of decode (the `ctx.*` rows already contain the "
+                     "per-input-class rows; never sum the two families)")
+        lines.append("| decode share | phase | family |")
+        lines.append("|---|---|---|")
+        for row in phases[:limit]:
+            lines.append(f"| {_pct(row.get('decode_fraction'))} | `{row.get('phase')}` | "
+                         f"{row.get('family')} |")
+    engram = observation.get("engram_fault_mix")
+    if isinstance(engram, Mapping):
+        faults = engram.get("fault_counts_are_measured") is True
+        lines.append("")
+        lines.append(f"### Engram counters (level {engram.get('level')}, op level "
+                     f"{engram.get('op_level')}, fault source {engram.get('fault_source')})")
+        gather = engram.get("gather_share_of_decode")
+        lines.append(f"- row-gather share of decode: "
+                     f"{_pct(gather) if gather is not None else 'not measured'}")
+        lines.append("- faults per decode token (minor / major): "
+                     + (f"{_num(engram.get('minflt_per_decode_token'))} / "
+                        f"{_num(engram.get('majflt_per_decode_token'))}" if faults else
+                        "UNMEASURED at this level (a zero here would not be an absence of "
+                        "faults)"))
+    limitations = observation.get("limitations") or []
+    if limitations:
+        lines.append("")
+        lines.append("Limitations: " + "; ".join(str(item) for item in limitations) + ".")
+    return lines
+
+
 def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
     """The bundle, as the actor sees it. Everything here was previously discarded."""
     lines: list[str] = []
@@ -1461,6 +1571,15 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
                      "the target runtime no matter how correct it is.")
     else:
         lines.append("(no profile yet — say so rather than guessing a target)")
+
+    # run.py has put `node_profile` in the CPU context since the instrumented-sibling
+    # capture landed, and its CPU directive tells the planner to "Read node_profile" --
+    # but nothing here printed it, so every CPU prompt through DS41 run 9 carried the
+    # instruction and not the data (run 8's retained observation was 21.4k chars of
+    # JSON the planner never saw). Rendered as tables, like `cpu_profile`, in BOTH
+    # context modes: the A/B arms differ only in where they read it.
+    if cpu and context.get("node_profile"):
+        lines.extend(_render_node_profile(context["node_profile"], limit=limit))
 
     prior = context.get("prior_experiments") or []
 

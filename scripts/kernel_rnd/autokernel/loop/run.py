@@ -719,11 +719,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--actor-context-mode", choices=("inline", "variable"), default="inline",
                         help="opencode planner/author context bundle: 'inline' puts the whole "
                              "rendered bundle in the prompt (every run through DS41 run 9: "
-                             "75.9k chars on run 8); 'variable' writes it to a per-call "
-                             "directory beside the lane (workers/actor-context/) and sends an "
-                             "index -- task, schema, table of contents with sizes, a resolved "
-                             "target card and the always-needed sections (~16k chars on the "
-                             "run-8 bundle). Works in either --actor-seat; the call record's "
+                             "79.9k chars on run 8 with node_profile rendered); 'variable' "
+                             "writes it to a per-call directory beside the lane "
+                             "(workers/actor-context/) and sends an index -- task, schema, "
+                             "table of contents with sizes, a resolved target card, the "
+                             "always-needed sections and a node_profile summary (~18.1k chars "
+                             "on the run-8 bundle). Works in either --actor-seat; the call record's "
                              "seat.arm gains '+ctx-variable'. No effect on codex/claude, or on "
                              "the critic (default: %(default)s)")
     parser.add_argument("--actor-steps", type=int, default=actors.ActorSeat.steps,
