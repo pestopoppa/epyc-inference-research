@@ -330,7 +330,10 @@ Harness: [`live_llm_contention.py`](live_llm_contention.py). Raw data: `raw/live
 
 **Side observations.**
 
-- The live speech services open `/dev/kfd` because `HIP_VISIBLE_DEVICES` is unset. They use
-  0 VRAM, so this is harmless.
+- The live speech services open `/dev/kfd`. They use 0 VRAM, so this is harmless.
+  *Correction (2026-09-24, wrap-up):* this line first said the cause was an unset
+  `HIP_VISIBLE_DEVICES`. `/proc/<pid>/environ` of whisper 2005824 and tts 2006079 shows
+  `HIP_VISIBLE_DEVICES=-1` set on both (and `GGML_BACKEND=CPU`, `SHIM_NPROCS=32`, `LD_PRELOAD`
+  on the TTS), so the HIP runtime opens `/dev/kfd` even with every device hidden.
 - megasync, which is unpinned, was running at about 60–100% on core 16. That core is inside
   whisper's 0-23 mask and is a possible source of stragglers: quiet STT RTF spread 0.22–0.39.
