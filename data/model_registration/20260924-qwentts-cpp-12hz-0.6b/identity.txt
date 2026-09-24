@@ -1,0 +1,52 @@
+# Step 0 identity — qwentts.cpp Qwen3-TTS 12Hz 0.6B, captured 2026-09-24
+
+## Model files (live-serving pair per epyc-orchestrator launch_manifest.yaml aux_services.tts)
+d54dbaf10591421fa764ed630d764efa717ae40cd959bd48c66d4eb1af226426  /mnt/raid0/llm/models/Qwen3-TTS-qwentts/qwen-talker-0.6b-base-Q8_0.gguf
+1883beeed99348fc35e23dd225e9082f93f6f8c109330a33d935baa8acdbfd94  /mnt/raid0/llm/models/Qwen3-TTS-qwentts/qwen-tokenizer-12hz-Q8_0.gguf
+
+size: 992,615,488 B (talker) + 291,150,624 B (codec) = 1,283,766,112 B = 1.196 GiB
+mtime: 2026-07-31 (both files)
+quant: Q8_0 (both)
+
+## Task-text pair (S-11 task text), verified NOT what qwentts.cpp serves — Path A leftovers
+54b6ed35bb95d714f31db96c87e99d07c9d49665d311a0e10494e1db45972e3f  /mnt/raid0/llm/models/Qwen3-TTS-12Hz-0.6B-Talker-Q4_K_M.gguf
+9c1d7250fc31c96589ee9366fe7ae88848b23a1da3ffea6f1db6c6d86cf79b7f  /mnt/raid0/llm/models/Qwen3-TTS-12Hz-0.6B-CodePredictor-Q8_0.gguf
+size: 484,219,712 B + 420,157,632 B; mtime 2026-02-14 — predates the qwentts.cpp integration
+(2026-07-31) and matches the "Path A: Qwen3-TTS via llama.cpp" artifacts described in
+multimodal-pipeline.md's own "TTS UNBLOCKED" banner (source lost, unrebuildable, superseded).
+Neither file is referenced anywhere in epyc-orchestrator's launch_manifest.yaml.
+
+## Kernel pin — git ground truth, captured 2026-09-24
+$ git -C /mnt/raid0/llm/qwentts.cpp rev-parse HEAD
+2c1b5182e7e9f1acaa04405ff21747d8a7acf4d5
+
+$ git -C /mnt/raid0/llm/qwentts.cpp branch --show-current
+production-speech-v1
+
+$ git -C /mnt/raid0/llm/qwentts.cpp status --porcelain
+(empty — clean working tree)
+
+$ git -C /mnt/raid0/llm/qwentts.cpp merge-base --is-ancestor abab6b3b 2c1b5182e ; echo exit=$?
+exit=0    # abab6b3b IS an ancestor of 2c1b5182e (true)
+
+$ sha256sum /mnt/raid0/llm/qwentts.cpp/build/tts-server
+369fc2f1de88e41f4459e1f56c0e962035e20984acf0ea2d4678f602232ff654  /mnt/raid0/llm/qwentts.cpp/build/tts-server
+(matches ratify_speech_kernel_freeze_20260731.json kernels.qwentts_cpp.binary_sha256 EXACTLY)
+
+$ md5sum /mnt/raid0/llm/qwentts.cpp/build/tts-server
+b976c78cc5ca32668ee4f76b2ce5c743  /mnt/raid0/llm/qwentts.cpp/build/tts-server
+(matches NEITHER the S-11 task-text md5 5b858d75614dfd2f696071212ae8f2e4 NOR any md5 in the
+ratification artifact, which records sha256 only — the S-11 md5 was captured from an EARLIER,
+pre-freeze build at commit abab6b3b, before the freeze commit re-pinned the ggml submodule)
+
+Ratification source: /workspace/artifacts/operator/ratify_speech_kernel_freeze_20260731.json
+  kernels.qwentts_cpp.commit                = 2c1b5182e7e9f1acaa04405ff21747d8a7acf4d5
+  kernels.qwentts_cpp.ggml_submodule_commit  = b86f660238dcc1a83b7cbf5a72d355a965de9245
+  kernels.qwentts_cpp.ggml                   = "0.17.0"
+  kernels.qwentts_cpp.binary_sha256          = 369fc2f1de88e41f4459e1f56c0e962035e20984acf0ea2d4678f602232ff654
+
+Verdict: the ratified freeze (2c1b5182e, ggml 0.17.0) matches the live checked-out branch, the
+live binary's sha256, and epyc-orchestrator launch_manifest.yaml's own "ggml 0.17.0" model_label.
+It is ground truth. S-11's task-text pin (abab6b3b / c044c6f0 / md5 5b858d75614dfd2f696071212ae8f2e4)
+is a stale, pre-ratification snapshot, one commit behind, captured before the same-day freeze
+commit landed — not a divergent fork, not currently running.

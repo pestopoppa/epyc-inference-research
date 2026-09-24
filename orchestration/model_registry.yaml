@@ -1268,15 +1268,19 @@ server_mode:
     # GPU BUDGET NOTE — this row and server_mode.architect_general share ONE MI210, and they
     # STILL DO after 2026-09-22. The full post-change arithmetic lives in ONE place:
     # server_mode.architect_general.serving_shape. Summary: 63.98 usable - 4.68 (whisper.cpp +
-    # Qwen3-TTS, live-measured, and INVISIBLE to the capacity gate) - 27.33 (27B weights)
-    # - 19.26 (this row's weights) = 12.71 GiB for both KV caches; 6.38 (27B @196608 q8_0)
-    # + 3.19 (this row @65536 q8_0) = 9.56 used, 3.15 free.
+    # Qwen3-TTS, live-measured — REGISTERED and gate-visible since 2026-09-24, INF-41 S-11/S-12)
+    # - 27.33 (27B weights) - 19.26 (this row's weights) = 12.71 GiB for both KV caches;
+    # 6.38 (27B @196608 q8_0) + 3.19 (this row @65536 q8_0) = 9.56 used, 3.15 free.
     # ⚠ The 2026-08 "62.59 of 63.98, headroom 1.40" four-model steady-state figure that used to
     # be quoted here is SUPERSEDED as a budget statement — it was taken with the 27B at -c 65536
     # and is not the post-change shape. It is NOT superseded as a warning: VRAM grows on first
-    # EXECUTION, not at load, voice_server (L947) still describes a CPU faster-whisper service,
-    # and Qwen3-TTS has NO registry entry at all, so any VRAM check derived from this file
-    # undercounts by the whole 4.68 GiB. Sample the card DURING the first post-cutover load.
+    # EXECUTION, not at load. `voice_server` (L947) and `tts` are now registered rows with
+    # declared `vram_gib`, folded into the gate via
+    # epyc-orchestrator stack_manifest.aux_gpu_reserved_gib() (INF-41 S-11/S-12, 2026-09-24) —
+    # a VRAM check derived from this file no longer undercounts them. Still sample the card
+    # DURING the first post-cutover load: the gate is arithmetic on DECLARED figures, not a
+    # live measurement, and the unresolved 3.71 GiB reconciliation gap noted below this block
+    # is a separate, still-open question.
 
   # REAP-25B: Permanently pruned Qwen3-Coder-30B-A3B (25% experts removed by Cerebras REAP)
   # Pure MoE — speculative decoding IS viable (unlike Qwen3.5 hybrids)
@@ -1351,15 +1355,20 @@ server_mode:
       # (Note also q8_0 = 0.53125 of f16, NOT 0.5: a q8_0 block is 34 B per 32 elements.
       # 64.0 x 0.53125 = 34.0, which is exactly what the server reports above.)
       #
-      # ⚠ THE CAPACITY GATE IS BLIND TO 4.68 GiB OF LIVE VRAM, AND THAT IS STILL A BINDING
-      # FACT. `stack_manifest.validate_serving_shape_capacity()` sums only the
-      # `vram_non_kv_gib` figures declared in THIS file. whisper.cpp has none
-      # (server_mode.voice_server still describes a CPU faster-whisper service) and
-      # Qwen3-TTS has NO registry entry at all. Both are VRAM-resident on this card.
+      # ⚠ THE CAPACITY GATE WAS BLIND TO 4.68 GiB OF LIVE VRAM — CLOSED 2026-09-24
+      # (INF-41 S-11/S-12). `stack_manifest.validate_serving_shape_capacity()` used to sum
+      # only the `vram_non_kv_gib` figures declared in THIS file, and whisper.cpp/Qwen3-TTS
+      # are aux_services, not `server_mode` roles, so neither could ever appear there.
       # MEASURED 2026-09-22 from /sys/class/kfd/kfd/proc/<pid>/vram_57300, sampled DURING
       # the live serving stack: whisper 2,210,533,376 B = 2.06 GiB, qwentts
-      # 2,815,950,848 B = 2.62 GiB, total 4.68 GiB. A gate PASS is therefore never on its
-      # own evidence that a lineup fits; the arithmetic below is.
+      # 2,815,950,848 B = 2.62 GiB, total 4.68 GiB. Registered as `server_mode.voice_server`
+      # (S-12) and `server_mode.tts` (S-11) in this file, and as
+      # `AuxService.vram_gib` on epyc-orchestrator's `whisper`/`tts` aux_services entries
+      # (orchestration/launch_manifest.yaml), folded into the GPU headroom by
+      # `stack_manifest.aux_gpu_reserved_gib()` / `serving_shape_capacity_report()`. A gate
+      # PASS is therefore now evidence a lineup fits INCLUDING these two always-on speech
+      # services; the arithmetic below (the operator's manual pre-adjustment) predates and
+      # matches that fix.
       #
       # ── THE OPERATOR'S 2026-09-22 ALLOCATION, AND THE ARITHMETIC IT SATISFIES ──────
       # BOTH GPU ROLES STAY ON THE CARD. worker_vision was NOT migrated to CPU; that move
@@ -1947,27 +1956,200 @@ server_mode:
       (Qwen3.6-35B-A3B Q8, CPU :8070), so that pipeline hop is NOT affected by this change."
 
   # Voice recognition service (separate from LLM inference)
+  # MRG-1 REGISTRATION (INF-41 S-12, 2026-09-24) — GPU whisper.cpp large-v3-turbo f16
+  # PROMOTED to the STT role; the CPU faster-whisper path below is RETIRED.
+  #   0 Identity     PASS — path/sha256 below, read from the GGUF header via ggufmeta.py-style
+  #                  inspection (whisper.cpp encoder/decoder header, not an LLM attention geometry).
+  #   1 Capacity     PASS (simplified) — this is a static VRAM-resident model with NO llama.cpp-style
+  #                  KV-growth-with-context axis (whisper's own cross-attention cache is bounded by
+  #                  its fixed 30s mel window, not `-c`); the only capacity fact is the resident
+  #                  weight footprint. Measured 2026-09-22 from live /sys/class/kfd/kfd/proc/<pid>/
+  #                  vram_57300 DURING the serving stack: 2,210,533,376 B = 2.06 GiB. See the capacity
+  #                  gate note at server_mode.architect_general.serving_shape and the orchestrator-side
+  #                  fix at epyc-orchestrator scripts/server/stack_manifest.py
+  #                  (AUX_SERVICES[...].vram_gib, INF-41 S-11/S-12).
+  #   2 Recipe       PASS, spec-dec N/A — `acceleration.type: none`; this is not a speculative-decoding
+  #                  role (R1-CHK's `type: none` carve-out applies).
+  #   3 Anchor       N/A, reason: no tok/s-shaped metric exists for this role. The MRG-1 anchor gate is
+  #                  scoped to `P-BENCH-*` decode-rate protocols; whisper's measured evidence is WER and
+  #                  wall-clock latency, captured under the ad hoc `stt_wer.py` harness (observation-
+  #                  grade, not a ratified P-BENCH-* id) rather than a registered anchor band.
+  #   4 Placement    N/A, reason: GPU-resident weights (-ngl equivalent full offload); no host NUMA
+  #                  placement axis. Host threads (`-t 8`) follow the GPU_HOST_LANE convention
+  #                  (physical 88-95 / logical 184-191), same as architect_general/worker_vision.
+  #   5 Shape x conc N/A, reason: single-instance aux service, not a multi-slot llama-server role.
+  #   6 Context      N/A, reason: no `-c`-shaped context axis; fixed 30s mel window per request.
+  #   7 Slot width   N/A, reason: single request in flight per the current aux-service wiring.
+  #   8 Co-residency PASS (informal) — MEASURED co-resident with architect_general + worker_vision on
+  #                  the same MI210 throughout 2026-09 (this is precisely the model that made the
+  #                  capacity gate's 4.68 GiB blind spot real). No isolated idle-vs-active A/B run.
+  # Full evidence: multimodal-pipeline.md S-10 (WER 2.35%, wall median 0.124s/max 0.218s, encode
+  # 3751ms->110ms, 2.56 GB VRAM at first measurement 2026-07-31); model_registry.yaml
+  # architect_general note (2026-09-22 live vram_57300 sample, 2.06 GiB).
   voice_server:
     url: http://localhost:9000
     port: 9000
     model_role: voice_transcription
-    description: Speech-to-text using faster-whisper (OpenAI-compatible API)
+    description: "whisper.cpp large-v3-turbo f16 (HIP/gfx90a, MI210) — PROMOTED 2026-09-24 (INF-41 S-12).
+      Replaces the CPU faster-whisper path below on the SAME port (9000); this is an implementation
+      swap, not a new service. Decision record: multimodal-pipeline.md S-10 (2026-07-31) — WER 2.35%
+      (identical to the CPU incumbent), wall median 0.124s / max 0.218s vs the CPU path's 4.2s FIXED
+      floor (a 19x floor-to-max improvement), encode 3751ms -> 110ms, 2.56 GB VRAM. The ~4.2s floor
+      that made CPU whisper unusable for conversational voice is gone."
     model: large-v3-turbo
     model_type: whisper
-    memory_gb: 4
+    path: /mnt/raid0/llm/models/whisper-ggml/ggml-large-v3-turbo.bin
+    sha256: 1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69
+    size_gb: 1.51    # 1,624,555,275 B, f16
+    quant: f16
+    device: ROCm0
+    vram_gib: 2.06   # measured 2026-09-22, live /sys/class/kfd .../vram_57300 during serving, KV-free
+                     # (this model has no `-c`-shaped KV growth axis — see MRG-1 Step 1 note above)
+    memory_gb: 0     # host RAM: GPU-resident, no meaningful host footprint beyond the aux process
     tier: hot
     languages: [en, it, de, fr]
     acceleration:
-      type: int8_quantization
-      vad_filter: true
-      vad_min_silence_ms: 300
-    throughput: 2.8  # RTF ~0.35x (2.8x real-time on CPU int8, verified 2026-01-16)
-    latency_target_ms: 500
-    launch_script: scripts/voice/start_whisper_server.sh
-    managed_by: orchestrator_stack    # Promoted from sidecar 2026-05-06 (start_whisper in orchestrator_stack.py)
+      type: none    # no speculative decoding; MRG-1 R1-CHK carve-out for `type: none` roles applies
+    throughput: null   # no tok/s-shaped metric; see WER/latency figures in `description` and `notes`
+    latency_target_ms: 124   # measured median wall-clock (multimodal-pipeline.md S-10, 2026-07-31)
+    launch_script: scripts/voice/start_whisper_server.sh   # RETIRED launcher, see `retired_cpu_path`
+    managed_by: orchestrator_stack    # aux_services.whisper in epyc-orchestrator orchestration/launch_manifest.yaml
     health_path: /health
-    health_timeout_sec: 60
-    notes: "Python REST service (not llama.cpp). Stack-managed via start_whisper() in orchestrator_stack.py. Serves Aider, Claude Code, orchestrator."
+    health_timeout_sec: 90
+    kernel:
+      tree: /mnt/raid0/llm/whisper.cpp
+      branch: production-speech-v1
+      pin_source: /workspace/artifacts/operator/ratify_speech_kernel_freeze_20260731.json
+      ggml_version: "0.18.0"    # per epyc-orchestrator launch_manifest.yaml aux_services.whisper.model_label
+    retired_cpu_path:
+      deprecated: true
+      description: faster-whisper (CTranslate2 int8, OpenAI-compatible API) — CPU only, CTranslate2
+        4.7.2 has no ROCm backend at all regardless of configuration.
+      launch_script: scripts/voice/start_whisper_server.sh
+      # NOTE: same script name pre-swap; the 2026-08-02 W4 implementation swap
+      # (epyc-orchestrator launch_manifest.yaml aux_services.whisper) replaced :9000's
+      # backing process — it did not rename the launcher entry point in this file.
+      acceleration_was: {type: int8_quantization, vad_filter: true, vad_min_silence_ms: 300}
+      throughput_was: 2.8   # RTF ~0.35x (2.8x real-time on CPU int8, verified 2026-01-16) -- SUPERSEDED,
+                            # this was ALSO the metric hiding the ~4.2s fixed per-request floor
+                            # (padding to 30s mel windows) that made xRT alone meaningless (S-10).
+      reason: "STT role RETIRED 2026-09-24 (INF-41 S-12). whisper.cpp large-v3-turbo GPU wins outright
+        on every measured axis (S-10, 2026-07-31): identical WER, 19x lower floor-to-max latency, frees
+        48 CPU cores. Kept here (not moved to deprecated_models:) because this is a ROLE retirement
+        record, not a model-file deletion — the CPU faster-whisper Python service itself remains on
+        disk at scripts/voice/whisper_server.py and is not scheduled for removal by this task."
+    notes: "GPU whisper.cpp service (not faster-whisper, not llama.cpp). Stack-managed via the
+      `whisper` aux_services entry in epyc-orchestrator orchestration/launch_manifest.yaml (backend:
+      stt, verify_ggml_linkage: true). API delta vs the retired CPU path: LOST POST
+      /v1/audio/translations and GET /v1/models; WAV ONLY (whisper.cpp --convert needs ffmpeg, not
+      installed on this host). Serves Aider, Claude Code, orchestrator."
+
+  # Text-to-speech service (separate from LLM inference).
+  # MRG-1 REGISTRATION (INF-41 S-11, 2026-09-24) — FIRST registration for this model. Prior to this
+  # row, Qwen3-TTS/qwentts.cpp had NO registry entry at all (recorded as a defect in
+  # server_mode.architect_general.serving_shape's 2026-09-22 comment: "Qwen3-TTS has NO registry
+  # entry at all", and in multimodal-pipeline.md's own 2026-07-31 banner).
+  #   0 Identity     PASS — GGUF header read directly (talker + codec pair below); not an
+  #                  attention-geometry LLM, so `kv_layers`/`head_count_kv` do not apply.
+  #   1 Capacity     PASS (simplified), same reasoning as voice_server above: fixed VRAM-resident
+  #                  footprint, no `-c`-shaped KV growth. Measured 2026-09-22, live
+  #                  /sys/class/kfd/kfd/proc/<pid>/vram_57300 DURING the serving stack:
+  #                  2,815,950,848 B = 2.62 GiB.
+  #   2 Recipe       PASS, spec-dec N/A — `acceleration.type: none`; not a speculative-decoding role.
+  #   3 Anchor       N/A, reason: no tok/s-shaped metric; measured evidence is round-trip WER + RTF
+  #                  under the ad hoc harness in multimodal-pipeline.md S-6/S-6a (observation-grade,
+  #                  not a ratified P-BENCH-* id).
+  #   4 Placement    N/A, reason: GPU-resident weights, no host NUMA placement axis (same as voice_server).
+  #   5 Shape x conc N/A, reason: single-instance aux service, not a multi-slot llama-server role.
+  #   6 Context      N/A, reason: no `-c`-shaped context axis for a TTS talker+codec pair.
+  #   7 Slot width   N/A, reason: single request in flight per the current aux-service wiring.
+  #   8 Co-residency PASS (informal) — MEASURED co-resident with architect_general + worker_vision +
+  #                  whisper on the same MI210 throughout 2026-09 (this model is the other half of the
+  #                  capacity gate's 4.68 GiB blind spot). No isolated idle-vs-active A/B run.
+  # Full evidence: multimodal-pipeline.md S-2 (CPU baseline), S-6/S-6a (GPU: RTF 0.169, round-trip
+  # WER 1.49%, gfx90a ARGSORT fix); server_mode.architect_general note (2026-09-22 live vram_57300
+  # sample, 2.62 GiB).
+  tts_server:
+    url: http://localhost:9002
+    port: 9002
+    model_role: voice_synthesis
+    description: "qwentts.cpp (Qwen3-TTS 12Hz 0.6B Talker Q8_0 + 12Hz codec Q8_0), HIP/gfx90a, MI210 —
+      REGISTERED 2026-09-24 (INF-41 S-11), first registry entry for this model. Decision record:
+      multimodal-pipeline.md Path E / S-2 / S-6 — round-trip WER 0.0% (CPU) / 1.49% (GPU, greedy;
+      0.0% on the canonical sentence), RTF 0.86x (CPU) -> 0.169x = 5.9x realtime (GPU), TTFA 67.9ms
+      (CPU) -> 37.8ms (GPU). Superseded the home-rolled Path A llama.cpp port (hand-rolled codec,
+      unintelligible output, source since lost) and the untested Path B (MiniCPM-o, deprecated)."
+    model: qwen-talker-0.6b-base-Q8_0.gguf + qwen-tokenizer-12hz-Q8_0.gguf
+    # ⚠ CORRECTED PATH, 2026-09-24. multimodal-pipeline.md S-11's task text names
+    # /mnt/raid0/llm/models/Qwen3-TTS-12Hz-0.6B-{Talker-Q4_K_M,CodePredictor-Q8_0}.gguf. Those files
+    # exist on disk (484,219,712 B / 420,157,632 B) but are LEFTOVERS of the abandoned, unrebuildable
+    # Path A home-rolled llama.cpp port (`llama-tts-qwen3`; source lost — see the file's own
+    # "TTS UNBLOCKED" banner). They are NOT what qwentts.cpp serves. The path below is read directly
+    # from the LIVE epyc-orchestrator orchestration/launch_manifest.yaml `aux_services` entry `tts`,
+    # which is what :9002 has actually run since 2026-08-02 (W4); its combined size (992,615,488 +
+    # 291,150,624 = 1,283,766,112 B = 1.196 GiB) matches the "1.19 GB" figure in this file's own
+    # 2026-07-31 top banner and S-2's task text.
+    path: /mnt/raid0/llm/models/Qwen3-TTS-qwentts/qwen-talker-0.6b-base-Q8_0.gguf
+    codec_path: /mnt/raid0/llm/models/Qwen3-TTS-qwentts/qwen-tokenizer-12hz-Q8_0.gguf
+    model_type: qwentts.cpp
+    size_gb: 1.196   # 1,283,766,112 B combined talker + codec, Q8_0
+    quant: Q8_0
+    device: ROCm0
+    vram_gib: 2.62   # measured 2026-09-22, live /sys/class/kfd .../vram_57300 during serving, KV-free
+                     # (this model has no `-c`-shaped KV growth axis — see MRG-1 Step 1 note above)
+    memory_gb: 0     # host RAM: GPU-resident, no meaningful host footprint beyond the aux process
+    tier: hot
+    languages: [en, zh, ja, ko, de, fr, ru, pt, es, it]
+    acceleration:
+      type: none    # no speculative decoding; MRG-1 R1-CHK carve-out for `type: none` roles applies
+    throughput: null   # no tok/s-shaped metric; see rtf/wer figures in `description`
+    latency_target_ms: 38   # TTFA, GPU, measured (multimodal-pipeline.md S-6, 2026-07-31)
+    launch_script: null   # AUX_SERVICES `tts` in epyc-orchestrator launch_manifest.yaml; argv/cwd/env
+                          # are launch data, no standalone shell launcher
+    managed_by: orchestrator_stack    # start_tts() in orchestrator_stack.py (wired 2026-08-02, cba55d49)
+    health_path: /health
+    health_timeout_sec: 90
+    # ── S-13: PINNED VERSIONED DEPENDENCY, NOT A MERGE. ─────────────────────────────────────────
+    # Operator decision 2026-07-31: do NOT merge qwentts.cpp (or its ggml fork) into the project's
+    # own llama.cpp tree; running this patched third-party fork indefinitely, pinned by commit, is
+    # acceptable. Do NOT "consolidate" it into any future production-consolidated-vNN promotion — it
+    # is not part of that kernel set's four-step experimental workflow (epyc-root CLAUDE.md); it is a
+    # separate, independently-versioned tree with its own ggml fork and its own freeze ratification.
+    # Guard: scripts/utils/verify_qwentts_pin_isolation.sh (this repo) fails closed if the production
+    # llama.cpp tree ever gains qwentts-specific artifacts, or if this pin drifts from what the
+    # ratification + the live launch_manifest.yaml `tts` entry declare.
+    kernel:
+      tree: /mnt/raid0/llm/qwentts.cpp
+      branch: production-speech-v1
+      commit: 2c1b5182e7e9f1acaa04405ff21747d8a7acf4d5
+      ggml_submodule_commit: b86f660238dcc1a83b7cbf5a72d355a965de9245
+      pin_source: /workspace/artifacts/operator/ratify_speech_kernel_freeze_20260731.json
+      ggml_version: "0.17.0"    # per epyc-orchestrator launch_manifest.yaml aux_services.tts.model_label
+      binary: /mnt/raid0/llm/qwentts.cpp/build/tts-server
+      binary_sha256: 369fc2f1de88e41f4459e1f56c0e962035e20984acf0ea2d4678f602232ff654
+      superseded_pin:
+        reason: >-
+          multimodal-pipeline.md S-11's task text records commit abab6b3b / ggml fork c044c6f0 /
+          binary md5 5b858d75614dfd2f696071212ae8f2e4. Verified 2026-09-24: `git -C
+          /mnt/raid0/llm/qwentts.cpp merge-base --is-ancestor abab6b3b 2c1b5182e` is true — abab6b3b
+          is a direct ancestor of 2c1b5182e, one commit back. 2c1b518 ("freeze: pin ggml submodule
+          carrying the gfx90a GPU patches", 2026-07-31 16:11:39Z) committed ggml submodule state
+          that had been UNCOMMITTED dirty state at abab6b3b's time — the measured binary could not
+          be rebuilt from abab6b3b alone. The on-disk binary's sha256 matches the ratification
+          EXACTLY; its md5 (b976c78cc5ca32668ee4f76b2ce5c743) matches neither pin's stated md5. The
+          live launch_manifest.yaml `tts` entry's own model_label already says "ggml 0.17.0".
+          Verdict: the ratified freeze (2c1b5182e / ggml 0.17.0) is ground truth; S-11's pin text
+          was stale (written before the freeze commit landed) and is NOT used here.
+      note: >-
+        Load-bearing gfx90a/ROCm-6.2 patches: ggml/src/ggml-cuda/argsort.{cu,cuh} thread-strided
+        bitonic sort (gfx90a 1024-thread/block cap; S-6a) and the FP8 guard 60200000 -> 60300000.
+        Verified via /workspace/scripts/session/verify_speech_kernels.sh.
+    notes: "Third-party fork (ServeurpersoCom/qwentts.cpp), C++/ggml, HIP build. NOT llama.cpp — see
+      the S-13 pin note above for why it stays a separate tree. Stack-managed via start_tts() in
+      orchestrator_stack.py (AUX_SERVICES `tts`, launch_manifest.yaml, backend: tts,
+      verify_ggml_linkage: true). Serves the voice-loop TTS leg. Path A (home-rolled llama.cpp port)
+      and Path C (scripts/voice/tts_server.py PyTorch sidecar) are both superseded/fallback; this is
+      the only registered production TTS model."
 
   # sd-server (stable-diffusion.cpp native ggml) — replaced ComfyUI 2026-05-07.
   # Native ggml Q8 GEMM kernels skip ComfyUI-GGUF's per-layer dequant-to-BF16 step.
