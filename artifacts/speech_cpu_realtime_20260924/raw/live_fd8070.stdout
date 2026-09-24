@@ -1,0 +1,5 @@
+19:35:50 LIVE[fd8070] llm_port=8070 max_tokens=1000 reps=1
+19:35:51 speech idle after 1.0 s
+19:38:00 {"kind": "tts", "fmt": "pcm", "text": "short", "first_packet_s": 13.357, "wall_s": 96.21, "audio_s": 0.41, "rtf": null, "timed_out_after_s": 60.0, "audio_delivered_s": 0.41, "t_start": 4.08, "t_end": 100.28, "llm_overlap": 1.0, "rep": 0, "tag": "fd8070", "llm_port": 8070}
+19:38:00 {"kind": "llm", "port": 8070, "t_start": 1.08, "t_end": 129.83, "wall_s": 128.75, "ttft_s": 0.047, "capped": true, "predicted_n": null, "tok_s": null, "stream_chunks": 136, "stream_chunks_per_s": 1.05, "draft_acc": "None/None", "rep": 0, "tag": "fd8070", "llm_port": 8070}
+19:38:00 guard rep=0 speech_realtime_broken=True llm_collapsed=True collapsed_reps=1

@@ -1,0 +1,38 @@
+19:18:16 LIVE[quiet] llm_port=None max_tokens=0 reps=2
+19:19:02 {"kind": "stt", "clip": "short_11s.wav", "audio_s": 11.0, "wall_s": 3.33, "rtf": 0.3028, "status": 200, "text_head": "And so, my fellow Americans, ask not what your country can\n do for you, ask what you can do for your country.", "words": 22, "t_start": 0.0, "t_end": 3.33, "llm_overlap": null, "rep": 0, "tag": "quiet", "llm_port": null}
+19:19:02 {"kind": "tts", "fmt": "pcm", "text": "short", "status": 200, "first_packet_s": 0.171, "wall_s": 2.677, "audio_s": 4.24, "prebuffer_needed_s": 0.092, "rtf": 0.6315, "t_start": 3.33, "t_end": 6.01, "llm_overlap": null, "rep": 0, "tag": "quiet", "llm_port": null}
+19:19:02 {"kind": "stt", "clip": "long_85s.wav", "audio_s": 86.54, "wall_s": 19.098, "rtf": 0.2207, "status": 200, "text_head": "The United States asked from the Yemen to kill a day. These\n are very important information. Are these some of the\n info", "words": 328, "t_start": 6.01, "t_end": 25.11, "llm_overlap": null, "rep": 0, "tag": "quiet", "llm_port": null}
+19:19:02 {"kind": "tts", "fmt": "pcm", "text": "long", "status": 200, "first_packet_s": 0.232, "wall_s": 21.013, "audio_s": 35.68, "prebuffer_needed_s": 0.146, "rtf": 0.5889, "t_start": 25.11, "t_end": 46.12, "llm_overlap": null, "rep": 0, "tag": "quiet", "llm_port": null}
+19:19:02 guard rep=0 speech_realtime_broken=False llm_collapsed=False collapsed_reps=0
+19:20:03 {"kind": "stt", "clip": "short_11s.wav", "audio_s": 11.0, "wall_s": 2.427, "rtf": 0.2207, "status": 200, "text_head": "And so, my fellow Americans, ask not what your country can\n do for you, ask what you can do for your country.", "words": 22, "t_start": 46.12, "t_end": 48.55, "llm_overlap": null, "rep": 1, "tag": "quiet", "llm_port": null}
+19:20:03 {"kind": "tts", "fmt": "pcm", "text": "short", "status": 200, "first_packet_s": 0.09, "wall_s": 2.317, "audio_s": 4.24, "prebuffer_needed_s": 0.045, "rtf": 0.5464, "t_start": 48.55, "t_end": 50.87, "llm_overlap": null, "rep": 1, "tag": "quiet", "llm_port": null}
+19:20:03 {"kind": "stt", "clip": "long_85s.wav", "audio_s": 86.54, "wall_s": 33.742, "rtf": 0.3899, "status": 200, "text_head": "The United States asked from the Yemen to kill a day, this\n is a very important information. Is this a real information\n", "words": 363, "t_start": 50.87, "t_end": 84.61, "llm_overlap": null, "rep": 1, "tag": "quiet", "llm_port": null}
+19:20:03 {"kind": "tts", "fmt": "pcm", "text": "long", "status": 200, "first_packet_s": 0.219, "wall_s": 21.713, "audio_s": 35.68, "prebuffer_needed_s": 0.277, "rtf": 0.6085, "t_start": 84.61, "t_end": 106.33, "llm_overlap": null, "rep": 1, "tag": "quiet", "llm_port": null}
+19:20:03 guard rep=1 speech_realtime_broken=False llm_collapsed=False collapsed_reps=0
+19:20:11 LIVE[arch8074] llm_port=8074 max_tokens=1000 reps=2
+19:31:46 LIVE[arch8074_b] llm_port=8074 max_tokens=1000 reps=1
+19:31:47 speech idle after 1.0 s
+19:34:56 {"kind": "tts", "fmt": "pcm", "text": "short", "first_packet_s": 13.558, "wall_s": 163.9, "audio_s": 0.56, "rtf": null, "timed_out_after_s": 90.0, "audio_delivered_s": 0.56, "t_start": 4.08, "t_end": 167.97, "llm_overlap": 1.0, "rep": 0, "tag": "arch8074_b", "llm_port": 8074}
+19:34:56 {"kind": "llm", "port": 8074, "t_start": 1.08, "t_end": 190.28, "wall_s": 189.21, "ttft_s": 0.017, "capped": true, "predicted_n": null, "tok_s": null, "stream_chunks": 112, "stream_chunks_per_s": 0.59, "draft_acc": "None/None", "rep": 0, "tag": "arch8074_b", "llm_port": 8074}
+19:34:56 guard rep=0 speech_realtime_broken=True llm_collapsed=True collapsed_reps=1
+19:35:08 LIVE[solo] llm_port=None max_tokens=0 reps=0
+19:35:50 LIVE[fd8070] llm_port=8070 max_tokens=1000 reps=1
+19:35:51 speech idle after 1.0 s
+19:38:00 {"kind": "tts", "fmt": "pcm", "text": "short", "first_packet_s": 13.357, "wall_s": 96.21, "audio_s": 0.41, "rtf": null, "timed_out_after_s": 60.0, "audio_delivered_s": 0.41, "t_start": 4.08, "t_end": 100.28, "llm_overlap": 1.0, "rep": 0, "tag": "fd8070", "llm_port": 8070}
+19:38:00 {"kind": "llm", "port": 8070, "t_start": 1.08, "t_end": 129.83, "wall_s": 128.75, "ttft_s": 0.047, "capped": true, "predicted_n": null, "tok_s": null, "stream_chunks": 136, "stream_chunks_per_s": 1.05, "draft_acc": "None/None", "rep": 0, "tag": "fd8070", "llm_port": 8070}
+19:38:00 guard rep=0 speech_realtime_broken=True llm_collapsed=True collapsed_reps=1
+19:38:49 LIVE[solo] llm_port=None max_tokens=0 reps=0
+19:39:54 LIVE[part18091] llm_port=18091 max_tokens=1000 reps=2
+19:39:55 speech idle after 1.0 s
+19:41:29 {"kind": "tts", "fmt": "pcm", "text": "short", "first_packet_s": 1.0, "wall_s": 5.92, "audio_s": 4.24, "rtf": 1.396, "timed_out_after_s": null, "audio_delivered_s": 4.24, "t_start": 4.08, "t_end": 10.0, "llm_overlap": 1.0, "rep": 0, "tag": "part18091", "llm_port": 18091}
+19:41:29 {"kind": "stt", "clip": "short_11s.wav", "audio_s": 11.0, "wall_s": 2.424, "rtf": 0.2203, "status": 200, "text_head": "And so, my fellow Americans, ask not what your country can\n do for you, ask what you can do for your country.", "words": 22, "t_start": 10.0, "t_end": 12.42, "llm_overlap": 1.0, "rep": 0, "tag": "part18091", "llm_port": 18091}
+19:41:29 {"kind": "tts", "fmt": "pcm", "text": "long", "first_packet_s": 0.241, "wall_s": 33.32, "audio_s": 35.68, "rtf": 0.934, "timed_out_after_s": null, "audio_delivered_s": 35.68, "t_start": 12.42, "t_end": 45.74, "llm_overlap": 1.0, "rep": 0, "tag": "part18091", "llm_port": 18091}
+19:41:29 {"kind": "stt", "clip": "long_85s.wav", "audio_s": 86.54, "wall_s": 21.882, "rtf": 0.2529, "status": 200, "text_head": "The United States asked from the Yemen to kill a day. This\n is a very difficult thing. Is this a very difficult thing?\n ", "words": 339, "t_start": 45.74, "t_end": 67.62, "llm_overlap": 1.0, "rep": 0, "tag": "part18091", "llm_port": 18091}
+19:41:29 {"kind": "llm", "port": 18091, "t_start": 1.08, "t_end": 51.32, "wall_s": 50.24, "ttft_s": 0.054, "capped": false, "predicted_n": 1000, "tok_s": 19.97, "stream_chunks": 1000, "stream_chunks_per_s": 19.9, "draft_acc": "582/1091", "rep": 0, "tag": "part18091", "llm_port": 18091}
+19:41:29 {"kind": "llm", "port": 18091, "t_start": 51.32, "t_end": 95.35, "wall_s": 44.03, "ttft_s": 0.06, "capped": false, "predicted_n": 1000, "tok_s": 22.8, "stream_chunks": 1000, "stream_chunks_per_s": 22.72, "draft_acc": "596/1032", "rep": 0, "tag": "part18091", "llm_port": 18091}
+19:41:29 guard rep=0 speech_realtime_broken=True llm_collapsed=False collapsed_reps=1
+19:41:31 speech idle after 1.0 s
+19:42:17 {"kind": "tts", "fmt": "pcm", "text": "short", "first_packet_s": 0.235, "wall_s": 4.16, "audio_s": 4.24, "rtf": 0.981, "timed_out_after_s": null, "audio_delivered_s": 4.24, "t_start": 99.44, "t_end": 103.6, "llm_overlap": 1.0, "rep": 1, "tag": "part18091", "llm_port": 18091}
+19:42:17 {"kind": "stt", "clip": "short_11s.wav", "audio_s": 11.0, "wall_s": 4.878, "rtf": 0.4435, "status": 200, "text_head": "And so, my fellow Americans, ask not what your country can\n do for you, ask what you can do for your country.", "words": 22, "t_start": 103.6, "t_end": 108.48, "llm_overlap": 1.0, "rep": 1, "tag": "part18091", "llm_port": 18091}
+19:42:17 {"kind": "llm", "port": 18091, "t_start": 96.44, "t_end": 142.76, "wall_s": 46.32, "ttft_s": 0.055, "capped": false, "predicted_n": 1000, "tok_s": 21.67, "stream_chunks": 1000, "stream_chunks_per_s": 21.59, "draft_acc": "556/1010", "rep": 1, "tag": "part18091", "llm_port": 18091}
+19:42:17 guard rep=1 speech_realtime_broken=False llm_collapsed=False collapsed_reps=1

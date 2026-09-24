@@ -30,3 +30,5 @@
 2026-09-24 17:53:50 tts_t16_smtC pid=1490031 argv=taskset -c 120-135 /mnt/raid0/llm/qwentts.cpp/build/tts-server --model /mnt/raid0/llm/models/Qwen3-TTS-qwentts/qwen-talker-0.6b-base-Q8_0.gguf --codec /mnt/raid0/llm/models/Qwen3-TTS-qwentts/qwen-tokenizer-12hz-Q8_0.gguf --alias qwen3-tts-12hz-0.6b --host 127.0.0.1 --port 19102 env={'HIP_VISIBLE_DEVICES': '-1', 'GGML_BACKEND': 'CPU', 'SHIM_NPROCS': '32', 'LD_PRELOAD': '/mnt/raid0/llm/tmp/speech-cpu-20260924/nprocs_shim.so', 'LD_LIBRARY_PATH': '/mnt/raid0/llm/qwentts.cpp/build:/opt/rocm/lib'}
 2026-09-24 18:14:59 stt_t16_smtC pid=1490030 stopped rc=0 alive_after=False
 2026-09-24 18:14:59 tts_t16_smtC pid=1490031 stopped rc=0 alive_after=False
+2026-09-24 19:38:11 test_flashnext_t56 pid=2328222 port=18091 taskset 40-95 numactl --interleave=all -t 56 (else = live :8074 argv; slot-save-path -> tmp)
+2026-09-24 19:42:30 test_flashnext_t56 pid=2328222 stopped (TERM) alive_after=False

@@ -247,3 +247,90 @@ decision.
 Command: `LLM_CAP_S=120 LLM_REPS=3 taskset -c 76-79 python3 speech_cpu_bench.py concurrent 16@96-111 16@120-135 2 smtC`.
 Raw output is in `raw/concurrent_smtC.stdout`, `raw/concurrent.jsonl` (tag `smtC`) and
 `raw/*_smtC.log`.
+
+## Addendum: production layout vs CPU LLM roles (measured 2026-09-24, 19:19–19:43 UTC)
+
+**Setup.** STT and TTS are now live on CPU:
+
+- whisper on `:9000`: pid 2005824, `-t 24 -ng`, affinity 0-23.
+- qwentts on `:9002`: pid 2006079, affinity 24-39, 16 threads via `/mnt/raid0/llm/cache/shims/nprocs_shim.so`.
+- `rocm-smi` shows **0 VRAM for both**.
+
+I only sent requests to the live services; I did not start, stop or restart them.
+
+**How requests were run.** Speech requests went one at a time, as an urgent request would. The
+LLM had one generation in flight, back to back, with `ignore_eos` and 1000 tokens. Every
+speech request overlapped an in-flight generation (`llm_overlap` = 1.0).
+
+**Safeguards.**
+
+- Each LLM generation was hard-capped: 600 s in the first architect run, then 120–180 s.
+- Each speech request was capped at 60–90 s after the first run.
+- A guard stopped an arm after two degraded repetitions.
+
+Harness: [`live_llm_contention.py`](live_llm_contention.py). Raw data: `raw/live_contention.{log,jsonl}`,
+`raw/live_*.stdout`, `raw/llm_solo_baselines.txt`.
+
+| condition | STT jfk 11 s RTF | STT 86.5 s RTF | TTS sentence: first pkt / RTF | TTS paragraph: first pkt / RTF | LLM decode |
+|---|---|---|---|---|---|
+| quiet (n=2) | 0.30, 0.22 | 0.22, 0.39 | 0.17 / 0.63; 0.09 / 0.55 | 0.23 / 0.59; 0.22 / 0.61 | — |
+| **architect :8074** generating (live `-t 96` @0-95) | **≥ 58**: one request took about 10.7 min and finished only when the generation was aborted | not attempted | **13.6 s**; 0.56 s of audio in 164 s | not attempted | **0.59 tok/s** (solo 31.1–31.3) |
+| **frontdoor :8070** generating (live `-t 96` @0-95) | not reached | not reached | **13.4 s**; 0.41 s of audio in 96 s | not reached | **1.05 tok/s** (solo 36.8) |
+| **TEST Flash-Next `-t 56` @40-95** generating (partitioned) | 0.22, 0.44 | 0.25 | 1.00 s / **1.40**; 0.24 s / 0.98 | 0.24 s / **0.93** | 20.0–22.8 tok/s |
+
+**Partitioned decode cost.**
+
+- The TEST instance used the same binary, arguments and OMP/`GGML_IQK` environment as live
+  `:8074`, with three changes: `-t 56`, `taskset -c 40-95`, and `--slot-save-path` pointed at a
+  temporary directory. It was also launched under `numactl --interleave=all`, matching the live
+  instance's memory policy.
+- RAM was fine: 859 GB available. The instance loaded in 29 s with an RSS of 104 GB.
+- Solo, with speech idle, it decoded 500 tokens at **23.0 and 24.5 tok/s**. The live `-t 96`
+  instance did **31.1 and 31.3 tok/s**, so the partition costs **22–26%** of decode speed.
+  While speech was running, the TEST instance reached 20.0–22.8 tok/s.
+- Its PID was 2328222. I stopped it with TERM, confirmed it dead, and removed its temporary
+  slot directory.
+
+**Findings.**
+
+1. **With `-t 96` roles on 0-95, the speech layout is not real time, and the collision is
+   two-sided.**
+   - Speech: STT slows by more than 50×, and TTS first packet goes to about 13 s.
+   - LLM roles: the generating role collapses too, the architect to 0.6 tok/s and the frontdoor
+     to 1 tok/s.
+   - Cause: speech threads now sit permanently inside the LLMs' core masks, so the LLMs'
+     barriers wait on the cores speech occupies. A speech request therefore stalls the LLM as
+     badly as the LLM stalls it.
+2. **Core partitioning fixes STT but leaves TTS marginal.**
+   - STT is at RTF 0.22–0.44, about quiet-baseline levels.
+   - TTS RTF is 0.93–1.40 against 0.55–0.63 quiet. First packet is 0.24–1.0 s, and the stream
+     would need a playback buffer.
+   - With disjoint cores, the remaining contention is **inferred** to be DRAM bandwidth: the
+     MoE decode saturates memory, and TTS's per-frame autoregressive loop is sensitive to
+     memory latency. This was not isolated.
+   - The guard counted rep 0 as degraded (TTS RTF above 1), so rep 1 ran only the short items.
+
+**Recommendation.**
+
+- **Choosing between partitioning and a priority pause, partitioning is the one to adopt, and
+  it has to happen now.** Right now any speech request that arrives during a `-t 96` generation
+  wrecks both the speech and the LLM.
+- **What partitioning means here:** relaunch the CPU LLM roles with their masks excluding 0-39,
+  for example `-t 56` on 40-95. That costs about 22–26% of decode speed, measured on Flash-Next.
+- **Why a priority pause alone won't do:** it cannot be applied mid-token, so a request is
+  still stalled until the pause lands. Also, no pause mechanism exists today (inferred from the
+  launch flags; not verified in code).
+- **To make TTS real time under a partitioned LLM, add one of:**
+  - (a) a pause or throttle of LLM decode while TTS streams, on top of the partition;
+  - (b) move TTS back to the GPU (0.92 GB of weights). This is the cheaper choice: STT on CPU
+    already frees the larger 2.2 GB.
+- These are relaunch and topology decisions for the operator. **Not measured:** the frontdoor
+  under the same partition (inferred to behave like Flash-Next, since both are
+  bandwidth-bound MoE decode).
+
+**Side observations.**
+
+- The live speech services open `/dev/kfd` because `HIP_VISIBLE_DEVICES` is unset. They use
+  0 VRAM, so this is harmless.
+- megasync, which is unpinned, was running at about 60–100% on core 16. That core is inside
+  whisper's 0-23 mask and is a possible source of stragglers: quiet STT RTF spread 0.22–0.39.

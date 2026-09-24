@@ -1,0 +1,9 @@
+19:35:08 LIVE[solo] llm_port=None max_tokens=0 reps=0
+2026-09-24 19:35:08 wait idle: 5.0
+2026-09-24 19:35:30 {"kind": "llm", "port": 8074, "t_start": 5.17, "t_end": 21.37, "wall_s": 16.2, "ttft_s": 0.051, "capped": false, "predicted_n": 500, "tok_s": 31.11, "stream_chunks": 500, "stream_chunks_per_s": 30.9, "draft_acc": "278/528", "mode": "solo, speech idle"}
+2026-09-24 19:35:43 {"kind": "llm", "port": 8070, "t_start": 21.37, "t_end": 35.2, "wall_s": 13.83, "ttft_s": 0.055, "capped": false, "predicted_n": 500, "tok_s": 36.79, "stream_chunks": 500, "stream_chunks_per_s": 36.23, "draft_acc": "303/779", "mode": "solo, speech idle"}
+19:38:49 LIVE[solo] llm_port=None max_tokens=0 reps=0
+2026-09-24 19:38:49 wait idle: 1.0
+2026-09-24 19:39:12 {"kind": "llm", "port": 18091, "t_start": 1.08, "t_end": 23.26, "wall_s": 22.19, "ttft_s": 0.014, "capped": false, "predicted_n": 500, "tok_s": 22.99, "stream_chunks": 500, "stream_chunks_per_s": 22.5, "draft_acc": "294/544", "mode": "solo, speech idle (TEST -t 56 @40-95)"}
+2026-09-24 19:39:32 {"kind": "llm", "port": 18091, "t_start": 23.27, "t_end": 43.86, "wall_s": 20.59, "ttft_s": 0.043, "capped": false, "predicted_n": 500, "tok_s": 24.47, "stream_chunks": 500, "stream_chunks_per_s": 24.29, "draft_acc": "306/507", "mode": "solo, speech idle (TEST -t 56 @40-95)"}
+2026-09-24 19:39:49 {"kind": "llm", "port": 8074, "t_start": 43.86, "t_end": 59.97, "wall_s": 16.11, "ttft_s": 0.054, "capped": false, "predicted_n": 500, "tok_s": 31.3, "stream_chunks": 500, "stream_chunks_per_s": 31.08, "draft_acc": "288/540", "mode": "solo, speech idle (live -t 96 @0-95)"}

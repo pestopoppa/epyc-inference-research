@@ -1,0 +1,5 @@
+19:31:46 LIVE[arch8074_b] llm_port=8074 max_tokens=1000 reps=1
+19:31:47 speech idle after 1.0 s
+19:34:56 {"kind": "tts", "fmt": "pcm", "text": "short", "first_packet_s": 13.558, "wall_s": 163.9, "audio_s": 0.56, "rtf": null, "timed_out_after_s": 90.0, "audio_delivered_s": 0.56, "t_start": 4.08, "t_end": 167.97, "llm_overlap": 1.0, "rep": 0, "tag": "arch8074_b", "llm_port": 8074}
+19:34:56 {"kind": "llm", "port": 8074, "t_start": 1.08, "t_end": 190.28, "wall_s": 189.21, "ttft_s": 0.017, "capped": true, "predicted_n": null, "tok_s": null, "stream_chunks": 112, "stream_chunks_per_s": 0.59, "draft_acc": "None/None", "rep": 0, "tag": "arch8074_b", "llm_port": 8074}
+19:34:56 guard rep=0 speech_realtime_broken=True llm_collapsed=True collapsed_reps=1
