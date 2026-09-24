@@ -5,6 +5,7 @@ back off (a codex 401 produced 284 failures in 23 minutes with zero delay), and 
 context bundle actually carries what the old planner never received.
 """
 import json
+import subprocess
 from pathlib import Path
 import unittest
 from unittest import mock
@@ -510,3 +511,44 @@ class Backends(unittest.TestCase):
         argv = ran.call_args.args[0]
         self.assertEqual(argv, b.argv("PROMPT", Path("/ws")))
         self.assertEqual(ran.call_args.kwargs["cwd"], "/ws")
+
+
+
+class RawReplyPersistenceAndStreamFallback(unittest.TestCase):
+    """A complete reply must never become a transient because of which stream
+    carried it, and every raw exchange must be on disk (DS41 2026-09-24)."""
+
+    def _done(self, stdout: str, stderr: str, rc: int = 0):
+        return subprocess.CompletedProcess(args=["x"], returncode=rc, stdout=stdout, stderr=stderr)
+
+    def test_reply_on_stderr_is_still_handed_to_the_parser(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp) / "workers" / "lane0"; ws.mkdir(parents=True)
+            body = '{"mechanism_id":"m","statement":"s","falsifier":"f","target_surface":"t","target_symbol":"y"}'
+            with mock.patch.object(actors.subprocess, "run",
+                                   return_value=self._done("chrome only\n", "final: " + body)):
+                raw = actors._run_agent("p", workspace=ws, backend=actors.backend_for("prov/model", "high"))
+            self.assertEqual(actors._extract_json(raw)["mechanism_id"], "m")
+            replies = sorted((ws.parent / actors.ACTOR_REPLY_DIR).iterdir())
+            self.assertEqual([p.suffix for p in replies], [".stderr", ".stdout"])
+            self.assertIn("final:", replies[0].read_text())
+            self.assertFalse(list(ws.iterdir()), "nothing may land inside the worker tree")
+
+    def test_stdout_reply_is_returned_unchanged(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp) / "workers" / "lane0"; ws.mkdir(parents=True)
+            with mock.patch.object(actors.subprocess, "run",
+                                   return_value=self._done('{"abstain":"x"}', '{"not":"this"}')):
+                raw = actors._run_agent("p", workspace=ws, backend=actors.backend_for("prov/model", "high"))
+            self.assertEqual(raw, '{"abstain":"x"}')
+
+    def test_nonzero_exit_is_still_a_transient_and_still_persisted(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp) / "workers" / "lane0"; ws.mkdir(parents=True)
+            with mock.patch.object(actors.subprocess, "run", return_value=self._done("", "boom", rc=3)):
+                with self.assertRaises(actors.ProviderTransient):
+                    actors._run_agent("p", workspace=ws, backend=actors.backend_for("prov/model", "high"))
+            self.assertTrue(any(p.name.endswith("-rc3.stderr") for p in (ws.parent / actors.ACTOR_REPLY_DIR).iterdir()))

@@ -160,6 +160,7 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
         # A hung container held a turn forever in v27; a bounded invocation is a
         # transient, not a terminal fault.
         raise ProviderTransient(f"actor exceeded {timeout_s}s") from exc
+    _persist_reply(workspace, backend, done)
     if done.returncode != 0:
         # Both tails. `claude -p` reports its own errors ("Not logged in", usage
         # limits, refusals) on STDOUT with a non-zero exit and an EMPTY stderr --
@@ -168,7 +169,40 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
         raise ProviderTransient(
             f"actor exited {done.returncode} [{backend.describe()}]: "
             f"stderr={done.stderr[-300:]!r} stdout={done.stdout[-300:]!r}")
+    # The parser reads the LAST JSON object. If stdout carries none, hand it the
+    # stderr tail too: a CLI that moves its final message between streams across
+    # versions must not turn a complete reply into a transient (DS41 2026-09-24: a
+    # 91-minute, fully formed hypothesis was retried from zero).
+    if _first_json_or_none(done.stdout) is None and _first_json_or_none(done.stderr) is not None:
+        return done.stdout + "\n" + done.stderr
     return done.stdout
+
+
+#: Where raw actor replies land: a sibling of the worker tree, never inside it (a
+#: file inside the worktree would ride into the authored diff).
+ACTOR_REPLY_DIR = "actor-replies"
+ACTOR_REPLY_KEEP_BYTES = 4 * 1024 * 1024
+
+
+def _persist_reply(workspace: Path, backend: Backend, done: subprocess.CompletedProcess) -> None:
+    """Keep every raw actor exchange on disk so a bounced reply is diagnosable
+    from the store instead of from a pipe nobody can read."""
+    try:
+        target = Path(workspace).parent / ACTOR_REPLY_DIR
+        target.mkdir(parents=True, exist_ok=True)
+        stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime())
+        stem = f"{stamp}-{backend.kind}-{backend.model.replace('/', '_')}-rc{done.returncode}"
+        (target / f"{stem}.stdout").write_text(done.stdout[-ACTOR_REPLY_KEEP_BYTES:], encoding="utf-8")
+        (target / f"{stem}.stderr").write_text(done.stderr[-ACTOR_REPLY_KEEP_BYTES:], encoding="utf-8")
+    except OSError:
+        pass  # a reply record is evidence, never a reason to fail the actor call
+
+
+def _first_json_or_none(text: str):
+    try:
+        return _extract_json(text)
+    except ProviderTransient:
+        return None
 
 
 def _with_backoff(call, *, attempts: int = len(BACKOFF_S),
