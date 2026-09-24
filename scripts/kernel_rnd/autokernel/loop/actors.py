@@ -47,7 +47,7 @@ import tempfile
 import time
 from typing import Any, Callable, Mapping, Sequence
 
-from . import integrity
+from . import actor_metrics, integrity
 from .loop import Abstain, ActorStopped, ActorTransient, Hypothesis, Review
 
 CODEX = "/usr/local/share/npm-global/bin/codex"
@@ -308,6 +308,19 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
         extra["input"] = payload
     if env:
         extra["env"] = {**os.environ, **env}
+    # Turn/efficiency metrics (DS41-C20c) come from `opencode export`, so they only
+    # exist for a REAL opencode call -- gated on `binary == OPENCODE`, not merely
+    # `kind == "opencode"`, so a test double that reuses the "opencode" kind (e.g.
+    # `test_actor_stop.py`'s script-backend, `binary=sys.executable`) never shells
+    # out to the real CLI. The "before" snapshot must happen here, ahead of the
+    # actor's own call, so a session it creates is detectable as NEW afterward.
+    collect_metrics = backend.kind == "opencode" and backend.binary == OPENCODE
+    before_session_ids: set[str] = set()
+    if collect_metrics:
+        try:
+            before_session_ids = actor_metrics.list_session_ids(workspace)
+        except Exception:  # noqa: BLE001 -- metrics are evidence, never a call failure
+            before_session_ids = set()
     # Capture to FILES, not pipes. The reply is the LAST thing the CLI prints, and
     # opencode (Bun) exits without draining a pipe: `opencode export` read through a
     # pipe stopped at exactly 98,304 bytes (DS41 seat A/B, 2026-09-24) while the same
@@ -326,6 +339,11 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
             reply = _persist_reply(workspace, backend, subprocess.CompletedProcess(
                 args=argv, returncode=stop.returncode,
                 stdout=_captured(None, out), stderr=_captured(None, err)))
+            _record_metrics(workspace, backend, role=_safe_role(schema),
+                            returncode=stop.returncode, wall_s=time.monotonic() - started,
+                            timed_out=False, before_ids=before_session_ids,
+                            collect_metrics=collect_metrics, schema=schema,
+                            final_text=None, salvaged=False)
             _record_call(workspace, backend, prompt, returncode=stop.returncode,
                          wall_s=time.monotonic() - started, env=env, schema=schema,
                          reply=reply)
@@ -341,6 +359,10 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
             reply = _persist_reply(workspace, backend, subprocess.CompletedProcess(
                 args=argv, returncode=-1,
                 stdout=_captured(exc.stdout, out), stderr=_captured(exc.stderr, err)))
+            _record_metrics(workspace, backend, role=_safe_role(schema), returncode=-1,
+                            wall_s=time.monotonic() - started, timed_out=True,
+                            before_ids=before_session_ids, collect_metrics=collect_metrics,
+                            schema=schema, final_text=None, salvaged=False)
             _record_call(workspace, backend, prompt, returncode=-1,
                          wall_s=time.monotonic() - started, env=env, schema=schema,
                          reply=reply, timed_out=True)
@@ -349,31 +371,22 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
             args=argv, returncode=done.returncode,
             stdout=_captured(done.stdout, out), stderr=_captured(done.stderr, err))
     reply = _persist_reply(workspace, backend, done)
-    _record_call(workspace, backend, prompt, returncode=done.returncode,
-                 wall_s=time.monotonic() - started, env=env, schema=schema, reply=reply)
+    # A non-zero exit is not proof the reply is bad. opencode exits 1 when one of its
+    # own tools threw mid-session and the agent recovered (DS41 2026-09-24 09:55:
+    # `(res.stderr || "").trim is not a function`), and the reply it printed was a
+    # complete, schema-valid hypothesis that this path used to throw away unread and
+    # retry from zero. Salvage ONLY a reply whose JSON is COMPLETE for the caller's
+    # schema (or an abstention): an incomplete object from a crashed actor must stay
+    # a transient -- a crashed critic whose stray JSON lacks `accepted` would
+    # otherwise read as a rejection. Only a process that EXITED (rc > 0): a signal
+    # death (rc < 0) never finished, and its stdout can hold a compaction summary
+    # quoting our own template (bounded-seat A/B, 2026-09-24: `{"abstain":"<reason>"}`).
+    salvage_text = None
     if done.returncode > 0 and schema is not None:
-        # A non-zero exit is not proof the reply is bad. opencode exits 1 when one
-        # of its own tools threw mid-session and the agent recovered (DS41
-        # 2026-09-24 09:55: `(res.stderr || "").trim is not a function`), and the
-        # reply it printed was a complete, schema-valid hypothesis that this path
-        # threw away unread and retried from zero. Salvage ONLY a reply whose JSON
-        # is COMPLETE for the caller's schema (or an abstention): an incomplete
-        # object from a crashed actor must stay a transient -- a crashed critic
-        # whose stray JSON lacks `accepted` would otherwise read as a rejection.
-        # Only a process that EXITED (rc > 0): a signal death (rc < 0) never
-        # finished, and its stdout can hold a compaction summary quoting our own
-        # template (bounded-seat A/B, 2026-09-24: `{"abstain":"<reason>"}`).
         for text in (done.stdout, done.stdout + "\n" + done.stderr):
             if _has_answer(text, schema):
-                return text
-    if done.returncode != 0:
-        # Both tails. `claude -p` reports its own errors ("Not logged in", usage
-        # limits, refusals) on STDOUT with a non-zero exit and an EMPTY stderr --
-        # run 27 logged 74 transients reading "actor exited 1: " and nothing else,
-        # because this path used to throw the only channel that carried the reason.
-        raise ProviderTransient(
-            f"actor exited {done.returncode} [{backend.describe()}]: "
-            f"stderr={done.stderr[-300:]!r} stdout={done.stdout[-300:]!r}")
+                salvage_text = text
+                break
     # The parser reads the LAST JSON object. If stdout carries none, hand it the
     # stderr tail too: a CLI that moves its final message between streams across
     # versions must not turn a complete reply into a transient (DS41 2026-09-24: a
@@ -388,9 +401,31 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
     # known (matching what `_parse_reply` will itself require), any parseable
     # object when it is not (`schema=None`, preserving the original behaviour for
     # the few call sites that do not thread one through).
-    if not _has_answer(done.stdout, schema) and _has_answer(done.stderr, schema):
-        return done.stdout + "\n" + done.stderr
-    return done.stdout
+    if salvage_text is not None:
+        final_text = salvage_text
+    elif done.returncode == 0:
+        final_text = (done.stdout + "\n" + done.stderr
+                     if (not _has_answer(done.stdout, schema) and _has_answer(done.stderr, schema))
+                     else done.stdout)
+    else:
+        final_text = None   # about to raise below; nothing to hand `_parse_reply`
+    _record_metrics(workspace, backend, role=_safe_role(schema), returncode=done.returncode,
+                    wall_s=time.monotonic() - started, timed_out=False,
+                    before_ids=before_session_ids, collect_metrics=collect_metrics,
+                    schema=schema, final_text=final_text, salvaged=salvage_text is not None)
+    _record_call(workspace, backend, prompt, returncode=done.returncode,
+                 wall_s=time.monotonic() - started, env=env, schema=schema, reply=reply)
+    if salvage_text is not None:
+        return salvage_text
+    if done.returncode != 0:
+        # Both tails. `claude -p` reports its own errors ("Not logged in", usage
+        # limits, refusals) on STDOUT with a non-zero exit and an EMPTY stderr --
+        # run 27 logged 74 transients reading "actor exited 1: " and nothing else,
+        # because this path used to throw the only channel that carried the reason.
+        raise ProviderTransient(
+            f"actor exited {done.returncode} [{backend.describe()}]: "
+            f"stderr={done.stderr[-300:]!r} stdout={done.stdout[-300:]!r}")
+    return final_text
 
 
 #: Where raw actor replies land: a sibling of the worker tree, never inside it (a
@@ -455,6 +490,78 @@ def _record_call(workspace: Path, backend: Backend, prompt: str, *, returncode: 
         target.mkdir(parents=True, exist_ok=True)
         with open(target / ACTOR_CALL_LOG, "a", encoding="utf-8") as handle:
             handle.write(json.dumps(row, sort_keys=True) + "\n")
+    except OSError:
+        pass  # evidence, never a reason to fail the actor call
+
+
+def _safe_role(schema: Mapping[str, Any] | None) -> str | None:
+    """`_role_of`, but None instead of a raise for a schema this module does not
+    recognise -- a metrics row must never fail the actor call over a role it
+    cannot name."""
+    try:
+        return _role_of(schema)
+    except ValueError:
+        return None
+
+
+def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
+                    returncode: int, wall_s: float, timed_out: bool,
+                    before_ids: set[str], collect_metrics: bool,
+                    schema: Mapping[str, Any] | None, final_text: str | None,
+                    salvaged: bool) -> None:
+    """A sibling line in `actor-calls.jsonl`, ahead of the `_record_call` line so a
+    reader taking "the last line" for the v1 record (as the existing tests and any
+    VB-AK-SEAT consumer do) is unaffected by this addition: the per-call
+    turn/efficiency numbers DS41-C20c's seat A/B computed by hand from `opencode
+    export` (`/mnt/raid0/llm/tmp/ak-seat-ab/driver.py`), ported into the seat so
+    EVERY campaign call carries them, not only an A/B arm.
+
+    Schema `actor_metrics.METRICS_SCHEMA` -- a NEW schema this repo owns, not an
+    extension of VB-AK-SEAT's closed, self-hashed `CALL_SCHEMA` (see
+    `actor_metrics.py`'s module docstring for why). Never raises: a
+    metrics-collection failure is recorded as `metrics_error`, never a reason to
+    fail the actor call."""
+    try:
+        finished = time.time()
+        schema_valid = repair_ran = None
+        if schema is not None and final_text is not None:
+            pre = _precheck_reply(final_text, schema)
+            schema_valid = pre.schema_valid
+            # `_schema_repair` no-ops immediately for a non-opencode backend (no
+            # local server to ask), so no repair TURN actually ran there even
+            # though `_parse_reply` would still attempt one.
+            repair_ran = (not pre.schema_valid) and not pre.empty and backend.kind == "opencode"
+        opencode_stats: dict[str, Any] | None = None
+        if collect_metrics:
+            target = Path(workspace).parent / ACTOR_REPLY_DIR
+            target.mkdir(parents=True, exist_ok=True)
+            stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime(finished))
+            opencode_stats = actor_metrics.collect(Path(workspace), before_ids, target, stamp=stamp)
+        record = {
+            "schema": actor_metrics.METRICS_SCHEMA,
+            "role": role,
+            "backend_kind": backend.kind,
+            "backend_model": backend.model,
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(finished)),
+            "wall_s": round(wall_s, 3),
+            "returncode": returncode,
+            "timed_out": timed_out,
+            "salvaged": salvaged,
+            "schema_valid": schema_valid,
+            "repair_ran": repair_ran,
+            "opencode": opencode_stats,
+            "metrics_error": (opencode_stats or {}).get("metrics_error") if collect_metrics else None,
+        }
+    except Exception as exc:   # noqa: BLE001 -- evidence, never a reason to fail the call
+        record = {"schema": actor_metrics.METRICS_SCHEMA, "role": role,
+                  "backend_kind": backend.kind, "backend_model": backend.model,
+                  "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                  "metrics_error": f"{type(exc).__name__}: {exc}"[:500]}
+    try:
+        target = Path(workspace).parent / ACTOR_REPLY_DIR
+        target.mkdir(parents=True, exist_ok=True)
+        with open(target / ACTOR_CALL_LOG, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record, sort_keys=True) + "\n")
     except OSError:
         pass  # evidence, never a reason to fail the actor call
 
@@ -1001,14 +1108,20 @@ def _ungrounded_fields(body: Mapping[str, Any], report: str,
     return bad
 
 
-def _parse_reply(raw: str, *, schema: Mapping[str, Any], backend: Backend,
-                 workspace: Path, instruction: str = _EXTRACT_INSTRUCTION) -> dict:
-    """`_extract_json`, then a schema repair turn when the object is missing or
-    incomplete. Abstentions pass straight through -- they are complete by
-    construction. `instruction` is forwarded to the extraction turn's system
-    prompt, so a caller whose schema does not share the hypothesis/paths field
-    names (e.g. actor_preparation.py's source-advice/build-recipe shapes,
-    TD-21.29) can describe its own fields instead of the default's."""
+@dataclass(frozen=True)
+class _ReplyPrecheck:
+    """What `_parse_reply` decides BEFORE any repair turn -- factored out so the
+    metrics hook (`_record_metrics`) can predict `schema_valid`/whether a repair
+    would be attempted from the exact same, pure, no-network decision, and the
+    two can never disagree (both call this one function; neither duplicates the
+    other's logic)."""
+    body: dict | None
+    echoed: list[str] | None
+    schema_valid: bool
+    empty: bool
+
+
+def _precheck_reply(raw: str, schema: Mapping[str, Any] | None) -> _ReplyPrecheck:
     try:
         body = _extract_json(raw)
     except ProviderTransient:
@@ -1018,12 +1131,26 @@ def _parse_reply(raw: str, *, schema: Mapping[str, Any], backend: Backend,
         # Our own template quoted back is not an answer; repair or fail.
         echoed = sorted(k for k, v in body.items() if isinstance(v, str) and _is_placeholder(v))
         body = None
-    if body is not None and ("abstain" in body or _schema_valid(body, schema)):
-        # TD-21.30(b): full-schema validation, not just required-key presence --
-        # a fished value with the right keys and the WRONG TYPES (e.g.
-        # `{"accepted": "true"}` for REVIEW_SCHEMA) must not short-circuit repair.
-        return body
-    if body is None and len(raw.strip()) < REPAIR_MIN_REPORT_CHARS:
+    # TD-21.30(b): full-schema validation, not just required-key presence -- a
+    # fished value with the right keys and the WRONG TYPES (e.g. `{"accepted":
+    # "true"}` for REVIEW_SCHEMA) must not short-circuit repair.
+    valid = body is not None and ("abstain" in body or _schema_valid(body, schema))
+    empty = body is None and len(raw.strip()) < REPAIR_MIN_REPORT_CHARS
+    return _ReplyPrecheck(body=body, echoed=echoed, schema_valid=valid, empty=empty)
+
+
+def _parse_reply(raw: str, *, schema: Mapping[str, Any], backend: Backend,
+                 workspace: Path, instruction: str = _EXTRACT_INSTRUCTION) -> dict:
+    """`_extract_json`, then a schema repair turn when the object is missing or
+    incomplete. Abstentions pass straight through -- they are complete by
+    construction. `instruction` is forwarded to the extraction turn's system
+    prompt, so a caller whose schema does not share the hypothesis/paths field
+    names (e.g. actor_preparation.py's source-advice/build-recipe shapes,
+    TD-21.29) can describe its own fields instead of the default's."""
+    pre = _precheck_reply(raw, schema)
+    if pre.schema_valid:
+        return pre.body
+    if pre.empty:
         # Nothing to copy from. A schema-constrained completion over an empty
         # report MUST fill every required field, so it invents them: DS41
         # 2026-09-24 10:09 a retry ended with empty stdout, the repair turn
@@ -1032,6 +1159,7 @@ def _parse_reply(raw: str, *, schema: Mapping[str, Any], backend: Backend,
         raise ProviderTransient(
             f"actor produced no final report ({len(raw.strip())} chars); "
             "refusing to repair an empty reply")
+    body, echoed = pre.body, pre.echoed
     question = next((q for key, q in _DECLINE_QUESTIONS.items()
                      if key in schema.get("required", ())), None)
     if question is not None:

@@ -543,8 +543,12 @@ class Backends(unittest.TestCase):
             with mock.patch.object(actors.subprocess, "run", return_value=done) as ran:
                 actors._run_agent("p", workspace=ws, backend=actors.backend_for("q/m", "high"),
                                   env={"OPENCODE_CONFIG": "/c.json"})
-            self.assertEqual(ran.call_args.kwargs["env"]["OPENCODE_CONFIG"], "/c.json")
-            self.assertIn("PATH", ran.call_args.kwargs["env"], "env extends, never replaces")
+            # The actor's own call, not the actor_metrics session-list calls this seat
+            # now also makes (they carry no `env` kwarg) -- find it by that kwarg
+            # rather than assuming it is the last (or only) `subprocess.run` call.
+            main_call = next(c for c in ran.call_args_list if "env" in c.kwargs)
+            self.assertEqual(main_call.kwargs["env"]["OPENCODE_CONFIG"], "/c.json")
+            self.assertIn("PATH", main_call.kwargs["env"], "env extends, never replaces")
             rows = (ws.parent / actors.ACTOR_REPLY_DIR / actors.ACTOR_CALL_LOG).read_text().splitlines()
             row = json.loads(rows[-1])
             self.assertEqual((row["returncode"], row["prompt_chars"], row["opencode_config"]), (0, 1, "/c.json"))

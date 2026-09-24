@@ -1,0 +1,124 @@
+## Objective
+- Propose exactly ONE kernel optimization hypothesis (as a single JSON object) for the CPU llama.cpp serving target: DeepSeek-V4.1-Flash-Q4, 48 threads, DSpark drafter, build at `ebb68dc55` on branch `experimental/deepseek41-port-20260923`.
+
+## Important Details
+- **Output format**: Reply with ONE JSON object `{"mechanism_id", "statement", "falsifier", "target_surface", "target_symbol"}` or `{"abstain": "<reason>"}`. Nothing else.
+- **Only admitted CPU source routes** (per strategy doc):
+  - `iqk_mul_mat_moe_rows` body in `iqk_mul_mat.cpp`
+  - `iqk_moe_fused_up_gate` body in `iqk_mul_mat.cpp`
+  - Q4_K/Q5_K dot route: `ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp`, target `mul_mat_qX_K_q8_2_X4_T`, edit only Q4_K/Q5_K-private dequantizer, its private scale-unpack helpers, or that Q4_K/Q5_K-only template body.
+  - `x86 quants.c` is **not admitted** (shared by both arms).
+- **Profile evidence** (sampled user cycles, original request):
+  - 44.93% libgomp `[unknown]` (thread sync) — **dead** per operator notes (barrier/sync/idle-spin measured null).
+  - **25.79% `mul_mat_qX_K_q8_2_X4_T<DequantizerQ4K_AVX2, {1,2,3}>`** — Q4_K gemm (19.61% + 4.00% + 2.17%). This is the #2 family and exactly matches the admitted dot-route target symbol.
+  - 19.98% `tinyBLAS_Q0_AVX<block_q8_0,...>::gemm4xN` — dense Q8, **not admitted** (no supported route).
+- **Build dispatches AVX2 dequantizer** (`DequantizerQ4K_AVX2`) despite `GGML_NATIVE=ON` on EPYC (gcc-15). The source has a `HAVE_FANCY_SIMD` path with `_mm256_dpbusd_epi32` (AVX-512 VNNI) vs an AVX2 fallback with `_mm256_maddubs_epi16`.
+- **Operator notes**: streaming efficiency is dead (80–90% of 220 GB/s ceiling); "the lever is bytes"; thread count flat 24→96; barrier/sync dead; NUMA thread policy dead.
+- **Scope**: half-screen (cores 0–47 of 96), non-promotable, requires full-target confirmation before keep.
+- **Gate for Q4_K/Q5_K dot route**: native `MUL_MAT` and `MUL_MAT_ID` suite + independent scalar `MUL_MAT`, `MUL_MAT_ID` and fused up-gate comparisons for both quants across activation widths 1–8. Each fused case requires trusted hit on matching template specialization in candidate CPU DSO.
+- **Half-screen constraint**: both A/B arms share listed threads/affinity; this is NOT an effect from changing those settings. Source-only, not runtime treatment.
+- **Historical (non-transfer)**: `akm-glm53-iqk-expert-multirow` measured null for expert-row batching on GLM; `akm-glm53-q8-rowexact-batch` measured null for dense Q8 batching. Different models, stale epoch.
+
+## Work State
+### Completed
+- Confirmed worktree at `ebb68dc55` (branch `experimental/deepseek41-port-20260923`).
+- Confirmed target file exists: `ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp`.
+- Read lines 1–~1100 of `iqk_gemm_kquants.cpp`: identified `Scales8K` struct, `process_mins_and_scales`, `process_mins_and_scales_64` (under `HAVE_FANCY_SIMD`), `shuffles512` tables, and beginning of the template.
+- Read lines ~1109–1130: k-loop body showing two paths:
+  - `HAVE_FANCY_SIMD` (AVX-512 VNNI): `_mm256_dpbusd_epi32` + `_mm256_mullo_epi32(iscales, sumi)`
+  - AVX2 fallback: 4× `_mm256_maddubs_epi16` + 4× `_mm256_madd_epi16(iscales, sumiN)` + adds
+- Identified that the profiled binary runs `DequantizerQ4K_AVX2`, meaning the `HAVE_FANCY_SIMD` path is **not** the active one (or the dequantizer struct selects AVX2 variant regardless).
+
+### Active
+- Reading the full `mul_mat_qX_K_q8_2_X4_T` template body and `DequantizerQ4K_AVX2` struct to identify a concrete mechanism within the admitted edit boundary.
+- Need to determine: (a) whether `HAVE_FANCY_SIMD` is defined in this build (GGML_NATIVE=ON on gcc-15 EPYC), (b) what the AVX2 dequantizer does differently from the AVX-512 path, (c) what small, numerics-preserving edit within the Q4_K-private dequantizer or template body could reduce work.
+
+### Blocked
+- (none)
+
+## Next Move
+1. Continue reading `iqk_gemm_kquants.cpp` — specifically the `DequantizerQ4K_AVX2` struct definition, the full `mul_mat_qX_K_q8_2_X4_T` template body (all specializations N=1,2,3), and the dispatch/`#ifdef` guards to confirm which SIMD path is active in this build.
+2. Identify the concrete mechanism (e.g., reduce redundant scale/min unpack operations, vectorize a scalar step, eliminate a redundant load within the dequantizer or template body) that stays within the admitted edit boundary and is testable by the Q4_K/Q5_K dot-route gate.
+3. Formulate the single JSON hypothesis with a falsifiable measurement (must clear the enforced noise floor on the half-screen, with full-target confirmation required for keep).
+
+## Relevant Files
+- `ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp`: the target source file; contains `mul_mat_qX_K_q8_2_X4_T` template and Q4_K/Q5_K-private dequantizer structs. Full worktree path: `/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run7/targets/71f54ec472e002dfdf65f9d57481afc674084ac8168addfd5197c63dafd11ce0/workers/lane0/ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp`
+- `ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.h`: header for the above (must not be edited per gate).
+- `/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/libggml-cpu.so.0.16.0`: the measured DSO containing the profiled symbols.
+- `/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store/cpu-profiles/d54c96266264f0f4a25e56ecdde1cd86eb015af948c99e3abf576192adfdbdaf-8bf2690c53f1fdb971d54457191a7e11813779c01d3c97aa551999b631ded740.json`: original CPU profile record.
+- `/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/inputs/ds41-decode.prompt-manifest.json`: frozen request manifest.
+- `/mnt/raid0/llm/tmp/ds41-hypotheses/HYPOTHESES.md`: operator's ranked hypothesis write-up (H1–H7).
+The previous request exceeded the provider's size limit due to large media attachments. The conversation was compacted and media files were removed from context. If the user was asking about attached images or files, explain that the attachments were too large to process and suggest they try again with smaller or fewer files.
+
+Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.
+Continuing: I'll read the dequantizer structs and the full template body in `iqk_gemm_kquants.cpp` to pin down the active SIMD path and find a concrete mechanism.
+`HAVE_FANCY_SIMD` is not defined anywhere in the build system, so the active path is the AVX2 `maddubs` fallback. Now let me find the callers and the `Q8`/`make_q4_scales` helpers to understand the tiling.
+Let me read `make_q4_scales` and check the `block_q8_2_x4` layout and `DataInfo`.
+Let me check the operator's hypothesis write-up and the DataInfo struct to make sure I understand the tiling before proposing.
+The HYPOTHESES doc gives crucial context. Now let me read the actual CPU profile record to confirm exactly where the Q4_K cycles are attributed.
+The profile is now confirmed with precise numbers. Let me verify the campaign strategy doc to make sure I honor the exact gate and route constraints.
+Let me disassemble the actual measured DSO's hot symbol to ground the mechanism in the emitted code.
+## Objective
+- Propose exactly ONE kernel-optimization hypothesis as a single JSON object (`{"mechanism_id","statement","falsifier","target_surface","target_symbol"}` or `{"abstain":"<reason>"}`) for the CPU llama.cpp serving target: DeepSeek-V4.1-Flash-Q4, 48 threads, DSpark drafter, build `ebb68dc55` on branch `experimental/deepseek41-port-20260923`.
+
+## Important Details
+- **Output contract**: Reply with ONE JSON object only; nothing else.
+- **Only admitted CPU source routes** (per strategy doc): `iqk_mul_mat_moe_rows` body in `iqk_mul_mat.cpp`; `iqk_moe_fused_up_gate` body in `iqk_mul_mat.cpp`; Q4_K/Q5_K dot route = `ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp`, target `mul_mat_qX_K_q8_2_X4_T`, edits limited to the Q4_K/Q5_K-private dequantizer, its private scale-unpack helper, or that Q4_K/Q5_K-only template body. `x86 quants.c` is **not admitted** (shared by both arms).
+- **Gate for Q4_K/Q5_K dot route**: native `MUL_MAT` + `MUL_MAT_ID` suite, plus independent scalar `MUL_MAT`, `MUL_MAT_ID`, and fused up-gate comparisons for **both** Q4_K and Q5_K across activation widths 1–8. Each fused case needs a trusted hit on the matching template specialization in the candidate CPU DSO.
+- **Profile (exact, from `perf report` on `measurement-record.data`)**: DSO `libggml-cpu.so` 53.30%, `libgomp.so` 45.88%. Symbols: libgomp `[unknown]` ≈45.88% (dead); **`mul_mat_qX_K_q8_2_X4_T<DequantizerQ4K_AVX2,1>` 19.28%**, `<…,2>` 3.93%, `<…,3>` 2.14% → **Q4_K family = 25.35%** (the #2 family, exactly the admitted target); `tinyBLAS_Q0_AVX<block_q8_0>::gemm4xN<3>` 16.80% + `<2>` 2.60% (dense Q8, **not admitted**); `ggml_compute_forward_flash_attn_ext` 1.71%; `ggml_gemv_mxfp4_8x8_q8_0` 0.82%; `ggml_vec_dot_f16` 1.20%; `dsv4_hc_post` 0.41%. Counters: `instructions:u` 3.128e12, `cache-references:u` 114.68e9, `cache-misses:u` 12.69e9 (**11.06% miss**), task-clock 1239.49 core-sec, **IPC ≈0.68** (memory-bound). Total user-cycle claim 4.818e12.
+- **HAVE_FANCY_SIMD status (unresolved contradiction)**: it is **never `#define`d in the source tree** (grep across all `.h/.c/.cpp/.txt/.cmake` finds only `#ifdef` usage in the two iqk gemm `.cpp` files; no compile-flag confirmation found — `flags.make` grep returned nothing). The profiled dequantizer is `DequantizerQ4K_AVX2`, but the template's inner loop is gated on the `HAVE_FANCY_SIMD` macro, not the dequantizer name. **Prior actor's disassembly cited `vpdpbusd`**, which would imply the `dpbusd` (VNNI) path *is* active — conflicting with the "no `#define`" finding. **Must confirm the active SIMD path by disassembling the measured DSO symbol before committing to a mechanism.**
+- **Template / helper facts**: `mul_mat_qX_K_q8_2_X4_T` is at `iqk_gemm_kquants.cpp:795` and is instantiated **only** for `DequantizerQ4K_AVX2`/`DequantizerQ5K_AVX2` (via `IQK_SET_MUL_MAT_FUNCTIONS_T` at lines 2713/2717) → a true Q4_K/Q5_K-only body, freely editable. `make_q4_scales` is at `iqk_common.h:186` and is **shared by many kernels** (lines 2227, 2292, 2819, 2830, 4202, 4276) → editing it is out-of-bounds/risky. `Q8<nrc_y, block_q8_2_x4>` at `iqk_common.h:315`; `DataInfo` at `iqk_common.h:102` (has `row_mapping` for MoE). `k_x_step=64` in `iqk_mul_mat.cpp`. Dispatch: `iqk_mul_mat_4d` (`iqk_mul_mat.cpp:705`), `iqk_mul_mat_moe` for MoE.
+- **Operand/byte facts**: x = Q4_K (dequantized) = **weights** (0.5625 B/elem; block_q4_K = qs[128]+scales[12]+d,dmin = 144 B/256 el); y = Q8_2_X4 = **activations** (~1.06–1.125 B/elem; block_q8_2_x4 = qs[128]+d[8×fp16] = 144 B/128 el). Both streams are sequential 144 B strides (100% line utilization). For MoE decode the Q4_K weights are streamed once per token (byte-optimal); the Q4_K gemm is attributed to the **DSpark drafter** (Q4_K-quantized small model), which runs many times per target token — it is **not** in the 86.3 ms main-model table.
+- **HYPOTHESES.md (rev2)** main-model table (86.3 ms/token, 11.588 t/s): dense Q8_0 8.031 GB @176.3 GB/s = **80.1%** of 220 GB/s; expert MXFP4 4.778 GB @199.2 GB/s = **90.5%**; lm_head Q8_0 0.703 GB @431 GB/s. The "prefetch/placement/page-size is dead" verdict is **scoped to this main-model dense/experts** and does **not** cover the drafter Q4_K path (its streaming efficiency is unmeasured).
+- **Operator "dead" levers**: streaming efficiency (main model only), thread count flat 24→96, barrier/sync/idle-spin, NUMA thread policy. "The lever is bytes."
+- **Scope**: half-screen (cores 0–47 of 96), non-promotable, both A/B arms share listed threads/affinity (source-only, not a runtime treatment); retention requires full-target confirmation. Must clear the enforced noise floor.
+- **Prior near-duplicate**: state-run5 actor proposed `akm-q4k-q82x4-zmm-scale-apply` — replace the 256-bit inner formulation with the 512-bit/ZMM scale-apply path (fold scale unpack into ZMM shuffles). **My hypothesis must not duplicate this.**
+
+## Work State
+### Completed
+- Confirmed worktree `ebb68dc55` (branch `experimental/deepseek41-port-20260923`); target file present.
+- Read `iqk_gemm_kquants.cpp` (4841 lines) through the template, dequantizers, dispatch, and the `HAVE_FANCY_SIMD` guards.
+- Established `mul_mat_qX_K_q8_2_X4_T` is Q4_K/Q5_K-only; `make_q4_scales` is shared (out of bounds); located `Q8`/`DataInfo`/`k_x_step`/dispatch.
+- Ran `perf report` on the raw perf data → exact symbol + DSO + counter breakdown (above).
+- Read `HYPOTHESES.md` (rev2) → main-model dense/experts streaming numbers; determined Q4_K gemm = drafter path, unmeasured for bandwidth.
+- Located and read a prior actor's `akm-q4k-q82x4-zmm-scale-apply` proposal (dup-avoidance constraint).
+
+### Active
+- Resolving the **active-SIMD-path uncertainty**: `HAVE_FANCY_SIMD` is not `#define`d in source, yet the prior actor's disassembly cites `vpdpbusd`. Need to disassemble the measured `libggml-cpu.so` symbol to confirm whether the inner loop uses `vpmaddubs` (AVX2 fallback) or `vpdpbusd` (VNNI) before choosing a mechanism.
+- Selecting the single non-duplicate, in-bounds, numerics-preserving mechanism (leading candidate: software prefetch of the Q4_K weight stream in the template body to hide DRAM latency on the drafter path — distinct from the prior ZMM-scale-apply proposal; alternative: vectorize the per-block scalar scale/min/d/dmin tail into the Q4_K-private dequantizer, keeping the integer dot bit-identical).
+
+### Blocked
+- Cannot finalize the exact mechanism wording until the active SIMD path (HAVE_FANCY_SIMD define-vs-not) is confirmed by DSO disassembly.
+- Tension: operator marked "prefetch/placement dead," but that verdict was scoped to the main-model dense/experts, not the drafter Q4_K path — need to state this scoping explicitly in the falsifier.
+- Risk of duplicating the prior `akm-q4k-q82x4-zmm-scale-apply` proposal if I go the scale-apply route.
+
+## Next Move
+1. Disassemble the measured symbol `mul_mat_qX_K_q8_2_X4_T<DequantizerQ4K_AVX2,1>` from `/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/libggml-cpu.so.0.16.0` (`objdump -d --disassemble=<sym>` or `perf annotate`) to confirm whether the hot loop uses `vpmaddubs` (AVX2) or `vpdpbusd` (VNNI), i.e. whether `HAVE_FANCY_SIMD` is actually active in this build.
+2. Emit the single JSON hypothesis (leading: software-prefetch the Q4_K weight stream in the Q4_K/Q5_K-only template body to hide DRAM latency on the drafter Q4_K path — numerics-identical, gate-testable, distinct from the prior ZMM-scale-apply proposal), with a falsifier that requires the native + scalar MUL_MAT/MUL_MAT_ID/fused-up-gate gate to pass AND a half-screen improvement that clears the noise floor (with full-target confirmation required for keep).
+
+## Relevant Files
+- `/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run7/targets/71f54ec472e002dfdf65f9d57481afc674084ac8168addfd5197c63dafd11ce0/workers/lane0/ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp`: target source; `mul_mat_qX_K_q8_2_X4_T` (line 795), `DequantizerQ4K_AVX2`/`Q5K_AVX2`, dispatch (2713/2717), `HAVE_FANCY_SIMD` guards.
+- `ggml/src/ggml-cpu/iqk/iqk_common.h`: `make_q4_scales` (line 186, shared — out of bounds), `Q8` (315), `DataInfo` (102).
+- `ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp`: `mul_mat_NxM` (82), `k_x_step=64`, `iqk_mul_mat_4d` (705), `iqk_mul_mat_moe` (dispatch/tile structure).
+- `/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/bin/libggml-cpu.so.0.16.0`: measured DSO; must disassemble the target symbol to confirm active SIMD path.
+- `/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store/cpu-profiles/d54c9626...-...json`: original CPU profile claim record (value 4.818e12 user cycles).
+- `/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store/cpu-profiles/cpu-raw-0316509f63689b3b45cd55ee15cc90a0/measurement-record.data`: raw perf data used for the `perf report` symbol breakdown.
+- `/mnt/raid0/llm/tmp/ds41-hypotheses/HYPOTHESES.md`: operator rev2 ranking + main-model bandwidth table (source of the "dead" scoping).
+- `/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run5/targets/b60bc314.../workers/actor-replies/20260924T060346-...stdout`: prior `akm-q4k-q82x4-zmm-scale-apply` proposal (dup-avoidance).
+- `/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/inputs/ds41-decode.prompt-manifest.json`: frozen request manifest.
+The previous request exceeded the provider's size limit due to large media attachments. The conversation was compacted and media files were removed from context. If the user was asking about attached images or files, explain that the attachments were too large to process and suggest they try again with smaller or fewer files.
+
+Continue if you have next steps, or stop and ask for clarification if you are unsure how to proceed.
+The active path is the VNNI `vpdpbusd` path (HAVE_FANCY_SIMD IS defined here, via compile flag), and there are **no prefetch instructions**. Let me inspect the hot loop structure.
+Let me get per-instruction cycle attribution from perf to distinguish memory-latency stalls from dequant-ALU cost.
+perf report works but annotate is failing on this data format. I have enough ground truth. Let me re-read the template body and dequantizer to confirm loop structure for the mechanism.
+I now have the decisive ground truth. Confirmed:
+- **Active path is the `HAVE_FANCY_SIMD` 256-bit VNNI branch** (`_mm256_dpbusd_epi32`, 14 `vpdpbusd` in the disasm, no `maddubs`) — so HAVE_FANCY_SIMD *is* defined here via compile flag (resolving the earlier contradiction).
+- **Zero prefetch instructions** in the compiled function; the weight stream (`deq.x[i]`, 144-byte `block_q4_K`) is loaded back-to-back in the `for i in nb` loop with no lookahead.
+- Kernel is memory-latency bound (IPC ~0.7, 11.06% cache-miss) and the Q4_K gemm family is 25.35% of user cycles (drafter path, not in the main-model 86.3 ms table).
+- The template (`template <typename Dequantizer, int nrc_y>`, line 794) has **only** Q4K_AVX2/Q5K_AVX2 specializations in the DSO → editing its inner loop is Q4_K/Q5_K-private (in bounds).
+- Prior actor's `akm-q4k-q82x4-zmm-scale-apply` already took the ALU/scale-apply (512-bit ZMM) axis; my mechanism must differ.
+
+Emitting the single hypothesis on the complementary memory-latency axis:
+
+{"mechanism_id":"akm-q4k-q82x4-weight-prefetch","statement":"In the Q4_K/Q5_K-only template mul_mat_qX_K_q8_2_X4_T (ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp:795), the per-K-block weight stream deq.x[i] (a 144-byte block_q4_K: 128B qs + 12B scales + d/dmin tail) is read back-to-back in the `for i in nb` loop with no lookahead, and the compiled symbol contains zero prefetch instructions (verified by disassembling the measured DSO). The profile shows this kernel is memory-latency bound (IPC ~0.7, 11.06% cache-miss of 114.7G refs) and its Q4K_AVX2 <1>/<2>/<3> specializations sum to 25.35% of user cycles on the DSpark drafter path (which is NOT in the main-model 86.3 ms dense/experts table). Add a software prefetch of the upcoming weight block(s) - __builtin_prefetch of deq.x[i+L] with L=1..2, targeting the 128B qs region plus the 16B scale/d/dmin tail - issued a few i-iterations ahead inside the `for i in nb` loop (optionally also the matching y activation block), so DRAM latency of the next block_q4_K overlaps the current block's dequant (deq.prepare) + vpdpbusd + scale-apply work. This is numerics-identical (prefetch is a pure hint, cannot change results) and is confined to the Q4_K/Q5_K-only template body.","falsifier":"Falsified if (a) the native MUL_MAT + MUL_MAT_ID suite and the independent scalar MUL_MAT / MUL_MAT_ID / fused-up-gate comparisons for BOTH Q4_K and Q5_K across activation widths 1-8 do NOT all pass (prefetch must not change numerics), OR (b) the half-screen A/B (candidate vs baseline on the same 48-thread half) yields no decode tokens/s improvement that clears the enforced noise floor (retention would still require full-target confirmation). Explicit scoping: the operator's 'prefetch/placement/page-size is dead' verdict was measured on the main-model dense-Q8 and expert-MXFP4 streams (80.1% and 90.5% of the 220 GB/s ceiling in HYPOTHESES rev2); the drafter Q4_K iqk X4 gemm is a different, separately-profiled path whose streaming efficiency was never measured, so a null result here specifically falsifies software prefetch on THIS path and does not contradict the prior dead-lever note.","target_surface":"ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp :: mul_mat_qX_K_q8_2_X4_T (template <typename Dequantizer, int nrc_y>, Q4_K/Q5_K-only body; inner `for i in nb` K-block loop, lines ~814-869)","target_symbol":"mul_mat_qX_K_q8_2_X4_T<(anonymous namespace)::DequantizerQ4K_AVX2, 1>"}
