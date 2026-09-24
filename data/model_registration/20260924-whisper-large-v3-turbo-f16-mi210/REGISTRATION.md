@@ -45,7 +45,7 @@ mel window internally, so the resident footprint is measured live rather than de
 per-token formula. Measured 2026-09-22 from `/sys/class/kfd/kfd/proc/<pid>/vram_57300`, sampled
 **during** the running serving stack: `2,210,533,376 B = 2.06 GiB`. Source:
 `artifacts/operator/lineup-change-20260922.md` ("Live per-process VRAM ... whisper-server ...
-2.06 GiB"). This is the figure the capacity-gate visibility fix (S-13) consumes — see
+2.06 GiB"). This is the figure the capacity-gate visibility fix (INF-41, prepared on noninf/inf41-speech, NOT landed) will consume — see
 `epyc-orchestrator` `orchestration/launch_manifest.yaml` `aux_services.whisper.vram_gib` and
 `scripts/server/stack_manifest.py` `serving_shape_capacity_report()`.
 

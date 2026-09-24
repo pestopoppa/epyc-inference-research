@@ -14,5 +14,5 @@ No -c-shaped KV growth axis applies to this model: qwentts.cpp is an aux_service
 role_launch_meta/NUMA_CONFIG llama-server role, and carries no n_ctx or
 kv_kib_per_token_f16 in stack_manifest.py's KV formula (kv_gib_for() is never called for
 this role). The capacity fact for this registration is the static resident figure above,
-consumed directly as headroom by stack_manifest.aux_gpu_reserved_gib() (INF-41 S-11/S-12
+to be consumed as headroom by stack_manifest.aux_gpu_reserved_gib() once the PREPARED, not-yet-landed orchestrator fix lands (INF-41 S-11/S-12
 capacity-gate fix, epyc-orchestrator scripts/server/stack_manifest.py).

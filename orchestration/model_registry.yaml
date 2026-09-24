@@ -1268,16 +1268,17 @@ server_mode:
     # GPU BUDGET NOTE — this row and server_mode.architect_general share ONE MI210, and they
     # STILL DO after 2026-09-22. The full post-change arithmetic lives in ONE place:
     # server_mode.architect_general.serving_shape. Summary: 63.98 usable - 4.68 (whisper.cpp +
-    # Qwen3-TTS, live-measured — REGISTERED and gate-visible since 2026-09-24, INF-41 S-11/S-12)
+    # Qwen3-TTS, live-measured — REGISTERED 2026-09-24 (INF-41 S-11/S-12); still INVISIBLE to the gate)
     # - 27.33 (27B weights) - 19.26 (this row's weights) = 12.71 GiB for both KV caches;
     # 6.38 (27B @196608 q8_0) + 3.19 (this row @65536 q8_0) = 9.56 used, 3.15 free.
     # ⚠ The 2026-08 "62.59 of 63.98, headroom 1.40" four-model steady-state figure that used to
     # be quoted here is SUPERSEDED as a budget statement — it was taken with the 27B at -c 65536
     # and is not the post-change shape. It is NOT superseded as a warning: VRAM grows on first
-    # EXECUTION, not at load. `voice_server` (L947) and `tts` are now registered rows with
-    # declared `vram_gib`, folded into the gate via
-    # epyc-orchestrator stack_manifest.aux_gpu_reserved_gib() (INF-41 S-11/S-12, 2026-09-24) —
-    # a VRAM check derived from this file no longer undercounts them. Still sample the card
+    # EXECUTION, not at load. `voice_server` and `tts_server` are now registered rows with
+    # declared `vram_gib`, but the capacity gate does NOT read them yet: the orchestrator fold
+    # (`stack_manifest.aux_gpu_reserved_gib()`, branch noninf/inf41-speech) is PREPARED, NOT
+    # LANDED — it awaits a stack-change signature and a fresh contention matrix. Until it lands,
+    # a VRAM check derived from the gate still undercounts by 4.68 GiB. Still sample the card
     # DURING the first post-cutover load: the gate is arithmetic on DECLARED figures, not a
     # live measurement, and the unresolved 3.71 GiB reconciliation gap noted below this block
     # is a separate, still-open question.
@@ -1355,20 +1356,18 @@ server_mode:
       # (Note also q8_0 = 0.53125 of f16, NOT 0.5: a q8_0 block is 34 B per 32 elements.
       # 64.0 x 0.53125 = 34.0, which is exactly what the server reports above.)
       #
-      # ⚠ THE CAPACITY GATE WAS BLIND TO 4.68 GiB OF LIVE VRAM — CLOSED 2026-09-24
-      # (INF-41 S-11/S-12). `stack_manifest.validate_serving_shape_capacity()` used to sum
+      # ⚠ THE CAPACITY GATE IS BLIND TO 4.68 GiB OF LIVE VRAM — fix PREPARED 2026-09-24, NOT
+      # LANDED (INF-41). `stack_manifest.validate_serving_shape_capacity()` sums
       # only the `vram_non_kv_gib` figures declared in THIS file, and whisper.cpp/Qwen3-TTS
       # are aux_services, not `server_mode` roles, so neither could ever appear there.
       # MEASURED 2026-09-22 from /sys/class/kfd/kfd/proc/<pid>/vram_57300, sampled DURING
       # the live serving stack: whisper 2,210,533,376 B = 2.06 GiB, qwentts
       # 2,815,950,848 B = 2.62 GiB, total 4.68 GiB. Registered as `server_mode.voice_server`
-      # (S-12) and `server_mode.tts` (S-11) in this file, and as
-      # `AuxService.vram_gib` on epyc-orchestrator's `whisper`/`tts` aux_services entries
-      # (orchestration/launch_manifest.yaml), folded into the GPU headroom by
-      # `stack_manifest.aux_gpu_reserved_gib()` / `serving_shape_capacity_report()`. A gate
-      # PASS is therefore now evidence a lineup fits INCLUDING these two always-on speech
-      # services; the arithmetic below (the operator's manual pre-adjustment) predates and
-      # matches that fix.
+      # (S-12) and `server_mode.tts_server` (S-11) in this file. The PREPARED orchestrator fix
+      # adds `AuxService.vram_gib` to the `whisper`/`tts` aux_services entries and folds them into
+      # GPU headroom via `stack_manifest.aux_gpu_reserved_gib()` (margin 5.85 -> 1.17 GiB for the
+      # 2026-09-22 lineup); until it lands, a gate PASS is NOT on its own evidence that a lineup
+      # fits — the arithmetic below (the operator's manual pre-adjustment) is.
       #
       # ── THE OPERATOR'S 2026-09-22 ALLOCATION, AND THE ARITHMETIC IT SATISFIES ──────
       # BOTH GPU ROLES STAY ON THE CARD. worker_vision was NOT migrated to CPU; that move
@@ -1965,9 +1964,9 @@ server_mode:
   #                  its fixed 30s mel window, not `-c`); the only capacity fact is the resident
   #                  weight footprint. Measured 2026-09-22 from live /sys/class/kfd/kfd/proc/<pid>/
   #                  vram_57300 DURING the serving stack: 2,210,533,376 B = 2.06 GiB. See the capacity
-  #                  gate note at server_mode.architect_general.serving_shape and the orchestrator-side
-  #                  fix at epyc-orchestrator scripts/server/stack_manifest.py
-  #                  (AUX_SERVICES[...].vram_gib, INF-41 S-11/S-12).
+  #                  gate note at server_mode.architect_general.serving_shape and the PREPARED (not
+  #                  landed) orchestrator-side fix at epyc-orchestrator scripts/server/stack_manifest.py
+  #                  (AUX_SERVICES[...].vram_gib, INF-41, branch noninf/inf41-speech).
   #   2 Recipe       PASS, spec-dec N/A — `acceleration.type: none`; this is not a speculative-decoding
   #                  role (R1-CHK's `type: none` carve-out applies).
   #   3 Anchor       N/A, reason: no tok/s-shaped metric exists for this role. The MRG-1 anchor gate is

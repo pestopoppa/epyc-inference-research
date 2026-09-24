@@ -15,5 +15,5 @@ mel window internally, so context does not scale its resident footprint the way 
 attention-KV llama-server role. whisper.cpp is an aux_service, not a role_launch_meta/
 NUMA_CONFIG llama-server role, and carries no n_ctx or kv_kib_per_token_f16 in
 stack_manifest.py's KV formula. The capacity fact for this registration is the static
-resident figure above, consumed directly as headroom by stack_manifest.aux_gpu_reserved_gib()
+resident figure above, to be consumed as headroom by stack_manifest.aux_gpu_reserved_gib() once the PREPARED, not-yet-landed orchestrator fix lands
 (INF-41 S-11/S-12 capacity-gate fix, epyc-orchestrator scripts/server/stack_manifest.py).

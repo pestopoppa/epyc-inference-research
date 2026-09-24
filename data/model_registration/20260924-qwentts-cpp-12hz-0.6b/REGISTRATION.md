@@ -69,7 +69,7 @@ measured live rather than derived from a per-token KV formula. Measured 2026-09-
 `/sys/class/kfd/kfd/proc/<pid>/vram_57300`, sampled **during** the running serving stack:
 `2,815,950,848 B = 2.62 GiB`. Source: `artifacts/operator/lineup-change-20260922.md`
 ("Live per-process VRAM ... tts-server (Qwen3-TTS) ... 2.62 GiB"). This is the figure the
-capacity-gate visibility fix (S-13) consumes — see `epyc-orchestrator`
+capacity-gate visibility fix (INF-41, prepared on noninf/inf41-speech, NOT landed) will consume — see `epyc-orchestrator`
 `orchestration/launch_manifest.yaml` `aux_services.tts.vram_gib` and
 `scripts/server/stack_manifest.py` `serving_shape_capacity_report()`.
 
