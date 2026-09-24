@@ -552,3 +552,16 @@ class RawReplyPersistenceAndStreamFallback(unittest.TestCase):
                 with self.assertRaises(actors.ProviderTransient):
                     actors._run_agent("p", workspace=ws, backend=actors.backend_for("prov/model", "high"))
             self.assertTrue(any(p.name.endswith("-rc3.stderr") for p in (ws.parent / actors.ACTOR_REPLY_DIR).iterdir()))
+
+
+    def test_timeout_persists_the_partial_output(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp) / "workers" / "lane0"; ws.mkdir(parents=True)
+            exc = subprocess.TimeoutExpired(cmd=["x"], timeout=1, output=b"half a patch", stderr=b"chrome")
+            with mock.patch.object(actors.subprocess, "run", side_effect=exc):
+                with self.assertRaises(actors.ProviderTransient):
+                    actors._run_agent("p", workspace=ws, backend=actors.backend_for("prov/model", "high"))
+            files = sorted((ws.parent / actors.ACTOR_REPLY_DIR).iterdir())
+            self.assertTrue(any(f.name.endswith("-rc-1.stdout") for f in files))
+            self.assertIn("half a patch", [f.read_text() for f in files if f.suffix == ".stdout"][0])

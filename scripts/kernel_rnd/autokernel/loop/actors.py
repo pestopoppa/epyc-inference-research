@@ -158,7 +158,12 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
                               cwd=str(workspace))
     except subprocess.TimeoutExpired as exc:
         # A hung container held a turn forever in v27; a bounded invocation is a
-        # transient, not a terminal fault.
+        # transient, not a terminal fault. Keep whatever it had written: a 2-hour
+        # authoring call that dies at the budget is only diagnosable from its
+        # partial output (DS41 2026-09-24 08:05, nothing on disk).
+        _persist_reply(workspace, backend, subprocess.CompletedProcess(
+            args=argv, returncode=-1,
+            stdout=_text_of(exc.stdout), stderr=_text_of(exc.stderr)))
         raise ProviderTransient(f"actor exceeded {timeout_s}s") from exc
     _persist_reply(workspace, backend, done)
     if done.returncode != 0:
@@ -196,6 +201,12 @@ def _persist_reply(workspace: Path, backend: Backend, done: subprocess.Completed
         (target / f"{stem}.stderr").write_text(done.stderr[-ACTOR_REPLY_KEEP_BYTES:], encoding="utf-8")
     except OSError:
         pass  # a reply record is evidence, never a reason to fail the actor call
+
+
+def _text_of(value) -> str:
+    if value is None:
+        return ""
+    return value.decode("utf-8", "replace") if isinstance(value, bytes) else str(value)
 
 
 def _first_json_or_none(text: str):
