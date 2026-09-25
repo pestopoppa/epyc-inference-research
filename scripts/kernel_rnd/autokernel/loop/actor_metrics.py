@@ -394,6 +394,34 @@ def _summary(rows: list[Mapping[str, Any]]) -> dict[str, Any]:
         "salvaged": sum(1 for r in rows if r.get("salvaged") is True),
         "metrics_errors": sum(1 for r in rows if r.get("metrics_error")),
         "store_errors": sum(1 for r in rows if r.get("failure_class") == OPENCODE_STORE_ERROR),
+        **_scout_summary(rows),
+    }
+
+
+def _scout_summary(rows: list[Mapping[str, Any]]) -> dict[str, Any]:
+    """INF-78 OAB-8: orchestrator-run scouts behind these calls (`orchestrator.scouts`).
+    Empty when no row asked for scouts, so pre-OAB-8 summaries are unchanged."""
+    echoes = [r["orchestrator"]["scouts"] for r in rows
+              if isinstance(r.get("orchestrator"), Mapping)
+              and isinstance(r["orchestrator"].get("scouts"), Mapping)]
+    if not echoes:
+        return {}
+    served = [e for e in echoes if e.get("server")]
+
+    def nums(key: str) -> list[float]:
+        return [float(e[key]) for e in served
+                if isinstance(e.get(key), (int, float)) and not isinstance(e.get(key), bool)]
+
+    return {
+        "scout_calls": len(echoes),
+        "scout_calls_unserved": len(echoes) - len(served),
+        "scouts_launched_total": sum(nums("launched")),
+        "scouts_completed_total": sum(nums("completed")),
+        "scouts_failed_total": sum(nums("failed")),
+        "scouts_wall_s_median": _median(nums("wall_s")),
+        "scouts_max_inflight_calls_max": max(nums("max_inflight_calls"), default=None),
+        "scouts_decoded_tokens_total": sum(nums("completion_tokens")),
+        "scouts_prompt_tokens_total": sum(nums("prompt_tokens")),
     }
 
 

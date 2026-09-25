@@ -1378,6 +1378,10 @@ if prov and spec.get("sidecar") is not None:
     record = dict(spec["sidecar"])
     record["request"] = dict(record.get("request") or {}, prompt_chars=len(prompt),
                              read_only="--read-only" in args, schema=opt("--schema"))
+    if opt("--scout-targets"):   # OAB-8: echo what the real CLI records
+        targets = json.load(open(opt("--scout-targets")))["targets"]
+        record["request"]["scouts"] = {"targets": len(targets), "max": int(opt("--scouts-max"))}
+        record["request"]["scout_targets_sent"] = targets
     open(prov, "w").write(json.dumps(record))
 sys.stdout.write(spec.get("stdout", ""))
 sys.stderr.write(spec.get("stderr", ""))
@@ -1619,3 +1623,148 @@ class OrchestratorBackendKind(unittest.TestCase):
         self.assertEqual((planner["calls"], planner["steps_total"], planner["tool_calls_total"],
                           planner["decoded_tokens_total"], planner["compactions_total"]),
                          (1, 23.0, 25.0, 57702.0, 1.0))
+
+    # ---------------------------------------------------------------- OAB-8 scouts
+
+    _PROFILE = {"target": {"recipe": {"backend": "cpu"}},
+                "cpu_profile": {"status": "observed", "hotspots": [
+                    {"dso": "libggml-cpu.so", "symbol": "ggml_vec_dot_q4_K_q8_K", "period": 9,
+                     "sampled_period_fraction": 0.41},
+                    {"dso": "libc.so.6", "symbol": "__memmove_avx_unaligned_erms", "period": 5,
+                     "sampled_period_fraction": 0.20},
+                    {"dso": "libggml-cpu.so", "symbol": "[unknown]", "period": 4,
+                     "sampled_period_fraction": 0.10},
+                    {"dso": "libggml-cpu.so", "symbol": "ggml_compute_forward_mul_mat", "period": 3,
+                     "sampled_period_fraction": 0.12},
+                    {"dso": "libggml-base.so", "symbol": "ggml_graph_compute_thread", "period": 2,
+                     "sampled_period_fraction": 0.05},
+                    {"dso": "libggml-cpu.so", "symbol": "tiny", "period": 1,
+                     "sampled_period_fraction": 0.004},
+                    {"dso": "[kernel.kallsyms]", "symbol": "clear_page_erms", "period": 1,
+                     "sampled_period_fraction": 0.09}]}}
+
+    def test_scouts_default_off_leaves_backend_and_argv_unchanged(self):
+        from autokernel.loop import actor_orchestrator as orch
+        with mock.patch.dict("os.environ", {}, clear=False) as env:
+            env.pop(orch.SCOUTS_ENV, None)
+            b = actors.backend_for("orch:auto", "high")
+        self.assertEqual(b.scouts_max, 0)
+        planner = actors.AgentPlanner(workspace=self.ws, backend=b)
+        self.assertIs(planner._seated("planner", self._PROFILE)[0], b,
+                      "default off: the very same backend object")
+        self.assertNotIn("--scout-targets", b.argv("P", self.ws, schema=actors.HYPOTHESIS_SCHEMA))
+
+    def test_scout_targets_come_from_the_profile_table(self):
+        from autokernel.loop import actor_orchestrator as orch
+        targets = orch.derive_scout_targets(self._PROFILE, 8)
+        self.assertEqual([t["symbol"] for t in targets],
+                         ["ggml_vec_dot_q4_K_q8_K", "ggml_compute_forward_mul_mat",
+                          "ggml_graph_compute_thread"],
+                         "system DSOs, [unknown] and <2% shares are not scouted; highest first")
+        self.assertEqual(targets[0], {"symbol": "ggml_vec_dot_q4_K_q8_K", "share": 0.41,
+                                      "label": "hotspot #1", "dso": "libggml-cpu.so"})
+        self.assertEqual(len(orch.derive_scout_targets(self._PROFILE, 2)), 2)
+        self.assertEqual(orch.derive_scout_targets(self._PROFILE, 0), [])
+        gpu = {"kernel_hotspots": [{"signature": "mul_mat_vec_q<4>", "share_of_device_time": 0.3},
+                                   {"signature": "rms_norm_f32", "share_of_device_time": 0.01}]}
+        self.assertEqual([t["symbol"] for t in orch.derive_scout_targets(gpu, 4)], ["mul_mat_vec_q<4>"])
+        self.assertEqual(orch.derive_scout_targets({}, 4), [])
+
+    def test_env_enables_scouts_for_the_planner_call_only(self):
+        from autokernel.loop import actor_orchestrator as orch
+        with mock.patch.dict("os.environ", {orch.SCOUTS_ENV: "2", orch.SCOUT_ROLE_ENV: "architect_general"}):
+            b = actors.backend_for("orch:auto", "high")
+        self.assertEqual((b.scouts_max, b.scout_role), (2, "architect_general"))
+        planner = actors.AgentPlanner(workspace=self.ws, backend=b)
+        seated, env = planner._seated("planner", self._PROFILE)
+        self.assertIsNone(env)
+        argv = seated.argv("P", self.ws, schema=actors.HYPOTHESIS_SCHEMA)
+        path = Path(argv[argv.index("--scout-targets") + 1])
+        self.assertEqual(path.parent, self.ws.parent / "actor-orchestrator")
+        self.assertEqual([t["symbol"] for t in json.loads(path.read_text())["targets"]],
+                         ["ggml_vec_dot_q4_K_q8_K", "ggml_compute_forward_mul_mat"])
+        self.assertEqual(argv[argv.index("--scouts-max") + 1], "2")
+        self.assertEqual(argv[argv.index("--scout-role") + 1], "architect_general")
+        for role in ("author", "critic"):
+            self.assertIs(planner._seated(role, self._PROFILE)[0], b, f"no scouts for the {role}")
+        # a context without a profile sends no targets even when scouts are on
+        bare = planner._seated("planner", {})[0]
+        self.assertNotIn("--scout-targets", bare.argv("P", self.ws, schema=actors.HYPOTHESIS_SCHEMA))
+        with mock.patch.dict("os.environ", {orch.SCOUTS_ENV: "many"}):
+            with self.assertRaises(ValueError):
+                actors.backend_for("orch:auto", "high")
+
+    def test_propose_sends_one_request_with_targets_and_records_scout_metrics(self):
+        import dataclasses
+        from autokernel.loop import actor_metrics
+        scouts_echo = {
+            "schema": "epyc.orchestrator.scouts.v1", "role": "architect_general",
+            "url": "http://127.0.0.1:8083", "transport": "direct_chat_completions",
+            "requested": 2, "launched": 2, "completed": 1, "failed": 1, "skipped": 0,
+            "max_concurrency": 2, "max_inflight_calls": 2, "wall_s": 61.5,
+            "prompt_tokens": 9000, "completion_tokens": 1400, "turns": 9, "block_chars": 3100,
+            "budget_s": 240.0, "error": None,
+            "cap": {"cap": 2, "total_slots": 4, "busy": 1, "free": 3, "reserve": 1,
+                    "source": "live_slots", "url": "http://127.0.0.1:8083"},
+            "scouts": [
+                {"index": 0, "status": "ok", "wall_s": 61.0, "started_s": 0.1, "ended_s": 61.1,
+                 "turns": 6, "prompt_tokens": 6000, "completion_tokens": 900, "reads": 5,
+                 "denied_reads": 0, "tool_output_chars": 30000, "summary_chars": 2400,
+                 "summary_preview": "x", "summary_sha256": "ab" * 32, "evidence_refs": 4,
+                 "target": {"symbol": "ggml_vec_dot_q4_K_q8_K", "share": 0.41, "label": "hotspot #1",
+                            "dso": "libggml-cpu.so", "file": None}},
+                {"index": 1, "status": "timeout", "wall_s": 60.0, "turns": 3,
+                 "prompt_tokens": 3000, "completion_tokens": 500, "reads": 2,
+                 "target": {"symbol": "ggml_compute_forward_mul_mat", "share": 0.12}}]}
+        b = self._fake(stdout=json.dumps(_ORCH_HYP) + "\n",
+                       sidecar={"http_status": 200, "request": {"schema_sha256": "ab" * 32},
+                                "response": dict(_ORCH_RESPONSE, scouts=scouts_echo)})
+        b = dataclasses.replace(b, scouts_max=2)
+        planner = actors.AgentPlanner(workspace=self.ws, backend=b)
+        hypothesis = planner.propose(self._PROFILE)
+        self.assertEqual(hypothesis.mechanism_id, _ORCH_HYP["mechanism_id"])
+        (row,) = self._metrics()
+        orch = row["orchestrator"]
+        self.assertEqual(orch["request"]["scouts"], {"targets": 2, "max": 2})
+        sc = orch["scouts"]
+        self.assertEqual((sc["requested_by_loop"], sc["server"], sc["launched"], sc["completed"],
+                          sc["max_inflight_calls"], sc["wall_s"]), (2, True, 2, 1, 2, 61.5))
+        self.assertEqual(sc["cap"], {"cap": 2, "total_slots": 4, "busy": 1, "free": 3,
+                                     "reserve": 1, "source": "live_slots"})
+        self.assertEqual([s["status"] for s in sc["scouts"]], ["ok", "timeout"])
+        self.assertEqual(sc["scouts"][0]["target"]["label"], "hotspot #1")
+        self.assertNotIn("summary_preview", sc["scouts"][0], "the row carries sizes, not text")
+        # totals cover every session behind the call, scouts included (the seat's rule)
+        self.assertEqual(orch["totals"]["steps"], 23 + 9)
+        self.assertEqual(orch["totals"]["tool_calls"], 25 + 7)
+        self.assertEqual(orch["totals"]["decoded_tokens"], 57702 + 1400)
+        self.assertEqual(orch["server"]["tokens_generated"], 57702, "planner-only stays raw")
+        summary = actor_metrics.summarize(self.root)["roles"]["planner"]
+        self.assertEqual((summary["scout_calls"], summary["scouts_launched_total"],
+                          summary["scouts_completed_total"], summary["scouts_failed_total"],
+                          summary["scouts_max_inflight_calls_max"],
+                          summary["scouts_decoded_tokens_total"]),
+                         (1, 2.0, 1.0, 1.0, 2.0, 1400.0))
+
+    def test_a_pre_oab8_server_that_ignores_scouts_is_recorded_as_unserved(self):
+        import dataclasses
+        from autokernel.loop import actor_metrics
+        b = dataclasses.replace(self._fake(stdout=json.dumps(_ORCH_HYP),
+                                           sidecar={"http_status": 200, "response": _ORCH_RESPONSE}),
+                                scouts_max=3)
+        actors.AgentPlanner(workspace=self.ws, backend=b).propose(self._PROFILE)
+        (row,) = self._metrics()
+        self.assertEqual(row["orchestrator"]["scouts"], {"requested_by_loop": 3, "server": False})
+        self.assertEqual(row["orchestrator"]["totals"]["steps"], 23, "nothing folded")
+        summary = actor_metrics.summarize(self.root)["roles"]["planner"]
+        self.assertEqual((summary["scout_calls"], summary["scout_calls_unserved"]), (1, 1))
+
+    def test_no_scout_columns_when_no_call_asked_for_scouts(self):
+        from autokernel.loop import actor_metrics
+        b = self._fake(stdout=json.dumps(_ORCH_HYP), sidecar={"http_status": 200,
+                                                              "response": _ORCH_RESPONSE})
+        actors._run_agent("p", workspace=self.ws, backend=b, schema=actors.HYPOTHESIS_SCHEMA)
+        (row,) = self._metrics()
+        self.assertIsNone(row["orchestrator"]["scouts"])
+        self.assertNotIn("scout_calls", actor_metrics.summarize(self.root)["roles"]["planner"])
+
