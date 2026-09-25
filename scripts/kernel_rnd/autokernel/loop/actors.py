@@ -47,8 +47,13 @@ import tempfile
 import time
 from typing import Any, Callable, Mapping, Sequence
 
-from . import actor_metrics, integrity
+from . import actor_metrics, belief_context, integrity
 from .loop import Abstain, ActorStopped, ActorTransient, Hypothesis, Review
+
+#: `--actor-belief-context`: `on` adds the belief-kernel section to the planner prompt only
+#: when ingested claims apply to the exact target (never otherwise), and records a receipt.
+BELIEF_CONTEXT_MODES = ("off", "on")
+BELIEF_ENV = belief_context.ENV_KEY
 
 CODEX = "/usr/local/share/npm-global/bin/codex"
 CLAUDE = "/home/node/.local/bin/claude"
@@ -697,6 +702,13 @@ def _seat_provenance(env: Mapping[str, str] | None) -> dict[str, Any]:
     switches = sorted(key for key in env if key.startswith("OPENCODE_DISABLE_"))
     if switches:
         out["seat_env"] = {key: env[key] for key in switches}
+    if env.get(BELIEF_ENV):
+        # Which Vidya claims the planner prompt presented (and why none, when none): the
+        # presented half of `belief_context`'s receipt. Only with --actor-belief-context on.
+        try:
+            out["belief_context"] = json.loads(env[BELIEF_ENV])
+        except ValueError as exc:
+            out["belief_context"] = {"error": f"{type(exc).__name__}: {exc}"[:200]}
     return out
 
 
@@ -889,8 +901,15 @@ def _text_of(value) -> str:
 # saying "I propose". So repair is two constrained turns: (1) a boolean --
 # does the report EXPLICITLY decline? -- and (2) pure extraction, no abstain path.
 HYPOTHESIS_FIELDS = ("mechanism_id", "statement", "falsifier", "target_surface", "target_symbol")
+#: `relies_on_claims` is OPTIONAL and never required: the planner's explicit declaration of
+#: the Vidya claim ids (from the prompt's belief-kernel section) a hypothesis depends on.
+#: Without it in the closed schema, a reply that declared reliance would fail validation and
+#: be sent to a repair turn that drops it. Shown is not relied on: only this field counts,
+#: and `belief_context.reliance` keeps only ids the prompt actually presented.
 HYPOTHESIS_SCHEMA = {"type": "object",
-                     "properties": {name: {"type": "string"} for name in HYPOTHESIS_FIELDS},
+                     "properties": {**{name: {"type": "string"} for name in HYPOTHESIS_FIELDS},
+                                    "relies_on_claims": {"type": "array",
+                                                         "items": {"type": "string"}}},
                      "required": list(HYPOTHESIS_FIELDS), "additionalProperties": False}
 PATHS_SCHEMA = {"type": "object",
                 "properties": {"paths": {"type": "array", "items": {"type": "string"}}},
@@ -2138,9 +2157,53 @@ class AgentPlanner:
     #: The loop's stop predicate (STOP file or SIGTERM/SIGINT). When set, an in-flight
     #: actor is TERM'd on stop and never retried (DS41-C22).
     should_stop: Callable[[], bool] | None = None
+    #: `off` (the library default: the historical prompt, byte for byte, and no receipt) or
+    #: `on` (run.py's default): read the Vidya claims whose declared scope equals the
+    #: planner's exact target, add them only when some apply, and record a receipt per call.
+    belief_context: str = "off"
+    #: ROOT owning the ledger and the reader modules (default EPYC_ROOT_REPO or /workspace).
+    belief_root: Path | None = None
 
     def _stop_kw(self) -> dict[str, Any]:
         return {} if self.should_stop is None else {"should_stop": self.should_stop}
+
+    def _belief_evidence(self, context: Mapping[str, Any]) -> dict[str, Any] | None:
+        """None when off. Never raises and never exceeds the reader's 10 s deadline: a
+        failure is an `unavailable` receipt and no prompt section (logged only)."""
+        if self.belief_context != "on":
+            return None
+        try:
+            evidence = belief_context.planner_evidence(context, root=self.belief_root)
+        except Exception as exc:  # noqa: BLE001 -- belief context never fails a planner call
+            evidence = {"status": "unavailable", "reasons": ["reader_error"],
+                        "error": f"{type(exc).__name__}: {exc}"[:300], "claim_ids": [],
+                        "section": ""}
+        if evidence.get("status") == "unavailable":
+            import sys
+            print(f"actor belief context: unavailable ({', '.join(evidence.get('reasons') or [])}"
+                  f"{': ' + str(evidence['error']) if evidence.get('error') else ''}); "
+                  "the planner prompt carries no belief section", file=sys.stderr)
+        return evidence
+
+    def _belief_receipt(self, evidence: Mapping[str, Any] | None, prompt: str,
+                        env: Mapping[str, str] | None, outcome: Mapping[str, Any],
+                        declared: Any = None) -> dict[str, Any] | None:
+        """Seal and append the planner-evidence receipt; returns it (None when off)."""
+        if evidence is None:
+            return None
+        try:
+            relied = belief_context.reliance(declared, evidence.get("claim_ids") or ())
+            receipt = belief_context.seal_receipt(
+                evidence, knob=self.belief_context, prompt=prompt, workspace=self.workspace,
+                seat_arm=(env or {}).get(SEAT_ENV_ARM), outcome=outcome, relied=relied,
+                root=self.belief_root)
+            belief_context.write_receipt(Path(self.workspace).parent / ACTOR_REPLY_DIR, receipt)
+            return receipt
+        except Exception as exc:  # noqa: BLE001 -- evidence, never a reason to fail the call
+            import sys
+            print(f"actor belief receipt: not written ({type(exc).__name__}: {exc})",
+                  file=sys.stderr)
+            return None
 
     def _seated(self, role: str, context: Mapping[str, Any]) -> tuple[Backend, dict[str, str] | None]:
         """The backend and extra env for one call: a per-run opencode config when the
@@ -2259,9 +2322,40 @@ class AgentPlanner:
                 prompt += ("\nRuntime treatments here are observation-only diagnostics. "
                            "Their A/B result cannot select a recipe, keep a candidate, "
                            "or establish a causal explanation for a sampled hotspot.")
+        # Belief-kernel section: present only when ingested claims apply to this exact
+        # target (never for another model/backend), bounded and neutral; `off` adds nothing.
+        evidence = self._belief_evidence(context)
+        if evidence is not None and evidence.get("section"):
+            prompt += "\n\n" + evidence["section"]
         prompt = self._guarded("planner", prompt, context)
         backend, env = self._seated("planner", context)
         env = self._sealed(prompt, bundle, env)
+        if evidence is not None:
+            env = {**(env or {}), BELIEF_ENV: belief_context.metrics_summary(evidence)}
+        try:
+            result, declared = self._proposal_from_agent(prompt, backend, env, context)
+        except BaseException as exc:
+            self._belief_receipt(evidence, prompt, env, {
+                "kind": "error", "detail": f"{type(exc).__name__}: {exc}"[:300]})
+            raise
+        if isinstance(result, Abstain):
+            self._belief_receipt(evidence, prompt, env,
+                                 {"kind": "abstain", "abstain_reason": result.reason[:500]},
+                                 declared)
+            return result
+        receipt = self._belief_receipt(evidence, prompt, env,
+                                       {"kind": "hypothesis", "mechanism_id": result.mechanism_id},
+                                       declared)
+        if receipt is not None:
+            result = dataclasses.replace(
+                result, relies_on_claims=tuple(receipt["reliance"]["accepted"]),
+                belief_receipt_id=receipt["receipt_id"])
+        return result
+
+    def _proposal_from_agent(self, prompt: str, backend: Backend, env: dict[str, str] | None,
+                             context: Mapping[str, Any]) -> tuple[Hypothesis | Abstain, Any]:
+        """One planner call and its parsed reply, plus the reply's raw `relies_on_claims`
+        declaration (validated against the presented claims by the caller)."""
         raw, streak = _with_backoff(
             lambda: _run_agent(prompt, workspace=self.workspace,
                                timeout_s=self.timeout_s, backend=backend,
@@ -2269,18 +2363,20 @@ class AgentPlanner:
             should_stop=self.should_stop)
         self.transient_streak = streak
         body = _parse_reply(raw, schema=HYPOTHESIS_SCHEMA, backend=self.backend, workspace=self.workspace)
+        declared = body.get(belief_context.RELIANCE_FIELD) if isinstance(body, dict) else None
         abstention = _abstention(body)
         if abstention is not None:
-            return abstention
+            return abstention, declared
         if "runtime_treatment" in body and context.get("runtime_anchor") is None:
             preparation = context.get("runtime_preparation") or {}
             return Abstain("runtime treatment unavailable before authoring: "
-                + str(preparation.get("reason") or "no prospective runtime frame is installed"))
+                + str(preparation.get("reason") or "no prospective runtime frame is installed")), declared
         missing = {"mechanism_id", "statement", "falsifier", "target_surface",
                    "target_symbol"} - set(body)
         if missing:
             raise ProviderTransient(f"hypothesis is missing {sorted(missing)}")
-        echoed = sorted(key for key in body if _is_placeholder(body[key]))
+        echoed = sorted(key for key in body
+                        if key != belief_context.RELIANCE_FIELD and _is_placeholder(body[key]))
         if echoed:
             raise ProviderTransient(
                 f"hypothesis echoed the prompt template for {echoed}")
@@ -2291,7 +2387,7 @@ class AgentPlanner:
             target_symbol=str(body["target_symbol"]),
             runtime_pair=(_runtime_pair(body["runtime_treatment"], context,
                                         str(body["mechanism_id"]))
-                          if "runtime_treatment" in body else None))
+                          if "runtime_treatment" in body else None)), declared
 
     def author(self, hypothesis: Hypothesis,
                context: Mapping[str, Any]) -> tuple[str, ...] | Abstain:

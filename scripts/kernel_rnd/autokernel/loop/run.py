@@ -778,6 +778,18 @@ def main(argv: list[str] | None = None) -> int:
                              "anchor SOURCE tree, every write for planner/critic and out-of-lane "
                              "edits for the author. The loop measures on this CPU, so an actor's "
                              "build is contamination, not help (default: %(default)s)")
+    parser.add_argument("--actor-belief-context", choices=actors.BELIEF_CONTEXT_MODES,
+                        default="on",
+                        help="planner only: read the Vidya claims (ROOT ledger, via "
+                             "--belief-root-repo) whose declared applicability scope EQUALS the "
+                             "planner target (model file, quant, backend, device) and add them "
+                             "as a bounded, neutral section -- only when some apply; any other "
+                             "target gets no section and never opens the ledger. The reader is "
+                             "killed at 10 s and any failure adds nothing. Every proposal call "
+                             "writes a receipt (workers/actor-replies/belief-receipts.jsonl: "
+                             "presented/omitted/unavailable claim ids, run, frontier, and the "
+                             "planner's explicit relies_on_claims). 'off' is the historical "
+                             "prompt with no receipt (default: %(default)s)")
     parser.add_argument("--actor-steps", type=int, default=actors.ActorSeat.steps,
                         help="bounded seat: opencode step cap per call (default: %(default)s)")
     parser.add_argument("--actor-timeout-s", type=int, default=actors.DEFAULT_TIMEOUT_S,
@@ -3060,6 +3072,8 @@ def main(argv: list[str] | None = None) -> int:
             ordinary = actors.AgentPlanner(workspace=worker.worktree, backend=planner_backend,
                                            timeout_s=args.actor_timeout_s,
                                            should_stop=should_stop,
+                                           belief_context=args.actor_belief_context,
+                                           belief_root=args.belief_root_repo,
                                            seat=actors.ActorSeat(
                                                bounded=args.actor_seat == "bounded",
                                                fan_out=args.actor_fan_out,

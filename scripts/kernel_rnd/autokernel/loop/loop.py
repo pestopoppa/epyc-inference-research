@@ -187,8 +187,17 @@ class Hypothesis:
     target_surface: str
     target_symbol: str
     runtime_pair: Any = None
+    #: Vidya claim ids the planner EXPLICITLY declared this hypothesis depends on, already
+    #: validated against the claims its prompt presented (`belief_context.reliance`), and the
+    #: planner-evidence receipt that recorded the presentation. Prompt exposure alone never
+    #: lands here. Kept on the experiments row so a later correction of a claim can find
+    #: every proposal that relied on it. Empty (and absent from `to_dict`) for every
+    #: historical row.
+    relies_on_claims: tuple[str, ...] = ()
+    belief_receipt_id: str = ""
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "relies_on_claims", tuple(self.relies_on_claims or ()))
         if self.runtime_pair is not None:
             from .unified_planner import RuntimeArmPair
             body = (self.runtime_pair.to_dict() if isinstance(self.runtime_pair, RuntimeArmPair)
@@ -201,6 +210,10 @@ class Hypothesis:
                 "target_symbol": self.target_symbol}
         if self.runtime_pair is not None:
             row["runtime_pair"] = self.runtime_pair.to_dict()
+        if self.relies_on_claims:
+            row["relies_on_claims"] = list(self.relies_on_claims)
+        if self.belief_receipt_id:
+            row["belief_receipt_id"] = self.belief_receipt_id
         return row
 
 
