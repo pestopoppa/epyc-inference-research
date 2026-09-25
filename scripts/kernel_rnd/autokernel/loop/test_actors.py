@@ -1254,3 +1254,269 @@ class RelaxRequiredIntegration(unittest.TestCase):
             decline_wire_schema = captured["bodies"][0]["response_format"]["json_schema"]["schema"]
             self.assertEqual(sorted(decline_wire_schema.get("required", [])),
                              ["explicitly_declines", "reason"])
+
+
+# --------------------------------------------------------------------------- INF-78 OAB-2
+#
+# The `orchestrator` Backend kind: argv is a thin CLI in the orchestrator repo, prompt
+# on stdin, ONE JSON object on stdout, exit 0/1. No inference and no orchestrator: the
+# end-to-end cases run a tiny FAKE CLI (a real child process) in place of
+# `scripts/autokernel_actor_cli.py`; the real CLI is tested in the orchestrator repo
+# (`tests/unit/test_autokernel_actor_cli.py`) against a mock `/chat` server.
+
+_ORCH_HYP = {"mechanism_id": "akm-x", "statement": "s", "falsifier": "f",
+             "target_surface": "ggml/src/a.cpp", "target_symbol": "fn"}
+
+_FAKE_CLI = r'''
+import json, sys
+args = sys.argv[1:]
+def opt(name):
+    return args[args.index(name) + 1] if name in args else None
+prompt = sys.stdin.read()
+spec = json.loads(%(spec)r)
+prov = opt("--provenance-out")
+if prov and spec.get("sidecar") is not None:
+    record = dict(spec["sidecar"])
+    record["request"] = dict(record.get("request") or {}, prompt_chars=len(prompt),
+                             read_only="--read-only" in args, schema=opt("--schema"))
+    open(prov, "w").write(json.dumps(record))
+sys.stdout.write(spec.get("stdout", ""))
+sys.stderr.write(spec.get("stderr", ""))
+raise SystemExit(spec.get("rc", 0))
+'''
+
+_ORCH_RESPONSE = {"routed_to": "architect_general", "role_history": ["frontdoor", "architect_general"],
+                  "routing_strategy": "rules", "turns": 23, "mode": "repl",
+                  "tokens_generated": 57702, "tools_used": 25,
+                  "tools_called": ["read_file"] * 13 + ["grep"] * 12,
+                  "tool_output_tokens": 9000, "compaction_triggered": True,
+                  "error_code": None, "elapsed_seconds": 1914.0}
+
+
+class OrchestratorBackendKind(unittest.TestCase):
+    """INF-78 OAB-2 -- `backend_for("orch:<role|auto>")`."""
+
+    def setUp(self):
+        import tempfile
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.ws = self.root / "workers" / "lane0"
+        self.ws.mkdir(parents=True)
+
+    def tearDown(self):
+        from autokernel.loop import actor_orchestrator
+        actor_orchestrator._PENDING.clear()
+        self._tmp.cleanup()
+
+    def _fake(self, *, stdout="", stderr="", rc=0, sidecar=None, role="architect_general"):
+        import dataclasses
+        import sys
+        spec = {"stdout": stdout, "stderr": stderr, "rc": rc, "sidecar": sidecar}
+        script = self.root / f"fake_cli_{rc}_{len(stdout)}.py"
+        script.write_text(_FAKE_CLI % {"spec": json.dumps(spec)})
+        backend = actors.backend_for(f"orch:{role}", "high")
+        return dataclasses.replace(backend, binary=sys.executable, cli=str(script))
+
+    def _rows(self):
+        log = self.ws.parent / actors.ACTOR_REPLY_DIR / actors.ACTOR_CALL_LOG
+        return [json.loads(line) for line in log.read_text().splitlines()]
+
+    def _metrics(self):
+        from autokernel.loop import actor_metrics
+        return [r for r in self._rows() if r.get("schema") == actor_metrics.METRICS_SCHEMA]
+
+    # ---------------------------------------------------------------- routing / argv
+
+    def test_orch_ids_route_to_the_orchestrator_kind(self):
+        from autokernel.loop import actor_orchestrator as orch
+        b = actors.backend_for("orch:auto", "high")
+        self.assertEqual((b.kind, b.model, b.effort), ("orchestrator", "auto", "high"))
+        self.assertEqual(b.describe(), "orchestrator:auto@high")
+        self.assertEqual(b.binary, actors.ORCHESTRATOR_PYTHON)
+        self.assertEqual(b.cli, f"{orch.DEFAULT_ORCHESTRATOR_ROOT}/scripts/autokernel_actor_cli.py")
+        self.assertEqual(b.url, orch.DEFAULT_URL)
+        self.assertEqual(actors.backend_for("orch:architect_general", "high").model, "architect_general")
+        # `orch:` wins over the `/` and `claude-` routes.
+        for bad in ("orch:", "orch:Architect", "orch:a/b", "orch:x y"):
+            with self.assertRaises(ValueError):
+                actors.backend_for(bad, "high")
+
+    def test_env_points_the_backend_at_a_lane_cli_and_url(self):
+        with mock.patch.dict("os.environ", {"AK_ORCHESTRATOR_ROOT": "/mnt/raid0/llm/worktrees/orch-x",
+                                            "AK_ORCHESTRATOR_URL": "http://127.0.0.1:8123/"}):
+            b = actors.backend_for("orch:auto", "high")
+        self.assertEqual(b.cli, "/mnt/raid0/llm/worktrees/orch-x/scripts/autokernel_actor_cli.py")
+        self.assertEqual(b.url, "http://127.0.0.1:8123")
+
+    def test_argv_contract_and_least_privilege_per_role(self):
+        b = actors.backend_for("orch:architect_general", "high")
+        planner = b.argv("PROMPT", self.ws, schema=actors.HYPOTHESIS_SCHEMA)
+        author = b.argv("PROMPT", self.ws, schema=actors.PATHS_SCHEMA)
+        critic = b.argv("PROMPT", self.ws, read_only=True, schema=actors.REVIEW_SCHEMA)
+        for argv in (planner, author, critic):
+            self.assertEqual(argv[:3], [actors.ORCHESTRATOR_PYTHON, "-I", b.cli],
+                             "a script PATH under -I: `-m scripts.*` would resolve the lane's own scripts/")
+            self.assertEqual(argv[argv.index("--root") + 1], str(self.ws))
+            self.assertEqual(argv[argv.index("--role") + 1], "architect_general")
+            self.assertEqual(argv[argv.index("--url") + 1], b.url)
+            self.assertEqual(argv[argv.index("--max-turns") + 1], str(b.max_turns))
+            self.assertNotIn("PROMPT", argv)
+            for flag in ("--schema", "--provenance-out"):
+                path = Path(argv[argv.index(flag) + 1])
+                self.assertEqual(path.parent, self.ws.parent / "actor-orchestrator",
+                                 "per-call files live beside the lane, never in the diff")
+        self.assertIn("--read-only", planner, "an orchestrator planner never needs to write")
+        self.assertIn("--read-only", critic)
+        self.assertNotIn("--read-only", author, "only the author edits (edit_mode=direct)")
+        self.assertIn("--read-only", b.argv("P", self.ws, read_only=True, schema=actors.PATHS_SCHEMA))
+        self.assertIn("--read-only", b.argv("P", self.ws), "no schema -> not the author call")
+        self.assertFalse(list(self.ws.iterdir()))
+        self.assertEqual(b.stdin_payload("PROMPT"), "PROMPT")
+
+    def test_wire_schema_offers_abstain_to_planner_and_author_only(self):
+        b = actors.backend_for("orch:auto", "high")
+        def wire(argv):
+            return json.loads(Path(argv[argv.index("--schema") + 1]).read_text())
+        planner = wire(b.argv("P", self.ws, schema=actors.HYPOTHESIS_SCHEMA))
+        self.assertEqual(planner["anyOf"][0], actors.HYPOTHESIS_SCHEMA)
+        self.assertEqual(planner["anyOf"][1]["required"], ["abstain"])
+        self.assertIn("anyOf", wire(b.argv("P", self.ws, schema=actors.PATHS_SCHEMA)))
+        self.assertEqual(wire(b.argv("P", self.ws, read_only=True, schema=actors.REVIEW_SCHEMA)),
+                         actors.REVIEW_SCHEMA, "a critic's rejection is not an abstention")
+
+    def test_run_agent_hands_the_schema_to_argv_and_the_prompt_to_stdin(self):
+        b = actors.backend_for("orch:auto", "high")
+        done = subprocess.CompletedProcess(args=["x"], returncode=0,
+                                           stdout=json.dumps(_ORCH_HYP), stderr="")
+        with mock.patch.object(actors.subprocess, "run", return_value=done) as ran:
+            raw = actors._run_agent('big "quoted" prompt', workspace=self.ws, backend=b,
+                                    schema=actors.HYPOTHESIS_SCHEMA)
+        self.assertEqual(json.loads(raw), _ORCH_HYP)
+        argv = ran.call_args.args[0]
+        self.assertIn("--schema", argv)
+        self.assertEqual(ran.call_args.kwargs["input"], 'big "quoted" prompt')
+        self.assertNotIn('big "quoted" prompt', argv)
+        self.assertEqual(ran.call_args.kwargs["cwd"], str(self.ws))
+
+    # ---------------------------------------------------------------- end to end (fake CLI)
+
+    def test_a_schema_valid_reply_parses_and_records_provenance(self):
+        b = self._fake(stdout=json.dumps(_ORCH_HYP) + "\n",
+                       sidecar={"schema": "epyc.autokernel.orchestrator_call.v1",
+                                "http_status": 200, "client_wall_s": 1914.2,
+                                "request": {"schema_sha256": "ab" * 32},
+                                "response": _ORCH_RESPONSE})
+        raw = actors._run_agent("the prompt", workspace=self.ws, backend=b,
+                                schema=actors.HYPOTHESIS_SCHEMA)
+        body = actors._parse_reply(raw, schema=actors.HYPOTHESIS_SCHEMA, backend=b, workspace=self.ws)
+        self.assertEqual(body, _ORCH_HYP)
+        (row,) = self._metrics()
+        self.assertEqual((row["backend_kind"], row["backend_model"]), ("orchestrator", "architect_general"))
+        self.assertEqual((row["returncode"], row["schema_valid"], row["salvaged"]), (0, True, False))
+        self.assertIsNone(row["repair_ran"], "repair ran server-side; the server does not say")
+        self.assertIsNone(row["opencode"])
+        self.assertIsNone(row["metrics_error"])
+        orch = row["orchestrator"]
+        self.assertEqual(orch["provenance"], {"routed_to": "architect_general",
+                                              "role_history": ["frontdoor", "architect_general"],
+                                              "routing_strategy": "rules", "turns": 23, "mode": "repl"})
+        self.assertEqual(orch["totals"]["steps"], 23)
+        self.assertEqual(orch["totals"]["tool_calls"], 25)
+        self.assertEqual(orch["totals"]["decoded_tokens"], 57702)
+        self.assertEqual(orch["totals"]["compactions"], 1)
+        self.assertEqual(orch["tools"], {"read_file": 13, "grep": 12})
+        self.assertTrue(orch["server_schema_valid"])
+        self.assertIn("totals.prompt_tokens", orch["unexposed"])
+        self.assertIn("context_max_tokens", orch["unexposed"])
+        self.assertEqual(orch["request"]["prompt_chars"], len("the prompt"))
+        self.assertTrue(orch["request"]["read_only"])
+        # The v1 call record (ROOT's closed contract) does not know this kind yet: the
+        # line is written, refused with the reason, and the call does not fail.
+        v1 = self._rows()[-1]
+        self.assertIn("backend.kind must be one of", v1["v1_refused"])
+        self.assertEqual(v1["backend"], "orchestrator:architect_general@high")
+        self.assertEqual(v1["returncode"], 0)
+
+    def test_rc1_with_a_complete_reply_is_salvaged(self):
+        b = self._fake(stdout=json.dumps(_ORCH_HYP) + "\n",
+                       stderr="autokernel_actor_cli: orchestrator returned HTTP 422 error_code=422\n",
+                       rc=1, sidecar={"http_status": 422, "request": {"schema_sha256": "ab" * 32},
+                                      "response": dict(_ORCH_RESPONSE, error_code=422)})
+        raw = actors._run_agent("p", workspace=self.ws, backend=b, schema=actors.HYPOTHESIS_SCHEMA)
+        self.assertEqual(actors._extract_json(raw), _ORCH_HYP)
+        (row,) = self._metrics()
+        self.assertTrue(row["salvaged"])
+        self.assertFalse(row["orchestrator"]["server_schema_valid"])
+
+    def test_rc1_with_an_incomplete_object_stays_a_transient(self):
+        b = self._fake(stdout='{"accepted": "yes"}\n', rc=1,
+                       sidecar={"http_status": 200, "response": _ORCH_RESPONSE})
+        with self.assertRaises(actors.ProviderTransient):
+            actors._run_agent("p", workspace=self.ws, backend=b, read_only=True,
+                              schema=actors.REVIEW_SCHEMA)
+
+    def test_orchestrator_down_is_a_transient_carrying_the_reason(self):
+        b = self._fake(stderr="autokernel_actor_cli: orchestrator unreachable at "
+                              "http://127.0.0.1:8000: [Errno 111] Connection refused\n", rc=1,
+                       sidecar={"http_status": None, "response": None,
+                                "error": "orchestrator unreachable at http://127.0.0.1:8000"})
+        with self.assertRaises(actors.ProviderTransient) as caught:
+            actors._run_agent("p", workspace=self.ws, backend=b, schema=actors.HYPOTHESIS_SCHEMA)
+        self.assertIn("unreachable", str(caught.exception))
+        self.assertIn("orchestrator:architect_general@high", str(caught.exception))
+        (row,) = self._metrics()
+        self.assertIn("unreachable", row["metrics_error"])
+        self.assertIsNone(row["orchestrator"]["totals"])
+        self.assertTrue(any(p.name.endswith("-rc1.stderr")
+                            for p in (self.ws.parent / actors.ACTOR_REPLY_DIR).iterdir()))
+
+    def test_non_json_stdout_is_a_transient_and_never_a_local_repair(self):
+        b = self._fake(stdout="I read the profile and have thoughts but no object.\n", rc=0,
+                       sidecar={"http_status": 200, "response": _ORCH_RESPONSE})
+        raw = actors._run_agent("p", workspace=self.ws, backend=b, schema=actors.HYPOTHESIS_SCHEMA)
+        with mock.patch("urllib.request.urlopen",
+                        side_effect=AssertionError("no local repair turn for this kind")):
+            with self.assertRaises(actors.ProviderTransient) as caught:
+                actors._parse_reply(raw, schema=actors.HYPOTHESIS_SCHEMA, backend=b, workspace=self.ws)
+        self.assertIn("no parseable JSON", str(caught.exception))
+        (row,) = self._metrics()
+        self.assertEqual((row["schema_valid"], row["repair_ran"]), (False, None))
+
+    def test_a_killed_cli_leaves_a_metrics_error_not_a_crash(self):
+        b = self._fake(stdout="", rc=0, sidecar=None)   # wrote no sidecar
+        actors._run_agent("p", workspace=self.ws, backend=b)
+        (row,) = self._metrics()
+        self.assertIn("no provenance sidecar", row["metrics_error"])
+
+    # ---------------------------------------------------------------- repair / mapping units
+
+    def test_schema_repair_short_circuits_for_the_orchestrator_kind(self):
+        b = actors.backend_for("orch:auto", "high")
+        with mock.patch("urllib.request.urlopen",
+                        side_effect=AssertionError("repair happened server-side")):
+            self.assertIsNone(actors._schema_repair("a long enough report naming a.cpp",
+                                                    schema=actors.HYPOTHESIS_SCHEMA,
+                                                    backend=b, workspace=self.ws))
+            incomplete = '{"mechanism_id": "akm-x", "statement": "s"} and a long tail of prose'
+            self.assertEqual(actors._parse_reply(incomplete, schema=actors.HYPOTHESIS_SCHEMA,
+                                                 backend=b, workspace=self.ws),
+                             {"mechanism_id": "akm-x", "statement": "s"},
+                             "the incomplete body goes back to the caller's own field check")
+
+    def test_collect_without_a_pending_call_or_with_garbage_never_raises(self):
+        from autokernel.loop import actor_orchestrator as orch
+        self.assertIn("no orchestrator call pending", orch.collect(self.ws)["metrics_error"])
+        b = actors.backend_for("orch:auto", "high")
+        argv = b.argv("P", self.ws, schema=actors.HYPOTHESIS_SCHEMA)
+        Path(argv[argv.index("--provenance-out") + 1]).write_text("{not json")
+        self.assertIn("JSONDecodeError", orch.collect(self.ws)["metrics_error"])
+
+    def test_the_summarizer_reports_orchestrator_rows_in_the_same_columns(self):
+        from autokernel.loop import actor_metrics
+        b = self._fake(stdout=json.dumps(_ORCH_HYP), sidecar={"http_status": 200,
+                                                              "response": _ORCH_RESPONSE})
+        actors._run_agent("p", workspace=self.ws, backend=b, schema=actors.HYPOTHESIS_SCHEMA)
+        planner = actor_metrics.summarize(self.root)["roles"]["planner"]
+        self.assertEqual((planner["calls"], planner["steps_total"], planner["tool_calls_total"],
+                          planner["decoded_tokens_total"], planner["compactions_total"]),
+                         (1, 23.0, 25.0, 57702.0, 1.0))

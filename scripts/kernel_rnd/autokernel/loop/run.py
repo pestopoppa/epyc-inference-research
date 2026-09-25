@@ -697,8 +697,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--planner-model", default=actors.PLANNER_DEFAULT.model,
                         help="planner/author model; claude-* routes via the claude CLI, "
                              "a provider/model id via opencode (external provider: the "
-                             "prompt egresses off-host), anything else via codex "
-                             "(default: %(default)s)")
+                             "prompt egresses off-host), orch:<role|auto> via the "
+                             "orchestrator's /chat (INF-78 OAB-2 opt-in: orch:auto lets it "
+                             "route, orch:architect_general pins the 27B; AK_ORCHESTRATOR_URL / "
+                             "AK_ORCHESTRATOR_ROOT override its API and CLI tree), anything "
+                             "else via codex (default: %(default)s)")
     parser.add_argument("--planner-effort", default=actors.PLANNER_DEFAULT.effort)
     parser.add_argument("--critic-model", default=actors.CRITIC_DEFAULT.model,
                         help="critic model, both passes; same routing as "
@@ -1308,6 +1311,13 @@ def main(argv: list[str] | None = None) -> int:
                   f"floor_provenance=unverified. Recalibrate it.")
     planner_backend = actors.backend_for(args.planner_model, args.planner_effort)
     critic_backend = actors.backend_for(args.critic_model, args.critic_effort)
+    # INF-78 OAB-2: an orchestrator actor's server-side budget sits under the loop's
+    # own per-call timeout, so the CLI reports a clean timeout before the loop TERMs it.
+    from .actor_orchestrator import ORCHESTRATOR_KIND, TIMEOUT_MARGIN_S
+    planner_backend, critic_backend = (
+        replace(b, timeout_s=max(60, args.actor_timeout_s - TIMEOUT_MARGIN_S))
+        if getattr(b, "kind", None) == ORCHESTRATOR_KIND else b
+        for b in (planner_backend, critic_backend))
     print(f"actors    planner={planner_backend.describe()}  "
           f"critic={critic_backend.describe()}  "
           f"seat={args.actor_seat}{' fan-out' if args.actor_fan_out else ''} steps={args.actor_steps} "

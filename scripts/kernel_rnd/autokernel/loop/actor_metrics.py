@@ -257,8 +257,11 @@ def _median(values: list[float]) -> float | None:
 
 
 def _totals_of(row: Mapping[str, Any], key: str) -> float | None:
-    opencode = row.get("opencode")
-    totals = opencode.get("totals") if isinstance(opencode, Mapping) else None
+    """One `totals` field from whichever harness produced the row: `opencode` (the
+    session export) or `orchestrator` (the ChatResponse projection, INF-78 OAB-2 --
+    same vocabulary, None where the orchestrator does not expose the field)."""
+    harness = row.get("opencode") if isinstance(row.get("opencode"), Mapping) else row.get("orchestrator")
+    totals = harness.get("totals") if isinstance(harness, Mapping) else None
     value = totals.get(key) if isinstance(totals, Mapping) else None
     return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
