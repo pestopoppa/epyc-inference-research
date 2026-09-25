@@ -180,7 +180,8 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
              accumulate_valid_positive: bool = False,
              validate_candidate=None, formation_guard=None,
              reserve_candidate=None,
-             record_abandoned: Callable[[Worker, loop_mod.Outcome], None] | None = None
+             record_abandoned: Callable[[Worker, loop_mod.Outcome], None] | None = None,
+             next_resume: Callable[[Worker, str], Any] | None = None
              ) -> list[loop_mod.Outcome]:
     """Drive `iterations` iterations across `workers` concurrent lanes.
 
@@ -193,6 +194,11 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
     batch), but it carries the lane lineage and, for a gate refusal, the dispatch
     reservation taken for that exact diff -- which the final outcome must then not
     inherit.
+
+    `next_resume(worker, base)` is asked once per draw, after the lane is reset and
+    before any fresh hypothesis: it CLAIMS and returns resumable work (a
+    `resume.ResumePoint`) or None. A resumed candidate is an ordinary iteration --
+    it draws budget and produces exactly one final outcome.
     """
     budget = Budget(iterations, should_stop=should_stop)
     tail = tail or SerializedTail(champion_head)
@@ -315,6 +321,7 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                         with outcomes_lock:
                             record_abandoned(_w, candidate)
 
+                resumed = next_resume(worker, base) if next_resume is not None else None
                 outcome = loop_mod.iterate(
                     planner=planner, critic=critic, context=build_context(),
                     measure=measure, gate=gate, commit=commit_one, on_step=step,
@@ -327,7 +334,7 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                         if validate_candidate is not None else None),
                     formation_guard=formation_guard,
                     reserve_candidate=reserve if reserve_candidate is not None else None,
-                    record_abandoned=abandoned)
+                    record_abandoned=abandoned, resume=resumed)
             except Superseded as exc:
                 # `iterate` already converted this into an Outcome carrying the
                 # hypothesis; reaching here means it escaped before one was formed.

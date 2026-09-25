@@ -1,0 +1,188 @@
+{
+ "attempt_id": "22d950a41493fb1107fa01a2ba4d4be6c3396ac3f88252a3d3b35ef27d0aadf8",
+ "branch_id": "detached:lane0",
+ "campaign_id": "ak-loop",
+ "deployment": null,
+ "depth": 1,
+ "effect_fraction": null,
+ "epoch_sha256": "25ed9144370732eba1cdbd103657f8344f23a8a69349f5e51e8d01d3c7ad7ad3",
+ "exact_effect": null,
+ "falsifier": "Three checks, in order: (1) mechanism witness - objdump of the candidate libggml-cpu.so must show the <DequantizerQ4K_AVX2,1> specialization no longer containing the per-block activation-scale conversion chain (vpmovzxwd/vpmovsxwd/cvtepi16/vcvtdq2ps on the activation block scales) and instead loading precomputed float scales, with the gate's required trusted hit on the matching template specializations in the candidate DSO; a missing change means the mechanism was not emitted. (2) correctness - the native MUL_MAT and MUL_MAT_ID host/op suite plus the route's independent scalar fixtures must be bit-identical for Q4_K and Q5_K across activation widths 1-8; any mismatch discards the candidate. (3) effect - the loop's matched alternating A/B serving run on the selected recipe (n>=5 pairs, decode floor for the pair count used) must show the candidate exceeding the floor; a result within the floor (or negative) disproves the premise that this kernel is instruction/latency-exposed enough for the hoist to matter, and the run is logged as a measured null with the kernel's ~28% inner-loop instruction share as the sample vector.",
+ "hypothesis_id": null,
+ "mechanism_id": "akm-q4k-x4-actscale-hoist",
+ "payload": {
+  "attempt_identity": "19c656569ff7f094c5da95800538cd3141d6853ee801474e7df5f458dfb96955",
+  "branch_id": "detached:lane0",
+  "candidate_diff_sha256": "6c800d5a35d92a73da5195d84fe96bf2dbe2bbc9c8267bf17d2967afb7924070",
+  "cpu_screen": {
+   "candidate": null,
+   "full_execution_digest": "eba8eff75ff0fb61ce846b868f4d18960ad6771351b365bb67e09d994c023c9d",
+   "measured_execution_digest": "3a0b8832efdd646849586df1c846e7377275eddc4239dc7784a79f9bfedd52e0",
+   "scope": "half"
+  },
+  "depth": 1,
+  "exact_repeat_dispatch_count": 1,
+  "falsifier": "Three checks, in order: (1) mechanism witness - objdump of the candidate libggml-cpu.so must show the <DequantizerQ4K_AVX2,1> specialization no longer containing the per-block activation-scale conversion chain (vpmovzxwd/vpmovsxwd/cvtepi16/vcvtdq2ps on the activation block scales) and instead loading precomputed float scales, with the gate's required trusted hit on the matching template specializations in the candidate DSO; a missing change means the mechanism was not emitted. (2) correctness - the native MUL_MAT and MUL_MAT_ID host/op suite plus the route's independent scalar fixtures must be bit-identical for Q4_K and Q5_K across activation widths 1-8; any mismatch discards the candidate. (3) effect - the loop's matched alternating A/B serving run on the selected recipe (n>=5 pairs, decode floor for the pair count used) must show the candidate exceeding the floor; a result within the floor (or negative) disproves the premise that this kernel is instruction/latency-exposed enough for the hoist to matter, and the run is logged as a measured null with the kernel's ~28% inner-loop instruction share as the sample vector.",
+  "hypothesis_round": 2,
+  "mechanism_id": "akm-q4k-x4-actscale-hoist",
+  "patch_round": 0,
+  "prior_rejection_prompt": true,
+  "reason": "run stop requested while this candidate was still forming; abandoned before the next actor call. No verdict on the mechanism \u2014 it was never attempted",
+  "research_scope": {
+   "backend": "cpu",
+   "cpu_screen": {
+    "candidate": null,
+    "full_execution_digest": "eba8eff75ff0fb61ce846b868f4d18960ad6771351b365bb67e09d994c023c9d",
+    "measured_execution_digest": "3a0b8832efdd646849586df1c846e7377275eddc4239dc7784a79f9bfedd52e0",
+    "scope": "half"
+   },
+   "measurement_surface": "serving:ds41-5a60152ae-cpu-t48-dspark-b2.cpu-half-d6ff1ab2f9d0ec0d",
+   "model": {
+    "path": "/mnt/raid0/llm/models/antirez/deepseek-v4.1-flash-gguf/DeepSeek-V4.1-Flash-Q4.gguf",
+    "sha256": null
+   },
+   "quant": "Q8_0",
+   "recipe": {
+    "build_recipe": {
+     "divergences": [
+      "GGML_HIP",
+      "GGML_NATIVE",
+      "GGML_OPENMP",
+      "CMAKE_C_COMPILER",
+      "CMAKE_CXX_COMPILER"
+     ],
+     "flags": [
+      {
+       "diverges": true,
+       "name": "GGML_HIP",
+       "production_value": null,
+       "reason": "Explicit experimental CPU build recipe",
+       "value": "OFF"
+      },
+      {
+       "diverges": true,
+       "name": "GGML_NATIVE",
+       "production_value": null,
+       "reason": "Explicit experimental CPU build recipe",
+       "value": "ON"
+      },
+      {
+       "diverges": true,
+       "name": "GGML_OPENMP",
+       "production_value": null,
+       "reason": "Explicit experimental CPU build recipe",
+       "value": "ON"
+      },
+      {
+       "diverges": true,
+       "name": "CMAKE_C_COMPILER",
+       "production_value": null,
+       "reason": "Explicit experimental CPU build recipe",
+       "value": "/usr/bin/gcc-15"
+      },
+      {
+       "diverges": true,
+       "name": "CMAKE_CXX_COMPILER",
+       "production_value": null,
+       "reason": "Explicit experimental CPU build recipe",
+       "value": "/usr/bin/g++-15"
+      }
+     ],
+     "name": "native-openmp-gcc15-cpu-v1",
+     "notes": "Experimental CPU build; no production adoption or cross-model qualification.",
+     "production_reference_is_verifiable": false,
+     "schema": "epyc.autokernel.gpu_build_recipe.v1"
+    },
+    "original_serving_arms": null
+   },
+   "request_digest": null
+  },
+  "spawn_parent": "5a60152ae3b84455f0bbb16264e6b6b8c99d8138",
+  "statement": "In the Q4_K/Q5_K-only template mul_mat_qX_K_q8_2_X4_T (ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp:795), the sampled-profile hot expert kernel (30.16% of user cycles across the <1>/<2>/<3> specializations; the MUL_MAT_ID path, 41.04% wall share in the sibling node profile), the per-128-weight activation scale/dmin conversion is recomputed for every weight row inside the outer ix loop: per (i, iy) it loads 16B of fp16 d[4]/dmin[4] from q8.y[iy][2*i+j], runs the vpmovzxwd/vpmovsxwd/vinserti32x4/cvtepi16 conversion chains and the d x dmin multiplies (~24-27 of the ~87 instructions of each 256-weight block, verified in the installed DSO disassembly of <DequantizerQ4K_AVX2,1> at 0x154760-0x15488a), even though these values depend only on the activation column iy and block i, not on the weight row ix. Mechanism: hoist that conversion into a pre-pass before the ix loop that materializes, per (iy, i), the 8 float scales (dy) and 8 float scale x dmin products (my) into a small per-thread L1-resident buffer (nrc_y x nb x 2 x 32B, <=32KB for this model's contraction dims); the inner loop then replaces the conversion chains with two 16B loads per (i, iy), cutting the per-block instruction count of the weight-streaming inner loop by ~25-30% and removing the fp16-conversion latency from the critical path of the batched-verify specializations where the cost is multiplied by nrc_y. No arithmetic changes: every scale product is computed with the identical operations, once instead of nrc_x times, so results are bit-identical; only which loop computes a value moves. The operator's canonical roofline measurement left 6-20% headroom below the DRAM streaming ceiling on the expert path, so if this kernel is not already at the ceiling the reduced instruction/latency pressure should raise achieved bandwidth; if it is at the ceiling the effect is null and that is the falsifier outcome.",
+  "status": "stopped_mid_formation",
+  "target_surface": "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp",
+  "target_symbol": "mul_mat_qX_K_q8_2_X4_T",
+  "turn_recorded_at": "2026-09-25T08:53:58.881426Z",
+  "validator_provenance": [
+   {
+    "accepted": true,
+    "changed_subsequent_search": false,
+    "decision": "critic:hypothesis",
+    "evidence_inspected": [
+     "review subject",
+     "rejection grounds",
+     "planner context"
+    ],
+    "independence": "different_family",
+    "reason": null,
+    "validator_identity": "codex:gpt-6-sol@high",
+    "validator_kind": "llm_critic"
+   },
+   {
+    "accepted": true,
+    "changed_subsequent_search": false,
+    "decision": "critic:patch",
+    "evidence_inspected": [
+     "review subject",
+     "rejection grounds",
+     "planner context"
+    ],
+    "independence": "different_family",
+    "reason": null,
+    "validator_identity": "codex:gpt-6-sol@high",
+    "validator_kind": "llm_critic"
+   },
+   {
+    "accepted": false,
+    "changed_subsequent_search": true,
+    "decision": "gate:op_scope",
+    "evidence_inspected": [
+     "candidate build artifact",
+     "op_scope"
+    ],
+    "independence": "non_model",
+    "reason": "CPU IQK source refused before build: the selected MUL_MAT/MUL_MAT_ID case must prove the edited quant/function path executed with use_ref=false and passed against the independent use_ref=true reference; the generic per-type [iqk] ACTIVE marker does not identify the edited path or case",
+    "validator_identity": "autokernel.gates.op_scope",
+    "validator_kind": "script"
+   },
+   {
+    "accepted": true,
+    "changed_subsequent_search": false,
+    "decision": "critic:patch",
+    "evidence_inspected": [
+     "review subject",
+     "rejection grounds",
+     "planner context"
+    ],
+    "independence": "different_family",
+    "reason": null,
+    "validator_identity": "codex:gpt-6-sol@high",
+    "validator_kind": "llm_critic"
+   },
+   {
+    "accepted": false,
+    "changed_subsequent_search": true,
+    "decision": "gate:op_scope",
+    "evidence_inspected": [
+     "candidate build artifact",
+     "op_scope"
+    ],
+    "independence": "non_model",
+    "reason": "CPU IQK source refused before build: the selected MUL_MAT/MUL_MAT_ID case must prove the edited quant/function path executed with use_ref=false and passed against the independent use_ref=true reference; the generic per-type [iqk] ACTIVE marker does not identify the edited path or case",
+    "validator_identity": "autokernel.gates.op_scope",
+    "validator_kind": "script"
+   }
+  ],
+  "width": 1
+ },
+ "recorded_at": "2026-09-25T08:53:58.881478Z",
+ "refusal_reason": "run stop requested while this candidate was still forming; abandoned before the next actor call. No verdict on the mechanism \u2014 it was never attempted",
+ "result_sha256": null,
+ "spawn_parent": "5a60152ae3b84455f0bbb16264e6b6b8c99d8138",
+ "statement": "In the Q4_K/Q5_K-only template mul_mat_qX_K_q8_2_X4_T (ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp:795), the sampled-profile hot expert kernel (30.16% of user cycles across the <1>/<2>/<3> specializations; the MUL_MAT_ID path, 41.04% wall share in the sibling node profile), the per-128-weight activation scale/dmin conversion is recomputed for every weight row inside the outer ix loop: per (i, iy) it loads 16B of fp16 d[4]/dmin[4] from q8.y[iy][2*i+j], runs the vpmovzxwd/vpmovsxwd/vinserti32x4/cvtepi16 conversion chains and the d x dmin multiplies (~24-27 of the ~87 instructions of each 256-weight block, verified in the installed DSO disassembly of <DequantizerQ4K_AVX2,1> at 0x154760-0x15488a), even though these values depend only on the activation column iy and block i, not on the weight row ix. Mechanism: hoist that conversion into a pre-pass before the ix loop that materializes, per (iy, i), the 8 float scales (dy) and 8 float scale x dmin products (my) into a small per-thread L1-resident buffer (nrc_y x nb x 2 x 32B, <=32KB for this model's contraction dims); the inner loop then replaces the conversion chains with two 16B loads per (i, iy), cutting the per-block instruction count of the weight-streaming inner loop by ~25-30% and removing the fp16-conversion latency from the critical path of the batched-verify specializations where the cost is multiplied by nrc_y. No arithmetic changes: every scale product is computed with the identical operations, once instead of nrc_x times, so results are bit-identical; only which loop computes a value moves. The operator's canonical roofline measurement left 6-20% headroom below the DRAM streaming ceiling on the expert path, so if this kernel is not already at the ceiling the reduced instruction/latency pressure should raise achieved bandwidth; if it is at the ceiling the effect is null and that is the falsifier outcome.",
+ "status": "stopped_mid_formation",
+ "target_effect": null,
+ "target_surface": "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp",
+ "target_symbol": "mul_mat_qX_K_q8_2_X4_T",
+ "width": 1
+}

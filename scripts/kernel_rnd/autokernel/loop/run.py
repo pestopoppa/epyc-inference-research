@@ -37,6 +37,7 @@ from . import (accumulate, actors, anchor, archive, bench, champion, claim, gate
                dispatch_guard, heartbeat, hotspots, loop, serving, serving_beliefs,
                integrity, heldout_serving, lineage_beliefs, pipeline, pool, production, status, surface_fold,
                surface_validation)
+from . import resume as resume_mod
 
 
 @dataclass(frozen=True)
@@ -691,6 +692,12 @@ def main(argv: list[str] | None = None) -> int:
                         help="read-only prior mechanism store; historical outcomes do not transfer")
     parser.add_argument("--operator-unblock-artifact", type=Path, action="append", default=[],
                         help="content-addressed operator amendment reopening one do_not_repeat match")
+    parser.add_argument("--resume", choices=("on", "off"), default="on",
+                        help="before drawing fresh hypotheses, resume checkpointed work of "
+                             "this anchor/epoch/target: an accepted patch goes straight to "
+                             "the current gates and the measurement, an accepted hypothesis "
+                             "back to authoring; each at most once, re-validated first "
+                             "(resume.py; default: %(default)s)")
     # ---- concurrency. EVERY run is pooled; --workers 1 is a one-lane pool. The
     # separate sequential path was deleted 2026-08-31 once the pool owned the
     # consecutive-error breaker -- two run paths were two things to drift.
@@ -2589,6 +2596,22 @@ def main(argv: list[str] | None = None) -> int:
         """
         candidate_integrity = {}
         integrity_evidence = {}
+        # What a checkpoint is bound to, and matched against on the next launch.
+        resume_target = resume_mod.target_identity(measurement_surface=args.surface,
+                                                   model=args.model)
+        resume_queue = [None]
+
+        def settle_resume(outcome) -> None:
+            # Lineage for the claim; a ledger fault never costs the durable row.
+            if outcome.resumed_from is None or resume_queue[0] is None:
+                return
+            try:
+                with resume_mod.ClaimLedger(args.store) as ledger:
+                    ledger.settle(outcome.resumed_from, current_anchor_commit[0],
+                                  result_status=outcome.status)
+            except Exception as exc:      # noqa: BLE001
+                print(f"warning: resume claim settle failed: {type(exc).__name__}: {exc}",
+                      file=sys.stderr)
 
         def validate_pooled(worker, hypothesis, paths):
             # A byte-bounded or otherwise partial census legitimately has no
@@ -2648,6 +2671,9 @@ def main(argv: list[str] | None = None) -> int:
             if screen_state is not None:
                 attempt["cpu_screen"] = dict(screen_state)
                 attempt["research_scope"]["cpu_screen"] = dict(screen_state)
+            resume_mod.bind_checkpoints(attempt, epoch=epoch,
+                                        anchor_commit=current_anchor_commit[0],
+                                        target=resume_target)
             journal_receipts = []
             try:
                 archive.record(args.store, attempt, epoch=epoch,
@@ -2659,6 +2685,7 @@ def main(argv: list[str] | None = None) -> int:
                 # row receipt. Missing receipts remain explicit in the sidecar.
                 outcome.journal_receipt = journal_receipts[0] if journal_receipts else None
                 lineage_recorded_outcomes.append(outcome)
+            settle_resume(outcome)
             if outcome.attempt_identity is not None:
                 registry = dispatch_guard.Registry(args.store)
                 try:
@@ -2702,8 +2729,12 @@ def main(argv: list[str] | None = None) -> int:
             if screen_state is not None:
                 attempt["cpu_screen"] = dict(screen_state)
                 attempt["research_scope"]["cpu_screen"] = dict(screen_state)
+            resume_mod.bind_checkpoints(attempt, epoch=epoch,
+                                        anchor_commit=current_anchor_commit[0],
+                                        target=resume_target)
             archive.record(args.store, attempt, epoch=epoch, recorded_at=loop._now(),
                            campaign_id="ak-loop")
+            settle_resume(candidate)
             if candidate.attempt_identity is not None:
                 registry = dispatch_guard.Registry(args.store)
                 try:
@@ -2721,9 +2752,25 @@ def main(argv: list[str] | None = None) -> int:
             publish("running", latest, hotspot_rows=hotspot_rows,
                     step=f"[{worker.name}] {line[:600]}")
 
+        def record_resume_rejected(attempt) -> None:
+            """A checkpoint that failed re-validation before reaching a lane."""
+            attempt["research_scope"] = archive.original_research_scope(
+                attempt, model=args.model, quant=census.dominant_quant,
+                backend="cpu" if cpu_launch else "gpu", build_recipe=recipe.to_dict(),
+                surface=args.surface)
+            if screen_state is not None:
+                attempt["cpu_screen"] = dict(screen_state)
+                attempt["research_scope"]["cpu_screen"] = dict(screen_state)
+            archive.record(args.store, attempt, epoch=epoch, recorded_at=loop._now(),
+                           campaign_id="ak-loop")
+            print(f"resume    rejected {attempt.get('mechanism_id') or '-'} "
+                  f"({attempt.get('resumed_from')}): {attempt.get('reason')}", flush=True)
+
         def step_pooled(worker_name: str, label: str) -> None:
             # The step line names the lane: an unattributed "building and gating" on a
             # pooled run says nothing about which of N lanes is where.
+            if label.startswith("resuming "):
+                print(f"resume    [{worker_name}] {label}", flush=True)
             publish("running", latest, hotspot_rows=hotspot_rows,
                     step=f"[{worker_name}] {label}")
 
@@ -2913,6 +2960,32 @@ def main(argv: list[str] | None = None) -> int:
                         runtime_owner[0] is not None else None)
         pending_slot = runtime_recovery.PendingPlanner.slot(pending_pair)
 
+        # RESUME before any fresh hypothesis (resume.py): checkpointed work of THIS
+        # anchor/epoch/target, most advanced first, each re-validated and claimed at
+        # most once. A retained screen candidate or a pending runtime pair already
+        # owns this launch's first draw, so neither is displaced.
+        if args.resume == "on" and not screen_confirmation and pending_pair is None:
+            try:
+                resume_queue[0], resume_report = resume_mod.prepare(
+                    args.store, epoch=epoch, anchor_commit=current_anchor_commit[0],
+                    target=resume_target, repo=args.worktree,
+                    on_rejected=record_resume_rejected, scratch=args.store)
+                print(f"resume    scanned {resume_report['scanned']} checkpoint(s): "
+                      f"{len(resume_report['queued'])} queued, "
+                      f"{len(resume_report['rejected'])} rejected, "
+                      f"{len(resume_report['ineligible'])} not resumable now, "
+                      f"{resume_report['already_claimed']} already claimed"
+                      + (f"; {resume_report['other_epoch_rows']} row(s) with checkpoints "
+                         f"in other epochs (not this launch's)"
+                         if resume_report["other_epoch_rows"] else ""), flush=True)
+                for row in resume_report["queued"]:
+                    print(f"resume    queued {row['mechanism_id']} at {row['stage']} "
+                          f"(from {row['checkpoint_id']})", flush=True)
+            except Exception as exc:      # noqa: BLE001 -- fresh research still runs
+                print(f"resume    unavailable: {type(exc).__name__}: {exc}", file=sys.stderr)
+        elif args.resume == "off":
+            print("resume    off (--resume off): checkpointed work is not scanned", flush=True)
+
         def make_planner(worker):
             if screen_confirmation:
                 return cpu_screen.RetainedPlanner(screen_confirmation, worker, screen_prepared["launch"])
@@ -2953,6 +3026,7 @@ def main(argv: list[str] | None = None) -> int:
                 hypothesis, {**context, "epoch_sha256": epoch}),
             reserve_candidate=reserve_pooled,
             record_abandoned=record_abandoned_pooled,
+            next_resume=(resume_queue[0].take if resume_queue[0] is not None else None),
             champion_tree=args.worktree, branch=args.champion_branch,
             on_step=step_pooled)
 
@@ -3633,6 +3707,8 @@ def main(argv: list[str] | None = None) -> int:
                   if outcome.comparison else "—")
         print(f"  {index:>2}. {outcome.status:<22} {effect:>10}  "
               f"{outcome.hypothesis.mechanism_id if outcome.hypothesis else ''}")
+        if outcome.resumed_from is not None:
+            print(f"      resumed at {outcome.resume_stage} from {outcome.resumed_from}")
         for row in outcome.abandoned_candidates:
             print(f"      disposed {row.get('status')} by {row.get('refusal_gate')} "
                   f"({row.get('mechanism_id') or '-'}): "

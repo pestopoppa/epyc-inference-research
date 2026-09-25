@@ -1,0 +1,11 @@
+{
+  "lane": "lane0",
+  "mechanism_id": "akm-q4k-x4-actscale-hoist",
+  "original_head": "5a60152ae3b84455f0bbb16264e6b6b8c99d8138",
+  "patch_file": "akm-q4k-x4-actscale-hoist.lane0.1ea649594464ee6c9e2123b164afd88692bc97426223eb9e7caba956ec23f29e.patch",
+  "patch_sha256": "bf318cafd9ecbd92d8001962de936461eda525b7c4d2668b94ad6553a476c7a7",
+  "schema": "epyc.autokernel.source_patch_archive.v1",
+  "scope": "source_only_not_execution_evidence",
+  "untracked_source_paths": [],
+  "worktree": "/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run9c/targets/674cc00c0a4ae9f9a241195fda2adb00c208ef3a9fff980c0b2740162ccfe13d/workers/lane0"
+}
