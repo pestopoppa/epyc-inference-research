@@ -341,7 +341,10 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                         if validate_candidate is not None else None),
                     formation_guard=formation_guard,
                     reserve_candidate=reserve if reserve_candidate is not None else None,
-                    record_abandoned=abandoned, resume=resumed)
+                    record_abandoned=abandoned, resume=resumed,
+                    # The lane and the commit reset_to_champion put it on for THIS
+                    # draw: the only lane an empty author report may be derived from.
+                    author_lane=(worker.worktree, base))
             except Superseded as exc:
                 # `iterate` already converted this into an Outcome carrying the
                 # hypothesis; reaching here means it escaped before one was formed.

@@ -131,6 +131,56 @@ def dirty_paths(worktree: Path) -> tuple[str, ...]:
     return tuple(sorted(paths))
 
 
+#: The source prefixes a candidate may touch (`validate_candidate`'s allowlist).
+KERNEL_ALLOWLIST = ("ggml/src/", "src/")
+
+
+class LaneDiffRefused(RuntimeError):
+    """The lane holds changes, but they cannot stand in for the author's report."""
+
+
+def lane_diff_report(worktree: Path, base: str, *, target_surface: str,
+                     before_tree: str | None = None) -> tuple[str, ...] | None:
+    """The author's `{"paths": [...]}` report, DERIVED from the lane, or None.
+
+    For an author call whose reply is empty or unparsable (`AuthorReplyMissing`): the
+    report is only the list of files it changed, and the lane says that factually --
+    `git diff --name-only <base>` plus the untracked files it created. `base` is the
+    commit the loop reset THIS lane to for THIS draw; nothing else qualifies.
+
+    None when there is nothing to report: no diff against `base`, or (`before_tree`)
+    the tree is the one the author call started from, so this call changed nothing (a
+    later patch round must not resubmit an earlier round's rejected edit).
+
+    Raises `LaneDiffRefused` when the lane cannot be trusted as the report: HEAD is
+    not `base` (committed, moved, or never reset), an untracked file outside
+    `KERNEL_ALLOWLIST`, or no changed file named by the hypothesis's target surface.
+    Everything else (protected files, extra files, the diff's content) is left to the
+    normal gates: critic pass 2, `validate_candidate`, op_scope and the build."""
+    if not base:
+        raise LaneDiffRefused("the loop recorded no reset base for this lane")
+    head = _git(worktree, "rev-parse", "HEAD").decode().strip()
+    if head != base:
+        raise LaneDiffRefused(f"lane HEAD {head[:12]} is not the reset base {base[:12]}")
+    tracked = {_normal_path(raw.decode("utf-8", "surrogateescape")) for raw in
+               _git(worktree, "diff", "--name-only", "-z", base, "--").split(b"\0") if raw}
+    untracked = {_normal_path(raw.decode("utf-8", "surrogateescape")) for raw in
+                 _git(worktree, "ls-files", "--others", "--exclude-standard", "-z").split(b"\0")
+                 if raw}
+    paths = tuple(sorted(tracked | untracked))
+    if not paths:
+        return None
+    if before_tree is not None and candidate_tree(worktree) == before_tree:
+        return None
+    stray = sorted(path for path in untracked if not path.startswith(KERNEL_ALLOWLIST))
+    if stray:
+        raise LaneDiffRefused(f"untracked files outside {list(KERNEL_ALLOWLIST)}: {stray}")
+    if not any(path in (target_surface or "") for path in paths):
+        raise LaneDiffRefused(f"no changed file {list(paths)} is the hypothesis's target "
+                              f"surface {str(target_surface)[:200]!r}")
+    return paths
+
+
 def _protected(path: str) -> bool:
     return (path.startswith(_PROTECTED_PREFIXES)
             or PurePosixPath(path).name == "CMakeLists.txt")
@@ -268,8 +318,7 @@ def validate_candidate(worktree: Path, declared_paths: Sequence[str], *,
     protected = [path for path in dirty if _protected(path)]
     if protected:
         raise IntegrityRefused("oracle_bench_source_modified", repr(protected))
-    outside = [path for path in dirty
-               if not (path.startswith("ggml/src/") or path.startswith("src/"))]
+    outside = [path for path in dirty if not path.startswith(KERNEL_ALLOWLIST)]
     if outside:
         raise IntegrityRefused("outside_kernel_allowlist", repr(outside))
     diff = _git(worktree, "diff", "--no-ext-diff", "HEAD", "--").decode(

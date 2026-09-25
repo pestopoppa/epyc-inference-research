@@ -557,7 +557,10 @@ class CliKnobs(unittest.TestCase):
 
     def _args(self, **kw):
         base = dict(actor_context_limit=aoc.DEFAULT_CONTEXT_LIMIT,
-                    actor_output_limit=aoc.DEFAULT_OUTPUT_LIMIT, actor_concise="on",
+                    actor_output_limit=aoc.DEFAULT_OUTPUT_LIMIT,
+                    actor_planner_output_limit=aoc.DEFAULT_PLANNER_OUTPUT_LIMIT,
+                    actor_author_output_limit=aoc.DEFAULT_AUTHOR_OUTPUT_LIMIT,
+                    actor_concise="on",
                     actor_planner_budget_s=2700, actor_author_budget_s=0,
                     actor_timeout_s=7200)
         base.update(kw)
@@ -568,7 +571,8 @@ class CliKnobs(unittest.TestCase):
         self.assertEqual((aoc.DEFAULT_CONTEXT_LIMIT, aoc.DEFAULT_OUTPUT_LIMIT), (131072, 8192))
         args = self._args()
         self.assertEqual(run._actor_limits(args),
-                         {"context_limit": 131072, "output_limit": 8192})
+                         {"context_limit": 131072, "output_limit": 8192,
+                          "planner_output_limit": 16384, "author_output_limit": 32768})
         self.assertEqual(run._actor_budgets(args), {"concise": True, "planner_budget_s": 2700,
                                                     "author_budget_s": 0})
         self.assertIsNone(run._actor_budget_error(args))

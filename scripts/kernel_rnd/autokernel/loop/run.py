@@ -260,11 +260,23 @@ def _actor_knobs(args) -> dict[str, bool]:
 
 
 def _actor_limits(args) -> dict[str, int]:
-    """OAB-23 opencode model limits (`--actor-context-limit` / `--actor-output-limit`)
-    as ActorSeat fields; every opencode seat gets them, the critic included (it runs on
-    the same server pool)."""
+    """OAB-23 opencode model limits as ActorSeat fields; every opencode seat gets them,
+    the critic included (it runs on the same server pool). Per role: the planner's and
+    the author's own `limit.output` (`--actor-planner-output-limit` /
+    `--actor-author-output-limit`; the critic takes the planner's), each falling back
+    to `--actor-output-limit` when 0."""
     return {"context_limit": int(args.actor_context_limit),
-            "output_limit": int(args.actor_output_limit)}
+            "output_limit": int(args.actor_output_limit),
+            "planner_output_limit": int(args.actor_planner_output_limit),
+            "author_output_limit": int(args.actor_author_output_limit)}
+
+
+def _effective_output_limits(args) -> dict[str, int]:
+    """`limit.output` each role's call will carry (0 = opencode's own default)."""
+    fallback = int(args.actor_output_limit)
+    planner = int(args.actor_planner_output_limit) or fallback
+    return {"planner": planner, "critic": planner,
+            "author": int(args.actor_author_output_limit) or fallback}
 
 
 def _actor_budgets(args) -> dict[str, int | bool]:
@@ -276,13 +288,23 @@ def _actor_budgets(args) -> dict[str, int | bool]:
 
 def _actor_budget_error(args) -> str | None:
     """Why the OAB-22/23 knobs are unusable, or None."""
-    for flag in ("actor_context_limit", "actor_output_limit", "actor_planner_budget_s",
+    for flag in ("actor_context_limit", "actor_output_limit", "actor_planner_output_limit",
+                 "actor_author_output_limit", "actor_planner_budget_s",
                  "actor_author_budget_s"):
         if int(getattr(args, flag)) < 0:
             return f"--{flag.replace('_', '-')} must be >= 0"
-    context, output = int(args.actor_context_limit), int(args.actor_output_limit)
-    if context and output and output >= context:
-        return "--actor-output-limit must be below --actor-context-limit"
+    context = int(args.actor_context_limit)
+    if not context:
+        return None
+    # opencode compacts at context - output; an output limit at or past half the
+    # context leaves the compaction threshold under the output it must make room for.
+    for flag in ("actor_output_limit", "actor_planner_output_limit",
+                 "actor_author_output_limit"):
+        output = int(getattr(args, flag))
+        if output and output * 2 >= context:
+            return (f"--{flag.replace('_', '-')} ({output}) must be below half of "
+                    f"--actor-context-limit ({context}): opencode compacts at "
+                    "context - output and needs that headroom")
     return None
 
 
@@ -839,6 +861,19 @@ def main(argv: list[str] | None = None) -> int:
                         help="opencode planner/author/critic (OAB-23): `limit.output`, sent as "
                              "max_tokens on every request (0 = opencode's 32000). A step that "
                              "hits it ends the opencode session (finish=length) "
+                             "(default: %(default)s)")
+    parser.add_argument("--actor-planner-output-limit", type=int,
+                        default=actor_opencode_config.DEFAULT_PLANNER_OUTPUT_LIMIT,
+                        help="opencode planner AND critic: their own `limit.output` "
+                             "(0 = --actor-output-limit). DS41 run 10b's planner hit 8,192 "
+                             "once and still replied (default: %(default)s)")
+    parser.add_argument("--actor-author-output-limit", type=int,
+                        default=actor_opencode_config.DEFAULT_AUTHOR_OUTPUT_LIMIT,
+                        help="opencode author: its own `limit.output` (0 = "
+                             "--actor-output-limit). A file-write tool call's arguments are "
+                             "output tokens; DS41 run 10b's author ended on one 8,192-token "
+                             "step with no report (failure_class=output_capped_empty). Must "
+                             "stay below half of --actor-context-limit "
                              "(default: %(default)s)")
     parser.add_argument("--actor-concise", choices=("on", "off"), default="on",
                         help="opencode planner/author (OAB-22): append the concision rule "
@@ -1454,7 +1489,9 @@ def main(argv: list[str] | None = None) -> int:
           f"context={args.actor_context_mode} "
           f"trim-instructions={args.actor_trim_instructions} "
           f"trim-tools={args.actor_trim_tools} lane-guard={args.actor_lane_guard} "
-          f"context-limit={args.actor_context_limit} output-limit={args.actor_output_limit} "
+          f"context-limit={args.actor_context_limit} output-limit="
+          + ",".join(f"{role}:{value}" for role, value in _effective_output_limits(args).items())
+          + " "
           f"concise={args.actor_concise} planner-budget={args.actor_planner_budget_s}s "
           f"author-budget={args.actor_author_budget_s}s")
     for moot in _moot_budgets(args):

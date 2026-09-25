@@ -48,7 +48,8 @@ import time
 from typing import Any, Callable, Mapping, Sequence
 
 from . import actor_metrics, belief_context, integrity
-from .loop import Abstain, ActorStopped, ActorTransient, Hypothesis, Review
+from .loop import (Abstain, ActorStopped, ActorTransient, AuthorReportMissing, Hypothesis,
+                   Review)
 
 #: `--actor-belief-context`: `on` adds the belief-kernel section to the planner prompt only
 #: when ingested claims apply to the exact target (never otherwise), and records a receipt.
@@ -228,6 +229,12 @@ class ActorSeat:
     #: `actor_opencode_config.model_limits`). Off here; run.py defaults them on.
     context_limit: int = 0
     output_limit: int = 0
+    #: Per-role `limit.output` (0 = fall back to `output_limit`). The author's turns
+    #: WRITE code, and a file-write tool call's arguments are output tokens, so it needs
+    #: more than the planner; the critic takes the planner's value. DS41 run 10b: an
+    #: author step hit 8,192 and the session ended with no report (`OUTPUT_CAPPED_EMPTY`).
+    planner_output_limit: int = 0
+    author_output_limit: int = 0
     #: OAB-22: append `CONCISE_RULE` to the planner and author prompts (opencode only).
     concise: bool = False
     #: OAB-23: a wall-clock budget per planner / author call (seconds, 0 = none), ended
@@ -243,14 +250,25 @@ class ActorSeat:
 
     @property
     def limits(self) -> dict[str, int]:
+        """The role-independent limits (the fallback); calls use `limits_for(role)`."""
         return {"context_limit": self.context_limit, "output_limit": self.output_limit}
+
+    def output_limit_for(self, role: str) -> int:
+        """`limit.output` for one call of `role`: the author's own value, the planner's
+        for the planner and the critic, else `output_limit`."""
+        per_role = self.author_output_limit if role == "author" else self.planner_output_limit
+        return per_role or self.output_limit
+
+    def limits_for(self, role: str) -> dict[str, int]:
+        return {"context_limit": self.context_limit,
+                "output_limit": self.output_limit_for(role)}
 
     def budget_for(self, role: str) -> int:
         return {"planner": self.planner_budget_s, "author": self.author_budget_s}.get(role, 0)
 
     def label_knobs(self, role: str) -> dict[str, Any]:
         """Every seat_label argument this seat turns on for one call of `role`."""
-        return {**self.knobs, **self.limits,
+        return {**self.knobs, **self.limits_for(role),
                 "concise": self.concise and role in ("planner", "author"),
                 "budget_s": self.budget_for(role)}
 
@@ -302,6 +320,31 @@ class ActorBudgetExhausted(ProviderTransient):
     a 61-minute planner call filled 183,710 of :8083's 196,608 pool tokens."""
 
     failure_class = actor_metrics.BUDGET_EXHAUSTED
+
+
+class AuthorReplyMissing(ProviderTransient, AuthorReportMissing):
+    """The AUTHOR's reply carried no usable `{"paths": [...]}` report (empty, or not
+    parseable even after the repair turn). Raised by `AgentPlanner.author` only -- the
+    planner's and critic's replies carry content that cannot be derived from anything
+    else, so they never raise it. `iterate` may derive the report from the lane diff
+    (`integrity.lane_diff_report`) when the loop reset that lane for this draw;
+    otherwise it ends the iteration exactly as the plain transient did."""
+
+    def __init__(self, message: str, *, failure_class: str | None = None):
+        super().__init__(message)
+        self.failure_class = failure_class
+
+
+class _Reply(str):
+    """A reply text that also says how the call ended (`failure_class`), so a parse
+    failure downstream can name it. Compares and parses as the plain string."""
+
+    failure_class: str | None = None
+
+    def __new__(cls, text: str, *, failure_class: str | None = None):
+        reply = super().__new__(cls, text)
+        reply.failure_class = failure_class
+        return reply
 
 
 class _BudgetSpent(Exception):
@@ -549,12 +592,14 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
                      else done.stdout)
     else:
         final_text = None   # about to raise below; nothing to hand `_parse_reply`
-    _record_metrics(workspace, backend, role=_safe_role(schema), returncode=done.returncode,
-                    wall_s=time.monotonic() - started, timed_out=False,
-                    before_ids=before_session_ids, arm=arm, env=env, collect_metrics=collect_metrics,
-                    schema=schema, final_text=final_text, salvaged=salvage_text is not None,
-                    started_at=started_at, budget_s=budget_s,
-                    failure_class=OpencodeStoreError.failure_class if store_error else None)
+    recorded_class = _record_metrics(
+        workspace, backend, role=_safe_role(schema), returncode=done.returncode,
+        wall_s=time.monotonic() - started, timed_out=False,
+        before_ids=before_session_ids, arm=arm, env=env, collect_metrics=collect_metrics,
+        schema=schema, final_text=final_text, salvaged=salvage_text is not None,
+        started_at=started_at, budget_s=budget_s,
+        failure_class=OpencodeStoreError.failure_class if store_error else None,
+        empty_reply=salvage_text is None and not (done.stdout or "").strip())
     _record_call(workspace, backend, prompt, returncode=done.returncode,
                  wall_s=time.monotonic() - started, env=env, schema=schema, reply=reply)
     if salvage_text is not None:
@@ -564,15 +609,17 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
             f"{OpencodeStoreError.failure_class}: opencode's SQLite store refused a write "
             f"(rc {done.returncode}, empty stdout, no model reply) [{backend.describe()}]: "
             f"stderr={done.stderr[:300]!r}")
+    capped = recorded_class == actor_metrics.OUTPUT_CAPPED_EMPTY
     if done.returncode != 0:
         # Both tails. `claude -p` reports its own errors ("Not logged in", usage
         # limits, refusals) on STDOUT with a non-zero exit and an EMPTY stderr --
         # run 27 logged 74 transients reading "actor exited 1: " and nothing else,
         # because this path used to throw the only channel that carried the reason.
         raise ProviderTransient(
-            f"actor exited {done.returncode} [{backend.describe()}]: "
+            (f"{actor_metrics.OUTPUT_CAPPED_EMPTY}: " if capped else "")
+            + f"actor exited {done.returncode} [{backend.describe()}]: "
             f"stderr={done.stderr[-300:]!r} stdout={done.stdout[-300:]!r}")
-    return final_text
+    return _Reply(final_text, failure_class=recorded_class) if capped else final_text
 
 
 def _budget_salvage(text: str, schema: Mapping[str, Any] | None) -> bool:
@@ -621,7 +668,7 @@ def _budget_exhausted(workspace: Path, backend: Backend, prompt: str, *, argv: l
 
 #: Where raw actor replies land: a sibling of the worker tree, never inside it (a
 #: file inside the worktree would ride into the authored diff).
-ACTOR_REPLY_DIR = "actor-replies"
+ACTOR_REPLY_DIR = actor_metrics.REPLY_DIR_NAME
 ACTOR_REPLY_KEEP_BYTES = 4 * 1024 * 1024
 
 
@@ -648,7 +695,7 @@ def _persist_reply(workspace: Path, backend: Backend,
         return None  # a reply record is evidence, never a reason to fail the actor call
 
 
-ACTOR_CALL_LOG = "actor-calls.jsonl"
+ACTOR_CALL_LOG = actor_metrics.CALL_LOG_NAME
 
 
 def _record_call(workspace: Path, backend: Backend, prompt: str, *, returncode: int,
@@ -704,7 +751,8 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
                     started_at: float | None = None,
                     failure_class: str | None = None,
                     budget_s: float | None = None,
-                    budget_exhausted: bool = False) -> None:
+                    budget_exhausted: bool = False,
+                    empty_reply: bool = False) -> str | None:
     """A sibling line in `actor-calls.jsonl`, ahead of the `_record_call` line so a
     reader taking "the last line" for the v1 record (as the existing tests and any
     VB-AK-SEAT consumer do) is unaffected by this addition: the per-call
@@ -716,7 +764,11 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
     extension of VB-AK-SEAT's closed, self-hashed `CALL_SCHEMA` (see
     `actor_metrics.py`'s module docstring for why). Never raises: a
     metrics-collection failure is recorded as `metrics_error`, never a reason to
-    fail the actor call."""
+    fail the actor call.
+
+    Returns the `failure_class` it recorded. An unclassified call whose reply is empty
+    (`empty_reply`) and whose export shows the final step ended on the output cap is
+    classified `OUTPUT_CAPPED_EMPTY` here, the one place that reads the export."""
     try:
         finished = time.time()
         schema_valid = repair_ran = None
@@ -734,6 +786,9 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
             stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime(finished))
             opencode_stats = actor_metrics.collect(Path(workspace), before_ids, target,
                                                    stamp=stamp, started_at=started_at)
+            if failure_class is None and empty_reply and not timed_out \
+                    and opencode_stats.get("final_step_capped"):
+                failure_class = actor_metrics.OUTPUT_CAPPED_EMPTY
         orchestrator_stats: dict[str, Any] | None = None
         if backend.kind == "orchestrator":
             # INF-78 OAB-2: the CLI's provenance sidecar, projected onto this schema's
@@ -783,6 +838,7 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
             handle.write(json.dumps(record, sort_keys=True) + "\n")
     except OSError:
         pass  # evidence, never a reason to fail the actor call
+    return failure_class
 
 
 def _budgets_of(env: Mapping[str, str] | None, budget_s: float | None,
@@ -1470,9 +1526,12 @@ def _parse_reply(raw: str, *, schema: Mapping[str, Any], backend: Backend,
         # 2026-09-24 10:09 a retry ended with empty stdout, the repair turn
         # returned "replay-verification / src/verify/replay.ts", and the critic
         # spent a pass rejecting a hypothesis no agent ever formed.
+        capped = getattr(raw, "failure_class", None) == actor_metrics.OUTPUT_CAPPED_EMPTY
         raise ProviderTransient(
-            f"actor produced no final report ({len(raw.strip())} chars); "
-            "refusing to repair an empty reply")
+            (f"{actor_metrics.OUTPUT_CAPPED_EMPTY}: " if capped else "")
+            + f"actor produced no final report ({len(raw.strip())} chars"
+            + ("; its final step hit the output cap" if capped else "")
+            + "); refusing to repair an empty reply")
     body, echoed = pre.body, pre.echoed
     question = next((q for key, q in _DECLINE_QUESTIONS.items()
                      if key in schema.get("required", ())), None)
@@ -2257,7 +2316,8 @@ def _budget_env(seat: "ActorSeat | None", role: str) -> dict[str, str]:
     """`SEAT_ENV_BUDGETS` for a call whose seat applies a limit or the concise rule."""
     if seat is None:
         return {}
-    applied = {**seat.limits, "concise": seat.concise and role in ("planner", "author")}
+    applied = {**seat.limits_for(role),
+               "concise": seat.concise and role in ("planner", "author")}
     if not any(applied.values()):
         return {}
     return {SEAT_ENV_BUDGETS: json.dumps(applied, sort_keys=True)}
@@ -2275,7 +2335,7 @@ def _seat_call(seat: "ActorSeat | None", backend: Backend, role: str, workspace:
         return None
     from . import actor_opencode_config as seat_config
     knobs = seat.knobs if seat is not None else {}
-    limits = seat.limits if seat is not None else {}
+    limits = seat.limits_for(role) if seat is not None else {}
     label = seat.label_knobs(role) if seat is not None else {}
     env: dict[str, str] = {}
     if any(label.values()):
@@ -2382,7 +2442,7 @@ class AgentPlanner:
             path, role=role, lane=Path(self.workspace), profiles=_profile_dirs(context),
             python=self.seat.tools_python, steps=self.seat.steps, fan_out=self.seat.fan_out,
             build_dir=_anchor_build_dir(context), model=self.backend.model,
-            **self.seat.knobs, **self.seat.limits)
+            **self.seat.knobs, **self.seat.limits_for(role))
         trim = seat_config.TRIM_ENV if self.seat.trim_instructions else {}
         return (dataclasses.replace(self.backend, agent=seat_config.AGENT_NAMES[role]),
                 {**trim, "OPENCODE_CONFIG": str(path), **_budget_env(self.seat, role),
@@ -2593,7 +2653,16 @@ class AgentPlanner:
                                **self._budget_kw("author")),
             should_stop=self.should_stop)
         self.transient_streak = streak
-        body = _parse_reply(raw, schema=PATHS_SCHEMA, backend=self.backend, workspace=self.workspace)
+        try:
+            body = _parse_reply(raw, schema=PATHS_SCHEMA, backend=self.backend,
+                                workspace=self.workspace)
+        except AuthorReplyMissing:
+            raise
+        except ProviderTransient as exc:
+            # The REPORT is missing, not necessarily the work: `iterate` may derive the
+            # report from the lane diff (never invented) or ends the iteration as before.
+            raise AuthorReplyMissing(
+                str(exc), failure_class=getattr(raw, "failure_class", None)) from exc
         abstention = _abstention(body)
         if abstention is not None:
             return abstention
@@ -2735,5 +2804,5 @@ class AgentCritic:
 
 __all__ = ["BACKOFF_S", "Backend", "CLAUDE", "CODEX", "CRITIC_DEFAULT", "OPENCODE",
            "PLANNER_DEFAULT", "STORE_ERROR_BACKOFF_S", "AgentCritic", "AgentPlanner",
-           "OpencodeStoreError", "ProviderTransient",
+           "AuthorReplyMissing", "OpencodeStoreError", "ProviderTransient",
            "backend_for", "render_context"]

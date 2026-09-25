@@ -125,6 +125,14 @@ SNAPSHOT_OFF = {"snapshot": False}
 #: own default (context 0: no proactive compaction; output 0: max_tokens 32000).
 DEFAULT_CONTEXT_LIMIT = 131_072
 DEFAULT_OUTPUT_LIMIT = 8_192
+#: Per-role `limit.output` (run.py `--actor-planner-output-limit` / `--actor-author-
+#: output-limit`; the critic takes the planner's). DS41 run 10b (2026-09-25): the author
+#: ended on ONE 8,192-token step with no report -- a file-write tool call's arguments are
+#: output -- and the planner hit 8,192 once but still replied. The pool bound is
+#: unchanged: compaction fires at C - O, so the worst next request is still ~C + one
+#: step of tool output whatever O is; O < C/2 keeps C - O >= O (run.py validates it).
+DEFAULT_PLANNER_OUTPUT_LIMIT = 16_384
+DEFAULT_AUTHOR_OUTPUT_LIMIT = 32_768
 
 
 def model_limits(model: str | None, *, context_limit: int = 0,
@@ -617,8 +625,8 @@ def write_plain_config(path: Path, **kw) -> Path:
     return path
 
 
-__all__ = ["actor_instructions", "AGENT_NAMES", "DEFAULT_CONTEXT_LIMIT",
-           "DEFAULT_OUTPUT_LIMIT", "limits_label", "model_limits", "AUTHOR_EDIT_GUARD",
+__all__ = ["actor_instructions", "AGENT_NAMES", "DEFAULT_AUTHOR_OUTPUT_LIMIT",
+           "DEFAULT_CONTEXT_LIMIT", "DEFAULT_OUTPUT_LIMIT", "DEFAULT_PLANNER_OUTPUT_LIMIT", "limits_label", "model_limits", "AUTHOR_EDIT_GUARD",
            "AUTHOR_STYLE_NOTE",
            "BUILD_DENY", "MAX_CONCURRENT_SUBAGENTS", "MCP_SERVER", "PLAIN_ROLES",
            "READ_ONLY_DENY", "SCOUT_AGENT", "SNAPSHOT_OFF", "TRIM_ENV", "UNUSED_TOOLS", "anchor_fence",

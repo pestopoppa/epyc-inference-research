@@ -78,6 +78,31 @@ OPENCODE_STORE_ERROR = "opencode_store_error"
 #: `failure_class` of a call ended by its per-call wall budget (OAB-23,
 #: `--actor-planner-budget-s`), distinct from the hard `--actor-timeout-s` timeout.
 BUDGET_EXHAUSTED = "budget_exhausted"
+#: `failure_class` of an opencode call whose FINAL step ended on the output cap
+#: (finish=length, `limit.output`) and whose reply text is empty: opencode ends the
+#: session on such a step, so nothing was printed. DS41 run 10b, 2026-09-25 19:58Z: an
+#: author call spent 608 s and ended on one 8,192-token reasoning step with no report.
+#: Distinct from the loop's `planner_transient` reasons so the metrics show it.
+OUTPUT_CAPPED_EMPTY = "output_capped_empty"
+#: A sibling row in the same `actor-calls.jsonl`, written when the loop derived an
+#: author call's `{"paths": [...]}` report from the lane diff (`report_source:
+#: "lane_diff"`) because the reply carried none. Its own schema, so the metrics
+#: summarizer and the VB-AK-SEAT reader (both filter by schema) are unaffected.
+REPORT_SOURCE_SCHEMA = "epyc.autokernel.actor_report_source.v1"
+CALL_LOG_NAME = "actor-calls.jsonl"
+REPLY_DIR_NAME = "actor-replies"
+
+
+def record_report_source(replies_dir: Path, record: Mapping[str, Any]) -> None:
+    """Append one `REPORT_SOURCE_SCHEMA` row. Never raises: evidence, not control."""
+    row = {"schema": REPORT_SOURCE_SCHEMA, "role": "author",
+           "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), **dict(record)}
+    try:
+        Path(replies_dir).mkdir(parents=True, exist_ok=True)
+        with open(Path(replies_dir) / CALL_LOG_NAME, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(row, sort_keys=True) + "\n")
+    except OSError:
+        pass
 
 #: Short busy-wait for this module's own `opencode session list` / `export` when the
 #: store is locked: bounded (~17 s of sleeps), because metrics are evidence and must
@@ -241,6 +266,8 @@ def parse_export(path: Path) -> dict[str, Any]:
         # Steps that ended on the output cap (`max_tokens`, OAB-23 `limit.output`): the
         # AI SDK's finish reason "length". opencode ends the session after such a step.
         "output_capped_steps": sum(1 for a in assistant if a.get("finish") == "length"),
+        # The LAST step hit the cap: the session ended there, before any final text.
+        "final_step_capped": bool(assistant) and assistant[-1].get("finish") == "length",
         "decoded_tokens": sum(_tokens(a, "output") for a in assistant),
         "prompt_tokens": sum(_tokens(a, "input") for a in assistant),
         "cache_read_tokens": sum(_tokens(a, "cache", "read") for a in assistant),
@@ -266,7 +293,8 @@ def _file_ref(path: Path) -> dict[str, Any]:
 
 def _empty_result(error: str) -> dict[str, Any]:
     return {"metrics_error": error, "session_ids": [], "sessions": [], "totals": None,
-            "primary_session_id": None, "context_first_tokens": None, "context_max_tokens": None}
+            "primary_session_id": None, "context_first_tokens": None, "context_max_tokens": None,
+            "final_step_capped": None}
 
 
 def collect(workspace: Path, before_ids: set[str], replies_dir: Path, *, stamp: str,
@@ -313,6 +341,8 @@ def collect(workspace: Path, before_ids: set[str], replies_dir: Path, *, stamp: 
             "totals": totals,
             "context_first_tokens": primary.get("context_first_tokens"),
             "context_max_tokens": max((s.get("context_max_tokens") or 0) for s in sessions),
+            # The ROOT session's last step (the one whose text is the reply).
+            "final_step_capped": bool(primary.get("final_step_capped")),
         }
     except Exception as exc:  # noqa: BLE001 -- evidence, never a reason to fail the call
         return _empty_result(f"{type(exc).__name__}: {exc}"[:500])
@@ -400,6 +430,8 @@ def _summary(rows: list[Mapping[str, Any]]) -> dict[str, Any]:
         "salvaged": sum(1 for r in rows if r.get("salvaged") is True),
         "metrics_errors": sum(1 for r in rows if r.get("metrics_error")),
         "store_errors": sum(1 for r in rows if r.get("failure_class") == OPENCODE_STORE_ERROR),
+        "output_capped_empty": sum(1 for r in rows
+                                   if r.get("failure_class") == OUTPUT_CAPPED_EMPTY),
         **_scout_summary(rows),
     }
 

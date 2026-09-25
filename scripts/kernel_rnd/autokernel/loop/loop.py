@@ -153,6 +153,22 @@ class ActorTransient(RuntimeError):
     """
 
 
+class AuthorReportMissing(ActorTransient):
+    """The author's reply carried no usable `{"paths": [...]}` report (the concrete
+    `actors.AuthorReplyMissing`). Only the author raises it. `iterate` then derives the
+    report from the lane diff when it was given the lane and the base the loop reset
+    it to for this draw (`author_lane`); with no diff, or no such lane, it ends the
+    iteration as any provider transient does (`planner_transient`, with the author
+    resume checkpoint). `failure_class` is the call's (`output_capped_empty`, ...)."""
+
+    failure_class: str | None = None
+
+
+#: `report_source` on a candidate whose paths were derived from the lane diff because
+#: the author's reply carried no report (`AuthorReportMissing`).
+REPORT_SOURCE_LANE_DIFF = "lane_diff"
+
+
 class ActorStopped(ActorTransient):
     """A stop was asked while an actor call was in flight, and the actor was ended.
 
@@ -300,6 +316,10 @@ class Outcome:
     resumed_from: str | None = None
     resume_stage: str | None = None
     resume_checkpoints: list[dict] = field(default_factory=list)
+    # "lane_diff" when the candidate's paths were derived from the lane because the
+    # author's reply carried no report; `author_report_recovery` says why and what.
+    report_source: str | None = None
+    author_report_recovery: dict | None = None
 
     def to_attempt(self) -> dict:
         row = {"status": self.status, "turn_recorded_at": _now()}
@@ -340,6 +360,9 @@ class Outcome:
             row["resume_stage"] = self.resume_stage
         if self.resume_checkpoints:
             row["resume_checkpoints"] = [dict(ck) for ck in self.resume_checkpoints]
+        if self.report_source is not None:
+            row["report_source"] = self.report_source
+            row["author_report_recovery"] = self.author_report_recovery
         for key in ("spawn_parent", "branch_id", "width", "depth"):
             if getattr(self, key) is not None:
                 row[key] = getattr(self, key)
@@ -377,6 +400,60 @@ def gate_rules_fingerprint() -> str:
     """
     import hashlib
     return hashlib.sha256(Path(gates.__file__).read_bytes()).hexdigest()
+
+
+def _mark_report_source(outcome: "Outcome", progress: Mapping[str, Any]) -> None:
+    """Stamp a candidate whose paths came from the lane diff (this patch round)."""
+    recovery = progress.get("report_recovery")
+    if recovery is not None and outcome.hypothesis is not None \
+            and outcome.report_source is None:
+        outcome.report_source = REPORT_SOURCE_LANE_DIFF
+        outcome.author_report_recovery = dict(recovery)
+
+
+def _recover_author_report(missing: AuthorReportMissing, author_lane, hypothesis,
+                           before_tree: str | None,
+                           progress: dict[str, Any]) -> tuple[str, ...]:
+    """The author's paths, derived from the lane diff, or re-raise `missing`.
+
+    Only for a lane the owner reset for this draw (`author_lane`). No diff (or no
+    change by this call) re-raises the original transient unchanged: that is the
+    refusal the loop always made. A lane that cannot stand in for the report re-raises
+    it with the reason appended. Never invents a path: every one is in the diff."""
+    if author_lane is None:
+        raise missing
+    worktree, base = Path(author_lane[0]), str(author_lane[1] or "")
+    try:
+        paths = integrity.lane_diff_report(worktree, base,
+                                           target_surface=hypothesis.target_surface,
+                                           before_tree=before_tree)
+    except Exception as exc:      # noqa: BLE001 -- LaneDiffRefused, git faults alike
+        raise _extended(missing, f"{missing}; lane diff not usable as the report: "
+                                 f"{type(exc).__name__}: {exc}"[:2000]) from missing
+    if not paths:
+        raise missing
+    progress["report_recovery"] = {
+        "report_source": REPORT_SOURCE_LANE_DIFF, "base": base, "paths": list(paths),
+        "failure_class": getattr(missing, "failure_class", None),
+        "reply_refusal": str(missing)[:500]}
+    # Beside the author call's own metrics row (`actors.ACTOR_REPLY_DIR`).
+    from . import actor_metrics
+    actor_metrics.record_report_source(
+        worktree.parent / actor_metrics.REPLY_DIR_NAME,
+        {**progress["report_recovery"], "mechanism_id": hypothesis.mechanism_id,
+         "workspace": str(worktree)})
+    return tuple(paths)
+
+
+def _extended(missing: AuthorReportMissing, message: str) -> AuthorReportMissing:
+    """`missing` again (same type, same `failure_class`) with a longer message."""
+    failure_class = getattr(missing, "failure_class", None)
+    try:
+        extended = type(missing)(message, failure_class=failure_class)
+    except TypeError:
+        extended = type(missing)(message)
+    extended.failure_class = failure_class
+    return extended
 
 
 def _pending_checkpoints(progress: Mapping[str, Any]) -> list[dict]:
@@ -492,7 +569,8 @@ def iterate(*, planner: Planner, critic: Critic,
             validate_candidate: Callable[[Hypothesis, Sequence[str]], Any] | None = None,
             formation_guard=None, reserve_candidate=None,
             record_abandoned: Callable[[Outcome], None] | None = None,
-            resume=None
+            resume=None,
+            author_lane: tuple[Path, str] | None = None
             ) -> Outcome:
     """One full turn. Pure control flow: every side effect is an injected callable.
 
@@ -515,10 +593,16 @@ def iterate(*, planner: Planner, critic: Critic,
     history. Every re-validation failure is disposed as `resume_rejected` and the
     iteration continues with fresh work. A stop, provider transient or gate refusal
     leaves `resume_checkpoints` on its row so the next launch can resume it.
+
+    `author_lane` is `(worktree, base)`: the lane the author edits and the commit the
+    OWNER reset it to for this draw (`pipeline.run_pool`). Only with it, an author
+    reply that carries no report (`AuthorReportMissing`) is answered from the lane diff
+    (`integrity.lane_diff_report`, recorded `report_source: "lane_diff"`), and the
+    normal gates judge that diff. Without it, or with no diff, the transient stands.
     """
     working = dict(context)
     abandoned: list[dict] = []
-    progress: dict[str, Any] = {"inflight": None, "build": None}
+    progress: dict[str, Any] = {"inflight": None, "build": None, "report_recovery": None}
     hypothesis_reasons: list[str] = []
     round_telemetry = {
         "hypothesis_round": 0,
@@ -553,6 +637,7 @@ def iterate(*, planner: Planner, critic: Critic,
             outcome.resume_stage = resume.stage
         if outcome.status in RESUMABLE_STATUSES and not outcome.resume_checkpoints:
             outcome.resume_checkpoints = _pending_checkpoints(progress)
+        _mark_report_source(outcome, progress)
         return outcome
 
     try:
@@ -571,7 +656,7 @@ def iterate(*, planner: Planner, critic: Critic,
                         round_telemetry=round_telemetry,
                         validator_provenance=validator_provenance,
                         record_abandoned=record_abandoned, abandoned=abandoned,
-                        resume=resume, progress=progress))
+                        resume=resume, progress=progress, author_lane=author_lane))
     except TailRefused as exc:
         # The candidate was formed and never measured. Carry the hypothesis: the
         # patch may well still help against the champion that displaced it, and the
@@ -609,7 +694,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
              formation_guard=lambda _hypothesis, _context: None,
              reserve_candidate=None, round_telemetry=None,
              validator_provenance=None, record_abandoned=None,
-             abandoned=None, resume=None, progress=None) -> Outcome:
+             abandoned=None, resume=None, progress=None, author_lane=None) -> Outcome:
     last_proposed: Hypothesis | None = None
     round_telemetry = round_telemetry if round_telemetry is not None else {}
     validator_provenance = (validator_provenance if validator_provenance is not None
@@ -668,6 +753,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             candidate.resume_stage = resume.stage
         if resume_checkpoint is not None:
             candidate.resume_checkpoints = [resume_checkpoint]
+        _mark_report_source(candidate, progress)
         record_error = None
         if record_abandoned is not None:
             try:
@@ -844,7 +930,19 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                         break
                 else:
                     on_step("authoring the patch")
-                    paths, halted = actor_call(planner.author, hypothesis, working)
+                    progress["report_recovery"] = None
+                    before_tree = None
+                    if author_lane is not None:
+                        try:
+                            before_tree = integrity.candidate_tree(Path(author_lane[0]))
+                        except Exception:      # noqa: BLE001 -- recovery then refuses
+                            before_tree = None
+                    try:
+                        paths, halted = actor_call(planner.author, hypothesis, working)
+                    except AuthorReportMissing as missing:
+                        paths, halted = _recover_author_report(
+                            missing, author_lane, hypothesis, before_tree, progress), None
+                        on_step("authoring report derived from the lane diff")
                     if halted is not None:
                         return halted
                     if isinstance(paths, Abstain):
@@ -1096,6 +1194,6 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
 # module's control flow now, and the pool is its only driver.
 
 __all__ = ["CANDIDATE_DISPOSITIONS", "CHECKPOINT_SCHEMA", "RESUMABLE_STATUSES",
-           "RESUME_REJECTED", "STOPPED_AFTER_DISPOSALS", "gate_rules_fingerprint", "Abstain", "ActorStopped", "ActorTransient", "ConfirmVetoed", "InteractionRegression", "TailRefused", "RunAborted", "MeasurementInvalid", "MeasurementFailed", "Critic",
+           "RESUME_REJECTED", "STOPPED_AFTER_DISPOSALS", "gate_rules_fingerprint", "Abstain", "ActorStopped", "ActorTransient", "AuthorReportMissing", "REPORT_SOURCE_LANE_DIFF", "ConfirmVetoed", "InteractionRegression", "TailRefused", "RunAborted", "MeasurementInvalid", "MeasurementFailed", "Critic",
            "HYPOTHESIS_ROUNDS", "Hypothesis", "Outcome", "PATCH_ROUNDS",
            "Planner", "Review", "STOPPED_MID_FORMATION", "iterate"]
