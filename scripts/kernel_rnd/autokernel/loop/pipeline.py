@@ -179,11 +179,20 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
              should_stop: Callable[[], bool] | None = None,
              accumulate_valid_positive: bool = False,
              validate_candidate=None, formation_guard=None,
-             reserve_candidate=None) -> list[loop_mod.Outcome]:
+             reserve_candidate=None,
+             record_abandoned: Callable[[Worker, loop_mod.Outcome], None] | None = None
+             ) -> list[loop_mod.Outcome]:
     """Drive `iterations` iterations across `workers` concurrent lanes.
 
     Every side effect is injected, exactly as in `loop.iterate`, so the whole pool is
     testable with no GPU, no build toolchain and no API key.
+
+    `record_abandoned(worker, outcome)` records a candidate an iteration abandoned
+    before its final outcome. It is NOT an iteration: it neither draws budget nor
+    enters the returned outcomes (whose count the serial driver checks against the
+    batch), but it carries the lane lineage and, for a gate refusal, the dispatch
+    reservation taken for that exact diff -- which the final outcome must then not
+    inherit.
     """
     budget = Budget(iterations, should_stop=should_stop)
     tail = tail or SerializedTail(champion_head)
@@ -291,6 +300,21 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                     reservation = reserve_candidate(_w, hypothesis, paths)
                     return reservation
 
+                def abandoned(candidate, _w=worker):
+                    nonlocal reservation
+                    candidate.spawn_parent = base
+                    candidate.branch_id = f"detached:{_w.name}"
+                    candidate.width = len(workers)
+                    candidate.depth = depth
+                    if reservation is not None:
+                        candidate.attempt_identity = reservation.identity
+                        candidate.exact_repeat_dispatch_count = reservation.dispatch_count
+                        candidate.candidate_diff_sha256 = reservation.candidate_diff_sha256
+                        reservation = None
+                    if record_abandoned is not None:
+                        with outcomes_lock:
+                            record_abandoned(_w, candidate)
+
                 outcome = loop_mod.iterate(
                     planner=planner, critic=critic, context=build_context(),
                     measure=measure, gate=gate, commit=commit_one, on_step=step,
@@ -302,7 +326,8 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                          validate_candidate(_w, hypothesis, paths))
                         if validate_candidate is not None else None),
                     formation_guard=formation_guard,
-                    reserve_candidate=reserve if reserve_candidate is not None else None)
+                    reserve_candidate=reserve if reserve_candidate is not None else None,
+                    record_abandoned=abandoned)
             except Superseded as exc:
                 # `iterate` already converted this into an Outcome carrying the
                 # hypothesis; reaching here means it escaped before one was formed.

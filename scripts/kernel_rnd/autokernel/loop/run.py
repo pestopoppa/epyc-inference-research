@@ -2671,6 +2671,56 @@ def main(argv: list[str] | None = None) -> int:
             latest.append(outcome)
             publish("running", latest, hotspot_rows=hotspot_rows)
 
+        def record_abandoned_pooled(worker, candidate) -> None:
+            """Durable disposition for a candidate abandoned INSIDE an iteration.
+
+            Run 9c: a hoist implemented twice, critic-accepted twice and refused twice
+            by `op_scope` before any build left no row of its own -- the iteration's
+            only row, written at the stop, called it "never attempted". Every
+            abandoned candidate now gets a row naming the gate, its verbatim reason
+            and the retained patch, the narration names it, and the status step
+            shows it. Not an iteration: `latest` (the status and continuation
+            counts) is untouched.
+            """
+            hypothesis = candidate.hypothesis
+            if hypothesis is not None and hypothesis.runtime_pair is None \
+                    and candidate.status != "hypothesis_rejected":
+                try:
+                    kept = keep_the_diff(worker, hypothesis)
+                    candidate.retained_patch = (None if kept is None else {
+                        "patch_file": str(kept.resolve()),
+                        "metadata_file": str(kept.with_suffix(".json").resolve()),
+                        "patch_sha256": hashlib.sha256(kept.read_bytes()).hexdigest()})
+                except Exception as exc:      # noqa: BLE001 -- the row still lands
+                    candidate.retained_patch = {
+                        "error": f"patch retention failed: {type(exc).__name__}: {exc}"}
+            attempt = candidate.to_attempt()
+            attempt["research_scope"] = archive.original_research_scope(
+                attempt, model=args.model, quant=census.dominant_quant,
+                backend="cpu" if cpu_launch else "gpu", build_recipe=recipe.to_dict(),
+                surface=args.surface)
+            if screen_state is not None:
+                attempt["cpu_screen"] = dict(screen_state)
+                attempt["research_scope"]["cpu_screen"] = dict(screen_state)
+            archive.record(args.store, attempt, epoch=epoch, recorded_at=loop._now(),
+                           campaign_id="ak-loop")
+            if candidate.attempt_identity is not None:
+                registry = dispatch_guard.Registry(args.store)
+                try:
+                    registry.finish(candidate.attempt_identity, status=candidate.status,
+                                    effect=None, epoch=epoch)
+                finally:
+                    registry.close()
+            reason = candidate.reasons[0] if candidate.reasons else ""
+            patch = (candidate.retained_patch or {}).get("patch_file") \
+                or (candidate.retained_patch or {}).get("error") or "no patch"
+            line = (f"{candidate.status} by {candidate.refusal_gate} "
+                    f"({hypothesis.mechanism_id if hypothesis else '-'}, round "
+                    f"{candidate.hypothesis_round}.{candidate.patch_round}): {reason}")
+            print(f"disposed  [{worker.name}] {line}; patch: {patch}", flush=True)
+            publish("running", latest, hotspot_rows=hotspot_rows,
+                    step=f"[{worker.name}] {line[:600]}")
+
         def step_pooled(worker_name: str, label: str) -> None:
             # The step line names the lane: an unattributed "building and gating" on a
             # pooled run says nothing about which of N lanes is where.
@@ -2902,6 +2952,7 @@ def main(argv: list[str] | None = None) -> int:
             formation_guard=lambda hypothesis, context: dispatch_guard.characterised_reason(
                 hypothesis, {**context, "epoch_sha256": epoch}),
             reserve_candidate=reserve_pooled,
+            record_abandoned=record_abandoned_pooled,
             champion_tree=args.worktree, branch=args.champion_branch,
             on_step=step_pooled)
 
@@ -3582,6 +3633,10 @@ def main(argv: list[str] | None = None) -> int:
                   if outcome.comparison else "—")
         print(f"  {index:>2}. {outcome.status:<22} {effect:>10}  "
               f"{outcome.hypothesis.mechanism_id if outcome.hypothesis else ''}")
+        for row in outcome.abandoned_candidates:
+            print(f"      disposed {row.get('status')} by {row.get('refusal_gate')} "
+                  f"({row.get('mechanism_id') or '-'}): "
+                  f"{str(row.get('reason') or '')[:160]}")
 
     if args.out:
         print(f"\nwrote {args.out / 'loop-run.json'}")

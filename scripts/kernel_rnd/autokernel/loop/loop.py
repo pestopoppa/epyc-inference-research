@@ -27,6 +27,7 @@ a ROCm toolchain.
 """
 from __future__ import annotations
 
+import sys
 from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -47,6 +48,25 @@ PATCH_ROUNDS = 2
 STOPPED_MID_FORMATION = (
     "run stop requested while this candidate was still forming; abandoned before "
     "the next actor call. No verdict on the mechanism — it was never attempted")
+
+#: The same stop, after this iteration had ALREADY disposed of candidates. DS41 run
+#: 9c recorded a hoist that two authoring rounds implemented, the critic accepted
+#: twice and `op_scope` refused twice as "never attempted", because the stop landed
+#: on the NEXT planner call. Those candidates carry their own rows
+#: (`CANDIDATE_DISPOSITIONS`); this row must not deny them.
+STOPPED_AFTER_DISPOSALS = (
+    "run stop requested while this iteration was still forming; abandoned before "
+    "the next actor call. This iteration had already attempted and disposed of "
+    "candidates (each has its own experiment row; any patch is retained under "
+    "<store>/patches) — this row is no verdict on them")
+
+#: One row per candidate abandoned INSIDE an iteration, recorded when it is
+#: abandoned (`iterate(record_abandoned=...)`), never only folded into the
+#: iteration's final outcome. Before this, a candidate refused at critic pass 2 or at
+#: the pre-build gate survived only as a prompt string for the next round: when a
+#: later round produced the iteration's outcome, the refused candidate -- its
+#: reason, its gate and its patch pointer -- was in no experiment row at all.
+CANDIDATE_DISPOSITIONS = ("hypothesis_rejected", "patch_rejected", "gate_refused")
 
 
 class RunAborted(RuntimeError):
@@ -242,6 +262,11 @@ class Outcome:
     # Populated only after the append-only experiment store commits this outcome.
     # Kept out of to_attempt() so the receipt cannot recursively hash itself.
     journal_receipt: dict | None = None
+    # Where this candidate's patch was retained (<store>/patches), set by the
+    # owner that retained it; and the candidates this iteration disposed of before
+    # its final outcome, each already recorded as its own row.
+    retained_patch: dict | None = None
+    abandoned_candidates: list[dict] = field(default_factory=list)
 
     def to_attempt(self) -> dict:
         row = {"status": self.status, "turn_recorded_at": _now()}
@@ -273,6 +298,10 @@ class Outcome:
         })
         if self.validator_provenance:
             row["validator_provenance"] = self.validator_provenance
+        if self.retained_patch is not None:
+            row["retained_patch"] = self.retained_patch
+        if self.abandoned_candidates:
+            row["abandoned_candidates"] = self.abandoned_candidates
         for key in ("spawn_parent", "branch_id", "width", "depth"):
             if getattr(self, key) is not None:
                 row[key] = getattr(self, key)
@@ -289,6 +318,14 @@ class Outcome:
             if split is not None:
                 row["claims"] = split
         return row
+
+
+def _disposal_summary(abandoned: Sequence[Mapping[str, Any]]) -> str:
+    """One line naming what this iteration disposed of before it was stopped."""
+    parts = [f"{row.get('status')} by {row.get('refusal_gate')} "
+             f"(round {row.get('hypothesis_round')}.{row.get('patch_round')}): "
+             f"{str(row.get('reason') or '')[:200]}" for row in abandoned]
+    return f"disposed before the stop ({len(parts)}): " + "; ".join(parts)
 
 
 def _critic_provenance(critic: Critic, review: Review, *, decision: str,
@@ -385,7 +422,8 @@ def iterate(*, planner: Planner, critic: Critic,
             record_reschedule: Callable[[Outcome], bool] | None = None,
             accumulate_valid_positive: bool = False,
             validate_candidate: Callable[[Hypothesis, Sequence[str]], Any] | None = None,
-            formation_guard=None, reserve_candidate=None
+            formation_guard=None, reserve_candidate=None,
+            record_abandoned: Callable[[Outcome], None] | None = None
             ) -> Outcome:
     """One full turn. Pure control flow: every side effect is an injected callable.
 
@@ -394,8 +432,14 @@ def iterate(*, planner: Planner, critic: Critic,
     critic pass and authoring turn), and never inside the tail — a candidate that
     reaches the tail finishes build → oracle → A/B → commit exactly as before, so a
     stop can never kill a measurement mid-A/B.
+
+    `record_abandoned` receives one `CANDIDATE_DISPOSITIONS` outcome for every
+    hypothesis or patch this turn abandons before its final outcome, at the moment
+    it is abandoned (so a later stop, lane error or crash cannot erase it). The
+    final outcome lists them again in `abandoned_candidates`.
     """
     working = dict(context)
+    abandoned: list[dict] = []
     hypothesis_reasons: list[str] = []
     round_telemetry = {
         "hypothesis_round": 0,
@@ -419,6 +463,11 @@ def iterate(*, planner: Planner, critic: Critic,
                     "kept", "keep_candidate", "measured_null", "regression",
                     "confirm_vetoed"}
         outcome.validator_provenance = list(validator_provenance)
+        if outcome.status == "stopped_mid_formation" and abandoned \
+                and outcome.reasons[:1] == [STOPPED_MID_FORMATION]:
+            outcome.reasons = [STOPPED_AFTER_DISPOSALS, *outcome.reasons[1:],
+                               _disposal_summary(abandoned)]
+        outcome.abandoned_candidates = list(abandoned)
         return outcome
 
     try:
@@ -435,7 +484,8 @@ def iterate(*, planner: Planner, critic: Critic,
                         formation_guard=formation_guard or (lambda _h, _c: None),
                         reserve_candidate=reserve_candidate,
                         round_telemetry=round_telemetry,
-                        validator_provenance=validator_provenance))
+                        validator_provenance=validator_provenance,
+                        record_abandoned=record_abandoned, abandoned=abandoned))
     except TailRefused as exc:
         # The candidate was formed and never measured. Carry the hypothesis: the
         # patch may well still help against the champion that displaced it, and the
@@ -472,11 +522,52 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
              validate_candidate=lambda _hypothesis, _paths: None,
              formation_guard=lambda _hypothesis, _context: None,
              reserve_candidate=None, round_telemetry=None,
-             validator_provenance=None) -> Outcome:
+             validator_provenance=None, record_abandoned=None,
+             abandoned=None) -> Outcome:
     last_proposed: Hypothesis | None = None
     round_telemetry = round_telemetry if round_telemetry is not None else {}
     validator_provenance = (validator_provenance if validator_provenance is not None
                             else [])
+
+    abandoned = abandoned if abandoned is not None else []
+
+    def dispose(hypothesis, status: str, reason: str | None, *, refusal_gate: str,
+                verdicts=()) -> None:
+        """Record one abandoned candidate NOW, with its reason and gate.
+
+        A recording fault is carried on the iteration's final outcome rather than
+        raised: raising here would turn one refused candidate into a lane error that
+        discards the rest of the turn, which is the loss this exists to stop.
+        """
+        candidate = Outcome(status, hypothesis,
+                            [reason or f"{refusal_gate} refused without a reason"],
+                            gate_verdicts=list(verdicts), refusal_gate=refusal_gate)
+        candidate.hypothesis_round = int(round_telemetry.get("hypothesis_round", 0))
+        candidate.patch_round = int(round_telemetry.get("patch_round", 0))
+        candidate.prior_rejection_prompt = bool(
+            round_telemetry.get("prior_rejection_prompt", False))
+        candidate.validator_provenance = [dict(row) for row in validator_provenance]
+        record_error = None
+        if record_abandoned is not None:
+            try:
+                record_abandoned(candidate)
+            except Exception as exc:      # noqa: BLE001 -- see docstring
+                record_error = f"{type(exc).__name__}: {exc}"
+                print(f"warning: abandoned-candidate record failed: {record_error}",
+                      file=sys.stderr)
+        summary = {
+            "status": status, "refusal_gate": refusal_gate,
+            "reason": candidate.reasons[0],
+            "mechanism_id": getattr(hypothesis, "mechanism_id", None),
+            "hypothesis_round": candidate.hypothesis_round,
+            "patch_round": candidate.patch_round,
+            "retained_patch": candidate.retained_patch,
+            "attempt_identity": candidate.attempt_identity,
+            "candidate_diff_sha256": candidate.candidate_diff_sha256,
+        }
+        if record_error is not None:
+            summary["record_error"] = record_error
+        abandoned.append(summary)
 
     def mark_search_changed(decision: str) -> None:
         for row in reversed(validator_provenance):
@@ -548,6 +639,8 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             if not verdict.accepted:
                 # Verbatim, so the planner can answer the objection rather than guess.
                 hypothesis_reasons.append(verdict.reason)
+                dispose(hypothesis, "hypothesis_rejected", verdict.reason,
+                        refusal_gate="critic:hypothesis")
                 continue
 
         patch_reasons: list[str] = []
@@ -595,6 +688,8 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                     # The hypothesis is untouched: a bad patch is not evidence against
                     # the idea it was trying to implement.
                     patch_reasons.append(patch_verdict.reason)
+                    dispose(hypothesis, "patch_rejected", patch_verdict.reason,
+                            refusal_gate="critic:patch")
                     continue
                 # The critic is a verifier, not a second author. Re-run the host-owned
                 # whole-tree validation after its call and before entering the build
@@ -660,6 +755,12 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                         # toolchain's own message is the reason, so no critic is needed.
                         patch_reasons.append(
                             verdicts[-1].reason if verdicts else "gate refused")
+                        # Recorded as its own row, naming the deterministic rule: an
+                        # accepted patch that never reaches the build must say which
+                        # gate stopped it and where its diff is kept.
+                        dispose(hypothesis, "gate_refused", patch_reasons[-1],
+                                refusal_gate=(verdicts[-1].gate if verdicts else "gate"),
+                                verdicts=verdicts)
                         continue
 
                     on_step("measuring A/B on the device")
@@ -778,6 +879,6 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
 # `archive.record` as `run.py`'s injected `record`. `iterate` is the whole of this
 # module's control flow now, and the pool is its only driver.
 
-__all__ = ["Abstain", "ActorStopped", "ActorTransient", "ConfirmVetoed", "InteractionRegression", "TailRefused", "RunAborted", "MeasurementInvalid", "MeasurementFailed", "Critic",
+__all__ = ["CANDIDATE_DISPOSITIONS", "STOPPED_AFTER_DISPOSALS", "Abstain", "ActorStopped", "ActorTransient", "ConfirmVetoed", "InteractionRegression", "TailRefused", "RunAborted", "MeasurementInvalid", "MeasurementFailed", "Critic",
            "HYPOTHESIS_ROUNDS", "Hypothesis", "Outcome", "PATCH_ROUNDS",
            "Planner", "Review", "STOPPED_MID_FORMATION", "iterate"]
