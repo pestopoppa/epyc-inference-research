@@ -1,0 +1,457 @@
+{
+ "warmup": [
+  {
+   "n": 64,
+   "wall_s": 2.2549750804901123,
+   "finish_reason": "length",
+   "predicted_n": 64,
+   "predicted_per_second": 40.17357495227819,
+   "prompt_n": 209,
+   "draft_n": 91,
+   "draft_n_accepted": 39,
+   "foreign_cpu_pct": 0.0,
+   "text_sha256": "8bec334b39bba94d2a21bf54eafbe3e38a5703bdbfaaae8f1a7097128ab9eb69",
+   "raw": {
+    "choices": [
+     {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+       "role": "assistant",
+       "content": "The CPU memory hierarchy exists to bridge the massive speed gap between the processor core (which executes instructions in nanoseconds) and main memory (which operates in hundreds of nanoseconds). Without this hierarchy, the CPU would spend the majority of its time idle, waiting for data. The system uses a pyramid structure where speed decreases and"
+      }
+     }
+    ],
+    "created": 1790348891,
+    "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+    "system_fingerprint": "b10308-90c12df42",
+    "object": "chat.completion",
+    "usage": {
+     "completion_tokens": 64,
+     "prompt_tokens": 209,
+     "total_tokens": 273,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     }
+    },
+    "id": "chatcmpl-KyqW2jVzkeqq0Hz3Pw3aJacBzq16wzd2",
+    "timings": {
+     "cache_n": 0,
+     "prompt_n": 209,
+     "prompt_ms": 639.886,
+     "prompt_per_token_ms": 3.061655502392344,
+     "prompt_per_second": 326.62067930850185,
+     "predicted_n": 64,
+     "predicted_ms": 1593.087,
+     "predicted_per_token_ms": 24.891984375,
+     "predicted_per_second": 40.17357495227819,
+     "draft_n": 91,
+     "draft_n_accepted": 39
+    }
+   }
+  },
+  {
+   "n": 64,
+   "wall_s": 2.0966639518737793,
+   "finish_reason": "length",
+   "predicted_n": 64,
+   "predicted_per_second": 40.50153557775124,
+   "prompt_n": 209,
+   "draft_n": 91,
+   "draft_n_accepted": 39,
+   "foreign_cpu_pct": 125.5,
+   "text_sha256": "8bec334b39bba94d2a21bf54eafbe3e38a5703bdbfaaae8f1a7097128ab9eb69",
+   "raw": {
+    "choices": [
+     {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+       "role": "assistant",
+       "content": "The CPU memory hierarchy exists to bridge the massive speed gap between the processor core (which executes instructions in nanoseconds) and main memory (which operates in hundreds of nanoseconds). Without this hierarchy, the CPU would spend the majority of its time idle, waiting for data. The system uses a pyramid structure where speed decreases and"
+      }
+     }
+    ],
+    "created": 1790348893,
+    "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+    "system_fingerprint": "b10308-90c12df42",
+    "object": "chat.completion",
+    "usage": {
+     "completion_tokens": 64,
+     "prompt_tokens": 209,
+     "total_tokens": 273,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     }
+    },
+    "id": "chatcmpl-1RdSVGQ8d5FmDqX2Qs3sn4TJZgbRPHSQ",
+    "timings": {
+     "cache_n": 0,
+     "prompt_n": 209,
+     "prompt_ms": 498.703,
+     "prompt_per_token_ms": 2.3861387559808613,
+     "prompt_per_second": 419.08711196844615,
+     "predicted_n": 64,
+     "predicted_ms": 1580.187,
+     "predicted_per_token_ms": 24.690421875,
+     "predicted_per_second": 40.50153557775124,
+     "draft_n": 91,
+     "draft_n_accepted": 39
+    }
+   }
+  },
+  {
+   "n": 64,
+   "wall_s": 2.2140557765960693,
+   "finish_reason": "length",
+   "predicted_n": 64,
+   "predicted_per_second": 37.79374300963386,
+   "prompt_n": 209,
+   "draft_n": 91,
+   "draft_n_accepted": 39,
+   "foreign_cpu_pct": 288.2,
+   "text_sha256": "8bec334b39bba94d2a21bf54eafbe3e38a5703bdbfaaae8f1a7097128ab9eb69",
+   "raw": {
+    "choices": [
+     {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+       "role": "assistant",
+       "content": "The CPU memory hierarchy exists to bridge the massive speed gap between the processor core (which executes instructions in nanoseconds) and main memory (which operates in hundreds of nanoseconds). Without this hierarchy, the CPU would spend the majority of its time idle, waiting for data. The system uses a pyramid structure where speed decreases and"
+      }
+     }
+    ],
+    "created": 1790348895,
+    "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+    "system_fingerprint": "b10308-90c12df42",
+    "object": "chat.completion",
+    "usage": {
+     "completion_tokens": 64,
+     "prompt_tokens": 209,
+     "total_tokens": 273,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     }
+    },
+    "id": "chatcmpl-DgmIscrNy4mDMokaIZJdSepJ7CpUv8ah",
+    "timings": {
+     "cache_n": 0,
+     "prompt_n": 209,
+     "prompt_ms": 502.775,
+     "prompt_per_token_ms": 2.405622009569378,
+     "prompt_per_second": 415.6929043806872,
+     "predicted_n": 64,
+     "predicted_ms": 1693.402,
+     "predicted_per_token_ms": 26.45940625,
+     "predicted_per_second": 37.79374300963386,
+     "draft_n": 91,
+     "draft_n_accepted": 39
+    }
+   }
+  },
+  {
+   "n": 64,
+   "wall_s": 2.150320529937744,
+   "finish_reason": "length",
+   "predicted_n": 64,
+   "predicted_per_second": 39.36506608718009,
+   "prompt_n": 209,
+   "draft_n": 91,
+   "draft_n_accepted": 39,
+   "foreign_cpu_pct": 340.2,
+   "text_sha256": "8bec334b39bba94d2a21bf54eafbe3e38a5703bdbfaaae8f1a7097128ab9eb69",
+   "raw": {
+    "choices": [
+     {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+       "role": "assistant",
+       "content": "The CPU memory hierarchy exists to bridge the massive speed gap between the processor core (which executes instructions in nanoseconds) and main memory (which operates in hundreds of nanoseconds). Without this hierarchy, the CPU would spend the majority of its time idle, waiting for data. The system uses a pyramid structure where speed decreases and"
+      }
+     }
+    ],
+    "created": 1790348897,
+    "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+    "system_fingerprint": "b10308-90c12df42",
+    "object": "chat.completion",
+    "usage": {
+     "completion_tokens": 64,
+     "prompt_tokens": 209,
+     "total_tokens": 273,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     }
+    },
+    "id": "chatcmpl-iBeXKjsNp4rIu7Q113Ts5kNuCGjJDUty",
+    "timings": {
+     "cache_n": 0,
+     "prompt_n": 209,
+     "prompt_ms": 497.087,
+     "prompt_per_token_ms": 2.3784066985645933,
+     "prompt_per_second": 420.4495390142973,
+     "predicted_n": 64,
+     "predicted_ms": 1625.807,
+     "predicted_per_token_ms": 25.403234375,
+     "predicted_per_second": 39.36506608718009,
+     "draft_n": 91,
+     "draft_n_accepted": 39
+    }
+   }
+  }
+ ],
+ "measured": [
+  {
+   "n": 512,
+   "wall_s": 12.915785312652588,
+   "finish_reason": "length",
+   "predicted_n": 512,
+   "predicted_per_second": 41.303822935028684,
+   "prompt_n": 209,
+   "draft_n": 689,
+   "draft_n_accepted": 338,
+   "foreign_cpu_pct": 197.8,
+   "text_sha256": "6e40dd2ecf3c74df66fe6e68e3c3a4ae1df29326ba943ba4afb5a4bd8018cab2",
+   "raw": {
+    "choices": [
+     {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+       "role": "assistant",
+       "content": "The CPU memory hierarchy exists to bridge the massive speed gap between the processor core (which executes instructions in nanoseconds) and main memory (which operates in hundreds of nanoseconds). Without this hierarchy, the CPU would spend the majority of its time idle, waiting for data. The system uses a pyramid structure where speed decreases and capacity increases as you move down the stack.\n\n### 1. Registers\n*   **Location:** Inside the CPU core.\n*   **Capacity:** Tiny (e.g., 32\u201364 general-purpose registers per core).\n*   **Latency:** 0\u20131 cycle (effectively instantaneous).\n*   **Purpose:** Hold the immediate operands for the ALU (Arithmetic Logic Unit). They are the only storage the CPU can access directly during execution.\n\n### 2. L1 Cache (Level 1)\n*   **Location:** Inside the CPU core, split into separate L1 Instruction (L1i) and L1 Data (L1d) caches.\n*   **Capacity:** Small (typically 32\u201364 KB per core).\n*   **Latency:** 3\u20134 cycles.\n*   **Purpose:** Provide the fastest possible access to data and instructions currently in use. It operates at the same clock speed as the core. If data is not in L1, the CPU must check L2.\n\n### 3. L2 Cache (Level 2)\n*   **Location:** Inside the CPU core (private to the core) or sometimes shared between a small cluster of cores.\n*   **Capacity:** Medium (256 KB \u2013 1 MB per core).\n*   **Latency:** 10\u201320 cycles.\n*   **Purpose:** Acts as a backup for L1. It holds data that was recently used but evicted from L1, or data that is larger than L1 can hold. It reduces the frequency of expensive trips to main memory.\n\n### 4. L3 Cache (Level 3)\n*   **Location:** Shared among all cores on a CPU chip (or chiplet).\n*   **Capacity:** Large (16\u2013128+ MB for consumer CPUs; much larger for servers).\n*   **Latency:** 30\u201350 cycles (varies significantly by architecture and hit/miss status).\n*   **Purpose:** A unified pool for all cores. It prevents redundant copies of the same"
+      }
+     }
+    ],
+    "created": 1790348910,
+    "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+    "system_fingerprint": "b10308-90c12df42",
+    "object": "chat.completion",
+    "usage": {
+     "completion_tokens": 512,
+     "prompt_tokens": 209,
+     "total_tokens": 721,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     }
+    },
+    "id": "chatcmpl-1jc2GWIun35RxFpzYtxR9sw07WaER7Cz",
+    "timings": {
+     "cache_n": 0,
+     "prompt_n": 209,
+     "prompt_ms": 496.042,
+     "prompt_per_token_ms": 2.373406698564593,
+     "prompt_per_second": 421.3352901568819,
+     "predicted_n": 512,
+     "predicted_ms": 12395.947,
+     "predicted_per_token_ms": 24.210833984375,
+     "predicted_per_second": 41.303822935028684,
+     "draft_n": 689,
+     "draft_n_accepted": 338
+    }
+   }
+  },
+  {
+   "n": 512,
+   "wall_s": 12.777015209197998,
+   "finish_reason": "length",
+   "predicted_n": 512,
+   "predicted_per_second": 41.792926334988096,
+   "prompt_n": 209,
+   "draft_n": 693,
+   "draft_n_accepted": 337,
+   "foreign_cpu_pct": 122.0,
+   "text_sha256": "6e40dd2ecf3c74df66fe6e68e3c3a4ae1df29326ba943ba4afb5a4bd8018cab2",
+   "raw": {
+    "choices": [
+     {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+       "role": "assistant",
+       "content": "The CPU memory hierarchy exists to bridge the massive speed gap between the processor core (which executes instructions in nanoseconds) and main memory (which operates in hundreds of nanoseconds). Without this hierarchy, the CPU would spend the majority of its time idle, waiting for data. The system uses a pyramid structure where speed decreases and capacity increases as you move down the stack.\n\n### 1. Registers\n*   **Location:** Inside the CPU core.\n*   **Capacity:** Tiny (e.g., 32\u201364 general-purpose registers per core).\n*   **Latency:** 0\u20131 cycle (effectively instantaneous).\n*   **Purpose:** Hold the immediate operands for the ALU (Arithmetic Logic Unit). They are the only storage the CPU can access directly during execution.\n\n### 2. L1 Cache (Level 1)\n*   **Location:** Inside the CPU core, split into separate L1 Instruction (L1i) and L1 Data (L1d) caches.\n*   **Capacity:** Small (typically 32\u201364 KB per core).\n*   **Latency:** 3\u20134 cycles.\n*   **Purpose:** Provide the fastest possible access to data and instructions currently in use. It operates at the same clock speed as the core. If data is not in L1, the CPU must check L2.\n\n### 3. L2 Cache (Level 2)\n*   **Location:** Inside the CPU core (private to the core) or sometimes shared between a small cluster of cores.\n*   **Capacity:** Medium (256 KB \u2013 1 MB per core).\n*   **Latency:** 10\u201320 cycles.\n*   **Purpose:** Acts as a backup for L1. It holds data that was recently used but evicted from L1, or data that is larger than L1 can hold. It reduces the frequency of expensive trips to main memory.\n\n### 4. L3 Cache (Level 3)\n*   **Location:** Shared among all cores on a CPU chip (or chiplet).\n*   **Capacity:** Large (16\u2013128+ MB for consumer CPUs; much larger for servers).\n*   **Latency:** 30\u201350 cycles (varies significantly by architecture and hit/miss status).\n*   **Purpose:** A unified pool for all cores. It prevents redundant copies of the same"
+      }
+     }
+    ],
+    "created": 1790348923,
+    "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+    "system_fingerprint": "b10308-90c12df42",
+    "object": "chat.completion",
+    "usage": {
+     "completion_tokens": 512,
+     "prompt_tokens": 209,
+     "total_tokens": 721,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     }
+    },
+    "id": "chatcmpl-Wgrpz5IbfetPzC6cGkTeryLXMv6yqmPZ",
+    "timings": {
+     "cache_n": 0,
+     "prompt_n": 209,
+     "prompt_ms": 488.216,
+     "prompt_per_token_ms": 2.3359617224880385,
+     "prompt_per_second": 428.0892064168319,
+     "predicted_n": 512,
+     "predicted_ms": 12250.877,
+     "predicted_per_token_ms": 23.927494140625,
+     "predicted_per_second": 41.792926334988096,
+     "draft_n": 693,
+     "draft_n_accepted": 337
+    }
+   }
+  },
+  {
+   "n": 512,
+   "wall_s": 12.714450120925903,
+   "finish_reason": "length",
+   "predicted_n": 512,
+   "predicted_per_second": 41.97014758490901,
+   "prompt_n": 209,
+   "draft_n": 693,
+   "draft_n_accepted": 337,
+   "foreign_cpu_pct": 49.6,
+   "text_sha256": "6e40dd2ecf3c74df66fe6e68e3c3a4ae1df29326ba943ba4afb5a4bd8018cab2",
+   "raw": {
+    "choices": [
+     {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+       "role": "assistant",
+       "content": "The CPU memory hierarchy exists to bridge the massive speed gap between the processor core (which executes instructions in nanoseconds) and main memory (which operates in hundreds of nanoseconds). Without this hierarchy, the CPU would spend the majority of its time idle, waiting for data. The system uses a pyramid structure where speed decreases and capacity increases as you move down the stack.\n\n### 1. Registers\n*   **Location:** Inside the CPU core.\n*   **Capacity:** Tiny (e.g., 32\u201364 general-purpose registers per core).\n*   **Latency:** 0\u20131 cycle (effectively instantaneous).\n*   **Purpose:** Hold the immediate operands for the ALU (Arithmetic Logic Unit). They are the only storage the CPU can access directly during execution.\n\n### 2. L1 Cache (Level 1)\n*   **Location:** Inside the CPU core, split into separate L1 Instruction (L1i) and L1 Data (L1d) caches.\n*   **Capacity:** Small (typically 32\u201364 KB per core).\n*   **Latency:** 3\u20134 cycles.\n*   **Purpose:** Provide the fastest possible access to data and instructions currently in use. It operates at the same clock speed as the core. If data is not in L1, the CPU must check L2.\n\n### 3. L2 Cache (Level 2)\n*   **Location:** Inside the CPU core (private to the core) or sometimes shared between a small cluster of cores.\n*   **Capacity:** Medium (256 KB \u2013 1 MB per core).\n*   **Latency:** 10\u201320 cycles.\n*   **Purpose:** Acts as a backup for L1. It holds data that was recently used but evicted from L1, or data that is larger than L1 can hold. It reduces the frequency of expensive trips to main memory.\n\n### 4. L3 Cache (Level 3)\n*   **Location:** Shared among all cores on a CPU chip (or chiplet).\n*   **Capacity:** Large (16\u2013128+ MB for consumer CPUs; much larger for servers).\n*   **Latency:** 30\u201350 cycles (varies significantly by architecture and hit/miss status).\n*   **Purpose:** A unified pool for all cores. It prevents redundant copies of the same"
+      }
+     }
+    ],
+    "created": 1790348936,
+    "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+    "system_fingerprint": "b10308-90c12df42",
+    "object": "chat.completion",
+    "usage": {
+     "completion_tokens": 512,
+     "prompt_tokens": 209,
+     "total_tokens": 721,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     }
+    },
+    "id": "chatcmpl-320IpfqSZmepiVAquYUetTvBVUXXbbFI",
+    "timings": {
+     "cache_n": 0,
+     "prompt_n": 209,
+     "prompt_ms": 496.825,
+     "prompt_per_token_ms": 2.3771531100478467,
+     "prompt_per_second": 420.67126251698284,
+     "predicted_n": 512,
+     "predicted_ms": 12199.147,
+     "predicted_per_token_ms": 23.826458984375,
+     "predicted_per_second": 41.97014758490901,
+     "draft_n": 693,
+     "draft_n_accepted": 337
+    }
+   }
+  },
+  {
+   "n": 512,
+   "wall_s": 12.644357204437256,
+   "finish_reason": "length",
+   "predicted_n": 512,
+   "predicted_per_second": 42.18198163699702,
+   "prompt_n": 209,
+   "draft_n": 693,
+   "draft_n_accepted": 337,
+   "foreign_cpu_pct": 128.9,
+   "text_sha256": "6e40dd2ecf3c74df66fe6e68e3c3a4ae1df29326ba943ba4afb5a4bd8018cab2",
+   "raw": {
+    "choices": [
+     {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+       "role": "assistant",
+       "content": "The CPU memory hierarchy exists to bridge the massive speed gap between the processor core (which executes instructions in nanoseconds) and main memory (which operates in hundreds of nanoseconds). Without this hierarchy, the CPU would spend the majority of its time idle, waiting for data. The system uses a pyramid structure where speed decreases and capacity increases as you move down the stack.\n\n### 1. Registers\n*   **Location:** Inside the CPU core.\n*   **Capacity:** Tiny (e.g., 32\u201364 general-purpose registers per core).\n*   **Latency:** 0\u20131 cycle (effectively instantaneous).\n*   **Purpose:** Hold the immediate operands for the ALU (Arithmetic Logic Unit). They are the only storage the CPU can access directly during execution.\n\n### 2. L1 Cache (Level 1)\n*   **Location:** Inside the CPU core, split into separate L1 Instruction (L1i) and L1 Data (L1d) caches.\n*   **Capacity:** Small (typically 32\u201364 KB per core).\n*   **Latency:** 3\u20134 cycles.\n*   **Purpose:** Provide the fastest possible access to data and instructions currently in use. It operates at the same clock speed as the core. If data is not in L1, the CPU must check L2.\n\n### 3. L2 Cache (Level 2)\n*   **Location:** Inside the CPU core (private to the core) or sometimes shared between a small cluster of cores.\n*   **Capacity:** Medium (256 KB \u2013 1 MB per core).\n*   **Latency:** 10\u201320 cycles.\n*   **Purpose:** Acts as a backup for L1. It holds data that was recently used but evicted from L1, or data that is larger than L1 can hold. It reduces the frequency of expensive trips to main memory.\n\n### 4. L3 Cache (Level 3)\n*   **Location:** Shared among all cores on a CPU chip (or chiplet).\n*   **Capacity:** Large (16\u2013128+ MB for consumer CPUs; much larger for servers).\n*   **Latency:** 30\u201350 cycles (varies significantly by architecture and hit/miss status).\n*   **Purpose:** A unified pool for all cores. It prevents redundant copies of the same"
+      }
+     }
+    ],
+    "created": 1790348948,
+    "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+    "system_fingerprint": "b10308-90c12df42",
+    "object": "chat.completion",
+    "usage": {
+     "completion_tokens": 512,
+     "prompt_tokens": 209,
+     "total_tokens": 721,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     }
+    },
+    "id": "chatcmpl-Ap65A39xFn9VovaDE6wa0OnKc8ERasgJ",
+    "timings": {
+     "cache_n": 0,
+     "prompt_n": 209,
+     "prompt_ms": 488.046,
+     "prompt_per_token_ms": 2.3351483253588516,
+     "prompt_per_second": 428.23832179753555,
+     "predicted_n": 512,
+     "predicted_ms": 12137.884,
+     "predicted_per_token_ms": 23.7068046875,
+     "predicted_per_second": 42.18198163699702,
+     "draft_n": 693,
+     "draft_n_accepted": 337
+    }
+   }
+  },
+  {
+   "n": 512,
+   "wall_s": 12.96718716621399,
+   "finish_reason": "length",
+   "predicted_n": 512,
+   "predicted_per_second": 41.35459228612467,
+   "prompt_n": 209,
+   "draft_n": 693,
+   "draft_n_accepted": 337,
+   "foreign_cpu_pct": 99.8,
+   "text_sha256": "6e40dd2ecf3c74df66fe6e68e3c3a4ae1df29326ba943ba4afb5a4bd8018cab2",
+   "raw": {
+    "choices": [
+     {
+      "finish_reason": "length",
+      "index": 0,
+      "message": {
+       "role": "assistant",
+       "content": "The CPU memory hierarchy exists to bridge the massive speed gap between the processor core (which executes instructions in nanoseconds) and main memory (which operates in hundreds of nanoseconds). Without this hierarchy, the CPU would spend the majority of its time idle, waiting for data. The system uses a pyramid structure where speed decreases and capacity increases as you move down the stack.\n\n### 1. Registers\n*   **Location:** Inside the CPU core.\n*   **Capacity:** Tiny (e.g., 32\u201364 general-purpose registers per core).\n*   **Latency:** 0\u20131 cycle (effectively instantaneous).\n*   **Purpose:** Hold the immediate operands for the ALU (Arithmetic Logic Unit). They are the only storage the CPU can access directly during execution.\n\n### 2. L1 Cache (Level 1)\n*   **Location:** Inside the CPU core, split into separate L1 Instruction (L1i) and L1 Data (L1d) caches.\n*   **Capacity:** Small (typically 32\u201364 KB per core).\n*   **Latency:** 3\u20134 cycles.\n*   **Purpose:** Provide the fastest possible access to data and instructions currently in use. It operates at the same clock speed as the core. If data is not in L1, the CPU must check L2.\n\n### 3. L2 Cache (Level 2)\n*   **Location:** Inside the CPU core (private to the core) or sometimes shared between a small cluster of cores.\n*   **Capacity:** Medium (256 KB \u2013 1 MB per core).\n*   **Latency:** 10\u201320 cycles.\n*   **Purpose:** Acts as a backup for L1. It holds data that was recently used but evicted from L1, or data that is larger than L1 can hold. It reduces the frequency of expensive trips to main memory.\n\n### 4. L3 Cache (Level 3)\n*   **Location:** Shared among all cores on a CPU chip (or chiplet).\n*   **Capacity:** Large (16\u2013128+ MB for consumer CPUs; much larger for servers).\n*   **Latency:** 30\u201350 cycles (varies significantly by architecture and hit/miss status).\n*   **Purpose:** A unified pool for all cores. It prevents redundant copies of the same"
+      }
+     }
+    ],
+    "created": 1790348961,
+    "model": "/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf",
+    "system_fingerprint": "b10308-90c12df42",
+    "object": "chat.completion",
+    "usage": {
+     "completion_tokens": 512,
+     "prompt_tokens": 209,
+     "total_tokens": 721,
+     "prompt_tokens_details": {
+      "cached_tokens": 0
+     }
+    },
+    "id": "chatcmpl-DCCo2LUMifE9puOedtgwu0l0kGSm1sGE",
+    "timings": {
+     "cache_n": 0,
+     "prompt_n": 209,
+     "prompt_ms": 568.127,
+     "prompt_per_token_ms": 2.7183110047846886,
+     "prompt_per_second": 367.87549262752873,
+     "predicted_n": 512,
+     "predicted_ms": 12380.729,
+     "predicted_per_token_ms": 24.181111328125,
+     "predicted_per_second": 41.35459228612467,
+     "draft_n": 693,
+     "draft_n_accepted": 337
+    }
+   }
+  }
+ ],
+ "invalid": 0
+}
