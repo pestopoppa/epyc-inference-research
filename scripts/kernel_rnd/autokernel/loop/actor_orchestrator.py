@@ -19,7 +19,9 @@ THE CONTRACT (one place; the CLI's own docstring restates it from the other side
           "--root", <lane worktree>, ("--read-only" unless authoring),
           "--schema", <per-call schema file>, "--url", <orchestrator base url>,
           "--role", <role|auto>, "--max-turns", N, "--timeout-s", S,
-          "--provenance-out", <per-call sidecar>]
+          "--provenance-out", <per-call sidecar>,
+          (planner + scouts on: "--scout-targets", <per-call targets file>,
+           "--scouts-max", N, ["--scout-role", <role>])]
   stdin  the prompt, UTF-8, verbatim (never argv: a ~100 KB prompt, and the opencode
           re-quoting lesson)
   stdout exactly one JSON object -- the reply -- or nothing
@@ -57,10 +59,22 @@ remembers it per workspace; `_record_metrics` calls `collect(workspace)` to read
 and project it onto the `actor_call_metrics.v1` vocabulary. Actor calls in one lane
 worktree are sequential, so "the pending call for this workspace" is unambiguous even
 when several lanes share one `actor-replies/` parent.
+
+SCOUTS (INF-78 OAB-8, default OFF). Fan-out is the orchestrator's decision, not the
+model's and not this loop's (operator 2026-09-24): with `AK_ORCHESTRATOR_SCOUTS=N`
+(N >= 1), a PLANNER call derives up to N `scout_targets` from the proposal context's
+profile hotspot table (`derive_scout_targets`) and hands them to the CLI
+(`--scout-targets <per-call file> --scouts-max N`). The orchestrator then runs that
+many read-only scouts concurrently (capped by the serving backend's free slots) before
+its planner turn. The loop still sends ONE request. The server's scout provenance comes
+back in the sidecar and is projected onto the metrics row as `orchestrator.scouts`
+(`_scouts`). NB the key is `orchestrator.scouts`, not a top-level `scouts`: "scouts"
+already names opencode's fan-out subagents in the seat's own vocabulary.
 """
 from __future__ import annotations
 
 from collections import Counter
+import dataclasses
 from dataclasses import dataclass
 import hashlib
 import json
@@ -100,6 +114,15 @@ TIMEOUT_MARGIN_S = 90
 #: Sibling of the worker tree, never inside it (a file inside rides into the diff).
 SIDECAR_DIR = "actor-orchestrator"
 PROVENANCE_SCHEMA = "epyc.autokernel.orchestrator_call.v1"
+
+#: OAB-8 knobs (read in `orchestrator_backend`). 0 / unset = no scouts (default).
+SCOUTS_ENV = "AK_ORCHESTRATOR_SCOUTS"
+SCOUT_ROLE_ENV = "AK_ORCHESTRATOR_SCOUT_ROLE"
+SCOUTS_MAX = 8                    # the server's `scouts.max` ceiling
+SCOUT_MIN_SHARE = 0.02            # hotspots below 2% of sampled periods are not scouted
+#: System DSOs whose symbols are not in a lane's source tree (a scout would find nothing).
+_SYSTEM_DSO = re.compile(r"kernel|kallsyms|vdso|(^|/)(libc|libm|libpthread|libgomp|libdl|"
+                         r"librt|ld-linux[^/]*|libstdc\+\+|libgcc_s)[.-]", re.IGNORECASE)
 
 #: The loop's abstention convention (`actors._abstention`, `_precheck_reply`) as a
 #: schema branch. The server shows `output_schema` to the agent as the FINAL()
@@ -155,6 +178,13 @@ class OrchestratorBackend(Backend):
     #: the server default: 4096-byte cap, no budget).
     context_print_cap_bytes: int | None = None
     context_pull_budget_bytes: int | None = None
+    #: OAB-8: most scouts per planner call (0 = off) and the role whose server runs them
+    #: (None = the server's default: force_role, else the routed role).
+    scouts_max: int = 0
+    scout_role: str | None = None
+    #: OAB-8: this call's targets as canonical JSON (a str keeps the frozen dataclass
+    #: hashable); set per call by `with_scouts`, empty = send none.
+    scout_targets_json: str = ""
 
     def argv(self, prompt: str, workspace: Path, *, read_only: bool = False,
              schema: Mapping[str, Any] | None = None) -> list[str]:
@@ -188,6 +218,12 @@ class OrchestratorBackend(Backend):
                 argv += ["--context-pull-budget-bytes", str(self.context_pull_budget_bytes)]
         argv += ["--url", self.url, "--role", self.model, "--max-turns", str(self.max_turns),
                  "--timeout-s", str(self.timeout_s), "--provenance-out", str(provenance)]
+        if self.scout_targets_json and self.scouts_max > 0:
+            targets_path = call_dir / f"{stem}.scouts.json"
+            targets_path.write_text(self.scout_targets_json, encoding="utf-8")
+            argv += ["--scout-targets", str(targets_path), "--scouts-max", str(self.scouts_max)]
+            if self.scout_role:
+                argv += ["--scout-role", self.scout_role]
         with _PENDING_LOCK:
             _PENDING[_key(workspace)] = provenance
         return argv
@@ -210,11 +246,85 @@ def orchestrator_backend(model: str, effort: str, *, timeout_s: int | None = Non
     if not _ROLE_TOKEN.match(role):
         raise ValueError(f"orchestrator role must be 'auto' or a role name, got {role!r}")
     root = os.environ.get(ORCHESTRATOR_ROOT_ENV) or DEFAULT_ORCHESTRATOR_ROOT
+    try:
+        scouts_max = max(0, min(SCOUTS_MAX, int(os.environ.get(SCOUTS_ENV) or 0)))
+    except ValueError as exc:
+        raise ValueError(f"{SCOUTS_ENV} must be an integer 0..{SCOUTS_MAX}") from exc
+    scout_role = os.environ.get(SCOUT_ROLE_ENV) or None
+    if scout_role is not None and not _ROLE_TOKEN.match(scout_role):
+        raise ValueError(f"{SCOUT_ROLE_ENV} must be a role name, got {scout_role!r}")
     return OrchestratorBackend(
         ORCHESTRATOR_KIND, role, effort, ORCHESTRATOR_PYTHON,
         url=(os.environ.get(URL_ENV) or DEFAULT_URL).rstrip("/"),
         cli=str(Path(root) / CLI_REL),
-        timeout_s=max(60, (timeout_s or DEFAULT_TIMEOUT_S) - TIMEOUT_MARGIN_S))
+        timeout_s=max(60, (timeout_s or DEFAULT_TIMEOUT_S) - TIMEOUT_MARGIN_S),
+        scouts_max=scouts_max, scout_role=scout_role)
+
+
+# --------------------------------------------------------------------------- scouts (OAB-8)
+
+
+def _share(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return max(0.0, min(1.0, float(value)))
+
+
+def derive_scout_targets(context: Mapping[str, Any], limit: int) -> list[dict[str, Any]]:
+    """Up to `limit` scout targets from the proposal context's profile table, highest
+    share first: the CPU `cpu_profile.hotspots` rows (symbol, dso,
+    sampled_period_fraction) when the profile was observed, else the GPU
+    `kernel_hotspots` rows (signature, share_of_device_time). Skips system-DSO symbols
+    (not in the lane), unknown symbols, shares under SCOUT_MIN_SHARE, and duplicates.
+    The profile carries no source file, so targets are symbols; the orchestrator
+    locates each one in the lane."""
+    if limit <= 0:
+        return []
+    rows: list[dict[str, Any]] = []
+    cpu = context.get("cpu_profile")
+    if isinstance(cpu, Mapping) and cpu.get("status") == "observed":
+        for row in cpu.get("hotspots") or ():
+            if not isinstance(row, Mapping):
+                continue
+            symbol, dso = str(row.get("symbol") or "").strip(), str(row.get("dso") or "")
+            share = _share(row.get("sampled_period_fraction"))
+            if not symbol or symbol.startswith("[") or share is None or _SYSTEM_DSO.search(dso):
+                continue
+            rows.append({"symbol": symbol, "dso": dso or None, "share": share})
+    if not rows:
+        for row in context.get("kernel_hotspots") or ():
+            if not isinstance(row, Mapping):
+                continue
+            symbol = str(row.get("signature") or "").strip()
+            share = _share(row.get("share_of_device_time"))
+            if symbol and share is not None:
+                rows.append({"symbol": symbol, "dso": None, "share": share})
+    rows.sort(key=lambda r: -r["share"])
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in rows:
+        if row["share"] < SCOUT_MIN_SHARE or row["symbol"] in seen:
+            continue
+        seen.add(row["symbol"])
+        target = {"symbol": row["symbol"][:512], "share": round(row["share"], 6),
+                  "label": f"hotspot #{len(out) + 1}"}
+        if row["dso"]:
+            target["dso"] = row["dso"][:512]
+        out.append(target)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def with_scouts(backend: Backend, context: Mapping[str, Any]) -> Backend:
+    """The backend for ONE planner call: scout targets derived from `context` when the
+    backend is the orchestrator kind with scouts enabled, else `backend` unchanged
+    (the default-off path returns the very same object)."""
+    if getattr(backend, "kind", None) != ORCHESTRATOR_KIND or getattr(backend, "scouts_max", 0) <= 0:
+        return backend
+    targets = derive_scout_targets(context, backend.scouts_max)
+    return dataclasses.replace(
+        backend, scout_targets_json=json.dumps({"targets": targets}, sort_keys=True) if targets else "")
 
 
 # --------------------------------------------------------------------------- metrics projection
@@ -290,11 +400,69 @@ def _file_ref(path: Path) -> dict[str, Any]:
     return {"path": str(path), "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}
 
 
+#: Per-scout keys kept on the metrics row (the server row also has digests/previews).
+SCOUT_ROW_KEYS = ("index", "status", "wall_s", "started_s", "ended_s", "turns",
+                  "prompt_tokens", "completion_tokens", "tokens_exact", "reads",
+                  "denied_reads", "tool_output_chars", "located", "summary_chars",
+                  "evidence_refs", "error", "skip_reason")
+SCOUT_TOTAL_KEYS = ("requested", "launched", "completed", "failed", "skipped",
+                    "max_concurrency", "max_inflight_calls", "wall_s", "prompt_tokens",
+                    "completion_tokens", "turns", "block_chars", "budget_s", "role", "url",
+                    "transport", "error")
+
+
+def _scouts(resp: Mapping[str, Any], request: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    """OAB-8: the server's `ChatResponse.scouts` projected onto the metrics row. None when
+    the call asked for no scouts; `{"requested_by_loop": N, "server": None}` when it did
+    but the server echoed nothing (a pre-OAB-8 API ignores the field)."""
+    asked = (request or {}).get("scouts") if isinstance(request, Mapping) else None
+    echo = resp.get("scouts") if isinstance(resp.get("scouts"), Mapping) else None
+    if asked is None and echo is None:
+        return None
+    out: dict[str, Any] = {
+        "requested_by_loop": (asked or {}).get("targets") if isinstance(asked, Mapping) else None,
+        "server": echo is not None,
+    }
+    if echo is None:
+        return out
+    out.update({key: echo.get(key) for key in SCOUT_TOTAL_KEYS})
+    cap = echo.get("cap") if isinstance(echo.get("cap"), Mapping) else {}
+    out["cap"] = {k: cap.get(k) for k in ("cap", "total_slots", "busy", "free", "reserve", "source")}
+    out["scouts"] = []
+    for row in echo.get("scouts") or ():
+        if not isinstance(row, Mapping):
+            continue
+        item = {key: row.get(key) for key in SCOUT_ROW_KEYS}
+        target = row.get("target") if isinstance(row.get("target"), Mapping) else {}
+        item["target"] = {k: target.get(k) for k in ("symbol", "file", "share", "label")}
+        out["scouts"].append(item)
+    return out
+
+
+def _fold_scouts(totals: dict[str, Any], scouts: Mapping[str, Any] | None) -> None:
+    """Totals cover EVERY session behind the call, scouts included -- the seat's rule
+    (`actor_metrics.collect` sums opencode's fan-out sessions, as VB-AK-SEAT
+    `derive_totals` does), so the two harnesses stay comparable: scout turns add to
+    `steps`, scout reads to `tool_calls`, scout decode to `decoded_tokens`. A planner
+    field the server does not expose stays None (unknown is never zero-filled)."""
+    if not scouts or not scouts.get("server"):
+        return
+    rows = scouts.get("scouts") or []
+
+    def total(key: str) -> int:
+        return sum(int(r.get(key) or 0) for r in rows if isinstance(r, Mapping))
+
+    for field, extra in (("steps", total("turns")), ("tool_calls", total("reads")),
+                         ("decoded_tokens", total("completion_tokens"))):
+        if totals.get(field) is not None:
+            totals[field] = int(totals[field]) + extra
+
+
 def _empty(error: str) -> dict[str, Any]:
     return {"metrics_error": error, "provenance": None, "server": None, "totals": None,
             "tools": None, "context_first_tokens": None, "context_max_tokens": None,
             "repair_ran": None, "server_schema_valid": None, "unexposed": None,
-            "sidecar": None}
+            "sidecar": None, "scouts": None}
 
 
 def collect(workspace: Path) -> dict[str, Any]:
@@ -319,6 +487,8 @@ def collect(workspace: Path) -> dict[str, Any]:
             out["http_status"] = data.get("http_status")
             return out
         totals = _totals(resp)
+        scouts = _scouts(resp, data.get("request"))
+        _fold_scouts(totals, scouts)
         tools = Counter(str(t) for t in (resp.get("tools_called") or []) if t)
         error_code = resp.get("error_code")
         stats = {
@@ -342,6 +512,8 @@ def collect(workspace: Path) -> dict[str, Any]:
             # OAB-7: the server's exact pull accounting (None: no bundle rode the call)
             "context_bundle_acknowledged": data.get("context_bundle_acknowledged"),
             "context_pulls": pull_summary(resp.get("context_pulls")),
+            # OAB-8: the orchestrator-run scouts behind this call (None = none asked).
+            "scouts": scouts,
         }
         stats["unexposed"] = sorted(
             [f"totals.{key}" for key, value in totals.items() if value is None]
@@ -353,5 +525,6 @@ def collect(workspace: Path) -> dict[str, Any]:
 
 
 __all__ = ["ABSTAIN_BRANCH", "AUTO_ROLE", "MODEL_PREFIX", "ORCHESTRATOR_KIND",
-           "OrchestratorBackend", "TURN_CAP", "collect", "orchestrator_backend", "pull_summary",
-           "stage_bundle", "wire_schema"]
+           "OrchestratorBackend", "SCOUTS_ENV", "SCOUT_ROLE_ENV", "TURN_CAP", "collect",
+           "derive_scout_targets", "orchestrator_backend", "pull_summary", "stage_bundle",
+           "wire_schema", "with_scouts"]

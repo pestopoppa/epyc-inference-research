@@ -2126,6 +2126,12 @@ class AgentPlanner:
     def _seated(self, role: str, context: Mapping[str, Any]) -> tuple[Backend, dict[str, str] | None]:
         """The backend and extra env for one call: a per-run opencode config when the
         seat is bounded and the backend is opencode, else the plain backend."""
+        if self.backend.kind == "orchestrator":
+            # INF-78 OAB-8: a proposal call may carry scout targets for the ORCHESTRATOR
+            # to fan out (default off: `with_scouts` returns the same backend).
+            from . import actor_orchestrator
+            return ((actor_orchestrator.with_scouts(self.backend, context)
+                     if role == "planner" else self.backend), None)
         if self.backend.kind != "opencode":
             return self.backend, None
         if self.seat is None or not self.seat.bounded:
