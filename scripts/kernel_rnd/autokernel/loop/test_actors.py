@@ -1533,11 +1533,20 @@ class OrchestratorBackendKind(unittest.TestCase):
         self.assertIn("context_max_tokens", orch["unexposed"])
         self.assertEqual(orch["request"]["prompt_chars"], len("the prompt"))
         self.assertTrue(orch["request"]["read_only"])
-        # The v1 call record (ROOT's closed contract) does not know this kind yet: the
-        # line is written, refused with the reason, and the call does not fail.
+        # The v1 call record (ROOT's closed contract, VB-AK-SEAT). ROOT fa8d0fa1 admits the
+        # `orchestrator` kind (endpoint = orchestrator loopback, served_model null); an older
+        # ROOT refuses it with the reason and the call still does not fail.
         v1 = self._rows()[-1]
-        self.assertIn("backend.kind must be one of", v1["v1_refused"])
-        self.assertEqual(v1["backend"], "orchestrator:architect_general@high")
+        contract = actors._seat_capture()
+        if "orchestrator" in getattr(contract, "BACKEND_KINDS", ()):
+            self.assertNotIn("v1_refused", v1)
+            self.assertEqual(v1["schema"], "epyc.autokernel.actor_call.v1")
+            self.assertEqual(v1["backend"]["kind"], "orchestrator")
+            self.assertEqual(v1["backend"]["model"], "architect_general")
+            self.assertIsNone(v1["server"]["served_model"])
+        else:
+            self.assertIn("backend.kind must be one of", v1["v1_refused"])
+            self.assertEqual(v1["backend"], "orchestrator:architect_general@high")
         self.assertEqual(v1["returncode"], 0)
 
     def test_rc1_with_a_complete_reply_is_salvaged(self):
