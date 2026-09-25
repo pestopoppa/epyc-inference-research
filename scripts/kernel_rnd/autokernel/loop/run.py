@@ -2637,8 +2637,18 @@ def main(argv: list[str] | None = None) -> int:
                 return
             try:
                 with resume_mod.ClaimLedger(args.store) as ledger:
-                    ledger.settle(outcome.resumed_from, current_anchor_commit[0],
-                                  result_status=outcome.status)
+                    # A validity outcome consumes the claim; an infrastructure
+                    # lane_error releases it for a bounded retry (resume.py).
+                    disposition = ledger.settle_outcome(
+                        outcome.resumed_from, current_anchor_commit[0],
+                        result_status=outcome.status,
+                        detail=(outcome.reasons[0][:2000] if outcome.reasons else None))
+                if disposition in {"released", "exhausted"}:
+                    print(f"resume    {outcome.resumed_from}: {outcome.status} is an "
+                          f"infrastructure fault -> claim {disposition}"
+                          + (" (the next launch retries it)" if disposition == "released"
+                             else " (infrastructure retry budget spent; consumed)"),
+                          flush=True)
             except Exception as exc:      # noqa: BLE001
                 print(f"warning: resume claim settle failed: {type(exc).__name__}: {exc}",
                       file=sys.stderr)
@@ -2674,7 +2684,7 @@ def main(argv: list[str] | None = None) -> int:
             # evidence added later is therefore visible to status and the journal.
             return evidence
 
-        def reserve_pooled(worker, _hypothesis, _paths):
+        def reserve_pooled(worker, _hypothesis, _paths, resume_point=None):
             diff = _git(worker.worktree, "diff", "--no-ext-diff", "HEAD", "--")
             diff_sha256 = hashlib.sha256(
                 dispatch_guard.normalized_diff(diff).encode()).hexdigest()
@@ -2686,7 +2696,9 @@ def main(argv: list[str] | None = None) -> int:
                 model=str(args.model), surface=args.surface)
             registry = dispatch_guard.Registry(args.store)
             try:
-                reservation = registry.reserve(identity)
+                # A resumed BUILD re-dispatches a claimed checkpoint's exact bytes;
+                # its claim, not the one-retry bound, governs (dispatch_guard.reserve).
+                reservation = registry.reserve(identity, resumed=resume_point is not None)
                 return dispatch_guard.Reservation(
                     reservation.identity, reservation.dispatch_count, diff_sha256)
             finally:

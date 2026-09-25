@@ -8,6 +8,9 @@
     PYTHONPATH=scripts/kernel_rnd python3 -m scripts.kernel_rnd.autokernel.loop.resume \\
         scan --store <store> --epoch <sha> --anchor <sha> [--surface S] [--model M] \\
         [--repo <tree>]
+    PYTHONPATH=scripts/kernel_rnd python3 -m scripts.kernel_rnd.autokernel.loop.resume \\
+        reopen --store <store> --checkpoint <attempt_id>#<i> --reason "..." \\
+        [--anchor <sha>] [--apply]
 
 WHY. Stops and refusals discarded the work in flight. Across DS41 runs 3-9c that
 was the largest drop class: ~300 actor-minutes and ~120 measure-minutes, and 0 of
@@ -52,6 +55,15 @@ THE ALGORITHM (`prepare`), on every launch, before any fresh hypothesis is drawn
     bytes, and `loop.iterate` re-runs the host integrity check and every CURRENT
     gate -- the old verdict is never trusted -- before any build or measurement.
 
+SETTLING. A validity outcome of the resumed round (a current-gate, compile or
+correctness refusal, a measured null or regression, a keep, a re-validation refusal)
+consumes the claim. An INFRASTRUCTURE fault (`INFRASTRUCTURE_STATUSES`: an exception
+contained as `lane_error`) releases it back to resumable, at most `INFRA_RETRIES`
+times per (checkpoint, anchor), counted in the ledger; `claim_events` logs every
+release, exhaustion, reopen and re-claim. `reopen` is the operator's logged override
+for a claim consumed anyway (DS41 run 9d: eab36f3e...#0, lost to a lane_error before
+releases existed).
+
 The backfill turns a row that predates checkpoints (run 9c's 22d950a4...) plus its
 retained patches into one resumable `gate_refused` row. It is a tool the operator's
 session runs; `--apply` is the only write, and it only appends.
@@ -90,6 +102,19 @@ MAX_RESUME_DEPTH = 3
 SCANNED_STATUSES = ("gate_refused", "stopped_mid_formation", "planner_transient")
 MAX_PATCH_BYTES = 4 * 1024 * 1024
 CLAIM_STATES = ("resumed", "rejected", "superseded")
+#: A claim handed back: by an infrastructure fault during the resumed round (bounded
+#: by `INFRA_RETRIES`) or by an operator's logged `reopen`. A released claim is not
+#: "claimed" -- the next launch re-validates and re-claims it like a fresh one.
+RELEASED = "released"
+#: Outcomes of a resumed round that are faults of the HARNESS, not verdicts on the
+#: candidate: an exception contained as the lane's `lane_error` (DS41 run 9d: a
+#: RatchetRefused re-retaining the restored patch). They release the claim instead
+#: of consuming it. Every other outcome -- a gate or compile or correctness refusal,
+#: a measured null, a regression, a keep, a re-validation refusal -- consumes it.
+INFRASTRUCTURE_STATUSES = frozenset({"lane_error"})
+#: Releases per (checkpoint, anchor) before an infrastructure fault consumes it too:
+#: a fault that recurs every time is the setup, and the operator's `reopen` remains.
+INFRA_RETRIES = 2
 
 
 class ResumeRejected(RuntimeError):
@@ -178,6 +203,19 @@ class ClaimLedger:
             "source_attempt_id TEXT, claimed_at TEXT NOT NULL, detail TEXT, "
             "result_status TEXT, settled_at TEXT, "
             "PRIMARY KEY (checkpoint_id, anchor_commit))")
+        # Additive migration: a ledger written before releases existed gains the
+        # count in place. Older code keeps working (it names its INSERT columns, and
+        # it counts a released row as claimed, which is the conservative reading).
+        columns = {row[1] for row in self.db.execute("PRAGMA table_info(claims)")}
+        if "retries" not in columns:
+            self.db.execute("ALTER TABLE claims ADD COLUMN retries INTEGER NOT NULL DEFAULT 0")
+        # Append-only: every release, exhaustion, reopen and re-claim, with its reason.
+        self.db.execute(
+            "CREATE TABLE IF NOT EXISTS claim_events ("
+            "event_id INTEGER PRIMARY KEY AUTOINCREMENT, checkpoint_id TEXT NOT NULL, "
+            "anchor_commit TEXT NOT NULL, event TEXT NOT NULL, at TEXT NOT NULL, "
+            "prior_state TEXT, prior_result_status TEXT, retries INTEGER, "
+            "actor TEXT, reason TEXT)")
         self.db.commit()
 
     def close(self) -> None:
@@ -194,7 +232,29 @@ class ClaimLedger:
         if self.db is None:
             return set()
         return {row[0] for row in self.db.execute(
-            "SELECT checkpoint_id FROM claims WHERE anchor_commit=?", (anchor_commit,))}
+            "SELECT checkpoint_id FROM claims WHERE anchor_commit=? AND state<>?",
+            (anchor_commit, RELEASED))}
+
+    def _event(self, checkpoint_id: str, anchor_commit: str, event: str, *,
+               prior: Mapping[str, Any] | None, retries: int | None,
+               actor: str, reason: str | None) -> None:
+        self.db.execute(
+            "INSERT INTO claim_events (checkpoint_id, anchor_commit, event, at, prior_state, "
+            "prior_result_status, retries, actor, reason) VALUES (?,?,?,?,?,?,?,?,?)",
+            (checkpoint_id, anchor_commit, event, _now(),
+             None if prior is None else prior.get("state"),
+             None if prior is None else prior.get("result_status"), retries, actor,
+             None if reason is None else str(reason)[:2000]))
+
+    def _row(self, checkpoint_id: str, anchor_commit: str) -> dict | None:
+        cursor = self.db.execute("SELECT * FROM claims WHERE checkpoint_id=? AND anchor_commit=?",
+                                 (checkpoint_id, anchor_commit))
+        row = cursor.fetchone()
+        if row is None:
+            return None
+        found = dict(zip([column[0] for column in cursor.description], row))
+        found.setdefault("retries", 0)
+        return found
 
     def claim(self, checkpoint_id: str, anchor_commit: str, *, state: str,
               stage: str | None = None, epoch: str | None = None,
@@ -215,7 +275,28 @@ class ClaimLedger:
             return True
         except sqlite3.IntegrityError:
             self.db.rollback()
-            return False
+        # A RELEASED claim is taken again by exactly one caller: the conditional
+        # UPDATE is atomic, so two racing launches cannot both re-take it.
+        self.db.execute("BEGIN IMMEDIATE")
+        try:
+            prior = self._row(checkpoint_id, anchor_commit)
+            taken = self.db.execute(
+                "UPDATE claims SET state=?, stage=coalesce(?, stage), "
+                "epoch_sha256=coalesce(?, epoch_sha256), mechanism_id=coalesce(?, mechanism_id), "
+                "source_attempt_id=coalesce(?, source_attempt_id), claimed_at=?, detail=?, "
+                "result_status=NULL, settled_at=NULL "
+                "WHERE checkpoint_id=? AND anchor_commit=? AND state=?",
+                (state, stage, epoch, mechanism_id, source_attempt_id, _now(), detail,
+                 checkpoint_id, anchor_commit, RELEASED)).rowcount == 1
+            if taken:
+                self._event(checkpoint_id, anchor_commit, f"reclaimed:{state}", prior=prior,
+                            retries=int(prior.get("retries") or 0), actor="loop",
+                            reason=detail)
+            self.db.commit()
+            return taken
+        except BaseException:
+            self.db.rollback()
+            raise
 
     def settle(self, checkpoint_id: str, anchor_commit: str, *, result_status: str,
                detail: str | None = None) -> None:
@@ -226,10 +307,106 @@ class ClaimLedger:
                         (result_status, _now(), detail, checkpoint_id, anchor_commit))
         self.db.commit()
 
+    def settle_outcome(self, checkpoint_id: str, anchor_commit: str, *, result_status: str,
+                       detail: str | None = None,
+                       max_retries: int = INFRA_RETRIES) -> str:
+        """Settle a resumed round's outcome; returns what happened to the claim.
+
+        "settled"   -- a validity outcome: the claim is consumed (the result recorded).
+        "released"  -- an infrastructure fault (`INFRASTRUCTURE_STATUSES`) with retries
+                       left: the claim goes back to resumable and the count increments.
+        "exhausted" -- an infrastructure fault with no retry left: consumed.
+        "kept"      -- the claim was not an open resumed one (already settled by a
+                       validity disposal in this iteration, rejected, superseded or
+                       released): left exactly as it is.
+        "absent"    -- no such claim.
+        """
+        if self.read_only:
+            raise RuntimeError("claim ledger opened read-only")
+        if result_status not in INFRASTRUCTURE_STATUSES:
+            self.settle(checkpoint_id, anchor_commit, result_status=result_status)
+            return "settled"
+        self.db.execute("BEGIN IMMEDIATE")
+        try:
+            prior = self._row(checkpoint_id, anchor_commit)
+            if prior is None:
+                self.db.rollback()
+                return "absent"
+            if prior["state"] != "resumed" or prior.get("result_status") is not None:
+                self.db.rollback()
+                return "kept"
+            retries = int(prior.get("retries") or 0)
+            if retries >= max_retries:
+                self.db.execute(
+                    "UPDATE claims SET result_status=?, settled_at=?, detail=? "
+                    "WHERE checkpoint_id=? AND anchor_commit=?",
+                    (result_status, _now(),
+                     f"infrastructure retry budget ({max_retries}) spent: "
+                     f"{result_status}: {detail or ''}"[:2000], checkpoint_id, anchor_commit))
+                self._event(checkpoint_id, anchor_commit, "exhausted", prior=prior,
+                            retries=retries, actor="loop", reason=detail)
+                self.db.commit()
+                return "exhausted"
+            self.db.execute(
+                "UPDATE claims SET state=?, retries=?, result_status=?, settled_at=?, detail=? "
+                "WHERE checkpoint_id=? AND anchor_commit=?",
+                (RELEASED, retries + 1, result_status, _now(),
+                 f"released after infrastructure fault {retries + 1}/{max_retries}: "
+                 f"{result_status}: {detail or ''}"[:2000], checkpoint_id, anchor_commit))
+            self._event(checkpoint_id, anchor_commit, "released", prior=prior,
+                        retries=retries + 1, actor="loop", reason=detail)
+            self.db.commit()
+            return "released"
+        except BaseException:
+            self.db.rollback()
+            raise
+
+    def reopen(self, checkpoint_id: str, anchor_commit: str, *, reason: str,
+               actor: str = "operator") -> dict:
+        """Operator override: hand a consumed claim back, with a logged reason.
+
+        The retry count is kept, so a reopened claim that then faults with its budget
+        spent is consumed after this one attempt; the event log keeps every prior state.
+        """
+        if self.read_only:
+            raise RuntimeError("claim ledger opened read-only")
+        if not reason or not reason.strip():
+            raise ValueError("a reopen needs a reason")
+        self.db.execute("BEGIN IMMEDIATE")
+        try:
+            prior = self._row(checkpoint_id, anchor_commit)
+            if prior is None:
+                raise ValueError(f"no claim for {checkpoint_id} at {anchor_commit}")
+            if prior["state"] == RELEASED:
+                raise ValueError(f"{checkpoint_id} is already released (resumable)")
+            self.db.execute(
+                "UPDATE claims SET state=?, detail=? WHERE checkpoint_id=? AND anchor_commit=?",
+                (RELEASED, f"reopened by {actor}: {reason}"[:2000], checkpoint_id,
+                 anchor_commit))
+            self._event(checkpoint_id, anchor_commit, "reopened", prior=prior,
+                        retries=int(prior.get("retries") or 0), actor=actor, reason=reason)
+            self.db.commit()
+            return prior
+        except BaseException:
+            self.db.rollback()
+            raise
+
     def rows(self) -> list[dict]:
         if self.db is None:
             return []
         cursor = self.db.execute("SELECT * FROM claims ORDER BY claimed_at")
+        names = [column[0] for column in cursor.description]
+        return [dict(zip(names, row)) for row in cursor.fetchall()]
+
+    def events(self, checkpoint_id: str | None = None) -> list[dict]:
+        if self.db is None:
+            return []
+        if not self.db.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
+                               "AND name='claim_events'").fetchone():
+            return []
+        cursor = self.db.execute(
+            "SELECT * FROM claim_events" + (" WHERE checkpoint_id=?" if checkpoint_id else "")
+            + " ORDER BY event_id", (checkpoint_id,) if checkpoint_id else ())
         names = [column[0] for column in cursor.description]
         return [dict(zip(names, row)) for row in cursor.fetchall()]
 
@@ -997,6 +1174,140 @@ def backfill_apply(store_root: Path, plan: Mapping[str, Any]) -> bool:
     return added
 
 
+# ------------------------------------------------------------------ reopen
+
+
+def _immutable_db(path: Path) -> sqlite3.Connection | None:
+    if not path.is_file():
+        return None
+    connection = sqlite3.connect(path.resolve().as_uri() + "?immutable=1", uri=True)
+    connection.row_factory = sqlite3.Row
+    return connection
+
+
+def reopen_plan(store_root: Path, *, checkpoint_id: str, reason: str,
+                anchor_commit: str | None = None,
+                rules_fingerprint: str | None = None) -> dict:
+    """Read-only (every database opened immutable=1). What `--apply` would change.
+
+    Also reports whether the next launch would actually queue the checkpoint once
+    it is released (its row, eligibility and retained-patch verification), and the
+    dispatch-registry rows of the exact candidate, so a reopen is never a no-op in
+    disguise.
+    """
+    store_root = Path(store_root)
+    if not reason or not reason.strip():
+        raise ValueError("a reopen needs a reason")
+    attempt_id, sep, index = checkpoint_id.rpartition("#")
+    if not sep or not attempt_id or not index.isdigit():
+        raise ValueError(f"checkpoint must be <attempt_id>#<index>, not {checkpoint_id!r}")
+    with ClaimLedger(store_root, read_only=True) as ledger:
+        rows = [row for row in ledger.rows() if row["checkpoint_id"] == checkpoint_id
+                and (anchor_commit is None or row["anchor_commit"] == anchor_commit)]
+        events = ledger.events(checkpoint_id)
+    if not rows:
+        raise ValueError(f"no claim for {checkpoint_id}"
+                         + (f" at anchor {anchor_commit}" if anchor_commit else ""))
+    if len(rows) > 1:
+        raise ValueError(f"{checkpoint_id} is claimed at {len(rows)} anchors; pass --anchor "
+                         f"({', '.join(row['anchor_commit'] for row in rows)})")
+    current = dict(rows[0])
+    current.setdefault("retries", 0)
+    plan: dict[str, Any] = {
+        "checkpoint_id": checkpoint_id, "anchor_commit": current["anchor_commit"],
+        "current": current, "events_so_far": events,
+        "refused": ("already released (resumable): nothing to reopen"
+                    if current["state"] == RELEASED else None),
+        "would_set": {"state": RELEASED,
+                      "detail": f"reopened by operator: {reason}"[:2000],
+                      "retries": int(current.get("retries") or 0)},
+        "would_append_event": {"event": "reopened", "prior_state": current["state"],
+                               "prior_result_status": current.get("result_status"),
+                               "retries": int(current.get("retries") or 0),
+                               "actor": "operator", "reason": reason},
+    }
+    checkpoint: dict[str, Any] = {"row": None}
+    identities: set[str] = set()
+    connection = _immutable_db(store_root / "experiments.db")
+    if connection is not None:
+        try:
+            row = connection.execute(
+                "SELECT attempt_id, recorded_at, status, mechanism_id, epoch_sha256, payload "
+                "FROM experiments WHERE attempt_id=?", (attempt_id,)).fetchone()
+            if row is not None:
+                payload = json.loads(row["payload"])
+                entries = payload.get("resume_checkpoints") or []
+                entry = entries[int(index)] if int(index) < len(entries) else None
+                checkpoint["row"] = {"attempt_id": row["attempt_id"], "status": row["status"],
+                                     "recorded_at": row["recorded_at"],
+                                     "mechanism_id": row["mechanism_id"]}
+                if isinstance(entry, dict):
+                    entry = dict(entry)
+                    if entry.get("stage") == "build" and not entry.get("retained_patch") \
+                            and isinstance(payload.get("retained_patch"), dict):
+                        entry["retained_patch"] = dict(payload["retained_patch"])
+                    candidate = Candidate(checkpoint_id, row["attempt_id"], row["recorded_at"],
+                                          row["status"], row["mechanism_id"], entry)
+                    checkpoint.update(candidate.summary())
+                    checkpoint["epoch_matches_claim"] = (
+                        entry.get("epoch_sha256") in (None, current.get("epoch_sha256")))
+                    checkpoint["ineligible_now"] = ineligible_reason(
+                        candidate, rules_fingerprint=(rules_fingerprint
+                                                      or loop.gate_rules_fingerprint()))
+                    if entry.get("stage") == "build":
+                        try:
+                            verify_retained_patch(entry.get("retained_patch"),
+                                                  anchor_commit=current["anchor_commit"],
+                                                  mechanism_id=candidate.group[0])
+                            checkpoint["retained_patch_verifies"] = True
+                        except ResumeRejected as exc:
+                            checkpoint["retained_patch_verifies"] = f"NO ({exc.check}): {exc}"
+                source = (payload.get("backfilled_from") or {}).get("attempt_id")
+                related = [payload]
+                if source:
+                    found = connection.execute("SELECT payload FROM experiments WHERE "
+                                               "attempt_id=?", (source,)).fetchone()
+                    if found is not None:
+                        related.append(json.loads(found["payload"]))
+                related.extend(json.loads(item["payload"]) for item in connection.execute(
+                    "SELECT payload FROM experiments "
+                    "WHERE json_extract(payload, '$.resumed_from') = ?", (checkpoint_id,)))
+                identities = {item["attempt_identity"] for item in related
+                              if isinstance(item.get("attempt_identity"), str)}
+        finally:
+            connection.close()
+    plan["checkpoint"] = checkpoint
+    registry: list[dict] = []
+    connection = _immutable_db(store_root / "dispatch-identity.sqlite3")
+    if connection is not None and identities:
+        try:
+            from .dispatch_guard import ANSWER_STATUSES
+            for identity in sorted(identities):
+                found = connection.execute("SELECT * FROM attempts WHERE identity=?",
+                                           (identity,)).fetchone()
+                if found is None:
+                    continue
+                entry = dict(found)
+                # The one-retry bound an ordinary dispatch would hit; a resumed build
+                # is admitted past it unless the identity was answered.
+                entry["one_retry_bound_reached"] = int(entry["dispatch_count"]) >= 2
+                entry["resumed_build_admitted"] = entry["status"] not in ANSWER_STATUSES
+                registry.append(entry)
+        finally:
+            connection.close()
+    plan["dispatch_registry"] = registry
+    return plan
+
+
+def reopen_apply(store_root: Path, plan: Mapping[str, Any], *, reason: str) -> dict:
+    """The only write: release the claim and append the reopen event."""
+    with ClaimLedger(store_root) as ledger:
+        ledger.reopen(plan["checkpoint_id"], plan["anchor_commit"], reason=reason)
+        return next(row for row in ledger.rows()
+                    if row["checkpoint_id"] == plan["checkpoint_id"]
+                    and row["anchor_commit"] == plan["anchor_commit"])
+
+
 # ------------------------------------------------------------------ CLI
 
 
@@ -1021,7 +1332,36 @@ def main(argv: Sequence[str] | None = None) -> int:
     look.add_argument("--model")
     look.add_argument("--repo", type=Path)
     look.add_argument("--scratch", type=Path)
+    again = commands.add_parser("reopen", help="operator: hand a consumed resume claim "
+                                "back, with a logged reason (dry-run unless --apply)")
+    again.add_argument("--store", type=Path, required=True)
+    again.add_argument("--checkpoint", required=True, help="<attempt_id>#<index>")
+    again.add_argument("--reason", required=True)
+    again.add_argument("--anchor", help="anchor commit, when claimed at several")
+    again.add_argument("--apply", action="store_true",
+                       help="release the claim and log the event (the only write)")
     args = parser.parse_args(argv)
+    if args.command == "reopen":
+        try:
+            plan = reopen_plan(args.store, checkpoint_id=args.checkpoint, reason=args.reason,
+                               anchor_commit=args.anchor)
+        except (ValueError, FileNotFoundError, sqlite3.DatabaseError) as exc:
+            print(f"reopen refused: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps(plan, indent=2, default=str))
+        if plan["refused"]:
+            print(f"reopen refused: {plan['refused']}", file=sys.stderr)
+            return 2
+        if not args.apply:
+            print("dry-run: nothing written (pass --apply to release the claim)")
+            return 0
+        try:
+            row = reopen_apply(args.store, plan, reason=args.reason)
+        except ValueError as exc:
+            print(f"reopen refused: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps({"reopened": row}, indent=2, default=str))
+        return 0
     if args.command == "backfill":
         try:
             plan = backfill_plan(args.store, row_id=args.row, patch=args.patch,
@@ -1048,11 +1388,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
-__all__ = ["BACKFILL_SCHEMA", "CLAIMS_FILE", "Candidate", "ClaimLedger", "MAX_RESUME_DEPTH",
-           "RULE_GATES", "ResumePoint", "ResumeQueue", "ResumeRejected", "backfill_apply",
+__all__ = ["BACKFILL_SCHEMA", "CLAIMS_FILE", "Candidate", "ClaimLedger", "INFRA_RETRIES",
+           "INFRASTRUCTURE_STATUSES", "MAX_RESUME_DEPTH", "RELEASED", "RULE_GATES",
+           "ResumePoint", "ResumeQueue", "ResumeRejected", "backfill_apply",
            "backfill_plan", "bind_checkpoints", "discard", "ineligible_reason", "materialize",
            "patch_applies", "patch_paths", "prepare", "prevalidate", "preview_op_scope",
-           "rejection_attempt", "resume_point", "scan", "target_identity",
+           "rejection_attempt", "reopen_apply", "reopen_plan", "resume_point", "scan",
+           "target_identity",
            "verify_retained_patch"]
 
 

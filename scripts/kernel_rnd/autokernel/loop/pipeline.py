@@ -254,6 +254,7 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
             depth += 1
             base = None
             reservation = None
+            resumed = None
             # INSIDE the try. This sat outside it, so a failure here killed the whole
             # thread rather than costing one iteration -- run 16 lost four of seven
             # lanes that way, silently, while the run carried on looking healthy at
@@ -303,7 +304,13 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                 # tail is unaffected -- `iterate` never polls inside the tail session.
                 def reserve(hypothesis, paths, _w=worker):
                     nonlocal reservation
-                    reservation = reserve_candidate(_w, hypothesis, paths)
+                    if _resumed_build(resumed, hypothesis):
+                        # The exact bytes of a claimed checkpoint: the resume claim
+                        # ledger, not the one-retry dispatch bound, governs re-dispatch.
+                        reservation = reserve_candidate(_w, hypothesis, paths,
+                                                        resume_point=resumed)
+                    else:
+                        reservation = reserve_candidate(_w, hypothesis, paths)
                     return reservation
 
                 def abandoned(candidate, _w=worker):
@@ -358,6 +365,12 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                     "lane_error", None,
                     [f"lane {worker.name}: {type(exc).__name__}: {exc}",
                      traceback.format_exc()[-1500:]])
+                if resumed is not None and getattr(resumed, "stale", None) is None:
+                    # Lineage, so the owner can classify the claim: a harness fault
+                    # during a resumed round releases it (bounded), never consumes it.
+                    # DS41 run 9d lost 9c's hoist this way -- the row named nothing.
+                    outcome.resumed_from = resumed.checkpoint_id
+                    outcome.resume_stage = resumed.stage
             if reservation is not None:
                 outcome.attempt_identity = reservation.identity
                 outcome.exact_repeat_dispatch_count = reservation.dispatch_count
@@ -376,6 +389,13 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
         # result list that reads as a completed run.
         raise aborted[0]
     return outcomes
+
+
+def _resumed_build(resumed, hypothesis) -> bool:
+    """The hypothesis in hand is a claimed BUILD checkpoint's, re-dispatching its bytes."""
+    return (resumed is not None and getattr(resumed, "stale", None) is None
+            and getattr(resumed, "stage", None) == "build"
+            and hypothesis is getattr(resumed, "hypothesis", None))
 
 
 __all__ = ["Budget", "DEFAULT_WORKERS", "MAX_CONSECUTIVE_ERRORS", "SerializedTail",
