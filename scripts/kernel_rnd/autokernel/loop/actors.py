@@ -194,6 +194,24 @@ class ActorSeat:
     steps: int = 60
     tools_python: str = ORCHESTRATOR_PYTHON
     context_mode: str = "inline"
+    #: OAB-10: drop the lane's AGENTS.md (and any CLAUDE.md/CONTEXT.md, global or
+    #: project), the Claude/agents skill catalog and the `skill` tool from every call's
+    #: fixed context. The author keeps AGENTS.md's code-style lines as a short note.
+    trim_instructions: bool = False
+    #: OAB-10: deny tools the planner never used (task, todowrite, webfetch, websearch,
+    #: question, lsp) so their schemas leave every request. Bounded fan-out keeps `task`.
+    trim_tools: bool = False
+    #: OAB-11: the prompt names the lane as THE source tree and the build dir as the
+    #: anchor BINARY; opencode permission denies builds/compiles/benchmarks, reads of
+    #: the anchor SOURCE, all writes for planner/critic and out-of-lane edits for the
+    #: author. All three are off here (the historical seat, byte for byte); run.py turns
+    #: them on by default.
+    lane_guard: bool = False
+
+    @property
+    def knobs(self) -> dict[str, bool]:
+        return {"trim_instructions": self.trim_instructions, "trim_tools": self.trim_tools,
+                "lane_guard": self.lane_guard}
 
 
 def _profile_dirs(context: Mapping[str, Any]) -> tuple[Path, ...]:
@@ -348,7 +366,7 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
                 stdout=_captured(None, out), stderr=_captured(None, err)))
             _record_metrics(workspace, backend, role=_safe_role(schema),
                             returncode=stop.returncode, wall_s=time.monotonic() - started,
-                            timed_out=False, before_ids=before_session_ids, arm=arm,
+                            timed_out=False, before_ids=before_session_ids, arm=arm, env=env,
                             collect_metrics=collect_metrics, schema=schema,
                             final_text=None, salvaged=False)
             _record_call(workspace, backend, prompt, returncode=stop.returncode,
@@ -368,7 +386,7 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
                 stdout=_captured(exc.stdout, out), stderr=_captured(exc.stderr, err)))
             _record_metrics(workspace, backend, role=_safe_role(schema), returncode=-1,
                             wall_s=time.monotonic() - started, timed_out=True,
-                            before_ids=before_session_ids, arm=arm, collect_metrics=collect_metrics,
+                            before_ids=before_session_ids, arm=arm, env=env, collect_metrics=collect_metrics,
                             schema=schema, final_text=None, salvaged=False)
             _record_call(workspace, backend, prompt, returncode=-1,
                          wall_s=time.monotonic() - started, env=env, schema=schema,
@@ -418,7 +436,7 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
         final_text = None   # about to raise below; nothing to hand `_parse_reply`
     _record_metrics(workspace, backend, role=_safe_role(schema), returncode=done.returncode,
                     wall_s=time.monotonic() - started, timed_out=False,
-                    before_ids=before_session_ids, arm=arm, collect_metrics=collect_metrics,
+                    before_ids=before_session_ids, arm=arm, env=env, collect_metrics=collect_metrics,
                     schema=schema, final_text=final_text, salvaged=salvage_text is not None)
     _record_call(workspace, backend, prompt, returncode=done.returncode,
                  wall_s=time.monotonic() - started, env=env, schema=schema, reply=reply)
@@ -515,7 +533,8 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
                     returncode: int, wall_s: float, timed_out: bool,
                     before_ids: set[str], collect_metrics: bool,
                     schema: Mapping[str, Any] | None, final_text: str | None,
-                    salvaged: bool, arm: str | None = None) -> None:
+                    salvaged: bool, arm: str | None = None,
+                    env: Mapping[str, str] | None = None) -> None:
     """A sibling line in `actor-calls.jsonl`, ahead of the `_record_call` line so a
     reader taking "the last line" for the v1 record (as the existing tests and any
     VB-AK-SEAT consumer do) is unaffected by this addition: the per-call
@@ -562,6 +581,7 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
             "repair_ran": repair_ran,
             "opencode": opencode_stats,
             "metrics_error": (opencode_stats or {}).get("metrics_error") if collect_metrics else None,
+            **_seat_provenance(env),
         }
     except Exception as exc:   # noqa: BLE001 -- evidence, never a reason to fail the call
         record = {"schema": actor_metrics.METRICS_SCHEMA, "role": role, "seat_arm": arm,
@@ -577,6 +597,24 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
         pass  # evidence, never a reason to fail the actor call
 
 
+def _seat_provenance(env: Mapping[str, str] | None) -> dict[str, Any]:
+    """The per-call seat config and opencode switches behind a metrics row (OAB-10/11):
+    the plain seat's permission-only config is not allowed in the VB-AK-SEAT record, so
+    its digest lives here. Empty for a call that set neither (historical rows unchanged)."""
+    env = env or {}
+    out: dict[str, Any] = {}
+    if env.get("OPENCODE_CONFIG"):
+        try:
+            out["seat_config"] = _file_ref(env["OPENCODE_CONFIG"])
+        except OSError as exc:
+            out["seat_config"] = {"path": env["OPENCODE_CONFIG"],
+                                  "error": f"{type(exc).__name__}: {exc}"[:200]}
+    switches = sorted(key for key in env if key.startswith("OPENCODE_DISABLE_"))
+    if switches:
+        out["seat_env"] = {key: env[key] for key in switches}
+    return out
+
+
 #: Where the VB-AK-SEAT write-side contract lives (the ROOT repo), and the module
 #: this producer names in its records.
 ROOT_REPO_ENV = "EPYC_ROOT_REPO"
@@ -586,6 +624,9 @@ PRODUCER_MODULE = "scripts/kernel_rnd/autokernel/loop/actors.py"
 #: name the seat arm without a second channel. Harmless to the child.
 SEAT_ENV_ARM, SEAT_ENV_FAN_OUT, SEAT_ENV_STEPS = (
     "AK_ACTOR_SEAT_ARM", "AK_ACTOR_SEAT_FAN_OUT", "AK_ACTOR_SEAT_STEPS")
+#: Marks an OPENCODE_CONFIG that belongs to the PLAIN seat (OAB-10/11 permission block
+#: only), so the VB-AK-SEAT record does not mistake it for a bounded seat's config.
+SEAT_ENV_PLAIN_CONFIG = "AK_ACTOR_SEAT_PLAIN_CONFIG"
 _V1_CACHE: dict[str, Any] = {}
 
 
@@ -690,7 +731,11 @@ def _call_record_v1(workspace: Path, backend: Backend, prompt: str, *, returncod
     env = env or {}
     stamp = lambda t: time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t))  # noqa: E731
     config_path = env.get("OPENCODE_CONFIG")
-    bounded = bool(config_path) and backend.kind == "opencode"
+    # A plain seat may carry a permission-only config (OAB-10/11); VB-AK-SEAT's closed
+    # contract says a plain seat records no config, so its digest goes to the sibling
+    # metrics row (`seat_config`) instead.
+    bounded = (bool(config_path) and backend.kind == "opencode"
+               and env.get(SEAT_ENV_PLAIN_CONFIG) != "1")
     instructions = None
     if bounded:
         conf = json.loads(Path(config_path).read_text(encoding="utf-8"))
@@ -1888,6 +1933,62 @@ def _runtime_pair(treatment, context, mechanism_id):
         raise ProviderTransient(f"runtime treatment refused: {exc}") from exc
 
 
+def _anchor_build_dir(context: Mapping[str, Any]) -> str | None:
+    """The target's anchor build dir (`target.recipe.build_dir`, pointers resolved)."""
+    from . import actor_context
+    value = actor_context._get(context.get("target"), "recipe", "build_dir")
+    return str(value) if isinstance(value, (str, Path)) and str(value) else None
+
+
+def _lane_block(role: str, workspace: Path, context: Mapping[str, Any]) -> str:
+    """OAB-11: where to read, and what never to do, stated before anything else. The
+    DS41 prompts named only the anchor's build tree, never the lane -- and the plain
+    planner read the anchor's SOURCE (and compiled into /tmp) instead of its lane."""
+    from . import actor_opencode_config as seat_config
+    build = _anchor_build_dir(context)
+    root, _builds, _others = seat_config.anchor_fence(build, Path(workspace))
+    lines = ["## Source tree and fences (enforced by the seat's permissions)",
+             f"- THE source tree is `{workspace}` (your working directory, a worktree of "
+             "the champion kernel). Read, grep and cite source ONLY there; paths in your "
+             "reply are relative to it."]
+    if build:
+        where = f" under `{root}`" if root is not None else " next to it"
+        lines.append(f"- `{build}` is the anchor BINARY build: read-only, and only for its "
+                     f"binaries (nm/objdump/--version). Never read source{where}: it is "
+                     "not the tree being changed and may differ from it.")
+    lines.append("- Never build, compile, link, benchmark or test: no cmake/make/ninja/"
+                 "gcc/g++/clang, no .o files, no llama-bench/llama-server, no perf record. "
+                 "The loop owns every build and measures on this machine; those commands "
+                 "are denied.")
+    if role == "author":
+        lines.append("- Edit only files inside the source tree above; edits elsewhere are "
+                     "denied.")
+    else:
+        lines.append("- You are read-only: no edits, no file writes, no git state changes "
+                     "(denied).")
+    return "\n".join(lines)
+
+
+def _seat_call(seat: "ActorSeat | None", backend: Backend, role: str, workspace: Path,
+               context: Mapping[str, Any]) -> dict[str, str] | None:
+    """Env for a PLAIN-seat opencode call under the OAB-10/11 knobs: the trim switches
+    plus a permission-only `OPENCODE_CONFIG` beside the lane, and the arm label. None
+    (the historical call, byte for byte) when every knob is off or the backend is not
+    opencode."""
+    if seat is None or backend.kind != "opencode" or not any(seat.knobs.values()):
+        return None
+    from . import actor_opencode_config as seat_config
+    env: dict[str, str] = {SEAT_ENV_ARM: seat_config.seat_label("plain", **seat.knobs)}
+    if seat.trim_instructions:
+        env.update(seat_config.TRIM_ENV)
+    path = seat_config.write_plain_config(
+        Path(workspace).parent / f"actor-opencode-plain-{role}.json", role=role,
+        lane=Path(workspace), build_dir=_anchor_build_dir(context), **seat.knobs)
+    if path is not None:
+        env.update({"OPENCODE_CONFIG": str(path), SEAT_ENV_PLAIN_CONFIG: "1"})
+    return env
+
+
 @dataclass
 class AgentPlanner:
     """Proposes and authors through an external coding agent (default: gpt-5.6-sol
@@ -1908,17 +2009,30 @@ class AgentPlanner:
     def _seated(self, role: str, context: Mapping[str, Any]) -> tuple[Backend, dict[str, str] | None]:
         """The backend and extra env for one call: a per-run opencode config when the
         seat is bounded and the backend is opencode, else the plain backend."""
-        if self.seat is None or not self.seat.bounded or self.backend.kind != "opencode":
+        if self.seat is None or self.backend.kind != "opencode":
             return self.backend, None
+        if not self.seat.bounded:
+            return self.backend, _seat_call(self.seat, self.backend, role,
+                                            Path(self.workspace), context)
         from . import actor_opencode_config as seat_config
         path = Path(self.workspace).parent / f"actor-opencode-{role}.json"
         seat_config.write_actor_config(
             path, role=role, lane=Path(self.workspace), profiles=_profile_dirs(context),
-            python=self.seat.tools_python, steps=self.seat.steps, fan_out=self.seat.fan_out)
+            python=self.seat.tools_python, steps=self.seat.steps, fan_out=self.seat.fan_out,
+            build_dir=_anchor_build_dir(context), **self.seat.knobs)
+        trim = seat_config.TRIM_ENV if self.seat.trim_instructions else {}
         return (dataclasses.replace(self.backend, agent=seat_config.AGENT_NAMES[role]),
-                {"OPENCODE_CONFIG": str(path), SEAT_ENV_ARM: "bounded",
+                {**trim, "OPENCODE_CONFIG": str(path),
+                 SEAT_ENV_ARM: seat_config.seat_label("bounded", **self.seat.knobs),
                  SEAT_ENV_FAN_OUT: "1" if self.seat.fan_out else "0",
                  SEAT_ENV_STEPS: str(self.seat.steps)})
+
+    def _guarded(self, role: str, prompt: str, context: Mapping[str, Any]) -> str:
+        """The lane block ahead of the prompt under the lane guard (opencode only; the
+        codex/claude prompts stay byte-identical)."""
+        if self.seat is None or not self.seat.lane_guard or self.backend.kind != "opencode":
+            return prompt
+        return _lane_block(role, Path(self.workspace), context) + "\n\n" + prompt
 
     def _context_block(self, role: str, context: Mapping[str, Any]):
         """The context text for one call, and the variable-mode bundle behind it.
@@ -1935,7 +2049,8 @@ class AgentPlanner:
         from . import actor_context
         try:
             bundle = actor_context.materialize(
-                text, Path(self.workspace).parent / actor_context.BUNDLE_DIR, role=role)
+                text, Path(self.workspace).parent / actor_context.BUNDLE_DIR, role=role,
+                lane=Path(self.workspace) if self.seat.lane_guard else None)
         except (OSError, ValueError) as exc:
             import sys
             print(f"actor context: variable bundle refused ({type(exc).__name__}: {exc}); "
@@ -1980,6 +2095,7 @@ class AgentPlanner:
                 prompt += ("\nRuntime treatments here are observation-only diagnostics. "
                            "Their A/B result cannot select a recipe, keep a candidate, "
                            "or establish a causal explanation for a sampled hotspot.")
+        prompt = self._guarded("planner", prompt, context)
         backend, env = self._seated("planner", context)
         env = self._sealed(prompt, bundle, env)
         raw, streak = _with_backoff(
@@ -2038,6 +2154,7 @@ class AgentPlanner:
             "If the hypothesis cannot be implemented honestly within these constraints, "
             "abstaining is a correct science result. Make no edits and reply instead with:\n"
             '{"abstain": "<specific reason the hypothesis is infeasible>"}')
+        prompt = self._guarded("author", prompt, context)
         backend, env = self._seated("author", context)
         env = self._sealed(prompt, bundle, env)
         raw, streak = _with_backoff(
@@ -2089,16 +2206,22 @@ class AgentCritic:
     backend: Backend = CRITIC_DEFAULT
     timeout_s: int = DEFAULT_TIMEOUT_S
     should_stop: Callable[[], bool] | None = None
+    #: Only the OAB-10/11 knobs apply (trim_instructions / trim_tools / lane_guard); the
+    #: critic is always the plain, read-only (no `--auto`) opencode seat.
+    seat: ActorSeat | None = None
 
     def _review(self, subject: str, grounds: str,
                 context: Mapping[str, Any]) -> Review:
         prompt = _REVIEW_TASK.format(subject=subject, grounds=grounds,
                                      context=render_context(context))
+        if self.seat is not None and self.seat.lane_guard and self.backend.kind == "opencode":
+            prompt = _lane_block("critic", Path(self.workspace), context) + "\n\n" + prompt
+        env = _seat_call(self.seat, self.backend, "critic", Path(self.workspace), context)
         stop_kw = {} if self.should_stop is None else {"should_stop": self.should_stop}
         raw, _ = _with_backoff(
             lambda: _run_agent(prompt, workspace=self.workspace,
                                timeout_s=self.timeout_s, backend=self.backend,
-                               read_only=True, schema=REVIEW_SCHEMA, **stop_kw),
+                               read_only=True, schema=REVIEW_SCHEMA, env=env, **stop_kw),
             should_stop=self.should_stop)
         body = _parse_reply(raw, schema=REVIEW_SCHEMA, backend=self.backend, workspace=self.workspace)
         accepted = bool(body.get("accepted"))

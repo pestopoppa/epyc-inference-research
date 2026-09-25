@@ -14,7 +14,11 @@ the global providers (``qwen-gpu``), the bash deny-list and the filesystem-conta
 plugin all survive. This file deliberately sets no top-level ``permission``, no
 ``plugin`` list and no per-agent ``bash`` rule: an agent's permission is appended AFTER
 the global rules and the last match wins, so an agent-level ``bash: allow`` would
-silently re-allow every globally denied verb.
+silently re-allow every globally denied verb. (OAB-10/11, opt-in: the trim and
+lane-guard knobs add a top-level ``permission`` block that holds only denies, plus
+``external_directory`` allows that re-open just the anchor build dirs its own deny
+closed; see ``seat_permission``. The PLAIN seat gets the same block through
+``build_plain_config``.)
 
 Key names are verified against the opencode 1.18.31 binary's config schema
 (``ConfigV1.Info`` / ``AgentConfig`` / ``McpLocalConfig`` / ``PermissionConfig``):
@@ -132,7 +136,10 @@ def build_actor_config(*, role: str, lane: Path, profiles: Sequence[Path] = (),
                        tool_output_max_bytes: int = 12000,
                        fan_out: bool = True,
                        instructions_path: Path | None = None,
-                       replace_system_prompt: bool = False) -> dict:
+                       replace_system_prompt: bool = False,
+                       trim_instructions: bool = False, trim_tools: bool = False,
+                       lane_guard: bool = False,
+                       build_dir: str | Path | None = None) -> dict:
     """The opencode config (a dict ready for ``json.dump``) for one actor run.
 
     By default the seat's guidance is ADDED to opencode's own system prompt through
@@ -141,7 +148,12 @@ def build_actor_config(*, role: str, lane: Path, profiles: Sequence[Path] = (),
     prompt, and opencode's default is the part that keeps the model terse: with it
     replaced (v1, ``replace_system_prompt=True``), the 27B planner decoded a median
     1,626 tokens per step against 266 on the plain seat and filled its 98k slot in 12
-    steps instead of ~45 (DS41 seat A/B, 2026-09-24)."""
+    steps instead of ~45 (DS41 seat A/B, 2026-09-24).
+
+    `trim_instructions` / `trim_tools` / `lane_guard` (OAB-10/11, all off by default)
+    add a TOP-LEVEL `permission` block of denies (`seat_permission`) that the global
+    config's rules merge with; under the lane guard the author agent's own `edit` rule
+    becomes the lane-only guard (an agent rule is evaluated after the top-level one)."""
     if role not in AGENT_NAMES:
         raise ValueError(f"unknown actor role {role!r}; expected one of "
                          f"{sorted(AGENT_NAMES)}")
@@ -156,7 +168,8 @@ def build_actor_config(*, role: str, lane: Path, profiles: Sequence[Path] = (),
         command += ["--profiles", str(profile)]
 
     mcp_tools = {f"{MCP_SERVER}_*": "allow"}
-    permission: dict = {"edit": "deny" if role == "planner" else "allow", **mcp_tools}
+    author_edit = ({"*": "allow", **AUTHOR_EDIT_GUARD} if lane_guard else "allow")
+    permission: dict = {"edit": "deny" if role == "planner" else author_edit, **mcp_tools}
     if fan_out:
         permission["task"] = {"*": "deny", SCOUT_AGENT: "allow"}
     else:
@@ -187,8 +200,12 @@ def build_actor_config(*, role: str, lane: Path, profiles: Sequence[Path] = (),
             scout["prompt"] = _scout_prompt()
         agents[SCOUT_AGENT] = scout
 
+    top = seat_permission(role, lane=lane, build_dir=build_dir,
+                          trim_instructions=trim_instructions, trim_tools=trim_tools,
+                          lane_guard=lane_guard, keep_task=fan_out, edit_rule=False)
     return {
         "$schema": "https://opencode.ai/config.json",
+        **({"permission": top} if top else {}),
         "tool_output": {"max_lines": tool_output_max_lines,
                         "max_bytes": tool_output_max_bytes},
         "compaction": {"prune": True},
@@ -270,5 +287,235 @@ def _atomic_write(path: Path, text: str) -> None:
         raise
 
 
-__all__ = ["actor_instructions", "AGENT_NAMES", "MAX_CONCURRENT_SUBAGENTS", "MCP_SERVER", "SCOUT_AGENT",
-           "build_actor_config", "write_actor_config"]
+# --------------------------------------------------------------------------------------
+# OAB-10 / OAB-11: fixed-overhead trim and the lane guard (2026-09-25).
+#
+# HOW opencode 1.18.31 BUILDS THE FIXED PART OF EVERY CALL (read from the installed
+# binary: `Instruction.systemPaths`, `SystemPrompt.skills`, `Permission.disabled`):
+#
+# * Instruction files. Global: the FIRST existing of `~/.config/opencode/AGENTS.md` and
+#   `~/.claude/CLAUDE.md` (the latter unless OPENCODE_DISABLE_CLAUDE_CODE[_PROMPT]).
+#   Project, unless OPENCODE_DISABLE_PROJECT_CONFIG: for the names AGENTS.md, CLAUDE.md,
+#   CONTEXT.md in that order, `findUp(name, --dir, git worktree root)`; the FIRST name
+#   with any hit wins and each hit is loaded as "Instructions from: <path>\n<text>". A
+#   lane is its own git worktree, so this loads exactly the lane's AGENTS.md (8,857 chars
+#   of ggml-org contribution policy; the lane's CLAUDE.md overlay is shadowed by it).
+#   Config `instructions` entries are ADDED; nothing in the config removes a discovered
+#   file, so the switch is the env var. It also skips project opencode.json and .opencode/
+#   dirs (a llama.cpp lane has neither) and keeps OPENCODE_CONFIG, the global config and
+#   its plugins. A `read` of a file in a SUBDIRECTORY still attaches that subdirectory's
+#   AGENTS.md (`Instruction.resolve`, not gated); a llama.cpp lane has none.
+# * The skill catalog. `SystemPrompt.skills` appends "Skills provide specialized
+#   instructions..." and an <available_skills> block (name, description, location) for
+#   every SKILL.md under ~/.claude/skills and ~/.agents/skills (and the project's), plus
+#   the built-in `customize-opencode`. On this host: the 12 synced claude.ai skills (pdf,
+#   docx, pptx, chrome-browser, ...; 8,149 description chars). It is omitted, and the
+#   `skill` tool dropped, when the agent's permission disables `skill`.
+# * Tool schemas. A tool is dropped from the request when the LAST rule matching its
+#   permission has pattern "*" and action "deny" (edit/write/apply_patch share `edit`).
+#
+# PERMISSION SEMANTICS (same binary): findLast over defaults -> global config ->
+# OPENCODE_CONFIG (deep-merged, global keys first) -> agent rules; `--auto` approves
+# every `ask` no rule DENIES, so every fence here is an explicit deny. Bash is checked
+# per parsed command (tree-sitter), matching the whole command text, heredoc body
+# included, against a wildcard: `*` is any run of characters including newlines, `?` is
+# ONE character, a trailing " *" makes the arguments optional, all else is literal.
+# `external_directory` is asked for native read/grep/glob/edit/write paths outside
+# --dir, but for bash only on cd/rm/cp/mv/mkdir/touch/chmod/chown/cat arguments and the
+# workdir -- so bash reads of another tree need bash rules too.
+# --------------------------------------------------------------------------------------
+
+#: Env for a trimmed call: no project instruction files, no Claude-Code prompt or skills,
+#: no external (~/.agents, project .claude/.agents) skills. Truthy is "1"/"true".
+TRIM_ENV = {"OPENCODE_DISABLE_PROJECT_CONFIG": "1",
+            "OPENCODE_DISABLE_CLAUDE_CODE": "1",
+            "OPENCODE_DISABLE_EXTERNAL_SKILLS": "1"}
+
+#: Tools the plain planner never called in the DS41 transcripts (C20c and the four OAB-9
+#: calls used only bash/read/grep/glob; the 27B never delegated through `task` in 69
+#: bounded steps). Denying them drops their schemas from every request.
+UNUSED_TOOLS = ("task", "todowrite", "webfetch", "websearch", "question", "lsp")
+
+#: Never build, compile, link, benchmark or test: the loop owns every build and measures
+#: on this CPU. Prefix patterns match one parsed command; the " <tool> " forms catch
+#: wrappers (`timeout 60 gcc ...`, `env CC=x g++ ...`) and are kept to names that do not
+#: occur in ordinary greps or prose (`make`, `cc` do, so they are prefix-only).
+BUILD_DENY = (
+    "cmake*", "*/cmake *", "* cmake *", "ctest*",
+    "make", "make *", "*/make *", "gmake*",
+    "ninja*", "*/ninja *", "* ninja *",
+    "gcc*", "*/gcc *", "* gcc *",
+    "g++*", "*/g++ *", "* g++ *",
+    "cc *", "*/cc *", "c++ *", "*/c++ *",
+    "clang*", "*/clang *", "* clang *", "*/clang++ *", "* clang++ *",
+    "ccache*", "* ccache *", "hipcc*", "*/hipcc *", "nvcc*", "*/nvcc *",
+    "ld *", "ld.*", "*.o", "*.o *",
+    "llama-bench*", "*/llama-bench *", "*/llama-bench",
+    "llama-server*", "*/llama-server *", "*/llama-server",
+    "llama-cli*", "*/llama-cli *", "*/llama-cli",
+    "llama-perplexity*", "*/llama-perplexity *",
+    "perf record*", "perf stat*", "perf top*", "*/perf record*", "*/perf stat*",
+)
+
+#: A read-only role (planner, critic) changes nothing anywhere: not its lane (a stray
+#: planner edit rides into the author's diff; a critic's is caught only after the fact
+#: by the tree check) and not outside it (`--auto` approves external writes).
+READ_ONLY_DENY = (
+    "rm *", "rmdir *", "mv *", "cp *", "mkdir *", "touch *", "tee *", "ln *",
+    "chmod *", "install *", "dd *", "truncate *", "patch *",
+    "sed -i*", "sed --in-place*", "perl -i*", "perl -pi*",
+    "git apply*", "git am *", "git checkout*", "git switch*", "git restore*",
+    "git reset*", "git stash*", "git commit*", "git clean*", "git merge*",
+    "git rebase*", "git cherry-pick*", "git revert*", "git worktree*", "git push*",
+    "git add*", "git rm *", "git mv *", "git tag *",
+    "*> /tmp/*", "*>/tmp/*", "*>> /tmp/*", "*>>/tmp/*",
+)
+
+#: The author edits only inside its lane. `edit` patterns are paths RELATIVE to the git
+#: worktree root, so anything outside the lane starts with "../". No "*": "allow" here:
+#: the default already allows, and a top-level allow would re-open edit for the native
+#: agents (plan/explore/compaction) whose defaults deny it.
+AUTHOR_EDIT_GUARD = {"../*": "deny", ".git/*": "deny"}
+
+#: Roles the plain config knows (the bounded config has no critic seat).
+PLAIN_ROLES = ("planner", "author", "critic")
+
+#: What the author keeps from the lane AGENTS.md: its code-style lines. The rest of that
+#: file is ggml-org's PR policy, and parts are actively wrong for this seat ("If you are
+#: a fully autonomous agent ... do not contribute ... STOP", "Guide, don't solve",
+#: "PAUSE and ask the user") -- a headless author has nobody to ask.
+AUTHOR_STYLE_NOTE = "\n".join([
+    "Code style for edits in this llama.cpp tree (from its AGENTS.md):",
+    "- ASCII only in code and comments: no em dash, unicode arrows, x-sign or ellipsis.",
+    "- Keep comments concise; never restate what the code says or narrate the task.",
+    "- Reuse existing infrastructure and blend in with the surrounding code; no new "
+    "subsystems.",
+    "- Read the relevant code before you write any.",
+])
+
+
+def anchor_fence(build_dir: str | Path | None, lane: Path | None = None
+                 ) -> tuple[Path | None, tuple[Path, ...], tuple[str, ...]]:
+    """(anchor source root, its build dirs, its other top-level entry names).
+
+    The root is the nearest ancestor of `build_dir` holding `.git` (the kernel tree),
+    else `build_dir`'s parent; build dirs are the root's `build*` children (the measured
+    build and siblings such as the instrumented `build-cpu-prof`). Nothing is fenced
+    without a build dir, or when the lane sits inside the root (that would fence the
+    lane itself)."""
+    if not build_dir:
+        return None, (), ()
+    build = Path(build_dir)
+    root = next((p for p in build.parents if (p / ".git").exists()), build.parent)
+    if str(root) in ("/", ""):
+        return None, (), ()
+    if lane is not None:
+        try:
+            Path(lane).resolve().relative_to(root.resolve())
+            return None, (), ()
+        except ValueError:
+            pass
+    try:
+        entries = sorted((p.name, p.is_dir()) for p in root.iterdir())
+    except OSError:
+        entries = []
+    builds = {root / name for name, is_dir in entries if is_dir and name.startswith("build")}
+    try:
+        builds.add(root / build.relative_to(root).parts[0])
+    except (ValueError, IndexError):
+        pass
+    others = tuple(name for name, _ in entries if root / name not in builds)
+    return root, tuple(sorted(builds)), others
+
+
+def seat_permission(role: str, *, lane: Path | None = None,
+                    build_dir: str | Path | None = None,
+                    trim_instructions: bool = False, trim_tools: bool = False,
+                    lane_guard: bool = False, keep_task: bool = False,
+                    edit_rule: bool = True) -> dict:
+    """The permission block OAB-10/11 add, for a TOP-LEVEL `permission` key.
+
+    Denies only, except `external_directory` allows for the anchor's build dirs, which
+    re-open only what this block's own anchor-root deny closed (the global config has no
+    external_directory rule). `keep_task` leaves `task` alone (bounded fan-out owns it);
+    `edit_rule=False` leaves `edit` to the caller (a bounded agent sets its own, and an
+    agent rule is evaluated after this one)."""
+    if role not in PLAIN_ROLES:
+        raise ValueError(f"unknown actor role {role!r}; expected one of {PLAIN_ROLES}")
+    permission: dict = {}
+    if trim_instructions:
+        permission["skill"] = "deny"
+    if trim_tools:
+        for tool in UNUSED_TOOLS:
+            if not (tool == "task" and keep_task):
+                permission[tool] = "deny"
+    if lane_guard:
+        bash = {pattern: "deny" for pattern in BUILD_DENY}
+        if role != "author":
+            bash.update({pattern: "deny" for pattern in READ_ONLY_DENY})
+        root, builds, others = anchor_fence(build_dir, lane)
+        if root is not None:
+            for pattern in (f"*{root}", f"*{root} *", f"*{root}/", f"*{root}/ *"):
+                bash[pattern] = "deny"
+            for name in others:
+                bash[f"*{root}/{name}*"] = "deny"
+            external = {f"{root}/*": "deny"}
+            external.update({f"{b}/*": "allow" for b in builds})
+            permission["external_directory"] = external
+        permission["bash"] = bash
+        if edit_rule:
+            permission["edit"] = dict(AUTHOR_EDIT_GUARD) if role == "author" else "deny"
+    return permission
+
+
+def seat_label(base: str, *, trim_instructions: bool = False, trim_tools: bool = False,
+               lane_guard: bool = False) -> str:
+    """`plain` / `bounded` plus one suffix per knob that is on (free text in VB-AK-SEAT)."""
+    return base + "".join(suffix for on, suffix in (
+        (trim_instructions, "+trim-instr"), (trim_tools, "+trim-tools"),
+        (lane_guard, "+lane-guard")) if on)
+
+
+def build_plain_config(*, role: str, lane: Path, build_dir: str | Path | None = None,
+                       trim_instructions: bool = False, trim_tools: bool = False,
+                       lane_guard: bool = False,
+                       author_note_path: Path | None = None) -> dict | None:
+    """The per-call `OPENCODE_CONFIG` for the PLAIN seat: a permission block (plus the
+    author's style note as an `instructions` file) and nothing else -- no agent, no MCP,
+    no tool_output cap, so the plain seat stays the plain seat. None when no knob needs
+    a config."""
+    permission = seat_permission(role, lane=lane, build_dir=build_dir,
+                                 trim_instructions=trim_instructions,
+                                 trim_tools=trim_tools, lane_guard=lane_guard)
+    note = trim_instructions and role == "author" and author_note_path is not None
+    if not permission and not note:
+        return None
+    config: dict = {"$schema": "https://opencode.ai/config.json"}
+    if permission:
+        config["permission"] = permission
+    if note:
+        config["instructions"] = [str(author_note_path)]
+    return config
+
+
+def write_plain_config(path: Path, **kw) -> Path | None:
+    """Build the plain-seat config and write it (and the author note) atomically; None,
+    and nothing written, when no knob needs a file."""
+    path = Path(path)
+    if kw.get("trim_instructions") and kw.get("role") == "author":
+        kw.setdefault("author_note_path", path.with_name(path.stem + ".instructions.md"))
+    config = build_plain_config(**kw)
+    if config is None:
+        return None
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if "instructions" in config:
+        _atomic_write(Path(config["instructions"][0]), AUTHOR_STYLE_NOTE + "\n")
+    _atomic_write(path, json.dumps(config, indent=2) + "\n")
+    return path
+
+
+__all__ = ["actor_instructions", "AGENT_NAMES", "AUTHOR_EDIT_GUARD", "AUTHOR_STYLE_NOTE",
+           "BUILD_DENY", "MAX_CONCURRENT_SUBAGENTS", "MCP_SERVER", "PLAIN_ROLES",
+           "READ_ONLY_DENY", "SCOUT_AGENT", "TRIM_ENV", "UNUSED_TOOLS", "anchor_fence",
+           "build_actor_config", "build_plain_config", "seat_label", "seat_permission",
+           "write_actor_config", "write_plain_config"]

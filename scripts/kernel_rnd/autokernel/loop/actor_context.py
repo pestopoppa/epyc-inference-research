@@ -348,11 +348,22 @@ CARD_FIELDS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
-def target_card(target: Any) -> list[str]:
+#: OAB-11: the card's build-dir label when the seat runs the lane guard. The plain
+#: planner read the anchor's SOURCE because the only tree the prompt named was the
+#: anchor build's; under the guard the card names the lane first as THE source tree.
+GUARDED_BUILD_LABEL = "build dir (anchor BINARY: read-only, binaries only; never read source there)"
+
+
+def target_card(target: Any, *, lane: Path | str | None = None) -> list[str]:
+    """The resolved facts every proposal needs. With `lane` (the lane guard), the first
+    row names the lane as THE source tree and the build dir is labelled a binary."""
     if not isinstance(target, dict):
         return []
-    lines = []
+    lines = [f"- source tree (THE tree to read and cite; your working directory): {lane}"
+             ] if lane is not None else []
     for label, path in CARD_FIELDS:
+        if lane is not None and path == ("recipe", "build_dir"):
+            label = GUARDED_BUILD_LABEL
         if not path:
             dims = [_get(target, "recipe", "template", key) for key in ("ctx", "batch", "ubatch")]
             value = None if all(d is None for d in dims) else " / ".join(str(d) for d in dims)
@@ -416,8 +427,10 @@ class Bundle:
             json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def materialize(context_text: str, parent: Path, *, role: str) -> Bundle:
-    """Write one call's bundle under `parent/` and return its index prompt text."""
+def materialize(context_text: str, parent: Path, *, role: str,
+                lane: Path | None = None) -> Bundle:
+    """Write one call's bundle under `parent/` and return its index prompt text.
+    `lane` (lane guard on) makes the target card name it as THE source tree."""
     parent = Path(parent)
     parent.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime())
@@ -440,14 +453,14 @@ def materialize(context_text: str, parent: Path, *, role: str) -> Bundle:
         data = path.read_bytes()
         files[str(path.relative_to(directory))] = {
             "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}
-    index = _index_text(directory, rows, payloads)
+    index = _index_text(directory, rows, payloads, lane=lane)
     (directory / "INDEX.md").write_text(index, encoding="utf-8")
     return Bundle(directory=directory, sections=sections, index=index, files=files,
                   inline_chars=len(context_text))
 
 
 def _index_text(directory: Path, rows: list[tuple[Section, str]],
-                payloads: dict[str, Any]) -> str:
+                payloads: dict[str, Any], *, lane: Path | None = None) -> str:
     total = sum(len(s.text) for s, _ in rows)
     on_disk = sum(len(s.text) for s, _ in rows if not s.inline)
     out = [
@@ -508,7 +521,7 @@ def _index_text(directory: Path, rows: list[tuple[Section, str]],
         for key, payload in payloads.items():
             out.extend(_json_toc(payload, key))
         out.append("")
-    card = target_card(payloads.get("target"))
+    card = target_card(payloads.get("target"), lane=lane)
     if card:
         out.append("Target card (resolved from the target section; full JSON in `json/target/`):")
         out.extend(card)
@@ -532,7 +545,7 @@ def _index_text(directory: Path, rows: list[tuple[Section, str]],
     return index + "".join(parts).rstrip("\n")
 
 
-__all__ = ["ARM_SUFFIX", "BUNDLE_DIR", "Bundle", "INLINE_SECTIONS", "JSON_SECTIONS", "MODES",
+__all__ = ["ARM_SUFFIX", "BUNDLE_DIR", "Bundle", "GUARDED_BUILD_LABEL", "INLINE_SECTIONS", "JSON_SECTIONS", "MODES",
            "REQUIRED_SECTIONS", "SECTION_HEADERS", "SUMMARY_SECTIONS", "Section", "explode",
            "implode", "json_payload", "materialize", "section_summary", "split_sections",
            "target_card"]

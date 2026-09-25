@@ -98,6 +98,23 @@ class CallRecordV1(_Lane, unittest.TestCase):
         self.assertEqual((row["seat"]["arm"], row["seat"]["bounded"], row["seat"]["config"]),
                          ("plain+ctx-variable", False, None))
 
+    def test_a_plain_seat_permission_config_stays_a_valid_plain_record(self):
+        """OAB-10/11: the plain seat's permission-only OPENCODE_CONFIG is not a bounded
+        seat; the closed contract records none, and the metrics row carries its digest."""
+        config = self.root / "actor-opencode-plain-planner.json"
+        config.write_text('{"permission": {"skill": "deny"}}')
+        env = {"OPENCODE_CONFIG": str(config), actors.SEAT_ENV_PLAIN_CONFIG: "1",
+               actors.SEAT_ENV_ARM: "plain+trim-instr+lane-guard",
+               "OPENCODE_DISABLE_PROJECT_CONFIG": "1"}
+        row = self._call(actors.backend_for("qwen-gpu/qwen3.8-27b", "high"),
+                         schema=actors.HYPOTHESIS_SCHEMA, env=env)
+        self.assertEqual(self.capture.validate_call_record(row), [])
+        self.assertEqual((row["seat"]["arm"], row["seat"]["bounded"], row["seat"]["config"]),
+                         ("plain+trim-instr+lane-guard", False, None))
+        metrics = self._rows()[-2]
+        self.assertEqual(metrics["seat_config"]["path"], str(config))
+        self.assertEqual(metrics["seat_env"], {"OPENCODE_DISABLE_PROJECT_CONFIG": "1"})
+
     def test_a_hosted_critic_is_a_plain_seat_with_no_opencode_fields(self):
         row = self._call(actors.CRITIC_DEFAULT, schema=actors.REVIEW_SCHEMA,
                          stdout='{"accepted": true}')

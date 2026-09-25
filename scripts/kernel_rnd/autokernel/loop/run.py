@@ -250,6 +250,13 @@ def _rebind_build_dso(original: Path, binary_dir: Path) -> Path:
     return candidate
 
 
+def _actor_knobs(args) -> dict[str, bool]:
+    """The OAB-10/11 seat knobs from the CLI (`on`/`off`) as ActorSeat fields."""
+    return {"trim_instructions": args.actor_trim_instructions == "on",
+            "trim_tools": args.actor_trim_tools == "on",
+            "lane_guard": args.actor_lane_guard == "on"}
+
+
 def _cpu_arm(original, build: Path, *, extra_env: dict | None = None):
     """Rebind only built executable/DSOs; preserve the selected target's launch.
 
@@ -727,6 +734,27 @@ def main(argv: list[str] | None = None) -> int:
                              "on the run-8 bundle). Works in either --actor-seat; the call record's "
                              "seat.arm gains '+ctx-variable'. No effect on codex/claude, or on "
                              "the critic (default: %(default)s)")
+    parser.add_argument("--actor-trim-instructions", choices=("on", "off"), default="on",
+                        help="opencode planner/author/critic (OAB-10): drop auto-loaded "
+                             "instruction files -- the lane's AGENTS.md (8.9k chars of ggml-org "
+                             "PR policy, incl. 'autonomous agents: STOP'), any CLAUDE.md/"
+                             "CONTEXT.md -- and the ~/.claude skill catalog + skill tool from "
+                             "every call (OPENCODE_DISABLE_PROJECT_CONFIG/_CLAUDE_CODE/"
+                             "_EXTERNAL_SKILLS + permission skill=deny). The author keeps the "
+                             "file's code-style lines as a short note. Off = the historical "
+                             "seat (default: %(default)s)")
+    parser.add_argument("--actor-trim-tools", choices=("on", "off"), default="on",
+                        help="opencode planner/author/critic (OAB-10): deny tools no DS41 "
+                             "planner transcript used (task, todowrite, webfetch, websearch, "
+                             "question, lsp) so their schemas leave every request; bounded "
+                             "fan-out keeps task (default: %(default)s)")
+    parser.add_argument("--actor-lane-guard", choices=("on", "off"), default="on",
+                        help="opencode planner/author/critic (OAB-11): the prompt names the lane "
+                             "as THE source tree and the build dir as the anchor BINARY; "
+                             "permission denies build/compile/benchmark commands, reads of the "
+                             "anchor SOURCE tree, every write for planner/critic and out-of-lane "
+                             "edits for the author. The loop measures on this CPU, so an actor's "
+                             "build is contamination, not help (default: %(default)s)")
     parser.add_argument("--actor-steps", type=int, default=actors.ActorSeat.steps,
                         help="bounded seat: opencode step cap per call (default: %(default)s)")
     parser.add_argument("--actor-timeout-s", type=int, default=actors.DEFAULT_TIMEOUT_S,
@@ -1311,7 +1339,9 @@ def main(argv: list[str] | None = None) -> int:
     print(f"actors    planner={planner_backend.describe()}  "
           f"critic={critic_backend.describe()}  "
           f"seat={args.actor_seat}{' fan-out' if args.actor_fan_out else ''} steps={args.actor_steps} "
-          f"context={args.actor_context_mode}")
+          f"context={args.actor_context_mode} "
+          f"trim-instructions={args.actor_trim_instructions} "
+          f"trim-tools={args.actor_trim_tools} lane-guard={args.actor_lane_guard}")
     # D4: with the two-rung gate on, the champion-vs-production headline is measured
     # on the confirm rung -- the standing +17.9% was the screen shape, which is the
     # "headline must be the production recipe" defect. Floor re-keyed to that model.
@@ -2873,7 +2903,8 @@ def main(argv: list[str] | None = None) -> int:
                                                bounded=args.actor_seat == "bounded",
                                                fan_out=args.actor_fan_out,
                                                steps=args.actor_steps,
-                                               context_mode=args.actor_context_mode))
+                                               context_mode=args.actor_context_mode,
+                                               **_actor_knobs(args)))
             return (runtime_recovery.PendingPlanner(ordinary, pending_slot)
                     if pending_pair is not None else ordinary)
 
@@ -2890,7 +2921,8 @@ def main(argv: list[str] | None = None) -> int:
                 cpu_screen.RetainedCritic(screen_confirmation)
                 if screen_confirmation else actors.AgentCritic(
                     workspace=worker.worktree, backend=critic_backend,
-                    timeout_s=args.actor_timeout_s, should_stop=should_stop)),
+                    timeout_s=args.actor_timeout_s, should_stop=should_stop,
+                    seat=actors.ActorSeat(bounded=False, **_actor_knobs(args)))),
             build_context=build_context, make_gate=gate_for,
             make_measure=measure_for, record=record_pooled,
             iterations=(args.iterations or None), should_stop=should_stop,

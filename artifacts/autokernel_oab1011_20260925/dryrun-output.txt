@@ -1,0 +1,47 @@
+worktree: /mnt/raid0/llm/worktrees/research-ak-oab1011-20260925 @ 0ac0b0c0
+control bundle: 78,628 chars
+
+[baseline] knobs=all off  arm label=plain (no env)
+  prompt: 79,890 chars ~27,644 tokens (est.)  sha256 a265a03a9f9a24b5  == OAB-9 control: True
+  opencode switches: none
+
+[trimmed] knobs={'trim_instructions': True, 'trim_tools': True, 'lane_guard': True}  arm label=plain+trim-instr+trim-tools+lane-guard
+  prompt: 80,777 chars ~27,951 tokens (est.)  sha256 bd73436ad24de3c3  == OAB-9 control: False
+  opencode switches: {'OPENCODE_DISABLE_PROJECT_CONFIG': '1', 'OPENCODE_DISABLE_CLAUDE_CODE': '1', 'OPENCODE_DISABLE_EXTERNAL_SKILLS': '1'}
+  per-call OPENCODE_CONFIG: /mnt/raid0/llm/tmp/ak-oab1011-ab/dryrun/workers/actor-opencode-plain-planner.json
+    top-level keys: ['$schema', 'permission']; permission keys: ['bash', 'edit', 'external_directory', 'lsp', 'question', 'skill', 'task', 'todowrite', 'webfetch', 'websearch']
+    bash rules: 156 (actions: ['deny']); edit: deny; skill: deny
+    external_directory: {'/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/*': 'deny', '/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu/*': 'allow', '/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu-prof/*': 'allow', '/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-hip/*': 'allow', '/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-prof/*': 'allow'}
+    instructions: none
+  prompt head (lane block):
+    | ## Source tree and fences (enforced by the seat's permissions)
+    | - THE source tree is `/mnt/raid0/llm/tmp/ak-oab1011-ab/dryrun/workers/lane0` (your working directory, a worktree of the champion kernel). Read, grep and cite source ONLY there; paths in your reply are relative to it.
+    | - `/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923/build-cpu` is the anchor BINARY build: read-only, and only for its binaries (nm/objdump/--version). Never read source under `/mnt/raid0/llm/llama.cpp-experimental-deepseek41-20260923`: it is not the tree being changed and may differ from it.
+    | - Never build, compile, link, benchmark or test: no cmake/make/ninja/gcc/g++/clang, no .o files, no llama-bench/llama-server, no perf record. The loop owns every build and measures on this machine; those commands are denied.
+    | - You are read-only: no edits, no file writes, no git state changes (denied).
+
+trimmed - baseline prompt: +887 chars (the lane block); the fixed-overhead cut is outside the prompt:
+  static (27B tokenizer, fixed_overhead.json): fixed overhead 12,912 -> 4,950 tokens; planner first step 40,575 -> ~32,866 (removed 7,962, added 253)
+    agents_md_block     2,009 tok  exact  [trim_instructions]
+    skill_catalog       3,383 tok  exact  [trim_instructions]
+    tool_skill            147 tok  approx  [trim_instructions]
+    tool_task             799 tok  approx  [trim_tools]
+    tool_todowrite        641 tok  approx  [trim_tools]
+    tool_webfetch         309 tok  approx  [trim_tools]
+    tool_edit             444 tok  approx  [lane_guard (planner/critic)]
+    tool_write            230 tok  approx  [lane_guard (planner/critic)]
+
+DS41 loop gate (from /proc, not waited on): running=True owner=[3498589] run.py=[3498660] busy=False measuring=[]
+--loop-control pause available: False (the serial owner was launched without --control-listen, so it has no control listener or token; pause/resume cannot be requested)
+    1. wait for a forming boundary: the gate condition (no llama-server/llama-bench under the run.py child) -- `python3 driver.py gate-status`
+    2. touch /mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run9c/STOP   (serial owner starts no further batch)
+    3. touch /mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store/STOP   (run.py: forming lanes abandon before their next actor call; a lane holding the measurement tail finishes and publishes first)
+    4. wait until the serial_run and run.py pids have exited (ps -p <pid>)
+    5. run the A/B with --loop-control none
+    6. rm /mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/state-run9c/STOP /mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/store/STOP and relaunch run 9c with its exact argv (or a new state dir, as run 9 -> 9b -> 9c were), floors reused
+
+lane: {'link': '/mnt/raid0/llm/tmp/ak-oab1011-ab/lane', 'real': '/mnt/raid0/llm/tmp/ak-seat-ab/lane', 'head': 'ebb68dc55d5f6af4a4a5dccdd2a013fa76c63bee', 'at_anchor': True, 'clean': True}
+:8083 (from /proc only, no request sent): pid=2009477 -np=4 -c=196608 kv_unified(cmdline)=True
+opencode binary: /usr/local/share/npm-global/bin/opencode exists=True (not run)
+per-call timeout: 5400s; results -> /mnt/raid0/llm/tmp/ak-oab1011-ab/results.jsonl; gate log -> /mnt/raid0/llm/tmp/ak-oab1011-ab/gate-log.jsonl
+schedule (ABBA): p1 baseline,trimmed; p2 trimmed,baseline; ... 3 pairs = 6 calls ~2.0-3.5 h at 20-35 min/call, plus gate waits.

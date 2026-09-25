@@ -1,0 +1,136 @@
+{
+  "schema": "epyc.autokernel.oab1011_fixed_overhead.v1",
+  "tokenizer": {
+    "binary": "/mnt/raid0/llm/kernels/production/cpu/llama-tokenize",
+    "vocab": "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+    "flags": "--no-escape --no-bos, vocab-only, taskset -c 72-79"
+  },
+  "opencode": {
+    "binary": "/usr/local/share/npm-global/lib/node_modules/opencode-ai/bin/opencode.exe",
+    "version": "1.18.31"
+  },
+  "oab9_calls": {
+    "inline": {
+      "prompt_chars": 79890,
+      "prompt_tokens": 27663,
+      "first_step_context_tokens": [
+        40575,
+        40575
+      ],
+      "fixed_overhead_tokens": [
+        12912,
+        12912
+      ]
+    },
+    "variable": {
+      "prompt_chars": 18055,
+      "prompt_tokens": 6163,
+      "first_step_context_tokens": [
+        19075,
+        19077
+      ],
+      "fixed_overhead_tokens": [
+        12912,
+        12914
+      ]
+    }
+  },
+  "components": {
+    "agents_md_block": {
+      "chars": 8913,
+      "tokens": 2009,
+      "exact": true,
+      "knob": "trim_instructions"
+    },
+    "skill_catalog": {
+      "chars": 11596,
+      "tokens": 3383,
+      "exact": true,
+      "skills": 13,
+      "knob": "trim_instructions"
+    },
+    "tool_skill": {
+      "chars": 667,
+      "tokens": 147,
+      "exact": false,
+      "approx": "+-10% (parameter JSON reconstructed)",
+      "knob": "trim_instructions"
+    },
+    "tool_task": {
+      "chars": 3643,
+      "tokens": 799,
+      "exact": false,
+      "approx": "+-10% (parameter JSON reconstructed)",
+      "knob": "trim_tools"
+    },
+    "tool_todowrite": {
+      "chars": 2700,
+      "tokens": 641,
+      "exact": false,
+      "approx": "+-10% (parameter JSON reconstructed)",
+      "knob": "trim_tools"
+    },
+    "tool_webfetch": {
+      "chars": 1287,
+      "tokens": 309,
+      "exact": false,
+      "approx": "+-10% (parameter JSON reconstructed)",
+      "knob": "trim_tools"
+    },
+    "tool_edit": {
+      "chars": 1966,
+      "tokens": 444,
+      "exact": false,
+      "approx": "+-10% (parameter JSON reconstructed)",
+      "knob": "lane_guard (planner/critic)"
+    },
+    "tool_write": {
+      "chars": 1014,
+      "tokens": 230,
+      "exact": false,
+      "approx": "+-10% (parameter JSON reconstructed)",
+      "knob": "lane_guard (planner/critic)"
+    }
+  },
+  "added_by_knobs": {
+    "author_style_note": {
+      "chars": 431,
+      "tokens": 115,
+      "role": "author",
+      "knob": "trim_instructions"
+    },
+    "lane_guard_prompt_block": {
+      "chars": 867,
+      "tokens": 253,
+      "knob": "lane_guard"
+    }
+  },
+  "per_role_all_knobs_on": {
+    "planner": {
+      "removed_tokens": 7962,
+      "added_tokens": 253,
+      "net_tokens": 7709
+    },
+    "author": {
+      "removed_tokens": 7288,
+      "added_tokens": 368,
+      "net_tokens": 6920
+    },
+    "critic": {
+      "removed_tokens": 7962,
+      "added_tokens": 253,
+      "net_tokens": 7709
+    }
+  },
+  "planner_trim_instructions_only_tokens": 5539,
+  "planner_first_step_projection": {
+    "oab9_inline_first_step": 40575,
+    "after_all_knobs": 32866,
+    "fixed_overhead_before": 12912,
+    "fixed_overhead_after": 4950
+  },
+  "notes": [
+    "context_first_tokens is llama-server's own count of step 1 (input + cache.read); the difference from the tokenized prompt includes ~5 chat-template tokens.",
+    "Every call re-bills the fixed part: the saving recurs on each of a call's steps (23-24 steps per OAB-9 inline call), mostly as prefix-cache reads."
+  ]
+}
