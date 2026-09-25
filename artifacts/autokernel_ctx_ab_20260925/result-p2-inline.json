@@ -1,0 +1,85 @@
+{
+  "actor_calls": 1,
+  "arm": "inline",
+  "context_mode": "inline",
+  "driver_wall_s": 1724.3,
+  "env_arm": null,
+  "hypothesis": {
+    "falsifier": "(1) Emission: objdump of the installed libggml-cpu.so must show 512-bit integer ops (zmm vpdpbusd, 512-bit vpand+vpsrl unpack) inside the Q4_K specialization of mul_mat_qX_K_q8_2_X4_T; if only 256-bit instructions remain, the mechanism was not emitted and the run is void. (2) Numerics: the native MUL_MAT and MUL_MAT_ID op suites pass and an independent scalar reference agrees for Q4_K at the fixed 40-row/2-token shape (and Q5_K shows no regression); any mismatch refuses timing. (3) Speed: a directly measured alternating A/B (n>=5) against the champion on the selected recipe fails to clear the enforced decode floor of 1.544% on median aggregate_tok_s -> the claim that the Q4_K path benefits from vector width is refuted (it is bandwidth-bound, not ALU-bound).",
+    "mechanism_id": "akm-q4k-x4-avx512",
+    "statement": "In ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp, the Q4_K GEMM mul_mat_qX_K_q8_2_X4_T<DequantizerQ4K_AVX2, nrc_y> (top patchable symbol, ~22.5% of sampled user cycles on the selected run) is 256-bit-only: Q4Bits_AVX2 unpacks the 4-bit weights into four ymm via _mm256_and/_mm256_srli, and the inner loop does _mm256_dpbusd_epi32 (or _mm256_maddubs_epi16) plus a 6-instruction horizontal reduction per 128-element subblock. This build is -march=native on a Zen5 EPYC 9655 with AVX512F/VNNI/VL/BW/DQ, so HAVE_FANCY_SIMD is already defined in this TU, but this kernel never uses 512-bit. Add an in-place HAVE_FANCY_SIMD branch that unpacks the Q4_K 4-bit weights into zmm (512-bit) and computes the dot with _mm512_dpbusd_epi32 and a 512-bit reduction, keeping the existing 256-bit code as the non-AVX512 fallback. This halves the instruction count of the dequant+dot inner loop and doubles ALU work per instruction. Q4_K has the heaviest dequant of this model's matmul paths (6-bit scales+mins+4-bit unpack), so - unlike the Q8_0/MXFP4 paths the operator measured at 80-94% of the bandwidth ceiling and retired as bandwidth-bound - this path is the one most likely to be ALU-bound and to gain from vector width. Only the Q4_K dequantizer and the Q4_K/Q5_K template body change; the selector (iqk_set_kernels_kquants) and all shared/header helpers are untouched.",
+    "target_surface": "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp",
+    "target_symbol": "mul_mat_qX_K_q8_2_X4_T"
+  },
+  "lane": {
+    "at_anchor": true,
+    "clean": true,
+    "head": "ebb68dc55d5f6af4a4a5dccdd2a013fa76c63bee",
+    "link": "/mnt/raid0/llm/tmp/ak-ctx-ab/lane",
+    "real": "/mnt/raid0/llm/tmp/ak-seat-ab/lane"
+  },
+  "lane_edited": false,
+  "metrics": {
+    "bundle_tool_calls": 0,
+    "bundle_tools": {},
+    "cache_read_tokens": 1574804,
+    "cache_write_tokens": 0,
+    "compactions": 0,
+    "context_first_tokens": 40575,
+    "context_max_tokens": 91537,
+    "decoded_tokens": 43768,
+    "metrics_error": null,
+    "metrics_row": true,
+    "prompt_tokens": 23544,
+    "repair_ran": false,
+    "returncode": 0,
+    "salvaged": false,
+    "schema_valid": true,
+    "seat_arm": null,
+    "sessions": [
+      "ses_f297de732ffebQ8T1nXsMlc4jt"
+    ],
+    "steps": 24,
+    "timed_out": false,
+    "tool_calls": 26,
+    "tool_output_chars": 33826,
+    "tools": {
+      "bash": 21,
+      "grep": 1,
+      "read": 4
+    },
+    "wall_s": 1723.108
+  },
+  "pair": 2,
+  "prompt_chars": 79890,
+  "prompt_is_control": true,
+  "prompt_sha256": "a265a03a9f9a24b5feb438055385831a72a183884dfd6450bb945af7d596c993",
+  "server": {
+    "binary": "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/llama-server",
+    "c": "196608",
+    "cmdline_sha256": "ce4065ccab5a688f9b1eee5357196b1e51fb444eda10554d50a8569d6455a455",
+    "found": true,
+    "kv_unified_cmdline": true,
+    "kv_unified_log": {
+      "kv_unified": true,
+      "n_ctx_slot": 196608,
+      "n_slots": 4
+    },
+    "launch_log": "/mnt/raid0/llm/epyc-orchestrator/logs/llama-server-8083.log",
+    "np": "4",
+    "pid": 2009477,
+    "props_build_info": "b10303-ffc1bac82",
+    "props_model_path": "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+    "props_n_ctx": 196608,
+    "props_total_slots": 4,
+    "start_ticks": "29291143"
+  },
+  "slots": {
+    "errors": 0,
+    "max_busy": 2,
+    "samples": 57,
+    "samples_with_other_busy": 2
+  },
+  "started": "2026-09-25T03:00:44Z",
+  "timeout_s": 5400
+}

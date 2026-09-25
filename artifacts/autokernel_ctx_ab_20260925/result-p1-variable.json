@@ -1,0 +1,124 @@
+{
+  "abstain": "No admitted source mechanism on this serving route has a credible causal path above the 1.544% decode floor. Verified: the only admitted live surface is the Q4_K/Q5_K dot route (mul_mat_qX_K_q8_2_X4_T body + DequantizerQ4K/Q5K_AVX2 in ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp); it is engaged (GGML_IQK=1, model experts are Q4_K; its specializations are 22.5% of sampled cycles and MUL_MAT_ID is 42.05% of wall in the instrumented sibling), but the operator's measured basis puts that exact kernel regime (nrc_y=1 slab, tg32) at 199/220 GB/s = 90% of the DRAM read ceiling with a ~40% instruction budget (~0.4 IPC on Zen5), so it is DRAM-bandwidth-bound and the bundle's own standing rule retires the streaming-efficiency/MLP class ('the whole streaming-efficiency prize is ~7 ms of an 86 ms token; bytes are the lever, not the kernels') - a bit-exact instruction-level body edit would be a cosmetic lower-share variant with no measured co-limiter. The larger families are off-surface or dead: dense Q8_0 MUL_MAT (43.51% wall, tinyBLAS_Q0_AVX, 18.3% sampled) is a non-admitted CPU source family (GGML_IQK_Q8_0 default off, launch env frozen); the 50.03% libgomp sync family's admitted source levers (D1 b1 barrier removal, B3-k slab balancing) are already in the anchor, and the remaining sync/work-balance mechanisms (multi-token verify striping in iqk_dispatch.cpp, dense partitioning, backend barrier structure) are in files the porting gate refuses while thread/barrier/affinity knobs are measured dead; iqk_moe_fused_up_gate has no caller on this route; GATED_DELTA_NET is absent from the DS41 graph (zero graph-builder references; not in the instrumented op census); iqk_mul_mat_moe_rows' body is kernel-select-plus-one-call plumbing with no bit-exact changeable mechanism; host phases (build_alloc 1.51%) and the 5.8% unattributed are non-admitted families with H6's own falsifier predicting <1 ms/token. The levers with real headroom (dense byte reduction, H2 requant) are lossy model surgery / a target revision, excluded by the ratified lossless-only rule and outside this loop's kernel-source authority.",
+  "actor_calls": 1,
+  "arm": "variable",
+  "bundle": {
+    "access": {
+      "json/shared_history/": {
+        "bash": 1
+      },
+      "json/target/": {
+        "bash": 1
+      },
+      "json/target/common_cpu_scope/": {
+        "bash": 1
+      },
+      "sections/01-target.md": {
+        "read": 1
+      },
+      "sections/03-program_strategy.md": {
+        "read": 1
+      },
+      "sections/05-node_profile.md": {
+        "read": 1
+      },
+      "sections/07-shared_history.md": {
+        "read": 1
+      },
+      "sections/08-serving_observations.md": {
+        "read": 1
+      },
+      "sections/09-inbox.md": {
+        "read": 1
+      }
+    },
+    "dir": "/mnt/raid0/llm/tmp/ak-ctx-ab/actor-context/20260925T020617-planner-rgp9ome_",
+    "greps_on_bundle": 0,
+    "index_chars": 16793,
+    "index_rereads": 0,
+    "inline_equivalent_prompt_chars": 79890,
+    "prompt_sha256_matches": true,
+    "reads_on_bundle": 6,
+    "required": {
+      "sections/03-program_strategy.md": true,
+      "sections/05-node_profile.md": true,
+      "sections/09-inbox.md": true
+    },
+    "required_read_all": true
+  },
+  "context_mode": "variable",
+  "driver_wall_s": 3266.2,
+  "env_arm": "plain+ctx-variable",
+  "lane": {
+    "at_anchor": true,
+    "clean": true,
+    "head": "ebb68dc55d5f6af4a4a5dccdd2a013fa76c63bee",
+    "link": "/mnt/raid0/llm/tmp/ak-ctx-ab/lane",
+    "real": "/mnt/raid0/llm/tmp/ak-seat-ab/lane"
+  },
+  "lane_edited": false,
+  "metrics": {
+    "bundle_tool_calls": 7,
+    "bundle_tools": {
+      "bash": 1,
+      "read": 6
+    },
+    "cache_read_tokens": 4462799,
+    "cache_write_tokens": 0,
+    "compactions": 0,
+    "context_first_tokens": 19075,
+    "context_max_tokens": 163101,
+    "decoded_tokens": 68870,
+    "metrics_error": null,
+    "metrics_row": true,
+    "prompt_tokens": 108071,
+    "repair_ran": false,
+    "returncode": 0,
+    "salvaged": false,
+    "schema_valid": true,
+    "seat_arm": "plain+ctx-variable",
+    "sessions": [
+      "ses_f29afbe4effeQu3W2tbwKA0kbZ"
+    ],
+    "steps": 49,
+    "timed_out": false,
+    "tool_calls": 54,
+    "tool_output_chars": 204059,
+    "tools": {
+      "bash": 35,
+      "read": 19
+    },
+    "wall_s": 3264.976
+  },
+  "pair": 1,
+  "prompt_chars": 18055,
+  "prompt_sha256": "41b1b2c6c15bd1841c01c56f4ea4a56c6f3e34246f8b1c2133bcd7fb549b174e",
+  "server": {
+    "binary": "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/llama-server",
+    "c": "196608",
+    "cmdline_sha256": "ce4065ccab5a688f9b1eee5357196b1e51fb444eda10554d50a8569d6455a455",
+    "found": true,
+    "kv_unified_cmdline": true,
+    "kv_unified_log": {
+      "kv_unified": true,
+      "n_ctx_slot": 196608,
+      "n_slots": 4
+    },
+    "launch_log": "/mnt/raid0/llm/epyc-orchestrator/logs/llama-server-8083.log",
+    "np": "4",
+    "pid": 2009477,
+    "props_build_info": "b10303-ffc1bac82",
+    "props_model_path": "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+    "props_n_ctx": 196608,
+    "props_total_slots": 4,
+    "start_ticks": "29291143"
+  },
+  "slots": {
+    "errors": 2,
+    "max_busy": 2,
+    "samples": 106,
+    "samples_with_other_busy": 1
+  },
+  "started": "2026-09-25T02:06:17Z",
+  "timeout_s": 5400
+}

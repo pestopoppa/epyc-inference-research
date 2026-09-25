@@ -1,0 +1,167 @@
+pair 1: ['inline', 'variable'] on :8083 pid=2009477 kv_unified=True n_ctx=196608
+  inline   wall=2257.6s steps=23 tools=25 decoded=52893 compactions=0 ctx_max=103997 valid=True ok
+  variable wall=3266.2s steps=49 tools=54 decoded=68870 compactions=0 ctx_max=163101 valid=True ok
+pair 2: ['inline', 'variable'] on :8083 pid=2009477 kv_unified=True n_ctx=196608
+  inline   wall=1724.3s steps=24 tools=26 decoded=43768 compactions=0 ctx_max=91537 valid=True ok
+  variable wall=2014.3s steps=29 tools=35 decoded=47720 compactions=0 ctx_max=118002 valid=True ok
+budget: pair 3 would not fit (71 min needed); stopping
+{
+  "inline": {
+    "cache_read_tokens": {
+      "median": 1547726.5,
+      "values": [
+        1520649,
+        1574804
+      ]
+    },
+    "calls": 2,
+    "compactions": {
+      "median": 0.0,
+      "values": [
+        0,
+        0
+      ]
+    },
+    "contended_calls": 2,
+    "context_first_tokens": {
+      "median": 40575.0,
+      "values": [
+        40575,
+        40575
+      ]
+    },
+    "context_max_tokens": {
+      "median": 97767.0,
+      "values": [
+        103997,
+        91537
+      ]
+    },
+    "decoded_tokens": {
+      "median": 48330.5,
+      "values": [
+        52893,
+        43768
+      ]
+    },
+    "driver_wall_s": {
+      "median": 1990.9499999999998,
+      "values": [
+        2257.6,
+        1724.3
+      ]
+    },
+    "prompt_tokens": {
+      "median": 47047.5,
+      "values": [
+        70551,
+        23544
+      ]
+    },
+    "schema_valid": 2,
+    "steps": {
+      "median": 23.5,
+      "values": [
+        23,
+        24
+      ]
+    },
+    "tool_calls": {
+      "median": 25.5,
+      "values": [
+        25,
+        26
+      ]
+    },
+    "transients": 0
+  },
+  "pairs_complete": 2,
+  "server_generations": [
+    "{\"kv_unified_cmdline\": true, \"kv_unified_log\": {\"kv_unified\": true, \"n_ctx_slot\": 196608, \"n_slots\": 4}, \"pid\": 2009477, \"props_n_ctx\": 196608, \"start_ticks\": \"29291143\"}"
+  ],
+  "variable": {
+    "cache_read_tokens": {
+      "median": 3337947.0,
+      "values": [
+        4462799,
+        2213095
+      ]
+    },
+    "calls": 2,
+    "compactions": {
+      "median": 0.0,
+      "values": [
+        0,
+        0
+      ]
+    },
+    "contended_calls": 2,
+    "context_first_tokens": {
+      "median": 19076.0,
+      "values": [
+        19075,
+        19077
+      ]
+    },
+    "context_max_tokens": {
+      "median": 140551.5,
+      "values": [
+        163101,
+        118002
+      ]
+    },
+    "decoded_tokens": {
+      "median": 58295.0,
+      "values": [
+        68870,
+        47720
+      ]
+    },
+    "driver_wall_s": {
+      "median": 2640.25,
+      "values": [
+        3266.2,
+        2014.3
+      ]
+    },
+    "greps_on_bundle": [
+      0,
+      0
+    ],
+    "index_rereads": [
+      0,
+      0
+    ],
+    "prompt_tokens": {
+      "median": 98051.0,
+      "values": [
+        108071,
+        88031
+      ]
+    },
+    "reads_on_bundle": [
+      6,
+      6
+    ],
+    "required_read_all": [
+      true,
+      true
+    ],
+    "schema_valid": 2,
+    "steps": {
+      "median": 39.0,
+      "values": [
+        49,
+        29
+      ]
+    },
+    "tool_calls": {
+      "median": 44.5,
+      "values": [
+        54,
+        35
+      ]
+    },
+    "transients": 0
+  }
+}

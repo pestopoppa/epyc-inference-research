@@ -1,0 +1,78 @@
+{
+  "abstain": "Top unresolved editable mechanism on the selected target is iqk's Q4_K GEMM mul_mat_qX_K_q8_2_X4_T<DequantizerQ4K_AVX2> (~22.5% of sampled user cycles; the 50% libgomp-sync family above it is operator-retired as a bandwidth-saturated straggler, not a kernel defect). I inspected its only admissible surface, the Q4_K/Q5_K-only template body and Q4_K/Q5_K-specific dequantizers in ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp. The one body-only change that could help is an AVX-512 VNNI dot product (a 512-bit VNNI sibling already exists for the Q8_K-activation K-quant GEMMs at :380, but the Q8_2_X4 path this model's Q4_K weights dispatch to at :2713 is stuck on the 256-bit AVX2 body). It is cosmetic here: the operator directly measured this K-quant path at 80-90% of a 220 GB/s readbw ceiling, so it achieves near-peak DRAM bandwidth and is DRAM-bandwidth-bound, not VNNI/issue-bound; the 256-bit body needs only ~0.5 IPC per 64 B weight chunk vs a ~2 IPC EPYC core (~3x headroom), so halving its vector-instruction count cannot clear the enforced 1.544% decode floor. The operator has retired every other lever that moves a bandwidth-bound GEMM on this host (streaming/MLP/prefetch, thread count, barrier/sync/spin, dispatch/affinity, batch/ubatch), and the single remaining lever on this path, bytes via dense requantization (H2), is a requantized-model target revision, not a kernel-source patch this loop can build, gate and A/B. No admissible kernel-source hypothesis has a payoff the existing matched A/B can demonstrate above the floor.",
+  "actor_calls": 1,
+  "arm": "inline",
+  "context_mode": "inline",
+  "driver_wall_s": 2257.6,
+  "env_arm": null,
+  "lane": {
+    "at_anchor": true,
+    "clean": true,
+    "head": "ebb68dc55d5f6af4a4a5dccdd2a013fa76c63bee",
+    "link": "/mnt/raid0/llm/tmp/ak-ctx-ab/lane",
+    "real": "/mnt/raid0/llm/tmp/ak-seat-ab/lane"
+  },
+  "lane_edited": false,
+  "metrics": {
+    "bundle_tool_calls": 0,
+    "bundle_tools": {},
+    "cache_read_tokens": 1520649,
+    "cache_write_tokens": 0,
+    "compactions": 0,
+    "context_first_tokens": 40575,
+    "context_max_tokens": 103997,
+    "decoded_tokens": 52893,
+    "metrics_error": null,
+    "metrics_row": true,
+    "prompt_tokens": 70551,
+    "repair_ran": false,
+    "returncode": 0,
+    "salvaged": false,
+    "schema_valid": true,
+    "seat_arm": null,
+    "sessions": [
+      "ses_f29d23130ffeq3jgrXbuCzujbA"
+    ],
+    "steps": 23,
+    "timed_out": false,
+    "tool_calls": 25,
+    "tool_output_chars": 65173,
+    "tools": {
+      "bash": 22,
+      "read": 3
+    },
+    "wall_s": 2256.416
+  },
+  "pair": 1,
+  "prompt_chars": 79890,
+  "prompt_is_control": true,
+  "prompt_sha256": "a265a03a9f9a24b5feb438055385831a72a183884dfd6450bb945af7d596c993",
+  "server": {
+    "binary": "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/llama-server",
+    "c": "196608",
+    "cmdline_sha256": "ce4065ccab5a688f9b1eee5357196b1e51fb444eda10554d50a8569d6455a455",
+    "found": true,
+    "kv_unified_cmdline": true,
+    "kv_unified_log": {
+      "kv_unified": true,
+      "n_ctx_slot": 196608,
+      "n_slots": 4
+    },
+    "launch_log": "/mnt/raid0/llm/epyc-orchestrator/logs/llama-server-8083.log",
+    "np": "4",
+    "pid": 2009477,
+    "props_build_info": "b10303-ffc1bac82",
+    "props_model_path": "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+    "props_n_ctx": 196608,
+    "props_total_slots": 4,
+    "start_ticks": "29291143"
+  },
+  "slots": {
+    "errors": 0,
+    "max_busy": 2,
+    "samples": 75,
+    "samples_with_other_busy": 4
+  },
+  "started": "2026-09-25T01:28:40Z",
+  "timeout_s": 5400
+}

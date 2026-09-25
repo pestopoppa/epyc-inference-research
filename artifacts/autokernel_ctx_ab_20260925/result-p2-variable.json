@@ -1,0 +1,115 @@
+{
+  "abstain": "No admissible kernel-source mechanism has an honest payoff. The two dominant ops are memory-bound at the measured host read-BW ceiling: MUL_MAT dense (Q8_0, ~43.5% wall, 18.3% user-cycles, 80% of the 220 GB/s ceiling) and MUL_MAT_ID MoE (Q4_K, ~42% wall, the single largest kernel at 22.5% user-cycles via mul_mat_qX_K_q8_2_X4_T<DequantizerQ4K_AVX2>, 90% of ceiling), each already reading the minimum on-disk weight bytes; the compute share of these memory-bound GEMV-ish ops is a small minority (~6%), so the only compute-throughput edit available in an admitted route (the Q4_K/Q5_K dot body) is a cosmetic variant expected to land at/under the enforced 1.544% decode floor, i.e. no mechanism, and the MoE slab scheduling (iqk_mul_mat_moe_rows) is already optimized per the INF-70 B3-k note. The levers the bundle shows have real headroom (dense-Q8 requantization, H2 rank-1; engram-table requantization; pruning F32) are model-artifact changes ('a new target revision, not an in-place arm'), not llama.cpp kernel source, so out of scope for a kernel optimisation. The remaining candidates are explicitly DEAD on arrival in the bundle: barrier/sync/idle-spin (the 50% user-cycle family), prefetch/MLP/streaming-efficiency, work-dispatch granularity, thread count, NUMA thread policy. The other admitted CPU routes (GATED_DELTA_NET, iqk_moe_fused_up_gate) hit a non-dominant surface (DSV4_HC ~1.2% wall) or the same memory-bound Q4_K MoE. Hence no honest, feasible, buildable, gate-able, A/B-testable kernel hypothesis satisfies the constraints.",
+  "actor_calls": 1,
+  "arm": "variable",
+  "bundle": {
+    "access": {
+      "sections/01-target.md": {
+        "read": 1
+      },
+      "sections/03-program_strategy.md": {
+        "read": 1
+      },
+      "sections/05-node_profile.md": {
+        "read": 1
+      },
+      "sections/07-shared_history.md": {
+        "read": 1
+      },
+      "sections/08-serving_observations.md": {
+        "read": 1
+      },
+      "sections/09-inbox.md": {
+        "read": 1
+      }
+    },
+    "dir": "/mnt/raid0/llm/tmp/ak-ctx-ab/actor-context/20260925T032928-planner-ujfpgr9f",
+    "greps_on_bundle": 0,
+    "index_chars": 16793,
+    "index_rereads": 0,
+    "inline_equivalent_prompt_chars": 79890,
+    "prompt_sha256_matches": true,
+    "reads_on_bundle": 6,
+    "required": {
+      "sections/03-program_strategy.md": true,
+      "sections/05-node_profile.md": true,
+      "sections/09-inbox.md": true
+    },
+    "required_read_all": true
+  },
+  "context_mode": "variable",
+  "driver_wall_s": 2014.3,
+  "env_arm": "plain+ctx-variable",
+  "lane": {
+    "at_anchor": true,
+    "clean": true,
+    "head": "ebb68dc55d5f6af4a4a5dccdd2a013fa76c63bee",
+    "link": "/mnt/raid0/llm/tmp/ak-ctx-ab/lane",
+    "real": "/mnt/raid0/llm/tmp/ak-seat-ab/lane"
+  },
+  "lane_edited": false,
+  "metrics": {
+    "bundle_tool_calls": 6,
+    "bundle_tools": {
+      "read": 6
+    },
+    "cache_read_tokens": 2213095,
+    "cache_write_tokens": 0,
+    "compactions": 0,
+    "context_first_tokens": 19077,
+    "context_max_tokens": 118002,
+    "decoded_tokens": 47720,
+    "metrics_error": null,
+    "metrics_row": true,
+    "prompt_tokens": 88031,
+    "repair_ran": false,
+    "returncode": 0,
+    "salvaged": false,
+    "schema_valid": true,
+    "seat_arm": "plain+ctx-variable",
+    "sessions": [
+      "ses_f296397b7ffeW9v189UcqyunGR"
+    ],
+    "steps": 29,
+    "timed_out": false,
+    "tool_calls": 35,
+    "tool_output_chars": 136491,
+    "tools": {
+      "bash": 26,
+      "grep": 1,
+      "read": 8
+    },
+    "wall_s": 2013.128
+  },
+  "pair": 2,
+  "prompt_chars": 18055,
+  "prompt_sha256": "662c39e4e39d418dead3ed757a9d6184de46acdcdd81aa2b60d10860e05dfd7d",
+  "server": {
+    "binary": "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/llama-server",
+    "c": "196608",
+    "cmdline_sha256": "ce4065ccab5a688f9b1eee5357196b1e51fb444eda10554d50a8569d6455a455",
+    "found": true,
+    "kv_unified_cmdline": true,
+    "kv_unified_log": {
+      "kv_unified": true,
+      "n_ctx_slot": 196608,
+      "n_slots": 4
+    },
+    "launch_log": "/mnt/raid0/llm/epyc-orchestrator/logs/llama-server-8083.log",
+    "np": "4",
+    "pid": 2009477,
+    "props_build_info": "b10303-ffc1bac82",
+    "props_model_path": "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+    "props_n_ctx": 196608,
+    "props_total_slots": 4,
+    "start_ticks": "29291143"
+  },
+  "slots": {
+    "errors": 1,
+    "max_busy": 2,
+    "samples": 66,
+    "samples_with_other_busy": 1
+  },
+  "started": "2026-09-25T03:29:28Z",
+  "timeout_s": 5400
+}
