@@ -222,11 +222,37 @@ class ActorSeat:
     #: still carries the snapshot-off per-call config, see `_seat_call`); run.py turns
     #: them on by default.
     lane_guard: bool = False
+    #: OAB-23: opencode `limit.context` / `limit.output` on the call's model, written into
+    #: every per-call config (plain, bounded, critic). 0 = opencode's own default, which
+    #: for this config-only model is NO proactive compaction and max_tokens 32000 (see
+    #: `actor_opencode_config.model_limits`). Off here; run.py defaults them on.
+    context_limit: int = 0
+    output_limit: int = 0
+    #: OAB-22: append `CONCISE_RULE` to the planner and author prompts (opencode only).
+    concise: bool = False
+    #: OAB-23: a wall-clock budget per planner / author call (seconds, 0 = none), ended
+    #: through the stop path and recorded as `failure_class: budget_exhausted`; distinct
+    #: from, and meant to sit under, the hard per-call timeout.
+    planner_budget_s: int = 0
+    author_budget_s: int = 0
 
     @property
     def knobs(self) -> dict[str, bool]:
         return {"trim_instructions": self.trim_instructions, "trim_tools": self.trim_tools,
                 "lane_guard": self.lane_guard}
+
+    @property
+    def limits(self) -> dict[str, int]:
+        return {"context_limit": self.context_limit, "output_limit": self.output_limit}
+
+    def budget_for(self, role: str) -> int:
+        return {"planner": self.planner_budget_s, "author": self.author_budget_s}.get(role, 0)
+
+    def label_knobs(self, role: str) -> dict[str, Any]:
+        """Every seat_label argument this seat turns on for one call of `role`."""
+        return {**self.knobs, **self.limits,
+                "concise": self.concise and role in ("planner", "author"),
+                "budget_s": self.budget_for(role)}
 
 
 def _profile_dirs(context: Mapping[str, Any]) -> tuple[Path, ...]:
@@ -264,6 +290,26 @@ class OpencodeStoreError(ProviderTransient):
     Retried on `STORE_ERROR_BACKOFF_S`, bounded, and recorded as `failure_class`."""
 
     failure_class = actor_metrics.OPENCODE_STORE_ERROR
+
+
+class ActorBudgetExhausted(ProviderTransient):
+    """The call spent its per-call wall budget (OAB-23, `ActorSeat.planner_budget_s`)
+    without a complete reply, and was ended through the stop path (process group TERM,
+    then KILL). NEVER retried by `_with_backoff`: a retry would spend the same budget on
+    the same prompt. It still ends only the ITERATION (`iterate` records a
+    `planner_transient` outcome whose reason starts with `budget_exhausted`, carrying the
+    iteration's abandoned candidates and resume checkpoint). DS41 run 10, 2026-09-25:
+    a 61-minute planner call filled 183,710 of :8083's 196,608 pool tokens."""
+
+    failure_class = actor_metrics.BUDGET_EXHAUSTED
+
+
+class _BudgetSpent(Exception):
+    """Internal: `_run_stoppable` ended the actor because its budget ran out."""
+
+    def __init__(self, returncode: int):
+        super().__init__(returncode)
+        self.returncode = returncode
 
 
 def _is_store_error(backend: "Backend", returncode: int, stdout: str | None,
@@ -304,7 +350,8 @@ def _end_group(proc: subprocess.Popen, *, grace_s: float) -> int:
 def _run_stoppable(argv: list[str], *, out, err, timeout_s: int, cwd: Path,
                    should_stop: Callable[[], bool], extra: Mapping[str, Any],
                    poll_s: float | None = None,
-                   grace_s: float | None = None) -> subprocess.CompletedProcess:
+                   grace_s: float | None = None,
+                   budget_s: float | None = None) -> subprocess.CompletedProcess:
     """`subprocess.run` that also honours the loop's stop predicate.
 
     The actor runs in its own session (process group) so a stop or a timeout can end
@@ -313,6 +360,10 @@ def _run_stoppable(argv: list[str], *, out, err, timeout_s: int, cwd: Path,
     directly as part of stopping the run). A signal death with NO stop asked is left
     to the caller's ordinary transient path: an operator killing one hung actor
     wants the call retried, not the run ended.
+
+    `budget_s` (OAB-23): past it the group is ended the same way and `_BudgetSpent` is
+    raised -- checked after the stop predicate and before the hard timeout, so a stop
+    stays a stop and the timeout stays the timeout.
     """
     poll_s = STOP_POLL_S if poll_s is None else poll_s
     grace_s = STOP_GRACE_S if grace_s is None else grace_s
@@ -336,16 +387,23 @@ def _run_stoppable(argv: list[str], *, out, err, timeout_s: int, cwd: Path,
                     pass
         writer = threading.Thread(target=feed, name="actor-stdin", daemon=True)
         writer.start()
-    deadline = time.monotonic() + timeout_s
+    started = time.monotonic()
+    deadline = started + timeout_s
+    budget_end = started + budget_s if budget_s else None
     while True:
         if should_stop():
             raise _StoppedChild(_end_group(proc, grace_s=grace_s))
+        if budget_end is not None and time.monotonic() >= budget_end:
+            raise _BudgetSpent(_end_group(proc, grace_s=grace_s))
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             _end_group(proc, grace_s=grace_s)
             raise subprocess.TimeoutExpired(argv, timeout_s)
+        wait = min(poll_s, remaining)
+        if budget_end is not None:
+            wait = max(0.0, min(wait, budget_end - time.monotonic()))
         try:
-            returncode = proc.wait(timeout=min(poll_s, remaining))
+            returncode = proc.wait(timeout=wait)
             break
         except subprocess.TimeoutExpired:
             continue
@@ -360,7 +418,8 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
                backend: Backend = CRITIC_DEFAULT, read_only: bool = False,
                schema: Mapping[str, Any] | None = None,
                env: Mapping[str, str] | None = None,
-               should_stop: Callable[[], bool] | None = None) -> str:
+               should_stop: Callable[[], bool] | None = None,
+               budget_s: float | None = None) -> str:
     # The orchestrator kind sends the caller's schema to the server (`--schema`), so
     # its argv is the one that needs it (INF-78 OAB-2, `actor_orchestrator`).
     argv = (backend.argv(prompt, workspace, read_only=read_only, schema=schema)
@@ -400,12 +459,19 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
     with tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace") as out, \
          tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace") as err:
         try:
-            if should_stop is None:
+            if should_stop is None and not budget_s:
                 done = subprocess.run(argv, stdout=out, stderr=err, text=True,
                                       timeout=timeout_s, cwd=str(workspace), **extra)
             else:
                 done = _run_stoppable(argv, out=out, err=err, timeout_s=timeout_s,
-                                      cwd=workspace, should_stop=should_stop, extra=extra)
+                                      cwd=workspace, should_stop=should_stop or (lambda: False),
+                                      extra=extra, budget_s=budget_s or None)
+        except _BudgetSpent as spent:
+            return _budget_exhausted(
+                workspace, backend, prompt, argv=argv, returncode=spent.returncode,
+                stdout=_captured(None, out), stderr=_captured(None, err), started=started,
+                started_at=started_at, before_ids=before_session_ids, arm=arm, env=env,
+                collect_metrics=collect_metrics, schema=schema, budget_s=budget_s)
         except _StoppedChild as stop:
             reply = _persist_reply(workspace, backend, subprocess.CompletedProcess(
                 args=argv, returncode=stop.returncode,
@@ -414,7 +480,8 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
                             returncode=stop.returncode, wall_s=time.monotonic() - started,
                             timed_out=False, before_ids=before_session_ids, arm=arm, env=env,
                             collect_metrics=collect_metrics, schema=schema,
-                            final_text=None, salvaged=False, started_at=started_at)
+                            final_text=None, salvaged=False, started_at=started_at,
+                            budget_s=budget_s)
             _record_call(workspace, backend, prompt, returncode=stop.returncode,
                          wall_s=time.monotonic() - started, env=env, schema=schema,
                          reply=reply)
@@ -433,7 +500,8 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
             _record_metrics(workspace, backend, role=_safe_role(schema), returncode=-1,
                             wall_s=time.monotonic() - started, timed_out=True,
                             before_ids=before_session_ids, arm=arm, env=env, collect_metrics=collect_metrics,
-                            schema=schema, final_text=None, salvaged=False, started_at=started_at)
+                            schema=schema, final_text=None, salvaged=False,
+                            started_at=started_at, budget_s=budget_s)
             _record_call(workspace, backend, prompt, returncode=-1,
                          wall_s=time.monotonic() - started, env=env, schema=schema,
                          reply=reply, timed_out=True)
@@ -485,7 +553,7 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
                     wall_s=time.monotonic() - started, timed_out=False,
                     before_ids=before_session_ids, arm=arm, env=env, collect_metrics=collect_metrics,
                     schema=schema, final_text=final_text, salvaged=salvage_text is not None,
-                    started_at=started_at,
+                    started_at=started_at, budget_s=budget_s,
                     failure_class=OpencodeStoreError.failure_class if store_error else None)
     _record_call(workspace, backend, prompt, returncode=done.returncode,
                  wall_s=time.monotonic() - started, env=env, schema=schema, reply=reply)
@@ -505,6 +573,50 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
             f"actor exited {done.returncode} [{backend.describe()}]: "
             f"stderr={done.stderr[-300:]!r} stdout={done.stdout[-300:]!r}")
     return final_text
+
+
+def _budget_salvage(text: str, schema: Mapping[str, Any] | None) -> bool:
+    """A budget-ended call's reply is kept only when it is a COMPLETE, non-echo answer
+    for the schema. Unlike the rc > 0 salvage, an abstention does not count: it is a
+    science verdict, and a call ended mid-session never reached one (its stdout can
+    quote an abstention from a compaction summary or a draft)."""
+    if schema is None or not _has_answer(text, schema):
+        return False
+    body = _first_json_or_none(text)
+    return isinstance(body, dict) and "abstain" not in body
+
+
+def _budget_exhausted(workspace: Path, backend: Backend, prompt: str, *, argv: list[str],
+                      returncode: int, stdout: str, stderr: str, started: float,
+                      started_at: float, before_ids: set[str], arm: str | None,
+                      env: Mapping[str, str] | None, collect_metrics: bool,
+                      schema: Mapping[str, Any] | None, budget_s: float | None) -> str:
+    """OAB-23: the call's wall budget ran out and its process group was ended. Keep the
+    raw streams, record `failure_class: budget_exhausted`, and return the reply when it
+    is complete (`_budget_salvage`); otherwise raise `ActorBudgetExhausted`, which
+    `_with_backoff` never retries."""
+    reply = _persist_reply(workspace, backend, subprocess.CompletedProcess(
+        args=argv, returncode=returncode, stdout=stdout, stderr=stderr))
+    salvage_text = None
+    for text in (stdout, stdout + "\n" + stderr):
+        if _budget_salvage(text, schema):
+            salvage_text = text
+            break
+    wall_s = time.monotonic() - started
+    _record_metrics(workspace, backend, role=_safe_role(schema), returncode=returncode,
+                    wall_s=wall_s, timed_out=False, before_ids=before_ids, arm=arm, env=env,
+                    collect_metrics=collect_metrics, schema=schema, final_text=salvage_text,
+                    salvaged=salvage_text is not None, started_at=started_at,
+                    failure_class=ActorBudgetExhausted.failure_class, budget_s=budget_s,
+                    budget_exhausted=True)
+    _record_call(workspace, backend, prompt, returncode=returncode, wall_s=wall_s, env=env,
+                 schema=schema, reply=reply)
+    if salvage_text is not None:
+        return salvage_text
+    raise ActorBudgetExhausted(
+        f"{ActorBudgetExhausted.failure_class}: the {_safe_role(schema) or 'actor'} call "
+        f"spent its {budget_s:.0f}s budget without a complete reply and was ended "
+        f"(rc {returncode}) after {wall_s:.0f}s [{backend.describe()}] -- not retried")
 
 
 #: Where raw actor replies land: a sibling of the worker tree, never inside it (a
@@ -590,7 +702,9 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
                     salvaged: bool, arm: str | None = None,
                     env: Mapping[str, str] | None = None,
                     started_at: float | None = None,
-                    failure_class: str | None = None) -> None:
+                    failure_class: str | None = None,
+                    budget_s: float | None = None,
+                    budget_exhausted: bool = False) -> None:
     """A sibling line in `actor-calls.jsonl`, ahead of the `_record_call` line so a
     reader taking "the last line" for the v1 record (as the existing tests and any
     VB-AK-SEAT consumer do) is unaffected by this addition: the per-call
@@ -653,6 +767,9 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
         if orchestrator_stats is not None:
             record["orchestrator"] = orchestrator_stats
             record["metrics_error"] = orchestrator_stats.get("metrics_error")
+        budgets = _budgets_of(env, budget_s, budget_exhausted, opencode_stats)
+        if budgets is not None:
+            record["budgets"] = budgets
     except Exception as exc:   # noqa: BLE001 -- evidence, never a reason to fail the call
         record = {"schema": actor_metrics.METRICS_SCHEMA, "role": role, "seat_arm": arm,
                   "backend_kind": backend.kind, "backend_model": backend.model,
@@ -666,6 +783,38 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
             handle.write(json.dumps(record, sort_keys=True) + "\n")
     except OSError:
         pass  # evidence, never a reason to fail the actor call
+
+
+def _budgets_of(env: Mapping[str, str] | None, budget_s: float | None,
+                budget_exhausted: bool, opencode_stats: Mapping[str, Any] | None
+                ) -> dict[str, Any] | None:
+    """OAB-22/23 on the metrics row: the limits the per-call config applied (from
+    `SEAT_ENV_BUDGETS`), the wall budget, whether it ran out, and -- when the export was
+    readable -- whether compaction ran and how many steps hit the output cap. None for a
+    call that applied none of them (historical rows unchanged)."""
+    applied: dict[str, Any] = {}
+    raw = (env or {}).get(SEAT_ENV_BUDGETS)
+    if raw:
+        try:
+            applied = dict(json.loads(raw))
+        except (ValueError, TypeError) as exc:
+            applied = {"error": f"{type(exc).__name__}: {exc}"[:200]}
+    if not applied and not budget_s:
+        return None
+    totals = (opencode_stats or {}).get("totals") or None
+    return {
+        "context_limit": applied.get("context_limit", 0),
+        "output_limit": applied.get("output_limit", 0),
+        "concise": bool(applied.get("concise", False)),
+        **({"error": applied["error"]} if "error" in applied else {}),
+        "budget_s": budget_s or 0,
+        "budget_exhausted": budget_exhausted,
+        # None when the export was unreadable: unknown, never "did not happen".
+        "compacted": (totals.get("compactions", 0) > 0) if totals else None,
+        "compactions": totals.get("compactions") if totals else None,
+        "output_capped_steps": totals.get("output_capped_steps") if totals else None,
+        "context_max_tokens": (opencode_stats or {}).get("context_max_tokens"),
+    }
 
 
 def _seat_provenance(env: Mapping[str, str] | None) -> dict[str, Any]:
@@ -705,6 +854,8 @@ SEAT_ENV_ARM, SEAT_ENV_FAN_OUT, SEAT_ENV_STEPS = (
 #: Marks an OPENCODE_CONFIG that belongs to the PLAIN seat (OAB-10/11 permission block
 #: only), so the VB-AK-SEAT record does not mistake it for a bounded seat's config.
 SEAT_ENV_PLAIN_CONFIG = "AK_ACTOR_SEAT_PLAIN_CONFIG"
+#: OAB-22/23: the limits a call's per-call config applied, as JSON, for the metrics row.
+SEAT_ENV_BUDGETS = "AK_ACTOR_SEAT_BUDGETS"
 _V1_CACHE: dict[str, Any] = {}
 
 
@@ -1394,7 +1545,8 @@ def _with_backoff(call, *, attempts: int = len(BACKOFF_S),
     With `should_stop`, no attempt is drawn and no backoff is slept once a stop is
     asked: the backoff sleeps in `STOP_POLL_S` slices and raises `ActorStopped`. An
     `ActorStopped` from the call itself is never retried (it is not a
-    `ProviderTransient`, so it propagates untouched)."""
+    `ProviderTransient`, so it propagates untouched). Nor is an `ActorBudgetExhausted`
+    (OAB-23): it propagates on its first occurrence."""
     stop = should_stop or (lambda: False)
     streak = provider_failures = store_failures = 0
     last: Exception | None = None
@@ -1404,6 +1556,8 @@ def _with_backoff(call, *, attempts: int = len(BACKOFF_S),
                                + (f"; last transient: {last}" if last else ""))
         try:
             return call(), streak
+        except ActorBudgetExhausted:
+            raise   # OAB-23: a spent budget is never re-spent on the same prompt
         except ProviderTransient as exc:
             last = exc
             streak += 1
@@ -1997,6 +2151,15 @@ def _mechanism_family(row: Mapping[str, Any]) -> str | None:
     return None
 
 
+#: OAB-22 (`ActorSeat.concise`, `--actor-concise`): appended to the planner and author
+#: prompts of an opencode call. Planner calls are decode-bound, and DS41's transcripts
+#: show single ~30k-token reasoning turns re-deriving the same formulas and a 62-minute
+#: chain of small turns (run 9). Off = the historical prompt, byte for byte.
+CONCISE_RULE = ("Be concise: derive each fact once; reuse results instead of re-deriving; "
+                "keep analysis under ~4,000 tokens before replying; the reply is the JSON "
+                "object only: no preamble, no restated plan, no draft you then replace.")
+
+
 _HYPOTHESIS_TASK = """You are proposing ONE kernel optimisation for llama.cpp on {platform}.
 
 {context}
@@ -2090,6 +2253,16 @@ def _lane_block(role: str, workspace: Path, context: Mapping[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _budget_env(seat: "ActorSeat | None", role: str) -> dict[str, str]:
+    """`SEAT_ENV_BUDGETS` for a call whose seat applies a limit or the concise rule."""
+    if seat is None:
+        return {}
+    applied = {**seat.limits, "concise": seat.concise and role in ("planner", "author")}
+    if not any(applied.values()):
+        return {}
+    return {SEAT_ENV_BUDGETS: json.dumps(applied, sort_keys=True)}
+
+
 def _seat_call(seat: "ActorSeat | None", backend: Backend, role: str, workspace: Path,
                context: Mapping[str, Any]) -> dict[str, str] | None:
     """Env for a PLAIN-seat opencode call: ALWAYS a per-call `OPENCODE_CONFIG` beside the
@@ -2102,19 +2275,22 @@ def _seat_call(seat: "ActorSeat | None", backend: Backend, role: str, workspace:
         return None
     from . import actor_opencode_config as seat_config
     knobs = seat.knobs if seat is not None else {}
+    limits = seat.limits if seat is not None else {}
+    label = seat.label_knobs(role) if seat is not None else {}
     env: dict[str, str] = {}
-    if any(knobs.values()):
-        env[SEAT_ENV_ARM] = seat_config.seat_label("plain", **knobs)
+    if any(label.values()):
+        env[SEAT_ENV_ARM] = seat_config.seat_label("plain", **label)
+    env.update(_budget_env(seat, role))
     if knobs.get("trim_instructions"):
         env.update(seat_config.TRIM_ENV)
     target = Path(workspace).parent / f"actor-opencode-plain-{role}.json"
     try:
         path = seat_config.write_plain_config(
             target, role=role, lane=Path(workspace), build_dir=_anchor_build_dir(context),
-            **knobs)
+            model=backend.model, **knobs, **limits)
     except OSError as exc:
-        if any(knobs.values()):
-            raise   # a knob's fence must never silently drop
+        if any(knobs.values()) or any(limits.values()):
+            raise   # a knob's fence (or a context cap) must never silently drop
         # Knobs off: the config only turns snapshots off. Unwritable, the call runs as
         # it always did rather than failing an actor call over store hygiene.
         import sys
@@ -2205,13 +2381,28 @@ class AgentPlanner:
         seat_config.write_actor_config(
             path, role=role, lane=Path(self.workspace), profiles=_profile_dirs(context),
             python=self.seat.tools_python, steps=self.seat.steps, fan_out=self.seat.fan_out,
-            build_dir=_anchor_build_dir(context), **self.seat.knobs)
+            build_dir=_anchor_build_dir(context), model=self.backend.model,
+            **self.seat.knobs, **self.seat.limits)
         trim = seat_config.TRIM_ENV if self.seat.trim_instructions else {}
         return (dataclasses.replace(self.backend, agent=seat_config.AGENT_NAMES[role]),
-                {**trim, "OPENCODE_CONFIG": str(path),
-                 SEAT_ENV_ARM: seat_config.seat_label("bounded", **self.seat.knobs),
+                {**trim, "OPENCODE_CONFIG": str(path), **_budget_env(self.seat, role),
+                 SEAT_ENV_ARM: seat_config.seat_label("bounded",
+                                                      **self.seat.label_knobs(role)),
                  SEAT_ENV_FAN_OUT: "1" if self.seat.fan_out else "0",
                  SEAT_ENV_STEPS: str(self.seat.steps)})
+
+    def _concise(self, prompt: str) -> str:
+        """OAB-22: `CONCISE_RULE` after the task (opencode only; off = byte-identical)."""
+        if self.seat is None or not self.seat.concise or self.backend.kind != "opencode":
+            return prompt
+        return prompt + "\n\n" + CONCISE_RULE
+
+    def _budget_kw(self, role: str) -> dict[str, Any]:
+        """OAB-23: the per-call wall budget for `role` (opencode only; none when 0)."""
+        if self.seat is None or self.backend.kind != "opencode":
+            return {}
+        budget = self.seat.budget_for(role)
+        return {"budget_s": budget} if budget else {}
 
     def _guarded(self, role: str, prompt: str, context: Mapping[str, Any]) -> str:
         """The lane block ahead of the prompt under the lane guard (opencode only; the
@@ -2302,6 +2493,7 @@ class AgentPlanner:
         evidence = self._belief_evidence(context)
         if evidence is not None and evidence.get("section"):
             prompt += "\n\n" + evidence["section"]
+        prompt = self._concise(prompt)
         prompt = self._guarded("planner", prompt, context)
         backend, env = self._seated("planner", context)
         env = self._sealed(prompt, bundle, env)
@@ -2334,7 +2526,8 @@ class AgentPlanner:
         raw, streak = _with_backoff(
             lambda: _run_agent(prompt, workspace=self.workspace,
                                timeout_s=self.timeout_s, backend=backend,
-                               schema=HYPOTHESIS_SCHEMA, env=env, **self._stop_kw()),
+                               schema=HYPOTHESIS_SCHEMA, env=env, **self._stop_kw(),
+                               **self._budget_kw("planner")),
             should_stop=self.should_stop)
         self.transient_streak = streak
         body = _parse_reply(raw, schema=HYPOTHESIS_SCHEMA, backend=self.backend, workspace=self.workspace)
@@ -2389,13 +2582,15 @@ class AgentPlanner:
             "If the hypothesis cannot be implemented honestly within these constraints, "
             "abstaining is a correct science result. Make no edits and reply instead with:\n"
             '{"abstain": "<specific reason the hypothesis is infeasible>"}')
+        prompt = self._concise(prompt)
         prompt = self._guarded("author", prompt, context)
         backend, env = self._seated("author", context)
         env = self._sealed(prompt, bundle, env)
         raw, streak = _with_backoff(
             lambda: _run_agent(prompt, workspace=self.workspace,
                                timeout_s=self.timeout_s, backend=backend,
-                               schema=PATHS_SCHEMA, env=env, **self._stop_kw()),
+                               schema=PATHS_SCHEMA, env=env, **self._stop_kw(),
+                               **self._budget_kw("author")),
             should_stop=self.should_stop)
         self.transient_streak = streak
         body = _parse_reply(raw, schema=PATHS_SCHEMA, backend=self.backend, workspace=self.workspace)

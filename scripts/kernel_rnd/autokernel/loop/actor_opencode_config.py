@@ -84,6 +84,80 @@ RESEARCH_ROOT = Path(__file__).resolve().parents[4]
 #: Independent of every OAB knob, so the knobs-off plain seat stops bloating too.
 SNAPSHOT_OFF = {"snapshot": False}
 
+# --------------------------------------------------------------------------------------
+# OAB-23: per-call CONTEXT and OUTPUT limits for the model the call runs on (2026-09-25).
+#
+# DS41 run 10 (18:49Z): the first planner call ran 61 min and reached 183,710 tokens of
+# :8083's 196,608-token UNIFIED KV pool (np4, --kv-unified, MTP draft); a full unified
+# pool under MTP crashes llama-server ("speculative batch index 8 is not inside the
+# current sub-batch", reproduced 4/4). The global provider entry gives the model no
+# `limit`, and opencode 1.18.31 then NEVER compacts proactively. Read from the installed
+# binary (read-only):
+#
+# * Provider model parse: `limit:{context:C.limit?.context??_?.limit?.context??0,
+#   input:C.limit?.input??..., output:C.limit?.output??_?.limit?.output??0}` -- a
+#   config-only model (not in models.dev) defaults to context 0, output 0.
+# * `ProviderTransform.maxOutputTokens(model, cap=OUTPUT_TOKEN_MAX=32000)` is
+#   `Math.min(model.limit.output, cap) || cap`: output 0 -> 32000. It is passed as
+#   `maxOutputTokens` on every LLM request, and `@ai-sdk/openai-compatible` sends it as
+#   `max_tokens`. So today every step may decode 32,000 tokens (the observed ~30k-token
+#   single reasoning turns); `limit.output: O` makes it `max_tokens: min(O, 32000)`.
+# * `SessionCompaction.isOverflow`: false when `compaction.auto === false` or
+#   `limit.context === 0`; otherwise true when the LAST finished assistant step's
+#   `tokens.total` (input + output + cache) >= usable, where usable = `limit.input -
+#   reserved` if `limit.input` is set, else `limit.context - maxOutputTokens(model)`.
+#   The loop checks it before every step and runs an auto compaction first. Context 0
+#   is why the seat only ever compacted REACTIVELY, on a server context-overflow error
+#   -- which a unified pool never returns before it is full.
+# * A step that ends on `finish == "length"` (the output cap) is not "tool-calls", so
+#   the session loop EXITS after it: a step cut at O tokens ends the call (the reply is
+#   whatever text it had; the loop's salvage/repair/transient paths take it from there).
+#
+# With C = 131,072 and O = 8,192: compaction fires once a step's total reaches C - O =
+# 122,880; the next request is at most that plus one step's tool results plus O
+# decoded, i.e. ~C + one step of tool output (bounded seat: <=12 KB per result; plain
+# seat: opencode's 50 KB default) -- about 131k-150k of the 196,608 pool, leaving
+# >= ~45k for the other three slots of :8083 (np4). O = 8,192 is twice the ~4,000-token
+# analysis budget the concise rule states (`actors.CONCISE_RULE`).
+# --------------------------------------------------------------------------------------
+
+#: run.py defaults for `--actor-context-limit` / `--actor-output-limit`. 0 = opencode's
+#: own default (context 0: no proactive compaction; output 0: max_tokens 32000).
+DEFAULT_CONTEXT_LIMIT = 131_072
+DEFAULT_OUTPUT_LIMIT = 8_192
+
+
+def model_limits(model: str | None, *, context_limit: int = 0,
+                 output_limit: int = 0) -> dict:
+    """The `provider` block that sets `limit` on the call's `provider/model`, or {}.
+
+    opencode deep-merges OPENCODE_CONFIG over the global config (plain objects merge
+    key by key, `uW` -> mergeDeep), so this entry ADDS `limit` to the global
+    `provider.<id>.models.<model>` and keeps its npm, name and options.baseURL. The
+    config schema's `limit` requires both `context` and `output`, so both are always
+    written; 0 keeps opencode's own default for that one."""
+    for label, value in (("context_limit", context_limit), ("output_limit", output_limit)):
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError(f"{label} must be a non-negative int, got {value!r}")
+    if not (context_limit or output_limit):
+        return {}
+    if not model or "/" not in model:
+        raise ValueError(f"model limits need a provider/model id, got {model!r}")
+    if context_limit and output_limit and output_limit >= context_limit:
+        raise ValueError(f"output_limit {output_limit} must be below context_limit "
+                         f"{context_limit}: opencode compacts at context - output")
+    provider, model_id = model.split("/", 1)
+    return {"provider": {provider: {"models": {model_id: {
+        "limit": {"context": context_limit, "output": output_limit}}}}}}
+
+
+def limits_label(*, context_limit: int = 0, output_limit: int = 0) -> str:
+    """`+ctx128k+out8k` style arm suffix for the limits that are on."""
+    def k(value: int) -> str:
+        return f"{value // 1024}k" if value % 1024 == 0 else str(value)
+    return (("+ctx" + k(context_limit) if context_limit else "")
+            + ("+out" + k(output_limit) if output_limit else ""))
+
 
 def _tool(name: str) -> str:
     return f"{MCP_SERVER}_{name}"
@@ -155,7 +229,9 @@ def build_actor_config(*, role: str, lane: Path, profiles: Sequence[Path] = (),
                        replace_system_prompt: bool = False,
                        trim_instructions: bool = False, trim_tools: bool = False,
                        lane_guard: bool = False,
-                       build_dir: str | Path | None = None) -> dict:
+                       build_dir: str | Path | None = None,
+                       model: str | None = None, context_limit: int = 0,
+                       output_limit: int = 0) -> dict:
     """The opencode config (a dict ready for ``json.dump``) for one actor run.
 
     By default the seat's guidance is ADDED to opencode's own system prompt through
@@ -169,7 +245,9 @@ def build_actor_config(*, role: str, lane: Path, profiles: Sequence[Path] = (),
     `trim_instructions` / `trim_tools` / `lane_guard` (OAB-10/11, all off by default)
     add a TOP-LEVEL `permission` block of denies (`seat_permission`) that the global
     config's rules merge with; under the lane guard the author agent's own `edit` rule
-    becomes the lane-only guard (an agent rule is evaluated after the top-level one)."""
+    becomes the lane-only guard (an agent rule is evaluated after the top-level one).
+
+    `context_limit` / `output_limit` (OAB-23, 0 = off) add `model_limits(model, ...)`."""
     if role not in AGENT_NAMES:
         raise ValueError(f"unknown actor role {role!r}; expected one of "
                          f"{sorted(AGENT_NAMES)}")
@@ -219,9 +297,11 @@ def build_actor_config(*, role: str, lane: Path, profiles: Sequence[Path] = (),
     top = seat_permission(role, lane=lane, build_dir=build_dir,
                           trim_instructions=trim_instructions, trim_tools=trim_tools,
                           lane_guard=lane_guard, keep_task=fan_out, edit_rule=False)
+    limits = model_limits(model, context_limit=context_limit, output_limit=output_limit)
     return {
         "$schema": "https://opencode.ai/config.json",
         **SNAPSHOT_OFF,
+        **limits,
         **({"permission": top} if top else {}),
         "tool_output": {"max_lines": tool_output_max_lines,
                         "max_bytes": tool_output_max_bytes},
@@ -486,27 +566,36 @@ def seat_permission(role: str, *, lane: Path | None = None,
 
 
 def seat_label(base: str, *, trim_instructions: bool = False, trim_tools: bool = False,
-               lane_guard: bool = False) -> str:
-    """`plain` / `bounded` plus one suffix per knob that is on (free text in VB-AK-SEAT)."""
-    return base + "".join(suffix for on, suffix in (
+               lane_guard: bool = False, context_limit: int = 0, output_limit: int = 0,
+               concise: bool = False, budget_s: int = 0) -> str:
+    """`plain` / `bounded` plus one suffix per knob that is on (free text in VB-AK-SEAT).
+    OAB-22/23 add `+ctx<C>+out<O>`, `+concise` and `+budget<B>s` (all off: unchanged)."""
+    return (base + "".join(suffix for on, suffix in (
         (trim_instructions, "+trim-instr"), (trim_tools, "+trim-tools"),
         (lane_guard, "+lane-guard")) if on)
+        + limits_label(context_limit=context_limit, output_limit=output_limit)
+        + ("+concise" if concise else "") + (f"+budget{budget_s}s" if budget_s else ""))
 
 
 def build_plain_config(*, role: str, lane: Path, build_dir: str | Path | None = None,
                        trim_instructions: bool = False, trim_tools: bool = False,
                        lane_guard: bool = False,
-                       author_note_path: Path | None = None) -> dict:
+                       author_note_path: Path | None = None,
+                       model: str | None = None, context_limit: int = 0,
+                       output_limit: int = 0) -> dict:
     """The per-call `OPENCODE_CONFIG` for the PLAIN seat: `snapshot: false`, a permission
     block (plus the author's style note as an `instructions` file) and nothing else -- no
     agent, no MCP, no tool_output cap, so the plain seat stays the plain seat. With every
     knob off it is `{"$schema", "snapshot": false}` alone: the plain seat ALWAYS gets a
-    per-call config, because snapshot tracking is on by default and bloats the store."""
+    per-call config, because snapshot tracking is on by default and bloats the store.
+    `context_limit` / `output_limit` (OAB-23, 0 = off) add `model_limits(model, ...)`."""
     permission = seat_permission(role, lane=lane, build_dir=build_dir,
                                  trim_instructions=trim_instructions,
                                  trim_tools=trim_tools, lane_guard=lane_guard)
     note = trim_instructions and role == "author" and author_note_path is not None
-    config: dict = {"$schema": "https://opencode.ai/config.json", **SNAPSHOT_OFF}
+    config: dict = {"$schema": "https://opencode.ai/config.json", **SNAPSHOT_OFF,
+                    **model_limits(model, context_limit=context_limit,
+                                   output_limit=output_limit)}
     if permission:
         config["permission"] = permission
     if note:
@@ -528,7 +617,9 @@ def write_plain_config(path: Path, **kw) -> Path:
     return path
 
 
-__all__ = ["actor_instructions", "AGENT_NAMES", "AUTHOR_EDIT_GUARD", "AUTHOR_STYLE_NOTE",
+__all__ = ["actor_instructions", "AGENT_NAMES", "DEFAULT_CONTEXT_LIMIT",
+           "DEFAULT_OUTPUT_LIMIT", "limits_label", "model_limits", "AUTHOR_EDIT_GUARD",
+           "AUTHOR_STYLE_NOTE",
            "BUILD_DENY", "MAX_CONCURRENT_SUBAGENTS", "MCP_SERVER", "PLAIN_ROLES",
            "READ_ONLY_DENY", "SCOUT_AGENT", "SNAPSHOT_OFF", "TRIM_ENV", "UNUSED_TOOLS", "anchor_fence",
            "build_actor_config", "build_plain_config", "seat_label", "seat_permission",

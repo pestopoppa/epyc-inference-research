@@ -37,6 +37,7 @@ from . import (accumulate, actors, anchor, archive, bench, champion, claim, gate
                dispatch_guard, heartbeat, hotspots, loop, serving, serving_beliefs,
                integrity, heldout_serving, lineage_beliefs, pipeline, pool, production, status, surface_fold,
                surface_validation)
+from . import actor_opencode_config
 from . import resume as resume_mod
 
 
@@ -256,6 +257,40 @@ def _actor_knobs(args) -> dict[str, bool]:
     return {"trim_instructions": args.actor_trim_instructions == "on",
             "trim_tools": args.actor_trim_tools == "on",
             "lane_guard": args.actor_lane_guard == "on"}
+
+
+def _actor_limits(args) -> dict[str, int]:
+    """OAB-23 opencode model limits (`--actor-context-limit` / `--actor-output-limit`)
+    as ActorSeat fields; every opencode seat gets them, the critic included (it runs on
+    the same server pool)."""
+    return {"context_limit": int(args.actor_context_limit),
+            "output_limit": int(args.actor_output_limit)}
+
+
+def _actor_budgets(args) -> dict[str, int | bool]:
+    """OAB-22/23 planner/author-only fields: the concise rule and the per-call budgets."""
+    return {"concise": args.actor_concise == "on",
+            "planner_budget_s": int(args.actor_planner_budget_s),
+            "author_budget_s": int(args.actor_author_budget_s)}
+
+
+def _actor_budget_error(args) -> str | None:
+    """Why the OAB-22/23 knobs are unusable, or None."""
+    for flag in ("actor_context_limit", "actor_output_limit", "actor_planner_budget_s",
+                 "actor_author_budget_s"):
+        if int(getattr(args, flag)) < 0:
+            return f"--{flag.replace('_', '-')} must be >= 0"
+    context, output = int(args.actor_context_limit), int(args.actor_output_limit)
+    if context and output and output >= context:
+        return "--actor-output-limit must be below --actor-context-limit"
+    return None
+
+
+def _moot_budgets(args) -> list[str]:
+    """Budgets at or past the hard timeout: the timeout ends those calls first."""
+    return [f"--{flag.replace('_', '-')}={getattr(args, flag)}"
+            for flag in ("actor_planner_budget_s", "actor_author_budget_s")
+            if int(getattr(args, flag)) and int(getattr(args, flag)) >= int(args.actor_timeout_s)]
 
 
 def _cpu_arm(original, build: Path, *, extra_env: dict | None = None):
@@ -790,6 +825,35 @@ def main(argv: list[str] | None = None) -> int:
                              "presented/omitted/unavailable claim ids, run, frontier, and the "
                              "planner's explicit relies_on_claims). 'off' is the historical "
                              "prompt with no receipt (default: %(default)s)")
+    parser.add_argument("--actor-context-limit", type=int,
+                        default=actor_opencode_config.DEFAULT_CONTEXT_LIMIT,
+                        help="opencode planner/author/critic (OAB-23): `limit.context` on the "
+                             "call's provider/model in every per-call OPENCODE_CONFIG. opencode "
+                             "compacts once a step's total tokens reach context - output; "
+                             "without it (0) a config-only model NEVER compacts proactively "
+                             "and DS41 run 10's planner reached 183,710 of :8083's 196,608 "
+                             "unified-pool tokens (full pool + MTP crashes the server). "
+                             "Default leaves the other np4 slots >=~45k (default: %(default)s)")
+    parser.add_argument("--actor-output-limit", type=int,
+                        default=actor_opencode_config.DEFAULT_OUTPUT_LIMIT,
+                        help="opencode planner/author/critic (OAB-23): `limit.output`, sent as "
+                             "max_tokens on every request (0 = opencode's 32000). A step that "
+                             "hits it ends the opencode session (finish=length) "
+                             "(default: %(default)s)")
+    parser.add_argument("--actor-concise", choices=("on", "off"), default="on",
+                        help="opencode planner/author (OAB-22): append the concision rule "
+                             "(derive each fact once, analysis under ~4,000 tokens, reply is "
+                             "the JSON object only). Off = the historical prompt byte for "
+                             "byte (default: %(default)s)")
+    parser.add_argument("--actor-planner-budget-s", type=int, default=2700,
+                        help="opencode planner (OAB-23): wall budget per proposal call, under "
+                             "--actor-timeout-s. Past it the call is ended through the stop "
+                             "path and recorded failure_class=budget_exhausted; a complete "
+                             "reply is salvaged, otherwise the iteration ends (never retried). "
+                             "0 = none (default: %(default)s)")
+    parser.add_argument("--actor-author-budget-s", type=int, default=0,
+                        help="opencode author (OAB-23): the same wall budget for authoring "
+                             "calls; 0 = none (default: %(default)s)")
     parser.add_argument("--actor-steps", type=int, default=actors.ActorSeat.steps,
                         help="bounded seat: opencode step cap per call (default: %(default)s)")
     parser.add_argument("--actor-timeout-s", type=int, default=actors.DEFAULT_TIMEOUT_S,
@@ -807,6 +871,9 @@ def main(argv: list[str] | None = None) -> int:
                         default=pool.WORKER_BUILD_ROOT,
                         help="parent of the per-lane candidate build directories")
     args = parser.parse_args(argv)
+    budget_error = _actor_budget_error(args)
+    if budget_error:
+        parser.error(budget_error)
     operator_unblocks = dispatch_guard.load_operator_unblocks(
         args.operator_unblock_artifact)
     if args.cpu_screen_scope or args.cpu_confirm_from:
@@ -1386,7 +1453,13 @@ def main(argv: list[str] | None = None) -> int:
           f"seat={args.actor_seat}{' fan-out' if args.actor_fan_out else ''} steps={args.actor_steps} "
           f"context={args.actor_context_mode} "
           f"trim-instructions={args.actor_trim_instructions} "
-          f"trim-tools={args.actor_trim_tools} lane-guard={args.actor_lane_guard}")
+          f"trim-tools={args.actor_trim_tools} lane-guard={args.actor_lane_guard} "
+          f"context-limit={args.actor_context_limit} output-limit={args.actor_output_limit} "
+          f"concise={args.actor_concise} planner-budget={args.actor_planner_budget_s}s "
+          f"author-budget={args.actor_author_budget_s}s")
+    for moot in _moot_budgets(args):
+        print(f"actors    WARNING {moot} is not below --actor-timeout-s={args.actor_timeout_s}: "
+              "the hard timeout ends those calls first, so the budget never fires")
     # D4: with the two-rung gate on, the champion-vs-production headline is measured
     # on the confirm rung -- the standing +17.9% was the screen shape, which is the
     # "headline must be the production recipe" defect. Floor re-keyed to that model.
@@ -3079,7 +3152,8 @@ def main(argv: list[str] | None = None) -> int:
                                                fan_out=args.actor_fan_out,
                                                steps=args.actor_steps,
                                                context_mode=args.actor_context_mode,
-                                               **_actor_knobs(args)))
+                                               **_actor_knobs(args), **_actor_limits(args),
+                                               **_actor_budgets(args)))
             return (runtime_recovery.PendingPlanner(ordinary, pending_slot)
                     if pending_pair is not None else ordinary)
 
@@ -3097,7 +3171,8 @@ def main(argv: list[str] | None = None) -> int:
                 if screen_confirmation else actors.AgentCritic(
                     workspace=worker.worktree, backend=critic_backend,
                     timeout_s=args.actor_timeout_s, should_stop=should_stop,
-                    seat=actors.ActorSeat(bounded=False, **_actor_knobs(args)))),
+                    seat=actors.ActorSeat(bounded=False, **_actor_knobs(args),
+                                          **_actor_limits(args)))),
             build_context=build_context, make_gate=gate_for,
             make_measure=measure_for, record=record_pooled,
             iterations=(args.iterations or None), should_stop=should_stop,

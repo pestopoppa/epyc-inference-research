@@ -75,6 +75,9 @@ EXPORT_TIMEOUT_S = 60.0
 STORE_ERROR_RE = re.compile(r"Failed query|SQLITE_BUSY|database is locked")
 #: The metrics row's `failure_class` for an actor call that died on that error.
 OPENCODE_STORE_ERROR = "opencode_store_error"
+#: `failure_class` of a call ended by its per-call wall budget (OAB-23,
+#: `--actor-planner-budget-s`), distinct from the hard `--actor-timeout-s` timeout.
+BUDGET_EXHAUSTED = "budget_exhausted"
 
 #: Short busy-wait for this module's own `opencode session list` / `export` when the
 #: store is locked: bounded (~17 s of sleeps), because metrics are evidence and must
@@ -116,7 +119,7 @@ def _run_cli(argv: list[str], *, cwd: Path, timeout_s: float, stdout) -> subproc
 #: ROOT's VB-AK-SEAT `derive_totals` convention for the seat A/B arm record.
 TOTAL_FIELDS = ("steps", "tool_calls", "compactions", "decoded_tokens", "prompt_tokens",
                 "cache_read_tokens", "cache_write_tokens", "tool_output_chars",
-                "bundle_tool_calls")
+                "bundle_tool_calls", "output_capped_steps")
 
 #: A tool call's input that names a file under a variable-mode context bundle
 #: (`actor_context.BUNDLE_DIR`, one directory per call): the path relative to that
@@ -235,6 +238,9 @@ def parse_export(path: Path) -> dict[str, Any]:
         "tool_calls": len(tools),
         "tools": tool_names,
         "compactions": sum(1 for p in parts if p.get("type") == "compaction"),
+        # Steps that ended on the output cap (`max_tokens`, OAB-23 `limit.output`): the
+        # AI SDK's finish reason "length". opencode ends the session after such a step.
+        "output_capped_steps": sum(1 for a in assistant if a.get("finish") == "length"),
         "decoded_tokens": sum(_tokens(a, "output") for a in assistant),
         "prompt_tokens": sum(_tokens(a, "input") for a in assistant),
         "cache_read_tokens": sum(_tokens(a, "cache", "read") for a in assistant),
