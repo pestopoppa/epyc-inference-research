@@ -27,6 +27,7 @@ a ROCm toolchain.
 """
 from __future__ import annotations
 
+import sys
 from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -47,6 +48,39 @@ PATCH_ROUNDS = 2
 STOPPED_MID_FORMATION = (
     "run stop requested while this candidate was still forming; abandoned before "
     "the next actor call. No verdict on the mechanism — it was never attempted")
+
+#: The same stop, after this iteration had ALREADY disposed of candidates. DS41 run
+#: 9c recorded a hoist that two authoring rounds implemented, the critic accepted
+#: twice and `op_scope` refused twice as "never attempted", because the stop landed
+#: on the NEXT planner call. Those candidates carry their own rows
+#: (`CANDIDATE_DISPOSITIONS`); this row must not deny them.
+STOPPED_AFTER_DISPOSALS = (
+    "run stop requested while this iteration was still forming; abandoned before "
+    "the next actor call. This iteration had already attempted and disposed of "
+    "candidates (each has its own experiment row; any patch is retained under "
+    "<store>/patches) — this row is no verdict on them")
+
+#: One row per candidate abandoned INSIDE an iteration, recorded when it is
+#: abandoned (`iterate(record_abandoned=...)`), never only folded into the
+#: iteration's final outcome. Before this, a candidate refused at critic pass 2 or at
+#: the pre-build gate survived only as a prompt string for the next round: when a
+#: later round produced the iteration's outcome, the refused candidate -- its
+#: reason, its gate and its patch pointer -- was in no experiment row at all.
+CANDIDATE_DISPOSITIONS = ("hypothesis_rejected", "patch_rejected", "gate_refused",
+                          "resume_rejected")
+
+#: A resumed candidate (`iterate(resume=...)`) that failed re-validation: its patch no
+#: longer applies, its bytes changed, its anchor moved, or a CURRENT gate refused it.
+#: Recorded as a disposition (its own row, never an iteration) and its checkpoint is
+#: consumed, so it is never retried in a loop; the iteration then draws fresh work.
+RESUME_REJECTED = "resume_rejected"
+
+#: The resumable checkpoint an outcome row carries (`resume_checkpoints`). The stop
+#: path, a provider transient and every gate refusal write one, so work in flight at a
+#: stop or refusal survives to the next launch instead of being re-derived: DS41 runs
+#: 3-9c dropped ~300 actor-min and ~120 measure-min that way, and 0 of ~15 such
+#: attempts ever reached a build. Consumer: `resume.py`.
+CHECKPOINT_SCHEMA = "epyc.autokernel.resume_checkpoint.v1"
 
 
 class RunAborted(RuntimeError):
@@ -242,6 +276,17 @@ class Outcome:
     # Populated only after the append-only experiment store commits this outcome.
     # Kept out of to_attempt() so the receipt cannot recursively hash itself.
     journal_receipt: dict | None = None
+    # Where this candidate's patch was retained (<store>/patches), set by the
+    # owner that retained it; and the candidates this iteration disposed of before
+    # its final outcome, each already recorded as its own row.
+    retained_patch: dict | None = None
+    abandoned_candidates: list[dict] = field(default_factory=list)
+    # Resume lineage and checkpoints (`resume.py`). `resumed_from` names the
+    # checkpoint (`<attempt_id>#<index>`) this candidate was resumed from;
+    # `resume_checkpoints` is what a later launch needs to resume THIS one.
+    resumed_from: str | None = None
+    resume_stage: str | None = None
+    resume_checkpoints: list[dict] = field(default_factory=list)
 
     def to_attempt(self) -> dict:
         row = {"status": self.status, "turn_recorded_at": _now()}
@@ -273,6 +318,15 @@ class Outcome:
         })
         if self.validator_provenance:
             row["validator_provenance"] = self.validator_provenance
+        if self.retained_patch is not None:
+            row["retained_patch"] = self.retained_patch
+        if self.abandoned_candidates:
+            row["abandoned_candidates"] = self.abandoned_candidates
+        if self.resumed_from is not None:
+            row["resumed_from"] = self.resumed_from
+            row["resume_stage"] = self.resume_stage
+        if self.resume_checkpoints:
+            row["resume_checkpoints"] = [dict(ck) for ck in self.resume_checkpoints]
         for key in ("spawn_parent", "branch_id", "width", "depth"):
             if getattr(self, key) is not None:
                 row[key] = getattr(self, key)
@@ -289,6 +343,44 @@ class Outcome:
             if split is not None:
                 row["claims"] = split
         return row
+
+
+#: Outcomes that end an iteration with accepted work still in flight. Their row
+#: carries `resume_checkpoints` (the in-flight stage, and the latest gate-refused
+#: patch) so a later launch resumes rather than re-derives it.
+RESUMABLE_STATUSES = frozenset({"stopped_mid_formation", "planner_transient"})
+
+#: Checkpoint fields the recording OWNER binds (never carried from an older row).
+_OWNER_BOUND = frozenset({"anchor_commit", "epoch_sha256", "target"})
+
+
+def gate_rules_fingerprint() -> str:
+    """Digest of the deterministic gate rules a refusal was made under.
+
+    A `gate_refused` checkpoint records it; `resume.py` treats a refusal by a rule
+    gate as resumable only once this has changed (or was never recorded). Coarse on
+    purpose: any change to `gates.py` re-opens the question, and the resumed
+    candidate re-runs every current gate before any build or measurement.
+    """
+    import hashlib
+    return hashlib.sha256(Path(gates.__file__).read_bytes()).hexdigest()
+
+
+def _pending_checkpoints(progress: Mapping[str, Any]) -> list[dict]:
+    pending: list[dict] = []
+    for key in ("inflight", "build"):
+        entry = progress.get(key)
+        if entry is not None and entry not in pending:
+            pending.append(dict(entry))
+    return pending
+
+
+def _disposal_summary(abandoned: Sequence[Mapping[str, Any]]) -> str:
+    """One line naming what this iteration disposed of before it was stopped."""
+    parts = [f"{row.get('status')} by {row.get('refusal_gate')} "
+             f"(round {row.get('hypothesis_round')}.{row.get('patch_round')}): "
+             f"{str(row.get('reason') or '')[:200]}" for row in abandoned]
+    return f"disposed before the stop ({len(parts)}): " + "; ".join(parts)
 
 
 def _critic_provenance(critic: Critic, review: Review, *, decision: str,
@@ -385,7 +477,9 @@ def iterate(*, planner: Planner, critic: Critic,
             record_reschedule: Callable[[Outcome], bool] | None = None,
             accumulate_valid_positive: bool = False,
             validate_candidate: Callable[[Hypothesis, Sequence[str]], Any] | None = None,
-            formation_guard=None, reserve_candidate=None
+            formation_guard=None, reserve_candidate=None,
+            record_abandoned: Callable[[Outcome], None] | None = None,
+            resume=None
             ) -> Outcome:
     """One full turn. Pure control flow: every side effect is an injected callable.
 
@@ -394,8 +488,24 @@ def iterate(*, planner: Planner, critic: Critic,
     critic pass and authoring turn), and never inside the tail — a candidate that
     reaches the tail finishes build → oracle → A/B → commit exactly as before, so a
     stop can never kill a measurement mid-A/B.
+
+    `record_abandoned` receives one `CANDIDATE_DISPOSITIONS` outcome for every
+    hypothesis or patch this turn abandons before its final outcome, at the moment
+    it is abandoned (so a later stop, lane error or crash cannot erase it). The
+    final outcome lists them again in `abandoned_candidates`.
+
+    `resume` (a `resume.ResumePoint`) seeds ONE extra round, before the fresh
+    hypothesis rounds, with work a previous launch already paid for: at stage
+    "build" an accepted patch goes straight to the host checks, the CURRENT gates
+    and the measurement (no planner, critic or author call); at stage "author" an
+    accepted hypothesis resumes authoring with its original verdict and rejection
+    history. Every re-validation failure is disposed as `resume_rejected` and the
+    iteration continues with fresh work. A stop, provider transient or gate refusal
+    leaves `resume_checkpoints` on its row so the next launch can resume it.
     """
     working = dict(context)
+    abandoned: list[dict] = []
+    progress: dict[str, Any] = {"inflight": None, "build": None}
     hypothesis_reasons: list[str] = []
     round_telemetry = {
         "hypothesis_round": 0,
@@ -419,6 +529,17 @@ def iterate(*, planner: Planner, critic: Critic,
                     "kept", "keep_candidate", "measured_null", "regression",
                     "confirm_vetoed"}
         outcome.validator_provenance = list(validator_provenance)
+        if outcome.status == "stopped_mid_formation" and abandoned \
+                and outcome.reasons[:1] == [STOPPED_MID_FORMATION]:
+            outcome.reasons = [STOPPED_AFTER_DISPOSALS, *outcome.reasons[1:],
+                               _disposal_summary(abandoned)]
+        outcome.abandoned_candidates = list(abandoned)
+        if resume is not None and outcome.hypothesis is not None \
+                and outcome.hypothesis is resume.hypothesis:
+            outcome.resumed_from = resume.checkpoint_id
+            outcome.resume_stage = resume.stage
+        if outcome.status in RESUMABLE_STATUSES and not outcome.resume_checkpoints:
+            outcome.resume_checkpoints = _pending_checkpoints(progress)
         return outcome
 
     try:
@@ -435,7 +556,9 @@ def iterate(*, planner: Planner, critic: Critic,
                         formation_guard=formation_guard or (lambda _h, _c: None),
                         reserve_candidate=reserve_candidate,
                         round_telemetry=round_telemetry,
-                        validator_provenance=validator_provenance))
+                        validator_provenance=validator_provenance,
+                        record_abandoned=record_abandoned, abandoned=abandoned,
+                        resume=resume, progress=progress))
     except TailRefused as exc:
         # The candidate was formed and never measured. Carry the hypothesis: the
         # patch may well still help against the champion that displaced it, and the
@@ -472,11 +595,94 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
              validate_candidate=lambda _hypothesis, _paths: None,
              formation_guard=lambda _hypothesis, _context: None,
              reserve_candidate=None, round_telemetry=None,
-             validator_provenance=None) -> Outcome:
+             validator_provenance=None, record_abandoned=None,
+             abandoned=None, resume=None, progress=None) -> Outcome:
     last_proposed: Hypothesis | None = None
     round_telemetry = round_telemetry if round_telemetry is not None else {}
     validator_provenance = (validator_provenance if validator_provenance is not None
                             else [])
+
+    abandoned = abandoned if abandoned is not None else []
+    progress = progress if progress is not None else {"inflight": None, "build": None}
+
+    def is_resumed(hypothesis) -> bool:
+        return resume is not None and hypothesis is not None \
+            and hypothesis is resume.hypothesis
+
+    def lineage(hypothesis) -> dict:
+        if is_resumed(hypothesis):
+            return {"resumed_from": resume.checkpoint_id,
+                    "resume_depth": int(resume.checkpoint.get("resume_depth") or 0) + 1}
+        return {"resumed_from": None, "resume_depth": 0}
+
+    def latest_accepted(decision: str) -> dict | None:
+        for row in reversed(validator_provenance):
+            if row.get("decision") == decision and row.get("accepted"):
+                return dict(row)
+        return None
+
+    def checkpoint(stage: str, hypothesis, **fields) -> dict:
+        """What a later launch needs to resume this candidate at `stage`.
+
+        The owner (`run.py`) binds the anchor, epoch and target it was formed
+        against when it records the row; `resume.py` refuses a mismatch.
+        """
+        return {"schema": CHECKPOINT_SCHEMA, "stage": stage,
+                "hypothesis": hypothesis.to_dict(),
+                "critic_hypothesis": latest_accepted("critic:hypothesis"),
+                "hypothesis_round": int(round_telemetry.get("hypothesis_round", 0)),
+                "patch_round": int(round_telemetry.get("patch_round", 0)),
+                **lineage(hypothesis), **fields}
+
+    def dispose(hypothesis, status: str, reason: str | None, *, refusal_gate: str,
+                verdicts=(), resume_checkpoint: dict | None = None) -> None:
+        """Record one abandoned candidate NOW, with its reason and gate.
+
+        A recording fault is carried on the iteration's final outcome rather than
+        raised: raising here would turn one refused candidate into a lane error that
+        discards the rest of the turn, which is the loss this exists to stop.
+        """
+        candidate = Outcome(status, hypothesis,
+                            [reason or f"{refusal_gate} refused without a reason"],
+                            gate_verdicts=list(verdicts), refusal_gate=refusal_gate)
+        candidate.hypothesis_round = int(round_telemetry.get("hypothesis_round", 0))
+        candidate.patch_round = int(round_telemetry.get("patch_round", 0))
+        candidate.prior_rejection_prompt = bool(
+            round_telemetry.get("prior_rejection_prompt", False))
+        candidate.validator_provenance = [dict(row) for row in validator_provenance]
+        if is_resumed(hypothesis):
+            candidate.resumed_from = resume.checkpoint_id
+            candidate.resume_stage = resume.stage
+        if resume_checkpoint is not None:
+            candidate.resume_checkpoints = [resume_checkpoint]
+        record_error = None
+        if record_abandoned is not None:
+            try:
+                record_abandoned(candidate)
+            except Exception as exc:      # noqa: BLE001 -- see docstring
+                record_error = f"{type(exc).__name__}: {exc}"
+                print(f"warning: abandoned-candidate record failed: {record_error}",
+                      file=sys.stderr)
+        if resume_checkpoint is not None:
+            # The owner retained the diff while recording. A later stop row carries
+            # this checkpoint too, so a failed disposal record cannot lose it.
+            progress["build"] = {**resume_checkpoint, "retained_patch": (
+                resume_checkpoint.get("retained_patch") or candidate.retained_patch)}
+        summary = {
+            "status": status, "refusal_gate": refusal_gate,
+            "reason": candidate.reasons[0],
+            "mechanism_id": getattr(hypothesis, "mechanism_id", None),
+            "hypothesis_round": candidate.hypothesis_round,
+            "patch_round": candidate.patch_round,
+            "retained_patch": candidate.retained_patch,
+            "attempt_identity": candidate.attempt_identity,
+            "candidate_diff_sha256": candidate.candidate_diff_sha256,
+        }
+        if record_error is not None:
+            summary["record_error"] = record_error
+        if candidate.resumed_from is not None:
+            summary["resumed_from"] = candidate.resumed_from
+        abandoned.append(summary)
 
     def mark_search_changed(decision: str) -> None:
         for row in reversed(validator_provenance):
@@ -498,9 +704,21 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
         except ActorStopped:
             return None, stopped()
 
-    for hypothesis_index in range(hypothesis_rounds):
+    # A resumed candidate is one EXTRA round ahead of the fresh ones: it replaces no
+    # fresh round, so a rejected resume still leaves the iteration its full budget.
+    schedule = ([resume] if resume is not None else []) + [None] * hypothesis_rounds
+    for hypothesis_index, resumed in enumerate(schedule):
         # Polled BEFORE each actor call, never after: the whole point is that no
         # further multi-minute call is drawn once the run has been told to stop.
+        if resumed is not None and getattr(resumed, "stale", None) is None:
+            # Named before the poll, so a stop here still carries the claimed
+            # checkpoint forward instead of consuming it.
+            last_proposed = resumed.hypothesis
+            progress["inflight"] = {
+                **{key: value for key, value in resumed.checkpoint.items()
+                   if key not in _OWNER_BOUND}, **lineage(resumed.hypothesis)}
+        else:
+            progress["inflight"] = None
         if should_abandon():
             return stopped()
         working["prior_hypothesis_rejections"] = list(hypothesis_reasons)
@@ -509,17 +727,38 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
         if hypothesis_reasons:
             round_telemetry["prior_rejection_prompt"] = True
             mark_search_changed("critic:hypothesis")
-        on_step("proposing a hypothesis")
-        hypothesis, halted = actor_call(planner.propose, working)
-        if halted is not None:
-            return halted
-        if isinstance(hypothesis, Abstain):
-            return Outcome("abstained", None, [hypothesis.reason])
-        last_proposed = hypothesis
-        repeat_reason = formation_guard(hypothesis, working)
-        if repeat_reason:
-            return Outcome("refused_at_formation", hypothesis, [repeat_reason],
-                           refusal_gate="do_not_repeat")
+        if resumed is not None:
+            hypothesis = resumed.hypothesis
+            stale = getattr(resumed, "stale", None)
+            if stale is not None:
+                dispose(hypothesis, RESUME_REJECTED,
+                        f"resume re-validation refused ({stale[0]}): {stale[1]}",
+                        refusal_gate=f"resume:{stale[0]}")
+                continue
+            on_step(resumed.label)
+            # The verdicts that admitted it are CARRIED, and marked so: no critic
+            # ran in this launch, and the provenance must not claim one did.
+            for row in resumed.provenance:
+                validator_provenance.append({**row, "resumed_from": resumed.checkpoint_id,
+                                             "changed_subsequent_search": False})
+            repeat_reason = formation_guard(hypothesis, working)
+            if repeat_reason:
+                dispose(hypothesis, RESUME_REJECTED,
+                        f"resume re-validation refused (do_not_repeat): {repeat_reason}",
+                        refusal_gate="resume:do_not_repeat")
+                continue
+        else:
+            on_step("proposing a hypothesis")
+            hypothesis, halted = actor_call(planner.propose, working)
+            if halted is not None:
+                return halted
+            if isinstance(hypothesis, Abstain):
+                return Outcome("abstained", None, [hypothesis.reason])
+            last_proposed = hypothesis
+            repeat_reason = formation_guard(hypothesis, working)
+            if repeat_reason:
+                return Outcome("refused_at_formation", hypothesis, [repeat_reason],
+                               refusal_gate="do_not_repeat")
 
         # ---- CRITIC PASS 1: the hypothesis, before any patch exists ----------
         if should_abandon():
@@ -535,7 +774,9 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             and pair.dimension.kind in {"threads", "cpu_list", "numa_policy", "env"}
             and (pair.dimension.kind != "env" or pair.dimension.candidate["key"]
                  in working.get("runtime_env_keys", ())))
-        if prevalidated_runtime:
+        if resumed is not None:
+            pass    # admitted by the carried verdict above
+        elif prevalidated_runtime:
             on_step("prevalidated runtime option: deterministic checks, no critic call")
         else:
             on_step("critic pass 1: reviewing the hypothesis")
@@ -548,10 +789,24 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             if not verdict.accepted:
                 # Verbatim, so the planner can answer the objection rather than guess.
                 hypothesis_reasons.append(verdict.reason)
+                dispose(hypothesis, "hypothesis_rejected", verdict.reason,
+                        refusal_gate="critic:hypothesis")
                 continue
 
-        patch_reasons: list[str] = []
-        for patch_index in range(1 if hypothesis.runtime_pair is not None else patch_rounds):
+        resumed_build = resumed is not None and resumed.stage == "build"
+        materialized = False
+        patch_reasons: list[str] = (list(resumed.prior_patch_rejections)
+                                    if resumed is not None else [])
+        round_count = (1 if hypothesis.runtime_pair is not None
+                       else max(1, int(resumed.patch_rounds)) if resumed is not None
+                       else patch_rounds)
+        for patch_index in range(round_count):
+            if hypothesis.runtime_pair is None and not resumed_build:
+                # The in-flight checkpoint a stop or provider transient leaves behind:
+                # an accepted hypothesis, its verdict and every patch rejection so far.
+                progress["inflight"] = checkpoint(
+                    "author", hypothesis, prior_patch_rejections=list(patch_reasons),
+                    patch_rounds_remaining=round_count - patch_index)
             if should_abandon():
                 return stopped()
             working["prior_patch_rejections"] = list(patch_reasons)
@@ -562,12 +817,25 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             paths = ()
             integrity_screen = None
             if hypothesis.runtime_pair is None:
-                on_step("authoring the patch")
-                paths, halted = actor_call(planner.author, hypothesis, working)
-                if halted is not None:
-                    return halted
-                if isinstance(paths, Abstain):
-                    return Outcome("abstained", hypothesis, [paths.reason])
+                if resumed_build:
+                    # No author call: restore the exact accepted bytes, re-verified
+                    # (digest, anchor, clean apply) by the owner at this moment.
+                    on_step("restoring the retained patch (no author call)")
+                    try:
+                        paths = tuple(resumed.materialize())
+                        materialized = True
+                    except Exception as exc:      # noqa: BLE001 -- a stale resume
+                        dispose(hypothesis, RESUME_REJECTED,
+                                f"resume re-validation refused: {exc}",
+                                refusal_gate=f"resume:{getattr(exc, 'check', 'materialize')}")
+                        break
+                else:
+                    on_step("authoring the patch")
+                    paths, halted = actor_call(planner.author, hypothesis, working)
+                    if halted is not None:
+                        return halted
+                    if isinstance(paths, Abstain):
+                        return Outcome("abstained", hypothesis, [paths.reason])
                 # A declared path list is a claim, not an isolation boundary.  The
                 # injected host check resolves the full worktree before review/build.
                 try:
@@ -575,6 +843,11 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                     integrity_screen = (checked.to_dict() if hasattr(checked, "to_dict")
                                         else checked)
                 except integrity.IntegrityRefused as exc:
+                    if resumed_build:
+                        dispose(hypothesis, RESUME_REJECTED,
+                                f"resume re-validation refused (integrity): {exc}",
+                                refusal_gate="resume:integrity")
+                        break
                     return Outcome(
                         "integrity_refused", hypothesis, [str(exc)],
                         integrity_screen={"refusal_class": exc.refusal_class})
@@ -582,7 +855,9 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             # ---- CRITIC PASS 2: the diff, BEFORE the build ------------------
             if should_abandon():
                 return stopped()
-            if hypothesis.runtime_pair is None:
+            if hypothesis.runtime_pair is None and resumed_build:
+                on_step("critic pass 2: carried verdict (resumed at build)")
+            elif hypothesis.runtime_pair is None:
                 on_step("critic pass 2: reviewing the diff")
                 patch_verdict, halted = actor_call(critic.review_patch, hypothesis, paths,
                                                    working)
@@ -595,6 +870,8 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                     # The hypothesis is untouched: a bad patch is not evidence against
                     # the idea it was trying to implement.
                     patch_reasons.append(patch_verdict.reason)
+                    dispose(hypothesis, "patch_rejected", patch_verdict.reason,
+                            refusal_gate="critic:patch")
                     continue
                 # The critic is a verifier, not a second author. Re-run the host-owned
                 # whole-tree validation after its call and before entering the build
@@ -660,6 +937,29 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                         # toolchain's own message is the reason, so no critic is needed.
                         patch_reasons.append(
                             verdicts[-1].reason if verdicts else "gate refused")
+                        refusing_gate = verdicts[-1].gate if verdicts else "gate"
+                        if resumed_build:
+                            # The CURRENT gates refused a resumed patch: the old
+                            # verdict is never trusted, and a refusal is final.
+                            dispose(hypothesis, RESUME_REJECTED,
+                                    "resume re-validation refused (current gate "
+                                    f"{refusing_gate}): {patch_reasons[-1]}",
+                                    refusal_gate=refusing_gate, verdicts=verdicts)
+                            continue
+                        # Recorded as its own row, naming the deterministic rule: an
+                        # accepted patch that never reaches the build must say which
+                        # gate stopped it and where its diff is kept. It carries a
+                        # build checkpoint: if that rule changes, the next launch can
+                        # take this exact patch straight to the build (`resume.py`).
+                        dispose(hypothesis, "gate_refused", patch_reasons[-1],
+                                refusal_gate=refusing_gate, verdicts=verdicts,
+                                resume_checkpoint=checkpoint(
+                                    "build", hypothesis,
+                                    critic_patch=latest_accepted("critic:patch"),
+                                    refusal_gate=refusing_gate,
+                                    refusal_reason=patch_reasons[-1],
+                                    gate_rules_fingerprint=gate_rules_fingerprint(),
+                                    retained_patch=None))
                         continue
 
                     on_step("measuring A/B on the device")
@@ -758,6 +1058,10 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
 
         # Patch budget spent. Control returns to the HYPOTHESIS loop, so the planner
         # may refine H knowing it could not be implemented cleanly.
+        progress["inflight"] = None
+        if materialized:
+            # A rejected resume must not leave its bytes under the next fresh round.
+            resumed.discard()
         hypothesis_reasons.extend(patch_reasons)
 
     # Hypothesis budget spent. H is NOT retired: it re-enters the pool carrying its
@@ -778,6 +1082,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
 # `archive.record` as `run.py`'s injected `record`. `iterate` is the whole of this
 # module's control flow now, and the pool is its only driver.
 
-__all__ = ["Abstain", "ActorStopped", "ActorTransient", "ConfirmVetoed", "InteractionRegression", "TailRefused", "RunAborted", "MeasurementInvalid", "MeasurementFailed", "Critic",
+__all__ = ["CANDIDATE_DISPOSITIONS", "CHECKPOINT_SCHEMA", "RESUMABLE_STATUSES",
+           "RESUME_REJECTED", "STOPPED_AFTER_DISPOSALS", "gate_rules_fingerprint", "Abstain", "ActorStopped", "ActorTransient", "ConfirmVetoed", "InteractionRegression", "TailRefused", "RunAborted", "MeasurementInvalid", "MeasurementFailed", "Critic",
            "HYPOTHESIS_ROUNDS", "Hypothesis", "Outcome", "PATCH_ROUNDS",
            "Planner", "Review", "STOPPED_MID_FORMATION", "iterate"]

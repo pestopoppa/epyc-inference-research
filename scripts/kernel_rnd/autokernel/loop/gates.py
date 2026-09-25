@@ -143,84 +143,120 @@ def _iqk_moe_rows_hunks_confined(source_text: str | None,
                                for line, count in hunks)
 
 
-def _iqk_q45_dot_hunks_confined(source_text: str | None,
-                                pre_source_text: str | None,
-                                patch_text: str | None) -> bool:
+#: The Q4_K/Q5_K dot route's edit boundary, in source order: (label, line prefix,
+#: closing line, required).  The two scale-unpack helpers exist only in trees that
+#: carry the `akm-q4k-pairrow-metadata-zmm` keep (the v10 keeps tree); production
+#: v10 and every tree cut from it (the DS41 port included) have neither.  Requiring
+#: them refused EVERY edit of this kernel on those anchors -- DS41 run 9c spent two
+#: critic-accepted authoring rounds (~47 actor-minutes) on a hoist the gate could
+#: never admit, under a reason that named neither the missing marker nor the rule.
+#: An optional helper is admitted only when HEAD and candidate agree on its presence.
+_Q45_DOT_REGIONS = (
+    ("DequantizerQ4K_AVX2", "struct DequantizerQ4K_AVX2 final :", "};", True),
+    ("DequantizerQ5K_AVX2", "struct DequantizerQ5K_AVX2 final :", "};", True),
+    ("unpack_q4_scales", "inline __m128i unpack_q4_scales(", "}", False),
+    ("unpack_q4_scales_2", "inline __m256i unpack_q4_scales_2(", "}", False),
+    ("mul_mat_qX_K_q8_2_X4_T", "static void mul_mat_qX_K_q8_2_X4_T(", "}", True),
+)
+_Q45_DOT_FENCE = "struct DequantizerQ6K_AVX2 final :"
+
+
+def _iqk_q45_dot_scope_refusal(source_text: str | None,
+                               pre_source_text: str | None,
+                               patch_text: str | None) -> str | None:
     """Admit only the Q4_K/Q5_K private dot implementation, never siblings.
+
+    Returns None when every hunk lies inside one admitted body in both HEAD and
+    the candidate, else the exact rule that refused it (logged verbatim in the
+    gate verdict, the step line and the author's next prompt).
 
     The x86 dispatch instantiates this template for Q4_K and Q5_K only.  The
     Q4Bits_AVX2 helper immediately before it is also used by Q6_K and is
-    deliberately outside the edit boundary.  A missing/duplicated marker
+    deliberately outside the edit boundary.  A missing/duplicated REQUIRED marker
     refuses rather than silently expanding the boundary after source drift.
     """
     if not source_text or not pre_source_text or not patch_text:
-        return False
-    prefixes = ("struct DequantizerQ4K_AVX2 final :",
-                "struct DequantizerQ5K_AVX2 final :",
-                "inline __m128i unpack_q4_scales(",
-                "inline __m256i unpack_q4_scales_2(",
-                "static void mul_mat_qX_K_q8_2_X4_T(",
-                "struct DequantizerQ6K_AVX2 final :")
+        return "HEAD source, candidate source or the -U0 patch is empty"
 
-    def bounds(text: str):
+    def bounds(text: str, side: str):
         lines = text.splitlines()
-        positions = []
-        for prefix in prefixes:
+        present = []
+        for label, prefix, token, required in _Q45_DOT_REGIONS:
             hits = [i + 1 for i, line in enumerate(lines) if line.startswith(prefix)]
-            if len(hits) != 1:
-                return None
-            positions.append(hits[0])
-        q4, q5, scale, scale2, dot, q6 = positions
-        if not (q4 < q5 < scale < scale2 < dot < q6):
-            return None
+            if len(hits) > 1 or (required and len(hits) != 1):
+                return (f"{side}: marker `{prefix}` occurs {len(hits)} times "
+                        f"(the {label} boundary needs exactly one)")
+            if hits:
+                present.append((label, hits[0], token))
+        fence = [i + 1 for i, line in enumerate(lines) if line.startswith(_Q45_DOT_FENCE)]
+        if len(fence) != 1:
+            return (f"{side}: fence `{_Q45_DOT_FENCE}` occurs {len(fence)} times "
+                    "(needs exactly one)")
+        positions = [pos for _label, pos, _token in present] + fence
+        if positions != sorted(set(positions)):
+            return f"{side}: admitted bodies are not in source order before the Q6_K fence"
         # A duplicated or rewritten selector no longer warrants Q4/Q5-only
         # scope.  Q6 must remain on the different qY template.
         for quant, dequant in (("Q4_K", "DequantizerQ4K_AVX2"),
                                ("Q5_K", "DequantizerQ5K_AVX2")):
             dispatch = f"IQK_SET_MUL_MAT_FUNCTIONS_T(mul_mat_qX_K_q8_2_X4_T, {dequant}, kernels)"
             if text.count(dispatch) != 1 or text.count(f"case GGML_TYPE_{quant}:") < 1:
-                return None
+                return f"{side}: the {quant} dispatch `{dispatch}` is missing or duplicated"
 
         def closing(start: int, stop: int, token: str, *, last=False):
             hits = [i for i in range(start + 1, stop) if lines[i - 1].strip() == token]
             return (hits[-1] if last else hits[0]) if hits else None
 
-        ends = (closing(q4, q5, "};"), closing(q5, scale, "};"),
-                closing(scale, scale2, "}"), closing(scale2, dot, "}"),
-                closing(dot, q6, "}", last=True))
-        if any(end is None for end in ends):
-            return None
-        # A candidate must not close the named body early and smuggle a new
-        # sibling definition between its original markers.  This allowlist
-        # contains no brace-bearing strings/comments in its reviewed base.
-        for start, end in zip(positions[:5], ends):
+        regions = []
+        for index, (label, start, token) in enumerate(present):
+            stop = positions[index + 1]
+            end = closing(start, stop, token, last=index == len(present) - 1)
+            if end is None:
+                return f"{side}: {label} body (line {start}) has no closing `{token}`"
+            # A candidate must not close the named body early and smuggle a new
+            # sibling definition between its original markers.  This allowlist
+            # contains no brace-bearing strings/comments in its reviewed base.
             depth = 0
             for pos in range(start, end + 1):
                 depth += lines[pos - 1].count("{") - lines[pos - 1].count("}")
                 if depth <= 0 and pos < end:
-                    return None
+                    return (f"{side}: {label} body closes early at line {pos} "
+                            "(braces must stay balanced inside the admitted body)")
             if depth != 0:
-                return None
-        return tuple((start + 1, end - 1) for start, end in zip(positions[:5], ends)), \
-               tuple(lines[pos - 1] for pos in positions)
+                return f"{side}: {label} body has unbalanced braces"
+            regions.append((label, start + 1, end - 1))
+        return tuple(regions), tuple(lines[pos - 1] for pos in positions)
 
-    old = bounds(pre_source_text)
-    new = bounds(source_text)
-    if old is None or new is None or old[1] != new[1]:
-        return False
+    old = bounds(pre_source_text, "HEAD")
+    if isinstance(old, str):
+        return old
+    new = bounds(source_text, "candidate")
+    if isinstance(new, str):
+        return new
+    if old[1] != new[1]:
+        return ("an admitted signature/marker line or the helper set differs between HEAD "
+                "and the candidate; only the bodies may change")
     hunks = re.findall(r"(?m)^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", patch_text)
     if not hunks:
-        return False
+        return "the -U0 patch has no hunks"
 
-    def within(line: str, count: str, regions) -> bool:
+    def within(line: str, count: str, region) -> bool:
         first, size = int(line), int(count) if count else 1
-        return any(start <= first and first + max(size, 1) - 1 <= end
-                   for start, end in regions)
+        return region[1] <= first and first + max(size, 1) - 1 <= region[2]
 
-    return all(any(within(old_line, old_count, (old[0][i],)) and
-                   within(new_line, new_count, (new[0][i],))
-                   for i in range(len(old[0])))
-               for old_line, old_count, new_line, new_count in hunks)
+    for old_line, old_count, new_line, new_count in hunks:
+        if not any(within(old_line, old_count, old[0][i]) and
+                   within(new_line, new_count, new[0][i]) for i in range(len(old[0]))):
+            admitted = ", ".join(f"{label} {first}-{last}" for label, first, last in old[0])
+            return (f"hunk @@ -{old_line},{old_count or 1} +{new_line},{new_count or 1} @@ "
+                    f"lies outside every admitted body (HEAD lines: {admitted})")
+    return None
+
+
+def _iqk_q45_dot_hunks_confined(source_text: str | None,
+                                pre_source_text: str | None,
+                                patch_text: str | None) -> bool:
+    return _iqk_q45_dot_scope_refusal(source_text, pre_source_text, patch_text) is None
 
 
 def affected_op_scope(paths: tuple[str, ...], *, target_surface: str,
@@ -265,14 +301,24 @@ def affected_op_scope(paths: tuple[str, ...], *, target_surface: str,
         # exact edited helper, after the nonempty MUL_MAT_ID host/op suite.
         return ("MUL_MAT_ID",)
     if changed == {"ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp"} and \
-            target_symbol == "mul_mat_qX_K_q8_2_X4_T" and \
-            _iqk_q45_dot_hunks_confined(source_text, pre_source_text, patch_text):
-        # Both quants and every nrc_y specialization are checked by the
-        # independent scalar suite plus exact candidate-DSO dot hits below.
-        return ("MUL_MAT", "MUL_MAT_ID")
+            target_symbol == "mul_mat_qX_K_q8_2_X4_T":
+        refusal = _iqk_q45_dot_scope_refusal(source_text, pre_source_text, patch_text)
+        if refusal is None:
+            # Both quants and every nrc_y specialization are checked by the
+            # independent scalar suite plus exact candidate-DSO dot hits below.
+            return ("MUL_MAT", "MUL_MAT_ID")
+        # The route exists; name the rule that refused THIS patch. The generic
+        # IQK text below told the author nothing it could act on (run 9c).
+        return Verdict("op_scope", False,
+                       "CPU IQK Q4_K/Q5_K dot route refused before build: " + refusal +
+                       ". Admitted: hunks inside the DequantizerQ4K_AVX2/DequantizerQ5K_AVX2 "
+                       "bodies, the unpack_q4_scales helpers where HEAD has them, or the "
+                       "mul_mat_qX_K_q8_2_X4_T body; signatures, Q4Bits_AVX2 and Q6_K unchanged")
     if any(path.startswith("ggml/src/ggml-cpu/iqk/") for path in changed):
         return Verdict("op_scope", False,
-                       "CPU IQK source refused before build: the selected MUL_MAT/MUL_MAT_ID "
+                       f"CPU IQK source refused before build (paths {sorted(changed)}, "
+                       f"target_symbol {target_symbol!r} has no admitted route): "
+                       "the selected MUL_MAT/MUL_MAT_ID "
                        "case must prove the edited quant/function path executed with use_ref=false "
                        "and passed against the independent use_ref=true reference; the generic "
                        "per-type [iqk] ACTIVE marker does not identify the edited path or case")

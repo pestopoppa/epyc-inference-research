@@ -243,6 +243,13 @@ def option(argv, name, default=None):
     return values[-1] if values else default
 
 
+def with_resume(argv, value):
+    """`argv` with exactly one `--resume <value>` (run.py's checkpoint resume)."""
+    if value not in ("on", "off"):
+        raise SerialRefused(f"--resume must be on or off, not {value!r}")
+    return [*_without(list(argv), {"--resume"}), "--resume", value]
+
+
 def _without(argv, names):
     out = []
     iterator = iter(argv)
@@ -1145,6 +1152,10 @@ def main(argv=None) -> int:
                         help="publish the exact cleanup plan without deleting build output")
     parser.add_argument("--retention-plan-only", action="store_true",
                         help="print the exact retention plan and exit without cleanup or a run")
+    parser.add_argument("--resume", choices=("on", "off"),
+                        help="pass-through to every child run.py (checkpointed-work resume; "
+                             "the child default is on). Omitted, children use their own "
+                             "argv/default; repeat unchanged on restart")
     parser.add_argument("--control-listen", help="optional authenticated IPv4 loopback HOST:PORT")
     parser.add_argument("--control-origin", default=os.environ.get("AUTOKERNEL_TRUSTED_HUB_ORIGIN"),
                         help="exact trusted hub origin; token comes from AUTOKERNEL_CONTROL_TOKEN")
@@ -1187,6 +1198,10 @@ def main(argv=None) -> int:
             if args.owned_targets or args.target_root or args.common_args:
                 raise SerialRefused("roster options require --resolved-campaign")
             targets = [_target_args(path) for path in (args.target_args or [])]
+        if args.resume is not None:
+            # Bound into each target's ORIGINAL argv once, so every batch, dry-run
+            # and recovery re-derivation of a child argv carries the same value.
+            targets = [with_resume(row, args.resume) for row in targets]
         # No two configured targets may overwrite an active target's source,
         # build lanes or history. The owner never creates/repoints those roots.
         for flag in ("--worktree", "--store", "--worker-root", "--worker-build-root"):

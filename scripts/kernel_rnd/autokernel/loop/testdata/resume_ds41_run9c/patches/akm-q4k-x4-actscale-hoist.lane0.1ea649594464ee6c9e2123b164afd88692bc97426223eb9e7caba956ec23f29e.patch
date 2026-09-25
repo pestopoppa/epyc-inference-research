@@ -1,0 +1,55 @@
+diff --git a/ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp b/ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp
+index 7ba76e617b634fceaae0d2aa801e9d32b2ddc403..2b58d6469015f5b9ef486e4be5b0188371e2e40a 100644
+--- a/ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp
++++ b/ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp
+@@ -803,7 +803,24 @@ static void mul_mat_qX_K_q8_2_X4_T(int n, const void * vx, size_t bx, const Data
+     uint32_t utmp[4];
+     __m256  accd[nrc_y];
+     __m256  scales[2];
+-    float   d8[8*nrc_y];
++
++    // per (i, iy): dy (8 floats) and my = dy * dmin (8 floats), independent of ix
++    static thread_local std::vector<float> ybuf;
++    ybuf.resize(16*nrc_y*nb);
++    float * yb = ybuf.data();
++    for (int i = 0; i < nb; ++i) {
++        for (int iy = 0; iy < nrc_y; ++iy) {
++            auto d4_1 = _mm_cvtepu16_epi32(_mm_loadl_epi64((const __m128i *)(q8.y[iy][2*i+0].d)));
++            auto d4_2 = _mm_cvtepu16_epi32(_mm_loadl_epi64((const __m128i *)(q8.y[iy][2*i+1].d)));
++            auto dy = _mm256_castsi256_ps(_mm256_slli_epi32(MM256_SET_M128I(d4_2, d4_1), 16));
++            auto m4_1 = _mm_cvtepi16_epi32(_mm_loadl_epi64((const __m128i *)(q8.y[iy][2*i+0].d+4)));
++            auto m4_2 = _mm_cvtepi16_epi32(_mm_loadl_epi64((const __m128i *)(q8.y[iy][2*i+1].d+4)));
++            auto myi  = MM256_SET_M128I(m4_2, m4_1);
++            auto my   = _mm256_mul_ps(dy, _mm256_cvtepi32_ps(myi));
++            _mm256_storeu_ps(yb + 16*(i*nrc_y + iy), dy);
++            _mm256_storeu_ps(yb + 16*(i*nrc_y + iy) + 8, my);
++        }
++    }
+ 
+     for (int ix = 0; ix < nrc_x; ++ix) {
+ 
+@@ -819,14 +836,7 @@ static void mul_mat_qX_K_q8_2_X4_T(int n, const void * vx, size_t bx, const Data
+             auto mins = _mm256_mul_ps(vm, _mm256_cvtepi32_ps(_mm256_cvtepu8_epi32(_mm_loadl_epi64((const __m128i *)(utmp + 2)))));
+             mins = _mm256_mul_ps(_mm256_set1_ps(-1.f), mins);
+             for (int iy = 0; iy < nrc_y; ++iy) {
+-                auto d4_1 = _mm_cvtepu16_epi32(_mm_loadl_epi64((const __m128i *)(q8.y[iy][2*i+0].d)));
+-                auto d4_2 = _mm_cvtepu16_epi32(_mm_loadl_epi64((const __m128i *)(q8.y[iy][2*i+1].d)));
+-                auto dy = _mm256_castsi256_ps(_mm256_slli_epi32(MM256_SET_M128I(d4_2, d4_1), 16));
+-                _mm256_storeu_ps(d8 + 8*iy, dy);
+-                auto m4_1 = _mm_cvtepi16_epi32(_mm_loadl_epi64((const __m128i *)(q8.y[iy][2*i+0].d+4)));
+-                auto m4_2 = _mm_cvtepi16_epi32(_mm_loadl_epi64((const __m128i *)(q8.y[iy][2*i+1].d+4)));
+-                auto myi  = MM256_SET_M128I(m4_2, m4_1);
+-                auto my   = _mm256_mul_ps(dy, _mm256_cvtepi32_ps(myi));
++                auto my = _mm256_loadu_ps(yb + 16*(i*nrc_y + iy) + 8);
+                 accd[iy]  = _mm256_fmadd_ps(my, mins, accd[iy]);
+             }
+ 
+@@ -859,7 +869,7 @@ static void mul_mat_qX_K_q8_2_X4_T(int n, const void * vx, size_t bx, const Data
+                     sumi1 = _mm256_add_epi16(_mm256_unpacklo_epi64(sumi1, sumi3), _mm256_unpackhi_epi64(sumi1, sumi3));
+                     sumi1 = _mm256_madd_epi16(_mm256_set1_epi16(1), sumi1);
+ #endif
+-                    auto dy4 = _mm_loadu_ps(d8 + 8*iy + 4*j);
++                    auto dy4 = _mm_loadu_ps(yb + 16*(i*nrc_y + iy) + 4*j);
+                     auto d4d8 = _mm256_mul_ps(scales[j], _mm256_set_m128(dy4, dy4));
+                     accd[iy] = _mm256_fmadd_ps(d4d8, _mm256_cvtepi32_ps(sumi1), accd[iy]);
+                 }
