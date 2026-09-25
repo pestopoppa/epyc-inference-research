@@ -242,6 +242,15 @@ class ActorSeat:
     #: from, and meant to sit under, the hard per-call timeout.
     planner_budget_s: int = 0
     author_budget_s: int = 0
+    #: OAB-24: "off" sends `chat_template_kwargs: {"enable_thinking": false}` on every
+    #: request of an AUTHOR call (its per-call config's model `options`; see
+    #: `actor_opencode_config.model_thinking`). Planner and critic calls never carry it.
+    #: "default" here (the historical config, byte for byte); run.py defaults it to "off".
+    author_thinking: str = "default"
+
+    def thinking_for(self, role: str) -> str:
+        """The reasoning switch for one call of `role`: the author's knob, else default."""
+        return self.author_thinking if role == "author" else "default"
 
     @property
     def knobs(self) -> dict[str, bool]:
@@ -270,7 +279,8 @@ class ActorSeat:
         """Every seat_label argument this seat turns on for one call of `role`."""
         return {**self.knobs, **self.limits_for(role),
                 "concise": self.concise and role in ("planner", "author"),
-                "budget_s": self.budget_for(role)}
+                "budget_s": self.budget_for(role),
+                "thinking_off": self.thinking_for(role) == "off"}
 
 
 def _profile_dirs(context: Mapping[str, Any]) -> tuple[Path, ...]:
@@ -862,6 +872,8 @@ def _budgets_of(env: Mapping[str, str] | None, budget_s: float | None,
         "context_limit": applied.get("context_limit", 0),
         "output_limit": applied.get("output_limit", 0),
         "concise": bool(applied.get("concise", False)),
+        # OAB-24: the reasoning switch the call's config applied ("default" = none).
+        "thinking": applied.get("thinking", "default"),
         **({"error": applied["error"]} if "error" in applied else {}),
         "budget_s": budget_s or 0,
         "budget_exhausted": budget_exhausted,
@@ -2316,8 +2328,10 @@ def _budget_env(seat: "ActorSeat | None", role: str) -> dict[str, str]:
     """`SEAT_ENV_BUDGETS` for a call whose seat applies a limit or the concise rule."""
     if seat is None:
         return {}
-    applied = {**seat.limits_for(role),
-               "concise": seat.concise and role in ("planner", "author")}
+    applied: dict[str, Any] = {**seat.limits_for(role),
+                               "concise": seat.concise and role in ("planner", "author")}
+    if seat.thinking_for(role) != "default":
+        applied["thinking"] = seat.thinking_for(role)
     if not any(applied.values()):
         return {}
     return {SEAT_ENV_BUDGETS: json.dumps(applied, sort_keys=True)}
@@ -2336,6 +2350,7 @@ def _seat_call(seat: "ActorSeat | None", backend: Backend, role: str, workspace:
     from . import actor_opencode_config as seat_config
     knobs = seat.knobs if seat is not None else {}
     limits = seat.limits_for(role) if seat is not None else {}
+    thinking = seat.thinking_for(role) if seat is not None else "default"
     label = seat.label_knobs(role) if seat is not None else {}
     env: dict[str, str] = {}
     if any(label.values()):
@@ -2347,10 +2362,10 @@ def _seat_call(seat: "ActorSeat | None", backend: Backend, role: str, workspace:
     try:
         path = seat_config.write_plain_config(
             target, role=role, lane=Path(workspace), build_dir=_anchor_build_dir(context),
-            model=backend.model, **knobs, **limits)
+            model=backend.model, thinking=thinking, **knobs, **limits)
     except OSError as exc:
-        if any(knobs.values()) or any(limits.values()):
-            raise   # a knob's fence (or a context cap) must never silently drop
+        if any(knobs.values()) or any(limits.values()) or thinking != "default":
+            raise   # a knob's fence (or a context cap, or thinking off) must never silently drop
         # Knobs off: the config only turns snapshots off. Unwritable, the call runs as
         # it always did rather than failing an actor call over store hygiene.
         import sys
@@ -2442,6 +2457,7 @@ class AgentPlanner:
             path, role=role, lane=Path(self.workspace), profiles=_profile_dirs(context),
             python=self.seat.tools_python, steps=self.seat.steps, fan_out=self.seat.fan_out,
             build_dir=_anchor_build_dir(context), model=self.backend.model,
+            thinking=self.seat.thinking_for(role),
             **self.seat.knobs, **self.seat.limits_for(role))
         trim = seat_config.TRIM_ENV if self.seat.trim_instructions else {}
         return (dataclasses.replace(self.backend, agent=seat_config.AGENT_NAMES[role]),

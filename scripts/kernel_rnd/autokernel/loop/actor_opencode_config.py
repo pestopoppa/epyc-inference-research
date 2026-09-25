@@ -159,6 +159,77 @@ def model_limits(model: str | None, *, context_limit: int = 0,
         "limit": {"context": context_limit, "output": output_limit}}}}}}
 
 
+# --------------------------------------------------------------------------------------
+# OAB-24: the AUTHOR's reasoning switch (operator, 2026-09-25: the local 27B author runs
+# with thinking OFF, author calls only; the planner keeps reasoning on).
+#
+# DS41 runs 10b/10c: the author decoded 74,288 tokens over 13 steps in 2,700 s, hit the
+# output cap twice re-deriving the block_q8_2_x4 layout inside <think>, and made zero
+# edits. The switch is the served template's own `enable_thinking` kwarg, sent per
+# request. The path, read from the installed opencode 1.18.31 binary (read-only):
+#
+# * `LLMRequestPrep.prepare`: `options = mergeDeep(mergeDeep(mergeDeep(base,
+#   model.options), agent.options), variant)`, where `base` is `ProviderTransform.options`
+#   (or `smallOptions` for small/title calls -- model.options is merged over BOTH).
+# * `ProviderTransform.providerOptions(model, options)`: for `@ai-sdk/openai-compatible`
+#   (no `sdkKey`) the key is `providerID.split(".")[0]`, i.e. `{"qwen-gpu": options}`.
+# * `@ai-sdk/openai-compatible` chat `getArgs`: `...Object.fromEntries(Object.entries(
+#   {...providerOptions[providerOptionsName], ...providerOptions[camelCase(name)]})
+#   .filter(([k]) => !Object.keys(<its own option schema>.shape).includes(k)))` is spread
+#   into the request BODY -- unknown keys pass through verbatim. opencode creates the SDK
+#   with `name: providerID`, so `providerOptionsName` is "qwen-gpu".
+#
+# So `provider.<id>.models.<model>.options.chat_template_kwargs` in the per-call config
+# (deep-merged over the global provider entry, like `limit`) becomes
+# `"chat_template_kwargs":{"enable_thinking":false}` in every POST body of that call
+# (proved against a recording mock server, `test_actor_author_thinking.py`). `provider.
+# <id>.options` would NOT work: those go to the SDK factory (baseURL, headers), never the
+# body. On the server, llama-server (--jinja) merges the request's `chat_template_kwargs`
+# over its CLI defaults and parses `enable_thinking` into `inputs.enable_thinking`
+# (`tools/server/server-common.cpp`), and the served template
+# `epyc-qwen3x-v1-terse.jinja` reads `enable_thinking` (default true) and, when false,
+# opens the assistant turn with an empty `<think>\n\n</think>` block.
+#
+# The kwarg rides the model entry of the AUTHOR's per-call config only, so it reaches
+# every request of that call (its scouts and any compaction step included) and no
+# planner or critic request. "default" writes nothing: the config is byte-identical.
+# --------------------------------------------------------------------------------------
+
+#: `--actor-author-thinking` choices; run.py defaults to "off" (the operator's choice).
+THINKING_CHOICES = ("default", "off")
+DEFAULT_AUTHOR_THINKING = "off"
+#: The model `options` that turn the served template's reasoning off for one call.
+THINKING_OFF_OPTIONS = {"chat_template_kwargs": {"enable_thinking": False}}
+
+
+def model_thinking(model: str | None, thinking: str = "default") -> dict:
+    """The `provider` block that sets the thinking-off kwarg on the call's model, or {}."""
+    if thinking not in THINKING_CHOICES:
+        raise ValueError(f"thinking must be one of {THINKING_CHOICES}, got {thinking!r}")
+    if thinking == "default":
+        return {}
+    if not model or "/" not in model:
+        raise ValueError(f"thinking={thinking!r} needs a provider/model id, got {model!r}")
+    provider, model_id = model.split("/", 1)
+    return {"provider": {provider: {"models": {model_id: {
+        "options": json.loads(json.dumps(THINKING_OFF_OPTIONS))}}}}}
+
+
+def _merge(a: dict, b: dict) -> dict:
+    out = dict(a)
+    for key, value in b.items():
+        out[key] = (_merge(a[key], value)
+                    if isinstance(a.get(key), dict) and isinstance(value, dict) else value)
+    return out
+
+
+def model_block(model: str | None, *, context_limit: int = 0, output_limit: int = 0,
+                thinking: str = "default") -> dict:
+    """`model_limits` and `model_thinking` for one call's model, merged ({} when both off)."""
+    return _merge(model_limits(model, context_limit=context_limit, output_limit=output_limit),
+                  model_thinking(model, thinking))
+
+
 def limits_label(*, context_limit: int = 0, output_limit: int = 0) -> str:
     """`+ctx128k+out8k` style arm suffix for the limits that are on."""
     def k(value: int) -> str:
@@ -239,7 +310,7 @@ def build_actor_config(*, role: str, lane: Path, profiles: Sequence[Path] = (),
                        lane_guard: bool = False,
                        build_dir: str | Path | None = None,
                        model: str | None = None, context_limit: int = 0,
-                       output_limit: int = 0) -> dict:
+                       output_limit: int = 0, thinking: str = "default") -> dict:
     """The opencode config (a dict ready for ``json.dump``) for one actor run.
 
     By default the seat's guidance is ADDED to opencode's own system prompt through
@@ -255,7 +326,8 @@ def build_actor_config(*, role: str, lane: Path, profiles: Sequence[Path] = (),
     config's rules merge with; under the lane guard the author agent's own `edit` rule
     becomes the lane-only guard (an agent rule is evaluated after the top-level one).
 
-    `context_limit` / `output_limit` (OAB-23, 0 = off) add `model_limits(model, ...)`."""
+    `context_limit` / `output_limit` (OAB-23, 0 = off) add `model_limits(model, ...)`;
+    `thinking="off"` (OAB-24) adds `model_thinking(model, "off")` on the same model entry."""
     if role not in AGENT_NAMES:
         raise ValueError(f"unknown actor role {role!r}; expected one of "
                          f"{sorted(AGENT_NAMES)}")
@@ -305,7 +377,8 @@ def build_actor_config(*, role: str, lane: Path, profiles: Sequence[Path] = (),
     top = seat_permission(role, lane=lane, build_dir=build_dir,
                           trim_instructions=trim_instructions, trim_tools=trim_tools,
                           lane_guard=lane_guard, keep_task=fan_out, edit_rule=False)
-    limits = model_limits(model, context_limit=context_limit, output_limit=output_limit)
+    limits = model_block(model, context_limit=context_limit, output_limit=output_limit,
+                         thinking=thinking)
     return {
         "$schema": "https://opencode.ai/config.json",
         **SNAPSHOT_OFF,
@@ -575,13 +648,15 @@ def seat_permission(role: str, *, lane: Path | None = None,
 
 def seat_label(base: str, *, trim_instructions: bool = False, trim_tools: bool = False,
                lane_guard: bool = False, context_limit: int = 0, output_limit: int = 0,
-               concise: bool = False, budget_s: int = 0) -> str:
+               concise: bool = False, budget_s: int = 0, thinking_off: bool = False) -> str:
     """`plain` / `bounded` plus one suffix per knob that is on (free text in VB-AK-SEAT).
-    OAB-22/23 add `+ctx<C>+out<O>`, `+concise` and `+budget<B>s` (all off: unchanged)."""
+    OAB-22/23 add `+ctx<C>+out<O>`, `+concise` and `+budget<B>s`; OAB-24 adds
+    `+think-off` (all off: unchanged)."""
     return (base + "".join(suffix for on, suffix in (
         (trim_instructions, "+trim-instr"), (trim_tools, "+trim-tools"),
         (lane_guard, "+lane-guard")) if on)
         + limits_label(context_limit=context_limit, output_limit=output_limit)
+        + ("+think-off" if thinking_off else "")
         + ("+concise" if concise else "") + (f"+budget{budget_s}s" if budget_s else ""))
 
 
@@ -590,20 +665,21 @@ def build_plain_config(*, role: str, lane: Path, build_dir: str | Path | None = 
                        lane_guard: bool = False,
                        author_note_path: Path | None = None,
                        model: str | None = None, context_limit: int = 0,
-                       output_limit: int = 0) -> dict:
+                       output_limit: int = 0, thinking: str = "default") -> dict:
     """The per-call `OPENCODE_CONFIG` for the PLAIN seat: `snapshot: false`, a permission
     block (plus the author's style note as an `instructions` file) and nothing else -- no
     agent, no MCP, no tool_output cap, so the plain seat stays the plain seat. With every
     knob off it is `{"$schema", "snapshot": false}` alone: the plain seat ALWAYS gets a
     per-call config, because snapshot tracking is on by default and bloats the store.
-    `context_limit` / `output_limit` (OAB-23, 0 = off) add `model_limits(model, ...)`."""
+    `context_limit` / `output_limit` (OAB-23, 0 = off) add `model_limits(model, ...)`;
+    `thinking="off"` (OAB-24) adds `model_thinking(model, "off")`."""
     permission = seat_permission(role, lane=lane, build_dir=build_dir,
                                  trim_instructions=trim_instructions,
                                  trim_tools=trim_tools, lane_guard=lane_guard)
     note = trim_instructions and role == "author" and author_note_path is not None
     config: dict = {"$schema": "https://opencode.ai/config.json", **SNAPSHOT_OFF,
-                    **model_limits(model, context_limit=context_limit,
-                                   output_limit=output_limit)}
+                    **model_block(model, context_limit=context_limit,
+                                  output_limit=output_limit, thinking=thinking)}
     if permission:
         config["permission"] = permission
     if note:
@@ -626,6 +702,8 @@ def write_plain_config(path: Path, **kw) -> Path:
 
 
 __all__ = ["actor_instructions", "AGENT_NAMES", "DEFAULT_AUTHOR_OUTPUT_LIMIT",
+           "DEFAULT_AUTHOR_THINKING", "THINKING_CHOICES", "THINKING_OFF_OPTIONS",
+           "model_block", "model_thinking",
            "DEFAULT_CONTEXT_LIMIT", "DEFAULT_OUTPUT_LIMIT", "DEFAULT_PLANNER_OUTPUT_LIMIT", "limits_label", "model_limits", "AUTHOR_EDIT_GUARD",
            "AUTHOR_STYLE_NOTE",
            "BUILD_DENY", "MAX_CONCURRENT_SUBAGENTS", "MCP_SERVER", "PLAIN_ROLES",

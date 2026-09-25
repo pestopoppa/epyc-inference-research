@@ -271,6 +271,12 @@ def _actor_limits(args) -> dict[str, int]:
             "author_output_limit": int(args.actor_author_output_limit)}
 
 
+def _actor_thinking(args) -> dict[str, str]:
+    """OAB-24: the author-only reasoning switch as an ActorSeat field. Only the
+    planner/author seat takes it; the critic seat never does."""
+    return {"author_thinking": str(args.actor_author_thinking)}
+
+
 def _effective_output_limits(args) -> dict[str, int]:
     """`limit.output` each role's call will carry (0 = opencode's own default)."""
     fallback = int(args.actor_output_limit)
@@ -875,6 +881,16 @@ def main(argv: list[str] | None = None) -> int:
                              "step with no report (failure_class=output_capped_empty). Must "
                              "stay below half of --actor-context-limit "
                              "(default: %(default)s)")
+    parser.add_argument("--actor-author-thinking",
+                        choices=actor_opencode_config.THINKING_CHOICES,
+                        default=actor_opencode_config.DEFAULT_AUTHOR_THINKING,
+                        help="opencode author ONLY (OAB-24, operator 2026-09-25): 'off' sends "
+                             "chat_template_kwargs {enable_thinking: false} on every request "
+                             "of an authoring call (per-call config, model options); the "
+                             "planner and critic keep the server's default reasoning. DS41 "
+                             "run 10c's author decoded 74,288 tokens in 2,700 s re-deriving "
+                             "a layout in <think> and made zero edits. 'default' = the "
+                             "historical config byte for byte (default: %(default)s)")
     parser.add_argument("--actor-concise", choices=("on", "off"), default="on",
                         help="opencode planner/author (OAB-22): append the concision rule "
                              "(derive each fact once, analysis under ~4,000 tokens, reply is "
@@ -1493,7 +1509,8 @@ def main(argv: list[str] | None = None) -> int:
           + ",".join(f"{role}:{value}" for role, value in _effective_output_limits(args).items())
           + " "
           f"concise={args.actor_concise} planner-budget={args.actor_planner_budget_s}s "
-          f"author-budget={args.actor_author_budget_s}s")
+          f"author-budget={args.actor_author_budget_s}s "
+          f"author-thinking={args.actor_author_thinking}")
     for moot in _moot_budgets(args):
         print(f"actors    WARNING {moot} is not below --actor-timeout-s={args.actor_timeout_s}: "
               "the hard timeout ends those calls first, so the budget never fires")
@@ -3190,7 +3207,8 @@ def main(argv: list[str] | None = None) -> int:
                                                steps=args.actor_steps,
                                                context_mode=args.actor_context_mode,
                                                **_actor_knobs(args), **_actor_limits(args),
-                                               **_actor_budgets(args)))
+                                               **_actor_budgets(args),
+                                               **_actor_thinking(args)))
             return (runtime_recovery.PendingPlanner(ordinary, pending_slot)
                     if pending_pair is not None else ordinary)
 
