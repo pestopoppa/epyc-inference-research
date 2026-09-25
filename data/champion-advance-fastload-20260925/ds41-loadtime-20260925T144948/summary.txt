@@ -1,0 +1,4 @@
+A-anchor  ready=1 launch_to_health=254.0s rchar:=528.6GB read_bytes:=175.7GB | 
+C-new-auto ready=1 launch_to_health=98.2s rchar:=528.6GB read_bytes:=270.4GB | load_all_data_parallel: read 1006 tensors (482.97 GiB) with 32 threads in 94.20 s (5.13 GiB/s) load_all_data_parallel: read 71 tensors (2.59 GiB) with 32 threads in 0.33 s (7.96 GiB/s) 
+B-new-old ready=1 launch_to_health=262.6s rchar:=528.6GB read_bytes:=264.7GB | 
+A2-anchor ready=1 launch_to_health=277.7s rchar:=528.6GB read_bytes:=351.7GB | 

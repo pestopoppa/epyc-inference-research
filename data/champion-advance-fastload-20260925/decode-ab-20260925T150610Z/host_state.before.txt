@@ -1,0 +1,7 @@
+uptime:  15:06:10 up 4 days,  5:43,  0 users,  load average: 20.40, 12.45, 12.77
+governor: performance
+thp: [always] madvise never
+numa_balancing: 0
+MemTotal:       1188472544 kB
+MemAvailable:   847534460 kB
+AnonHugePages:  81176576 kB

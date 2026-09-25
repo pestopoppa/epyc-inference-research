@@ -1,0 +1,54 @@
+[15:06:10] evidence: /mnt/raid0/llm/epyc-inference-research/data/champion-advance-fastload-20260925/decode-ab-20260925T150610Z
+[15:06:10] --- identity
+[15:06:10] OK   /mnt/raid0/llm/kernels/builds/cpu-20260925-2b57340bf version 10306 (2b57340bf)
+[15:06:10] OK   /mnt/raid0/llm/kernels/builds/cpu-20260925-2b57340bf SHA256SUMS
+[15:06:10] OK   /mnt/raid0/llm/kernels/builds/cpu-20260925-2b57340bf RUNPATH [$ORIGIN]
+[15:06:10] OK   /mnt/raid0/llm/kernels/builds/cpu-20260925-2b57340bf verify_ggml_linkage PASS
+[15:06:10] OK   /mnt/raid0/llm/kernels/builds/cpu-20260925-90c12df42 version 10308 (90c12df42)
+[15:06:10] OK   /mnt/raid0/llm/kernels/builds/cpu-20260925-90c12df42 SHA256SUMS
+[15:06:10] OK   /mnt/raid0/llm/kernels/builds/cpu-20260925-90c12df42 RUNPATH [$ORIGIN]
+[15:06:10] OK   /mnt/raid0/llm/kernels/builds/cpu-20260925-90c12df42 verify_ggml_linkage PASS
+[15:06:10] --- cpu_region locks
+[15:06:11] --- competing processes
+[15:06:14] --- production CPU servers idle
+[15:06:22] production CPU servers [2022735 2022949 2023219 2023456 2023679 2023882 2025240 2025603 2028639 2030855 ] used 0% CPU over 5 s (max 50%)
+[15:06:22] --- host quiet
+[15:06:29] host busy CPU over 5 s: 143% of one CPU (max 400%)
+[15:06:29] --- memory
+[15:06:29] MemAvailable 808 GB (need >= 174 GB for one server + margin)
+[15:06:29] --- region-lock status
+      q0  HELD   bench[None] champion-decode-ab:20260925T150610Z
+      q1  HELD   bench[None] champion-decode-ab:20260925T150610Z
+      q2  HELD   bench[None] champion-decode-ab:20260925T150610Z
+      q3  HELD   bench[None] champion-decode-ab:20260925T150610Z
+[15:08:00] frontdoor-01-A rc=0 load_s=16.940862686 decode_median=42.232338737010565 foreign_max=255.2%
+[15:09:25] frontdoor-02-B rc=0 load_s=8.658457453 decode_median=41.792926334988096 foreign_max=197.8%
+[15:10:56] frontdoor-03-A rc=0 load_s=11.656124356 decode_median=40.382131695438275 foreign_max=196.5%
+Traceback (most recent call last):
+  File "<stdin>", line 41, in <module>
+  File "<stdin>", line 21, in req
+  File "/usr/lib/python3.13/urllib/request.py", line 189, in urlopen
+    return opener.open(url, data, timeout)
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/urllib/request.py", line 489, in open
+    response = self._open(req, data)
+  File "/usr/lib/python3.13/urllib/request.py", line 506, in _open
+    result = self._call_chain(self.handle_open, protocol, protocol +
+                              '_open', req)
+  File "/usr/lib/python3.13/urllib/request.py", line 466, in _call_chain
+    result = func(*args)
+  File "/usr/lib/python3.13/urllib/request.py", line 1348, in http_open
+    return self.do_open(http.client.HTTPConnection, req)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/urllib/request.py", line 1323, in do_open
+    r = h.getresponse()
+  File "/usr/lib/python3.13/http/client.py", line 1450, in getresponse
+    response.begin()
+    ~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/http/client.py", line 336, in begin
+    version, status, reason = self._read_status()
+                              ~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/http/client.py", line 305, in _read_status
+    raise RemoteDisconnected("Remote end closed connection without"
+                             " response")
+http.client.RemoteDisconnected: Remote end closed connection without response
