@@ -733,7 +733,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--actor-fan-out", action=argparse.BooleanOptionalAction, default=True,
                         help="bounded seat: let the agent spread independent reads over "
                              "read-only scout subagents (default: %(default)s)")
-    parser.add_argument("--actor-context-mode", choices=("inline", "variable"), default="inline",
+    parser.add_argument("--actor-context-mode", choices=("inline", "variable", "orchestrator-variable"),
+                        default="inline",
                         help="opencode planner/author context bundle: 'inline' puts the whole "
                              "rendered bundle in the prompt (every run through DS41 run 9: "
                              "79.9k chars on run 8 with node_profile rendered); 'variable' "
@@ -743,7 +744,19 @@ def main(argv: list[str] | None = None) -> int:
                              "always-needed sections and a node_profile summary (~18.1k chars "
                              "on the run-8 bundle). Works in either --actor-seat; the call record's "
                              "seat.arm gains '+ctx-variable'. No effect on codex/claude, or on "
-                             "the critic (default: %(default)s)")
+                             "the critic. 'orchestrator-variable' (INF-78 OAB-7, orch:<role> "
+                             "planners only; every other backend stays inline) ships the bundle "
+                             "as ChatRequest.context_bundle: the orchestrator REPL holds it as "
+                             "the variable `context`, the prompt carries the index, and the "
+                             "server echoes exact per-section pull bytes; seat.arm gains "
+                             "'+ctx-orch-variable' (default: %(default)s)")
+    parser.add_argument("--actor-context-print-cap-bytes", type=int, default=None,
+                        help="orchestrator-variable only (INF-78 OAB-7): per-turn cap on printed "
+                             "REPL output, which bounds what a pulled value can put into the "
+                             "root prompt (default: the server's, 4096)")
+    parser.add_argument("--actor-context-pull-budget-bytes", type=int, default=None,
+                        help="orchestrator-variable only (INF-78 OAB-7/OAB-12): cap on bytes "
+                             "the planner may pull from the bundle over one call (default: none)")
     parser.add_argument("--actor-trim-instructions", choices=("on", "off"), default="on",
                         help="opencode planner/author/critic (OAB-10): drop auto-loaded "
                              "instruction files -- the lane's AGENTS.md (8.9k chars of ggml-org "
@@ -1350,7 +1363,10 @@ def main(argv: list[str] | None = None) -> int:
     # own per-call timeout, so the CLI reports a clean timeout before the loop TERMs it.
     from .actor_orchestrator import ORCHESTRATOR_KIND, TIMEOUT_MARGIN_S
     planner_backend, critic_backend = (
-        replace(b, timeout_s=max(60, args.actor_timeout_s - TIMEOUT_MARGIN_S))
+        replace(b, timeout_s=max(60, args.actor_timeout_s - TIMEOUT_MARGIN_S),
+                # OAB-7: only used when a bundle rides the call (orchestrator-variable)
+                context_print_cap_bytes=args.actor_context_print_cap_bytes,
+                context_pull_budget_bytes=args.actor_context_pull_budget_bytes)
         if getattr(b, "kind", None) == ORCHESTRATOR_KIND else b
         for b in (planner_backend, critic_backend))
     print(f"actors    planner={planner_backend.describe()}  "

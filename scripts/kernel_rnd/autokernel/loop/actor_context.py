@@ -80,9 +80,17 @@ from typing import Any, Iterable
 #: Sibling of the lane worktree (never inside it: a file there would ride into the
 #: authored diff and into the author's `git status` ground-truth check).
 BUNDLE_DIR = "actor-context"
-MODES = ("inline", "variable")
+#: INF-78 OAB-7: the bundle travels to the ORCHESTRATOR as `ChatRequest.context_bundle`
+#: and its REPL holds it as the variable `context` (`orchestrator_bundle`). Only the
+#: `orchestrator` backend kind honours it; every other kind stays inline.
+ORCH_MODE = "orchestrator-variable"
+MODES = ("inline", "variable", ORCH_MODE)
 #: `seat.arm` suffix on the VB-AK-SEAT call record for a variable-mode call.
 ARM_SUFFIX = "+ctx-variable"
+#: ... and for an orchestrator-variable call.
+ORCH_ARM_SUFFIX = "+ctx-orch-variable"
+#: The orchestrator's payload schema (epyc-orchestrator src/repl_environment/context_bundle.py).
+ORCH_BUNDLE_SCHEMA = "epyc.orchestrator.context_bundle.v1"
 
 #: (key, header prefixes) in the order `actors.render_context` emits them. The split
 #: only honours a header whose order is after the last one matched, and stops matching
@@ -545,7 +553,149 @@ def _index_text(directory: Path, rows: list[tuple[Section, str]],
     return index + "".join(parts).rstrip("\n")
 
 
+# ---------------------------------------------------------------------------
+# INF-78 OAB-7: the bundle as the orchestrator REPL's `context` variable
+# ---------------------------------------------------------------------------
+#: One line per section for the orchestrator's section table ("about" column).
+SECTION_ABOUT = {
+    "preamble": "the task line",
+    "target": "target JSON: launch, model, requests, build (card below)",
+    "program": "run.py scope directives for this target",
+    "program_strategy": "program.md strategy (GPU text; the CPU directive overrides it)",
+    "superseded": "formed but never measured: consider FIRST",
+    "profile": "CPU/GPU profile: hotspot table and ranked families",
+    "node_profile": "per-op wall SHARES (summary in prompt; required reading)",
+    "exhausted_families": "diminishing-returns escape: mandatory this turn",
+    "stagnant_families": "family-level diminishing returns: escape required",
+    "characterised": "characterised: do NOT re-measure",
+    "already_tried": "already tried",
+    "shared_history": "shared historical mechanisms (suggestions only)",
+    "serving_observations": "original serving observations (recall)",
+    "hypothesis_rejections": "your hypothesis was rejected: answer these",
+    "patch_rejections": "your patch was rejected: answer these",
+    "inbox": "operator suggestions (required reading)",
+}
+
+
+@dataclass
+class OrchestratorBundle:
+    """One orchestrator-variable call: the payload the CLI ships as
+    `ChatRequest.context_bundle`, and the index text that replaces the context block
+    in the prompt. Nothing is written to disk here -- the backend writes the payload
+    beside the lane (`actor_orchestrator`), because the orchestrator, not the model,
+    reads it."""
+    sections: list[Section]
+    payload: dict[str, Any]
+    index: str
+    inline_chars: int = 0
+
+    def seal(self, prompt: str, *, role: str | None = None) -> None:
+        """Bind the payload to the exact prompt sent (its `manifest`, echoed by digest
+        in the orchestrator's `context_pulls`)."""
+        self.payload["manifest"] = {
+            "schema": "epyc.autokernel.actor_context_bundle.v1",
+            "mode": ORCH_MODE,
+            "role": role,
+            "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "prompt": {"sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
+                       "chars": len(prompt)},
+            "inline_equivalent_prompt_chars": len(prompt) - len(self.index) + self.inline_chars,
+            "context_chars": self.inline_chars,
+            "index_chars": len(self.index),
+            "sections": [{"key": s.key, "chars": len(s.text), "inline": s.inline}
+                         for s in self.sections],
+        }
+
+
+def orchestrator_bundle(context_text: str, *, role: str,
+                        lane: Path | str | None = None) -> OrchestratorBundle:
+    """Split `render_context`'s text into the orchestrator payload (every section,
+    verbatim, in order: the section texts concatenate back to `context_text`) and the
+    index the prompt carries instead (required reading, JSON keys, target card, and the
+    same evidence-chosen INLINE set as file-variable mode)."""
+    sections = split_sections(context_text)
+    payloads: dict[str, Any] = {}
+    entries = []
+    for section in sections:
+        payload = json_payload(section) if section.key in JSON_SECTIONS else None
+        if payload is not None:
+            payloads[section.key] = payload
+        about = SECTION_ABOUT.get(section.key, "")
+        entries.append({"name": section.key, "text": section.text,
+                        "kind": "json" if payload is not None else "text",
+                        "inline": section.inline, "description": about})
+    index = _orch_index_text(sections, payloads, lane=lane)
+    return OrchestratorBundle(sections=sections,
+                              payload={"schema": ORCH_BUNDLE_SCHEMA, "sections": entries},
+                              index=index, inline_chars=len(context_text))
+
+
+def _orch_index_text(sections: list[Section], payloads: dict[str, Any], *,
+                     lane: Path | str | None = None) -> str:
+    total = sum(len(s.text) for s in sections)
+    held = sum(len(s.text) for s in sections if not s.inline)
+    out = [
+        "## Context bundle -- ORCHESTRATOR mode: it is the REPL variable `context`",
+        f"The full planning context is {total:,} chars in {len(sections)} sections. The "
+        "sections marked INLINE are reproduced in full at the end of this index; the other "
+        f"{held:,} chars are in `context` and NOT in this prompt. Pull what you need -- "
+        "context.get('<section>'), context.grep('<regex>', section='<section>'), "
+        "context.json('target.recipe') -- into variables, and print only the slice you "
+        "use: pulls cost nothing, printed text is capped per turn. The sections are exactly "
+        "what an inline prompt would have shown, nothing added, nothing dropped. The "
+        "orchestrator's section table (sizes) follows this prompt.",
+        "",
+    ]
+    must: list[str] = []
+    for section in sections:
+        if section.inline:
+            continue
+        if section.key == "inbox":
+            must.append("- `inbox` -- operator suggestions for this campaign (read it all)")
+        if section.key in REQUIRED_SECTIONS:
+            must.append(f"- `{section.key}` -- {REQUIRED_SECTIONS[section.key]}")
+        for line, heading in _headings(section.text):
+            if section.key != "inbox" and _MUST_READ.search(heading):
+                must.append(f"- `{section.key}` line {line}: {heading}")
+    if must:
+        out.append("Read these before you propose (line numbers are within "
+                   "context.get('<section>')). The critic reviews your proposal against the "
+                   "FULL bundle and rejects one that contradicts it:")
+        out.extend(must)
+        out.append("")
+    if payloads:
+        out.append("JSON keys with sizes (chars, as pretty-printed); reach one with "
+                   "context.json('<section>.<key>'):")
+        for key, payload in payloads.items():
+            out.extend(_json_toc(payload, key))
+        out.append("")
+    card = target_card(payloads.get("target"), lane=lane)
+    if card:
+        out.append("Target card (resolved from the target section; the full JSON is "
+                   "context['target']):")
+        out.extend(card)
+        out.append("")
+    out.append("=== INLINE sections (verbatim) ===")
+    out.append("")
+    index = "\n".join(out)
+    parts = []
+    for section in sections:
+        if section.inline:
+            parts.append(section.text)
+        elif section.summarized:
+            head = section_summary(section)
+            if head == section.text:
+                parts.append(section.text)
+            else:
+                parts.append(head.rstrip("\n") + "\n"
+                             f"(summary -- the rest of this section, "
+                             f"{len(section.text) - len(head):,} chars, is "
+                             f"context.get(\"{section.key}\"))\n\n")
+    return index + "".join(parts).rstrip("\n")
+
+
 __all__ = ["ARM_SUFFIX", "BUNDLE_DIR", "Bundle", "GUARDED_BUILD_LABEL", "INLINE_SECTIONS", "JSON_SECTIONS", "MODES",
            "REQUIRED_SECTIONS", "SECTION_HEADERS", "SUMMARY_SECTIONS", "Section", "explode",
            "implode", "json_payload", "materialize", "section_summary", "split_sections",
-           "target_card"]
+           "target_card", "ORCH_ARM_SUFFIX", "ORCH_BUNDLE_SCHEMA", "ORCH_MODE",
+           "OrchestratorBundle", "orchestrator_bundle"]

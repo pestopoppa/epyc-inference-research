@@ -40,6 +40,16 @@ lane worktree for a pre-merge smoke. The CLI is stdlib-only, so it needs nothing
 orchestrator package provides and imports nothing heavy (the call runs right before a
 CPU measurement window).
 
+CONTEXT AS A REPL VARIABLE (INF-78 OAB-7, `--actor-context-mode orchestrator-variable`).
+`AgentPlanner._context_block` builds an `actor_context.OrchestratorBundle` (every section
+of the rendered context, verbatim, plus an index that replaces the context block in the
+prompt) and `_sealed` stages its payload here with `stage_bundle(workspace, prompt,
+payload)`. `argv` attaches it -- `--context-bundle <per-call file>` -- only when the
+prompt it is building for hashes to the staged one, so a retry of the same call carries
+it and any other call (a critic, a later call with a different prompt) never does. The
+server echoes exact pull accounting (`context_pulls`); `collect` projects it onto the
+metrics row (`bundle_tool_calls` = pull calls) and keeps a per-section summary.
+
 Provenance (R5) rides a per-call SIDECAR file, not stdout (stdout must stay one
 object for `_extract_json`) and not stderr (the stderr fallback in `_run_agent` would
 see it as a candidate reply for a schema-less call). `argv` allocates the sidecar and
@@ -101,6 +111,23 @@ ABSTAIN_BRANCH = {"type": "object", "properties": {"abstain": {"type": "string"}
 
 _PENDING: dict[str, Path] = {}
 _PENDING_LOCK = threading.Lock()
+#: workspace -> (sha256 of the prompt the bundle belongs to, payload). OAB-7.
+_STAGED: dict[str, tuple[str, dict[str, Any]]] = {}
+
+
+def stage_bundle(workspace: Path, prompt: str, payload: Mapping[str, Any]) -> None:
+    """Stage an orchestrator context bundle for the next `argv` of THIS prompt."""
+    with _PENDING_LOCK:
+        _STAGED[_key(workspace)] = (hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
+                                    dict(payload))
+
+
+def _staged_for(workspace: Path, prompt: str) -> dict[str, Any] | None:
+    with _PENDING_LOCK:
+        staged = _STAGED.get(_key(workspace))
+    if staged is None or staged[0] != hashlib.sha256(prompt.encode("utf-8")).hexdigest():
+        return None
+    return staged[1]
 
 
 def wire_schema(schema: Mapping[str, Any], *, allow_abstain: bool = True) -> dict[str, Any]:
@@ -124,6 +151,10 @@ class OrchestratorBackend(Backend):
     cli: str = f"{DEFAULT_ORCHESTRATOR_ROOT}/{CLI_REL}"
     max_turns: int = TURN_CAP
     timeout_s: int = DEFAULT_TIMEOUT_S - TIMEOUT_MARGIN_S
+    #: OAB-7: per-turn print cap / whole-call pull budget sent with a bundle (None =
+    #: the server default: 4096-byte cap, no budget).
+    context_print_cap_bytes: int | None = None
+    context_pull_budget_bytes: int | None = None
 
     def argv(self, prompt: str, workspace: Path, *, read_only: bool = False,
              schema: Mapping[str, Any] | None = None) -> list[str]:
@@ -146,6 +177,15 @@ class OrchestratorBackend(Backend):
                 json.dumps(wire_schema(schema, allow_abstain=abstains), sort_keys=True),
                 encoding="utf-8")
             argv += ["--schema", str(schema_path)]
+        bundle = _staged_for(workspace, prompt)
+        if bundle is not None:
+            bundle_path = call_dir / f"{stem}.context-bundle.json"
+            bundle_path.write_text(json.dumps(bundle, ensure_ascii=False), encoding="utf-8")
+            argv += ["--context-bundle", str(bundle_path)]
+            if self.context_print_cap_bytes is not None:
+                argv += ["--context-print-cap-bytes", str(self.context_print_cap_bytes)]
+            if self.context_pull_budget_bytes is not None:
+                argv += ["--context-pull-budget-bytes", str(self.context_pull_budget_bytes)]
         argv += ["--url", self.url, "--role", self.model, "--max-turns", str(self.max_turns),
                  "--timeout-s", str(self.timeout_s), "--provenance-out", str(provenance)]
         with _PENDING_LOCK:
@@ -204,9 +244,36 @@ def _totals(resp: Mapping[str, Any]) -> dict[str, Any]:
         # The server reports `tool_output_tokens` (~len/4), not characters; kept raw
         # under `server` rather than multiplied back into a fake character count.
         "tool_output_chars": None,
-        # No variable-mode bundle exists for this kind (OAB-7 makes context a REPL
-        # variable server-side instead).
-        "bundle_tool_calls": None,
+        # OAB-7: pull calls against the server-side `context` bundle, when one rode
+        # the request (None otherwise: nothing to pull).
+        "bundle_tool_calls": _pull_calls(resp.get("context_pulls")),
+    }
+
+
+def _pull_calls(pulls: Any) -> int | None:
+    totals = pulls.get("totals") if isinstance(pulls, Mapping) else None
+    value = totals.get("pull_calls") if isinstance(totals, Mapping) else None
+    return int(value) if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def pull_summary(pulls: Any) -> dict[str, Any] | None:
+    """The bounded part of the server's `context_pulls` echo for the metrics row: the
+    bundle digest, offered bytes, totals and per-section pulled/unique bytes. The
+    per-turn records stay in the sidecar (`sidecar.path`)."""
+    if not isinstance(pulls, Mapping):
+        return None
+    sections = pulls.get("sections") if isinstance(pulls.get("sections"), Mapping) else {}
+    return {
+        "schema": pulls.get("schema"),
+        "bundle": pulls.get("bundle"),
+        "print_cap_bytes": pulls.get("print_cap_bytes"),
+        "pull_budget_bytes": pulls.get("pull_budget_bytes"),
+        "offered": pulls.get("offered"),
+        "totals": pulls.get("totals"),
+        "sections": {name: {key: row.get(key) for key in ("in_prompt", "offered_bytes", "pulls",
+                                                          "bytes_pulled", "unique_bytes",
+                                                          "coverage")}
+                     for name, row in sections.items() if isinstance(row, Mapping)},
     }
 
 
@@ -272,6 +339,9 @@ def collect(workspace: Path) -> dict[str, Any]:
             "http_status": data.get("http_status"),
             "client_wall_s": data.get("client_wall_s"),
             "sidecar": _file_ref(path),
+            # OAB-7: the server's exact pull accounting (None: no bundle rode the call)
+            "context_bundle_acknowledged": data.get("context_bundle_acknowledged"),
+            "context_pulls": pull_summary(resp.get("context_pulls")),
         }
         stats["unexposed"] = sorted(
             [f"totals.{key}" for key, value in totals.items() if value is None]
@@ -283,4 +353,5 @@ def collect(workspace: Path) -> dict[str, Any]:
 
 
 __all__ = ["ABSTAIN_BRANCH", "AUTO_ROLE", "MODEL_PREFIX", "ORCHESTRATOR_KIND",
-           "OrchestratorBackend", "TURN_CAP", "collect", "orchestrator_backend", "wire_schema"]
+           "OrchestratorBackend", "TURN_CAP", "collect", "orchestrator_backend", "pull_summary",
+           "stage_bundle", "wire_schema"]
