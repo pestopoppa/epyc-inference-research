@@ -54,6 +54,25 @@ CODEX = "/usr/local/share/npm-global/bin/codex"
 CLAUDE = "/home/node/.local/bin/claude"
 OPENCODE = "/usr/local/share/npm-global/bin/opencode"
 DEFAULT_TIMEOUT_S = 1800
+_KVQ_READER = Path("/workspace/scripts/vidya/kvq_planner_context.py")
+_KVQ_UNAVAILABLE = "Vidya v10 KV-quant: unavailable (reader or ingested evidence unavailable)."
+
+
+def _kvq_planner_evidence(context: Mapping[str, Any]) -> str:
+    """Bounded, read-only bench evidence for the exact model and GPU family only."""
+    regime = context.get("current_regime") or {}
+    model = str((regime.get("model") or {}).get("path", "")).lower()
+    if (regime.get("backend") != "gpu" or "qwen3.8-27b-q8_0" not in model):
+        return "Vidya v10 KV-quant: inapplicable to this model or backend."
+    try:
+        result = subprocess.run(["python3", str(_KVQ_READER)], capture_output=True,
+                                text=True, timeout=10, check=True)
+        evidence = result.stdout.strip()
+        if not evidence.startswith("Vidya v10 KV-quant:"):
+            return _KVQ_UNAVAILABLE
+        return evidence[:8000]
+    except (OSError, subprocess.SubprocessError):
+        return _KVQ_UNAVAILABLE
 #: 30s -> 1800s. The streak is what the operator needs to see, not each retry.
 BACKOFF_S = (30, 120, 480, 1800)
 #: Backoff for `OpencodeStoreError` (opencode's SQLite store refused a write), with its
@@ -2220,6 +2239,12 @@ class AgentPlanner:
             profile_rule=("use the original CPU launch/model and inspect its source route; "
                           "if the CPU profile is unavailable, state that limit and do not invent timing evidence"
                           if cpu else "attack a route near the top of the profile"))
+        prompt += ("\n\n## Vidya v10 KV-quant evidence\n"
+                   + _kvq_planner_evidence(context)
+                   + "\nThis is advisory benchmark evidence only. Use substantive rows only "
+                     "for the matching Qwen3.8-27B-Q8_0 MI210 GPU model, metric, and "
+                     "context depth. Do not extrapolate to another model, CPU, serving "
+                     "rate, or workload. It does not authorize a keep or promotion.\n")
         if context.get("runtime_anchor") is not None:
             prompt += ("\nAlternatively propose ONE runtime treatment of the original serving launch, "
                        "without source edits or rebuilding. Add runtime_treatment={kind: threads|"

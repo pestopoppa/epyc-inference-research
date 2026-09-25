@@ -193,6 +193,33 @@ class ContextBundle(unittest.TestCase):
 
 class PlannerContract(unittest.TestCase):
 
+    def test_matching_gpu_planner_receives_vidya_bench_evidence(self):
+        context = {"current_regime": {"backend": "gpu", "model": {
+            "path": "/models/Qwen3.8-27B-Q8_0.gguf"}}}
+        payload = '{"abstain": "no suitable hypothesis"}'
+        with mock.patch.object(actors, "_kvq_planner_evidence",
+                               return_value="Vidya v10 KV-quant: d32k decode grade=E2"), \
+             mock.patch.object(actors, "_run_agent", return_value=payload) as run:
+            actors.AgentPlanner(workspace=Path("/tmp")).propose(context)
+        prompt = run.call_args.args[0]
+        self.assertIn("d32k decode grade=E2", prompt)
+        self.assertIn("does not authorize a keep or promotion", prompt)
+
+    def test_missing_evidence_is_visible_and_other_targets_do_not_read_ledger(self):
+        matching = {"current_regime": {"backend": "gpu", "model": {
+            "path": "/models/Qwen3.8-27B-Q8_0.gguf"}}}
+        payload = '{"abstain": "no suitable hypothesis"}'
+        with mock.patch.object(actors, "_KVQ_READER", Path("/missing/kvq_reader.py")), \
+             mock.patch.object(actors, "_run_agent", return_value=payload) as run:
+            actors.AgentPlanner(workspace=Path("/tmp")).propose(matching)
+        self.assertIn("Vidya v10 KV-quant: unavailable", run.call_args.args[0])
+        with mock.patch.object(actors.subprocess, "run") as reader, \
+             mock.patch.object(actors, "_run_agent", return_value=payload) as run:
+            actors.AgentPlanner(workspace=Path("/tmp")).propose({
+                "current_regime": {"backend": "cpu", "model": matching["current_regime"]["model"]}})
+        reader.assert_not_called()
+        self.assertIn("inapplicable to this model or backend", run.call_args.args[0])
+
     def test_original_cpu_target_reaches_planner_author_and_critic_without_gpu_constraints(self):
         from .test_glm_frozen_requests import _canonical_launch
 
