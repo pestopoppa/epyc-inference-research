@@ -593,6 +593,68 @@ class OrchestratorVariableMode(unittest.TestCase):
         self.assertNotIn("turns", stats["context_pulls"], "per-turn records stay in the sidecar")
         self.assertNotIn("totals.bundle_tool_calls", stats["unexposed"])
 
+    def test_bundle_and_scouts_ride_one_planner_call(self):
+        """INF-78 integration (OAB-7 + OAB-8): orchestrator-variable context mode and
+        AK_ORCHESTRATOR_SCOUTS together -- ONE planner call carries --context-bundle AND
+        --scout-targets, and collect() projects both echoes onto the metrics row."""
+        from autokernel.loop import actor_orchestrator as orch
+        profile = {"target": {"recipe": {"backend": "cpu"}},
+                   "cpu_profile": {"status": "observed", "hotspots": [
+                       {"symbol": "ggml_vec_dot_q4_K_q8_K", "dso": "libggml-cpu.so",
+                        "sampled_period_fraction": 0.41},
+                       {"symbol": "ggml_compute_forward_mul_mat", "dso": "libggml-cpu.so",
+                        "sampled_period_fraction": 0.12}]}}
+        with mock.patch.dict("os.environ", {orch.SCOUTS_ENV: "2"}):
+            backend = actors.backend_for("orch:auto", "high")
+        seen = {}
+
+        def run(prompt, **kw):
+            seen["prompt"] = prompt
+            seen["argv"] = kw["backend"].argv(prompt, kw["workspace"], schema=kw.get("schema"))
+            return HYPOTHESIS
+
+        pulls = {"schema": "epyc.orchestrator.context_pulls.v1",
+                 "totals": {"pull_calls": 2, "bytes_pulled": 300, "unique_bytes": 300},
+                 "sections": {}}
+        scouts_echo = {"schema": "epyc.orchestrator.scouts.v1", "requested": 2, "launched": 2,
+                       "completed": 2, "failed": 0, "turns": 5, "completion_tokens": 700,
+                       "cap": {"cap": 2, "total_slots": 4, "busy": 0, "free": 4, "reserve": 1,
+                               "source": "live_slots"},
+                       "scouts": [{"index": 0, "status": "ok", "reads": 3, "turns": 5,
+                                   "target": {"symbol": "ggml_vec_dot_q4_K_q8_K"}}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp) / "workers" / "lane0"
+            ws.mkdir(parents=True)
+            planner = actors.AgentPlanner(
+                workspace=ws, backend=backend,
+                seat=actors.ActorSeat(bounded=False, context_mode="orchestrator-variable"))
+            with mock.patch.object(actors, "render_context", return_value=_real_context_text()), \
+                    mock.patch.object(actors, "_run_agent", side_effect=run):
+                planner.propose(profile)
+            argv = seen["argv"]
+            self.assertIn("--context-bundle", argv)
+            self.assertIn("--scout-targets", argv)
+            self.assertEqual(argv[argv.index("--scouts-max") + 1], "2")
+            bundle = json.loads(Path(argv[argv.index("--context-bundle") + 1]).read_text())
+            self.assertEqual("".join(e["text"] for e in bundle["sections"]), _real_context_text())
+            targets = json.loads(Path(argv[argv.index("--scout-targets") + 1]).read_text())
+            self.assertEqual([t["symbol"] for t in targets["targets"]],
+                             ["ggml_vec_dot_q4_K_q8_K", "ggml_compute_forward_mul_mat"])
+            self.assertIn("ORCHESTRATOR mode", seen["prompt"])
+            sidecar = orch._PENDING[orch._key(ws)]
+            sidecar.write_text(json.dumps({
+                "request": {"schema_sha256": None, "scouts": {"targets": 2, "max": 2}},
+                "response": {"turns": 4, "tools_used": 3, "context_pulls": pulls,
+                             "scouts": scouts_echo},
+                "context_bundle_acknowledged": True, "http_status": 200}))
+            stats = orch.collect(ws)
+        self.assertTrue(stats["context_bundle_acknowledged"])
+        self.assertEqual(stats["context_pulls"]["totals"]["pull_calls"], 2)
+        self.assertEqual((stats["scouts"]["requested_by_loop"], stats["scouts"]["server"],
+                          stats["scouts"]["launched"]), (2, True, 2))
+        self.assertEqual(stats["totals"]["steps"], 4 + 5, "scout turns fold into the totals")
+        self.assertEqual(stats["totals"]["tool_calls"], 3 + 3, "scout reads fold into the totals")
+
 
 if __name__ == "__main__":
     unittest.main()
