@@ -145,8 +145,12 @@ class Backend:
 
 
 def backend_for(model: str, effort: str) -> Backend:
-    """Route by model id: `claude-*` -> claude CLI, `provider/model` (a `/`) ->
+    """Route by model id: `orch:<role|auto>` -> the orchestrator (INF-78 OAB-2,
+    `actor_orchestrator`), `claude-*` -> claude CLI, `provider/model` (a `/`) ->
     opencode (external providers), everything else -> codex."""
+    if model.startswith("orch:"):
+        from .actor_orchestrator import orchestrator_backend
+        return orchestrator_backend(model, effort)
     if model.startswith("claude-"):
         return Backend("claude", model, effort, CLAUDE)
     if "/" in model:
@@ -352,7 +356,10 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
                schema: Mapping[str, Any] | None = None,
                env: Mapping[str, str] | None = None,
                should_stop: Callable[[], bool] | None = None) -> str:
-    argv = backend.argv(prompt, workspace, read_only=read_only)
+    # The orchestrator kind sends the caller's schema to the server (`--schema`), so
+    # its argv is the one that needs it (INF-78 OAB-2, `actor_orchestrator`).
+    argv = (backend.argv(prompt, workspace, read_only=read_only, schema=schema)
+            if backend.kind == "orchestrator" else backend.argv(prompt, workspace, read_only=read_only))
     payload = backend.stdin_payload(prompt)
     started = time.monotonic()
     started_at = time.time()
@@ -608,6 +615,13 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
             stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime(finished))
             opencode_stats = actor_metrics.collect(Path(workspace), before_ids, target,
                                                    stamp=stamp, started_at=started_at)
+        orchestrator_stats: dict[str, Any] | None = None
+        if backend.kind == "orchestrator":
+            # INF-78 OAB-2: the CLI's provenance sidecar, projected onto this schema's
+            # vocabulary. Repair ran (or not) SERVER-side; the server does not say which.
+            from . import actor_orchestrator
+            orchestrator_stats = actor_orchestrator.collect(Path(workspace))
+            repair_ran = orchestrator_stats.get("repair_ran")
         record = {
             "schema": actor_metrics.METRICS_SCHEMA,
             "role": role,
@@ -631,6 +645,9 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
             "metrics_error": (opencode_stats or {}).get("metrics_error") if collect_metrics else None,
             **_seat_provenance(env),
         }
+        if orchestrator_stats is not None:
+            record["orchestrator"] = orchestrator_stats
+            record["metrics_error"] = orchestrator_stats.get("metrics_error")
     except Exception as exc:   # noqa: BLE001 -- evidence, never a reason to fail the call
         record = {"schema": actor_metrics.METRICS_SCHEMA, "role": role, "seat_arm": arm,
                   "backend_kind": backend.kind, "backend_model": backend.model,
@@ -802,7 +819,8 @@ def _call_record_v1(workspace: Path, backend: Backend, prompt: str, *, returncod
         "config": _file_ref(config_path) if bounded else None,
         "instructions": instructions,
     }
-    endpoint = (_provider_base_url(backend.model) if opencode else None) or f"hosted:{backend.kind}"
+    endpoint = ((_provider_base_url(backend.model) if opencode else getattr(backend, "url", None))
+                or f"hosted:{backend.kind}")
     import uuid
     return capture.build_call_record(
         call_id=uuid.uuid4().hex, role=_role_of(schema), workspace=str(workspace),
@@ -1005,6 +1023,8 @@ def _schema_repair(raw: str, *, schema: Mapping[str, Any], backend: Backend,
     is `_relax_required_for_wire(schema)` -- `schema` itself, what the caller
     validates the RESULT against, is never mutated."""
     if backend.kind != "opencode":
+        # codex/claude have no local server to ask; the orchestrator kind already
+        # repaired server-side (TD-21.1 `repl_final`, INF-78 OAB-2).
         return None
     base = _provider_base_url(backend.model)
     if base is None:
