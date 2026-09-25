@@ -2160,8 +2160,17 @@ class AgentPlanner:
         the call is recorded under the unsuffixed arm -- an A/B must never count an
         inline prompt as a variable-mode call."""
         text = render_context(context)
-        if (self.seat is None or self.seat.context_mode != "variable"
-                or self.backend.kind != "opencode"):
+        mode = self.seat.context_mode if self.seat is not None else "inline"
+        if mode == "orchestrator-variable":
+            # INF-78 OAB-7: the ORCHESTRATOR's REPL holds the bundle as `context`; only
+            # the orchestrator kind can carry it (every other kind stays inline).
+            if self.backend.kind != "orchestrator":
+                return text, None
+            from . import actor_context
+            bundle = actor_context.orchestrator_bundle(
+                text, role=role, lane=Path(self.workspace) if self.seat.lane_guard else None)
+            return bundle.index, bundle
+        if mode != "variable" or self.backend.kind != "opencode":
             return text, None
         from . import actor_context
         try:
@@ -2175,13 +2184,20 @@ class AgentPlanner:
             return text, None
         return bundle.index, bundle
 
-    @staticmethod
-    def _sealed(prompt: str, bundle, env: dict[str, str] | None) -> dict[str, str] | None:
+    def _sealed(self, prompt: str, bundle, env: dict[str, str] | None) -> dict[str, str] | None:
         """Bind a variable-mode bundle to the exact prompt and name the arm on the call
-        record (`seat.arm` is free text in VB-AK-SEAT: `plain+ctx-variable`)."""
+        record (`seat.arm` is free text in VB-AK-SEAT: `plain+ctx-variable`). An
+        orchestrator bundle is staged for the backend's argv, keyed by the prompt it
+        belongs to (`orch+ctx-orch-variable`)."""
         if bundle is None:
             return env
         from . import actor_context
+        if isinstance(bundle, actor_context.OrchestratorBundle):
+            from . import actor_orchestrator
+            bundle.seal(prompt)
+            actor_orchestrator.stage_bundle(Path(self.workspace), prompt, bundle.payload)
+            arm = (env or {}).get(SEAT_ENV_ARM) or "orch"
+            return {**(env or {}), SEAT_ENV_ARM: arm + actor_context.ORCH_ARM_SUFFIX}
         bundle.seal(prompt)
         arm = (env or {}).get(SEAT_ENV_ARM) or "plain"
         return {**(env or {}), SEAT_ENV_ARM: arm + actor_context.ARM_SUFFIX}

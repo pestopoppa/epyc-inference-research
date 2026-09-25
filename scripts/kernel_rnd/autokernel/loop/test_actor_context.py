@@ -443,5 +443,156 @@ class VariableModeThroughThePlanner(unittest.TestCase):
         assert_snapshot_only(self, seen["env"], seen["config"], seen["ws"])
 
 
+
+class OrchestratorVariableMode(unittest.TestCase):
+    """INF-78 OAB-7: the bundle rides `ChatRequest.context_bundle` to the orchestrator,
+    whose REPL holds it as the variable `context`; the prompt carries the index."""
+
+    #: The orchestrator's payload contract (epyc-orchestrator
+    #: src/repl_environment/context_bundle.py `ContextBundle.from_payload`), restated so a
+    #: drift fails HERE, in the repo that builds the payload.
+    NAME = __import__("re").compile(r"^[A-Za-z_][A-Za-z0-9_-]{0,63}$")
+    FENCE = __import__("re").compile(r"```json\n(.*)\n```", __import__("re").S)
+
+    def tearDown(self):
+        from autokernel.loop import actor_orchestrator
+        actor_orchestrator._PENDING.clear()
+        actor_orchestrator._STAGED.clear()
+
+    def test_payload_partitions_the_real_bundle_losslessly(self):
+        text = _real_context_text()
+        bundle = actor_context.orchestrator_bundle(text, role="planner")
+        entries = bundle.payload["sections"]
+        self.assertEqual(bundle.payload["schema"], actor_context.ORCH_BUNDLE_SCHEMA)
+        self.assertEqual("".join(e["text"] for e in entries), text)
+        self.assertEqual([e["name"] for e in entries],
+                         [s.key for s in actor_context.split_sections(text)])
+        kinds = {e["name"]: e["kind"] for e in entries}
+        self.assertEqual({k for k, v in kinds.items() if v == "json"},
+                         {"target", "shared_history", "serving_observations"})
+        for e in entries:
+            self.assertRegex(e["name"], self.NAME)
+            self.assertLessEqual(set(e), {"name", "text", "kind", "inline", "description"})
+            self.assertLessEqual(len(e["description"]), 300)
+            self.assertEqual(e["inline"], e["name"] in actor_context.INLINE_SECTIONS)
+            if e["kind"] == "json":   # the orchestrator's parse rule gives the same object
+                parsed = json.loads(self.FENCE.search(e["text"]).group(1))
+                self.assertEqual(parsed, actor_context.json_payload(actor_context.Section(e["name"], e["text"])))
+
+    def test_index_is_the_inline_set_and_names_no_file(self):
+        text = _real_context_text()
+        bundle = actor_context.orchestrator_bundle(text, role="planner")
+        for section in actor_context.split_sections(text):
+            if section.inline:
+                self.assertIn(section.text.rstrip("\n"), bundle.index)
+        self.assertNotIn('"full_transfer_target"', bundle.index)
+        self.assertNotIn(actor_context.BUNDLE_DIR, bundle.index)
+        self.assertNotIn("sections/", bundle.index)
+        self.assertIn('context.get("node_profile")', bundle.index)
+        self.assertIn("`inbox` -- operator suggestions", bundle.index)
+        self.assertLess(len(bundle.index), len(text) // 3)
+
+    def _propose(self, backend, seat):
+        seen = {}
+
+        def run(prompt, **kw):
+            seen["prompt"], seen["env"] = prompt, kw.get("env")
+            seen["argv"] = kw["backend"].argv(prompt, kw["workspace"], schema=kw.get("schema"))
+            return HYPOTHESIS
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp) / "workers" / "lane0"
+            ws.mkdir(parents=True)
+            planner = actors.AgentPlanner(workspace=ws, backend=backend, seat=seat)
+            with mock.patch.object(actors, "render_context", return_value=_real_context_text()), \
+                    mock.patch.object(actors, "_run_agent", side_effect=run):
+                planner.propose(_cpu_context())
+            argv = seen["argv"]
+            if "--context-bundle" in argv:
+                seen["bundle"] = json.loads(Path(argv[argv.index("--context-bundle") + 1]).read_text())
+            seen["bundle_dirs"] = list((ws.parent / actor_context.BUNDLE_DIR).glob("*"))
+        return seen
+
+    def test_the_orchestrator_planner_ships_the_bundle_and_sends_the_index(self):
+        seen = self._propose(actors.backend_for("orch:auto", "high"),
+                             actors.ActorSeat(bounded=False, context_mode="orchestrator-variable"))
+        self.assertIn("ORCHESTRATOR mode", seen["prompt"])
+        self.assertNotIn('"full_transfer_target"', seen["prompt"])
+        self.assertTrue(seen["prompt"].endswith('{"abstain": "<specific reason>"}.'))
+        self.assertEqual(seen["env"][actors.SEAT_ENV_ARM], "orch+ctx-orch-variable")
+        self.assertEqual("".join(e["text"] for e in seen["bundle"]["sections"]), _real_context_text())
+        manifest = seen["bundle"]["manifest"]
+        self.assertEqual(manifest["prompt"]["sha256"], hashlib.sha256(seen["prompt"].encode()).hexdigest())
+        self.assertEqual(manifest["inline_equivalent_prompt_chars"], len(_real_prompt()))
+        self.assertEqual(seen["bundle_dirs"], [], "no on-disk bundle tree: the REPL holds it")
+
+    def test_inline_stays_the_default_for_the_orchestrator_kind(self):
+        for seat in (None, actors.ActorSeat(bounded=False)):
+            seen = self._propose(actors.backend_for("orch:auto", "high"), seat)
+            self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), CONTROL_SHA256)
+            self.assertNotIn("--context-bundle", seen["argv"])
+
+    def test_orchestrator_variable_is_inline_for_every_other_kind(self):
+        backend = actors.backend_for("gpt-5.6-sol", "high")
+        seen = {}
+
+        def run(prompt, **kw):
+            seen["prompt"] = prompt
+            return HYPOTHESIS
+
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp) / "workers" / "lane0"
+            ws.mkdir(parents=True)
+            planner = actors.AgentPlanner(workspace=ws, backend=backend,
+                                          seat=actors.ActorSeat(context_mode="orchestrator-variable"))
+            with mock.patch.object(actors, "render_context", return_value=_real_context_text()), \
+                    mock.patch.object(actors, "_run_agent", side_effect=run):
+                planner.propose(_cpu_context())
+        self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), CONTROL_SHA256)
+
+    def test_argv_attaches_the_bundle_only_for_its_own_prompt(self):
+        from autokernel.loop import actor_orchestrator as orch
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp) / "workers" / "lane0"
+            ws.mkdir(parents=True)
+            backend = actors.backend_for("orch:auto", "high")
+            orch.stage_bundle(ws, "THE PROMPT", {"sections": [{"name": "a", "text": "x"}]})
+            self.assertNotIn("--context-bundle", backend.argv("A CRITIC PROMPT", ws))
+            again = backend.argv("THE PROMPT", ws)              # a retry of the same call
+            self.assertIn("--context-bundle", again)
+            capped = __import__("dataclasses").replace(backend, context_print_cap_bytes=2048,
+                                                       context_pull_budget_bytes=90000)
+            argv = capped.argv("THE PROMPT", ws)
+            self.assertEqual(argv[argv.index("--context-print-cap-bytes") + 1], "2048")
+            self.assertEqual(argv[argv.index("--context-pull-budget-bytes") + 1], "90000")
+
+    def test_collect_projects_the_servers_pull_accounting(self):
+        from autokernel.loop import actor_orchestrator as orch
+        pulls = {"schema": "epyc.orchestrator.context_pulls.v1",
+                 "bundle": {"sha256": "ab" * 32, "sections": 2, "bytes": 900},
+                 "print_cap_bytes": 4096, "pull_budget_bytes": None,
+                 "offered": {"bytes": 900, "in_prompt_bytes": 100, "variable_only_bytes": 800},
+                 "totals": {"pull_calls": 3, "bytes_pulled": 450, "unique_bytes": 400},
+                 "sections": {"inbox": {"kind": "text", "in_prompt": False, "offered_bytes": 800,
+                                        "pulls": 3, "bytes_pulled": 450, "unique_bytes": 400,
+                                        "coverage": 0.5}},
+                 "turns": [{"turn": 1, "pulls": [{"op": "get", "section": "inbox", "bytes": 450}]}]}
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp) / "workers" / "lane0"
+            ws.mkdir(parents=True)
+            actors.backend_for("orch:auto", "high").argv("P", ws)
+            sidecar = orch._PENDING[orch._key(ws)]
+            sidecar.write_text(json.dumps({"request": {"schema_sha256": None},
+                                           "response": {"turns": 4, "context_pulls": pulls},
+                                           "context_bundle_acknowledged": True,
+                                           "http_status": 200}))
+            stats = orch.collect(ws)
+        self.assertEqual(stats["totals"]["bundle_tool_calls"], 3)
+        self.assertTrue(stats["context_bundle_acknowledged"])
+        self.assertEqual(stats["context_pulls"]["sections"]["inbox"]["coverage"], 0.5)
+        self.assertNotIn("turns", stats["context_pulls"], "per-turn records stay in the sidecar")
+        self.assertNotIn("totals.bundle_tool_calls", stats["unexposed"])
+
+
 if __name__ == "__main__":
     unittest.main()
