@@ -75,7 +75,19 @@ class Registry:
     def close(self) -> None:
         self.db.close()
 
-    def reserve(self, identity: str) -> Reservation:
+    def reserve(self, identity: str, *, resumed: bool = False) -> Reservation:
+        """Reserve one dispatch of `identity`; refuse an answered or exhausted one.
+
+        `resumed=True` is a RESUMED BUILD (`resume.py`) re-dispatching the exact bytes
+        of a checkpoint. An answered identity is still refused. A non-answered one is
+        admitted past the one-retry bound: its earlier dispatches ended at a rule gate
+        or an infrastructure error, never an answer, and the resume claim ledger (at
+        most once per anchor, plus a bounded infrastructure-retry count or an
+        operator's logged reopen) is what bounds a resume. DS41 run 9d: 9c's reserve
+        plus op_scope refusal, then 9d's resumed reserve plus lane_error, left the
+        hoist at dispatch_count 2, so every retry would have been refused as
+        "configuration closed infeasible" although it was never built.
+        """
         try:
             self.db.execute("BEGIN IMMEDIATE")
             row = self.db.execute(
@@ -89,7 +101,7 @@ class Registry:
                 raise DispatchRefused("exact candidate already answered",
                                       duplicate_of=identity, prior_effect=row[2],
                                       prior_epoch=row[3], attempt_identity=identity)
-            elif row[0] >= 2:
+            elif row[0] >= 2 and not resumed:
                 raise DispatchRefused(
                     "identical NON-ANSWER already retried once; configuration closed infeasible",
                     duplicate_of=identity, prior_effect=row[2], prior_epoch=row[3],

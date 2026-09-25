@@ -131,9 +131,73 @@ def retain_patch(store_root: Path, repo: Path, *, lane: str,
                 "worktree": str(repo), "lane": lane, "mechanism_id": mechanism_id,
                 "patch_file": path.name, "patch_sha256": hashlib.sha256(patch).hexdigest(),
                 "untracked_source_paths": additions, "scope": "source_only_not_execution_evidence"}
-    _retain_bytes(path.with_suffix(".json"),
-                  (json.dumps(metadata, sort_keys=True, indent=2) + "\n").encode())
+    _retain_sidecar(path.with_suffix(".json"), metadata)
     return path
+
+
+#: Sidecar fields that record WHERE a retention happened, not WHAT was retained. The
+#: filename already binds (mechanism label, lane label, sha256(head + patch)), so two
+#: retentions of the same bytes from different lane checkouts -- a resumed build in a
+#: later run's state dir re-retaining the patch an earlier run kept -- differ only
+#: here. Every other field is identity and must match exactly.
+SIDECAR_PROVENANCE_FIELDS = frozenset({"worktree"})
+RETENTION_SCHEMA = "epyc.autokernel.source_patch_retention.v1"
+
+
+def _read_regular(path: Path, limit: int = 1024 * 1024) -> bytes:
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, "rb") as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            raise RatchetRefused(f"existing immutable patch artifact differs: {path}")
+        raw = stream.read(limit + 1)
+    if len(raw) > limit:
+        raise RatchetRefused(f"existing immutable patch artifact differs: {path}")
+    return raw
+
+
+def _retain_sidecar(sidecar: Path, metadata: Mapping[str, Any]) -> None:
+    """Publish the immutable sidecar, or recognise the one already published.
+
+    Re-retaining identical bytes (same filename: same head, patch, lane and mechanism
+    label) whose stored sidecar differs ONLY in provenance reuses the stored sidecar
+    untouched and records the new retention in its own content-addressed lineage file
+    beside it -- never a rewrite, never a failure. DS41 run 9d: the resumed build of
+    run 9c's retained hoist re-retained the patch from state-run9d's lane checkout and
+    the ratchet refused on `worktree` alone, as a lane_error. Any identity difference
+    (and any different bytes under the same name) still refuses.
+    """
+    raw = (json.dumps(dict(metadata), sort_keys=True, indent=2) + "\n").encode()
+    try:
+        _retain_bytes(sidecar, raw)
+        return
+    except RatchetRefused as refused:
+        conflict = refused
+    stored_raw = _read_regular(sidecar)
+    try:
+        stored = json.loads(stored_raw)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise conflict from None
+    if not isinstance(stored, dict):
+        raise conflict
+    keys = (set(stored) | set(metadata)) - SIDECAR_PROVENANCE_FIELDS
+    differing = sorted(key for key in keys if stored.get(key) != metadata.get(key))
+    if differing:
+        raise RatchetRefused(f"{conflict} (identity fields differ: {', '.join(differing)})")
+    provenance = {key: metadata.get(key) for key in sorted(SIDECAR_PROVENANCE_FIELDS)}
+    if all(stored.get(key) == value for key, value in provenance.items()):
+        return      # the same record, serialized differently: nothing new to note
+    record = {"schema": RETENTION_SCHEMA, "patch_file": metadata.get("patch_file"),
+              "patch_sha256": metadata.get("patch_sha256"),
+              "lane": metadata.get("lane"), "mechanism_id": metadata.get("mechanism_id"),
+              "original_sidecar": sidecar.name,
+              "original_sidecar_sha256": hashlib.sha256(stored_raw).hexdigest(),
+              "retained_again_from": provenance,
+              "scope": "retention_lineage_only_not_execution_evidence"}
+    encoded = (json.dumps(record, sort_keys=True, indent=2) + "\n").encode()
+    digest = hashlib.sha256(encoded).hexdigest()[:16]
+    # Never `<stem>.json`: resume/backfill/cpu_screen read `<stem>.json` and glob
+    # `*.patch`, so a lineage file is invisible to every reader of the archive.
+    _retain_bytes(sidecar.with_name(f"{sidecar.stem}.retention.{digest}.json"), encoded)
 
 
 _AMBIENT_REPO_ENV = ("GIT_DIR", "GIT_WORK_TREE")
