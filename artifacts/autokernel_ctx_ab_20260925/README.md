@@ -13,7 +13,7 @@ n = 2 pairs, so this is a direction, not a magnitude.
   - `inline`: the whole rendered bundle is in the prompt (79,890 chars, sha256 `a265a03a…`). It is run 8's recorded
     planner prompt plus the `node_profile` section that `render_context` now prints (DS41-C20e fix, research
     `8a9d2a40`).
-  - `variable`: the same bundle is written to `actor-context/<call>/` (`sections/`, `json/`, `INDEX.md`,
+  - `variable`: the same bundle is written to `actor-context/<call>/` (`sections/`, `json/`, INDEX.md,
     `manifest.json`), and the prompt carries only the index (18,055 chars).
 - **Code**: research `30631761` (integration lane `lane/ak-planner-integ-20260924`, merged to research main). Both
   arms go through the real `AgentPlanner.propose`, with two patches: the context is pinned to the control bundle,
@@ -45,7 +45,7 @@ n = 2 pairs, so this is a direction, not a magnitude.
 
 **Variable arm, bundle use.** The arm used the bundle as designed:
 - all three required files were read (`03-program_strategy`, `05-node_profile`, `09-inbox`);
-- `INDEX.md` was never re-read;
+- INDEX.md was never re-read;
 - no greps ran on the bundle.
 
 However, it read **all six file-only sections** in both pairs (`01-target`, `03`, `05`, `07-shared_history`,
@@ -86,9 +86,11 @@ lane SOURCE more than inline did: +29 and +9 tool calls, and 3-4x the tool outpu
 | `results.jsonl` | one row per call: metrics, server fingerprint, `/slots` samples, bundle access, reply |
 | `result-p{1,2}-{inline,variable}.json` | per-call result files |
 | `actor-calls.jsonl` | the seat's `actor_call_metrics.v1` + `actor_call.v1` lines for the 4 calls |
+| `bundle-manifests/<call>/{manifest.json,INDEX.md}` | the two variable-arm bundle manifests (`actor_context_bundle.v1`, bound to the prompt sha256) and the index each prompt carried (root VB-AK-CTX-1) |
 
 These stay on local disk and are **not committed**, because of size:
 - `/mnt/raid0/llm/tmp/ak-ctx-ab/actor-replies/`: opencode exports and stdout/stderr per call (2.3 MB);
-- `/mnt/raid0/llm/tmp/ak-ctx-ab/actor-context/`: the two variable-arm bundles (564 KB);
+- `/mnt/raid0/llm/tmp/ak-ctx-ab/actor-context/`: the two variable-arm bundles' section and JSON files (564 KB;
+  their manifests and indexes are committed above);
 - `/mnt/raid0/llm/tmp/ak-ctx-ab/dryrun/`;
 - `lane`, a symlink to `/mnt/raid0/llm/tmp/ak-seat-ab/lane`.
