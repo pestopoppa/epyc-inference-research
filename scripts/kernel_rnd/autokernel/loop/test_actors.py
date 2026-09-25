@@ -49,6 +49,58 @@ class Backoff(unittest.TestCase):
         result, streak = actors._with_backoff(lambda: "fine", sleep=slept.append)
         self.assertEqual((result, streak, slept), ("fine", 0, []))
 
+    def test_a_store_error_is_retried_on_its_own_schedule(self):
+        """DS41 run 9c: the author died on opencode's locked db at 07:59:47 and the
+        retry succeeded. A store error is an infra fault with its own backoff."""
+        slept, calls = [], {"n": 0}
+
+        def locked_then_fine():
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise actors.OpencodeStoreError("opencode_store_error: Failed query")
+            return "ok"
+
+        result, streak = actors._with_backoff(locked_then_fine, sleep=slept.append)
+        self.assertEqual((result, streak), ("ok", 1))
+        self.assertEqual(slept, [actors.STORE_ERROR_BACKOFF_S[0]])
+
+    def test_store_errors_are_bounded_and_spend_their_own_budget(self):
+        slept = []
+
+        def always_locked():
+            raise actors.OpencodeStoreError("opencode_store_error: database is locked")
+
+        with self.assertRaises(actors.ProviderTransient) as caught:
+            actors._with_backoff(always_locked, sleep=slept.append)
+        self.assertIn("opencode_store_error", str(caught.exception))
+        self.assertEqual(slept, list(actors.STORE_ERROR_BACKOFF_S),
+                         "len+1 attempts, every scheduled pause, then give up")
+
+    def test_store_errors_do_not_spend_the_providers_attempts(self):
+        slept, seq = [], iter(["store", "store", "prov", "prov", "prov", "ok"])
+
+        def mixed():
+            kind = next(seq)
+            if kind == "store":
+                raise actors.OpencodeStoreError("locked")
+            if kind == "prov":
+                raise actors.ProviderTransient("401")
+            return "ok"
+
+        result, streak = actors._with_backoff(mixed, sleep=slept.append)
+        self.assertEqual((result, streak), ("ok", 5))
+        self.assertEqual(slept, [*actors.STORE_ERROR_BACKOFF_S[:2], *actors.BACKOFF_S[:3]])
+
+    def test_a_stop_during_a_store_error_backoff_is_honoured(self):
+        stop = {"asked": False}
+
+        def locked():
+            stop["asked"] = True
+            raise actors.OpencodeStoreError("locked")
+
+        with self.assertRaises(actors.ActorStopped):
+            actors._with_backoff(locked, sleep=lambda s: None, should_stop=lambda: stop["asked"])
+
 
 class JsonExtraction(unittest.TestCase):
 
@@ -310,6 +362,31 @@ class CriticContract(unittest.TestCase):
         self.assertFalse(review.accepted)
         self.assertIn("without stating a reason", review.reason)
 
+    def test_a_reasonless_acceptance_is_schema_valid(self):
+        """DS41 run 9c 07:59:35Z: codex replied exactly `{"accepted":true}` -- what
+        `_REVIEW_TASK` asks for (reason is "<required when accepted is false>") -- and
+        the metrics row said schema_valid=false."""
+        pre = actors._precheck_reply('{"accepted":true}', actors.REVIEW_SCHEMA)
+        self.assertTrue(pre.schema_valid)
+        self.assertEqual(pre.body, {"accepted": True})
+        self.assertTrue(actors._has_answer('{"accepted":true}', actors.REVIEW_SCHEMA))
+        for invalid in ('{"accepted": false}', '{"accepted": "true"}', '{"reason": "x"}',
+                        '{"accepted": true, "extra": 1}', '{"accepted": true, "reason": 3}'):
+            self.assertFalse(actors._precheck_reply(invalid, actors.REVIEW_SCHEMA).schema_valid,
+                             invalid)
+        self.assertFalse(actors._has_answer('{"accepted": false}', actors.REVIEW_SCHEMA),
+                         "a rejection still needs its reason")
+        self.assertEqual(actors.REVIEW_SCHEMA["required"], ["accepted", "reason"],
+                         "the repair wire grammar is unchanged")
+
+    def test_a_reasonless_acceptance_never_triggers_a_repair_turn(self):
+        backend = actors.backend_for("q/m", "high")
+        with mock.patch.object(actors, "_schema_repair",
+                               side_effect=AssertionError("no repair for a valid reply")):
+            body = actors._parse_reply('{"accepted":true}', schema=actors.REVIEW_SCHEMA,
+                                       backend=backend, workspace=Path("/tmp"))
+        self.assertEqual(body, {"accepted": True})
+
     def test_an_acceptance_passes_through(self):
         critic = actors.AgentCritic(workspace=Path("/tmp"))
         with mock.patch.object(actors, "_run_agent",
@@ -527,13 +604,35 @@ class Backends(unittest.TestCase):
             self.assertEqual(command[command.index("--root") + 1], str(ws))
             self.assertEqual(command[command.index("--profiles") + 1], str(profiles))
 
-    def test_plain_seat_and_non_opencode_backends_are_untouched(self):
-        ws = Path("/ws")
-        for backend, seat in ((actors.backend_for("q/m", "high"), actors.ActorSeat(bounded=False)),
-                              (actors.backend_for("q/m", "high"), None),
-                              (actors.backend_for("gpt-5.6-sol", "high"), actors.ActorSeat())):
-            planner = actors.AgentPlanner(workspace=ws, backend=backend, seat=seat)
-            self.assertEqual(planner._seated("planner", {}), (backend, None))
+    def test_plain_seat_gets_only_snapshot_off_and_non_opencode_backends_are_untouched(self):
+        import tempfile
+        from autokernel.loop import test_actor_context as fx
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp) / "workers" / "lane0"; ws.mkdir(parents=True)
+            for seat in (actors.ActorSeat(bounded=False), None):
+                backend = actors.backend_for("q/m", "high")
+                planner = actors.AgentPlanner(workspace=ws, backend=backend, seat=seat)
+                got, env = planner._seated("planner", {})
+                self.assertEqual(got, backend, "the plain seat names no --agent")
+                fx.assert_snapshot_only(self, env, fx.config_body(env), ws)
+            codex = actors.backend_for("gpt-5.6-sol", "high")
+            planner = actors.AgentPlanner(workspace=ws, backend=codex, seat=actors.ActorSeat())
+            self.assertEqual(planner._seated("planner", {}), (codex, None))
+
+    def test_bounded_seat_config_turns_snapshots_off_for_every_role(self):
+        import tempfile
+        from autokernel.loop import actor_opencode_config as aoc
+        with tempfile.TemporaryDirectory() as tmp:
+            ws = Path(tmp) / "workers" / "lane0"; ws.mkdir(parents=True)
+            for role in aoc.AGENT_NAMES:
+                for fan_out in (True, False):
+                    planner = actors.AgentPlanner(
+                        workspace=ws, backend=actors.backend_for("q/m", "high"),
+                        seat=actors.ActorSeat(tools_python="/py", fan_out=fan_out))
+                    _, env = planner._seated(role, {})
+                    body = json.loads(Path(env["OPENCODE_CONFIG"]).read_text())
+                    self.assertIs(body["snapshot"], False, (role, fan_out))
+                    self.assertNotIn("snapshots", body, "the plural is not a v1 config key")
 
     def test_run_agent_passes_env_and_logs_the_call(self):
         import tempfile

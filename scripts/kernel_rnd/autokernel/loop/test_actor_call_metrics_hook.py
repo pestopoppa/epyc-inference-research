@@ -209,6 +209,135 @@ class MetricsCollectionFailureNeverFailsTheCall(_Lane):
         self.assertIn("boom", row["metrics_error"])
 
 
+STORE_STDERR = (FIXTURES / "store_error_run9c_0759.stderr").read_text()
+PATHS = json.dumps({"paths": ["ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp"]})
+
+
+class OpencodeStoreErrorCall(_Lane):
+    """DS41 run 9c 07:59:47Z (the real stderr is the fixture): the author exited 1
+    in ~12 s, empty stdout, "Unexpected error / Failed query: insert into project".
+    The reaper's VACUUM held the write lock; no model turn ever ran."""
+
+    def _call(self, done, backend=None, schema=None):
+        backend = backend or actors.backend_for("qwen-gpu/qwen3.8-27b", "high")
+        with mock.patch.object(actors.subprocess, "run", return_value=done), \
+             mock.patch.object(actor_metrics, "list_session_ids", return_value=set()):
+            return actors._run_agent("the prompt", workspace=self.ws, backend=backend,
+                                     schema=schema or actors.PATHS_SCHEMA)
+
+    def test_is_classified_recorded_and_raised_as_a_store_error(self):
+        with self.assertRaises(actors.OpencodeStoreError) as caught:
+            self._call(self._done("", STORE_STDERR, rc=1))
+        self.assertIsInstance(caught.exception, actors.ProviderTransient, "retryable")
+        self.assertIn("opencode_store_error", str(caught.exception))
+        row = self._metrics_rows()[0]
+        self.assertEqual(row["failure_class"], "opencode_store_error")
+        self.assertEqual(row["returncode"], 1)
+        self.assertFalse(row["salvaged"])
+        self.assertIsNone(row["schema_valid"], "no reply exists to judge")
+
+    def test_a_reply_shaped_object_in_the_failed_statement_is_never_salvaged(self):
+        """A `part` insert's params ARE model output (2026-09-01 "Failed query: insert
+        into part ..."): a complete paths object quoted there is not a reply."""
+        stderr = ('Error: Unexpected error\n\nFailed query: insert into "part" (...) '
+                  f'values (?, ?)\nparams: prt_1,msg_1,{PATHS}')
+        with self.assertRaises(actors.OpencodeStoreError):
+            self._call(self._done("", stderr, rc=1))
+        self.assertFalse(self._metrics_rows()[0]["salvaged"])
+
+    def test_stdout_present_is_not_a_store_error(self):
+        """Non-empty stdout means the session ran: the ordinary salvage path owns it."""
+        raw = self._call(self._done(PATHS, "Failed query: insert into part", rc=1))
+        self.assertEqual(raw, PATHS)
+        row = self._metrics_rows()[0]
+        self.assertTrue(row["salvaged"])
+        self.assertIsNone(row["failure_class"])
+
+    def test_other_rc1_failures_and_other_backends_keep_the_plain_transient(self):
+        with self.assertRaises(actors.ProviderTransient) as caught:
+            self._call(self._done("", "Error: model not found", rc=1))
+        self.assertNotIsInstance(caught.exception, actors.OpencodeStoreError)
+        with self.assertRaises(actors.ProviderTransient) as caught:
+            self._call(self._done("", STORE_STDERR, rc=1), backend=actors.CRITIC_DEFAULT,
+                       schema=actors.REVIEW_SCHEMA)
+        self.assertNotIsInstance(caught.exception, actors.OpencodeStoreError)
+        self.assertEqual([r["failure_class"] for r in self._metrics_rows()], [None, None])
+
+    def test_the_author_retries_after_a_store_error_and_succeeds(self):
+        """The run 9c sequence end to end: store error, backoff, retried call, reply."""
+        seq = iter([self._done("", STORE_STDERR, rc=1), self._done(PATHS)])
+        backend = actors.backend_for("qwen-gpu/qwen3.8-27b", "high")
+        slept = []
+        with mock.patch.object(actors.subprocess, "run", side_effect=lambda *a, **k: next(seq)), \
+             mock.patch.object(actor_metrics, "list_session_ids", return_value=set()):
+            raw, streak = actors._with_backoff(
+                lambda: actors._run_agent("p", workspace=self.ws, backend=backend,
+                                          schema=actors.PATHS_SCHEMA),
+                sleep=slept.append)
+        self.assertEqual((raw, streak, slept), (PATHS, 1, [actors.STORE_ERROR_BACKOFF_S[0]]))
+        self.assertEqual([r["failure_class"] for r in self._metrics_rows()],
+                         ["opencode_store_error", None])
+
+
+class Run9cSessionMisattribution(_Lane):
+    """The failed author row carried the PLANNER's session (29 steps): the before
+    listing died on the locked store (empty), the after listing returned the lane's
+    older planner session. Real `list_session_ids` + `collect`, subprocess mocked."""
+
+    def test_a_failed_call_is_never_credited_an_older_session(self):
+        planner_session = {"id": "ses_f288f639cffer5HW8JogPQjCYW",
+                           "directory": str(self.ws), "created": 1000}  # long before
+        seen = []
+
+        def run(argv, **kw):
+            seen.append(argv[:3])
+            if argv[1:3] == ["session", "list"]:
+                if len([a for a in seen if a[1:3] == ["session", "list"]]) <= 4:
+                    kw["stderr"].write(STORE_STDERR)          # before: locked, x4
+                    return subprocess.CompletedProcess(argv, 1, stdout="", stderr=None)
+                return subprocess.CompletedProcess(argv, 0, stdout=json.dumps([planner_session]),
+                                                   stderr=None)
+            if argv[1] == "export":
+                raise AssertionError("the planner's session must not be exported")
+            return subprocess.CompletedProcess(argv, 1, stdout="", stderr=STORE_STDERR)
+
+        backend = actors.backend_for("qwen-gpu/qwen3.8-27b", "high")
+        with mock.patch.object(actors.subprocess, "run", side_effect=run), \
+             mock.patch.object(actor_metrics, "_sleep"):
+            with self.assertRaises(actors.OpencodeStoreError):
+                actors._run_agent("p", workspace=self.ws, backend=backend,
+                                  schema=actors.PATHS_SCHEMA)
+        row = self._metrics_rows()[0]
+        self.assertEqual(row["opencode"]["session_ids"], [])
+        self.assertIsNone(row["opencode"]["totals"])
+        self.assertIn("none created at or after", row["metrics_error"])
+        self.assertEqual(row["failure_class"], "opencode_store_error")
+
+    def test_the_session_the_call_created_is_still_found(self):
+        import time as _time
+        future = int((_time.time() + 3600) * 1000)
+        rows = [{"id": "ses_old", "directory": str(self.ws), "created": 1000},
+                {"id": "ses_new", "directory": str(self.ws), "created": future}]
+
+        listings = iter([rows[:1], rows])   # before the call: only the old session
+
+        def run(argv, **kw):
+            if argv[1:3] == ["session", "list"]:
+                return subprocess.CompletedProcess(argv, 0, stdout=json.dumps(next(listings)),
+                                                   stderr=None)
+            return self._done(HYP)
+
+        backend = actors.backend_for("qwen-gpu/qwen3.8-27b", "high")
+        with mock.patch.object(actors.subprocess, "run", side_effect=run), \
+             mock.patch.object(actor_metrics, "export_session",
+                               side_effect=_copy_fixture_export(PLAIN_EXPORT)):
+            actors._run_agent("p", workspace=self.ws, backend=backend,
+                              schema=actors.HYPOTHESIS_SCHEMA)
+        row = self._metrics_rows()[0]
+        self.assertEqual(row["opencode"]["session_ids"], ["ses_new"])
+        self.assertEqual(row["opencode"]["totals"]["steps"], 23)
+
+
 class NonOpencodeBackend(_Lane):
     """Universal fields (wall/returncode/schema_valid) still record for a hosted
     (non-opencode) backend; there is no session to export."""
@@ -225,6 +354,20 @@ class NonOpencodeBackend(_Lane):
         self.assertIsNone(row["opencode"])
         self.assertIsNone(row["metrics_error"])
         self.assertTrue(row["schema_valid"])
+
+    def test_run9c_codex_critic_accept_without_reason_is_schema_valid(self):
+        """DS41 run 9c 07:59:35Z: codex's stdout was exactly `{"accepted":true}\\n`
+        and the row recorded schema_valid=false."""
+        codex = actors.backend_for("gpt-6-sol", "high")
+        with mock.patch.object(actors.subprocess, "run",
+                               return_value=self._done('{"accepted":true}\n')):
+            raw = actors._run_agent("the prompt", workspace=self.ws, backend=codex,
+                                    schema=actors.REVIEW_SCHEMA)
+        self.assertEqual(raw.strip(), '{"accepted":true}')
+        row = self._metrics_rows()[0]
+        self.assertEqual((row["role"], row["backend_kind"]), ("critic", "codex"))
+        self.assertTrue(row["schema_valid"])
+        self.assertFalse(row["repair_ran"])
 
 
 class ScriptBackendDoubleNeverTouchesOpencode(_Lane):

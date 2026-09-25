@@ -54,6 +54,8 @@ import hashlib
 import json
 import re
 import subprocess
+import tempfile
+import time
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -63,6 +65,51 @@ METRICS_SCHEMA = "epyc.autokernel.actor_call_metrics.v1"
 
 SESSION_LIST_TIMEOUT_S = 30.0
 EXPORT_TIMEOUT_S = 60.0
+
+#: opencode's own SQLite store refusing a statement. opencode opens its db with
+#: `busy_timeout = 5000` (1.18.31 binary) and its CLI prints only the wrapper --
+#: "Unexpected error / Failed query: insert into ..." -- with no SQLite code, so the
+#: wrapper text is the signal. DS41 run 9c 2026-09-25 07:59:47Z: the reaper's VACUUM
+#: held the write lock for 34 s and every opencode process started inside that window
+#: (the actor AND this module's own `session list`) died on its first write.
+STORE_ERROR_RE = re.compile(r"Failed query|SQLITE_BUSY|database is locked")
+#: The metrics row's `failure_class` for an actor call that died on that error.
+OPENCODE_STORE_ERROR = "opencode_store_error"
+
+#: Short busy-wait for this module's own `opencode session list` / `export` when the
+#: store is locked: bounded (~17 s of sleeps), because metrics are evidence and must
+#: never hold the loop for long. The actor call itself has its own, longer schedule.
+STORE_RETRY_SLEEPS_S = (2.0, 5.0, 10.0)
+_sleep = time.sleep
+
+
+def is_store_error(returncode: int, stderr: str | None) -> bool:
+    """A non-zero opencode exit whose stderr is its store's failure wrapper."""
+    return returncode != 0 and bool(STORE_ERROR_RE.search(stderr or ""))
+
+
+def _run_cli(argv: list[str], *, cwd: Path, timeout_s: float, stdout) -> subprocess.CompletedProcess:
+    """One opencode CLI call, retried on a store error only (never on anything else).
+    `stdout` is a callable returning the handle for one attempt (a fresh file per try)
+    or None to capture; stderr always goes to a temp FILE, never a pipe (Bun)."""
+    for attempt in range(len(STORE_RETRY_SLEEPS_S) + 1):
+        with tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace") as err:
+            handle = stdout() if stdout is not None else None
+            try:
+                done = subprocess.run(argv, cwd=str(cwd), text=True, timeout=timeout_s,
+                                      stdout=handle if handle is not None else subprocess.PIPE,
+                                      stderr=err)
+            finally:
+                if handle is not None:
+                    handle.close()
+            err.seek(0)
+            stderr = err.read()
+        done = subprocess.CompletedProcess(done.args, done.returncode,
+                                           stdout=done.stdout, stderr=stderr)
+        if not is_store_error(done.returncode, stderr) or attempt == len(STORE_RETRY_SLEEPS_S):
+            return done
+        _sleep(STORE_RETRY_SLEEPS_S[attempt])
+    return done  # pragma: no cover -- the loop always returns
 
 #: Fields summed across every new opencode session a call created (the root session
 #: AND any read-only fan-out scouts) -- "the GPU paid for every one of them", mirroring
@@ -78,9 +125,20 @@ TOTAL_FIELDS = ("steps", "tool_calls", "compactions", "decoded_tokens", "prompt_
 BUNDLE_PATH = re.compile(r"actor-context/[^/\s\"'`]+/([^\s\"'`;|&<>)]+)")
 
 
-def list_session_ids(workspace: Path, *, timeout_s: float = SESSION_LIST_TIMEOUT_S) -> set[str]:
+def list_session_ids(workspace: Path, *, timeout_s: float = SESSION_LIST_TIMEOUT_S,
+                     created_since_ms: int | None = None, strict: bool = False) -> set[str]:
     """The opencode session ids created IN `workspace`, or an empty set on ANY
-    failure (opencode not installed, empty lane, malformed output, timeout, ...).
+    failure (opencode not installed, empty lane, malformed output, timeout, ...);
+    `strict=True` raises instead, so a caller can tell "the listing failed" from
+    "no session".
+
+    `created_since_ms` keeps only sessions whose `created` (epoch ms, `session list
+    --format json`) is at or after it; a row with no `created` is then dropped, since
+    it cannot be shown to be new. This is what scopes a call's sessions to the CALL:
+    DS41 run 9c 2026-09-25 07:59:47Z, the before-call listing died on a locked store
+    and came back empty, so the planner's 38-minute-old session (29 steps) was the
+    failed author call's "new" session. A before/after set difference is only as good
+    as the before listing; a creation time is not.
 
     `opencode session list` is scoped to the PROJECT (the repository's root commit),
     not the directory: one listing from a DS41 lane returned sessions of run-5, run-7
@@ -94,14 +152,27 @@ def list_session_ids(workspace: Path, *, timeout_s: float = SESSION_LIST_TIMEOUT
     before and after the actor's own call, and a failure here must never be mistaken
     for "the actor produced no session"."""
     try:
-        out = subprocess.run(
-            ["opencode", "session", "list", "--format", "json", "-n", "50"],
-            cwd=str(workspace), capture_output=True, text=True, timeout=timeout_s)
+        out = _run_cli(["opencode", "session", "list", "--format", "json", "-n", "50"],
+                       cwd=Path(workspace), timeout_s=timeout_s, stdout=None)
+        if out.returncode != 0:
+            raise RuntimeError(f"opencode session list exited {out.returncode}: "
+                               f"{(out.stderr or '').strip()[-300:]}")
         rows = json.loads(out.stdout or "[]")
         here = {str(workspace), str(Path(workspace).resolve())}
+
+        def new_enough(row: Mapping[str, Any]) -> bool:
+            if created_since_ms is None:
+                return True
+            created = row.get("created")
+            return (isinstance(created, (int, float)) and not isinstance(created, bool)
+                    and created >= created_since_ms)
+
         return {row["id"] for row in rows if isinstance(row, Mapping) and "id" in row
-                and (row.get("directory") is None or str(row["directory"]) in here)}
+                and (row.get("directory") is None or str(row["directory"]) in here)
+                and new_enough(row)}
     except Exception:  # noqa: BLE001 -- evidence, never a reason to fail the caller
+        if strict:
+            raise
         return set()
 
 
@@ -114,10 +185,12 @@ def export_session(workspace: Path, session_id: str, out_path: Path, *,
     `metrics_error`; this function does not swallow it, so a genuine parse
     problem is diagnosable from the exception rather than a silently empty file."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(out_path, "w", encoding="utf-8") as handle:
-        subprocess.run(["opencode", "export", session_id], cwd=str(workspace),
-                       stdout=handle, stderr=subprocess.DEVNULL, timeout=timeout_s,
-                       check=True)
+    done = _run_cli(["opencode", "export", session_id], cwd=Path(workspace),
+                    timeout_s=timeout_s,
+                    stdout=lambda: open(out_path, "w", encoding="utf-8"))
+    if done.returncode != 0:
+        raise subprocess.CalledProcessError(done.returncode, done.args,
+                                            stderr=(done.stderr or "")[-300:])
 
 
 def _tokens(step: Mapping[str, Any], *path_keys: str) -> int:
@@ -190,20 +263,33 @@ def _empty_result(error: str) -> dict[str, Any]:
             "primary_session_id": None, "context_first_tokens": None, "context_max_tokens": None}
 
 
-def collect(workspace: Path, before_ids: set[str], replies_dir: Path, *, stamp: str) -> dict[str, Any]:
+def collect(workspace: Path, before_ids: set[str], replies_dir: Path, *, stamp: str,
+            started_at: float | None = None) -> dict[str, Any]:
     """Export and parse every opencode session `workspace` created since
     `before_ids`, and total them (root session and any read-only fan-out scouts
     alike: "the GPU paid for every one of them").
+
+    `started_at` (epoch seconds, taken just before the actor process was spawned)
+    additionally requires each session's `created` to be at or after it -- see
+    `list_session_ids`. Every caller in the seat passes it; without it only the
+    before/after difference applies (the pre-2026-09-25 behaviour).
 
     Never raises: any failure -- opencode not installed, a truncated/mid-write
     export, a timeout -- comes back as `{"metrics_error": "..."}` with everything
     else null, so a metrics-collection problem is evidence on the call record,
     never a reason to fail the actor call it describes."""
     try:
-        after_ids = list_session_ids(workspace)
+        since_ms = None if started_at is None else int(started_at * 1000)
+        try:
+            after_ids = list_session_ids(workspace, created_since_ms=since_ms, strict=True)
+        except Exception as exc:  # noqa: BLE001
+            return _empty_result(f"session list failed after the call: "
+                                 f"{type(exc).__name__}: {exc}"[:500])
         new_ids = sorted(after_ids - before_ids)
         if not new_ids:
-            return _empty_result("no new opencode session observed after the call")
+            return _empty_result("no new opencode session observed after the call"
+                                 + ("" if since_ms is None else
+                                    f" (none created at or after {since_ms} ms)"))
         sessions = []
         for sid in new_ids:
             out_path = Path(replies_dir) / f"{stamp}-export-{sid}.json"
@@ -304,6 +390,7 @@ def _summary(rows: list[Mapping[str, Any]]) -> dict[str, Any]:
         "repair_ran": sum(1 for r in rows if r.get("repair_ran") is True),
         "salvaged": sum(1 for r in rows if r.get("salvaged") is True),
         "metrics_errors": sum(1 for r in rows if r.get("metrics_error")),
+        "store_errors": sum(1 for r in rows if r.get("failure_class") == OPENCODE_STORE_ERROR),
     }
 
 

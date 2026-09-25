@@ -150,6 +150,29 @@ class NodeProfileIsExactlyOneInsertedSection(unittest.TestCase):
         self.assertNotIn(actors.NODE_PROFILE_HEADER, text)
 
 
+#: What a knobs-off plain opencode call now carries (operator 2026-09-25): a per-call
+#: config that only turns snapshot tracking off, marked as the plain seat's, and
+#: nothing else -- no arm label, no trim switches, and (asserted by the callers) not
+#: one changed prompt byte.
+SNAPSHOT_ONLY_CONFIG = {"$schema": "https://opencode.ai/config.json", "snapshot": False}
+
+
+def config_body(env):
+    """The per-call OPENCODE_CONFIG's JSON, read while the call is in flight."""
+    path = (env or {}).get("OPENCODE_CONFIG")
+    return json.loads(Path(path).read_text()) if path else None
+
+
+def assert_snapshot_only(case, env, body, ws=None):
+    case.assertEqual(set(env or {}), {"OPENCODE_CONFIG", actors.SEAT_ENV_PLAIN_CONFIG},
+                     "knobs off: the snapshot-off config and nothing else (no arm, no trim)")
+    case.assertEqual(env[actors.SEAT_ENV_PLAIN_CONFIG], "1")
+    case.assertEqual(body, SNAPSHOT_ONLY_CONFIG)
+    if ws is not None:
+        case.assertEqual(Path(env["OPENCODE_CONFIG"]).parent, Path(ws).parent,
+                         "beside the lane, never inside the worktree")
+
+
 class InlineModeIsByteIdentical(unittest.TestCase):
     """Inline is the A/B control: it must be exactly what run 8 sent."""
 
@@ -159,6 +182,7 @@ class InlineModeIsByteIdentical(unittest.TestCase):
 
         def run(prompt, **kw):
             seen["prompt"], seen["env"] = prompt, kw.get("env")
+            seen["config"] = config_body(kw.get("env"))
             return HYPOTHESIS
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -178,7 +202,7 @@ class InlineModeIsByteIdentical(unittest.TestCase):
                                                                              context_mode="inline")):
             seen = self._captured(seat)
             self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), CONTROL_SHA256)
-            self.assertIsNone(seen["env"], "plain inline adds no env and no arm suffix")
+            assert_snapshot_only(self, seen["env"], seen["config"])
             self.assertEqual(seen["bundle_dirs"], [])
 
     def test_the_template_still_wraps_the_recorded_run8_bundle_byte_for_byte(self):
@@ -359,6 +383,7 @@ class VariableModeThroughThePlanner(unittest.TestCase):
 
         def run(prompt, **kw):
             seen["prompt"], seen["env"] = prompt, kw.get("env")
+            seen["config"] = config_body(kw.get("env"))
             return HYPOTHESIS if role == "planner" else '{"paths": ["ggml/src/x.c"]}'
 
         tmp = tempfile.TemporaryDirectory()
@@ -389,7 +414,9 @@ class VariableModeThroughThePlanner(unittest.TestCase):
         self.assertIn(str(bundle), seen["prompt"])
         self.assertNotIn('"full_transfer_target"', seen["prompt"])
         self.assertTrue(seen["prompt"].endswith('{"abstain": "<specific reason>"}.'))
-        self.assertEqual(seen["env"], {actors.SEAT_ENV_ARM: "plain+ctx-variable"})
+        self.assertEqual(seen["env"][actors.SEAT_ENV_ARM], "plain+ctx-variable")
+        assert_snapshot_only(self, {k: v for k, v in seen["env"].items()
+                                    if k != actors.SEAT_ENV_ARM}, seen["config"], seen["ws"])
         manifest = json.loads((bundle / "manifest.json").read_text())
         self.assertEqual(manifest["prompt"]["sha256"],
                          hashlib.sha256(seen["prompt"].encode()).hexdigest())
@@ -411,7 +438,9 @@ class VariableModeThroughThePlanner(unittest.TestCase):
         with mock.patch.object(actor_context, "materialize", side_effect=OSError("disk full")):
             seen = self._run(actors.ActorSeat(bounded=False, context_mode="variable"))
         self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), CONTROL_SHA256)
-        self.assertIsNone(seen["env"], "an inline call is never recorded as the variable arm")
+        self.assertNotIn(actors.SEAT_ENV_ARM, seen["env"],
+                         "an inline call is never recorded as the variable arm")
+        assert_snapshot_only(self, seen["env"], seen["config"], seen["ws"])
 
 
 if __name__ == "__main__":

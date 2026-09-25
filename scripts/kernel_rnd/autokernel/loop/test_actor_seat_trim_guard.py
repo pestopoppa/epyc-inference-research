@@ -159,10 +159,17 @@ class TrimInstructions(_Tmp):
         self.assertEqual(Path(body["instructions"][0]).read_text().rstrip("\n"),
                          aoc.AUTHOR_STYLE_NOTE)
 
-    def test_every_knob_off_is_the_historical_call(self):
+    def test_every_knob_off_adds_only_the_snapshot_off_config(self):
+        """Operator 2026-09-25: the plain seat ALWAYS gets a per-call config, because
+        snapshot tracking bloats opencode.db whatever the knobs say."""
         for seat in (None, actors.ActorSeat(bounded=False)):
-            self.assertIsNone(actors._seat_call(seat, actors.backend_for("q/m", "high"),
-                                                "planner", self.lane, {}))
+            for role in aoc.PLAIN_ROLES:
+                env = actors._seat_call(seat, actors.backend_for("q/m", "high"),
+                                        role, self.lane, {})
+                fx.assert_snapshot_only(self, env, fx.config_body(env), self.lane)
+                self.assertEqual(Path(env["OPENCODE_CONFIG"]).name,
+                                 f"actor-opencode-plain-{role}.json")
+        self.assertFalse(list(self.lane.iterdir()))
         self.assertIsNone(actors._seat_call(actors.ActorSeat(bounded=False, **ALL_ON),
                                             actors.backend_for("gpt-5.6-sol", "high"),
                                             "planner", self.lane, {}),
@@ -330,7 +337,7 @@ class PromptAndCard(_Tmp):
     def test_knobs_off_is_the_control_prompt_byte_for_byte(self):
         seen = self._prompt(actors.ActorSeat(bounded=False))
         self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), fx.CONTROL_SHA256)
-        self.assertIsNone(seen["env"])
+        fx.assert_snapshot_only(self, seen["env"], fx.config_body(seen["env"]), self.lane)
 
     def test_trim_alone_changes_no_prompt_byte(self):
         seen = self._prompt(actors.ActorSeat(bounded=False, trim_instructions=True,
@@ -407,7 +414,7 @@ class CriticSeat(_Tmp):
                                   or '{"accepted": true}'):
             actors.AgentCritic(workspace=self.lane, backend=actors.backend_for("q/m", "high")
                                ).review_hypothesis(actors.Hypothesis("a", "s", "f", "a.c", "g"), {})
-        self.assertIsNone(seen["env"])
+        fx.assert_snapshot_only(self, seen["env"], fx.config_body(seen["env"]), self.lane)
 
 
 class Provenance(_Tmp):

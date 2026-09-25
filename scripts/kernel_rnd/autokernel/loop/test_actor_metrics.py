@@ -164,6 +164,168 @@ class Collect(unittest.TestCase):
             self.assertEqual(actor_metrics.list_session_ids(link), {"ses_resolved"})
 
 
+STORE_STDERR = (FIXTURES / "store_error_run9c_0759.stderr").read_text()
+
+
+def _cli(script):
+    """A `subprocess.run` stand-in for opencode's CLI: `script` is a list of
+    (returncode, stdout, stderr) consumed one per call. stderr is written to the
+    handle the caller passed (actor_metrics captures it to a FILE, never a pipe)."""
+    calls = []
+
+    def run(argv, **kw):
+        rc, out, err = script[len(calls)]
+        calls.append(list(argv))
+        if err and hasattr(kw.get("stderr"), "write"):
+            kw["stderr"].write(err)
+        handle = kw.get("stdout")
+        if out and hasattr(handle, "write"):
+            handle.write(out)
+            out = None
+        return subprocess.CompletedProcess(argv, rc, stdout=out, stderr=None)
+    return run, calls
+
+
+class SessionScopingByCreationTime(unittest.TestCase):
+    """DS41 run 9c, 2026-09-25 07:59:47Z: the author call died on a locked store, its
+    BEFORE listing had died the same way (empty set), and the AFTER listing returned
+    the planner's session from 07:21 -- so the failed call was credited 29 steps. A
+    call's sessions are the ones CREATED at or after the call started."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.workspace = Path(self._tmp.name) / "lane"
+        self.workspace.mkdir()
+        self.replies = Path(self._tmp.name) / "actor-replies"
+        self.start_ms = 1790323175000   # 2026-09-25T07:59:35Z, the author call
+        self.rows = [
+            {"id": "ses_planner", "directory": str(self.workspace), "created": 1790320875000},
+            {"id": "ses_author", "directory": str(self.workspace), "created": self.start_ms + 900},
+            {"id": "ses_no_created", "directory": str(self.workspace)},
+            {"id": "ses_other_lane", "directory": "/elsewhere", "created": self.start_ms + 5},
+        ]
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_only_sessions_created_at_or_after_the_start_are_listed(self):
+        run, _ = _cli([(0, json.dumps(self.rows), "")] * 2)
+        with mock.patch.object(actor_metrics.subprocess, "run", side_effect=run):
+            self.assertEqual(actor_metrics.list_session_ids(
+                self.workspace, created_since_ms=self.start_ms), {"ses_author"})
+            self.assertEqual(actor_metrics.list_session_ids(self.workspace),
+                             {"ses_planner", "ses_author", "ses_no_created"},
+                             "without a start time the historical filter is unchanged")
+
+    def test_an_exactly_simultaneous_creation_counts(self):
+        rows = [{"id": "ses_edge", "directory": str(self.workspace), "created": self.start_ms}]
+        run, _ = _cli([(0, json.dumps(rows), "")])
+        with mock.patch.object(actor_metrics.subprocess, "run", side_effect=run):
+            self.assertEqual(actor_metrics.list_session_ids(
+                self.workspace, created_since_ms=self.start_ms), {"ses_edge"})
+
+    def test_collect_never_credits_an_older_session_when_the_before_listing_failed(self):
+        """The run 9c shape: before_ids is EMPTY (that listing failed), the after
+        listing holds only the planner's session."""
+        rows = [self.rows[0]]
+        run, calls = _cli([(0, json.dumps(rows), "")])
+        with mock.patch.object(actor_metrics.subprocess, "run", side_effect=run), \
+             mock.patch.object(actor_metrics, "export_session",
+                               side_effect=AssertionError("nothing to export")):
+            result = actor_metrics.collect(self.workspace, set(), self.replies, stamp="s",
+                                           started_at=self.start_ms / 1000)
+        self.assertEqual(result["session_ids"], [])
+        self.assertIsNone(result["totals"])
+        self.assertIn("none created at or after", result["metrics_error"])
+        self.assertEqual(len(calls), 1)
+
+    def test_collect_exports_the_session_the_call_created(self):
+        run, _ = _cli([(0, json.dumps(self.rows), "")])
+
+        def fake_export(workspace, session_id, out_path, *, timeout_s=60.0):
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            out_path.write_bytes(PLAIN_EXPORT.read_bytes())
+
+        with mock.patch.object(actor_metrics.subprocess, "run", side_effect=run), \
+             mock.patch.object(actor_metrics, "export_session", side_effect=fake_export):
+            result = actor_metrics.collect(self.workspace, set(), self.replies, stamp="s",
+                                           started_at=self.start_ms / 1000)
+        self.assertIsNone(result["metrics_error"])
+        self.assertEqual(result["session_ids"], ["ses_author"])
+
+    def test_a_failed_after_listing_is_reported_as_such_not_as_no_session(self):
+        run, _ = _cli([(1, "", "Error: boom")])
+        with mock.patch.object(actor_metrics.subprocess, "run", side_effect=run):
+            result = actor_metrics.collect(self.workspace, set(), self.replies, stamp="s",
+                                           started_at=self.start_ms / 1000)
+        self.assertIn("session list failed", result["metrics_error"])
+        self.assertIn("boom", result["metrics_error"])
+
+
+class StoreBusyRetry(unittest.TestCase):
+    """The collector's own opencode processes hit the same locked store (run 9c): a
+    short, bounded busy-wait on a store error only."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.workspace = Path(self._tmp.name) / "lane"
+        self.workspace.mkdir()
+        self.slept = []
+        self._p = mock.patch.object(actor_metrics, "_sleep", side_effect=self.slept.append)
+        self._p.start()
+
+    def tearDown(self):
+        self._p.stop()
+        self._tmp.cleanup()
+
+    def test_the_real_run9c_stderr_is_a_store_error(self):
+        self.assertTrue(actor_metrics.is_store_error(1, STORE_STDERR))
+        self.assertFalse(actor_metrics.is_store_error(0, STORE_STDERR), "rc 0 is never one")
+        self.assertFalse(actor_metrics.is_store_error(1, "Error: model not found"))
+        for text in ("SQLITE_BUSY: database is locked", "database is locked"):
+            self.assertTrue(actor_metrics.is_store_error(1, text))
+
+    def test_session_list_retries_a_locked_store_then_succeeds(self):
+        rows = [{"id": "ses_a", "directory": str(self.workspace)}]
+        run, calls = _cli([(1, "", STORE_STDERR), (1, "", STORE_STDERR),
+                           (0, json.dumps(rows), "")])
+        with mock.patch.object(actor_metrics.subprocess, "run", side_effect=run):
+            self.assertEqual(actor_metrics.list_session_ids(self.workspace, strict=True),
+                             {"ses_a"})
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(self.slept, list(actor_metrics.STORE_RETRY_SLEEPS_S[:2]))
+
+    def test_session_list_gives_up_after_a_bounded_wait(self):
+        n = len(actor_metrics.STORE_RETRY_SLEEPS_S) + 1
+        run, calls = _cli([(1, "", STORE_STDERR)] * n)
+        with mock.patch.object(actor_metrics.subprocess, "run", side_effect=run):
+            with self.assertRaises(RuntimeError):
+                actor_metrics.list_session_ids(self.workspace, strict=True)
+            self.assertEqual(len(calls), n)
+        self.assertEqual(self.slept, list(actor_metrics.STORE_RETRY_SLEEPS_S))
+
+    def test_a_non_store_failure_is_not_retried(self):
+        run, calls = _cli([(1, "", "Error: unknown flag")])
+        with mock.patch.object(actor_metrics.subprocess, "run", side_effect=run):
+            self.assertEqual(actor_metrics.list_session_ids(self.workspace), set())
+        self.assertEqual((len(calls), self.slept), (1, []))
+
+    def test_export_retries_a_locked_store_and_keeps_only_the_good_attempt(self):
+        out = self.workspace.parent / "replies" / "x-export.json"
+        run, calls = _cli([(1, "partial", STORE_STDERR), (0, '{"messages": []}', "")])
+        with mock.patch.object(actor_metrics.subprocess, "run", side_effect=run):
+            actor_metrics.export_session(self.workspace, "ses_a", out)
+        self.assertEqual(out.read_text(), '{"messages": []}')
+        self.assertEqual(len(calls), 2)
+
+    def test_export_failure_still_raises(self):
+        out = self.workspace.parent / "replies" / "x-export.json"
+        run, _ = _cli([(2, "", "Error: session not found")])
+        with mock.patch.object(actor_metrics.subprocess, "run", side_effect=run):
+            with self.assertRaises(subprocess.CalledProcessError):
+                actor_metrics.export_session(self.workspace, "ses_a", out)
+
+
 class BundleAccess(unittest.TestCase):
     """Variable-mode context: which bundle files the actor's tools named."""
 

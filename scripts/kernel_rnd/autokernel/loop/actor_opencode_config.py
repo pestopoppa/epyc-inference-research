@@ -18,7 +18,8 @@ silently re-allow every globally denied verb. (OAB-10/11, opt-in: the trim and
 lane-guard knobs add a top-level ``permission`` block that holds only denies, plus
 ``external_directory`` allows that re-open just the anchor build dirs its own deny
 closed; see ``seat_permission``. The PLAIN seat gets the same block through
-``build_plain_config``.)
+``build_plain_config``.) Every config either builder returns also sets
+``snapshot: false`` (``SNAPSHOT_OFF``), knobs on or off, bounded or plain.
 
 Key names are verified against the opencode 1.18.31 binary's config schema
 (``ConfigV1.Info`` / ``AgentConfig`` / ``McpLocalConfig`` / ``PermissionConfig``):
@@ -36,6 +37,11 @@ Key names are verified against the opencode 1.18.31 binary's config schema
 * ``permission.task`` patterns match the ``subagent_type``; MCP tools are named
   ``<server>_<tool>`` with non ``[A-Za-z0-9_-]`` characters replaced by ``_``.
 * ``compaction.prune`` -- prune old tool outputs (default false).
+* ``snapshot`` -- top-level boolean, SINGULAR (``ConfigV1.Info``: "Enable or disable
+  snapshot tracking ... Defaults to true"; the v2 translation reads ``t.snapshot`` into
+  ``snapshots``, and ``Snapshot`` gates on ``config.snapshot !== false``). The docs'
+  plural spelling is the v2 INTERNAL name and is not a v1 config key. See
+  ``SNAPSHOT_OFF``.
 """
 from __future__ import annotations
 
@@ -67,6 +73,16 @@ MCP_TIMEOUT_MS = 120_000
 
 #: <repo>/scripts/kernel_rnd/autokernel/loop/this_file.py -> <repo>
 RESEARCH_ROOT = Path(__file__).resolve().parents[4]
+
+#: Every per-call config this module writes turns opencode's snapshot tracking off
+#: (operator-approved 2026-09-25). With it on, opencode `git write-tree`s the lane into
+#: `~/.local/share/opencode/snapshot/<project>/` on every step and stores per-step
+#: snapshot diffs in opencode.db -- the growth behind the 10.8 GB store that the
+#: reaper's 30-minute VACUUM keeps rewriting, and a VACUUM window is exactly what
+#: killed DS41 run 9c's author call (07:59:47Z, SQLITE_BUSY behind "Unexpected error").
+#: The actor never uses undo/revert: the loop owns the worktree and resets it itself.
+#: Independent of every OAB knob, so the knobs-off plain seat stops bloating too.
+SNAPSHOT_OFF = {"snapshot": False}
 
 
 def _tool(name: str) -> str:
@@ -205,6 +221,7 @@ def build_actor_config(*, role: str, lane: Path, profiles: Sequence[Path] = (),
                           lane_guard=lane_guard, keep_task=fan_out, edit_rule=False)
     return {
         "$schema": "https://opencode.ai/config.json",
+        **SNAPSHOT_OFF,
         **({"permission": top} if top else {}),
         "tool_output": {"max_lines": tool_output_max_lines,
                         "max_bytes": tool_output_max_bytes},
@@ -479,18 +496,17 @@ def seat_label(base: str, *, trim_instructions: bool = False, trim_tools: bool =
 def build_plain_config(*, role: str, lane: Path, build_dir: str | Path | None = None,
                        trim_instructions: bool = False, trim_tools: bool = False,
                        lane_guard: bool = False,
-                       author_note_path: Path | None = None) -> dict | None:
-    """The per-call `OPENCODE_CONFIG` for the PLAIN seat: a permission block (plus the
-    author's style note as an `instructions` file) and nothing else -- no agent, no MCP,
-    no tool_output cap, so the plain seat stays the plain seat. None when no knob needs
-    a config."""
+                       author_note_path: Path | None = None) -> dict:
+    """The per-call `OPENCODE_CONFIG` for the PLAIN seat: `snapshot: false`, a permission
+    block (plus the author's style note as an `instructions` file) and nothing else -- no
+    agent, no MCP, no tool_output cap, so the plain seat stays the plain seat. With every
+    knob off it is `{"$schema", "snapshot": false}` alone: the plain seat ALWAYS gets a
+    per-call config, because snapshot tracking is on by default and bloats the store."""
     permission = seat_permission(role, lane=lane, build_dir=build_dir,
                                  trim_instructions=trim_instructions,
                                  trim_tools=trim_tools, lane_guard=lane_guard)
     note = trim_instructions and role == "author" and author_note_path is not None
-    if not permission and not note:
-        return None
-    config: dict = {"$schema": "https://opencode.ai/config.json"}
+    config: dict = {"$schema": "https://opencode.ai/config.json", **SNAPSHOT_OFF}
     if permission:
         config["permission"] = permission
     if note:
@@ -498,15 +514,13 @@ def build_plain_config(*, role: str, lane: Path, build_dir: str | Path | None = 
     return config
 
 
-def write_plain_config(path: Path, **kw) -> Path | None:
-    """Build the plain-seat config and write it (and the author note) atomically; None,
-    and nothing written, when no knob needs a file."""
+def write_plain_config(path: Path, **kw) -> Path:
+    """Build the plain-seat config and write it (and the author note) atomically. Always
+    writes: even the knobs-off config carries `snapshot: false`."""
     path = Path(path)
     if kw.get("trim_instructions") and kw.get("role") == "author":
         kw.setdefault("author_note_path", path.with_name(path.stem + ".instructions.md"))
     config = build_plain_config(**kw)
-    if config is None:
-        return None
     path.parent.mkdir(parents=True, exist_ok=True)
     if "instructions" in config:
         _atomic_write(Path(config["instructions"][0]), AUTHOR_STYLE_NOTE + "\n")
@@ -516,6 +530,6 @@ def write_plain_config(path: Path, **kw) -> Path | None:
 
 __all__ = ["actor_instructions", "AGENT_NAMES", "AUTHOR_EDIT_GUARD", "AUTHOR_STYLE_NOTE",
            "BUILD_DENY", "MAX_CONCURRENT_SUBAGENTS", "MCP_SERVER", "PLAIN_ROLES",
-           "READ_ONLY_DENY", "SCOUT_AGENT", "TRIM_ENV", "UNUSED_TOOLS", "anchor_fence",
+           "READ_ONLY_DENY", "SCOUT_AGENT", "SNAPSHOT_OFF", "TRIM_ENV", "UNUSED_TOOLS", "anchor_fence",
            "build_actor_config", "build_plain_config", "seat_label", "seat_permission",
            "write_actor_config", "write_plain_config"]

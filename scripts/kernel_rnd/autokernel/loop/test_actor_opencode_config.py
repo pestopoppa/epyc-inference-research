@@ -169,6 +169,54 @@ class Write(unittest.TestCase):
             self.assertEqual(os.listdir(tmp), [], "no stray instructions file either")
 
 
+class SnapshotOff(unittest.TestCase):
+    """Operator 2026-09-25: every per-call config the loop writes sets the top-level,
+    SINGULAR `snapshot: false` (opencode 1.18.31 `ConfigV1.Info.snapshot`; `snapshots`
+    is only the v2 internal name). opencode's per-step lane snapshots are what bloat
+    opencode.db, and the reaper VACUUM that rewrites it killed DS41 run 9c's author."""
+
+    KNOB_SETS = [dict(trim_instructions=a, trim_tools=b, lane_guard=c)
+                 for a in (False, True) for b in (False, True) for c in (False, True)]
+
+    def test_every_bounded_config_turns_snapshots_off(self):
+        for role in aoc.AGENT_NAMES:
+            for knobs in self.KNOB_SETS:
+                for fan_out in (True, False):
+                    for replace in (True, False):
+                        cfg = aoc.build_actor_config(
+                            role=role, lane=LANE, fan_out=fan_out, replace_system_prompt=replace,
+                            instructions_path=None if replace else LANE.parent / "i.md", **knobs)
+                        self.assertIs(cfg["snapshot"], False, (role, knobs, fan_out, replace))
+                        self.assertNotIn("snapshots", cfg)
+
+    def test_every_plain_config_turns_snapshots_off_and_is_never_none(self):
+        for role in aoc.PLAIN_ROLES:
+            for knobs in self.KNOB_SETS:
+                cfg = aoc.build_plain_config(role=role, lane=LANE,
+                                             author_note_path=LANE.parent / "n.md", **knobs)
+                self.assertIsNotNone(cfg, (role, knobs))
+                self.assertIs(cfg["snapshot"], False, (role, knobs))
+                self.assertNotIn("snapshots", cfg)
+
+    def test_knobs_off_plain_config_is_snapshot_off_and_nothing_else(self):
+        for role in aoc.PLAIN_ROLES:
+            self.assertEqual(aoc.build_plain_config(role=role, lane=LANE),
+                             {"$schema": "https://opencode.ai/config.json", "snapshot": False})
+
+    def test_write_plain_config_always_writes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for role in aoc.PLAIN_ROLES:
+                path = aoc.write_plain_config(Path(tmp) / f"plain-{role}.json", role=role,
+                                              lane=Path(tmp) / "lane")
+                self.assertIsNotNone(path)
+                self.assertIs(json.loads(path.read_text())["snapshot"], False)
+
+    def test_write_actor_config_writes_snapshot_off(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = aoc.write_actor_config(Path(tmp) / "c.json", role="author", lane=LANE)
+            self.assertIs(json.loads(path.read_text())["snapshot"], False)
+
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -56,6 +56,11 @@ OPENCODE = "/usr/local/share/npm-global/bin/opencode"
 DEFAULT_TIMEOUT_S = 1800
 #: 30s -> 1800s. The streak is what the operator needs to see, not each retry.
 BACKOFF_S = (30, 120, 480, 1800)
+#: Backoff for `OpencodeStoreError` (opencode's SQLite store refused a write), with its
+#: own bounded budget (len + 1 attempts) so an infra lock never spends the provider's
+#: attempts. The lock seen so far is the reaper's VACUUM of the 10.8 GB store: 34-48 s,
+#: plus a quick_check, so the first retry already lands after it.
+STORE_ERROR_BACKOFF_S = (30, 60, 120, 240)
 #: How often an in-flight actor call polls the loop's stop predicate, and how long a
 #: TERM'd actor's process group gets before KILL. The stop predicate reads a STOP file
 #: as well as the signal flag, so the poll is deliberately not tighter than a second.
@@ -204,7 +209,8 @@ class ActorSeat:
     #: OAB-11: the prompt names the lane as THE source tree and the build dir as the
     #: anchor BINARY; opencode permission denies builds/compiles/benchmarks, reads of
     #: the anchor SOURCE, all writes for planner/critic and out-of-lane edits for the
-    #: author. All three are off here (the historical seat, byte for byte); run.py turns
+    #: author. All three are off here (the historical prompt, byte for byte; the call
+    #: still carries the snapshot-off per-call config, see `_seat_call`); run.py turns
     #: them on by default.
     lane_guard: bool = False
 
@@ -233,6 +239,28 @@ class ProviderTransient(ActorTransient):
     Subclasses the loop's own transient type so `iterate` ends the ITERATION rather
     than the run, without this module and the loop importing each other.
     """
+
+
+class OpencodeStoreError(ProviderTransient):
+    """opencode died on its own SQLite store, not on the model: rc != 0, EMPTY stdout,
+    and stderr carrying the store's failure wrapper (`actor_metrics.STORE_ERROR_RE`).
+
+    DS41 run 9c, 2026-09-25 07:59:47Z: the author call exited 1 after ~12 s with
+    "Unexpected error / Failed query: insert into "project" ... on conflict ..." --
+    the reaper had started a VACUUM at 07:59:17 (34 s, exclusive write lock) because
+    no opencode process was alive during the codex critic call, and opencode's first
+    write (its project-row upsert) outlasted its 5 s busy_timeout. No model turn ran.
+    Never salvaged: a store error's stderr quotes the failed statement's PARAMS, and a
+    `part` insert's params are model output (a JSON object that can look like a reply).
+    Retried on `STORE_ERROR_BACKOFF_S`, bounded, and recorded as `failure_class`."""
+
+    failure_class = actor_metrics.OPENCODE_STORE_ERROR
+
+
+def _is_store_error(backend: "Backend", returncode: int, stdout: str | None,
+                    stderr: str | None) -> bool:
+    return (backend.kind == "opencode" and not (stdout or "").strip()
+            and actor_metrics.is_store_error(returncode, stderr))
 
 
 class _StoppedChild(Exception):
@@ -327,6 +355,7 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
     argv = backend.argv(prompt, workspace, read_only=read_only)
     payload = backend.stdin_payload(prompt)
     started = time.monotonic()
+    started_at = time.time()
     extra: dict[str, Any] = {}
     if payload is not None:
         extra["input"] = payload
@@ -346,6 +375,11 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
             before_session_ids = actor_metrics.list_session_ids(workspace)
         except Exception:  # noqa: BLE001 -- metrics are evidence, never a call failure
             before_session_ids = set()
+        # The CALL starts here, after the listing: a session counts as this call's
+        # only if opencode created it at or after this instant (`collect`), so a
+        # before-listing that failed (locked store) cannot hand the call an older
+        # session that merely sits in the same lane directory.
+        started_at = time.time()
     # Capture to FILES, not pipes. The reply is the LAST thing the CLI prints, and
     # opencode (Bun) exits without draining a pipe: `opencode export` read through a
     # pipe stopped at exactly 98,304 bytes (DS41 seat A/B, 2026-09-24) while the same
@@ -368,7 +402,7 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
                             returncode=stop.returncode, wall_s=time.monotonic() - started,
                             timed_out=False, before_ids=before_session_ids, arm=arm, env=env,
                             collect_metrics=collect_metrics, schema=schema,
-                            final_text=None, salvaged=False)
+                            final_text=None, salvaged=False, started_at=started_at)
             _record_call(workspace, backend, prompt, returncode=stop.returncode,
                          wall_s=time.monotonic() - started, env=env, schema=schema,
                          reply=reply)
@@ -387,7 +421,7 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
             _record_metrics(workspace, backend, role=_safe_role(schema), returncode=-1,
                             wall_s=time.monotonic() - started, timed_out=True,
                             before_ids=before_session_ids, arm=arm, env=env, collect_metrics=collect_metrics,
-                            schema=schema, final_text=None, salvaged=False)
+                            schema=schema, final_text=None, salvaged=False, started_at=started_at)
             _record_call(workspace, backend, prompt, returncode=-1,
                          wall_s=time.monotonic() - started, env=env, schema=schema,
                          reply=reply, timed_out=True)
@@ -406,8 +440,9 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
     # otherwise read as a rejection. Only a process that EXITED (rc > 0): a signal
     # death (rc < 0) never finished, and its stdout can hold a compaction summary
     # quoting our own template (bounded-seat A/B, 2026-09-24: `{"abstain":"<reason>"}`).
+    store_error = _is_store_error(backend, done.returncode, done.stdout, done.stderr)
     salvage_text = None
-    if done.returncode > 0 and schema is not None:
+    if done.returncode > 0 and schema is not None and not store_error:
         for text in (done.stdout, done.stdout + "\n" + done.stderr):
             if _has_answer(text, schema):
                 salvage_text = text
@@ -437,11 +472,18 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
     _record_metrics(workspace, backend, role=_safe_role(schema), returncode=done.returncode,
                     wall_s=time.monotonic() - started, timed_out=False,
                     before_ids=before_session_ids, arm=arm, env=env, collect_metrics=collect_metrics,
-                    schema=schema, final_text=final_text, salvaged=salvage_text is not None)
+                    schema=schema, final_text=final_text, salvaged=salvage_text is not None,
+                    started_at=started_at,
+                    failure_class=OpencodeStoreError.failure_class if store_error else None)
     _record_call(workspace, backend, prompt, returncode=done.returncode,
                  wall_s=time.monotonic() - started, env=env, schema=schema, reply=reply)
     if salvage_text is not None:
         return salvage_text
+    if store_error:
+        raise OpencodeStoreError(
+            f"{OpencodeStoreError.failure_class}: opencode's SQLite store refused a write "
+            f"(rc {done.returncode}, empty stdout, no model reply) [{backend.describe()}]: "
+            f"stderr={done.stderr[:300]!r}")
     if done.returncode != 0:
         # Both tails. `claude -p` reports its own errors ("Not logged in", usage
         # limits, refusals) on STDOUT with a non-zero exit and an EMPTY stderr --
@@ -534,7 +576,9 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
                     before_ids: set[str], collect_metrics: bool,
                     schema: Mapping[str, Any] | None, final_text: str | None,
                     salvaged: bool, arm: str | None = None,
-                    env: Mapping[str, str] | None = None) -> None:
+                    env: Mapping[str, str] | None = None,
+                    started_at: float | None = None,
+                    failure_class: str | None = None) -> None:
     """A sibling line in `actor-calls.jsonl`, ahead of the `_record_call` line so a
     reader taking "the last line" for the v1 record (as the existing tests and any
     VB-AK-SEAT consumer do) is unaffected by this addition: the per-call
@@ -562,7 +606,8 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
             target = Path(workspace).parent / ACTOR_REPLY_DIR
             target.mkdir(parents=True, exist_ok=True)
             stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime(finished))
-            opencode_stats = actor_metrics.collect(Path(workspace), before_ids, target, stamp=stamp)
+            opencode_stats = actor_metrics.collect(Path(workspace), before_ids, target,
+                                                   stamp=stamp, started_at=started_at)
         record = {
             "schema": actor_metrics.METRICS_SCHEMA,
             "role": role,
@@ -577,6 +622,9 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
             "returncode": returncode,
             "timed_out": timed_out,
             "salvaged": salvaged,
+            # None, or `opencode_store_error` (OpencodeStoreError): the call died on
+            # opencode's own db, not the model -- an infra fault, never a reply.
+            "failure_class": failure_class,
             "schema_valid": schema_valid,
             "repair_ran": repair_ran,
             "opencode": opencode_stats,
@@ -586,6 +634,7 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
     except Exception as exc:   # noqa: BLE001 -- evidence, never a reason to fail the call
         record = {"schema": actor_metrics.METRICS_SCHEMA, "role": role, "seat_arm": arm,
                   "backend_kind": backend.kind, "backend_model": backend.model,
+                  "failure_class": failure_class,
                   "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                   "metrics_error": f"{type(exc).__name__}: {exc}"[:500]}
     try:
@@ -999,8 +1048,26 @@ def _schema_repair(raw: str, *, schema: Mapping[str, Any], backend: Backend,
     return repaired if isinstance(repaired, dict) else None
 
 
+#: An ACCEPTING review needs no reason: `_REVIEW_TASK` asks for
+#: `"reason": "<required when accepted is false>"`, so `{"accepted": true}` is a
+#: compliant answer. REVIEW_SCHEMA itself keeps `reason` required (it is the repair
+#: turn's wire grammar, and a rejection must say why); this is the schema a reply is
+#: JUDGED against when it accepts without one. DS41 run 9c 07:59:35Z: codex replied
+#: exactly `{"accepted":true}` and the metrics row recorded schema_valid=false (an
+#: opencode critic would also have been sent a pointless repair turn).
+_REVIEW_ACCEPT_SCHEMA = {**REVIEW_SCHEMA, "required": ["accepted"]}
+
+
+def _reply_schema(body: Any, schema: Mapping[str, Any] | None) -> Mapping[str, Any] | None:
+    """The schema a parsed reply is judged against (see `_REVIEW_ACCEPT_SCHEMA`)."""
+    if (schema is REVIEW_SCHEMA and isinstance(body, Mapping)
+            and body.get("accepted") is True and "reason" not in body):
+        return _REVIEW_ACCEPT_SCHEMA
+    return schema
+
+
 def _complete(body: Mapping[str, Any], schema: Mapping[str, Any]) -> bool:
-    return set(schema.get("required", ())) <= set(body)
+    return set(_reply_schema(body, schema).get("required", ())) <= set(body)
 
 
 try:
@@ -1190,7 +1257,8 @@ def _precheck_reply(raw: str, schema: Mapping[str, Any] | None) -> _ReplyPrechec
     # TD-21.30(b): full-schema validation, not just required-key presence -- a
     # fished value with the right keys and the WRONG TYPES (e.g. `{"accepted":
     # "true"}` for REVIEW_SCHEMA) must not short-circuit repair.
-    valid = body is not None and ("abstain" in body or _schema_valid(body, schema))
+    valid = body is not None and ("abstain" in body
+                                  or _schema_valid(body, _reply_schema(body, schema)))
     empty = body is None and len(raw.strip()) < REPAIR_MIN_REPORT_CHARS
     return _ReplyPrecheck(body=body, echoed=echoed, schema_valid=valid, empty=empty)
 
@@ -1276,37 +1344,51 @@ def _has_answer(text: str, schema: Mapping[str, Any] | None) -> bool:
 
 def _with_backoff(call, *, attempts: int = len(BACKOFF_S),
                   sleep=time.sleep,
-                  should_stop: Callable[[], bool] | None = None) -> tuple[Any, int]:
+                  should_stop: Callable[[], bool] | None = None,
+                  store_attempts: int = len(STORE_ERROR_BACKOFF_S) + 1) -> tuple[Any, int]:
     """Retry a provider call, backing off. Returns (result, transient_streak).
+
+    Two bounded budgets: a `ProviderTransient` spends `attempts` on `BACKOFF_S`; an
+    `OpencodeStoreError` (opencode's db, not the provider) spends `store_attempts` on
+    `STORE_ERROR_BACKOFF_S`. Both count in the streak.
 
     With `should_stop`, no attempt is drawn and no backoff is slept once a stop is
     asked: the backoff sleeps in `STOP_POLL_S` slices and raises `ActorStopped`. An
     `ActorStopped` from the call itself is never retried (it is not a
     `ProviderTransient`, so it propagates untouched)."""
     stop = should_stop or (lambda: False)
-    streak = 0
+    streak = provider_failures = store_failures = 0
     last: Exception | None = None
-    for index in range(attempts):
+    while True:
         if stop():
-            raise ActorStopped(f"stop asked before actor attempt {index + 1}"
+            raise ActorStopped(f"stop asked before actor attempt {streak + 1}"
                                + (f"; last transient: {last}" if last else ""))
         try:
             return call(), streak
         except ProviderTransient as exc:
             last = exc
             streak += 1
-            if index < attempts - 1:
-                pause = BACKOFF_S[min(index, len(BACKOFF_S) - 1)]
-                if should_stop is None:
-                    sleep(pause)
-                    continue
-                while pause > 0:
-                    if stop():
-                        raise ActorStopped(
-                            f"stop asked during the backoff after: {exc}") from exc
-                    step = min(STOP_POLL_S, pause)
-                    sleep(step)
-                    pause -= step
+            if isinstance(exc, OpencodeStoreError):
+                store_failures += 1
+                if store_failures >= store_attempts:
+                    break
+                schedule, index = STORE_ERROR_BACKOFF_S, store_failures - 1
+            else:
+                provider_failures += 1
+                if provider_failures >= attempts:
+                    break
+                schedule, index = BACKOFF_S, provider_failures - 1
+            pause = schedule[min(index, len(schedule) - 1)]
+            if should_stop is None:
+                sleep(pause)
+                continue
+            while pause > 0:
+                if stop():
+                    raise ActorStopped(
+                        f"stop asked during the backoff after: {exc}") from exc
+                step = min(STOP_POLL_S, pause)
+                sleep(step)
+                pause -= step
     raise ProviderTransient(
         f"actor failed {streak} consecutive times; last: {last}") from last
 
@@ -1971,21 +2053,36 @@ def _lane_block(role: str, workspace: Path, context: Mapping[str, Any]) -> str:
 
 def _seat_call(seat: "ActorSeat | None", backend: Backend, role: str, workspace: Path,
                context: Mapping[str, Any]) -> dict[str, str] | None:
-    """Env for a PLAIN-seat opencode call under the OAB-10/11 knobs: the trim switches
-    plus a permission-only `OPENCODE_CONFIG` beside the lane, and the arm label. None
-    (the historical call, byte for byte) when every knob is off or the backend is not
-    opencode."""
-    if seat is None or backend.kind != "opencode" or not any(seat.knobs.values()):
+    """Env for a PLAIN-seat opencode call: ALWAYS a per-call `OPENCODE_CONFIG` beside the
+    lane carrying `snapshot: false` (operator 2026-09-25: snapshot tracking is what
+    bloats opencode.db), plus, under the OAB-10/11 knobs, the permission block, the trim
+    switches and the arm label. With every knob off the prompt and the arm label are the
+    historical call's; only the snapshot-off config is added. None only for a
+    non-opencode backend (codex/claude are never touched)."""
+    if backend.kind != "opencode":
         return None
     from . import actor_opencode_config as seat_config
-    env: dict[str, str] = {SEAT_ENV_ARM: seat_config.seat_label("plain", **seat.knobs)}
-    if seat.trim_instructions:
+    knobs = seat.knobs if seat is not None else {}
+    env: dict[str, str] = {}
+    if any(knobs.values()):
+        env[SEAT_ENV_ARM] = seat_config.seat_label("plain", **knobs)
+    if knobs.get("trim_instructions"):
         env.update(seat_config.TRIM_ENV)
-    path = seat_config.write_plain_config(
-        Path(workspace).parent / f"actor-opencode-plain-{role}.json", role=role,
-        lane=Path(workspace), build_dir=_anchor_build_dir(context), **seat.knobs)
-    if path is not None:
-        env.update({"OPENCODE_CONFIG": str(path), SEAT_ENV_PLAIN_CONFIG: "1"})
+    target = Path(workspace).parent / f"actor-opencode-plain-{role}.json"
+    try:
+        path = seat_config.write_plain_config(
+            target, role=role, lane=Path(workspace), build_dir=_anchor_build_dir(context),
+            **knobs)
+    except OSError as exc:
+        if any(knobs.values()):
+            raise   # a knob's fence must never silently drop
+        # Knobs off: the config only turns snapshots off. Unwritable, the call runs as
+        # it always did rather than failing an actor call over store hygiene.
+        import sys
+        print(f"actor seat: snapshot-off config not written ({type(exc).__name__}: {exc}); "
+              "this call runs with opencode's default snapshot tracking", file=sys.stderr)
+        return env or None
+    env.update({"OPENCODE_CONFIG": str(path), SEAT_ENV_PLAIN_CONFIG: "1"})
     return env
 
 
@@ -2009,9 +2106,9 @@ class AgentPlanner:
     def _seated(self, role: str, context: Mapping[str, Any]) -> tuple[Backend, dict[str, str] | None]:
         """The backend and extra env for one call: a per-run opencode config when the
         seat is bounded and the backend is opencode, else the plain backend."""
-        if self.seat is None or self.backend.kind != "opencode":
+        if self.backend.kind != "opencode":
             return self.backend, None
-        if not self.seat.bounded:
+        if self.seat is None or not self.seat.bounded:
             return self.backend, _seat_call(self.seat, self.backend, role,
                                             Path(self.workspace), context)
         from . import actor_opencode_config as seat_config
@@ -2304,5 +2401,6 @@ class AgentCritic:
 
 
 __all__ = ["BACKOFF_S", "Backend", "CLAUDE", "CODEX", "CRITIC_DEFAULT", "OPENCODE",
-           "PLANNER_DEFAULT", "AgentCritic", "AgentPlanner", "ProviderTransient",
+           "PLANNER_DEFAULT", "STORE_ERROR_BACKOFF_S", "AgentCritic", "AgentPlanner",
+           "OpencodeStoreError", "ProviderTransient",
            "backend_for", "render_context"]
