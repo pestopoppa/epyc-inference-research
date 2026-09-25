@@ -94,3 +94,7 @@ These stay on local disk and are **not committed**, because of size:
   their manifests and indexes are committed above);
 - `/mnt/raid0/llm/tmp/ak-ctx-ab/dryrun/`;
 - `lane`, a symlink to `/mnt/raid0/llm/tmp/ak-seat-ab/lane`.
+
+**Committed INDEX.md copies are not byte-exact.** The PII pre-commit hook replaced 7 perf sample-period cells per
+file with `[period redacted]` (the known false positive, root TOC-RD-1b). The originals are byte-exact under
+`/mnt/raid0/llm/tmp/ak-ctx-ab/actor-context/<call>/`. The committed `manifest.json` files are byte-identical.
