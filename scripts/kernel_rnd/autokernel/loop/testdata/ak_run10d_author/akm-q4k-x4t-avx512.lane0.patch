@@ -1,0 +1,119 @@
+diff --git a/ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp b/ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp
+index 7ba76e617..79025d84b 100644
+--- a/ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp
++++ b/ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp
+@@ -769,7 +769,23 @@ struct DequantizerQ4K_AVX2 final : public BaseDequantizer<block_q4_K> {
+     inline void prepare(int i, int j) {
+         bits.prepare(x[i].qs, j);
+     }
++#ifdef HAVE_FANCY_SIMD
++    inline void prepare(int i, int j, __m512i * values512) {
++        auto q4 = _mm512_loadu_si512((const __m512i *)x[i].qs + 2*j);
++        auto lo = _mm512_and_si512(q4, ml512);
++        auto hi = _mm512_and_si512(_mm512_srli_epi16(q4, 4), ml512);
++        auto l0 = _mm256_castsi512_si256(lo);
++        auto l1 = _mm256_castsi512_si256(hi);
++        values512[0] = _mm512_inserti128(_mm512_castsi256_si512(l0), _mm256_extracti128_si256(l0, 1), 1);
++        values512[1] = _mm512_inserti128(_mm512_castsi256_si512(l1), _mm256_extracti128_si256(l1, 1), 1);
++        values512[2] = _mm512_inserti128(_mm512_castsi256_si512(l0), _mm256_extracti128_si256(l0, 1), 1);
++        values512[3] = _mm512_inserti128(_mm512_castsi256_si512(l1), _mm256_extracti128_si256(l1, 1), 1);
++    }
++#endif
+     Q4Bits_AVX2 bits;
++#ifdef HAVE_FANCY_SIMD
++    const __m512i ml512 = _mm512_set1_epi8(0xf);
++#endif
+ };
+ 
+ struct DequantizerQ5K_AVX2 final : public BaseDequantizer<block_q5_K> {
+@@ -779,6 +795,31 @@ struct DequantizerQ5K_AVX2 final : public BaseDequantizer<block_q5_K> {
+         hbits = j == 0 ? _mm256_loadu_si256((const __m256i *)x[i].qh) : _mm256_srli_epi16(hbits, 4);
+         apply_hbits();
+     }
++#ifdef HAVE_FANCY_SIMD
++    inline void prepare(int i, int j, __m512i * values512) {
++        auto q4 = _mm512_loadu_si512((const __m512i *)x[i].qs + 2*j);
++        auto lo = _mm512_and_si512(q4, ml512);
++        auto hi = _mm512_and_si512(_mm512_srli_epi16(q4, 4), ml512);
++        auto qh = j == 0 ? _mm512_loadu_si512((const __m512i *)x[i].qh) : hbits512;
++        hbits512 = qh;
++        auto s0 = _mm512_and_si512(_mm512_slli_epi16(qh, 4), mh512);
++        auto s1 = _mm512_and_si512(_mm512_slli_epi16(qh, 3), mh512);
++        auto s2 = _mm512_and_si512(_mm512_slli_epi16(qh, 2), mh512);
++        auto s3 = _mm512_and_si512(_mm512_slli_epi16(qh, 1), mh512);
++        auto v0 = _mm512_or_si512(lo, s0);
++        auto v1 = _mm512_or_si512(hi, s1);
++        auto v2 = _mm512_or_si512(lo, s2);
++        auto v3 = _mm512_or_si512(hi, s3);
++        auto v0l = _mm256_castsi512_si256(v0);
++        auto v1l = _mm256_castsi512_si256(v1);
++        auto v2l = _mm256_castsi512_si256(v2);
++        auto v3l = _mm256_castsi512_si256(v3);
++        values512[0] = _mm512_inserti128(_mm512_castsi256_si512(v0l), _mm256_extracti128_si256(v0l, 1), 1);
++        values512[1] = _mm512_inserti128(_mm512_castsi256_si512(v1l), _mm256_extracti128_si256(v1l, 1), 1);
++        values512[2] = _mm512_inserti128(_mm512_castsi256_si512(v2l), _mm256_extracti128_si256(v2l, 1), 1);
++        values512[3] = _mm512_inserti128(_mm512_castsi256_si512(v3l), _mm256_extracti128_si256(v3l, 1), 1);
++    }
++#endif
+     inline void apply_hbits() {
+         bits.values[0] = _mm256_or_si256(bits.values[0], _mm256_and_si256(_mm256_slli_epi16(hbits, 4), mh));
+         bits.values[1] = _mm256_or_si256(bits.values[1], _mm256_and_si256(_mm256_slli_epi16(hbits, 3), mh));
+@@ -787,6 +828,11 @@ struct DequantizerQ5K_AVX2 final : public BaseDequantizer<block_q5_K> {
+     }
+ 
+     const __m256i mh = _mm256_set1_epi8(0x10);
++#ifdef HAVE_FANCY_SIMD
++    const __m512i mh512 = _mm512_set1_epi8(0x10);
++    const __m512i ml512 = _mm512_set1_epi8(0xf);
++    __m512i hbits512;
++#endif
+     Q4Bits_AVX2 bits;
+     __m256i hbits;
+ };
+@@ -835,6 +881,38 @@ static void mul_mat_qX_K_q8_2_X4_T(int n, const void * vx, size_t bx, const Data
+             auto scales_h = _mm256_extractf128_ps(all_scales, 1);
+             scales[1] = _mm256_set_m128(scales_h, scales_h);
+ 
++#if defined(HAVE_FANCY_SIMD) && defined(__AVX512VBMI2__)
++            const uint8_t * u8 = (const uint8_t *)utmp;
++            auto vd512 = _mm512_set1_ps(deq.d);
++            auto vm512 = _mm512_set1_ps(-GGML_FP16_TO_FP32(deq.x[i].dmin));
++            for (int j = 0; j < QK_K/256; ++j) {
++
++                __m512i values512[4];
++                deq.prepare(i, 2*j, values512);
++                auto sc_l = _mm512_mul_ps(vd512, _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(_mm512_loadu_si128((const __m128i *)(u8 + 8*j)))));
++                auto sc_h = _mm512_mul_ps(vm512, _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(_mm512_loadu_si128((const __m128i *)(u8 + 8*j + 8)))));
++
++                for (int iy = 0; iy < nrc_y; ++iy) {
++                    const block_q8_2_x4& y = q8.y[iy][2*i+2*j];
++                    auto a = _mm512_loadu_si512((const __m512i*)y.qs);
++                    auto b = _mm512_loadu_si512((const __m512i*)y.qs + 1);
++                    auto sumi1 = _mm512_dpbusd_epi32(_mm512_setzero_si512(), values512[0], a);
++                    auto sumi2 = _mm512_dpbusd_epi32(_mm512_setzero_si512(), values512[1], b);
++                    auto sumi3 = _mm512_dpbusd_epi32(_mm512_setzero_si512(), values512[2], _mm512_add_epi8(a, _mm512_set1_epi8(32)));
++                    auto sumi4 = _mm512_dpbusd_epi32(_mm512_setzero_si512(), values512[3], _mm512_add_epi8(b, _mm512_set1_epi8(32)));
++                    auto sumi = _mm512_add_epi32(_mm512_add_epi32(sumi1, sumi2), _mm512_add_epi32(sumi3, sumi4));
++                    auto s1 = _mm512_cvtps_ps(sumi);
++                    auto s_lo = _mm256_castps512_ps256(s1);
++                    auto s_hi = _mm256_extractf128_ps(s1, 1);
++                    auto dy8 = _mm256_loadu_ps(d8 + 8*iy + 8*j);
++                    auto d_lo = _mm256_mul_ps(_mm256_castps512_ps256(sc_l), _mm256_set1_ps(dy8[0]));
++                    auto d_hi = _mm256_mul_ps(_mm256_extractf128_ps(sc_h, 1), _mm256_set1_ps(dy8[1]));
++                    accd[iy] = _mm256_fmadd_ps(d_lo, s_lo, accd[iy]);
++                    accd[iy] = _mm256_fmadd_ps(d_hi, s_hi, accd[iy]);
++                }
++
++            }
++#else
+             for (int j = 0; j < QK_K/128; ++j) {
+ 
+                 deq.prepare(i, j);
+@@ -865,6 +943,7 @@ static void mul_mat_qX_K_q8_2_X4_T(int n, const void * vx, size_t bx, const Data
+                 }
+ 
+             }
++#endif
+ 
+         }
+ 

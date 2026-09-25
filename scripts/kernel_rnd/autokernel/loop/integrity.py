@@ -139,11 +139,78 @@ class LaneDiffRefused(RuntimeError):
     """The lane holds changes, but they cannot stand in for the author's report."""
 
 
+#: Report files an author may write at the LANE ROOT instead of printing its reply
+#: (DS41 run 10d: `reply.json`). Untracked ones are the author's report artifact, never
+#: part of the candidate: `take_report_artifacts` reads and deletes them right after the
+#: author call, and `lane_diff_report` ignores them.
+REPORT_ARTIFACT_NAMES = ("reply.json", "report.json")
+REPORT_ARTIFACT_SUFFIX = ".reply.json"
+
+
+def is_report_artifact(path: str) -> bool:
+    """A lane-root `reply.json` / `report.json` / `*.reply.json` (no directory part)."""
+    posix = PurePosixPath(path)
+    if len(posix.parts) != 1:
+        return False
+    name = posix.name
+    return name in REPORT_ARTIFACT_NAMES or (
+        name.endswith(REPORT_ARTIFACT_SUFFIX) and name != REPORT_ARTIFACT_SUFFIX)
+
+
+def _untracked(worktree: Path) -> set[str]:
+    return {_normal_path(raw.decode("utf-8", "surrogateescape")) for raw in
+            _git(worktree, "ls-files", "--others", "--exclude-standard", "-z").split(b"\0")
+            if raw}
+
+
+def take_report_artifacts(worktree: Path) -> list[tuple[str, str]]:
+    """Read and DELETE every untracked lane-root report artifact; `[(name, text)]`.
+
+    Deleted whatever their content, so none reaches `validate_candidate`, the build or
+    the keep commit. A tracked file of that name is never touched (it is not the
+    author's artifact; it is a change the gates judge)."""
+    taken: list[tuple[str, str]] = []
+    for name in sorted(path for path in _untracked(worktree) if is_report_artifact(path)):
+        target = Path(worktree) / name
+        try:
+            text = target.read_bytes()[:1024 * 1024].decode("utf-8", "replace")
+        except OSError:
+            text = ""
+        try:
+            target.unlink()
+        except FileNotFoundError:
+            pass
+        taken.append((name, text))
+    return taken
+
+
+#: Characters that may follow a real path when an author appends prose to it
+#: (`<path>: <text>`, `<path> - <text>`, `<path> (…)`, `<path>, …`).
+_PROSE_BOUNDARY = frozenset(" \t\r\n:;,-(\u2013\u2014")
+
+
+def normalize_reported_path(raw: str, changed: Iterable[str]) -> str | None:
+    """The changed file an author's path entry names, when the entry is not exactly it.
+
+    DS41 run 10d: `"ggml/src/.../iqk_gemm_kquants.cpp: Added an AVX-512 ..."`. Returns
+    the LONGEST path in `changed` that the stripped entry equals, or that it starts with
+    followed by a prose boundary (whitespace, `:`, `-`, `(`, ...). None otherwise: this
+    never invents a path, it only picks one the lane diff already names."""
+    text = str(raw).strip().strip("`'\"").strip()
+    if text.startswith("./"):
+        text = text[2:]
+    for path in sorted(set(changed), key=len, reverse=True):
+        if text == path or (text.startswith(path) and text[len(path)] in _PROSE_BOUNDARY):
+            return path
+    return None
+
+
 def lane_diff_report(worktree: Path, base: str, *, target_surface: str,
                      before_tree: str | None = None) -> tuple[str, ...] | None:
     """The author's `{"paths": [...]}` report, DERIVED from the lane, or None.
 
-    For an author call whose reply is empty or unparsable (`AuthorReplyMissing`): the
+    For an author call whose reply is empty or unparsable, or names paths the lane did
+    not change (`AuthorReplyMissing`): the
     report is only the list of files it changed, and the lane says that factually --
     `git diff --name-only <base>` plus the untracked files it created. `base` is the
     commit the loop reset THIS lane to for THIS draw; nothing else qualifies.
@@ -164,9 +231,8 @@ def lane_diff_report(worktree: Path, base: str, *, target_surface: str,
         raise LaneDiffRefused(f"lane HEAD {head[:12]} is not the reset base {base[:12]}")
     tracked = {_normal_path(raw.decode("utf-8", "surrogateescape")) for raw in
                _git(worktree, "diff", "--name-only", "-z", base, "--").split(b"\0") if raw}
-    untracked = {_normal_path(raw.decode("utf-8", "surrogateescape")) for raw in
-                 _git(worktree, "ls-files", "--others", "--exclude-standard", "-z").split(b"\0")
-                 if raw}
+    # The author's report artifact (`reply.json`, ...) is not a change: ignored here.
+    untracked = {path for path in _untracked(worktree) if not is_report_artifact(path)}
     paths = tuple(sorted(tracked | untracked))
     if not paths:
         return None

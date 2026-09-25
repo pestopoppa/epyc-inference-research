@@ -345,6 +345,72 @@ class AuthorReplyMissing(ProviderTransient, AuthorReportMissing):
         self.failure_class = failure_class
 
 
+#: `report_source` of an author report read from its stdout reply (the normal case)
+#: and from a lane-root report file it wrote instead (`integrity.take_report_artifacts`).
+REPORT_SOURCE_REPLY = "reply"
+REPORT_SOURCE_REPLY_FILE = "reply_file"
+
+#: One line of the author prompt's output contract (DS41 run 10d: prose inside the path
+#: string, and the report written to `reply.json` with prose on stdout).
+AUTHOR_REPLY_RULE = ("Print that JSON object as your reply on stdout; do not write it (or "
+                     "any report) to a file. Each paths entry is exactly one repo-relative "
+                     "file path, with no description, comment or line numbers.")
+
+
+class AuthorPaths(tuple):
+    """The author's changed paths (a plain tuple to every caller) plus `report`: where
+    they came from (`report_source`), whether an entry was normalized from
+    `<path>: <prose>` (`path_normalized`), and the entries as reported."""
+
+    report: dict
+
+    def __new__(cls, paths, *, report: Mapping[str, Any] | None = None):
+        made = super().__new__(cls, tuple(paths))
+        made.report = dict(report or {})
+        return made
+
+
+def _surface_file(target_surface: str) -> str:
+    """The leading file path of a target surface (`"<file>: <symbol> ..."` -> `<file>`)."""
+    match = re.match(r"[A-Za-z0-9_./+-]+", str(target_surface or "").strip())
+    path = match.group(0).rstrip(".") if match else ""
+    return path or str(target_surface)
+
+
+def _report_file_body(artifacts: Sequence[tuple[str, str]]
+                      ) -> tuple[str | None, dict | None]:
+    """The first report artifact that parses to a schema-valid `{"paths": [...]}`."""
+    for name, text in artifacts:
+        try:
+            body = json.loads(text)
+        except (json.JSONDecodeError, ValueError):
+            body = _first_json_or_none(text)
+        if isinstance(body, dict) and not _is_template_echo(body) \
+                and _schema_valid(body, PATHS_SCHEMA):
+            return name, body
+    return None, None
+
+
+def _resolve_reported_paths(workspace: Path, reported: Sequence[str]
+                            ) -> tuple[tuple[str, ...], bool]:
+    """Each reported entry, or the changed file it names when it carries prose
+    (`integrity.normalize_reported_path`); duplicates dropped. `(paths, normalized)`."""
+    try:
+        changed = integrity.dirty_paths(workspace)
+    except (integrity.IntegrityRefused, OSError, subprocess.SubprocessError):
+        changed = ()
+    resolved: list[str] = []
+    normalized = False
+    for item in reported:
+        fixed = item if item in changed else integrity.normalize_reported_path(item, changed)
+        if fixed is not None and fixed != item:
+            normalized = True
+        path = fixed if fixed is not None else item
+        if path not in resolved:
+            resolved.append(path)
+    return tuple(resolved), normalized
+
+
 class _Reply(str):
     """A reply text that also says how the call ended (`failure_class`), so a parse
     failure downstream can name it. Compares and parses as the plain string."""
@@ -2637,7 +2703,10 @@ class AgentPlanner:
                context: Mapping[str, Any]) -> tuple[str, ...] | Abstain:
         cpu = _cpu_target(context)
         resource = "selected CPU resources" if cpu else "GPU"
-        reply = (json.dumps({"paths": [hypothesis.target_surface]}) if cpu else
+        # The example carries the surface's FILE only: a target_surface such as
+        # "<file>: <symbol> (lines ...)" quoted whole taught the author to put prose in
+        # the path (DS41 run 10d).
+        reply = (json.dumps({"paths": [_surface_file(hypothesis.target_surface)]}) if cpu else
                  '{"paths": ["ggml/src/ggml-cuda/<file>"]}')
         context_text, bundle = self._context_block("author", context)
         prompt = (
@@ -2655,6 +2724,7 @@ class AgentPlanner:
             "Then reply with ONE json object naming the files you actually changed, "
             "using their real paths:\n"
             f"{reply}\n"
+            f"{AUTHOR_REPLY_RULE}\n"
             "If the hypothesis cannot be implemented honestly within these constraints, "
             "abstaining is a correct science result. Make no edits and reply instead with:\n"
             '{"abstain": "<specific reason the hypothesis is infeasible>"}')
@@ -2669,37 +2739,77 @@ class AgentPlanner:
                                **self._budget_kw("author")),
             should_stop=self.should_stop)
         self.transient_streak = streak
+        precheck = _precheck_reply(raw, PATHS_SCHEMA)
+        early = _abstention(precheck.body) if precheck.schema_valid else None
+        if early is not None:
+            return early   # no candidate: the lane is not read
+        # DS41 run 10d: the author wrote its report to `reply.json` in the lane root.
+        # Such a file is the report's carrier, never part of the candidate: taken out of
+        # the lane here, before any gate, whatever it holds.
         try:
-            body = _parse_reply(raw, schema=PATHS_SCHEMA, backend=self.backend,
-                                workspace=self.workspace)
-        except AuthorReplyMissing:
-            raise
-        except ProviderTransient as exc:
-            # The REPORT is missing, not necessarily the work: `iterate` may derive the
-            # report from the lane diff (never invented) or ends the iteration as before.
-            raise AuthorReplyMissing(
-                str(exc), failure_class=getattr(raw, "failure_class", None)) from exc
-        abstention = _abstention(body)
-        if abstention is not None:
-            return abstention
-        paths = body.get("paths")
-        if isinstance(paths, list) and not paths:
-            return Abstain("authoring returned no changed paths")
-        if not isinstance(paths, list):
-            raise ProviderTransient("authoring reply is missing a paths list")
-        if any(_is_placeholder(item) for item in paths):
-            raise ProviderTransient(
-                f"authoring echoed the prompt template instead of answering: {paths}")
-        # The ground truth is the worktree, not the reply. An actor that says it
-        # changed a file and did not is the failure mode a self-reported path cannot
-        # catch.
-        dirty = subprocess.run(
-            ["git", "-C", str(self.workspace), "status", "--porcelain", "--", *paths],
-            capture_output=True, text=True, timeout=300).stdout.strip()
-        if not dirty:
-            raise ProviderTransient(
-                f"authoring reported {paths} but the worktree is unchanged there")
-        return tuple(str(item) for item in paths)
+            artifacts = integrity.take_report_artifacts(Path(self.workspace))
+        except (integrity.IntegrityRefused, OSError):
+            artifacts = []
+        file_name, file_body = _report_file_body(artifacts)
+        if file_body is not None and not precheck.schema_valid:
+            # Stdout carries no complete report: the file is it (and no repair turn).
+            sources = [(REPORT_SOURCE_REPLY_FILE, file_body)]
+        else:
+            try:
+                body = _parse_reply(raw, schema=PATHS_SCHEMA, backend=self.backend,
+                                    workspace=self.workspace)
+            except AuthorReplyMissing:
+                raise
+            except ProviderTransient as exc:
+                # The REPORT is missing, not necessarily the work: `iterate` may derive
+                # the report from the lane diff (never invented) or ends the iteration.
+                raise AuthorReplyMissing(
+                    str(exc), failure_class=getattr(raw, "failure_class", None)) from exc
+            abstention = _abstention(body)
+            if abstention is not None:
+                return abstention
+            sources = [(REPORT_SOURCE_REPLY, body)]
+            if file_body is not None:
+                # A stdout object that names nothing the lane changed (e.g. its compaction
+                # summary quoting the contract) yields to the report file it wrote.
+                sources.append((REPORT_SOURCE_REPLY_FILE, file_body))
+        refusal: str | None = None
+        for report_source, body in sources:
+            paths = body.get("paths")
+            if isinstance(paths, list) and not paths:
+                return Abstain("authoring returned no changed paths")
+            if not isinstance(paths, list):
+                raise ProviderTransient("authoring reply is missing a paths list")
+            reported = [str(item) for item in paths]
+            resolved, normalized = _resolve_reported_paths(Path(self.workspace), reported)
+            if any(_is_placeholder(item) for item in resolved):
+                raise ProviderTransient(
+                    f"authoring echoed the prompt template instead of answering: {paths}")
+            # The ground truth is the worktree, not the reply. An actor that says it
+            # changed a file and did not is the failure mode a self-reported path cannot
+            # catch.
+            dirty = subprocess.run(
+                ["git", "-C", str(self.workspace), "status", "--porcelain", "--", *resolved],
+                capture_output=True, text=True, timeout=300).stdout.strip()
+            if not dirty:
+                refusal = refusal or (
+                    f"authoring reported {paths} but the worktree is unchanged there")
+                continue
+            report = {"report_source": report_source, "path_normalized": normalized,
+                      "reported_paths": reported, "paths": list(resolved),
+                      "report_artifacts": [name for name, _text in artifacts]}
+            if report_source == REPORT_SOURCE_REPLY_FILE:
+                report["reply_file"] = file_name
+            if normalized or report_source != REPORT_SOURCE_REPLY or artifacts:
+                actor_metrics.record_report_source(
+                    Path(self.workspace).parent / actor_metrics.REPLY_DIR_NAME,
+                    {**report, "mechanism_id": hypothesis.mechanism_id,
+                     "workspace": str(self.workspace)})
+            return AuthorPaths(resolved, report=report)
+        # The report names nothing the lane changed. Recoverable: `iterate` derives the
+        # report from the lane diff when the lane holds one inside the target surface
+        # (every `lane_diff_report` refusal kept), else ends the iteration as before.
+        raise AuthorReplyMissing(refusal or "authoring report names no changed path")
 
 
 _REVIEW_TASK = """{subject}
@@ -2820,5 +2930,5 @@ class AgentCritic:
 
 __all__ = ["BACKOFF_S", "Backend", "CLAUDE", "CODEX", "CRITIC_DEFAULT", "OPENCODE",
            "PLANNER_DEFAULT", "STORE_ERROR_BACKOFF_S", "AgentCritic", "AgentPlanner",
-           "AuthorReplyMissing", "OpencodeStoreError", "ProviderTransient",
+           "AuthorPaths", "AuthorReplyMissing", "OpencodeStoreError", "ProviderTransient",
            "backend_for", "render_context"]

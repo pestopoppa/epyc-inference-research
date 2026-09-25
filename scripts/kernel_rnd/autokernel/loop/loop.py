@@ -403,11 +403,12 @@ def gate_rules_fingerprint() -> str:
 
 
 def _mark_report_source(outcome: "Outcome", progress: Mapping[str, Any]) -> None:
-    """Stamp a candidate whose paths came from the lane diff (this patch round)."""
+    """Stamp a candidate whose paths came from the lane diff, a lane-root reply file,
+    or a normalized `<path>: <prose>` entry (this patch round)."""
     recovery = progress.get("report_recovery")
     if recovery is not None and outcome.hypothesis is not None \
             and outcome.report_source is None:
-        outcome.report_source = REPORT_SOURCE_LANE_DIFF
+        outcome.report_source = recovery.get("report_source") or REPORT_SOURCE_LANE_DIFF
         outcome.author_report_recovery = dict(recovery)
 
 
@@ -435,7 +436,7 @@ def _recover_author_report(missing: AuthorReportMissing, author_lane, hypothesis
     progress["report_recovery"] = {
         "report_source": REPORT_SOURCE_LANE_DIFF, "base": base, "paths": list(paths),
         "failure_class": getattr(missing, "failure_class", None),
-        "reply_refusal": str(missing)[:500]}
+        "path_normalized": False, "reply_refusal": str(missing)[:500]}
     # Beside the author call's own metrics row (`actors.ACTOR_REPLY_DIR`).
     from . import actor_metrics
     actor_metrics.record_report_source(
@@ -443,6 +444,17 @@ def _recover_author_report(missing: AuthorReportMissing, author_lane, hypothesis
         {**progress["report_recovery"], "mechanism_id": hypothesis.mechanism_id,
          "workspace": str(worktree)})
     return tuple(paths)
+
+
+def _note_author_report(paths, progress: dict[str, Any]) -> None:
+    """Carry a non-default author report source onto the outcome: a reply read from a
+    lane-root report file, or an entry normalized from `<path>: <prose>` (the author
+    already wrote its `actor_report_source` row)."""
+    report = getattr(paths, "report", None)
+    if not isinstance(report, Mapping):
+        return
+    if report.get("path_normalized") or report.get("report_source") not in (None, "reply"):
+        progress["report_recovery"] = dict(report)
 
 
 def _extended(missing: AuthorReportMissing, message: str) -> AuthorReportMissing:
@@ -943,6 +955,8 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                         paths, halted = _recover_author_report(
                             missing, author_lane, hypothesis, before_tree, progress), None
                         on_step("authoring report derived from the lane diff")
+                    else:
+                        _note_author_report(paths, progress)
                     if halted is not None:
                         return halted
                     if isinstance(paths, Abstain):
