@@ -1,0 +1,142 @@
+{
+  "schema": "epyc.exl3.gfx90a.validation_status.v1",
+  "date": "2026-09-26T08:52:04.038230+00:00",
+  "contract_commit": "bc9ac47b8e1cf79db3592553ef5e1ecc99cb0872",
+  "writer_root_commit": "6b8f9e8505dabe459974a95e9765bf2b954182c0",
+  "writer_sha256": "8caeb33dbb12986fadc385afe25d22bd791b036253c736f9527e67a55f85e268",
+  "build_directory": "/mnt/raid0/llm/tmp/exl3-gfx90a-owner-build-20260926",
+  "host_directory": "/mnt/raid0/llm/tmp/exl3-gfx90a-owner-host-20260926",
+  "native_verifiers": [
+    {
+      "row_id": "2c09072cfc2809bae41f28cdd715a4aa756a70c7dbdcd220370c10032c94ba19",
+      "fixture": "real-mcg-k4",
+      "proposition": "Independent C++ ascending FP32 materialized-weight output equals the canonical real-mcg-k4 golden exactly",
+      "verdict": "pass",
+      "attestation_path": "/mnt/raid0/llm/tmp/exl3-gfx90a-owner-host-20260926/native/2c09072cfc2809bae41f28cdd715a4aa756a70c7dbdcd220370c10032c94ba19.attestation.json",
+      "attestation_sha256": "3a049ba13c735cc0105c319414a6c5a816b48c9bcff404ad5ef005b31b2add10"
+    },
+    {
+      "row_id": "52a18ad50deea3626137ef32da1b5e2953915be2fd61164b962e66030894c688",
+      "fixture": "dispatch_truth_table_and_domain_boundaries",
+      "proposition": "The 5120 host capability truth-table cells and 256-expert dispatch boundary assertions execute their declared outcomes",
+      "verdict": "pass",
+      "attestation_path": "/mnt/raid0/llm/tmp/exl3-gfx90a-owner-host-20260926/native/52a18ad50deea3626137ef32da1b5e2953915be2fd61164b962e66030894c688.attestation.json",
+      "attestation_sha256": "6875fe9187921a3137fd1a20ba10e0da05d7979e72b8fd8066b56c3ca9506016"
+    },
+    {
+      "row_id": "5da121a08dc691aac92df5e6b3860041b5e8a8bae494e349938200e77418132b",
+      "fixture": "real-mul1-k3",
+      "proposition": "Independent C++ ascending FP32 materialized-weight output equals the canonical real-mul1-k3 golden exactly",
+      "verdict": "pass",
+      "attestation_path": "/mnt/raid0/llm/tmp/exl3-gfx90a-owner-host-20260926/native/5da121a08dc691aac92df5e6b3860041b5e8a8bae494e349938200e77418132b.attestation.json",
+      "attestation_sha256": "bf9c9599a090eedadd30abb55dea45a86e7fecccea25e22552c02c3e7e601f7e"
+    },
+    {
+      "row_id": "9820c20502e08e611f95d9214e31f79b0b0261999431f2e1806c379cdab3f954",
+      "fixture": "real-mul1-k4",
+      "proposition": "Independent C++ ascending FP32 materialized-weight output equals the canonical real-mul1-k4 golden exactly",
+      "verdict": "pass",
+      "attestation_path": "/mnt/raid0/llm/tmp/exl3-gfx90a-owner-host-20260926/native/9820c20502e08e611f95d9214e31f79b0b0261999431f2e1806c379cdab3f954.attestation.json",
+      "attestation_sha256": "2e5fe86690187689c3df3794f235e007d00dc22e2f51ebfa7f66e39f7085f845"
+    }
+  ],
+  "host_assertions": 5579,
+  "truth_table_cells": 5120,
+  "max_experts": 256,
+  "exact_real_outputs": {
+    "mul1_K3": 384,
+    "mul1_K4": 384,
+    "MCG_K4": 384
+  },
+  "gates": {
+    "G3": "OPEN: device packed/reconstruction/real-output/tail/residency/teardown tests not executed",
+    "G4": "OPEN: MFMA device lane/output/regime/profile tests not executed",
+    "G5": "OPEN: GPU dispatch/fallback/capture/guard/routing tests not executed; host truth-table passes"
+  },
+  "runtime_blocker": {
+    "delegated": {
+      "path": "/workspace/coordination/session-bus/config.yaml",
+      "observed": "resource_claims.gpu: {provider: null, enabled: false}",
+      "needed": "qualified enabled GPU provider and an ACTIVE lease covering mi210_0"
+    },
+    "owner": {
+      "authority": "eligible under explicit inference owner mode",
+      "observed_kfd_pids": [
+        "1892835",
+        "2005824",
+        "2006079",
+        "2009477"
+      ],
+      "co_residency": {
+        "status": "refused",
+        "reason": "foreign KFD process present; no measured co-residency policy for this operator"
+      },
+      "needed": "Inference Main execution at an authorized boundary with exclusive physical claim, no foreign KFD occupancy and in-window residency evidence"
+    }
+  },
+  "hip_runtime_executed": false,
+  "full_model_inference_executed": false,
+  "performance_claim": false,
+  "gitnexus": {
+    "status": "up-to-date at 300951d",
+    "impact": "UNKNOWN: existing LadybugDB WAL identity mismatch",
+    "manual_blast_radius": "new standalone module with no existing callers"
+  },
+  "scope": "standalone experimental research; no production tree or kernel store modifications",
+  "authority_review": {
+    "date": "2026-09-26T08:46:42.216160+00:00",
+    "receipt": "owner-run-20260926.json",
+    "tests_passed": 13,
+    "owner_authority": "passes explicit inference_owner preflight; no delegated lease",
+    "build_manifest_refresh_required": false
+  },
+  "historical_validation": [
+    {
+      "date": "2026-09-26T08:29:43.691208+00:00",
+      "build_directory": "/mnt/raid0/llm/tmp/exl3-gfx90a-build-20260926",
+      "host_directory": "/mnt/raid0/llm/tmp/exl3-gfx90a-host-sealed-20260926",
+      "native_verifiers": [
+        {
+          "row_id": "309a925027d8505588a529358ef2616a83de321a36f2af7c4894ef9a9ee9a565",
+          "fixture": "real-mul1-k3",
+          "proposition": "Independent C++ ascending FP32 materialized-weight output equals the canonical real-mul1-k3 golden exactly",
+          "verdict": "pass",
+          "attestation_path": "/mnt/raid0/llm/tmp/exl3-gfx90a-host-sealed-20260926/native/309a925027d8505588a529358ef2616a83de321a36f2af7c4894ef9a9ee9a565.attestation.json",
+          "attestation_sha256": "71d28c95fef55d47ea6264aefa979e4481697a99b156d1692127b91e6b5e04cd"
+        },
+        {
+          "row_id": "5d93fc907504e075ab3e9de0c6c2c91b96573c140b97ce03fcba8eafc6d0128f",
+          "fixture": "dispatch_truth_table_and_domain_boundaries",
+          "proposition": "The 5120 host capability truth-table cells and 256-expert dispatch boundary assertions execute their declared outcomes",
+          "verdict": "pass",
+          "attestation_path": "/mnt/raid0/llm/tmp/exl3-gfx90a-host-sealed-20260926/native/5d93fc907504e075ab3e9de0c6c2c91b96573c140b97ce03fcba8eafc6d0128f.attestation.json",
+          "attestation_sha256": "b61b62d85da3d2e1f24d502d0bc4b55ebc347d6ff78750d61be3bfa66e358c42"
+        },
+        {
+          "row_id": "5fb81fbfbabb75c1790e46753747898c4b7142accbbd9168f2ba8769de5284c2",
+          "fixture": "real-mcg-k4",
+          "proposition": "Independent C++ ascending FP32 materialized-weight output equals the canonical real-mcg-k4 golden exactly",
+          "verdict": "pass",
+          "attestation_path": "/mnt/raid0/llm/tmp/exl3-gfx90a-host-sealed-20260926/native/5fb81fbfbabb75c1790e46753747898c4b7142accbbd9168f2ba8769de5284c2.attestation.json",
+          "attestation_sha256": "01ed3262885ccb60b436974b0253f360a2f4e39013453183fa5d2df5c1da573a"
+        },
+        {
+          "row_id": "ce6f0c698ecd3bac2f7bb491f496efea49fd84a4f52bac5c8777f37e89a80672",
+          "fixture": "real-mul1-k4",
+          "proposition": "Independent C++ ascending FP32 materialized-weight output equals the canonical real-mul1-k4 golden exactly",
+          "verdict": "pass",
+          "attestation_path": "/mnt/raid0/llm/tmp/exl3-gfx90a-host-sealed-20260926/native/ce6f0c698ecd3bac2f7bb491f496efea49fd84a4f52bac5c8777f37e89a80672.attestation.json",
+          "attestation_sha256": "d9a67600fc12ae00e240f478f36a32001d71db8515a2a9b9dd570e1b05a73b91"
+        }
+      ]
+    }
+  ],
+  "build_refresh": {
+    "receipt": "refresh-owner-run-20260926.json",
+    "build_receipt": "build-owner-run-20260926.json",
+    "build_manifest_sha256": "9ce75fdba55a046dfd25d7a28a9ac37e1ef68030c9b31d559bf97a4aa8add19a",
+    "source_hashes_current": 11,
+    "artifact_hashes_verified": 6,
+    "source_drift_preflight": "passes the same digest comparisons used before physical claim acquisition"
+  }
+}

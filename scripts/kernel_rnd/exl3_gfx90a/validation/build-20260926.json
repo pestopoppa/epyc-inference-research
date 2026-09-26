@@ -1,0 +1,295 @@
+{
+  "schema": "epyc.exl3.gfx90a.build.v1",
+  "target": "gfx90a:xnack-:sramecc+",
+  "wavefront_size": 64,
+  "code_object_version": 5,
+  "xnack": "off",
+  "sramecc": "on",
+  "compiler": "HIP version: 6.2.41133-dd7f95766\nAMD clang version 18.0.0git (https://github.com/RadeonOpenCompute/llvm-project roc-6.2.0 24292 26466ce804ac523b398608f17388eb6d605a3f09)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/rocm/lib/llvm/bin\nConfiguration file: /opt/rocm/lib/llvm/bin/clang++.cfg\n",
+  "compiler_binary_sha256": "d7abf6eb6db27e3ead0be22aed5688b51ea4ab64831476f68434087155a68b21",
+  "flags": [
+    "-std=c++17",
+    "-O2",
+    "--offload-arch=gfx90a:xnack-:sramecc+",
+    "-mcode-object-version=5",
+    "-ffp-contract=off",
+    "-fno-fast-math"
+  ],
+  "commands": [
+    [
+      "/opt/rocm/bin/hipcc",
+      "-std=c++17",
+      "-O2",
+      "--offload-arch=gfx90a:xnack-:sramecc+",
+      "-mcode-object-version=5",
+      "-ffp-contract=off",
+      "-fno-fast-math",
+      "-c",
+      "/mnt/raid0/llm/worktrees/exl3-gfx90a-20260926/scripts/kernel_rnd/exl3_gfx90a/kernels.hip",
+      "-o",
+      "/mnt/raid0/llm/tmp/exl3-gfx90a-build-20260926/kernels.o"
+    ],
+    [
+      "/opt/rocm/bin/hipcc",
+      "-std=c++17",
+      "-O2",
+      "--offload-arch=gfx90a:xnack-:sramecc+",
+      "-mcode-object-version=5",
+      "-ffp-contract=off",
+      "-fno-fast-math",
+      "--genco",
+      "/mnt/raid0/llm/worktrees/exl3-gfx90a-20260926/scripts/kernel_rnd/exl3_gfx90a/kernels.hip",
+      "-o",
+      "/mnt/raid0/llm/tmp/exl3-gfx90a-build-20260926/kernels.bundle"
+    ],
+    [
+      "/opt/rocm/llvm/bin/clang-offload-bundler",
+      "--unbundle",
+      "--type=o",
+      "--targets=hipv4-amdgcn-amd-amdhsa--gfx90a:sramecc+:xnack-",
+      "--input=/mnt/raid0/llm/tmp/exl3-gfx90a-build-20260926/kernels.bundle",
+      "--output=/mnt/raid0/llm/tmp/exl3-gfx90a-build-20260926/kernels.hsaco"
+    ],
+    [
+      "/opt/rocm/llvm/bin/llvm-objdump",
+      "-d",
+      "/mnt/raid0/llm/tmp/exl3-gfx90a-build-20260926/kernels.hsaco"
+    ],
+    [
+      "/opt/rocm/llvm/bin/llvm-readelf",
+      "-h",
+      "-n",
+      "/mnt/raid0/llm/tmp/exl3-gfx90a-build-20260926/kernels.hsaco"
+    ],
+    [
+      "g++",
+      "-std=c++17",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "/mnt/raid0/llm/worktrees/exl3-gfx90a-20260926/scripts/kernel_rnd/exl3_gfx90a/test_contract.cpp",
+      "-o",
+      "/mnt/raid0/llm/tmp/exl3-gfx90a-build-20260926/test_contract"
+    ],
+    [
+      "/opt/rocm/bin/hipcc",
+      "-std=c++17",
+      "-O2",
+      "--offload-arch=gfx90a:xnack-:sramecc+",
+      "-mcode-object-version=5",
+      "-ffp-contract=off",
+      "-fno-fast-math",
+      "-c",
+      "/mnt/raid0/llm/worktrees/exl3-gfx90a-20260926/scripts/kernel_rnd/exl3_gfx90a/test_runtime.hip",
+      "-o",
+      "/mnt/raid0/llm/tmp/exl3-gfx90a-build-20260926/test_runtime.o"
+    ],
+    [
+      "/opt/rocm/bin/hipcc",
+      "-std=c++17",
+      "-O2",
+      "--offload-arch=gfx90a:xnack-:sramecc+",
+      "-mcode-object-version=5",
+      "-ffp-contract=off",
+      "-fno-fast-math",
+      "/mnt/raid0/llm/tmp/exl3-gfx90a-build-20260926/test_runtime.o",
+      "/mnt/raid0/llm/tmp/exl3-gfx90a-build-20260926/kernels.o",
+      "-o",
+      "/mnt/raid0/llm/tmp/exl3-gfx90a-build-20260926/test_runtime"
+    ],
+    [
+      "nm",
+      "--undefined-only",
+      "/mnt/raid0/llm/tmp/exl3-gfx90a-build-20260926/kernels.o"
+    ]
+  ],
+  "source_sha256": {
+    "README.md": "918970ffa5b979ba7927e67b45c498872f18a2d580c77579bb263ee54efa5ba0",
+    "build.py": "2950c814b5ac02cad382cf97f9dc6cedbfcf8bdccdcc9246f587a4327728f5d2",
+    "claimed_run.py": "06dfcc35f5349d310f5814e26fe367d82708b7b33f62f40daf7256bc7992fce5",
+    "contract.hpp": "1ff3230b79cf448f4ba5af037498be176551221ecc379566a51e7ceefba952cf",
+    "fixtures.py": "a1a5b53c61d8930874b1f62a796597e822f22b6613c127a8887033350534d17b",
+    "kernels.hip": "180f1a37f634bd1f69e7777b9735410e92511dc583a55a9d80152c8747356d0e",
+    "runtime.hpp": "2604ac577aea3297955532d6e3e890394f92ac4c6ebc7ed541fc04a23fcc9b08",
+    "test_contract.cpp": "80de3552440095c22869eb51d373dd6161d92e426e28b80524be84f9fb643a28",
+    "test_runtime.hip": "2733ea92d08c0231ba056e1e48c467c55ac8efa9b70a5571e2135923704bc744",
+    "verify_host.py": "31024e467c9a27af21ae5babf43931f6d0698014c6c377a47a929aa4bd489770"
+  },
+  "artifact_sha256": {
+    "kernels.o": "a68041f770b0de766f822dc567d588d134fd0f56dd99d2e9fae59261dced898d",
+    "kernels.hsaco": "abdc209aa9b3e746887e8f3cc73bbb2cbe2e0590993b883cc7285a256ae75006",
+    "disassembly.txt": "5d8dcab7d6c9586f31e2d1cfa293126fd2313e35250cfad7f119d8c9cbd06bfb",
+    "code-object-metadata.txt": "5c17bf1db44620929058175a26a47662a11737966f19bd629e78812f3e325da2",
+    "test_contract": "0ca3e369087c11e7500a1f0e8b4dd8c72f40f744ff74aa5023dafd36b0f33517",
+    "test_runtime": "c4669adf71a9dfa9a17d46dad11d6d95c63c0bf569b1a748248184caee3bb079"
+  },
+  "mfma_instruction_count": 2,
+  "execution": "not_run",
+  "performance_eligible": false,
+  "kernel_resources": [
+    {
+      "name": "_ZN4exl314codebook_probeEPKtNS_8CodebookEjPf",
+      "group_segment_fixed_size": "0",
+      "private_segment_fixed_size": "0",
+      "sgpr_count": "9",
+      "vgpr_count": "6",
+      "wavefront_size": "64"
+    },
+    {
+      "name": "_ZN4exl311state_probeEPKjjNS_8CodebookEjPtPf",
+      "group_segment_fixed_size": "0",
+      "private_segment_fixed_size": "0",
+      "sgpr_count": "14",
+      "vgpr_count": "11",
+      "wavefront_size": "64"
+    },
+    {
+      "name": "_ZN4exl314decode_weightsEPKNS_6MatrixEPfjj",
+      "group_segment_fixed_size": "0",
+      "private_segment_fixed_size": "0",
+      "sgpr_count": "15",
+      "vgpr_count": "13",
+      "wavefront_size": "64"
+    },
+    {
+      "name": "_ZN4exl316materialize_leftEPKNS_6MatrixEPKfPfjj",
+      "group_segment_fixed_size": "0",
+      "private_segment_fixed_size": "0",
+      "sgpr_count": "18",
+      "vgpr_count": "28",
+      "wavefront_size": "64"
+    },
+    {
+      "name": "_ZN4exl317materialize_rightEPKNS_6MatrixEPKfPfjj",
+      "group_segment_fixed_size": "0",
+      "private_segment_fixed_size": "0",
+      "sgpr_count": "20",
+      "vgpr_count": "25",
+      "wavefront_size": "64"
+    },
+    {
+      "name": "_ZN4exl319prepare_activationsEPKNS_6MatrixEPKNS_11DeviceRouteEPKfPfjjjNS_12OperatorModeE",
+      "group_segment_fixed_size": "0",
+      "private_segment_fixed_size": "0",
+      "sgpr_count": "20",
+      "vgpr_count": "16",
+      "wavefront_size": "64"
+    },
+    {
+      "name": "_ZN4exl34mfmaEPKNS_6MatrixEPKNS_11DeviceRouteEPKjjjjPKfS9_PfjjNS_12OperatorModeE",
+      "group_segment_fixed_size": "0",
+      "private_segment_fixed_size": "0",
+      "sgpr_count": "52",
+      "vgpr_count": "33",
+      "wavefront_size": "64"
+    },
+    {
+      "name": "_ZN4exl313finish_routesEPKNS_6MatrixEPKNS_11DeviceRouteEPKfPfjjjNS_12OperatorModeE",
+      "group_segment_fixed_size": "0",
+      "private_segment_fixed_size": "0",
+      "sgpr_count": "22",
+      "vgpr_count": "23",
+      "wavefront_size": "64"
+    },
+    {
+      "name": "_ZN4exl312gather_fixedEPKfPfjjj",
+      "group_segment_fixed_size": "0",
+      "private_segment_fixed_size": "0",
+      "sgpr_count": "14",
+      "vgpr_count": "8",
+      "wavefront_size": "64"
+    },
+    {
+      "name": "_ZN4exl313gather_atomicEPKfPKNS_11DeviceRouteEPfjj",
+      "group_segment_fixed_size": "0",
+      "private_segment_fixed_size": "0",
+      "sgpr_count": "16",
+      "vgpr_count": "5",
+      "wavefront_size": "64"
+    },
+    {
+      "name": "_ZN4exl310mfma_probeEPKfS1_Pf",
+      "group_segment_fixed_size": "0",
+      "private_segment_fixed_size": "0",
+      "sgpr_count": "6",
+      "vgpr_count": "11",
+      "wavefront_size": "64"
+    },
+    {
+      "name": "_ZN4exl34gemvILj1EEEvPKNS_6MatrixEPKNS_11DeviceRouteEPKjjjiPKfSA_PfjjNS_12OperatorModeE",
+      "group_segment_fixed_size": "0",
+      "private_segment_fixed_size": "0",
+      "sgpr_count": "31",
+      "vgpr_count": "18",
+      "wavefront_size": "64"
+    },
+    {
+      "name": "_ZN4exl34gemvILj2EEEvPKNS_6MatrixEPKNS_11DeviceRouteEPKjjjiPKfSA_PfjjNS_12OperatorModeE",
+      "group_segment_fixed_size": "0",
+      "private_segment_fixed_size": "0",
+      "sgpr_count": "31",
+      "vgpr_count": "18",
+      "wavefront_size": "64"
+    },
+    {
+      "name": "_ZN4exl34gemvILj3EEEvPKNS_6MatrixEPKNS_11DeviceRouteEPKjjjiPKfSA_PfjjNS_12OperatorModeE",
+      "group_segment_fixed_size": "0",
+      "private_segment_fixed_size": "0",
+      "sgpr_count": "33",
+      "vgpr_count": "19",
+      "wavefront_size": "64"
+    },
+    {
+      "name": "_ZN4exl34gemvILj4EEEvPKNS_6MatrixEPKNS_11DeviceRouteEPKjjjiPKfSA_PfjjNS_12OperatorModeE",
+      "group_segment_fixed_size": "0",
+      "private_segment_fixed_size": "0",
+      "sgpr_count": "31",
+      "vgpr_count": "18",
+      "wavefront_size": "64"
+    },
+    {
+      "name": "_ZN4exl34gemvILj5EEEvPKNS_6MatrixEPKNS_11DeviceRouteEPKjjjiPKfSA_PfjjNS_12OperatorModeE",
+      "group_segment_fixed_size": "0",
+      "private_segment_fixed_size": "0",
+      "sgpr_count": "33",
+      "vgpr_count": "19",
+      "wavefront_size": "64"
+    },
+    {
+      "name": "_ZN4exl34gemvILj6EEEvPKNS_6MatrixEPKNS_11DeviceRouteEPKjjjiPKfSA_PfjjNS_12OperatorModeE",
+      "group_segment_fixed_size": "0",
+      "private_segment_fixed_size": "0",
+      "sgpr_count": "33",
+      "vgpr_count": "19",
+      "wavefront_size": "64"
+    },
+    {
+      "name": "_ZN4exl34gemvILj7EEEvPKNS_6MatrixEPKNS_11DeviceRouteEPKjjjiPKfSA_PfjjNS_12OperatorModeE",
+      "group_segment_fixed_size": "0",
+      "private_segment_fixed_size": "0",
+      "sgpr_count": "33",
+      "vgpr_count": "19",
+      "wavefront_size": "64"
+    },
+    {
+      "name": "_ZN4exl34gemvILj8EEEvPKNS_6MatrixEPKNS_11DeviceRouteEPKjjjiPKfSA_PfjjNS_12OperatorModeE",
+      "group_segment_fixed_size": "0",
+      "private_segment_fixed_size": "0",
+      "sgpr_count": "31",
+      "vgpr_count": "18",
+      "wavefront_size": "64"
+    },
+    {
+      "name": "_ZN4exl34gemvILj0EEEvPKNS_6MatrixEPKNS_11DeviceRouteEPKjjjiPKfSA_PfjjNS_12OperatorModeE",
+      "group_segment_fixed_size": "0",
+      "private_segment_fixed_size": "0",
+      "sgpr_count": "34",
+      "vgpr_count": "21",
+      "wavefront_size": "64"
+    }
+  ],
+  "run_allocation_symbols": [],
+  "hbm_traffic": "not_measured",
+  "occupancy": "not_measured"
+}
