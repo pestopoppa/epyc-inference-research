@@ -933,6 +933,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
         fields = {"prior_patch_rejections": carried,
                   "patch_rounds_remaining": int(patch_rounds),
                   "author_attempts_used": used, "author_attempts_budget": budget}
+        checkpoints = None
         if scope:
             state["scope_block"] = fields["scope_block"] = {
                 "route": f"{hypothesis.target_surface}::{hypothesis.target_symbol}",
@@ -941,13 +942,22 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             summary = (f"scope_blocked: the accepted hypothesis cannot be written inside "
                        f"the admitted route ({last['source']}: {last['rule']}); kept "
                        f"pending until the scope rules change")
+            if last["source"].startswith("gate:"):
+                # A RULE gate refused a critic-ACCEPTED patch: its `gate_refused` row
+                # already carries a build checkpoint that resumes the exact patch once
+                # that rule changes (and outranks, then supersedes, any author sibling).
+                # An author checkpoint here would be dead weight.
+                checkpoints = []
+                state["resumable_via"] = "gate_refused build checkpoint"
+                summary += "; resumable through the gate_refused row's build checkpoint"
         else:
             summary = (f"patch_rounds_exhausted: {rounds} ended on author failures while "
                        f"the hypothesis stood accepted; pending re-authoring with that "
                        f"feedback ({budget - used} of {budget} attempts left)")
         return Outcome(state["class"], hypothesis, [summary, *carried],
                        refusal_gate=last["source"],
-                       resume_checkpoints=[checkpoint("author", hypothesis, **fields)],
+                       resume_checkpoints=(checkpoints if checkpoints is not None
+                                           else [checkpoint("author", hypothesis, **fields)]),
                        hypothesis_pending=state)
 
     def dispose(hypothesis, status: str, reason: str | None, *, refusal_gate: str,

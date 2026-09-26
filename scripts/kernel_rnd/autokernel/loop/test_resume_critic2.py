@@ -457,11 +457,10 @@ class Critic2VersusBuild(Fixture):
         self.assertEqual([row["stage"] for row in report["queued"]], ["build"])
         point = queue.take(base.Worker(self.repo), self.anchor)
         self.assertEqual(point.stage, "build")
-        # The transient row's author and critic2 checkpoints, and the scope_blocked
-        # row's author checkpoint: superseded, never resumed.
+        # The transient row's author and critic2 checkpoints: superseded, never resumed.
         siblings = [row["state"] for key, row in self.claims().items()
                     if key != point.checkpoint_id]
-        self.assertEqual(siblings, ["superseded", "superseded", "superseded"])
+        self.assertEqual(siblings, ["superseded", "superseded"])
 
 
 class CriticVerdictClassification(unittest.TestCase):

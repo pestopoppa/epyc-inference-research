@@ -224,7 +224,7 @@ class InfrastructureFaultsReleaseTheClaim(Base):
                          ["released", "reclaimed:resumed", "released", "reclaimed:resumed",
                           "exhausted"])
         queue, report = self.prepare()
-        self.assertEqual((len(queue), report["already_claimed"]), (0, 2))  # + the scope_blocked row's author checkpoint, superseded as a sibling
+        self.assertEqual((len(queue), report["already_claimed"]), (0, 1))
 
     def test_a_validity_refusal_consumes_it(self):
         self.refuse_once()
@@ -241,7 +241,7 @@ class InfrastructureFaultsReleaseTheClaim(Base):
         self.assertEqual((claim["state"], claim["result_status"], claim["retries"]),
                          ("resumed", loop.RESUME_REJECTED, 0))
         queue, report = self.prepare()
-        self.assertEqual((len(queue), report["already_claimed"]), (0, 2))  # + the scope_blocked row's author checkpoint, superseded as a sibling
+        self.assertEqual((len(queue), report["already_claimed"]), (0, 1))
 
     def test_a_lane_error_after_a_validity_disposal_does_not_release(self):
         self.refuse_once()

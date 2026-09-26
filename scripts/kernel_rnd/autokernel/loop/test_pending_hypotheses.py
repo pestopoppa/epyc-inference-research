@@ -297,6 +297,9 @@ class ScopeBlockedWaitsForTheScopeToChange(Fixture):
         self.assertEqual(outcome.status, loop.SCOPE_BLOCKED)
         self.assertEqual(outcome.hypothesis_pending["scope_block"]["source"], "gate:op_scope")
         self.assertEqual(outcome.hypothesis_pending["scope_block"]["rule"], base.REFUSAL)
+        self.assertEqual(outcome.resume_checkpoints, [])        # the build checkpoints are
+        queue, report = self.prepare()                           # rules "changed" here
+        self.assertEqual([q["stage"] for q in report["queued"]], ["build"])
 
 
 # ------------------------------------------------------------------ 4. ordering

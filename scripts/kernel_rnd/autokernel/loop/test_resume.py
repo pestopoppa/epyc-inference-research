@@ -283,8 +283,7 @@ class ResumesAtBuild(Fixture):
     def test_another_epoch_is_never_resumed_but_is_counted(self):
         self.refuse_once()
         queue, report = self.prepare(epoch="d" * 64)
-        # The gate_refused disposal and the scope_blocked iteration row.
-        self.assertEqual((len(queue), report["scanned"], report["other_epoch_rows"]), (0, 0, 2))
+        self.assertEqual((len(queue), report["scanned"], report["other_epoch_rows"]), (0, 0, 1))
         self.assertEqual(self.claims(), {})
 
     def test_a_compile_failure_is_never_resumed_at_build(self):
@@ -467,7 +466,7 @@ class RevalidationFailuresAreRecordedAndNeverRetried(Fixture):
         self.assertEqual(row["resumed_from"], point.checkpoint_id)
         self.assertNotIn("resume_checkpoints", row)     # a refusal is final
         queue, report = self.prepare()
-        self.assertEqual((len(queue), report["already_claimed"]), (0, 2))  # + the scope_blocked row's author checkpoint, superseded as a sibling
+        self.assertEqual((len(queue), report["already_claimed"]), (0, 1))
 
     def test_an_anchor_that_moves_during_the_run_is_rejected_in_the_lane(self):
         self.refuse_once()
@@ -515,7 +514,7 @@ class Idempotency(Fixture):
         point = queue.take(Worker(self.repo), self.anchor)
         # ... the process dies here, before any outcome is recorded ...
         queue, report = self.prepare()
-        self.assertEqual((len(queue), report["already_claimed"]), (0, 2))  # + the scope_blocked row's author checkpoint, superseded as a sibling
+        self.assertEqual((len(queue), report["already_claimed"]), (0, 1))
         self.assertEqual(self.claims()[point.checkpoint_id]["state"], "resumed")
         self.assertIsNone(self.claims()[point.checkpoint_id]["result_status"])
 
@@ -537,7 +536,7 @@ class Idempotency(Fixture):
         queue, _ = self.prepare()
         self.assertIsNotNone(queue.take(Worker(self.repo), self.anchor))
         with resume.ClaimLedger(self.store) as ledger:
-            self.assertIn(queue.handed_out[0], ledger.claimed(self.anchor))
+            self.assertEqual(ledger.claimed(self.anchor), {queue.handed_out[0]})
             self.assertEqual(ledger.claimed("f" * 40), set())
 
 
@@ -577,9 +576,9 @@ class TheStopPathWritesACheckpoint(Fixture):
         self.assertEqual((outcome.status, planner.proposals), (loop.SCOPE_BLOCKED, 1))
         builds = [row["resume_checkpoints"][0] for row in rows_with(self.store, "gate_refused")]
         self.assertEqual([ck["patch_round"] for ck in builds], [1, 2])
-        (author,) = outcome.resume_checkpoints
-        self.assertEqual((author["stage"], author["scope_block"]["source"]),
-                         ("author", "gate:op_scope"))
+        # The build checkpoints ARE the resume path once op_scope changes: no author one.
+        self.assertEqual(outcome.resume_checkpoints, [])
+        self.assertEqual(outcome.hypothesis_pending["scope_block"]["source"], "gate:op_scope")
 
     def test_a_clean_stop_before_any_acceptance_writes_none(self):
         outcome = loop.iterate(planner=Planner(self.repo, [hyp()]), critic=Critic(),

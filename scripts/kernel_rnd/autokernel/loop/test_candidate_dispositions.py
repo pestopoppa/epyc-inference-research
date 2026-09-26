@@ -169,9 +169,9 @@ class AbandonedCandidatesGetTheirOwnRow(unittest.TestCase):
         block = outcome.hypothesis_pending["scope_block"]
         self.assertEqual((block["rule"], block["source"], block["route"]),
                          (REFUSAL, "gate:op_scope", f"{KQUANTS}::{SYMBOL}"))
-        (checkpoint,) = outcome.resume_checkpoints
-        self.assertEqual((checkpoint["stage"], checkpoint["scope_block"]["rule"]),
-                         ("author", REFUSAL))
+        # Resumable through the gate_refused rows' build checkpoints once op_scope
+        # changes; the pending row itself adds no duplicate author checkpoint.
+        self.assertEqual(outcome.resume_checkpoints, [])
         self.assertEqual(len(outcome.abandoned_candidates), 2)
         self.assertEqual(outcome.to_attempt()["abandoned_candidates"],
                          outcome.abandoned_candidates)
