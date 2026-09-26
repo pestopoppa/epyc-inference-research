@@ -437,6 +437,31 @@ class AffectedOpAndIndependentReference(unittest.TestCase):
                                   "+        auto q = A[0].qs[3];\n"))
         self.assertFalse(qs.passed)
         self.assertIn("forbidden pattern", qs.reason)
+
+    def test_planner_written_symbols_resolve_the_route_but_not_the_boundary(self):
+        # DS41 run 10h: the planner named the symbol as it reads in source, and the
+        # exact lookup refused an in-body patch as "affected native op ... unresolved".
+        path = "ggml/src/ggml-cpu/llamafile/sgemm.cpp"
+        written = "tinyBLAS_Q0_AVX<block_q8_0, block_q8_0, float>::gemm4xN (template body, RN=1..4)"
+        self.assertEqual(gates.cpu_source_route(path, written).route, "dense_q8_tinyblas")
+        self.assertEqual(gates.affected_op_scope(
+            (path,), target_surface=path, target_symbol=written,
+            source_text=self._SGEMM, pre_source_text=self._SGEMM,
+            patch_text=self._hunk(self._SGEMM, "        tile4xN(); // braces in comments { do not count")),
+            ("MUL_MAT",))
+        refused = gates.affected_op_scope(
+            (path,), target_surface=path, target_symbol=written,
+            source_text=self._SGEMM, pre_source_text=self._SGEMM,
+            patch_text=self._hunk(self._SGEMM, "        return q8();"))
+        self.assertFalse(refused.passed)
+        self.assertIn("dense_q8_tinyblas route refused", refused.reason)
+        # Same path, two routes: the member name picks the right one.
+        dispatch = "ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp"
+        self.assertEqual(gates.cpu_source_route(dispatch, "ggml_iqk_try_mul_mat_id (N>1 path)").route,
+                         "iqk_mmid_dispatch")
+        self.assertEqual(gates.cpu_source_route(dispatch, "ggml_iqk_try_mul_mat").route,
+                         "iqk_dense_dispatch")
+        self.assertIsNone(gates.cpu_source_route(path, "tinyBLAS_Q4_0::gemv (other class)"))
         header = self._SGEMM.replace(
             "    NOINLINE void gemm4xN(int64_t m0, int64_t m, int64_t n0, int64_t n) {",
             "    NOINLINE void gemm4xN(int64_t m0, int64_t m, int64_t n0, int64_t n, int x) {")

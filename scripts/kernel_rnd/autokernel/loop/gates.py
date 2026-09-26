@@ -359,10 +359,35 @@ CPU_SOURCE_ROUTES = (
 CPU_SOURCE_ROUTE_PATHS = tuple(sorted({route.path for route in CPU_SOURCE_ROUTES}))
 
 
+def _route_symbol_names(target_symbol: str) -> list[str]:
+    """Bare names a planner-written target symbol can mean, most specific first.
+
+    Planners write symbols the way they read them, e.g. ``tinyBLAS_Q0_AVX<block_q8_0,
+    block_q8_0, float>::gemm4xN (template body, RN=1..4)`` (DS41 run 10h), which the exact
+    lookup never matched, so an admitted route refused the patch as "unresolved". Only the
+    LOOKUP is lenient: hunk confinement to the route's named bodies is still enforced.
+    """
+    text = str(target_symbol or "").split(" (", 1)[0].strip()
+    while True:
+        stripped = re.sub(r"<[^<>]*>", "", text)
+        if stripped == text:
+            break
+        text = stripped
+    parts = [part.strip() for part in text.split("::") if part.strip()]
+    return list(dict.fromkeys(reversed(parts)))
+
+
 def cpu_source_route(path: str, target_symbol: str) -> CpuSourceRoute | None:
     """The widened route a (single path, target symbol) pair names, if any."""
-    return next((route for route in CPU_SOURCE_ROUTES
-                 if route.path == path and target_symbol in route.symbols), None)
+    candidates = [route for route in CPU_SOURCE_ROUTES if route.path == path]
+    exact = next((route for route in candidates if target_symbol in route.symbols), None)
+    if exact is not None:
+        return exact
+    for name in _route_symbol_names(target_symbol):
+        route = next((route for route in candidates if name in route.symbols), None)
+        if route is not None:
+            return route
+    return None
 
 
 def _strip_code_line(line: str, in_block: bool) -> tuple[str, bool]:
