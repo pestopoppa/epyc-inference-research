@@ -1,0 +1,46 @@
+{
+  "schema": "exl3-cpu-real-slices-v1",
+  "scope": "real 128x128 tile submatrices; no full-model inference",
+  "fixtures": [
+    {
+      "file": "mul1_k3.bin",
+      "sha256": "539f36868a91ce53d375d4071526972c322bb31c1a17b9cca3206a44cd1c8a4a",
+      "source": "/mnt/raid0/llm/tmp/inf70/agents/x1/data3/L3_gate_proj_trellis.bin",
+      "model": "turboderp/Qwen3.8-Flash-Next-exl3",
+      "revision_or_branch": "69e33439ae950f17bcbe95c98f117d80f759ab6d",
+      "source_prefix_sha256": "3b027f403846043b6daebd76a4b31c7e080956e45b4eff632f26f07ba48ca18a",
+      "slice": "input tiles [0:8], output tiles [0:8], scales [0:128]",
+      "source_output_tiles": 40,
+      "prefix_bytes": 30720
+    },
+    {
+      "file": "mul1_k4.bin",
+      "sha256": "dd1f180e7bc7fe18f3a5177bbefb54a4ace8ad34426a4d58bacd820315a8acb9",
+      "source": "/mnt/raid0/llm/tmp/inf70/agents/x1/data/L3_gate_proj_trellis.bin",
+      "model": "turboderp/Qwen3.8-Flash-Next-exl3",
+      "revision_or_branch": "55a732e0c4c3d4614bc42b68493bb930d9b02c0a",
+      "source_prefix_sha256": "f3d78541ffa2eefe945cdf998225a53dfea739bc24fa30bd6a13116a4309a2c3",
+      "slice": "input tiles [0:8], output tiles [0:8], scales [0:128]",
+      "source_output_tiles": 40,
+      "prefix_bytes": 40960
+    },
+    {
+      "file": "mcg_k4.bin",
+      "sha256": "99681d3eb021503381b7ac25fd13e29fbecead37265ad2477b96f9fcae243e8f",
+      "source": "/workspace/tmp/intake-jev-exl3/exp-exl3/repo1/engines/tools/dione-evidence/payloads/model.language_model.layers.3.mlp.experts.0.gate_proj.rank0.trellis.bin",
+      "model": "0xSero/GLM-5.3-Flash-EXL3-Q4",
+      "revision_or_branch": "99cccdf0e8741715662c383828a9ea601990c125",
+      "source_prefix_sha256": "72a463640641ae54d565d58ddc6760a53bb5bfd2bf2c9d2f64616e3af7d08d5a",
+      "slice": "input tiles [0:8], output tiles [0:8], scales [0:128]",
+      "source_output_tiles": 32,
+      "prefix_bytes": 32768
+    }
+  ],
+  "files": {
+    "mcg_k4.bin": "99681d3eb021503381b7ac25fd13e29fbecead37265ad2477b96f9fcae243e8f",
+    "mul1_k3.bin": "539f36868a91ce53d375d4071526972c322bb31c1a17b9cca3206a44cd1c8a4a",
+    "mul1_k4.bin": "dd1f180e7bc7fe18f3a5177bbefb54a4ace8ad34426a4d58bacd820315a8acb9",
+    "mcg_lut.f16": "95383563929baa9d1ae5de0be22490284382673620bdd85929feea7bdbef04a9",
+    "mul1_lut.f16": "bc48d02cb1c14939dc47b90f870dd689d63e3b1ab69a157e65538db68677a6c8"
+  }
+}
