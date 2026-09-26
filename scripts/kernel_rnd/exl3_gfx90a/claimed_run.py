@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Provider-qualified, lease-bound standalone HIP verifier/observation launcher.
+"""Owner-run or delegated standalone HIP verifier/observation launcher.
 
 This launcher never enables a provider, grants a lease, reloads a serving process,
-or steals a claim. The owning session supplies an already ACTIVE GPU lease.
+or steals a claim. Delegation requires an ACTIVE lease and qualified provider.
+The inference roster owner may explicitly select its existing owner-run authority.
 """
 from __future__ import annotations
 import argparse
@@ -26,10 +27,39 @@ def sha(path):
         for chunk in iter(lambda:f.read(1<<20),b''):h.update(chunk)
     return h.hexdigest()
 
-def preflight(root: Path, lease_id: str, holder: str) -> dict:
+def preflight(root: Path, lease_id: str | None, holder: str, *,
+              owner_run: bool = False, task_id: str | None = None) -> dict:
     import yaml
-    config=yaml.safe_load((root/'coordination/session-bus/config.yaml').read_text())
+    config_path=root/'coordination/session-bus/config.yaml'
+    config=yaml.safe_load(config_path.read_text())
+    if not isinstance(config,dict):raise Refusal('invalid coordination configuration')
     gpu=(config.get('resource_claims') or {}).get('gpu') or {}
+    if owner_run:
+        if lease_id is not None:raise Refusal('owner-run must not claim a delegated lease')
+        if holder!='inference' or not isinstance(task_id,str) or not task_id.strip():
+            raise Refusal('owner-run requires holder inference and an explicit task ID')
+        roster=config.get('roster')
+        if not isinstance(roster,list):raise Refusal('owner-run requires the canonical inference roster')
+        owners=[row for row in roster if isinstance(row,dict) and
+                isinstance(row.get('resource_owner'),list) and 'gpu' in row['resource_owner']]
+        named=[row for row in roster if isinstance(row,dict) and row.get('id')=='inference']
+        if len(owners)!=1 or len(named)!=1 or owners[0]!=named[0]:
+            raise Refusal('owner-run requires one unambiguous inference GPU owner')
+        owner=owners[0]
+        if (owner.get('role')!='inference-main' or owner.get('schedulable') is not True or
+                not isinstance(owner.get('lanes'),list) or 'gpu' not in owner['lanes'] or
+                owner.get('role_policy')!='agents/inference-main.md'):
+            raise Refusal('inference roster is not eligible for owner-run GPU work')
+        policy=(root/'agents/inference-main.md').resolve()
+        if not policy.is_file():raise Refusal('inference owner role policy is missing')
+        return {'mode':'inference_owner','holder':holder,'task_id':task_id,
+                'campaign_id':f'owner:{holder}:{task_id}','lease':None,
+                'physical_claim_provider':'autokernel.resource.device_claim.gpu_device_claim',
+                'delegated_provider':gpu,'roster_owner':owner,
+                'config':{'path':str(config_path.resolve()),'sha256':sha(config_path)},
+                'role_policy':{'path':str(policy),'sha256':sha(policy)}}
+    if not lease_id:raise Refusal('delegated run requires a resource lease ID')
+    if task_id is not None:raise Refusal('task-id is only used with explicit owner-run mode')
     if not gpu.get('enabled') or not gpu.get('provider'):
         raise Refusal('resource_claims.gpu is disabled or provider=null; physical flock alone is insufficient authority')
     # Provider selection is owned by root governance. Do not guess compatibility.
@@ -45,7 +75,11 @@ def preflight(root: Path, lease_id: str, holder: str) -> dict:
     expires=lease.get('expires_ts')
     if not expires or datetime.fromisoformat(expires.replace('Z','+00:00'))<=datetime.now(timezone.utc):
         raise Refusal('lease expired or has no bounded expiry')
-    return {'provider':gpu,'lease':lease}
+    return {'mode':'delegated','provider':gpu,'lease':lease,'campaign_id':lease_id}
+
+def require_exclusive_kfd(sample: dict) -> None:
+    if sample['kfd_pids'] is None:raise Refusal('KFD process census unavailable')
+    if sample['kfd_pids']:raise Refusal('foreign KFD process present; no measured co-residency policy for this operator')
 
 def residency_sample(pid: int) -> dict:
     proc=Path('/sys/class/kfd/kfd/proc')
@@ -81,13 +115,17 @@ def main():
     p.add_argument('--contract-root',type=Path,required=True)
     p.add_argument('--build',type=Path,required=True)
     p.add_argument('--output',type=Path,required=True)
-    p.add_argument('--lease-id',required=True);p.add_argument('--holder',required=True)
-    p.add_argument('--preflight-only',action='store_true')
+    authority_mode=p.add_mutually_exclusive_group(required=True)
+    authority_mode.add_argument('--lease-id',help='ACTIVE delegated resource lease')
+    authority_mode.add_argument('--owner-run',action='store_true',help='Existing inference roster owner authority; no delegated lease')
+    p.add_argument('--holder',required=True)
+    p.add_argument('--task-id',help='Required task identity for owner-run mode')
+    p.add_argument('--preflight-only',action='store_true',help='Check authority only; acquire no claim and launch no GPU work')
     p.add_argument('--microbench',action='store_true')
     p.add_argument('--fixture',type=Path,help='Canonical manifest.json; transport derived and verified before GPU allocation')
     a=p.parse_args()
     if a.fixture and a.microbench:raise Refusal('fixture correctness and microbench modes are separate')
-    authority=preflight(a.root,a.lease_id,a.holder)
+    authority=preflight(a.root,a.lease_id,a.holder,owner_run=a.owner_run,task_id=a.task_id)
     if a.preflight_only:print(json.dumps(authority));return
     sys.path.insert(0,str(a.contract_root.resolve()))
     from scripts.kernel_rnd.exl3 import evidence as e
@@ -104,7 +142,7 @@ def main():
     snapshot=out/'snapshot';snapshot.mkdir()
     shutil.copy2(binary,snapshot/'test_runtime');binary=snapshot/'test_runtime'
     for name in build['source_sha256']:shutil.copy2(HERE/name,snapshot/name)
-    command=[str(binary)];read_paths=[snapshot/'test_runtime.hip',snapshot/'kernels.hip',snapshot/'contract.hpp',out/'build.json']
+    command=[str(binary)];read_paths=[snapshot/'test_runtime.hip',snapshot/'kernels.hip',snapshot/'contract.hpp',out/'build.json',out/'authority.json']
     fixture='synthetic_k1_k8_mixed_routing'
     if a.fixture:
         from fixtures import export
@@ -120,15 +158,15 @@ def main():
     env=dict(os.environ,LD_LIBRARY_PATH='/opt/rocm/lib:/opt/rocm/lib64',HIP_VISIBLE_DEVICES='0',ROCR_VISIBLE_DEVICES='0')
     (out/'libraries.txt').write_bytes(subprocess.check_output(['ldd',str(binary)],env=env))
     samples=[]
-    with gpu_device_claim('mi210_0',purpose='EXL3 standalone operator validation',campaign_id=a.lease_id,
+    with gpu_device_claim('mi210_0',purpose='EXL3 standalone operator validation',campaign_id=authority['campaign_id'],
                           holder_label=a.holder,journal=ClaimJournal(out/'claim-journal.jsonl'),timeout_s=0) as claim:
         receipt=asdict(claim.receipt());(out/'physical-claim.json').write_text(json.dumps(receipt,sort_keys=True))
         if not claim.held:raise Refusal('physical claim did not remain held')
-        preflight(a.root,a.lease_id,a.holder)
+        renewed=preflight(a.root,a.lease_id,a.holder,owner_run=a.owner_run,task_id=a.task_id)
+        if renewed!=authority:raise Refusal('authority changed before GPU launch')
         # Conservative co-residency: no foreign KFD process may share a verifier.
         before=residency_sample(os.getpid())
-        if before['kfd_pids'] is None:raise Refusal('KFD process census unavailable')
-        if before['kfd_pids']:raise Refusal('foreign KFD process present; no measured co-residency policy for this operator')
+        require_exclusive_kfd(before)
         env['EXL3_PHYSICAL_CLAIM_FD']=str(claim._fd)
         with (out/'stdout.jsonl').open('w') as stdout,(out/'stderr.txt').open('w') as stderr:
             proc=subprocess.Popen(command,stdout=stdout,stderr=stderr,env=env,pass_fds=(claim._fd,))

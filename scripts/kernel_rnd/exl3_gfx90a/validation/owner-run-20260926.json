@@ -1,0 +1,131 @@
+{
+  "schema": "epyc.exl3.gfx90a.owner_authority_review.v1",
+  "date": "2026-09-26T08:46:42.216160+00:00",
+  "base_commit": "9e4fa16264e184fbec10554418dd986ae5fb251a",
+  "source_sha256": {
+    "claimed_run.py": "b8a8bd68550caec3a0972424db1cb07f0336baf430b192a93fc18bcf78f91b9d",
+    "test_claimed_run.py": "104efe5e078bcea3a15d658a06be50044baa4ce4d43c701f3231b2094eec9b1e"
+  },
+  "authority_test": {
+    "returncode": 0,
+    "methods": 13,
+    "stdout": "",
+    "stderr": "test_both_modes_keep_physical_claim_kfd_and_residency_checks (__main__.AuthorityTests.test_both_modes_keep_physical_claim_kfd_and_residency_checks) ... ok\ntest_cli_owner_and_delegated_modes_are_mutually_exclusive (__main__.AuthorityTests.test_cli_owner_and_delegated_modes_are_mutually_exclusive) ... ok\ntest_cli_owner_preflight_never_starts_a_process_or_claim (__main__.AuthorityTests.test_cli_owner_preflight_never_starts_a_process_or_claim) ... ok\ntest_delegated_active_lease_passes (__main__.AuthorityTests.test_delegated_active_lease_passes) ... ok\ntest_delegated_lease_checks_remain_fail_closed (__main__.AuthorityTests.test_delegated_lease_checks_remain_fail_closed) ... ok\ntest_delegated_mode_refuses_owner_only_task_argument (__main__.AuthorityTests.test_delegated_mode_refuses_owner_only_task_argument) ... ok\ntest_delegation_still_requires_enabled_known_provider (__main__.AuthorityTests.test_delegation_still_requires_enabled_known_provider) ... ok\ntest_live_or_unreadable_kfd_refuses_both_modes (__main__.AuthorityTests.test_live_or_unreadable_kfd_refuses_both_modes) ... ok\ntest_owner_disabled_provider_has_explicit_authority_without_lease (__main__.AuthorityTests.test_owner_disabled_provider_has_explicit_authority_without_lease) ... ok\ntest_owner_is_not_an_automatic_holder_bypass (__main__.AuthorityTests.test_owner_is_not_an_automatic_holder_bypass) ... ok\ntest_owner_missing_policy_refuses (__main__.AuthorityTests.test_owner_missing_policy_refuses) ... ok\ntest_owner_refuses_another_holder_missing_task_or_lease_claim (__main__.AuthorityTests.test_owner_refuses_another_holder_missing_task_or_lease_claim) ... ok\ntest_owner_roster_must_be_unique_and_current (__main__.AuthorityTests.test_owner_roster_must_be_unique_and_current) ... ok\n\n----------------------------------------------------------------------\nRan 13 tests in 0.037s\n\nOK\n"
+  },
+  "python_compile_returncode": 0,
+  "owner_authority_preflight": {
+    "command": [
+      "/usr/bin/python3",
+      "/mnt/raid0/llm/worktrees/exl3-owner-run-20260926/scripts/kernel_rnd/exl3_gfx90a/claimed_run.py",
+      "--root",
+      "/workspace",
+      "--contract-root",
+      "/tmp/exl3-research-contract",
+      "--build",
+      "/mnt/raid0/llm/tmp/exl3-gfx90a-build-20260926",
+      "--output",
+      "/mnt/raid0/llm/tmp/exl3-owner-preflight-unused",
+      "--preflight-only",
+      "--owner-run",
+      "--holder",
+      "inference",
+      "--task-id",
+      "EXL3-owner-authority-review"
+    ],
+    "returncode": 0,
+    "authority": {
+      "mode": "inference_owner",
+      "holder": "inference",
+      "task_id": "EXL3-owner-authority-review",
+      "campaign_id": "owner:inference:EXL3-owner-authority-review",
+      "lease": null,
+      "physical_claim_provider": "autokernel.resource.device_claim.gpu_device_claim",
+      "delegated_provider": {
+        "provider": null,
+        "enabled": false
+      },
+      "roster_owner": {
+        "id": "inference",
+        "role": "inference-main",
+        "lanes": [
+          "cpu",
+          "gpu",
+          "none"
+        ],
+        "endpoint": "tmux:agent:inference",
+        "drain": "boundary",
+        "schedulable": true,
+        "resource_owner": [
+          "cpu",
+          "gpu"
+        ],
+        "role_policy": "agents/inference-main.md",
+        "recommended_launch_profiles": [
+          {
+            "model": "gpt-5.6-terra",
+            "effort": "medium"
+          },
+          {
+            "model": "claude-opus",
+            "effort": "high"
+          }
+        ]
+      },
+      "config": {
+        "path": "/workspace/coordination/session-bus/config.yaml",
+        "sha256": "332d71912a310559541bc55e67c6dac8c766a9160746ae9e46a5ed03529f8fcd"
+      },
+      "role_policy": {
+        "path": "/workspace/agents/inference-main.md",
+        "sha256": "0ffaee89b7226033a8f5a9e393d86ad6b4054db133826d8d17d2ab33ac947d37"
+      }
+    }
+  },
+  "delegated_authority_preflight": {
+    "command": [
+      "/usr/bin/python3",
+      "/mnt/raid0/llm/worktrees/exl3-owner-run-20260926/scripts/kernel_rnd/exl3_gfx90a/claimed_run.py",
+      "--root",
+      "/workspace",
+      "--contract-root",
+      "/tmp/exl3-research-contract",
+      "--build",
+      "/mnt/raid0/llm/tmp/exl3-gfx90a-build-20260926",
+      "--output",
+      "/mnt/raid0/llm/tmp/exl3-owner-preflight-unused",
+      "--preflight-only",
+      "--lease-id",
+      "preflight-no-such-lease",
+      "--holder",
+      "inference"
+    ],
+    "returncode": 2,
+    "refusal": {
+      "status": "refused",
+      "reason": "resource_claims.gpu is disabled or provider=null; physical flock alone is insufficient authority"
+    }
+  },
+  "read_only_kfd_sample": {
+    "time": "2026-09-26T08:46:42.216131+00:00",
+    "pid": 2159950,
+    "pid_alive": true,
+    "kfd_pids": [
+      "1892835",
+      "2005824",
+      "2006079",
+      "2009477"
+    ],
+    "vram_used_bytes": {
+      "/sys/class/drm/card2/device/mem_info_vram_used": 67008638976
+    }
+  },
+  "co_residency_preflight": {
+    "status": "refused",
+    "reason": "foreign KFD process present; no measured co-residency policy for this operator"
+  },
+  "physical_claim_acquired": false,
+  "hip_runtime_executed": false,
+  "full_model_inference_executed": false,
+  "gate_effect": "G3, G4 and G5 remain OPEN; authority and mock boundary tests only",
+  "build_provenance": "Historical build and host receipts remain unchanged; refresh build manifest before actual runtime because the launcher source changed."
+}
