@@ -272,10 +272,60 @@ def _actor_limits(args) -> dict[str, int]:
             "author_output_limit": int(args.actor_author_output_limit)}
 
 
-def _actor_thinking(args) -> dict[str, str]:
-    """OAB-24: the author-only reasoning switch as an ActorSeat field. Only the
-    planner/author seat takes it; the critic seat never does."""
-    return {"author_thinking": str(args.actor_author_thinking)}
+def measurement_epoch_inputs(epoch_inputs: Mapping[str, Any],
+                             resolved_campaign=None) -> dict[str, Any]:
+    """The epoch inputs minus actor/backend configuration.
+
+    Every epoch input is measurement identity (execution digests, request set, target,
+    screen scope, instrument) except `enrolled_manifest_digest`, which folds the
+    campaign's actor roster in; it is replaced by the resolved campaign's
+    `measurement_digest` (the same document without `actors`/`fallbacks`)."""
+    out = {key: value for key, value in epoch_inputs.items()
+           if key != "enrolled_manifest_digest"}
+    if "enrolled_manifest_digest" in epoch_inputs:
+        if resolved_campaign is None:
+            raise ValueError("an enrolled manifest digest needs its resolved campaign")
+        out["enrolled_measurement_digest"] = resolved_campaign.measurement_digest
+    return out
+
+
+def _actor_config(args, resolved_campaign=None) -> dict[str, Any]:
+    """This launch's actor/backend configuration: provenance only, never identity.
+
+    Recorded on every checkpoint and in loop-run.json; a resumed row carries the keys
+    that differ from its checkpoint's (`resume.actor_config_diff`)."""
+    get = lambda name, default=None: getattr(args, name, default)  # noqa: E731
+    config: dict[str, Any] = {
+        "planner_model": get("planner_model"), "planner_effort": get("planner_effort"),
+        "critic_model": get("critic_model"), "critic_effort": get("critic_effort"),
+        # The author runs on the planner's backend.
+        "author_model": get("planner_model"),
+        "author_thinking": get("actor_author_thinking"),
+        "author_action_rule": get("actor_author_action_rule"),
+        "actor_seat": get("actor_seat"), "actor_concise": get("actor_concise"),
+        "actor_context_limit": get("actor_context_limit"),
+        "actor_output_limit": get("actor_output_limit"),
+        "actor_planner_output_limit": get("actor_planner_output_limit"),
+        "actor_author_output_limit": get("actor_author_output_limit"),
+        "actor_planner_budget_s": get("actor_planner_budget_s"),
+        "actor_author_budget_s": get("actor_author_budget_s"),
+        "actor_timeout_s": get("actor_timeout_s"),
+        "actor_trim_instructions": get("actor_trim_instructions"),
+        "actor_trim_tools": get("actor_trim_tools"),
+        "actor_lane_guard": get("actor_lane_guard"),
+    }
+    if resolved_campaign is not None:
+        config["manifest_actors"] = {key: value for key, value in resolved_campaign.actors}
+        config["manifest_fallbacks"] = {key: list(values)
+                                        for key, values in resolved_campaign.fallbacks}
+    return json.loads(json.dumps(config, default=str))
+
+
+def _actor_thinking(args) -> dict[str, Any]:
+    """OAB-24: the author-only reasoning switch and action rule as ActorSeat fields.
+    Only the planner/author seat takes them; the critic seat never does."""
+    return {"author_thinking": str(args.actor_author_thinking),
+            "author_action_rule": getattr(args, "actor_author_action_rule", "off") == "on"}
 
 
 def _effective_output_limits(args) -> dict[str, int]:
@@ -303,15 +353,24 @@ def _actor_budget_error(args) -> str | None:
     context = int(args.actor_context_limit)
     if not context:
         return None
-    # opencode compacts at context - output; an output limit at or past half the
-    # context leaves the compaction threshold under the output it must make room for.
+    # Operator pool budget (2026-09-26): a FULL unified pool plus MTP crashes
+    # llama-server, so the context cap leaves >= 16k of :8083's unified pool free for
+    # the other slots, and opencode (which compacts at context - output) keeps >= 32k
+    # of context headroom under every role's output limit.
+    cap = actor_opencode_config.MAX_CONTEXT_LIMIT
+    if context > cap:
+        return (f"--actor-context-limit ({context}) must be <= {cap} (the "
+                f"{actor_opencode_config.POOL_TOKENS}-token unified pool minus "
+                f"{actor_opencode_config.POOL_RESERVE} kept free: a full pool plus MTP "
+                "crashes llama-server)")
+    headroom = actor_opencode_config.MIN_COMPACTION_HEADROOM
     for flag in ("actor_output_limit", "actor_planner_output_limit",
                  "actor_author_output_limit"):
         output = int(getattr(args, flag))
-        if output and output * 2 >= context:
-            return (f"--{flag.replace('_', '-')} ({output}) must be below half of "
-                    f"--actor-context-limit ({context}): opencode compacts at "
-                    "context - output and needs that headroom")
+        if output and output >= context - headroom:
+            return (f"--{flag.replace('_', '-')} ({output}) must be below "
+                    f"--actor-context-limit - {headroom} ({context - headroom}): "
+                    "opencode compacts at context - output and needs that headroom")
     return None
 
 
@@ -862,7 +921,8 @@ def main(argv: list[str] | None = None) -> int:
                              "without it (0) a config-only model NEVER compacts proactively "
                              "and DS41 run 10's planner reached 183,710 of :8083's 196,608 "
                              "unified-pool tokens (full pool + MTP crashes the server). "
-                             "Default leaves the other np4 slots >=~45k (default: %(default)s)")
+                             "At most 196608 - 16384 so >=16k of the pool stays free for the "
+                             "other slots (operator 2026-09-26) (default: %(default)s)")
     parser.add_argument("--actor-output-limit", type=int,
                         default=actor_opencode_config.DEFAULT_OUTPUT_LIMIT,
                         help="opencode planner/author/critic (OAB-23): `limit.output`, sent as "
@@ -880,18 +940,29 @@ def main(argv: list[str] | None = None) -> int:
                              "--actor-output-limit). A file-write tool call's arguments are "
                              "output tokens; DS41 run 10b's author ended on one 8,192-token "
                              "step with no report (failure_class=output_capped_empty). Must "
-                             "stay below half of --actor-context-limit "
-                             "(default: %(default)s)")
+                             "stay below --actor-context-limit - 32768; above 32000 the call "
+                             "raises opencode's own ceiling (OPENCODE_EXPERIMENTAL_OUTPUT_"
+                             "TOKEN_MAX) (default: %(default)s)")
     parser.add_argument("--actor-author-thinking",
                         choices=actor_opencode_config.THINKING_CHOICES,
                         default=actor_opencode_config.DEFAULT_AUTHOR_THINKING,
-                        help="opencode author ONLY (OAB-24, operator 2026-09-25): 'off' sends "
-                             "chat_template_kwargs {enable_thinking: false} on every request "
-                             "of an authoring call (per-call config, model options); the "
-                             "planner and critic keep the server's default reasoning. DS41 "
-                             "run 10c's author decoded 74,288 tokens in 2,700 s re-deriving "
-                             "a layout in <think> and made zero edits. 'default' = the "
-                             "historical config byte for byte (default: %(default)s)")
+                        help="opencode author ONLY (OAB-24): 'medium' (operator 2026-09-26) "
+                             "sends chat_template_kwargs {enable_thinking: true, "
+                             "reasoning_effort: medium} on every request of an authoring call "
+                             "(per-call config, model options); 'off' sends {enable_thinking: "
+                             "false}. The planner and critic keep the server's default "
+                             "reasoning. Thinking uncapped, DS41 run 10c's author decoded "
+                             "74,288 tokens re-deriving a layout and made zero edits; "
+                             "thinking off (run 10g) it edited but wrote broken AVX-512. "
+                             "'default' = the historical config byte for byte "
+                             "(default: %(default)s)")
+    parser.add_argument("--actor-author-action-rule", choices=("on", "off"), default="on",
+                        help="opencode author ONLY (operator 2026-09-26): append the author "
+                             "action rule (think briefly then act in small verified edits, "
+                             "copy the tree's own idioms, only intrinsics seen in the tree or "
+                             "the GCC headers, signatures match callers, stay in scope or "
+                             "abstain). Off = the historical prompt byte for byte "
+                             "(default: %(default)s)")
     parser.add_argument("--actor-concise", choices=("on", "off"), default="on",
                         help="opencode planner/author (OAB-22): append the concision rule "
                              "(derive each fact once, analysis under ~4,000 tokens, reply is "
@@ -1346,6 +1417,21 @@ def main(argv: list[str] | None = None) -> int:
     epoch = archive.epoch_for(anchor_commit=anchor_commit,
                               build_recipe=recipe.to_dict(),
                               **({"host_state": epoch_inputs} if epoch_inputs else {}))
+    # The MEASUREMENT epoch: the same inputs minus actor/backend configuration. The
+    # full epoch above folds the manifest's actor roster in (through
+    # `enrolled_manifest_digest`); DS41 2026-09-26 switched the critic model and the
+    # epoch moved e0aefe6a -> e384c2ad, orphaning every resume checkpoint with anchor,
+    # target, recipe, instrument, requests and floor unchanged. Resume binds on this
+    # one; the full epoch stays the provenance key (archive rows, history, status).
+    # Without an enrolled manifest the two are the same digest.
+    measurement_inputs = measurement_epoch_inputs(
+        epoch_inputs, resolved_campaign if selected_identity is not None else None)
+    measurement_epoch = (epoch if measurement_inputs == epoch_inputs else
+                         archive.epoch_for(anchor_commit=anchor_commit,
+                                           build_recipe=recipe.to_dict(),
+                                           host_state=measurement_inputs))
+    launch_actor_config = _actor_config(
+        args, resolved_campaign if selected_identity is not None else None)
     runtime_statistical = None
     runtime_epoch = None
     runtime_calibration_launches = None
@@ -1357,11 +1443,14 @@ def main(argv: list[str] | None = None) -> int:
                 _read_cpu_document(args.runtime_statistics))
             runtime_epoch, runtime_calibration_launches = runtime_calibration.prospective_budget(
                 campaign_id=resolved_campaign.campaign_id if selected_target is not None else "ak-loop",
-                source_epoch=epoch, statistical=runtime_statistical,
+                # Calibration statistics describe the measurement, not the actors:
+                # keyed on the measurement epoch so an actor swap reuses them.
+                source_epoch=measurement_epoch, statistical=runtime_statistical,
                 max_launches=args.runtime_calibration_max_launches)
         except (OSError, ValueError, runtime_calibration.RuntimeCalibrationRefused) as exc:
             parser.error(f"runtime calibration preflight refused before resource claim: {exc}")
-    print(f"anchor    {anchor_commit[:12]}   epoch {epoch[:12]}")
+    print(f"anchor    {anchor_commit[:12]}   epoch {epoch[:12]}   "
+          f"measurement-epoch {measurement_epoch[:12]}")
 
     pp, tg, ubatch = bench.SURFACES[args.surface]
     bench_surface = args.surface
@@ -1512,7 +1601,8 @@ def main(argv: list[str] | None = None) -> int:
           + " "
           f"concise={args.actor_concise} planner-budget={args.actor_planner_budget_s}s "
           f"author-budget={args.actor_author_budget_s}s "
-          f"author-thinking={args.actor_author_thinking}")
+          f"author-thinking={args.actor_author_thinking} "
+          f"author-action-rule={args.actor_author_action_rule}")
     for moot in _moot_budgets(args):
         print(f"actors    WARNING {moot} is not below --actor-timeout-s={args.actor_timeout_s}: "
               "the hard timeout ends those calls first, so the budget never fires")
@@ -2909,7 +2999,10 @@ def main(argv: list[str] | None = None) -> int:
                 attempt["research_scope"]["cpu_screen"] = dict(screen_state)
             resume_mod.bind_checkpoints(attempt, epoch=epoch,
                                         anchor_commit=current_anchor_commit[0],
-                                        target=resume_target)
+                                        target=resume_target,
+                                        measurement_epoch=measurement_epoch,
+                                        actor_config=launch_actor_config)
+            resume_mod.stamp_actor_diff(attempt, resume_queue[0])
             journal_receipts = []
             try:
                 archive.record(args.store, attempt, epoch=epoch,
@@ -2967,7 +3060,10 @@ def main(argv: list[str] | None = None) -> int:
                 attempt["research_scope"]["cpu_screen"] = dict(screen_state)
             resume_mod.bind_checkpoints(attempt, epoch=epoch,
                                         anchor_commit=current_anchor_commit[0],
-                                        target=resume_target)
+                                        target=resume_target,
+                                        measurement_epoch=measurement_epoch,
+                                        actor_config=launch_actor_config)
+            resume_mod.stamp_actor_diff(attempt, resume_queue[0])
             archive.record(args.store, attempt, epoch=epoch, recorded_at=loop._now(),
                            campaign_id="ak-loop")
             settle_resume(candidate)
@@ -3205,7 +3301,9 @@ def main(argv: list[str] | None = None) -> int:
                 resume_queue[0], resume_report = resume_mod.prepare(
                     args.store, epoch=epoch, anchor_commit=current_anchor_commit[0],
                     target=resume_target, repo=args.worktree,
-                    on_rejected=record_resume_rejected, scratch=args.store)
+                    on_rejected=record_resume_rejected, scratch=args.store,
+                    measurement_epoch=measurement_epoch,
+                    actor_config=launch_actor_config)
                 print(f"resume    scanned {resume_report['scanned']} checkpoint(s): "
                       f"{len(resume_report['queued'])} queued, "
                       f"{len(resume_report['rejected'])} rejected, "
@@ -3215,8 +3313,13 @@ def main(argv: list[str] | None = None) -> int:
                          f"in other epochs (not this launch's)"
                          if resume_report["other_epoch_rows"] else ""), flush=True)
                 for row in resume_report["queued"]:
+                    diff = row.get("actor_config_diff")
                     print(f"resume    queued {row['mechanism_id']} at {row['stage']} "
-                          f"(from {row['checkpoint_id']})", flush=True)
+                          f"(from {row['checkpoint_id']})"
+                          + (f"; actor config differs: {', '.join(diff)}" if diff else
+                             "; checkpoint predates actor-config recording"
+                             if "actor_config_diff" in row and diff is None else ""),
+                          flush=True)
             except Exception as exc:      # noqa: BLE001 -- fresh research still runs
                 print(f"resume    unavailable: {type(exc).__name__}: {exc}", file=sys.stderr)
         elif args.resume == "off":
@@ -3869,6 +3972,7 @@ def main(argv: list[str] | None = None) -> int:
             body = {
                 "schema": "epyc.autokernel.loop_run.v1",
                 "epoch": epoch, "anchor_commit": anchor_commit,
+                "measurement_epoch": measurement_epoch, "actor_config": launch_actor_config,
                 **({"runtime_preparation": dict(runtime_preparation)} if direct_launch else {}),
                 **({"runtime_recipe_reference": runtime_recipe_reference[0]}
                    if runtime_recipe_reference[0] is not None else {}),

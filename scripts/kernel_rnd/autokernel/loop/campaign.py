@@ -303,6 +303,13 @@ class CampaignManifest:
     def manifest_digest(self) -> str:
         return _digest(self.to_dict())
 
+    @property
+    def measurement_digest(self) -> str:
+        """The digest of what this manifest MEASURES: everything but the actor roster
+        (`actors`, `fallbacks`). Resume and measurement comparability bind on this, so
+        swapping a planner/critic/author model leaves checkpoints resumable."""
+        return _digest(_measurement_view(self.to_dict()))
+
 
 def _target_list(value: Any, label: str) -> Sequence[Mapping[str, Any]]:
     if isinstance(value, (str, bytes)) or not isinstance(value, Sequence):
@@ -628,6 +635,24 @@ class ResolvedCampaign:
                 "actors": _pairs_dict(self.actors),
                 "fallbacks": {key: list(values) for key, values in self.fallbacks},
                 "targets": [item.to_dict() for item in self.targets]}
+
+    @property
+    def measurement_digest(self) -> str:
+        """The digest of what this resolved campaign MEASURES: everything but the actor
+        roster (`actors`, `fallbacks`) and the manifest digest that folds the roster in.
+        DS41 2026-09-26: switching the critic model moved `manifest_digest` and with it
+        the run epoch (e0aefe6a -> e384c2ad), orphaning every resume checkpoint although
+        the anchor, target, recipe, instrument, requests and floor were unchanged."""
+        return _digest(_measurement_view(self.to_dict()))
+
+
+#: The manifest fields that name WHO acts (actor/backend configuration), never what is
+#: measured. `manifest_digest` is excluded too because it folds `actors` in.
+ACTOR_FIELDS = ("actors", "fallbacks", "manifest_digest")
+
+
+def _measurement_view(row: Mapping[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in row.items() if key not in ACTOR_FIELDS}
 
 
 ArtifactResolver = Callable[[str, str, Mapping[str, Any]], Mapping[str, Any] | None]
