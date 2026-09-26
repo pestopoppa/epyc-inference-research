@@ -69,7 +69,31 @@ def _activation(token: int, column: int) -> float:
 
 
 def _source_weight(expert: int, row: int, column: int) -> float:
-    return ((column * 13 + row * 7 + expert * 17) % 31 - 15) / 16.0
+    """Fixture weight whose every stored quant scale varies (DS41-C53).
+
+    Each 32-column block is `level * step - minimum` with its own step
+    (amplitude x per-row gain) and its own minimum (code x per-row gain), so
+    Q8_0 `d` varies per block, Q4_K/Q5_K sub-scales AND mins vary per
+    sub-block (independently of each other), and `d`/`dmin` vary per row (one
+    256-column super-block per row). The previous constant-amplitude fixture
+    spanned the same +/-15/16 in every block: one Q8_0 `d` for every block and
+    uniform K sub-scales, so a scale-layout permutation bug could not change
+    any output (intake-1825#record: a gfx90a scale-layout bug passed
+    constant-scale fixtures).
+
+    The level sweeps all 31 residues in every block; amplitude codes 2..9 map
+    to 6-bit sub-scales 14..63 and minimum codes 28..63 are themselves 6-bit,
+    with 63 of each in every row, so Q5_K can store this grid almost exactly.
+    Values are integer/2048: exact in float, bit-identical to the probe's C++
+    `weight()`.
+    """
+    block = column // 32
+    level = (column * 13 + row * 7 + expert * 17) % 31
+    amplitude = 2 + (block * 5 + row + expert * 5) % 8
+    gain = 8 - (row * 3 + expert * 3) % 4
+    minimum = 63 - 5 * ((block * 3 + row * 5 + expert) % 8)
+    minimum_gain = 16 - (row + expert * 7) % 5
+    return (level * amplitude * gain - minimum * minimum_gain) / 2048.0
 
 
 def _scale_min(scales: bytes, group: int) -> tuple[int, int]:

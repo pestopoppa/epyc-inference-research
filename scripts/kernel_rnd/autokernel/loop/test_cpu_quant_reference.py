@@ -9,13 +9,104 @@ from unittest import mock
 from autokernel.loop import cpu_quant_reference as fixture
 
 
-def q8_encoded_row(expert: int, row: int) -> bytes:
-    blocks = []
+def _f16(value: float) -> float:
+    return struct.unpack("<e", struct.pack("<e", value))[0]
+
+
+def q8_encoded_row(expert: int, row: int, block_order: tuple[int, ...] = tuple(range(8))) -> bytes:
+    """Q8_0 row of the fixture; `block_order` lets a test mis-assign block scales."""
+    values = [fixture._source_weight(expert, row, column) for column in range(fixture.K)]
+    scales, quants = [], []
     for block in range(8):
-        ints = [int(16 * fixture._source_weight(expert, row, block * 32 + column))
-                for column in range(32)]
-        blocks.append(struct.pack("<e32b", 1 / 16, *ints))
-    return b"".join(blocks)
+        chunk = values[block * 32:(block + 1) * 32]
+        scale = _f16(max(abs(value) for value in chunk) / 127)
+        scales.append(scale)
+        quants.append([max(-127, min(127, round(value / scale))) for value in chunk])
+    return b"".join(struct.pack("<e32b", scales[block_order[block]], *quants[block])
+                    for block in range(8))
+
+
+def _pack_k_scales(scales: list[int], minimums: list[int]) -> bytes:
+    """Inverse of `fixture._scale_min`: ggml's 12-byte 6-bit K-quant layout."""
+    packed = [0] * 12
+    for group in range(4):
+        packed[group] = scales[group] | ((scales[group + 4] >> 4) << 6)
+        packed[group + 4] = minimums[group] | ((minimums[group + 4] >> 4) << 6)
+        packed[group + 8] = (scales[group + 4] & 15) | ((minimums[group + 4] & 15) << 4)
+    return bytes(packed)
+
+
+def k_encoded_row(quant: str, expert: int, row: int,
+                  scale_order: tuple[int, ...] = tuple(range(8))) -> bytes:
+    """Independent Q4_K/Q5_K encoder for the fixture row.
+
+    `scale_order` stores sub-block g's (scale, min) pair from sub-block
+    `scale_order[g]` while keeping the quants: the byte image a kernel with a
+    sub-scale layout/permutation bug effectively decodes.
+    """
+    levels = 15 if quant == "Q4_K" else 30  # 30: the fixture's 31-level grid
+    values = [fixture._source_weight(expert, row, column) for column in range(fixture.K)]
+    steps, minimums = [], []
+    for group in range(8):
+        chunk = values[group * 32:(group + 1) * 32]
+        low = min(0.0, min(chunk))
+        steps.append((max(chunk) - low) / levels)
+        minimums.append(-low)
+    d, dmin = _f16(max(steps) / 63), _f16(max(minimums) / 63)
+    scale_codes = [round(step / d) for step in steps]
+    minimum_codes = [round(minimum / dmin) if dmin else 0 for minimum in minimums]
+    top = 15 if quant == "Q4_K" else 31
+    quants = []
+    for group in range(8):
+        step = d * scale_codes[group]
+        for value in values[group * 32:(group + 1) * 32]:
+            quant_value = round((value + dmin * minimum_codes[group]) / step) if step else 0
+            quants.append(max(0, min(top, quant_value)))
+    packed, high = bytearray(128), bytearray(32)
+    for group in range(8):
+        for column32 in range(32):
+            quant_value = quants[group * 32 + column32]
+            if quant_value & 16:
+                high[column32] |= 1 << group
+            packed[(group // 2) * 32 + column32] |= (quant_value & 15) << (4 * (group % 2))
+    header = struct.pack("<ee", d, dmin) + _pack_k_scales(
+        [scale_codes[scale_order[g]] for g in range(8)],
+        [minimum_codes[scale_order[g]] for g in range(8)])
+    return header + (bytes(packed) if quant == "Q4_K" else bytes(high) + bytes(packed))
+
+
+def encoded_row(quant: str, expert: int, row: int,
+                order: tuple[int, ...] = tuple(range(8))) -> bytes:
+    return (q8_encoded_row(expert, row, order) if quant == "Q8_0"
+            else k_encoded_row(quant, expert, row, order))
+
+
+def permuted_scale_output(quant: str, op: str, width: int,
+                          order: tuple[int, ...]) -> str:
+    """Probe output whose stored bytes are right but whose outputs were computed
+    by a kernel that reads the per-block scales in `order`."""
+    experts = 2 if op == "MUL_MAT_ID" else 1
+    lines = [f"{fixture.MARKER} {quant} {op} 256 40 {width} {fixture.ROW_BYTES[quant]}"]
+    misread = {}
+    for expert in range(experts):
+        for row in range(fixture.ROWS):
+            lines.append(f"A {expert} {row} {encoded_row(quant, expert, row).hex()}")
+            misread[expert, row] = encoded_row(quant, expert, row, order)
+    for token in range(width):
+        for row in range(fixture.ROWS):
+            value = fixture._reference(quant, op, misread, token, row)
+            lines.append(f"O {token} {row} {value.hex()}")
+    return "\n".join(lines) + "\n"
+
+
+def _constant_scale_weight(expert: int, row: int, column: int) -> float:
+    # The pre-DS41-C53 fixture: every 32-block spans the same +/-15/16.
+    return ((column * 13 + row * 7 + expert * 17) % 31 - 15) / 16.0
+
+
+IDENTITY = tuple(range(8))
+ADJACENT_SWAP = (1, 0, 3, 2, 5, 4, 7, 6)
+REVERSED = tuple(range(7, -1, -1))
 
 
 def q8_fused_output(width: int = fixture.TOKENS,
@@ -189,7 +280,7 @@ class QuantReferenceTest(unittest.TestCase):
         metric = json.loads(receipt)
         self.assertEqual((metric["quant"], metric["op"], metric["outputs"]),
                          ("Q8_0", "MUL_MAT_ID", 80))
-        self.assertEqual(metric["max_quant_abs_error"], 0)
+        self.assertLess(metric["max_quant_abs_error"], fixture.QUANT_ABS_TOL["Q8_0"])
         self.assertAlmostEqual(metric["max_output_abs_error"], 0.009)
         self.assertAlmostEqual(metric["max_output_limit_fraction"], 0.9)
         self.assertEqual((metric["output_abs_tol"], metric["output_rel_tol"]),
@@ -230,13 +321,12 @@ class QuantReferenceTest(unittest.TestCase):
         self.assertIn("mismatch", result.reason)
 
     def test_near_boundary_wrong_output_is_rejected(self):
-        # The exact synthetic reference at this point is 0.625. A +0.012
-        # perturbation is only 1.2% of the output, but exceeds both the
-        # 0.01 absolute and 0.005 relative allowances.
+        # Below |2| the absolute allowance dominates. A +0.012 perturbation
+        # exceeds both the 0.01 absolute and 0.005 relative allowances.
         lines = q8_output().splitlines()
         index = next(i for i, line in enumerate(lines) if line.startswith("O 0 0 "))
         baseline = float.fromhex(lines[index].split()[3])
-        self.assertEqual(baseline, 0.625)
+        self.assertLess(abs(baseline), 1.0)
         lines[index] = f"O 0 0 {(baseline + 0.009).hex()}"
         self.assertEqual(fixture._parse_and_compare("\n".join(lines),
                                                     "Q8_0", "MUL_MAT_ID").status, "pass")
@@ -263,6 +353,59 @@ class QuantReferenceTest(unittest.TestCase):
         decoded5 = fixture._decode_row("Q5_K", q5)
         self.assertEqual(decoded5[:32], (17.0,) * 32)
         self.assertEqual(decoded5[32:64], (2.0,) * 32)
+
+    def test_fixture_scales_vary_per_block_and_sub_block(self):
+        # DS41-C53: every stored scale must vary, or a scale-layout bug is
+        # invisible. Checked on the encoder's stored codes, for the up and the
+        # fused gate matrices (expert + 3, row + 5).
+        row_scales = set()
+        for expert, row in [(e, r) for e in range(2) for r in range(fixture.ROWS)] + \
+                [(e + 3, r + 5) for e in range(2) for r in range(fixture.ROWS)]:
+            q8 = q8_encoded_row(expert, row)
+            q8_scales = [struct.unpack_from("<e", q8, 34 * block)[0] for block in range(8)]
+            # amax/127 can coincide for two non-adjacent blocks; never for a pair
+            # an adjacent-block mis-read would confuse.
+            self.assertGreaterEqual(len(set(q8_scales)), 7, (expert, row))
+            self.assertTrue(all(q8_scales[b] != q8_scales[b ^ 1] for b in range(8)))
+            for quant in ("Q4_K", "Q5_K"):
+                encoded = k_encoded_row(quant, expert, row)
+                pairs = [fixture._scale_min(encoded[4:16], group) for group in range(8)]
+                self.assertEqual(len({scale for scale, _ in pairs}), 8, (quant, expert, row))
+                self.assertEqual(len({minimum for _, minimum in pairs}), 8,
+                                 (quant, expert, row))
+                # Scales and mins vary independently: a scale/min swap is visible.
+                self.assertTrue(any(scale != minimum for scale, minimum in pairs))
+                row_scales.add((quant, struct.unpack_from("<ee", encoded)))
+        self.assertGreaterEqual(len({v for q, v in row_scales if q == "Q4_K"}), 4)
+
+    def test_scale_layout_permutation_is_caught(self):
+        # intake-1825#record: a gfx90a scale-layout bug passed constant-scale
+        # fixtures. A kernel that reads per-block scales (Q8_0 d, K-quant
+        # sub-scale/min pairs) in the wrong order must fail the oracle at every
+        # width, including width 1, where each token touches only 4 blocks.
+        for quant in fixture.QUANTS:
+            for op in fixture.OPS:
+                for width in (1, 2, 8):
+                    for order in (ADJACENT_SWAP, REVERSED):
+                        with self.subTest(quant=quant, op=op, width=width, order=order):
+                            result = fixture._parse_and_compare(
+                                permuted_scale_output(quant, op, width, order), quant, op, width)
+                            self.assertEqual(result.status, "wrong")
+                            self.assertIn(f"{quant} {op} mismatch", result.reason)
+                with self.subTest(quant=quant, op=op, order="identity"):
+                    self.assertEqual(fixture._parse_and_compare(
+                        permuted_scale_output(quant, op, 8, IDENTITY), quant, op, 8).status,
+                        "pass")
+
+    def test_constant_scale_fixture_was_blind_to_permutation(self):
+        # The control that makes the test above meaningful: under the old
+        # constant-amplitude fixture the same mis-read passes.
+        with mock.patch.object(fixture, "_source_weight", _constant_scale_weight):
+            for quant in fixture.QUANTS:
+                with self.subTest(quant=quant):
+                    self.assertEqual(fixture._parse_and_compare(
+                        permuted_scale_output(quant, "MUL_MAT", 8, ADJACENT_SWAP),
+                        quant, "MUL_MAT", 8).status, "pass")
 
     def test_missing_rows_and_identity_are_untrusted(self):
         output = q8_output()

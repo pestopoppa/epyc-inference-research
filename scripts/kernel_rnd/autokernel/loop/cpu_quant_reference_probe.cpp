@@ -23,8 +23,16 @@ static float activation(int token, int column) {
     return 0.0f;
 }
 
+// Must stay bit-identical to cpu_quant_reference._source_weight, which
+// documents why: every stored Q8_0/Q4_K/Q5_K scale and min must vary.
 static float weight(int expert, int row, int column) {
-    return ((column * 13 + row * 7 + expert * 17) % 31 - 15) / 16.0f;
+    const int block = column / 32;
+    const int level = (column * 13 + row * 7 + expert * 17) % 31;
+    const int amplitude = 2 + (block * 5 + row + expert * 5) % 8;
+    const int gain = 8 - (row * 3 + expert * 3) % 4;
+    const int minimum = 63 - 5 * ((block * 3 + row * 5 + expert) % 8);
+    const int minimum_gain = 16 - (row + expert * 7) % 5;
+    return static_cast<float>(level * amplitude * gain - minimum * minimum_gain) / 2048.0f;
 }
 
 int main(int argc, char ** argv) {
