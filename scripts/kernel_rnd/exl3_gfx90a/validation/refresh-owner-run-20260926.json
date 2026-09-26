@@ -1,0 +1,89 @@
+{
+  "schema": "epyc.exl3.gfx90a.build_refresh.v1",
+  "date": "2026-09-26T08:52:04.038230+00:00",
+  "base_commit": "b02b1889700eff299e094e7feecf98a1704aadd2",
+  "build_directory": "/mnt/raid0/llm/tmp/exl3-gfx90a-owner-build-20260926",
+  "host_directory": "/mnt/raid0/llm/tmp/exl3-gfx90a-owner-host-20260926",
+  "build_manifest_sha256": "9ce75fdba55a046dfd25d7a28a9ac37e1ef68030c9b31d559bf97a4aa8add19a",
+  "committed_build_receipt": "build-owner-run-20260926.json",
+  "source_hashes_current": 11,
+  "artifact_hashes_verified": 6,
+  "claimed_run_sha256": "b8a8bd68550caec3a0972424db1cb07f0336baf430b192a93fc18bcf78f91b9d",
+  "exact_target": "gfx90a:xnack-:sramecc+",
+  "code_object_version": 5,
+  "wave64_kernels": 20,
+  "mfma_instructions": 2,
+  "code_object_sha256": "7dc947dcbaa055fbac49a19f606038229289ab99f721db0e76936136be676a71",
+  "negative_target_probe": {
+    "command": [
+      "/opt/rocm/bin/hipcc",
+      "-std=c++17",
+      "-O2",
+      "--offload-arch=gfx908",
+      "-mcode-object-version=5",
+      "-ffp-contract=off",
+      "-fno-fast-math",
+      "--genco",
+      "/mnt/raid0/llm/worktrees/exl3-owner-build-refresh-20260926/scripts/kernel_rnd/exl3_gfx90a/kernels.hip",
+      "-o",
+      "/mnt/raid0/llm/tmp/exl3-gfx90a-owner-build-20260926/wrong-target.hsaco"
+    ],
+    "returncode": 1,
+    "diagnostic": "EXL3 requires exact gfx90a, not a generic gfx9 or wave32 target",
+    "log": "/mnt/raid0/llm/tmp/exl3-gfx90a-owner-build-20260926/wrong-target.log",
+    "log_sha256": "2e0c9a0d78b241f25ca1ab8947653d9a30c25b6dc7e8d15580cc8ccfe7ef290d"
+  },
+  "host_assertions": 5579,
+  "truth_table_cells": 5120,
+  "max_experts": 256,
+  "exact_real_outputs": {
+    "mul1_K3": 384,
+    "mul1_K4": 384,
+    "MCG_K4": 384
+  },
+  "native_verifiers": [
+    {
+      "row_id": "2c09072cfc2809bae41f28cdd715a4aa756a70c7dbdcd220370c10032c94ba19",
+      "fixture": "real-mcg-k4",
+      "proposition": "Independent C++ ascending FP32 materialized-weight output equals the canonical real-mcg-k4 golden exactly",
+      "verdict": "pass",
+      "attestation_path": "/mnt/raid0/llm/tmp/exl3-gfx90a-owner-host-20260926/native/2c09072cfc2809bae41f28cdd715a4aa756a70c7dbdcd220370c10032c94ba19.attestation.json",
+      "attestation_sha256": "3a049ba13c735cc0105c319414a6c5a816b48c9bcff404ad5ef005b31b2add10"
+    },
+    {
+      "row_id": "52a18ad50deea3626137ef32da1b5e2953915be2fd61164b962e66030894c688",
+      "fixture": "dispatch_truth_table_and_domain_boundaries",
+      "proposition": "The 5120 host capability truth-table cells and 256-expert dispatch boundary assertions execute their declared outcomes",
+      "verdict": "pass",
+      "attestation_path": "/mnt/raid0/llm/tmp/exl3-gfx90a-owner-host-20260926/native/52a18ad50deea3626137ef32da1b5e2953915be2fd61164b962e66030894c688.attestation.json",
+      "attestation_sha256": "6875fe9187921a3137fd1a20ba10e0da05d7979e72b8fd8066b56c3ca9506016"
+    },
+    {
+      "row_id": "5da121a08dc691aac92df5e6b3860041b5e8a8bae494e349938200e77418132b",
+      "fixture": "real-mul1-k3",
+      "proposition": "Independent C++ ascending FP32 materialized-weight output equals the canonical real-mul1-k3 golden exactly",
+      "verdict": "pass",
+      "attestation_path": "/mnt/raid0/llm/tmp/exl3-gfx90a-owner-host-20260926/native/5da121a08dc691aac92df5e6b3860041b5e8a8bae494e349938200e77418132b.attestation.json",
+      "attestation_sha256": "bf9c9599a090eedadd30abb55dea45a86e7fecccea25e22552c02c3e7e601f7e"
+    },
+    {
+      "row_id": "9820c20502e08e611f95d9214e31f79b0b0261999431f2e1806c379cdab3f954",
+      "fixture": "real-mul1-k4",
+      "proposition": "Independent C++ ascending FP32 materialized-weight output equals the canonical real-mul1-k4 golden exactly",
+      "verdict": "pass",
+      "attestation_path": "/mnt/raid0/llm/tmp/exl3-gfx90a-owner-host-20260926/native/9820c20502e08e611f95d9214e31f79b0b0261999431f2e1806c379cdab3f954.attestation.json",
+      "attestation_sha256": "2e5fe86690187689c3df3794f235e007d00dc22e2f51ebfa7f66e39f7085f845"
+    }
+  ],
+  "launcher_tests": {
+    "methods": 13,
+    "returncode": 0,
+    "log": "/mnt/raid0/llm/tmp/exl3-gfx90a-owner-build-20260926/launcher-tests.log",
+    "log_sha256": "10e8be36259a7051a070c942775f040e6781c5af84b310bf3884f49c6c230524"
+  },
+  "physical_claim_acquired": false,
+  "hip_runtime_executed": false,
+  "full_model_inference_executed": false,
+  "build_manifest_refresh_required": false,
+  "gate_effect": "G3, G4 and G5 remain OPEN; only compilation, disassembly, source identity and host checks repeated."
+}
