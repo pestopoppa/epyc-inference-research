@@ -114,7 +114,8 @@ class EpochSplit(unittest.TestCase):
                                       "actor_config=launch_actor_config,\n"
                                       "                                        "
                                       "carry_family=resume_carry.family)"), 2)
-        prepare = source[source.index("resume_mod.prepare("):][:500]
+        # The LIVE launch's prepare (the dry-run scan above it binds its own arguments).
+        prepare = source[source.index("resume_report = resume_mod.prepare("):][:500]
         self.assertIn("measurement_epoch=measurement_epoch", prepare)
         self.assertIn("actor_config=launch_actor_config", prepare)
         self.assertEqual(source.count("resume_mod.stamp_actor_diff(attempt, resume_queue[0])"),

@@ -697,8 +697,11 @@ class RunWiresTheCarry(unittest.TestCase):
         return {kw.arg: kw.value for kw in call.keywords if kw.arg}
 
     def test_prepare_and_the_pending_view_get_the_launch_carry_context(self):
-        (prepare,) = self.calls("prepare")
-        self.assertEqual(self.keywords(prepare)["carry"].id, "resume_carry")
+        # The live launch and the read-only dry-run scan (COR lane) both preview the carry.
+        prepares = self.calls("prepare")
+        self.assertEqual(len(prepares), 2)
+        self.assertEqual({self.keywords(p)["carry"].id for p in prepares},
+                         {"resume_carry", "carry"})
         views = [node for node in ast.walk(ast.parse(
             (Path(__file__).parent / "run.py").read_text()))
             if isinstance(node, ast.Call) and getattr(node.func, "id", None)

@@ -265,7 +265,7 @@ def _recover_legacy_cor_build(args, head: str, candidates, *, experimental: bool
 
 def _dry_run_accumulator_and_resume(args, *, anchor_commit: str, experimental: bool,
                                     epoch: str, measurement_epoch: str,
-                                    actor_config) -> None:
+                                    actor_config, carry=None) -> None:
     """Read-only: what the live child would restore before its claim.
 
     The dry run used to return before the durable accumulator was reopened, so a
@@ -315,10 +315,10 @@ def _dry_run_accumulator_and_resume(args, *, anchor_commit: str, experimental: b
         _queue, report = resume_mod.prepare(
             args.store, epoch=epoch, anchor_commit=anchor_commit, target=target,
             repo=None, dry_run=True, measurement_epoch=measurement_epoch,
-            actor_config=actor_config)
+            actor_config=actor_config, carry=carry)
         pending = resume_mod.pending_hypotheses(
             args.store, epoch=epoch, anchor_commit=anchor_commit,
-            measurement_epoch=measurement_epoch)
+            measurement_epoch=measurement_epoch, carry=carry)
     except Exception as exc:      # noqa: BLE001 -- the live run treats resume the same way
         print(f"resume    (dry) unavailable: {type(exc).__name__}: {exc}")
         return
@@ -2023,7 +2023,7 @@ def main(argv: list[str] | None = None) -> int:
             _dry_run_accumulator_and_resume(
                 args, anchor_commit=anchor_commit, experimental=experimental,
                 epoch=epoch, measurement_epoch=measurement_epoch,
-                actor_config=launch_actor_config)
+                actor_config=launch_actor_config, carry=resume_carry)
         print("\nDRY RUN — wiring proven, nothing spent.")
         return 0
 
