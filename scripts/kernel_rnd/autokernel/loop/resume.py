@@ -6,6 +6,10 @@
         backfill --store <store> --row <attempt-id-prefix> [--repo <tree>] \\
         [--scratch <dir>] [--apply]
     PYTHONPATH=scripts/kernel_rnd python3 -m scripts.kernel_rnd.autokernel.loop.resume \\
+        backfill-critic2 --store <store> --row <attempt-id-prefix> --patch <file> \\
+        --epoch <sha> [--epoch-reason "..."] [--base <sha>] [--lost-in-row <prefix>] \\
+        [--repo <tree>] [--scratch <dir>] [--apply]
+    PYTHONPATH=scripts/kernel_rnd python3 -m scripts.kernel_rnd.autokernel.loop.resume \\
         scan --store <store> --epoch <sha> --anchor <sha> [--surface S] [--model M] \\
         [--repo <tree>]
     PYTHONPATH=scripts/kernel_rnd python3 -m scripts.kernel_rnd.autokernel.loop.resume \\
@@ -24,14 +28,19 @@ THE RECORD. Every row that ends with accepted work still in flight carries
 
     stage                   "build"  -- a critic-accepted patch that never reached a
                                         measurement (refused by a gate, or stopped)
+                            "critic2" -- an AUTHORED patch whose critic pass 2 never
+                                        returned a verdict (a critic transient or auth
+                                        failure, a stop, a lane_error, an author
+                                        report-path failure over a real diff)
                             "author" -- a critic-accepted hypothesis whose authoring
                                         was interrupted by a stop or a transient
     hypothesis              the exact Hypothesis.to_dict()
     critic_hypothesis       the accepted critic:hypothesis provenance row
     critic_patch            (build) the accepted critic:patch provenance row
-    retained_patch          (build) {patch_file, metadata_file, patch_sha256}
+    retained_patch          (build, critic2) {patch_file, metadata_file, patch_sha256}
     refusal_gate / refusal_reason / gate_rules_fingerprint   (build, gate refusals)
-    prior_patch_rejections / patch_rounds_remaining          (author)
+    prior_patch_rejections / patch_rounds_remaining          (author, critic2; the
+                            remaining count INCLUDES the round in flight)
     hypothesis_round / patch_round
     resumed_from / resume_depth                              lineage
     anchor_commit / epoch_sha256 / target                    bound by the owner
@@ -42,12 +51,16 @@ THE ALGORITHM (`prepare`), on every launch, before any fresh hypothesis is drawn
     at this anchor (`<store>/resume-claims.sqlite3`);
  2. eligibility: a build checkpoint needs a retained patch and a refusal by a RULE
     gate (`RULE_GATES`) whose rules have changed since (or were never recorded);
-    an author checkpoint needs a patch round left. Ineligible ones stay unclaimed,
-    so a later rule change can still reopen them;
- 3. group by hypothesis; per group, try the most advanced first (build > author,
-    then newest): re-validate it -- anchor, epoch and target match, chain depth,
-    the carried critic verdicts, and for a build the patch bytes against the row's
-    and the sidecar's sha256 and a clean apply at the anchor. A failure is recorded
+    a critic2 checkpoint needs a retained patch; an author checkpoint needs a patch
+    round left. Ineligible ones stay unclaimed, so a later rule change can still
+    reopen them;
+ 3. group by hypothesis; per group, try the most advanced first (build > critic2 >
+    author, then newest): re-validate it -- anchor, epoch and target match, chain
+    depth, the carried critic verdicts, and for a build or critic2 the patch bytes
+    against the row's and the sidecar's sha256 and a clean apply at the anchor. A
+    critic2 resume restores the bytes and runs critic pass 2 for real, then the gates
+    and the measurement (no planner or author call); a rejection there continues the
+    ordinary patch rounds with the author. A failure is recorded
     as `resume_rejected` (its own row, and a claim) and the next sibling is tried;
  4. the queue hands each survivor to a lane on its next iteration (`take`), which
     CLAIMS it first (at most once per anchor; siblings become `superseded`), so a
@@ -67,6 +80,14 @@ releases existed).
 The backfill turns a row that predates checkpoints (run 9c's 22d950a4...) plus its
 retained patches into one resumable `gate_refused` row. It is a tool the operator's
 session runs; `--apply` is the only write, and it only appends.
+
+`backfill-critic2` does the same for an author patch saved OUTSIDE the store before
+checkpoints could carry one (DS41 runs 10d/10e): it takes an author-stage checkpoint
+row (the hypothesis and its accepted critic:hypothesis verdict) and the saved patch,
+and plans one `planner_transient` row carrying one critic2 checkpoint, bound to an
+explicit `--epoch` (a rebind from the source row's epoch needs `--epoch-reason`,
+recorded in the row). `--apply` retains the patch in `<store>/patches` (the same
+immutable content-addressed pair `archive.retain_patch` writes) and appends that row.
 """
 from __future__ import annotations
 
@@ -92,14 +113,21 @@ from . import loop
 CLAIMS_FILE = "resume-claims.sqlite3"
 BACKFILL_SCHEMA = "epyc.autokernel.resume_backfill.v1"
 PATCH_ARCHIVE_SCHEMA = "epyc.autokernel.source_patch_archive.v1"
-STAGE_RANK = {"build": 2, "author": 1}
+STAGE_RANK = {"build": 3, "critic2": 2, "author": 1}
+#: Stages that restore retained patch bytes (`loop.PATCH_STAGES`).
+PATCH_STAGES = loop.PATCH_STAGES
+CRITIC2_BACKFILL_SCHEMA = "epyc.autokernel.resume_backfill_critic2.v1"
 #: Deterministic pre-build rule gates. A refusal by one of these is a verdict of the
 #: RULE, not of the patch, so it is resumable once the rule changes. A compile or
 #: correctness failure is the patch's own and is never resumed at build.
 RULE_GATES = frozenset({"op_scope"})
 #: A stop during a resumed candidate writes a new checkpoint; bound the chain.
 MAX_RESUME_DEPTH = 3
-SCANNED_STATUSES = ("gate_refused", "stopped_mid_formation", "planner_transient")
+#: `lane_error` rows carry a checkpoint only when an authored patch was waiting on
+#: critic pass 2 when the lane faulted (`pipeline.run_pool`); the scan's
+#: `resume_checkpoints` filter excludes every other lane_error row.
+SCANNED_STATUSES = ("gate_refused", "stopped_mid_formation", "planner_transient",
+                    "lane_error")
 MAX_PATCH_BYTES = 4 * 1024 * 1024
 CLAIM_STATES = ("resumed", "rejected", "superseded")
 #: A claim handed back: by an infrastructure fault during the resumed round (bounded
@@ -171,6 +199,40 @@ def bind_checkpoints(attempt: dict, *, epoch: str, anchor_commit: str,
             if isinstance(pointer, dict) and pointer.get("patch_sha256"):
                 entry["retained_patch"] = dict(pointer)
     return attempt
+
+
+def retain_checkpoint_patches(checkpoints: list, retain: Callable[[str], Any]) -> list:
+    """Owner-side, before binding: give each pending critic2 checkpoint its patch.
+
+    `retain(mechanism_id)` retains the lane's diff (`archive.retain_patch`) and
+    returns the patch path, or None when the lane holds no diff. A critic2
+    checkpoint the loop could not point yet takes that pointer; one whose lane holds
+    no diff, or whose retention failed, is DROPPED (an author checkpoint beside it
+    still resumes the round). Returns the list, modified in place.
+    """
+    if not isinstance(checkpoints, list):
+        return checkpoints
+    kept: list = []
+    for entry in checkpoints:
+        if isinstance(entry, dict) and entry.get("stage") == "critic2" \
+                and not entry.get("retained_patch"):
+            mechanism = (entry.get("hypothesis") or {}).get("mechanism_id") or "unnamed"
+            try:
+                path = retain(mechanism)
+            except Exception as exc:      # noqa: BLE001 -- the row still lands
+                print(f"warning: critic2 patch retention failed: {type(exc).__name__}: "
+                      f"{exc}", file=sys.stderr)
+                path = None
+            if path is None:
+                continue
+            path = Path(path)
+            entry["retained_patch"] = {
+                "patch_file": str(path.resolve()),
+                "metadata_file": str(path.with_suffix(".json").resolve()),
+                "patch_sha256": _sha256(path.read_bytes())}
+        kept.append(entry)
+    checkpoints[:] = kept
+    return checkpoints
 
 
 # ------------------------------------------------------------------ claims ledger
@@ -730,10 +792,16 @@ def ineligible_reason(candidate: Candidate, *, rules_fingerprint: str) -> str | 
         return f"unknown stage {candidate.stage!r}"
     if not candidate.hypothesis.get("mechanism_id"):
         return "checkpoint carries no hypothesis"
-    if candidate.stage == "build":
+    if candidate.stage in PATCH_STAGES:
         pointer = ck.get("retained_patch")
         if not isinstance(pointer, Mapping) or not pointer.get("patch_sha256"):
             return "no retained patch"
+    if candidate.stage == "critic2":
+        # Absent means the round in flight only (it counts itself).
+        remaining = ck.get("patch_rounds_remaining")
+        if remaining is not None and int(remaining) < 1:
+            return "no patch round left"
+    elif candidate.stage == "build":
         gate = ck.get("refusal_gate")
         if gate is not None and gate not in RULE_GATES:
             return f"refused by {gate}, a verdict on the patch rather than a rule"
@@ -778,11 +846,12 @@ def prevalidate(candidate: Candidate, *, epoch: str, anchor_commit: str,
     verdict = ck.get("critic_hypothesis")
     if not isinstance(verdict, Mapping) or not verdict.get("accepted"):
         raise ResumeRejected("critic", "no accepted critic:hypothesis verdict is carried")
-    if candidate.stage != "build":
+    if candidate.stage not in PATCH_STAGES:
         return None
-    verdict = ck.get("critic_patch")
-    if not isinstance(verdict, Mapping) or not verdict.get("accepted"):
-        raise ResumeRejected("critic", "no accepted critic:patch verdict is carried")
+    if candidate.stage == "build":
+        verdict = ck.get("critic_patch")
+        if not isinstance(verdict, Mapping) or not verdict.get("accepted"):
+            raise ResumeRejected("critic", "no accepted critic:patch verdict is carried")
     patch = verify_retained_patch(ck.get("retained_patch"), anchor_commit=anchor_commit,
                                   mechanism_id=hypothesis.mechanism_id)
     if repo is not None:
@@ -850,7 +919,7 @@ def resume_point(candidate: Candidate, *, patch: bytes | None = None,
                        if isinstance(ck.get(key), Mapping)
                        and (key == "critic_hypothesis" or candidate.stage == "build"))
     materializer = discarder = None
-    if candidate.stage == "build":
+    if candidate.stage in PATCH_STAGES:
         def materializer():
             # Re-read and re-verify at the moment of use: the bytes the scan
             # checked are not assumed to be the bytes on disk now.
@@ -870,6 +939,8 @@ def resume_point(candidate: Candidate, *, patch: bytes | None = None,
         checkpoint=dict(ck), provenance=provenance,
         prior_patch_rejections=tuple(str(item) for item in
                                      (ck.get("prior_patch_rejections") or ())),
+        # critic2: its own round (critic pass 2 on the restored bytes) plus the
+        # author rounds that were left, exactly as the interrupted round had them.
         patch_rounds=(1 if candidate.stage == "build"
                       else max(1, int(ck.get("patch_rounds_remaining") or 1))),
         _materialize=materializer, _discard=discarder)
@@ -1174,6 +1245,253 @@ def backfill_apply(store_root: Path, plan: Mapping[str, Any]) -> bool:
     return added
 
 
+# ------------------------------------------------------------------ backfill: critic2
+
+
+def _author_checkpoint(payload: Mapping[str, Any], source: str,
+                       index: int | None) -> tuple[int, dict]:
+    entries = [(position, entry) for position, entry in
+               enumerate(payload.get("resume_checkpoints") or ())
+               if isinstance(entry, dict) and entry.get("schema") == loop.CHECKPOINT_SCHEMA
+               and entry.get("stage") == "author"]
+    if index is not None:
+        entries = [item for item in entries if item[0] == index]
+    if len(entries) != 1:
+        raise ValueError(f"row {source[:12]} carries {len(entries)} author checkpoint(s)"
+                         + ("" if index is None else f" at index {index}")
+                         + "; need exactly 1 (pass --checkpoint-index)")
+    return entries[0][0], dict(entries[0][1])
+
+
+def _live_status(store_root: Path) -> dict:
+    """What the store's current run published (loop-status.json), for the report only:
+    a mismatch is shown, never acted on (the next launch may differ from this one)."""
+    try:
+        status = json.loads(_read_bounded(Path(store_root) / "loop-status.json"))
+    except (OSError, ResumeRejected, ValueError):
+        status = {}
+    status = status if isinstance(status, dict) else {}
+    pick = lambda key: status.get(key) if isinstance(status.get(key), str) else None
+    return {"live_loop_status_epoch": pick("epoch_sha256"),
+            "live_loop_status_surface": pick("surface"),
+            "live_loop_status_anchor": pick("anchor_commit")}
+
+
+def backfill_critic2_plan(store_root: Path, *, row_id: str, patch: Path, epoch: str,
+                          epoch_reason: str | None = None, base: str | None = None,
+                          lost_in_row: str | None = None, lane: str = "lane0",
+                          checkpoint_index: int | None = None, repo: Path | None = None,
+                          scratch: Path | None = None, surface: str | None = None,
+                          surface_reason: str | None = None) -> dict:
+    """Read-only. A critic2 checkpoint for an author patch saved outside the store.
+
+    `row_id` names the row whose AUTHOR checkpoint carries the hypothesis and its
+    accepted critic:hypothesis verdict (DS41: 629ca6ab...). `patch` is the saved lane
+    diff; its base is `base`, else `base.txt` beside it, and must be that checkpoint's
+    anchor. `epoch` is explicit: the row is bound to the epoch the NEXT launch runs in,
+    and a rebind away from the source row's epoch must say why (`epoch_reason`,
+    recorded in the row). The target is the source checkpoint's; `surface` rebinds its
+    measurement surface (needs `surface_reason`, recorded in the row) when the next
+    launch measures on another one -- resume refuses a target mismatch otherwise.
+    Nothing is written; `backfill_critic2_apply` writes the plan.
+    """
+    from . import archive
+    store_root = Path(store_root)
+    if not re.fullmatch(r"[0-9a-f]{64}", str(epoch or "")):
+        raise ValueError("--epoch must be a 64-hex epoch sha256")
+    connection = _connect(store_root, immutable=True)
+    try:
+        row = _resolve_row(connection, row_id)
+        lost = _resolve_row(connection, lost_in_row) if lost_in_row else None
+    finally:
+        connection.close()
+    payload = json.loads(row["payload"])
+    source = row["attempt_id"]
+    index, author = _author_checkpoint(payload, source, checkpoint_index)
+    source_checkpoint = f"{source}#{index}"
+    hypothesis = author.get("hypothesis")
+    if not isinstance(hypothesis, Mapping) or not hypothesis.get("mechanism_id"):
+        raise ValueError("the author checkpoint carries no hypothesis")
+    parsed = loop.Hypothesis(**dict(hypothesis))
+    if parsed.runtime_pair is not None:
+        raise ValueError("runtime treatments carry no patch")
+    critic_hypothesis = author.get("critic_hypothesis")
+    if not isinstance(critic_hypothesis, Mapping) or not critic_hypothesis.get("accepted"):
+        raise ValueError("the author checkpoint carries no accepted critic:hypothesis verdict")
+    anchor = author.get("anchor_commit") or payload.get("spawn_parent")
+    if not anchor:
+        raise ValueError("the author checkpoint names no anchor")
+    patch = Path(patch)
+    raw = _read_bounded(patch)
+    touched, _preexisting = patch_paths(raw)
+    base_file = None
+    if base is None:
+        base_file = patch.parent / "base.txt"
+        try:
+            base = _read_bounded(base_file).decode("utf-8").strip()
+        except FileNotFoundError:
+            raise ValueError(f"no --base and no {base_file}") from None
+    if base != anchor:
+        raise ValueError(f"the patch was formed on {base}, not the checkpoint's anchor {anchor}")
+    source_epoch = row["epoch_sha256"]
+    rebind = epoch != source_epoch
+    if rebind and not (epoch_reason and epoch_reason.strip()):
+        raise ValueError(f"--epoch {epoch[:12]} differs from the source row's epoch "
+                         f"{source_epoch[:12]}: pass --epoch-reason saying why the patch "
+                         "is still valid there")
+    target = dict(author.get("target") or {})
+    source_surface = target.get("measurement_surface")
+    surface_rebound = surface is not None and surface != source_surface
+    if surface_rebound:
+        if not (surface_reason and surface_reason.strip()):
+            raise ValueError(f"--surface {surface!r} differs from the checkpoint's "
+                             f"{source_surface!r}: pass --surface-reason")
+        target["measurement_surface"] = surface
+    lost_record = None
+    if lost is not None:
+        lost_payload = json.loads(lost["payload"])
+        lost_hypotheses = [entry.get("hypothesis") for entry in
+                           lost_payload.get("resume_checkpoints") or ()
+                           if isinstance(entry, dict)]
+        same = any(_canonical(item) == _canonical(dict(hypothesis))
+                   for item in lost_hypotheses if isinstance(item, Mapping))
+        if not same:
+            raise ValueError(f"--lost-in-row {lost['attempt_id'][:12]} carries a different "
+                             "hypothesis than the source checkpoint")
+        lost_record = {"attempt_id": lost["attempt_id"], "status": lost["status"],
+                       "recorded_at": lost["recorded_at"],
+                       "epoch_sha256": lost["epoch_sha256"],
+                       # The provider's stderr is left in the source row: it can
+                       # quote credentials (run 10e's 401 quoted a masked key).
+                       "reason": str(lost_payload.get("reason") or "")
+                       .split(" stderr=", 1)[0][:500]}
+    mechanism = parsed.mechanism_id
+    target_path = archive.retained_patch_path(store_root, raw, head=anchor, lane=lane,
+                                              mechanism_id=mechanism).resolve()
+    sidecar = archive.patch_sidecar(target_path, raw, head=anchor, lane=lane,
+                                    mechanism_id=mechanism,
+                                    worktree=str(patch.resolve().parent))
+    pointer = {"patch_file": str(target_path),
+               "metadata_file": str(target_path.with_suffix(".json")),
+               "patch_sha256": _sha256(raw)}
+    already_retained = False
+    if target_path.exists():
+        if _read_bounded(target_path) != raw:
+            raise ValueError(f"{target_path} exists with different bytes")
+        already_retained = True
+    insertions = sum(1 for line in raw.decode("utf-8", "replace").splitlines()
+                     if line.startswith("+") and not line.startswith("+++"))
+    deletions = sum(1 for line in raw.decode("utf-8", "replace").splitlines()
+                    if line.startswith("-") and not line.startswith("---"))
+    remaining = author.get("patch_rounds_remaining")
+    checkpoint = {
+        "schema": loop.CHECKPOINT_SCHEMA, "stage": "critic2",
+        "hypothesis": dict(hypothesis), "critic_hypothesis": dict(critic_hypothesis),
+        "hypothesis_round": int(author.get("hypothesis_round") or 1),
+        # The author checkpoint is written before its round's number is taken, so
+        # the round the saved patch was authored in is one past it.
+        "patch_round": int(author.get("patch_round") or 0) + 1,
+        "prior_patch_rejections": list(author.get("prior_patch_rejections") or ()),
+        "patch_rounds_remaining": max(1, int(remaining if remaining is not None else 1)),
+        "retained_patch": pointer,
+        "resumed_from": source_checkpoint,
+        "resume_depth": int(author.get("resume_depth") or 0) + 1,
+        "anchor_commit": anchor, "epoch_sha256": epoch,
+        "target": target,
+    }
+    reason = ("backfilled critic2 checkpoint: an authored patch lost before critic pass 2 "
+              "returned a verdict; resume restores it and runs critic pass 2")
+    if lost_record is not None:
+        reason += f" (lost in {lost_record['attempt_id'][:12]}: {lost_record['reason'][:200]})"
+    attempt = {
+        **dict(hypothesis), "status": "planner_transient", "turn_recorded_at": _now(),
+        "reason": reason,
+        "hypothesis_round": checkpoint["hypothesis_round"],
+        "patch_round": checkpoint["patch_round"],
+        "prior_rejection_prompt": bool(checkpoint["prior_patch_rejections"]),
+        "validator_provenance": [{**dict(critic_hypothesis),
+                                  "resumed_from": source_checkpoint,
+                                  "changed_subsequent_search": False}],
+        "resume_checkpoints": [checkpoint],
+        "backfilled_from": {
+            "schema": CRITIC2_BACKFILL_SCHEMA, "attempt_id": source,
+            "checkpoint_id": source_checkpoint, "recorded_at": row["recorded_at"],
+            "status": row["status"], "source_epoch_sha256": source_epoch,
+            "epoch_sha256": epoch, "epoch_rebound": rebind,
+            "epoch_rebind_reason": (epoch_reason.strip() if rebind else None),
+            "source_measurement_surface": source_surface,
+            "surface_rebound": surface_rebound,
+            "surface_rebind_reason": (surface_reason.strip() if surface_rebound else None),
+            "lost_in": lost_record,
+            "patch_source": {"file": str(patch.resolve()), "sha256": _sha256(raw),
+                             "bytes": len(raw), "insertions": insertions,
+                             "deletions": deletions, "touched_paths": list(touched),
+                             "base": base,
+                             "base_file": None if base_file is None else str(base_file.resolve())},
+            "tool": "autokernel.loop.resume backfill-critic2"},
+        # experiments._attempt_id prefers this key: re-running the backfill is a no-op.
+        "proposal_sha256": _sha256(f"resume-backfill-critic2\n{source_checkpoint}\n"
+                                   f"{pointer['patch_sha256']}\n{epoch}".encode()),
+    }
+    attempt["spawn_parent"] = anchor
+    for key in ("branch_id", "width", "depth", "research_scope", "cpu_screen"):
+        if payload.get(key) is not None:
+            attempt[key] = payload[key]
+    checks: dict[str, Any] = {
+        "patch_sha256_matches_sidecar": sidecar["patch_sha256"] == pointer["patch_sha256"],
+        "sidecar_original_head_is_anchor": sidecar["original_head"] == anchor,
+        "base_is_checkpoint_anchor": True,
+        "patch_already_retained": already_retained,
+        "epoch_rebound": rebind,
+        "surface_rebound": surface_rebound,
+        **_live_status(store_root),
+    }
+    checks["epoch_matches_live_loop_status"] = checks["live_loop_status_epoch"] == epoch
+    checks["surface_matches_live_loop_status"] = (
+        checks["live_loop_status_surface"] == target.get("measurement_surface"))
+    if repo is not None:
+        try:
+            patch_applies(repo, anchor, raw, scratch=scratch)
+            checks["applies_cleanly_at_anchor"] = True
+        except ResumeRejected as exc:
+            checks["applies_cleanly_at_anchor"] = f"NO: {exc}"
+    connection = _connect(store_root, immutable=True)
+    try:
+        attempt_id = experiments._attempt_id(attempt, campaign_id=row["campaign_id"])
+        present = connection.execute("SELECT 1 FROM experiments WHERE attempt_id=?",
+                                     (attempt_id,)).fetchone() is not None
+    finally:
+        connection.close()
+    return {"source_attempt_id": source, "source_checkpoint_id": source_checkpoint,
+            "epoch_sha256": epoch, "campaign_id": row["campaign_id"],
+            "attempt_id": attempt_id, "checkpoint_id": f"{attempt_id}#0",
+            "already_present": present, "attempt": attempt, "checks": checks,
+            "patch_bytes": raw, "sidecar": sidecar, "lane": lane}
+
+
+def backfill_critic2_apply(store_root: Path, plan: Mapping[str, Any]) -> dict:
+    """The only writes: retain the patch (immutable, content-addressed; a no-op when
+    already there) and append the planned row (idempotent on its attempt id)."""
+    from . import archive
+    checkpoint = plan["attempt"]["resume_checkpoints"][0]
+    pointer = checkpoint["retained_patch"]
+    kept = archive.retain_patch_bytes(
+        store_root, plan["patch_bytes"], head=checkpoint["anchor_commit"], lane=plan["lane"],
+        mechanism_id=checkpoint["hypothesis"]["mechanism_id"],
+        worktree=plan["sidecar"]["worktree"])
+    if str(kept.resolve()) != pointer["patch_file"]:
+        raise ResumeRejected("patch_pointer", f"retained at {kept}, planned "
+                             f"{pointer['patch_file']}")
+    verify_retained_patch(pointer, anchor_commit=checkpoint["anchor_commit"],
+                          mechanism_id=checkpoint["hypothesis"]["mechanism_id"])
+    with experiments.ExperimentStore(store_root) as store:
+        added = store.record(plan["attempt"], epoch=plan["epoch_sha256"],
+                             recorded_at=_now(), campaign_id=plan["campaign_id"])
+        store.write_markdown(epoch=plan["epoch_sha256"])
+    return {"retained_patch": str(kept.resolve()), "appended": added,
+            "attempt_id": plan["attempt_id"]}
+
+
 # ------------------------------------------------------------------ reopen
 
 
@@ -1254,7 +1572,7 @@ def reopen_plan(store_root: Path, *, checkpoint_id: str, reason: str,
                     checkpoint["ineligible_now"] = ineligible_reason(
                         candidate, rules_fingerprint=(rules_fingerprint
                                                       or loop.gate_rules_fingerprint()))
-                    if entry.get("stage") == "build":
+                    if entry.get("stage") in PATCH_STAGES:
                         try:
                             verify_retained_patch(entry.get("retained_patch"),
                                                   anchor_commit=current["anchor_commit"],
@@ -1324,6 +1642,33 @@ def main(argv: Sequence[str] | None = None) -> int:
                       "read-only clean-apply check and the op_scope preview")
     back.add_argument("--scratch", type=Path, help="scratch directory for the apply check")
     back.add_argument("--apply", action="store_true", help="append the row (the only write)")
+    crit = commands.add_parser("backfill-critic2", help="turn an author patch saved "
+                               "outside the store into a resumable critic2 record "
+                               "(dry-run unless --apply)")
+    crit.add_argument("--store", type=Path, required=True)
+    crit.add_argument("--row", required=True, help="row carrying the AUTHOR checkpoint "
+                      "(hypothesis + accepted critic:hypothesis): attempt id or prefix")
+    crit.add_argument("--checkpoint-index", type=int, help="author checkpoint index on "
+                      "--row when it carries several")
+    crit.add_argument("--patch", type=Path, required=True, help="the saved author patch")
+    crit.add_argument("--base", help="commit the patch was formed on "
+                      "(default: base.txt beside --patch)")
+    crit.add_argument("--epoch", required=True, help="epoch the NEXT launch runs in "
+                      "(store/loop-status.json epoch_sha256)")
+    crit.add_argument("--epoch-reason", help="required when --epoch differs from the "
+                      "source row's epoch; recorded in the row")
+    crit.add_argument("--surface", help="rebind the checkpoint's measurement surface "
+                      "(default: the source checkpoint's)")
+    crit.add_argument("--surface-reason", help="required with a differing --surface; "
+                      "recorded in the row")
+    crit.add_argument("--lost-in-row", help="the row whose round lost this patch "
+                      "(recorded as provenance; must carry the same hypothesis)")
+    crit.add_argument("--lane", default="lane0", help="lane label for the retained file")
+    crit.add_argument("--repo", type=Path, help="git repo holding the anchor; enables the "
+                      "read-only clean-apply check")
+    crit.add_argument("--scratch", type=Path, help="scratch directory for the apply check")
+    crit.add_argument("--apply", action="store_true", help="retain the patch and append "
+                      "the row (the only writes)")
     look = commands.add_parser("scan", help="read-only: what a launch would resume")
     look.add_argument("--store", type=Path, required=True)
     look.add_argument("--epoch", required=True)
@@ -1362,6 +1707,37 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 2
         print(json.dumps({"reopened": row}, indent=2, default=str))
         return 0
+    if args.command == "backfill-critic2":
+        try:
+            plan = backfill_critic2_plan(
+                args.store, row_id=args.row, patch=args.patch, epoch=args.epoch,
+                epoch_reason=args.epoch_reason, base=args.base, lost_in_row=args.lost_in_row,
+                lane=args.lane, checkpoint_index=args.checkpoint_index, repo=args.repo,
+                scratch=args.scratch, surface=args.surface,
+                surface_reason=args.surface_reason)
+        except (ValueError, FileNotFoundError, ResumeRejected, sqlite3.DatabaseError) as exc:
+            print(f"backfill-critic2 refused: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps({key: plan[key] for key in (
+            "source_attempt_id", "source_checkpoint_id", "attempt_id", "checkpoint_id",
+            "already_present", "epoch_sha256", "campaign_id", "checks")}, indent=2))
+        print(json.dumps({"resume_checkpoints": plan["attempt"]["resume_checkpoints"],
+                          "backfilled_from": plan["attempt"]["backfilled_from"],
+                          "would_retain": {"patch_file": plan["attempt"]["resume_checkpoints"]
+                                           [0]["retained_patch"]["patch_file"],
+                                           "sidecar": plan["sidecar"]}}, indent=2))
+        if plan["checks"].get("applies_cleanly_at_anchor", True) is not True:
+            print("backfill-critic2 refused: the patch does not apply at the anchor",
+                  file=sys.stderr)
+            return 2
+        if not args.apply:
+            print("dry-run: nothing written (pass --apply to retain the patch and append "
+                  "this row)")
+            return 0
+        done = backfill_critic2_apply(args.store, plan)
+        print(f"{'appended' if done['appended'] else 'already present'} "
+              f"{done['attempt_id']}; patch retained at {done['retained_patch']}")
+        return 0
     if args.command == "backfill":
         try:
             plan = backfill_plan(args.store, row_id=args.row, patch=args.patch,
@@ -1388,7 +1764,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
-__all__ = ["BACKFILL_SCHEMA", "CLAIMS_FILE", "Candidate", "ClaimLedger", "INFRA_RETRIES",
+__all__ = ["BACKFILL_SCHEMA", "CLAIMS_FILE", "CRITIC2_BACKFILL_SCHEMA", "Candidate",
+           "ClaimLedger", "INFRA_RETRIES", "PATCH_STAGES", "STAGE_RANK",
+           "backfill_critic2_apply", "backfill_critic2_plan", "retain_checkpoint_patches",
            "INFRASTRUCTURE_STATUSES", "MAX_RESUME_DEPTH", "RELEASED", "RULE_GATES",
            "ResumePoint", "ResumeQueue", "ResumeRejected", "backfill_apply",
            "backfill_plan", "bind_checkpoints", "discard", "ineligible_reason", "materialize",
