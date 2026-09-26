@@ -836,7 +836,10 @@ def _load_completed_or_recover(path: Path, *, expected_argv=None,
     optional = {"runtime_preparation", "runtime_recipe_reference",
                 "held_claim_evidence", "held_claim_error", "target", "cpu_screen",
                 "baseline_scope", "experimental_branch", "launch_snapshot",
-                "floor_request_digest", "measurement_epoch", "actor_config"}
+                "floor_request_digest", "measurement_epoch", "actor_config",
+                # run.py writes these too; before OP-60 the recovery path refused
+                # every loop-run.json carrying them as "malformed".
+                "width_depth_trajectory", "scratch", "comparability"}
     if (not isinstance(result, dict) or not required.issubset(result)
             or not set(result).issubset(required | optional)
             or result.get("schema") != "epyc.autokernel.loop_run.v1"

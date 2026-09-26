@@ -44,6 +44,13 @@ clause governs what it may READ, never what it may skip. Nothing here decides wh
 run next, and nothing here banks anything -- ranking produces an ORDER, and the order
 is an input to a planner that still has to propose, gate and measure.
 
+OP-60 (operator, 2026-09-26): the "fixed epoch" of A3 -- for planner-history
+comparability and for the do-not-repeat gate -- is the MEASUREMENT epoch: anchor
+commit, build recipe and declared host state, excluding actor configuration. Rows keep
+the full epoch as their provenance key; `epoch_aliases` maps a full epoch to its
+measurement epoch through self-verifying records, and a row without a verified alias
+is compared on its full epoch only.
+
 The flag therefore defaults to False and the default path is byte-for-byte what it was
 before A3: `ranking_authorized=False` returns the same rows, in the same recency order,
 with the same keys. Opting in is a caller's explicit act (`run.py
@@ -88,7 +95,92 @@ CREATE TABLE IF NOT EXISTS experiments (
 );
 CREATE INDEX IF NOT EXISTS experiments_epoch ON experiments (epoch_sha256);
 CREATE INDEX IF NOT EXISTS experiments_mechanism ON experiments (mechanism_id);
+CREATE TABLE IF NOT EXISTS epoch_aliases (
+    full_epoch        TEXT PRIMARY KEY,
+    measurement_epoch TEXT NOT NULL,
+    recorded_at       TEXT NOT NULL,
+    record            TEXT NOT NULL
+);
 """
+
+#: OP-60 (operator, 2026-09-26): planner-history comparability and the do-not-repeat
+#: gate compare on the MEASUREMENT epoch -- anchor commit, build recipe and declared host
+#: state, EXCLUDING actor configuration -- instead of the full epoch, which also folds
+#: the campaign's actor roster in (through `enrolled_manifest_digest`). Archive rows keep
+#: the full epoch as their provenance key; an `epoch_aliases` record maps a full epoch to
+#: its measurement epoch and carries the identity inputs that PROVE the mapping, so any
+#: reader recomputes both digests before trusting it. A row whose full epoch has no
+#: verified alias stays on full-epoch comparison: comparability is never widened to a
+#: row whose measurement identity is unknown.
+EPOCH_ALIAS_SCHEMA = "epyc.autokernel.epoch_alias.v1"
+
+
+def measurement_host_state(host_state: Mapping[str, Any],
+                           measurement_digest: str | None = None) -> dict[str, Any]:
+    """`host_state` minus actor configuration.
+
+    The only actor input to an epoch is `enrolled_manifest_digest` (the resolved
+    campaign's manifest digest folds `actors`/`fallbacks` in); it is replaced by the
+    resolved campaign's `measurement_digest`, the same document without the roster."""
+    out = {key: value for key, value in host_state.items()
+           if key != "enrolled_manifest_digest"}
+    if "enrolled_manifest_digest" in host_state:
+        if not measurement_digest:
+            raise ValueError("an enrolled manifest digest needs its resolved campaign")
+        out["enrolled_measurement_digest"] = measurement_digest
+    return out
+
+
+def _record_digest(body: Mapping[str, Any]) -> str:
+    return hashlib.sha256(json.dumps(
+        {key: value for key, value in body.items() if key != "record_sha256"},
+        sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def epoch_alias_record(*, anchor_commit: str, build_recipe: Mapping[str, Any],
+                       host_state: Mapping[str, Any], measurement_digest: str,
+                       source: Mapping[str, Any]) -> dict[str, Any]:
+    """A self-verifying full-epoch -> measurement-epoch alias.
+
+    `host_state` is the FULL epoch's host state (with `enrolled_manifest_digest`);
+    `measurement_digest` the resolved campaign's `measurement_digest`. Both epochs are
+    recomputed from these inputs by `verify_epoch_alias`, never taken on trust."""
+    host = dict(host_state)
+    full = epoch_sha256(anchor_commit=anchor_commit, build_recipe=build_recipe,
+                        host_state=host)
+    measured = epoch_sha256(anchor_commit=anchor_commit, build_recipe=build_recipe,
+                            host_state=measurement_host_state(host, measurement_digest))
+    body = {"schema": EPOCH_ALIAS_SCHEMA, "full_epoch_sha256": full,
+            "measurement_epoch_sha256": measured, "anchor_commit": anchor_commit,
+            "build_recipe": dict(build_recipe), "host_state": host,
+            "enrolled_measurement_digest": measurement_digest,
+            "source": dict(source)}
+    return {**body, "record_sha256": _record_digest(body)}
+
+
+def verify_epoch_alias(record: Any) -> str | None:
+    """None when `record` proves its mapping; otherwise the reason it does not."""
+    if not isinstance(record, Mapping) or record.get("schema") != EPOCH_ALIAS_SCHEMA:
+        return "not an epoch alias record"
+    host = record.get("host_state")
+    recipe = record.get("build_recipe")
+    anchor = record.get("anchor_commit")
+    digest = record.get("enrolled_measurement_digest")
+    if not isinstance(host, Mapping) or not isinstance(recipe, Mapping) \
+            or not isinstance(anchor, str) or not anchor:
+        return "alias identity inputs missing"
+    if "enrolled_manifest_digest" not in host or not isinstance(digest, str) or not digest:
+        return "alias has no enrolled manifest to separate from its measurement identity"
+    if record.get("record_sha256") != _record_digest(record):
+        return "alias record digest mismatch"
+    full = epoch_sha256(anchor_commit=anchor, build_recipe=recipe, host_state=host)
+    if full != record.get("full_epoch_sha256"):
+        return "full epoch does not recompute from the recorded inputs"
+    measured = epoch_sha256(anchor_commit=anchor, build_recipe=recipe,
+                            host_state=measurement_host_state(host, digest))
+    if measured != record.get("measurement_epoch_sha256"):
+        return "measurement epoch does not recompute from the recorded inputs"
+    return None
 
 #: Every field that carries a MEASURED MAGNITUDE. `P-AK-SEARCH-1-A3` clause 2 says a
 #: cross-epoch record's measured value "MUST NOT be ranked, compared, or presented as
@@ -289,7 +381,8 @@ def epoch_sha256(*, anchor_commit: str | None, build_recipe: Mapping[str, Any] |
 class ExperimentStore:
     """Append-only experiment memory keyed by attempt identity."""
 
-    def __init__(self, root: Path | str, *, read_only: bool = False) -> None:
+    def __init__(self, root: Path | str, *, read_only: bool = False,
+                 bounded: bool = True) -> None:
         self.root = Path(root)
         self.path = self.root / "experiments.db"
         self.markdown_path = self.root / "experiments.md"
@@ -299,8 +392,12 @@ class ExperimentStore:
             self._connection = sqlite3.connect(self.path.resolve().as_uri() + "?mode=ro",
                                               uri=True, timeout=0.2)
             self._connection.execute("PRAGMA query_only=ON")
-            deadline = time.monotonic() + 0.2
-            self._connection.set_progress_handler(lambda: time.monotonic() > deadline, 1000)
+            if bounded:
+                # Shared-history reads are advisory: 0.2 s from open, then abandoned.
+                # Status/offline readers of the store itself pass bounded=False.
+                deadline = time.monotonic() + 0.2
+                self._connection.set_progress_handler(
+                    lambda: time.monotonic() > deadline, 1000)
         else:
             self.root.mkdir(parents=True, exist_ok=True)
             self._connection = sqlite3.connect(self.path, timeout=30.0)
@@ -399,8 +496,18 @@ class ExperimentStore:
                include_claims: bool = False,
                statuses: Sequence[str] | None = None,
                exclude_statuses: bool = False,
-               append_order: bool = False) -> list[dict[str, Any]]:
+               append_order: bool = False,
+               measurement_epoch: str | None = None) -> list[dict[str, Any]]:
         """Prior attempts, each marked same-epoch or stale.
+
+        `measurement_epoch` (OP-60) is the caller's measurement epoch, the one `epoch`
+        maps to. Given, a row is same-epoch when its full epoch equals `epoch` OR its
+        full epoch has a VERIFIED alias (`epoch_aliases`) to `measurement_epoch`; a row
+        whose full epoch has no verified alias compares on the full epoch only. Each
+        row then also carries its own `epoch_sha256`, its `measurement_epoch_sha256`
+        (None when unknown), `epoch_match` (`full` | `measurement` | None) and its
+        archived `research_scope`, which the do-not-repeat gate needs. Omitted, the
+        rows are exactly the pre-OP-60 rows.
 
         `ranking_authorized` is the `P-AK-SEARCH-1` denial-4 boundary, narrowed by
         `P-AK-SEARCH-1-A3`.
@@ -450,6 +557,15 @@ class ExperimentStore:
         elif include_claims:
             projection = ("*, CASE WHEN length(payload)<=2097152 AND json_valid(payload) "
                           "THEN json_extract(payload,'$.claims') END AS claims_projection")
+        if measurement_epoch is not None and not include_source_scope:
+            projection += (", CASE WHEN length(payload)<=2097152 AND json_valid(payload) "
+                           "THEN json_extract(payload,'$.research_scope') END "
+                           "AS research_scope_projection")
+        aliases: dict[str, str] = {}
+        if measurement_epoch is not None:
+            aliases = self.epoch_aliases()
+            # The caller's own mapping is true by construction: it computed both.
+            aliases[epoch] = measurement_epoch
         predicate, parameters = "", []
         if statuses:
             placeholders = ",".join("?" for _ in statuses)
@@ -476,6 +592,10 @@ class ExperimentStore:
         recalled = []
         for row in rows:
             same_epoch = row["epoch_sha256"] == epoch
+            row_measurement = aliases.get(row["epoch_sha256"])
+            aliased = (not same_epoch and measurement_epoch is not None
+                       and row_measurement == measurement_epoch)
+            same_epoch = same_epoch or aliased
             recalled.append({
                 "attempt_id": row["attempt_id"],
                 "recorded_at": row["recorded_at"],
@@ -512,9 +632,104 @@ class ExperimentStore:
                 scope = json.loads(row["research_scope"]) if row["research_scope"] else None
                 recalled[-1].update(original_epoch=row["epoch_sha256"],
                                     research_scope=scope if isinstance(scope, dict) else None)
+            if measurement_epoch is not None:
+                recalled[-1].update(
+                    epoch_sha256=row["epoch_sha256"],
+                    measurement_epoch_sha256=row_measurement,
+                    epoch_match=("measurement" if aliased else
+                                 "full" if row["epoch_sha256"] == epoch else None))
+                if not include_source_scope:
+                    raw_scope = row["research_scope_projection"]
+                    try:
+                        scope = (json.loads(raw_scope) if isinstance(raw_scope, str)
+                                 else raw_scope)
+                    except json.JSONDecodeError:
+                        scope = None
+                    recalled[-1]["research_scope"] = scope if isinstance(scope, dict) else None
         if not ranking_authorized:
             return recalled
         return rank(recalled)[:int(limit)]
+
+    # ---------------------------------------------------------- epoch aliases
+
+    def register_epoch_alias(self, record: Mapping[str, Any], *,
+                             recorded_at: str) -> str:
+        """Persist one verified alias: `added`, `present` (idempotent) or `conflict`.
+
+        Refuses (ValueError) a record that does not prove its own mapping. A conflict
+        -- the same full epoch already mapped elsewhere -- is never overwritten."""
+        reason = verify_epoch_alias(record)
+        if reason is not None:
+            raise ValueError(f"epoch alias refused: {reason}")
+        full = record["full_epoch_sha256"]
+        measured = record["measurement_epoch_sha256"]
+        cursor = self._connection.execute(
+            "INSERT OR IGNORE INTO epoch_aliases (full_epoch,measurement_epoch,"
+            "recorded_at,record) VALUES (?,?,?,?)",
+            (full, measured, recorded_at, json.dumps(dict(record), sort_keys=True)))
+        self._connection.commit()
+        if cursor.rowcount == 1:
+            return "added"
+        existing = self._connection.execute(
+            "SELECT measurement_epoch FROM epoch_aliases WHERE full_epoch=?",
+            (full,)).fetchone()
+        return "present" if existing and existing[0] == measured else "conflict"
+
+    def epoch_aliases(self) -> dict[str, str]:
+        """Full epoch -> measurement epoch, VERIFIED records only (fail closed).
+
+        Every record is recomputed from its own identity inputs on read; one that
+        does not recompute, or whose columns disagree with its body, is dropped, so
+        its rows stay on full-epoch comparison."""
+        try:
+            rows = self._connection.execute(
+                "SELECT full_epoch,measurement_epoch,record FROM epoch_aliases").fetchall()
+        except sqlite3.OperationalError:
+            return {}       # a store that predates OP-60 (read-only open): no aliases
+        out: dict[str, str] = {}
+        for full, measured, raw in rows:
+            try:
+                record = json.loads(raw)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            if (verify_epoch_alias(record) is None
+                    and record["full_epoch_sha256"] == full
+                    and record["measurement_epoch_sha256"] == measured):
+                out[full] = measured
+        return out
+
+    def comparability(self, *, epoch: str,
+                      measurement_epoch: str | None) -> dict[str, Any]:
+        """Which epoch history comparability used, and how many rows it reached.
+
+        For status surfaces: `rows_full_epoch` share the full epoch, `rows_aliased`
+        reach the measurement epoch through a verified alias, `rows_unresolved` carry
+        a full epoch with no verified alias (full-epoch comparison only)."""
+        stored = self.epoch_aliases()
+        aliases = dict(stored) if measurement_epoch is not None else {}
+        if measurement_epoch is not None:
+            aliases[epoch] = measurement_epoch
+        counts = self._connection.execute(
+            "SELECT epoch_sha256, COUNT(*) FROM experiments GROUP BY epoch_sha256").fetchall()
+        full = aliased = other = unresolved = 0
+        aliased_epochs = []
+        for row_epoch, n in counts:
+            if row_epoch == epoch:
+                full += n
+            elif measurement_epoch is not None and aliases.get(row_epoch) == measurement_epoch:
+                aliased += n
+                aliased_epochs.append(row_epoch)
+            elif row_epoch in aliases:
+                other += n
+            else:
+                unresolved += n
+        return {"epoch": "measurement" if measurement_epoch is not None else "full",
+                "full_epoch_sha256": epoch, "measurement_epoch_sha256": measurement_epoch,
+                "rows_full_epoch": full, "rows_aliased": aliased,
+                "aliased_full_epochs": sorted(aliased_epochs),
+                "rows_other_measurement_epoch": other,
+                "rows_unresolved": unresolved,
+                "verified_aliases": len(stored)}
 
     def mechanisms_tried(self, *, epoch: str | None = None) -> list[str]:
         """Distinct mechanism ids, optionally within one epoch."""
@@ -544,6 +759,10 @@ class ExperimentStore:
         """
         rows = self._connection.execute(
             "SELECT * FROM experiments ORDER BY recorded_at DESC, rowid DESC").fetchall()
+        # OP-60: a row whose full epoch has a verified alias to the current full
+        # epoch's measurement epoch is not stale. Without aliases this is unchanged.
+        aliases = self.epoch_aliases() if epoch is not None else {}
+        current_measurement = aliases.get(epoch) if epoch is not None else None
         lines = [
             "# AutoKernel experiments",
             "",
@@ -560,7 +779,10 @@ class ExperimentStore:
             "|---|---|---|---|---|---|---|",
         ]
         for row in rows:
-            stale = "" if epoch is None or row["epoch_sha256"] == epoch else " ⚠ stale epoch"
+            stale = ("" if epoch is None or row["epoch_sha256"] == epoch
+                     or (current_measurement is not None
+                         and aliases.get(row["epoch_sha256"]) == current_measurement)
+                     else " ⚠ stale epoch")
             effect = ("—" if row["effect_fraction"] is None
                       else f"{row['effect_fraction'] * 100:+.3f}%")
             note = row["refusal_reason"] or row["statement"] or ""
@@ -652,5 +874,6 @@ def _jsonable(value: Any) -> Any:
     return str(value)
 
 
-__all__ = ["ExperimentStore", "RANKING_POOL", "epoch_sha256", "rank",
+__all__ = ["EPOCH_ALIAS_SCHEMA", "ExperimentStore", "RANKING_POOL", "epoch_alias_record",
+           "epoch_sha256", "measurement_host_state", "rank", "verify_epoch_alias",
            "SCHEMA_VERSION"]

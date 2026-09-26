@@ -133,9 +133,24 @@ class Registry:
 
 
 def characterised_reason(hypothesis, context: Mapping[str, Any]) -> str | None:
-    """Refuse three comparable same-epoch outcomes by structural facets, never prose."""
+    """Refuse three comparable same-epoch outcomes by structural facets, never prose.
+
+    OP-60 (2026-09-26): "same epoch" is the MEASUREMENT epoch when the context carries
+    one (`measurement_epoch_sha256`): anchor commit, build recipe and declared host
+    state, excluding actor configuration, so a planner/critic/author model swap does
+    not reopen a mechanism already answered on the same measurement identity. A row
+    compares on its measurement epoch only when it carries one (`recall` resolves it
+    through a verified alias); a row without one compares on the full epoch (fail
+    closed: comparability never widens to an unknown measurement identity)."""
     epoch = context.get("epoch_sha256")
+    measurement_epoch = context.get("measurement_epoch_sha256")
     regime = context.get("current_regime")
+
+    def same_epoch(row: Mapping[str, Any]) -> bool:
+        if row.get("epoch_sha256") == epoch:
+            return True
+        return (measurement_epoch is not None
+                and row.get("measurement_epoch_sha256") == measurement_epoch)
 
     def project_regime(scope: Mapping[str, Any]) -> tuple[Any, ...] | None:
         """Canonical identity across live context and original_research_scope."""
@@ -170,7 +185,7 @@ def characterised_reason(hypothesis, context: Mapping[str, Any]) -> str | None:
             "mechanism": row.get("mechanism_id"), "symbol": row.get("target_symbol"),
             "file": row.get("target_surface")})
         agrees, _why = target.agreement(query)
-        if (agrees and row.get("epoch_sha256") == epoch and same_regime(row)
+        if (agrees and same_epoch(row) and same_regime(row)
                 and row.get("comparable_measurement", True)
                 and row.get("status") in ANSWER_STATUSES):
             matches.append(row)
@@ -186,7 +201,7 @@ def characterised_reason(hypothesis, context: Mapping[str, Any]) -> str | None:
             "mechanism": row.get("mechanism_id"), "symbol": row.get("target_symbol"),
             "file": row.get("target_surface")})
         agrees, _why = target.agreement(query)
-        if (agrees and row.get("epoch_sha256") == epoch and same_regime(row)
+        if (agrees and same_epoch(row) and same_regime(row)
                 and row.get("status") not in ANSWER_STATUSES
                 and row.get("candidate_diff_sha256")):
             nonanswers.append(row["candidate_diff_sha256"])
@@ -208,9 +223,13 @@ def characterised_reason(hypothesis, context: Mapping[str, Any]) -> str | None:
             "target_surface", "target_symbol", "candidate_diff_sha256")}
         digest = hashlib.sha256(json.dumps(
             body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+        # An amendment may name the full epoch or (OP-60) the measurement epoch.
+        scoped_epoch = (body["epoch_sha256"]
+                        if body["epoch_sha256"] in {epoch, measurement_epoch} - {None}
+                        else epoch)
         if (artifact.get("sha256") == digest
                 and body == {"schema": "epyc.autokernel.operator_unblock.v1",
-                             "gate": "do_not_repeat", "epoch_sha256": epoch,
+                             "gate": "do_not_repeat", "epoch_sha256": scoped_epoch,
                              "mechanism_id": hypothesis.mechanism_id,
                              "target_surface": hypothesis.target_surface,
                              "target_symbol": hypothesis.target_symbol,

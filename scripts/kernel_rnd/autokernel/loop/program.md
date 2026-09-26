@@ -391,4 +391,14 @@ Under `P-AK-SEARCH-1` denial 4, prior records inform **hypothesis formation** on
 the operator amends it (decision D1,
 `handoffs/active/autokernel-rebuild-program.md`). Cross-epoch records are returned but
 marked `stale_epoch` — the fact that a mechanism was tried is formation; its *number*
-is not comparable.
+is not comparable. `P-AK-SEARCH-1-A3` permits epoch-scoped ranking
+(`--rank-prior-experiments`), and its do-not-repeat gate refuses re-proposing a
+mechanism already answered three times in the same epoch.
+
+**The epoch is the MEASUREMENT epoch** (OP-60, 2026-09-26): the anchor commit, the
+build recipe and the declared host state (execution and request digests, target,
+screen scope, serving instrument), **excluding actor configuration** — the planner,
+critic and author models and their fallbacks. Changing an actor does not make prior
+same-anchor results stale and does not reopen a mechanism the do-not-repeat gate has
+closed; changing the anchor, recipe or host state does. A record whose measurement
+identity cannot be established is compared on its full epoch only.
