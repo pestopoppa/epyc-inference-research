@@ -225,6 +225,11 @@ class ActorSeat:
     #: still carries the snapshot-off per-call config, see `_seat_call`); run.py turns
     #: them on by default.
     lane_guard: bool = False
+    #: `ak-check` (operator 2026-09-26, `ak_check.py`): the author may run the scratch
+    #: compile / op-test sandbox, told so by `AUTHOR_SANDBOX_RULE`; planner and critic
+    #: configs deny it. Off here (byte-identical); run.py defaults it on. Needs the
+    #: planner's `sandbox_scratch` allocator and an anchor build dir, else it stays off.
+    author_sandbox: bool = False
     #: OAB-23: opencode `limit.context` / `limit.output` on the call's model, written into
     #: every per-call config (plain, bounded, critic). 0 = opencode's own default, which
     #: for this config-only model is NO proactive compaction and max_tokens 32000 (see
@@ -284,7 +289,8 @@ class ActorSeat:
     @property
     def knobs(self) -> dict[str, bool]:
         return {"trim_instructions": self.trim_instructions, "trim_tools": self.trim_tools,
-                "lane_guard": self.lane_guard}
+                "lane_guard": self.lane_guard,
+                **({"author_sandbox": True} if self.author_sandbox else {})}
 
     @property
     def limits(self) -> dict[str, int]:
@@ -386,6 +392,14 @@ REPORT_SOURCE_REPLY_FILE = "reply_file"
 AUTHOR_REPLY_RULE = ("Print that JSON object as your reply on stdout; do not write it (or "
                      "any report) to a file. Each paths entry is exactly one repo-relative "
                      "file path, with no description, comment or line numbers.")
+
+#: `ak-check` (ActorSeat.author_sandbox): the one line the author prompt gains, placed
+#: after `_SANDBOX_ANCHOR`, the sentence that otherwise forbids every check.
+AUTHOR_SANDBOX_RULE = ("The one exception is the sandbox command `ak-check`: after each edit "
+                       "run `ak-check` (compile check); before replying run `ak-check "
+                       "--op-test`; fix every error it reports; never reply with a patch "
+                       "that fails ak-check.")
+_SANDBOX_ANCHOR = "Make the edit and stop."
 
 
 class AuthorPaths(tuple):
@@ -979,6 +993,10 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
         budgets = _budgets_of(env, budget_s, budget_exhausted, opencode_stats)
         if budgets is not None:
             record["budgets"] = budgets
+        if (env or {}).get("AK_CHECK_CALL_ID"):
+            from . import ak_check
+            record["ak_check"] = ak_check.usage_summary(env.get(ak_check.ENV_LOG),
+                                                        env.get(ak_check.ENV_CALL_ID))
     except Exception as exc:   # noqa: BLE001 -- evidence, never a reason to fail the call
         record = {"schema": actor_metrics.METRICS_SCHEMA, "role": role, "seat_arm": arm,
                   "backend_kind": backend.kind, "backend_model": backend.model,
@@ -2579,6 +2597,10 @@ class AgentPlanner:
     belief_context: str = "off"
     #: ROOT owning the ledger and the reader modules (default EPYC_ROOT_REPO or /workspace).
     belief_root: Path | None = None
+    #: `ak-check`: returns (the scratch dir the loop allocated for this lane's current
+    #: iteration, or None; a reason to degrade `--op-test` to the compile check, or
+    #: None). Without it the author sandbox stays off whatever the seat says.
+    sandbox_scratch: Callable[[], tuple[Path | None, str | None]] | None = None
 
     def _stop_kw(self) -> dict[str, Any]:
         return {} if self.should_stop is None else {"should_stop": self.should_stop}
@@ -2651,6 +2673,35 @@ class AgentPlanner:
                                                       **self.seat.label_knobs(role)),
                  SEAT_ENV_FAN_OUT: "1" if self.seat.fan_out else "0",
                  SEAT_ENV_STEPS: str(self.seat.steps)})
+
+    def _sandbox_on(self, context: Mapping[str, Any]) -> bool:
+        return (self.seat is not None and self.seat.author_sandbox
+                and self.backend.kind == "opencode" and self.sandbox_scratch is not None
+                and _anchor_build_dir(context) is not None)
+
+    def _sandbox_rule(self, prompt: str, context: Mapping[str, Any]) -> str:
+        """`AUTHOR_SANDBOX_RULE` after the no-build sentence (off: byte-identical)."""
+        if not self._sandbox_on(context):
+            return prompt
+        if _SANDBOX_ANCHOR in prompt:
+            return prompt.replace(_SANDBOX_ANCHOR,
+                                  f"{_SANDBOX_ANCHOR}\n\n{AUTHOR_SANDBOX_RULE}", 1)
+        return f"{prompt}\n\n{AUTHOR_SANDBOX_RULE}"
+
+    def _sandboxed(self, env: dict[str, str] | None,
+                   context: Mapping[str, Any]) -> dict[str, str] | None:
+        """The author call's env for `ak-check`: shim on PATH, allocated scratch dir,
+        calls log and call id (read back into the metrics row). Off: unchanged."""
+        if not self._sandbox_on(context):
+            return env
+        from . import ak_check
+        import uuid
+        scratch, degrade = self.sandbox_scratch()
+        lane = Path(self.workspace)
+        return {**(env or {}), **ak_check.author_env(
+            lane, Path(_anchor_build_dir(context)), scratch=scratch,
+            log=lane.parent / ACTOR_REPLY_DIR / f"ak-check-{lane.name}.jsonl",
+            call_id=uuid.uuid4().hex, op_test_off=degrade)}
 
     def _concise(self, prompt: str) -> str:
         """OAB-22: `CONCISE_RULE` after the task (opencode only; off = byte-identical)."""
@@ -2860,10 +2911,12 @@ class AgentPlanner:
             "If the hypothesis cannot be implemented honestly within these constraints, "
             "abstaining is a correct science result. Make no edits and reply instead with:\n"
             '{"abstain": "<specific reason the hypothesis is infeasible>"}')
+        prompt = self._sandbox_rule(prompt, context)
         prompt = self._concise(prompt)
         prompt = self._action_rule(prompt, context)
         prompt = self._guarded("author", prompt, context)
         backend, env = self._seated("author", context)
+        env = self._sandboxed(env, context)
         env = self._sealed(prompt, bundle, env)
         raw, streak = _with_backoff(
             lambda: _run_agent(prompt, workspace=self.workspace,

@@ -308,7 +308,8 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
           accumulate_valid_positive: bool = False,
           validate_candidate=None, formation_guard=None,
           reserve_candidate=None, record_abandoned=None,
-          next_resume=None) -> PoolResult:
+          next_resume=None, author_sandbox: bool = False,
+          scratch=None) -> PoolResult:
     """Run `iterations` iterations across `workers` lanes and report the accounting.
 
     Everything device-shaped is still injected; this only binds the git side and the
@@ -318,7 +319,23 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
     """
     check_lanes_are_disjoint(workers)
     clock = PhaseClock()
-    tail = pipeline.SerializedTail(lambda: champion_head(champion_tree, branch))
+    fence = None
+    if author_sandbox:
+        # `ak-check` (the author's sandbox) runs as a separate process: every tail session
+        # takes the cross-process fence of every lane's worker root, so a check never
+        # overlaps any lane's build, oracle or measurement.
+        from . import ak_check
+        fences = {ak_check.fence_dir(worker.worktree) for worker in workers}
+        fence = lambda: ak_check.tail_fence(fences)   # noqa: E731
+    tail = pipeline.SerializedTail(lambda: champion_head(champion_tree, branch), fence=fence)
+    iteration_scope = None
+    if scratch is not None:
+        # The loop's scratch registry (`scratch.py`): one ITERATION scope per lane draw,
+        # opened on the lane's thread, so the author sandbox's build dir (and anything
+        # else allocated in it) is released when the iteration ends, on every path.
+        def iteration_scope(worker, depth):
+            scratch.sweep()     # crash residue: marked, owner provably gone
+            return scratch.scope("iteration", name=f"{worker.name}-it{depth}")
 
     def step(worker_name: str, label: str) -> None:
         clock.note(worker_name, label)
@@ -340,7 +357,7 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
         accumulate_valid_positive=accumulate_valid_positive,
         validate_candidate=validate_candidate, formation_guard=formation_guard,
         reserve_candidate=reserve_candidate, record_abandoned=record_abandoned,
-        next_resume=next_resume)
+        next_resume=next_resume, open_iteration_scope=iteration_scope)
     clock.close()
     return PoolResult(outcomes=outcomes, phase_seconds=clock.totals(),
                       wall_seconds=time.monotonic() - started,
