@@ -169,7 +169,9 @@ def assert_snapshot_only(case, env, body, ws=None):
     case.assertEqual(env[actors.SEAT_ENV_PLAIN_CONFIG], "1")
     case.assertEqual(body, SNAPSHOT_ONLY_CONFIG)
     if ws is not None:
-        case.assertEqual(Path(env["OPENCODE_CONFIG"]).parent, Path(ws).parent,
+        # One registry-owned directory per call, beside the lanes, never inside one.
+        case.assertEqual(Path(env["OPENCODE_CONFIG"]).parent.parent,
+                         Path(ws).parent / actors.SEAT_CONFIG_DIR,
                          "beside the lane, never inside the worktree")
 
 
@@ -277,9 +279,16 @@ class VariableModeIsLossless(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.text = _real_context_text()
-        self.bundle = actor_context.materialize(self.text, Path(self._tmp.name), role="planner")
+        from autokernel.loop import scratch
+        self._scratch = scratch.ScratchRegistry(Path(self._tmp.name) / "scratch",
+                                                {"run_id": "t"}, 0)
+        self._scope = self._scratch.scope("call", "planner").__enter__()
+        self.bundle = actor_context.materialize(self.text, Path(self._tmp.name), role="planner",
+                                                scope=self._scope)
 
     def tearDown(self):
+        self._scope.close()
+        self.assertFalse(self.bundle.directory.exists(), "released with its scope")
         self._tmp.cleanup()
 
     def test_section_files_concatenate_to_the_inline_bundle(self):
@@ -384,6 +393,10 @@ class VariableModeThroughThePlanner(unittest.TestCase):
         def run(prompt, **kw):
             seen["prompt"], seen["env"] = prompt, kw.get("env")
             seen["config"] = config_body(kw.get("env"))
+            # The bundle is call-scoped scratch: observed while the call is in flight.
+            seen["bundles"] = sorted((ws.parent / actor_context.BUNDLE_DIR).glob("*"))
+            seen["manifests"] = {b: json.loads((b / "manifest.json").read_text())
+                                 for b in seen["bundles"] if (b / "manifest.json").is_file()}
             return HYPOTHESIS if role == "planner" else '{"paths": ["ggml/src/x.c"]}'
 
         tmp = tempfile.TemporaryDirectory()
@@ -402,7 +415,8 @@ class VariableModeThroughThePlanner(unittest.TestCase):
                 planner.author(actors.Hypothesis("akm-x", "s", "f", "ggml/src/x.c", "g"),
                                _cpu_context())
         seen["ws"] = ws
-        seen["bundles"] = sorted((ws.parent / actor_context.BUNDLE_DIR).glob("*"))
+        self.assertEqual(sorted((ws.parent / actor_context.BUNDLE_DIR).glob("*")), [],
+                         "the bundle is released with the actor call's scope")
         return seen
 
     def test_plain_variable_sends_the_index_and_labels_the_arm(self):
@@ -417,7 +431,7 @@ class VariableModeThroughThePlanner(unittest.TestCase):
         self.assertEqual(seen["env"][actors.SEAT_ENV_ARM], "plain+ctx-variable")
         assert_snapshot_only(self, {k: v for k, v in seen["env"].items()
                                     if k != actors.SEAT_ENV_ARM}, seen["config"], seen["ws"])
-        manifest = json.loads((bundle / "manifest.json").read_text())
+        manifest = seen["manifests"][bundle]
         self.assertEqual(manifest["prompt"]["sha256"],
                          hashlib.sha256(seen["prompt"].encode()).hexdigest())
         self.assertEqual(manifest["inline_equivalent_prompt_chars"], len(_real_prompt()))
@@ -497,7 +511,11 @@ class OrchestratorVariableMode(unittest.TestCase):
 
         def run(prompt, **kw):
             seen["prompt"], seen["env"] = prompt, kw.get("env")
-            seen["argv"] = kw["backend"].argv(prompt, kw["workspace"], schema=kw.get("schema"))
+            argv = seen["argv"] = kw["backend"].argv(prompt, kw["workspace"], schema=kw.get("schema"))
+            # The request inputs are call-scoped scratch: read while the call is in flight.
+            for flag, key in (("--context-bundle", "bundle"), ("--scout-targets", "scouts")):
+                if flag in argv:
+                    seen[key] = json.loads(Path(argv[argv.index(flag) + 1]).read_text())
             return HYPOTHESIS
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -508,8 +526,10 @@ class OrchestratorVariableMode(unittest.TestCase):
                     mock.patch.object(actors, "_run_agent", side_effect=run):
                 planner.propose(_cpu_context())
             argv = seen["argv"]
-            if "--context-bundle" in argv:
-                seen["bundle"] = json.loads(Path(argv[argv.index("--context-bundle") + 1]).read_text())
+            for flag in ("--context-bundle", "--scout-targets", "--schema"):
+                if flag in argv:
+                    self.assertFalse(Path(argv[argv.index(flag) + 1]).exists(),
+                                     f"{flag} input released with the call scope")
             seen["bundle_dirs"] = list((ws.parent / actor_context.BUNDLE_DIR).glob("*"))
         return seen
 
@@ -610,7 +630,10 @@ class OrchestratorVariableMode(unittest.TestCase):
 
         def run(prompt, **kw):
             seen["prompt"] = prompt
-            seen["argv"] = kw["backend"].argv(prompt, kw["workspace"], schema=kw.get("schema"))
+            argv = seen["argv"] = kw["backend"].argv(prompt, kw["workspace"], schema=kw.get("schema"))
+            # Call-scoped scratch inputs: read while the call is in flight.
+            seen["bundle"] = json.loads(Path(argv[argv.index("--context-bundle") + 1]).read_text())
+            seen["targets"] = json.loads(Path(argv[argv.index("--scout-targets") + 1]).read_text())
             return HYPOTHESIS
 
         pulls = {"schema": "epyc.orchestrator.context_pulls.v1",
@@ -635,9 +658,9 @@ class OrchestratorVariableMode(unittest.TestCase):
             self.assertIn("--context-bundle", argv)
             self.assertIn("--scout-targets", argv)
             self.assertEqual(argv[argv.index("--scouts-max") + 1], "2")
-            bundle = json.loads(Path(argv[argv.index("--context-bundle") + 1]).read_text())
+            bundle = seen["bundle"]
             self.assertEqual("".join(e["text"] for e in bundle["sections"]), _real_context_text())
-            targets = json.loads(Path(argv[argv.index("--scout-targets") + 1]).read_text())
+            targets = seen["targets"]
             self.assertEqual([t["symbol"] for t in targets["targets"]],
                              ["ggml_vec_dot_q4_K_q8_K", "ggml_compute_forward_mul_mat"])
             self.assertIn("ORCHESTRATOR mode", seen["prompt"])

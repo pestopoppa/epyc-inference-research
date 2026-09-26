@@ -73,8 +73,8 @@ import hashlib
 import json
 from pathlib import Path
 import re
-import tempfile
 import time
+import uuid
 from typing import Any, Iterable
 
 #: Sibling of the lane worktree (never inside it: a file there would ride into the
@@ -435,14 +435,19 @@ class Bundle:
             json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def materialize(context_text: str, parent: Path, *, role: str,
+def materialize(context_text: str, parent: Path, *, role: str, scope,
                 lane: Path | None = None) -> Bundle:
     """Write one call's bundle under `parent/` and return its index prompt text.
-    `lane` (lane guard on) makes the target card name it as THE source tree."""
+    `lane` (lane guard on) makes the target card name it as THE source tree.
+
+    The bundle directory is SCRATCH, allocated from `scope` (a `scratch.Scope`, the
+    actor call's): it is marked, journalled, and released when the call ends. Its
+    evidence -- the manifest's prompt digest and per-file digests -- rides on the call
+    record, so nothing reads the directory after the call."""
     parent = Path(parent)
-    parent.mkdir(parents=True, exist_ok=True)
     stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime())
-    directory = Path(tempfile.mkdtemp(prefix=f"{stamp}-{role}-", dir=parent))
+    name = f"{stamp}-{role}-{uuid.uuid4().hex[:8]}"
+    directory = scope.dir(BUNDLE_DIR, name, at=parent / name)
     sections = split_sections(context_text)
     (directory / "sections").mkdir()
     files: dict[str, dict[str, Any]] = {}
@@ -457,7 +462,8 @@ def materialize(context_text: str, parent: Path, *, role: str,
             if payload is not None:
                 payloads[section.key] = payload
                 explode(payload, directory / "json" / section.key)
-    for path in sorted(p for p in directory.rglob("*") if p.is_file()):
+    from .scratch import MARKER
+    for path in sorted(p for p in directory.rglob("*") if p.is_file() and p.name != MARKER):
         data = path.read_bytes()
         files[str(path.relative_to(directory))] = {
             "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}

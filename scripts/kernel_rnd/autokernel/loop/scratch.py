@@ -19,6 +19,19 @@ MARKED and its owner is provably gone. Unmarked paths are never touched.
             if not reg.ensure_free(20 * GB):
                 ...degrade (best-of N -> 1, op-test -> compile-only)...
 
+THE RULE (enforced, not advisory): every scratch path the loop package creates -- a temp
+dir, a per-call config, a context bundle, a detached worktree, a build dir that is not
+evidence -- is allocated here. `test_scratch.py::ScratchInventory` scans the package AST
+for every file/dir-creating call (mkdtemp, mkstemp, TemporaryDirectory, mkdir, makedirs,
+copytree, write_text/bytes, open(..., "w"/"a"/"x"), `git worktree add`) and fails unless
+the call is in this module or on its reviewed allowlist of EVIDENCE writers, each with a
+one-line reason. A new feature that makes scratch any other way fails that test. Code
+with no scope handle uses `active_scope()` (the innermost scope on this thread of the
+installed registry); with no registry installed (unit tests, standalone tools) a
+fallback registry under `<system tmp>/ak-scratch` is used, so there is no unregistered
+path. Actor subprocesses get a scoped TMPDIR (`Scope.tmp_env`); the loop's in-process
+`tempfile` calls land in the run scope's tmp (`adopt_tempfile`).
+
 Markers: a DIRECTORY carries `<dir>/.ak-scratch-owner`; a FILE or WORKTREE carries a
 sidecar `<path>.ak-scratch-owner` (a marker inside a worktree would be an untracked file
 an actor's `git add -A` could commit). Journal: `<root>/scratch-journal.jsonl`.
@@ -218,6 +231,24 @@ class Scope:
         """A fresh, marked scratch directory (`<root>/<kind>/<name>` unless `at`)."""
         return self.registry._allocate(self, "dir", kind, name, at=at)
 
+    def release(self, path: Path | str) -> bool:
+        """Release ONE resource of this scope now, before the scope ends (a best-of
+        loser's worktree, a finished check's build dir). True when it was released."""
+        path = Path(path)
+        with self.registry._lock:
+            match = [r for r in self.resources if Path(r["path"]) == path]
+        if not match:
+            raise ScratchRefused(f"scratch: {path} is not a resource of scope {self.id}")
+        res = match[-1]
+        released = self.registry._release(res, reason="early-release")
+        if released:
+            with self.registry._lock:
+                if res in self.resources:
+                    self.resources.remove(res)
+                if self._tmp is not None and Path(res["path"]) == self._tmp:
+                    self._tmp = None
+        return released
+
     def tmpdir(self, name: str = "") -> Path:
         """This scope's system-temp directory (`<root>/tmp/<scope id>`), allocated once
         per scope and released with it."""
@@ -275,6 +306,11 @@ class ScratchRegistry:
                        "sweep_removed": 0, "sweep_bytes_freed": 0, "sweep_skipped": 0,
                        "sweeps": 0, "guard_checks": 0, "guard_refusals": 0}
         self._live: dict[str, dict] = {}
+        self._sweep_lock = threading.RLock()
+        self._journal_cache: dict[str, str] = {}
+        self._journal_offset = 0
+        self._standing: Scope | None = None
+        self._run_scope: Scope | None = None
 
     # -- scopes -----------------------------------------------------------------------
     def _stack(self) -> list[Scope]:
@@ -283,10 +319,34 @@ class ScratchRegistry:
             stack = self._local.stack = []
         return stack
 
-    def current(self) -> Scope | None:
-        """The innermost open scope on THIS thread."""
+    def current(self, level: str | None = None) -> Scope | None:
+        """The innermost open scope on THIS thread (of `level`, walking outward, when
+        given). Feature code inside `loop.iterate` finds its iteration scope with
+        `registry.current("iteration")` (or `scratch.current("iteration")`)."""
         stack = self._stack()
-        return stack[-1] if stack else None
+        scope = stack[-1] if stack else None
+        while level is not None and scope is not None and scope.level != level:
+            scope = scope.parent
+        return scope if scope is None or not scope.closed else None
+
+    def standing(self) -> Scope:
+        """The scope for allocations made on a thread with no open scope: the run
+        scope while one is open, else a lazily opened standing run-level scope that
+        `close()` releases."""
+        with self._lock:
+            if self._run_scope is not None and not self._run_scope.closed:
+                return self._run_scope
+            if self._standing is None or self._standing.closed:
+                self._standing = Scope(self, "run", "standing", None)
+                self._active[self._standing.id] = self._standing
+            return self._standing
+
+    def close(self) -> None:
+        """Release the standing scope (the explicit scopes release themselves)."""
+        with self._lock:
+            standing, self._standing = self._standing, None
+        if standing is not None:
+            standing.close()
 
     def scope(self, level: str, name: str = "", *, parent: Scope | None = None) -> Scope:
         """`with registry.scope("iteration", name="it-7") as s:`. `parent` defaults to
@@ -297,6 +357,9 @@ class ScratchRegistry:
         scope = Scope(self, level, name or level, parent)
         with self._lock:
             self._active[scope.id] = scope
+            if level == "run" and parent is None and (
+                    self._run_scope is None or self._run_scope.closed):
+                self._run_scope = scope
             if parent is not None:
                 parent.children.append(scope)
         return scope
@@ -318,8 +381,9 @@ class ScratchRegistry:
                 self._release(res, reason="scope-exit")
         with self._lock:
             self._active.pop(scope.id, None)
-        self._journal({"event": "scope_close", "scope": scope.info, "failed": failed,
-                       "retained": retain, "resources": len(scope.resources)})
+        if scope.resources:
+            self._journal({"event": "scope_close", "scope": scope.info, "failed": failed,
+                           "retained": retain, "resources": len(scope.resources)})
 
     # -- allocation -------------------------------------------------------------------
     def _default_path(self, resource: str, kind: str, name: str) -> Path:
@@ -378,12 +442,13 @@ class ScratchRegistry:
 
     def _reclaim_stale(self, resource: str, path: Path) -> None:
         """A name collision: reclaim it only when it is ours-to-collect; else refuse."""
-        marker = read_marker(resource, path)
-        why = self._collectible(marker) if marker else None
-        if marker is None or why is None or marker.get("resource") != resource:
-            raise FileExistsError(f"scratch: {path} exists and is not a collectible "
-                                  f"registry resource")
-        self._release(marker, reason=f"reclaim:{why}", sweep=True)
+        with self._sweep_lock:
+            marker = read_marker(resource, path)
+            why = self._collectible(marker) if marker else None
+            if marker is None or why is None or marker.get("resource") != resource:
+                raise FileExistsError(f"scratch: {path} exists and is not a collectible "
+                                      f"registry resource")
+            self._release(marker, reason=f"reclaim:{why}", sweep=True)
         if os.path.lexists(path):
             raise FileExistsError(f"scratch: could not reclaim {path}")
 
@@ -557,29 +622,44 @@ class ScratchRegistry:
         return sorted((res, Path(p)) for p, res in seen.items())
 
     def _journal_live(self) -> dict[str, str]:
-        live: dict[str, str] = {}
-        try:
-            lines = self.journal_path.read_text(encoding="utf-8").splitlines()
-        except OSError:
-            return live
-        for line in lines:
+        """Paths the journal says are allocated and not yet released (read
+        incrementally: only lines appended since the last call are parsed)."""
+        with self._lock:
             try:
-                row = json.loads(line)
-            except ValueError:
-                continue
-            path = row.get("path")
-            if not path:
-                continue
-            if row.get("event") == "allocate":
-                live[path] = row.get("resource", "dir")
-            elif row.get("event") in ("release", "sweep_remove"):
-                live.pop(path, None)
-        return live
+                with open(self.journal_path, "rb") as fh:
+                    fh.seek(self._journal_offset)
+                    data = fh.read()
+            except OSError:
+                return dict(self._journal_cache)
+            end = data.rfind(b"\n") + 1
+            self._journal_offset += end
+            for line in data[:end].decode("utf-8", "replace").splitlines():
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                path = row.get("path")
+                if not path:
+                    continue
+                if row.get("event") == "allocate":
+                    self._journal_cache[path] = row.get("resource", "dir")
+                elif row.get("event") in ("release", "sweep_remove"):
+                    self._journal_cache.pop(path, None)
+            return dict(self._journal_cache)
 
     def sweep(self) -> dict:
         """Collect marked resources whose owner is gone (dead pid, or a finished run in
         this process), retained scratch when keep=none, and this registry's own orphans.
         Never touches an unmarked path. Journals every action."""
+        with self._sweep_lock:
+            try:
+                return self._sweep()
+            except Exception as exc:  # noqa: BLE001 -- cleanup never ends a run or a lane
+                self._journal({"event": "sweep_error",
+                               "error": f"{type(exc).__name__}: {exc}"[:500]})
+                return {"removed": [], "skipped": 0, "failed": [], "error": str(exc)[:500]}
+
+    def _sweep(self) -> dict:
         removed, skipped, failed = [], 0, []
         for resource, path in self._candidates():
             marker = read_marker(resource, path)
@@ -597,8 +677,9 @@ class ScratchRegistry:
             self._stats["sweeps"] += 1
             self._stats["sweep_skipped"] += skipped
         result = {"removed": removed, "skipped": skipped, "failed": failed}
-        self._journal({"event": "sweep", "removed": len(removed), "skipped": skipped,
-                       "failed": len(failed)})
+        if removed or failed:  # a no-op sweep (every iteration) is counted, not journalled
+            self._journal({"event": "sweep", "removed": len(removed), "skipped": skipped,
+                           "failed": len(failed)})
         return result
 
     # -- disk guard -------------------------------------------------------------------
@@ -650,6 +731,100 @@ class ScratchRegistry:
             pass  # the journal is evidence of cleanup, never a reason to fail it
 
 
+# -- ambient registry ---------------------------------------------------------------------
+# run.py installs the run's registry; code below it (actors, pipeline, feature code) finds
+# it here instead of threading a handle through every signature. With none installed
+# (unit tests, standalone tools) a FALLBACK registry is used, so scratch is registry-owned
+# on every path -- there is no unregistered mode.
+_AMBIENT: list[ScratchRegistry] = []
+_FALLBACKS: dict[str, ScratchRegistry] = {}
+_AMBIENT_LOCK = threading.Lock()
+FALLBACK_DIRNAME = "ak-scratch"
+
+
+def install(registry: ScratchRegistry) -> ScratchRegistry:
+    """Make `registry` the process's ambient registry (until `uninstall`)."""
+    with _AMBIENT_LOCK:
+        _AMBIENT.append(registry)
+    return registry
+
+
+def uninstall(registry: ScratchRegistry) -> None:
+    with _AMBIENT_LOCK:
+        if registry in _AMBIENT:
+            _AMBIENT.remove(registry)
+
+
+def ambient() -> ScratchRegistry | None:
+    """The installed registry, or None."""
+    with _AMBIENT_LOCK:
+        return _AMBIENT[-1] if _AMBIENT else None
+
+
+def _fallback(root: Path | str | None) -> ScratchRegistry:
+    import atexit
+    import tempfile
+    root = Path(root) if root is not None else Path(tempfile.gettempdir()) / FALLBACK_DIRNAME
+    key = str(root.absolute())
+    with _AMBIENT_LOCK:
+        reg = _FALLBACKS.get(key)
+        if reg is None:
+            owner = {"campaign": "standalone", "state_dir": key,
+                     "run_id": f"standalone-{os.getpid()}-{uuid.uuid4().hex[:8]}"}
+            try:
+                reg = ScratchRegistry(root, owner, 0)
+            except OSError:
+                # An unwritable hint (a workspace at `/x`): the system-temp fallback.
+                root = Path(tempfile.gettempdir()) / FALLBACK_DIRNAME
+                reg = _FALLBACKS.get(str(root.absolute())) or ScratchRegistry(root, owner, 0)
+                _FALLBACKS[str(root.absolute())] = reg
+            _FALLBACKS[key] = reg
+            atexit.register(reg.close)
+        return reg
+
+
+def registry_for(fallback_root: Path | str | None = None) -> ScratchRegistry:
+    """The ambient registry, else the fallback registry rooted at `fallback_root`
+    (default `<system tmp>/ak-scratch`)."""
+    return ambient() or _fallback(fallback_root)
+
+
+def active_scope(fallback_root: Path | str | None = None) -> Scope:
+    """Where an allocation made HERE belongs: the innermost open scope on this thread
+    of the ambient (else fallback) registry, else that registry's standing scope."""
+    reg = registry_for(fallback_root)
+    return reg.current() or reg.standing()
+
+
+def current(level: str | None = None) -> Scope | None:
+    """The ambient registry's innermost open scope on this thread (of `level`)."""
+    reg = ambient()
+    return reg.current(level) if reg is not None else None
+
+
+class adopt_tempfile:
+    """`with adopt_tempfile(scope):` points in-process `tempfile` at `scope.tmpdir()`,
+    so the loop's own TemporaryDirectory/mkstemp calls land in a scoped, released dir.
+    Child processes are NOT affected (their env is untouched: serving launches digest
+    their environment); actor calls get `Scope.tmp_env()` explicitly."""
+
+    def __init__(self, scope: Scope) -> None:
+        self.scope = scope
+        self._previous: str | None = None
+
+    def __enter__(self) -> Path:
+        import tempfile
+        path = self.scope.tmpdir()
+        self._previous = tempfile.tempdir
+        tempfile.tempdir = str(path)
+        return path
+
+    def __exit__(self, *exc) -> bool:
+        import tempfile
+        tempfile.tempdir = self._previous
+        return False
+
+
 # -- CLI knobs --------------------------------------------------------------------------
 def add_arguments(parser) -> None:
     """`--scratch-min-free-gb` and `--scratch-keep` for run.py."""
@@ -669,6 +844,8 @@ def from_args(args, *, root: Path | str, owner: dict) -> ScratchRegistry:
                            keep=getattr(args, "scratch_keep", "none") or "none")
 
 
-__all__ = ["DEFAULT_MIN_FREE_BYTES", "DEFAULT_MIN_FREE_GB", "GB", "JOURNAL", "KEEP_MODES",
-           "LEVELS", "MARKER", "SIDECAR_SUFFIX", "Scope", "ScratchError", "ScratchRefused",
-           "ScratchRegistry", "add_arguments", "from_args", "pid_alive", "read_marker"]
+__all__ = ["DEFAULT_MIN_FREE_BYTES", "DEFAULT_MIN_FREE_GB", "FALLBACK_DIRNAME", "GB",
+           "JOURNAL", "KEEP_MODES", "LEVELS", "MARKER", "SIDECAR_SUFFIX", "Scope",
+           "ScratchError", "ScratchRefused", "ScratchRegistry", "active_scope",
+           "add_arguments", "adopt_tempfile", "ambient", "current", "from_args", "install",
+           "pid_alive", "read_marker", "registry_for", "uninstall"]

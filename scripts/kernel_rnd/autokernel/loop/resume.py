@@ -103,9 +103,9 @@ import sqlite3
 import stat
 import subprocess
 import sys
-import tempfile
 import threading
 from typing import Any, Callable, Mapping, Sequence
+import uuid
 
 from ..controller import experiments
 from . import loop
@@ -574,17 +574,33 @@ def verify_retained_patch(pointer: Mapping[str, Any], *, anchor_commit: str,
     return raw
 
 
+class _ScratchHolder:
+    """`TemporaryDirectory`-shaped handle: `cleanup()` releases the scratch dir now."""
+
+    def __init__(self, scope, root: Path) -> None:
+        self.scope, self.name = scope, str(root)
+
+    def cleanup(self) -> None:
+        if Path(self.name).exists():
+            self.scope.release(self.name)
+
+
 def _scratch_tree(repo: Path, anchor_commit: str, patch: bytes,
-                  scratch: Path | None) -> tuple[tempfile.TemporaryDirectory, Path]:
+                  scratch: Path | None) -> tuple["_ScratchHolder", Path]:
     """Pre-image files at the anchor, copied out by object reads only.
 
     The source repository is never checked out, indexed or written: this is a
     READ of the anchor's blobs into a scratch directory outside any repository.
     """
     _touched, preexisting = patch_paths(patch)
-    holder = tempfile.TemporaryDirectory(prefix=".resume-apply-",
-                                         dir=None if scratch is None else str(scratch))
-    root = Path(holder.name)
+    # SCRATCH: a registry-owned dir (marked, journalled, swept after a crash), not a
+    # bare TemporaryDirectory in the store. `scratch` is only the fallback registry's
+    # home when no run registry is installed (the standalone CLI).
+    from . import scratch as scratch_mod
+    scope = scratch_mod.active_scope(
+        None if scratch is None else Path(scratch) / scratch_mod.FALLBACK_DIRNAME)
+    root = scope.dir("resume-apply", f"resume-apply-{uuid.uuid4().hex[:12]}")
+    holder = _ScratchHolder(scope, root)
     for name in preexisting:
         probe = subprocess.run(["git", "-C", str(repo), "cat-file", "-e",
                                 f"{anchor_commit}:{name}"], capture_output=True,

@@ -222,7 +222,8 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
           anchor_guard: Mapping[str, Any] | None = None,
           accumulator: Mapping[str, Any] | None = None,
           stale_after_s: int = DEFAULT_STALE_AFTER_S,
-          actor_health: dict | None = None) -> Path:
+          actor_health: dict | None = None,
+          scratch: Mapping[str, Any] | None = None) -> Path:
     """Atomically publish the loop's current standing.
 
     Atomic because a dashboard polling a half-written file is how a surface reports
@@ -309,6 +310,9 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
         body["serial_control"] = dict(serial_control)
     if runtime_preparation is not None:
         body["runtime_preparation"] = dict(runtime_preparation)
+    if scratch is not None:
+        # The scratch registry's counters (allocated/released/live/sweeps/guard).
+        body["scratch"] = dict(scratch)
     return write_json(store_root, STATUS_FILENAME, body)
 
 

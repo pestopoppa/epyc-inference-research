@@ -50,6 +50,12 @@ import threading
 from typing import Any, Callable, Sequence
 
 from . import loop as loop_mod
+from . import scratch
+
+#: Outcomes that reached a measurement: an iteration ending any other way counts as
+#: FAILED for `--scratch-keep failed` (its scratch is retained, still marked).
+MEASURED_STATUSES = frozenset({"kept", "measured_null", "regression", "keep_candidate",
+                               "runtime_observed"})
 
 #: Beyond this, lanes queue on the serialized tail rather than adding throughput.
 #: Derived from measurement, not chosen. Run 13 recorded per-phase wall time:
@@ -202,6 +208,11 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
     """
     budget = Budget(iterations, should_stop=should_stop)
     tail = tail or SerializedTail(champion_head)
+    # SCRATCH (operator 2026-09-26): one `batch` scope for this pool, one `iteration`
+    # scope per draw (on the lane's own thread, so actor calls nest under it), and a
+    # sweep at the start of each. The installed run registry, else the fallback.
+    registry = scratch.registry_for()
+    batch_scope = registry.scope("batch", name=f"pool-{len(workers)}")
     outcomes: list[loop_mod.Outcome] = []
     outcomes_lock = threading.Lock()
     aborted: list[BaseException] = []
@@ -239,6 +250,16 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
         planner, critic = make_planner(worker), make_critic(worker)
         depth = 0
         base: str | None = None
+        iteration_scope: scratch.Scope | None = None
+
+        def close_iteration(outcome: loop_mod.Outcome | None) -> None:
+            nonlocal iteration_scope
+            if iteration_scope is None:
+                return
+            if outcome is None or outcome.status not in MEASURED_STATUSES:
+                iteration_scope.mark_failed()
+            iteration_scope.__exit__(None, None, None)
+            iteration_scope = None
 
         def keep_lane(outcome: loop_mod.Outcome) -> None:
             # A lane is detached, so this is a logical branch identifier rather
@@ -255,6 +276,10 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
             base = None
             reservation = None
             resumed = None
+            close_iteration(None)  # never left open across draws
+            iteration_scope = registry.scope("iteration", name=f"{worker.name}-{depth}",
+                                             parent=batch_scope).__enter__()
+            registry.sweep()
             # INSIDE the try. This sat outside it, so a failure here killed the whole
             # thread rather than costing one iteration -- run 16 lost four of seven
             # lanes that way, silently, while the run carried on looking healthy at
@@ -262,11 +287,13 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
             try:
                 base = reset_to_champion(worker)
             except Exception as exc:      # noqa: BLE001
-                keep_lane(loop_mod.Outcome(
+                failed = loop_mod.Outcome(
                     "lane_error", None,
                     [f"lane {worker.name} could not reach the champion: "
                      f"{type(exc).__name__}: {exc}",
-                     traceback.format_exc()[-1500:]]))
+                     traceback.format_exc()[-1500:]])
+                close_iteration(failed)
+                keep_lane(failed)
                 continue
 
             # All three run INSIDE one `tail.session`, so they need no lock of their
@@ -344,7 +371,8 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                     record_abandoned=abandoned, resume=resumed,
                     # The lane and the commit reset_to_champion put it on for THIS
                     # draw: the only lane an empty author report may be derived from.
-                    author_lane=(worker.worktree, base))
+                    author_lane=(worker.worktree, base),
+                    iteration_scope=iteration_scope)
             except Superseded as exc:
                 # `iterate` already converted this into an Outcome carrying the
                 # hypothesis; reaching here means it escaped before one was formed.
@@ -385,14 +413,18 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                 outcome.attempt_identity = reservation.identity
                 outcome.exact_repeat_dispatch_count = reservation.dispatch_count
                 outcome.candidate_diff_sha256 = reservation.candidate_diff_sha256
+            close_iteration(outcome)
             keep_lane(outcome)
+        close_iteration(None)
 
     threads = [threading.Thread(target=lane, args=(w,), name=w.name, daemon=True)
                for w in workers]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
+    with batch_scope:
+        registry.sweep()
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
     if aborted:
         # Re-raised after every lane has published, so the run ends the way a crashed
         # run does -- `run.py` publishes `failed` -- rather than returning a normal

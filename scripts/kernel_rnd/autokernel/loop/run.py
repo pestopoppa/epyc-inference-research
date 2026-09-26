@@ -38,6 +38,7 @@ from . import (accumulate, actors, anchor, archive, bench, champion, claim, gate
                integrity, heldout_serving, lineage_beliefs, pipeline, pool, production, status, surface_fold,
                surface_validation)
 from . import actor_opencode_config
+from . import scratch
 from . import resume as resume_mod
 
 
@@ -921,6 +922,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--worker-build-root", type=Path,
                         default=pool.WORKER_BUILD_ROOT,
                         help="parent of the per-lane candidate build directories")
+    scratch.add_arguments(parser)
     args = parser.parse_args(argv)
     budget_error = _actor_budget_error(args)
     if budget_error:
@@ -2167,6 +2169,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"profile   {len(rows)} hotspots; top: "
               f"{rows[0].signature[:60] if rows else '(none)'}")
 
+    # SCRATCH (operator 2026-09-26): this run's ONE scratch registry, rooted in the
+    # store; created when the run body starts (below) and read by status/loop-run.
+    scratch_registry: list = [None]
+
     stopping = {"asked": False}
 
     def _ask_stop(signum, _frame) -> None:
@@ -2711,7 +2717,8 @@ def main(argv: list[str] | None = None) -> int:
             # heartbeat every HEARTBEAT_S below, so the envelope can be tight: silence now
             # means the PROCESS is gone, not that a build or a 20-pair bench is long.
             stale_after_s=HEARTBEAT_S * 6,
-            actor_health=actor_health(outcomes))
+            actor_health=actor_health(outcomes),
+            scratch=(scratch_registry[0].stats() if scratch_registry[0] is not None else None))
 
     latest: list = []
     original_source_keeps: list[dict] = []
@@ -3386,6 +3393,22 @@ def main(argv: list[str] | None = None) -> int:
         status_publisher.start()
         started = time.time()
         with ExitStack() as ownership:
+            # Every scratch path this run creates is allocated under this run scope and
+            # released when the stack unwinds (normal end, exception, or the SIGTERM
+            # stop path, which returns through here). The sweep first collects what a
+            # killed earlier run left behind -- marked, dead-owner resources only.
+            scratch_run_id = f"{time.strftime('%Y%m%dT%H%M%S', time.gmtime())}-{os.getpid()}"
+            scratch_registry[0] = scratch.from_args(args, root=args.store / "scratch", owner={
+                "campaign": (resolved_campaign.campaign_id if selected_target is not None
+                             else "ak-loop"),
+                "state_dir": str(args.store), "run_id": scratch_run_id, "pid": os.getpid()})
+            run_scope = ownership.enter_context(
+                scratch_registry[0].scope("run", name=scratch_run_id))
+            scratch.install(scratch_registry[0])
+            ownership.callback(scratch.uninstall, scratch_registry[0])
+            ownership.callback(scratch_registry[0].close)
+            scratch_registry[0].sweep()
+            ownership.enter_context(scratch.adopt_tempfile(run_scope))
             try:
                 if owned_cpu_list is not None:
                     # This thread and future actor/oracle children inherit the declared
@@ -3863,6 +3886,8 @@ def main(argv: list[str] | None = None) -> int:
                 "phase_seconds": pooled_body.pop("phase_lane_seconds"),
                 "phase_seconds_are_lane_seconds": True,
                 "pool": pooled_body,
+                **({"scratch": scratch_registry[0].stats()}
+                   if scratch_registry[0] is not None else {}),
                 "continuation": serial_run.continuation(
                     argv=original_argv, binding=original_binding,
                     terminal="stopped" if should_stop() else "complete",
