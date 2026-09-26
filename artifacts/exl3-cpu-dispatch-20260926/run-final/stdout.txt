@@ -1,0 +1,50 @@
+isa 0 supported=1
+isa 1 supported=1
+isa 2 supported=1
+isa 3 supported=1
+fixture mul1_k3 fused_relative_l2=0.000457453 q8_relative_l2=0.00839703
+fixture mul1_k4 fused_relative_l2=0.000432122 q8_relative_l2=0.0085257
+fixture mcg_k4 fused_relative_l2=0.000424603
+microbench_window_begin_ns=186b703945b27
+microbench candidate_observation isa=0 grouped=0 rep=0 batch_us=2951.63 checksum=0.291854
+microbench candidate_observation isa=0 grouped=0 rep=1 batch_us=2947.5 checksum=0.291854
+microbench candidate_observation isa=0 grouped=0 rep=2 batch_us=3258.35 checksum=0.291854
+microbench candidate_observation isa=0 grouped=0 rep=3 batch_us=3315.06 checksum=0.291854
+microbench candidate_observation isa=0 grouped=0 rep=4 batch_us=3136.96 checksum=0.291854
+microbench candidate_observation isa=0 grouped=1 rep=0 batch_us=2955.74 checksum=0.291854
+microbench candidate_observation isa=0 grouped=1 rep=1 batch_us=2949.34 checksum=0.291854
+microbench candidate_observation isa=0 grouped=1 rep=2 batch_us=2949.86 checksum=0.291854
+microbench candidate_observation isa=0 grouped=1 rep=3 batch_us=2948.43 checksum=0.291854
+microbench candidate_observation isa=0 grouped=1 rep=4 batch_us=2947.35 checksum=0.291854
+microbench candidate_observation isa=1 grouped=0 rep=0 batch_us=1268.65 checksum=0.291854
+microbench candidate_observation isa=1 grouped=0 rep=1 batch_us=1262.89 checksum=0.291854
+microbench candidate_observation isa=1 grouped=0 rep=2 batch_us=1268.53 checksum=0.291854
+microbench candidate_observation isa=1 grouped=0 rep=3 batch_us=1313.55 checksum=0.291854
+microbench candidate_observation isa=1 grouped=0 rep=4 batch_us=1367.83 checksum=0.291854
+microbench candidate_observation isa=1 grouped=1 rep=0 batch_us=1290.49 checksum=0.291854
+microbench candidate_observation isa=1 grouped=1 rep=1 batch_us=1341.62 checksum=0.291854
+microbench candidate_observation isa=1 grouped=1 rep=2 batch_us=1357.32 checksum=0.291854
+microbench candidate_observation isa=1 grouped=1 rep=3 batch_us=1264.26 checksum=0.291854
+microbench candidate_observation isa=1 grouped=1 rep=4 batch_us=1269.06 checksum=0.291854
+microbench candidate_observation isa=2 grouped=0 rep=0 batch_us=1257.53 checksum=0.291854
+microbench candidate_observation isa=2 grouped=0 rep=1 batch_us=1264.92 checksum=0.291854
+microbench candidate_observation isa=2 grouped=0 rep=2 batch_us=1260.11 checksum=0.291854
+microbench candidate_observation isa=2 grouped=0 rep=3 batch_us=1265.23 checksum=0.291854
+microbench candidate_observation isa=2 grouped=0 rep=4 batch_us=1258.24 checksum=0.291854
+microbench candidate_observation isa=2 grouped=1 rep=0 batch_us=1265.29 checksum=0.291854
+microbench candidate_observation isa=2 grouped=1 rep=1 batch_us=1258.06 checksum=0.291854
+microbench candidate_observation isa=2 grouped=1 rep=2 batch_us=1264.28 checksum=0.291854
+microbench candidate_observation isa=2 grouped=1 rep=3 batch_us=1257.8 checksum=0.291854
+microbench candidate_observation isa=2 grouped=1 rep=4 batch_us=1264.5 checksum=0.291854
+microbench candidate_observation isa=3 grouped=0 rep=0 batch_us=1267.09 checksum=0.291854
+microbench candidate_observation isa=3 grouped=0 rep=1 batch_us=1259.61 checksum=0.291854
+microbench candidate_observation isa=3 grouped=0 rep=2 batch_us=1265.4 checksum=0.291854
+microbench candidate_observation isa=3 grouped=0 rep=3 batch_us=1260.44 checksum=0.291854
+microbench candidate_observation isa=3 grouped=0 rep=4 batch_us=1269.43 checksum=0.291854
+microbench candidate_observation isa=3 grouped=1 rep=0 batch_us=1351.24 checksum=0.291854
+microbench candidate_observation isa=3 grouped=1 rep=1 batch_us=1324.37 checksum=0.291854
+microbench candidate_observation isa=3 grouped=1 rep=2 batch_us=1304.79 checksum=0.291854
+microbench candidate_observation isa=3 grouped=1 rep=3 batch_us=1355.51 checksum=0.291854
+microbench candidate_observation isa=3 grouped=1 rep=4 batch_us=1291.14 checksum=0.291854
+microbench_window_end_ns=186b714d7cda6
+PASS checks=719096
