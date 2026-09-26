@@ -205,12 +205,25 @@ class TodaysRefusalStands(_Lane):
             self.assertIn(needle, outcome.reasons[0])
         return outcome
 
+    def _assert_author_failure(self, outcome, status, *needles):
+        """lane/ak-authfail-20260926: no diff by this call is an AUTHORING failure of
+        the accepted hypothesis (pending, author checkpoint), never a lost iteration."""
+        self.assertEqual(outcome.status, status)
+        self.assertIsNone(outcome.report_source)
+        for needle in needles:
+            self.assertIn(needle, " | ".join(outcome.reasons))
+        return outcome
+
     def test_no_diff_keeps_the_refusal_and_the_author_checkpoint(self):
-        outcome = self._assert_transient(self.iterate(self.planner("")),
-                                         "output_capped_empty",
-                                         "refusing to repair an empty reply")
-        self.assertNotIn("lane diff", outcome.reasons[0])
+        # A capped empty reply is the HARNESS's (the output cap ended the session).
+        outcome = self._assert_author_failure(self.iterate(self.planner("")),
+                                              loop_mod.AUTHORING_HARNESS_FAILURE,
+                                              "output_capped_empty",
+                                              "refusing to repair an empty reply")
+        self.assertNotIn("lane diff", " ".join(outcome.reasons))
         [checkpoint] = outcome.resume_checkpoints
+        self.assertEqual(checkpoint["author_attempts_used"], 0)
+        self.assertEqual(checkpoint["author_harness_failures"], 1)
         self.assertEqual(checkpoint["stage"], "author")
         self.assertEqual(checkpoint["schema"], loop_mod.CHECKPOINT_SCHEMA)
         self.assertEqual(checkpoint["hypothesis"]["mechanism_id"], "akm-q4k-x4t-avx512")
@@ -218,9 +231,10 @@ class TodaysRefusalStands(_Lane):
         self.assertTrue(checkpoint["critic_hypothesis"]["accepted"])
 
     def test_a_lane_the_loop_did_not_reset_is_never_salvaged(self):
-        self._assert_transient(self.iterate(self.planner("", edit=self.edit),
-                                            author_lane=None),
-                               "no final report")
+        outcome = self._assert_author_failure(
+            self.iterate(self.planner("", edit=self.edit), author_lane=None),
+            loop_mod.AUTHORING_HARNESS_FAILURE, "no final report")
+        self.assertEqual([c["stage"] for c in outcome.resume_checkpoints], ["author"])
 
     def test_a_moved_head_is_refused(self):
         def commit_it():
@@ -255,9 +269,12 @@ class TodaysRefusalStands(_Lane):
             return reply
         with mock.patch.object(actors, "_run_agent", side_effect=call):
             outcome = self.iterate(planner, critic=critic)
-        self._assert_transient(outcome, "no final report")
-        self.assertEqual(outcome.resume_checkpoints[0]["prior_patch_rejections"],
-                         ["too broad"])
+        # An UNCAPPED empty reply is the author's own: one attempt charged.
+        self._assert_author_failure(outcome, loop_mod.AUTHORING_FAILED, "no final report")
+        carried = outcome.resume_checkpoints[0]["prior_patch_rejections"]
+        self.assertEqual(carried[0], "too broad")
+        self.assertIn("authoring failed [author] report_missing", carried[1])
+        self.assertEqual(outcome.resume_checkpoints[0]["author_attempts_used"], 1)
 
 
 class OnlyTheAuthorIsDerived(_Lane):

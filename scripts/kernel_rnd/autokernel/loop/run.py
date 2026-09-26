@@ -403,13 +403,15 @@ def _author_plan(args, planner_kind: str | None = None) -> AuthorPlan:
         if explicit:
             raise ValueError(reason)
         return AuthorPlan(note=f"single author: {reason}")
-    budget = bestof.author_budget(len(specs), pool_tokens=int(args.actor_pool_tokens))
+    budget = bestof.panel_budget(
+        specs, pool_tokens=int(args.actor_pool_tokens),
+        modes=bestof.parse_mode_budgets(getattr(args, "actor_authors_budget", None)))
     return AuthorPlan(specs=specs, budget=budget,
                       note=(f"best-of-{len(specs)} "
-                            + ",".join(f"{s.label}" for s in specs)
-                            + f" context={budget.context_limit} output={budget.output_limit}"
-                            f" compaction@{budget.compaction_at} pool={budget.pool_tokens}"
-                            f"-{budget.reserve}"))
+                            + " ".join(f"{m.label}(context={m.context_limit} "
+                                       f"output={m.output_limit} compaction@{m.compaction_at})"
+                                       for m in budget.members)
+                            + f" pool={budget.pool_tokens}-{budget.reserve}"))
 
 
 def _author_validator(args):
@@ -968,7 +970,13 @@ def main(argv: list[str] | None = None) -> int:
                              "run out on author failures leave it pending "
                              "(patch_rounds_exhausted) and the next draw re-authors it before "
                              "the planner is asked; the last attempt retires it "
-                             "(hypothesis_retired). A scope_blocked attempt spends none "
+                             "(hypothesis_retired). A scope_blocked attempt spends none. An "
+                             "author call that produces no diff (abstains, reports a change "
+                             "it never made; every best-of member) spends one "
+                             "(authoring_failed); one whose failures were all the harness's "
+                             "(truncated final step, timeout, provider error) spends none "
+                             "(authoring_harness_failure) until "
+                             f"{loop.AUTHOR_HARNESS_FAILURE_CAP} in a row "
                              "(default: %(default)s)")
     # ---- concurrency. EVERY run is pooled; --workers 1 is a one-lane pool. The
     # separate sequential path was deleted 2026-08-31 once the pool owned the
@@ -1151,9 +1159,18 @@ def main(argv: list[str] | None = None) -> int:
                              "first diff that passes the validator lands on the lane and the "
                              "other calls are ended. N=len(list). 'single' (or one mode) is "
                              "the single-author path byte for byte. Each author's opencode "
-                             "context is floor((--actor-pool-tokens - 16384) / N), output "
-                             "16384. Default: " + DEFAULT_ACTOR_AUTHORS + " (degrades to "
+                             "context/output comes from --actor-authors-budget (by thinking "
+                             "mode). Default: " + DEFAULT_ACTOR_AUTHORS + " (degrades to "
                              "single when this build lacks a mode or --workers > 1)")
+    parser.add_argument("--actor-authors-budget", default="",
+                        help="best-of-N per-thinking-mode budget, merged over the defaults: "
+                             "comma list of <mode>=<context weight>:<output tokens>. The pool "
+                             "above its 16384 reserve is split by weight; each member takes "
+                             "its mode's output cap (must stay 32768 below its context). "
+                             "Defaults: " + ",".join(
+                                 f"{mode}={weight}:{output}" for mode, (weight, output)
+                                 in bestof.DEFAULT_MODE_BUDGETS.items())
+                             + " (off,medium on 196608: 65536/16384 and 114688/40960)")
     parser.add_argument("--actor-pool-tokens", type=int, default=bestof.DEFAULT_POOL_TOKENS,
                         help=":8083's unified KV pool the concurrent authors share "
                              "(np4 --kv-unified; default: %(default)s)")
@@ -1903,6 +1920,10 @@ def main(argv: list[str] | None = None) -> int:
                 "planner": planner_backend.describe(),
                 "critic": critic_backend.describe(),
             },
+            # The store the context's paths point into (experiments.md, runtime floors,
+            # cpu/node profiles): the read-only critic's seat allows reads there, since
+            # a rejected read ends its opencode session with no reply (actors._read_roots).
+            "actor_read_roots": [str(Path(args.store).resolve())],
             **({"serving_instrument": dict(source_instrument)} if source_instrument else {}),
             **({"cpu_screen": {**screen_state,
                                "full_target": full_cpu_target.to_dict()}} if screen_state else {}),
@@ -2993,8 +3014,9 @@ def main(argv: list[str] | None = None) -> int:
     def actor_health(outcomes) -> dict:
         """What the dashboard needs to say 'the critic is failing' instead of 'running'."""
         rows = [o.to_attempt() for o in list(outcomes)[-60:]]
-        fails = [r for r in rows if r.get("status") == "planner_transient"]
-        last = next((r for r in reversed(rows) if r.get("status") == "planner_transient"), None)
+        failing = {"planner_transient", loop.AUTHORING_HARNESS_FAILURE}
+        fails = [r for r in rows if r.get("status") in failing]
+        last = next((r for r in reversed(rows) if r.get("status") in failing), None)
         reason = str((last or {}).get("refusal_reason") or "")[:200]
         return {"recent_attempts": len(rows), "planner_transient": len(fails),
                 "failing": len(rows) >= 5 and len(fails) * 2 > len(rows),
@@ -3605,8 +3627,12 @@ def main(argv: list[str] | None = None) -> int:
                         bounded=args.actor_seat == "bounded", fan_out=args.actor_fan_out,
                         steps=args.actor_steps, context_mode=args.actor_context_mode,
                         **_actor_knobs(args),
-                        **{**_actor_limits(args), "context_limit": budget.context_limit,
-                           "author_output_limit": budget.output_limit},
+                        # This member's share of the pool and ITS output cap (asymmetric
+                        # by thinking mode, `bestof.panel_budget`); an output above
+                        # 32,000 reaches the wire via output_ceiling_env.
+                        **{**_actor_limits(args),
+                           "context_limit": budget.for_member(spec).context_limit,
+                           "author_output_limit": budget.for_member(spec).output_limit},
                         **_actor_budgets(args),
                         **{**_actor_thinking(args), "author_thinking": spec.thinking}))
 

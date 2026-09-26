@@ -59,8 +59,40 @@ SCOPE_BLOCKED = "scope_blocked"
 #: The accepted hypothesis spent its authoring budget on author failures. Terminal,
 #: no checkpoint; the reason names the budget and carries every patch rejection.
 HYPOTHESIS_RETIRED = "hypothesis_retired"
+#: The AUTHOR failed an accepted hypothesis without producing a checkable diff: it
+#: abstained, returned no changed path, reported a change the lane does not hold, or
+#: (best-of-N) every member did one of those. Operator rule 2026-09-26 (DS41 run 10h,
+#: `akm-q4k-x4t-avx512` dropped as `abstained` a second time): an accepted hypothesis is
+#: never discarded because only its AUTHORING failed. One authoring attempt is spent
+#: and the row carries an author checkpoint whose feedback names every member's reason,
+#: its ak-check result and its retained patch, so the next draw starts from them.
+AUTHORING_FAILED = "authoring_failed"
+#: The same, but every failure was the HARNESS's, not the author's: a provider
+#: transient or timeout, a per-call budget, an output-capped final step (the edit was
+#: truncated, so a "report_missing" is not the author's claim), an opencode store
+#: error. No attempt is charged -- until `AUTHOR_HARNESS_FAILURE_CAP` of them in a row
+#: for one hypothesis, whose last one IS charged, so a setup that fails every time
+#: cannot re-author forever.
+AUTHORING_HARNESS_FAILURE = "authoring_harness_failure"
+#: Consecutive harness failures of one accepted hypothesis before the next is charged.
+AUTHOR_HARNESS_FAILURE_CAP = 3
+#: Critic-pass-1 transients (an empty reply, a provider error, a timeout) one PLANNER
+#: hypothesis survives before it is dropped: each writes a "critic1" checkpoint the next
+#: draw resumes at critic pass 1, before the planner is asked (DS41 run 10h batch 1:
+#: `akm-verify-batch-solo-2rows`, 31 planner-minutes, lost to one empty critic reply).
+CRITIC1_RETRIES = 3
 #: Iteration outcomes whose row keeps an accepted hypothesis pending authoring.
-PENDING_HYPOTHESIS_STATUSES = frozenset({PATCH_ROUNDS_EXHAUSTED, SCOPE_BLOCKED})
+PENDING_HYPOTHESIS_STATUSES = frozenset({PATCH_ROUNDS_EXHAUSTED, SCOPE_BLOCKED,
+                                         AUTHORING_FAILED, AUTHORING_HARNESS_FAILURE})
+#: Actor-call `failure_class` values (`actor_metrics`) that say the HARNESS ended the
+#: author call: an output-capped empty final step, a per-call wall budget, opencode's
+#: own store refusing a write, a refused tool permission that ended the session.
+HARNESS_FAILURE_CLASSES = frozenset({"output_capped_empty", "budget_exhausted",
+                                     "opencode_store_error", "permission_rejected"})
+#: Author-member outcomes that are never the author's verdict (`bestof._Member.outcome`
+#: vocabulary, shared by the single path): a provider transient, a contained error, a
+#: call ended without a run stop.
+HARNESS_OUTCOMES = frozenset({"transient", "error", "stopped"})
 #: Most patch rejections an author checkpoint carries forward (newest kept).
 MAX_CARRIED_PATCH_REJECTIONS = 8
 #: How critic pass 2 tags a SCOPE rejection: the reason begins `SCOPE: ...` or
@@ -227,6 +259,129 @@ class Abstain:
     def __post_init__(self) -> None:
         if not isinstance(self.reason, str) or not self.reason.strip():
             raise ValueError("a planner abstention must carry a reason")
+
+
+@dataclass(frozen=True)
+class AuthoringFailure(Abstain):
+    """A best-of-N round in which no author produced a diff and at least one failed on
+    its own account (`bestof.AuthorPanel._no_diff`). `members` carries one
+    `author_failure_record` per author, each classified "authoring" or "harness".
+    An all-harness round raises the provider exception instead, with the same records
+    on it as `author_failures`."""
+
+    members: tuple = ()
+
+
+def classify_author_failure(outcome: str, *, failure_class: str | None = None,
+                            final_step_capped: bool | None = None,
+                            timed_out: bool | None = None) -> dict:
+    """Whose failure an author call that produced no checkable diff was.
+
+    "harness"   -- a provider transient, contained error or ended call
+                   (`HARNESS_OUTCOMES`); or a `HARNESS_FAILURE_CLASSES` failure class; or
+                   a timeout; or a report that names a change the lane does not hold
+                   while the call's FINAL step ended on the output cap (the edit was
+                   truncated: DS41 run 10h a1-medium, 3 capped steps at 16,384).
+    "authoring" -- the author's own answer: an abstention (an explicit reply, whatever
+                   the step budget), an empty paths list, or a report of a change it
+                   never made on an uncapped final step.
+    """
+    if outcome in HARNESS_OUTCOMES:
+        return {"class": "harness",
+                "harness_reason": failure_class or f"author call {outcome}"}
+    if outcome != "abstained":
+        if failure_class in HARNESS_FAILURE_CLASSES:
+            return {"class": "harness", "harness_reason": failure_class}
+        if timed_out:
+            return {"class": "harness", "harness_reason": "author call timed out"}
+        if final_step_capped:
+            return {"class": "harness",
+                    "harness_reason": "output-capped final step (the edit was truncated)"}
+    return {"class": "authoring", "harness_reason": None}
+
+
+def author_failure_record(*, label: str, outcome: str, reason: str,
+                          thinking: str | None = None, evidence: Mapping[str, Any] | None = None,
+                          patch: Mapping[str, Any] | None = None,
+                          validation: Mapping[str, Any] | None = None,
+                          panel_id: str | None = None) -> dict:
+    """One author's failure, classified, with the evidence the next attempt needs.
+
+    `evidence` is `actor_metrics.failure_evidence` of the call's metrics row
+    (failure_class, final_step_capped, output_capped_steps, output_limit, timed_out,
+    steps, decoded_tokens, ak_check). `patch` is the member's retained patch
+    ({patch_file, patch_sha256, ...}) when its tree held one."""
+    evidence = dict(evidence or {})
+    failure_class = evidence.get("failure_class")
+    if not failure_class and evidence.get("final_step_capped") and outcome != "diff" \
+            and not (patch or {}).get("patch_sha256"):
+        failure_class = "output_capped_empty"
+    verdict = classify_author_failure(outcome, failure_class=failure_class,
+                                      final_step_capped=evidence.get("final_step_capped"),
+                                      timed_out=evidence.get("timed_out"))
+    record = {"label": label, "thinking": thinking, "outcome": outcome,
+              "reason": str(reason or "")[:600], **verdict,
+              "failure_class": failure_class}
+    for key in ("final_step_capped", "output_capped_steps", "output_limit", "context_limit",
+                "timed_out", "steps", "decoded_tokens", "ak_check"):
+        if evidence.get(key) is not None:
+            record[key] = evidence[key]
+    if isinstance(patch, Mapping) and patch.get("patch_sha256"):
+        record["patch"] = {key: patch.get(key) for key in ("patch_file", "patch_sha256", "bytes")
+                           if patch.get(key) is not None}
+    if isinstance(validation, Mapping):
+        record["validation"] = {key: validation.get(key)
+                                for key in ("passed", "reason", "validator")}
+    if panel_id:
+        record["panel_id"] = panel_id
+    return record
+
+
+def _ak_check_text(summary: Mapping[str, Any] | None) -> str | None:
+    """"ak-check: compile 1/5 pass, op-test 0/2 pass; last op-test 51/130" or None."""
+    if not isinstance(summary, Mapping) or not summary.get("calls"):
+        return None
+    parts = []
+    for mode, row in sorted((summary.get("by_mode") or {}).items()):
+        if isinstance(row, Mapping):
+            parts.append(f"{mode} {row.get('pass', 0)}/{row.get('calls', 0)} pass")
+    text = "ak-check: " + (", ".join(parts) or f"{summary.get('calls')} call(s)")
+    last = summary.get("last_op_test")
+    if isinstance(last, Mapping) and last.get("total"):
+        text += (f"; last op-test {str(last.get('status') or '').upper() or '?'} "
+                 f"{last.get('passed')}/{last.get('total')}"
+                 + (f" on {','.join(last.get('types') or ())}" if last.get("types") else ""))
+    elif summary.get("last_status"):
+        text += f"; last status {summary['last_status']}"
+    return text
+
+
+def author_failure_feedback(record: Mapping[str, Any]) -> str:
+    """The author-facing line for one failure record (carried as
+    `prior_patch_rejections`, rendered under "Your patch was rejected")."""
+    who = str(record.get("label") or "author")
+    if record.get("thinking"):
+        who += f", thinking {record['thinking']}"
+    harness = record.get("class") == "harness"
+    head = (f"authoring harness failure, not charged [{who}] {record.get('outcome')}"
+            if harness else f"authoring failed [{who}] {record.get('outcome')}")
+    if harness and record.get("harness_reason"):
+        head += f" ({record['harness_reason']}"
+        if record.get("output_capped_steps"):
+            head += (f"; {record['output_capped_steps']} step(s) hit the "
+                     f"{record.get('output_limit') or '?'}-token output cap")
+        head += ")"
+    parts = [f"{head}: {str(record.get('reason') or '').strip()[:500]}"]
+    checked = _ak_check_text(record.get("ak_check"))
+    if checked:
+        parts.append(checked)
+    validation = record.get("validation")
+    if isinstance(validation, Mapping) and validation.get("passed") is False:
+        parts.append(f"validator: {str(validation.get('reason') or '')[:200]}")
+    patch = record.get("patch")
+    if isinstance(patch, Mapping) and patch.get("patch_file"):
+        parts.append(f"its patch is retained at {patch['patch_file']}")
+    return " — ".join(parts)
 
 
 def _now() -> str:
@@ -560,6 +715,69 @@ def _lane_changed(author_lane, before_tree: str | None) -> bool:
         return False
 
 
+#: Failure classes of a reply that came back EMPTY because the harness ended the
+#: session (`actor_metrics`): worth one immediate retry of critic pass 1.
+_EMPTY_REPLY_CLASSES = frozenset({"output_capped_empty", "permission_rejected"})
+
+
+def _empty_reply(exc: BaseException) -> bool:
+    """A transient whose reply was empty (not a provider error that will recur)."""
+    return (getattr(exc, "failure_class", None) in _EMPTY_REPLY_CLASSES
+            or "no final report" in str(exc))
+
+
+def _critic1_spent(exc: BaseException, used: int) -> ActorTransient:
+    """The transient that drops a planner hypothesis after `CRITIC1_RETRIES`."""
+    spent = ActorTransient(f"critic pass 1 failed {used} times for this hypothesis "
+                           f"(retry budget {CRITIC1_RETRIES} spent; not resumed): {exc}"[:2000])
+    spent.failure_class = getattr(exc, "failure_class", None)
+    return spent
+
+
+def _call_log(author_lane) -> Path | None:
+    """The author lane's actor-call metrics log (`actor_metrics`), or None."""
+    if author_lane is None:
+        return None
+    from . import actor_metrics
+    return Path(author_lane[0]).parent / actor_metrics.REPLY_DIR_NAME / actor_metrics.CALL_LOG_NAME
+
+
+def _call_log_offset(author_lane) -> int:
+    path = _call_log(author_lane)
+    try:
+        return path.stat().st_size if path is not None else 0
+    except OSError:
+        return 0
+
+
+def _last_call_evidence(author_lane, offset: int) -> dict:
+    """`actor_metrics.failure_evidence` of the last author metrics row this call wrote
+    to the lane's log (past `offset`); {} when there is none. Evidence only."""
+    path = _call_log(author_lane)
+    if path is None:
+        return {}
+    from . import actor_metrics
+    try:
+        rows = actor_metrics.metric_rows_since(path, offset, role="author")
+    except Exception:      # noqa: BLE001 -- evidence, never control
+        return {}
+    return actor_metrics.failure_evidence(rows[-1]) if rows else {}
+
+
+def _failure_members(exc: BaseException, outcome: str, author_lane,
+                     offset: int) -> list[dict]:
+    """The failure records an author exception carries (a best-of-N panel attaches one
+    per member as `author_failures`), else one record for the single author."""
+    carried = getattr(exc, "author_failures", None)
+    if carried:
+        return [dict(item) for item in carried]
+    evidence = _last_call_evidence(author_lane, offset)
+    if getattr(exc, "failure_class", None) and not evidence.get("failure_class"):
+        evidence["failure_class"] = getattr(exc, "failure_class")
+    return [author_failure_record(label="author", outcome=outcome, reason=str(exc),
+                                  evidence=evidence)]
+
+
 def _note_author_report(paths, progress: dict[str, Any]) -> None:
     """Carry a non-default author report source onto the outcome: a reply read from a
     lane-root report file, or an entry normalized from `<path>: <prose>` (the author
@@ -579,6 +797,8 @@ def _extended(missing: AuthorReportMissing, message: str) -> AuthorReportMissing
     except TypeError:
         extended = type(missing)(message)
     extended.failure_class = failure_class
+    if getattr(missing, "author_failures", None):
+        extended.author_failures = missing.author_failures     # a panel's member records
     return extended
 
 
@@ -733,6 +953,16 @@ def iterate(*, planner: Planner, critic: Critic,
     author failure spends one, and the last one retires it (`hypothesis_retired`). A
     scope-blocked attempt spends none: it waits for the scope rules to change.
 
+    An author call that produces NO checkable diff for an accepted hypothesis (it
+    abstains, returns no path, reports a change the lane does not hold, or fails as a
+    provider transient; for best-of-N, every member) is an AUTHORING failure, never a
+    verdict on the idea: the iteration ends `authoring_failed` (one attempt spent,
+    however many panel members failed) or `authoring_harness_failure` (every failure
+    was the harness's -- a truncated final step, a timeout, a provider error -- none
+    spent until `AUTHOR_HARNESS_FAILURE_CAP` in a row), with an author checkpoint whose
+    feedback names each member's reason, ak-check result and retained patch. The budget
+    spent retires it. Only the PLANNER's abstention (`propose`) ends as `abstained`.
+
     `resume` (a `resume.ResumePoint`) seeds ONE extra round, before the fresh
     hypothesis rounds, with work a previous launch already paid for: at stage
     "build" an accepted patch goes straight to the host checks, the CURRENT gates
@@ -741,7 +971,11 @@ def iterate(*, planner: Planner, critic: Critic,
     critic pass 2 for real, then gated and measured (no planner or author call; a
     rejection hands the author the reason if patch rounds remain); at stage "author"
     an accepted hypothesis resumes authoring with its original verdict and rejection
-    history. Every re-validation failure is disposed as `resume_rejected` and the
+    history; at stage "critic1" a planner hypothesis whose critic pass 1 never answered
+    is reviewed by critic pass 1 for real (no planner call). A fresh hypothesis is
+    checkpointed at "critic1" before critic pass 1: an empty critic reply is retried once
+    in the iteration, and a critic transient ends it `planner_transient` carrying that
+    checkpoint, at most `CRITIC1_RETRIES` times per hypothesis. Every re-validation failure is disposed as `resume_rejected` and the
     iteration continues with fresh work. A stop, provider transient or gate refusal
     leaves `resume_checkpoints` on its row so the next launch can resume it; an
     authored patch still awaiting critic pass 2 adds a "critic2" checkpoint (also
@@ -853,7 +1087,10 @@ def iterate(*, planner: Planner, critic: Critic,
         # The provider failed, not the science. This ends the ITERATION and is
         # recorded as such; the run continues, and a streak becomes visible in
         # experiments.md rather than taking the campaign down with it.
-        return observed(Outcome("planner_transient", None, [str(exc)]))
+        # A critic-pass-1 transient carries the planner's hypothesis (and its row
+        # the critic1 checkpoint): the row names what was in flight.
+        return observed(Outcome("planner_transient", getattr(exc, "hypothesis", None),
+                                [str(exc)]))
     except bench.BenchFailed as exc:
         # The INSTRUMENT failed, not the science, and it gets the same treatment for
         # the same reason. Run 12 died on iteration 1 because `llama-bench` was
@@ -943,6 +1180,10 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                 **({"author_attempts_budget": resume.checkpoint["author_attempts_budget"]}
                    if is_resumed(hypothesis)
                    and resume.checkpoint.get("author_attempts_budget") is not None else {}),
+                # So is its harness-failure streak (a stop is neither a success nor a
+                # harness failure of the author call).
+                **({"author_harness_failures": harness_streak(hypothesis)}
+                   if harness_streak(hypothesis) else {}),
                 **lineage(hypothesis), **fields}
 
     def exhausted(hypothesis, patch_reasons: list[str],
@@ -973,7 +1214,9 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                 hypothesis_pending=state)
         fields = {"prior_patch_rejections": carried,
                   "patch_rounds_remaining": int(patch_rounds),
-                  "author_attempts_used": used, "author_attempts_budget": budget}
+                  "author_attempts_used": used, "author_attempts_budget": budget,
+                  # Every round produced a diff: the harness streak is broken.
+                  "author_harness_failures": 0}
         checkpoints = None
         if scope:
             state["scope_block"] = fields["scope_block"] = {
@@ -999,6 +1242,90 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                        refusal_gate=last["source"],
                        resume_checkpoints=(checkpoints if checkpoints is not None
                                            else [checkpoint("author", hypothesis, **fields)]),
+                       hypothesis_pending=state)
+
+    def critic1_used(hypothesis) -> int:
+        """Critic-pass-1 transients this hypothesis already spent (a critic1 resume)."""
+        if not is_resumed(hypothesis) or resume.stage != "critic1":
+            return 0
+        try:
+            return max(0, int(resume.checkpoint.get("critic1_attempts_used") or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    def critic1_checkpoint(hypothesis, used: int, **extra) -> dict:
+        """A planner hypothesis whose critic pass 1 has not answered: resumed AT critic
+        pass 1 (no planner call), with every patch round still ahead of it."""
+        return checkpoint("critic1", hypothesis, critic_hypothesis=None, patch_round=0,
+                          critic1_attempts_used=int(used),
+                          critic1_attempts_budget=CRITIC1_RETRIES,
+                          patch_rounds_remaining=int(patch_rounds), **extra)
+
+    def harness_streak(hypothesis) -> int:
+        """Consecutive harness failures this accepted hypothesis carries (resumed)."""
+        if not is_resumed(hypothesis):
+            return 0
+        try:
+            return max(0, int(resume.checkpoint.get("author_harness_failures") or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    def authoring_failed(hypothesis, patch_reasons: list[str],
+                         members: Sequence[Mapping[str, Any]]) -> Outcome:
+        """The author produced no checkable diff for an ACCEPTED hypothesis.
+
+        Operator rule 2026-09-26: only the AUTHORING failed, so the hypothesis stays
+        pending at the author. A round with any genuine authoring failure spends ONE
+        attempt (a best-of-N panel charges at most one, however many members failed);
+        an all-harness round spends none until `AUTHOR_HARNESS_FAILURE_CAP` in a row.
+        The budget spent retires it, exactly as `exhausted` does.
+        """
+        members = [dict(member) for member in members] or [author_failure_record(
+            label="author", outcome="error", reason="author produced no diff")]
+        harness = all(member.get("class") == "harness" for member in members)
+        budget = max(1, int(author_attempts))
+        streak = harness_streak(hypothesis) + 1 if harness else 0
+        charged = not harness or streak >= AUTHOR_HARNESS_FAILURE_CAP
+        used = attempts_used(hypothesis) + (1 if charged else 0)
+        feedback = [author_failure_feedback(member) for member in members]
+        if harness and charged:
+            feedback.append(f"{streak} consecutive authoring harness failures "
+                            f"(cap {AUTHOR_HARNESS_FAILURE_CAP}): this one is charged")
+        carried = [*patch_reasons, *feedback][-MAX_CARRIED_PATCH_REJECTIONS:]
+        status = AUTHORING_HARNESS_FAILURE if not charged else AUTHORING_FAILED
+        state = {"class": status, "author_attempts_used": used,
+                 "author_attempts_budget": budget,
+                 "author_attempts_remaining": max(0, budget - used),
+                 "patch_rounds_per_attempt": int(patch_rounds), "charged": charged,
+                 "author_harness_failures": 0 if charged else streak,
+                 "author_harness_failure_cap": AUTHOR_HARNESS_FAILURE_CAP,
+                 "authoring_failures": members,
+                 "last_rejection": {"class": "harness" if harness else "authoring",
+                                    "source": "author", "rule": None}}
+        who = ", ".join(f"{m.get('label')}: {m.get('outcome')} ({m.get('class')})"
+                        for m in members)
+        if charged and used >= budget:
+            state["class"] = HYPOTHESIS_RETIRED
+            return Outcome(HYPOTHESIS_RETIRED, hypothesis, [
+                f"retired: the accepted hypothesis spent its authoring budget "
+                f"({used}/{budget} attempts); the last attempt produced no diff ({who}); "
+                f"the critic's acceptance of the idea was never withdrawn", *carried],
+                refusal_gate="author_attempts", hypothesis_pending=state)
+        if charged:
+            summary = (f"authoring_failed: the author produced no diff for the accepted "
+                       f"hypothesis ({who}); pending re-authoring with that feedback "
+                       f"({budget - used} of {budget} attempts left)")
+        else:
+            summary = (f"authoring_harness_failure: no diff, and every failure was the "
+                       f"harness's ({who}); no attempt charged ({streak}/"
+                       f"{AUTHOR_HARNESS_FAILURE_CAP} consecutive), pending re-authoring")
+        fields = {"prior_patch_rejections": carried,
+                  "patch_rounds_remaining": int(patch_rounds),
+                  "author_attempts_used": used, "author_attempts_budget": budget,
+                  "author_harness_failures": state["author_harness_failures"],
+                  "authoring_failures": members}
+        return Outcome(status, hypothesis, [summary, *carried], refusal_gate="author",
+                       resume_checkpoints=[checkpoint("author", hypothesis, **fields)],
                        hypothesis_pending=state)
 
     def dispose(hypothesis, status: str, reason: str | None, *, refusal_gate: str,
@@ -1137,6 +1464,9 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             if repeat_reason:
                 return Outcome("refused_at_formation", hypothesis, [repeat_reason],
                                refusal_gate="do_not_repeat")
+            if hypothesis.runtime_pair is None:
+                # Formed and not yet judged: a stop before critic pass 1 answers keeps it.
+                progress["inflight"] = critic1_checkpoint(hypothesis, 0)
 
         # ---- CRITIC PASS 1: the hypothesis, before any patch exists ----------
         if should_abandon():
@@ -1152,13 +1482,50 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             and pair.dimension.kind in {"threads", "cpu_list", "numa_policy", "env"}
             and (pair.dimension.kind != "env" or pair.dimension.candidate["key"]
                  in working.get("runtime_env_keys", ())))
-        if resumed is not None:
+        if resumed is not None and resumed.stage != "critic1":
             pass    # admitted by the carried verdict above
         elif prevalidated_runtime:
             on_step("prevalidated runtime option: deterministic checks, no critic call")
         else:
-            on_step("critic pass 1: reviewing the hypothesis")
-            verdict, halted = actor_call(critic.review_hypothesis, hypothesis, working)
+            # The planner's hypothesis is PAID FOR (DS41 run 10h batch 1: 31 minutes of
+            # planning) before critic pass 1 answers: checkpointed first, so a critic
+            # transient resumes it at critic pass 1 instead of discarding it.
+            critic1 = hypothesis.runtime_pair is None
+            if critic1:
+                progress["inflight"] = critic1_checkpoint(hypothesis, critic1_used(hypothesis))
+            on_step("critic pass 1: reviewing the hypothesis"
+                    + (f" ({resumed.label})" if resumed is not None else ""))
+            retried = False
+            while True:
+                try:
+                    verdict, halted = actor_call(critic.review_hypothesis, hypothesis, working)
+                    break
+                except ActorStopped:
+                    raise
+                except ActorTransient as exc:
+                    if not retried and _empty_reply(exc):
+                        # One immediate retry for an EMPTY reply (a session a
+                        # permission rejection or the output cap ended silently).
+                        retried = True
+                        on_step("critic pass 1: empty reply, retrying once")
+                        if should_abandon():
+                            return stopped()
+                        continue
+                    if critic1:
+                        used = critic1_used(hypothesis) + 1
+                        if used >= CRITIC1_RETRIES:
+                            progress["inflight"] = None
+                            spent = _critic1_spent(exc, used)
+                            spent.hypothesis = hypothesis
+                            raise spent from exc
+                        progress["inflight"] = critic1_checkpoint(hypothesis, used,
+                                                                  last_transient=str(exc))
+                    try:
+                        exc.hypothesis = hypothesis     # the row names what was in flight
+                    except Exception:      # noqa: BLE001 -- an exception without __dict__
+                        pass
+                    raise
+            progress["inflight"] = None
             if halted is not None:
                 return halted
             validator_provenance.append(_critic_provenance(
@@ -1248,27 +1615,44 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                             # recovery below and every later stage read it as usual.
                             return author_panel(h, ctx, lane=_lane, solo=_solo,
                                                 record=_panel_recorder(progress))
+                    log_offset = _call_log_offset(author_lane)
                     try:
                         paths, halted = actor_call(author, hypothesis, working)
                     except AuthorReportMissing as missing:
                         try:
                             paths, halted = _recover_author_report(
                                 missing, author_lane, hypothesis, before_tree, progress), None
-                        except AuthorReportMissing:
+                        except AuthorReportMissing as unrecovered:
                             # DS41 run 10d: the author edited the lane and its report
                             # was unusable. The edit may still be a patch worth a
                             # verdict -- but only an edit made BY THIS CALL: a lane
                             # still holding an earlier round's rejected patch is not.
                             if _lane_changed(author_lane, before_tree):
                                 progress["critic2"] = authored_checkpoint()
-                            raise
+                                raise
+                            # No diff by this call: an AUTHORING failure of an accepted
+                            # hypothesis (truncation-caused = the harness's).
+                            return authoring_failed(hypothesis, patch_reasons, _failure_members(
+                                unrecovered, "report_missing", author_lane, log_offset))
                         on_step("authoring report derived from the lane diff")
+                    except ActorStopped:
+                        raise
+                    except ActorTransient as transient:
+                        # Provider transient / timeout / per-call budget of the AUTHOR
+                        # (every panel member's, for best-of-N): the harness failed.
+                        return authoring_failed(hypothesis, patch_reasons, _failure_members(
+                            transient, "transient", author_lane, log_offset))
                     else:
                         _note_author_report(paths, progress)
                     if halted is not None:
                         return halted
                     if isinstance(paths, Abstain):
-                        return Outcome("abstained", hypothesis, [paths.reason])
+                        # The AUTHOR abstained (or returned no changed path): only the
+                        # authoring failed; the critic-accepted idea stays pending.
+                        members = getattr(paths, "members", None) or [author_failure_record(
+                            label="author", outcome="abstained", reason=paths.reason,
+                            evidence=_last_call_evidence(author_lane, log_offset))]
+                        return authoring_failed(hypothesis, patch_reasons, members)
                     progress["critic2"] = authored_checkpoint()
                 # A declared path list is a claim, not an isolation boundary.  The
                 # injected host check resolves the full worktree before review/build.
@@ -1536,7 +1920,11 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
 # `archive.record` as `run.py`'s injected `record`. `iterate` is the whole of this
 # module's control flow now, and the pool is its only driver.
 
-__all__ = ["CANDIDATE_DISPOSITIONS", "CHECKPOINT_SCHEMA", "PATCH_STAGES", "RESUMABLE_STATUSES",
+__all__ = ["AUTHORING_FAILED", "AUTHORING_HARNESS_FAILURE", "AUTHOR_HARNESS_FAILURE_CAP",
+           "CRITIC1_RETRIES",
+           "AuthoringFailure", "HARNESS_FAILURE_CLASSES", "HARNESS_OUTCOMES",
+           "author_failure_feedback", "author_failure_record", "classify_author_failure",
+           "CANDIDATE_DISPOSITIONS", "CHECKPOINT_SCHEMA", "PATCH_STAGES", "RESUMABLE_STATUSES",
            "HYPOTHESIS_AUTHOR_ATTEMPTS", "HYPOTHESIS_RETIRED", "PATCH_ROUNDS_EXHAUSTED",
            "PENDING_HYPOTHESIS_STATUSES", "SCOPE_BLOCKED", "classify_patch_rejection",
            "scope_rules_fingerprint",

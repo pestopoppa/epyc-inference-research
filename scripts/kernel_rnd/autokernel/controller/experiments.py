@@ -140,6 +140,9 @@ _STATUS_MERIT = {
     "patch_rounds_exhausted": 3.0,
     "scope_blocked": 3.0,
     "hypothesis_retired": 3.0,
+    # The author produced no diff for an accepted hypothesis; it is queued the same way.
+    "authoring_failed": 3.0,
+    "authoring_harness_failure": 3.0,
     "bench_failed": 1.0,
     "lane_error": 0.5,
     "anchor_verified": 0.25,

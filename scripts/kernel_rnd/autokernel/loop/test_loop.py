@@ -256,11 +256,14 @@ class TheLoopback(unittest.TestCase):
         gate = mock.Mock(side_effect=AssertionError("abstention must not build"))
         outcome = loop.iterate(planner=planner, critic=critic, context={},
                                measure=measure, gate=gate, commit=mock.Mock())
-        self.assertEqual(outcome.status, "abstained")
+        # Operator rule 2026-09-26: the AUTHOR abstaining on an accepted hypothesis is an
+        # authoring failure (one attempt spent, pending), never `abstained`.
+        self.assertEqual(outcome.status, loop.AUTHORING_FAILED)
         self.assertEqual(outcome.hypothesis.mechanism_id, "akm-q5-bit-deposit")
-        self.assertEqual(outcome.reasons, ["edit would violate scope"])
-        self.assertEqual(outcome.to_attempt()["status"], "abstained")
-        self.assertEqual(outcome.to_attempt()["reason"], "edit would violate scope")
+        self.assertIn("edit would violate scope", outcome.reasons[-1])
+        self.assertEqual(outcome.to_attempt()["status"], loop.AUTHORING_FAILED)
+        (checkpoint,) = outcome.resume_checkpoints
+        self.assertEqual((checkpoint["stage"], checkpoint["author_attempts_used"]), ("author", 1))
         self.assertEqual(critic.patch_verdicts, [])
         gate.assert_not_called()
         measure.assert_not_called()
@@ -412,15 +415,17 @@ class ProviderTransientsEndAnIterationNotTheRun(unittest.TestCase):
         self.assertIn("provider 401", outcome.reasons[0])
 
     def test_a_transient_while_authoring_ends_the_iteration(self):
+        # lane/ak-authfail-20260926: an AUTHOR transient keeps the accepted hypothesis
+        # pending (a harness failure, no attempt charged), still only the iteration.
         outcome, committed = _run(self._Exploding("author"), _Critic([], []))
-        self.assertEqual(outcome.status, "planner_transient")
-        self.assertIn("no changed paths", outcome.reasons[0])
+        self.assertEqual(outcome.status, loop.AUTHORING_HARNESS_FAILURE)
+        self.assertIn("no changed paths", " ".join(outcome.reasons))
         self.assertEqual(committed, {})
 
     def test_the_transient_is_recorded_with_its_reason(self):
         outcome, _ = _run(self._Exploding("author"), _Critic([], []))
         row = outcome.to_attempt()
-        self.assertEqual(row["status"], "planner_transient")
+        self.assertEqual(row["status"], loop.AUTHORING_HARNESS_FAILURE)
         self.assertIn("no changed paths", row["reason"])
 
     def test_a_run_continues_past_a_transient(self):
@@ -434,7 +439,7 @@ class ProviderTransientsEndAnIterationNotTheRun(unittest.TestCase):
             measure=lambda h, p: _comparison(0.05),
             gate=lambda h, p: (True, []),
             commit=lambda h, p, c: "head", iterations=3)
-        self.assertEqual([o.status for o in outcomes], ["planner_transient"] * 3)
+        self.assertEqual([o.status for o in outcomes], [loop.AUTHORING_HARNESS_FAILURE] * 3)
 
 
 # `TheTreeIsResetBeforeEachIteration` was deleted with the sequential CLI path: the

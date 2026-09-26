@@ -298,7 +298,11 @@ class RunPyAuthorPlan(unittest.TestCase):
             plan = self.run._author_plan(self.args(), "opencode")
         self.assertTrue(plan.panel)
         self.assertEqual([s.thinking for s in plan.specs], ["off", "medium"])
-        self.assertEqual(plan.budget.context_limit, 90_112)
+        # Asymmetric by thinking mode (lane/ak-authfail-20260926).
+        self.assertEqual([(m.label, m.context_limit, m.output_limit)
+                          for m in plan.budget.members],
+                         [("a0-off", 65_536, 16_384), ("a1-medium", 114_688, 40_960)])
+        self.assertIsNone(plan.budget.context_limit)
         self.assertEqual(self.run.DEFAULT_ACTOR_AUTHORS, "off,medium")
 
     def test_default_degrades_loudly_without_medium_and_explicit_refuses(self):
@@ -939,7 +943,7 @@ class SingleAuthorPathUnchanged(unittest.TestCase):
         outcome = loop.iterate(planner=P(), critic=_Critic(), context={"a": 1},
                                measure=lambda h, p: None, gate=lambda h, p: (True, []),
                                commit=lambda *a: "h")
-        self.assertEqual(outcome.status, "abstained")
+        self.assertEqual(outcome.status, loop.AUTHORING_FAILED)
         self.assertEqual(len(calls), 1)
         self.assertNotIn("author_panels", outcome.to_attempt())
         self.assertEqual(outcome.author_panels, [])

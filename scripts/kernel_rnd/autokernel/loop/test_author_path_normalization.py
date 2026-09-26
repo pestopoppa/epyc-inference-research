@@ -221,9 +221,12 @@ class MismatchFallsBackToTheLaneDiff(_RealLane):
         self.assertIn("unchanged there", outcome.author_report_recovery["reply_refusal"])
 
     def test_a_mismatch_without_a_reset_lane_stays_a_transient(self):
+        # lane/ak-authfail-20260926: with no reset lane to prove a diff, the author's
+        # misreport is an AUTHORING failure of the accepted hypothesis (kept pending).
         outcome = self.iterate(self._mismatched(), author_lane=None)
-        self.assertEqual(outcome.status, "planner_transient")
-        self.assertIn("unchanged there", outcome.reasons[0])
+        self.assertEqual(outcome.status, loop_mod.AUTHORING_FAILED)
+        self.assertIn("unchanged there", " ".join(outcome.reasons))
+        self.assertEqual([c["stage"] for c in outcome.resume_checkpoints], ["author"])
 
     def test_a_stray_untracked_file_outside_the_allowlist_still_refuses(self):
         def edit():

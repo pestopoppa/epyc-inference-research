@@ -17,10 +17,12 @@ VALID_COMPARISONS = frozenset({"kept", "keep_candidate", "measured_null", "regre
 INVALID_OUTCOMES = frozenset({
     "measurement_invalid", "runtime_observed", "runtime_refused", "refused_at_formation",
     "integrity_refused", "patch_rounds_exhausted", "scope_blocked", "hypothesis_retired",
+    "authoring_failed",
     "stopped_before_reschedule", "stopped_mid_formation", "superseded",
     "source_validation_failed", "source_validation_pending",
 })
-FAILED_OUTCOMES = frozenset({"bench_failed", "lane_error", "planner_transient"})
+FAILED_OUTCOMES = frozenset({"bench_failed", "lane_error", "planner_transient",
+                             "authoring_harness_failure"})
 INTERVAL_SCHEMA = "epyc.autokernel.direct_held_intervals.v1"
 REFERENCE_SCHEMA = "epyc.autokernel.direct_held_reference.v1"
 COST_FORECAST_POLICY = "original-held-stage-p75-last8.v1"

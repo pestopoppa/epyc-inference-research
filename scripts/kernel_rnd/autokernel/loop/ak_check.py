@@ -869,6 +869,17 @@ def usage_summary(log: Path | str | None, call_id: str | None) -> dict | None:
                                 "pass": sum(1 for r in sub if r.get("status") == "pass"),
                                 "fail": sum(1 for r in sub if r.get("status") == "fail"),
                                 "seconds": round(sum(r.get("seconds") or 0 for r in sub), 1)}
+    # The last op test's oracle (pass counts, types, ops): the evidence an authoring
+    # failure's feedback carries to the next attempt (`loop.author_failure_feedback`).
+    op_tests = [r for r in rows if str(r.get("mode") or "").startswith("op-test")]
+    if op_tests:
+        last = op_tests[-1]
+        oracle = last.get("oracle") if isinstance(last.get("oracle"), dict) else {}
+        out["last_op_test"] = {"status": last.get("status"), "mode": last.get("mode"),
+                               "passed": oracle.get("passed"), "total": oracle.get("total"),
+                               "types": oracle.get("types"), "ops": oracle.get("ops"),
+                               "reason": (str(last.get("reason"))[:300]
+                                          if last.get("reason") else None)}
     return out
 
 

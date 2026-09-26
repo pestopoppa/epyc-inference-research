@@ -84,6 +84,16 @@ BUDGET_EXHAUSTED = "budget_exhausted"
 #: author call spent 608 s and ended on one 8,192-token reasoning step with no report.
 #: Distinct from the loop's `planner_transient` reasons so the metrics show it.
 OUTPUT_CAPPED_EMPTY = "output_capped_empty"
+#: `failure_class` of an opencode call whose session a PERMISSION REJECTION ended: a
+#: tool call was refused (a read-only seat has no `--auto`, so an `ask` -- e.g.
+#: `external_directory` for a store path -- is auto-rejected) and opencode stopped after
+#: that step (finish "tool-calls") with no final text. DS41 run 10h batch 1, 12:49Z:
+#: the critic read `<store>/experiments.md`, was rejected, and returned 0 chars. A
+#: harness failure, never a verdict (`loop.HARNESS_FAILURE_CLASSES`).
+PERMISSION_REJECTED = "permission_rejected"
+#: What opencode writes as a refused tool call's error.
+PERMISSION_REJECTED_RE = re.compile(r"rejected permission|permission (?:was )?(?:denied|rejected)",
+                                    re.IGNORECASE)
 #: A sibling row in the same `actor-calls.jsonl`, written when the loop derived an
 #: author call's `{"paths": [...]}` report from the lane diff (`report_source:
 #: "lane_diff"`) because the reply carried none. Its own schema, so the metrics
@@ -103,6 +113,50 @@ def record_report_source(replies_dir: Path, record: Mapping[str, Any]) -> None:
             handle.write(json.dumps(row, sort_keys=True) + "\n")
     except OSError:
         pass
+
+def metric_rows_since(log: Path, offset: int = 0, *, role: str | None = None) -> list[dict]:
+    """`METRICS_SCHEMA` rows appended to one `actor-calls.jsonl` past byte `offset`
+    (optionally one role's), oldest first. Missing file: []."""
+    try:
+        with open(log, "rb") as handle:
+            handle.seek(max(0, int(offset)))
+            text = handle.read().decode("utf-8", "replace")
+    except OSError:
+        return []
+    rows = []
+    for line in text.splitlines():
+        try:
+            row = json.loads(line) if line.strip() else None
+        except json.JSONDecodeError:
+            continue
+        if isinstance(row, dict) and row.get("schema") == METRICS_SCHEMA \
+                and (role is None or row.get("role") == role):
+            rows.append(row)
+    return rows
+
+
+def failure_evidence(row: Mapping[str, Any] | None) -> dict[str, Any]:
+    """What a metrics row says about how an author call ENDED, for classifying a call
+    that produced no diff (`loop.classify_author_failure`): its failure class, whether
+    its final step hit the output cap and how many did, the limits, a timeout, the
+    steps and decoded tokens, and its ak-check usage."""
+    if not isinstance(row, Mapping):
+        return {}
+    opencode = row.get("opencode") if isinstance(row.get("opencode"), Mapping) else {}
+    budgets = row.get("budgets") if isinstance(row.get("budgets"), Mapping) else {}
+    totals = opencode.get("totals") if isinstance(opencode.get("totals"), Mapping) else {}
+    capped_steps = budgets.get("output_capped_steps", totals.get("output_capped_steps"))
+    out = {"failure_class": row.get("failure_class"),
+           "final_step_capped": opencode.get("final_step_capped"),
+           "output_capped_steps": capped_steps,
+           "output_limit": budgets.get("output_limit"),
+           "context_limit": budgets.get("context_limit"),
+           "timed_out": row.get("timed_out"),
+           "permission_rejected": opencode.get("permission_rejected"),
+           "steps": totals.get("steps"), "decoded_tokens": totals.get("decoded_tokens"),
+           "ak_check": row.get("ak_check") if isinstance(row.get("ak_check"), Mapping) else None}
+    return {key: value for key, value in out.items() if value is not None}
+
 
 #: Short busy-wait for this module's own `opencode session list` / `export` when the
 #: store is locked: bounded (~17 s of sleeps), because metrics are evidence and must
@@ -268,6 +322,14 @@ def parse_export(path: Path) -> dict[str, Any]:
         "output_capped_steps": sum(1 for a in assistant if a.get("finish") == "length"),
         # The LAST step hit the cap: the session ended there, before any final text.
         "final_step_capped": bool(assistant) and assistant[-1].get("finish") == "length",
+        # How the last step ended ("stop" for a final answer; "tool-calls" when the
+        # session ended right after a tool step, e.g. a rejected permission).
+        "final_finish": assistant[-1].get("finish") if assistant else None,
+        # Tool calls refused by a permission rule (the error opencode records).
+        "permission_rejected": sum(
+            1 for p in tools if isinstance(p.get("state"), Mapping)
+            and p["state"].get("status") == "error"
+            and PERMISSION_REJECTED_RE.search(str(p["state"].get("error") or ""))),
         "decoded_tokens": sum(_tokens(a, "output") for a in assistant),
         "prompt_tokens": sum(_tokens(a, "input") for a in assistant),
         "cache_read_tokens": sum(_tokens(a, "cache", "read") for a in assistant),
@@ -343,6 +405,8 @@ def collect(workspace: Path, before_ids: set[str], replies_dir: Path, *, stamp: 
             "context_max_tokens": max((s.get("context_max_tokens") or 0) for s in sessions),
             # The ROOT session's last step (the one whose text is the reply).
             "final_step_capped": bool(primary.get("final_step_capped")),
+            "final_finish": primary.get("final_finish"),
+            "permission_rejected": int(primary.get("permission_rejected") or 0),
         }
     except Exception as exc:  # noqa: BLE001 -- evidence, never a reason to fail the call
         return _empty_result(f"{type(exc).__name__}: {exc}"[:500])

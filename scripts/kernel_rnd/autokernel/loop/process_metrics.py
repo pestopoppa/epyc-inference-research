@@ -21,7 +21,8 @@ MEASURED = frozenset({"kept", "keep_candidate", "measured_null", "regression",
 #: `refused_at_formation` an accepted hypothesis's spent patch rounds used to end in.
 VALID_DENOMINATOR = MEASURED | {"refused_at_formation", "planner_transient", "bench_failed",
                                 "patch_rounds_exhausted", "scope_blocked",
-                                "hypothesis_retired"}
+                                "hypothesis_retired", "authoring_failed",
+                                "authoring_harness_failure"}
 
 
 def _finite_number(value: Any) -> float | None:

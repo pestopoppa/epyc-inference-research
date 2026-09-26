@@ -29,11 +29,23 @@ are unchanged. N=1 never builds a panel: the single-author path is byte-identica
 
 POOL BUDGET. :8083 serves np4 on ONE unified KV pool (196,608 tokens, `--kv-unified`);
 a full pool under MTP crashes llama-server. N concurrent author calls must fit in the
-pool minus a 16,384-token reserve, so each author's `limit.context` is
-floor((pool - reserve) / N) -- 90,112 for N=2 -- with `limit.output` 16,384, so opencode
-compacts at 73,728 (context - output). Computed from N and the pool size
-(`author_budget`), refused when the output cannot leave the compaction headroom. The
-planner and critic limits are unchanged: they never run concurrently with the authors.
+pool minus a 16,384-token reserve. The split is ASYMMETRIC by thinking mode
+(`panel_budget`, operator 2026-09-26 after DS41 run 10h truncated the medium author's
+edit step at a 16,384 output cap): off 65,536 context / 16,384 output, medium 114,688 /
+40,960 (weights 4:7 of 180,224; `--actor-authors-budget` overrides per mode). Refused
+when any member's output cannot leave the compaction headroom (opencode compacts at
+context - output). An output above opencode's 32,000 wire cap reaches the wire through
+`OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` (`actor_opencode_config.output_ceiling_env`).
+`author_budget` is the symmetric floor((pool - reserve) / N) split. The planner and
+critic limits are unchanged: they never run concurrently with the authors.
+
+NO WINNER. A round in which no author produced a diff hands `iterate` one failure
+record per member (`loop.author_failure_record`: outcome, reason, "authoring" or
+"harness", the call's capped-step and ak-check evidence, the retained patch): as a
+`loop.AuthoringFailure` when any member failed on its own account (it abstained, or
+reported a change it never made on an uncapped final step), else by raising the
+provider exception with the records attached (`author_failures`). A member whose final
+step hit the output cap with no diff is recorded `failure_class: output_capped_empty`.
 
 DISK. Every scratch tree is allocated from, and released by, the flow-level scratch
 registry (`scratch.py`): marker-owned, released on every exit path of the scope, the
@@ -55,7 +67,8 @@ import time
 from typing import Any, Callable, Iterator, Mapping, Sequence
 
 from . import actor_metrics, archive, integrity
-from .loop import Abstain, ActorStopped, ActorTransient, AuthorReportMissing
+from .loop import (Abstain, ActorStopped, ActorTransient, AuthoringFailure, AuthorReportMissing,
+                   author_failure_record)
 
 #: :8083's unified KV pool (np4, --kv-unified, MTP draft) and the tokens that always stay
 #: free for the other slots (operator 2026-09-26).
@@ -122,12 +135,26 @@ def parse_authors(spec: str, *, allowed: Sequence[str] = AUTHOR_MODES) -> tuple[
     return tuple(AuthorSpec(f"a{index}-{mode}", mode) for index, mode in enumerate(modes))
 
 
+#: Per-thinking-mode (context WEIGHT, `limit.output`) of a concurrent author (operator
+#: 2026-09-26, after DS41 run 10h). A thinking-medium author reasons inside each step
+#: before it edits, so a 16,384-token output cap truncates its edit step: run 10h's
+#: a1-medium hit the cap on 3 of 14 steps, the last one its edit, and the round was
+#: lost as `report_missing` after 71 minutes. Off 4 : medium 7 of the 180,224 tokens
+#: the pool leaves above its reserve is 65,536 / 114,688 of context, with outputs
+#: 16,384 / 40,960 (each keeps `MIN_COMPACTION_HEADROOM` below it). "default" (thinking
+#: uncapped) is budgeted like medium. `--actor-authors-budget` overrides per mode.
+DEFAULT_MODE_BUDGETS: dict[str, tuple[int, int]] = {
+    "off": (4, 16_384), "medium": (7, 40_960), "default": (7, 40_960)}
+#: Member contexts are floored to this granule (so the split's sum stays in the pool).
+CONTEXT_GRANULE = 1_024
+
+
 @dataclass(frozen=True)
-class PoolBudget:
-    """Per-author opencode limits for N concurrent authors on one unified pool."""
-    n: int
-    pool_tokens: int
-    reserve: int
+class MemberBudget:
+    """One panel member's opencode limits: its share of the pool and its output cap."""
+    label: str
+    thinking: str
+    weight: int
     context_limit: int
     output_limit: int
 
@@ -136,10 +163,77 @@ class PoolBudget:
         return self.context_limit - self.output_limit
 
     def to_dict(self) -> dict:
-        return {"n": self.n, "pool_tokens": self.pool_tokens, "reserve": self.reserve,
+        return {"label": self.label, "thinking": self.thinking, "weight": self.weight,
+                "context_limit": self.context_limit, "output_limit": self.output_limit,
+                "compaction_at": self.compaction_at}
+
+
+@dataclass(frozen=True)
+class PoolBudget:
+    """Per-author opencode limits for N concurrent authors on one unified pool.
+
+    `members` (from `panel_budget`) may differ per thinking mode; `context_limit` /
+    `output_limit` are then None. A symmetric budget (`author_budget`) carries them and
+    no members: every author gets the same."""
+    n: int
+    pool_tokens: int
+    reserve: int
+    context_limit: int | None
+    output_limit: int | None
+    members: tuple = ()
+
+    @property
+    def compaction_at(self) -> int | None:
+        if self.context_limit is None or self.output_limit is None:
+            return None
+        return self.context_limit - self.output_limit
+
+    @property
+    def concurrent_peak(self) -> int:
+        if self.members:
+            return sum(member.context_limit for member in self.members) + self.reserve
+        return self.n * int(self.context_limit or 0) + self.reserve
+
+    def for_member(self, spec: "AuthorSpec") -> MemberBudget:
+        """The limits `spec` runs with (its own row, else the symmetric values)."""
+        for member in self.members:
+            if member.label == spec.label:
+                return member
+        if self.context_limit is None or self.output_limit is None:
+            raise KeyError(f"no budget for panel member {spec.label}")
+        return MemberBudget(spec.label, spec.thinking, 1, self.context_limit,
+                            self.output_limit)
+
+    def to_dict(self) -> dict:
+        body = {"n": self.n, "pool_tokens": self.pool_tokens, "reserve": self.reserve,
                 "context_limit": self.context_limit, "output_limit": self.output_limit,
                 "compaction_at": self.compaction_at,
-                "concurrent_peak": self.n * self.context_limit + self.reserve}
+                "concurrent_peak": self.concurrent_peak}
+        if self.members:
+            body["members"] = [member.to_dict() for member in self.members]
+        return body
+
+
+def parse_mode_budgets(text: str | None) -> dict[str, tuple[int, int]]:
+    """`--actor-authors-budget "off=4:16384,medium=7:40960"` -> {mode: (weight, output)},
+    merged over `DEFAULT_MODE_BUDGETS` (a mode not named keeps its default). Empty or
+    None is the defaults."""
+    modes = dict(DEFAULT_MODE_BUDGETS)
+    for part in [item.strip() for item in str(text or "").split(",") if item.strip()]:
+        mode, sep, value = part.partition("=")
+        weight, colon, output = value.partition(":")
+        try:
+            parsed = (int(weight), int(output))
+        except ValueError:
+            parsed = None
+        if not sep or not colon or not mode.strip() or parsed is None:
+            raise ValueError(f"--actor-authors-budget entry {part!r}: need "
+                             "<mode>=<context weight>:<output tokens>")
+        if parsed[0] < 1 or parsed[1] < 1:
+            raise ValueError(f"--actor-authors-budget entry {part!r}: weight and output "
+                             "must be positive")
+        modes[mode.strip()] = parsed
+    return modes
 
 
 def author_budget(n: int, *, pool_tokens: int = DEFAULT_POOL_TOKENS,
@@ -169,6 +263,57 @@ def author_budget(n: int, *, pool_tokens: int = DEFAULT_POOL_TOKENS,
             "or opencode compacts with no working room")
     budget = PoolBudget(n, pool_tokens, reserve, context, output_limit)
     assert budget.n * budget.context_limit + budget.reserve <= budget.pool_tokens
+    return budget
+
+
+def panel_budget(specs: Sequence["AuthorSpec"], *, pool_tokens: int = DEFAULT_POOL_TOKENS,
+                 reserve: int = POOL_RESERVE,
+                 modes: Mapping[str, tuple[int, int]] | None = None) -> PoolBudget:
+    """Per-member limits for a MIXED panel, or `PoolBudgetRefused`.
+
+    The pool above the reserve is split by each member's mode weight (floored to
+    `CONTEXT_GRANULE`), and each member takes its mode's output cap. Defaults
+    (`DEFAULT_MODE_BUDGETS`) on 196,608: off 65,536 / 16,384, medium 114,688 / 40,960
+    (sum 180,224 = pool - 16,384). Refused like `author_budget`: N outside
+    1..MAX_AUTHORS, a pool not above its reserve, an unbudgeted mode, a non-positive
+    output, or any member whose output leaves less than MIN_COMPACTION_HEADROOM of its
+    context below it. An output above opencode's 32,000 wire cap is sent through
+    `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` by the seat (`output_ceiling_env`)."""
+    specs = tuple(specs)
+    modes = dict(DEFAULT_MODE_BUDGETS if modes is None else modes)
+    n, pool_tokens, reserve = len(specs), int(pool_tokens), int(reserve)
+    if not 1 <= n <= MAX_AUTHORS:
+        raise PoolBudgetRefused(f"{n} concurrent authors: outside 1..{MAX_AUTHORS} "
+                                f"(:8083 is np{MAX_AUTHORS})")
+    if reserve < 0 or pool_tokens <= reserve:
+        raise PoolBudgetRefused(f"pool {pool_tokens} tokens does not exceed the "
+                                f"{reserve}-token reserve")
+    unknown = sorted({spec.thinking for spec in specs if spec.thinking not in modes})
+    if unknown:
+        raise PoolBudgetRefused(f"no author budget for thinking mode(s) {unknown} "
+                                f"(budgeted: {sorted(modes)})")
+    weights = [int(modes[spec.thinking][0]) for spec in specs]
+    if any(weight < 1 for weight in weights):
+        raise PoolBudgetRefused("a concurrent author needs a positive context weight")
+    available, total = pool_tokens - reserve, sum(weights)
+    members = []
+    for spec, weight in zip(specs, weights):
+        context = (available * weight // total) // CONTEXT_GRANULE * CONTEXT_GRANULE
+        output = int(modes[spec.thinking][1])
+        if output <= 0:
+            raise PoolBudgetRefused("a concurrent author needs a positive output limit")
+        if output >= context - MIN_COMPACTION_HEADROOM:
+            raise PoolBudgetRefused(
+                f"{spec.label} gets {context} tokens of context (weight {weight}/{total} of "
+                f"{available}); output {output} must stay below "
+                f"{context - MIN_COMPACTION_HEADROOM} (context - {MIN_COMPACTION_HEADROOM}) "
+                "or opencode compacts with no working room")
+        members.append(MemberBudget(spec.label, spec.thinking, weight, context, output))
+    same = len({(m.context_limit, m.output_limit) for m in members}) == 1
+    budget = PoolBudget(n, pool_tokens, reserve,
+                        members[0].context_limit if same else None,
+                        members[0].output_limit if same else None, tuple(members))
+    assert budget.concurrent_peak <= budget.pool_tokens
     return budget
 
 
@@ -383,6 +528,8 @@ class _Member:
     #: The member's other marked dirs, released with its tree, newest first (its
     #: ak-check dir, then its home dir holding the per-call opencode config).
     extra: list = field(default_factory=list)
+    #: `actor_metrics.failure_evidence` of its last call (set by `_harvest_metrics`).
+    evidence: dict = field(default_factory=dict)
 
 
 class AuthorPanel:
@@ -415,6 +562,11 @@ class AuthorPanel:
             raise ValueError("an author panel needs N >= 2; N=1 is the single-author path")
         if len(specs) != budget.n:
             raise ValueError(f"{len(specs)} authors but a budget for {budget.n}")
+        for spec in specs:
+            try:
+                budget.for_member(spec)
+            except KeyError as exc:
+                raise ValueError(str(exc)) from None
         self.lane = lane
         self.specs = tuple(specs)
         self.make_author = make_author
@@ -636,6 +788,10 @@ class AuthorPanel:
             with_diff = [m for m in order if m.outcome == "diff"]
             if not with_diff:
                 row["selection"] = SELECTION_NONE
+                # Retained first: a member that abstained over a diff it made (DS41
+                # run 10h a0-off) hands the next attempt its patch path.
+                for member in members:
+                    self._retire(scope, member, hypothesis)
                 return self._no_diff(members)
             # The existing rules: the diff that got furthest through the checks, ties to
             # the first finished; it goes to the lane and the normal gates judge it.
@@ -703,25 +859,46 @@ class AuthorPanel:
         report = getattr(result, "report", None)
         member.report = dict(report) if isinstance(report, Mapping) else None
 
+    def failure_record(self, member: _Member, panel_id: str = "") -> dict:
+        """`loop.author_failure_record` for one member that produced no diff."""
+        return author_failure_record(
+            label=member.spec.label, thinking=member.spec.thinking, outcome=member.outcome,
+            reason=member.reason, evidence=member.evidence, patch=member.patch,
+            validation=None if member.validation is None else member.validation.to_dict(),
+            panel_id=panel_id or member.panel_id)
+
     def _no_diff(self, members: Sequence[_Member]):
-        """No member produced a diff: the round ends as the single path would. A stop
-        is a stop; an abstention is a science result; otherwise the first provider
-        failure is raised (so `iterate` keeps its author checkpoint)."""
+        """No member produced a diff. A stop is a stop. Otherwise every member gets a
+        failure record (`failure_record`): when ANY failed on its own account (an
+        abstention, a report of a change it never made on an uncapped final step) the
+        round returns `loop.AuthoringFailure` -- an AUTHORING failure of an accepted
+        hypothesis, one attempt charged however many failed; when every failure was the
+        harness's, the first provider exception is raised as before, carrying the
+        records as `author_failures` (`iterate` then records a harness failure)."""
         summary = "; ".join(f"{m.spec.label}: {m.outcome}: {m.reason}"[:400] for m in members)
         if self.should_stop():
             raise ActorStopped(f"stop asked during the author panel ({summary})")
-        abstained = [m for m in members if m.outcome == "abstained"]
-        if abstained:
-            return Abstain("; ".join(f"{m.spec.label}: {m.reason}" for m in abstained))
+        records = [self.failure_record(member) for member in members]
+        if any(record["class"] == "authoring" for record in records):
+            reason = "; ".join(f"{r['label']}: {r['outcome']} ({r['class']}): {r['reason']}"
+                               for r in records)
+            return AuthoringFailure(reason[:4000] or "author panel: no diff",
+                                    members=tuple(records))
+        failure: BaseException | None = None
         for kind in ("report_missing", "transient", "stopped"):
             for member in members:
-                if member.outcome == kind and member.error is not None:
-                    raise _with_message(member.error, f"author panel: every author failed "
-                                                      f"({summary})")
-        errors = [m.error for m in members if m.error is not None]
-        if errors:
-            raise errors[0]
-        raise ActorTransient(f"author panel: no author produced a diff ({summary})")
+                if failure is None and member.outcome == kind and member.error is not None:
+                    failure = _with_message(member.error, f"author panel: every author "
+                                                          f"failed ({summary})")
+        if failure is None:
+            errors = [m.error for m in members if m.error is not None]
+            failure = errors[0] if errors else ActorTransient(
+                f"author panel: no author produced a diff ({summary})")
+        try:
+            failure.author_failures = records
+        except Exception:      # noqa: BLE001 -- an exception type without __dict__
+            pass
+        raise failure
 
     def _apply(self, member: _Member, worktree: Path, base: str, lane_tree: str) -> tuple[str, ...]:
         """Put the selected member's full diff (seed included) on the real lane."""
@@ -851,11 +1028,21 @@ class AuthorPanel:
             "metrics_error": next((r.get("metrics_error") for r in reversed(metric_rows)
                                    if r.get("metrics_error")), None),
         }
+        # How the LAST call ended (capped steps, limits, timeout, its ak-check usage):
+        # what classifies a no-diff member as the author's failure or the harness's.
+        last = actor_metrics.failure_evidence(metric_rows[-1]) if metric_rows else {}
+        member.evidence = {**last, "steps": member.metrics["steps"],
+                           "decoded_tokens": member.metrics["decoded_tokens"],
+                           "failure_class": member.metrics["failure_class"]}
+        for key in ("final_step_capped", "output_capped_steps", "output_limit",
+                    "context_limit", "ak_check"):
+            if last.get(key) is not None:
+                member.metrics[key] = last[key]
 
     def _describe(self, member: _Member, row: Mapping[str, Any]) -> dict:
         wall = (round(member.finished - member.started, 3)
                 if member.started is not None and member.finished is not None else None)
-        return {"label": member.spec.label, "thinking": member.spec.thinking,
+        body = {"label": member.spec.label, "thinking": member.spec.thinking,
                 "result": member.result, "outcome": member.outcome,
                 "reason": member.reason or None, "wall_s": wall,
                 "started_offset_s": None if member.started is None else round(member.started, 3),
@@ -865,6 +1052,19 @@ class AuthorPanel:
                 "validation": None if member.validation is None else member.validation.to_dict(),
                 "patch": member.patch, "workspace": None if member.workspace is None
                 else str(member.workspace), **member.metrics}
+        try:
+            body["budget"] = self.budget.for_member(member.spec).to_dict()
+        except KeyError:
+            pass
+        if member.outcome not in ("diff", "pending"):
+            # No diff from this member: whose failure it was, and a final step that
+            # ended on the output cap with nothing to show surfaces as
+            # `output_capped_empty` (DS41 run 10h a1-medium).
+            record = self.failure_record(member)
+            body["failure_class"] = record.get("failure_class")
+            body["failure"] = {"class": record["class"],
+                               "harness_reason": record.get("harness_reason")}
+        return body
 
     def _write_row(self, lane, row: Mapping[str, Any]) -> None:
         """The panel row in the LANE's reply dir (the scratch trees are released)."""
@@ -964,4 +1164,5 @@ __all__ = ["AUTHOR_MODES", "AUTHOR_OUTPUT_LIMIT", "AuthorPanel", "AuthorSpec",
            "SELECTION_FALLBACK", "SELECTION_FIRST_PASSING", "SELECTION_NONE", "Validation",
            "ValidationStopped", "CHECK_DIR_KIND", "CHECK_DIR_NAME", "ak_check_validator",
            "author_budget", "chain_validators", "command_validator",
-           "integrity_validator", "parse_authors"]
+           "integrity_validator", "parse_authors", "CONTEXT_GRANULE", "DEFAULT_MODE_BUDGETS",
+           "MemberBudget", "panel_budget", "parse_mode_budgets"]

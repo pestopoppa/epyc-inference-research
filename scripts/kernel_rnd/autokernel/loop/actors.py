@@ -778,6 +778,7 @@ def _run_agent_in(attempt: "scratch.Scope", prompt: str, *, workspace: Path,
             f"(rc {done.returncode}, empty stdout, no model reply) [{backend.describe()}]: "
             f"stderr={done.stderr[:300]!r}")
     capped = recorded_class == actor_metrics.OUTPUT_CAPPED_EMPTY
+    classified = recorded_class in _EMPTY_REPLY_CLASSES
     if done.returncode != 0:
         # Both tails. `claude -p` reports its own errors ("Not logged in", usage
         # limits, refusals) on STDOUT with a non-zero exit and an EMPTY stderr --
@@ -787,7 +788,13 @@ def _run_agent_in(attempt: "scratch.Scope", prompt: str, *, workspace: Path,
             (f"{actor_metrics.OUTPUT_CAPPED_EMPTY}: " if capped else "")
             + f"actor exited {done.returncode} [{backend.describe()}]: "
             f"stderr={done.stderr[-300:]!r} stdout={done.stdout[-300:]!r}")
-    return _Reply(final_text, failure_class=recorded_class) if capped else final_text
+    return _Reply(final_text, failure_class=recorded_class) if classified else final_text
+
+
+#: Failure classes of an EMPTY reply the harness caused, carried on the reply text so
+#: `_parse_reply`'s refusal names them (and sets `failure_class` on its transient).
+_EMPTY_REPLY_CLASSES = frozenset({actor_metrics.OUTPUT_CAPPED_EMPTY,
+                                  actor_metrics.PERMISSION_REJECTED})
 
 
 def _budget_salvage(text: str, schema: Mapping[str, Any] | None) -> bool:
@@ -957,6 +964,12 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
             if failure_class is None and empty_reply and not timed_out \
                     and opencode_stats.get("final_step_capped"):
                 failure_class = actor_metrics.OUTPUT_CAPPED_EMPTY
+            elif failure_class is None and empty_reply and not timed_out \
+                    and opencode_stats.get("permission_rejected") \
+                    and opencode_stats.get("final_finish") != "stop":
+                # A refused tool call ended the session before any final text (a
+                # read-only seat auto-rejects every `ask`): the harness, not the model.
+                failure_class = actor_metrics.PERMISSION_REJECTED
         orchestrator_stats: dict[str, Any] | None = None
         if backend.kind == "orchestrator":
             # INF-78 OAB-2: the CLI's provenance sidecar, projected onto this schema's
@@ -1701,12 +1714,17 @@ def _parse_reply(raw: str, *, schema: Mapping[str, Any], backend: Backend,
         # 2026-09-24 10:09 a retry ended with empty stdout, the repair turn
         # returned "replay-verification / src/verify/replay.ts", and the critic
         # spent a pass rejecting a hypothesis no agent ever formed.
-        capped = getattr(raw, "failure_class", None) == actor_metrics.OUTPUT_CAPPED_EMPTY
-        raise ProviderTransient(
-            (f"{actor_metrics.OUTPUT_CAPPED_EMPTY}: " if capped else "")
+        failure_class = getattr(raw, "failure_class", None)
+        capped = failure_class == actor_metrics.OUTPUT_CAPPED_EMPTY
+        rejected = failure_class == actor_metrics.PERMISSION_REJECTED
+        empty = ProviderTransient(
+            (f"{failure_class}: " if capped or rejected else "")
             + f"actor produced no final report ({len(raw.strip())} chars"
             + ("; its final step hit the output cap" if capped else "")
+            + ("; a refused tool permission ended the session" if rejected else "")
             + "); refusing to repair an empty reply")
+        empty.failure_class = failure_class
+        raise empty
     body, echoed = pre.body, pre.echoed
     question = next((q for key, q in _DECLINE_QUESTIONS.items()
                      if key in schema.get("required", ())), None)
@@ -2561,6 +2579,24 @@ def _budget_env(seat: "ActorSeat | None", role: str) -> dict[str, str]:
     return {SEAT_ENV_BUDGETS: json.dumps(applied, sort_keys=True)}
 
 
+def _read_roots(context: Mapping[str, Any] | None) -> tuple[Path, ...]:
+    """Directories the actor context points into (the run's store: experiments.md,
+    runtime-source-floors, cpu/node profiles), from `context["actor_read_roots"]`.
+
+    The CRITIC is the read-only seat (no `--auto`): opencode auto-REJECTS every `ask`,
+    and a rejected `external_directory` read ENDS the session with no final text (DS41
+    run 10h batch 1: the critic read `<store>/experiments.md`, 0 chars, the planner's
+    31-minute hypothesis lost). Its per-call config allows reads there instead
+    (`actor_opencode_config.seat_permission(read_roots=...)`); its edits stay refused."""
+    roots = (context or {}).get("actor_read_roots") if isinstance(context, Mapping) else None
+    out = []
+    for root in roots or ():
+        path = Path(str(root))
+        if path.is_absolute() and str(path) not in ("/", ""):
+            out.append(path)
+    return tuple(dict.fromkeys(out))
+
+
 def _seat_call(seat: "ActorSeat | None", backend: Backend, role: str, workspace: Path,
                context: Mapping[str, Any]) -> dict[str, str] | None:
     """Env for a PLAIN-seat opencode call: ALWAYS a per-call `OPENCODE_CONFIG` beside the
@@ -2587,7 +2623,9 @@ def _seat_call(seat: "ActorSeat | None", backend: Backend, role: str, workspace:
         target = _seat_config_dir(Path(workspace), f"plain-{role}") / f"actor-opencode-plain-{role}.json"
         path = seat_config.write_plain_config(
             target, role=role, lane=Path(workspace), build_dir=_anchor_build_dir(context),
-            model=backend.model, thinking=thinking, **knobs, **limits)
+            model=backend.model, thinking=thinking, **knobs, **limits,
+            **({"read_roots": _read_roots(context)} if role == "critic"
+               and _read_roots(context) else {}))
     except OSError as exc:
         if any(knobs.values()) or any(limits.values()) or thinking != "default":
             raise   # a knob's fence (or a context cap, or thinking off) must never silently drop

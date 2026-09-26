@@ -341,9 +341,10 @@ class ResumesAtAuthor(Fixture):
                             author_raises=loop.ActorTransient("codex 502")),
             critic=Critic(), context={}, measure=lambda h, p: None, gate=passing_gate,
             commit=lambda h, p, c: None)
-        self.assertEqual(outcome.status, "planner_transient")
+        # An author transient is an authoring HARNESS failure: pending, not charged.
+        self.assertEqual(outcome.status, loop.AUTHORING_HARNESS_FAILURE)
         self.owner.record(outcome)
-        self.assert_resumes_at_author("planner_transient")
+        self.assert_resumes_at_author(loop.AUTHORING_HARNESS_FAILURE)
 
     def test_prior_patch_rejections_travel_with_the_checkpoint(self):
         planner = Planner(self.repo, [hyp()])

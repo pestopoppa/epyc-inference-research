@@ -682,14 +682,21 @@ def seat_permission(role: str, *, lane: Path | None = None,
                     build_dir: str | Path | None = None,
                     trim_instructions: bool = False, trim_tools: bool = False,
                     lane_guard: bool = False, keep_task: bool = False,
-                    edit_rule: bool = True, author_sandbox: bool = False) -> dict:
+                    edit_rule: bool = True, author_sandbox: bool = False,
+                    read_roots: tuple = ()) -> dict:
     """The permission block OAB-10/11 add, for a TOP-LEVEL `permission` key.
 
     Denies only, except `external_directory` allows for the anchor's build dirs, which
     re-open only what this block's own anchor-root deny closed (the global config has no
     external_directory rule). `keep_task` leaves `task` alone (bounded fan-out owns it);
     `edit_rule=False` leaves `edit` to the caller (a bounded agent sets its own, and an
-    agent rule is evaluated after this one)."""
+    agent rule is evaluated after this one).
+
+    `read_roots` (the critic's, `actors._read_roots`) add `external_directory` ALLOWS for
+    directories its context points into: the read-only critic has no `--auto`, so an
+    `ask` there is auto-rejected and the rejection ends its session with no reply. The
+    critic's `edit` stays denied (lane guard) or asked-and-rejected (no `--auto`), so
+    this re-opens reads only."""
     if role not in PLAIN_ROLES:
         raise ValueError(f"unknown actor role {role!r}; expected one of {PLAIN_ROLES}")
     permission: dict = {}
@@ -719,6 +726,13 @@ def seat_permission(role: str, *, lane: Path | None = None,
         permission["bash"] = bash
         if edit_rule:
             permission["edit"] = dict(AUTHOR_EDIT_GUARD) if role == "author" else "deny"
+    if read_roots:
+        external = permission.setdefault("external_directory", {})
+        for root in read_roots:
+            root = str(root).rstrip("/")
+            if root:
+                external.pop(f"{root}/*", None)   # re-inserted LAST: the last match wins
+                external[f"{root}/*"] = "allow"
     if author_sandbox:
         bash = permission.setdefault("bash", {})
         for pattern in (AK_CHECK_ALLOW if role == "author" else AK_CHECK_DENY):
@@ -767,7 +781,8 @@ def build_plain_config(*, role: str, lane: Path, build_dir: str | Path | None = 
                        lane_guard: bool = False, author_sandbox: bool = False,
                        author_note_path: Path | None = None,
                        model: str | None = None, context_limit: int = 0,
-                       output_limit: int = 0, thinking: str = "default") -> dict:
+                       output_limit: int = 0, thinking: str = "default",
+                       read_roots: tuple = ()) -> dict:
     """The per-call `OPENCODE_CONFIG` for the PLAIN seat: `snapshot: false`, a permission
     block (plus the author's style note as an `instructions` file) and nothing else -- no
     agent, no MCP, no tool_output cap, so the plain seat stays the plain seat. With every
@@ -778,7 +793,7 @@ def build_plain_config(*, role: str, lane: Path, build_dir: str | Path | None = 
     permission = seat_permission(role, lane=lane, build_dir=build_dir,
                                  trim_instructions=trim_instructions,
                                  trim_tools=trim_tools, lane_guard=lane_guard,
-                                 author_sandbox=author_sandbox)
+                                 author_sandbox=author_sandbox, read_roots=tuple(read_roots))
     note = trim_instructions and role == "author" and author_note_path is not None
     config: dict = {"$schema": "https://opencode.ai/config.json", **SNAPSHOT_OFF,
                     **model_block(model, context_limit=context_limit,

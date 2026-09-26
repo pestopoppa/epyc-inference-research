@@ -421,10 +421,12 @@ class ReinstateADroppedHypothesis(Fixture):
             critic=base.Critic(), context={}, measure=lambda h, p: None,
             gate=lambda h, p: None, commit=lambda h, p, c: None, hypothesis_rounds=1)
         self.owner.record(interrupted)
-        (source,) = base.rows_with(self.store, "planner_transient")
+        # An author transient is now an authoring harness failure (pending, uncharged).
+        status = loop.AUTHORING_HARNESS_FAILURE
+        (source,) = base.rows_with(self.store, status)
         with experiments.ExperimentStore(self.store) as store:
             source_id = store._connection.execute(
-                "SELECT attempt_id FROM experiments WHERE status='planner_transient'"
+                "SELECT attempt_id FROM experiments WHERE status=?", (status,)
             ).fetchone()[0]
         checkpoint_id = f"{source_id}#0"
         with resume.ClaimLedger(self.store) as ledger:
@@ -467,7 +469,7 @@ class ReinstateADroppedHypothesis(Fixture):
                           checkpoint["author_attempts_used"], checkpoint["author_attempts_budget"],
                           checkpoint["patch_rounds_remaining"]),
                          ("author", checkpoint_id, 1, 3, loop.PATCH_ROUNDS))
-        self.assertEqual(checkpoint["prior_patch_rejections"], [AUTHORING_1, AUTHORING_2])
+        self.assertEqual(checkpoint["prior_patch_rejections"][-2:], [AUTHORING_1, AUTHORING_2])
         self.assertEqual(attempt["reinstated_from"]["attempt_lineages"], [checkpoint_id])
         self.assertNotIn("measurement_epoch_sha256", checkpoint)
         stamped = resume.reinstate_plan(self.store, row_id=source_id[:12], rejection_rows=ids,
@@ -480,7 +482,7 @@ class ReinstateADroppedHypothesis(Fixture):
         point, report = self.take()
         self.assertEqual((point.stage, report["queued"][0]["row_status"]),
                          ("author", loop.PATCH_ROUNDS_EXHAUSTED))
-        self.assertEqual(point.prior_patch_rejections, (AUTHORING_1, AUTHORING_2))
+        self.assertEqual(point.prior_patch_rejections[-2:], (AUTHORING_1, AUTHORING_2))
 
     def test_the_cli_is_a_dry_run_unless_applied(self):
         source_id, _checkpoint_id, ids = self.seed_pre_policy_chain()
