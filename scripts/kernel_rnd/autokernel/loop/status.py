@@ -219,11 +219,11 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
           gpu: Mapping[str, Any] | None = None,
           hotspots: Sequence[Mapping[str, Any]] = (),
           step: str | None = None,
+          pending_hypotheses: Sequence[Mapping[str, Any]] | None = None,
           anchor_guard: Mapping[str, Any] | None = None,
           accumulator: Mapping[str, Any] | None = None,
           stale_after_s: int = DEFAULT_STALE_AFTER_S,
-          actor_health: dict | None = None,
-          pending_hypotheses: Sequence[Mapping[str, Any]] | None = None) -> Path:
+          actor_health: dict | None = None) -> Path:
     """Atomically publish the loop's current standing.
 
     Atomic because a dashboard polling a half-written file is how a surface reports

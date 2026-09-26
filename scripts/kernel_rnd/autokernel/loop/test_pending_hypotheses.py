@@ -307,6 +307,7 @@ class PendingHypothesesResumeBeforeThePlanner(Fixture):
     def test_the_next_draw_of_the_same_run_resumes_it_before_the_planner(self):
         queue, report = self.prepare()          # launch: nothing to resume yet
         self.assertEqual(report["queued"], [])
+        queue.enable_pending_refresh(TARGET)    # what run.py does after prepare
         planner = base.Planner(self.repo, [base.hyp(), base.hyp("akm-should-not-be-drawn")])
         critic = base.Critic([], [rejected(AUTHORING_1), rejected(AUTHORING_2)])
         contexts = []
@@ -343,6 +344,21 @@ class PendingHypothesesResumeBeforeThePlanner(Fixture):
         # The second draw's context saw the pending hypothesis as claimed in flight.
         self.assertEqual([row["state"] for row in contexts[1]], ["in_flight"])
         self.assertEqual(pending["hypothesis_pending"]["author_attempts_used"], 1)
+
+    def test_without_the_refresh_a_queue_stays_launch_only(self):
+        queue, _ = self.prepare()
+        self.attempt([rejected(AUTHORING_1), rejected(AUTHORING_2)])
+        self.assertIsNone(queue.take(base.Worker(self.repo), self.anchor))
+        queue.enable_pending_refresh(TARGET)
+        self.assertEqual(queue.take(base.Worker(self.repo), self.anchor).stage, "author")
+
+    def test_a_refreshed_checkpoint_that_fails_revalidation_is_handed_out_stale(self):
+        queue, _ = self.prepare()
+        queue.enable_pending_refresh({**TARGET, "measurement_surface": "serving:other"})
+        self.attempt([rejected(AUTHORING_1), rejected(AUTHORING_2)])
+        point = queue.take(base.Worker(self.repo), self.anchor)
+        self.assertEqual(point.stale[0], "target")
+        self.assertEqual(self.claim(point.checkpoint_id)["state"], "rejected")
 
     def test_launch_prepare_orders_checkpoints_before_fresh_work(self):
         self.attempt([rejected(AUTHORING_1), rejected(AUTHORING_2)])
@@ -450,6 +466,11 @@ class ReinstateADroppedHypothesis(Fixture):
                          ("author", checkpoint_id, 1, 3, loop.PATCH_ROUNDS))
         self.assertEqual(checkpoint["prior_patch_rejections"], [AUTHORING_1, AUTHORING_2])
         self.assertEqual(attempt["reinstated_from"]["attempt_lineages"], [checkpoint_id])
+        self.assertNotIn("measurement_epoch_sha256", checkpoint)
+        stamped = resume.reinstate_plan(self.store, row_id=source_id[:12], rejection_rows=ids,
+                                        epoch=EPOCH, measurement_epoch="a" * 64)
+        self.assertEqual(stamped["attempt"]["resume_checkpoints"][0]
+                         ["measurement_epoch_sha256"], "a" * 64)
 
         self.assertTrue(resume.reinstate_apply(self.store, plan))
         self.assertFalse(resume.reinstate_apply(self.store, plan))     # idempotent

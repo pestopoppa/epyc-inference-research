@@ -770,18 +770,16 @@ def _connect(store_root: Path, *, immutable: bool) -> sqlite3.Connection:
     return connection
 
 
-def scan(store_root: Path, *, epoch: str, immutable: bool = False,
-         statuses: Sequence[str] = SCANNED_STATUSES) -> list[Candidate]:
-    """Every checkpoint recorded in this epoch (rows of `statuses`), oldest first."""
-    statuses = tuple(statuses)
-    placeholders = ",".join("?" for _ in statuses)
+def scan(store_root: Path, *, epoch: str, immutable: bool = False) -> list[Candidate]:
+    """Every checkpoint recorded in this epoch, oldest first."""
+    placeholders = ",".join("?" for _ in SCANNED_STATUSES)
     connection = _connect(store_root, immutable=immutable)
     try:
         rows = connection.execute(
             "SELECT attempt_id, recorded_at, status, mechanism_id, payload FROM experiments "
             f"WHERE epoch_sha256=? AND status IN ({placeholders}) "
             "AND instr(payload, '\"resume_checkpoints\"') > 0 ORDER BY recorded_at, rowid",
-            (epoch, *statuses)).fetchall()
+            (epoch, *SCANNED_STATUSES)).fetchall()
     finally:
         connection.close()
     found: list[Candidate] = []
@@ -1015,30 +1013,42 @@ class ResumeQueue:
 
     def __init__(self, *, store_root: Path, entries: Sequence[tuple[Candidate, bytes | None]],
                  siblings: Mapping[str, Sequence[str]], anchor_commit: str,
-                 epoch: str, target: Mapping[str, Any] | None = None,
-                 refresh_pending: bool = False) -> None:
+                 epoch: str) -> None:
         self.store_root = Path(store_root)
         self.entries = list(entries)
         self.siblings = {key: tuple(value) for key, value in siblings.items()}
         self.anchor_commit = anchor_commit
         self.epoch = epoch
         self.handed_out: list[str] = []
-        #: IN-RUN pending hypotheses: with `refresh_pending`, an empty queue re-scans
-        #: the store for accepted hypotheses a lane left pending THIS run
-        #: (`loop.PENDING_HYPOTHESIS_STATUSES`), so the next draw re-authors them
-        #: before the planner is asked. Launch-time `prepare` covers earlier runs.
-        self.target = dict(target) if target is not None else None
-        self.refresh_pending = bool(refresh_pending) and target is not None
-        #: checkpoint_id -> (check, reason) for a refreshed entry that failed
-        #: re-validation: handed out stale, so the lane records WHY.
-        self.stale: dict[str, tuple[str, str]] = {}
         self._lock = threading.Lock()
+
+    #: IN-RUN pending hypotheses (`enable_pending_refresh`): an empty queue re-scans
+    #: the store for accepted hypotheses a lane left pending THIS run
+    #: (`loop.PENDING_HYPOTHESIS_STATUSES`), so the next draw re-authors them before
+    #: the planner is asked. Launch-time `prepare` covers earlier runs.
+    refresh_target: Mapping[str, Any] | None = None
+    #: Extra binding keywords for `scan` / `prevalidate` (the launch's own binding).
+    refresh_bind: Mapping[str, Any] = {}
+    #: checkpoint_id -> (check, reason) for a refreshed entry that failed
+    #: re-validation: handed out stale, so the lane records WHY.
+    stale: Mapping[str, tuple[str, str]] = {}
+
+    def enable_pending_refresh(self, target: Mapping[str, Any], **bind: Any) -> "ResumeQueue":
+        """Turn on the in-run refresh. `target` is the launch's `target_identity`;
+        `bind` is forwarded to `scan` and `prevalidate` (whatever binding keywords the
+        launch's own `prepare` used), so a refreshed checkpoint binds exactly like a
+        launch-time one."""
+        self.refresh_target = dict(target)
+        self.refresh_bind = dict(bind)
+        self.stale = {}
+        return self
 
     def _refresh(self) -> None:
         """Queue accepted hypotheses left pending since the last scan (author stage)."""
         try:
-            candidates = scan(self.store_root, epoch=self.epoch,
-                              statuses=tuple(sorted(loop.PENDING_HYPOTHESIS_STATUSES)))
+            candidates = [candidate for candidate in
+                          scan(self.store_root, epoch=self.epoch, **self.refresh_bind)
+                          if candidate.row_status in loop.PENDING_HYPOTHESIS_STATUSES]
         except FileNotFoundError:
             return
         # The writable ledger (as `take` uses): a read-only one is opened immutable and
@@ -1060,7 +1070,8 @@ class ResumeQueue:
                     continue
                 try:
                     prevalidate(candidate, epoch=self.epoch, anchor_commit=self.anchor_commit,
-                                target=self.target or {}, repo=None)
+                                target=self.refresh_target or {}, repo=None,
+                                **self.refresh_bind)
                 except ResumeRejected as exc:
                     self.stale[candidate.checkpoint_id] = (exc.check, str(exc))
                 self.entries.append((candidate, None))
@@ -1073,7 +1084,7 @@ class ResumeQueue:
 
     def take(self, worker, base: str | None) -> ResumePoint | None:
         with self._lock:
-            if not self.entries and self.refresh_pending:
+            if not self.entries and self.refresh_target is not None:
                 try:
                     self._refresh()
                 except Exception as exc:      # noqa: BLE001 -- fresh research still runs
@@ -1084,7 +1095,8 @@ class ResumeQueue:
             with ClaimLedger(self.store_root) as ledger:
                 while self.entries:
                     candidate, patch = self.entries.pop(0)
-                    stale = self.stale.pop(candidate.checkpoint_id, None)
+                    stale = self.stale.pop(candidate.checkpoint_id, None) \
+                        if self.stale else None
                     if stale is not None:
                         if not ledger.claim(candidate.checkpoint_id, self.anchor_commit,
                                             state="rejected", stage=candidate.stage,
@@ -1191,8 +1203,7 @@ def prepare(store_root: Path, *, epoch: str, anchor_commit: str, target: Mapping
     finally:
         ledger.close()
     return (ResumeQueue(store_root=store_root, entries=entries, siblings=siblings,
-                        anchor_commit=anchor_commit, epoch=epoch, target=target,
-                        refresh_pending=not dry_run),
+                        anchor_commit=anchor_commit, epoch=epoch),
             report)
 
 
@@ -1218,7 +1229,7 @@ def _claim_rows_live(store_root: Path) -> list[dict]:
 
 
 def pending_hypotheses(store_root: Path, *, epoch: str, anchor_commit: str | None = None,
-                       limit: int = PENDING_SUMMARY_LIMIT) -> list[dict]:
+                       limit: int = PENDING_SUMMARY_LIMIT, **bind: Any) -> list[dict]:
     """Accepted hypotheses pending authoring in this epoch, newest first. Read-only.
 
     One row per hypothesis: its NEWEST `patch_rounds_exhausted` / `scope_blocked`
@@ -1227,11 +1238,12 @@ def pending_hypotheses(store_root: Path, *, epoch: str, anchor_commit: str | Non
     or it was formed on another anchor. `state` is "pending" (the next draw resumes
     it), "in_flight" (a lane holds its claim), "scope_blocked" or "budget_spent"
     (not resumable now; `blocked_reason` says why). Feeds the planner prompt (so it
-    does not re-propose them) and `loop-status.json`.
+    does not re-propose them) and `loop-status.json`. `bind` is forwarded to `scan`
+    (the launch's own binding keywords).
     """
     try:
-        candidates = scan(store_root, epoch=epoch, immutable=False,
-                          statuses=tuple(sorted(loop.PENDING_HYPOTHESIS_STATUSES)))
+        candidates = [candidate for candidate in scan(store_root, epoch=epoch, **bind)
+                      if candidate.row_status in loop.PENDING_HYPOTHESIS_STATUSES]
     except (FileNotFoundError, sqlite3.DatabaseError):
         return []
     claims = {(row["checkpoint_id"], row["anchor_commit"]): row
@@ -1299,7 +1311,8 @@ def reinstate_plan(store_root: Path, *, row_id: str, rejection_rows: Sequence[st
                    scope_rule: str | None = None, attempts_used: int | None = None,
                    budget: int = loop.HYPOTHESIS_AUTHOR_ATTEMPTS,
                    patch_rounds: int = loop.PATCH_ROUNDS,
-                   reason: str | None = None) -> dict:
+                   reason: str | None = None,
+                   measurement_epoch: str | None = None) -> dict:
     """Read-only. One pending-hypothesis row for an ACCEPTED hypothesis a pre-policy
     iteration dropped after its patch rounds ran out (DS41 run 10g).
 
@@ -1310,7 +1323,10 @@ def reinstate_plan(store_root: Path, *, row_id: str, rejection_rows: Sequence[st
     the checkpoint already carried). `attempts_used` defaults to the number of
     distinct authoring attempts those rows came from (their `resumed_from`, else their
     own row lineage). The planned row carries one AUTHOR checkpoint bound to `epoch`
-    (a rebind from the source row's epoch needs `epoch_reason`). Nothing is written.
+    (a rebind from the source row's epoch needs `epoch_reason`); `measurement_epoch`,
+    when given, is stamped as the checkpoint's `measurement_epoch_sha256` -- the
+    identity a launch that binds resume on the measurement epoch matches, whatever
+    actor configuration moved the full epoch. Nothing is written.
     """
     store_root = Path(store_root)
     if status not in loop.PENDING_HYPOTHESIS_STATUSES:
@@ -1319,6 +1335,8 @@ def reinstate_plan(store_root: Path, *, row_id: str, rejection_rows: Sequence[st
         raise ValueError("--status scope_blocked needs --scope-rule naming the route/rule")
     if not re.fullmatch(r"[0-9a-f]{64}", str(epoch or "")):
         raise ValueError("--epoch must be a 64-hex epoch sha256")
+    if measurement_epoch is not None and not re.fullmatch(r"[0-9a-f]{64}", measurement_epoch):
+        raise ValueError("--measurement-epoch must be a 64-hex epoch sha256")
     if not rejection_rows:
         raise ValueError("name at least one --rejection row (the patch rejections)")
     connection = _connect(store_root, immutable=True)
@@ -1401,6 +1419,8 @@ def reinstate_plan(store_root: Path, *, row_id: str, rejection_rows: Sequence[st
         "anchor_commit": anchor, "epoch_sha256": epoch,
         "target": dict(ck.get("target") or {}),
     }
+    if measurement_epoch is not None:
+        checkpoint["measurement_epoch_sha256"] = measurement_epoch
     state = {"class": status, "author_attempts_used": used, "author_attempts_budget": budget,
              "author_attempts_remaining": max(0, budget - used),
              "patch_rounds_per_attempt": max(1, int(patch_rounds)),
@@ -1433,6 +1453,7 @@ def reinstate_plan(store_root: Path, *, row_id: str, rejection_rows: Sequence[st
             "source_epoch_sha256": source_epoch, "epoch_sha256": epoch,
             "epoch_rebound": rebind,
             "epoch_rebind_reason": epoch_reason.strip() if rebind else None,
+            "measurement_epoch_sha256": measurement_epoch,
             "rejections": rejection_record, "attempt_lineages": attempts,
             "tool": "autokernel.loop.resume reinstate"},
         # experiments._attempt_id prefers this key: re-running the reinstate is a no-op.
@@ -2105,6 +2126,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     rein.add_argument("--epoch", required=True, help="epoch the NEXT launch runs in "
                       "(store/loop-status.json epoch_sha256)")
     rein.add_argument("--epoch-reason")
+    rein.add_argument("--measurement-epoch", help="stamp the checkpoint's "
+                      "measurement_epoch_sha256 (what a measurement-epoch launch binds on)")
     rein.add_argument("--status", default=loop.PATCH_ROUNDS_EXHAUSTED,
                       choices=sorted(loop.PENDING_HYPOTHESIS_STATUSES))
     rein.add_argument("--scope-rule", help="with --status scope_blocked: the route/rule")
@@ -2157,7 +2180,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                                   epoch=args.epoch, epoch_reason=args.epoch_reason,
                                   checkpoint_index=args.checkpoint_index, status=args.status,
                                   scope_rule=args.scope_rule, attempts_used=args.attempts_used,
-                                  budget=args.budget, reason=args.reason)
+                                  budget=args.budget, reason=args.reason,
+                                  measurement_epoch=args.measurement_epoch)
         except (ValueError, FileNotFoundError, ResumeRejected, sqlite3.DatabaseError) as exc:
             print(f"reinstate refused: {exc}", file=sys.stderr)
             return 2

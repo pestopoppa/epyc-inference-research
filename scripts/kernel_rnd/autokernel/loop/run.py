@@ -573,12 +573,13 @@ def _git(repo: Path, *args: str) -> str:
                           capture_output=True, text=True, timeout=600).stdout.strip()
 
 
-def pending_hypotheses_view(args, epoch: str, anchor_commit: str | None) -> list[dict]:
+def pending_hypotheses_view(args, epoch: str, anchor_commit: str | None,
+                            **bind) -> list[dict]:
     """Accepted hypotheses pending authoring (resume.pending_hypotheses), for the
     planner prompt and loop-status. A read fault is reported and reads as none."""
     try:
         return resume_mod.pending_hypotheses(args.store, epoch=epoch,
-                                             anchor_commit=anchor_commit)
+                                             anchor_commit=anchor_commit, **bind)
     except Exception as exc:      # noqa: BLE001 -- the iteration still runs
         print(f"warning: pending-hypothesis view unavailable: {type(exc).__name__}: {exc}",
               file=sys.stderr)
@@ -1592,7 +1593,8 @@ def main(argv: list[str] | None = None) -> int:
     def build_context() -> dict:
         # Accepted hypotheses still pending authoring: the planner must not re-propose
         # them (the next draws re-author them first). Only present when non-empty.
-        pending_view[0] = pending_hypotheses_view(args, epoch, current_anchor_commit[0])
+        pending_view[0] = pending_hypotheses_view(args, epoch, current_anchor_commit[0],
+                                                  **resume_bind)
         program = loop.PROGRAM.read_text(encoding="utf-8")
         if cpu_launch:
             program = (
@@ -1856,6 +1858,9 @@ def main(argv: list[str] | None = None) -> int:
     # Accepted hypotheses pending authoring, as last read (resume.pending_hypotheses):
     # refreshed per iteration by build_context and after each pending/resumed row.
     pending_view: list[list[dict]] = [[]]
+    #: Extra binding keywords the in-run pending refresh and the pending view pass to
+    #: `resume.scan` / `prevalidate` -- the same binding the launch's `prepare` uses.
+    resume_bind: dict = {}
     # R23-44 two-tier champion (operator 2026-09-04): the anchor above is the ACCUMULATOR,
     # advancing on every bench keep so keeps compound. The CHAMPION OF RECORD is the last
     # commit a serving gate DEMONSTRATED, the one the headline shows and a promotion would
@@ -2737,13 +2742,13 @@ def main(argv: list[str] | None = None) -> int:
             **({"runtime_preparation": runtime_status[0]} if runtime_status[0] is not None else {}),
             anchor_guard=anchor_guard_seen[-1] if anchor_guard_seen else None,
             accumulator=accumulator_state(),
+            pending_hypotheses=pending_view[0],
             gpu=gpu if gpu is not None else gpu_reading(outcomes),
             hotspots=[row.to_dict() for row in hotspot_rows],
             # heartbeat every HEARTBEAT_S below, so the envelope can be tight: silence now
             # means the PROCESS is gone, not that a build or a 20-pair bench is long.
             stale_after_s=HEARTBEAT_S * 6,
-            actor_health=actor_health(outcomes),
-            pending_hypotheses=pending_view[0])
+            actor_health=actor_health(outcomes))
 
     latest: list = []
     original_source_keeps: list[dict] = []
@@ -2951,7 +2956,8 @@ def main(argv: list[str] | None = None) -> int:
                     or outcome.status == loop.HYPOTHESIS_RETIRED \
                     or outcome.resumed_from is not None:
                 pending_view[0] = pending_hypotheses_view(args, epoch,
-                                                          current_anchor_commit[0])
+                                                          current_anchor_commit[0],
+                                                          **resume_bind)
             if outcome.attempt_identity is not None:
                 registry = dispatch_guard.Registry(args.store)
                 try:
@@ -3244,6 +3250,9 @@ def main(argv: list[str] | None = None) -> int:
                       + (f"; {resume_report['other_epoch_rows']} row(s) with checkpoints "
                          f"in other epochs (not this launch's)"
                          if resume_report["other_epoch_rows"] else ""), flush=True)
+                # In-run: a hypothesis a lane leaves pending THIS run is re-authored on
+                # the next draw, before the planner (resume.ResumeQueue._refresh).
+                resume_queue[0].enable_pending_refresh(resume_target, **resume_bind)
                 for row in resume_report["queued"]:
                     print(f"resume    queued {row['mechanism_id']} at {row['stage']} "
                           f"(from {row['checkpoint_id']})", flush=True)

@@ -688,10 +688,10 @@ def iterate(*, planner: Planner, critic: Critic,
             accumulate_valid_positive: bool = False,
             validate_candidate: Callable[[Hypothesis, Sequence[str]], Any] | None = None,
             formation_guard=None, reserve_candidate=None,
+            author_attempts: int = HYPOTHESIS_AUTHOR_ATTEMPTS,
             record_abandoned: Callable[[Outcome], None] | None = None,
             resume=None,
-            author_lane: tuple[Path, str] | None = None,
-            author_attempts: int = HYPOTHESIS_AUTHOR_ATTEMPTS
+            author_lane: tuple[Path, str] | None = None
             ) -> Outcome:
     """One full turn. Pure control flow: every side effect is an injected callable.
 
@@ -705,6 +705,16 @@ def iterate(*, planner: Planner, critic: Critic,
     hypothesis or patch this turn abandons before its final outcome, at the moment
     it is abandoned (so a later stop, lane error or crash cannot erase it). The
     final outcome lists them again in `abandoned_candidates`.
+
+    An ACCEPTED hypothesis whose patch rounds all end in rejection is not thrown back
+    to the planner. The iteration ends as `patch_rounds_exhausted` (the last rejection
+    was the author's) or `scope_blocked` (the last rejection said the mechanism cannot
+    be written inside the admitted route), carrying an AUTHOR checkpoint with every
+    patch rejection as author feedback, so the next draw re-authors it before the
+    planner is asked (`resume.py`). `author_attempts` bounds that per hypothesis
+    across iterations: each authoring attempt of `patch_rounds` rounds that ends on an
+    author failure spends one, and the last one retires it (`hypothesis_retired`). A
+    scope-blocked attempt spends none: it waits for the scope rules to change.
 
     `resume` (a `resume.ResumePoint`) seeds ONE extra round, before the fresh
     hypothesis rounds, with work a previous launch already paid for: at stage
@@ -725,16 +735,6 @@ def iterate(*, planner: Planner, critic: Critic,
     reply that carries no report (`AuthorReportMissing`) is answered from the lane diff
     (`integrity.lane_diff_report`, recorded `report_source: "lane_diff"`), and the
     normal gates judge that diff. Without it, or with no diff, the transient stands.
-
-    An ACCEPTED hypothesis whose patch rounds all end in rejection is not thrown back
-    to the planner. The iteration ends as `patch_rounds_exhausted` (the last rejection
-    was the author's) or `scope_blocked` (the last rejection said the mechanism cannot
-    be written inside the admitted route), carrying an AUTHOR checkpoint with every
-    patch rejection as author feedback, so the next draw re-authors it before the
-    planner is asked (`resume.py`). `author_attempts` bounds that per hypothesis
-    across iterations: each authoring attempt of `patch_rounds` rounds that ends on an
-    author failure spends one, and the last one retires it (`hypothesis_retired`). A
-    scope-blocked attempt spends none: it waits for the scope rules to change.
     """
     working = dict(context)
     abandoned: list[dict] = []
@@ -787,6 +787,7 @@ def iterate(*, planner: Planner, critic: Critic,
                         hypothesis_reasons=hypothesis_reasons, measure=measure,
                         gate=gate, commit=commit,
                         hypothesis_rounds=hypothesis_rounds,
+                        author_attempts=author_attempts,
                         patch_rounds=patch_rounds, on_step=_safe_step(on_step),
                         tail_session=tail_session,
                         should_abandon=should_abandon or (lambda: False),
@@ -798,8 +799,7 @@ def iterate(*, planner: Planner, critic: Critic,
                         round_telemetry=round_telemetry,
                         validator_provenance=validator_provenance,
                         record_abandoned=record_abandoned, abandoned=abandoned,
-                        resume=resume, progress=progress, author_lane=author_lane,
-                        author_attempts=author_attempts))
+                        resume=resume, progress=progress, author_lane=author_lane))
     except TailRefused as exc:
         # The candidate was formed and never measured. Carry the hypothesis: the
         # patch may well still help against the champion that displaced it, and the
@@ -848,9 +848,9 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
              validate_candidate=lambda _hypothesis, _paths: None,
              formation_guard=lambda _hypothesis, _context: None,
              reserve_candidate=None, round_telemetry=None,
+             author_attempts=HYPOTHESIS_AUTHOR_ATTEMPTS,
              validator_provenance=None, record_abandoned=None,
-             abandoned=None, resume=None, progress=None, author_lane=None,
-             author_attempts=HYPOTHESIS_AUTHOR_ATTEMPTS) -> Outcome:
+             abandoned=None, resume=None, progress=None, author_lane=None) -> Outcome:
     last_proposed: Hypothesis | None = None
     round_telemetry = round_telemetry if round_telemetry is not None else {}
     validator_provenance = (validator_provenance if validator_provenance is not None
