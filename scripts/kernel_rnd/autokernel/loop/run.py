@@ -349,9 +349,20 @@ def _author_scratch_registry(args):
         from . import scratch as scratch_mod
     except ImportError:
         return None
-    return scratch_mod.ScratchRegistry(
-        Path(args.worker_root), owner=f"ak-bestof store={args.store} pid={os.getpid()}",
+    registry = scratch_mod.ScratchRegistry(
+        Path(args.worker_root) / "scratch",
+        owner={"campaign": "ak-loop", "state_dir": str(args.store),
+               "worker_root": str(args.worker_root), "role": "author-panel",
+               "pid": os.getpid()},
         min_free_bytes=int(float(args.actor_authors_min_free_gb) * 1_000_000_000))
+    try:
+        # Residue of an earlier killed run: marked, owner provably gone (scratch.py).
+        swept = registry.sweep()
+        print(f"actors    author scratch sweep: {swept}", flush=True)
+    except Exception as exc:      # noqa: BLE001 -- a failed sweep never blocks the run
+        print(f"actors    author scratch sweep failed: {type(exc).__name__}: {exc}",
+              file=sys.stderr)
+    return registry
 
 
 def _author_validator(args):

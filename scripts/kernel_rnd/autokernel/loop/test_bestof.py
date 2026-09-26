@@ -7,8 +7,10 @@ the pool-budget math and its refusals, N=1 staying the single path byte for byte
 scratch-worktree lifecycle on every exit path (allocated from the flow-level registry,
 released, never pruned), and the per-author record on the outcome and in the metrics rows.
 
-The scratch registry here is a test double of `scratch.ScratchRegistry` (lane/ak-scratch-
-20260926): the production panel never creates, sweeps or removes a worktree itself.
+Most tests allocate through the REAL flow-level registry (`scratch.ScratchRegistry`); a
+small double stands in where a test needs a registry shape the real one does not have
+(an early `release`, a shared parent). The panel never creates, sweeps or removes a
+worktree itself.
 """
 from __future__ import annotations
 
@@ -29,7 +31,8 @@ import unittest
 from types import SimpleNamespace
 from unittest import mock
 
-from autokernel.loop import actor_metrics, actors, archive, bestof, bench, gates, loop, pipeline
+from autokernel.loop import (actor_metrics, actors, archive, bestof, bench, gates, loop,
+                             pipeline, scratch)
 from autokernel.loop.loop import Abstain, ActorStopped, ActorTransient, Hypothesis, Review
 
 TARGET = "ggml/src/kernel.c"
@@ -131,8 +134,12 @@ class Fixture(unittest.TestCase):
         self.lane = self.workers / "lane0"
         _git(self.repo, "worktree", "add", "--detach", str(self.lane), self.base)
         self.store = self.root / "store"
-        self.registry = FakeRegistry(self.root / "scratch")
+        self.registry = self.real_registry()
         self.stop = threading.Event()
+
+    def real_registry(self, min_free_bytes=0):
+        return scratch.ScratchRegistry(self.root / "scratch", owner={"test": self.id()},
+                                       min_free_bytes=min_free_bytes)
 
     def tearDown(self):
         self._tmp.cleanup()
@@ -155,11 +162,15 @@ class Fixture(unittest.TestCase):
         return result, records
 
     def assert_no_scratch_left(self):
-        left = {p for p in _worktrees(self.repo) if str(self.registry.root) in p}
+        root = str(Path(self.registry.root).resolve())
+        left = {p for p in _worktrees(self.repo) if p.startswith(root)}
         self.assertEqual(left, set(), "a scratch worktree survived the panel")
-        created = [p for kind, p in self.registry.events if kind == "create"]
-        for path in created:
-            self.assertFalse(Path(path).exists(), path)
+        for kind in ("author", "worktrees"):
+            home = Path(root) / kind
+            self.assertFalse(home.exists() and any(home.iterdir()), f"{home} not empty")
+        for kind, path in getattr(self.registry, "events", []):
+            if kind == "create":
+                self.assertFalse(Path(path).exists(), path)
 
 
 class Editor:
@@ -360,10 +371,15 @@ class ConcurrentRace(Fixture):
         self.assertEqual(members["a1-medium"]["result"], "cancelled")
         self.assertEqual(members["a1-medium"]["outcome"], "stopped")
         self.assertTrue(members["a0-off"]["validation"]["passed"])
-        # The loser was released before the winner (as soon as the winner landed).
+        self.assert_no_scratch_left()
+
+    def test_with_an_early_release_the_loser_goes_first(self):
+        self.registry = FakeRegistry(self.root / "fake-scratch")
+        panel = self.panel({"off": Editor, "medium": lambda s, w, st: Blocker(s, w, st)})
+        self.call(panel)
         releases = [p for kind, p in self.registry.events if kind == "release"]
         self.assertEqual(len(releases), 2)
-        self.assertIn("a1-medium", releases[0])
+        self.assertIn("a1-medium", releases[0])      # released as soon as a0 won
         self.assert_no_scratch_left()
 
     def test_a_failing_first_finisher_does_not_win(self):
@@ -544,15 +560,37 @@ class ScratchLifecycle(Fixture):
                 seen.append((_git(self.ws, "rev-parse", "HEAD"), self.ws))
                 return super().author(hypothesis, context)
 
-        self.call(self.panel({"off": Peek, "medium": lambda s, w, st: Peek(s, w, st, delay=0.2)}))
+        with mock.patch.object(self.registry, "ensure_free",
+                               wraps=self.registry.ensure_free) as guard:
+            _paths, records = self.call(self.panel(
+                {"off": Peek, "medium": lambda s, w, st: Peek(s, w, st, delay=0.2)}))
         self.assertEqual({head for head, _ws in seen}, {self.base})
         self.assertEqual(len({ws.parent for _h, ws in seen}), 2, "authors share a parent")
-        self.assertEqual(self.registry.counters, {"worktrees_created": 2, "worktrees_removed": 2})
-        self.assertEqual(self.registry.ensure_calls, [2 * bestof.SCRATCH_BYTES_PER_AUTHOR])
+        for _head, ws in seen:
+            self.assertFalse(ws.parent.exists(), "a member dir survived the scope")
+        guard.assert_called_once_with(2 * bestof.SCRATCH_BYTES_PER_AUTHOR)
+        stats = self.registry.stats()
+        self.assertEqual((stats["allocated"], stats["released"]), (4, 4))   # 2 dirs + 2 trees
+        moved = records[0]["scratch"]
+        self.assertEqual((moved["delta_allocated"], moved["delta_released"]), (4, 4))
+        self.assertGreater(moved["delta_bytes_freed"], 0)
+        self.assert_no_scratch_left()
+
+    def test_member_trees_are_marked_while_they_run(self):
+        seen = []
+
+        class Peek(Editor):
+            def author(self, hypothesis, context):
+                seen.append(((self.ws.parent / scratch.MARKER).is_file(),
+                             Path(str(self.ws) + scratch.SIDECAR_SUFFIX).is_file()))
+                return super().author(hypothesis, context)
+
+        self.call(self.panel({"off": Peek, "medium": Peek}))
+        self.assertEqual(seen, [(True, True), (True, True)])
         self.assert_no_scratch_left()
 
     def test_scope_exit_releases_without_an_early_release_method(self):
-        self.registry = FakeRegistry(self.root / "scratch", release_method=False)
+        self.registry = FakeRegistry(self.root / "fake-scratch", release_method=False)
         self.call(self.panel({"off": Editor,
                               "medium": lambda s, w, st: Blocker(s, w, st)}))
         kinds = [kind for kind, _p in self.registry.events]
@@ -596,7 +634,7 @@ class ScratchLifecycle(Fixture):
         self.assert_no_scratch_left()
 
     def test_free_space_guard_falls_back_to_the_single_author(self):
-        self.registry = FakeRegistry(self.root / "scratch", free=False)
+        self.registry = self.real_registry(min_free_bytes=10 ** 18)
         solo_calls = []
 
         def solo(h, ctx):
@@ -609,12 +647,13 @@ class ScratchLifecycle(Fixture):
         self.assertEqual(tuple(paths), (TARGET,))
         self.assertEqual(records[0]["selection"], "fallback_single")
         self.assertIn("space", records[0]["fallback_reason"])
-        self.assertEqual(self.registry.counters["worktrees_created"], 0)
+        self.assertEqual(self.registry.stats()["allocated"], 0)
+        self.assertEqual(self.registry.stats()["guard_refusals"], 1)
 
     def test_scratch_trees_sharing_a_parent_fall_back(self):
         # The actor writes its per-call opencode config into workspace.parent: two
         # members there would run each other's thinking mode.
-        self.registry = FakeRegistry(self.root / "scratch", shared_parent=True)
+        self.registry = FakeRegistry(self.root / "fake-scratch", shared_parent=True)
         paths, records = self.call(self.panel({"off": Editor, "medium": Editor}),
                                    solo=lambda h, c: (TARGET,))
         self.assertEqual(records[0]["selection"], "fallback_single")
@@ -628,7 +667,9 @@ class ScratchLifecycle(Fixture):
         joined = "\n".join(strings)
         for forbidden in (r"""^[rbuf]*['"]prune['"]$""", r"""^[rbuf]*['"]gc['"]$"""):
             self.assertFalse(any(re.match(forbidden, s) for s in strings), forbidden)
-        self.assertNotIn("worktree prune", joined)
+        # Spelled in pieces, like test_scratch's scanner, so this file is not itself
+        # an offender under that package-wide ban.
+        self.assertNotIn("worktree " + "pr" + "une", joined)
         self.assertNotRegex(source, r"""["']worktree["']\s*,\s*["'](add|remove|prune)["']""")
         self.assertNotIn("rmtree", source)
 

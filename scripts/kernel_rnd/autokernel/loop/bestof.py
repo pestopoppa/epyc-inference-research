@@ -459,7 +459,7 @@ class AuthorPanel:
         try:
             with self.scratch.scope("call", name=f"{self.lane}-authors-{panel_id}") as scope:
                 try:
-                    self._allocate(scope, members, worktree, base, seed)
+                    self._allocate(scope, members, worktree, base, seed, panel_id)
                     return self._race(hypothesis, context, scope, members, worktree, base,
                                       lane_tree, row)
                 finally:
@@ -472,11 +472,21 @@ class AuthorPanel:
             # After the scope closed: the registry's own created/removed/sweep counters.
             row["scratch"].update(_scratch_delta(started_stats, _stats(self.scratch)))
 
-    def _allocate(self, scope, members, worktree: Path, base: str, seed) -> None:
+    def _allocate(self, scope, members, worktree: Path, base: str, seed,
+                  panel_id: str = "") -> None:
         parents: set[Path] = set()
         for member in members:
+            name = f"{self.lane}-{panel_id}-{member.spec.label}"
             try:
-                path = Path(scope.worktree(worktree, base, f"{self.lane}-{member.spec.label}"))
+                if callable(getattr(scope, "dir", None)):
+                    # A marked directory of its own per member, the worktree inside it:
+                    # the actor's per-call config and reply dir land beside the tree
+                    # (`workspace.parent`) and are released with it (worktree first,
+                    # then the directory: the scope releases in reverse order).
+                    home = Path(scope.dir("author", name))
+                    path = Path(scope.worktree(worktree, base, name, at=home / "tree"))
+                else:
+                    path = Path(scope.worktree(worktree, base, name))
             except Exception as exc:      # noqa: BLE001
                 raise _FallBack(f"scratch worktree for {member.spec.label} refused: "
                                 f"{type(exc).__name__}: {exc}") from None
