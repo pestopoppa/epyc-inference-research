@@ -326,8 +326,15 @@ def test_selected_identity_survives_existing_pool_context_status_output_and_epoc
         assert target["request_id"] == resolved.request_id
         assert target["selected_id"] == "selected"
         assert target["manifest_digest"] == resolved.manifest_digest
-        assert epoch.call_args.kwargs["host_state"]["enrolled_manifest_digest"] == resolved.manifest_digest
-        assert len(epoch.call_args.kwargs["host_state"]["enrolled_target_digest"]) == 64
+        # Two epochs since the measurement-epoch split: the FULL epoch (provenance, folds
+        # the manifest in) and the MEASUREMENT epoch (the manifest minus its actors).
+        states = [call.kwargs.get("host_state") or {} for call in epoch.call_args_list]
+        (full,) = [st for st in states if "enrolled_manifest_digest" in st]
+        assert full["enrolled_manifest_digest"] == resolved.manifest_digest
+        assert len(full["enrolled_target_digest"]) == 64
+        (measured,) = [st for st in states if "enrolled_measurement_digest" in st]
+        assert measured["enrolled_measurement_digest"] == resolved.measurement_digest
+        assert measured["enrolled_target_digest"] == full["enrolled_target_digest"]
         assert result["epoch"] == status["epoch_sha256"]
         assert result["epoch"] != run.archive.epoch_for(
             anchor_commit=fixture.tip, build_recipe=run.build_recipe.HOUSE_GPU_RECIPE.to_dict())
