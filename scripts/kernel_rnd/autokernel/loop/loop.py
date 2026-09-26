@@ -926,6 +926,7 @@ def iterate(*, planner: Planner, critic: Critic,
             author_attempts: int = HYPOTHESIS_AUTHOR_ATTEMPTS,
             record_abandoned: Callable[[Outcome], None] | None = None,
             resume=None,
+            next_resume: Callable[[], Any] | None = None,
             author_lane: tuple[Path, str] | None = None,
             iteration_scope=None,
             author_panel=None
@@ -976,8 +977,10 @@ def iterate(*, planner: Planner, critic: Critic,
     checkpointed at "critic1" before critic pass 1: an empty critic reply is retried once
     in the iteration, and a critic transient ends it `planner_transient` carrying that
     checkpoint, at most `CRITIC1_RETRIES` times per hypothesis. Every re-validation failure is disposed as `resume_rejected` and the
-    iteration continues with fresh work. A stop, provider transient or gate refusal
-    leaves `resume_checkpoints` on its row so the next launch can resume it; an
+    iteration continues with the next queued checkpoint (`next_resume()`, drawn before
+    any fresh round; each checkpoint at most once per iteration), else fresh work.
+    A stop, provider transient or gate refusal leaves `resume_checkpoints` on its row
+    so the next launch can resume it; an
     authored patch still awaiting critic pass 2 adds a "critic2" checkpoint (also
     handed to the pool on an escaping exception, for its `lane_error` row).
 
@@ -1010,7 +1013,9 @@ def iterate(*, planner: Planner, critic: Critic,
     abandoned: list[dict] = []
     progress: dict[str, Any] = {"inflight": None, "critic2": None, "build": None,
                                 "report_recovery": None, "resumed_active": False,
-                                "author_panels": [], "author_panel": None}
+                                "author_panels": [], "author_panel": None,
+                                # The resume in flight: `next_resume` replaces a refused one.
+                                "resume": resume}
     hypothesis_reasons: list[str] = []
     round_telemetry = {
         "hypothesis_round": 0,
@@ -1041,15 +1046,16 @@ def iterate(*, planner: Planner, critic: Critic,
         outcome.abandoned_candidates = list(abandoned)
         if progress["author_panels"] and not outcome.author_panels:
             outcome.author_panels = [dict(panel) for panel in progress["author_panels"]]
-        if resume is not None and (
-                (outcome.hypothesis is not None and outcome.hypothesis is resume.hypothesis)
+        resumed = progress.get("resume")
+        if resumed is not None and (
+                (outcome.hypothesis is not None and outcome.hypothesis is resumed.hypothesis)
                 or (outcome.hypothesis is None and progress.get("resumed_active"))):
             # The second clause: a provider transient (the critic's auth failure in
             # DS41 run 10e) ends the iteration with no hypothesis on the outcome while
             # the RESUMED candidate was in flight. Unattributed, the row named no
             # lineage and the claim was never settled (2738e95f...#0 stayed open).
-            outcome.resumed_from = resume.checkpoint_id
-            outcome.resume_stage = resume.stage
+            outcome.resumed_from = resumed.checkpoint_id
+            outcome.resume_stage = resumed.stage
         if outcome.status in RESUMABLE_STATUSES and not outcome.resume_checkpoints:
             outcome.resume_checkpoints = _pending_checkpoints(progress)
         _mark_report_source(outcome, progress)
@@ -1072,7 +1078,8 @@ def iterate(*, planner: Planner, critic: Critic,
                         round_telemetry=round_telemetry,
                         validator_provenance=validator_provenance,
                         record_abandoned=record_abandoned, abandoned=abandoned,
-                        resume=resume, progress=progress, author_lane=author_lane,
+                        resume=resume, next_resume=next_resume, progress=progress,
+                        author_lane=author_lane,
                         author_panel=author_panel))
     except TailRefused as exc:
         # The candidate was formed and never measured. Carry the hypothesis: the
@@ -1127,8 +1134,8 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
              reserve_candidate=None, round_telemetry=None,
              author_attempts=HYPOTHESIS_AUTHOR_ATTEMPTS,
              validator_provenance=None, record_abandoned=None,
-             abandoned=None, resume=None, progress=None, author_lane=None,
-             author_panel=None) -> Outcome:
+             abandoned=None, resume=None, next_resume=None, progress=None,
+             author_lane=None, author_panel=None) -> Outcome:
     last_proposed: Hypothesis | None = None
     round_telemetry = round_telemetry if round_telemetry is not None else {}
     validator_provenance = (validator_provenance if validator_provenance is not None
@@ -1404,7 +1411,30 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
     # A resumed candidate is one EXTRA round ahead of the fresh ones: it replaces no
     # fresh round, so a rejected resume still leaves the iteration its full budget.
     schedule = ([resume] if resume is not None else []) + [None] * hypothesis_rounds
-    for hypothesis_index, resumed in enumerate(schedule):
+    tried = {resume.checkpoint_id} if resume is not None else set()
+
+    def draw_next_resume(index: int) -> None:
+        """A refused resume yields to the NEXT queued checkpoint, not the planner.
+
+        DS41 run 10i batch 0 queued two checkpoints; the first was refused at
+        re-validation and the iteration fell through to a planner that abstained,
+        wasting a one-iteration batch while an accepted hypothesis sat queued. Also an
+        EXTRA round (no fresh round is replaced), and bounded: a checkpoint already
+        tried in this iteration ends the draw.
+        """
+        nonlocal resume
+        point = next_resume() if next_resume is not None else None
+        if point is None or point.checkpoint_id in tried:
+            return
+        tried.add(point.checkpoint_id)
+        # Rebound so lineage, carried budgets and the final outcome name THIS point.
+        resume = progress["resume"] = point
+        schedule.insert(index + 1, point)
+
+    hypothesis_index = -1
+    while hypothesis_index + 1 < len(schedule):
+        hypothesis_index += 1
+        resumed = schedule[hypothesis_index]
         # Polled BEFORE each actor call, never after: the whole point is that no
         # further multi-minute call is drawn once the run has been told to stop.
         progress["critic2"] = None
@@ -1439,6 +1469,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                 dispose(hypothesis, RESUME_REJECTED,
                         f"resume re-validation refused ({stale[0]}): {stale[1]}",
                         refusal_gate=f"resume:{stale[0]}")
+                draw_next_resume(hypothesis_index)
                 continue
             on_step(resumed.label)
             # The verdicts that admitted it are CARRIED, and marked so: no critic
@@ -1451,6 +1482,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                 dispose(hypothesis, RESUME_REJECTED,
                         f"resume re-validation refused (do_not_repeat): {repeat_reason}",
                         refusal_gate="resume:do_not_repeat")
+                draw_next_resume(hypothesis_index)
                 continue
         else:
             on_step("proposing a hypothesis")
@@ -1899,7 +1931,10 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             # rather than being dropped for the planner's next proposal.
             return exhausted(hypothesis, patch_reasons, rejections)
         # A refused RESUME (stale bytes, moved anchor, a current gate): control
-        # returns to the HYPOTHESIS loop and fresh work is drawn, as before.
+        # returns to the HYPOTHESIS loop, which takes the next queued checkpoint
+        # first and only then draws fresh work.
+        if resume_refused:
+            draw_next_resume(hypothesis_index)
         hypothesis_reasons.extend(patch_reasons)
 
     # Hypothesis budget spent. H is NOT retired: it re-enters the pool carrying its

@@ -214,7 +214,8 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
     `next_resume(worker, base)` is asked once per draw, after the lane is reset and
     before any fresh hypothesis: it CLAIMS and returns resumable work (a
     `resume.ResumePoint`) or None. A resumed candidate is an ordinary iteration --
-    it draws budget and produces exactly one final outcome.
+    it draws budget and produces exactly one final outcome. A resume refused at
+    re-validation asks it again within the same draw (`loop.iterate(next_resume=)`).
 
     `make_author_panel(worker)` builds the lane's best-of-N author panel
     (`bestof.AuthorPanel`) once, like its planner; None from it, or no factory, is the
@@ -371,6 +372,16 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                         with outcomes_lock:
                             record_abandoned(_w, candidate)
 
+                def draw_resume(_w=worker, _b=base):
+                    # `iterate` asks again when it refuses `resumed` at re-validation.
+                    # A drawn point is rebound here too, so `reserve` and a lane_error
+                    # row name the checkpoint actually in flight.
+                    nonlocal resumed
+                    point = next_resume(_w, _b)
+                    if point is not None:
+                        resumed = point
+                    return point
+
                 resumed = next_resume(worker, base) if next_resume is not None else None
                 outcome = loop_mod.iterate(
                     planner=planner, critic=critic, context=build_context(),
@@ -387,6 +398,7 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                     formation_guard=formation_guard,
                     reserve_candidate=reserve if reserve_candidate is not None else None,
                     record_abandoned=abandoned, resume=resumed,
+                    next_resume=draw_resume if next_resume is not None else None,
                     **({"author_panel": author_panel} if author_panel is not None else {}),
                     # The lane and the commit reset_to_champion put it on for THIS
                     # draw: the only lane an empty author report may be derived from.

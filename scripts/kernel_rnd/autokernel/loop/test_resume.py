@@ -500,6 +500,126 @@ class RevalidationFailuresAreRecordedAndNeverRetried(Fixture):
         self.assertEqual(outcome.abandoned_candidates[0]["refusal_gate"], "resume:lane_dirty")
 
 
+class ARefusedResumeYieldsToTheNextQueuedCheckpoint(Fixture):
+    """DS41 run 10i batch 0: two checkpoints queued (build, author); the build one was
+    refused by a current gate and the iteration fell through to the planner, which
+    abstained -- a one-iteration batch wasted with an accepted hypothesis queued."""
+
+    def author_checkpoint(self, mechanism):
+        """An accepted hypothesis whose patch failed to compile: resumable at author."""
+        outcome = loop.iterate(
+            planner=Planner(self.repo, [hyp(mechanism)], edit="BROKEN"), critic=Critic(),
+            context={}, measure=lambda h, p: self.fail("never measured"),
+            gate=lambda h, p: (False, [gates.Verdict("compile", False, "error: x")]),
+            commit=lambda h, p, c: self.fail("no commit"), hypothesis_rounds=1,
+            patch_rounds=1, record_abandoned=self.owner.record_abandoned)
+        self.owner.record(outcome)
+        reset(self.repo)
+
+    def pool(self, planner, critic, gate):
+        def reset_lane(worker):
+            reset(self.repo)
+            return self.anchor
+
+        queue, report = self.prepare()
+        (outcome,) = pipeline.run_pool(
+            workers=[pipeline.Worker("lane0", self.repo, self.tmp / "build")],
+            make_planner=lambda w: planner, make_critic=lambda w: critic,
+            build_context=dict, make_gate=lambda w: gate,
+            make_measure=lambda w: lambda h, p: comparison(0.0),
+            commit=lambda w, h, p, c: self.fail("a null is not kept"),
+            champion_head=lambda: self.anchor, reset_to_champion=reset_lane,
+            record=self.owner.record,
+            record_abandoned=lambda w, candidate: self.owner.record_abandoned(candidate),
+            iterations=1, next_resume=queue.take)
+        return outcome, report
+
+    def test_the_next_queued_checkpoint_resumes_in_the_same_iteration(self):
+        self.refuse_once(hypothesis=hyp("akm-build"))
+        self.author_checkpoint("akm-author")
+        gated = []
+
+        def gate(hypothesis, paths):
+            gated.append(hypothesis.mechanism_id)
+            # The CURRENT gates refuse the resumed build patch (run 10i: the CPU quant
+            # probe failed to compile); the re-authored patch passes.
+            return refusing_gate(hypothesis, paths) if len(gated) == 1 \
+                else passing_gate(hypothesis, paths)
+
+        planner = Planner(self.repo, [])
+        planner.propose = lambda context: self.fail("a queued checkpoint remains: "
+                                                    "the planner must not be asked")
+        outcome, report = self.pool(planner, Critic(hypothesis_fails=self), gate)
+        self.assertEqual([row["stage"] for row in report["queued"]], ["build", "author"])
+        build_id, author_id = (row["checkpoint_id"] for row in report["queued"])
+        self.assertEqual(gated, ["akm-build", "akm-author"])
+        self.assertEqual(outcome.status, "measured_null")
+        self.assertEqual((outcome.hypothesis.mechanism_id, outcome.resumed_from,
+                          outcome.resume_stage), ("akm-author", author_id, "author"))
+        self.assertEqual(planner.authored[0][0].mechanism_id, "akm-author")
+        (rejected,) = rows_with(self.store, "resume_rejected")
+        self.assertEqual((rejected["resumed_from"], rejected["refusal_gate"]),
+                         (build_id, "op_scope"))
+        claims = self.claims()
+        self.assertEqual((claims[build_id]["result_status"],
+                          claims[author_id]["result_status"]),
+                         ("resume_rejected", "measured_null"))
+
+    def test_every_queued_checkpoint_refused_falls_through_to_the_planner_once(self):
+        self.refuse_once(hypothesis=hyp("akm-first"))
+        self.refuse_once(hypothesis=hyp("akm-second"))
+        gated, clean_at_propose = [], []
+
+        def gate(hypothesis, paths):
+            gated.append(hypothesis.mechanism_id)
+            return passing_gate(hypothesis, paths) if hypothesis.mechanism_id == "akm-fresh" \
+                else refusing_gate(hypothesis, paths)
+
+        planner = Planner(self.repo, [hyp("akm-fresh")])
+        propose = planner.propose
+
+        def watched(context):
+            clean_at_propose.append(git(self.repo, "status", "--porcelain").strip() == "")
+            return propose(context)
+
+        planner.propose = watched
+        outcome, report = self.pool(planner, Critic(), gate)
+        self.assertEqual(len(report["queued"]), 2)
+        # Each checkpoint tried exactly once, then fresh work, on a clean lane.
+        self.assertEqual(sorted(gated[:2]), ["akm-first", "akm-second"])
+        self.assertEqual(gated[2:], ["akm-fresh"])
+        self.assertEqual((planner.proposals, clean_at_propose), (1, [True]))
+        self.assertEqual(outcome.status, "measured_null")
+        self.assertEqual(outcome.hypothesis.mechanism_id, "akm-fresh")
+        self.assertIsNone(outcome.resumed_from)
+        self.assertEqual(sorted(row["resumed_from"] for row in
+                                rows_with(self.store, "resume_rejected")),
+                         sorted(row["checkpoint_id"] for row in report["queued"]))
+
+    def test_a_checkpoint_is_tried_at_most_once_per_iteration(self):
+        # A next_resume that hands the same (stale) point back must not loop.
+        point = resume.ResumePoint(
+            checkpoint_id="a" * 64 + "#0", stage="build", hypothesis=hyp("akm-stale"),
+            checkpoint={}, provenance=(), prior_patch_rejections=(), patch_rounds=1,
+            stale=("anchor", "anchor changed during the run"))
+        draws, disposed = [], []
+
+        def again():
+            draws.append(point.checkpoint_id)
+            return point
+
+        planner = Planner(self.repo, [hyp("akm-fresh")])
+        outcome = loop.iterate(planner=planner, critic=Critic(), context={},
+                               measure=lambda h, p: comparison(0.0), gate=passing_gate,
+                               commit=lambda h, p, c: None, hypothesis_rounds=1,
+                               record_abandoned=disposed.append, resume=point,
+                               next_resume=again)
+        self.assertEqual((len(draws), planner.proposals), (1, 1))
+        self.assertEqual([c.status for c in disposed], ["resume_rejected"])
+        self.assertEqual(outcome.hypothesis.mechanism_id, "akm-fresh")
+        self.assertIsNone(outcome.resumed_from)
+
+
 class Idempotency(Fixture):
 
     def test_two_launches_racing_resume_it_once(self):
