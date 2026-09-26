@@ -868,7 +868,9 @@ class LoopIntegration(Fixture):
             hypothesis_rounds=1, measure=lambda h, p: None, gate=lambda h, p: (True, []),
             commit=lambda *a: "head", author_lane=(self.lane, self.base), author_panel=panel,
             record_abandoned=abandoned.append)
-        self.assertEqual(outcome.status, "refused_at_formation")
+        # lane/ak-keephyp-20260926: an ACCEPTED hypothesis whose patch rounds all end
+        # rejected stays pending, so the iteration ends `patch_rounds_exhausted`.
+        self.assertEqual(outcome.status, loop.PATCH_ROUNDS_EXHAUSTED)
         self.assertEqual(abandoned[0].status, "patch_rejected")
         self.assertEqual(abandoned[0].author_panels[0]["winner"], "a0-off")
         self.assertEqual(len(outcome.author_panels), 1)

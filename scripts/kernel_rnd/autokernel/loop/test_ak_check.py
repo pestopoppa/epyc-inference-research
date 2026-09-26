@@ -531,9 +531,16 @@ class AuthorCall(unittest.TestCase):
         explicit_off = self.author(actors.ActorSeat(bounded=False, lane_guard=True,
                                                     author_sandbox=False),
                                    provider=lambda: (self.scratch, None))
+        def env_of(seen):
+            # The per-call OPENCODE_CONFIG lives in a fresh per-call scratch dir (its
+            # path is unique by construction); its NAME and bytes are what must match.
+            env = dict(seen["env"])
+            if "OPENCODE_CONFIG" in env:
+                env["OPENCODE_CONFIG"] = Path(env["OPENCODE_CONFIG"]).name
+            return env
         for other in (off_with_allocator, explicit_off):
             self.assertEqual(other["prompt"], base["prompt"])
-            self.assertEqual(other["env"], base["env"])
+            self.assertEqual(env_of(other), env_of(base))
             self.assertEqual(other["config"], base["config"])
         self.assertNotIn("ak-check", base["prompt"] + base["config"])
 
