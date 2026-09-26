@@ -224,7 +224,8 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
           accumulator: Mapping[str, Any] | None = None,
           stale_after_s: int = DEFAULT_STALE_AFTER_S,
           actor_health: dict | None = None,
-          scratch: Mapping[str, Any] | None = None) -> Path:
+          scratch: Mapping[str, Any] | None = None,
+          comparability: Mapping[str, Any] | None = None) -> Path:
     """Atomically publish the loop's current standing.
 
     Atomic because a dashboard polling a half-written file is how a surface reports
@@ -314,6 +315,11 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
                 "author_attempts_remaining", "patch_rejections", "blocked_reason",
                 "scope_block") if row.get(key) is not None} for row in rows],
         }
+    if comparability is not None:
+        # OP-60: which epoch planner-history comparability and the do-not-repeat gate
+        # used (`measurement` | `full`), and how many archive rows reached it through
+        # a verified full->measurement alias versus stayed full-epoch only.
+        body["comparability"] = dict(comparability)
     if baseline_scope is not None:
         body["baseline_scope"] = baseline_scope
     if target is not None:

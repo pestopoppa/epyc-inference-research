@@ -183,3 +183,23 @@ def test_restart_refuses_forged_embedded_receipt_without_losing_it_or_advancing(
     assert state_path.read_bytes() == before
     assert full_path.read_bytes() == original_full
     assert not continuation_path.exists()
+
+
+def test_recovery_accepts_every_key_run_py_writes(tmp_path, monkeypatch):
+    """run.py's loop-run.json carries `width_depth_trajectory`, `scratch` and (OP-60)
+    `comparability`; the recovery reader refused all three as "malformed", so a real
+    DS41 result (run 10h batch 0 carries the first two) could never be recovered."""
+    root, argv, state_path, _state = _completed_before_router_save(tmp_path, monkeypatch)
+    continuation_path = root / "batches/batch-000000/loop-continuation.json"
+    continuation = json.loads(continuation_path.read_text())
+    continuation["outcome_counts"] = {"bench_failed": 1}
+    full = _full_result(continuation)
+    full.update(width_depth_trajectory=[{"spawn_parent": None, "branch_id": "b",
+                                         "width": 1, "depth": 1}],
+                scratch={"allocated": 0, "released": 0},
+                comparability={"epoch": "measurement", "rows_aliased": 3})
+    (continuation_path.parent / "loop-run.json").write_text(json.dumps(full))
+    continuation_path.unlink()
+    assert sr.main(argv) == 0
+    recovered, _sha = sr.load_completed(continuation_path)
+    assert recovered["outcome_counts"] == {"bench_failed": 1}

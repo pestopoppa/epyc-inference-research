@@ -38,6 +38,7 @@ from . import (accumulate, actors, anchor, archive, bench, champion, claim, gate
                integrity, heldout_serving, lineage_beliefs, pipeline, pool, production, status, surface_fold,
                surface_validation)
 from . import actor_opencode_config
+from . import epoch_aliases
 from . import scratch
 from . import ak_check
 from . import resume as resume_mod
@@ -300,14 +301,14 @@ def measurement_epoch_inputs(epoch_inputs: Mapping[str, Any],
     Every epoch input is measurement identity (execution digests, request set, target,
     screen scope, instrument) except `enrolled_manifest_digest`, which folds the
     campaign's actor roster in; it is replaced by the resolved campaign's
-    `measurement_digest` (the same document without `actors`/`fallbacks`)."""
-    out = {key: value for key, value in epoch_inputs.items()
-           if key != "enrolled_manifest_digest"}
-    if "enrolled_manifest_digest" in epoch_inputs:
-        if resolved_campaign is None:
-            raise ValueError("an enrolled manifest digest needs its resolved campaign")
-        out["enrolled_measurement_digest"] = resolved_campaign.measurement_digest
-    return out
+    `measurement_digest` (the same document without `actors`/`fallbacks`).
+    `experiments.measurement_host_state` is the one derivation; the epoch-alias
+    records (OP-60) recompute through it too."""
+    if "enrolled_manifest_digest" in epoch_inputs and resolved_campaign is None:
+        raise ValueError("an enrolled manifest digest needs its resolved campaign")
+    return experiments.measurement_host_state(
+        epoch_inputs, resolved_campaign.measurement_digest
+        if resolved_campaign is not None else None)
 
 
 def _actor_config(args, resolved_campaign=None) -> dict[str, Any]:
@@ -768,8 +769,14 @@ def pending_hypotheses_view(args, epoch: str, anchor_commit: str | None,
         return []
 
 
-def prior_experiments(args, epoch: str) -> list[dict]:
+def prior_experiments(args, epoch: str, measurement_epoch: str | None = None) -> list[dict]:
     """The history the planner gets, and the one place `-A3` is turned on.
+
+    OP-60: comparability is the MEASUREMENT epoch. A row is same-epoch when it shares
+    the full epoch or its full epoch has a verified alias to `measurement_epoch`, so an
+    actor-only change keeps prior same-anchor measured results visible (and their
+    magnitudes rankable) while an anchor/recipe/host-state change still separates
+    them. Rows whose measurement identity is unknown compare on the full epoch.
 
     A named function rather than three lines inside `build_context`, because the CLI
     flag existing and the flag REACHING the store are different facts, and only one
@@ -783,7 +790,27 @@ def prior_experiments(args, epoch: str) -> list[dict]:
     with experiments.ExperimentStore(args.store) as store:
         return store.recall(epoch=epoch,
                             ranking_authorized=args.rank_prior_experiments,
-                            include_claims=True)
+                            include_claims=True, measurement_epoch=measurement_epoch)
+
+
+def history_comparability(store_root: Path, *, epoch: str,
+                          measurement_epoch: str | None) -> dict | None:
+    """Status surface: which epoch history comparability used and how many rows it
+    aliased. A read fault is reported and reads as unknown (None), never as zero."""
+    try:
+        if not (Path(store_root) / "experiments.db").is_file():
+            # Nothing recorded yet; a status read never creates the store (dry run).
+            return {"epoch": "measurement" if measurement_epoch is not None else "full",
+                    "full_epoch_sha256": epoch, "measurement_epoch_sha256": measurement_epoch,
+                    "rows_full_epoch": 0, "rows_aliased": 0, "aliased_full_epochs": [],
+                    "rows_other_measurement_epoch": 0, "rows_unresolved": 0,
+                    "verified_aliases": 0}
+        with experiments.ExperimentStore(store_root, read_only=True, bounded=False) as store:
+            return store.comparability(epoch=epoch, measurement_epoch=measurement_epoch)
+    except Exception as exc:      # noqa: BLE001 -- a status fact, never a run fault
+        print(f"warning: history comparability unavailable: {type(exc).__name__}: {exc}",
+              file=sys.stderr)
+        return None
 
 
 def calibrate(args, run=subprocess.run) -> int:
@@ -1593,22 +1620,23 @@ def main(argv: list[str] | None = None) -> int:
           f"divergences={[f.name for f in recipe.divergences()] or 'none'}")
 
     anchor_commit = _git(args.worktree, "rev-parse", "HEAD")
-    epoch_inputs = ({"cpu_execution_digest": cpu_launch.execution_digest,
-                     "frozen_prompt_digest": manifest.digest} if cpu_launch else {})
-    if args.gpu_serving_launch:
-        epoch_inputs.update(gpu_execution_digest=direct_launch.execution_digest,
-                            frozen_prompt_digest=manifest.digest)
-    if selected_identity is not None:
-        epoch_inputs.update(
-            enrolled_manifest_digest=resolved_campaign.manifest_digest,
-            enrolled_target_digest=hashlib.sha256(json.dumps(
-                selected_target.to_dict(), sort_keys=True, separators=(",", ":"),
-                allow_nan=False).encode()).hexdigest())
-    if screen_state is not None:
-        epoch_inputs["cpu_screen"] = dict(screen_state)
-    if args.serving_instrument == serving.MATCHED_INSTRUMENT:
-        epoch_inputs["serving_instrument"] = {"version": args.serving_instrument,
-                                               "pairs": args.serving_pairs}
+    # ONE derivation of the declared host state (`epoch_aliases.launch_epoch_inputs`):
+    # the OP-60 alias backfill re-derives legacy launches' epochs through it.
+    epoch_inputs = epoch_aliases.launch_epoch_inputs(
+        cpu_execution_digest=cpu_launch.execution_digest if cpu_launch else None,
+        gpu_execution_digest=(direct_launch.execution_digest
+                              if args.gpu_serving_launch else None),
+        frozen_prompt_digest=(manifest.digest
+                              if cpu_launch or args.gpu_serving_launch else None),
+        enrolled_manifest_digest=(resolved_campaign.manifest_digest
+                                  if selected_identity is not None else None),
+        enrolled_target=(selected_target.to_dict()
+                         if selected_identity is not None else None),
+        screen_state=screen_state,
+        serving_instrument=({"version": args.serving_instrument,
+                             "pairs": args.serving_pairs}
+                            if args.serving_instrument == serving.MATCHED_INSTRUMENT
+                            else None))
     epoch = archive.epoch_for(anchor_commit=anchor_commit,
                               build_recipe=recipe.to_dict(),
                               **({"host_state": epoch_inputs} if epoch_inputs else {}))
@@ -1617,7 +1645,8 @@ def main(argv: list[str] | None = None) -> int:
     # `enrolled_manifest_digest`); DS41 2026-09-26 switched the critic model and the
     # epoch moved e0aefe6a -> e384c2ad, orphaning every resume checkpoint with anchor,
     # target, recipe, instrument, requests and floor unchanged. Resume binds on this
-    # one; the full epoch stays the provenance key (archive rows, history, status).
+    # one, and (OP-60, operator 2026-09-26) so do planner-history comparability and
+    # the do-not-repeat gate; the full epoch stays the provenance key of archive rows.
     # Without an enrolled manifest the two are the same digest.
     measurement_inputs = measurement_epoch_inputs(
         epoch_inputs, resolved_campaign if selected_identity is not None else None)
@@ -1646,6 +1675,28 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(f"runtime calibration preflight refused before resource claim: {exc}")
     print(f"anchor    {anchor_commit[:12]}   epoch {epoch[:12]}   "
           f"measurement-epoch {measurement_epoch[:12]}")
+    # OP-60: register this launch's own full -> measurement mapping (self-verifying),
+    # so its rows stay comparable to any later launch with the same measurement
+    # identity and a different actor roster. A dry run proves wiring, writes nothing.
+    if measurement_epoch != epoch and not args.dry_run:
+        try:
+            alias_state = epoch_aliases.register_launch_alias(
+                args.store, anchor_commit=anchor_commit, build_recipe=recipe.to_dict(),
+                epoch_inputs=epoch_inputs,
+                measurement_digest=resolved_campaign.measurement_digest,
+                source={"kind": "launch", "campaign_id": resolved_campaign.campaign_id,
+                        "manifest_digest": resolved_campaign.manifest_digest},
+                recorded_at=loop._now())
+        except Exception as exc:      # noqa: BLE001 -- own rows still match by full epoch
+            alias_state = f"failed ({type(exc).__name__}: {exc})"
+        print(f"epoch-alias {epoch[:12]} -> {measurement_epoch[:12]}: {alias_state}")
+    history_view = [history_comparability(args.store, epoch=epoch,
+                                          measurement_epoch=measurement_epoch)]
+    if history_view[0] is not None:
+        print(f"history   comparability on the {history_view[0]['epoch']} epoch: "
+              f"{history_view[0]['rows_full_epoch']} row(s) same full epoch, "
+              f"{history_view[0]['rows_aliased']} aliased, "
+              f"{history_view[0]['rows_unresolved']} unresolved (full-epoch only)")
 
     pp, tg, ubatch = bench.SURFACES[args.surface]
     bench_surface = args.surface
@@ -1866,6 +1917,10 @@ def main(argv: list[str] | None = None) -> int:
         # them (the next draws re-author them first). Only present when non-empty.
         pending_view[0] = pending_hypotheses_view(args, epoch, current_anchor_commit[0],
                                                   **resume_bind)
+        # The status surface's comparability counts move as rows are recorded.
+        history_view[0] = (history_comparability(args.store, epoch=epoch,
+                                                 measurement_epoch=measurement_epoch)
+                           or history_view[0])
         program = loop.PROGRAM.read_text(encoding="utf-8")
         if cpu_launch:
             program = (
@@ -1930,7 +1985,7 @@ def main(argv: list[str] | None = None) -> int:
             "kernel_hotspots": [row.to_dict() for row in hotspot_rows],
             **({"cpu_profile": dict(cpu_profile_observation)} if cpu_launch else {}),
             **({"node_profile": dict(node_profile_observation)} if cpu_launch else {}),
-            "prior_experiments": prior_experiments(args, epoch),
+            "prior_experiments": prior_experiments(args, epoch, measurement_epoch),
             **({"pending_accepted_hypotheses": list(pending_view[0])}
                if pending_view[0] else {}),
             "current_regime": {
@@ -3047,6 +3102,7 @@ def main(argv: list[str] | None = None) -> int:
             # means the PROCESS is gone, not that a build or a 20-pair bench is long.
             stale_after_s=HEARTBEAT_S * 6,
             actor_health=actor_health(outcomes),
+            comparability=history_view[0],
             scratch=(scratch_registry[0].stats() if scratch_registry[0] is not None else None))
 
     latest: list = []
@@ -3673,7 +3729,8 @@ def main(argv: list[str] | None = None) -> int:
             author_attempts=args.hypothesis_author_attempts,
             validate_candidate=validate_pooled,
             formation_guard=lambda hypothesis, context: dispatch_guard.characterised_reason(
-                hypothesis, {**context, "epoch_sha256": epoch}),
+                hypothesis, {**context, "epoch_sha256": epoch,
+                             "measurement_epoch_sha256": measurement_epoch}),
             reserve_candidate=reserve_pooled,
             record_abandoned=record_abandoned_pooled,
             next_resume=(resume_queue[0].take if resume_queue[0] is not None else None),
@@ -4276,6 +4333,7 @@ def main(argv: list[str] | None = None) -> int:
                 "schema": "epyc.autokernel.loop_run.v1",
                 "epoch": epoch, "anchor_commit": anchor_commit,
                 "measurement_epoch": measurement_epoch, "actor_config": launch_actor_config,
+                "comparability": history_view[0],
                 **({"runtime_preparation": dict(runtime_preparation)} if direct_launch else {}),
                 **({"runtime_recipe_reference": runtime_recipe_reference[0]}
                    if runtime_recipe_reference[0] is not None else {}),
