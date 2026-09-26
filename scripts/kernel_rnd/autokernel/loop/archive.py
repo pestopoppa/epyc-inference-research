@@ -62,6 +62,21 @@ def retain_patch(store_root: Path, repo: Path, *, lane: str,
     source under ggml/src or src. This is a source archive, not build/measurement
     evidence or permission to resume execution. The real Git index is untouched.
     """
+    captured = capture_patch(repo)
+    head, patch, additions = captured if captured is not None else ("", b"", [])
+    if not patch:
+        return None
+    return retain_patch_bytes(store_root, patch, head=head, lane=lane,
+                              mechanism_id=mechanism_id, worktree=str(_verified_repo(Path(repo))),
+                              untracked_source_paths=additions)
+
+
+def capture_patch(repo: Path) -> tuple[str, bytes, list[str]] | None:
+    """`(HEAD, patch bytes, untracked source paths)` of a worktree's source change, or
+    None when it holds none: exactly the bytes `retain_patch` keeps (tracked diff
+    against HEAD plus untracked kernel source), without writing anything. The best-of
+    author panel (`bestof.py`) applies a winning scratch worktree's change to the real
+    lane with these bytes, and retains every member's through `retain_patch_bytes`."""
     repo = _verified_repo(Path(repo))
     head = _git(repo, "rev-parse", "HEAD")
 
@@ -120,9 +135,7 @@ def retain_patch(store_root: Path, repo: Path, *, lane: str,
         return None
     if _git(repo, "rev-parse", "HEAD") != head:
         raise RatchetRefused("lane HEAD moved during patch capture; no reset")
-    return retain_patch_bytes(store_root, patch, head=head, lane=lane,
-                              mechanism_id=mechanism_id, worktree=str(repo),
-                              untracked_source_paths=additions)
+    return head, patch, additions
 
 
 def retained_patch_path(store_root: Path, patch: bytes, *, head: str, lane: str,
@@ -611,5 +624,5 @@ def epoch_for(*, anchor_commit: str, build_recipe: Mapping[str, Any],
                                     host_state=host_state)
 
 
-__all__ = ["RatchetRefused", "epoch_for", "keep", "patch_sidecar", "recall", "record",
+__all__ = ["RatchetRefused", "capture_patch", "epoch_for", "keep", "patch_sidecar", "recall", "record",
            "retain_patch", "retain_patch_bytes", "retained_patch_path"]

@@ -307,6 +307,7 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
           on_step: Callable[[str, str], None] | None = None,
           accumulate_valid_positive: bool = False,
           validate_candidate=None, formation_guard=None,
+          make_author_panel=None,
           reserve_candidate=None, record_abandoned=None,
           next_resume=None, author_sandbox: bool = False,
           scratch=None) -> PoolResult:
@@ -356,6 +357,7 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
         should_stop=should_stop,
         accumulate_valid_positive=accumulate_valid_positive,
         validate_candidate=validate_candidate, formation_guard=formation_guard,
+        **({"make_author_panel": make_author_panel} if make_author_panel is not None else {}),
         reserve_candidate=reserve_candidate, record_abandoned=record_abandoned,
         next_resume=next_resume, open_iteration_scope=iteration_scope)
     clock.close()
