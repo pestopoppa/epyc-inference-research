@@ -214,6 +214,132 @@ def _verify_before_claim(action, *, out, scheduler_selection, target):
         raise
 
 
+def _recover_legacy_cor_build(args, head: str, candidates, *, experimental: bool):
+    """The exact champion-of-record build of a legacy experimental continuation.
+
+    Experimental continuations recorded ``cor_anchor: null`` until 2026-09-26, so
+    after an accumulator keep the next batch had no COR build and was refused (DS41
+    run 10i batch-000002). `candidates` are the build dirs the continuation chain
+    names (`serial_run.continuation_cor_candidates`). The durable bundle names the
+    COR commit (read-only here; the authoritative write-capable load runs later),
+    and a candidate is adopted only when `verify_exact_anchor` proves it IS that
+    commit's build. The current anchor is never a candidate: the tip is never
+    relabelled. None leaves the existing refusal in place.
+    """
+    if not (Path(args.store) / accumulate.JOURNAL_DIRNAME).exists():
+        return None
+
+    def is_ancestor(a: str, b: str) -> bool:
+        return subprocess.run(["git", "-C", str(args.worktree), "merge-base",
+                               "--is-ancestor", a, b], capture_output=True).returncode == 0
+
+    try:
+        peek, _note = accumulate.load_bundle(args.store, anchor_commit=head,
+                                             is_ancestor=is_ancestor, read_only=True)
+    except (accumulate.BundleRecoveryRequired, OSError, ValueError) as exc:
+        print(f"cor       legacy champion-of-record recovery unavailable: {exc}",
+              file=sys.stderr)
+        return None
+    if peek.champion_of_record == head:
+        return None
+    from . import serial_run
+    try:
+        cor_commit = serial_run.full_commit(args.worktree, peek.champion_of_record)
+    except ValueError:
+        return None
+    tip = Path(args.anchor_build).resolve()
+    for candidate in candidates:
+        if Path(candidate).resolve() == tip:
+            continue
+        try:
+            serial_run.verify_exact_anchor(Path(candidate), args.worktree, cor_commit,
+                                           experimental=experimental)
+        except (champion.StartupRefused, ValueError, OSError):
+            continue
+        print(f"cor       recovered champion of record {cor_commit[:12]} = {candidate} "
+              "from the continuation chain (legacy experimental continuation recorded no "
+              "COR; exact build identity verified)")
+        return Path(candidate)
+    return None
+
+
+def _dry_run_accumulator_and_resume(args, *, anchor_commit: str, experimental: bool,
+                                    epoch: str, measurement_epoch: str,
+                                    actor_config) -> None:
+    """Read-only: what the live child would restore before its claim.
+
+    The dry run used to return before the durable accumulator was reopened, so a
+    continuation whose champion of record could not be resolved passed its dry run
+    and was refused live (DS41 run 10i batch-000002). This reopens the bundle
+    read-only, applies the same COR refusal and exact-build verification, and
+    prints the resume scan with no claim or rejection row written.
+    """
+    from . import serial_run
+    store = Path(args.store)
+    if ((store / accumulate.JOURNAL_DIRNAME).exists()
+            or (store / accumulate.Bundle.FILENAME).exists()):
+        def is_ancestor(a: str, b: str) -> bool:
+            return subprocess.run(["git", "-C", str(args.worktree), "merge-base",
+                                   "--is-ancestor", a, b],
+                                  capture_output=True).returncode == 0
+        try:
+            peek, note = accumulate.load_bundle(args.store, anchor_commit=anchor_commit,
+                                                is_ancestor=is_ancestor, read_only=True)
+        except accumulate.BundleRecoveryRequired as exc:
+            raise champion.StartupRefused(
+                f"REFUSED (dry run): accumulator cannot be restored: {exc}") from exc
+        print(f"accum     (dry) {note}; keeps={list(peek.keeps)}")
+        if args.cor_build is not None or peek.champion_of_record != anchor_commit:
+            if args.cor_build is None:
+                raise champion.StartupRefused(
+                    "REFUSED (dry run): restored champion of record "
+                    f"{peek.champion_of_record[:12]} differs from current anchor "
+                    f"{anchor_commit[:12]}; supply its original --cor-build or "
+                    "--resume-run, never relabel the tip build")
+            serial_run.verify_exact_anchor(args.cor_build, args.worktree,
+                                           peek.champion_of_record,
+                                           experimental=experimental,
+                                           allow_unverified=args.allow_unverified_anchor)
+            print(f"cor       (dry) champion of record {peek.champion_of_record[:12]} = "
+                  f"{args.cor_build} — exact build identity verified; tip "
+                  f"{anchor_commit[:12]} = {args.anchor_build}")
+        else:
+            print(f"cor       (dry) champion of record {anchor_commit[:12]} = current anchor")
+    else:
+        print("accum     (dry) no durable accumulator in this store yet (the live run "
+              "initializes or refuses it before the claim)")
+    if args.resume != "on":
+        return
+    try:
+        target = resume_mod.target_identity(measurement_surface=args.surface, model=args.model)
+        _queue, report = resume_mod.prepare(
+            args.store, epoch=epoch, anchor_commit=anchor_commit, target=target,
+            repo=None, dry_run=True, measurement_epoch=measurement_epoch,
+            actor_config=actor_config)
+        pending = resume_mod.pending_hypotheses(
+            args.store, epoch=epoch, anchor_commit=anchor_commit,
+            measurement_epoch=measurement_epoch)
+    except Exception as exc:      # noqa: BLE001 -- the live run treats resume the same way
+        print(f"resume    (dry) unavailable: {type(exc).__name__}: {exc}")
+        return
+    print(f"resume    (dry) scanned {report['scanned']} checkpoint(s): "
+          f"{len(report['queued'])} queued, {len(report['rejected'])} rejected, "
+          f"{len(report['ineligible'])} not resumable now, "
+          f"{report['already_claimed']} already claimed; "
+          f"{report.get('other_epoch_rows', 0)} row(s) with checkpoints in other epochs")
+    for row in report["queued"]:
+        print(f"resume    (dry) queued {row.get('mechanism_id')} at {row.get('stage')} "
+              f"(from {row.get('checkpoint_id')})")
+    for row in report["rejected"]:
+        print(f"resume    (dry) would reject {row.get('mechanism_id')} at {row.get('stage')}: "
+              f"{str(row.get('reason') or row.get('check'))[:200]}")
+    for row in report["ineligible"]:
+        print(f"resume    (dry) not resumable now {row.get('mechanism_id')} at "
+              f"{row.get('stage')}: {str(row.get('reason'))[:200]}")
+    for row in pending:
+        print(f"resume    (dry) pending {row.get('mechanism_id')} [{row.get('state')}]")
+
+
 def _bind_owned_cpu_affinity(original, resources):
     """Make inherited CPU placement explicit using only the campaign allocation."""
     from . import legacy_targets, resolved_recipe as rr
@@ -1236,6 +1362,9 @@ def main(argv: list[str] | None = None) -> int:
     original_binding = serial_run.input_binding(original_argv) \
         if args.out or args.resume_run or args.source_anchor_continuation else None
     resumed = None
+    #: Build dirs a legacy (null ``cor_anchor``) experimental continuation chain names;
+    #: hints only, proven exact against the restored COR before use (see below).
+    legacy_cor_candidates: list[Path] = []
     if args.resume_run is not None:
         try:
             prior, _sha = serial_run.load_resume(args.resume_run, original_argv)
@@ -1257,6 +1386,9 @@ def main(argv: list[str] | None = None) -> int:
                 if args.cor_build is not None and args.cor_build.resolve() != original_cor.resolve():
                     parser.error("--cor-build differs from preceding original COR")
                 args.cor_build = original_cor
+            elif args.cor_build is None:
+                legacy_cor_candidates = serial_run.continuation_cor_candidates(
+                    args.resume_run)
             args.cpu_calibrate_serving = None  # Existing request-bound floor is reopened below.
             args.gpu_calibrate_serving = None
         except (OSError, ValueError) as exc:
@@ -1544,7 +1676,9 @@ def main(argv: list[str] | None = None) -> int:
                                   else args.champion_branch)
                 or Path(resumed["model"]).resolve() != args.model.resolve()
                 or resumed["selected_target"] != selected_identity
-                or (not experimental) != (resumed["cor_anchor"] is not None)):
+                # Canonical continuations always carry a COR; experimental ones do
+                # since 2026-09-26 and legacy experimental rows carry null.
+                or (not experimental and resumed["cor_anchor"] is None)):
             parser.error("continuation target/branch/model/backend differs")
 
     # FIRST, before the claim, the census, even the dry run's wiring proof: the loop
@@ -1592,6 +1726,13 @@ def main(argv: list[str] | None = None) -> int:
             raise
     print(f"{'candidate' if experimental else 'champion'}  {args.champion_branch} "
           f"@ {verified_head[:12]} — verified")
+    if legacy_cor_candidates and experimental and args.cor_build is None:
+        # Before the floor lookup: the COR arm is also the calibrated floor frame a
+        # source keep reuses (no fresh 48-launch calibration per keep).
+        recovered_cor = _recover_legacy_cor_build(
+            args, verified_head, legacy_cor_candidates, experimental=experimental)
+        if recovered_cor is not None:
+            args.cor_build = recovered_cor
     if args.cpu_confirm_from:
         from . import cpu_screen
         try:
@@ -1878,6 +2019,11 @@ def main(argv: list[str] | None = None) -> int:
             ServingStatisticsDeclaration.from_dict(_read_cpu_document(args.runtime_statistics))
         if (args.calibrate_runtime or args.runtime_statistics is not None) and not direct_launch:
             parser.error("direct runtime calibration requires the original serving launch")
+        if direct_launch is not None:
+            _dry_run_accumulator_and_resume(
+                args, anchor_commit=anchor_commit, experimental=experimental,
+                epoch=epoch, measurement_epoch=measurement_epoch,
+                actor_config=launch_actor_config)
         print("\nDRY RUN — wiring proven, nothing spent.")
         return 0
 
@@ -2268,17 +2414,31 @@ def main(argv: list[str] | None = None) -> int:
     cor_commit = [restored.champion_of_record]
     cor_build = [args.cor_build or args.anchor_build]
     if args.cor_build is not None or cor_commit[0] != anchor_commit:
+        def _refuse(message):
+            raise champion.StartupRefused(message)
         if args.cor_build is None:
-            raise champion.StartupRefused(
-                "REFUSED: restored champion of record differs from current anchor; "
-                "supply its original --cor-build or --resume-run, never relabel the tip build")
+            # Settle the serial parent's selection with a pre-claim marker: without
+            # it the parent reports only "published neither held-resource evidence
+            # nor a pre-claim failure marker" and the reason is lost.
+            _verify_before_claim(
+                lambda: _refuse(
+                    "REFUSED: restored champion of record "
+                    f"{cor_commit[0][:12]} differs from current anchor "
+                    f"{anchor_commit[:12]}; supply its original --cor-build or "
+                    "--resume-run, never relabel the tip build"),
+                out=args.out, scheduler_selection=scheduler_selection,
+                target=selected_identity)
         if (resumed is not None and resumed["cor_anchor"] is not None
                 and resumed["cor_anchor"]["commit"] != serial_run.full_commit(
                     args.worktree, cor_commit[0])):
-            raise champion.StartupRefused("REFUSED: retained COR differs from original restored bundle")
+            _verify_before_claim(
+                lambda: _refuse("REFUSED: retained COR differs from original restored bundle"),
+                out=args.out, scheduler_selection=scheduler_selection,
+                target=selected_identity)
         _verify_before_claim(
             lambda: serial_run.verify_exact_anchor(
                 cor_build[0], args.worktree, cor_commit[0],
+                experimental=experimental,
                 allow_unverified=args.allow_unverified_anchor),
             out=args.out, scheduler_selection=scheduler_selection,
             target=selected_identity)
@@ -4381,9 +4541,11 @@ def main(argv: list[str] | None = None) -> int:
                     selected_target=selected_identity,
                     anchor_build=anchor_build[0], anchor_commit=current_anchor_commit[0],
                     iterations_requested=args.iterations, outcomes=outcomes,
-                    cor_build=cor_build[0] if not experimental else None,
-                    cor_commit=serial_run.full_commit(args.worktree, cor_commit[0])
-                    if not experimental else None,
+                    # Experimental runs record their COR too (2026-09-26): an
+                    # experimental keep advances the anchor, and the next batch must
+                    # resume the protected serving A-arm, not relabel the tip.
+                    cor_build=cor_build[0],
+                    cor_commit=serial_run.full_commit(args.worktree, cor_commit[0]),
                     **({"cpu_screen": screen_state} if screen_state is not None else {}),
                     **({"cpu_profile_reference": serial_run.cpu_profile_reference(
                         cpu_profile_observation, store=args.store,
