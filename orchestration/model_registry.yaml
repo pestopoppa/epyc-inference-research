@@ -1805,9 +1805,15 @@ server_mode:
       recipe_id: qwen38-flash-next-cpu-mtp
       module: epyc-inference-research/scripts/lib/qwen38_flash_next_recipe.py
       surface: cpu-decode
-      threads: 48        # NOT 96, on a 0-95 cpuset. This is the SERVED decode optimum for this
-                         # model (scripts/lib/qwen38_flash_next_recipe.py THREADS, "NOT 96: the
-                         # served decode optimum on this model").
+      threads: 48        # on a 0-95 cpuset. = scripts/lib/qwen38_flash_next_recipe.py THREADS.
+                         # ⚠ CORRECTED 2026-09-26 (DAR-LAT-3h): this used to say "the SERVED decode
+                         # optimum". No served 48-vs-96 comparison existed; the 48 rests on pre-BIOS
+                         # bare llama-bench (D4/C5, tg128 t48 10.09 vs t96 9.67). The live :8074 ran
+                         # -t 96 because stack_topology.yaml never named this shape (C3's orchestrator
+                         # half never landed). Gate G1 of the DAR-LAT-3h stack-change package
+                         # (epyc-root, operator artifact dir stack-change-dar-lat-3h-20260926)
+                         # decides; its receipt replaces this note. epyc-orchestrator tests/unit/
+                         # test_critic_shape_recipe_parity.py now diffs this row against the topology.
       cpu_shape: NUMA_FULL_T48
       # ── C3 RESOLVED (operator ruling: "add the needed cpu shape") ─────────────────
       # An earlier draft recorded -t 48 on a 0-95 cpuset as an UNRESOLVED CONFLICT with
@@ -1837,10 +1843,22 @@ server_mode:
       no_mmap: true
       flash_attn: on
       env:
-        GGML_NOHUGEPAGE_PROCESS: "1"   # CHAMP-2, ADOPTED 2026-09-08 (operator-ruled).
-                                       # UNIT = SESSION, set AT LAUNCH. cpu-decode ONLY —
-                                       # R23-58 measured a bounded null on the GPU surface.
-        GGML_FA_SPLIT_KV: "0"          # BE-2: makes 1-row decode and n-row verify row-exact
+        # 2026-09-26 (DAR-LAT-3h, operator split after the GGML_* env audit): the SERVING env this
+        # recipe asks the launcher to emit. epyc-orchestrator stack_env._ROLE_ENV_BLOCKS
+        # ["architect_critic"] carries it, test_stack_env_recipe_parity.py diffs the two, and the
+        # pipeline's declared_env_attestation step checks the live /proc/<pid>/environ.
+        GGML_FUSED_DECODE_OFF: "1"     # the recipe's graph path. Inert while MTP serves (the fused
+                                       # path needs !embeddings_nextn); G1 arm T96-vs-L checks that.
+      # Knobs of the champion MEASUREMENT recipe that are NOT serving env (yet). Not read by anything.
+      env_not_serving:
+        GGML_NOHUGEPAGE_PROCESS: "1"   # CHAMP-2 THP shim (+5.23%, lower launch sd) vs v10 common.cpp
+                                       # CHAMPION-3 (+1.48% with it OFF): conflicting, neither at the
+                                       # served shape on v10. Own factor in DAR-LAT-3h gate G1; moves
+                                       # into `env` only on a G1 outcome ending in N.
+        GGML_FA_SPLIT_KV: "0"          # BE-2 row-exact reduction order. Correctness-affecting, and a
+                                       # perf risk at long context (single-row decode loses KV-axis
+                                       # parallelism) while the critic serves n_ctx 262144. Task
+                                       # DAR-LAT-3i: long-context decode arm + numerics/quality check.
       measured_at_context: 8192        # ⚠ CONTEXT = 8192 in the recipe. serving_shape above
                                        # declares 262144 — a 32x extrapolation of a shape that
                                        # was never served. See .md C4.
@@ -8649,7 +8667,7 @@ roles:
         recipe_revision: 2026-09-14
         kernel: "ef81196d5 / build 10241 (llama.cpp-experimental champion) — NOT production v10"
         prefix: "taskset -c 0-95 numactl --interleave=all"
-        threads: 48            # NOT 96 — the served decode optimum on this model
+        threads: 48            # the champion measurement's -t; NOT a measured served optimum over 96 (see server_mode.architect_critic.recipe.threads)
         flags: >-
           --no-webui -np 1 -c 8192 -t 48 --no-mmap -fa on -ctk f16 -ctv f16
           -md <MTP_HEAD_GGUF> --spec-type draft-mtp --spec-draft-n-max 4 --spec-draft-p-min 0.5

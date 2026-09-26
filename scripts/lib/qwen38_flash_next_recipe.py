@@ -687,7 +687,15 @@ CHAMPION_KNOBS = {
 # ---------------------------------------------------------------------------
 # 5. SERVER FLAGS
 # ---------------------------------------------------------------------------
-THREADS = 48                     # NOT 96: the served decode optimum on this model
+# THREADS is the champion MEASUREMENT recipe's -t: every served headline below was taken at 48.
+# It was long annotated "NOT 96: the served decode optimum on this model". That OVERSTATED the
+# record (corrected 2026-09-26, DAR-LAT-3h): no served 48-vs-96 comparison existed. The 48 rests on
+# pre-BIOS bare llama-bench sweeps (D4/C5, 2026-09-02, build 10196: tg128 t48 10.09 vs t96 9.67,
+# pp512 172.6 vs 147.2, one window, no ABA). Production serving -t is decided by the DAR-LAT-3h
+# package's gate G1 (epyc-root, operator artifact dir stack-change-dar-lat-3h-20260926) and recorded
+# in the master registry's server_mode.architect_critic.recipe. R23-64 (autokernel-rebuild-program)
+# owns the champion-side t48/t64/t96 re-sweep.
+THREADS = 48
 CONTEXT = 8192
 PARALLEL_SLOTS = 1
 
