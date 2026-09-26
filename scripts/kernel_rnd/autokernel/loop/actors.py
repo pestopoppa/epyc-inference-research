@@ -2849,7 +2849,17 @@ class AgentCritic:
                                read_only=True, schema=REVIEW_SCHEMA, env=env, **stop_kw),
             should_stop=self.should_stop)
         body = _parse_reply(raw, schema=REVIEW_SCHEMA, backend=self.backend, workspace=self.workspace)
-        accepted = bool(body.get("accepted"))
+        if not isinstance(body.get("accepted"), bool):
+            # No verdict was stated: an abstention, or an object `_parse_reply` handed
+            # back unrepaired. `bool(None)` used to read that as a REJECTION ("critic
+            # rejected without stating a reason"), charging a provider failure to the
+            # patch -- it cost the candidate a patch round and, on a resumed round,
+            # consumed the claim as `patch_rejected`. It is infrastructure: a
+            # transient, so the iteration ends with the critic2 checkpoint intact.
+            raise ProviderTransient(
+                f"critic reply states no accepted verdict (keys {sorted(body)[:8]}); "
+                "a missing verdict is a provider failure, not a rejection")
+        accepted = body["accepted"]
         reason = str(body.get("reason") or "")
         if not accepted and not reason.strip():
             # The loop refuses a reasonless rejection at construction; make the

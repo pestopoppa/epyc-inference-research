@@ -2869,8 +2869,30 @@ def main(argv: list[str] | None = None) -> int:
             finally:
                 registry.close()
 
+        # The provisioned lanes by name, so the recorder can retain a lane's diff.
+        lanes_by_name: dict = {}
+
+        def retain_critic2(outcome, attempt) -> None:
+            """A critic2 checkpoint points at the patch its lane holds NOW (resume.py).
+
+            Recording happens before the lane's next reset, so the authored diff that
+            critic pass 2 never judged is still there: retain it (the same immutable
+            store as every gate-refused patch) or drop the checkpoint when the lane
+            holds no diff. DS41 runs 10d/10e lost such patches three times."""
+            checkpoints = attempt.get("resume_checkpoints")
+            if not checkpoints:
+                return
+            worker = lanes_by_name.get(str(outcome.branch_id or "").partition(":")[2])
+            resume_mod.retain_checkpoint_patches(
+                checkpoints, lambda mechanism: None if worker is None else
+                archive.retain_patch(args.store, worker.worktree, lane=worker.name,
+                                     mechanism_id=mechanism))
+            if not checkpoints:
+                attempt.pop("resume_checkpoints", None)
+
         def record_pooled(outcome) -> None:
             attempt = attempt_with_codegen(outcome, codegen_by_head)
+            retain_critic2(outcome, attempt)
             attempt["research_scope"] = archive.original_research_scope(
                 attempt, model=args.model, quant=census.dominant_quant,
                 backend="cpu" if cpu_launch else "gpu", build_recipe=recipe.to_dict(),
@@ -3212,14 +3234,16 @@ def main(argv: list[str] | None = None) -> int:
             return (runtime_recovery.PendingPlanner(ordinary, pending_slot)
                     if pending_pair is not None else ordinary)
 
+        pooled_lanes = pool.provision(args.workers, champion_tree=args.worktree,
+                                      champion_branch=args.champion_branch,
+                                      root=args.worker_root,
+                                      build_root=args.worker_build_root,
+                                      execute=True)
+        lanes_by_name.update({lane.name: lane for lane in pooled_lanes})
         return pool.drive(
             commit=commit_pooled,
             reset=reset_retained,
-            workers=pool.provision(args.workers, champion_tree=args.worktree,
-                                   champion_branch=args.champion_branch,
-                                   root=args.worker_root,
-                                   build_root=args.worker_build_root,
-                                   execute=True),
+            workers=pooled_lanes,
             make_planner=make_planner,
             make_critic=lambda worker: (
                 cpu_screen.RetainedCritic(screen_confirmation)

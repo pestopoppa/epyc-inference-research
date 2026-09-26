@@ -1,0 +1,169 @@
+{
+ "_fixture_note": "copy of the DS41 store row; reason redacted (the provider's stderr quoted a masked key)",
+ "attempt_id": "548f8f2401ffc889929b8105411420c9b22a008bc5707e057bdc1d661a31f603",
+ "branch_id": "detached:lane0",
+ "campaign_id": "ak-loop",
+ "deployment": null,
+ "depth": 1,
+ "effect_fraction": null,
+ "epoch_sha256": "e0aefe6a0e79dc5b3504595c17fa81ac66404d60e0d1b6cd34bf8a7ba00ed290",
+ "exact_effect": null,
+ "falsifier": null,
+ "hypothesis_id": null,
+ "mechanism_id": null,
+ "payload": {
+  "branch_id": "detached:lane0",
+  "cpu_screen": {
+   "candidate": null,
+   "full_execution_digest": "593fae7d010b5c45c62441f778871d006afa21a400555ebb346fa7a9ed93c605",
+   "measured_execution_digest": "871a823fd1ab8766865c588d46db91f4d0cb478043e59d0b4e1c503a8d63d6e4",
+   "scope": "half"
+  },
+  "depth": 1,
+  "hypothesis_round": 1,
+  "patch_round": 1,
+  "prior_rejection_prompt": false,
+  "reason": "actor failed 4 consecutive times; last: actor exited 1 [codex:gpt-6-sol@high]: stderr='<redacted in this fixture: codex 401, invalid API key>' stdout=''",
+  "research_scope": {
+   "backend": "cpu",
+   "cpu_screen": {
+    "candidate": null,
+    "full_execution_digest": "593fae7d010b5c45c62441f778871d006afa21a400555ebb346fa7a9ed93c605",
+    "measured_execution_digest": "871a823fd1ab8766865c588d46db91f4d0cb478043e59d0b4e1c503a8d63d6e4",
+    "scope": "half"
+   },
+   "measurement_surface": "serving:ds41-00d118d44-cpu-t48-dspark-b2.cpu-half-f29a817a878300af",
+   "model": {
+    "path": "/mnt/raid0/llm/models/antirez/deepseek-v4.1-flash-gguf/DeepSeek-V4.1-Flash-Q4.gguf",
+    "sha256": null
+   },
+   "quant": "Q8_0",
+   "recipe": {
+    "build_recipe": {
+     "divergences": [
+      "GGML_HIP",
+      "GGML_NATIVE",
+      "GGML_OPENMP",
+      "CMAKE_C_COMPILER",
+      "CMAKE_CXX_COMPILER"
+     ],
+     "flags": [
+      {
+       "diverges": true,
+       "name": "GGML_HIP",
+       "production_value": null,
+       "reason": "Explicit experimental CPU build recipe",
+       "value": "OFF"
+      },
+      {
+       "diverges": true,
+       "name": "GGML_NATIVE",
+       "production_value": null,
+       "reason": "Explicit experimental CPU build recipe",
+       "value": "ON"
+      },
+      {
+       "diverges": true,
+       "name": "GGML_OPENMP",
+       "production_value": null,
+       "reason": "Explicit experimental CPU build recipe",
+       "value": "ON"
+      },
+      {
+       "diverges": true,
+       "name": "CMAKE_C_COMPILER",
+       "production_value": null,
+       "reason": "Explicit experimental CPU build recipe",
+       "value": "/usr/bin/gcc-15"
+      },
+      {
+       "diverges": true,
+       "name": "CMAKE_CXX_COMPILER",
+       "production_value": null,
+       "reason": "Explicit experimental CPU build recipe",
+       "value": "/usr/bin/g++-15"
+      }
+     ],
+     "name": "native-openmp-gcc15-cpu-v1",
+     "notes": "Experimental CPU build; no production adoption or cross-model qualification.",
+     "production_reference_is_verifiable": false,
+     "schema": "epyc.autokernel.gpu_build_recipe.v1"
+    },
+    "original_serving_arms": null
+   },
+   "request_digest": null
+  },
+  "resume_checkpoints": [
+   {
+    "anchor_commit": "00d118d44876d69f7a9e6503d1f7b8d5255799ca",
+    "critic_hypothesis": {
+     "accepted": true,
+     "changed_subsequent_search": false,
+     "decision": "critic:hypothesis",
+     "evidence_inspected": [
+      "review subject",
+      "rejection grounds",
+      "planner context"
+     ],
+     "independence": "different_family",
+     "reason": null,
+     "resumed_from": "2738e95f72476761f7304a5292e90706c5c85a0a6ac92915a14a44de3916245d#0",
+     "validator_identity": "codex:gpt-6-sol@high",
+     "validator_kind": "llm_critic"
+    },
+    "epoch_sha256": "e0aefe6a0e79dc5b3504595c17fa81ac66404d60e0d1b6cd34bf8a7ba00ed290",
+    "hypothesis": {
+     "belief_receipt_id": "sha256:fbc165bc565b1e1dffc26a25e5a7dd5a1083100dbced0572ffd58183c5eb7391",
+     "falsifier": "The patch passes the native MUL_MAT and MUL_MAT_ID scalar-reference fixtures for both Q4_K and Q5_K (activation widths 1-8, with the DSO specializations actually hit), yet a direct matched A/B on aggregate_tok_s (n>=5) fails to clear the decode floor 1.544% (prefill 0.973%) - i.e. the Q4_K X4_T kernel is DRAM-bandwidth-bound rather than instruction/load-port-bound and halving the 256-bit inner-loop instruction count cannot move aggregate throughput above the noise floor.",
+     "mechanism_id": "akm-q4k-x4t-avx512",
+     "statement": "The hot Q4_K dot kernel mul_mat_qX_K_q8_2_X4_T (ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp:795; profiled specialization <DequantizerQ4K_AVX2,1> = 19.43% of sampled user cycles, Q4_K total ~25.35%, the largest addressable kernel) is hardwired to 256-bit: per 128-element weight sub-block it issues 2x32B loads + 4 and + 2 srli unpack, then per activation row 4x32B y loads + 4x _mm256_dpbusd_epi32 + 5 int adds (lines 838-865). The same file already contains a 512-bit sibling for the identical Q4_K/Q5_K dequantizer family against the Q8_K y-format (mul_mat_qX_K_q8_K_AVX512, lines 380-421, with zmm Q4Bits prepare64 + permute1/2 shuffles at lines 307-331), but no 512-bit variant exists for the Q8_2_X4 y-format that dispatch actually selects for Q4_K/Q5_K. Mechanism: add a #ifdef HAVE_FANCY_SIMD 512-bit inner loop to the Q4_K/Q5_K-only template body plus Q4_K/Q5_K-specific zmm nibble dequantizers (new structs mirroring the file's existing zmm Q4Bits idiom; the shared Q4Bits_AVX2 at line 754, also used by Q6_K, is untouched): per sub-block 1x64B weight load + 2 mask/shift unpacks, 2x64B y loads, 2x _mm512_dpbusd_epi32, 4-add reduction, with the existing float scale/min epilogue (d8 + scales[2] fmadd, lines 821-836/862-864) byte-for-byte unchanged. This halves unpack+dpbusd instructions and load instructions per weight byte on this AVX-512 Zen 4/5 host (avx512f/vl/bw/dq/vnni present in /proc/cpuinfo; GGML_NATIVE=ON -> HAVE_FANCY_SIMD defined). Integer dots are exact in int32 regardless of lane grouping (same 16-element partition, |sum| << 2^31) and the float epilogue is unchanged, so outputs are bit-identical; the dense path streams at 176 GB/s = 83% of the 220 GB/s host read ceiling, so the ~17% residual gap on that path is the recoverable headroom if the ny=1 256-bit inner loop is load-port/issue-bound.",
+     "target_surface": "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp: mul_mat_qX_K_q8_2_X4_T body (lines 795-876) and Q4_K/Q5_K-only dequantizers DequantizerQ4K_AVX2/DequantizerQ5K_AVX2 (lines 767-792); dispatch at lines 2713/2717 unchanged",
+     "target_symbol": "mul_mat_qX_K_q8_2_X4_T<DequantizerQ4K_AVX2, 1>"
+    },
+    "hypothesis_round": 1,
+    "patch_round": 0,
+    "patch_rounds_remaining": 2,
+    "prior_patch_rejections": [],
+    "resume_depth": 2,
+    "resumed_from": "2738e95f72476761f7304a5292e90706c5c85a0a6ac92915a14a44de3916245d#0",
+    "schema": "epyc.autokernel.resume_checkpoint.v1",
+    "stage": "author",
+    "target": {
+     "measurement_surface": "serving:ds41-00d118d44-cpu-t48-dspark-b2.cpu-half-f29a817a878300af",
+     "model": "/mnt/raid0/llm/models/antirez/deepseek-v4.1-flash-gguf/DeepSeek-V4.1-Flash-Q4.gguf"
+    }
+   }
+  ],
+  "spawn_parent": "00d118d44876d69f7a9e6503d1f7b8d5255799ca",
+  "status": "planner_transient",
+  "turn_recorded_at": "2026-09-25T23:22:07.300309Z",
+  "validator_provenance": [
+   {
+    "accepted": true,
+    "changed_subsequent_search": false,
+    "decision": "critic:hypothesis",
+    "evidence_inspected": [
+     "review subject",
+     "rejection grounds",
+     "planner context"
+    ],
+    "independence": "different_family",
+    "reason": null,
+    "resumed_from": "2738e95f72476761f7304a5292e90706c5c85a0a6ac92915a14a44de3916245d#0",
+    "validator_identity": "codex:gpt-6-sol@high",
+    "validator_kind": "llm_critic"
+   }
+  ],
+  "width": 1
+ },
+ "recorded_at": "2026-09-25T23:22:07.300355Z",
+ "refusal_reason": "actor failed 4 consecutive times; last: actor exited 1 [codex:gpt-6-sol@high]: stderr='<redacted in this fixture: codex 401, invalid API key>' stdout=''",
+ "result_sha256": null,
+ "spawn_parent": "00d118d44876d69f7a9e6503d1f7b8d5255799ca",
+ "statement": null,
+ "status": "planner_transient",
+ "target_effect": null,
+ "target_surface": null,
+ "target_symbol": null,
+ "width": 1
+}

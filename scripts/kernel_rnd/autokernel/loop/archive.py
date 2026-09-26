@@ -120,18 +120,49 @@ def retain_patch(store_root: Path, repo: Path, *, lane: str,
         return None
     if _git(repo, "rev-parse", "HEAD") != head:
         raise RatchetRefused("lane HEAD moved during patch capture; no reset")
+    return retain_patch_bytes(store_root, patch, head=head, lane=lane,
+                              mechanism_id=mechanism_id, worktree=str(repo),
+                              untracked_source_paths=additions)
+
+
+def retained_patch_path(store_root: Path, patch: bytes, *, head: str, lane: str,
+                        mechanism_id: str) -> Path:
+    """Where `retain_patch_bytes` keeps these bytes: content-addressed by (head, patch),
+    labelled by mechanism and lane. Pure: nothing is read or written."""
     digest = hashlib.sha256(head.encode() + b"\n" + patch).hexdigest()
     label = re.sub(r"[^A-Za-z0-9_.-]", "_", mechanism_id)[:80] or "unnamed"
     lane_label = re.sub(r"[^A-Za-z0-9_.-]", "_", lane)[:40] or "lane"
-    directory = Path(store_root) / "patches"
-    directory.mkdir(parents=True, exist_ok=True)
-    path = directory / f"{label}.{lane_label}.{digest}.patch"
+    return Path(store_root) / "patches" / f"{label}.{lane_label}.{digest}.patch"
+
+
+def patch_sidecar(path: Path, patch: bytes, *, head: str, lane: str, mechanism_id: str,
+                  worktree: str, untracked_source_paths=()) -> dict:
+    """The immutable sidecar `retain_patch_bytes` publishes beside `path`."""
+    return {"schema": "epyc.autokernel.source_patch_archive.v1", "original_head": head,
+            "worktree": str(worktree), "lane": lane, "mechanism_id": mechanism_id,
+            "patch_file": Path(path).name, "patch_sha256": hashlib.sha256(patch).hexdigest(),
+            "untracked_source_paths": list(untracked_source_paths),
+            "scope": "source_only_not_execution_evidence"}
+
+
+def retain_patch_bytes(store_root: Path, patch: bytes, *, head: str, lane: str,
+                       mechanism_id: str, worktree: str,
+                       untracked_source_paths=()) -> Path:
+    """Publish exact patch bytes formed on `head` into the immutable patch store.
+
+    The one writer behind `retain_patch` (a lane's diff) and the resume backfill (an
+    author patch saved outside the store, DS41 runs 10d/10e). Same name, same bytes,
+    same sidecar: re-retaining is a no-op, a differing artifact is refused.
+    """
+    if not patch:
+        raise RatchetRefused("refusing to retain an empty patch")
+    path = retained_patch_path(store_root, patch, head=head, lane=lane,
+                               mechanism_id=mechanism_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
     _retain_bytes(path, patch)
-    metadata = {"schema": "epyc.autokernel.source_patch_archive.v1", "original_head": head,
-                "worktree": str(repo), "lane": lane, "mechanism_id": mechanism_id,
-                "patch_file": path.name, "patch_sha256": hashlib.sha256(patch).hexdigest(),
-                "untracked_source_paths": additions, "scope": "source_only_not_execution_evidence"}
-    _retain_sidecar(path.with_suffix(".json"), metadata)
+    _retain_sidecar(path.with_suffix(".json"), patch_sidecar(
+        path, patch, head=head, lane=lane, mechanism_id=mechanism_id, worktree=worktree,
+        untracked_source_paths=untracked_source_paths))
     return path
 
 
@@ -580,4 +611,5 @@ def epoch_for(*, anchor_commit: str, build_recipe: Mapping[str, Any],
                                     host_state=host_state)
 
 
-__all__ = ["RatchetRefused", "epoch_for", "keep", "recall", "record"]
+__all__ = ["RatchetRefused", "epoch_for", "keep", "patch_sidecar", "recall", "record",
+           "retain_patch", "retain_patch_bytes", "retained_patch_path"]

@@ -374,6 +374,13 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                     # DS41 run 9d lost 9c's hoist this way -- the row named nothing.
                     outcome.resumed_from = resumed.checkpoint_id
                     outcome.resume_stage = resumed.stage
+                # An authored patch still waiting on critic pass 2 when the lane
+                # faulted (`loop.iterate` hands it over on the exception): the owner
+                # retains the lane's diff while recording this row, so the next launch
+                # resumes AT critic pass 2 instead of re-running the author.
+                pending = getattr(exc, "resume_checkpoints", None)
+                if isinstance(pending, list) and pending:
+                    outcome.resume_checkpoints = [dict(entry) for entry in pending]
             if reservation is not None:
                 outcome.attempt_identity = reservation.identity
                 outcome.exact_repeat_dispatch_count = reservation.dispatch_count

@@ -82,6 +82,15 @@ RESUME_REJECTED = "resume_rejected"
 #: attempts ever reached a build. Consumer: `resume.py`.
 CHECKPOINT_SCHEMA = "epyc.autokernel.resume_checkpoint.v1"
 
+#: Checkpoint stages that restore retained patch BYTES into the lane instead of
+#: calling the author. "build": a critic-accepted patch a gate refused (or a stop
+#: caught), resumed at the host checks and the CURRENT gates. "critic2": an authored
+#: patch whose critic pass 2 never returned a verdict (a critic transient or auth
+#: failure, a stop, a lane_error, an author report-path failure over a real diff),
+#: resumed AT critic pass 2 -- DS41 runs 10d/10e lost a 79- and a 116-line author
+#: patch at that boundary, and every loss re-ran the author (~13-26 min).
+PATCH_STAGES = frozenset({"build", "critic2"})
+
 
 class RunAborted(RuntimeError):
     """The run stopped because iterations were failing systematically."""
@@ -446,6 +455,16 @@ def _recover_author_report(missing: AuthorReportMissing, author_lane, hypothesis
     return tuple(paths)
 
 
+def _lane_changed(author_lane, before_tree: str | None) -> bool:
+    """True only when the author lane's full tree provably changed since `before_tree`."""
+    if author_lane is None or before_tree is None:
+        return False
+    try:
+        return integrity.candidate_tree(Path(author_lane[0])) != before_tree
+    except Exception:      # noqa: BLE001 -- unprovable is "no"
+        return False
+
+
 def _note_author_report(paths, progress: dict[str, Any]) -> None:
     """Carry a non-default author report source onto the outcome: a reply read from a
     lane-root report file, or an entry normalized from `<path>: <prose>` (the author
@@ -470,7 +489,7 @@ def _extended(missing: AuthorReportMissing, message: str) -> AuthorReportMissing
 
 def _pending_checkpoints(progress: Mapping[str, Any]) -> list[dict]:
     pending: list[dict] = []
-    for key in ("inflight", "build"):
+    for key in ("inflight", "critic2", "build"):
         entry = progress.get(key)
         if entry is not None and entry not in pending:
             pending.append(dict(entry))
@@ -600,11 +619,16 @@ def iterate(*, planner: Planner, critic: Critic,
     `resume` (a `resume.ResumePoint`) seeds ONE extra round, before the fresh
     hypothesis rounds, with work a previous launch already paid for: at stage
     "build" an accepted patch goes straight to the host checks, the CURRENT gates
-    and the measurement (no planner, critic or author call); at stage "author" an
-    accepted hypothesis resumes authoring with its original verdict and rejection
+    and the measurement (no planner, critic or author call); at stage "critic2" an
+    authored patch whose critic pass 2 never answered is restored and reviewed by
+    critic pass 2 for real, then gated and measured (no planner or author call; a
+    rejection hands the author the reason if patch rounds remain); at stage "author"
+    an accepted hypothesis resumes authoring with its original verdict and rejection
     history. Every re-validation failure is disposed as `resume_rejected` and the
     iteration continues with fresh work. A stop, provider transient or gate refusal
-    leaves `resume_checkpoints` on its row so the next launch can resume it.
+    leaves `resume_checkpoints` on its row so the next launch can resume it; an
+    authored patch still awaiting critic pass 2 adds a "critic2" checkpoint (also
+    handed to the pool on an escaping exception, for its `lane_error` row).
 
     `author_lane` is `(worktree, base)`: the lane the author edits and the commit the
     OWNER reset it to for this draw (`pipeline.run_pool`). Only with it, an author
@@ -614,7 +638,8 @@ def iterate(*, planner: Planner, critic: Critic,
     """
     working = dict(context)
     abandoned: list[dict] = []
-    progress: dict[str, Any] = {"inflight": None, "build": None, "report_recovery": None}
+    progress: dict[str, Any] = {"inflight": None, "critic2": None, "build": None,
+                                "report_recovery": None, "resumed_active": False}
     hypothesis_reasons: list[str] = []
     round_telemetry = {
         "hypothesis_round": 0,
@@ -643,8 +668,13 @@ def iterate(*, planner: Planner, critic: Critic,
             outcome.reasons = [STOPPED_AFTER_DISPOSALS, *outcome.reasons[1:],
                                _disposal_summary(abandoned)]
         outcome.abandoned_candidates = list(abandoned)
-        if resume is not None and outcome.hypothesis is not None \
-                and outcome.hypothesis is resume.hypothesis:
+        if resume is not None and (
+                (outcome.hypothesis is not None and outcome.hypothesis is resume.hypothesis)
+                or (outcome.hypothesis is None and progress.get("resumed_active"))):
+            # The second clause: a provider transient (the critic's auth failure in
+            # DS41 run 10e) ends the iteration with no hypothesis on the outcome while
+            # the RESUMED candidate was in flight. Unattributed, the row named no
+            # lineage and the claim was never settled (2738e95f...#0 stayed open).
             outcome.resumed_from = resume.checkpoint_id
             outcome.resume_stage = resume.stage
         if outcome.status in RESUMABLE_STATUSES and not outcome.resume_checkpoints:
@@ -695,6 +725,18 @@ def iterate(*, planner: Planner, critic: Critic,
         # taken" is a different fact from "the actor would not answer", and merging
         # them would hide an instrument failing behind an API being flaky.
         return observed(Outcome("bench_failed", None, [str(exc)]))
+    except Exception as exc:
+        # Contained by the pool as `lane_error`, which carries no hypothesis and
+        # never read `progress`. An authored patch whose critic pass 2 had not
+        # returned is the one piece of in-flight work worth carrying across that
+        # containment: hand its checkpoint to the pool on the exception itself.
+        pending = [dict(progress["critic2"])] if progress.get("critic2") else []
+        if pending:
+            try:
+                exc.resume_checkpoints = pending
+            except Exception:      # noqa: BLE001 -- an exception type without __dict__
+                pass
+        raise
 
 
 def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, commit,
@@ -713,7 +755,8 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                             else [])
 
     abandoned = abandoned if abandoned is not None else []
-    progress = progress if progress is not None else {"inflight": None, "build": None}
+    progress = progress if progress is not None else {"inflight": None, "critic2": None,
+                                                      "build": None}
 
     def is_resumed(hypothesis) -> bool:
         return resume is not None and hypothesis is not None \
@@ -821,13 +864,20 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
     for hypothesis_index, resumed in enumerate(schedule):
         # Polled BEFORE each actor call, never after: the whole point is that no
         # further multi-minute call is drawn once the run has been told to stop.
+        progress["critic2"] = None
+        progress["resumed_active"] = False
         if resumed is not None and getattr(resumed, "stale", None) is None:
             # Named before the poll, so a stop here still carries the claimed
             # checkpoint forward instead of consuming it.
             last_proposed = resumed.hypothesis
-            progress["inflight"] = {
-                **{key: value for key, value in resumed.checkpoint.items()
-                   if key not in _OWNER_BOUND}, **lineage(resumed.hypothesis)}
+            progress["resumed_active"] = True
+            carried = {**{key: value for key, value in resumed.checkpoint.items()
+                          if key not in _OWNER_BOUND}, **lineage(resumed.hypothesis)}
+            if resumed.stage == "critic2":
+                # Its retained pointer is carried as-is: the bytes are the same ones.
+                progress["inflight"], progress["critic2"] = None, carried
+            else:
+                progress["inflight"] = carried
         else:
             progress["inflight"] = None
         if should_abandon():
@@ -906,18 +956,25 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
 
         resumed_build = resumed is not None and resumed.stage == "build"
         materialized = False
+        #: The restored bytes are still the lane's only change (no author call since).
+        restored_untouched = False
         patch_reasons: list[str] = (list(resumed.prior_patch_rejections)
                                     if resumed is not None else [])
         round_count = (1 if hypothesis.runtime_pair is not None
                        else max(1, int(resumed.patch_rounds)) if resumed is not None
                        else patch_rounds)
         for patch_index in range(round_count):
-            if hypothesis.runtime_pair is None and not resumed_build:
+            # Round 1 of a build or critic2 resume restores retained bytes instead of
+            # authoring; a critic2 resume's later rounds author normally.
+            restoring = (resumed is not None and resumed.stage in PATCH_STAGES
+                         and patch_index == 0)
+            if hypothesis.runtime_pair is None and not restoring:
                 # The in-flight checkpoint a stop or provider transient leaves behind:
                 # an accepted hypothesis, its verdict and every patch rejection so far.
                 progress["inflight"] = checkpoint(
                     "author", hypothesis, prior_patch_rejections=list(patch_reasons),
                     patch_rounds_remaining=round_count - patch_index)
+                progress["critic2"] = None
             if should_abandon():
                 return stopped()
             working["prior_patch_rejections"] = list(patch_reasons)
@@ -928,13 +985,13 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             paths = ()
             integrity_screen = None
             if hypothesis.runtime_pair is None:
-                if resumed_build:
-                    # No author call: restore the exact accepted bytes, re-verified
+                if restoring:
+                    # No author call: restore the exact retained bytes, re-verified
                     # (digest, anchor, clean apply) by the owner at this moment.
                     on_step("restoring the retained patch (no author call)")
                     try:
                         paths = tuple(resumed.materialize())
-                        materialized = True
+                        materialized = restored_untouched = True
                     except Exception as exc:      # noqa: BLE001 -- a stale resume
                         dispose(hypothesis, RESUME_REJECTED,
                                 f"resume re-validation refused: {exc}",
@@ -943,17 +1000,37 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                 else:
                     on_step("authoring the patch")
                     progress["report_recovery"] = None
+                    restored_untouched = False
                     before_tree = None
                     if author_lane is not None:
                         try:
                             before_tree = integrity.candidate_tree(Path(author_lane[0]))
                         except Exception:      # noqa: BLE001 -- recovery then refuses
                             before_tree = None
+
+                    def authored_checkpoint() -> dict:
+                        # The author produced a diff and critic pass 2 has not answered.
+                        # The OWNER retains the lane diff when it records the row
+                        # (`resume.retain_checkpoint_patches`) and drops this entry if
+                        # the lane holds none. Rounds remaining count THIS round.
+                        return checkpoint("critic2", hypothesis,
+                                          prior_patch_rejections=list(patch_reasons),
+                                          patch_rounds_remaining=round_count - patch_index,
+                                          retained_patch=None)
                     try:
                         paths, halted = actor_call(planner.author, hypothesis, working)
                     except AuthorReportMissing as missing:
-                        paths, halted = _recover_author_report(
-                            missing, author_lane, hypothesis, before_tree, progress), None
+                        try:
+                            paths, halted = _recover_author_report(
+                                missing, author_lane, hypothesis, before_tree, progress), None
+                        except AuthorReportMissing:
+                            # DS41 run 10d: the author edited the lane and its report
+                            # was unusable. The edit may still be a patch worth a
+                            # verdict -- but only an edit made BY THIS CALL: a lane
+                            # still holding an earlier round's rejected patch is not.
+                            if _lane_changed(author_lane, before_tree):
+                                progress["critic2"] = authored_checkpoint()
+                            raise
                         on_step("authoring report derived from the lane diff")
                     else:
                         _note_author_report(paths, progress)
@@ -961,6 +1038,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                         return halted
                     if isinstance(paths, Abstain):
                         return Outcome("abstained", hypothesis, [paths.reason])
+                    progress["critic2"] = authored_checkpoint()
                 # A declared path list is a claim, not an isolation boundary.  The
                 # injected host check resolves the full worktree before review/build.
                 try:
@@ -968,7 +1046,8 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                     integrity_screen = (checked.to_dict() if hasattr(checked, "to_dict")
                                         else checked)
                 except integrity.IntegrityRefused as exc:
-                    if resumed_build:
+                    if restoring:
+                        progress["critic2"] = None
                         dispose(hypothesis, RESUME_REJECTED,
                                 f"resume re-validation refused (integrity): {exc}",
                                 refusal_gate="resume:integrity")
@@ -988,6 +1067,8 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                                                    working)
                 if halted is not None:
                     return halted
+                # A verdict came back: the critic2 checkpoint is answered either way.
+                progress["critic2"] = None
                 validator_provenance.append(_critic_provenance(
                     critic, patch_verdict, decision="critic:patch",
                     evidence=("candidate diff", "declared paths", "planner context")))
@@ -1183,9 +1264,13 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
 
         # Patch budget spent. Control returns to the HYPOTHESIS loop, so the planner
         # may refine H knowing it could not be implemented cleanly.
-        progress["inflight"] = None
-        if materialized:
+        progress["inflight"] = progress["critic2"] = None
+        progress["resumed_active"] = False
+        if materialized and restored_untouched:
             # A rejected resume must not leave its bytes under the next fresh round.
+            # Once an author has edited on top of them (a critic2 resume whose restored
+            # patch was rejected with rounds left), the lane is the author's, exactly
+            # as after any fresh patch round.
             resumed.discard()
         hypothesis_reasons.extend(patch_reasons)
 
@@ -1207,7 +1292,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
 # `archive.record` as `run.py`'s injected `record`. `iterate` is the whole of this
 # module's control flow now, and the pool is its only driver.
 
-__all__ = ["CANDIDATE_DISPOSITIONS", "CHECKPOINT_SCHEMA", "RESUMABLE_STATUSES",
+__all__ = ["CANDIDATE_DISPOSITIONS", "CHECKPOINT_SCHEMA", "PATCH_STAGES", "RESUMABLE_STATUSES",
            "RESUME_REJECTED", "STOPPED_AFTER_DISPOSALS", "gate_rules_fingerprint", "Abstain", "ActorStopped", "ActorTransient", "AuthorReportMissing", "REPORT_SOURCE_LANE_DIFF", "ConfirmVetoed", "InteractionRegression", "TailRefused", "RunAborted", "MeasurementInvalid", "MeasurementFailed", "Critic",
            "HYPOTHESIS_ROUNDS", "Hypothesis", "Outcome", "PATCH_ROUNDS",
            "Planner", "Review", "STOPPED_MID_FORMATION", "iterate"]
