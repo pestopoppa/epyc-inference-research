@@ -223,6 +223,11 @@ class ActorSeat:
     #: still carries the snapshot-off per-call config, see `_seat_call`); run.py turns
     #: them on by default.
     lane_guard: bool = False
+    #: `ak-check` (operator 2026-09-26, `ak_check.py`): the author may run the scratch
+    #: compile / op-test sandbox, told so by `AUTHOR_SANDBOX_RULE`; planner and critic
+    #: configs deny it. Off here (byte-identical); run.py defaults it on. Needs the
+    #: planner's `sandbox_scratch` allocator and an anchor build dir, else it stays off.
+    author_sandbox: bool = False
     #: OAB-23: opencode `limit.context` / `limit.output` on the call's model, written into
     #: every per-call config (plain, bounded, critic). 0 = opencode's own default, which
     #: for this config-only model is NO proactive compaction and max_tokens 32000 (see
@@ -247,11 +252,6 @@ class ActorSeat:
     #: `actor_opencode_config.model_thinking`). Planner and critic calls never carry it.
     #: "default" here (the historical config, byte for byte); run.py defaults it to "off".
     author_thinking: str = "default"
-    #: `ak-check` (operator 2026-09-26, `ak_check.py`): the author may run the scratch
-    #: compile / op-test sandbox, told so by `AUTHOR_SANDBOX_RULE`; planner and critic
-    #: configs deny it. Off here (byte-identical); run.py defaults it on. Needs the
-    #: planner's `sandbox_scratch` allocator and an anchor build dir, else it stays off.
-    author_sandbox: bool = False
 
     def thinking_for(self, role: str) -> str:
         """The reasoning switch for one call of `role`: the author's knob, else default."""

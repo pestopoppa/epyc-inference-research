@@ -662,9 +662,9 @@ def seat_permission(role: str, *, lane: Path | None = None,
 
 
 def seat_label(base: str, *, trim_instructions: bool = False, trim_tools: bool = False,
+               author_sandbox: bool = False,
                lane_guard: bool = False, context_limit: int = 0, output_limit: int = 0,
-               concise: bool = False, budget_s: int = 0, thinking_off: bool = False,
-               author_sandbox: bool = False) -> str:
+               concise: bool = False, budget_s: int = 0, thinking_off: bool = False) -> str:
     """`plain` / `bounded` plus one suffix per knob that is on (free text in VB-AK-SEAT).
     OAB-22/23 add `+ctx<C>+out<O>`, `+concise` and `+budget<B>s`; OAB-24 adds
     `+think-off` (all off: unchanged)."""
