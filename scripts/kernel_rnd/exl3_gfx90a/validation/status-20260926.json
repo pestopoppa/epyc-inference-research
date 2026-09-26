@@ -54,9 +54,25 @@
     "G5": "OPEN: GPU dispatch/fallback/capture/guard/routing tests not executed; host truth-table passes"
   },
   "runtime_blocker": {
-    "path": "/workspace/coordination/session-bus/config.yaml",
-    "observed": "resource_claims.gpu: {provider: null, enabled: false}",
-    "needed": "qualified enabled GPU provider and an ACTIVE lease covering mi210_0"
+    "delegated": {
+      "path": "/workspace/coordination/session-bus/config.yaml",
+      "observed": "resource_claims.gpu: {provider: null, enabled: false}",
+      "needed": "qualified enabled GPU provider and an ACTIVE lease covering mi210_0"
+    },
+    "owner": {
+      "authority": "eligible under explicit inference owner mode",
+      "observed_kfd_pids": [
+        "1892835",
+        "2005824",
+        "2006079",
+        "2009477"
+      ],
+      "co_residency": {
+        "status": "refused",
+        "reason": "foreign KFD process present; no measured co-residency policy for this operator"
+      },
+      "needed": "Inference Main execution at an authorized boundary with exclusive physical claim, no foreign KFD occupancy and in-window residency evidence"
+    }
   },
   "hip_runtime_executed": false,
   "full_model_inference_executed": false,
@@ -66,5 +82,12 @@
     "impact": "UNKNOWN: existing LadybugDB WAL identity mismatch",
     "manual_blast_radius": "new standalone module with no existing callers"
   },
-  "scope": "standalone experimental research; no production tree or kernel store modifications"
+  "scope": "standalone experimental research; no production tree or kernel store modifications",
+  "authority_review": {
+    "date": "2026-09-26T08:46:42.216160+00:00",
+    "receipt": "owner-run-20260926.json",
+    "tests_passed": 13,
+    "owner_authority": "passes explicit inference_owner preflight; no delegated lease",
+    "build_manifest_refresh_required": true
+  }
 }

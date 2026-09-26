@@ -129,13 +129,21 @@ disassembly, wave size and kernel register/LDS usage. ROCm's bundled output is
 explicitly unbundled before disassembly. HBM traffic and achieved occupancy remain
 `not_measured` until device profiling.
 
-GPU execution uses `claimed_run.py` with an ACTIVE bus resource lease and a
-qualified, enabled GPU provider. It acquires the canonical physical device claim,
-passes its descriptor to the child, rejects foreign KFD co-residency, sets an
-isolated HIP library path and samples in-window KFD/VRAM. Disabled/null providers
-refuse before device allocation. The binary independently validates its inherited
-claim descriptor and the provider lock's device/inode and exclusion. A lone
-environment claim ID has no authority.
+GPU execution uses `claimed_run.py` with one explicit authority mode:
+
+* Delegated runs require an ACTIVE bus resource lease and a qualified, enabled
+  GPU provider. Disabled/null providers refuse before device allocation.
+* `--owner-run --holder inference --task-id TASK_ID` uses the existing Inference
+  Main authority in root `agents/inference-main.md`. It requires the canonical
+  roster to name `inference` as the unique eligible GPU owner and records
+  `mode=inference_owner`, `lease=null`, the task identity, roster and policy hashes.
+  This mode neither grants nor represents a delegated lease.
+
+Both modes acquire the same canonical `gpu_device_claim`, recheck authority while
+holding it, pass its descriptor to the child, reject foreign KFD co-residency, set
+an isolated HIP library path and require in-window KFD/VRAM evidence. The binary
+independently validates its inherited claim descriptor and the provider lock's
+device/inode and exclusion. A lone environment claim ID has no authority.
 
 ```bash
 python3 scripts/kernel_rnd/exl3_gfx90a/claimed_run.py \
@@ -144,6 +152,21 @@ python3 scripts/kernel_rnd/exl3_gfx90a/claimed_run.py \
   --output /mnt/raid0/llm/tmp/exl3-device-unique-run \
   --lease-id ACTIVE_LEASE_ID --holder OWNING_SESSION
 ```
+
+An authority-only owner check acquires no claim and launches no GPU work:
+
+```bash
+python3 scripts/kernel_rnd/exl3_gfx90a/claimed_run.py \
+  --contract-root /path/to/integrated/research \
+  --build /mnt/raid0/llm/tmp/exl3-gfx90a-build \
+  --output /mnt/raid0/llm/tmp/exl3-owner-unique-run \
+  --owner-run --holder inference --task-id EXL3-3 --preflight-only
+python3 scripts/kernel_rnd/exl3_gfx90a/test_claimed_run.py
+```
+
+Authority-only success does not establish physical availability or residency.
+Refresh the build manifest after launcher changes: source drift is refused before
+any GPU launch, even when the kernel sources did not change.
 
 Use `--fixture path/to/canonical/manifest.json` for each real MUL1 K3/K4 and MCG K4
 fixture. Use `--microbench` separately for concentrated/spread/random routes,
@@ -154,13 +177,14 @@ claim. Native verifier and measurement rows use the EXL3-1 writer and projection
 
 ## Gate accounting
 
-| Gate | Implemented and checked without GPU | Still requires provider-qualified runtime |
+| Gate | Implemented and checked without GPU | Still requires authorized, physically claimed runtime |
 |---|---|---|
 | G3 | Exact target build/disassembly; host procedural/canonical real fixture references; compiled native packed wave64 kernels | Exhaustive device states/lane maps; real MUL1/MCG GPU↔portable↔CPU output parity; poisoned-tail/device teardown checks |
 | G4 | Separate 16×16×16 FP16/FP32 MFMA path; register decode and transform references; emitted MFMA instruction and resource metadata | Full 256-cell device lane map; prefill output parity; measured shape regime, launch/latency/occupancy/HBM observations |
 | G5 | 5,120 truth cells; E=256 sentinel separation; plan/schedule bounds, source identity, native arena cap; all fallback tests compiled | Every named GPU path/fallback output and counter; device capacity/alias/capture guard checks; deterministic/atomic routing results and microbenchmarks |
 
-No gate is marked complete from compilation or host checks alone. Current run
-blocker: `resource_claims.gpu: {provider: null, enabled: false}` in the canonical
-coordination config. Enabling/qualifying that provider and obtaining an active
-lease is external to this standalone experimental module.
+No gate is marked complete from compilation or host checks alone. The delegated
+provider remains disabled/null. The explicit owner authority check passes, but
+the 2026-09-26 read-only KFD census found existing processes and the shared
+co-residency check refused. No physical claim or GPU workload was attempted for
+this correction; see `validation/owner-run-20260926.json`.
