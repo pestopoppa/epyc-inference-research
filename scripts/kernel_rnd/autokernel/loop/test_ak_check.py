@@ -112,6 +112,30 @@ class TranslationUnitSelection(_Tree):
         self.assertEqual(len(units), 1)
         self.assertIn("included by 2 TUs; checked 1", notes[0])
 
+    def test_anchor_root_comes_from_cmakecache_for_builds_outside_the_tree(self):
+        # DS41 2026-09-26: a keep's promoted anchor build lives in store/anchor-gen-NNN,
+        # outside the source tree; the .git-parent walk returned the store and every
+        # changed TU read as "no compile command" (a vacuous NOTHING/pass).
+        with tempfile.TemporaryDirectory() as tmp:
+            outside = Path(tmp) / "store" / "anchor-gen-001"
+            outside.mkdir(parents=True)
+            (outside / "CMakeCache.txt").write_text(
+                f"FOO:STRING=bar\nCMAKE_HOME_DIRECTORY:INTERNAL={self.root}\n")
+            self.assertEqual(ak_check.anchor_root_of(outside), Path(self.root))
+            (outside / "CMakeCache.txt").write_text("CMAKE_HOME_DIRECTORY:INTERNAL=/nonexistent\n")
+            self.assertEqual(ak_check.anchor_root_of(outside), outside.parent)
+
+    def test_an_unmapped_changed_source_is_an_error_never_nothing(self):
+        self.assertTrue(ak_check._unchecked_sources(["ggml/src/ggml-cpu/new.cpp"]))
+        self.assertFalse(ak_check._unchecked_sources(["README.md", "ggml/include/ggml.h"]))
+        with mock.patch.object(ak_check, "changed_files",
+                               return_value=["ggml/src/ggml-cpu/new.cpp"]):
+            result = ak_check.compile_check(lane=self.lane, build_dir=self.build, db_path=self.db,
+                                            scratch=Path(tempfile.mkdtemp()), base="HEAD",
+                                            cpus=(0,))
+        self.assertEqual(result["status"], "error")
+        self.assertIn("could NOT check", result["reason"])
+
     def test_non_code_changes_select_nothing(self):
         self.assertEqual(self.units(["README.md"])[0], [])
 

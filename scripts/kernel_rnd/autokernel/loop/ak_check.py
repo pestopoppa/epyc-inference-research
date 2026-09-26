@@ -271,7 +271,21 @@ def load_compile_db(path: Path) -> dict[str, dict]:
 
 
 def anchor_root_of(build_dir: Path) -> Path:
+    """The source tree the anchor build was configured from.
+
+    CMakeCache's CMAKE_HOME_DIRECTORY first: a keep's promoted anchor build lives OUTSIDE
+    the source tree (``store/anchor-gen-NNN``), so the old ``.git``-parent walk returned
+    the store and every changed TU read as "no compile command" -- a vacuous NOTHING/pass
+    for every author and winner check after DS41's first keep (2026-09-26)."""
     build = Path(build_dir)
+    try:
+        for line in (build / "CMakeCache.txt").read_text(errors="replace").splitlines():
+            if line.startswith("CMAKE_HOME_DIRECTORY:"):
+                home = Path(line.split("=", 1)[1].strip())
+                if home.is_dir():
+                    return home
+    except OSError:
+        pass
     return next((p for p in build.parents if (p / ".git").exists()), build.parent)
 
 
@@ -298,6 +312,15 @@ def _depends_on(entry: Mapping, build_dir: Path, header_abs: str) -> bool:
     except OSError:
         return False
     return any(tok == header_abs for tok in text.replace("\\\n", " ").split())
+
+
+UNCHECKED_REASON = ("changed C/C++ source(s) have no compile command in the anchor build: the "
+                    "sandbox could NOT check this patch (not a pass; see the notes)")
+
+
+def _unchecked_sources(changed: Sequence[str]) -> bool:
+    """A changed translation unit that selection could not map is never "nothing to check"."""
+    return any(rel.endswith(SOURCE_SUFFIXES) for rel in changed)
 
 
 def select_units(changed: Sequence[str], db: Mapping[str, dict], *, anchor_root: Path,
@@ -667,6 +690,9 @@ def compile_check(*, lane: Path, build_dir: Path, db_path: Path, scratch: Path, 
     units, notes = select_units(changed, db, anchor_root=anchor_root, build_dir=build_dir,
                                 max_header_tus=MAX_HEADER_TUS_COMPILE)
     if not units:
+        if _unchecked_sources(changed):
+            return {"status": "error", "changed": changed, "units": [], "notes": notes,
+                    "reason": UNCHECKED_REASON}
         return {"status": "nothing", "changed": changed, "units": [], "notes": notes}
     if syntax_only:
         results = []
@@ -710,6 +736,9 @@ def op_test(*, lane: Path, build_dir: Path, db_path: Path, scratch: Path, base: 
     units, notes = select_units(changed, db, anchor_root=anchor_root, build_dir=build_dir,
                                 max_header_tus=MAX_OP_TEST_TUS)
     if not units:
+        if _unchecked_sources(changed):
+            return {"status": "error", "changed": changed, "notes": notes,
+                    "diff_base": diff_base, "reason": UNCHECKED_REASON}
         return {"status": "nothing", "changed": changed, "notes": notes, "diff_base": diff_base}
     if len(units) > MAX_OP_TEST_TUS:
         return {"status": "skipped", "changed": changed, "diff_base": diff_base,
