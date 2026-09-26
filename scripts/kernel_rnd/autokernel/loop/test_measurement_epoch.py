@@ -107,9 +107,13 @@ class EpochSplit(unittest.TestCase):
         source = Path(run.__file__).read_text(encoding="utf-8")
         self.assertIn("measurement_inputs = measurement_epoch_inputs(\n        epoch_inputs,",
                       source)
+        # Both owners bind the measurement epoch, the actor config (provenance) and the
+        # carry family (resume.py carry-forward across a keep).
         self.assertEqual(source.count("measurement_epoch=measurement_epoch,\n"
                                       "                                        "
-                                      "actor_config=launch_actor_config)"), 2)
+                                      "actor_config=launch_actor_config,\n"
+                                      "                                        "
+                                      "carry_family=resume_carry.family)"), 2)
         prepare = source[source.index("resume_mod.prepare("):][:500]
         self.assertIn("measurement_epoch=measurement_epoch", prepare)
         self.assertIn("actor_config=launch_actor_config", prepare)

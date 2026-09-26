@@ -1656,6 +1656,14 @@ def main(argv: list[str] | None = None) -> int:
                                            host_state=measurement_inputs))
     launch_actor_config = _actor_config(
         args, resolved_campaign if selected_identity is not None else None)
+    # CARRY-FORWARD (resume.py; operator 2026-09-26): an unmeasured accepted hypothesis
+    # formed on an ANCESTOR of this anchor (a keep moved it) follows the champion
+    # instead of being orphaned by the anchor-bound epoch. The family is this launch's
+    # measurement identity minus the anchor, execution digests and screen scope.
+    resume_carry = resume_mod.CarryContext(
+        family=resume_mod.carry_family(build_recipe=recipe.to_dict(),
+                                       host_state=measurement_inputs),
+        repo=args.worktree, scratch=args.store)
     runtime_statistical = None
     runtime_epoch = None
     runtime_calibration_launches = None
@@ -1916,7 +1924,7 @@ def main(argv: list[str] | None = None) -> int:
         # Accepted hypotheses still pending authoring: the planner must not re-propose
         # them (the next draws re-author them first). Only present when non-empty.
         pending_view[0] = pending_hypotheses_view(args, epoch, current_anchor_commit[0],
-                                                  **resume_bind)
+                                                  carry=resume_carry, **resume_bind)
         # The status surface's comparability counts move as rows are recorded.
         history_view[0] = (history_comparability(args.store, epoch=epoch,
                                                  measurement_epoch=measurement_epoch)
@@ -3300,7 +3308,8 @@ def main(argv: list[str] | None = None) -> int:
                                         anchor_commit=current_anchor_commit[0],
                                         target=resume_target,
                                         measurement_epoch=measurement_epoch,
-                                        actor_config=launch_actor_config)
+                                        actor_config=launch_actor_config,
+                                        carry_family=resume_carry.family)
             resume_mod.stamp_actor_diff(attempt, resume_queue[0])
             journal_receipts = []
             try:
@@ -3319,6 +3328,7 @@ def main(argv: list[str] | None = None) -> int:
                     or outcome.resumed_from is not None:
                 pending_view[0] = pending_hypotheses_view(args, epoch,
                                                           current_anchor_commit[0],
+                                                          carry=resume_carry,
                                                           **resume_bind)
             if outcome.attempt_identity is not None:
                 registry = dispatch_guard.Registry(args.store)
@@ -3367,7 +3377,8 @@ def main(argv: list[str] | None = None) -> int:
                                         anchor_commit=current_anchor_commit[0],
                                         target=resume_target,
                                         measurement_epoch=measurement_epoch,
-                                        actor_config=launch_actor_config)
+                                        actor_config=launch_actor_config,
+                                        carry_family=resume_carry.family)
             resume_mod.stamp_actor_diff(attempt, resume_queue[0])
             archive.record(args.store, attempt, epoch=epoch, recorded_at=loop._now(),
                            campaign_id="ak-loop")
@@ -3608,7 +3619,7 @@ def main(argv: list[str] | None = None) -> int:
                     target=resume_target, repo=args.worktree,
                     on_rejected=record_resume_rejected, scratch=args.store,
                     measurement_epoch=measurement_epoch,
-                    actor_config=launch_actor_config)
+                    actor_config=launch_actor_config, carry=resume_carry)
                 print(f"resume    scanned {resume_report['scanned']} checkpoint(s): "
                       f"{len(resume_report['queued'])} queued, "
                       f"{len(resume_report['rejected'])} rejected, "
@@ -3616,7 +3627,10 @@ def main(argv: list[str] | None = None) -> int:
                       f"{resume_report['already_claimed']} already claimed"
                       + (f"; {resume_report['other_epoch_rows']} row(s) with checkpoints "
                          f"in other epochs (not this launch's)"
-                         if resume_report["other_epoch_rows"] else ""), flush=True)
+                         if resume_report["other_epoch_rows"] else "")
+                      + (f"; {len(resume_report['carried'])} carried forward from an "
+                         f"ancestor anchor or sibling epoch"
+                         if resume_report.get("carried") else ""), flush=True)
                 # In-run: a hypothesis a lane leaves pending THIS run is re-authored on
                 # the next draw, before the planner (resume.ResumeQueue._refresh).
                 resume_queue[0].enable_pending_refresh(resume_target, **resume_bind)
@@ -3624,6 +3638,9 @@ def main(argv: list[str] | None = None) -> int:
                     diff = row.get("actor_config_diff")
                     print(f"resume    queued {row['mechanism_id']} at {row['stage']} "
                           f"(from {row['checkpoint_id']})"
+                          + (f"; carried ({row['carry']['action']}) from anchor "
+                             f"{str(row['carry']['carried_from_anchor'])[:12]}"
+                             if row.get("carry") else "")
                           + (f"; actor config differs: {', '.join(diff)}" if diff else
                              "; checkpoint predates actor-config recording"
                              if "actor_config_diff" in row and diff is None else ""),

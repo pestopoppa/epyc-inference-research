@@ -19,6 +19,10 @@
         reopen --store <store> --checkpoint <attempt_id>#<i> --reason "..." \\
         [--anchor <sha>] [--apply]
     PYTHONPATH=scripts/kernel_rnd python3 -m scripts.kernel_rnd.autokernel.loop.resume \\
+        carry-forward --store <store> --checkpoint <attempt_id>#<i> [--checkpoint ...] \\
+        --repo <champion tree> --anchor <sha> --epoch <sha> --surface S [--model M] \\
+        [--measurement-epoch <sha>] [--scratch <dir>] [--apply]
+    PYTHONPATH=scripts/kernel_rnd python3 -m scripts.kernel_rnd.autokernel.loop.resume \\
         reinstate --store <store> --row <latest-checkpoint-row> --rejection <row> \\
         [--rejection <row> ...] --epoch <sha> [--measurement-epoch <sha>] \\
         [--actor-calls <lane actor-calls.jsonl>] [--attempts-used N] [--apply]
@@ -104,6 +108,28 @@ failure (`loop.AUTHORING_HARNESS_FAILURE`) spends none until
 author-stage `abstained` row (its panel members become the feedback), and
 `backfill-critic1` re-queues a planner hypothesis a critic-pass-1 transient dropped
 before critic1 checkpoints existed, from the planner's saved reply.
+
+CARRY-FORWARD (operator rule 2026-09-26: an accepted hypothesis is not discarded when
+only its authoring failed or its anchor moved). Resume binds on a measurement epoch
+that folds the anchor in, so every KEEP used to orphan the pending work formed on the
+old anchor (DS41: `akm-q4k-x4t-avx512` and `akm-ds41-dense-q8-tb-prefetch` at
+00d118d44 after the gemm4xn keep moved the anchor to anchor-gen-001 cafb59c3). With a
+`CarryContext` (`run.py` passes one), `prepare`, the in-run refresh, the pending view
+and an in-run anchor advance (`ResumeQueue.take`) re-bind a checkpoint whose anchor is
+an ANCESTOR of the current one -- or the current one under another measurement epoch
+of the same family (a screen scope) -- when `carry_refusal` admits it: same
+measurement family (`carry_family`: the measurement identity minus the anchor, the
+execution digests and the screen scope; from the checkpoint's stamp, else its epoch's
+verified alias record), same target family, not consumed at another anchor. Author
+and critic1 checkpoints carry as they are; a critic2 or build checkpoint whose patch
+applies cleanly at the new anchor resumes at CRITIC2 (critic re-review, fresh build;
+no verdict or build crosses anchors), and one whose patch does not apply is DEMOTED
+to an author checkpoint carrying the old patch as feedback. A carry spends no
+authoring attempt and adds one `resume_depth` hop, so `depth_limit` still bounds it;
+the row records it as `resume_carry`. A checkpoint from another lineage stays refused.
+Comparability is untouched (P-AK-SEARCH-1-A3.1): nothing measured is carried, and the
+resumed work is measured afresh in the new epoch. `carry-forward` is the operator's
+explicit, logged version for a live store.
 
 SETTLING. A validity outcome of the resumed round (a current-gate, compile or
 correctness refusal, a measured null or regression, a keep, a re-validation refusal)
@@ -244,6 +270,11 @@ def stamp_actor_diff(attempt: dict, queue: "ResumeQueue | None") -> dict:
     origin = attempt.get("resumed_from")
     if origin and queue is not None and origin in queue.actor_diffs:
         attempt["resumed_actor_config_diff"] = queue.actor_diffs[origin]
+    # A CARRIED checkpoint (`carry_checkpoint`): the row names the anchors and epochs
+    # it was carried between, the action (carried / rebased / demoted) and why.
+    carries = getattr(queue, "carries", None) if queue is not None else None
+    if origin and isinstance(carries, Mapping) and origin in carries:
+        attempt["resume_carry"] = carries[origin]
     return attempt
 
 
@@ -262,7 +293,8 @@ def _measurement_bound(entry: Mapping[str, Any], row_epoch: str | None, *, epoch
 
 def bind_checkpoints(attempt: dict, *, epoch: str, anchor_commit: str,
                      target: Mapping[str, Any], measurement_epoch: str | None = None,
-                     actor_config: Mapping[str, Any] | None = None) -> dict:
+                     actor_config: Mapping[str, Any] | None = None,
+                     carry_family: str | None = None) -> dict:
     """Owner-side: stamp where each checkpoint on this row may be resumed.
 
     The anchor is the lane base the candidate was formed on (`spawn_parent`) when
@@ -270,7 +302,9 @@ def bind_checkpoints(attempt: dict, *, epoch: str, anchor_commit: str,
     pointer the loop could not know yet (the owner retained it while recording)
     takes the row's `retained_patch`. `measurement_epoch` (what resume binds on) and
     `actor_config` (provenance: what a later resume reports as changed) are stamped
-    when given; `epoch_sha256` stays the full epoch.
+    when given; `epoch_sha256` stays the full epoch. `carry_family` (`carry_family`)
+    is the anchor-free measurement family a later launch matches to CARRY the
+    checkpoint across a keep (`carry_refusal`) without an epoch-alias lookup.
     """
     checkpoints = attempt.get("resume_checkpoints")
     if not isinstance(checkpoints, list):
@@ -285,6 +319,8 @@ def bind_checkpoints(attempt: dict, *, epoch: str, anchor_commit: str,
             entry["measurement_epoch_sha256"] = measurement_epoch
         if actor_config is not None:
             entry["actor_config"] = json.loads(json.dumps(dict(actor_config)))
+        if carry_family is not None:
+            entry["carry_family_sha256"] = carry_family
         entry["target"] = dict(target)
         if entry.get("stage") == "build" and not entry.get("retained_patch"):
             pointer = attempt.get("retained_patch")
@@ -838,11 +874,18 @@ class Candidate:
 
     def summary(self) -> dict:
         pointer = self.checkpoint.get("retained_patch") or {}
-        return {"checkpoint_id": self.checkpoint_id, "stage": self.stage,
-                "mechanism_id": self.group[0], "row_status": self.row_status,
-                "recorded_at": self.recorded_at,
-                "patch_round": self.checkpoint.get("patch_round"),
-                "patch_file": pointer.get("patch_file") if isinstance(pointer, Mapping) else None}
+        out = {"checkpoint_id": self.checkpoint_id, "stage": self.stage,
+               "mechanism_id": self.group[0], "row_status": self.row_status,
+               "recorded_at": self.recorded_at,
+               "patch_round": self.checkpoint.get("patch_round"),
+               "patch_file": pointer.get("patch_file") if isinstance(pointer, Mapping) else None}
+        carry = self.checkpoint.get("carry")
+        if isinstance(carry, Mapping):
+            out["carry"] = {key: carry.get(key) for key in (
+                "action", "from_stage", "carried_from_anchor", "carried_to_anchor",
+                "from_measurement_epoch_sha256", "to_measurement_epoch_sha256",
+                "resume_depth", "apply_error")}
+        return out
 
 
 def _connect(store_root: Path, *, immutable: bool) -> sqlite3.Connection:
@@ -994,6 +1037,374 @@ def depth_limit(checkpoint: Mapping[str, Any]) -> int:
     return MAX_RESUME_DEPTH + extra
 
 
+# ------------------------------------------------------------------ carry forward
+
+
+CARRY_SCHEMA = "epyc.autokernel.resume_carry.v1"
+CARRY_FAMILY_SCHEMA = "epyc.autokernel.resume_carry_family.v1"
+CARRY_TOOL_SCHEMA = "epyc.autokernel.resume_carry_forward.v1"
+#: Measurement-identity inputs that a KEEP or a screen scope moves while the instrument
+#: stays the same: the execution digests hash the anchor generation's executable and
+#: DSOs (DS41: 593fae7d at 00d118d44 -> 0e8f2710 at anchor-gen-001 cafb59c3), and
+#: `cpu_screen` names the half/quarter/full sampling of the SAME target.
+CARRY_VOLATILE_HOST_KEYS = frozenset({"cpu_execution_digest", "gpu_execution_digest",
+                                      "cpu_screen"})
+#: `cpu_screen.prepare_launch` names a reduced screen `<full>.cpu-<scope>-<hash16>`.
+_SCREEN_SURFACE_SUFFIX = re.compile(r"\.cpu-(?:quarter|half)-[0-9a-f]{16}$")
+#: How much of a patch that no longer applies is carried into the author's feedback.
+CARRY_PATCH_EXCERPT_BYTES = 12000
+_ANCESTRY: dict[tuple[str, str, str], bool | None] = {}
+_ANCESTRY_LOCK = threading.Lock()
+
+
+@dataclass(frozen=True)
+class CarryContext:
+    """What a launch needs to carry unmeasured accepted work across a keep.
+
+    Operator rule (2026-09-26): an accepted hypothesis is not discarded when only its
+    authoring failed or its anchor moved. A checkpoint formed on an ANCESTOR of the
+    current anchor (or on the same anchor under another measurement epoch of the same
+    measurement family) follows the champion forward. Comparability is untouched
+    (P-AK-SEARCH-1-A3.1): nothing measured is carried, and the resumed work is
+    measured afresh in THIS launch's epoch.
+
+    `family` is this launch's `carry_family`; `repo` the champion tree (ancestry and
+    clean-apply checks); `scratch` the apply-check scratch root."""
+    family: str | None
+    repo: Path | None
+    scratch: Path | None = None
+
+
+def carry_family(*, build_recipe: Mapping[str, Any], host_state: Mapping[str, Any]) -> str:
+    """The measurement identity with the anchor and `CARRY_VOLATILE_HOST_KEYS` removed:
+    build recipe, request set, enrolled target and campaign measurement document,
+    serving instrument, and which backends execute. `host_state` is the MEASUREMENT
+    host state (`experiments.measurement_host_state`: no actor roster)."""
+    if "enrolled_manifest_digest" in host_state:
+        raise ValueError("carry_family takes the measurement host state, not the full one")
+    state = {key: value for key, value in host_state.items()
+             if key not in CARRY_VOLATILE_HOST_KEYS}
+    state["execution_backends"] = sorted(
+        key.partition("_")[0] for key in ("cpu_execution_digest", "gpu_execution_digest")
+        if host_state.get(key) is not None)
+    return _sha256(_canonical({"schema": CARRY_FAMILY_SCHEMA,
+                               "build_recipe": dict(build_recipe),
+                               "host_state": state}).encode())
+
+
+def target_family(target: Mapping[str, Any] | None) -> dict:
+    """A target with the screen-scope suffix removed from its surface: a half-scope
+    screen measures the same target as the full launch it was reduced from."""
+    target = target if isinstance(target, Mapping) else {}
+    surface = target.get("measurement_surface")
+    return {"measurement_surface": (None if surface is None
+                                    else _SCREEN_SURFACE_SUFFIX.sub("", str(surface))),
+            "model": None if target.get("model") is None else str(target.get("model"))}
+
+
+def alias_families(store_root: Path, *, immutable: bool = False) -> dict[str, str]:
+    """{full epoch or measurement epoch: carry family} from VERIFIED `epoch_aliases`
+    records only (`experiments.verify_epoch_alias`): the one place an old checkpoint's
+    measurement identity can be recovered. A store without the table maps nothing."""
+    try:
+        connection = _connect(store_root, immutable=immutable)
+    except FileNotFoundError:
+        return {}
+    try:
+        rows = connection.execute("SELECT full_epoch, measurement_epoch, record "
+                                  "FROM epoch_aliases").fetchall()
+    except sqlite3.OperationalError:
+        return {}
+    finally:
+        connection.close()
+    out: dict[str, str] = {}
+    for full, measured, raw in rows:
+        try:
+            record = json.loads(raw)
+        except (TypeError, json.JSONDecodeError):
+            continue
+        if experiments.verify_epoch_alias(record) is not None \
+                or record.get("full_epoch_sha256") != full \
+                or record.get("measurement_epoch_sha256") != measured:
+            continue
+        try:
+            family = carry_family(build_recipe=record["build_recipe"],
+                                  host_state=experiments.measurement_host_state(
+                                      record["host_state"],
+                                      record["enrolled_measurement_digest"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+        out[full] = family
+        out[measured] = family
+    return out
+
+
+def is_ancestor(repo: Path | None, older: str, newer: str) -> bool | None:
+    """`git merge-base --is-ancestor`: True, False, or None when it cannot be proved
+    (no repository, an unknown commit). Commits are immutable, so answers are cached."""
+    if repo is None or not older or not newer:
+        return None
+    key = (str(repo), older, newer)
+    with _ANCESTRY_LOCK:
+        if key in _ANCESTRY:
+            return _ANCESTRY[key]
+    try:
+        done = subprocess.run(["git", "-C", str(repo), "merge-base", "--is-ancestor",
+                               older, newer], capture_output=True, timeout=120,
+                              env=_git_env())
+        answer = True if done.returncode == 0 else False if done.returncode == 1 else None
+    except (OSError, subprocess.SubprocessError):
+        answer = None
+    if answer is not None:
+        with _ANCESTRY_LOCK:
+            _ANCESTRY[key] = answer
+    return answer
+
+
+@dataclass(frozen=True)
+class CarryScope:
+    """One launch's (or one in-run anchor advance's) carry inputs, gathered once."""
+    carry: CarryContext
+    anchor_commit: str
+    epoch: str
+    measurement_epoch: str | None
+    target: Mapping[str, Any]
+    families: Mapping[str, str]
+    claim_rows: Sequence[Mapping[str, Any]]
+
+
+def carry_scope(store_root: Path, carry: CarryContext, *, anchor_commit: str, epoch: str,
+                measurement_epoch: str | None, target: Mapping[str, Any],
+                claim_rows: Sequence[Mapping[str, Any]],
+                immutable: bool = False) -> CarryScope:
+    return CarryScope(carry=carry, anchor_commit=anchor_commit, epoch=epoch,
+                      measurement_epoch=measurement_epoch, target=dict(target),
+                      families=alias_families(store_root, immutable=immutable),
+                      claim_rows=[dict(row) for row in claim_rows])
+
+
+def checkpoint_family(checkpoint: Mapping[str, Any],
+                      families: Mapping[str, str]) -> str | None:
+    """A checkpoint's carry family: its own stamp (`bind_checkpoints(carry_family=)`),
+    else the verified alias of its full or measurement epoch; None when unknown."""
+    stamped = checkpoint.get("carry_family_sha256")
+    if isinstance(stamped, str) and stamped:
+        return stamped
+    for key in ("epoch_sha256", "measurement_epoch_sha256"):
+        value = checkpoint.get(key)
+        if isinstance(value, str) and value in families:
+            return families[value]
+    return None
+
+
+def consumed_elsewhere(checkpoint_id: str, anchor_commit: str,
+                       claim_rows: Sequence[Mapping[str, Any]]) -> str | None:
+    """Why a checkpoint was already used up at ANOTHER anchor, or None.
+
+    Claims are per (checkpoint, anchor), so without this a checkpoint resumed and
+    settled at 00d118d44 would look fresh at cafb59c3. Only a RELEASED claim, or a
+    rejection whose only complaint was the anchor moving (`anchor:`, the orphaning
+    this carry exists to repair), leaves it carriable."""
+    for row in claim_rows:
+        if row.get("checkpoint_id") != checkpoint_id or row.get("anchor_commit") == anchor_commit:
+            continue
+        if row.get("state") == RELEASED:
+            continue
+        if row.get("state") == "rejected" and str(row.get("detail") or "").startswith("anchor:"):
+            continue
+        return (f"{row.get('state')} at {str(row.get('anchor_commit'))[:12]}"
+                + (f" ({row['result_status']})" if row.get("result_status") else ""))
+    return None
+
+
+def carry_refusal(candidate: Candidate, *, bound: bool, scope: CarryScope) -> str | None:
+    """Why this checkpoint cannot follow the champion to `scope.anchor_commit`, or None.
+
+    Cheap checks only (no patch work): an anchor that is the current one or an
+    ANCESTOR of it (`git merge-base --is-ancestor`; another lineage stays refused),
+    the same measurement family (its own epoch, else `checkpoint_family` must equal
+    this launch's), the same target family (`target_family`), and not consumed at
+    another anchor (`consumed_elsewhere`)."""
+    ck = candidate.checkpoint
+    formed = ck.get("anchor_commit")
+    if not formed:
+        return "checkpoint names no anchor"
+    if candidate.stage not in STAGE_RANK:
+        return f"unknown stage {candidate.stage!r}"
+    if formed != scope.anchor_commit:
+        ancestry = is_ancestor(scope.carry.repo, formed, scope.anchor_commit)
+        if ancestry is None:
+            return (f"cannot prove {formed[:12]} is an ancestor of the current anchor "
+                    f"{scope.anchor_commit[:12]} (no repository, or an unknown commit)")
+        if not ancestry:
+            return (f"formed on {formed[:12]}, which is not an ancestor of the current "
+                    f"anchor {scope.anchor_commit[:12]} (another lineage)")
+    elif bound:
+        return "bound to this launch already: not a carry"
+    if not bound:
+        family = checkpoint_family(ck, scope.families)
+        if family is None:
+            return ("measurement family unknown: no carry_family stamp and no verified "
+                    f"epoch alias for {str(ck.get('epoch_sha256'))[:12]}")
+        if scope.carry.family is None or family != scope.carry.family:
+            return (f"measurement family differs ({family[:12]} != "
+                    f"{str(scope.carry.family)[:12]}): another instrument, recipe or "
+                    "request set, not only a keep or a screen scope")
+    then, now = target_family(ck.get("target")), target_family(scope.target)
+    for key in ("measurement_surface", "model"):
+        if then[key] is not None and now[key] is not None and then[key] != now[key]:
+            return f"target {key} family differs: {then[key]} != {now[key]}"
+    used = consumed_elsewhere(candidate.checkpoint_id, scope.anchor_commit, scope.claim_rows)
+    if used is not None:
+        return f"already consumed: {used}"
+    return None
+
+
+def _patch_excerpt(raw: bytes) -> str:
+    text = raw.decode("utf-8", "replace")
+    if len(raw) <= CARRY_PATCH_EXCERPT_BYTES:
+        return text
+    return (raw[:CARRY_PATCH_EXCERPT_BYTES].decode("utf-8", "replace")
+            + f"\n... [{len(raw) - CARRY_PATCH_EXCERPT_BYTES} more bytes clipped]")
+
+
+def carry_checkpoint(candidate: Candidate, *, scope: CarryScope,
+                     check_patch: bool = True) -> Candidate:
+    """The checkpoint re-bound to `scope` (same checkpoint id: claims stay per
+    (checkpoint, anchor)). Never raises for the candidate's own defects: those are
+    left for `prevalidate` to refuse on the re-bound checkpoint, in group order.
+
+      author / critic1   carried as they are.
+      critic2 / build    the retained patch applies cleanly at the current anchor:
+                         resumed at CRITIC2 on the new base -- the critic re-reviews the
+                         rebased diff and the build re-runs; a build's critic:patch
+                         verdict and refusal are dropped (no build or verdict artifact
+                         crosses anchors). It does not apply: DEMOTED to an author
+                         checkpoint whose feedback names the failed apply and carries
+                         the old patch as reference.
+
+    Every carry adds one `resume_depth` hop (the chain bound, `depth_limit`, holds
+    across repeated carries) and spends no authoring attempt. `carry` records the
+    old and new anchors and epochs, the action and the reason; `carry_family_sha256`
+    is stamped so the next hop needs no alias lookup.
+    """
+    ck = dict(candidate.checkpoint)
+    formed = str(ck.get("anchor_commit"))
+    anchor = scope.anchor_commit
+    moved = formed != anchor
+    effective = dict(ck)
+    effective.update(anchor_commit=anchor, epoch_sha256=scope.epoch,
+                     target=dict(scope.target),
+                     resume_depth=int(ck.get("resume_depth") or 0) + 1)
+    if scope.measurement_epoch is not None:
+        effective["measurement_epoch_sha256"] = scope.measurement_epoch
+    else:
+        effective.pop("measurement_epoch_sha256", None)
+    if scope.carry.family is not None:
+        effective["carry_family_sha256"] = scope.carry.family
+    why = (f"an unmeasured accepted hypothesis follows the champion: formed on "
+           f"{formed[:12]}, an ancestor of the current anchor {anchor[:12]} (a keep "
+           f"moved it)" if moved else
+           f"formed on this anchor {anchor[:12]} under measurement epoch "
+           f"{str(ck.get('measurement_epoch_sha256') or ck.get('epoch_sha256'))[:12]} of "
+           "the same measurement family (screen scope or execution digest only)")
+    why += f"; it is measured afresh in epoch {scope.epoch[:12]}, never compared across epochs"
+    record: dict[str, Any] = {
+        "schema": CARRY_SCHEMA, "action": "carried", "from_stage": candidate.stage,
+        "stage": candidate.stage, "carried_from_anchor": formed, "carried_to_anchor": anchor,
+        "from_epoch_sha256": ck.get("epoch_sha256"),
+        "from_measurement_epoch_sha256": ck.get("measurement_epoch_sha256"),
+        "to_epoch_sha256": scope.epoch, "to_measurement_epoch_sha256": scope.measurement_epoch,
+        "from_target": ck.get("target"), "carry_family_sha256": scope.carry.family,
+        "resume_depth": effective["resume_depth"], "author_attempt_charged": False,
+        "reason": why}
+    if isinstance(ck.get("carry"), Mapping):
+        record["previous"] = dict(ck["carry"])
+    if candidate.stage in PATCH_STAGES and check_patch:
+        pointer = ck.get("retained_patch") if isinstance(ck.get("retained_patch"), Mapping) \
+            else {}
+        patch_anchor = str(pointer.get("formed_on") or formed)
+        raw = applies = apply_error = None
+        try:
+            raw = verify_retained_patch(pointer, anchor_commit=patch_anchor,
+                                        mechanism_id=candidate.hypothesis.get("mechanism_id"))
+        except ResumeRejected:
+            raw = None      # prevalidate refuses the re-bound checkpoint, with its check
+        if raw is not None:
+            if patch_anchor == anchor:
+                applies = True
+            elif scope.carry.repo is not None:
+                try:
+                    patch_applies(scope.carry.repo, anchor, raw, scratch=scope.carry.scratch)
+                    applies = True
+                except ResumeRejected as exc:
+                    if exc.check == "patch_apply":
+                        applies, apply_error = False, str(exc)
+        for key in ("critic_patch", "refusal_gate", "refusal_reason", "gate_rules_fingerprint"):
+            effective.pop(key, None)
+        patch_record = {"patch_file": pointer.get("patch_file"),
+                        "patch_sha256": pointer.get("patch_sha256"), "formed_on": patch_anchor}
+        if applies is False:
+            prior = [str(item) for item in ck.get("prior_patch_rejections") or ()]
+            feedback = (f"prior patch did not apply after keep {anchor[:12]} (it was formed "
+                        f"on {patch_anchor[:12]}): {apply_error}; re-author on the new "
+                        f"anchor. The prior patch, for reference only (sha256 "
+                        f"{str(pointer.get('patch_sha256'))[:12]}):\n```diff\n"
+                        f"{_patch_excerpt(raw)}\n```")
+            effective.pop("retained_patch", None)
+            effective.update(
+                stage="author", patch_round=0,
+                prior_patch_rejections=[*prior, feedback][-loop.MAX_CARRIED_PATCH_REJECTIONS:],
+                patch_rounds_remaining=max(1, int(ck.get("patch_rounds_remaining")
+                                                  or loop.PATCH_ROUNDS)),
+                author_attempts_used=int(ck.get("author_attempts_used") or 0),
+                author_attempts_budget=int(ck.get("author_attempts_budget")
+                                           or loop.HYPOTHESIS_AUTHOR_ATTEMPTS),
+                carried_patch={**dict(pointer), "formed_on": patch_anchor})
+            record.update(action="demoted", stage="author", patch=patch_record,
+                          apply_error=apply_error)
+            record["reason"] += ("; its patch does not apply at the new anchor, so it is "
+                                 "re-authored there with the old patch as feedback")
+        else:
+            effective.update(stage="critic2", retained_patch={**dict(pointer),
+                                                              "formed_on": patch_anchor},
+                             patch_rounds_remaining=max(
+                                 1, int(ck.get("patch_rounds_remaining") or 1)))
+            record.update(action="rebased", stage="critic2", patch=patch_record,
+                          apply_checked=applies is True)
+            record["reason"] += ("; its patch applies at the new anchor, so critic pass 2 "
+                                 "re-reviews the rebased diff and the build re-runs")
+    effective["carry"] = record
+    return Candidate(candidate.checkpoint_id, candidate.attempt_id, candidate.recorded_at,
+                     candidate.row_status, candidate.mechanism_id, effective)
+
+
+def scan_all(store_root: Path, *, epoch: str, measurement_epoch: str | None = None,
+             immutable: bool = False) -> list[tuple[Candidate, bool]]:
+    """Every checkpoint in the store, oldest first, with whether it is bound to this
+    launch's measurement identity (exactly `scan`'s rule)."""
+    found: list[tuple[Candidate, bool]] = []
+    for row in _checkpoint_rows(store_root, immutable=immutable):
+        for index, entry in _row_checkpoints(row) or ():
+            if measurement_epoch is None:
+                bound = row["epoch_sha256"] == epoch
+            else:
+                bound = _measurement_bound(entry, row["epoch_sha256"], epoch=epoch,
+                                           measurement_epoch=measurement_epoch)
+            found.append((Candidate(f"{row['attempt_id']}#{index}", row["attempt_id"],
+                                    row["recorded_at"], row["status"], row["mechanism_id"],
+                                    entry), bound))
+    return found
+
+
+def _patch_anchor(pointer: Any, anchor_commit: str | None) -> str | None:
+    """The commit a retained patch's bytes were formed on: `formed_on` when a carry
+    rebased it onto a later anchor, else the checkpoint's anchor."""
+    if isinstance(pointer, Mapping) and pointer.get("formed_on"):
+        return str(pointer["formed_on"])
+    return anchor_commit
+
+
 def prevalidate(candidate: Candidate, *, epoch: str, anchor_commit: str,
                 target: Mapping[str, Any], repo: Path | None,
                 scratch: Path | None = None,
@@ -1043,7 +1454,9 @@ def prevalidate(candidate: Candidate, *, epoch: str, anchor_commit: str,
         verdict = ck.get("critic_patch")
         if not isinstance(verdict, Mapping) or not verdict.get("accepted"):
             raise ResumeRejected("critic", "no accepted critic:patch verdict is carried")
-    patch = verify_retained_patch(ck.get("retained_patch"), anchor_commit=anchor_commit,
+    patch = verify_retained_patch(ck.get("retained_patch"),
+                                  anchor_commit=_patch_anchor(ck.get("retained_patch"),
+                                                              anchor_commit),
                                   mechanism_id=hypothesis.mechanism_id)
     if repo is not None:
         patch_applies(repo, anchor_commit, patch, scratch=scratch)
@@ -1062,6 +1475,8 @@ def rejection_attempt(candidate: Candidate, check: str, reason: str, *,
         "reason": f"resume re-validation refused ({check}): {reason}",
         "refusal_gate": f"resume:{check}", "resumed_from": candidate.checkpoint_id,
         "resume_stage": candidate.stage,
+        **({"resume_carry": dict(candidate.checkpoint["carry"])}
+           if isinstance(candidate.checkpoint.get("carry"), Mapping) else {}),
         # experiments._attempt_id prefers this key: one row per (checkpoint, anchor).
         "proposal_sha256": _sha256(
             f"resume_rejected\n{candidate.checkpoint_id}\n{anchor_commit}".encode()),
@@ -1114,8 +1529,11 @@ def resume_point(candidate: Candidate, *, patch: bytes | None = None,
         def materializer():
             # Re-read and re-verify at the moment of use: the bytes the scan
             # checked are not assumed to be the bytes on disk now.
+            # A carried (rebased) patch verifies against the commit its bytes were
+            # formed on and is applied, with a clean-apply check, on the current base.
             fresh = verify_retained_patch(ck.get("retained_patch"),
-                                          anchor_commit=anchor_commit or base,
+                                          anchor_commit=_patch_anchor(
+                                              ck.get("retained_patch"), anchor_commit or base),
                                           mechanism_id=hypothesis.mechanism_id)
             if patch is not None and fresh != patch:
                 raise ResumeRejected("patch_sha256", "retained patch changed after the scan")
@@ -1123,7 +1541,8 @@ def resume_point(candidate: Candidate, *, patch: bytes | None = None,
 
         def discarder():
             discard(worktree, patch if patch is not None else verify_retained_patch(
-                ck.get("retained_patch"), anchor_commit=anchor_commit or base,
+                ck.get("retained_patch"),
+                anchor_commit=_patch_anchor(ck.get("retained_patch"), anchor_commit or base),
                 mechanism_id=hypothesis.mechanism_id))
     return ResumePoint(
         checkpoint_id=candidate.checkpoint_id, stage=candidate.stage, hypothesis=hypothesis,
@@ -1142,7 +1561,9 @@ class ResumeQueue:
 
     def __init__(self, *, store_root: Path, entries: Sequence[tuple[Candidate, bytes | None]],
                  siblings: Mapping[str, Sequence[str]], anchor_commit: str,
-                 epoch: str, actor_diffs: Mapping[str, Any] | None = None) -> None:
+                 epoch: str, actor_diffs: Mapping[str, Any] | None = None,
+                 carry: CarryContext | None = None, target: Mapping[str, Any] | None = None,
+                 measurement_epoch: str | None = None) -> None:
         self.store_root = Path(store_root)
         #: checkpoint_id -> `actor_config_diff` (None: the checkpoint recorded none).
         self.actor_diffs = dict(actor_diffs or {})
@@ -1152,6 +1573,18 @@ class ResumeQueue:
         self.epoch = epoch
         self.handed_out: list[str] = []
         self._lock = threading.Lock()
+        #: Carry-forward (`CarryContext`): None keeps the historical anchor-exact queue.
+        self.carry = carry
+        self.target = None if target is None else dict(target)
+        self.measurement_epoch = measurement_epoch
+        #: checkpoint_id -> the `carry` record of a carried entry (`stamp_actor_diff`).
+        self.carries: dict[str, dict] = {
+            candidate.checkpoint_id: dict(candidate.checkpoint["carry"])
+            for candidate, _patch in self.entries
+            if isinstance(candidate.checkpoint.get("carry"), Mapping)}
+        #: In-run anchor advances this queue followed (a keep during the run).
+        self.advances: list[dict] = []
+        self.stale = {}
 
     #: IN-RUN pending hypotheses (`enable_pending_refresh`): an empty queue re-scans
     #: the store for accepted hypotheses a lane left pending THIS run
@@ -1160,47 +1593,74 @@ class ResumeQueue:
     refresh_target: Mapping[str, Any] | None = None
     #: Extra binding keywords for `scan` / `prevalidate` (the launch's own binding).
     refresh_bind: Mapping[str, Any] = {}
-    #: checkpoint_id -> (check, reason) for a refreshed entry that failed
-    #: re-validation: handed out stale, so the lane records WHY.
+    #: checkpoint_id -> (check, reason) for an entry that failed re-validation
+    #: (a refreshed one, or one re-bound by an in-run anchor advance): handed out
+    #: stale, so the lane records WHY.
     stale: Mapping[str, tuple[str, str]] = {}
 
     def enable_pending_refresh(self, target: Mapping[str, Any], **bind: Any) -> "ResumeQueue":
         """Turn on the in-run refresh. `target` is the launch's `target_identity`;
         `bind` is forwarded to `scan` and `prevalidate` (whatever binding keywords the
         launch's own `prepare` used), so a refreshed checkpoint binds exactly like a
-        launch-time one."""
+        launch-time one. A queue built with a `CarryContext` carries in the refresh
+        too (an in-run keep moves the anchor under pending work)."""
         self.refresh_target = dict(target)
         self.refresh_bind = dict(bind)
         self.stale = {}
         return self
+
+    def _carry_scope(self, claim_rows: Sequence[Mapping[str, Any]],
+                     anchor_commit: str | None = None) -> CarryScope:
+        measured = self.refresh_bind.get("measurement_epoch", self.measurement_epoch)
+        return carry_scope(self.store_root, self.carry,
+                           anchor_commit=anchor_commit or self.anchor_commit, epoch=self.epoch,
+                           measurement_epoch=measured,
+                           target=self.refresh_target or self.target or {},
+                           claim_rows=claim_rows)
 
     def _refresh(self) -> None:
         """Queue accepted hypotheses left pending since the last scan (author stage)."""
         try:
             # Pending accepted hypotheses, and planner hypotheses whose critic pass 1
             # never answered (critic1): both resume before the planner is asked.
-            candidates = [candidate for candidate in
-                          scan(self.store_root, epoch=self.epoch, **self.refresh_bind)
-                          if candidate.row_status in loop.PENDING_HYPOTHESIS_STATUSES
-                          or candidate.stage == "critic1"]
+            if self.carry is None:
+                pairs = [(candidate, True) for candidate in
+                         scan(self.store_root, epoch=self.epoch, **self.refresh_bind)]
+            else:
+                pairs = scan_all(self.store_root, epoch=self.epoch,
+                                 measurement_epoch=self.refresh_bind.get("measurement_epoch"))
+            pairs = [(candidate, bound) for candidate, bound in pairs
+                     if candidate.row_status in loop.PENDING_HYPOTHESIS_STATUSES
+                     or candidate.stage == "critic1"]
         except FileNotFoundError:
             return
         # The writable ledger (as `take` uses): a read-only one is opened immutable and
         # would not see claims still in this process's WAL.
         with ClaimLedger(self.store_root) as ledger:
             claimed = ledger.claimed(self.anchor_commit)
+            claim_rows = ledger.rows() if self.carry is not None else []
+        scope = self._carry_scope(claim_rows) if self.carry is not None else None
         known = set(self.handed_out) | {entry[0].checkpoint_id for entry in self.entries}
+        rules = loop.gate_rules_fingerprint()
+        scope_fp = loop.scope_rules_fingerprint()
         groups: dict[tuple, list[Candidate]] = {}
-        for candidate in candidates:
+        for candidate, bound in pairs:
             if candidate.checkpoint_id in claimed or candidate.checkpoint_id in known:
                 continue
+            if scope is not None and not (
+                    bound and candidate.checkpoint.get("anchor_commit") == self.anchor_commit):
+                if carry_refusal(candidate, bound=bound, scope=scope) is None:
+                    if ineligible_reason(candidate, rules_fingerprint=rules,
+                                         scope_fingerprint=scope_fp) is not None:
+                        continue
+                    candidate = carry_checkpoint(candidate, scope=scope)
+                elif not bound:
+                    continue
             groups.setdefault(candidate.group, []).append(candidate)
-        rules = loop.gate_rules_fingerprint()
-        scope = loop.scope_rules_fingerprint()
         for members in groups.values():
             for candidate in sorted(members, key=lambda item: item.rank, reverse=True):
                 if ineligible_reason(candidate, rules_fingerprint=rules,
-                                     scope_fingerprint=scope) is not None:
+                                     scope_fingerprint=scope_fp) is not None:
                     continue
                 try:
                     prevalidate(candidate, epoch=self.epoch, anchor_commit=self.anchor_commit,
@@ -1209,15 +1669,76 @@ class ResumeQueue:
                 except ResumeRejected as exc:
                     self.stale[candidate.checkpoint_id] = (exc.check, str(exc))
                 self.entries.append((candidate, None))
+                if isinstance(candidate.checkpoint.get("carry"), Mapping):
+                    self.carries[candidate.checkpoint_id] = dict(candidate.checkpoint["carry"])
                 self.siblings[candidate.checkpoint_id] = tuple(
                     item.checkpoint_id for item in members if item is not candidate)
                 break
+
+    def _follow(self, base: str) -> str:
+        """The lane's base differs from the queue's anchor: "advanced" (a keep moved
+        the champion forward; every queued entry is carried onto it), "lagging" (the
+        lane still sits on an ANCESTOR of the queue's anchor: it gets no resume this
+        draw, the entries wait for a current lane), or "unrelated"."""
+        if is_ancestor(self.carry.repo, self.anchor_commit, base) is True:
+            self._advance(base)
+            return "advanced"
+        if is_ancestor(self.carry.repo, base, self.anchor_commit) is True:
+            return "lagging"
+        return "unrelated"
+
+    def _advance(self, base: str) -> None:
+        """Carry every queued entry onto `base` (`carry_checkpoint`): an in-run keep no
+        longer consumes queued accepted work as `anchor changed during the run`."""
+        with ClaimLedger(self.store_root) as ledger:
+            claim_rows = ledger.rows()
+        scope = self._carry_scope(claim_rows, anchor_commit=base)
+        previous, entries = self.anchor_commit, self.entries
+        self.anchor_commit, self.entries = base, []
+        carried = []
+        for candidate, patch in entries:
+            if candidate.checkpoint_id in self.stale:
+                self.entries.append((candidate, patch))
+                continue
+            why = carry_refusal(candidate, bound=True, scope=scope)
+            if why is not None:
+                self.stale[candidate.checkpoint_id] = ("carry", why)
+                self.entries.append((candidate, patch))
+                continue
+            moved = carry_checkpoint(candidate, scope=scope)
+            try:
+                patch = prevalidate(moved, epoch=self.epoch, anchor_commit=base,
+                                    target=scope.target, repo=self.carry.repo,
+                                    scratch=self.carry.scratch,
+                                    measurement_epoch=scope.measurement_epoch)
+            except ResumeRejected as exc:
+                self.stale[moved.checkpoint_id] = (exc.check, str(exc))
+                patch = None
+            self.entries.append((moved, patch))
+            self.carries[moved.checkpoint_id] = dict(moved.checkpoint["carry"])
+            carried.append({"checkpoint_id": moved.checkpoint_id,
+                            "action": moved.checkpoint["carry"]["action"],
+                            "stale": self.stale.get(moved.checkpoint_id)})
+        self.entries.sort(key=lambda entry: entry[0].rank, reverse=True)
+        self.advances.append({"from_anchor": previous, "to_anchor": base, "at": _now(),
+                              "carried": carried})
+        print(f"resume    anchor advanced {previous[:12]} -> {base[:12]} during the run: "
+              f"{len(carried)} queued checkpoint(s) carried forward", file=sys.stderr)
 
     def __len__(self) -> int:
         return len(self.entries)
 
     def take(self, worker, base: str | None) -> ResumePoint | None:
         with self._lock:
+            if base and base != self.anchor_commit and self.carry is not None:
+                try:
+                    followed = self._follow(base)
+                except Exception as exc:      # noqa: BLE001 -- the old stale path remains
+                    print(f"resume    carry-forward on anchor advance failed: "
+                          f"{type(exc).__name__}: {exc}", file=sys.stderr)
+                    followed = "unrelated"
+                if followed == "lagging":
+                    return None
             if not self.entries and self.refresh_target is not None:
                 try:
                     self._refresh()
@@ -1257,11 +1778,15 @@ class ResumeQueue:
                         point.stale = ("anchor", reason)
                         self.handed_out.append(candidate.checkpoint_id)
                         return point
+                    carry = candidate.checkpoint.get("carry")
+                    note = (f"; carried ({carry.get('action')}) from "
+                            f"{str(carry.get('carried_from_anchor'))[:12]}"
+                            if isinstance(carry, Mapping) else "")
                     if not ledger.claim(candidate.checkpoint_id, self.anchor_commit,
                                         state="resumed", stage=candidate.stage,
                                         epoch=self.epoch, mechanism_id=candidate.group[0],
                                         source_attempt_id=candidate.attempt_id,
-                                        detail=f"lane {getattr(worker, 'name', worker)}"):
+                                        detail=f"lane {getattr(worker, 'name', worker)}{note}"):
                         continue    # another process took it: at most once
                     for sibling in self.siblings.get(candidate.checkpoint_id, ()):
                         ledger.claim(sibling, self.anchor_commit, state="superseded",
@@ -1275,17 +1800,30 @@ class ResumeQueue:
             return None
 
 
+#: At most this many non-carriable other-epoch checkpoints are listed in a report
+#: (`carry_refused`); the count is always given.
+CARRY_REFUSED_LISTED = 50
+
+
 def prepare(store_root: Path, *, epoch: str, anchor_commit: str, target: Mapping[str, Any],
             repo: Path | None, rules_fingerprint: str | None = None,
             on_rejected: Callable[[dict], None] | None = None,
             scratch: Path | None = None, dry_run: bool = False,
             measurement_epoch: str | None = None,
-            actor_config: Mapping[str, Any] | None = None) -> tuple[ResumeQueue, dict]:
+            actor_config: Mapping[str, Any] | None = None,
+            carry: CarryContext | None = None) -> tuple[ResumeQueue, dict]:
     """Scan, choose and re-validate. `dry_run` writes nothing (not even a claim).
 
     `measurement_epoch` binds resume on measurement identity only (see `scan`);
     `actor_config` is this launch's actor settings, diffed against each queued
-    checkpoint's (`actor_config_diff`, in the report and on the queue)."""
+    checkpoint's (`actor_config_diff`, in the report and on the queue).
+
+    `carry` (a `CarryContext`) turns on CARRY-FORWARD: a checkpoint bound elsewhere
+    (another anchor, or another measurement epoch of the same family) that
+    `carry_refusal` admits is re-bound here by `carry_checkpoint` -- after its own
+    eligibility, before grouping -- and then chosen and re-validated like any other.
+    One from another lineage or family is not this launch's: it is listed
+    (`carry_refused`) and never claimed. Without `carry`, nothing changes."""
     rules_fingerprint = rules_fingerprint or loop.gate_rules_fingerprint()
     report: dict[str, Any] = {"epoch": epoch, "anchor_commit": anchor_commit,
                               "target": dict(target), "queued": [], "rejected": [],
@@ -1293,22 +1831,56 @@ def prepare(store_root: Path, *, epoch: str, anchor_commit: str, target: Mapping
     if measurement_epoch is not None:
         report["measurement_epoch"] = measurement_epoch
     try:
-        candidates = scan(store_root, epoch=epoch, measurement_epoch=measurement_epoch,
-                          immutable=dry_run)
+        if carry is None:
+            pairs = [(candidate, True) for candidate in
+                     scan(store_root, epoch=epoch, measurement_epoch=measurement_epoch,
+                          immutable=dry_run)]
+        else:
+            pairs = scan_all(store_root, epoch=epoch, measurement_epoch=measurement_epoch,
+                             immutable=dry_run)
     except FileNotFoundError:
-        candidates = []
-    report["scanned"] = len(candidates)
+        pairs = []
+    report["scanned"] = sum(1 for _candidate, bound in pairs if bound)
     report["other_epoch_rows"] = other_epoch_checkpoints(
         store_root, epoch=epoch, measurement_epoch=measurement_epoch, immutable=dry_run)
+    if carry is not None:
+        report.update(carried=[], carry_refused=[], carry_refused_count=0)
     actor_diffs: dict[str, Any] = {}
     ledger = ClaimLedger(store_root, read_only=dry_run)
     try:
         claimed = ledger.claimed(anchor_commit)
+        scope = (carry_scope(store_root, carry, anchor_commit=anchor_commit, epoch=epoch,
+                             measurement_epoch=measurement_epoch, target=target,
+                             claim_rows=ledger.rows(), immutable=dry_run)
+                 if carry is not None else None)
         groups: dict[tuple, list[Candidate]] = {}
-        for candidate in candidates:
-            if candidate.checkpoint_id in claimed:
+        for candidate, bound in pairs:
+            if bound and candidate.checkpoint_id in claimed:
                 report["already_claimed"] += 1
                 continue
+            if scope is not None and not (
+                    bound and candidate.checkpoint.get("anchor_commit") == anchor_commit):
+                why = carry_refusal(candidate, bound=bound, scope=scope)
+                if why is not None:
+                    if not bound:
+                        # Not this launch's: never claimed, only listed.
+                        report["carry_refused_count"] += 1
+                        if len(report["carry_refused"]) < CARRY_REFUSED_LISTED:
+                            report["carry_refused"].append({**candidate.summary(),
+                                                            "reason": why})
+                        continue
+                    # Bound but on another lineage: refused by `prevalidate`, as before.
+                else:
+                    if candidate.checkpoint_id in claimed:
+                        report["already_claimed"] += 1
+                        continue
+                    why = ineligible_reason(candidate, rules_fingerprint=rules_fingerprint)
+                    if why is not None:
+                        report["ineligible"].append({**candidate.summary(), "reason": why,
+                                                     "carry_admitted": True})
+                        continue
+                    candidate = carry_checkpoint(candidate, scope=scope)
+                    report["carried"].append(candidate.summary())
             groups.setdefault(candidate.group, []).append(candidate)
         entries: list[tuple[Candidate, bytes | None]] = []
         siblings: dict[str, list[str]] = {}
@@ -1354,7 +1926,8 @@ def prepare(store_root: Path, *, epoch: str, anchor_commit: str, target: Mapping
     finally:
         ledger.close()
     return (ResumeQueue(store_root=store_root, entries=entries, siblings=siblings,
-                        anchor_commit=anchor_commit, epoch=epoch, actor_diffs=actor_diffs),
+                        anchor_commit=anchor_commit, epoch=epoch, actor_diffs=actor_diffs,
+                        carry=carry, target=target, measurement_epoch=measurement_epoch),
             report)
 
 
@@ -1380,7 +1953,8 @@ def _claim_rows_live(store_root: Path) -> list[dict]:
 
 
 def pending_hypotheses(store_root: Path, *, epoch: str, anchor_commit: str | None = None,
-                       limit: int = PENDING_SUMMARY_LIMIT, **bind: Any) -> list[dict]:
+                       limit: int = PENDING_SUMMARY_LIMIT,
+                       carry: CarryContext | None = None, **bind: Any) -> list[dict]:
     """Accepted hypotheses pending authoring in this epoch, newest first. Read-only.
 
     One row per hypothesis: its NEWEST `patch_rounds_exhausted` / `scope_blocked`
@@ -1390,17 +1964,36 @@ def pending_hypotheses(store_root: Path, *, epoch: str, anchor_commit: str | Non
     it), "in_flight" (a lane holds its claim), "scope_blocked" or "budget_spent"
     (not resumable now; `blocked_reason` says why). Feeds the planner prompt (so it
     does not re-propose them) and `loop-status.json`. `bind` is forwarded to `scan`
-    (the launch's own binding keywords).
+    (the launch's own binding keywords). With `carry` (and an anchor), a pending
+    hypothesis formed on an ancestor anchor or another epoch of the same family is
+    shown re-bound here (`carry_refusal` / `carry_checkpoint`), as the next draw
+    would resume it.
     """
     try:
-        candidates = [candidate for candidate in scan(store_root, epoch=epoch, **bind)
-                      if candidate.row_status in loop.PENDING_HYPOTHESIS_STATUSES]
+        if carry is None or anchor_commit is None:
+            pairs = [(candidate, True) for candidate in scan(store_root, epoch=epoch, **bind)]
+        else:
+            pairs = scan_all(store_root, epoch=epoch,
+                             measurement_epoch=bind.get("measurement_epoch"))
+        pairs = [(candidate, bound) for candidate, bound in pairs
+                 if candidate.row_status in loop.PENDING_HYPOTHESIS_STATUSES]
     except (FileNotFoundError, sqlite3.DatabaseError):
         return []
-    claims = {(row["checkpoint_id"], row["anchor_commit"]): row
-              for row in _claim_rows_live(store_root)}
+    claim_rows = _claim_rows_live(store_root)
+    claims = {(row["checkpoint_id"], row["anchor_commit"]): row for row in claim_rows}
+    scope = (carry_scope(store_root, carry, anchor_commit=anchor_commit, epoch=epoch,
+                         measurement_epoch=bind.get("measurement_epoch"), target={},
+                         claim_rows=claim_rows)
+             if carry is not None and anchor_commit is not None else None)
     newest: dict[tuple, Candidate] = {}
-    for candidate in candidates:      # oldest first: the last one per group wins
+    for candidate, bound in pairs:      # oldest first: the last one per group wins
+        if scope is not None and not (
+                bound and candidate.checkpoint.get("anchor_commit") == anchor_commit):
+            if carry_refusal(candidate, bound=bound, scope=scope) is not None:
+                if not bound:
+                    continue
+            else:
+                candidate = carry_checkpoint(candidate, scope=scope, check_patch=False)
         newest[candidate.group] = candidate
     rules = loop.gate_rules_fingerprint()
     scope = loop.scope_rules_fingerprint()
@@ -1440,6 +2033,8 @@ def pending_hypotheses(store_root: Path, *, epoch: str, anchor_commit: str | Non
                "last_patch_rejection": prior[-1][:300] if prior else None}
         if blocked is not None and state != "in_flight":
             row["blocked_reason"] = blocked
+        if isinstance(ck.get("carry"), Mapping):
+            row["carried_from_anchor"] = ck["carry"].get("carried_from_anchor")
         if isinstance(ck.get("scope_block"), Mapping):
             row["scope_block"] = {key: ck["scope_block"].get(key)
                                   for key in ("route", "rule", "source")}
@@ -2391,6 +2986,222 @@ def backfill_critic1_apply(store_root: Path, plan: Mapping[str, Any]) -> bool:
     return added
 
 
+# ------------------------------------------------------------------ carry-forward (tool)
+
+
+def _alias_record(store_root: Path, epoch: str) -> dict | None:
+    """The VERIFIED epoch-alias record whose full or measurement epoch is `epoch`."""
+    # mode=ro, never immutable: a live run's rows may still sit in the WAL.
+    connection = _connect(store_root, immutable=False)
+    try:
+        rows = connection.execute("SELECT record FROM epoch_aliases WHERE full_epoch=? "
+                                  "OR measurement_epoch=?", (epoch, epoch)).fetchall()
+    except sqlite3.OperationalError:
+        return None
+    finally:
+        connection.close()
+    for (raw,) in rows:
+        try:
+            record = json.loads(raw)
+        except (TypeError, json.JSONDecodeError):
+            continue
+        if experiments.verify_epoch_alias(record) is None:
+            return record
+    return None
+
+
+def carry_forward_plan(store_root: Path, *, checkpoints: Sequence[str], repo: Path,
+                       anchor_commit: str, epoch: str, surface: str,
+                       model: str | None = None, measurement_epoch: str | None = None,
+                       scratch: Path | None = None,
+                       rules_fingerprint: str | None = None) -> dict:
+    """Read-only. One re-bound row per named checkpoint, exactly as the automatic path
+    (`prepare(carry=)`) would re-bind it, for a store whose next launch runs at
+    `anchor_commit` in `epoch`.
+
+    The automatic path already carries checkpoints formed before it existed (their
+    measurement family comes from the verified epoch aliases), so this is the
+    operator's explicit, logged version of it: for the live DS41 pair, move them onto
+    anchor-gen-001 now. `epoch` must have a verified alias record (the family and,
+    unless given, the measurement epoch come from it). Each planned row keeps its
+    source row's status, carries ONE checkpoint (`resumed_from` = the source
+    checkpoint, one depth hop, no authoring attempt spent) and `carried_forward_from`
+    provenance. Nothing is written; `carry_forward_apply` appends the rows and claims
+    each source checkpoint `superseded` at the anchor, so it is never resumed twice.
+    """
+    store_root = Path(store_root)
+    for name, value in (("--anchor", anchor_commit), ("--epoch", epoch)):
+        if not re.fullmatch(r"[0-9a-f]{40}" if name == "--anchor" else r"[0-9a-f]{64}",
+                            str(value or "")):
+            raise ValueError(f"{name} must be a full {'commit sha' if name == '--anchor' else '64-hex epoch sha256'}")
+    record = _alias_record(store_root, epoch)
+    if record is None:
+        raise ValueError(f"epoch {epoch[:12]} has no verified epoch-alias record: its "
+                         "measurement family cannot be proved (launch at it once, or "
+                         "backfill the alias, first)")
+    if measurement_epoch is None:
+        measurement_epoch = record["measurement_epoch_sha256"]
+    if record.get("anchor_commit") != anchor_commit:
+        raise ValueError(f"epoch {epoch[:12]} was declared at anchor "
+                         f"{str(record.get('anchor_commit'))[:12]}, not {anchor_commit[:12]}")
+    if epoch not in (record["full_epoch_sha256"], record["measurement_epoch_sha256"]) \
+            or measurement_epoch != record["measurement_epoch_sha256"]:
+        raise ValueError("--measurement-epoch does not match the epoch's alias record")
+    full_epoch = record["full_epoch_sha256"]
+    family = carry_family(build_recipe=record["build_recipe"],
+                          host_state=experiments.measurement_host_state(
+                              record["host_state"], record["enrolled_measurement_digest"]))
+    head = _git(Path(repo), "rev-parse", "--verify", f"{anchor_commit}^{{commit}}").decode().strip()
+    if head != anchor_commit:
+        raise ValueError(f"{anchor_commit} is not a commit in {repo}")
+    rules_fingerprint = rules_fingerprint or loop.gate_rules_fingerprint()
+    carry = CarryContext(family=family, repo=Path(repo), scratch=scratch)
+    claim_rows = _claim_rows_live(store_root)
+    live = _live_status(store_root)
+    families = alias_families(store_root, immutable=False)
+    connection = _connect(store_root, immutable=False)
+    try:
+        plans = []
+        for name in checkpoints:
+            attempt_prefix, sep, index = str(name).rpartition("#")
+            if not sep or not index.isdigit():
+                raise ValueError(f"checkpoint must be <attempt_id>#<index>, not {name!r}")
+            row = _resolve_row(connection, attempt_prefix)
+            payload = json.loads(row["payload"])
+            entries = dict(_row_checkpoints(row) or ())
+            if int(index) not in entries:
+                raise ValueError(f"row {row['attempt_id'][:12]} carries no checkpoint #{index}")
+            source = entries[int(index)]
+            checkpoint_id = f"{row['attempt_id']}#{index}"
+            target = target_identity(measurement_surface=surface,
+                                     model=model or (source.get("target") or {}).get("model"))
+            candidate = Candidate(checkpoint_id, row["attempt_id"], row["recorded_at"],
+                                  row["status"], row["mechanism_id"], source)
+            scope = CarryScope(carry=carry, anchor_commit=anchor_commit, epoch=full_epoch,
+                               measurement_epoch=measurement_epoch, target=target,
+                               families=families, claim_rows=claim_rows)
+            bound = _measurement_bound(source, row["epoch_sha256"], epoch=full_epoch,
+                                       measurement_epoch=measurement_epoch)
+            refused = None
+            if bound and source.get("anchor_commit") == anchor_commit:
+                refused = "already bound to that anchor and epoch: nothing to carry"
+            claimed_here = [dict(item) for item in claim_rows
+                            if item["checkpoint_id"] == checkpoint_id
+                            and item["anchor_commit"] == anchor_commit
+                            and item["state"] != RELEASED]
+            if refused is None and claimed_here:
+                refused = (f"already claimed at {anchor_commit[:12]} "
+                           f"({claimed_here[0]['state']})")
+            refused = refused or carry_refusal(candidate, bound=bound, scope=scope)
+            refused = refused or ineligible_reason(candidate, rules_fingerprint=rules_fingerprint)
+            plan: dict[str, Any] = {"source_checkpoint_id": checkpoint_id,
+                                    "source_status": row["status"],
+                                    "source_stage": candidate.stage,
+                                    "source_anchor": source.get("anchor_commit"),
+                                    "source_epoch_sha256": source.get("epoch_sha256"),
+                                    "source_measurement_epoch_sha256":
+                                        source.get("measurement_epoch_sha256"),
+                                    "mechanism_id": candidate.group[0],
+                                    "source_claims": [dict(item) for item in claim_rows
+                                                      if item["checkpoint_id"] == checkpoint_id],
+                                    "refused": refused}
+            if refused is not None:
+                plans.append(plan)
+                continue
+            moved = carry_checkpoint(candidate, scope=scope)
+            ck = dict(moved.checkpoint)
+            ck["resumed_from"] = checkpoint_id
+            ck["carry"] = {**ck["carry"], "tool": "autokernel.loop.resume carry-forward"}
+            planned = Candidate("<planned>#0", "<planned>", _now(), row["status"],
+                                candidate.mechanism_id, ck)
+            checks: dict[str, Any] = {"ineligible_now": ineligible_reason(
+                planned, rules_fingerprint=rules_fingerprint)}
+            try:
+                prevalidate(planned, epoch=full_epoch, anchor_commit=anchor_commit,
+                            target=target, repo=Path(repo), scratch=scratch,
+                            measurement_epoch=measurement_epoch)
+                checks["prevalidates_at_anchor"] = True
+            except ResumeRejected as exc:
+                checks["prevalidates_at_anchor"] = f"NO ({exc.check}): {exc}"
+            hypothesis = dict(ck.get("hypothesis") or {})
+            carry_record = ck["carry"]
+            pending = None
+            if ck.get("stage") == "author":
+                used = int(ck.get("author_attempts_used") or 0)
+                budget = ck.get("author_attempts_budget")
+                pending = {"class": row["status"], "carried_forward": True,
+                           "author_attempts_used": used,
+                           "author_attempts_budget": None if budget is None else int(budget),
+                           "author_attempts_remaining": (None if budget is None
+                                                         else max(0, int(budget) - used))}
+            attempt = {
+                **hypothesis, "status": row["status"], "turn_recorded_at": _now(),
+                "reason": " | ".join([f"carried forward ({carry_record['action']}): "
+                                      f"{carry_record['reason']}",
+                                      *[str(item) for item in
+                                        (ck.get("prior_patch_rejections") or ())][-2:]]),
+                "refusal_gate": payload.get("refusal_gate"),
+                "hypothesis_round": int(ck.get("hypothesis_round") or 1),
+                "patch_round": int(ck.get("patch_round") or 0),
+                "prior_rejection_prompt": bool(ck.get("prior_patch_rejections")),
+                "validator_provenance": ([{**dict(ck["critic_hypothesis"]),
+                                           "resumed_from": checkpoint_id,
+                                           "changed_subsequent_search": False}]
+                                         if isinstance(ck.get("critic_hypothesis"), Mapping)
+                                         else []),
+                "resume_checkpoints": [ck], "spawn_parent": anchor_commit,
+                "carried_forward_from": {
+                    "schema": CARRY_TOOL_SCHEMA, "attempt_id": row["attempt_id"],
+                    "checkpoint_id": checkpoint_id, "recorded_at": row["recorded_at"],
+                    "status": row["status"], "stage": candidate.stage,
+                    "carry": carry_record, "alias_record_sha256": record.get("record_sha256"),
+                    "tool": "autokernel.loop.resume carry-forward"},
+                # experiments._attempt_id prefers this key: re-running the carry is a no-op.
+                "proposal_sha256": _sha256(f"resume-carry-forward\n{checkpoint_id}\n"
+                                           f"{anchor_commit}\n{full_epoch}\n"
+                                           f"{measurement_epoch}".encode()),
+            }
+            if pending is not None:
+                attempt["hypothesis_pending"] = pending
+            attempt_id = experiments._attempt_id(attempt, campaign_id=row["campaign_id"])
+            present = connection.execute("SELECT 1 FROM experiments WHERE attempt_id=?",
+                                         (attempt_id,)).fetchone() is not None
+            plan.update(attempt_id=attempt_id, checkpoint_id=f"{attempt_id}#0",
+                        campaign_id=row["campaign_id"], already_present=present,
+                        action=carry_record["action"], stage=ck.get("stage"),
+                        checks=checks, attempt=attempt)
+            plans.append(plan)
+    finally:
+        connection.close()
+    return {"anchor_commit": anchor_commit, "epoch_sha256": full_epoch,
+            "measurement_epoch_sha256": measurement_epoch, "carry_family_sha256": family,
+            "target_surface": surface, **live, "plans": plans}
+
+
+def carry_forward_apply(store_root: Path, plan: Mapping[str, Any]) -> list[dict]:
+    """The only writes: append each planned row (idempotent on its attempt id), then
+    claim its source checkpoint `superseded` at the anchor (at most once)."""
+    done = []
+    anchor = plan["anchor_commit"]
+    for item in plan["plans"]:
+        if item.get("refused") is not None:
+            continue
+        with experiments.ExperimentStore(store_root) as store:
+            added = store.record(item["attempt"], epoch=plan["epoch_sha256"],
+                                 recorded_at=_now(), campaign_id=item["campaign_id"])
+            store.write_markdown(epoch=plan["epoch_sha256"])
+        with ClaimLedger(store_root) as ledger:
+            claimed = ledger.claim(item["source_checkpoint_id"], anchor, state="superseded",
+                                   stage=item["source_stage"], epoch=plan["epoch_sha256"],
+                                   mechanism_id=item["mechanism_id"],
+                                   source_attempt_id=item["source_checkpoint_id"].rpartition("#")[0],
+                                   detail=f"carried forward to {item['checkpoint_id']} "
+                                          f"({item['action']}) by the operator carry-forward tool")
+        done.append({"attempt_id": item["attempt_id"], "appended": added,
+                     "source_superseded": claimed})
+    return done
+
+
 # ------------------------------------------------------------------ reopen
 
 
@@ -2616,6 +3427,24 @@ def main(argv: Sequence[str] | None = None) -> int:
     c1.add_argument("--attempts-used", type=int, default=1,
                     help="critic-pass-1 transients already spent (default: %(default)s)")
     c1.add_argument("--apply", action="store_true", help="append the row (the only write)")
+    fwd = commands.add_parser("carry-forward", help="operator: carry checkpoints formed on "
+                              "an ancestor anchor (or another epoch of the same family) "
+                              "onto the current anchor and epoch, as the automatic path "
+                              "would (dry-run unless --apply)")
+    fwd.add_argument("--store", type=Path, required=True)
+    fwd.add_argument("--checkpoint", action="append", default=[], required=True,
+                     help="<attempt_id or prefix>#<index> (repeat)")
+    fwd.add_argument("--repo", type=Path, required=True, help="the champion tree holding the "
+                     "anchor (ancestry and clean-apply checks; read only)")
+    fwd.add_argument("--anchor", required=True, help="the anchor the next launch runs at")
+    fwd.add_argument("--epoch", required=True, help="the next launch's full (or measurement) "
+                     "epoch; must have a verified epoch-alias record")
+    fwd.add_argument("--measurement-epoch", help="default: the alias record's")
+    fwd.add_argument("--surface", required=True, help="the next launch's measurement surface")
+    fwd.add_argument("--model", help="default: the source checkpoint's model")
+    fwd.add_argument("--scratch", type=Path, help="scratch directory for the apply check")
+    fwd.add_argument("--apply", action="store_true", help="append the rows and claim each "
+                     "source superseded at the anchor (the only writes)")
     look = commands.add_parser("scan", help="read-only: what a launch would resume")
     look.add_argument("--store", type=Path, required=True)
     look.add_argument("--epoch", required=True)
@@ -2624,6 +3453,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     look.add_argument("--model")
     look.add_argument("--repo", type=Path)
     look.add_argument("--scratch", type=Path)
+    look.add_argument("--measurement-epoch", help="bind on this measurement epoch "
+                      "(default with --carry: the --epoch alias record's)")
+    look.add_argument("--carry", action="store_true", help="preview CARRY-FORWARD as a "
+                      "launch would run it (needs --repo and a verified alias for --epoch)")
     again = commands.add_parser("reopen", help="operator: hand a consumed resume claim "
                                 "back, with a logged reason (dry-run unless --apply)")
     again.add_argument("--store", type=Path, required=True)
@@ -2633,6 +3466,37 @@ def main(argv: Sequence[str] | None = None) -> int:
     again.add_argument("--apply", action="store_true",
                        help="release the claim and log the event (the only write)")
     args = parser.parse_args(argv)
+    if args.command == "carry-forward":
+        try:
+            plan = carry_forward_plan(args.store, checkpoints=args.checkpoint, repo=args.repo,
+                                      anchor_commit=args.anchor, epoch=args.epoch,
+                                      surface=args.surface, model=args.model,
+                                      measurement_epoch=args.measurement_epoch,
+                                      scratch=args.scratch)
+        except (ValueError, FileNotFoundError, ResumeRejected, sqlite3.DatabaseError) as exc:
+            print(f"carry-forward refused: {exc}", file=sys.stderr)
+            return 2
+        shown = {**plan, "plans": [{key: value for key, value in item.items()
+                                    if key != "attempt"} for item in plan["plans"]]}
+        print(json.dumps(shown, indent=2, default=str))
+        print(json.dumps({"resume_checkpoints": [item["attempt"]["resume_checkpoints"]
+                                                 for item in plan["plans"] if "attempt" in item]},
+                         indent=2, default=str))
+        bad = [item["source_checkpoint_id"] for item in plan["plans"]
+               if item.get("refused") is not None
+               or item.get("checks", {}).get("prevalidates_at_anchor") is not True]
+        if bad:
+            print(f"carry-forward refused: {', '.join(bad)} cannot be carried (see "
+                  "`refused` / `checks`)", file=sys.stderr)
+            return 2
+        if not args.apply:
+            print("dry-run: nothing written (pass --apply to append these rows and claim "
+                  "each source checkpoint superseded at the anchor)")
+            return 0
+        for done in carry_forward_apply(args.store, plan):
+            print(f"{'appended' if done['appended'] else 'already present'} "
+                  f"{done['attempt_id']}; source superseded: {done['source_superseded']}")
+        return 0
     if args.command == "reopen":
         try:
             plan = reopen_plan(args.store, checkpoint_id=args.checkpoint, reason=args.reason,
@@ -2757,15 +3621,35 @@ def main(argv: Sequence[str] | None = None) -> int:
         added = backfill_apply(args.store, plan)
         print(f"{'appended' if added else 'already present'} {plan['attempt_id']}")
         return 0
+    carry = None
+    measurement_epoch = args.measurement_epoch
+    if args.carry:
+        record = _alias_record(args.store, args.epoch) if args.repo is not None else None
+        if record is None:
+            print("scan refused: --carry needs --repo and a verified epoch-alias record "
+                  "for --epoch (its measurement family)", file=sys.stderr)
+            return 2
+        measurement_epoch = measurement_epoch or record["measurement_epoch_sha256"]
+        carry = CarryContext(family=carry_family(
+            build_recipe=record["build_recipe"],
+            host_state=experiments.measurement_host_state(
+                record["host_state"], record["enrolled_measurement_digest"])),
+            repo=args.repo, scratch=args.scratch)
     _queue, report = prepare(args.store, epoch=args.epoch, anchor_commit=args.anchor,
                              target=target_identity(measurement_surface=args.surface,
                                                     model=args.model),
-                             repo=args.repo, scratch=args.scratch, dry_run=True)
+                             repo=args.repo, scratch=args.scratch, dry_run=True,
+                             measurement_epoch=measurement_epoch, carry=carry)
     print(json.dumps(report, indent=2))
     return 0
 
 
 __all__ = ["BACKFILL_SCHEMA", "CLAIMS_FILE", "CRITIC2_BACKFILL_SCHEMA", "Candidate",
+           "CARRY_SCHEMA", "CARRY_FAMILY_SCHEMA", "CARRY_TOOL_SCHEMA", "CARRY_VOLATILE_HOST_KEYS",
+           "CarryContext", "CarryScope", "alias_families", "carry_checkpoint", "carry_family",
+           "carry_forward_apply", "carry_forward_plan", "carry_refusal", "carry_scope",
+           "checkpoint_family", "consumed_elsewhere", "is_ancestor", "scan_all",
+           "target_family",
            "CRITIC1_BACKFILL_SCHEMA", "CRITIC1_SOURCE_STATUSES", "backfill_critic1_apply",
            "backfill_critic1_plan",
            "AUTHOR_FAILURE_ROWS", "PENDING_SUMMARY_LIMIT", "REINSTATE_SCHEMA", "ROUND_DISPOSITIONS", "depth_limit",
