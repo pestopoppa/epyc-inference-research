@@ -388,6 +388,187 @@ class AffectedOpAndIndependentReference(unittest.TestCase):
         self.assertTrue(verdict.passed)
         dot.assert_called_once()
 
+    # --- widened CPU source routes (DS41 scope, 2026-09-26) ---------------------------
+
+    _SGEMM = ("class tinyBLAS {\n"
+              "    void mnpack(int64_t m0, int64_t m, int64_t n0, int64_t n) {\n"
+              "        other_class();\n    }\n};\n"
+              "template <typename TA, typename TB, typename TC>\n"
+              "class tinyBLAS_Q0_AVX {\n  private:\n"
+              "    void mnpack(int64_t m0, int64_t m, int64_t n0, int64_t n) {\n"
+              "        pack();\n    }\n"
+              "    template <int RN>\n"
+              "    NOINLINE void gemm4xN(int64_t m0, int64_t m, int64_t n0, int64_t n) {\n"
+              "        tile4xN(); // braces in comments { do not count\n    }\n"
+              "    template <int RM>\n"
+              "    NOINLINE void gemmMx4(int64_t m0, int64_t m, int64_t n0, int64_t n) {\n"
+              "        tileMx4();\n    }\n"
+              "    template <int RM, int RN>\n"
+              "    NOINLINE void gemm(int64_t m0, int64_t m, int64_t n0, int64_t n) {\n"
+              "        tile();\n    }\n"
+              "    inline __m256i load(const block_q8_0 *b) {\n"
+              "        return q8();\n    }\n};\n")
+
+    @staticmethod
+    def _hunk(source, token, replacement="+new\n"):
+        line = source.splitlines().index(token) + 1
+        return f"@@ -{line} +{line} @@\n-old\n{replacement}"
+
+    def test_dense_q8_tinyblas_route_is_class_confined(self):
+        path = "ggml/src/ggml-cpu/llamafile/sgemm.cpp"
+        for token in ("        pack();", "        tile4xN(); // braces in comments { do not count",
+                      "        tileMx4();", "        tile();"):
+            self.assertEqual(gates.affected_op_scope(
+                (path,), target_surface=path, target_symbol="gemm4xN",
+                source_text=self._SGEMM, pre_source_text=self._SGEMM,
+                patch_text=self._hunk(self._SGEMM, token)), ("MUL_MAT",))
+        for token in ("        other_class();", "        return q8();",
+                      "class tinyBLAS_Q0_AVX {"):
+            refused = gates.affected_op_scope(
+                (path,), target_surface=path, target_symbol="tinyBLAS_Q0_AVX",
+                source_text=self._SGEMM, pre_source_text=self._SGEMM,
+                patch_text=self._hunk(self._SGEMM, token))
+            self.assertFalse(refused.passed)
+            self.assertIn("dense_q8_tinyblas route refused", refused.reason)
+        qs = gates.affected_op_scope(
+            (path,), target_surface=path, target_symbol="gemm4xN",
+            source_text=self._SGEMM, pre_source_text=self._SGEMM,
+            patch_text=self._hunk(self._SGEMM, "        tile4xN(); // braces in comments { do not count",
+                                  "+        auto q = A[0].qs[3];\n"))
+        self.assertFalse(qs.passed)
+        self.assertIn("forbidden pattern", qs.reason)
+        header = self._SGEMM.replace(
+            "    NOINLINE void gemm4xN(int64_t m0, int64_t m, int64_t n0, int64_t n) {",
+            "    NOINLINE void gemm4xN(int64_t m0, int64_t m, int64_t n0, int64_t n, int x) {")
+        self.assertFalse(gates.affected_op_scope(
+            (path,), target_surface=path, target_symbol="gemm4xN",
+            source_text=header, pre_source_text=self._SGEMM,
+            patch_text=self._hunk(self._SGEMM, "        pack();")).passed)
+        # an unadmitted symbol on the same file keeps the generic refusal
+        self.assertFalse(gates.affected_op_scope(
+            (path,), target_surface=path, target_symbol="llamafile_sgemm",
+            source_text=self._SGEMM, pre_source_text=self._SGEMM,
+            patch_text=self._hunk(self._SGEMM, "        pack();")).passed)
+
+    _DISPATCH = ("namespace {\n"
+                 "inline bool iqk_q8_0_enabled() {\n    return off();\n}\n"
+                 "}\n"
+                 'extern "C" bool ggml_iqk_try_mul_mat(const struct ggml_compute_params * params, '
+                 "struct ggml_tensor * dst) {\n    dense();\n}\n"
+                 'extern "C" bool ggml_iqk_try_mul_mat_id(const struct ggml_compute_params * params, '
+                 "struct ggml_tensor * dst) {\n    moe();\n"
+                 '    fprintf(stderr, "{ not a brace");\n}\n'
+                 "#else  // iqk not implemented / disabled\n"
+                 'extern "C" bool ggml_iqk_try_mul_mat_id(const struct ggml_compute_params * params, '
+                 "struct ggml_tensor * dst) {\n    stub();\n}\n#endif\n")
+
+    def test_iqk_dispatch_routes_split_by_symbol_and_skip_the_stub(self):
+        path = "ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp"
+        src = self._DISPATCH
+        self.assertEqual(gates.affected_op_scope(
+            (path,), target_surface=path, target_symbol="ggml_iqk_try_mul_mat_id",
+            source_text=src, pre_source_text=src,
+            patch_text=self._hunk(src, "    moe();")), ("MUL_MAT_ID",))
+        for token in ("    dense();", "    return off();"):
+            self.assertEqual(gates.affected_op_scope(
+                (path,), target_surface=path, target_symbol="ggml_iqk_try_mul_mat",
+                source_text=src, pre_source_text=src,
+                patch_text=self._hunk(src, token)), ("MUL_MAT", "MUL_MAT_ID"))
+        for symbol, token in (("ggml_iqk_try_mul_mat_id", "    stub();"),
+                              ("ggml_iqk_try_mul_mat_id", "    dense();"),
+                              ("ggml_iqk_try_mul_mat", "    moe();")):
+            self.assertFalse(gates.affected_op_scope(
+                (path,), target_surface=path, target_symbol=symbol,
+                source_text=src, pre_source_text=src,
+                patch_text=self._hunk(src, token)).passed)
+        no_fence = src.replace("#else  // iqk not implemented / disabled\n", "")
+        self.assertFalse(gates.affected_op_scope(
+            (path,), target_surface=path, target_symbol="ggml_iqk_try_mul_mat_id",
+            source_text=no_fence, pre_source_text=no_fence,
+            patch_text=self._hunk(no_fence, "    moe();")).passed)
+
+    def test_cpu_graph_sync_route_scope_is_every_ds41_op(self):
+        path = "ggml/src/ggml-cpu/ggml-cpu.c"
+        src = ("void ggml_barrier(struct ggml_threadpool * tp) {\n    barrier();\n}\n"
+               "static bool ggml_cpu_node_is_solo(const struct ggml_tensor * node) {\n"
+               "    solo();\n}\n"
+               "static int ggml_cpu_try_fuse_ops(\n        int i,\n"
+               "        const struct ggml_cplan * cplan) {\n    fuse();\n}\n"
+               "static thread_ret_t ggml_graph_compute_thread(void * data) {\n    walk();\n}\n"
+               "static void ggml_compute_forward_add(void) {\n    kernel();\n}\n")
+        for token in ("    barrier();", "    solo();", "    fuse();", "    walk();"):
+            self.assertEqual(gates.affected_op_scope(
+                (path,), target_surface=path, target_symbol="ggml_barrier",
+                source_text=src, pre_source_text=src,
+                patch_text=self._hunk(src, token)), gates._DS41_SYNC_OPS)
+        for token in ("    kernel();", "        int i,"):
+            self.assertFalse(gates.affected_op_scope(
+                (path,), target_surface=path, target_symbol="ggml_barrier",
+                source_text=src, pre_source_text=src,
+                patch_text=self._hunk(src, token)).passed)
+
+    @unittest.skipUnless(Path("/mnt/raid0/llm/llama.cpp-experimental-fastload-ds41-20260925"
+                              "/ggml/src/ggml-cpu/ggml-cpu.c").is_file(),
+                         "DS41 anchor tree not present")
+    def test_route_markers_resolve_once_on_the_ds41_anchor(self):
+        root = Path("/mnt/raid0/llm/llama.cpp-experimental-fastload-ds41-20260925")
+        for route in gates.CPU_SOURCE_ROUTES:
+            text = (root / route.path).read_text(encoding="utf-8")
+            bounds = gates._cpu_route_bounds(text, "HEAD", route)
+            self.assertNotIsInstance(bounds, str, f"{route.route}: {bounds}")
+            self.assertEqual([label for label, _a, _b in bounds[0]],
+                             [label for label, _prefix in route.bodies])
+
+    def test_cpu_route_reference_dispatches_to_the_route_witness(self):
+        from autokernel.loop import cpu_route_witness, iqk_witness
+        for status, gate in (("pass", "reference_comparison"),
+                             ("wrong", "reference_comparison"),
+                             ("unavailable", "oracle_unavailable")):
+            with mock.patch.object(cpu_route_witness, "check",
+                    return_value=iqk_witness.Result(status, "reason", "detail")) as check:
+                verdict = gates.check_cpu_route_reference(
+                    Path("/build"), Path("/source"), resolved_recipe=object(),
+                    path="ggml/src/ggml-cpu/llamafile/sgemm.cpp", target_symbol="gemm4xN")
+            self.assertEqual((verdict.gate, verdict.passed), (gate, status == "pass"))
+            self.assertEqual(check.call_args.kwargs["route"], "dense_q8_tinyblas")
+        unknown = gates.check_cpu_route_reference(
+            Path("/build"), Path("/source"), resolved_recipe=object(),
+            path="ggml/src/ggml-cpu/ops.cpp", target_symbol="ggml_compute_forward_concat")
+        self.assertEqual((unknown.gate, unknown.passed), ("oracle_unavailable", False))
+
+    def test_route_witness_requires_reference_then_candidate_hit_in_candidate_dso(self):
+        from autokernel.loop import cpu_route_witness
+        witness = cpu_route_witness.WITNESSES["iqk_mmid_dispatch"]
+        dso = Path("/build/bin/libggml-cpu.so.0")
+        ok = [{"schema": "epyc.autokernel.cpu_route_hit.v1", "status": "hit",
+               "role": "independent_reference", "symbol": "ggml_backend_cpu_set_use_ref",
+               "dso": str(dso.resolve())},
+              {"schema": "epyc.autokernel.cpu_route_hit.v1", "status": "hit",
+               "role": "candidate_route", "symbol": "ggml_iqk_try_mul_mat_id",
+               "dso": str(dso.resolve())}]
+        output = (f"  MUL_MAT_ID({witness.case}): OK\n  1/1 tests passed\n"
+                  "  Backend CPU: OK\n[iqk] ACTIVE: MoE mul_mat_id via ik kernels "
+                  "(type=12 activation=41 n_as=4)\n[Inferior 1 (process 1) exited normally]\n")
+        self.assertEqual(cpu_route_witness.assess_case(witness, ok, output, 0, dso).status,
+                         "pass")
+        self.assertEqual(cpu_route_witness.assess_case(witness, ok[::-1], output, 0,
+                                                       dso).status, "unavailable")
+        other_dso = [dict(ok[0]), dict(ok[1], dso="/prod/libggml-cpu.so.0")]
+        self.assertEqual(cpu_route_witness.assess_case(witness, other_dso, output, 0,
+                                                       dso).status, "unavailable")
+        silent = output.replace("[iqk] ACTIVE: MoE", "[iqk] quiet: MoE")
+        self.assertEqual(cpu_route_witness.assess_case(witness, ok, silent, 0, dso).status,
+                         "unavailable")
+        two_cases = output.replace("1/1 tests passed", "2/2 tests passed")
+        self.assertEqual(cpu_route_witness.assess_case(witness, ok, two_cases, 0,
+                                                       dso).status, "unavailable")
+
+    def test_every_widened_route_reaches_the_actors(self):
+        program = (Path(__file__).resolve().parent / "program.md").read_text()
+        for route in gates.CPU_SOURCE_ROUTES:
+            self.assertIn(f"`{route.route}`", program)
+            self.assertIn(route.path, program)
+
     def test_wrong_vs_unavailable_reference_are_distinct(self):
         for status, gate in (("pass", "reference_comparison"),
                              ("wrong", "reference_comparison"),

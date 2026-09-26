@@ -726,7 +726,8 @@ def preview_op_scope(repo: Path, anchor_commit: str, patch: bytes, hypothesis: M
     """
     from . import gates
     touched, _pre = patch_paths(patch)
-    iqk = {"ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp", "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp"}
+    iqk = {"ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp", "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp",
+           *gates.CPU_SOURCE_ROUTE_PATHS}
     if not (len(touched) == 1 and (touched[0] in iqk or touched[0] == "ggml/src/ggml-cpu/ops.cpp")):
         scope = gates.affected_op_scope(touched, target_surface=hypothesis["target_surface"],
                                         target_symbol=hypothesis["target_symbol"])

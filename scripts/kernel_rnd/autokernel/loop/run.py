@@ -1851,8 +1851,11 @@ def main(argv: list[str] | None = None) -> int:
     source_loo_result = None
     if source_authoring:
         source_validation_reference = dict(resumed["source_validation"])
+    # GGML_IQK_Q8_0: the existing dense-Q8_0 iqk opt-in (default off since aebb556b1).
+    # Admitted only when the campaign's environment policy also lists it.
     runtime_env_keys = (set(direct_launch.environment_policy.measurement_keys) &
-        ({"GGML_IQK", "OMP_NUM_THREADS", "OMP_PROC_BIND", "OMP_PLACES", "OMP_WAIT_POLICY"}
+        ({"GGML_IQK", "GGML_IQK_Q8_0", "OMP_NUM_THREADS", "OMP_PROC_BIND", "OMP_PLACES",
+          "OMP_WAIT_POLICY"}
          if cpu_launch else {"OMP_NUM_THREADS", "OMP_PROC_BIND", "OMP_PLACES", "OMP_WAIT_POLICY"})
         if direct_launch else set())
     feedback = serving_beliefs.PlannerFeedback(args.store, args.belief_root_repo)
@@ -2045,12 +2048,19 @@ def main(argv: list[str] | None = None) -> int:
             iqk_rows_path = "ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp"
             iqk_gemm_path = "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp"
             iqk_paths = {iqk_rows_path, iqk_gemm_path}
+            # Widened single-file CPU routes (gates.CPU_SOURCE_ROUTES): same pre-build
+            # inputs as the IQK routes (post-image, HEAD image, -U0 hunks).
+            route_paths = set(gates.CPU_SOURCE_ROUTE_PATHS)
             if len(changed) == 1 and changed[0] in iqk_paths and not cpu_launch:
                 return False, [gates.Verdict(
                     "op_scope", False, "CPU IQK source route requires a CPU target recipe")]
+            if len(changed) == 1 and changed[0] in route_paths and not cpu_launch:
+                return False, [gates.Verdict(
+                    "op_scope", False, "CPU source route requires a CPU target recipe")]
             scope_source = (cpu_ops if changed == ("ggml/src/ggml-cpu/ops.cpp",) else
                             worker.worktree / changed[0]
-                            if len(changed) == 1 and changed[0] in iqk_paths else None)
+                            if len(changed) == 1 and changed[0] in iqk_paths | route_paths
+                            else None)
             scope = gates.affected_op_scope(changed + untracked,
                                              target_surface=hypothesis.target_surface,
                                              target_symbol=hypothesis.target_symbol,
@@ -2083,6 +2093,10 @@ def main(argv: list[str] | None = None) -> int:
                     checks.append(lambda: gates.check_cpu_iqk_reference(
                         worker.build_dir, worker.worktree, resolved_recipe=arm,
                         target_symbol=hypothesis.target_symbol))
+                if cpu_launch and len(changed) == 1 and changed[0] in route_paths:
+                    checks.append(lambda: gates.check_cpu_route_reference(
+                        worker.build_dir, worker.worktree, resolved_recipe=arm,
+                        path=changed[0], target_symbol=hypothesis.target_symbol))
                 return gates.run_all(*checks)
             # Callables, so a failed build actually short-circuits: an eagerly
             # evaluated op_correctness ran the suite against a stale binary and blamed
@@ -2113,6 +2127,11 @@ def main(argv: list[str] | None = None) -> int:
                     worker.build_dir, worker.worktree,
                     resolved_recipe=_cpu_arm(direct_launch, worker.build_dir),
                     target_symbol=hypothesis.target_symbol))
+            if cpu_launch and len(changed) == 1 and changed[0] in route_paths:
+                checks.append(lambda: gates.check_cpu_route_reference(
+                    worker.build_dir, worker.worktree,
+                    resolved_recipe=_cpu_arm(direct_launch, worker.build_dir),
+                    path=changed[0], target_symbol=hypothesis.target_symbol))
             if not direct_launch:
                 checks.extend((
                     lambda: gates.deterministic(worker.build_dir, args.model),
