@@ -1263,21 +1263,26 @@ def _author_checkpoint(payload: Mapping[str, Any], source: str,
     return entries[0][0], dict(entries[0][1])
 
 
-def _live_epoch(store_root: Path) -> str | None:
-    """The epoch the store's current run published (loop-status.json), for the report."""
+def _live_status(store_root: Path) -> dict:
+    """What the store's current run published (loop-status.json), for the report only:
+    a mismatch is shown, never acted on (the next launch may differ from this one)."""
     try:
         status = json.loads(_read_bounded(Path(store_root) / "loop-status.json"))
     except (OSError, ResumeRejected, ValueError):
-        return None
-    value = status.get("epoch_sha256") if isinstance(status, dict) else None
-    return value if isinstance(value, str) else None
+        status = {}
+    status = status if isinstance(status, dict) else {}
+    pick = lambda key: status.get(key) if isinstance(status.get(key), str) else None
+    return {"live_loop_status_epoch": pick("epoch_sha256"),
+            "live_loop_status_surface": pick("surface"),
+            "live_loop_status_anchor": pick("anchor_commit")}
 
 
 def backfill_critic2_plan(store_root: Path, *, row_id: str, patch: Path, epoch: str,
                           epoch_reason: str | None = None, base: str | None = None,
                           lost_in_row: str | None = None, lane: str = "lane0",
                           checkpoint_index: int | None = None, repo: Path | None = None,
-                          scratch: Path | None = None) -> dict:
+                          scratch: Path | None = None, surface: str | None = None,
+                          surface_reason: str | None = None) -> dict:
     """Read-only. A critic2 checkpoint for an author patch saved outside the store.
 
     `row_id` names the row whose AUTHOR checkpoint carries the hypothesis and its
@@ -1285,7 +1290,10 @@ def backfill_critic2_plan(store_root: Path, *, row_id: str, patch: Path, epoch: 
     diff; its base is `base`, else `base.txt` beside it, and must be that checkpoint's
     anchor. `epoch` is explicit: the row is bound to the epoch the NEXT launch runs in,
     and a rebind away from the source row's epoch must say why (`epoch_reason`,
-    recorded in the row). Nothing is written; `backfill_critic2_apply` writes the plan.
+    recorded in the row). The target is the source checkpoint's; `surface` rebinds its
+    measurement surface (needs `surface_reason`, recorded in the row) when the next
+    launch measures on another one -- resume refuses a target mismatch otherwise.
+    Nothing is written; `backfill_critic2_apply` writes the plan.
     """
     from . import archive
     store_root = Path(store_root)
@@ -1331,6 +1339,14 @@ def backfill_critic2_plan(store_root: Path, *, row_id: str, patch: Path, epoch: 
         raise ValueError(f"--epoch {epoch[:12]} differs from the source row's epoch "
                          f"{source_epoch[:12]}: pass --epoch-reason saying why the patch "
                          "is still valid there")
+    target = dict(author.get("target") or {})
+    source_surface = target.get("measurement_surface")
+    surface_rebound = surface is not None and surface != source_surface
+    if surface_rebound:
+        if not (surface_reason and surface_reason.strip()):
+            raise ValueError(f"--surface {surface!r} differs from the checkpoint's "
+                             f"{source_surface!r}: pass --surface-reason")
+        target["measurement_surface"] = surface
     lost_record = None
     if lost is not None:
         lost_payload = json.loads(lost["payload"])
@@ -1381,7 +1397,7 @@ def backfill_critic2_plan(store_root: Path, *, row_id: str, patch: Path, epoch: 
         "resumed_from": source_checkpoint,
         "resume_depth": int(author.get("resume_depth") or 0) + 1,
         "anchor_commit": anchor, "epoch_sha256": epoch,
-        "target": dict(author.get("target") or {}),
+        "target": target,
     }
     reason = ("backfilled critic2 checkpoint: an authored patch lost before critic pass 2 "
               "returned a verdict; resume restores it and runs critic pass 2")
@@ -1403,6 +1419,9 @@ def backfill_critic2_plan(store_root: Path, *, row_id: str, patch: Path, epoch: 
             "status": row["status"], "source_epoch_sha256": source_epoch,
             "epoch_sha256": epoch, "epoch_rebound": rebind,
             "epoch_rebind_reason": (epoch_reason.strip() if rebind else None),
+            "source_measurement_surface": source_surface,
+            "surface_rebound": surface_rebound,
+            "surface_rebind_reason": (surface_reason.strip() if surface_rebound else None),
             "lost_in": lost_record,
             "patch_source": {"file": str(patch.resolve()), "sha256": _sha256(raw),
                              "bytes": len(raw), "insertions": insertions,
@@ -1424,9 +1443,12 @@ def backfill_critic2_plan(store_root: Path, *, row_id: str, patch: Path, epoch: 
         "base_is_checkpoint_anchor": True,
         "patch_already_retained": already_retained,
         "epoch_rebound": rebind,
-        "live_loop_status_epoch": _live_epoch(store_root),
+        "surface_rebound": surface_rebound,
+        **_live_status(store_root),
     }
     checks["epoch_matches_live_loop_status"] = checks["live_loop_status_epoch"] == epoch
+    checks["surface_matches_live_loop_status"] = (
+        checks["live_loop_status_surface"] == target.get("measurement_surface"))
     if repo is not None:
         try:
             patch_applies(repo, anchor, raw, scratch=scratch)
@@ -1635,6 +1657,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                       "(store/loop-status.json epoch_sha256)")
     crit.add_argument("--epoch-reason", help="required when --epoch differs from the "
                       "source row's epoch; recorded in the row")
+    crit.add_argument("--surface", help="rebind the checkpoint's measurement surface "
+                      "(default: the source checkpoint's)")
+    crit.add_argument("--surface-reason", help="required with a differing --surface; "
+                      "recorded in the row")
     crit.add_argument("--lost-in-row", help="the row whose round lost this patch "
                       "(recorded as provenance; must carry the same hypothesis)")
     crit.add_argument("--lane", default="lane0", help="lane label for the retained file")
@@ -1687,7 +1713,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 args.store, row_id=args.row, patch=args.patch, epoch=args.epoch,
                 epoch_reason=args.epoch_reason, base=args.base, lost_in_row=args.lost_in_row,
                 lane=args.lane, checkpoint_index=args.checkpoint_index, repo=args.repo,
-                scratch=args.scratch)
+                scratch=args.scratch, surface=args.surface,
+                surface_reason=args.surface_reason)
         except (ValueError, FileNotFoundError, ResumeRejected, sqlite3.DatabaseError) as exc:
             print(f"backfill-critic2 refused: {exc}", file=sys.stderr)
             return 2

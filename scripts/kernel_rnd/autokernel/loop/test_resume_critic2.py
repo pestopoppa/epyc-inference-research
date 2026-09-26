@@ -587,6 +587,21 @@ class Run10eBackfill(unittest.TestCase):
         same = self.plan(epoch=self.source["epoch_sha256"], epoch_reason=None)
         self.assertFalse(same["attempt"]["backfilled_from"]["epoch_rebound"])
 
+    def test_a_surface_rebind_needs_a_reason_and_is_recorded(self):
+        with self.assertRaisesRegex(ValueError, "surface-reason"):
+            self.plan(surface="serving:ds41-00d118d44-cpu-t48-dspark-b2")
+        plan = self.plan(surface="serving:ds41-00d118d44-cpu-t48-dspark-b2",
+                         surface_reason="full-scope screen this launch")
+        (checkpoint,) = plan["attempt"]["resume_checkpoints"]
+        self.assertEqual(checkpoint["target"]["measurement_surface"],
+                         "serving:ds41-00d118d44-cpu-t48-dspark-b2")
+        origin = plan["attempt"]["backfilled_from"]
+        self.assertEqual((origin["surface_rebound"], origin["surface_rebind_reason"]),
+                         (True, "full-scope screen this launch"))
+        self.assertTrue(origin["source_measurement_surface"].endswith(
+            ".cpu-half-f29a817a878300af"))
+        self.assertFalse(self.plan()["attempt"]["backfilled_from"]["surface_rebound"])
+
     def test_the_base_must_be_the_checkpoint_anchor(self):
         with self.assertRaisesRegex(ValueError, "not the checkpoint's anchor"):
             self.plan(base="f" * 40)
