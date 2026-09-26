@@ -300,23 +300,30 @@ class Fence(unittest.TestCase):
                 pass
         self.assertEqual(entered, ["in", "out"], "a superseded attempt never waits on the fence")
 
-    def test_the_iteration_scope_closes_on_return_and_on_raise(self):
-        events = []
-
-        class Scope:
-            def __enter__(self):
-                events.append("open")
-
-            def __exit__(self, *exc):
-                events.append("close")
-                return False
-        worker = pipeline.Worker("lane0", Path("/w/lane0"), Path("/b"))
-        self.assertEqual(pipeline._in_scope(lambda w, d: Scope(), worker, 1, lambda: 7), 7)
-        with self.assertRaises(ValueError):
-            pipeline._in_scope(lambda w, d: Scope(), worker, 2,
-                               lambda: (_ for _ in ()).throw(ValueError("x")))
-        self.assertEqual(events, ["open", "close", "open", "close"])
-        self.assertEqual(pipeline._in_scope(None, worker, 3, lambda: 8), 8)
+    def test_the_sandbox_dir_lives_in_the_run_registry_iteration_scope(self):
+        """ONE registry: the provider allocates in the iteration scope `run_pool` opens
+        on the lane thread of the run's installed registry (actor `call` scopes nested
+        under it), the dir carries the registry's marker, and closing the iteration
+        releases it."""
+        from autokernel.loop import run as run_mod, scratch
+        with tempfile.TemporaryDirectory() as tmp:
+            reg = scratch.ScratchRegistry(Path(tmp) / "scratch", owner={"test": "sandbox"})
+            args = mock.Mock(actor_author_sandbox="on")
+            self.assertIs(run_mod._sandbox_scratch(args, reg), reg)
+            self.assertIsNone(run_mod._sandbox_scratch(mock.Mock(actor_author_sandbox="off"),
+                                                       reg))
+            provide = ak_check.scratch_provider(reg, "lane0")
+            batch = reg.scope("batch", name="pool-1")
+            iteration = reg.scope("iteration", name="lane0-1", parent=batch).__enter__()
+            with reg.scope("call", name="author"):
+                path, degrade = provide()
+            self.assertIsNone(degrade)
+            self.assertTrue((path / ak_check.SCRATCH_MARKER).is_file())
+            self.assertEqual(path.parent.parent, reg.root)
+            iteration.__exit__(None, None, None)
+            self.assertFalse(path.exists(), "the iteration's close releases the build dir")
+            batch.close()
+            reg.close()
 
 
 class _Scope:

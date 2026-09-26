@@ -268,20 +268,16 @@ def _actor_sandbox(args) -> dict[str, bool]:
     return {"author_sandbox": getattr(args, "actor_author_sandbox", "off") == "on"}
 
 
-def _sandbox_scratch(args):
+def _sandbox_scratch(args, registry):
     """The scratch registry the author sandbox allocates its per-iteration build dir
-    from, or None: sandbox off, or no `scratch.py` in this tree (the registry lands with
-    lane/ak-scratch-20260926), in which case the author sandbox stays off."""
+    from, or None (sandbox off, or no registry): the author sandbox then stays off.
+
+    It is THE run's registry (`<store>/scratch`, created and installed by the run
+    body): the build dir lands in the iteration scope `pipeline.run_pool` opens for
+    each draw, so it is released with that iteration, and a killed run's residue is
+    collected by the one start-of-run sweep. Never a registry of its own."""
     if not _actor_sandbox(args)["author_sandbox"]:
         return None
-    try:
-        from . import scratch
-    except ImportError:
-        return None
-    registry = scratch.from_args(args, root=Path(args.worker_root).parent / "scratch",
-                                 owner={"worker_root": str(args.worker_root),
-                                        "pid": os.getpid()})
-    registry.sweep()
     return registry
 
 
@@ -414,30 +410,6 @@ def _author_plan(args, planner_kind: str | None = None) -> AuthorPlan:
                             + f" context={budget.context_limit} output={budget.output_limit}"
                             f" compaction@{budget.compaction_at} pool={budget.pool_tokens}"
                             f"-{budget.reserve}"))
-
-
-def _author_scratch_registry(args):
-    """The flow-level scratch registry the panel allocates its worktrees from
-    (`scratch.py`, lane/ak-scratch-20260926), rooted at the lanes' workers dir, or None
-    when this build has none (the panel then falls back to the single path)."""
-    try:
-        from . import scratch as scratch_mod
-    except ImportError:
-        return None
-    registry = scratch_mod.ScratchRegistry(
-        Path(args.worker_root) / "scratch",
-        owner={"campaign": "ak-loop", "state_dir": str(args.store),
-               "worker_root": str(args.worker_root), "role": "author-panel",
-               "pid": os.getpid()},
-        min_free_bytes=int(float(args.actor_authors_min_free_gb) * 1_000_000_000))
-    try:
-        # Residue of an earlier killed run: marked, owner provably gone (scratch.py).
-        swept = registry.sweep()
-        print(f"actors    author scratch sweep: {swept}", flush=True)
-    except Exception as exc:      # noqa: BLE001 -- a failed sweep never blocks the run
-        print(f"actors    author scratch sweep failed: {type(exc).__name__}: {exc}",
-              file=sys.stderr)
-    return registry
 
 
 def _author_validator(args):
@@ -1192,9 +1164,6 @@ def main(argv: list[str] | None = None) -> int:
                              "alone; anything else = an argv with {worktree}/{base}/{paths}/"
                              "{scratch}/{build_dir} placeholders (exit 0 passes, 2 is "
                              "inconclusive) (default: %(default)r)")
-    parser.add_argument("--actor-authors-min-free-gb", type=float, default=50.0,
-                        help="best-of-N: the scratch registry's free-space floor; below it a "
-                             "round runs the single author (default: %(default)s)")
     args = parser.parse_args(argv)
     if args.hypothesis_author_attempts < 1:
         parser.error("--hypothesis-author-attempts must be >= 1")
@@ -3580,7 +3549,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.resume == "off":
             print("resume    off (--resume off): checkpointed work is not scanned", flush=True)
 
-        sandbox_scratch = _sandbox_scratch(args)
+        sandbox_scratch = _sandbox_scratch(args, scratch_registry[0])
         # Effective only with an allocator: without one the seat is the historical seat.
         sandbox_seat = {"author_sandbox": sandbox_scratch is not None}
 
@@ -3608,8 +3577,6 @@ def main(argv: list[str] | None = None) -> int:
             return (runtime_recovery.PendingPlanner(ordinary, pending_slot)
                     if pending_pair is not None else ordinary)
 
-        author_registry = [None]
-
         def make_author_panel(worker):
             """Best-of-N (`--actor-authors`, N >= 2): one panel per lane, its members
             the ordinary author seat with the member's thinking mode and the pool
@@ -3617,14 +3584,11 @@ def main(argv: list[str] | None = None) -> int:
             single-author path (N=1, a retained screen, or no scratch registry)."""
             if not author_plan.panel or screen_confirmation:
                 return None
-            if author_registry[0] is None:
-                author_registry[0] = _author_scratch_registry(args)
-                if author_registry[0] is None:
-                    print("actors    WARNING best-of authoring needs the scratch registry "
-                          "(scratch.py); this build has none -- single author",
-                          file=sys.stderr)
-            if author_registry[0] is False or author_registry[0] is None:
-                author_registry[0] = False
+            if scratch_registry[0] is None:
+                # The run registry is created by the run body before any lane draws;
+                # without it there is nowhere marked to put the members' trees.
+                print("actors    WARNING best-of authoring needs the run's scratch "
+                      "registry; none is installed -- single author", file=sys.stderr)
                 return None
             budget = author_plan.budget
 
@@ -3646,7 +3610,7 @@ def main(argv: list[str] | None = None) -> int:
 
             return bestof.AuthorPanel(
                 lane=worker.name, specs=author_plan.specs, make_author=make_author,
-                scratch=author_registry[0], budget=budget,
+                scratch=scratch_registry[0], budget=budget,
                 validator=_author_validator(args),
                 retain=lambda **patch: archive.retain_patch_bytes(args.store, **patch),
                 should_stop=should_stop)
@@ -3658,7 +3622,7 @@ def main(argv: list[str] | None = None) -> int:
                                       execute=True)
         lanes_by_name.update({lane.name: lane for lane in pooled_lanes})
         return pool.drive(
-            author_sandbox=sandbox_seat["author_sandbox"], scratch=sandbox_scratch,
+            author_sandbox=sandbox_seat["author_sandbox"],
             commit=commit_pooled,
             reset=reset_retained,
             workers=pooled_lanes,

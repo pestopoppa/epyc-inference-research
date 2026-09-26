@@ -11,7 +11,7 @@ SHAPE (one authoring round of `loop.iterate`)
 
     lane @ base (+ the lane's current diff, e.g. round 1's rejected patch)
       -> N scratch worktrees at the same base, each seeded with that diff
-         (allocated through the flow-level scratch registry, `scratch.py`)
+         (allocated through the run's one scratch registry, `<store>/scratch`)
       -> N author calls CONCURRENTLY on :8083, each in its own scratch tree
       -> the FIRST author whose diff passes the validator wins:
            its diff is applied to the real lane; every other call is ended through
@@ -380,6 +380,9 @@ class _Member:
     lane_log: Path | None = None
     released: bool = False
     retained: bool = False
+    #: The member's other marked dirs, released with its tree, newest first (its
+    #: ak-check dir, then its home dir holding the per-call opencode config).
+    extra: list = field(default_factory=list)
 
 
 class AuthorPanel:
@@ -389,7 +392,7 @@ class AuthorPanel:
     `author(hypothesis, context)` for one member (run.py: an `AgentPlanner` whose seat
     carries the member's thinking mode and `budget`'s limits, rooted at `workspace`).
 
-    `scratch` is the flow-level scratch registry (`scratch.ScratchRegistry`): `scope(
+    `scratch` is the run's scratch registry (`scratch.ScratchRegistry`): `scope(
     kind, name=...)` opens a marker-owned scope whose `worktree(repo, base_commit, name)`
     allocates a detached worktree released on every exit path (and `release(path)`, when
     it has one, releases one early); `ensure_free(bytes)` says whether the space exists.
@@ -538,7 +541,8 @@ class AuthorPanel:
                     path = Path(scope.worktree(worktree, base, name, at=home / "tree"))
                     # The member's ak-check build dir (the author's own sandbox calls
                     # and the winner check share it; released first, it is newest).
-                    scope.dir(CHECK_DIR_KIND, name, at=home / CHECK_DIR_NAME)
+                    check = Path(scope.dir(CHECK_DIR_KIND, name, at=home / CHECK_DIR_NAME))
+                    member.extra = [check, home]
                 else:
                     path = Path(scope.worktree(worktree, base, name))
             except Exception as exc:      # noqa: BLE001
@@ -780,7 +784,14 @@ class AuthorPanel:
             release(member.workspace)
             member.released = True
         except Exception:      # noqa: BLE001 -- the scope exit still releases it
-            pass
+            return
+        # A finished loser's whole footprint goes now, not at the panel's end: its
+        # check dir, then the home dir (tree first: the home dir holds it).
+        for path in member.extra:
+            try:
+                release(path)
+            except Exception:      # noqa: BLE001 -- the scope exit still releases it
+                pass
 
     def _harvest_metrics(self, member: _Member) -> None:
         """Move this member's actor-call rows from beside its scratch tree into the

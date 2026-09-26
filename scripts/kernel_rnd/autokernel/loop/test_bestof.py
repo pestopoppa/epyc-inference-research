@@ -373,6 +373,26 @@ class ConcurrentRace(Fixture):
         self.assertTrue(members["a0-off"]["validation"]["passed"])
         self.assert_no_scratch_left()
 
+    def test_a_real_registry_releases_the_losers_whole_footprint_early(self):
+        """With the run registry's `Scope.release`, a finished loser's tree, ak-check
+        dir and home dir (its per-call opencode config) go at once, in that order,
+        before the panel's call scope ends."""
+        released = []
+        real = scratch.Scope.release
+
+        def spy(scope, path):
+            released.append((scope.closed, Path(path)))
+            return real(scope, path)
+        panel = self.panel({"off": Editor, "medium": lambda s, w, st: Blocker(s, w, st)})
+        with mock.patch.object(scratch.Scope, "release", spy):
+            self.call(panel)
+        loser = [p for _, p in released if "a1-medium" in str(p)]
+        self.assertEqual([p.name for p in loser[:3]], ["tree", bestof.CHECK_DIR_NAME,
+                                                       loser[2].name])
+        self.assertEqual(loser[2], loser[0].parent)
+        self.assertTrue(all(not closed for closed, _ in released))
+        self.assert_no_scratch_left()
+
     def test_with_an_early_release_the_loser_goes_first(self):
         self.registry = FakeRegistry(self.root / "fake-scratch")
         panel = self.panel({"off": Editor, "medium": lambda s, w, st: Blocker(s, w, st)})

@@ -197,8 +197,7 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
              reserve_candidate=None,
              make_author_panel: Callable[[Worker], Any] | None = None,
              record_abandoned: Callable[[Worker, loop_mod.Outcome], None] | None = None,
-             next_resume: Callable[[Worker, str], Any] | None = None,
-             open_iteration_scope: Callable[[Worker, int], Any] | None = None
+             next_resume: Callable[[Worker, str], Any] | None = None
              ) -> list[loop_mod.Outcome]:
     """Drive `iterations` iterations across `workers` concurrent lanes.
 
@@ -373,7 +372,7 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                             record_abandoned(_w, candidate)
 
                 resumed = next_resume(worker, base) if next_resume is not None else None
-                outcome = _in_scope(open_iteration_scope, worker, depth, lambda: loop_mod.iterate(
+                outcome = loop_mod.iterate(
                     planner=planner, critic=critic, context=build_context(),
                     measure=measure, gate=gate, commit=commit_one, on_step=step,
                     tail_session=lambda _b=base: tail.session(_b),
@@ -392,7 +391,7 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                     # The lane and the commit reset_to_champion put it on for THIS
                     # draw: the only lane an empty author report may be derived from.
                     author_lane=(worker.worktree, base),
-                    iteration_scope=iteration_scope))
+                    iteration_scope=iteration_scope)
             except Superseded as exc:
                 # `iterate` already converted this into an Outcome carrying the
                 # hypothesis; reaching here means it escaped before one was formed.
@@ -451,15 +450,6 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
         # result list that reads as a completed run.
         raise aborted[0]
     return outcomes
-
-
-def _in_scope(open_scope, worker: Worker, depth: int, call: Callable[[], Any]) -> Any:
-    """`call()` inside `open_scope(worker, depth)` (a scratch ITERATION scope: whatever it
-    allocated is released as `iterate` returns or raises, on every path), or bare."""
-    if open_scope is None:
-        return call()
-    with open_scope(worker, depth):
-        return call()
 
 
 def _resumed_build(resumed, hypothesis) -> bool:
