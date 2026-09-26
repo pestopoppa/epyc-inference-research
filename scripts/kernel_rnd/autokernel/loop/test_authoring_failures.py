@@ -585,8 +585,11 @@ class PermissionRejectedSessions(unittest.TestCase):
 
     def test_run_py_hands_the_store_to_the_critic(self):
         from autokernel.loop import run
-        self.assertIn('"actor_read_roots": [str(Path(args.store).resolve())]',
-                      Path(run.__file__).read_text())
+        source = Path(run.__file__).read_text()
+        block = source[source.index('"actor_read_roots"'):][:300]
+        # The store and the campaign root holding it (inputs/, state-*/): run 10i's
+        # critic grepped the campaign root.
+        self.assertIn("(Path(args.store).resolve(), Path(args.store).resolve().parent)", block)
 
 
 # ------------------------------------------------------------------ 7. reinstate / backfill

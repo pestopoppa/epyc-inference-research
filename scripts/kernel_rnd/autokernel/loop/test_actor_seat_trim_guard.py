@@ -167,7 +167,7 @@ class TrimInstructions(_Tmp):
             for role in aoc.PLAIN_ROLES:
                 env = actors._seat_call(seat, actors.backend_for("q/m", "high"),
                                         role, self.lane, {})
-                fx.assert_snapshot_only(self, env, fx.config_body(env), self.lane)
+                fx.assert_snapshot_only(self, env, fx.config_body(env), self.lane, role=role)
                 self.assertEqual(Path(env["OPENCODE_CONFIG"]).name,
                                  f"actor-opencode-plain-{role}.json")
         self.assertFalse(list(self.lane.iterdir()))
@@ -233,8 +233,12 @@ class LaneGuardBuilds(_Tmp):
                              list(aoc.gitnexus_allow(self.root)) if bash_allows else [])
             allows = [(k, p) for k, v in perm.items() if isinstance(v, dict)
                       for p, a in v.items() if a == "allow"]
+            # The critic's `.env.example` allow only re-opens what its own `.env.*` deny
+            # (`CRITIC_READ_RULES`, in place of opencode's built-in ask) closed.
             self.assertTrue(all(k == "external_directory" or (k, p) in
-                                {("bash", q) for q in bash_allows} for k, p in allows), allows)
+                                {("bash", q) for q in bash_allows}
+                                | ({("read", "*.env.example")} if role == "critic" else set())
+                                for k, p in allows), allows)
 
 
 class LaneGuardReads(_Tmp):
@@ -416,7 +420,7 @@ class CriticSeat(_Tmp):
         self.assertTrue(oc.disabled("edit"))
         self.assertEqual(oc.bash("git reset --hard"), "deny")
 
-    def test_an_unseated_critic_is_unchanged(self):
+    def test_an_unseated_critic_carries_only_the_never_ask_block(self):
         seen = {}
         with mock.patch.object(actors, "render_context", return_value="ctx"), \
                 mock.patch.object(actors, "_run_agent",
@@ -425,7 +429,7 @@ class CriticSeat(_Tmp):
                                   or '{"accepted": true}'):
             actors.AgentCritic(workspace=self.lane, backend=actors.backend_for("q/m", "high")
                                ).review_hypothesis(actors.Hypothesis("a", "s", "f", "a.c", "g"), {})
-        fx.assert_snapshot_only(self, seen["env"], seen["config"], self.lane)
+        fx.assert_snapshot_only(self, seen["env"], seen["config"], self.lane, role="critic")
 
 
 class Provenance(_Tmp):

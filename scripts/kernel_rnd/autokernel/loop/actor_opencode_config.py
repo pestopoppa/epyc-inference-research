@@ -541,6 +541,15 @@ def _atomic_write(path: Path, text: str) -> None:
 # `external_directory` is asked for native read/grep/glob/edit/write paths outside
 # --dir, but for bash only on cd/rm/cp/mv/mkdir/touch/chmod/chown/cat arguments and the
 # workdir -- so bash reads of another tree need bash rules too.
+#
+# ASK VERSUS DENY WITHOUT `--auto` (measured 2026-09-26, 1.18.31 against a scripted fake
+# model, `test_actor_critic_permission.py`): an `ask` is AUTO-REJECTED and the rejection
+# ENDS the session -- no follow-up request, no final text, an empty reply. A configured
+# `deny` only fails that one tool call: the model gets the rule text as the tool result,
+# opencode sends the next request and the final text arrives (with or without `--auto`).
+# The built-in asks are external_directory "*", doom_loop and read "*.env"/"*.env.*";
+# the built-in default for everything else (edit and bash included) is ALLOW, so running
+# without `--auto` fences nothing but the asks. Hence `CRITIC_NEVER_ASK`.
 # --------------------------------------------------------------------------------------
 
 #: Env for a trimmed call: no project instruction files, no Claude-Code prompt or skills,
@@ -588,6 +597,17 @@ READ_ONLY_DENY = (
     "git add*", "git rm *", "git mv *", "git tag *",
     "*> /tmp/*", "*>/tmp/*", "*>> /tmp/*", "*>>/tmp/*",
 )
+
+#: The critic is the one seat run WITHOUT `--auto`, so every built-in `ask` it reaches is
+#: auto-rejected and kills its session (DS41 runs 10h/10i: `cd <campaign> && rg ...` hit
+#: external_directory, empty reply, critic pass 1 lost). Its block resolves every ask to
+#: an explicit rule: external_directory gets a catch-all "*": "deny" FIRST (the anchor
+#: build dirs and the context's read roots are allowed after it; opencode re-appends its
+#: own tool-output allow after the config), `.env` reads are denied rather than asked,
+#: doom_loop and question are denied. Its fences are denies too, with or without the lane
+#: guard: `edit` (edit/write/apply_patch) and the mutating bash verbs.
+CRITIC_NEVER_ASK = {"doom_loop": "deny", "question": "deny"}
+CRITIC_READ_RULES = {"*.env": "deny", "*.env.*": "deny", "*.env.example": "allow"}
 
 #: The author edits only inside its lane. `edit` patterns are paths RELATIVE to the git
 #: worktree root, so anything outside the lane starts with "../". No "*": "allow" here:
@@ -692,11 +712,14 @@ def seat_permission(role: str, *, lane: Path | None = None,
     `edit_rule=False` leaves `edit` to the caller (a bounded agent sets its own, and an
     agent rule is evaluated after this one).
 
+    The CRITIC (no `--auto`) always gets `CRITIC_NEVER_ASK` on top, knobs on or off:
+    an external_directory catch-all deny ahead of every allow, `.env` reads denied,
+    `edit` denied and the `READ_ONLY_DENY` bash verbs denied, so no permission decision
+    it reaches is an `ask` (an auto-rejected ask ends its session; a deny does not).
+
     `read_roots` (the critic's, `actors._read_roots`) add `external_directory` ALLOWS for
-    directories its context points into: the read-only critic has no `--auto`, so an
-    `ask` there is auto-rejected and the rejection ends its session with no reply. The
-    critic's `edit` stays denied (lane guard) or asked-and-rejected (no `--auto`), so
-    this re-opens reads only."""
+    directories its context points into, after the catch-all deny: reads only, since
+    the critic's `edit` and mutating bash stay denied."""
     if role not in PLAIN_ROLES:
         raise ValueError(f"unknown actor role {role!r}; expected one of {PLAIN_ROLES}")
     permission: dict = {}
@@ -726,6 +749,18 @@ def seat_permission(role: str, *, lane: Path | None = None,
         permission["bash"] = bash
         if edit_rule:
             permission["edit"] = dict(AUTHOR_EDIT_GUARD) if role == "author" else "deny"
+    if role == "critic":
+        permission.update(CRITIC_NEVER_ASK)
+        permission["read"] = dict(CRITIC_READ_RULES)
+        # The catch-all goes FIRST so every allow after it (anchor builds, read roots)
+        # still wins by being the last match.
+        permission["external_directory"] = {"*": "deny",
+                                            **permission.get("external_directory", {})}
+        bash = permission.setdefault("bash", {})
+        for pattern in READ_ONLY_DENY:
+            bash.setdefault(pattern, "deny")
+        if edit_rule:
+            permission["edit"] = "deny"
     if read_roots:
         external = permission.setdefault("external_directory", {})
         for root in read_roots:
@@ -786,8 +821,9 @@ def build_plain_config(*, role: str, lane: Path, build_dir: str | Path | None = 
     """The per-call `OPENCODE_CONFIG` for the PLAIN seat: `snapshot: false`, a permission
     block (plus the author's style note as an `instructions` file) and nothing else -- no
     agent, no MCP, no tool_output cap, so the plain seat stays the plain seat. With every
-    knob off it is `{"$schema", "snapshot": false}` alone: the plain seat ALWAYS gets a
-    per-call config, because snapshot tracking is on by default and bloats the store.
+    knob off it is `{"$schema", "snapshot": false}` alone (the critic's also carries
+    its never-ask permission block): the plain seat ALWAYS gets a per-call config,
+    because snapshot tracking is on by default and bloats the store.
     `context_limit` / `output_limit` (OAB-23, 0 = off) add `model_limits(model, ...)`;
     `thinking` "off"/"medium" (OAB-24) adds `model_thinking(model, thinking)`."""
     permission = seat_permission(role, lane=lane, build_dir=build_dir,
@@ -828,7 +864,7 @@ __all__ = ["actor_instructions", "AGENT_NAMES", "AK_CHECK_ALLOW", "AK_CHECK_DENY
            "model_block", "model_thinking",
            "DEFAULT_CONTEXT_LIMIT", "DEFAULT_OUTPUT_LIMIT", "DEFAULT_PLANNER_OUTPUT_LIMIT", "limits_label", "model_limits", "AUTHOR_EDIT_GUARD",
            "AUTHOR_STYLE_NOTE",
-           "BUILD_DENY", "MAX_CONCURRENT_SUBAGENTS", "MCP_SERVER", "PLAIN_ROLES",
+           "BUILD_DENY", "CRITIC_NEVER_ASK", "CRITIC_READ_RULES", "MAX_CONCURRENT_SUBAGENTS", "MCP_SERVER", "PLAIN_ROLES",
            "READ_ONLY_DENY", "SCOUT_AGENT", "SNAPSHOT_OFF", "TRIM_ENV", "UNUSED_TOOLS", "anchor_fence",
            "build_actor_config", "build_plain_config", "seat_label", "seat_permission",
            "write_actor_config", "write_plain_config"]

@@ -200,8 +200,11 @@ class SnapshotOff(unittest.TestCase):
 
     def test_knobs_off_plain_config_is_snapshot_off_and_nothing_else(self):
         for role in aoc.PLAIN_ROLES:
+            # The critic (no `--auto`) always carries its never-ask block as well.
+            extra = ({"permission": aoc.seat_permission("critic")} if role == "critic" else {})
             self.assertEqual(aoc.build_plain_config(role=role, lane=LANE),
-                             {"$schema": "https://opencode.ai/config.json", "snapshot": False})
+                             {"$schema": "https://opencode.ai/config.json", "snapshot": False,
+                              **extra})
 
     def test_write_plain_config_always_writes(self):
         with tempfile.TemporaryDirectory() as tmp:

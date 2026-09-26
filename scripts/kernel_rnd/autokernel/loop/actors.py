@@ -2586,8 +2586,10 @@ def _read_roots(context: Mapping[str, Any] | None) -> tuple[Path, ...]:
     The CRITIC is the read-only seat (no `--auto`): opencode auto-REJECTS every `ask`,
     and a rejected `external_directory` read ENDS the session with no final text (DS41
     run 10h batch 1: the critic read `<store>/experiments.md`, 0 chars, the planner's
-    31-minute hypothesis lost). Its per-call config allows reads there instead
-    (`actor_opencode_config.seat_permission(read_roots=...)`); its edits stay refused."""
+    31-minute hypothesis lost). Its per-call config denies every external path by a
+    catch-all (a deny fails the one tool call; the session continues) and allows reads
+    under these roots after it (`actor_opencode_config.seat_permission`,
+    `CRITIC_NEVER_ASK`); its edits stay denied."""
     roots = (context or {}).get("actor_read_roots") if isinstance(context, Mapping) else None
     out = []
     for root in roots or ():

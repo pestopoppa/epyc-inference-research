@@ -163,11 +163,17 @@ def config_body(env):
     return json.loads(Path(path).read_text()) if path else None
 
 
-def assert_snapshot_only(case, env, body, ws=None):
+def assert_snapshot_only(case, env, body, ws=None, role=None):
+    """`role="critic"`: its knobs-off config also carries the never-ask permission block
+    (`actor_opencode_config.CRITIC_NEVER_ASK`; an auto-rejected ask ends its session)."""
+    from autokernel.loop import actor_opencode_config as aoc
     case.assertEqual(set(env or {}), {"OPENCODE_CONFIG", actors.SEAT_ENV_PLAIN_CONFIG},
                      "knobs off: the snapshot-off config and nothing else (no arm, no trim)")
     case.assertEqual(env[actors.SEAT_ENV_PLAIN_CONFIG], "1")
-    case.assertEqual(body, SNAPSHOT_ONLY_CONFIG)
+    expect = dict(SNAPSHOT_ONLY_CONFIG)
+    if role == "critic":
+        expect["permission"] = aoc.seat_permission("critic")
+    case.assertEqual(body, expect)
     if ws is not None:
         # One registry-owned directory per call, beside the lanes, never inside one.
         case.assertEqual(Path(env["OPENCODE_CONFIG"]).parent.parent,

@@ -1976,9 +1976,13 @@ def main(argv: list[str] | None = None) -> int:
                 "critic": critic_backend.describe(),
             },
             # The store the context's paths point into (experiments.md, runtime floors,
-            # cpu/node profiles): the read-only critic's seat allows reads there, since
-            # a rejected read ends its opencode session with no reply (actors._read_roots).
-            "actor_read_roots": [str(Path(args.store).resolve())],
+            # cpu/node profiles) and the campaign root holding it (inputs/, state-*/,
+            # sibling stores): the read-only critic's seat allows reads there and denies
+            # every other external path (actors._read_roots). DS41 run 10i: the critic
+            # grepped the campaign root to verify a hypothesis.
+            "actor_read_roots": list(dict.fromkeys(
+                str(p) for p in (Path(args.store).resolve(), Path(args.store).resolve().parent)
+                if str(p) != "/")),
             **({"serving_instrument": dict(source_instrument)} if source_instrument else {}),
             **({"cpu_screen": {**screen_state,
                                "full_target": full_cpu_target.to_dict()}} if screen_state else {}),
