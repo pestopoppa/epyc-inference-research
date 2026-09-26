@@ -193,9 +193,16 @@ class Validation:
                 "checks": self.checks, "validator": self.validator}
 
 
+#: Where a member's ak-check build dir sits: a marked registry dir beside its tree.
+CHECK_DIR_NAME = "ak-check"
+#: The registry `kind` of that dir (ak_check.SCRATCH_KIND on lane/ak-sandbox-20260926).
+CHECK_DIR_KIND = "ak-check-build"
+
+
 def integrity_validator(hypothesis, workspace: Path, base: str, paths: Sequence[str],
-                        should_stop: Callable[[], bool]) -> Validation:
-    """The fallback validator until ak-check lands: the lane-diff and integrity checks.
+                        should_stop: Callable[[], bool], context=None) -> Validation:
+    """The lane-diff and integrity checks: the winner check without ak-check, and the
+    first stage in front of it.
 
     A diff exists against `base` and names the hypothesis's target surface (no stray
     untracked file: `integrity.lane_diff_report`), and the declared paths pass the host
@@ -225,23 +232,36 @@ def integrity_validator(hypothesis, workspace: Path, base: str, paths: Sequence[
 
 
 def command_validator(template: Sequence[str] | str, *, name: str = "ak-check",
-                      timeout_s: int = 1800) -> Callable[..., Validation]:
+                      timeout_s: int = 1800, inconclusive_exits: Sequence[int] = (),
+                      score_output: Callable[[str], int] | None = None
+                      ) -> Callable[..., Validation]:
     """An external check (ak-check: compile + `--op-test`) run in the scratch tree.
 
-    `template` is an argv (or a shell-split string) whose `{worktree}` / `{base}` /
-    `{paths}` placeholders are filled per member; it runs with the scratch tree as cwd,
-    in its own process group, and is ended the same way as an actor when the panel no
-    longer needs it. Exit 0 passes. When its LAST stdout line is a JSON object, each
-    `{"<check>": {"passed": bool}}` entry is recorded, and passing entries raise the
-    failing score."""
+    `template` is an argv (or a shell-split string) whose placeholders are filled per
+    member: `{worktree}`, `{base}`, `{paths}`, `{scratch}` (the member's marked check
+    dir beside its tree) and `{build_dir}` (the target's anchor build, from the round's
+    context). It runs with the scratch tree as cwd, in its own process group, and is
+    ended the same way as an actor when the panel no longer needs it. Exit 0 passes.
+    An exit in `inconclusive_exits` (ak-check's 2: refused, or the sandbox could not
+    run -- NOT evidence about the patch) passes as inconclusive, so the winner check
+    falls back to the stages before it. When its LAST stdout line is a JSON object,
+    each `{"<check>": {"passed": bool}}` entry is recorded and passing entries raise
+    the failing score; `score_output(stdout)` may add to it."""
     argv_template = shlex.split(template) if isinstance(template, str) else list(template)
     if not argv_template:
         raise ValueError("a command validator needs a command")
 
     def validate(hypothesis, workspace: Path, base: str, paths: Sequence[str],
-                 should_stop: Callable[[], bool]) -> Validation:
+                 should_stop: Callable[[], bool], context=None) -> Validation:
         from . import actors
-        values = {"worktree": str(workspace), "base": str(base), "paths": " ".join(paths)}
+        build_dir = actors._anchor_build_dir(context or {})
+        values = {"worktree": str(workspace), "base": str(base), "paths": " ".join(paths),
+                  "scratch": str(Path(workspace).parent / CHECK_DIR_NAME),
+                  "build_dir": build_dir or ""}
+        if any("{build_dir}" in part for part in argv_template) and not build_dir:
+            return Validation(True, 0, f"{name} inconclusive: the target names no anchor "
+                              "build dir", {name: {"passed": None, "inconclusive": True}},
+                              name)
         argv = [part.format(**values) for part in argv_template]
         import tempfile
         with tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace") as out, \
@@ -273,10 +293,20 @@ def command_validator(template: Sequence[str] | str, *, name: str = "ak-check",
             except ValueError:
                 stages = {}
         passed_stages = sum(1 for value in stages.values() if value.get("passed") is True)
+        if score_output is not None:
+            try:
+                passed_stages += int(score_output(stdout))
+            except Exception:      # noqa: BLE001 -- scoring is advisory
+                pass
         record = {"passed": done.returncode == 0, "returncode": done.returncode,
-                  "stages": stages, "stderr_tail": stderr[-1000:] or None}
+                  "stages": stages, "stdout_tail": stdout[-2000:] or None,
+                  "stderr_tail": stderr[-1000:] or None}
         if done.returncode == 0:
             return Validation(True, passed_stages, "", {name: record}, name)
+        if done.returncode in tuple(inconclusive_exits):
+            record.update(passed=None, inconclusive=True)
+            return Validation(True, 0, f"{name} inconclusive (rc {done.returncode}): "
+                              f"{(stdout or stderr).strip()[-300:]}", {name: record}, name)
         return Validation(False, passed_stages,
                           f"{name} failed (rc {done.returncode}): "
                           f"{(stderr or stdout).strip()[-400:]}", {name: record}, name)
@@ -288,13 +318,14 @@ def command_validator(template: Sequence[str] | str, *, name: str = "ak-check",
 def chain_validators(*validators: Callable[..., Validation]) -> Callable[..., Validation]:
     """Run validators in order; the first failure stops the chain. The chain's failing
     score is 10 per stage passed plus the failing stage's own score."""
-    def validate(hypothesis, workspace, base, paths, should_stop) -> Validation:
+    def validate(hypothesis, workspace, base, paths, should_stop, context=None) -> Validation:
         checks: dict[str, Any] = {}
         names: list[str] = []
         for stage, validator in enumerate(validators):
             if should_stop():
                 raise ValidationStopped("the panel no longer needs this validation")
-            result = validator(hypothesis, workspace, base, paths, should_stop)
+            result = validator(hypothesis, workspace, base, paths, should_stop,
+                               context=context)
             checks.update(result.checks)
             names.append(result.validator or getattr(validator, "__name__", f"stage{stage}"))
             if not result.passed:
@@ -303,6 +334,26 @@ def chain_validators(*validators: Callable[..., Validation]) -> Callable[..., Va
         return Validation(True, 10 * len(validators), "", checks, "+".join(names))
     validate.__name__ = "+".join(getattr(v, "__name__", "validator") for v in validators)
     return validate
+
+
+def ak_check_validator(script: Path | str, *, python: str | None = None,
+                       timeout_s: int = 1800) -> Callable[..., Validation]:
+    """`ak-check --op-test` (lane/ak-sandbox-20260926) on a member's scratch tree: the
+    compile check with the anchor build's own commands, a relink of the touched libraries
+    and test-backend-ops against the CPU reference, built in the member's marked check
+    dir. Exit 0 passes, 1 fails (a failure that reached the op test outranks a compile
+    failure), 2 is inconclusive (refused / sandbox fault: never evidence about the
+    patch), so the integrity screen in front of it decides."""
+    import sys as _sys
+
+    def reached_op_test(stdout: str) -> int:
+        return 1 if "--- test-backend-ops" in stdout else 0
+
+    return command_validator(
+        [python or _sys.executable, str(script), "--op-test", "--lane", "{worktree}",
+         "--build-dir", "{build_dir}", "--scratch", "{scratch}", "--base", "{base}"],
+        name="ak-check", timeout_s=timeout_s, inconclusive_exits=(2,),
+        score_output=reached_op_test)
 
 
 # ----------------------------------------------------------------- the panel
@@ -485,6 +536,9 @@ class AuthorPanel:
                     # then the directory: the scope releases in reverse order).
                     home = Path(scope.dir("author", name))
                     path = Path(scope.worktree(worktree, base, name, at=home / "tree"))
+                    # The member's ak-check build dir (the author's own sandbox calls
+                    # and the winner check share it; released first, it is newest).
+                    scope.dir(CHECK_DIR_KIND, name, at=home / CHECK_DIR_NAME)
                 else:
                     path = Path(scope.worktree(worktree, base, name))
             except Exception as exc:      # noqa: BLE001
@@ -525,7 +579,8 @@ class AuthorPanel:
                 if member.outcome == "diff":
                     try:
                         member.validation = self.validator(hypothesis, member.workspace, base,
-                                                           member.paths, stop_member)
+                                                           member.paths, stop_member,
+                                                           context=context)
                     except ValidationStopped as exc:
                         member.validation = Validation(False, -1, str(exc), {"stopped": True},
                                                        "stopped")
@@ -896,5 +951,6 @@ __all__ = ["AUTHOR_MODES", "AUTHOR_OUTPUT_LIMIT", "AuthorPanel", "AuthorSpec",
            "PANEL_SCHEMA", "POOL_RESERVE", "PanelSetupRefused", "PoolBudget",
            "PoolBudgetRefused", "SCRATCH_BYTES_PER_AUTHOR", "SELECTION_BEST_FAILING",
            "SELECTION_FALLBACK", "SELECTION_FIRST_PASSING", "SELECTION_NONE", "Validation",
-           "ValidationStopped", "author_budget", "chain_validators", "command_validator",
+           "ValidationStopped", "CHECK_DIR_KIND", "CHECK_DIR_NAME", "ak_check_validator",
+           "author_budget", "chain_validators", "command_validator",
            "integrity_validator", "parse_authors"]

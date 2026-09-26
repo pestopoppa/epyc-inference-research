@@ -154,11 +154,11 @@ class Fixture(unittest.TestCase):
             retain=lambda **patch: archive.retain_patch_bytes(self.store, **patch),
             should_stop=self.stop.is_set, **kw)
 
-    def call(self, panel, solo=None, lane=None):
+    def call(self, panel, solo=None, lane=None, context=None):
         records = []
         solo = solo or (lambda h, c: (_ for _ in ()).throw(AssertionError("solo called")))
-        result = panel(HYP, {"k": "v"}, lane=lane or (self.lane, self.base), solo=solo,
-                       record=records.append)
+        result = panel(HYP, context or {"k": "v"}, lane=lane or (self.lane, self.base),
+                       solo=solo, record=records.append)
         return result, records
 
     def assert_no_scratch_left(self):
@@ -570,9 +570,10 @@ class ScratchLifecycle(Fixture):
             self.assertFalse(ws.parent.exists(), "a member dir survived the scope")
         guard.assert_called_once_with(2 * bestof.SCRATCH_BYTES_PER_AUTHOR)
         stats = self.registry.stats()
-        self.assertEqual((stats["allocated"], stats["released"]), (4, 4))   # 2 dirs + 2 trees
+        # Per member: its home dir, its worktree, its ak-check dir.
+        self.assertEqual((stats["allocated"], stats["released"]), (6, 6))
         moved = records[0]["scratch"]
-        self.assertEqual((moved["delta_allocated"], moved["delta_released"]), (4, 4))
+        self.assertEqual((moved["delta_allocated"], moved["delta_released"]), (6, 6))
         self.assertGreater(moved["delta_bytes_freed"], 0)
         self.assert_no_scratch_left()
 
@@ -612,7 +613,7 @@ class ScratchLifecycle(Fixture):
         def broken(s, w, st):
             raise RuntimeError("factory fault")
 
-        def validator(*args):
+        def validator(*args, **kwargs):
             raise RuntimeError("validator fault")
 
         with self.assertRaisesRegex(RuntimeError, "factory fault"):
@@ -672,6 +673,91 @@ class ScratchLifecycle(Fixture):
         self.assertNotIn("worktree " + "pr" + "une", joined)
         self.assertNotRegex(source, r"""["']worktree["']\s*,\s*["'](add|remove|prune)["']""")
         self.assertNotIn("rmtree", source)
+
+
+# --------------------------------------------------------------------------- ak-check
+
+#: A stand-in for `ak_check.py` with its CLI and exit contract (0 pass, 1 fail, 2
+#: refused): decides by what the member wrote into the target.
+FAKE_AK_CHECK = r"""
+import argparse, os, sys
+ap = argparse.ArgumentParser()
+ap.add_argument("--op-test", action="store_true")
+ap.add_argument("--lane"); ap.add_argument("--build-dir"); ap.add_argument("--scratch")
+ap.add_argument("--base")
+a = ap.parse_args()
+assert a.op_test and a.build_dir == "/anchor/build", a
+assert os.path.isfile(os.path.join(a.scratch, ".ak-scratch-owner")), "scratch not marked"
+assert os.path.dirname(a.scratch) == os.path.dirname(a.lane), (a.scratch, a.lane)
+open(os.path.join(a.scratch, "obj.o"), "w").write("x" * 4096)
+text = open(os.path.join(a.lane, "ggml/src/kernel.c")).read()
+if "return 7" in text:
+    print("ak-check op-test: PASS"); sys.exit(0)
+if "return 8" in text:
+    print("ak-check op-test: FAIL\n--- ggml/src/kernel.c: ok\n--- test-backend-ops -o MUL_MAT: 3/4 passed")
+    sys.exit(1)
+if "REFUSE" in text:
+    print("ak-check op-test: REFUSED\nREFUSED: the loop is measuring"); sys.exit(2)
+print("ak-check op-test: FAIL\n--- ggml/src/kernel.c: FAIL\nerror: bad intrinsic"); sys.exit(1)
+"""
+CONTEXT = {"target": {"recipe": {"build_dir": "/anchor/build"}}}
+
+
+class AkCheckWinner(Fixture):
+
+    def setUp(self):
+        super().setUp()
+        self.script = self.root / "fake_ak_check.py"
+        self.script.write_text(FAKE_AK_CHECK)
+        self.validator = bestof.chain_validators(
+            bestof.integrity_validator, bestof.ak_check_validator(self.script, timeout_s=60))
+
+    def text(self, value):
+        return f"int f(void) {{ {value} }}\n"
+
+    def test_the_first_author_passing_ak_check_wins(self):
+        panel = self.panel({
+            "off": lambda s, w, st: Editor(s, w, st, text=self.text("return 9;")),
+            "medium": lambda s, w, st: Editor(s, w, st, delay=0.3, text=self.text("return 7;"))},
+            validator=self.validator)
+        _paths, records = self.call(panel, context=CONTEXT)
+        row = records[0]
+        self.assertEqual((row["selection"], row["winner"]), ("first_passing", "a1-medium"))
+        members = {m["label"]: m for m in row["members"]}
+        self.assertEqual(members["a0-off"]["validation"]["checks"]["ak-check"]["returncode"], 1)
+        self.assertEqual(members["a1-medium"]["validation"]["checks"]["ak-check"]["returncode"], 0)
+        self.assertEqual((self.lane / TARGET).read_text(), self.text("return 7;"))
+        self.assert_no_scratch_left()
+
+    def test_no_pass_prefers_the_failure_that_reached_the_op_test(self):
+        panel = self.panel({
+            "off": lambda s, w, st: Editor(s, w, st, text=self.text("return 9;")),
+            "medium": lambda s, w, st: Editor(s, w, st, delay=0.3, text=self.text("return 8;"))},
+            validator=self.validator)
+        _paths, records = self.call(panel, context=CONTEXT)
+        row = records[0]
+        self.assertEqual((row["selection"], row["winner"]), ("best_failing", "a1-medium"))
+        members = {m["label"]: m for m in row["members"]}
+        self.assertGreater(members["a1-medium"]["validation"]["score"],
+                           members["a0-off"]["validation"]["score"])
+        self.assert_no_scratch_left()
+
+    def test_a_refused_check_falls_back_to_the_integrity_screen(self):
+        panel = self.panel({
+            "off": lambda s, w, st: Editor(s, w, st, text=self.text("return 1; /* REFUSE */")),
+            "medium": lambda s, w, st: Blocker(s, w, st)}, validator=self.validator)
+        _paths, records = self.call(panel, context=CONTEXT)
+        row = records[0]
+        self.assertEqual((row["selection"], row["winner"]), ("first_passing", "a0-off"))
+        check = {m["label"]: m for m in row["members"]}["a0-off"]["validation"]["checks"]
+        self.assertTrue(check["ak-check"]["inconclusive"])
+        self.assert_no_scratch_left()
+
+    def test_no_anchor_build_dir_is_inconclusive(self):
+        result = bestof.ak_check_validator(self.script)(HYP, self.lane, self.base, [TARGET],
+                                                         lambda: False, context={})
+        self.assertTrue(result.passed)
+        self.assertTrue(result.checks["ak-check"]["inconclusive"])
 
 
 # --------------------------------------------------------------------------- metrics

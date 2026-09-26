@@ -366,14 +366,39 @@ def _author_scratch_registry(args):
 
 
 def _author_validator(args):
-    """The panel's winner check: the lane-diff/integrity screen, then `--actor-authors-
-    check` (ak-check compile + --op-test, lane/ak-sandbox-20260926) when given."""
-    if not str(args.actor_authors_check or "").strip():
+    """The panel's winner check: the lane-diff/integrity screen, then ak-check compile +
+    `--op-test` (`ak_check.py`, lane/ak-sandbox-20260926) when this build has it, or the
+    `--actor-authors-check` command; `off` (or no ak-check) = the screen alone."""
+    check = str(args.actor_authors_check or "").strip()
+    if check == "off":
+        return bestof.integrity_validator
+    if check:
+        return bestof.chain_validators(
+            bestof.integrity_validator,
+            bestof.command_validator(check, name="authors-check",
+                                     timeout_s=int(args.actor_timeout_s),
+                                     inconclusive_exits=(2,)))
+    try:
+        from . import ak_check
+    except ImportError:
         return bestof.integrity_validator
     return bestof.chain_validators(
         bestof.integrity_validator,
-        bestof.command_validator(args.actor_authors_check, name="ak-check",
-                                 timeout_s=int(args.actor_timeout_s)))
+        bestof.ak_check_validator(Path(ak_check.__file__), timeout_s=int(args.actor_timeout_s)))
+
+
+def _member_sandbox(args, workspace) -> tuple[dict, dict]:
+    """(AgentPlanner kwargs, ActorSeat kwargs) giving a panel member the author sandbox
+    (`ak-check`, lane/ak-sandbox-20260926) in ITS marked check dir, when this build has
+    the sandbox and it is on; ({}, {}) otherwise (the seat is then byte-identical)."""
+    import dataclasses as _dc
+    planner_fields = {f.name for f in _dc.fields(actors.AgentPlanner)}
+    seat_fields = {f.name for f in _dc.fields(actors.ActorSeat)}
+    if "sandbox_scratch" not in planner_fields or "author_sandbox" not in seat_fields \
+            or getattr(args, "actor_author_sandbox", "off") != "on":
+        return {}, {}
+    check = Path(workspace).parent / bestof.CHECK_DIR_NAME
+    return {"sandbox_scratch": lambda: (check, None)}, {"author_sandbox": True}
 
 
 def _effective_output_limits(args) -> dict[str, int]:
@@ -1004,10 +1029,12 @@ def main(argv: list[str] | None = None) -> int:
                         help=":8083's unified KV pool the concurrent authors share "
                              "(np4 --kv-unified; default: %(default)s)")
     parser.add_argument("--actor-authors-check", default="",
-                        help="best-of-N: an extra winner check run in each author's scratch "
-                             "tree after the integrity screen (ak-check compile + --op-test); "
-                             "an argv with {worktree}/{base}/{paths} placeholders, exit 0 "
-                             "passes. Empty = integrity screen only (default: %(default)r)")
+                        help="best-of-N winner check after the integrity screen, run in each "
+                             "author's scratch tree. Empty = `ak-check --op-test` when this "
+                             "build has ak_check.py, else the screen alone; 'off' = the screen "
+                             "alone; anything else = an argv with {worktree}/{base}/{paths}/"
+                             "{scratch}/{build_dir} placeholders (exit 0 passes, 2 is "
+                             "inconclusive) (default: %(default)r)")
     parser.add_argument("--actor-authors-min-free-gb", type=float, default=50.0,
                         help="best-of-N: the scratch registry's free-space floor; below it a "
                              "round runs the single author (default: %(default)s)")
@@ -3386,12 +3413,13 @@ def main(argv: list[str] | None = None) -> int:
             budget = author_plan.budget
 
             def make_author(spec, workspace, member_stop):
+                sandbox_kw, sandbox_seat_kw = _member_sandbox(args, workspace)
                 return actors.AgentPlanner(
                     workspace=Path(workspace), backend=planner_backend,
                     timeout_s=args.actor_timeout_s, should_stop=member_stop,
                     belief_context=args.actor_belief_context,
-                    belief_root=args.belief_root_repo,
-                    seat=actors.ActorSeat(
+                    belief_root=args.belief_root_repo, **sandbox_kw,
+                    seat=actors.ActorSeat(**sandbox_seat_kw,
                         bounded=args.actor_seat == "bounded", fan_out=args.actor_fan_out,
                         steps=args.actor_steps, context_mode=args.actor_context_mode,
                         **_actor_knobs(args),
