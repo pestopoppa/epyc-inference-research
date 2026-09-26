@@ -912,10 +912,12 @@ def author_env(lane: Path, build_dir: Path, *, scratch: Path | None, log: Path,
                op_test_off: str | None = None,
                base_path: str | None = None) -> dict[str, str]:
     """The env an author call needs for `ak-check`: the shim's dir first on PATH, the
-    loop-allocated scratch dir, the calls log and this call's id. Writes the shim beside
-    the lane (never inside it: the lane's diff is the candidate)."""
+    loop-allocated scratch dir, the calls log and this call's id. Writes the shim INSIDE
+    the loop-allocated scratch dir (released with its iteration scope), or, with none,
+    beside the lane (never inside it: the lane's diff is the candidate)."""
     lane, build_dir = Path(lane), Path(build_dir)
-    shim_dir = lane.parent / SHIM_DIR_NAME / lane.name
+    shim_dir = (Path(scratch) / SHIM_DIR_NAME if scratch is not None
+                else lane.parent / SHIM_DIR_NAME / lane.name)
     shim_dir.mkdir(parents=True, exist_ok=True)
     shim = shim_dir / COMMAND
     tmp = shim.with_name(f".{COMMAND}.{os.getpid()}.tmp")

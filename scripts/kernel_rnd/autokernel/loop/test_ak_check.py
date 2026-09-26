@@ -565,7 +565,8 @@ class AuthorCall(unittest.TestCase):
         self.assertEqual(prompt.count(actors.AUTHOR_SANDBOX_RULE), 1)
         self.assertIn(f"{actors._SANDBOX_ANCHOR}\n\n{actors.AUTHOR_SANDBOX_RULE}", prompt)
         env = seen["env"]
-        shim_dir = self.lane.parent / ak_check.SHIM_DIR_NAME / "lane0"
+        # The shim lives in the loop-allocated check dir (released with its iteration).
+        shim_dir = self.scratch / ak_check.SHIM_DIR_NAME
         self.assertTrue(env["PATH"].startswith(str(shim_dir) + os.pathsep))
         self.assertEqual(env[ak_check.ENV_SCRATCH], str(self.scratch))
         self.assertNotIn(ak_check.ENV_OP_TEST, env)

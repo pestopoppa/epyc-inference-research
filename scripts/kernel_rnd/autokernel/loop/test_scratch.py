@@ -697,7 +697,25 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     "actors.py:_record_metrics:open-write": (1, "evidence: actor_call_metrics log (append)"),
     "belief_context.py:write_receipt:mkdir": (1, "evidence: belief receipt log"),
     "belief_context.py:write_receipt:open-write": (1, "evidence: belief receipt log (append)"),
-    # -- self-cleaning temp --------------------------------------------------------------
+    # -- ak-check sandbox (lane/ak-sandbox): everything it builds lives in the check dir
+    #    the loop allocates per iteration (ak_check.scratch_provider -> Scope.dir) ------
+    "ak_check.py:author_env:mkdir": (1, _IN_SCOPE + " (ak-check shim; no check dir: one per-lane shim beside the lane)"),
+    "ak_check.py:author_env:write_text": (1, _IN_SCOPE + " (ak-check shim, temp + os.replace)"),
+    "ak_check.py:compile_units.one:mkdir": (1, _IN_SCOPE + " (ak-check object cache)"),
+    "ak_check.py:compile_units.one:write_text": (1, _IN_SCOPE + " (ak-check object cache key stamp)"),
+    "ak_check.py:relink:mkdir": (1, _IN_SCOPE + " (relinked libraries under <check dir>/bin)"),
+    "ak_check.py:mirror_sonames:symlink_to": (1, _IN_SCOPE + " (soname links under <check dir>/bin)"),
+    "ak_check.py:op_test:mkdir": (1, _IN_SCOPE + " (<check dir>/bin for test-backend-ops)"),
+    "ak_check.py:_open_lock:mkdir": (1, "state: ak-check cross-process fence dir beside the lane / lane lock in the check dir"),
+    "ak_check.py:_open_lock:open-write": (1, "state: ak-check flock files (fence gate/slot, per-check-dir lane lock)"),
+    "ak_check.py:record_call:mkdir": (1, "evidence: ak-check calls log, read back into the actor_call_metrics row"),
+    "ak_check.py:record_call:open-write": (1, "evidence: ak-check calls log (append)"),
+    # -- best-of panel (lane/ak-bestof): member trees are Scope.worktree/dir -------------
+    "bestof.py:AuthorPanel._harvest_metrics:mkdir": (1, "evidence: member actor-call rows moved into the LANE's actor-calls.jsonl"),
+    "bestof.py:AuthorPanel._harvest_metrics:open-write": (2, "evidence: the lane's actor-calls.jsonl (append) and the member log truncation"),
+    "bestof.py:AuthorPanel._write_row:mkdir": (1, "evidence: author-panel.jsonl in the lane's reply dir"),
+    "bestof.py:AuthorPanel._write_row:open-write": (1, "evidence: author-panel.jsonl (append)"),
+    "bestof.py:command_validator.validate:TemporaryFile": (2, "anonymous (unlinked) stdout/stderr capture of the winner check, deleted on close"),
     "archive.py:keep:TemporaryDirectory": (1, _SELF_CLEANING + " (private git index)"),
     "archive.py:keep:write_text": (1, "commit message inside the self-cleaning private-index dir"),
     "cpu_quant_reference.py:check_cpu_quant_suite:TemporaryDirectory": (1, _SELF_CLEANING + " (probe build)"),
