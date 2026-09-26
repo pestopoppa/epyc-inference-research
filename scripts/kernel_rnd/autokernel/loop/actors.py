@@ -2041,6 +2041,27 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
     # the champion it was formed against are all recorded, so it can be re-proposed
     # against the champion that displaced it. Cheaper than deriving a new one, and it
     # is a QUEUE, not a graveyard.
+    # Critic-ACCEPTED hypotheses whose patches failed and which are queued to be
+    # re-authored (loop.PATCH_ROUNDS_EXHAUSTED / SCOPE_BLOCKED): the next draws resume
+    # them BEFORE the planner is asked, so proposing one again duplicates queued work.
+    pending = [row for row in (context.get("pending_accepted_hypotheses") or [])
+               if isinstance(row, Mapping)][:limit]
+    if pending:
+        lines.append("## Accepted hypotheses pending authoring — do NOT re-propose these")
+        lines.append("Each was accepted by the critic; its patches failed on authoring or "
+                     "scope, not on the idea. The loop re-authors them itself, with the "
+                     "rejections as feedback. Propose something different.")
+        for row in pending:
+            used, budget = row.get("author_attempts_used"), row.get("author_attempts_budget")
+            state = row.get("state") or "pending"
+            lines.append(f"- `{row.get('mechanism_id')}` ({row.get('target')}; {state}"
+                         + (f", {used}/{budget} authoring attempts spent"
+                            if budget is not None else "") + ")"
+                         + (f" — {row['statement']}" if row.get("statement") else "")
+                         + (f"\n    blocked: {row['blocked_reason']}"
+                            if row.get("blocked_reason") else ""))
+        lines.append("")
+
     superseded = [row for row in (context.get("prior_experiments") or [])
                   if row.get("status") == "superseded"][:limit]
     if superseded:
@@ -2144,7 +2165,7 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
     # changes a recorded result nor assigns a magnitude to a historical observation.
     exhausted: dict[str, list[Mapping[str, Any]]] = {}
     terminal = {"measured_null", "regression", "refused_at_formation", "authoring_refused",
-                "screened_out"}
+                "screened_out", "hypothesis_retired"}
     for row in prior:
         if row.get("status") not in terminal:
             continue
@@ -3109,7 +3130,11 @@ class AgentCritic:
             "</candidate-data>",
             "it does not implement the accepted mechanism; it creeps beyond "
             f"{list(paths)}; it risks correctness; or it edits a file that must stay "
-            "byte-identical to production",
+            "byte-identical to production. If you reject it because the accepted "
+            "mechanism CANNOT be implemented without editing a region the admitted route "
+            "refuses (not merely because this patch strayed there), begin the reason with "
+            "`SCOPE[<the route or rule that refuses it>]: `; otherwise do not use that "
+            "prefix",
             context)
         after = integrity.candidate_tree(self.workspace)
         if after != before:

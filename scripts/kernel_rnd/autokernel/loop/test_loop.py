@@ -205,8 +205,15 @@ class TheLoopback(unittest.TestCase):
         planner = _Planner()
         critic = _Critic([], [])
         outcome, _ = _run(planner, critic, gate_ok=False)
-        self.assertEqual(outcome.status, "refused_at_formation")
+        # A compile failure is the AUTHOR's: the accepted hypothesis stays pending at
+        # the author, and the toolchain message is the next attempt's feedback.
+        self.assertEqual(outcome.status, loop.PATCH_ROUNDS_EXHAUSTED)
         self.assertIn("build failed: undefined symbol", " ".join(outcome.reasons))
+        self.assertEqual(planner.seen_patch_rejections[-1],
+                         ["build failed: undefined symbol"])
+        (checkpoint,) = outcome.resume_checkpoints
+        self.assertEqual(checkpoint["stage"], "author")
+        self.assertIn("build failed: undefined symbol", checkpoint["prior_patch_rejections"])
 
     def test_characterised_guard_runs_before_critic_pass_one(self):
         critic = mock.Mock()
@@ -262,15 +269,17 @@ class TheLoopback(unittest.TestCase):
 class BudgetsAreIndependent(unittest.TestCase):
     """critic_revise must never be charged to the hypothesis's counter."""
 
-    def test_patch_rounds_are_bounded_and_then_return_to_the_hypothesis_loop(self):
+    def test_patch_rounds_are_bounded_and_the_accepted_hypothesis_stays_pending(self):
         planner = _Planner()
         critic = _Critic([], [loop.Review(False, "scope creep")] * 10)
         outcome, _ = _run(planner, critic)
-        # 3 hypothesis rounds x 2 patch rounds: the patch budget is spent inside each
-        # hypothesis round, not shared across them.
-        self.assertEqual(planner.authorings, loop.HYPOTHESIS_ROUNDS * loop.PATCH_ROUNDS)
-        self.assertEqual(planner.proposals, loop.HYPOTHESIS_ROUNDS)
-        self.assertEqual(outcome.status, "refused_at_formation")
+        # The patch budget is spent on ONE accepted hypothesis, and the iteration ends
+        # with it pending at the author -- it is never thrown back to the planner for
+        # the author's failures (DS41 run 10g), and the hypothesis budget is untouched.
+        self.assertEqual(planner.authorings, loop.PATCH_ROUNDS)
+        self.assertEqual(planner.proposals, 1)
+        self.assertEqual(outcome.status, loop.PATCH_ROUNDS_EXHAUSTED)
+        self.assertEqual(outcome.hypothesis.mechanism_id, "akm-q5-bit-deposit")
 
     def test_a_hypothesis_budget_exhaustion_does_not_retire_the_hypothesis(self):
         planner = _Planner()

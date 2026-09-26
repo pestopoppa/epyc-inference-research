@@ -192,6 +192,7 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
              tail: SerializedTail | None = None,
              should_stop: Callable[[], bool] | None = None,
              accumulate_valid_positive: bool = False,
+             author_attempts: int = loop_mod.HYPOTHESIS_AUTHOR_ATTEMPTS,
              validate_candidate=None, formation_guard=None,
              reserve_candidate=None,
              make_author_panel: Callable[[Worker], Any] | None = None,
@@ -378,6 +379,8 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                     tail_session=lambda _b=base: tail.session(_b),
                     should_abandon=should_stop, record_reschedule=record_reschedule,
                     accumulate_valid_positive=accumulate_valid_positive,
+                    # Per-hypothesis authoring budget across iterations (loop.py).
+                    author_attempts=author_attempts,
                     validate_candidate=(
                         (lambda hypothesis, paths, _w=worker:
                          validate_candidate(_w, hypothesis, paths))

@@ -137,15 +137,19 @@ def _refusing_gate(hypothesis, paths):
 
 class AbandonedCandidatesGetTheirOwnRow(unittest.TestCase):
 
-    def test_run9c_sequence_records_both_refusals_and_the_stop_does_not_deny_them(self):
-        """author -> accept -> op_scope refuse, twice; then STOP on the next proposal."""
+    def test_run9c_sequence_records_both_refusals_and_keeps_the_hypothesis_pending(self):
+        """author -> accept -> op_scope refuse, twice: the idea stays scope_blocked.
+
+        Before the pending-hypothesis policy the iteration moved to a NEW proposal
+        here (and run 9c's stop landed on it); now the accepted hypothesis ends the
+        iteration, pending until the scope rule that refused it changes."""
         recorded = []
         planner = _Planner([_hypothesis(), _hypothesis("akm-next")])
         outcome = loop.iterate(
             planner=planner, critic=_Critic(), context={},
             measure=lambda h, p: self.fail("a refused patch must not be measured"),
             gate=_refusing_gate, commit=lambda h, p, c: self.fail("no commit"),
-            should_abandon=lambda: planner.proposals >= 1 and len(recorded) >= 2,
+            should_abandon=lambda: planner.proposals >= 2,
             record_abandoned=recorded.append)
         self.assertEqual([c.status for c in recorded], ["gate_refused", "gate_refused"])
         for patch_round, candidate in enumerate(recorded, start=1):
@@ -158,13 +162,33 @@ class AbandonedCandidatesGetTheirOwnRow(unittest.TestCase):
             row = candidate.to_attempt()
             self.assertEqual(row["refusal_gate"], "op_scope")
             self.assertEqual(row["reason"], REFUSAL)
-        self.assertEqual(outcome.status, "stopped_mid_formation")
-        self.assertEqual(outcome.reasons[0], loop.STOPPED_AFTER_DISPOSALS)
+        self.assertEqual(planner.proposals, 1)
+        self.assertEqual(outcome.status, loop.SCOPE_BLOCKED)
+        self.assertEqual(outcome.hypothesis.mechanism_id, "akm-q4k-x4-actscale-hoist")
         self.assertNotIn("never attempted", " ".join(outcome.reasons))
-        self.assertIn("gate_refused by op_scope", outcome.reasons[-1])
+        block = outcome.hypothesis_pending["scope_block"]
+        self.assertEqual((block["rule"], block["source"], block["route"]),
+                         (REFUSAL, "gate:op_scope", f"{KQUANTS}::{SYMBOL}"))
+        # Resumable through the gate_refused rows' build checkpoints once op_scope
+        # changes; the pending row itself adds no duplicate author checkpoint.
+        self.assertEqual(outcome.resume_checkpoints, [])
         self.assertEqual(len(outcome.abandoned_candidates), 2)
         self.assertEqual(outcome.to_attempt()["abandoned_candidates"],
                          outcome.abandoned_candidates)
+
+    def test_a_stop_after_a_disposal_does_not_deny_it(self):
+        """critic pass 1 refuses one idea; the stop lands on the NEXT proposal."""
+        recorded = []
+        planner = _Planner([_hypothesis("akm-first"), _hypothesis("akm-next")])
+        outcome = loop.iterate(
+            planner=planner, critic=_Critic([loop.Review(False, "unsupported premise")]),
+            context={}, measure=lambda h, p: self.fail("never measured"),
+            gate=_refusing_gate, commit=lambda h, p, c: self.fail("no commit"),
+            should_abandon=lambda: len(recorded) >= 1, record_abandoned=recorded.append)
+        self.assertEqual(outcome.status, "stopped_mid_formation")
+        self.assertEqual(outcome.reasons[0], loop.STOPPED_AFTER_DISPOSALS)
+        self.assertNotIn("never attempted", " ".join(outcome.reasons))
+        self.assertIn("hypothesis_rejected by critic:hypothesis", outcome.reasons[-1])
 
     def test_a_clean_stop_keeps_the_never_attempted_text(self):
         outcome = loop.iterate(
@@ -205,7 +229,7 @@ class AbandonedCandidatesGetTheirOwnRow(unittest.TestCase):
             planner=_Planner([_hypothesis()]), critic=_Critic(), context={},
             measure=lambda h, p: None, gate=_refusing_gate, commit=lambda h, p, c: None,
             hypothesis_rounds=1, record_abandoned=broken)
-        self.assertEqual(outcome.status, "refused_at_formation")
+        self.assertEqual(outcome.status, loop.SCOPE_BLOCKED)
         self.assertEqual(len(outcome.abandoned_candidates), 2)
         self.assertTrue(all("store is read-only" in row["record_error"]
                             for row in outcome.abandoned_candidates))
@@ -233,16 +257,17 @@ class PoolAttachesLineageAndTheRefusedDiffsReservation(unittest.TestCase):
             record_abandoned=lambda w, c: abandoned.append((w.name, c)))
         self.assertEqual(len(outcomes), 1)          # the batch count is untouched
         self.assertEqual(records, outcomes)
-        # 3 hypothesis rounds x 2 patch rounds, each refused at op_scope.
-        self.assertEqual(len(abandoned), 6)
+        # ONE accepted hypothesis x 2 patch rounds, each refused at op_scope: the
+        # iteration then ends scope_blocked instead of drawing new hypotheses.
+        self.assertEqual(len(abandoned), loop.PATCH_ROUNDS)
         self.assertEqual([c.attempt_identity for _w, c in abandoned],
-                         [f"identity-{n}" for n in range(1, 7)])
+                         [f"identity-{n}" for n in range(1, loop.PATCH_ROUNDS + 1)])
         self.assertEqual({(w, c.branch_id, c.spawn_parent, c.depth) for w, c in abandoned},
                          {("lane0", "detached:lane0", "c0", 1)})
         final = outcomes[0]
-        self.assertEqual(final.status, "refused_at_formation")
+        self.assertEqual(final.status, loop.SCOPE_BLOCKED)
         self.assertIsNone(final.attempt_identity)  # never inherits a refused diff's
-        self.assertEqual(len(final.abandoned_candidates), 6)
+        self.assertEqual(len(final.abandoned_candidates), loop.PATCH_ROUNDS)
 
 
 class RunWiresTheRecorder(unittest.TestCase):

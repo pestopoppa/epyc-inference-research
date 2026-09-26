@@ -17,7 +17,11 @@ from typing import Any, Iterable, Mapping, Sequence
 SCHEMA = "epyc.autokernel.process_metrics.v1"
 MEASURED = frozenset({"kept", "keep_candidate", "measured_null", "regression",
                       "runtime_observed"})
-VALID_DENOMINATOR = MEASURED | {"refused_at_formation", "planner_transient", "bench_failed"}
+#: `patch_rounds_exhausted` / `scope_blocked` / `hypothesis_retired` replace the
+#: `refused_at_formation` an accepted hypothesis's spent patch rounds used to end in.
+VALID_DENOMINATOR = MEASURED | {"refused_at_formation", "planner_transient", "bench_failed",
+                                "patch_rounds_exhausted", "scope_blocked",
+                                "hypothesis_retired"}
 
 
 def _finite_number(value: Any) -> float | None:

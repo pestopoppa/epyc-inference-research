@@ -15,6 +15,9 @@
     PYTHONPATH=scripts/kernel_rnd python3 -m scripts.kernel_rnd.autokernel.loop.resume \\
         reopen --store <store> --checkpoint <attempt_id>#<i> --reason "..." \\
         [--anchor <sha>] [--apply]
+    PYTHONPATH=scripts/kernel_rnd python3 -m scripts.kernel_rnd.autokernel.loop.resume \\
+        reinstate --store <store> --row <latest-checkpoint-row> --rejection <row> \\
+        [--rejection <row> ...] --epoch <sha> [--attempts-used N] [--apply]
 
 WHY. Stops and refusals discarded the work in flight. Across DS41 runs 3-9c that
 was the largest drop class: ~300 actor-minutes and ~120 measure-minutes, and 0 of
@@ -33,7 +36,10 @@ THE RECORD. Every row that ends with accepted work still in flight carries
                                         failure, a stop, a lane_error, an author
                                         report-path failure over a real diff)
                             "author" -- a critic-accepted hypothesis whose authoring
-                                        was interrupted by a stop or a transient
+                                        was interrupted by a stop or a transient,
+                                        or whose patch rounds ran out on author
+                                        failures (`patch_rounds_exhausted`) or on a
+                                        scope rejection (`scope_blocked`)
     hypothesis              the exact Hypothesis.to_dict()
     critic_hypothesis       the accepted critic:hypothesis provenance row
     critic_patch            (build) the accepted critic:patch provenance row
@@ -68,9 +74,23 @@ THE ALGORITHM (`prepare`), on every launch, before any fresh hypothesis is drawn
     bytes, and `loop.iterate` re-runs the host integrity check and every CURRENT
     gate -- the old verdict is never trusted -- before any build or measurement.
 
+PENDING HYPOTHESES. An accepted hypothesis whose patch rounds all end in rejection
+stays pending at the author (`loop.PATCH_ROUNDS_EXHAUSTED`): its row carries an
+author checkpoint with every patch rejection as feedback and
+`author_attempts_used/budget`, so the next draw re-authors it before the planner is
+asked -- at launch through `prepare`, and in-run through `ResumeQueue` refreshing
+when it runs dry. The budget spent retires it (`loop.HYPOTHESIS_RETIRED`, no
+checkpoint). A `loop.SCOPE_BLOCKED` checkpoint records the route and rule that
+blocked it (`scope_block`) and stays ineligible until `loop.scope_rules_fingerprint`
+changes, which re-admits it with no operator action. `pending_hypotheses` is the
+read-only view the planner prompt and `loop-status.json` show; `reinstate` re-pends
+one a pre-policy iteration dropped.
+
 SETTLING. A validity outcome of the resumed round (a current-gate, compile or
 correctness refusal, a measured null or regression, a keep, a re-validation refusal)
-consumes the claim. An INFRASTRUCTURE fault (`INFRASTRUCTURE_STATUSES`: an exception
+consumes the claim; a ROUND disposition inside it (`ROUND_DISPOSITIONS`: one
+patch rejected, one gate refusal) leaves it to the iteration's outcome. An
+INFRASTRUCTURE fault (`INFRASTRUCTURE_STATUSES`: an exception
 contained as `lane_error`) releases it back to resumable, at most `INFRA_RETRIES`
 times per (checkpoint, anchor), counted in the ledger; `claim_events` logs every
 release, exhaustion, reopen and re-claim. `reopen` is the operator's logged override
@@ -127,7 +147,7 @@ MAX_RESUME_DEPTH = 3
 #: critic pass 2 when the lane faulted (`pipeline.run_pool`); the scan's
 #: `resume_checkpoints` filter excludes every other lane_error row.
 SCANNED_STATUSES = ("gate_refused", "stopped_mid_formation", "planner_transient",
-                    "lane_error")
+                    "lane_error", loop.PATCH_ROUNDS_EXHAUSTED, loop.SCOPE_BLOCKED)
 MAX_PATCH_BYTES = 4 * 1024 * 1024
 CLAIM_STATES = ("resumed", "rejected", "superseded")
 #: A claim handed back: by an infrastructure fault during the resumed round (bounded
@@ -143,6 +163,13 @@ INFRASTRUCTURE_STATUSES = frozenset({"lane_error"})
 #: Releases per (checkpoint, anchor) before an infrastructure fault consumes it too:
 #: a fault that recurs every time is the setup, and the operator's `reopen` remains.
 INFRA_RETRIES = 2
+#: Dispositions of ONE ROUND of a resumed candidate, recorded while its iteration is
+#: still running: a verdict on that patch, never on the resumed hypothesis. They do
+#: not settle the claim; the iteration's own outcome does. DS41 run 10g: the first
+#: `patch_rejected` of a resumed critic2 round consumed eed08b5f...#0 at once, so
+#: nothing that iteration did afterwards (another round, a pending author checkpoint,
+#: a lane_error release) could still speak for the claim.
+ROUND_DISPOSITIONS = frozenset({"patch_rejected", "gate_refused"})
 
 
 class ResumeRejected(RuntimeError):
@@ -418,6 +445,12 @@ class ClaimLedger:
         """Settle a resumed round's outcome; returns what happened to the claim.
 
         "settled"   -- a validity outcome: the claim is consumed (the result recorded).
+                       A pending-hypothesis outcome (`patch_rounds_exhausted`,
+                       `scope_blocked`) consumes it too: its row carries the NEXT
+                       checkpoint, so the hypothesis stays resumable under a new id.
+        "pending"   -- a round disposition (`ROUND_DISPOSITIONS`) of a resumed
+                       candidate whose iteration is still running: nothing changes;
+                       the iteration's outcome settles it.
         "released"  -- an infrastructure fault (`INFRASTRUCTURE_STATUSES`) with retries
                        left: the claim goes back to resumable and the count increments.
         "exhausted" -- an infrastructure fault with no retry left: consumed.
@@ -428,6 +461,8 @@ class ClaimLedger:
         """
         if self.read_only:
             raise RuntimeError("claim ledger opened read-only")
+        if result_status in ROUND_DISPOSITIONS:
+            return "pending"
         if result_status not in INFRASTRUCTURE_STATUSES:
             self.settle(checkpoint_id, anchor_commit, result_status=result_status)
             return "settled"
@@ -871,8 +906,14 @@ def other_epoch_checkpoints(store_root: Path, *, epoch: str,
     return count
 
 
-def ineligible_reason(candidate: Candidate, *, rules_fingerprint: str) -> str | None:
-    """Why this checkpoint is not resumable NOW (it stays unclaimed), or None."""
+def ineligible_reason(candidate: Candidate, *, rules_fingerprint: str,
+                      scope_fingerprint: str | None = None) -> str | None:
+    """Why this checkpoint is not resumable NOW (it stays unclaimed), or None.
+
+    A pending accepted hypothesis (an author checkpoint from `patch_rounds_exhausted`
+    or `scope_blocked`) is refused only when its authoring budget is spent, or while
+    the scope rules that blocked it are unchanged (`loop.scope_rules_fingerprint`).
+    """
     ck = candidate.checkpoint
     if candidate.stage not in STAGE_RANK:
         return f"unknown stage {candidate.stage!r}"
@@ -896,7 +937,28 @@ def ineligible_reason(candidate: Candidate, *, rules_fingerprint: str) -> str | 
             return f"{gate} rules unchanged since the refusal"
     elif int(ck.get("patch_rounds_remaining") or 0) < 1:
         return "no patch round left"
+    budget = ck.get("author_attempts_budget")
+    if budget is not None and int(ck.get("author_attempts_used") or 0) >= int(budget):
+        return (f"authoring budget spent ({ck.get('author_attempts_used')}/{budget} "
+                "attempts)")
+    block = ck.get("scope_block")
+    if isinstance(block, Mapping):
+        recorded = block.get("scope_rules_fingerprint")
+        current = scope_fingerprint or loop.scope_rules_fingerprint()
+        if recorded is not None and recorded == current:
+            return (f"scope-blocked on {block.get('route')} by {block.get('source')}: "
+                    f"{str(block.get('rule') or '')[:200]}; the scope rules are unchanged")
     return None
+
+
+def depth_limit(checkpoint: Mapping[str, Any]) -> int:
+    """`MAX_RESUME_DEPTH` interruption hops, plus one hop per authoring attempt a
+    pending hypothesis is budgeted (each re-authoring is a resume by design and is
+    bounded by that budget), plus one for a scope-blocked re-admission."""
+    extra = int(checkpoint.get("author_attempts_budget") or 0)
+    if isinstance(checkpoint.get("scope_block"), Mapping):
+        extra += 1
+    return MAX_RESUME_DEPTH + extra
 
 
 def prevalidate(candidate: Candidate, *, epoch: str, anchor_commit: str,
@@ -905,9 +967,9 @@ def prevalidate(candidate: Candidate, *, epoch: str, anchor_commit: str,
                 measurement_epoch: str | None = None) -> bytes | None:
     """Everything checkable before a lane is touched. Returns the patch for a build."""
     ck = candidate.checkpoint
-    if int(ck.get("resume_depth") or 0) >= MAX_RESUME_DEPTH:
+    if int(ck.get("resume_depth") or 0) >= depth_limit(ck):
         raise ResumeRejected("depth", f"resume chain depth {ck.get('resume_depth')} reached "
-                             f"the limit {MAX_RESUME_DEPTH}")
+                             f"the limit {depth_limit(ck)}")
     formed = ck.get("anchor_commit")
     if not formed:
         raise ResumeRejected("anchor", "checkpoint names no anchor")
@@ -1056,16 +1118,92 @@ class ResumeQueue:
         self.handed_out: list[str] = []
         self._lock = threading.Lock()
 
+    #: IN-RUN pending hypotheses (`enable_pending_refresh`): an empty queue re-scans
+    #: the store for accepted hypotheses a lane left pending THIS run
+    #: (`loop.PENDING_HYPOTHESIS_STATUSES`), so the next draw re-authors them before
+    #: the planner is asked. Launch-time `prepare` covers earlier runs.
+    refresh_target: Mapping[str, Any] | None = None
+    #: Extra binding keywords for `scan` / `prevalidate` (the launch's own binding).
+    refresh_bind: Mapping[str, Any] = {}
+    #: checkpoint_id -> (check, reason) for a refreshed entry that failed
+    #: re-validation: handed out stale, so the lane records WHY.
+    stale: Mapping[str, tuple[str, str]] = {}
+
+    def enable_pending_refresh(self, target: Mapping[str, Any], **bind: Any) -> "ResumeQueue":
+        """Turn on the in-run refresh. `target` is the launch's `target_identity`;
+        `bind` is forwarded to `scan` and `prevalidate` (whatever binding keywords the
+        launch's own `prepare` used), so a refreshed checkpoint binds exactly like a
+        launch-time one."""
+        self.refresh_target = dict(target)
+        self.refresh_bind = dict(bind)
+        self.stale = {}
+        return self
+
+    def _refresh(self) -> None:
+        """Queue accepted hypotheses left pending since the last scan (author stage)."""
+        try:
+            candidates = [candidate for candidate in
+                          scan(self.store_root, epoch=self.epoch, **self.refresh_bind)
+                          if candidate.row_status in loop.PENDING_HYPOTHESIS_STATUSES]
+        except FileNotFoundError:
+            return
+        # The writable ledger (as `take` uses): a read-only one is opened immutable and
+        # would not see claims still in this process's WAL.
+        with ClaimLedger(self.store_root) as ledger:
+            claimed = ledger.claimed(self.anchor_commit)
+        known = set(self.handed_out) | {entry[0].checkpoint_id for entry in self.entries}
+        groups: dict[tuple, list[Candidate]] = {}
+        for candidate in candidates:
+            if candidate.checkpoint_id in claimed or candidate.checkpoint_id in known:
+                continue
+            groups.setdefault(candidate.group, []).append(candidate)
+        rules = loop.gate_rules_fingerprint()
+        scope = loop.scope_rules_fingerprint()
+        for members in groups.values():
+            for candidate in sorted(members, key=lambda item: item.rank, reverse=True):
+                if ineligible_reason(candidate, rules_fingerprint=rules,
+                                     scope_fingerprint=scope) is not None:
+                    continue
+                try:
+                    prevalidate(candidate, epoch=self.epoch, anchor_commit=self.anchor_commit,
+                                target=self.refresh_target or {}, repo=None,
+                                **self.refresh_bind)
+                except ResumeRejected as exc:
+                    self.stale[candidate.checkpoint_id] = (exc.check, str(exc))
+                self.entries.append((candidate, None))
+                self.siblings[candidate.checkpoint_id] = tuple(
+                    item.checkpoint_id for item in members if item is not candidate)
+                break
+
     def __len__(self) -> int:
         return len(self.entries)
 
     def take(self, worker, base: str | None) -> ResumePoint | None:
         with self._lock:
+            if not self.entries and self.refresh_target is not None:
+                try:
+                    self._refresh()
+                except Exception as exc:      # noqa: BLE001 -- fresh research still runs
+                    print(f"resume    pending-hypothesis refresh failed: "
+                          f"{type(exc).__name__}: {exc}", file=sys.stderr)
             if not self.entries:
                 return None
             with ClaimLedger(self.store_root) as ledger:
                 while self.entries:
                     candidate, patch = self.entries.pop(0)
+                    stale = self.stale.pop(candidate.checkpoint_id, None) \
+                        if self.stale else None
+                    if stale is not None:
+                        if not ledger.claim(candidate.checkpoint_id, self.anchor_commit,
+                                            state="rejected", stage=candidate.stage,
+                                            epoch=self.epoch, mechanism_id=candidate.group[0],
+                                            source_attempt_id=candidate.attempt_id,
+                                            detail=f"{stale[0]}: {stale[1]}"[:2000]):
+                            continue
+                        point = resume_point(candidate, patch=patch)
+                        point.stale = stale
+                        self.handed_out.append(candidate.checkpoint_id)
+                        return point
                     if base != self.anchor_commit:
                         # The champion advanced under the run: consumed as rejected,
                         # and handed out stale so the lane records WHY.
@@ -1180,6 +1318,313 @@ def prepare(store_root: Path, *, epoch: str, anchor_commit: str, target: Mapping
     return (ResumeQueue(store_root=store_root, entries=entries, siblings=siblings,
                         anchor_commit=anchor_commit, epoch=epoch, actor_diffs=actor_diffs),
             report)
+
+
+# ------------------------------------------------------------------ pending hypotheses
+
+
+PENDING_SUMMARY_LIMIT = 12
+
+
+def _claim_rows_live(store_root: Path) -> list[dict]:
+    """Every claim row, read `mode=ro` (never `immutable`: a live run's claims may still
+    sit in the WAL) and without creating the ledger when it does not exist yet."""
+    path = Path(store_root) / CLAIMS_FILE
+    if not path.is_file():
+        return []
+    connection = sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True, timeout=30)
+    try:
+        cursor = connection.execute("SELECT * FROM claims")
+        names = [column[0] for column in cursor.description]
+        return [dict(zip(names, row)) for row in cursor.fetchall()]
+    finally:
+        connection.close()
+
+
+def pending_hypotheses(store_root: Path, *, epoch: str, anchor_commit: str | None = None,
+                       limit: int = PENDING_SUMMARY_LIMIT, **bind: Any) -> list[dict]:
+    """Accepted hypotheses pending authoring in this epoch, newest first. Read-only.
+
+    One row per hypothesis: its NEWEST `patch_rounds_exhausted` / `scope_blocked`
+    checkpoint, unless that checkpoint's claim at the anchor is already settled (the
+    re-authoring resolved it: kept, measured, retired or re-pended under a newer row)
+    or it was formed on another anchor. `state` is "pending" (the next draw resumes
+    it), "in_flight" (a lane holds its claim), "scope_blocked" or "budget_spent"
+    (not resumable now; `blocked_reason` says why). Feeds the planner prompt (so it
+    does not re-propose them) and `loop-status.json`. `bind` is forwarded to `scan`
+    (the launch's own binding keywords).
+    """
+    try:
+        candidates = [candidate for candidate in scan(store_root, epoch=epoch, **bind)
+                      if candidate.row_status in loop.PENDING_HYPOTHESIS_STATUSES]
+    except (FileNotFoundError, sqlite3.DatabaseError):
+        return []
+    claims = {(row["checkpoint_id"], row["anchor_commit"]): row
+              for row in _claim_rows_live(store_root)}
+    newest: dict[tuple, Candidate] = {}
+    for candidate in candidates:      # oldest first: the last one per group wins
+        newest[candidate.group] = candidate
+    rules = loop.gate_rules_fingerprint()
+    scope = loop.scope_rules_fingerprint()
+    out: list[dict] = []
+    for candidate in sorted(newest.values(), key=lambda item: item.recorded_at,
+                            reverse=True):
+        ck = candidate.checkpoint
+        formed = ck.get("anchor_commit")
+        if anchor_commit is not None and formed not in (None, anchor_commit):
+            continue
+        claim = claims.get((candidate.checkpoint_id, anchor_commit or formed))
+        state = "pending"
+        if claim is not None and claim.get("state") != RELEASED:
+            if claim.get("state") != "resumed" or claim.get("result_status") is not None:
+                continue
+            state = "in_flight"
+        blocked = ineligible_reason(candidate, rules_fingerprint=rules,
+                                    scope_fingerprint=scope)
+        if state == "pending" and blocked is not None:
+            state = "scope_blocked" if isinstance(ck.get("scope_block"), Mapping) \
+                else "budget_spent" if "budget" in blocked else "blocked"
+        used = int(ck.get("author_attempts_used") or 0)
+        budget = ck.get("author_attempts_budget")
+        prior = [str(item) for item in ck.get("prior_patch_rejections") or ()]
+        hypothesis = candidate.hypothesis
+        row = {"mechanism_id": candidate.group[0],
+               "statement": str(hypothesis.get("statement") or "")[:300],
+               "target": f"{hypothesis.get('target_surface')}::{hypothesis.get('target_symbol')}",
+               "status": candidate.row_status, "state": state,
+               "checkpoint_id": candidate.checkpoint_id,
+               "recorded_at": candidate.recorded_at,
+               "author_attempts_used": used,
+               "author_attempts_budget": None if budget is None else int(budget),
+               "author_attempts_remaining": (None if budget is None
+                                             else max(0, int(budget) - used)),
+               "patch_rejections": len(prior),
+               "last_patch_rejection": prior[-1][:300] if prior else None}
+        if blocked is not None and state != "in_flight":
+            row["blocked_reason"] = blocked
+        if isinstance(ck.get("scope_block"), Mapping):
+            row["scope_block"] = {key: ck["scope_block"].get(key)
+                                  for key in ("route", "rule", "source")}
+        out.append(row)
+        if len(out) >= limit:
+            break
+    return out
+
+
+# ------------------------------------------------------------------ reinstate
+
+
+REINSTATE_SCHEMA = "epyc.autokernel.resume_reinstate_hypothesis.v1"
+
+
+def reinstate_plan(store_root: Path, *, row_id: str, rejection_rows: Sequence[str],
+                   epoch: str, epoch_reason: str | None = None,
+                   checkpoint_index: int | None = None,
+                   status: str = loop.PATCH_ROUNDS_EXHAUSTED,
+                   scope_rule: str | None = None, attempts_used: int | None = None,
+                   budget: int = loop.HYPOTHESIS_AUTHOR_ATTEMPTS,
+                   patch_rounds: int = loop.PATCH_ROUNDS,
+                   reason: str | None = None,
+                   measurement_epoch: str | None = None) -> dict:
+    """Read-only. One pending-hypothesis row for an ACCEPTED hypothesis a pre-policy
+    iteration dropped after its patch rounds ran out (DS41 run 10g).
+
+    `row_id` names the row carrying the hypothesis's LATEST checkpoint (any stage:
+    its hypothesis, accepted critic:hypothesis verdict, anchor, target and lineage are
+    carried). `rejection_rows` are the `patch_rejected` / `gate_refused` rows whose
+    verbatim reasons become the author's feedback (ordered by recorded_at, after any
+    the checkpoint already carried). `attempts_used` defaults to the number of
+    distinct authoring attempts those rows came from (their `resumed_from`, else their
+    own row lineage). The planned row carries one AUTHOR checkpoint bound to `epoch`
+    (a rebind from the source row's epoch needs `epoch_reason`); `measurement_epoch`,
+    when given, is stamped as the checkpoint's `measurement_epoch_sha256` -- the
+    identity a launch that binds resume on the measurement epoch matches, whatever
+    actor configuration moved the full epoch. Nothing is written.
+    """
+    store_root = Path(store_root)
+    if status not in loop.PENDING_HYPOTHESIS_STATUSES:
+        raise ValueError(f"--status must be one of {sorted(loop.PENDING_HYPOTHESIS_STATUSES)}")
+    if status == loop.SCOPE_BLOCKED and not (scope_rule and scope_rule.strip()):
+        raise ValueError("--status scope_blocked needs --scope-rule naming the route/rule")
+    if not re.fullmatch(r"[0-9a-f]{64}", str(epoch or "")):
+        raise ValueError("--epoch must be a 64-hex epoch sha256")
+    if measurement_epoch is not None and not re.fullmatch(r"[0-9a-f]{64}", measurement_epoch):
+        raise ValueError("--measurement-epoch must be a 64-hex epoch sha256")
+    if not rejection_rows:
+        raise ValueError("name at least one --rejection row (the patch rejections)")
+    connection = _connect(store_root, immutable=True)
+    try:
+        row = _resolve_row(connection, row_id)
+        rejected = [_resolve_row(connection, item) for item in rejection_rows]
+    finally:
+        connection.close()
+    payload = json.loads(row["payload"])
+    source = row["attempt_id"]
+    entries = [(position, entry) for position, entry in
+               enumerate(payload.get("resume_checkpoints") or ())
+               if isinstance(entry, dict) and entry.get("schema") == loop.CHECKPOINT_SCHEMA]
+    if checkpoint_index is not None:
+        entries = [item for item in entries if item[0] == checkpoint_index]
+    if len(entries) != 1:
+        raise ValueError(f"row {source[:12]} carries {len(entries)} checkpoint(s)"
+                         + ("" if checkpoint_index is None else f" at index {checkpoint_index}")
+                         + "; need exactly 1 (pass --checkpoint-index)")
+    index, ck = entries[0][0], dict(entries[0][1])
+    source_checkpoint = f"{source}#{index}"
+    hypothesis = ck.get("hypothesis")
+    if not isinstance(hypothesis, Mapping) or not hypothesis.get("mechanism_id"):
+        raise ValueError("the source checkpoint carries no hypothesis")
+    parsed = loop.Hypothesis(**dict(hypothesis))
+    if parsed.runtime_pair is not None:
+        raise ValueError("runtime treatments are not authored")
+    critic_hypothesis = ck.get("critic_hypothesis")
+    if not isinstance(critic_hypothesis, Mapping) or not critic_hypothesis.get("accepted"):
+        raise ValueError("the source checkpoint carries no accepted critic:hypothesis verdict")
+    anchor = ck.get("anchor_commit") or payload.get("spawn_parent")
+    if not anchor:
+        raise ValueError("the source checkpoint names no anchor")
+    source_epoch = ck.get("epoch_sha256") or row["epoch_sha256"]
+    rebind = epoch != source_epoch
+    if rebind and not (epoch_reason and epoch_reason.strip()):
+        raise ValueError(f"--epoch {epoch[:12]} differs from the source checkpoint's epoch "
+                         f"{str(source_epoch)[:12]}: pass --epoch-reason")
+    feedback = [str(item) for item in ck.get("prior_patch_rejections") or ()]
+    attempts: list[str] = []
+    rejection_record = []
+    for item in sorted(rejected, key=lambda found: (found["recorded_at"], found["attempt_id"])):
+        body = json.loads(item["payload"])
+        if item["status"] not in ROUND_DISPOSITIONS:
+            raise ValueError(f"rejection row {item['attempt_id'][:12]} is {item['status']}, "
+                             f"not one of {sorted(ROUND_DISPOSITIONS)}")
+        same = {key: body.get(key) for key in ("mechanism_id", "statement", "falsifier",
+                                               "target_surface", "target_symbol")}
+        if same != {key: hypothesis.get(key) for key in same}:
+            raise ValueError(f"rejection row {item['attempt_id'][:12]} carries a different "
+                             "hypothesis than the source checkpoint")
+        text = str(body.get("reason") or "").strip()
+        if text and text not in feedback:
+            feedback.append(text)
+        lineage = str(body.get("resumed_from") or item["attempt_id"])
+        if lineage not in attempts:
+            attempts.append(lineage)
+        rejection_record.append({"attempt_id": item["attempt_id"], "status": item["status"],
+                                 "recorded_at": item["recorded_at"],
+                                 "epoch_sha256": item["epoch_sha256"],
+                                 "refusal_gate": body.get("refusal_gate"),
+                                 "resumed_from": body.get("resumed_from"),
+                                 "patch_round": body.get("patch_round")})
+    used = len(attempts) if attempts_used is None else int(attempts_used)
+    budget = max(1, int(budget))
+    if status == loop.PATCH_ROUNDS_EXHAUSTED and used >= budget:
+        raise ValueError(f"{used} authoring attempt(s) already spent of a budget of {budget}: "
+                         "this hypothesis would be retired, not pending (raise --budget or "
+                         "pass --attempts-used)")
+    carried = feedback[-loop.MAX_CARRIED_PATCH_REJECTIONS:]
+    checkpoint = {
+        "schema": loop.CHECKPOINT_SCHEMA, "stage": "author",
+        "hypothesis": dict(hypothesis), "critic_hypothesis": dict(critic_hypothesis),
+        "hypothesis_round": int(ck.get("hypothesis_round") or 1), "patch_round": 0,
+        "prior_patch_rejections": carried,
+        "patch_rounds_remaining": max(1, int(patch_rounds)),
+        "author_attempts_used": used, "author_attempts_budget": budget,
+        "resumed_from": source_checkpoint,
+        "resume_depth": int(ck.get("resume_depth") or 0) + 1,
+        "anchor_commit": anchor, "epoch_sha256": epoch,
+        "target": dict(ck.get("target") or {}),
+    }
+    if measurement_epoch is not None:
+        checkpoint["measurement_epoch_sha256"] = measurement_epoch
+    state = {"class": status, "author_attempts_used": used, "author_attempts_budget": budget,
+             "author_attempts_remaining": max(0, budget - used),
+             "patch_rounds_per_attempt": max(1, int(patch_rounds)),
+             "last_rejection": {"class": "scope" if status == loop.SCOPE_BLOCKED
+                                else "authoring", "source": "critic:patch",
+                                "rule": scope_rule if status == loop.SCOPE_BLOCKED else None}}
+    if status == loop.SCOPE_BLOCKED:
+        checkpoint["scope_block"] = state["scope_block"] = {
+            "route": f"{parsed.target_surface}::{parsed.target_symbol}",
+            "rule": scope_rule.strip(), "source": "critic:patch",
+            "scope_rules_fingerprint": loop.scope_rules_fingerprint()}
+    summary = (reason.strip() if reason and reason.strip() else
+               f"reinstated {status}: an ACCEPTED hypothesis dropped after its patch rounds "
+               f"ran out (pre-policy); {len(rejection_record)} patch rejection(s) carried as "
+               f"author feedback, {used}/{budget} authoring attempts spent")
+    attempt = {
+        **dict(hypothesis), "status": status, "turn_recorded_at": _now(),
+        "reason": " | ".join([summary, *carried]), "refusal_gate": "critic:patch",
+        "hypothesis_round": checkpoint["hypothesis_round"], "patch_round": 0,
+        "prior_rejection_prompt": bool(carried),
+        "validator_provenance": [{**dict(critic_hypothesis), "resumed_from": source_checkpoint,
+                                  "changed_subsequent_search": False}],
+        "hypothesis_pending": state,
+        "resume_checkpoints": [checkpoint],
+        "spawn_parent": anchor,
+        "reinstated_from": {
+            "schema": REINSTATE_SCHEMA, "attempt_id": source,
+            "checkpoint_id": source_checkpoint, "checkpoint_stage": ck.get("stage"),
+            "recorded_at": row["recorded_at"], "status": row["status"],
+            "source_epoch_sha256": source_epoch, "epoch_sha256": epoch,
+            "epoch_rebound": rebind,
+            "epoch_rebind_reason": epoch_reason.strip() if rebind else None,
+            "measurement_epoch_sha256": measurement_epoch,
+            "rejections": rejection_record, "attempt_lineages": attempts,
+            "tool": "autokernel.loop.resume reinstate"},
+        # experiments._attempt_id prefers this key: re-running the reinstate is a no-op.
+        "proposal_sha256": _sha256("resume-reinstate\n{}\n{}\n{}\n{}".format(
+            source_checkpoint, epoch, status,
+            ",".join(item["attempt_id"] for item in rejection_record)).encode()),
+    }
+    for key in ("branch_id", "width", "depth", "research_scope", "cpu_screen"):
+        if payload.get(key) is not None:
+            attempt[key] = payload[key]
+    with ClaimLedger(store_root, read_only=True) as ledger:
+        source_claims = [dict(item) for item in ledger.rows()
+                         if item["checkpoint_id"] == source_checkpoint]
+    candidate = Candidate("<planned>#0", "<planned>", _now(), status,
+                          parsed.mechanism_id, checkpoint)
+    checks: dict[str, Any] = {
+        "source_claims": source_claims,
+        # An open source claim would still resume on its own: reinstating it too
+        # would queue the same hypothesis twice (the group dedupes, but say so).
+        "source_checkpoint_consumed": any(
+            item.get("state") != RELEASED and (item.get("result_status") is not None
+                                              or item.get("state") in ("rejected", "superseded"))
+            for item in source_claims),
+        "epoch_rebound": rebind,
+        "ineligible_now": ineligible_reason(candidate,
+                                            rules_fingerprint=loop.gate_rules_fingerprint()),
+        **_live_status(store_root),
+    }
+    checks["epoch_matches_live_loop_status"] = checks["live_loop_status_epoch"] == epoch
+    checks["anchor_matches_live_loop_status"] = checks["live_loop_status_anchor"] == anchor
+    checks["surface_matches_live_loop_status"] = (
+        checks["live_loop_status_surface"] == checkpoint["target"].get("measurement_surface"))
+    try:
+        prevalidate(candidate, epoch=epoch, anchor_commit=anchor,
+                    target=checkpoint["target"], repo=None)
+        checks["prevalidates_at_anchor"] = True
+    except ResumeRejected as exc:
+        checks["prevalidates_at_anchor"] = f"NO ({exc.check}): {exc}"
+    connection = _connect(store_root, immutable=True)
+    try:
+        attempt_id = experiments._attempt_id(attempt, campaign_id=row["campaign_id"])
+        present = connection.execute("SELECT 1 FROM experiments WHERE attempt_id=?",
+                                     (attempt_id,)).fetchone() is not None
+    finally:
+        connection.close()
+    return {"source_attempt_id": source, "source_checkpoint_id": source_checkpoint,
+            "epoch_sha256": epoch, "campaign_id": row["campaign_id"],
+            "attempt_id": attempt_id, "checkpoint_id": f"{attempt_id}#0",
+            "already_present": present, "attempt": attempt, "checks": checks}
+
+
+def reinstate_apply(store_root: Path, plan: Mapping[str, Any]) -> bool:
+    """The only write: append the planned row (idempotent on its attempt id)."""
+    with experiments.ExperimentStore(store_root) as store:
+        added = store.record(plan["attempt"], epoch=plan["epoch_sha256"],
+                             recorded_at=_now(), campaign_id=plan["campaign_id"])
+        store.write_markdown(epoch=plan["epoch_sha256"])
+    return added
 
 
 # ------------------------------------------------------------------ backfill
@@ -1782,6 +2227,28 @@ def main(argv: Sequence[str] | None = None) -> int:
     crit.add_argument("--scratch", type=Path, help="scratch directory for the apply check")
     crit.add_argument("--apply", action="store_true", help="retain the patch and append "
                       "the row (the only writes)")
+    rein = commands.add_parser("reinstate", help="re-pend an ACCEPTED hypothesis a "
+                               "pre-policy iteration dropped after its patch rounds ran out "
+                               "(dry-run unless --apply)")
+    rein.add_argument("--store", type=Path, required=True)
+    rein.add_argument("--row", required=True, help="row carrying the hypothesis's latest "
+                      "checkpoint: attempt id or prefix")
+    rein.add_argument("--checkpoint-index", type=int)
+    rein.add_argument("--rejection", action="append", default=[], required=True,
+                      help="a patch_rejected/gate_refused row of this hypothesis (repeat)")
+    rein.add_argument("--epoch", required=True, help="epoch the NEXT launch runs in "
+                      "(store/loop-status.json epoch_sha256)")
+    rein.add_argument("--epoch-reason")
+    rein.add_argument("--measurement-epoch", help="stamp the checkpoint's "
+                      "measurement_epoch_sha256 (what a measurement-epoch launch binds on)")
+    rein.add_argument("--status", default=loop.PATCH_ROUNDS_EXHAUSTED,
+                      choices=sorted(loop.PENDING_HYPOTHESIS_STATUSES))
+    rein.add_argument("--scope-rule", help="with --status scope_blocked: the route/rule")
+    rein.add_argument("--attempts-used", type=int, help="authoring attempts already spent "
+                      "(default: distinct attempts among the --rejection rows)")
+    rein.add_argument("--budget", type=int, default=loop.HYPOTHESIS_AUTHOR_ATTEMPTS)
+    rein.add_argument("--reason", help="row reason (default: a generated summary)")
+    rein.add_argument("--apply", action="store_true", help="append the row (the only write)")
     look = commands.add_parser("scan", help="read-only: what a launch would resume")
     look.add_argument("--store", type=Path, required=True)
     look.add_argument("--epoch", required=True)
@@ -1819,6 +2286,34 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(f"reopen refused: {exc}", file=sys.stderr)
             return 2
         print(json.dumps({"reopened": row}, indent=2, default=str))
+        return 0
+    if args.command == "reinstate":
+        try:
+            plan = reinstate_plan(args.store, row_id=args.row, rejection_rows=args.rejection,
+                                  epoch=args.epoch, epoch_reason=args.epoch_reason,
+                                  checkpoint_index=args.checkpoint_index, status=args.status,
+                                  scope_rule=args.scope_rule, attempts_used=args.attempts_used,
+                                  budget=args.budget, reason=args.reason,
+                                  measurement_epoch=args.measurement_epoch)
+        except (ValueError, FileNotFoundError, ResumeRejected, sqlite3.DatabaseError) as exc:
+            print(f"reinstate refused: {exc}", file=sys.stderr)
+            return 2
+        print(json.dumps({key: plan[key] for key in (
+            "source_attempt_id", "source_checkpoint_id", "attempt_id", "checkpoint_id",
+            "already_present", "epoch_sha256", "campaign_id", "checks")}, indent=2,
+            default=str))
+        print(json.dumps({"hypothesis_pending": plan["attempt"]["hypothesis_pending"],
+                          "resume_checkpoints": plan["attempt"]["resume_checkpoints"],
+                          "reinstated_from": plan["attempt"]["reinstated_from"]}, indent=2))
+        if plan["checks"]["prevalidates_at_anchor"] is not True:
+            print("reinstate refused: the planned checkpoint does not prevalidate",
+                  file=sys.stderr)
+            return 2
+        if not args.apply:
+            print("dry-run: nothing written (pass --apply to append this row)")
+            return 0
+        added = reinstate_apply(args.store, plan)
+        print(f"{'appended' if added else 'already present'} {plan['attempt_id']}")
         return 0
     if args.command == "backfill-critic2":
         try:
@@ -1878,6 +2373,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 __all__ = ["BACKFILL_SCHEMA", "CLAIMS_FILE", "CRITIC2_BACKFILL_SCHEMA", "Candidate",
+           "PENDING_SUMMARY_LIMIT", "REINSTATE_SCHEMA", "ROUND_DISPOSITIONS", "depth_limit",
+           "pending_hypotheses", "reinstate_apply", "reinstate_plan",
            "ClaimLedger", "INFRA_RETRIES", "PATCH_STAGES", "STAGE_RANK",
            "backfill_critic2_apply", "backfill_critic2_plan", "retain_checkpoint_patches",
            "INFRASTRUCTURE_STATUSES", "MAX_RESUME_DEPTH", "RELEASED", "RULE_GATES",

@@ -136,6 +136,10 @@ _STATUS_MERIT = {
     "regression": 5.0,
     "superseded": 4.0,
     "refused_at_formation": 3.0,
+    # An accepted hypothesis whose patches failed: "do not re-propose; it is queued".
+    "patch_rounds_exhausted": 3.0,
+    "scope_blocked": 3.0,
+    "hypothesis_retired": 3.0,
     "bench_failed": 1.0,
     "lane_error": 0.5,
     "anchor_verified": 0.25,

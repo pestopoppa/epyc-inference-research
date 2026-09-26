@@ -219,6 +219,7 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
           gpu: Mapping[str, Any] | None = None,
           hotspots: Sequence[Mapping[str, Any]] = (),
           step: str | None = None,
+          pending_hypotheses: Sequence[Mapping[str, Any]] | None = None,
           anchor_guard: Mapping[str, Any] | None = None,
           accumulator: Mapping[str, Any] | None = None,
           stale_after_s: int = DEFAULT_STALE_AFTER_S,
@@ -298,6 +299,21 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
             for row in list(outcomes)[-10:][::-1]],
     }
 
+    if pending_hypotheses is not None:
+        # Critic-ACCEPTED hypotheses still pending authoring (resume.pending_hypotheses):
+        # the next draws re-author them before the planner, each within its attempt
+        # budget; a scope-blocked one waits for the scope rules to change.
+        rows = [dict(row) for row in pending_hypotheses]
+        body["pending_accepted_hypotheses"] = {
+            "count": len(rows),
+            "resumable": sum(1 for row in rows if row.get("state") == "pending"),
+            "scope_blocked": sum(1 for row in rows if row.get("state") == "scope_blocked"),
+            "rows": [{key: row.get(key) for key in (
+                "mechanism_id", "state", "status", "target", "checkpoint_id",
+                "author_attempts_used", "author_attempts_budget",
+                "author_attempts_remaining", "patch_rejections", "blocked_reason",
+                "scope_block") if row.get(key) is not None} for row in rows],
+        }
     if baseline_scope is not None:
         body["baseline_scope"] = baseline_scope
     if target is not None:
