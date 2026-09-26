@@ -180,9 +180,9 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
              accumulate_valid_positive: bool = False,
              validate_candidate=None, formation_guard=None,
              reserve_candidate=None,
+             make_author_panel: Callable[[Worker], Any] | None = None,
              record_abandoned: Callable[[Worker, loop_mod.Outcome], None] | None = None,
-             next_resume: Callable[[Worker, str], Any] | None = None,
-             make_author_panel: Callable[[Worker], Any] | None = None
+             next_resume: Callable[[Worker, str], Any] | None = None
              ) -> list[loop_mod.Outcome]:
     """Drive `iterations` iterations across `workers` concurrent lanes.
 
@@ -349,10 +349,10 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                     formation_guard=formation_guard,
                     reserve_candidate=reserve if reserve_candidate is not None else None,
                     record_abandoned=abandoned, resume=resumed,
+                    **({"author_panel": author_panel} if author_panel is not None else {}),
                     # The lane and the commit reset_to_champion put it on for THIS
                     # draw: the only lane an empty author report may be derived from.
-                    author_lane=(worker.worktree, base),
-                    **({"author_panel": author_panel} if author_panel is not None else {}))
+                    author_lane=(worker.worktree, base))
             except Superseded as exc:
                 # `iterate` already converted this into an Outcome carrying the
                 # hypothesis; reaching here means it escaped before one was formed.

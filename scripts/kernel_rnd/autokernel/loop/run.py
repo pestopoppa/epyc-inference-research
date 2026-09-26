@@ -38,8 +38,8 @@ from . import (accumulate, actors, anchor, archive, bench, champion, claim, gate
                integrity, heldout_serving, lineage_beliefs, pipeline, pool, production, status, surface_fold,
                surface_validation)
 from . import actor_opencode_config
-from . import bestof
 from . import resume as resume_mod
+from . import bestof
 
 
 @dataclass(frozen=True)
@@ -1015,29 +1015,6 @@ def main(argv: list[str] | None = None) -> int:
                              "run 10c's author decoded 74,288 tokens in 2,700 s re-deriving "
                              "a layout in <think> and made zero edits. 'default' = the "
                              "historical config byte for byte (default: %(default)s)")
-    parser.add_argument("--actor-authors", default=None,
-                        help="best-of-N authoring (operator 2026-09-26): a comma list of "
-                             "author thinking modes, one CONCURRENT author call per entry for "
-                             "each accepted hypothesis, each in its own scratch worktree; the "
-                             "first diff that passes the validator lands on the lane and the "
-                             "other calls are ended. N=len(list). 'single' (or one mode) is "
-                             "the single-author path byte for byte. Each author's opencode "
-                             "context is floor((--actor-pool-tokens - 16384) / N), output "
-                             "16384. Default: " + DEFAULT_ACTOR_AUTHORS + " (degrades to "
-                             "single when this build lacks a mode or --workers > 1)")
-    parser.add_argument("--actor-pool-tokens", type=int, default=bestof.DEFAULT_POOL_TOKENS,
-                        help=":8083's unified KV pool the concurrent authors share "
-                             "(np4 --kv-unified; default: %(default)s)")
-    parser.add_argument("--actor-authors-check", default="",
-                        help="best-of-N winner check after the integrity screen, run in each "
-                             "author's scratch tree. Empty = `ak-check --op-test` when this "
-                             "build has ak_check.py, else the screen alone; 'off' = the screen "
-                             "alone; anything else = an argv with {worktree}/{base}/{paths}/"
-                             "{scratch}/{build_dir} placeholders (exit 0 passes, 2 is "
-                             "inconclusive) (default: %(default)r)")
-    parser.add_argument("--actor-authors-min-free-gb", type=float, default=50.0,
-                        help="best-of-N: the scratch registry's free-space floor; below it a "
-                             "round runs the single author (default: %(default)s)")
     parser.add_argument("--actor-concise", choices=("on", "off"), default="on",
                         help="opencode planner/author (OAB-22): append the concision rule "
                              "(derive each fact once, analysis under ~4,000 tokens, reply is "
@@ -1068,6 +1045,29 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--worker-build-root", type=Path,
                         default=pool.WORKER_BUILD_ROOT,
                         help="parent of the per-lane candidate build directories")
+    parser.add_argument("--actor-authors", default=None,
+                        help="best-of-N authoring (operator 2026-09-26): a comma list of "
+                             "author thinking modes, one CONCURRENT author call per entry for "
+                             "each accepted hypothesis, each in its own scratch worktree; the "
+                             "first diff that passes the validator lands on the lane and the "
+                             "other calls are ended. N=len(list). 'single' (or one mode) is "
+                             "the single-author path byte for byte. Each author's opencode "
+                             "context is floor((--actor-pool-tokens - 16384) / N), output "
+                             "16384. Default: " + DEFAULT_ACTOR_AUTHORS + " (degrades to "
+                             "single when this build lacks a mode or --workers > 1)")
+    parser.add_argument("--actor-pool-tokens", type=int, default=bestof.DEFAULT_POOL_TOKENS,
+                        help=":8083's unified KV pool the concurrent authors share "
+                             "(np4 --kv-unified; default: %(default)s)")
+    parser.add_argument("--actor-authors-check", default="",
+                        help="best-of-N winner check after the integrity screen, run in each "
+                             "author's scratch tree. Empty = `ak-check --op-test` when this "
+                             "build has ak_check.py, else the screen alone; 'off' = the screen "
+                             "alone; anything else = an argv with {worktree}/{base}/{paths}/"
+                             "{scratch}/{build_dir} placeholders (exit 0 passes, 2 is "
+                             "inconclusive) (default: %(default)r)")
+    parser.add_argument("--actor-authors-min-free-gb", type=float, default=50.0,
+                        help="best-of-N: the scratch registry's free-space floor; below it a "
+                             "round runs the single author (default: %(default)s)")
     args = parser.parse_args(argv)
     budget_error = _actor_budget_error(args)
     if budget_error:
@@ -1664,14 +1664,14 @@ def main(argv: list[str] | None = None) -> int:
           f"concise={args.actor_concise} planner-budget={args.actor_planner_budget_s}s "
           f"author-budget={args.actor_author_budget_s}s "
           f"author-thinking={args.actor_author_thinking}")
+    for moot in _moot_budgets(args):
+        print(f"actors    WARNING {moot} is not below --actor-timeout-s={args.actor_timeout_s}: "
+              "the hard timeout ends those calls first, so the budget never fires")
     try:
         author_plan = _author_plan(args, getattr(planner_backend, "kind", None))
     except ValueError as exc:
         parser.error(str(exc))
     print(f"actors    authors: {author_plan.note}")
-    for moot in _moot_budgets(args):
-        print(f"actors    WARNING {moot} is not below --actor-timeout-s={args.actor_timeout_s}: "
-              "the hard timeout ends those calls first, so the budget never fires")
     # D4: with the two-rung gate on, the champion-vs-production headline is measured
     # on the confirm rung -- the standing +17.9% was the screen shape, which is the
     # "headline must be the production recipe" defect. Floor re-keyed to that model.
