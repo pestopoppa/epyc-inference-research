@@ -2129,8 +2129,10 @@ def main(argv: list[str] | None = None) -> int:
     # refreshed per iteration by build_context and after each pending/resumed row.
     pending_view: list[list[dict]] = [[]]
     #: Extra binding keywords the in-run pending refresh and the pending view pass to
-    #: `resume.scan` / `prevalidate` -- the same binding the launch's `prepare` uses.
-    resume_bind: dict = {}
+    #: `resume.scan` / `prevalidate` -- the same binding the launch's `prepare` uses:
+    #: the MEASUREMENT epoch, so a pending hypothesis formed under another actor
+    #: configuration (same measurement identity) is still seen and resumed in-run.
+    resume_bind: dict = {"measurement_epoch": measurement_epoch}
     # R23-44 two-tier champion (operator 2026-09-04): the anchor above is the ACCUMULATOR,
     # advancing on every bench keep so keeps compound. The CHAMPION OF RECORD is the last
     # commit a serving gate DEMONSTRATED, the one the headline shows and a promotion would

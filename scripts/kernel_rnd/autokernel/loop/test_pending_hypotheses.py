@@ -508,3 +508,65 @@ class ReinstateADroppedHypothesis(Fixture):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ------------------------------------------------------------ measurement epoch binding
+
+MEASURED = "m" * 64
+OTHER_EPOCH = "d" * 64
+
+
+class MeasurementOwner(Owner):
+    """run.py's recorder after the measurement-epoch split."""
+
+    def _record(self, outcome):
+        attempt = outcome.to_attempt()
+        attempt.setdefault("spawn_parent", self.anchor)
+        resume.bind_checkpoints(attempt, epoch=EPOCH, anchor_commit=self.anchor, target=TARGET,
+                                measurement_epoch=MEASURED)
+        with experiments.ExperimentStore(self.store) as store:
+            store.record(attempt, epoch=EPOCH, recorded_at=loop._now(), campaign_id="ak-loop")
+        self.rows.append(attempt)
+
+
+class PendingBindsOnTheMeasurementEpoch(Fixture):
+    """The in-run refresh and the pending view bind like the launch's `prepare`: on the
+    measurement epoch, so an actor-only change (a new full epoch) keeps a pending
+    accepted hypothesis visible and resumable within the run."""
+
+    def setUp(self):
+        super().setUp()
+        self.owner = MeasurementOwner(self.store, self.repo, self.anchor)
+
+    def test_run_binds_the_pending_refresh_on_the_measurement_epoch(self):
+        import ast
+        tree = ast.parse((Path(__file__).parent / "run.py").read_text())
+        binds = [node.value for node in ast.walk(tree)
+                 if isinstance(node, ast.AnnAssign) and getattr(node.target, "id", None)
+                 == "resume_bind"]
+        self.assertEqual(len(binds), 1)
+        self.assertEqual([k.value for k in binds[0].keys], ["measurement_epoch"])
+        self.assertEqual(binds[0].values[0].id, "measurement_epoch")
+
+    def test_a_new_full_epoch_still_sees_and_resumes_the_pending_hypothesis(self):
+        queue, report = self.prepare(epoch=OTHER_EPOCH, measurement_epoch=MEASURED)
+        self.assertEqual(report["queued"], [])
+        queue.enable_pending_refresh(TARGET, measurement_epoch=MEASURED)
+        outcome, _ = self.attempt([rejected(AUTHORING_1), rejected(AUTHORING_2)],
+                                  author_attempts=3)
+        self.assertEqual(outcome.status, loop.PATCH_ROUNDS_EXHAUSTED)
+        self.assertEqual(resume.pending_hypotheses(self.store, epoch=OTHER_EPOCH,
+                                                   anchor_commit=self.anchor), [])
+        (view,) = resume.pending_hypotheses(self.store, epoch=OTHER_EPOCH,
+                                            anchor_commit=self.anchor,
+                                            measurement_epoch=MEASURED)
+        self.assertEqual(view["state"], "pending")
+        point = queue.take(base.Worker(self.repo), self.anchor)
+        self.assertIsNotNone(point, "the in-run refresh bound on the measurement epoch")
+        self.assertEqual(point.stage, "author")
+
+    def test_without_the_measurement_bind_the_refresh_misses_it(self):
+        queue, _ = self.prepare(epoch=OTHER_EPOCH, measurement_epoch=MEASURED)
+        queue.enable_pending_refresh(TARGET)          # the old `resume_bind = {}`
+        self.attempt([rejected(AUTHORING_1), rejected(AUTHORING_2)], author_attempts=3)
+        self.assertIsNone(queue.take(base.Worker(self.repo), self.anchor))
