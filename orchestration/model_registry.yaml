@@ -3030,7 +3030,7 @@ roles:
     # until 2026-05-09. A model swap MUST edit both blocks — and as of 2026-07-31 also
     # roles.coder_escalation (the alias): THREE places.
     tier: A
-    description: "System architecture, invariants, acceptance tests - emits IR only. 2026-08-22: E-7 stamps at terse template 1443ea9ab4bb — math 85.0%, mmlu_pro 27.5%, gpqa_diamond 47.5%, cruxeval 22.5%, gpqa_diamond_cot 75.0% (45/60 @4096). 2026-07-31: Qwen3.6-27B dense Q8 MTP on MI210 (ROCm0); PRIMARY for the :8083 process, with coder_escalation aliased onto it."
+    description: "System architecture, invariants, acceptance tests - emits IR only. 2026-08-22: E-7 stamps at terse template 1443ea9ab4bb — math 85.0%, mmlu_pro 27.5%, gpqa_diamond 47.5%, cruxeval 22.5%, gpqa_diamond_cot 75.0% (45/60 @4096). 2026-07-31: dense 27B Q8 MTP on MI210 (ROCm0) — Qwen3.6-27B from 2026-07-31, Qwen3.8-27B-Q8_0 since 2026-08-20; PRIMARY for the :8083 process, with coder_escalation and (since 2026-09-22) ingest_long_context aliased onto it."
     agent_file_compression_operating_point: none  # 2026-07-31 model swap: the `aggressive` gate
       # (Phase 3, 2026-05-07: 117% baseline compliance, 110% procedure, recall 0.93) was measured
       # on the 122B and does NOT transfer. RE-PROBE via tests/compliance/agent_file/runner.py.
@@ -6138,7 +6138,7 @@ roles:
       temperature: 0.3
   worker_general:
     tier: C
-    description: General worker — gemma4-26B-A4B Q4_K_M (MTP) — swapped 2026-05-08 from Meta-Llama-3-8B / Qwen3-Coder-30B-A3B lineage. Mirrors the live orchestrator worker_general target for benchmark correctness.
+    description: "General worker — since the 2026-09-22 lineup change an ALIAS on frontdoor's :8070 process (Qwen3.6-35B-A3B-MTP-Q8_0, halves :8080/:8180; binding server_mode.frontdoor.shared_with). gemma4-26B-A4B Q4_K_M (MTP, 2026-05-08 .. 2026-09-22) is RETIRED; lineage before it: Meta-Llama-3-8B / Qwen3-Coder-30B-A3B. Mirrors the live orchestrator worker_general target for benchmark correctness."
     model:
       name: Qwen3.6-35B-A3B-MTP-Q8_0
       path: /mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf
@@ -8590,13 +8590,15 @@ roles:
       residency: cold            # was hot/pinned while serving
       pinned: false
 
-  # ── 2026-09-22: NEW. The artifact backing architect_critic + its ingest_long_context alias.
+  # ── 2026-09-22: NEW. The artifact backing architect_critic (single-role; ingest_long_context went to :8083).
   # Registered BEFORE cutover, which is the rule the retired 2.6B rungs broke.
   qwen38_flash_next_ud_iq4xs_local:
     tier: A
     description: "Qwen3.8-Flash-Next UD-IQ4_XS exact local artifact (3 shards). 2026-09-22: PROMOTED
-      from research-campaign artifact to the PRODUCTION model backing architect_critic (:8074, CPU)
-      and its ingest_long_context alias. ⚠ THIS IS NOT THE ARTIFACT THE CAMPAIGN MEASURED — the
+      from research-campaign artifact to the PRODUCTION model backing architect_critic (:8074, CPU),
+      single-role: ingest_long_context is NOT aliased here — operator ruling C2 sent it to
+      architect_general's :8083 GPU Qwen3.8-27B (server_mode.ingest_long_context.alias_of,
+      server_mode.architect_general.shared_with). ⚠ THIS IS NOT THE ARTIFACT THE CAMPAIGN MEASURED — the
       codified recipe's TRUNK_GGUF is the IQ4_XS-uniform SINGLE FILE (98,392,912,256 B, sha256
       4bfb9849...f8957). Reconciling served-vs-anchor is PROD-3's open job and the recipe module
       says so itself. Every performance figure attached to this model was taken on the uniform file."
@@ -8631,7 +8633,7 @@ roles:
         mtp-shared-Q8_0-headQ4_K.gguf: "B12 candidate, 1.077x wall vs borrowed q6_K — NO-GO"
     candidate_roles:
     - architect_critic       # 2026-09-22: PRIMARY, :8074 CPU
-    - ingest_long_context    # 2026-09-22: alias on the same :8074 process
+    - ingest_long_context    # CANDIDATE only. Served by architect_general's :8083 (ruling C2, 2026-09-22), not :8074
     - architect
     - critic
     - reasoning
