@@ -603,6 +603,30 @@ AUTHOR_EDIT_GUARD = {"../*": "deny", ".git/*": "deny"}
 AK_CHECK_ALLOW = ("ak-check", "ak-check --op-test")
 AK_CHECK_DENY = ("ak-check*", "* ak-check*", "*/ak-check*", "*ak_check*")
 
+#: GitNexus under the lane guard. Every role is denied the subcommands that write an
+#: index or the host's editor setup (a bare `gitnexus analyze` in a lane would index
+#: the lane under the anchor's name; only /workspace/scripts/gitnexus-analyze.sh may
+#: re-index). The AUTHOR is allowed exactly the two read forms its action rule names,
+#: targeting the anchor by its ABSOLUTE path: the anchor is registered under the name
+#: `llama.cpp`, which collides with the frozen production tree, and the author's cwd
+#: (a lane worktree at another path) cannot disambiguate a name. Appended after every
+#: deny (the last match wins), so the anchor-path denies still refuse anything else.
+GITNEXUS_DENY = tuple(pattern for sub in ("analyze", "index", "clean", "remove", "setup",
+                                          "uninstall", "wiki", "publish", "serve", "mcp",
+                                          "eval-server", "group")
+                      for pattern in (f"gitnexus {sub}*", f"* gitnexus {sub}*",
+                                      f"*/gitnexus {sub}*"))
+GITNEXUS_READS = ("context", "query")
+
+
+def gitnexus_allow(root: str | Path) -> tuple[str, ...]:
+    """The author's bash allows for `gitnexus context|query ... --repo <root>`."""
+    return tuple(pattern for sub in GITNEXUS_READS
+                 for pattern in (f"gitnexus {sub} * --repo {root}",
+                                 f"gitnexus {sub} * --repo {root} *",
+                                 f"gitnexus {sub} --repo {root} *"))
+
+
 #: Roles the plain config knows (the bounded config has no critic seat).
 PLAIN_ROLES = ("planner", "author", "critic")
 
@@ -677,6 +701,7 @@ def seat_permission(role: str, *, lane: Path | None = None,
                 permission[tool] = "deny"
     if lane_guard:
         bash = {pattern: "deny" for pattern in BUILD_DENY}
+        bash.update({pattern: "deny" for pattern in GITNEXUS_DENY})
         if role != "author":
             bash.update({pattern: "deny" for pattern in READ_ONLY_DENY})
         root, builds, others = anchor_fence(build_dir, lane)
@@ -685,6 +710,9 @@ def seat_permission(role: str, *, lane: Path | None = None,
                 bash[pattern] = "deny"
             for name in others:
                 bash[f"*{root}/{name}*"] = "deny"
+            if role == "author":
+                for pattern in gitnexus_allow(root):
+                    bash[pattern] = "allow"     # after every deny: the last match wins
             external = {f"{root}/*": "deny"}
             external.update({f"{b}/*": "allow" for b in builds})
             permission["external_directory"] = external
@@ -700,12 +728,18 @@ def seat_permission(role: str, *, lane: Path | None = None,
 
 
 def gitnexus_repo_for(build_dir: str | Path | None) -> str | None:
-    """The GitNexus repo name of the anchor tree holding `build_dir` (its git root's
-    directory name, as `gitnexus analyze` registers a worktree), or None without one.
-    Only the NAME goes in the author's prompt: a command naming the anchor root's PATH
-    is denied by the lane guard, `gitnexus ... --repo <name>` is not."""
+    """The `gitnexus --repo` target of the anchor tree holding `build_dir`: its git
+    root's ABSOLUTE path, or None without one.
+
+    Not the name: `gitnexus analyze` registers a tree under its git remote/repo name,
+    and the DS41 anchor (`/mnt/raid0/llm/llama.cpp-experimental-fastload-ds41-...`) is
+    registered as `llama.cpp`, colliding with the frozen production tree at
+    `/mnt/raid0/llm/llama.cpp`; `--repo llama.cpp` is refused as ambiguous, and the
+    author's cwd (a lane worktree at another path) cannot disambiguate it. The
+    absolute path is GitNexus's own disambiguation, and the lane guard allows exactly
+    `gitnexus context|query ... --repo <this path>` (`gitnexus_allow`)."""
     root, _builds, _others = anchor_fence(build_dir)
-    return root.name if root is not None else None
+    return str(root) if root is not None else None
 
 
 def seat_label(base: str, *, trim_instructions: bool = False, trim_tools: bool = False,
@@ -775,6 +809,7 @@ __all__ = ["actor_instructions", "AGENT_NAMES", "AK_CHECK_ALLOW", "AK_CHECK_DENY
            "THINKING_MEDIUM_OPTIONS", "THINKING_OPTIONS", "OUTPUT_TOKEN_MAX_ENV",
            "OPENCODE_OUTPUT_TOKEN_MAX", "output_ceiling_env", "POOL_TOKENS",
            "POOL_RESERVE", "MAX_CONTEXT_LIMIT", "MIN_COMPACTION_HEADROOM", "gitnexus_repo_for",
+           "GITNEXUS_DENY", "GITNEXUS_READS", "gitnexus_allow",
            "model_block", "model_thinking",
            "DEFAULT_CONTEXT_LIMIT", "DEFAULT_OUTPUT_LIMIT", "DEFAULT_PLANNER_OUTPUT_LIMIT", "limits_label", "model_limits", "AUTHOR_EDIT_GUARD",
            "AUTHOR_STYLE_NOTE",

@@ -307,22 +307,23 @@ class ActionRuleGitNexus(unittest.TestCase):
             planner.author(ActionRule.HYP, context)
         return seen["prompt"]
 
-    def test_repo_is_the_anchor_worktree_name(self):
-        self.assertEqual(aoc.gitnexus_repo_for(self.build), "llama.cpp-experimental-x")
-        self.assertEqual(aoc.gitnexus_repo_for(
-            "/mnt/raid0/llm/llama.cpp-experimental-fastload-ds41-20260925/build-cpu"),
-            "llama.cpp-experimental-fastload-ds41-20260925")
+    def test_repo_is_the_anchor_trees_absolute_path(self):
+        # The DS41 anchor is registered in GitNexus as `llama.cpp`, the frozen production
+        # tree's name too: only the absolute path targets it unambiguously.
+        self.assertEqual(aoc.gitnexus_repo_for(self.build), str(self.root))
+        self.assertTrue(Path(aoc.gitnexus_repo_for(self.build)).is_absolute())
         self.assertIsNone(aoc.gitnexus_repo_for(None))
 
     def test_the_author_prompt_names_the_anchor_repo(self):
         context = {"target": {"recipe": {"backend": "cpu", "build_dir": str(self.build)}}}
-        rule = actors.author_action_rule("llama.cpp-experimental-x")
+        repo = str(self.root)
+        rule = actors.author_action_rule(repo)
         control = self._author_prompt(actors.ActorSeat(bounded=False), context)
         on = self._author_prompt(actors.ActorSeat(bounded=False, author_action_rule=True),
                                  context)
         self.assertEqual(on, control + "\n\n" + rule)
-        self.assertIn("gitnexus context <symbol> --repo llama.cpp-experimental-x", on)
-        self.assertIn('gitnexus query "<concept>" --repo llama.cpp-experimental-x', on)
+        self.assertIn(f"gitnexus context <symbol> --repo {repo}", on)
+        self.assertIn(f'gitnexus query "<concept>" --repo {repo}', on)
         self.assertIn("then read only the lines you will change", on)
         # Every base sentence is kept, after the GitNexus one.
         self.assertTrue(rule.startswith("Author action rule: think briefly, then act. "
@@ -358,8 +359,25 @@ class ActionRuleGitNexus(unittest.TestCase):
                                 "x86_64-linux-gnu/15/include/avx512fintrin.h"):
                     self.assertEqual(oc.bash(command), "allow", command)
                 for command in ("cmake --build build -j", "make -j 16",
-                                "g++ -march=native -c y.cpp", "ninja -C build"):
+                                "g++ -march=native -c y.cpp", "ninja -C build",
+                                # Index writers stay denied, bare or aimed at the anchor.
+                                "gitnexus analyze", "gitnexus analyze --force",
+                                f"gitnexus analyze {repo}", "cd x && gitnexus analyze .",
+                                f"gitnexus clean --repo {repo}", "gitnexus wiki",
+                                # The anchor path outside the two read forms: denied.
+                                f"ls {repo}", f"gitnexus impact Q4Bits --repo {repo}",
+                                f"cat {repo}/ggml/src/x.c"):
                     self.assertEqual(oc.bash(command), "deny", command)
+
+    def test_planner_and_critic_get_no_gitnexus_allow(self):
+        repo = aoc.gitnexus_repo_for(self.build)
+        for role in ("planner", "critic"):
+            with self.subTest(role=role):
+                oc = self.guard._Opencode(aoc.build_plain_config(
+                    role=role, lane=self.lane, build_dir=self.build,
+                    lane_guard=True, trim_tools=True, trim_instructions=True))
+                self.assertEqual(oc.bash(f"gitnexus context Q4Bits --repo {repo}"), "deny")
+                self.assertEqual(oc.bash("gitnexus analyze"), "deny")
 
 
 @unittest.skipUnless(OPENCODE and REAL_GLOBAL.is_file()

@@ -2434,8 +2434,10 @@ AUTHOR_ACTION_RULE = (
     "reason instead of writing a partial patch.")
 #: Operator 2026-09-26: with a known anchor, the rule also points the author at GitNexus
 #: (inserted after the first sentence). The lane is anchor + edits, so the anchor tree's
-#: index is valid for navigation; the repo is named by the anchor worktree's directory
-#: name (`actor_opencode_config.gitnexus_repo_for`). No anchor build dir: omitted.
+#: index is valid for navigation; the repo is the anchor tree's ABSOLUTE path
+#: (`actor_opencode_config.gitnexus_repo_for`: its registered name `llama.cpp` is
+#: ambiguous with the frozen production tree), the one form the lane guard allows.
+#: No anchor build dir: omitted.
 AUTHOR_GITNEXUS_RULE = (
     "Use GitNexus to find definitions, callers and idioms instead of re-deriving them: "
     "`gitnexus context <symbol> --repo {repo}` and `gitnexus query \"<concept>\" --repo "

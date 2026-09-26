@@ -222,12 +222,19 @@ class LaneGuardBuilds(_Tmp):
             self.assertEqual(oc.bash(command), "deny")
 
     def test_no_bash_rule_is_an_allow(self):
+        # The one exception: the author's two GitNexus read forms aimed at the anchor
+        # by absolute path (`aoc.gitnexus_allow`), appended after every deny.
         for role in aoc.PLAIN_ROLES:
             perm = self.plain(role, **ALL_ON)["permission"]
-            self.assertEqual(set(perm["bash"].values()), {"deny"})
+            bash_allows = {p for p, a in perm["bash"].items() if a == "allow"}
+            self.assertEqual(bash_allows, set(aoc.gitnexus_allow(self.root))
+                             if role == "author" else set(), role)
+            self.assertEqual(list(perm["bash"])[-len(bash_allows):] if bash_allows else [],
+                             list(aoc.gitnexus_allow(self.root)) if bash_allows else [])
             allows = [(k, p) for k, v in perm.items() if isinstance(v, dict)
                       for p, a in v.items() if a == "allow"]
-            self.assertTrue(all(k == "external_directory" for k, _ in allows), allows)
+            self.assertTrue(all(k == "external_directory" or (k, p) in
+                                {("bash", q) for q in bash_allows} for k, p in allows), allows)
 
 
 class LaneGuardReads(_Tmp):
