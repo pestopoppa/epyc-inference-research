@@ -38,6 +38,7 @@ from . import (accumulate, actors, anchor, archive, bench, champion, claim, gate
                integrity, heldout_serving, lineage_beliefs, pipeline, pool, production, status, surface_fold,
                surface_validation)
 from . import actor_opencode_config
+from . import bestof
 from . import resume as resume_mod
 
 
@@ -275,6 +276,93 @@ def _actor_thinking(args) -> dict[str, str]:
     """OAB-24: the author-only reasoning switch as an ActorSeat field. Only the
     planner/author seat takes it; the critic seat never does."""
     return {"author_thinking": str(args.actor_author_thinking)}
+
+
+#: run.py's `--actor-authors` default (operator decision 2026-09-26: best-of-2, a mixed
+#: pair). The library default (no panel) is the single-author path.
+DEFAULT_ACTOR_AUTHORS = "off,medium"
+#: `--actor-authors single`: one author, thinking from `--actor-author-thinking`.
+SINGLE_AUTHOR = "single"
+
+
+@dataclass(frozen=True)
+class AuthorPlan:
+    """What `--actor-authors` resolved to: a panel (N >= 2) or the single path."""
+    specs: tuple = ()
+    budget: object = None
+    note: str = ""
+
+    @property
+    def panel(self) -> bool:
+        return len(self.specs) >= 2
+
+
+def _author_plan(args, planner_kind: str | None = None) -> AuthorPlan:
+    """Resolve `--actor-authors` against this build and the pool, or raise ValueError.
+
+    An EXPLICIT value that cannot run is refused. The run.py DEFAULT ("off,medium")
+    degrades to the single path, loudly, when this build lacks a mode it names (the
+    `medium` thinking mode lands with lane/ak-author-medium-20260926) or when several
+    lanes would share :8083's pool. N=1 (`single`, or one mode) is the single path."""
+    explicit = args.actor_authors is not None
+    spec = args.actor_authors if explicit else DEFAULT_ACTOR_AUTHORS
+    if str(spec).strip() == SINGLE_AUTHOR:
+        return AuthorPlan(note="single author (--actor-authors single)")
+    try:
+        specs = bestof.parse_authors(spec, allowed=actor_opencode_config.THINKING_CHOICES)
+    except ValueError as exc:
+        if explicit:
+            raise
+        return AuthorPlan(note=f"single author: default --actor-authors {spec!r} unavailable "
+                               f"in this build ({exc})")
+    if len(specs) == 1:
+        return AuthorPlan(specs=specs, note=f"single author (thinking {specs[0].thinking})")
+    if planner_kind is not None and planner_kind != "opencode":
+        # The members differ ONLY by the per-call chat_template_kwargs of an opencode
+        # author seat; on codex/claude/orchestrator they would be N identical calls.
+        reason = (f"best-of-{len(specs)} races author thinking modes, which only an "
+                  f"opencode author seat carries (planner backend: {planner_kind})")
+        if explicit:
+            raise ValueError(reason)
+        return AuthorPlan(note=f"single author: {reason}")
+    if planner_kind == "opencode" and int(args.workers) > 1:
+        reason = (f"{len(specs)} concurrent authors per lane with --workers {args.workers}: "
+                  "the pool budget holds one lane's authors on :8083's unified pool, and "
+                  "other lanes' calls would share it")
+        if explicit:
+            raise ValueError(reason)
+        return AuthorPlan(note=f"single author: {reason}")
+    budget = bestof.author_budget(len(specs), pool_tokens=int(args.actor_pool_tokens))
+    return AuthorPlan(specs=specs, budget=budget,
+                      note=(f"best-of-{len(specs)} "
+                            + ",".join(f"{s.label}" for s in specs)
+                            + f" context={budget.context_limit} output={budget.output_limit}"
+                            f" compaction@{budget.compaction_at} pool={budget.pool_tokens}"
+                            f"-{budget.reserve}"))
+
+
+def _author_scratch_registry(args):
+    """The flow-level scratch registry the panel allocates its worktrees from
+    (`scratch.py`, lane/ak-scratch-20260926), rooted at the lanes' workers dir, or None
+    when this build has none (the panel then falls back to the single path)."""
+    try:
+        from . import scratch as scratch_mod
+    except ImportError:
+        return None
+    return scratch_mod.ScratchRegistry(
+        Path(args.worker_root), owner=f"ak-bestof store={args.store} pid={os.getpid()}",
+        min_free_bytes=int(float(args.actor_authors_min_free_gb) * 1_000_000_000))
+
+
+def _author_validator(args):
+    """The panel's winner check: the lane-diff/integrity screen, then `--actor-authors-
+    check` (ak-check compile + --op-test, lane/ak-sandbox-20260926) when given."""
+    if not str(args.actor_authors_check or "").strip():
+        return bestof.integrity_validator
+    return bestof.chain_validators(
+        bestof.integrity_validator,
+        bestof.command_validator(args.actor_authors_check, name="ak-check",
+                                 timeout_s=int(args.actor_timeout_s)))
 
 
 def _effective_output_limits(args) -> dict[str, int]:
@@ -891,6 +979,27 @@ def main(argv: list[str] | None = None) -> int:
                              "run 10c's author decoded 74,288 tokens in 2,700 s re-deriving "
                              "a layout in <think> and made zero edits. 'default' = the "
                              "historical config byte for byte (default: %(default)s)")
+    parser.add_argument("--actor-authors", default=None,
+                        help="best-of-N authoring (operator 2026-09-26): a comma list of "
+                             "author thinking modes, one CONCURRENT author call per entry for "
+                             "each accepted hypothesis, each in its own scratch worktree; the "
+                             "first diff that passes the validator lands on the lane and the "
+                             "other calls are ended. N=len(list). 'single' (or one mode) is "
+                             "the single-author path byte for byte. Each author's opencode "
+                             "context is floor((--actor-pool-tokens - 16384) / N), output "
+                             "16384. Default: " + DEFAULT_ACTOR_AUTHORS + " (degrades to "
+                             "single when this build lacks a mode or --workers > 1)")
+    parser.add_argument("--actor-pool-tokens", type=int, default=bestof.DEFAULT_POOL_TOKENS,
+                        help=":8083's unified KV pool the concurrent authors share "
+                             "(np4 --kv-unified; default: %(default)s)")
+    parser.add_argument("--actor-authors-check", default="",
+                        help="best-of-N: an extra winner check run in each author's scratch "
+                             "tree after the integrity screen (ak-check compile + --op-test); "
+                             "an argv with {worktree}/{base}/{paths} placeholders, exit 0 "
+                             "passes. Empty = integrity screen only (default: %(default)r)")
+    parser.add_argument("--actor-authors-min-free-gb", type=float, default=50.0,
+                        help="best-of-N: the scratch registry's free-space floor; below it a "
+                             "round runs the single author (default: %(default)s)")
     parser.add_argument("--actor-concise", choices=("on", "off"), default="on",
                         help="opencode planner/author (OAB-22): append the concision rule "
                              "(derive each fact once, analysis under ~4,000 tokens, reply is "
@@ -925,6 +1034,12 @@ def main(argv: list[str] | None = None) -> int:
     budget_error = _actor_budget_error(args)
     if budget_error:
         parser.error(budget_error)
+    try:
+        # The backend-dependent refusals come with the backends (provider setup must
+        # not run before the selection refusals below).
+        _author_plan(args)
+    except ValueError as exc:
+        parser.error(str(exc))
     operator_unblocks = dispatch_guard.load_operator_unblocks(
         args.operator_unblock_artifact)
     if args.cpu_screen_scope or args.cpu_confirm_from:
@@ -1511,6 +1626,11 @@ def main(argv: list[str] | None = None) -> int:
           f"concise={args.actor_concise} planner-budget={args.actor_planner_budget_s}s "
           f"author-budget={args.actor_author_budget_s}s "
           f"author-thinking={args.actor_author_thinking}")
+    try:
+        author_plan = _author_plan(args, getattr(planner_backend, "kind", None))
+    except ValueError as exc:
+        parser.error(str(exc))
+    print(f"actors    authors: {author_plan.note}")
     for moot in _moot_budgets(args):
         print(f"actors    WARNING {moot} is not below --actor-timeout-s={args.actor_timeout_s}: "
               "the hard timeout ends those calls first, so the budget never fires")
@@ -3234,6 +3354,48 @@ def main(argv: list[str] | None = None) -> int:
             return (runtime_recovery.PendingPlanner(ordinary, pending_slot)
                     if pending_pair is not None else ordinary)
 
+        author_registry = [None]
+
+        def make_author_panel(worker):
+            """Best-of-N (`--actor-authors`, N >= 2): one panel per lane, its members
+            the ordinary author seat with the member's thinking mode and the pool
+            budget's per-author limits, rooted at a scratch worktree. None = the
+            single-author path (N=1, a retained screen, or no scratch registry)."""
+            if not author_plan.panel or screen_confirmation:
+                return None
+            if author_registry[0] is None:
+                author_registry[0] = _author_scratch_registry(args)
+                if author_registry[0] is None:
+                    print("actors    WARNING best-of authoring needs the scratch registry "
+                          "(scratch.py); this build has none -- single author",
+                          file=sys.stderr)
+            if author_registry[0] is False or author_registry[0] is None:
+                author_registry[0] = False
+                return None
+            budget = author_plan.budget
+
+            def make_author(spec, workspace, member_stop):
+                return actors.AgentPlanner(
+                    workspace=Path(workspace), backend=planner_backend,
+                    timeout_s=args.actor_timeout_s, should_stop=member_stop,
+                    belief_context=args.actor_belief_context,
+                    belief_root=args.belief_root_repo,
+                    seat=actors.ActorSeat(
+                        bounded=args.actor_seat == "bounded", fan_out=args.actor_fan_out,
+                        steps=args.actor_steps, context_mode=args.actor_context_mode,
+                        **_actor_knobs(args),
+                        **{**_actor_limits(args), "context_limit": budget.context_limit,
+                           "author_output_limit": budget.output_limit},
+                        **_actor_budgets(args),
+                        **{**_actor_thinking(args), "author_thinking": spec.thinking}))
+
+            return bestof.AuthorPanel(
+                lane=worker.name, specs=author_plan.specs, make_author=make_author,
+                scratch=author_registry[0], budget=budget,
+                validator=_author_validator(args),
+                retain=lambda **patch: archive.retain_patch_bytes(args.store, **patch),
+                should_stop=should_stop)
+
         pooled_lanes = pool.provision(args.workers, champion_tree=args.worktree,
                                       champion_branch=args.champion_branch,
                                       root=args.worker_root,
@@ -3265,6 +3427,7 @@ def main(argv: list[str] | None = None) -> int:
             reserve_candidate=reserve_pooled,
             record_abandoned=record_abandoned_pooled,
             next_resume=(resume_queue[0].take if resume_queue[0] is not None else None),
+            **({"make_author_panel": make_author_panel} if author_plan.panel else {}),
             champion_tree=args.worktree, branch=args.champion_branch,
             on_step=step_pooled)
 

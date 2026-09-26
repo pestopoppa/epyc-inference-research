@@ -181,7 +181,8 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
              validate_candidate=None, formation_guard=None,
              reserve_candidate=None,
              record_abandoned: Callable[[Worker, loop_mod.Outcome], None] | None = None,
-             next_resume: Callable[[Worker, str], Any] | None = None
+             next_resume: Callable[[Worker, str], Any] | None = None,
+             make_author_panel: Callable[[Worker], Any] | None = None
              ) -> list[loop_mod.Outcome]:
     """Drive `iterations` iterations across `workers` concurrent lanes.
 
@@ -199,6 +200,11 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
     before any fresh hypothesis: it CLAIMS and returns resumable work (a
     `resume.ResumePoint`) or None. A resumed candidate is an ordinary iteration --
     it draws budget and produces exactly one final outcome.
+
+    `make_author_panel(worker)` builds the lane's best-of-N author panel
+    (`bestof.AuthorPanel`) once, like its planner; None from it, or no factory, is the
+    single-author path (N=1), unchanged. The panel authors in scratch worktrees and
+    lands the selected diff on this lane at the base `reset_to_champion` returned.
     """
     budget = Budget(iterations, should_stop=should_stop)
     tail = tail or SerializedTail(champion_head)
@@ -237,6 +243,7 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
 
     def lane(worker: Worker) -> None:
         planner, critic = make_planner(worker), make_critic(worker)
+        author_panel = make_author_panel(worker) if make_author_panel is not None else None
         depth = 0
         base: str | None = None
 
@@ -344,7 +351,8 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                     record_abandoned=abandoned, resume=resumed,
                     # The lane and the commit reset_to_champion put it on for THIS
                     # draw: the only lane an empty author report may be derived from.
-                    author_lane=(worker.worktree, base))
+                    author_lane=(worker.worktree, base),
+                    **({"author_panel": author_panel} if author_panel is not None else {}))
             except Superseded as exc:
                 # `iterate` already converted this into an Outcome carrying the
                 # hypothesis; reaching here means it escaped before one was formed.

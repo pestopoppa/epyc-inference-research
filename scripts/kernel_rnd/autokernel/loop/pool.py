@@ -308,7 +308,7 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
           accumulate_valid_positive: bool = False,
           validate_candidate=None, formation_guard=None,
           reserve_candidate=None, record_abandoned=None,
-          next_resume=None) -> PoolResult:
+          next_resume=None, make_author_panel=None) -> PoolResult:
     """Run `iterations` iterations across `workers` lanes and report the accounting.
 
     Everything device-shaped is still injected; this only binds the git side and the
@@ -340,7 +340,8 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
         accumulate_valid_positive=accumulate_valid_positive,
         validate_candidate=validate_candidate, formation_guard=formation_guard,
         reserve_candidate=reserve_candidate, record_abandoned=record_abandoned,
-        next_resume=next_resume)
+        next_resume=next_resume,
+        **({"make_author_panel": make_author_panel} if make_author_panel is not None else {}))
     clock.close()
     return PoolResult(outcomes=outcomes, phase_seconds=clock.totals(),
                       wall_seconds=time.monotonic() - started,

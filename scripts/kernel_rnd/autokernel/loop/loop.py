@@ -329,6 +329,10 @@ class Outcome:
     # author's reply carried no report; `author_report_recovery` says why and what.
     report_source: str | None = None
     author_report_recovery: dict | None = None
+    # Best-of-N authoring (`bestof.AuthorPanel`): one record per panel round that
+    # produced this candidate (per author: thinking mode, wall, steps, decoded tokens,
+    # validator result, won/lost/cancelled, retained patch). Empty on the single path.
+    author_panels: list[dict] = field(default_factory=list)
 
     def to_attempt(self) -> dict:
         row = {"status": self.status, "turn_recorded_at": _now()}
@@ -372,6 +376,8 @@ class Outcome:
         if self.report_source is not None:
             row["report_source"] = self.report_source
             row["author_report_recovery"] = self.author_report_recovery
+        if self.author_panels:
+            row["author_panels"] = [dict(panel) for panel in self.author_panels]
         for key in ("spawn_parent", "branch_id", "width", "depth"):
             if getattr(self, key) is not None:
                 row[key] = getattr(self, key)
@@ -485,6 +491,15 @@ def _extended(missing: AuthorReportMissing, message: str) -> AuthorReportMissing
         extended = type(missing)(message)
     extended.failure_class = failure_class
     return extended
+
+
+def _panel_recorder(progress: dict[str, Any]):
+    """Collect one `bestof.AuthorPanel` round's record: on the iteration's outcome
+    (all rounds) and on any candidate this patch round disposes of (its own round)."""
+    def record(panel: Mapping[str, Any]) -> None:
+        progress["author_panel"] = dict(panel)
+        progress.setdefault("author_panels", []).append(dict(panel))
+    return record
 
 
 def _pending_checkpoints(progress: Mapping[str, Any]) -> list[dict]:
@@ -601,7 +616,8 @@ def iterate(*, planner: Planner, critic: Critic,
             formation_guard=None, reserve_candidate=None,
             record_abandoned: Callable[[Outcome], None] | None = None,
             resume=None,
-            author_lane: tuple[Path, str] | None = None
+            author_lane: tuple[Path, str] | None = None,
+            author_panel=None
             ) -> Outcome:
     """One full turn. Pure control flow: every side effect is an injected callable.
 
@@ -635,11 +651,17 @@ def iterate(*, planner: Planner, critic: Critic,
     reply that carries no report (`AuthorReportMissing`) is answered from the lane diff
     (`integrity.lane_diff_report`, recorded `report_source: "lane_diff"`), and the
     normal gates judge that diff. Without it, or with no diff, the transient stands.
+
+    `author_panel` (`bestof.AuthorPanel`, best-of-N) replaces the one author call of
+    each patch round: N authors race in scratch worktrees and the selected diff lands
+    on `author_lane`, so everything after the call is the single path's. None (N=1)
+    is the single-author path, byte for byte.
     """
     working = dict(context)
     abandoned: list[dict] = []
     progress: dict[str, Any] = {"inflight": None, "critic2": None, "build": None,
-                                "report_recovery": None, "resumed_active": False}
+                                "report_recovery": None, "resumed_active": False,
+                                "author_panels": [], "author_panel": None}
     hypothesis_reasons: list[str] = []
     round_telemetry = {
         "hypothesis_round": 0,
@@ -668,6 +690,8 @@ def iterate(*, planner: Planner, critic: Critic,
             outcome.reasons = [STOPPED_AFTER_DISPOSALS, *outcome.reasons[1:],
                                _disposal_summary(abandoned)]
         outcome.abandoned_candidates = list(abandoned)
+        if progress["author_panels"] and not outcome.author_panels:
+            outcome.author_panels = [dict(panel) for panel in progress["author_panels"]]
         if resume is not None and (
                 (outcome.hypothesis is not None and outcome.hypothesis is resume.hypothesis)
                 or (outcome.hypothesis is None and progress.get("resumed_active"))):
@@ -698,7 +722,8 @@ def iterate(*, planner: Planner, critic: Critic,
                         round_telemetry=round_telemetry,
                         validator_provenance=validator_provenance,
                         record_abandoned=record_abandoned, abandoned=abandoned,
-                        resume=resume, progress=progress, author_lane=author_lane))
+                        resume=resume, progress=progress, author_lane=author_lane,
+                        author_panel=author_panel))
     except TailRefused as exc:
         # The candidate was formed and never measured. Carry the hypothesis: the
         # patch may well still help against the champion that displaced it, and the
@@ -748,7 +773,8 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
              formation_guard=lambda _hypothesis, _context: None,
              reserve_candidate=None, round_telemetry=None,
              validator_provenance=None, record_abandoned=None,
-             abandoned=None, resume=None, progress=None, author_lane=None) -> Outcome:
+             abandoned=None, resume=None, progress=None, author_lane=None,
+             author_panel=None) -> Outcome:
     last_proposed: Hypothesis | None = None
     round_telemetry = round_telemetry if round_telemetry is not None else {}
     validator_provenance = (validator_provenance if validator_provenance is not None
@@ -808,6 +834,8 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             candidate.resume_stage = resume.stage
         if resume_checkpoint is not None:
             candidate.resume_checkpoints = [resume_checkpoint]
+        if progress.get("author_panel") is not None:
+            candidate.author_panels = [dict(progress["author_panel"])]
         _mark_report_source(candidate, progress)
         record_error = None
         if record_abandoned is not None:
@@ -866,6 +894,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
         # further multi-minute call is drawn once the run has been told to stop.
         progress["critic2"] = None
         progress["resumed_active"] = False
+        progress["author_panel"] = None
         if resumed is not None and getattr(resumed, "stale", None) is None:
             # Named before the poll, so a stop here still carries the claimed
             # checkpoint forward instead of consuming it.
@@ -984,6 +1013,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                 mark_search_changed("critic:patch")
             paths = ()
             integrity_screen = None
+            progress["author_panel"] = None
             if hypothesis.runtime_pair is None:
                 if restoring:
                     # No author call: restore the exact retained bytes, re-verified
@@ -1017,8 +1047,15 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                                           prior_patch_rejections=list(patch_reasons),
                                           patch_rounds_remaining=round_count - patch_index,
                                           retained_patch=None)
+                    author = planner.author
+                    if author_panel is not None:
+                        def author(h, ctx, _lane=author_lane, _solo=planner.author):
+                            # Best-of-N: the selected diff lands on the lane, so the
+                            # recovery below and every later stage read it as usual.
+                            return author_panel(h, ctx, lane=_lane, solo=_solo,
+                                                record=_panel_recorder(progress))
                     try:
-                        paths, halted = actor_call(planner.author, hypothesis, working)
+                        paths, halted = actor_call(author, hypothesis, working)
                     except AuthorReportMissing as missing:
                         try:
                             paths, halted = _recover_author_report(
