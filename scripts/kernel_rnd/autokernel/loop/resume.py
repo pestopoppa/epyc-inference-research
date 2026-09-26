@@ -175,14 +175,53 @@ def target_identity(*, measurement_surface: str | None, model: str | Path | None
             "model": None if model is None else str(model)}
 
 
+def actor_config_diff(then: Mapping[str, Any] | None,
+                      now: Mapping[str, Any] | None) -> dict[str, dict] | None:
+    """{key: {"checkpoint": value, "now": value}} for every actor setting that differs
+    between a checkpoint and the resuming launch. `None` when the checkpoint recorded
+    no actor config (formed before it was recorded): unknown, never "no difference"."""
+    if not isinstance(then, Mapping):
+        return None
+    now = now if isinstance(now, Mapping) else {}
+    return {key: {"checkpoint": then.get(key), "now": now.get(key)}
+            for key in sorted(set(then) | set(now)) if then.get(key) != now.get(key)}
+
+
+def stamp_actor_diff(attempt: dict, queue: "ResumeQueue | None") -> dict:
+    """Owner-side: a RESUMED row names the actor settings that differ from its
+    checkpoint's (`resumed_actor_config_diff`; None = the checkpoint predates
+    actor-config recording). Resume binds on measurement identity only, so the row
+    itself must say which planner/critic/author settings produced the rest of it."""
+    origin = attempt.get("resumed_from")
+    if origin and queue is not None and origin in queue.actor_diffs:
+        attempt["resumed_actor_config_diff"] = queue.actor_diffs[origin]
+    return attempt
+
+
+def _measurement_bound(entry: Mapping[str, Any], row_epoch: str | None, *, epoch: str,
+                       measurement_epoch: str | None) -> bool:
+    """Whether a checkpoint belongs to this launch's measurement identity.
+
+    A checkpoint that carries `measurement_epoch_sha256` binds on it (actor settings
+    may differ); one formed before the split binds on the full epoch, as it always did
+    (its measurement identity was never recorded, so it cannot be inferred)."""
+    recorded = entry.get("measurement_epoch_sha256")
+    if recorded is not None and measurement_epoch is not None:
+        return recorded == measurement_epoch
+    return (entry.get("epoch_sha256") or row_epoch) == epoch
+
+
 def bind_checkpoints(attempt: dict, *, epoch: str, anchor_commit: str,
-                     target: Mapping[str, Any]) -> dict:
+                     target: Mapping[str, Any], measurement_epoch: str | None = None,
+                     actor_config: Mapping[str, Any] | None = None) -> dict:
     """Owner-side: stamp where each checkpoint on this row may be resumed.
 
     The anchor is the lane base the candidate was formed on (`spawn_parent`) when
     the pool recorded one, else the current anchor. A build checkpoint whose patch
     pointer the loop could not know yet (the owner retained it while recording)
-    takes the row's `retained_patch`.
+    takes the row's `retained_patch`. `measurement_epoch` (what resume binds on) and
+    `actor_config` (provenance: what a later resume reports as changed) are stamped
+    when given; `epoch_sha256` stays the full epoch.
     """
     checkpoints = attempt.get("resume_checkpoints")
     if not isinstance(checkpoints, list):
@@ -193,6 +232,10 @@ def bind_checkpoints(attempt: dict, *, epoch: str, anchor_commit: str,
             continue
         entry["anchor_commit"] = anchor
         entry["epoch_sha256"] = epoch
+        if measurement_epoch is not None:
+            entry["measurement_epoch_sha256"] = measurement_epoch
+        if actor_config is not None:
+            entry["actor_config"] = json.loads(json.dumps(dict(actor_config)))
         entry["target"] = dict(target)
         if entry.get("stage") == "build" and not entry.get("retained_patch"):
             pointer = attempt.get("retained_patch")
@@ -735,54 +778,81 @@ def _connect(store_root: Path, *, immutable: bool) -> sqlite3.Connection:
     return connection
 
 
-def scan(store_root: Path, *, epoch: str, immutable: bool = False) -> list[Candidate]:
-    """Every checkpoint recorded in this epoch, oldest first."""
+def _checkpoint_rows(store_root: Path, *, immutable: bool) -> list[sqlite3.Row]:
     placeholders = ",".join("?" for _ in SCANNED_STATUSES)
     connection = _connect(store_root, immutable=immutable)
     try:
-        rows = connection.execute(
-            "SELECT attempt_id, recorded_at, status, mechanism_id, payload FROM experiments "
-            f"WHERE epoch_sha256=? AND status IN ({placeholders}) "
+        return connection.execute(
+            "SELECT attempt_id, recorded_at, status, mechanism_id, epoch_sha256, payload "
+            f"FROM experiments WHERE status IN ({placeholders}) "
             "AND instr(payload, '\"resume_checkpoints\"') > 0 ORDER BY recorded_at, rowid",
-            (epoch, *SCANNED_STATUSES)).fetchall()
+            tuple(SCANNED_STATUSES)).fetchall()
     finally:
         connection.close()
-    found: list[Candidate] = []
-    for row in rows:
-        try:
-            payload = json.loads(row["payload"])
-        except json.JSONDecodeError:
+
+
+def _row_checkpoints(row: sqlite3.Row) -> list[tuple[int, dict]] | None:
+    try:
+        payload = json.loads(row["payload"])
+    except json.JSONDecodeError:
+        return None
+    out = []
+    for index, entry in enumerate(payload.get("resume_checkpoints") or ()):
+        if not isinstance(entry, dict) or entry.get("schema") != loop.CHECKPOINT_SCHEMA:
             continue
-        for index, entry in enumerate(payload.get("resume_checkpoints") or ()):
-            if not isinstance(entry, dict) or entry.get("schema") != loop.CHECKPOINT_SCHEMA:
+        entry = dict(entry)
+        if entry.get("stage") == "build" and not entry.get("retained_patch") \
+                and isinstance(payload.get("retained_patch"), dict):
+            entry["retained_patch"] = dict(payload["retained_patch"])
+        out.append((index, entry))
+    return out
+
+
+def scan(store_root: Path, *, epoch: str, measurement_epoch: str | None = None,
+         immutable: bool = False) -> list[Candidate]:
+    """Every checkpoint bound to this launch's measurement identity, oldest first.
+
+    With `measurement_epoch`, a checkpoint that recorded one resumes whenever it
+    matches, whatever actor configuration moved the full epoch; one formed before the
+    split still needs the full epoch. Without it, the full epoch alone (historical)."""
+    found: list[Candidate] = []
+    for row in _checkpoint_rows(store_root, immutable=immutable):
+        if measurement_epoch is None and row["epoch_sha256"] != epoch:
+            continue
+        for index, entry in _row_checkpoints(row) or ():
+            if measurement_epoch is not None and not _measurement_bound(
+                    entry, row["epoch_sha256"], epoch=epoch,
+                    measurement_epoch=measurement_epoch):
                 continue
-            entry = dict(entry)
-            if entry.get("stage") == "build" and not entry.get("retained_patch") \
-                    and isinstance(payload.get("retained_patch"), dict):
-                entry["retained_patch"] = dict(payload["retained_patch"])
             found.append(Candidate(f"{row['attempt_id']}#{index}", row["attempt_id"],
                                    row["recorded_at"], row["status"], row["mechanism_id"],
                                    entry))
     return found
 
 
-def other_epoch_checkpoints(store_root: Path, *, epoch: str, immutable: bool = False) -> int:
-    """Rows carrying checkpoints in OTHER epochs: never resumed here, but a launch
-    that expected to resume them (a changed screen scope or instrument moves the
-    epoch) must say so rather than silently scanning zero."""
-    placeholders = ",".join("?" for _ in SCANNED_STATUSES)
+def other_epoch_checkpoints(store_root: Path, *, epoch: str,
+                            measurement_epoch: str | None = None,
+                            immutable: bool = False) -> int:
+    """Rows carrying checkpoints bound to OTHER measurement identities: never resumed
+    here, but a launch that expected to resume them (a changed screen scope or
+    instrument moves the epoch) must say so rather than silently scanning zero."""
     try:
-        connection = _connect(store_root, immutable=immutable)
+        rows = _checkpoint_rows(store_root, immutable=immutable)
     except FileNotFoundError:
         return 0
-    try:
-        return int(connection.execute(
-            "SELECT count(*) FROM experiments WHERE epoch_sha256<>? "
-            f"AND status IN ({placeholders}) "
-            "AND instr(payload, '\"resume_checkpoints\"') > 0",
-            (epoch, *SCANNED_STATUSES)).fetchone()[0])
-    finally:
-        connection.close()
+    count = 0
+    for row in rows:
+        if measurement_epoch is None:
+            count += row["epoch_sha256"] != epoch
+            continue
+        entries = _row_checkpoints(row)
+        if entries is None:
+            count += row["epoch_sha256"] != epoch
+            continue
+        count += not any(_measurement_bound(entry, row["epoch_sha256"], epoch=epoch,
+                                            measurement_epoch=measurement_epoch)
+                         for _index, entry in entries)
+    return count
 
 
 def ineligible_reason(candidate: Candidate, *, rules_fingerprint: str) -> str | None:
@@ -815,7 +885,8 @@ def ineligible_reason(candidate: Candidate, *, rules_fingerprint: str) -> str | 
 
 def prevalidate(candidate: Candidate, *, epoch: str, anchor_commit: str,
                 target: Mapping[str, Any], repo: Path | None,
-                scratch: Path | None = None) -> bytes | None:
+                scratch: Path | None = None,
+                measurement_epoch: str | None = None) -> bytes | None:
     """Everything checkable before a lane is touched. Returns the patch for a build."""
     ck = candidate.checkpoint
     if int(ck.get("resume_depth") or 0) >= MAX_RESUME_DEPTH:
@@ -827,7 +898,14 @@ def prevalidate(candidate: Candidate, *, epoch: str, anchor_commit: str,
     if formed != anchor_commit:
         raise ResumeRejected("anchor", f"anchor changed: formed on {formed[:12]}, "
                              f"current {anchor_commit[:12]}")
-    if ck.get("epoch_sha256") not in (None, epoch):
+    if measurement_epoch is not None and ck.get("measurement_epoch_sha256") is not None:
+        # Measurement identity only: actor/backend settings may differ (recorded on
+        # the resumed row as `resumed_actor_config_diff`).
+        if ck["measurement_epoch_sha256"] != measurement_epoch:
+            raise ResumeRejected("epoch", "measurement epoch changed: "
+                                 f"{str(ck['measurement_epoch_sha256'])[:12]} "
+                                 f"!= {measurement_epoch[:12]}")
+    elif ck.get("epoch_sha256") not in (None, epoch):
         raise ResumeRejected("epoch", f"epoch changed: {str(ck.get('epoch_sha256'))[:12]} "
                              f"!= {epoch[:12]}")
     recorded_target = ck.get("target") if isinstance(ck.get("target"), Mapping) else {}
@@ -951,8 +1029,10 @@ class ResumeQueue:
 
     def __init__(self, *, store_root: Path, entries: Sequence[tuple[Candidate, bytes | None]],
                  siblings: Mapping[str, Sequence[str]], anchor_commit: str,
-                 epoch: str) -> None:
+                 epoch: str, actor_diffs: Mapping[str, Any] | None = None) -> None:
         self.store_root = Path(store_root)
+        #: checkpoint_id -> `actor_config_diff` (None: the checkpoint recorded none).
+        self.actor_diffs = dict(actor_diffs or {})
         self.entries = list(entries)
         self.siblings = {key: tuple(value) for key, value in siblings.items()}
         self.anchor_commit = anchor_commit
@@ -1006,19 +1086,29 @@ class ResumeQueue:
 def prepare(store_root: Path, *, epoch: str, anchor_commit: str, target: Mapping[str, Any],
             repo: Path | None, rules_fingerprint: str | None = None,
             on_rejected: Callable[[dict], None] | None = None,
-            scratch: Path | None = None, dry_run: bool = False) -> tuple[ResumeQueue, dict]:
-    """Scan, choose and re-validate. `dry_run` writes nothing (not even a claim)."""
+            scratch: Path | None = None, dry_run: bool = False,
+            measurement_epoch: str | None = None,
+            actor_config: Mapping[str, Any] | None = None) -> tuple[ResumeQueue, dict]:
+    """Scan, choose and re-validate. `dry_run` writes nothing (not even a claim).
+
+    `measurement_epoch` binds resume on measurement identity only (see `scan`);
+    `actor_config` is this launch's actor settings, diffed against each queued
+    checkpoint's (`actor_config_diff`, in the report and on the queue)."""
     rules_fingerprint = rules_fingerprint or loop.gate_rules_fingerprint()
     report: dict[str, Any] = {"epoch": epoch, "anchor_commit": anchor_commit,
                               "target": dict(target), "queued": [], "rejected": [],
                               "ineligible": [], "already_claimed": 0, "scanned": 0}
+    if measurement_epoch is not None:
+        report["measurement_epoch"] = measurement_epoch
     try:
-        candidates = scan(store_root, epoch=epoch, immutable=dry_run)
+        candidates = scan(store_root, epoch=epoch, measurement_epoch=measurement_epoch,
+                          immutable=dry_run)
     except FileNotFoundError:
         candidates = []
     report["scanned"] = len(candidates)
-    report["other_epoch_rows"] = other_epoch_checkpoints(store_root, epoch=epoch,
-                                                         immutable=dry_run)
+    report["other_epoch_rows"] = other_epoch_checkpoints(
+        store_root, epoch=epoch, measurement_epoch=measurement_epoch, immutable=dry_run)
+    actor_diffs: dict[str, Any] = {}
     ledger = ClaimLedger(store_root, read_only=dry_run)
     try:
         claimed = ledger.claimed(anchor_commit)
@@ -1039,7 +1129,8 @@ def prepare(store_root: Path, *, epoch: str, anchor_commit: str, target: Mapping
                     continue
                 try:
                     patch = prevalidate(candidate, epoch=epoch, anchor_commit=anchor_commit,
-                                        target=target, repo=repo, scratch=scratch)
+                                        target=target, repo=repo, scratch=scratch,
+                                        measurement_epoch=measurement_epoch)
                 except ResumeRejected as exc:
                     report["rejected"].append({**candidate.summary(), "check": exc.check,
                                                "reason": str(exc)})
@@ -1054,7 +1145,13 @@ def prepare(store_root: Path, *, epoch: str, anchor_commit: str, target: Mapping
                     continue
                 chosen = candidate
                 entries.append((candidate, patch))
-                report["queued"].append(candidate.summary())
+                summary = candidate.summary()
+                if actor_config is not None:
+                    diff = actor_config_diff(candidate.checkpoint.get("actor_config"),
+                                             actor_config)
+                    actor_diffs[candidate.checkpoint_id] = diff
+                    summary["actor_config_diff"] = diff
+                report["queued"].append(summary)
                 break
             if chosen is not None:
                 siblings[chosen.checkpoint_id] = [item.checkpoint_id for item in members
@@ -1065,7 +1162,7 @@ def prepare(store_root: Path, *, epoch: str, anchor_commit: str, target: Mapping
     finally:
         ledger.close()
     return (ResumeQueue(store_root=store_root, entries=entries, siblings=siblings,
-                        anchor_commit=anchor_commit, epoch=epoch),
+                        anchor_commit=anchor_commit, epoch=epoch, actor_diffs=actor_diffs),
             report)
 
 

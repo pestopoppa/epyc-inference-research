@@ -271,6 +271,55 @@ def _actor_limits(args) -> dict[str, int]:
             "author_output_limit": int(args.actor_author_output_limit)}
 
 
+def measurement_epoch_inputs(epoch_inputs: Mapping[str, Any],
+                             resolved_campaign=None) -> dict[str, Any]:
+    """The epoch inputs minus actor/backend configuration.
+
+    Every epoch input is measurement identity (execution digests, request set, target,
+    screen scope, instrument) except `enrolled_manifest_digest`, which folds the
+    campaign's actor roster in; it is replaced by the resolved campaign's
+    `measurement_digest` (the same document without `actors`/`fallbacks`)."""
+    out = {key: value for key, value in epoch_inputs.items()
+           if key != "enrolled_manifest_digest"}
+    if "enrolled_manifest_digest" in epoch_inputs:
+        if resolved_campaign is None:
+            raise ValueError("an enrolled manifest digest needs its resolved campaign")
+        out["enrolled_measurement_digest"] = resolved_campaign.measurement_digest
+    return out
+
+
+def _actor_config(args, resolved_campaign=None) -> dict[str, Any]:
+    """This launch's actor/backend configuration: provenance only, never identity.
+
+    Recorded on every checkpoint and in loop-run.json; a resumed row carries the keys
+    that differ from its checkpoint's (`resume.actor_config_diff`)."""
+    get = lambda name, default=None: getattr(args, name, default)  # noqa: E731
+    config: dict[str, Any] = {
+        "planner_model": get("planner_model"), "planner_effort": get("planner_effort"),
+        "critic_model": get("critic_model"), "critic_effort": get("critic_effort"),
+        # The author runs on the planner's backend.
+        "author_model": get("planner_model"),
+        "author_thinking": get("actor_author_thinking"),
+        "author_action_rule": get("actor_author_action_rule"),
+        "actor_seat": get("actor_seat"), "actor_concise": get("actor_concise"),
+        "actor_context_limit": get("actor_context_limit"),
+        "actor_output_limit": get("actor_output_limit"),
+        "actor_planner_output_limit": get("actor_planner_output_limit"),
+        "actor_author_output_limit": get("actor_author_output_limit"),
+        "actor_planner_budget_s": get("actor_planner_budget_s"),
+        "actor_author_budget_s": get("actor_author_budget_s"),
+        "actor_timeout_s": get("actor_timeout_s"),
+        "actor_trim_instructions": get("actor_trim_instructions"),
+        "actor_trim_tools": get("actor_trim_tools"),
+        "actor_lane_guard": get("actor_lane_guard"),
+    }
+    if resolved_campaign is not None:
+        config["manifest_actors"] = {key: value for key, value in resolved_campaign.actors}
+        config["manifest_fallbacks"] = {key: list(values)
+                                        for key, values in resolved_campaign.fallbacks}
+    return json.loads(json.dumps(config, default=str))
+
+
 def _actor_thinking(args) -> dict[str, Any]:
     """OAB-24: the author-only reasoning switch and action rule as ActorSeat fields.
     Only the planner/author seat takes them; the critic seat never does."""
@@ -1366,6 +1415,21 @@ def main(argv: list[str] | None = None) -> int:
     epoch = archive.epoch_for(anchor_commit=anchor_commit,
                               build_recipe=recipe.to_dict(),
                               **({"host_state": epoch_inputs} if epoch_inputs else {}))
+    # The MEASUREMENT epoch: the same inputs minus actor/backend configuration. The
+    # full epoch above folds the manifest's actor roster in (through
+    # `enrolled_manifest_digest`); DS41 2026-09-26 switched the critic model and the
+    # epoch moved e0aefe6a -> e384c2ad, orphaning every resume checkpoint with anchor,
+    # target, recipe, instrument, requests and floor unchanged. Resume binds on this
+    # one; the full epoch stays the provenance key (archive rows, history, status).
+    # Without an enrolled manifest the two are the same digest.
+    measurement_inputs = measurement_epoch_inputs(
+        epoch_inputs, resolved_campaign if selected_identity is not None else None)
+    measurement_epoch = (epoch if measurement_inputs == epoch_inputs else
+                         archive.epoch_for(anchor_commit=anchor_commit,
+                                           build_recipe=recipe.to_dict(),
+                                           host_state=measurement_inputs))
+    launch_actor_config = _actor_config(
+        args, resolved_campaign if selected_identity is not None else None)
     runtime_statistical = None
     runtime_epoch = None
     runtime_calibration_launches = None
@@ -1377,11 +1441,14 @@ def main(argv: list[str] | None = None) -> int:
                 _read_cpu_document(args.runtime_statistics))
             runtime_epoch, runtime_calibration_launches = runtime_calibration.prospective_budget(
                 campaign_id=resolved_campaign.campaign_id if selected_target is not None else "ak-loop",
-                source_epoch=epoch, statistical=runtime_statistical,
+                # Calibration statistics describe the measurement, not the actors:
+                # keyed on the measurement epoch so an actor swap reuses them.
+                source_epoch=measurement_epoch, statistical=runtime_statistical,
                 max_launches=args.runtime_calibration_max_launches)
         except (OSError, ValueError, runtime_calibration.RuntimeCalibrationRefused) as exc:
             parser.error(f"runtime calibration preflight refused before resource claim: {exc}")
-    print(f"anchor    {anchor_commit[:12]}   epoch {epoch[:12]}")
+    print(f"anchor    {anchor_commit[:12]}   epoch {epoch[:12]}   "
+          f"measurement-epoch {measurement_epoch[:12]}")
 
     pp, tg, ubatch = bench.SURFACES[args.surface]
     bench_surface = args.surface
@@ -2925,7 +2992,10 @@ def main(argv: list[str] | None = None) -> int:
                 attempt["research_scope"]["cpu_screen"] = dict(screen_state)
             resume_mod.bind_checkpoints(attempt, epoch=epoch,
                                         anchor_commit=current_anchor_commit[0],
-                                        target=resume_target)
+                                        target=resume_target,
+                                        measurement_epoch=measurement_epoch,
+                                        actor_config=launch_actor_config)
+            resume_mod.stamp_actor_diff(attempt, resume_queue[0])
             journal_receipts = []
             try:
                 archive.record(args.store, attempt, epoch=epoch,
@@ -2983,7 +3053,10 @@ def main(argv: list[str] | None = None) -> int:
                 attempt["research_scope"]["cpu_screen"] = dict(screen_state)
             resume_mod.bind_checkpoints(attempt, epoch=epoch,
                                         anchor_commit=current_anchor_commit[0],
-                                        target=resume_target)
+                                        target=resume_target,
+                                        measurement_epoch=measurement_epoch,
+                                        actor_config=launch_actor_config)
+            resume_mod.stamp_actor_diff(attempt, resume_queue[0])
             archive.record(args.store, attempt, epoch=epoch, recorded_at=loop._now(),
                            campaign_id="ak-loop")
             settle_resume(candidate)
@@ -3221,7 +3294,9 @@ def main(argv: list[str] | None = None) -> int:
                 resume_queue[0], resume_report = resume_mod.prepare(
                     args.store, epoch=epoch, anchor_commit=current_anchor_commit[0],
                     target=resume_target, repo=args.worktree,
-                    on_rejected=record_resume_rejected, scratch=args.store)
+                    on_rejected=record_resume_rejected, scratch=args.store,
+                    measurement_epoch=measurement_epoch,
+                    actor_config=launch_actor_config)
                 print(f"resume    scanned {resume_report['scanned']} checkpoint(s): "
                       f"{len(resume_report['queued'])} queued, "
                       f"{len(resume_report['rejected'])} rejected, "
@@ -3231,8 +3306,13 @@ def main(argv: list[str] | None = None) -> int:
                          f"in other epochs (not this launch's)"
                          if resume_report["other_epoch_rows"] else ""), flush=True)
                 for row in resume_report["queued"]:
+                    diff = row.get("actor_config_diff")
                     print(f"resume    queued {row['mechanism_id']} at {row['stage']} "
-                          f"(from {row['checkpoint_id']})", flush=True)
+                          f"(from {row['checkpoint_id']})"
+                          + (f"; actor config differs: {', '.join(diff)}" if diff else
+                             "; checkpoint predates actor-config recording"
+                             if "actor_config_diff" in row and diff is None else ""),
+                          flush=True)
             except Exception as exc:      # noqa: BLE001 -- fresh research still runs
                 print(f"resume    unavailable: {type(exc).__name__}: {exc}", file=sys.stderr)
         elif args.resume == "off":
@@ -3869,6 +3949,7 @@ def main(argv: list[str] | None = None) -> int:
             body = {
                 "schema": "epyc.autokernel.loop_run.v1",
                 "epoch": epoch, "anchor_commit": anchor_commit,
+                "measurement_epoch": measurement_epoch, "actor_config": launch_actor_config,
                 **({"runtime_preparation": dict(runtime_preparation)} if direct_launch else {}),
                 **({"runtime_recipe_reference": runtime_recipe_reference[0]}
                    if runtime_recipe_reference[0] is not None else {}),
