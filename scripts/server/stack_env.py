@@ -9,6 +9,8 @@ so existing call sites keep working.
 
 from __future__ import annotations
 
+from collections.abc import Iterable, MutableMapping
+
 from src.roles import Role
 
 
@@ -196,6 +198,35 @@ def compose_ld_library_path(
     return ":".join(ordered)
 
 
+def strip_ambient_ggml(
+    env: MutableMapping[str, str],
+    preserve: Iterable[str] = (),
+    *,
+    keep_iqk: bool = True,
+) -> list[str]:
+    """Remove every GGML_* key from `env` except the declared ones; return what was removed.
+
+    ONE rule for every launch branch (2026-09-26, DAR-LAT-3h audit). GGML_* knobs are
+    kernel tuning, so a process may carry only the ones its launch DECLARES: the role's
+    stack_env block (llama-server roles, plus the canonical GGML_IQK) or the service's
+    launch_manifest env (aux services). Anything else came from the ambient environment
+    of whoever ran the launcher and is dropped.
+
+    Before this, the rule was keyed on the WRONG signal. The llama-server branches stripped
+    only when a binary override was set, and they stripped the role's own declared block as
+    well. Since b060dd56 (2026-07-31) every role's compiled prior carries a binary_dir, so
+    that strip fired on every launch and silently dropped every declared knob. The
+    embedding, eval-batch and aux-service branches never stripped at all.
+    """
+    keep = set(preserve)
+    if keep_iqk:
+        keep.add("GGML_IQK")
+    stripped = [key for key in list(env) if key.startswith("GGML_") and key not in keep]
+    for key in stripped:
+        del env[key]
+    return stripped
+
+
 def build_service_env(
     spec: "object", base_env: dict[str, str] | None = None
 ) -> dict[str, str]:
@@ -217,7 +248,11 @@ def build_service_env(
     value it was meant to drop.
     """
     env: dict[str, str] = dict(base_env) if base_env else {}
-    env.update({key: str(value) for key, value in (getattr(spec, "env", None) or {}).items()})
+    declared_env = {key: str(value) for key, value in (getattr(spec, "env", None) or {}).items()}
+    env.update(declared_env)
+    # Ambient GGML_* must not reach a different kernel (whisper.cpp / qwentts.cpp run
+    # their own ggml generation). The service's declared GGML keys are kept.
+    strip_ambient_ggml(env, declared_env, keep_iqk=False)
     declared = getattr(spec, "ld_library_path", None)
     if declared:
         env["LD_LIBRARY_PATH"] = compose_ld_library_path(

@@ -51,6 +51,14 @@ gen_system_card = importlib.import_module("gen_system_card")
 @pytest.fixture(autouse=True)
 def _clean_runtime_attestation(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(pipeline, "_runtime_attestation_warnings", lambda: [])
+    # Unit tests never read the live /proc: pin the declared-env attestation to a clean result.
+    from scripts.server.env_attestation import EnvAttestation
+
+    monkeypatch.setattr(
+        pipeline,
+        "_declared_env_attestation_result",
+        lambda: EnvAttestation(compared=["fixture:0 pid 0 (fixture, 0 declared keys)"]),
+    )
 
 
 @pytest.fixture(autouse=True)

@@ -40,7 +40,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, MutableMapping
+from typing import Any, Iterable, MutableMapping
 
 _ORIGINAL_SUBPROCESS_POPEN = subprocess.Popen
 
@@ -79,9 +79,11 @@ if __name__ == "__main__":
 
 from scripts.server import stack_processes as _stack_processes
 from scripts.server.stack_env import (
+    _role_env_overrides,
     build_launch_env,
     build_service_env,
     compose_ld_library_path,
+    strip_ambient_ggml,
 )
 from scripts.server.stack_health import wait_for_health as _wait_for_health
 from scripts.server.fleet_markers import (
@@ -690,14 +692,35 @@ def _stack_prior_runtime_overrides(role_name: str) -> tuple[str | None, list[str
     return binary_override, ld_paths
 
 
+def _strip_ambient_ggml(
+    env: MutableMapping[str, str], preserve: Iterable[str] = (), *, label: str
+) -> list[str]:
+    """stack_env.strip_ambient_ggml plus a launch-log line. Used by every llama-server branch."""
+    stripped = strip_ambient_ggml(env, preserve)
+    if stripped:
+        print(f"    [{label}] stripped ambient GGML_* env: {stripped}")
+    return stripped
+
+
 def _apply_runtime_requirements_env(
     env: MutableMapping[str, str],
     *,
     binary_override: str | None,
     ld_paths: list[str] | None,
     ld_path_mode: str = "prepend",
+    preserve: Iterable[str] = (),
 ) -> None:
     """Apply role runtime overrides to a llama-server launch environment.
+
+    `preserve` names GGML_* keys the ROLE itself declares (stack_env._ROLE_ENV_BLOCKS).
+    The binary-override strip exists to keep AMBIENT GGML_* knobs out of a launch whose
+    binary may not honour them. Until 2026-09-26 it also stripped the role's own declared
+    block. Since b060dd56 (2026-07-31) every role's compiled prior carries a binary_dir, so
+    the strip fired on every launch and dropped every declared GGML knob. The only one it
+    ever dropped was architect_critic's dead GGML_NUMA_REPACK_INTERLEAVE (live environ
+    readback, 2026-09-26, DAR-LAT-3h). The declared values come from build_launch_env,
+    which has already overwritten any ambient value of the same key, so preserving them
+    still keeps ambient values out.
 
     `ld_path_mode` defaults to "prepend", which routes through
     `compose_ld_library_path`'s pure-concatenation branch and is therefore
@@ -707,14 +730,14 @@ def _apply_runtime_requirements_env(
     services need it (an experimental tree with its own ggml generation), but no
     role declares it today, so no live role's env changes.
     """
+    # The strip no longer keys on `binary_override`. That was the misread signal: the
+    # compiler marks a backend-derived binary_dir `env_policy: canonical` precisely so it
+    # does NOT change env policy (stack_priors.py, "A backend-derived default must not, or
+    # every role silently changes env policy"), but this function read binary_dir presence
+    # and stripped anyway. Ambient GGML_* is now dropped on every launch and declared keys
+    # are always kept, so there is no policy left for the flag to select.
+    _strip_ambient_ggml(env, preserve, label="launch")
     if binary_override:
-        stripped = [
-            key for key in list(env.keys()) if key.startswith("GGML_") and key != "GGML_IQK"
-        ]
-        for key in stripped:
-            del env[key]
-        if stripped:
-            print(f"    [binary_override] stripped GGML_* env: {stripped}")
         env["KMP_BLOCKTIME"] = "10"
     if ld_paths:
         existing = env.get("LD_LIBRARY_PATH", "")
@@ -1787,6 +1810,9 @@ def start_server(
 
         with open(log_file, "a") as log:
             env = build_launch_env(source_role, os.environ.copy())
+            # No binary override on this branch either; strip ambient GGML_* like every
+            # other branch (2026-09-26).
+            _strip_ambient_ggml(env, _role_env_overrides(source_role), label="eval_batch")
             proc = subprocess.Popen(
                 spawn_prefix + cmd,
                 stdout=log,
@@ -1853,6 +1879,7 @@ def start_server(
                 env,
                 binary_override=binary_override,
                 ld_paths=ld_paths,
+                preserve=_role_env_overrides(source_role),
             )
             proc = subprocess.Popen(
                 spawn_prefix + cmd,
@@ -1921,6 +1948,7 @@ def start_server(
                 env,
                 binary_override=binary_override,
                 ld_paths=ld_paths,
+                preserve=_role_env_overrides(roles[0]),
             )
             proc = subprocess.Popen(
                 spawn_prefix + cmd,
@@ -1974,6 +2002,9 @@ def start_server(
 
         with open(log_file, "a") as log:
             env = build_launch_env(roles[0], os.environ.copy())
+            # The embedding branch has no binary override, so it used to pass ambient GGML_*
+            # straight through. Strip it like every other branch (2026-09-26).
+            _strip_ambient_ggml(env, _role_env_overrides(roles[0]), label="embedding")
             # NOTE: Do NOT set OMP_NUM_THREADS=1 - it disables parallel tensor repack (2.2x slower loading)
             proc = subprocess.Popen(
                 spawn_prefix + cmd,
@@ -2040,6 +2071,7 @@ def start_server(
                 env,
                 binary_override=binary_override,
                 ld_paths=ld_paths,
+                preserve=_role_env_overrides("worker"),
             )
             # NOTE: Do NOT set OMP_NUM_THREADS=1 - it disables parallel tensor repack (2.2x slower loading)
             # Fleet marker: written BEFORE Popen so the watcher can resolve
@@ -2142,6 +2174,7 @@ def start_server(
             env,
             binary_override=binary_override,
             ld_paths=ld_paths,
+            preserve=_role_env_overrides(primary_role),
         )
         # NOTE: Do NOT set OMP_NUM_THREADS=1 - it disables parallel tensor repack (2.2x slower loading)
         # Fleet marker: written BEFORE Popen so the watcher can resolve

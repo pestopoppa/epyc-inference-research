@@ -32,6 +32,14 @@ SURFACE_INVENTORY_LINE = f"surface_inventory: run {SURFACE_INVENTORY_COMMAND}"
 @pytest.fixture(autouse=True)
 def _clean_runtime_attestation(monkeypatch):
     monkeypatch.setattr(pipeline, "_runtime_attestation_warnings", lambda: [])
+    # Unit tests never read the live /proc: pin the declared-env attestation to a clean result.
+    from scripts.server.env_attestation import EnvAttestation
+
+    monkeypatch.setattr(
+        pipeline,
+        "_declared_env_attestation_result",
+        lambda: EnvAttestation(compared=["fixture:0 pid 0 (fixture, 0 declared keys)"]),
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -393,6 +401,10 @@ def test_update_then_check_succeeds_with_known_gaps_allowed(tmp_path: Path) -> N
         "stack_manifest_registry",
         "q_scorer_priors",
         "runtime_attestation",
+        # 2026-09-26: declared-vs-live launch env (/proc/<pid>/environ). Added because
+        # every declared GGML knob was dropped at launch for eight weeks (b060dd56) and
+        # runtime_attestation never compared the env blocks.
+        "declared_env_attestation",
         "simulated_fixtures",
         "promotion_gate",
     }
@@ -1001,3 +1013,21 @@ def test_lean_check_judges_committed_content_not_the_gitignored_cache_key(tmp_pa
     edited = pipeline._lean_registry_step(config, check=True)
     assert edited.status == "stale"
     assert "local cache key: matches" in edited.errors[0]
+
+
+def test_declared_env_attestation_step_maps_verdicts(monkeypatch) -> None:
+    from scripts.server.env_attestation import EnvAttestation
+
+    monkeypatch.setattr(pipeline, "_declared_env_attestation_result",
+                        lambda: EnvAttestation(compared=["x"], errors=["x: declared K='1' but live has it MISSING"]))
+    failed = pipeline._declared_env_attestation_step()
+    assert failed.status == "failed" and not failed.ok and "MISSING" in failed.errors[0]
+
+    monkeypatch.setattr(pipeline, "_declared_env_attestation_result", lambda: EnvAttestation())
+    skipped = pipeline._declared_env_attestation_step()
+    assert skipped.status == "skipped" and "COULD-NOT-CHECK" in skipped.warnings[0]
+
+    def boom():
+        raise RuntimeError("proc unreadable")
+    monkeypatch.setattr(pipeline, "_declared_env_attestation_result", boom)
+    assert pipeline._declared_env_attestation_step().status == "failed"

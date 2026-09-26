@@ -1170,6 +1170,50 @@ def _runtime_attestation_step(*, prior_ok: bool) -> PipelineStep:
     )
 
 
+def _declared_env_attestation_result():
+    """Seam for tests (like _runtime_attestation_warnings): reads the LIVE processes."""
+    from scripts.server.env_attestation import attest
+    from scripts.server.orchestrator_stack import _pids_on_port, load_state
+
+    return attest(load_state(), pids_on_port=_pids_on_port)
+
+
+def _declared_env_attestation_step() -> PipelineStep:
+    """Declared-vs-live launch env (scripts/server/env_attestation.py). Read-only /proc.
+
+    Deliberately NOT gated on prior_ok: it reads the live processes and the declared env
+    blocks, never a compiled artifact, so a stale descriptor must not hide it. It exists
+    because runtime_attestation never compared the declared env blocks, and every declared
+    GGML knob was dropped at launch for eight weeks without a signal (b060dd56 .. 2026-09-26).
+    """
+    try:
+        result = _declared_env_attestation_result()
+    except Exception as exc:  # noqa: BLE001
+        return PipelineStep(
+            name="declared_env_attestation",
+            status="failed",
+            errors=[f"declared env attestation failed to run: {exc}"],
+        )
+    details = [f"compared: {line}" for line in result.compared]
+    details += [f"not attested (no declared env contract): {line}" for line in result.not_attested]
+    if result.verdict == "failed":
+        return PipelineStep(
+            name="declared_env_attestation",
+            status="failed",
+            errors=[f"declared env drift: {line}" for line in result.errors],
+            details=details,
+        )
+    if result.verdict == "could-not-check":
+        return PipelineStep(
+            name="declared_env_attestation",
+            status="skipped",
+            warnings=["COULD-NOT-CHECK: no managed live process in this tree's state file "
+                      "(a lane worktree has none); this is not a pass"],
+            details=details,
+        )
+    return PipelineStep(name="declared_env_attestation", status="ok", details=details)
+
+
 def _stack_manifest_registry_step(
     config: StackChangePipelineConfig,
     *,
@@ -1342,6 +1386,7 @@ def run_stack_change_pipeline(config: StackChangePipelineConfig) -> PipelineRepo
     report.steps.append(_stack_manifest_registry_step(config, prior_ok=report.ok))
     report.steps.append(_q_scorer_prior_sources_step(config, prior_ok=report.ok))
     report.steps.append(_runtime_attestation_step(prior_ok=report.ok))
+    report.steps.append(_declared_env_attestation_step())
     report.steps.append(
         PipelineStep(
             name="simulated_fixtures",
