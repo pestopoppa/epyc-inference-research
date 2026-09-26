@@ -1,0 +1,1 @@
+{"command": ["/opt/rocm/bin/hipcc", "-std=c++17", "--offload-arch=gfx908", "-fsyntax-only", "scripts/kernel_rnd/exl3_gfx90a/kernels.hip"], "returncode": 1, "proposition": "gfx908 compilation refuses at exact-target guard", "status": "pass", "log_sha256": "416bfa79e0a190223a0be378f371cf08806e007d9796d70a4e4cca56b34ec4f8"}
