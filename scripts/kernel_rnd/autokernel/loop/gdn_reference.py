@@ -101,8 +101,10 @@ def check_cpu_gdn(build_dir: Path, source_root: Path, *,
                             str(PROBE), "-L", str(lib_dir),
                             "-Wl,-rpath," + str(lib_dir),
                             "-lggml-cpu", "-lggml-base", "-lggml", "-o", str(binary)]
+            # Toolchain env for the compile; the launch env has no PATH (see
+            # cpu_quant_reference). Only the probe run uses the candidate's launch env.
             built = subprocess.run(compile_argv, capture_output=True, text=True,
-                                   timeout=120, env=env)
+                                   timeout=120, env=dict(os.environ))
             if built.returncode:
                 return GDNResult("unavailable", "GDN probe compile failed", built.stderr[-2000:])
             run = subprocess.run([*topology_prefix, str(binary)], capture_output=True,

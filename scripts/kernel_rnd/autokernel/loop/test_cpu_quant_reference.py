@@ -108,6 +108,27 @@ class QuantReferenceTest(unittest.TestCase):
         rows = [json.loads(line.split(" ", 1)[1]) for line in result.detail.splitlines()]
         self.assertEqual([row["width"] for row in rows], [1, 2, 4, 8])
 
+    def test_compile_uses_toolchain_env_and_run_uses_launch_env(self):
+        # DS41 run 10i: the launch env is an allowlist with no PATH, so compiling
+        # under it failed with "cannot execute 'cc1plus'" and every widened-route
+        # reference came back `unavailable`.
+        completed = [subprocess.CompletedProcess([], 0, "", ""),
+                     subprocess.CompletedProcess([], 0, q8_output(width=1), "")]
+        launch = {"OMP_NUM_THREADS": "48"}
+        with mock.patch.object(Path, "is_file", return_value=True), \
+             mock.patch.dict("os.environ", {"PATH": "/usr/bin:/bin"}), \
+             mock.patch.object(subprocess, "run", side_effect=completed) as run:
+            result = fixture.check_cpu_quant_suite(
+                Path("/build"), Path("/source"), quants=("Q8_0",),
+                ops=("MUL_MAT_ID",), widths=(1,), launch_env=launch)
+        self.assertEqual(result.status, "pass")
+        compile_env = run.call_args_list[0].kwargs["env"]
+        run_env = run.call_args_list[1].kwargs["env"]
+        self.assertEqual(compile_env.get("PATH"), "/usr/bin:/bin")
+        self.assertNotIn("PATH", run_env)
+        self.assertEqual(run_env["OMP_NUM_THREADS"], "48")
+        self.assertTrue(run_env["LD_LIBRARY_PATH"].startswith("/build/bin"))
+
     def test_single_expert_suite_passes_cli_mode(self):
         completed = [subprocess.CompletedProcess([], 0, "", ""),
                      subprocess.CompletedProcess([], 0,

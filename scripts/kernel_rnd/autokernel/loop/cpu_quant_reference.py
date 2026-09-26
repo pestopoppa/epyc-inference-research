@@ -268,7 +268,12 @@ def check_cpu_quant_suite(build_dir: Path, source_root: Path, *,
             command = ["c++", "-std=c++17", "-O2", "-I", str(source_root / "ggml/include"),
                        str(PROBE), "-L", str(lib_dir), "-Wl,-rpath," + str(lib_dir),
                        "-lggml-cpu", "-lggml-base", "-lggml", "-o", str(binary)]
-            built = subprocess.run(command, capture_output=True, text=True, timeout=120, env=env)
+            # Compile with the loop's own toolchain environment. The candidate launch env
+            # is an allowlist with no PATH, so gcc could not find cc1plus there (DS41 run
+            # 10i: every widened-route reference was `unavailable`). Only the probe RUN
+            # below must use the candidate's launch env.
+            built = subprocess.run(command, capture_output=True, text=True, timeout=120,
+                                   env=dict(os.environ))
             if built.returncode:
                 return QuantResult("unavailable", "CPU quant probe compile failed",
                                    built.stderr[-2000:])
