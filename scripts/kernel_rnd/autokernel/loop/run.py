@@ -3305,13 +3305,14 @@ def main(argv: list[str] | None = None) -> int:
             # confirmation; full-confirmed sub-floor positives may then enter the
             # same working accumulator as unscreened experimental source keeps.
             accumulate_valid_positive=experimental,
+            # Per accepted hypothesis, across iterations (loop.HYPOTHESIS_AUTHOR_ATTEMPTS).
+            author_attempts=args.hypothesis_author_attempts,
             validate_candidate=validate_pooled,
             formation_guard=lambda hypothesis, context: dispatch_guard.characterised_reason(
                 hypothesis, {**context, "epoch_sha256": epoch}),
             reserve_candidate=reserve_pooled,
             record_abandoned=record_abandoned_pooled,
             next_resume=(resume_queue[0].take if resume_queue[0] is not None else None),
-            author_attempts=args.hypothesis_author_attempts,
             champion_tree=args.worktree, branch=args.champion_branch,
             on_step=step_pooled)
 

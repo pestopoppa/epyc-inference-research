@@ -359,14 +359,14 @@ class Outcome:
     resumed_from: str | None = None
     resume_stage: str | None = None
     resume_checkpoints: list[dict] = field(default_factory=list)
-    # "lane_diff" when the candidate's paths were derived from the lane because the
-    # author's reply carried no report; `author_report_recovery` says why and what.
-    report_source: str | None = None
-    author_report_recovery: dict | None = None
     # PATCH_ROUNDS_EXHAUSTED / SCOPE_BLOCKED / HYPOTHESIS_RETIRED: the accepted
     # hypothesis's authoring state (class, attempts used/budget/remaining, and for a
     # scope block the route and rule that blocked it).
     hypothesis_pending: dict | None = None
+    # "lane_diff" when the candidate's paths were derived from the lane because the
+    # author's reply carried no report; `author_report_recovery` says why and what.
+    report_source: str | None = None
+    author_report_recovery: dict | None = None
 
     def to_attempt(self) -> dict:
         row = {"status": self.status, "turn_recorded_at": _now()}
@@ -407,11 +407,11 @@ class Outcome:
             row["resume_stage"] = self.resume_stage
         if self.resume_checkpoints:
             row["resume_checkpoints"] = [dict(ck) for ck in self.resume_checkpoints]
+        if self.hypothesis_pending is not None:
+            row["hypothesis_pending"] = dict(self.hypothesis_pending)
         if self.report_source is not None:
             row["report_source"] = self.report_source
             row["author_report_recovery"] = self.author_report_recovery
-        if self.hypothesis_pending is not None:
-            row["hypothesis_pending"] = dict(self.hypothesis_pending)
         for key in ("spawn_parent", "branch_id", "width", "depth"):
             if getattr(self, key) is not None:
                 row[key] = getattr(self, key)
