@@ -23,18 +23,41 @@ slot as well as the new 512 one; the arms differ only in placement.
 
 This script only sends HTTP requests. It starts, stops and signals nothing,
 and it refuses to run if a declared pool port is not answering /health.
+
+LOAD MODES (UFH-12 REPL-EMB-1.4, 2026-09-26). `--load-mode raw` (the default)
+is the Phase-0 method, unchanged: `per_port` threads per port POST straight to
+each embedder, so no scheduler is involved. `--load-mode scheduler` offers the
+same load (`per_port` x ports concurrent callers, the same text) THROUGH the
+pooled client and its scheduler (src/embedding_pool), so the busy-frontdoor
+neighbour cap from orchestration/embedding_pool_policy.yaml is exercised: while
+a frontdoor instance decodes, embedders on its NUMA nodes hold at most
+`neighbour_cap.max_in_flight` texts. The client's cache is bypassed so every
+call reaches an embedder. Scheduler mode additionally records, per S sample,
+the embedding throughput and the scheduler's grant counters, so the cap's
+throughput cost is visible next to the decode ratio. The G1 re-measure with
+the cap on is:
+
+    scripts/region-lock run --cpu-list 0-191 -- \
+      .venv/bin/python scripts/server/embedder_placement_gate.py --label post-cap \
+        --load-mode scheduler \
+        --out /mnt/raid0/llm/epyc-orchestrator/data/embedder_placement/post-cap-<date>.json
 """
 
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import statistics
+import sys
 import threading
 import time
 import urllib.request
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, Callable
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 POOL_PORTS = [8090, 8091, 8092, 8093, 8094, 8095]
 FD_PROMPT = (
@@ -118,16 +141,161 @@ class _Load:
             t.join(timeout=150)
 
 
-def g1(fd_ports: list[int], pairs: int, n_predict: int) -> dict:
+def _default_pool_client(ports: list[int]) -> Any:
+    """A pooled client + scheduler over `ports`, built from the repo's policy and the
+    stack's declared placement (scheduler mode only)."""
+    if str(_REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(_REPO_ROOT))
+    from src.embedding_pool.client import PooledEmbeddingClient
+    from src.embedding_pool.policy import load_policy
+    from src.embedding_pool.scheduler import EmbeddingScheduler
+    from src.embedding_pool.topology import live_topology
+
+    policy = load_policy()
+    topology = live_topology(policy.neighbour_cap.guarded_roles).restricted_to(ports)
+    return PooledEmbeddingClient(EmbeddingScheduler(topology, policy), policy=policy)
+
+
+class _SchedulerLoad:
+    """The same offered load as `_Load` (`per_port` x len(ports) concurrent callers, the
+    same text), but every call goes through the pooled client and its scheduler, so the
+    neighbour cap decides how many texts each embedder holds. Calls that find no
+    headroom within `admission_wait_s` count as `deferred` (the lexical-now outcome),
+    not as errors; anything else that fails is an error."""
+
+    def __init__(self, ports: list[int], per_port: int, *,
+                 client_factory: Callable[[list[int]], Any] | None = None,
+                 admission_wait_s: float = 30.0, warmup_s: float = 3.0) -> None:
+        self.ports, self.per_port = ports, per_port
+        self.client_factory = client_factory or _default_pool_client
+        self.admission_wait_s = admission_wait_s
+        self.warmup_s = warmup_s
+        self.stop = threading.Event()
+        self.done = 0
+        self.errors = 0
+        self.deferred = 0
+        self.error_samples: list[str] = []
+        self.stats_start: dict = {}
+        self.stats_end: dict = {}
+        self._lock = threading.Lock()
+        self._client: Any = None
+        self._ready = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._crash: BaseException | None = None
+
+    def _snapshot(self) -> dict:
+        try:
+            return self._client.scheduler.stats() if self._client is not None else {}
+        except Exception:  # noqa: BLE001
+            return {}
+
+    async def _worker(self) -> None:
+        from src.embedding_pool.client import EmbeddingUnavailable
+
+        while not self.stop.is_set():
+            try:
+                await self._client.embed_many([EMB_TEXT], use_cache=False, cancel_event=self.stop,
+                                              admission_wait_s=self.admission_wait_s, timeout_s=120.0)
+                with self._lock:
+                    self.done += 1
+            except EmbeddingUnavailable as exc:
+                with self._lock:
+                    if exc.reason == "cancelled" and self.stop.is_set():
+                        pass  # the sample ended; not a failure
+                    elif exc.reason == "saturated":
+                        self.deferred += 1
+                    else:
+                        self.errors += 1
+                        if len(self.error_samples) < 5:
+                            self.error_samples.append(str(exc))
+            except Exception as exc:  # noqa: BLE001 — counted, reported, never swallowed silently
+                with self._lock:
+                    self.errors += 1
+                    if len(self.error_samples) < 5:
+                        self.error_samples.append(f"{type(exc).__name__}: {exc}")
+
+    async def _main(self) -> None:
+        self._client = self.client_factory(self.ports)
+        try:
+            workers = [asyncio.ensure_future(self._worker())
+                       for _ in range(len(self.ports) * self.per_port)]
+            self._ready.set()
+            while not self.stop.is_set():
+                await asyncio.sleep(0.05)
+            # every in-flight call finishes (or times out) before the load reports done
+            await asyncio.gather(*workers, return_exceptions=True)
+        finally:
+            await self._client.aclose()
+
+    def _run(self) -> None:
+        try:
+            asyncio.run(self._main())
+        except BaseException as exc:  # noqa: BLE001 — surfaced by __exit__
+            self._crash = exc
+            self._ready.set()
+
+    def __enter__(self) -> "_SchedulerLoad":
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+        self._ready.wait(timeout=60)
+        if self._crash is not None:
+            raise SystemExit(f"scheduler load failed to start: {self._crash!r}")
+        time.sleep(self.warmup_s)  # let every server reach steady state before sampling
+        with self._lock:
+            self.done = 0
+            self.errors = 0
+            self.deferred = 0
+            self.stats_start = self._snapshot()
+        self.t0 = time.monotonic()
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.elapsed = time.monotonic() - self.t0
+        with self._lock:
+            self.stats_end = self._snapshot()
+        self.stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=150)
+        if self._crash is not None:
+            raise SystemExit(f"scheduler load crashed: {self._crash!r}")
+
+    def summary(self) -> dict:
+        start = self.stats_start.get("counters", {})
+        end = self.stats_end.get("counters", {})
+        return {
+            "texts": self.done,
+            "seconds": self.elapsed,
+            "texts_per_s": self.done / self.elapsed if self.elapsed else 0.0,
+            "deferred": self.deferred,
+            "errors": self.errors,
+            "counters_delta": {k: end.get(k, 0) - start.get(k, 0) for k in sorted(set(end) | set(start))},
+            "effective_caps_at_end": self.stats_end.get("effective_caps", {}),
+            "peak_in_flight": self.stats_end.get("peak_in_flight", {}),
+            "busy_at_end": self.stats_end.get("busy", {}),
+        }
+
+
+def _load_for(mode: str, **scheduler_kwargs: Any) -> Callable[[list[int], int], Any]:
+    if mode == "raw":
+        return _Load
+    if mode == "scheduler":
+        return lambda ports, per_port: _SchedulerLoad(ports, per_port, **scheduler_kwargs)
+    raise ValueError(f"unknown load mode {mode!r}")
+
+
+def g1(fd_ports: list[int], pairs: int, n_predict: int, load_factory: Callable[[list[int], int], Any] = _Load) -> dict:
     out: dict = {}
     for port in fd_ports:
         q, s = [], []
+        s_loads: list[dict] = []
         for _ in range(pairs):
             q.append(_decode_tps(port, n_predict))
-            with _Load(POOL_PORTS, 4) as load:
+            with load_factory(POOL_PORTS, 4) as load:
                 s.append(_decode_tps(port, n_predict))
             if load.errors:
                 raise SystemExit(f"G1 :{port}: {load.errors} embedding errors under load; refuse")
+            if hasattr(load, "summary"):
+                s_loads.append(load.summary())
         q.append(_decode_tps(port, n_predict))  # closing A of the ABA
         qq = [abs(b - a) / a for a, b in zip(q, q[1:])]
         ratios = [si / ((qa + qb) / 2) for si, qa, qb in zip(s, q, q[1:])]
@@ -138,45 +306,68 @@ def g1(fd_ports: list[int], pairs: int, n_predict: int) -> dict:
             "s_over_q_all": ratios,
             "aa_noise_floor_rel_median": statistics.median(qq),
         }
+        if s_loads:
+            out[str(port)]["s_embedding_load"] = s_loads
+            out[str(port)]["s_embed_texts_per_s_median"] = statistics.median(
+                x["texts_per_s"] for x in s_loads)
     return out
 
 
-def g2(window_s: float) -> dict:
+def g2(window_s: float, load_factory: Callable[[list[int], int], Any] = _Load) -> dict:
     res = {}
     for name, ports in (("one_port", POOL_PORTS[:1]), ("whole_pool", POOL_PORTS)):
-        with _Load(ports, 4) as load:
+        with load_factory(ports, 4) as load:
             time.sleep(window_s)
         if load.errors:
             raise SystemExit(f"G2 {name}: {load.errors} embedding errors; refuse")
         res[name] = {"texts": load.done, "seconds": load.elapsed, "texts_per_s": load.done / load.elapsed}
+        if hasattr(load, "summary"):
+            res[name]["load"] = load.summary()
     res["scaling_ratio"] = res["whole_pool"]["texts_per_s"] / res["one_port"]["texts_per_s"]
     return res
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--label", required=True, choices=("pre", "post"))
+    ap.add_argument("--label", required=True, choices=("pre", "post", "post-cap"))
     ap.add_argument("--out", required=True, type=Path)
     ap.add_argument("--fd-ports", default="8070,8080,8180")
     ap.add_argument("--pairs", type=int, default=6)
     ap.add_argument("--n-predict", type=int, default=256)
     ap.add_argument("--g2-window-s", type=float, default=60.0)
+    ap.add_argument("--load-mode", choices=("raw", "scheduler"), default="raw",
+                    help="raw = Phase-0 method (straight HTTP); scheduler = through the pooled "
+                         "client + neighbour cap (REPL-EMB-1.4)")
+    ap.add_argument("--sched-admission-wait-s", type=float, default=30.0,
+                    help="scheduler mode: how long a load call waits for headroom before it "
+                         "counts as deferred")
     args = ap.parse_args()
     fd_ports = [int(p) for p in args.fd_ports.split(",")]
     down = [p for p in POOL_PORTS + fd_ports if not _healthy(p)]
     if down:
         raise SystemExit(f"refusing: ports not healthy: {down}")
-    record = {
+    load_factory = _load_for(args.load_mode, admission_wait_s=args.sched_admission_wait_s)
+    record: dict = {
         "schema": "epyc.embedder_placement_gate.v1",
         "label": args.label,
+        "load_mode": args.load_mode,
         "started_at": datetime.now(UTC).isoformat(),
-        "g2_pool_scaling": g2(args.g2_window_s),
-        "g1_frontdoor_decode": g1(fd_ports, args.pairs, args.n_predict),
-        "finished_at": datetime.now(UTC).isoformat(),
     }
+    if args.load_mode == "scheduler":
+        if str(_REPO_ROOT) not in sys.path:
+            sys.path.insert(0, str(_REPO_ROOT))
+        from src.embedding_pool.policy import load_policy
+        from src.embedding_pool.topology import live_topology
+
+        policy = load_policy()
+        record["scheduler_policy"] = policy.as_dict()
+        record["pool_topology"] = live_topology(policy.neighbour_cap.guarded_roles).describe()
+    record["g2_pool_scaling"] = g2(args.g2_window_s, load_factory)
+    record["g1_frontdoor_decode"] = g1(fd_ports, args.pairs, args.n_predict, load_factory)
+    record["finished_at"] = datetime.now(UTC).isoformat()
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(record, indent=2) + "\n")
-    print(json.dumps({k: record[k] for k in ("label", "g2_pool_scaling")}, indent=2))
+    print(json.dumps({k: record[k] for k in ("label", "load_mode", "g2_pool_scaling")}, indent=2))
     for port, row in record["g1_frontdoor_decode"].items():
         print(f"G1 :{port} S/Q median {row['s_over_q_median']:.3f}  A/A floor {row['aa_noise_floor_rel_median']:.3%}")
     return 0

@@ -1,0 +1,73 @@
+# Embedding pool policy — UFH-12 REPL-EMB-1.1 (pooled client) + REPL-EMB-1.4 (in-flight cap).
+#
+# POLICY, NOT PLACEMENT. Nothing here names a port, a cpuset or a NUMA node.
+# Which embedder sits on which node is derived from launch_manifest.yaml
+# `embedding.placement` (stack_manifest.EMBEDDING_PLACEMENT); which serving
+# instance sits on which nodes is derived from stack_topology.yaml
+# `numa_config` (stack_numa.NUMA_CONFIG); per-instance slots come from the
+# embedding pool recipe (`-np`). This file only says how to USE that layout.
+#
+# Loaded by src/embedding_pool/policy.py. Unknown keys are rejected.
+# The whole pool is behind the `repl_embedding_pool` feature flag (default OFF).
+#
+# Selection rule (operator decision D1, 2026-09-26):
+#   an idle instance anywhere -> else the instance sharing the requesting
+#   model's hardware -> else answer lexically now and index later.
+# There is NO hash-vector fallback: when no instance can take the work the
+# client raises EmbeddingUnavailable and the caller degrades to a LABELLED
+# lexical result.
+
+version: 1
+
+client:
+  # httpx connect timeout per request (s).
+  connect_timeout_s: 1.0
+  # Read/write/pool timeout for one list-batched /embedding request (s). One
+  # request carries at most `slots` texts of <= 512 tokens each.
+  request_timeout_s: 15.0
+  # Wall-clock bound for one embed_many() call, retries included (s).
+  call_timeout_s: 30.0
+  # How long a call may wait for pool headroom before giving up with
+  # reason "saturated" (s). 0 = interactive: no headroom -> lexical now.
+  # Batch/index callers pass their own wait per call.
+  admission_wait_s: 0.0
+  # A failed instance (transport error, timeout, 5xx, malformed reply) is
+  # skipped for this long before it is tried again (s).
+  failure_backoff_s: 2.0
+  # Degenerate-vector guard: a returned vector with an L2 norm below this, a
+  # non-finite component or the wrong dimension is rejected, never cached.
+  min_norm: 1.0e-6
+  # Expected embedding dimension. null = lock to the first valid reply.
+  embedding_dim: 1024
+  # sha256 LRU cache (key = model id + text), entries.
+  cache_max_entries: 20000
+  # Poll interval while waiting for headroom or a busy-state change (s).
+  poll_interval_s: 0.02
+
+neighbour_cap:
+  # REPL-EMB-1.4 (operator decision D3, 2026-09-26): while a guarded serving
+  # instance is decoding, embedder instances on any NUMA node it occupies take
+  # at most `max_in_flight` texts at once (instead of their full slot count).
+  enabled: true
+  # Roles whose instances are protected. Their node sets are derived from
+  # NUMA_CONFIG cpusets.
+  guarded_roles: [frontdoor]
+  # In-flight texts allowed on an embedder next to a busy guarded instance.
+  # 0 = never use it while its neighbour decodes.
+  max_in_flight: 1
+  # Where "busy" comes from, in order. `ledger` = the orchestrator's own
+  # dispatch ledger (per-region CPU locks held during decode; positive-only,
+  # because traffic that bypasses the orchestrator never takes a lock);
+  # `slots` = the instance's live /slots (is_processing), which sees all
+  # traffic. A port the ledger already marks busy is not probed.
+  busy_sources: [ledger, slots]
+  # Busy snapshot lifetime (s). Decode lasts seconds; this bounds how late
+  # the cap engages after a decode starts.
+  busy_ttl_s: 0.25
+  # Timeout for one /slots probe (s).
+  slots_timeout_s: 0.5
+  # A guarded instance whose state cannot be read counts as busy.
+  unknown_is_busy: true
+  # After idle instances and the requester's own hardware, may capped
+  # instances next to OTHER busy instances take work up to the cap?
+  use_capped_foreign_instances: true

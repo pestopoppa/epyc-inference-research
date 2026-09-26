@@ -242,6 +242,10 @@ _FEATURE_REGISTRY: tuple[FeatureSpec, ...] = (
     # REPL tool dispatch chokepoint (src/repl_environment/context.py). The
     # typed arm is fail-open: any decline keeps the model-provided arguments.
     FeatureSpec("typed_decisions_tool_args", False, False, "TYPED_DECISIONS_TOOL_ARGS", "TD-4: closed-set typed selection of tool-call arguments; fail-open to the model-provided arguments"),
+    # UFH-12 REPL-EMB-1.1/1.4: placement-aware pooled embedding client with the
+    # neighbour in-flight cap (src/embedding_pool/). Default OFF in BOTH test and
+    # prod; with it off the factories return None and no consumer is migrated.
+    FeatureSpec("repl_embedding_pool", False, False, "REPL_EMBEDDING_POOL", "UFH-12 REPL-EMB-1.1/1.4: pooled embedding client with placement-aware scheduling and the busy-frontdoor neighbour cap"),
     # Debug/Development
     FeatureSpec("mock_mode", True, False, "MOCK_MODE", "Mock mode for safety"),
 )
@@ -615,6 +619,11 @@ class Features:
     # dispatch chokepoint. Default OFF in both test and prod; fail-open — any
     # decline keeps the model-provided arguments.
     typed_decisions_tool_args: bool = False
+
+    # UFH-12 REPL-EMB-1.1/1.4: pooled embedding client (src/embedding_pool/).
+    # Default OFF in both test and prod; get_pooled_embedder()/get_sync_embedder()
+    # return None while off, so no live path changes until a consumer migrates.
+    repl_embedding_pool: bool = False
 
     # RTE-Prefix (repl-turn-efficiency): render fixed prompt sections (task,
     # instruction) BEFORE per-turn-mutating ones (state, context,

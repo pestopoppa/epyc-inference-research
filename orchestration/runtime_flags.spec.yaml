@@ -89,6 +89,7 @@ flags:
   react_mode: baseline
   reasoning_length_alarm: baseline
   repl: baseline
+  repl_embedding_pool: baseline
   restricted_python: baseline
   resume_tokens: baseline
   review_before_commit_consult: baseline
