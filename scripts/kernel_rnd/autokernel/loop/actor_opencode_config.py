@@ -310,7 +310,8 @@ def build_actor_config(*, role: str, lane: Path, profiles: Sequence[Path] = (),
                        lane_guard: bool = False,
                        build_dir: str | Path | None = None,
                        model: str | None = None, context_limit: int = 0,
-                       output_limit: int = 0, thinking: str = "default") -> dict:
+                       output_limit: int = 0, thinking: str = "default",
+                       author_sandbox: bool = False) -> dict:
     """The opencode config (a dict ready for ``json.dump``) for one actor run.
 
     By default the seat's guidance is ADDED to opencode's own system prompt through
@@ -376,7 +377,8 @@ def build_actor_config(*, role: str, lane: Path, profiles: Sequence[Path] = (),
 
     top = seat_permission(role, lane=lane, build_dir=build_dir,
                           trim_instructions=trim_instructions, trim_tools=trim_tools,
-                          lane_guard=lane_guard, keep_task=fan_out, edit_rule=False)
+                          lane_guard=lane_guard, keep_task=fan_out, edit_rule=False,
+                          author_sandbox=author_sandbox)
     limits = model_block(model, context_limit=context_limit, output_limit=output_limit,
                          thinking=thinking)
     return {
@@ -555,6 +557,14 @@ READ_ONLY_DENY = (
 #: agents (plan/explore/compaction) whose defaults deny it.
 AUTHOR_EDIT_GUARD = {"../*": "deny", ".git/*": "deny"}
 
+#: `ak-check` (operator 2026-09-26, `ak_check.py`): the author's ONE sanctioned check, a
+#: compile / op test of its patch in a loop-allocated scratch dir that refuses while the
+#: campaign measures. The author gets exactly these command texts as allows, appended
+#: AFTER every deny so they are the last match (everything else stays denied: `gcc ...`,
+#: `ak-check; gcc ...` parse into separate commands). Planner and critic get the denies.
+AK_CHECK_ALLOW = ("ak-check", "ak-check --op-test")
+AK_CHECK_DENY = ("ak-check*", "* ak-check*", "*/ak-check*", "*ak_check*")
+
 #: Roles the plain config knows (the bounded config has no critic seat).
 PLAIN_ROLES = ("planner", "author", "critic")
 
@@ -610,7 +620,7 @@ def seat_permission(role: str, *, lane: Path | None = None,
                     build_dir: str | Path | None = None,
                     trim_instructions: bool = False, trim_tools: bool = False,
                     lane_guard: bool = False, keep_task: bool = False,
-                    edit_rule: bool = True) -> dict:
+                    edit_rule: bool = True, author_sandbox: bool = False) -> dict:
     """The permission block OAB-10/11 add, for a TOP-LEVEL `permission` key.
 
     Denies only, except `external_directory` allows for the anchor's build dirs, which
@@ -643,18 +653,24 @@ def seat_permission(role: str, *, lane: Path | None = None,
         permission["bash"] = bash
         if edit_rule:
             permission["edit"] = dict(AUTHOR_EDIT_GUARD) if role == "author" else "deny"
+    if author_sandbox:
+        bash = permission.setdefault("bash", {})
+        for pattern in (AK_CHECK_ALLOW if role == "author" else AK_CHECK_DENY):
+            bash.pop(pattern, None)   # re-inserted LAST: the last match wins
+            bash[pattern] = "allow" if role == "author" else "deny"
     return permission
 
 
 def seat_label(base: str, *, trim_instructions: bool = False, trim_tools: bool = False,
                lane_guard: bool = False, context_limit: int = 0, output_limit: int = 0,
-               concise: bool = False, budget_s: int = 0, thinking_off: bool = False) -> str:
+               concise: bool = False, budget_s: int = 0, thinking_off: bool = False,
+               author_sandbox: bool = False) -> str:
     """`plain` / `bounded` plus one suffix per knob that is on (free text in VB-AK-SEAT).
     OAB-22/23 add `+ctx<C>+out<O>`, `+concise` and `+budget<B>s`; OAB-24 adds
     `+think-off` (all off: unchanged)."""
     return (base + "".join(suffix for on, suffix in (
         (trim_instructions, "+trim-instr"), (trim_tools, "+trim-tools"),
-        (lane_guard, "+lane-guard")) if on)
+        (lane_guard, "+lane-guard"), (author_sandbox, "+ak-check")) if on)
         + limits_label(context_limit=context_limit, output_limit=output_limit)
         + ("+think-off" if thinking_off else "")
         + ("+concise" if concise else "") + (f"+budget{budget_s}s" if budget_s else ""))
@@ -662,7 +678,7 @@ def seat_label(base: str, *, trim_instructions: bool = False, trim_tools: bool =
 
 def build_plain_config(*, role: str, lane: Path, build_dir: str | Path | None = None,
                        trim_instructions: bool = False, trim_tools: bool = False,
-                       lane_guard: bool = False,
+                       lane_guard: bool = False, author_sandbox: bool = False,
                        author_note_path: Path | None = None,
                        model: str | None = None, context_limit: int = 0,
                        output_limit: int = 0, thinking: str = "default") -> dict:
@@ -675,7 +691,8 @@ def build_plain_config(*, role: str, lane: Path, build_dir: str | Path | None = 
     `thinking="off"` (OAB-24) adds `model_thinking(model, "off")`."""
     permission = seat_permission(role, lane=lane, build_dir=build_dir,
                                  trim_instructions=trim_instructions,
-                                 trim_tools=trim_tools, lane_guard=lane_guard)
+                                 trim_tools=trim_tools, lane_guard=lane_guard,
+                                 author_sandbox=author_sandbox)
     note = trim_instructions and role == "author" and author_note_path is not None
     config: dict = {"$schema": "https://opencode.ai/config.json", **SNAPSHOT_OFF,
                     **model_block(model, context_limit=context_limit,
@@ -701,7 +718,7 @@ def write_plain_config(path: Path, **kw) -> Path:
     return path
 
 
-__all__ = ["actor_instructions", "AGENT_NAMES", "DEFAULT_AUTHOR_OUTPUT_LIMIT",
+__all__ = ["actor_instructions", "AGENT_NAMES", "AK_CHECK_ALLOW", "AK_CHECK_DENY", "DEFAULT_AUTHOR_OUTPUT_LIMIT",
            "DEFAULT_AUTHOR_THINKING", "THINKING_CHOICES", "THINKING_OFF_OPTIONS",
            "model_block", "model_thinking",
            "DEFAULT_CONTEXT_LIMIT", "DEFAULT_OUTPUT_LIMIT", "DEFAULT_PLANNER_OUTPUT_LIMIT", "limits_label", "model_limits", "AUTHOR_EDIT_GUARD",

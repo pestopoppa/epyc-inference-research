@@ -38,6 +38,7 @@ from . import (accumulate, actors, anchor, archive, bench, champion, claim, gate
                integrity, heldout_serving, lineage_beliefs, pipeline, pool, production, status, surface_fold,
                surface_validation)
 from . import actor_opencode_config
+from . import ak_check
 from . import resume as resume_mod
 
 
@@ -257,6 +258,29 @@ def _actor_knobs(args) -> dict[str, bool]:
     return {"trim_instructions": args.actor_trim_instructions == "on",
             "trim_tools": args.actor_trim_tools == "on",
             "lane_guard": args.actor_lane_guard == "on"}
+
+
+def _actor_sandbox(args) -> dict[str, bool]:
+    """`--actor-author-sandbox` (operator 2026-09-26) as the ActorSeat field: the author
+    may run `ak-check`; planner and critic configs deny it."""
+    return {"author_sandbox": getattr(args, "actor_author_sandbox", "off") == "on"}
+
+
+def _sandbox_scratch(args):
+    """The scratch registry the author sandbox allocates its per-iteration build dir
+    from, or None: sandbox off, or no `scratch.py` in this tree (the registry lands with
+    lane/ak-scratch-20260926), in which case the author sandbox stays off."""
+    if not _actor_sandbox(args)["author_sandbox"]:
+        return None
+    try:
+        from . import scratch
+    except ImportError:
+        return None
+    registry = scratch.from_args(args, root=Path(args.worker_root).parent / "scratch",
+                                 owner={"worker_root": str(args.worker_root),
+                                        "pid": os.getpid()})
+    registry.sweep()
+    return registry
 
 
 def _actor_limits(args) -> dict[str, int]:
@@ -841,6 +865,14 @@ def main(argv: list[str] | None = None) -> int:
                              "anchor SOURCE tree, every write for planner/critic and out-of-lane "
                              "edits for the author. The loop measures on this CPU, so an actor's "
                              "build is contamination, not help (default: %(default)s)")
+    parser.add_argument("--actor-author-sandbox", choices=("on", "off"), default="on",
+                        help="opencode author ONLY (operator 2026-09-26): the author may run "
+                             "`ak-check` (compile check; `--op-test` relinks libggml-cpu and runs "
+                             "test-backend-ops vs the CPU reference) in a per-iteration scratch "
+                             "dir, niced and pinned, refused while any tail measures; its prompt "
+                             "says to fix every error before replying. Planner/critic configs "
+                             "deny it. Off = the historical seat byte for byte "
+                             "(default: %(default)s)")
     parser.add_argument("--actor-belief-context", choices=actors.BELIEF_CONTEXT_MODES,
                         default="on",
                         help="planner only: read the Vidya claims (ROOT ledger, via "
@@ -3215,6 +3247,14 @@ def main(argv: list[str] | None = None) -> int:
         elif args.resume == "off":
             print("resume    off (--resume off): checkpointed work is not scanned", flush=True)
 
+        sandbox_scratch = _sandbox_scratch(args)
+        # Effective only with an allocator: without one the seat is the historical seat.
+        sandbox_seat = {"author_sandbox": sandbox_scratch is not None}
+
+        def sandbox_for(worker):
+            return (ak_check.scratch_provider(sandbox_scratch, worker.name)
+                    if sandbox_scratch is not None else None)
+
         def make_planner(worker):
             if screen_confirmation:
                 return cpu_screen.RetainedPlanner(screen_confirmation, worker, screen_prepared["launch"])
@@ -3223,6 +3263,7 @@ def main(argv: list[str] | None = None) -> int:
                                            should_stop=should_stop,
                                            belief_context=args.actor_belief_context,
                                            belief_root=args.belief_root_repo,
+                                           sandbox_scratch=sandbox_for(worker),
                                            seat=actors.ActorSeat(
                                                bounded=args.actor_seat == "bounded",
                                                fan_out=args.actor_fan_out,
@@ -3230,7 +3271,7 @@ def main(argv: list[str] | None = None) -> int:
                                                context_mode=args.actor_context_mode,
                                                **_actor_knobs(args), **_actor_limits(args),
                                                **_actor_budgets(args),
-                                               **_actor_thinking(args)))
+                                               **_actor_thinking(args), **sandbox_seat))
             return (runtime_recovery.PendingPlanner(ordinary, pending_slot)
                     if pending_pair is not None else ordinary)
 
@@ -3241,6 +3282,7 @@ def main(argv: list[str] | None = None) -> int:
                                       execute=True)
         lanes_by_name.update({lane.name: lane for lane in pooled_lanes})
         return pool.drive(
+            author_sandbox=sandbox_seat["author_sandbox"], scratch=sandbox_scratch,
             commit=commit_pooled,
             reset=reset_retained,
             workers=pooled_lanes,
@@ -3251,7 +3293,7 @@ def main(argv: list[str] | None = None) -> int:
                     workspace=worker.worktree, backend=critic_backend,
                     timeout_s=args.actor_timeout_s, should_stop=should_stop,
                     seat=actors.ActorSeat(bounded=False, **_actor_knobs(args),
-                                          **_actor_limits(args)))),
+                                          **_actor_limits(args), **sandbox_seat))),
             build_context=build_context, make_gate=gate_for,
             make_measure=measure_for, record=record_pooled,
             iterations=(args.iterations or None), should_stop=should_stop,
