@@ -245,12 +245,39 @@ class ActorSeat:
     #: OAB-24: "off" sends `chat_template_kwargs: {"enable_thinking": false}` on every
     #: request of an AUTHOR call (its per-call config's model `options`; see
     #: `actor_opencode_config.model_thinking`). Planner and critic calls never carry it.
-    #: "default" here (the historical config, byte for byte); run.py defaults it to "off".
+    #: "medium" (operator 2026-09-26) sends `{"enable_thinking": true, "reasoning_effort":
+    #: "medium"}` the same way. "default" here (the historical config, byte for byte);
+    #: run.py defaults it to "medium".
     author_thinking: str = "default"
+    #: Operator 2026-09-26: append `AUTHOR_ACTION_RULE` to the AUTHOR prompt (opencode
+    #: only). Off here (the historical prompt, byte for byte); run.py defaults it on.
+    author_action_rule: bool = False
 
     def thinking_for(self, role: str) -> str:
         """The reasoning switch for one call of `role`: the author's knob, else default."""
         return self.author_thinking if role == "author" else "default"
+
+    def for_author(self, *, thinking: str | None = None, context_limit: int | None = None,
+                   output_limit: int | None = None) -> "ActorSeat":
+        """This seat with explicit per-call AUTHOR values (None keeps the seat's own).
+
+        Per-author injection (operator 2026-09-26, best-of-N authoring): each concurrent
+        author may run its own reasoning mode and its own share of the pool, e.g. N=2 as
+        thinking off + medium at context 90,112 / output 16,384, while the single-author
+        path keeps the run's defaults. The config builders already take every value per
+        call; this only threads them through the seat the call is made with."""
+        from . import actor_opencode_config as seat_config
+        if thinking is not None and thinking not in seat_config.THINKING_CHOICES:
+            raise ValueError(f"thinking must be one of {seat_config.THINKING_CHOICES}, "
+                             f"got {thinking!r}")
+        changes: dict[str, Any] = {}
+        if thinking is not None:
+            changes["author_thinking"] = thinking
+        if context_limit is not None:
+            changes["context_limit"] = int(context_limit)
+        if output_limit is not None:
+            changes["author_output_limit"] = int(output_limit)
+        return dataclasses.replace(self, **changes)
 
     @property
     def knobs(self) -> dict[str, bool]:
@@ -280,7 +307,9 @@ class ActorSeat:
         return {**self.knobs, **self.limits_for(role),
                 "concise": self.concise and role in ("planner", "author"),
                 "budget_s": self.budget_for(role),
-                "thinking_off": self.thinking_for(role) == "off"}
+                "thinking": ("" if self.thinking_for(role) == "default"
+                             else self.thinking_for(role)),
+                "action_rule": self.author_action_rule and role == "author"}
 
 
 def _profile_dirs(context: Mapping[str, Any]) -> tuple[Path, ...]:
@@ -940,6 +969,7 @@ def _budgets_of(env: Mapping[str, str] | None, budget_s: float | None,
         "concise": bool(applied.get("concise", False)),
         # OAB-24: the reasoning switch the call's config applied ("default" = none).
         "thinking": applied.get("thinking", "default"),
+        "action_rule": bool(applied.get("action_rule", False)),
         **({"error": applied["error"]} if "error" in applied else {}),
         "budget_s": budget_s or 0,
         "budget_exhausted": budget_exhausted,
@@ -2296,6 +2326,42 @@ CONCISE_RULE = ("Be concise: derive each fact once; reuse results instead of re-
                 "keep analysis under ~4,000 tokens before replying; the reply is the JSON "
                 "object only: no preamble, no restated plan, no draft you then replace.")
 
+#: Operator 2026-09-26 (`ActorSeat.author_action_rule`, `--actor-author-action-rule`):
+#: appended to the AUTHOR prompt of an opencode call, after `CONCISE_RULE`. DS41 run 10g's
+#: author (27B, thinking off) wrote five AVX-512 patches the critic rejected: intrinsics
+#: GCC does not have (_mm512_set_m128, _mm512_extractf128_ps, _mm512_inserti128_si512),
+#: wrong arity, block_q8_2_x4 offset errors, the file's own Q4Bits/BlockPermuter idiom
+#: ignored, and edits to the dispatch the admitted scope forbids. With thinking uncapped
+#: it deliberated 74k tokens and never edited. Off = the historical prompt, byte for byte.
+AUTHOR_ACTION_RULE = (
+    "Author action rule: think briefly, then act. Work in small verified steps: read the "
+    "exact lines you will change, edit them immediately, then re-read the edited region to "
+    "verify it. Never re-derive a data layout or formula already visible in the source: "
+    "grep for it and copy the existing idiom (for AVX-512, this tree's own Q4Bits and "
+    "BlockPermuter in iqk_common.h). Use only intrinsics you have seen used in this tree or "
+    "can grep in the GCC headers under /usr/lib/gcc/x86_64-linux-gnu/15/include/; never "
+    "invent an intrinsic name. Keep every function signature consistent with its callers. "
+    "Stay strictly inside the admitted scope: do not edit dispatch or selector code the "
+    "scope refuses. If the change is not feasible inside the scope, abstain with the "
+    "reason instead of writing a partial patch.")
+#: Operator 2026-09-26: with a known anchor, the rule also points the author at GitNexus
+#: (inserted after the first sentence). The lane is anchor + edits, so the anchor tree's
+#: index is valid for navigation; the repo is named by the anchor worktree's directory
+#: name (`actor_opencode_config.gitnexus_repo_for`). No anchor build dir: omitted.
+AUTHOR_GITNEXUS_RULE = (
+    "Use GitNexus to find definitions, callers and idioms instead of re-deriving them: "
+    "`gitnexus context <symbol> --repo {repo}` and `gitnexus query \"<concept>\" --repo "
+    "{repo}`; then read only the lines you will change.")
+_ACTION_RULE_HEAD = "Author action rule: think briefly, then act. "
+
+
+def author_action_rule(gitnexus_repo: str | None = None) -> str:
+    """`AUTHOR_ACTION_RULE`, with the GitNexus sentence when the anchor repo is known."""
+    if not gitnexus_repo:
+        return AUTHOR_ACTION_RULE
+    return (_ACTION_RULE_HEAD + AUTHOR_GITNEXUS_RULE.format(repo=gitnexus_repo) + " "
+            + AUTHOR_ACTION_RULE[len(_ACTION_RULE_HEAD):])
+
 
 _HYPOTHESIS_TASK = """You are proposing ONE kernel optimisation for llama.cpp on {platform}.
 
@@ -2398,6 +2464,8 @@ def _budget_env(seat: "ActorSeat | None", role: str) -> dict[str, str]:
                                "concise": seat.concise and role in ("planner", "author")}
     if seat.thinking_for(role) != "default":
         applied["thinking"] = seat.thinking_for(role)
+    if seat.author_action_rule and role == "author":
+        applied["action_rule"] = True
     if not any(applied.values()):
         return {}
     return {SEAT_ENV_BUDGETS: json.dumps(applied, sort_keys=True)}
@@ -2422,6 +2490,7 @@ def _seat_call(seat: "ActorSeat | None", backend: Backend, role: str, workspace:
     if any(label.values()):
         env[SEAT_ENV_ARM] = seat_config.seat_label("plain", **label)
     env.update(_budget_env(seat, role))
+    env.update(seat_config.output_ceiling_env(limits.get("output_limit", 0)))
     if knobs.get("trim_instructions"):
         env.update(seat_config.TRIM_ENV)
     target = Path(workspace).parent / f"actor-opencode-plain-{role}.json"
@@ -2528,6 +2597,7 @@ class AgentPlanner:
         trim = seat_config.TRIM_ENV if self.seat.trim_instructions else {}
         return (dataclasses.replace(self.backend, agent=seat_config.AGENT_NAMES[role]),
                 {**trim, "OPENCODE_CONFIG": str(path), **_budget_env(self.seat, role),
+                 **seat_config.output_ceiling_env(self.seat.output_limit_for(role)),
                  SEAT_ENV_ARM: seat_config.seat_label("bounded",
                                                       **self.seat.label_knobs(role)),
                  SEAT_ENV_FAN_OUT: "1" if self.seat.fan_out else "0",
@@ -2538,6 +2608,16 @@ class AgentPlanner:
         if self.seat is None or not self.seat.concise or self.backend.kind != "opencode":
             return prompt
         return prompt + "\n\n" + CONCISE_RULE
+
+    def _action_rule(self, prompt: str, context: Mapping[str, Any]) -> str:
+        """`author_action_rule` after the author task (opencode only; off = byte-identical),
+        naming the anchor's GitNexus repo when the target has an anchor build dir."""
+        if (self.seat is None or not self.seat.author_action_rule
+                or self.backend.kind != "opencode"):
+            return prompt
+        from . import actor_opencode_config as seat_config
+        repo = seat_config.gitnexus_repo_for(_anchor_build_dir(context))
+        return prompt + "\n\n" + author_action_rule(repo)
 
     def _budget_kw(self, role: str) -> dict[str, Any]:
         """OAB-23: the per-call wall budget for `role` (opencode only; none when 0)."""
@@ -2729,6 +2809,7 @@ class AgentPlanner:
             "abstaining is a correct science result. Make no edits and reply instead with:\n"
             '{"abstain": "<specific reason the hypothesis is infeasible>"}')
         prompt = self._concise(prompt)
+        prompt = self._action_rule(prompt, context)
         prompt = self._guarded("author", prompt, context)
         backend, env = self._seated("author", context)
         env = self._sealed(prompt, bundle, env)

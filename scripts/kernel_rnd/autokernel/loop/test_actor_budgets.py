@@ -568,11 +568,11 @@ class CliKnobs(unittest.TestCase):
 
     def test_defaults_and_mapping(self):
         from autokernel.loop import run
-        self.assertEqual((aoc.DEFAULT_CONTEXT_LIMIT, aoc.DEFAULT_OUTPUT_LIMIT), (131072, 8192))
+        self.assertEqual((aoc.DEFAULT_CONTEXT_LIMIT, aoc.DEFAULT_OUTPUT_LIMIT), (180224, 8192))
         args = self._args()
         self.assertEqual(run._actor_limits(args),
-                         {"context_limit": 131072, "output_limit": 8192,
-                          "planner_output_limit": 16384, "author_output_limit": 32768})
+                         {"context_limit": 180224, "output_limit": 8192,
+                          "planner_output_limit": 16384, "author_output_limit": 40960})
         self.assertEqual(run._actor_budgets(args), {"concise": True, "planner_budget_s": 2700,
                                                     "author_budget_s": 0})
         self.assertIsNone(run._actor_budget_error(args))

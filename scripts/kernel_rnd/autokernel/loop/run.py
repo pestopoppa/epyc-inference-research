@@ -271,10 +271,11 @@ def _actor_limits(args) -> dict[str, int]:
             "author_output_limit": int(args.actor_author_output_limit)}
 
 
-def _actor_thinking(args) -> dict[str, str]:
-    """OAB-24: the author-only reasoning switch as an ActorSeat field. Only the
-    planner/author seat takes it; the critic seat never does."""
-    return {"author_thinking": str(args.actor_author_thinking)}
+def _actor_thinking(args) -> dict[str, Any]:
+    """OAB-24: the author-only reasoning switch and action rule as ActorSeat fields.
+    Only the planner/author seat takes them; the critic seat never does."""
+    return {"author_thinking": str(args.actor_author_thinking),
+            "author_action_rule": getattr(args, "actor_author_action_rule", "off") == "on"}
 
 
 def _effective_output_limits(args) -> dict[str, int]:
@@ -302,15 +303,24 @@ def _actor_budget_error(args) -> str | None:
     context = int(args.actor_context_limit)
     if not context:
         return None
-    # opencode compacts at context - output; an output limit at or past half the
-    # context leaves the compaction threshold under the output it must make room for.
+    # Operator pool budget (2026-09-26): a FULL unified pool plus MTP crashes
+    # llama-server, so the context cap leaves >= 16k of :8083's unified pool free for
+    # the other slots, and opencode (which compacts at context - output) keeps >= 32k
+    # of context headroom under every role's output limit.
+    cap = actor_opencode_config.MAX_CONTEXT_LIMIT
+    if context > cap:
+        return (f"--actor-context-limit ({context}) must be <= {cap} (the "
+                f"{actor_opencode_config.POOL_TOKENS}-token unified pool minus "
+                f"{actor_opencode_config.POOL_RESERVE} kept free: a full pool plus MTP "
+                "crashes llama-server)")
+    headroom = actor_opencode_config.MIN_COMPACTION_HEADROOM
     for flag in ("actor_output_limit", "actor_planner_output_limit",
                  "actor_author_output_limit"):
         output = int(getattr(args, flag))
-        if output and output * 2 >= context:
-            return (f"--{flag.replace('_', '-')} ({output}) must be below half of "
-                    f"--actor-context-limit ({context}): opencode compacts at "
-                    "context - output and needs that headroom")
+        if output and output >= context - headroom:
+            return (f"--{flag.replace('_', '-')} ({output}) must be below "
+                    f"--actor-context-limit - {headroom} ({context - headroom}): "
+                    "opencode compacts at context - output and needs that headroom")
     return None
 
 
@@ -861,7 +871,8 @@ def main(argv: list[str] | None = None) -> int:
                              "without it (0) a config-only model NEVER compacts proactively "
                              "and DS41 run 10's planner reached 183,710 of :8083's 196,608 "
                              "unified-pool tokens (full pool + MTP crashes the server). "
-                             "Default leaves the other np4 slots >=~45k (default: %(default)s)")
+                             "At most 196608 - 16384 so >=16k of the pool stays free for the "
+                             "other slots (operator 2026-09-26) (default: %(default)s)")
     parser.add_argument("--actor-output-limit", type=int,
                         default=actor_opencode_config.DEFAULT_OUTPUT_LIMIT,
                         help="opencode planner/author/critic (OAB-23): `limit.output`, sent as "
@@ -879,18 +890,29 @@ def main(argv: list[str] | None = None) -> int:
                              "--actor-output-limit). A file-write tool call's arguments are "
                              "output tokens; DS41 run 10b's author ended on one 8,192-token "
                              "step with no report (failure_class=output_capped_empty). Must "
-                             "stay below half of --actor-context-limit "
-                             "(default: %(default)s)")
+                             "stay below --actor-context-limit - 32768; above 32000 the call "
+                             "raises opencode's own ceiling (OPENCODE_EXPERIMENTAL_OUTPUT_"
+                             "TOKEN_MAX) (default: %(default)s)")
     parser.add_argument("--actor-author-thinking",
                         choices=actor_opencode_config.THINKING_CHOICES,
                         default=actor_opencode_config.DEFAULT_AUTHOR_THINKING,
-                        help="opencode author ONLY (OAB-24, operator 2026-09-25): 'off' sends "
-                             "chat_template_kwargs {enable_thinking: false} on every request "
-                             "of an authoring call (per-call config, model options); the "
-                             "planner and critic keep the server's default reasoning. DS41 "
-                             "run 10c's author decoded 74,288 tokens in 2,700 s re-deriving "
-                             "a layout in <think> and made zero edits. 'default' = the "
-                             "historical config byte for byte (default: %(default)s)")
+                        help="opencode author ONLY (OAB-24): 'medium' (operator 2026-09-26) "
+                             "sends chat_template_kwargs {enable_thinking: true, "
+                             "reasoning_effort: medium} on every request of an authoring call "
+                             "(per-call config, model options); 'off' sends {enable_thinking: "
+                             "false}. The planner and critic keep the server's default "
+                             "reasoning. Thinking uncapped, DS41 run 10c's author decoded "
+                             "74,288 tokens re-deriving a layout and made zero edits; "
+                             "thinking off (run 10g) it edited but wrote broken AVX-512. "
+                             "'default' = the historical config byte for byte "
+                             "(default: %(default)s)")
+    parser.add_argument("--actor-author-action-rule", choices=("on", "off"), default="on",
+                        help="opencode author ONLY (operator 2026-09-26): append the author "
+                             "action rule (think briefly then act in small verified edits, "
+                             "copy the tree's own idioms, only intrinsics seen in the tree or "
+                             "the GCC headers, signatures match callers, stay in scope or "
+                             "abstain). Off = the historical prompt byte for byte "
+                             "(default: %(default)s)")
     parser.add_argument("--actor-concise", choices=("on", "off"), default="on",
                         help="opencode planner/author (OAB-22): append the concision rule "
                              "(derive each fact once, analysis under ~4,000 tokens, reply is "
@@ -1510,7 +1532,8 @@ def main(argv: list[str] | None = None) -> int:
           + " "
           f"concise={args.actor_concise} planner-budget={args.actor_planner_budget_s}s "
           f"author-budget={args.actor_author_budget_s}s "
-          f"author-thinking={args.actor_author_thinking}")
+          f"author-thinking={args.actor_author_thinking} "
+          f"author-action-rule={args.actor_author_action_rule}")
     for moot in _moot_budgets(args):
         print(f"actors    WARNING {moot} is not below --actor-timeout-s={args.actor_timeout_s}: "
               "the hard timeout ends those calls first, so the budget never fires")

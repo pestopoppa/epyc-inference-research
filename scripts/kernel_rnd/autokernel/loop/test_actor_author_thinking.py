@@ -168,9 +168,10 @@ class AuthorThinkingConfig(unittest.TestCase):
 
     def test_cli_knob(self):
         from autokernel.loop import run
-        self.assertEqual(aoc.DEFAULT_AUTHOR_THINKING, "off")
+        # Operator 2026-09-26: the default moved to "medium" (test_actor_author_medium).
+        self.assertEqual(aoc.DEFAULT_AUTHOR_THINKING, "medium")
         self.assertEqual(run._actor_thinking(argparse.Namespace(actor_author_thinking="off")),
-                         {"author_thinking": "off"})
+                         {"author_thinking": "off", "author_action_rule": False})
         source = Path(run.__file__).read_text(encoding="utf-8")
         block = source[source.index('"--actor-author-thinking"'):][:300]
         self.assertIn("DEFAULT_AUTHOR_THINKING", block)
@@ -346,8 +347,9 @@ class OpencodeMockBody(unittest.TestCase):
         bodies = self._assert_bodies("author", actors.ActorSeat(
             bounded=False, author_thinking="off", context_limit=131072,
             author_output_limit=32768, output_limit=8192), True)
-        # The limit rides the same model entry: max_tokens is min(32768, 32000).
-        self.assertTrue(any(b.get("max_tokens") == 32000 for b in bodies))
+        # The limit rides the same model entry; above opencode's 32000 ceiling the call's
+        # env raises it (OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX), so 32768 reaches the wire.
+        self.assertTrue(any(b.get("max_tokens") == 32768 for b in bodies))
 
     def test_plain_planner_body_does_not(self):
         self._assert_bodies("planner", actors.ActorSeat(

@@ -121,18 +121,30 @@ SNAPSHOT_OFF = {"snapshot": False}
 # analysis budget the concise rule states (`actors.CONCISE_RULE`).
 # --------------------------------------------------------------------------------------
 
+# Operator pool budget, 2026-09-26 (supersedes C = 131,072 and the O < C/2 rule): a
+# FULL unified pool plus MTP crashes llama-server, so the bound is on the pool, not on
+# O relative to C. :8083's unified KV pool is POOL_TOKENS = 196,608; every role's C is
+# at most POOL_TOKENS - POOL_RESERVE (16,384 always stay free for the other :8083
+# slots), and every O is below C - MIN_COMPACTION_HEADROOM (32,768), so compaction
+# (at C - O) always leaves at least 32k of context before the cap. Defaults: C =
+# 180,224 for all roles; author O = 40,960 (compaction ~139k), planner and critic O =
+# 16,384 (compaction ~164k). run.py validates both bounds.
+POOL_TOKENS = 196_608
+POOL_RESERVE = 16_384
+MAX_CONTEXT_LIMIT = POOL_TOKENS - POOL_RESERVE
+MIN_COMPACTION_HEADROOM = 32_768
+
 #: run.py defaults for `--actor-context-limit` / `--actor-output-limit`. 0 = opencode's
 #: own default (context 0: no proactive compaction; output 0: max_tokens 32000).
-DEFAULT_CONTEXT_LIMIT = 131_072
+DEFAULT_CONTEXT_LIMIT = 180_224
 DEFAULT_OUTPUT_LIMIT = 8_192
 #: Per-role `limit.output` (run.py `--actor-planner-output-limit` / `--actor-author-
 #: output-limit`; the critic takes the planner's). DS41 run 10b (2026-09-25): the author
 #: ended on ONE 8,192-token step with no report -- a file-write tool call's arguments are
-#: output -- and the planner hit 8,192 once but still replied. The pool bound is
-#: unchanged: compaction fires at C - O, so the worst next request is still ~C + one
-#: step of tool output whatever O is; O < C/2 keeps C - O >= O (run.py validates it).
+#: output -- and the planner hit 8,192 once but still replied. The author's 40,960 is
+#: above opencode's 32,000 ceiling, so its calls carry `output_ceiling_env`.
 DEFAULT_PLANNER_OUTPUT_LIMIT = 16_384
-DEFAULT_AUTHOR_OUTPUT_LIMIT = 32_768
+DEFAULT_AUTHOR_OUTPUT_LIMIT = 40_960
 
 
 def model_limits(model: str | None, *, context_limit: int = 0,
@@ -195,15 +207,24 @@ def model_limits(model: str | None, *, context_limit: int = 0,
 # planner or critic request. "default" writes nothing: the config is byte-identical.
 # --------------------------------------------------------------------------------------
 
-#: `--actor-author-thinking` choices; run.py defaults to "off" (the operator's choice).
-THINKING_CHOICES = ("default", "off")
-DEFAULT_AUTHOR_THINKING = "off"
+# Operator, 2026-09-26: "off" edited but wrote broken AVX-512 (five critic rejections in
+# DS41 run 10g); thinking ON uncapped deliberated 74k tokens without editing. The author
+# now runs thinking ON at MEDIUM reasoning effort (`reasoning_effort` rides the same
+# per-request `chat_template_kwargs`), with the output cap at its maximum and the author
+# action rule (`actors.AUTHOR_ACTION_RULE`) telling it to think briefly and act.
+#: `--actor-author-thinking` choices; run.py defaults to "medium" (the operator's choice).
+THINKING_CHOICES = ("default", "off", "medium")
+DEFAULT_AUTHOR_THINKING = "medium"
 #: The model `options` that turn the served template's reasoning off for one call.
 THINKING_OFF_OPTIONS = {"chat_template_kwargs": {"enable_thinking": False}}
+#: The model `options` for thinking ON at medium reasoning effort.
+THINKING_MEDIUM_OPTIONS = {"chat_template_kwargs": {"enable_thinking": True,
+                                                    "reasoning_effort": "medium"}}
+THINKING_OPTIONS = {"off": THINKING_OFF_OPTIONS, "medium": THINKING_MEDIUM_OPTIONS}
 
 
 def model_thinking(model: str | None, thinking: str = "default") -> dict:
-    """The `provider` block that sets the thinking-off kwarg on the call's model, or {}."""
+    """The `provider` block that sets the call's reasoning kwargs on its model, or {}."""
     if thinking not in THINKING_CHOICES:
         raise ValueError(f"thinking must be one of {THINKING_CHOICES}, got {thinking!r}")
     if thinking == "default":
@@ -212,7 +233,24 @@ def model_thinking(model: str | None, thinking: str = "default") -> dict:
         raise ValueError(f"thinking={thinking!r} needs a provider/model id, got {model!r}")
     provider, model_id = model.split("/", 1)
     return {"provider": {provider: {"models": {model_id: {
-        "options": json.loads(json.dumps(THINKING_OFF_OPTIONS))}}}}}
+        "options": json.loads(json.dumps(THINKING_OPTIONS[thinking]))}}}}}
+
+
+#: opencode 1.18.31 sends `max_tokens = min(limit.output, OUTPUT_TOKEN_MAX)`, where
+#: OUTPUT_TOKEN_MAX is `OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX` (a positive int) or 32000
+#: (`ProviderTransform.maxOutputTokens`, read from the installed binary). A `limit.output`
+#: above 32000 is silently clamped unless the call's env raises the ceiling, so a call
+#: whose output limit exceeds it carries this env var set to that limit. Compaction also
+#: reads it (threshold = context - maxOutputTokens).
+OUTPUT_TOKEN_MAX_ENV = "OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX"
+OPENCODE_OUTPUT_TOKEN_MAX = 32_000
+
+
+def output_ceiling_env(output_limit: int) -> dict[str, str]:
+    """The env that lets `output_limit` reach the wire, or {} at/below opencode's 32000."""
+    if output_limit > OPENCODE_OUTPUT_TOKEN_MAX:
+        return {OUTPUT_TOKEN_MAX_ENV: str(int(output_limit))}
+    return {}
 
 
 def _merge(a: dict, b: dict) -> dict:
@@ -327,7 +365,7 @@ def build_actor_config(*, role: str, lane: Path, profiles: Sequence[Path] = (),
     becomes the lane-only guard (an agent rule is evaluated after the top-level one).
 
     `context_limit` / `output_limit` (OAB-23, 0 = off) add `model_limits(model, ...)`;
-    `thinking="off"` (OAB-24) adds `model_thinking(model, "off")` on the same model entry."""
+    `thinking` "off"/"medium" (OAB-24) adds `model_thinking(model, thinking)` on the same model entry."""
     if role not in AGENT_NAMES:
         raise ValueError(f"unknown actor role {role!r}; expected one of "
                          f"{sorted(AGENT_NAMES)}")
@@ -646,18 +684,32 @@ def seat_permission(role: str, *, lane: Path | None = None,
     return permission
 
 
+def gitnexus_repo_for(build_dir: str | Path | None) -> str | None:
+    """The GitNexus repo name of the anchor tree holding `build_dir` (its git root's
+    directory name, as `gitnexus analyze` registers a worktree), or None without one.
+    Only the NAME goes in the author's prompt: a command naming the anchor root's PATH
+    is denied by the lane guard, `gitnexus ... --repo <name>` is not."""
+    root, _builds, _others = anchor_fence(build_dir)
+    return root.name if root is not None else None
+
+
 def seat_label(base: str, *, trim_instructions: bool = False, trim_tools: bool = False,
                lane_guard: bool = False, context_limit: int = 0, output_limit: int = 0,
-               concise: bool = False, budget_s: int = 0, thinking_off: bool = False) -> str:
+               concise: bool = False, budget_s: int = 0, thinking_off: bool = False,
+               thinking: str = "default", action_rule: bool = False) -> str:
     """`plain` / `bounded` plus one suffix per knob that is on (free text in VB-AK-SEAT).
     OAB-22/23 add `+ctx<C>+out<O>`, `+concise` and `+budget<B>s`; OAB-24 adds
-    `+think-off` (all off: unchanged)."""
+    `+think-off` (or `+think-<thinking>`), and the author action rule `+act-rule`
+    (all off: unchanged)."""
+    if thinking_off:
+        thinking = "off"
     return (base + "".join(suffix for on, suffix in (
         (trim_instructions, "+trim-instr"), (trim_tools, "+trim-tools"),
         (lane_guard, "+lane-guard")) if on)
         + limits_label(context_limit=context_limit, output_limit=output_limit)
-        + ("+think-off" if thinking_off else "")
-        + ("+concise" if concise else "") + (f"+budget{budget_s}s" if budget_s else ""))
+        + (f"+think-{thinking}" if thinking and thinking != "default" else "")
+        + ("+concise" if concise else "") + ("+act-rule" if action_rule else "")
+        + (f"+budget{budget_s}s" if budget_s else ""))
 
 
 def build_plain_config(*, role: str, lane: Path, build_dir: str | Path | None = None,
@@ -672,7 +724,7 @@ def build_plain_config(*, role: str, lane: Path, build_dir: str | Path | None = 
     knob off it is `{"$schema", "snapshot": false}` alone: the plain seat ALWAYS gets a
     per-call config, because snapshot tracking is on by default and bloats the store.
     `context_limit` / `output_limit` (OAB-23, 0 = off) add `model_limits(model, ...)`;
-    `thinking="off"` (OAB-24) adds `model_thinking(model, "off")`."""
+    `thinking` "off"/"medium" (OAB-24) adds `model_thinking(model, thinking)`."""
     permission = seat_permission(role, lane=lane, build_dir=build_dir,
                                  trim_instructions=trim_instructions,
                                  trim_tools=trim_tools, lane_guard=lane_guard)
@@ -703,6 +755,9 @@ def write_plain_config(path: Path, **kw) -> Path:
 
 __all__ = ["actor_instructions", "AGENT_NAMES", "DEFAULT_AUTHOR_OUTPUT_LIMIT",
            "DEFAULT_AUTHOR_THINKING", "THINKING_CHOICES", "THINKING_OFF_OPTIONS",
+           "THINKING_MEDIUM_OPTIONS", "THINKING_OPTIONS", "OUTPUT_TOKEN_MAX_ENV",
+           "OPENCODE_OUTPUT_TOKEN_MAX", "output_ceiling_env", "POOL_TOKENS",
+           "POOL_RESERVE", "MAX_CONTEXT_LIMIT", "MIN_COMPACTION_HEADROOM", "gitnexus_repo_for",
            "model_block", "model_thinking",
            "DEFAULT_CONTEXT_LIMIT", "DEFAULT_OUTPUT_LIMIT", "DEFAULT_PLANNER_OUTPUT_LIMIT", "limits_label", "model_limits", "AUTHOR_EDIT_GUARD",
            "AUTHOR_STYLE_NOTE",
