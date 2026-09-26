@@ -196,12 +196,23 @@ class OrchestratorBackend(Backend):
         call_dir = Path(workspace).parent / SIDECAR_DIR
         call_dir.mkdir(parents=True, exist_ok=True)
         stem = f"{time.strftime('%Y%m%dT%H%M%S', time.gmtime())}-{uuid.uuid4().hex[:12]}"
+        # EVIDENCE: the provenance sidecar is bound by digest into the call's metrics
+        # row (`collect` -> `sidecar`) and stays. The request INPUTS below (schema,
+        # context bundle, scout targets) are SCRATCH: their digests already ride on
+        # the request the server echoes, so they are registry-owned and released
+        # when the actor call's scope ends.
+        scope = actors._scratch_scope(workspace)
+
+        def sidecar_input(suffix: str) -> Path:
+            name = f"{stem}.{suffix}"
+            return scope.file(SIDECAR_DIR, name, at=call_dir / name)
+
         provenance = call_dir / f"{stem}.provenance.json"
         argv = [self.binary, "-I", self.cli, "--root", str(workspace)]
         if not edit:
             argv.append("--read-only")
         if schema is not None:
-            schema_path = call_dir / f"{stem}.schema.json"
+            schema_path = sidecar_input("schema.json")
             abstains = schema is actors.HYPOTHESIS_SCHEMA or schema is actors.PATHS_SCHEMA
             schema_path.write_text(
                 json.dumps(wire_schema(schema, allow_abstain=abstains), sort_keys=True),
@@ -209,7 +220,7 @@ class OrchestratorBackend(Backend):
             argv += ["--schema", str(schema_path)]
         bundle = _staged_for(workspace, prompt)
         if bundle is not None:
-            bundle_path = call_dir / f"{stem}.context-bundle.json"
+            bundle_path = sidecar_input("context-bundle.json")
             bundle_path.write_text(json.dumps(bundle, ensure_ascii=False), encoding="utf-8")
             argv += ["--context-bundle", str(bundle_path)]
             if self.context_print_cap_bytes is not None:
@@ -219,7 +230,7 @@ class OrchestratorBackend(Backend):
         argv += ["--url", self.url, "--role", self.model, "--max-turns", str(self.max_turns),
                  "--timeout-s", str(self.timeout_s), "--provenance-out", str(provenance)]
         if self.scout_targets_json and self.scouts_max > 0:
-            targets_path = call_dir / f"{stem}.scouts.json"
+            targets_path = sidecar_input("scouts.json")
             targets_path.write_text(self.scout_targets_json, encoding="utf-8")
             argv += ["--scout-targets", str(targets_path), "--scouts-max", str(self.scouts_max)]
             if self.scout_role:

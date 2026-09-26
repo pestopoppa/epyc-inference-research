@@ -596,7 +596,8 @@ class Backends(unittest.TestCase):
             backend, env = planner._seated("planner", context)
             self.assertEqual(backend.agent, "autokernel-planner")
             config = Path(env["OPENCODE_CONFIG"])
-            self.assertEqual(config.parent, ws.parent, "the config must not ride into the diff")
+            self.assertEqual(config.parent.parent, ws.parent / actors.SEAT_CONFIG_DIR,
+                             "the config must not ride into the diff")
             self.assertFalse(list(ws.iterdir()))
             body = json.loads(config.read_text())
             command = next(iter(body["mcp"].values()))["command"]

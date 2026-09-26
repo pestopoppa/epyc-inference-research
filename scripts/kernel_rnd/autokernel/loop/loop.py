@@ -601,7 +601,8 @@ def iterate(*, planner: Planner, critic: Critic,
             formation_guard=None, reserve_candidate=None,
             record_abandoned: Callable[[Outcome], None] | None = None,
             resume=None,
-            author_lane: tuple[Path, str] | None = None
+            author_lane: tuple[Path, str] | None = None,
+            iteration_scope=None
             ) -> Outcome:
     """One full turn. Pure control flow: every side effect is an injected callable.
 
@@ -635,7 +636,21 @@ def iterate(*, planner: Planner, critic: Critic,
     reply that carries no report (`AuthorReportMissing`) is answered from the lane diff
     (`integrity.lane_diff_report`, recorded `report_source: "lane_diff"`), and the
     normal gates judge that diff. Without it, or with no diff, the transient stands.
+
+    `iteration_scope` (a `scratch.Scope`, opened by `pipeline.run_pool` on the lane's
+    thread) is where THIS iteration's scratch is allocated: a best-of author worktree
+    is `iteration_scope.worktree(repo, base, name)`, an ak-check build dir is
+    `iteration_scope.dir("ak-check-build", name)`, and a subprocess gets a scoped TMPDIR
+    from `iteration_scope.tmp_env()`. Check `registry.ensure_free(bytes)` first and
+    degrade on False (best-of N->1, op-test->compile-only). Everything allocated here
+    is released when the iteration ends; nothing else may create scratch
+    (`scratch.py`, enforced by `test_scratch.py`). Injected callables running inside
+    this call find the same scope with `scratch.current("iteration")`. None (a direct
+    caller) falls back to the current thread's scope, else the registry's standing one.
     """
+    if iteration_scope is None:
+        from . import scratch
+        iteration_scope = scratch.current("iteration") or scratch.active_scope()
     working = dict(context)
     abandoned: list[dict] = []
     progress: dict[str, Any] = {"inflight": None, "critic2": None, "build": None,

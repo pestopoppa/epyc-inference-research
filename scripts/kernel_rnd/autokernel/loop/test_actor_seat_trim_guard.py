@@ -153,7 +153,8 @@ class TrimInstructions(_Tmp):
             self.assertEqual(env[key], value)
         self.assertEqual(env[actors.SEAT_ENV_ARM], "plain+trim-instr")
         config = Path(env["OPENCODE_CONFIG"])
-        self.assertEqual(config.parent, self.lane.parent, "never inside the worktree")
+        self.assertEqual(config.parent.parent, self.lane.parent / actors.SEAT_CONFIG_DIR,
+                         "never inside the worktree")
         self.assertFalse(list(self.lane.iterdir()))
         body = json.loads(config.read_text())
         self.assertEqual(Path(body["instructions"][0]).read_text().rstrip("\n"),
@@ -318,6 +319,7 @@ class PromptAndCard(_Tmp):
 
         def run(prompt, **kw):
             seen["prompt"], seen["env"] = prompt, kw.get("env")
+            seen["config"] = fx.config_body(kw.get("env"))  # call-scoped: read in flight
             return fx.HYPOTHESIS if role == "planner" else '{"paths": ["ggml/src/x.c"]}'
 
         planner = actors.AgentPlanner(workspace=self.lane, seat=seat,
@@ -337,7 +339,7 @@ class PromptAndCard(_Tmp):
     def test_knobs_off_is_the_control_prompt_byte_for_byte(self):
         seen = self._prompt(actors.ActorSeat(bounded=False))
         self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), fx.CONTROL_SHA256)
-        fx.assert_snapshot_only(self, seen["env"], fx.config_body(seen["env"]), self.lane)
+        fx.assert_snapshot_only(self, seen["env"], seen["config"], self.lane)
 
     def test_trim_alone_changes_no_prompt_byte(self):
         seen = self._prompt(actors.ActorSeat(bounded=False, trim_instructions=True,
@@ -391,6 +393,7 @@ class CriticSeat(_Tmp):
 
         def run(prompt, **kw):
             seen["prompt"], seen["env"], seen["ro"] = prompt, kw.get("env"), kw.get("read_only")
+            seen["config"] = fx.config_body(kw.get("env"))  # call-scoped: read in flight
             return '{"accepted": true}'
 
         critic = actors.AgentCritic(workspace=self.lane, backend=actors.backend_for("q/m", "high"),
@@ -401,7 +404,7 @@ class CriticSeat(_Tmp):
             critic.review_hypothesis(actors.Hypothesis("akm-x", "s", "f", "a.c", "g"), context)
         self.assertTrue(seen["ro"])
         self.assertIn("You are read-only", seen["prompt"])
-        body = json.loads(Path(seen["env"]["OPENCODE_CONFIG"]).read_text())
+        body = seen["config"]
         oc = _Opencode(body)
         self.assertTrue(oc.disabled("edit"))
         self.assertEqual(oc.bash("git reset --hard"), "deny")
@@ -410,11 +413,12 @@ class CriticSeat(_Tmp):
         seen = {}
         with mock.patch.object(actors, "render_context", return_value="ctx"), \
                 mock.patch.object(actors, "_run_agent",
-                                  side_effect=lambda p, **kw: seen.update(env=kw.get("env"))
+                                  side_effect=lambda p, **kw: seen.update(
+                                      env=kw.get("env"), config=fx.config_body(kw.get("env")))
                                   or '{"accepted": true}'):
             actors.AgentCritic(workspace=self.lane, backend=actors.backend_for("q/m", "high")
                                ).review_hypothesis(actors.Hypothesis("a", "s", "f", "a.c", "g"), {})
-        fx.assert_snapshot_only(self, seen["env"], fx.config_body(seen["env"]), self.lane)
+        fx.assert_snapshot_only(self, seen["env"], seen["config"], self.lane)
 
 
 class Provenance(_Tmp):

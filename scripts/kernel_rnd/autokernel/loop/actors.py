@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import dataclasses
 from dataclasses import dataclass
+import functools
 import hashlib
 import json
 import os
@@ -46,8 +47,9 @@ import subprocess
 import tempfile
 import time
 from typing import Any, Callable, Mapping, Sequence
+import uuid
 
-from . import actor_metrics, belief_context, integrity
+from . import actor_metrics, belief_context, integrity, scratch
 from .loop import (Abstain, ActorStopped, ActorTransient, AuthorReportMissing, Hypothesis,
                    Review)
 
@@ -533,12 +535,57 @@ def _run_stoppable(argv: list[str], *, out, err, timeout_s: int, cwd: Path,
     return subprocess.CompletedProcess(args=argv, returncode=returncode)
 
 
+#: Per-call opencode seat configs: a sibling of the worker trees, one registry-owned
+#: directory per actor call (a shared `actor-opencode-<role>.json` beside the lanes was
+#: rewritten by every lane, so one lane's call could start on another lane's fence).
+SEAT_CONFIG_DIR = "actor-opencode"
+
+
+def _scratch_scope(workspace: Path | str) -> "scratch.Scope":
+    """The scope an actor-side allocation belongs to: the innermost open scope on this
+    thread (the actor call's), else the registry's standing scope; with no registry
+    installed, a fallback registry beside the lanes (never inside one)."""
+    return scratch.active_scope(Path(workspace).parent / scratch.FALLBACK_DIRNAME)
+
+
+def _in_call_scope(role: str):
+    """Run an actor method inside one `call` scope: its context bundle, seat config and
+    per-attempt scratch are released when the call returns or raises."""
+    def wrap(method):
+        @functools.wraps(method)
+        def inner(self, *args, **kwargs):
+            with _scratch_scope(self.workspace).scope("call", role):
+                return method(self, *args, **kwargs)
+        return inner
+    return wrap
+
+
+def _seat_config_dir(workspace: Path, label: str) -> Path:
+    workspace = Path(workspace)
+    name = (f"{time.strftime('%Y%m%dT%H%M%S', time.gmtime())}-{workspace.name}-{label}-"
+            f"{uuid.uuid4().hex[:8]}")
+    return _scratch_scope(workspace).dir(SEAT_CONFIG_DIR, name,
+                                         at=workspace.parent / SEAT_CONFIG_DIR / name)
+
+
 def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT_S,
                backend: Backend = CRITIC_DEFAULT, read_only: bool = False,
                schema: Mapping[str, Any] | None = None,
                env: Mapping[str, str] | None = None,
                should_stop: Callable[[], bool] | None = None,
                budget_s: float | None = None) -> str:
+    """One actor process, inside its own `call` scope: the orchestrator's per-call
+    sidecar inputs and the process's TMPDIR are registry-owned and released after."""
+    with _scratch_scope(workspace).scope("call", "attempt") as attempt:
+        return _run_agent_in(attempt, prompt, workspace=workspace, timeout_s=timeout_s,
+                             backend=backend, read_only=read_only, schema=schema, env=env,
+                             should_stop=should_stop, budget_s=budget_s)
+
+
+def _run_agent_in(attempt: "scratch.Scope", prompt: str, *, workspace: Path,
+                  timeout_s: int, backend: Backend, read_only: bool,
+                  schema: Mapping[str, Any] | None, env: Mapping[str, str] | None,
+                  should_stop: Callable[[], bool] | None, budget_s: float | None) -> str:
     # The orchestrator kind sends the caller's schema to the server (`--schema`), so
     # its argv is the one that needs it (INF-78 OAB-2, `actor_orchestrator`).
     argv = (backend.argv(prompt, workspace, read_only=read_only, schema=schema)
@@ -549,8 +596,8 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
     extra: dict[str, Any] = {}
     if payload is not None:
         extra["input"] = payload
-    if env:
-        extra["env"] = {**os.environ, **env}
+    # TMPDIR/TMP/TEMP -> this attempt's scoped dir; the recorded `env` stays the seat's.
+    extra["env"] = attempt.tmp_env({**os.environ, **(env or {})})
     # Turn/efficiency metrics (DS41-C20c) come from `opencode export`, so they only
     # exist for a REAL opencode call -- gated on `binary == OPENCODE`, not merely
     # `kind == "opencode"`, so a test double that reuses the "opencode" kind (e.g.
@@ -575,8 +622,10 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
     # pipe stopped at exactly 98,304 bytes (DS41 seat A/B, 2026-09-24) while the same
     # export to a file was 316 KB. A long session's stdout (compaction summaries) past
     # that point would lose exactly the JSON the loop needs.
-    with tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace") as out, \
-         tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace") as err:
+    with tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace",
+                                dir=attempt.tmpdir()) as out, \
+         tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace",
+                                dir=attempt.tmpdir()) as err:
         try:
             if should_stop is None and not budget_s:
                 done = subprocess.run(argv, stdout=out, stderr=err, text=True,
@@ -2424,8 +2473,8 @@ def _seat_call(seat: "ActorSeat | None", backend: Backend, role: str, workspace:
     env.update(_budget_env(seat, role))
     if knobs.get("trim_instructions"):
         env.update(seat_config.TRIM_ENV)
-    target = Path(workspace).parent / f"actor-opencode-plain-{role}.json"
     try:
+        target = _seat_config_dir(Path(workspace), f"plain-{role}") / f"actor-opencode-plain-{role}.json"
         path = seat_config.write_plain_config(
             target, role=role, lane=Path(workspace), build_dir=_anchor_build_dir(context),
             model=backend.model, thinking=thinking, **knobs, **limits)
@@ -2518,7 +2567,7 @@ class AgentPlanner:
             return self.backend, _seat_call(self.seat, self.backend, role,
                                             Path(self.workspace), context)
         from . import actor_opencode_config as seat_config
-        path = Path(self.workspace).parent / f"actor-opencode-{role}.json"
+        path = _seat_config_dir(Path(self.workspace), role) / f"actor-opencode-{role}.json"
         seat_config.write_actor_config(
             path, role=role, lane=Path(self.workspace), profiles=_profile_dirs(context),
             python=self.seat.tools_python, steps=self.seat.steps, fan_out=self.seat.fan_out,
@@ -2578,6 +2627,7 @@ class AgentPlanner:
         try:
             bundle = actor_context.materialize(
                 text, Path(self.workspace).parent / actor_context.BUNDLE_DIR, role=role,
+                scope=_scratch_scope(self.workspace),
                 lane=Path(self.workspace) if self.seat.lane_guard else None)
         except (OSError, ValueError) as exc:
             import sys
@@ -2604,6 +2654,7 @@ class AgentPlanner:
         arm = (env or {}).get(SEAT_ENV_ARM) or "plain"
         return {**(env or {}), SEAT_ENV_ARM: arm + actor_context.ARM_SUFFIX}
 
+    @_in_call_scope("planner")
     def propose(self, context: Mapping[str, Any]) -> Hypothesis | Abstain:
         cpu = _cpu_target(context)
         context_text, bundle = self._context_block("planner", context)
@@ -2699,6 +2750,7 @@ class AgentPlanner:
                                         str(body["mechanism_id"]))
                           if "runtime_treatment" in body else None)), declared
 
+    @_in_call_scope("author")
     def author(self, hypothesis: Hypothesis,
                context: Mapping[str, Any]) -> tuple[str, ...] | Abstain:
         cpu = _cpu_target(context)
@@ -2835,6 +2887,7 @@ class AgentCritic:
     #: critic is always the plain, read-only (no `--auto`) opencode seat.
     seat: ActorSeat | None = None
 
+    @_in_call_scope("critic")
     def _review(self, subject: str, grounds: str,
                 context: Mapping[str, Any]) -> Review:
         prompt = _REVIEW_TASK.format(subject=subject, grounds=grounds,
