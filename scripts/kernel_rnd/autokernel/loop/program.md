@@ -123,6 +123,59 @@ independent. Do not infer a
 universal cosine, PSNR, max-abs or MSE tolerance from this policy. Low-precision
 comparison requires its own validated reference and threshold.
 
+### Widened CPU source routes (operator decision 2026-09-26)
+
+Four more single-file CPU routes are admitted (`gates.CPU_SOURCE_ROUTES`). Each needs the
+named `target_symbol`, hunks inside the named bodies in both HEAD and the candidate, and
+byte-identical headers (marker line through opening brace). A marker that recurs
+elsewhere in the file never widens the boundary: markers are resolved inside the named
+class, or before the disabled-build stub.
+
+- **`dense_q8_tinyblas`**: `ggml/src/ggml-cpu/llamafile/sgemm.cpp`, target
+  `tinyBLAS_Q0_AVX` (or `mnpack`/`gemm4xN`/`gemmMx4`/`gemm`).
+  - **Scope:** the type-generic `mnpack`, `gemm4xN`, `gemmMx4` and `gemm` bodies of
+    `class tinyBLAS_Q0_AVX`. This is the dense Q8_0 verify-batch GEMM (N=2..3 lands in
+    `gemm4xN<2|3>`).
+  - **Refused:** type-specific `load*`, `updot`, `denibble` and `bittobyte`, other
+    classes, and added lines touching `.qs`/`.qh`.
+  - **Op:** `MUL_MAT`.
+  - **Reference:** `use_ref` does not bypass llamafile, so the native suite is not
+    independent here. The independent evidence is two checks:
+    - the scalar Q8_0 `MUL_MAT` fixture at widths 1–8;
+    - a trusted GDB hit on `tinyBLAS_Q0_AVX<block_q8_0, block_q8_0, float>::mnpack`, in
+      the candidate DSO, for the sole selected case.
+- **`iqk_mmid_dispatch`**: `ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp`, target
+  `ggml_iqk_try_mul_mat_id`.
+  - **Scope:** its implemented body. This covers the single-token slab path and the
+    N>1 verify path:
+    - thread-0 activation quantization;
+    - the serial mapping pass and its barrier;
+    - 1/nth per-expert stripes.
+  - It is also the landing zone for the rowexact partition keeps.
+  - **Op:** `MUL_MAT_ID`.
+  - **Reference:** scalar Q4_K/Q5_K `MUL_MAT_ID` at widths 1–8, in alternating and
+    single-expert modes. Plus a GDB entry hit and the Q4_K MoE ACTIVE marker on the
+    selected n=4 case.
+- **`iqk_dense_dispatch`**: same file, target `ggml_iqk_try_mul_mat` or
+  `iqk_q8_0_enabled`.
+  - **Scope:** those two bodies. The Q8_0 opt-in has defaulted off since aebb556b1.
+  - **Ops:** `MUL_MAT` and `MUL_MAT_ID`.
+  - **Reference:** scalar Q4_K/Q5_K/Q8_0 at widths 1–8, plus a GDB entry hit and the
+    dense ACTIVE marker. Routing Q8_0 into iqk changes the activation quantization.
+    The outputs are therefore not bit-identical to tinyBLAS: say so and price it.
+- **`cpu_graph_sync`**: `ggml/src/ggml-cpu/ggml-cpu.c`, target `ggml_barrier`,
+  `ggml_cpu_node_is_solo`, `ggml_cpu_try_fuse_ops` or `ggml_graph_compute_thread`.
+  - **Scope:** barrier implementation, per-node sync, tiny-solo selection and
+    in-backend fusion.
+  - **Ops:** every DS41 op suite (19).
+  - **Reference:** the full scalar quant suite. It checks numbers independently of the
+    candidate's barrier.
+  - These edits must be bit-exact by construction. Name the ordering argument.
+
+These routes retire nothing measured. They correct one premise: the "220 GB/s read
+ceiling" is contradicted by the same-boot C0 measurement under the identical launch prefix
+(405–410 GB/s at 48 threads). The inbox brief carries the numbers.
+
 ---
 
 ## What the instrument can actually resolve

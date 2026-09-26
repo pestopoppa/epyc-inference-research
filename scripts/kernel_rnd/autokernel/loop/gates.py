@@ -259,6 +259,234 @@ def _iqk_q45_dot_hunks_confined(source_text: str | None,
     return _iqk_q45_dot_scope_refusal(source_text, pre_source_text, patch_text) is None
 
 
+# --- Widened CPU source routes (DS41 decode scope, operator decision 2026-09-26) ------
+#
+# Each route is ONE file, a closed set of target symbols, and hunks confined to named
+# function/member BODIES in both HEAD and the candidate, with every header line (the
+# marker through its opening brace) byte-identical.  Markers are searched inside an
+# optional container (a class) and before an optional fence (a stub section), so a
+# marker that recurs elsewhere in the file (sgemm.cpp has nine `mnpack`s) or in a
+# disabled-build stub (iqk_dispatch.cpp) never widens the boundary.
+#
+# route -> (path, container prefix, fence prefix, admitted bodies, native ops,
+#           forbidden added-line pattern, what the author is told)
+_DS41_SYNC_OPS = ("MUL_MAT", "MUL_MAT_ID", "ADD", "MUL", "RMS_NORM", "SCALE", "CLAMP",
+                  "CONT", "CPY", "CONCAT", "GLU", "UNARY", "SUM_ROWS", "GET_ROWS",
+                  "SET_ROWS", "ROPE", "SOFT_MAX", "ARGSORT", "FLASH_ATTN_EXT")
+
+
+@dataclass(frozen=True)
+class CpuSourceRoute:
+    route: str
+    path: str
+    symbols: tuple[str, ...]
+    bodies: tuple[tuple[str, str], ...]
+    ops: tuple[str, ...]
+    container: str | None = None
+    fence: str | None = None
+    forbidden_added: str | None = None
+    admitted_text: str = ""
+
+
+CPU_SOURCE_ROUTES = (
+    # Dense Q8_0 small-N GEMM: the type-GENERIC tiling/compute members of
+    # tinyBLAS_Q0_AVX (verify-batch N=2..3 lands in gemm4xN<2|3>). The class is also
+    # instantiated for Q4_0/Q5_0/IQ4_NL, and llamafile is NOT bypassed by use_ref, so
+    # the native suite is not independent here: type-specific load*/updot/denibble/
+    # bittobyte stay outside the boundary and added lines may not touch block quant
+    # fields directly, which keeps the Q8_0 scalar reference representative.
+    CpuSourceRoute(
+        route="dense_q8_tinyblas",
+        path="ggml/src/ggml-cpu/llamafile/sgemm.cpp",
+        symbols=("tinyBLAS_Q0_AVX", "mnpack", "gemm4xN", "gemmMx4", "gemm"),
+        container="class tinyBLAS_Q0_AVX {",
+        bodies=(("mnpack", "    void mnpack(int64_t m0, int64_t m, int64_t n0, int64_t n) {"),
+                ("gemm4xN", "    NOINLINE void gemm4xN(int64_t m0, int64_t m, int64_t n0, int64_t n) {"),
+                ("gemmMx4", "    NOINLINE void gemmMx4(int64_t m0, int64_t m, int64_t n0, int64_t n) {"),
+                ("gemm", "    NOINLINE void gemm(int64_t m0, int64_t m, int64_t n0, int64_t n) {")),
+        ops=("MUL_MAT",),
+        forbidden_added=r"(\.|->)(qs|qh)\b",
+        admitted_text=("hunks inside the tinyBLAS_Q0_AVX mnpack/gemm4xN/gemmMx4/gemm bodies; "
+                       "load*/updot/denibble/bittobyte, the class header, other classes and "
+                       "direct .qs/.qh access unchanged")),
+    # MoE expert dispatch: single-token B3-k slab AND the N>1 verify-batch path
+    # (thread-0 activation quantization + mapping barrier + 1/nth per-expert stripes).
+    # Also the landing zone for the rowexact partition keeps, which touch only this body.
+    CpuSourceRoute(
+        route="iqk_mmid_dispatch",
+        path="ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp",
+        symbols=("ggml_iqk_try_mul_mat_id",),
+        fence="#else  // iqk not implemented",
+        bodies=(("ggml_iqk_try_mul_mat_id",
+                 'extern "C" bool ggml_iqk_try_mul_mat_id(const struct ggml_compute_params * params, '
+                 'struct ggml_tensor * dst) {'),),
+        ops=("MUL_MAT_ID",),
+        admitted_text=("hunks inside the implemented ggml_iqk_try_mul_mat_id body; its "
+                       "signature, the disabled-build stub, helpers and kernels unchanged")),
+    # Dense iqk dispatch, including the Q8_0 opt-in (`iqk_q8_0_enabled`, default off
+    # since aebb556b1); that predicate also gates Q8_0 MUL_MAT_ID, hence both ops.
+    CpuSourceRoute(
+        route="iqk_dense_dispatch",
+        path="ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp",
+        symbols=("ggml_iqk_try_mul_mat", "iqk_q8_0_enabled"),
+        fence="#else  // iqk not implemented",
+        bodies=(("iqk_q8_0_enabled", "inline bool iqk_q8_0_enabled() {"),
+                ("ggml_iqk_try_mul_mat",
+                 'extern "C" bool ggml_iqk_try_mul_mat(const struct ggml_compute_params * params, '
+                 'struct ggml_tensor * dst) {')),
+        ops=("MUL_MAT", "MUL_MAT_ID"),
+        admitted_text=("hunks inside the iqk_q8_0_enabled or implemented ggml_iqk_try_mul_mat "
+                       "bodies; signatures, the stub and every other helper unchanged")),
+    # Per-node synchronisation, graph walk, tiny-solo selection and in-backend fusion.
+    # Numerics-free by construction, so the independent reference is the full scalar
+    # quant suite (it runs through the candidate's barriers) plus every DS41 op suite.
+    CpuSourceRoute(
+        route="cpu_graph_sync",
+        path="ggml/src/ggml-cpu/ggml-cpu.c",
+        symbols=("ggml_barrier", "ggml_cpu_node_is_solo", "ggml_cpu_try_fuse_ops",
+                 "ggml_graph_compute_thread"),
+        bodies=(("ggml_barrier", "void ggml_barrier(struct ggml_threadpool * tp) {"),
+                ("ggml_cpu_node_is_solo",
+                 "static bool ggml_cpu_node_is_solo(const struct ggml_tensor * node) {"),
+                ("ggml_cpu_try_fuse_ops", "static int ggml_cpu_try_fuse_ops("),
+                ("ggml_graph_compute_thread",
+                 "static thread_ret_t ggml_graph_compute_thread(void * data) {")),
+        ops=_DS41_SYNC_OPS,
+        admitted_text=("hunks inside the ggml_barrier, ggml_cpu_node_is_solo, "
+                       "ggml_cpu_try_fuse_ops or ggml_graph_compute_thread bodies; headers, "
+                       "globals, op kernels and every other function unchanged")),
+)
+CPU_SOURCE_ROUTE_PATHS = tuple(sorted({route.path for route in CPU_SOURCE_ROUTES}))
+
+
+def cpu_source_route(path: str, target_symbol: str) -> CpuSourceRoute | None:
+    """The widened route a (single path, target symbol) pair names, if any."""
+    return next((route for route in CPU_SOURCE_ROUTES
+                 if route.path == path and target_symbol in route.symbols), None)
+
+
+def _strip_code_line(line: str, in_block: bool) -> tuple[str, bool]:
+    """Code text with comments and string/char literals removed, for brace counting."""
+    out, i, n = [], 0, len(line)
+    while i < n:
+        if in_block:
+            end = line.find("*/", i)
+            if end < 0:
+                return "".join(out), True
+            i, in_block = end + 2, False
+            continue
+        ch = line[i]
+        if line.startswith("//", i):
+            break
+        if line.startswith("/*", i):
+            in_block, i = True, i + 2
+            continue
+        if ch in "\"'":
+            j = i + 1
+            while j < n and line[j] != ch:
+                j += 2 if line[j] == "\\" else 1
+            i = j + 1
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out), in_block
+
+
+def _brace_deltas(lines: list[str]) -> list[int]:
+    deltas, in_block = [], False
+    for line in lines:
+        code, in_block = _strip_code_line(line, in_block)
+        deltas.append(code.count("{") - code.count("}"))
+    return deltas
+
+
+def _cpu_route_bounds(text: str, side: str, route: CpuSourceRoute):
+    """Admitted body regions (label, first, last) and header text, or a refusal."""
+    lines = text.splitlines()
+    deltas = _brace_deltas(lines)
+
+    def block_end(start: int) -> int | None:
+        """1-based line closing the block whose first `{` is at/after `start`."""
+        depth, opened = 0, False
+        for pos in range(start, len(lines) + 1):
+            depth += deltas[pos - 1]
+            opened = opened or depth > 0
+            if opened and depth <= 0:
+                return pos
+        return None
+
+    lo, hi = 1, len(lines)
+    if route.fence is not None:
+        fence = [i + 1 for i, line in enumerate(lines) if line.startswith(route.fence)]
+        if len(fence) != 1:
+            return f"{side}: fence `{route.fence}` occurs {len(fence)} times (needs exactly one)"
+        hi = fence[0] - 1
+    if route.container is not None:
+        starts = [i + 1 for i, line in enumerate(lines[:hi]) if line.startswith(route.container)]
+        if len(starts) != 1:
+            return (f"{side}: container `{route.container}` occurs {len(starts)} times "
+                    "(needs exactly one)")
+        end = block_end(starts[0])
+        if end is None:
+            return f"{side}: container `{route.container}` never closes"
+        lo, hi = starts[0], end
+    regions, headers = [], []
+    for label, prefix in route.bodies:
+        hits = [i + 1 for i in range(lo - 1, hi) if lines[i].startswith(prefix)]
+        if len(hits) != 1:
+            return (f"{side}: marker `{prefix.strip()}` occurs {len(hits)} times inside the "
+                    f"admitted window (the {label} boundary needs exactly one)")
+        start = hits[0]
+        opening = next((pos for pos in range(start, hi + 1) if "{" in
+                        _strip_code_line(lines[pos - 1], False)[0]), None)
+        end = block_end(start)
+        if opening is None or end is None or end > hi:
+            return f"{side}: {label} body (line {start}) has no balanced closing brace"
+        regions.append((label, opening + 1, end - 1))
+        headers.append("\n".join(lines[start - 1:opening]))
+    spans = sorted((first, last) for _label, first, last in regions)
+    if any(a_last >= b_first for (_a, a_last), (b_first, _b) in zip(spans, spans[1:])):
+        return f"{side}: admitted bodies overlap"
+    return tuple(regions), tuple(headers)
+
+
+def _cpu_route_scope_refusal(route: CpuSourceRoute, source_text: str | None,
+                             pre_source_text: str | None,
+                             patch_text: str | None) -> str | None:
+    """None when every -U0 hunk lies inside one admitted body on both sides."""
+    if not source_text or not pre_source_text or not patch_text:
+        return "HEAD source, candidate source or the -U0 patch is empty"
+    old = _cpu_route_bounds(pre_source_text, "HEAD", route)
+    if isinstance(old, str):
+        return old
+    new = _cpu_route_bounds(source_text, "candidate", route)
+    if isinstance(new, str):
+        return new
+    if old[1] != new[1]:
+        return "an admitted header (marker through opening brace) differs; only bodies may change"
+    hunks = re.findall(r"(?m)^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", patch_text)
+    if not hunks:
+        return "the -U0 patch has no hunks"
+
+    def within(line: str, count: str, region) -> bool:
+        first, size = int(line), int(count) if count else 1
+        return region[1] <= first and first + max(size, 1) - 1 <= region[2]
+
+    for old_line, old_count, new_line, new_count in hunks:
+        if not any(within(old_line, old_count, old[0][i]) and
+                   within(new_line, new_count, new[0][i]) for i in range(len(old[0]))):
+            admitted = ", ".join(f"{label} {first}-{last}" for label, first, last in old[0])
+            return (f"hunk @@ -{old_line},{old_count or 1} +{new_line},{new_count or 1} @@ "
+                    f"lies outside every admitted body (HEAD lines: {admitted})")
+    if route.forbidden_added is not None:
+        pattern = re.compile(route.forbidden_added)
+        for line in patch_text.splitlines():
+            if line.startswith("+") and not line.startswith("+++") and pattern.search(line):
+                return (f"an added line matches the forbidden pattern `{route.forbidden_added}` "
+                        f"({line[1:].strip()[:120]!r})")
+    return None
+
+
 def affected_op_scope(paths: tuple[str, ...], *, target_surface: str,
                       target_symbol: str, source_text: str | None = None,
                       patch_text: str | None = None,
@@ -314,6 +542,15 @@ def affected_op_scope(paths: tuple[str, ...], *, target_surface: str,
                        ". Admitted: hunks inside the DequantizerQ4K_AVX2/DequantizerQ5K_AVX2 "
                        "bodies, the unpack_q4_scales helpers where HEAD has them, or the "
                        "mul_mat_qX_K_q8_2_X4_T body; signatures, Q4Bits_AVX2 and Q6_K unchanged")
+    if len(changed) == 1:
+        route = cpu_source_route(next(iter(changed)), target_symbol)
+        if route is not None:
+            refusal = _cpu_route_scope_refusal(route, source_text, pre_source_text, patch_text)
+            if refusal is None:
+                return route.ops
+            return Verdict("op_scope", False,
+                           f"CPU {route.route} route refused before build: {refusal}. "
+                           f"Admitted: {route.admitted_text}")
     if any(path.startswith("ggml/src/ggml-cpu/iqk/") for path in changed):
         return Verdict("op_scope", False,
                        f"CPU IQK source refused before build (paths {sorted(changed)}, "
@@ -359,6 +596,24 @@ def check_cpu_iqk_reference(build_dir: Path, source_root: Path, *,
     else:
         return Verdict("oracle_unavailable", False,
                        "unsupported CPU IQK helper has no independent reference")
+    return Verdict("reference_comparison" if result.status == "wrong" else
+                   "oracle_unavailable" if result.status == "unavailable" else
+                   "reference_comparison", result.status == "pass",
+                   result.reason, result.detail)
+
+
+def check_cpu_route_reference(build_dir: Path, source_root: Path, *, resolved_recipe,
+                              path: str, target_symbol: str) -> Verdict:
+    """Independent reference for a widened CPU route (see `CPU_SOURCE_ROUTES`)."""
+    from . import cpu_route_witness
+
+    route = cpu_source_route(path, target_symbol)
+    if route is None:
+        return Verdict("oracle_unavailable", False,
+                       "CPU source route has no reviewed independent reference")
+    result = cpu_route_witness.check(build_dir, resolved_recipe=resolved_recipe,
+                                     source_root=source_root, route=route.route,
+                                     source_path=route.path)
     return Verdict("reference_comparison" if result.status == "wrong" else
                    "oracle_unavailable" if result.status == "unavailable" else
                    "reference_comparison", result.status == "pass",
@@ -583,8 +838,9 @@ def run_all(*checks: "Callable[[], Verdict]") -> tuple[bool, list[Verdict]]:
     return True, collected
 
 
-__all__ = ["BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S", "DEFAULT_TARGETS",
-           "PROMOTION_TARGETS", "Verdict", "compiles", "deterministic",
+__all__ = ["BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S", "CPU_SOURCE_ROUTES",
+           "CPU_SOURCE_ROUTE_PATHS", "DEFAULT_TARGETS",
+           "PROMOTION_TARGETS", "Verdict", "compiles", "cpu_source_route", "deterministic",
            "affected_op_scope", "check_cpu_gdn_reference", "check_cpu_iqk_reference",
-           "no_fallback_dispatch",
+           "check_cpu_route_reference", "no_fallback_dispatch",
            "op_correctness", "run_all"]
