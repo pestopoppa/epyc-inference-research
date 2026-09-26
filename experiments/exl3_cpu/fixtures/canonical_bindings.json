@@ -1,0 +1,26 @@
+{
+  "mul1_k3.bin": {
+    "derived_sha256": "539f36868a91ce53d375d4071526972c322bb31c1a17b9cca3206a44cd1c8a4a",
+    "canonical_artifact_sha256": "f189398706a86a4bb0aa10755716e9f794d85effa61b0d4704eef081ba1441b7",
+    "artifact_path": "scripts/kernel_rnd/exl3/fixtures/real-mul1-k3/manifest.json",
+    "artifact_sha256": "c8b3893d81b48d2178ad2f4ac7a28c35c307a46362141f26edbc0b950f8b60c2",
+    "fixture_path": "scripts/kernel_rnd/exl3/fixtures/real-mul1-k3/fixture.json",
+    "fixture_sha256": "95173a3f0ca07d9740782fc070862f95d66638c4655c59fe5965518c877c2dc2"
+  },
+  "mul1_k4.bin": {
+    "derived_sha256": "dd1f180e7bc7fe18f3a5177bbefb54a4ace8ad34426a4d58bacd820315a8acb9",
+    "canonical_artifact_sha256": "7dfeee0011fc13e8001c628aa47548e1094c784e497f006fcb812ca27ee03591",
+    "artifact_path": "scripts/kernel_rnd/exl3/fixtures/real-mul1-k4/manifest.json",
+    "artifact_sha256": "7de76ae8b842c9c835ceaeaea8445db3c1621acde1f5e836e024997a7bed9490",
+    "fixture_path": "scripts/kernel_rnd/exl3/fixtures/real-mul1-k4/fixture.json",
+    "fixture_sha256": "39f311844904d1f2ba9e170aecf87fa28b1962c0c15d67e0e428de035fdd1833"
+  },
+  "mcg_k4.bin": {
+    "derived_sha256": "99681d3eb021503381b7ac25fd13e29fbecead37265ad2477b96f9fcae243e8f",
+    "canonical_artifact_sha256": "a81cdba92cfe35b9b0db3e27e3ca1e89b209d53937bbd484016fd04eb21e28f1",
+    "artifact_path": "scripts/kernel_rnd/exl3/fixtures/real-mcg-k4/manifest.json",
+    "artifact_sha256": "73f11bd212eefd668eb05bda2ffc402be24d79721e99d41d53add607124bd6ec",
+    "fixture_path": "scripts/kernel_rnd/exl3/fixtures/real-mcg-k4/fixture.json",
+    "fixture_sha256": "c29b5dc864bcfbc7ea533376e95832bd931c6c96d70f5642fee19dd36c899150"
+  }
+}

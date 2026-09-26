@@ -1,0 +1,40 @@
+{
+  "repo": "0xSero/GLM-5.3-Flash-EXL3-Q4",
+  "revision": "99cccdf0e8741715662c383828a9ea601990c125",
+  "shard": "layers/layer-03-part-0.safetensors",
+  "header_sha256": "3f0466ec915961c2852c761fc69d0c5d0ef4ba9804eaf9c0601b3fa87f390dd1",
+  "comparisons": [
+    {
+      "tensor": "model.language_model.layers.3.mlp.experts.0.gate_proj.rank0.trellis",
+      "file_byte_offset": 12613456,
+      "length": 32768,
+      "sha256": "72a463640641ae54d565d58ddc6760a53bb5bfd2bf2c9d2f64616e3af7d08d5a",
+      "equal_retained_capture": true,
+      "response_etag": null
+    },
+    {
+      "tensor": "model.language_model.layers.3.mlp.experts.0.gate_proj.rank0.suh",
+      "file_byte_offset": 493392,
+      "length": 256,
+      "sha256": "635562e8a1e7e1b6a1ff1817f64cd1809667be3e156851f20df1ce3623d0a19c",
+      "equal_retained_capture": true,
+      "response_etag": null
+    },
+    {
+      "tensor": "model.language_model.layers.3.mlp.experts.0.gate_proj.rank0.svh",
+      "file_byte_offset": 501584,
+      "length": 256,
+      "sha256": "13b538bfccf585e0fe7f890b87e78b12a232cf3a2baee66e583103013b1ba2c7",
+      "equal_retained_capture": true,
+      "response_etag": null
+    },
+    {
+      "tensor": "model.language_model.layers.3.mlp.experts.0.gate_proj.rank0.mcg",
+      "file_byte_offset": 453088,
+      "length": 4,
+      "sha256": "ade4fb124dda0f3537386cdd4a3cdcea3a223d386e506a4be89394bb33ee13fe",
+      "equal_retained_capture": true,
+      "response_etag": null
+    }
+  ]
+}

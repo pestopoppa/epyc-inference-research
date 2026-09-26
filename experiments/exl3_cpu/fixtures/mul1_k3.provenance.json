@@ -1,0 +1,33 @@
+{
+  "repo": "turboderp/Qwen3.8-Flash-Next-exl3",
+  "revision": "69e33439ae950f17bcbe95c98f117d80f759ab6d",
+  "branch_observed": "3.05bpw_h5_ng5",
+  "shard": "model-00001-of-00007.safetensors",
+  "header_sha256": "e7b8d7bfa91e0d843250eb0c75695914430f9856c1ea4aaf9207a1b42eda37d3",
+  "comparisons": [
+    {
+      "tensor": "model.language_model.layers.3.mlp.experts.0.gate_proj.trellis",
+      "file_byte_offset": 5362243019,
+      "length": 30720,
+      "sha256": "3b027f403846043b6daebd76a4b31c7e080956e45b4eff632f26f07ba48ca18a",
+      "equal_retained_capture": true,
+      "response_etag": null
+    },
+    {
+      "tensor": "model.language_model.layers.3.mlp.experts.0.gate_proj.suh",
+      "file_byte_offset": 5362236615,
+      "length": 256,
+      "sha256": "7fae58d22eb937239493b1736afa405c68b4088f7cda59c81b05cb3703b17ad6",
+      "equal_retained_capture": true,
+      "response_etag": null
+    },
+    {
+      "tensor": "model.language_model.layers.3.mlp.experts.0.gate_proj.svh",
+      "file_byte_offset": 5362241735,
+      "length": 256,
+      "sha256": "600a48a464b44eb9ce8e2117ec4ad12a1a2eda2902f3c60feeb52f1e0ec6fef6",
+      "equal_retained_capture": true,
+      "response_etag": null
+    }
+  ]
+}
