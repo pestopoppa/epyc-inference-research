@@ -165,8 +165,11 @@ python3 scripts/kernel_rnd/exl3_gfx90a/test_claimed_run.py
 ```
 
 Authority-only success does not establish physical availability or residency.
-Refresh the build manifest after launcher changes: source drift is refused before
-any GPU launch, even when the kernel sources did not change.
+The owner-mode build is refreshed in
+`/mnt/raid0/llm/tmp/exl3-gfx90a-owner-build-20260926`; its committed receipt is
+`validation/build-owner-run-20260926.json`. It binds the current launcher and
+README. Later source changes require another manifest refresh: source drift is
+refused before any GPU launch, even when the kernel sources did not change.
 
 Use `--fixture path/to/canonical/manifest.json` for each real MUL1 K3/K4 and MCG K4
 fixture. Use `--microbench` separately for concentrated/spread/random routes,
