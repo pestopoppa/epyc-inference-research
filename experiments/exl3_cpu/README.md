@@ -147,3 +147,8 @@ MCG K4's corresponding bounded comparison covered 33,284 bytes (trellis slice,
 scales and marker) against `0xSero/GLM-5.3-Flash-EXL3-Q4` commit
 `99cccdf0e8741715662c383828a9ea601990c125`, shard
 `layers/layer-03-part-0.safetensors`; `fixtures/mcg_k4.provenance.json` records it.
+
+Timing capture now requires `--region-lock-file` under the canonical q3 owner on
+CPU95. It binds the actual synthetic workload bytes to each measurement, records
+the live claim, and samples during the timing window. See [TIMING.md](TIMING.md)
+for the completed grouped-K/runtime-K comparison and its observation limits.

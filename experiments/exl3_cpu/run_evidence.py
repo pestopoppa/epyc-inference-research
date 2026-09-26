@@ -8,6 +8,7 @@ an old stdout log into an acceptance record.
 import argparse
 import datetime
 import hashlib
+import fcntl
 import importlib.util
 import json
 import math
@@ -34,6 +35,7 @@ def main():
     ap.add_argument('--canonical-root', type=Path, default=HERE.parents[1])
     ap.add_argument('--output', type=Path, required=True)
     ap.add_argument('--bench', action='store_true')
+    ap.add_argument('--region-lock-file', type=Path)
     args = ap.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     sha = lambda p: hashlib.sha256(Path(p).read_bytes()).hexdigest()
@@ -94,11 +96,25 @@ def main():
                     writer_sha256=sha(writer), benchmark=args.bench, env={k:v for k,v in os.environ.items() if k.startswith('CPU_REGION_') or k.startswith('REGION_LOCK_')})
     if args.bench and len(metadata['affinity'])!=1:
         raise SystemExit('microbenchmark must run on exactly one explicitly claimed CPU')
+    claim=None
+    if args.bench:
+        if not args.region_lock_file:raise SystemExit('region-lock-file required for timing')
+        claim=json.loads(args.region_lock_file.read_text())
+        if claim.get('pid')!=os.getppid() or claim.get('region')!='q3' or metadata['affinity']!=[95]:
+            raise SystemExit('timing requires the parent region-lock holding q3 and CPU95 affinity')
+        with args.region_lock_file.open('rb') as lock:
+            try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+            except BlockingIOError:pass
+            else:
+                fcntl.flock(lock,fcntl.LOCK_UN)
+                raise SystemExit('declared region lock is not held')
+        claim_path=args.output/'region-claim.json';claim_path.write_text(json.dumps(claim,sort_keys=True)+'\n');reads.append(claim_path.resolve())
     meta_path=args.output/'environment.json';meta_path.write_text(json.dumps(metadata,indent=2)+'\n');reads.append(meta_path.resolve())
     read_set=[{'path':str(p),'sha256':sha(p)} for p in sorted(set(reads))]
     checker_sha=sha(binary)
     cmd=[str(binary),str(HERE/'fixtures'),str(library)]+(['--bench'] if args.bench else [])
     env=dict(os.environ,OPENBLAS_NUM_THREADS='1')
+    if args.bench:env['EXL3_BENCH_WORKLOAD']=str((args.output/'workload.bin').resolve())
     start=datetime.datetime.now(datetime.timezone.utc).isoformat()
     with (args.output/'stdout.txt').open('w') as out,(args.output/'stderr.txt').open('w') as err:
         child=subprocess.Popen(cmd,stdout=out,stderr=err,env=env)
@@ -117,13 +133,16 @@ def main():
     # Refuse source, fixture, checker, library or writer drift across the run.
     if sha(binary)!=checker_sha or any(sha(d['path'])!=d['sha256'] for d in read_set):
         raise SystemExit('read set changed during execution')
+    if args.bench:
+        if json.loads(args.region_lock_file.read_text())!=claim:raise SystemExit('region owner changed during timing')
+        read_set.append({'path':str((args.output/'workload.bin').resolve()),'sha256':sha(args.output/'workload.bin')})
     read_set += [{'path':str(p.resolve()),'sha256':sha(p)} for p in (stdout_path,args.output/'stderr.txt',sample_path)]
     identity=lambda name,obj:dict(id=name,sha256=e.digest(obj))
     identities=dict(model=identity('three real expert tile slices',manifest['fixtures']),
                     artifact=identity('canonical EXL3-1 bindings',bindings),source=identity('CPU implementation read set',read_set),
                     binary={'id':str(binary),'sha256':checker_sha},library={'id':str(library),'sha256':sha(library)},
                     toolchain=identity('C++17 baseline + target ISA functions',metadata['compiler']),
-                    hardware=identity('host CPU/affinity',metadata),residency=identity('owned CPU process during execution',samples))
+                    hardware=identity('host CPU/affinity',metadata),residency=identity('owned CPU process and region during execution',{'samples':samples,'region_claim':claim}))
     common=dict(run_id='exl3-cpu-'+start,date=start,category='CANDIDATE',protocol_id='',protocol_eligible=False,
                 arm='standalone-cpu',comparator='independent-codebooks-and-materialized-FP32-FMA-oracle',identities=identities,backend='cpu')
     proposition='Mandatory real MUL1 K3/K4 and MCG K4 reconstruction is exact; scalar/BW/VNNI/VBMI synthetic K1-K8 operators meet the checked parity, padding, routing, bias, guard and provider envelopes'
@@ -135,16 +154,19 @@ def main():
     row=e.write(args.output/'native',fields);e.project(row)
     print('verifier',row['row_id'],row['verdict'])
     if args.bench and passed:
-        begin=re.search(r'microbench_window_begin_ns=(\d+)',stdout)
-        end=re.search(r'microbench_window_end_ns=(\d+)',stdout)
-        if not begin or not end or not any(int(begin[1])<=s['monotonic_ns']<=int(end[1]) for s in samples):
+        begin=re.search(r'microbench_window_begin_ns=([0-9a-f]+)',stdout)
+        end=re.search(r'microbench_window_end_ns=([0-9a-f]+)',stdout)
+        if not begin or not end or not any(int(begin[1],16)<=s['monotonic_ns']<=int(end[1],16) for s in samples):
             raise SystemExit('no residency sample overlaps the timed microbenchmark window')
         vectors={}
         for isa,grouped,rep,value in re.findall(r'isa=(\d+) grouped=(\d+) rep=(\d+) batch_us=([0-9.e+-]+)',stdout):
             vectors.setdefault((isa,grouped),[]).append(float(value))
         if len(vectors)!=8 or any(len(v)!=5 for v in vectors.values()):raise SystemExit('incomplete benchmark matrix')
+        timing_identities=dict(identities,
+            model=identity('synthetic mixed-K CPU operators; no model',{'experts':8,'K':list(range(1,9)),'shape':[128,128]}),
+            artifact={'id':str((args.output/'workload.bin').resolve()),'sha256':sha(args.output/'workload.bin')})
         for (isa,grouped),raw in vectors.items():
-            fields=dict(common,schema=e.MEASUREMENT,arm=f'isa{isa}-grouped{grouped}',operator='indexed-mul1-q8',
+            fields=dict(common,schema=e.MEASUREMENT,identities=timing_identities,comparator='same-ISA opposite grouped-K setting on identical captured payload',arm=f'isa{isa}-grouped{grouped}',operator='indexed-mul1-q8',
                         shape=[8,1,128,128],metric='batch_latency',value=math.fsum(raw)/len(raw),unit='us_per_eight_expert_batch',
                         metric_direction='lower_better',repetitions=len(raw),reps_basis='five batches of four timed invocations after one warmup',
                         raw_vector=raw,aggregation='arithmetic_mean',claim='Cache-resident experimental operator latency observation; no inference or promotion claim')

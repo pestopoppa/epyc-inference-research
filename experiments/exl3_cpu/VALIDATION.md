@@ -31,7 +31,7 @@ used to close the final acceptance proposition.
 | Native and band-contiguous | Both layouts tested; lossless round trip; canonical fixture hash preserved through reconstruction; derived cache evidence requires canonical binding |
 | ISA / K / rows / tails / padding / guards | Four executed ISA tiers, K1-K8, rows1-4, 1/17/128/131 input and 1/128/129/149 output extents, padded128/256, nontrivial strides, unchanged filled guards |
 | Real fixtures cannot skip | Required real MUL1 K3/K4 and MCG K4, immutable provenance, SHA checks, independent raw/canonical golden, missing/corrupt/truncated failure |
-| Grouped K versus runtime K | Both dispatch implementations and exact output comparison; timed comparison prepared but not run (region ownership below) |
+| Grouped K versus runtime K | Both dispatch implementations and exact output comparison; timing completed after q3 release, see TIMING.md |
 | Canonical reconstruction + provider prefill | Stage-rounded normalized H128 ascending FP32 FMA; real reconstructed matrices bit-exact; seven-row existing OpenBLAS provider checked against deterministic output oracle |
 | Avoid unprofiled many-row optimization | More-than-four-row fused requests rejected; prefill delegates to existing GEMM, no packed many-row kernel/cache |
 
@@ -41,8 +41,10 @@ materialized weight output were 0.000457453 (MUL1 K3), 0.000432122 (MUL1 K4), an
 approximate Q8 MUL1 path observed 0.00839703 and 0.0085257, within 0.025. Each is one
 fixed operator input, not a model quality result or universal error bound.
 
-Timing admission was attempted with `region-lock run --cpu-list 95 --timeout-s 1`
-on 2026-09-26. It returned **75**, reporting q3 held by `autokernel-cpu`. The exact
-refusal is retained in `/tmp/exl3-cpu-region-attempt.stderr`. No microbenchmark
-executed. The specific event needed for timed comparison is release of that CPU
-region by its owning session. Production/other-session processes were untouched.
+The grouped-K versus runtime-K timing comparison completed on CPU95 under a
+canonical q3 region claim, and q3 was released afterward. The final run passed
+719,096 correctness checks, sealed eight measurement rows and one verifier row,
+and passed strict projection. [TIMING.md](TIMING.md) records the commands,
+medians, receipt identities and observation limits. Native measurement rows store
+arithmetic means and raw vectors; reported medians are derived from those vectors.
+No inference ran and no dispatch winner or production promotion is asserted.

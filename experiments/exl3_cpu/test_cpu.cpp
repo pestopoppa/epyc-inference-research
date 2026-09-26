@@ -5,6 +5,7 @@
 #include <cfenv>
 #include <limits>
 #include <cstring>
+#include <cstdlib>
 #include <dlfcn.h>
 #include <fstream>
 #include <iostream>
@@ -127,9 +128,24 @@ void coverage(){
 }
 void bench(){
     const auto begin_ns=std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-    std::cout<<"microbench_window_begin_ns="<<begin_ns<<std::endl;
+    std::cout<<"microbench_window_begin_ns="<<std::hex<<begin_ns<<std::dec<<std::endl;
     std::vector<Matrix> experts;for(unsigned b=1;b<=8;++b)experts.push_back(matrix(b,Codebook::mul1,128,128));
     std::vector<Route> routes;for(size_t i=0;i<8;++i)routes.push_back({i,0});auto x=input(1,135);std::vector<float>y(8*128);
+    // Capture the actual timed synthetic payload, not the preceding real test fixtures.
+    const char* capture=std::getenv("EXL3_BENCH_WORKLOAD");
+    if(!capture)throw std::runtime_error("EXL3_BENCH_WORKLOAD required for timing identity");
+    std::ofstream payload(capture,std::ios::binary);
+    const uint32_t header[]={0x31425845,8,128,128,135};
+    payload.write(reinterpret_cast<const char*>(header),sizeof(header));
+    for(const auto& w:experts){
+        const uint32_t meta[]={w.bits,uint32_t(w.codebook),uint32_t(w.layout),uint32_t(w.trellis.size())};
+        payload.write(reinterpret_cast<const char*>(meta),sizeof(meta));
+        payload.write(reinterpret_cast<const char*>(w.trellis.data()),w.trellis.size()*sizeof(uint16_t));
+        payload.write(reinterpret_cast<const char*>(w.suh.data()),w.suh.size()*sizeof(float));
+        payload.write(reinterpret_cast<const char*>(w.svh.data()),w.svh.size()*sizeof(float));
+    }
+    payload.write(reinterpret_cast<const char*>(x.data()),x.size()*sizeof(float));payload.close();
+    if(!payload)throw std::runtime_error("cannot capture timing payload");
     for(auto isa:{ISA::scalar,ISA::avx512bw,ISA::vnni,ISA::vbmi})if(supported(isa))for(bool grouped:{false,true}){
         indexed(experts,routes,x.data(),1,135,y.data(),128,isa,grouped,true);
         for(int rep=0;rep<5;++rep){auto start=std::chrono::steady_clock::now();for(int j=0;j<4;++j)indexed(experts,routes,x.data(),1,135,y.data(),128,isa,grouped,true);
@@ -137,7 +153,7 @@ void bench(){
         std::cout<<"microbench candidate_observation isa="<<int(isa)<<" grouped="<<grouped<<" rep="<<rep<<" batch_us="<<us<<" checksum="<<y[0]<<"\n";}
     }
     const auto end_ns=std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-    std::cout<<"microbench_window_end_ns="<<end_ns<<std::endl;
+    std::cout<<"microbench_window_end_ns="<<std::hex<<end_ns<<std::dec<<std::endl;
 }
 }
 int main(int argc,char**argv){try{

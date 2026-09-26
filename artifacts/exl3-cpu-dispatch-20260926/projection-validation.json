@@ -1,0 +1,65 @@
+[
+  {
+    "file": "artifacts/exl3-cpu-dispatch-20260926/run-final/native/424a4830587486dce8c084ec8d016a88e651524ce1ffa9717df2ca2ad4124a33.measurement.json",
+    "row_id": "424a4830587486dce8c084ec8d016a88e651524ce1ffa9717df2ca2ad4124a33",
+    "grade": "('Judged', 'Located', ['no protocol citation \u2014 this is an OBSERVATION, never decision-gating (MEASUREMENT.md:13)'])",
+    "attestation_verified": true,
+    "promotion_authority": false
+  },
+  {
+    "file": "artifacts/exl3-cpu-dispatch-20260926/run-final/native/57706a951383e354fca514cf7dc403d160dd6aae485e60358ee1cb91d51d95d3.measurement.json",
+    "row_id": "57706a951383e354fca514cf7dc403d160dd6aae485e60358ee1cb91d51d95d3",
+    "grade": "('Judged', 'Located', ['no protocol citation \u2014 this is an OBSERVATION, never decision-gating (MEASUREMENT.md:13)'])",
+    "attestation_verified": true,
+    "promotion_authority": false
+  },
+  {
+    "file": "artifacts/exl3-cpu-dispatch-20260926/run-final/native/6550ad2c28a0f0e0ecd77bc751cf849ad7bf0f50832293b2a2871bec1880c83c.measurement.json",
+    "row_id": "6550ad2c28a0f0e0ecd77bc751cf849ad7bf0f50832293b2a2871bec1880c83c",
+    "grade": "('Judged', 'Located', ['no protocol citation \u2014 this is an OBSERVATION, never decision-gating (MEASUREMENT.md:13)'])",
+    "attestation_verified": true,
+    "promotion_authority": false
+  },
+  {
+    "file": "artifacts/exl3-cpu-dispatch-20260926/run-final/native/84bf196a5e32601df08511abc06d4838b9e51e331394e587c2c813cd0b66a32f.verifier.json",
+    "row_id": "84bf196a5e32601df08511abc06d4838b9e51e331394e587c2c813cd0b66a32f",
+    "grade": "('Judged', 'Located', ['no protocol citation \u2014 this is an OBSERVATION, never decision-gating (MEASUREMENT.md:13)', \"verifier class (binding_kind='identity'): a verifier confirms, it does not measure \u2014 the Q ceiling is Verified, and protocol-admissible measurement is the only route to Witnessed (docs/design/vidya-pilot-spec.md \u00a74.5)\"])",
+    "attestation_verified": true,
+    "promotion_authority": false
+  },
+  {
+    "file": "artifacts/exl3-cpu-dispatch-20260926/run-final/native/a29b2c8960d2b78a45ee2efb4410c15b22711b22336a532dd7f72477d8941f86.measurement.json",
+    "row_id": "a29b2c8960d2b78a45ee2efb4410c15b22711b22336a532dd7f72477d8941f86",
+    "grade": "('Judged', 'Located', ['no protocol citation \u2014 this is an OBSERVATION, never decision-gating (MEASUREMENT.md:13)'])",
+    "attestation_verified": true,
+    "promotion_authority": false
+  },
+  {
+    "file": "artifacts/exl3-cpu-dispatch-20260926/run-final/native/b9ab39d496eaee1968be68a5c58995055a5a87cdd70a9fbaa831b30261609e01.measurement.json",
+    "row_id": "b9ab39d496eaee1968be68a5c58995055a5a87cdd70a9fbaa831b30261609e01",
+    "grade": "('Judged', 'Located', ['no protocol citation \u2014 this is an OBSERVATION, never decision-gating (MEASUREMENT.md:13)'])",
+    "attestation_verified": true,
+    "promotion_authority": false
+  },
+  {
+    "file": "artifacts/exl3-cpu-dispatch-20260926/run-final/native/d6ceed078c42bfbdccbb04cb8e6367c913519b2bb6adcb1eea8b0c8a28325ad4.measurement.json",
+    "row_id": "d6ceed078c42bfbdccbb04cb8e6367c913519b2bb6adcb1eea8b0c8a28325ad4",
+    "grade": "('Judged', 'Located', ['no protocol citation \u2014 this is an OBSERVATION, never decision-gating (MEASUREMENT.md:13)'])",
+    "attestation_verified": true,
+    "promotion_authority": false
+  },
+  {
+    "file": "artifacts/exl3-cpu-dispatch-20260926/run-final/native/dc94d370f1d13d910b8b2964ef0c1014bdc1807d09a5d6680f8ef05de21ac700.measurement.json",
+    "row_id": "dc94d370f1d13d910b8b2964ef0c1014bdc1807d09a5d6680f8ef05de21ac700",
+    "grade": "('Judged', 'Located', ['no protocol citation \u2014 this is an OBSERVATION, never decision-gating (MEASUREMENT.md:13)'])",
+    "attestation_verified": true,
+    "promotion_authority": false
+  },
+  {
+    "file": "artifacts/exl3-cpu-dispatch-20260926/run-final/native/eecd04c2c7852574842d08fd0d3a28ad556628660a9d4359fb33a575317b0cd0.measurement.json",
+    "row_id": "eecd04c2c7852574842d08fd0d3a28ad556628660a9d4359fb33a575317b0cd0",
+    "grade": "('Judged', 'Located', ['no protocol citation \u2014 this is an OBSERVATION, never decision-gating (MEASUREMENT.md:13)'])",
+    "attestation_verified": true,
+    "promotion_authority": false
+  }
+]

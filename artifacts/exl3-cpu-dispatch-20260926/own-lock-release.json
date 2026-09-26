@@ -1,0 +1,6 @@
+{
+  "lock_path": "/mnt/raid0/llm/tmp/cpu_region.exl3-cpu-probe.q3.lock",
+  "own_role_lock_unheld": true,
+  "attribution_cleared": true,
+  "post_run_current_holder": "autokernel-cpu (subsequent canonical status)"
+}

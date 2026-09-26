@@ -1,0 +1,162 @@
+{
+  "schema": "exl3-cpu-dispatch-comparison-observation/v1",
+  "category": "CANDIDATE",
+  "instrument_class": "bench",
+  "protocol_eligible": false,
+  "acceptance": "pass: operator timing comparison completed; no performance promotion",
+  "unit": "microseconds per eight-expert 128x128 single-row mixed-K1-K8 MUL1-Q8 batch",
+  "metric_direction": "lower_better",
+  "reps_basis": "five observations per arm; each observation averages four invocations after warmup",
+  "payload_sha256": "28217be82281df2a89760fdcad447b0a64aaca0fa0f0d9f9499b9c8ef7d6d355",
+  "samples_during_timed_window": 28,
+  "q3_released": true,
+  "measurements": [
+    {
+      "arm": "isa0-grouped0",
+      "median_us": 3136.96,
+      "mean_us": 3121.9,
+      "raw_us": [
+        2951.63,
+        2947.5,
+        3258.35,
+        3315.06,
+        3136.96
+      ],
+      "row_id": "a29b2c8960d2b78a45ee2efb4410c15b22711b22336a532dd7f72477d8941f86",
+      "self_sha256": "84d949440d29b8c6944918e8b91cacb4942acbd97db3a975a95eb43ecc3a1b88"
+    },
+    {
+      "arm": "isa0-grouped1",
+      "median_us": 2949.34,
+      "mean_us": 2950.144,
+      "raw_us": [
+        2955.74,
+        2949.34,
+        2949.86,
+        2948.43,
+        2947.35
+      ],
+      "row_id": "dc94d370f1d13d910b8b2964ef0c1014bdc1807d09a5d6680f8ef05de21ac700",
+      "self_sha256": "441b7f49180d9f15bcaf2443c68d147d4ec2fbbc1f63a6b86b03c029329456ea"
+    },
+    {
+      "arm": "isa1-grouped0",
+      "median_us": 1268.65,
+      "mean_us": 1296.29,
+      "raw_us": [
+        1268.65,
+        1262.89,
+        1268.53,
+        1313.55,
+        1367.83
+      ],
+      "row_id": "eecd04c2c7852574842d08fd0d3a28ad556628660a9d4359fb33a575317b0cd0",
+      "self_sha256": "6b909becba4bafb9d2f46120a0df4b91c8c622f977d7fb5aa5b8b963c180f24e"
+    },
+    {
+      "arm": "isa1-grouped1",
+      "median_us": 1290.49,
+      "mean_us": 1304.55,
+      "raw_us": [
+        1290.49,
+        1341.62,
+        1357.32,
+        1264.26,
+        1269.06
+      ],
+      "row_id": "57706a951383e354fca514cf7dc403d160dd6aae485e60358ee1cb91d51d95d3",
+      "self_sha256": "685f77f5cdc82fd64554dce10a11fb17fe9cae0dab656cec7a50df1236d577ed"
+    },
+    {
+      "arm": "isa2-grouped0",
+      "median_us": 1260.11,
+      "mean_us": 1261.206,
+      "raw_us": [
+        1257.53,
+        1264.92,
+        1260.11,
+        1265.23,
+        1258.24
+      ],
+      "row_id": "d6ceed078c42bfbdccbb04cb8e6367c913519b2bb6adcb1eea8b0c8a28325ad4",
+      "self_sha256": "da2614e48540d329942a69bc8d5b0b79536301e6644178430d29472c769a1232"
+    },
+    {
+      "arm": "isa2-grouped1",
+      "median_us": 1264.28,
+      "mean_us": 1261.986,
+      "raw_us": [
+        1265.29,
+        1258.06,
+        1264.28,
+        1257.8,
+        1264.5
+      ],
+      "row_id": "424a4830587486dce8c084ec8d016a88e651524ce1ffa9717df2ca2ad4124a33",
+      "self_sha256": "e6d86914183b495508fe7421a5819fa76f93cad65b9734c2a1c25e4277d706f3"
+    },
+    {
+      "arm": "isa3-grouped0",
+      "median_us": 1265.4,
+      "mean_us": 1264.394,
+      "raw_us": [
+        1267.09,
+        1259.61,
+        1265.4,
+        1260.44,
+        1269.43
+      ],
+      "row_id": "b9ab39d496eaee1968be68a5c58995055a5a87cdd70a9fbaa831b30261609e01",
+      "self_sha256": "560960f9f84ada6caaa1f2d2966eb2dedddeb18500443914edeb5c8d10d2e84b"
+    },
+    {
+      "arm": "isa3-grouped1",
+      "median_us": 1324.37,
+      "mean_us": 1325.41,
+      "raw_us": [
+        1351.24,
+        1324.37,
+        1304.79,
+        1355.51,
+        1291.14
+      ],
+      "row_id": "6550ad2c28a0f0e0ecd77bc751cf849ad7bf0f50832293b2a2871bec1880c83c",
+      "self_sha256": "220f2b978f992620436816ccdaf9493e035f6c05e6ab6fae3544f3114e190aab"
+    }
+  ],
+  "verifier_row_id": "84bf196a5e32601df08511abc06d4838b9e51e331394e587c2c813cd0b66a32f",
+  "verifier_self_sha256": "0ef858df858a3656487f099bb2759c00bc6443fc82649466369dbf6cf690b5b1",
+  "files": {
+    "command.sh": "313ba8a61dd718930f9d9a051ec321eeb52f40ada740770a5f49bfd18646706b",
+    "region-final.stdout": "acfa47406666d20a9604689958159682ae5bf9dc7eed693f5ac83576e5a47f9a",
+    "region-final.stderr": "9beaa371e9bb6668d16061ca3c45c8546f61b9e2c3f6d182cc1234e8048b44df",
+    "released.txt": "b1dc7ea2bc83f873c081f1e3fd0b0b2b64ddfed7a4a0bb2bfbfdbb71f11d86d1",
+    "own-lock-release.json": "0b1978b5a7c46ba22444e2abbd559b4c00c3c2e68861cf56db29691c20f32366",
+    "projection-validation.json": "7f120af163f4c778ee8e50abbd40beb135c65fc97576e90f332645f97318d616"
+  },
+  "native_file_sha256": {
+    "424a4830587486dce8c084ec8d016a88e651524ce1ffa9717df2ca2ad4124a33.attestation.json": "3ae611dad7f1fe365b6f2541346f7b36f1ba232fc5da93467e1866037d4e08ce",
+    "424a4830587486dce8c084ec8d016a88e651524ce1ffa9717df2ca2ad4124a33.measurement.json": "6d8b91f17d34646369e35e84f7ad35c866063fad351c97cfaefaf65f1f34113b",
+    "57706a951383e354fca514cf7dc403d160dd6aae485e60358ee1cb91d51d95d3.attestation.json": "71755447d6fa8183d19d82e353a176d4c17f4810901465d4e8a455896e4cf47a",
+    "57706a951383e354fca514cf7dc403d160dd6aae485e60358ee1cb91d51d95d3.measurement.json": "85b9e12f976549aaec1704deed6631d7bd01b02e5eecb7789adfe9b0642f3e62",
+    "6550ad2c28a0f0e0ecd77bc751cf849ad7bf0f50832293b2a2871bec1880c83c.attestation.json": "911f0a05a981f4749c9c8fdb1d4e4e09179080b281acc6a82c3b563d81ac2307",
+    "6550ad2c28a0f0e0ecd77bc751cf849ad7bf0f50832293b2a2871bec1880c83c.measurement.json": "b0247f8cdf8cb19e20d8a7f197bfdab67dac3d67ae6d290bedcfb4d015f2cc8b",
+    "84bf196a5e32601df08511abc06d4838b9e51e331394e587c2c813cd0b66a32f.attestation.json": "19b61a36e0f5bd03a76897b64b6c0e810c9cab5e93a5a3f2ba99ec22a231a995",
+    "84bf196a5e32601df08511abc06d4838b9e51e331394e587c2c813cd0b66a32f.verifier.json": "c79f87e631fdf7468c7bb6c5d5a6191d7894ee33d576bebb68a28926497c8c1a",
+    "a29b2c8960d2b78a45ee2efb4410c15b22711b22336a532dd7f72477d8941f86.attestation.json": "1299fffb43a09266fc4805b92465b98051e1a72d8ae78b3bee3860050b70f46b",
+    "a29b2c8960d2b78a45ee2efb4410c15b22711b22336a532dd7f72477d8941f86.measurement.json": "d774930bb57db1bd29f1fa8767670e5ddae9ae380204fb9b7a05c652f038aea8",
+    "b9ab39d496eaee1968be68a5c58995055a5a87cdd70a9fbaa831b30261609e01.attestation.json": "5b23fe6c4c7c400433b31401eed16e450f20250761b31b8c2e3126f8b01e4599",
+    "b9ab39d496eaee1968be68a5c58995055a5a87cdd70a9fbaa831b30261609e01.measurement.json": "c107d8a425db85840033606276f7817f4abb7e4b975d4043b9e495e065baf442",
+    "d6ceed078c42bfbdccbb04cb8e6367c913519b2bb6adcb1eea8b0c8a28325ad4.attestation.json": "2e7d6679ff2368350da67b9229dc3e28026426e5dc3992c358d8deed95a2434a",
+    "d6ceed078c42bfbdccbb04cb8e6367c913519b2bb6adcb1eea8b0c8a28325ad4.measurement.json": "bed725d0777d370aeb9514ef86f5b321743321694726d80344eb9a3483d17480",
+    "dc94d370f1d13d910b8b2964ef0c1014bdc1807d09a5d6680f8ef05de21ac700.attestation.json": "d69abb4c8be83b7dcf2f7f8e7478a9b709c533adf1878e9b4c0be4b6bc676171",
+    "dc94d370f1d13d910b8b2964ef0c1014bdc1807d09a5d6680f8ef05de21ac700.measurement.json": "ec083f1a3f35e58dbbda78ce4df1cfd533b0bb52263d5386934126087e25ba55",
+    "eecd04c2c7852574842d08fd0d3a28ad556628660a9d4359fb33a575317b0cd0.attestation.json": "7b3060f15d2d082988585584a6afdd543754a7f35a5a366dd3a0ba1a133b6dd9",
+    "eecd04c2c7852574842d08fd0d3a28ad556628660a9d4359fb33a575317b0cd0.measurement.json": "eb89b5e246d22af1bca3e9b1999392677a6b3a8341373a9521db7217547b5875"
+  },
+  "timed_window_ns_hex": [
+    "0x186b703945b27",
+    "0x186b714d7cda6"
+  ],
+  "post_run_current_holder": "autokernel-cpu subsequently reacquired q3; our role lock unheld and cleared"
+}
