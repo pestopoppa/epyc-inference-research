@@ -2,7 +2,8 @@
 import hashlib
 import json
 import os
-from contextlib import nullcontext
+from contextlib import nullcontext, redirect_stdout
+import io
 from pathlib import Path
 from unittest import mock
 
@@ -372,6 +373,23 @@ def test_new_serial_epoch_seeds_only_completed_prior_target_continuation(
     assert not ({row.receipt_id for row in scheduler.accounted_receipts}
                 & {row.receipt_id for row in old_scheduler.accounted_receipts})
     assert scheduler.issued_selection_digests == ()
+
+
+def test_seeded_dry_run_resumes_the_initial_continuation(tmp_path, monkeypatch):
+    old, argv = _inputs(tmp_path, monkeypatch, rounds=1)
+    argv = _scheduled(tmp_path, argv[2:])
+    assert sr.main(argv) == 0
+    prior = old / "batches/batch-000000/loop-continuation.json"
+    fresh = tmp_path / "fresh-dry"
+    restarted = list(argv)
+    restarted[restarted.index("--state-dir") + 1] = str(fresh)
+    calls = []
+    monkeypatch.setattr(run, "main", lambda child: calls.append(list(child)) or 0)
+    assert sr.main([*restarted, "--initial-continuation", str(prior), "--dry-run"]) == 0
+    assert len(calls) == 1
+    assert sr.option(calls[0], "--resume-run") == str(prior.resolve())
+    assert calls[0][-1] == "--dry-run"
+    assert not fresh.exists()
 
 
 def test_initial_continuation_refuses_stopped_or_other_target_without_new_state(
@@ -839,7 +857,8 @@ def test_actual_cpu_post_keep_resume_rebinds_original_launch_without_recalibrati
         assert original_main(argv) == 0
         first = Path(sr.option(argv, "--out"))
         row, _ = sr.load_completed(first / "loop-continuation.json")
-        assert row["cor_anchor"] is None
+        # Experimental continuations record their champion of record (2026-09-26).
+        assert row["cor_anchor"]["path"] == str(Path(sr.option(argv, "--anchor-build")).resolve())
         assert row["current_anchor"]["path"] != sr.option(argv, "--anchor-build")
         # Keep all original recipe/request arguments and source identity checks.
         # Only this second pass is dry-run; the original five-iteration fixture
@@ -856,6 +875,127 @@ def test_actual_cpu_post_keep_resume_rebinds_original_launch_without_recalibrati
     with mock.patch.object(run, "main", first_then_resume_dry_run):
         cpu_fixture.test_existing_main_cpu_five_iterations_preserves_canonical_champion(False)
     assert len(resumed) == 1
+
+
+class _ReachedClaim(RuntimeError):
+    """Sentinel: the resumed child passed every pre-claim identity guard."""
+
+
+@pytest.mark.parametrize("legacy_null_cor", [False, True])
+def test_actual_cpu_experimental_keep_then_resumed_batch_restores_original_cor(
+        legacy_null_cor):
+    """DS41 run 10i: an experimental accumulator keep advanced the anchor to
+    anchor-gen-001; the next serial batch resumed there with no recorded COR and was
+    refused ("restored champion of record differs from current anchor"). The
+    resumed child must restore the ORIGINAL COR build, proven exact, reuse its
+    calibrated floor frame, and still refuse a chain that names only the tip."""
+    original_main = run.main
+    reached = []
+
+    def first_then_resume(argv):
+        assert original_main(argv) == 0
+        first = Path(sr.option(argv, "--out"))
+        path = first / "loop-continuation.json"
+        row, _ = sr.load_completed(path)
+        startup = Path(sr.option(argv, "--anchor-build")).resolve()
+        worktree = Path(row["worktree"])
+        tip = row["current_anchor"]
+        assert tip["path"] != str(startup)
+        store = Path(sr.option(argv, "--store"))
+        bundle, _ = run.accumulate.load_bundle(
+            store, anchor_commit=tip["commit"], is_ancestor=lambda *_: True,
+            read_only=True)
+        assert bundle.keeps and bundle.champion_of_record != tip["commit"]
+        cor = {"path": str(startup),
+               "commit": sr.full_commit(worktree, bundle.champion_of_record)}
+        if legacy_null_cor:
+            # Experimental continuations written before 2026-09-26 recorded null.
+            legacy = json.loads(path.read_text())
+            legacy["cor_anchor"] = None
+            path.write_text(json.dumps(legacy))
+            assert sr.load_completed(path)[0]["cor_anchor"] is None
+        else:
+            assert row["cor_anchor"] == cor
+        resumed_out = first.parent / "resumed"
+        resume = [*argv, "--resume-run", str(path), "--out", str(resumed_out),
+                  "--iterations", "1"]
+        # The fixture redirects stdout for the whole run; capture ours explicitly.
+        dry_out = io.StringIO()
+        with mock.patch.object(run.serving, "calibrate_floor",
+                               side_effect=AssertionError("recalibration")), \
+                redirect_stdout(dry_out):
+            # The dry run now reopens the accumulator and proves the COR too.
+            assert original_main([*resume, "--dry-run"]) == 0
+        dry = dry_out.getvalue()
+        assert f"champion of record {cor['commit'][:12]} = {startup}" in dry
+        exact = []
+        real_exact = sr.verify_exact_anchor
+
+        def record(*args, **kwargs):
+            exact.append((Path(args[0]).resolve(), sr.full_commit(worktree, args[2]),
+                          kwargs.get("experimental")))
+            return real_exact(*args, **kwargs)
+
+        live_out = io.StringIO()
+        with mock.patch.object(run.serving, "calibrate_floor",
+                               side_effect=AssertionError("recalibration")), \
+                mock.patch.object(sr, "verify_exact_anchor", side_effect=record), \
+                mock.patch.object(run.claim, "hold_cpu", side_effect=_ReachedClaim), \
+                redirect_stdout(live_out), pytest.raises(_ReachedClaim):
+            original_main(resume)
+        live = live_out.getvalue()
+        # The COR arm is the original startup build, proven exact under the
+        # experimental identity -- never the kept tip relabelled.
+        assert (startup, cor["commit"], True) in exact
+        assert all(not (path == Path(tip["path"]).resolve() and commit == cor["commit"])
+                   for path, commit, _experimental in exact)
+        # Its verified floor frame is reused: no fresh calibration for the new tip.
+        assert "request-bound floor None" not in live
+        assert "original calibration launches" not in live
+        if legacy_null_cor:
+            # The recovery adopts only a PROVEN build: a chain naming only the tip
+            # keeps the refusal, and nothing is claimed.
+            with mock.patch.object(sr, "continuation_cor_candidates",
+                                   return_value=[Path(tip["path"])]), \
+                    mock.patch.object(run.claim, "hold_cpu",
+                                      side_effect=AssertionError("claim after refusal")), \
+                    pytest.raises(run.champion.StartupRefused, match="original --cor-build"):
+                original_main(resume)
+            # An explicit wrong --cor-build (the tip) is refused by exact identity.
+            with mock.patch.object(run.claim, "hold_cpu",
+                                   side_effect=AssertionError("claim after refusal")), \
+                    pytest.raises((run.champion.StartupRefused, sr.SerialRefused)):
+                original_main([*resume, "--cor-build", tip["path"]])
+        reached.append(True)
+        return 0
+
+    with mock.patch.object(run, "main", first_then_resume):
+        cpu_fixture.test_existing_main_cpu_five_iterations_preserves_canonical_champion(False)
+    assert reached == [True]
+
+
+def test_continuation_cor_candidates_walk_legacy_chain_to_root(tmp_path):
+    root_anchor, gen1, gen2 = (tmp_path.resolve() / name for name in ("build-cpu", "gen-1", "gen-2"))
+
+    def write(name, current, previous=None, cor=None, anchor_build=None):
+        argv = ["--anchor-build", str(anchor_build or root_anchor)]
+        if previous is not None:
+            argv += ["--resume-run", str(previous)]
+        path = tmp_path / f"{name}.json"
+        path.write_text(json.dumps({"input_argv": argv, "cor_anchor": cor,
+                                    "current_anchor": {"path": str(current), "commit": "0" * 40}}))
+        return path
+
+    first = write("b0", gen1)                       # the root kept: its anchor moved
+    second = write("b1", gen2, previous=first)
+    assert sr.continuation_cor_candidates(second) == [gen2, gen1, root_anchor]
+    recorded = write("b2", gen2, previous=second,
+                     cor={"path": str(root_anchor), "commit": "1" * 40})
+    third = write("b3", gen2, previous=recorded)
+    # Stops at the first recorded COR; hints are never adopted by position.
+    assert sr.continuation_cor_candidates(third) == [gen2, root_anchor]
+    broken = write("b4", gen2, previous=tmp_path / "missing.json")
+    assert sr.continuation_cor_candidates(broken) == [gen2]
 
 
 @pytest.mark.parametrize("validation_failure,cross_worktree", [

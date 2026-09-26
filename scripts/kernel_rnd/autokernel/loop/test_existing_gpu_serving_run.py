@@ -209,7 +209,11 @@ def test_existing_gpu_pool_uses_selected_requests_and_original_keep_owners(
         assert run.status.read(fixture.store)["gpu"]["device_seconds_under_load"] is None
         assert bool(bench_calls) is (not experimental)
         if experimental:
-            assert result["continuation"]["cor_anchor"] is None
+            # Experimental continuations record their COR too (2026-09-26): the next
+            # batch resumes the protected serving A-arm, never the relabelled tip.
+            cor = result["continuation"]["cor_anchor"]
+            assert cor is not None and Path(cor["path"]).is_dir()
+            assert len(cor["commit"]) == 40
             assert run._git(fixture.repo, "rev-parse", run.champion.CANONICAL_BRANCH) == fixture.tip
         else:
             # Original whole-COR gate runs separately; a marginal keep never promotes it by itself.

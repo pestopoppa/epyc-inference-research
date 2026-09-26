@@ -756,7 +756,11 @@ def load_completed(path: Path, *, expected_argv=None, expected_binding=None):
     experimental = cpu or (gpu and option(argv, "--experimental-branch") is not None)
     branch = option(argv, "--experimental-branch") if experimental else option(
         argv, "--champion-branch", champion.CANONICAL_BRANCH)
-    if (cpu and gpu) or branch != row["branch"] or experimental != (row["cor_anchor"] is None):
+    # A canonical continuation always carries its champion of record. An experimental
+    # one carries it too since 2026-09-26 (DS41 run 10i: an experimental accumulator
+    # keep advanced the anchor, the COR was recorded nowhere, and the next batch was
+    # refused); older experimental rows recorded null and stay loadable.
+    if (cpu and gpu) or branch != row["branch"] or (not experimental and row["cor_anchor"] is None):
         raise SerialRefused("recorded branch/backend differs from actual input arguments")
     if option(argv, "--resolved-campaign") is not None:
         resolved = campaign_cli.load_previous(Path(option(argv, "--resolved-campaign")))
@@ -944,6 +948,62 @@ def full_commit(worktree: Path, commit: str) -> str:
     if done.returncode != 0:
         raise SerialRefused("original commit cannot be resolved unambiguously")
     return done.stdout.strip()
+
+
+MAX_COR_CHAIN_HOPS = 1024
+
+
+def continuation_cor_candidates(path: Path) -> list[Path]:
+    """Build dirs a continuation chain names, newest first: HINTS, never a COR.
+
+    Experimental continuations written before 2026-09-26 recorded ``cor_anchor:
+    null`` although experimental serving has had a durable accumulator with a
+    champion of record since 522ccbbf. After an accumulator keep the next batch
+    resumed at the kept anchor-gen with no way to name the COR's build, and was
+    refused (DS41 run 10i batch-000002). The COR's build is still named by the
+    chain: an earlier batch's ``current_anchor`` or the chain root's original
+    ``--anchor-build``. This walks ``--resume-run`` links back (bounded) and stops
+    at the first continuation that did record a ``cor_anchor``.
+
+    The caller must PROVE one candidate is the exact champion-of-record arm
+    (``verify_exact_anchor``) and must never adopt one by position; an unreadable
+    link ends the walk rather than failing it, because a missing hint only leaves
+    the existing refusal in place.
+    """
+    candidates: list[Path] = []
+    seen: set[str] = set()
+
+    def add(value) -> None:
+        if isinstance(value, str) and value and Path(value).is_absolute():
+            key = str(Path(value).resolve())
+            if key not in seen:
+                seen.add(key)
+                candidates.append(Path(key))
+
+    current = Path(path)
+    for _hop in range(MAX_COR_CHAIN_HOPS):
+        try:
+            body, _sha = _json(current, limit=2 * 1024 * 1024)
+            if not isinstance(body, dict):
+                break
+            cor = body.get("cor_anchor")
+            if isinstance(cor, dict):
+                add(cor.get("path"))
+                break
+            anchor = body.get("current_anchor")
+            if isinstance(anchor, dict):
+                add(anchor.get("path"))
+            argv = body.get("input_argv")
+            if not isinstance(argv, list) or not all(isinstance(item, str) for item in argv):
+                break
+            previous = option(argv, "--resume-run")
+            if previous is None:
+                add(option(argv, "--anchor-build"))
+                break
+            current = Path(previous)
+        except (OSError, ValueError, TypeError):
+            break
+    return candidates
 
 
 def verify_exact_anchor(path: Path, worktree: Path, commit: str, *, experimental=False,
@@ -1267,8 +1327,14 @@ def main(argv=None) -> int:
                                          scheduler_manifest.scheduler_id),
                 tuple(option(target, "--target-id") for target in targets), now=time.time(),
                 stage_number=0)
-        for target in targets:
-            result = run.main([*target, "--dry-run"])
+        for index, target in enumerate(targets):
+            # The first child of a seeded epoch resumes the initial continuation, so
+            # its dry run must too: the original target argv alone names the chain's
+            # ROOT anchor, which no longer matches a source head a keep advanced.
+            seeded = (["--resume-run", initial_continuation["path"]]
+                      if initial_continuation is not None
+                      and initial_continuation["target_index"] == index else [])
+            result = run.main([*target, *seeded, "--dry-run"])
             if result:
                 return result
         return 0
