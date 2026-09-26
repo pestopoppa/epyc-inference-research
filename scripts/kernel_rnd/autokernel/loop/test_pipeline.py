@@ -1561,7 +1561,9 @@ class ThePoolBreaker(unittest.TestCase):
         drawn, recorded, raised = self._pool(gate=refusing, iterations=8)
         self.assertEqual(raised, [])
         self.assertEqual(len(recorded), 8)
-        self.assertTrue(all(o.status == "refused_at_formation" for o in recorded))
+        # A compile refusal of every patch leaves each accepted hypothesis pending
+        # at the author: still the loop working, never a breaker trip.
+        self.assertTrue(all(o.status == loop.PATCH_ROUNDS_EXHAUSTED for o in recorded))
 
     def test_nulls_are_the_loop_working_and_never_trip_it(self):
         def passing(worker):

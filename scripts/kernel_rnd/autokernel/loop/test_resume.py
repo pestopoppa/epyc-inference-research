@@ -283,7 +283,8 @@ class ResumesAtBuild(Fixture):
     def test_another_epoch_is_never_resumed_but_is_counted(self):
         self.refuse_once()
         queue, report = self.prepare(epoch="d" * 64)
-        self.assertEqual((len(queue), report["scanned"], report["other_epoch_rows"]), (0, 0, 1))
+        # The gate_refused disposal and the scope_blocked iteration row.
+        self.assertEqual((len(queue), report["scanned"], report["other_epoch_rows"]), (0, 0, 2))
         self.assertEqual(self.claims(), {})
 
     def test_a_compile_failure_is_never_resumed_at_build(self):
@@ -295,8 +296,12 @@ class ResumesAtBuild(Fixture):
             record_abandoned=self.owner.record_abandoned)
         self.owner.record(outcome)
         queue, report = self.prepare()
-        self.assertEqual(len(queue), 0)
         self.assertIn("verdict on the patch", report["ineligible"][0]["reason"])
+        # Never at BUILD -- but the accepted hypothesis is re-AUTHORED: a compile
+        # failure is the author's defect, not a verdict on the idea.
+        self.assertEqual(outcome.status, loop.PATCH_ROUNDS_EXHAUSTED)
+        self.assertEqual([(row["stage"], row["row_status"]) for row in report["queued"]],
+                         [("author", loop.PATCH_ROUNDS_EXHAUSTED)])
 
 
 class ResumesAtAuthor(Fixture):
@@ -462,7 +467,7 @@ class RevalidationFailuresAreRecordedAndNeverRetried(Fixture):
         self.assertEqual(row["resumed_from"], point.checkpoint_id)
         self.assertNotIn("resume_checkpoints", row)     # a refusal is final
         queue, report = self.prepare()
-        self.assertEqual((len(queue), report["already_claimed"]), (0, 1))
+        self.assertEqual((len(queue), report["already_claimed"]), (0, 2))  # + the scope_blocked row's author checkpoint, superseded as a sibling
 
     def test_an_anchor_that_moves_during_the_run_is_rejected_in_the_lane(self):
         self.refuse_once()
@@ -510,7 +515,7 @@ class Idempotency(Fixture):
         point = queue.take(Worker(self.repo), self.anchor)
         # ... the process dies here, before any outcome is recorded ...
         queue, report = self.prepare()
-        self.assertEqual((len(queue), report["already_claimed"]), (0, 1))
+        self.assertEqual((len(queue), report["already_claimed"]), (0, 2))  # + the scope_blocked row's author checkpoint, superseded as a sibling
         self.assertEqual(self.claims()[point.checkpoint_id]["state"], "resumed")
         self.assertIsNone(self.claims()[point.checkpoint_id]["result_status"])
 
@@ -532,13 +537,14 @@ class Idempotency(Fixture):
         queue, _ = self.prepare()
         self.assertIsNotNone(queue.take(Worker(self.repo), self.anchor))
         with resume.ClaimLedger(self.store) as ledger:
-            self.assertEqual(ledger.claimed(self.anchor), {queue.handed_out[0]})
+            self.assertIn(queue.handed_out[0], ledger.claimed(self.anchor))
             self.assertEqual(ledger.claimed("f" * 40), set())
 
 
 class TheStopPathWritesACheckpoint(Fixture):
 
     def test_the_run9c_sequence_leaves_a_build_checkpoint_on_the_stop_row(self):
+        # Run 9c's refusal, then a stop before the next patch round is authored.
         planner = Planner(self.repo, [hyp(), hyp("akm-next")])
         disposed = []
 
@@ -550,15 +556,30 @@ class TheStopPathWritesACheckpoint(Fixture):
             planner=planner, critic=Critic(), context={},
             measure=lambda h, p: self.fail("refused"), gate=refusing_gate,
             commit=lambda h, p, c: self.fail("refused"),
-            should_abandon=lambda: planner.proposals >= 1 and len(disposed) >= 2,
+            should_abandon=lambda: planner.proposals >= 1 and len(disposed) >= 1,
             record_abandoned=record)
         self.assertEqual(outcome.reasons[0], loop.STOPPED_AFTER_DISPOSALS)
-        (checkpoint,) = outcome.resume_checkpoints
-        self.assertEqual((checkpoint["stage"], checkpoint["patch_round"]), ("build", 2))
+        author, checkpoint = outcome.resume_checkpoints
+        self.assertEqual((author["stage"], author["patch_rounds_remaining"]), ("author", 1))
+        self.assertEqual((checkpoint["stage"], checkpoint["patch_round"]), ("build", 1))
         self.assertEqual(checkpoint["retained_patch"], disposed[-1].retained_patch)
         self.assertTrue(checkpoint["critic_patch"]["accepted"])
         self.assertEqual(checkpoint["gate_rules_fingerprint"], loop.gate_rules_fingerprint())
-        self.assertEqual(outcome.to_attempt()["resume_checkpoints"], [checkpoint])
+        self.assertEqual(outcome.to_attempt()["resume_checkpoints"], [author, checkpoint])
+
+    def test_both_rounds_refused_by_the_rule_leave_it_scope_blocked(self):
+        planner = Planner(self.repo, [hyp(), hyp("akm-next")])
+        outcome = loop.iterate(
+            planner=planner, critic=Critic(), context={},
+            measure=lambda h, p: self.fail("refused"), gate=refusing_gate,
+            commit=lambda h, p, c: self.fail("refused"),
+            record_abandoned=self.owner.record_abandoned)
+        self.assertEqual((outcome.status, planner.proposals), (loop.SCOPE_BLOCKED, 1))
+        builds = [row["resume_checkpoints"][0] for row in rows_with(self.store, "gate_refused")]
+        self.assertEqual([ck["patch_round"] for ck in builds], [1, 2])
+        (author,) = outcome.resume_checkpoints
+        self.assertEqual((author["stage"], author["scope_block"]["source"]),
+                         ("author", "gate:op_scope"))
 
     def test_a_clean_stop_before_any_acceptance_writes_none(self):
         outcome = loop.iterate(planner=Planner(self.repo, [hyp()]), critic=Critic(),

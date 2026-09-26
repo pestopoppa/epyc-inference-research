@@ -27,6 +27,7 @@ a ROCm toolchain.
 """
 from __future__ import annotations
 
+import re
 import sys
 from contextlib import nullcontext
 from dataclasses import dataclass, field
@@ -38,6 +39,34 @@ from . import bench, gates, integrity
 
 HYPOTHESIS_ROUNDS = 3
 PATCH_ROUNDS = 2
+#: Authoring attempts one ACCEPTED hypothesis gets across iterations, each of
+#: `patch_rounds` rounds (`run.py --hypothesis-author-attempts`). A critic-accepted
+#: idea is not evidence-free: DS41 run 10g threw `akm-q4k-x4t-avx512` back to the
+#: planner after two patches failed on authoring defects (non-GCC intrinsics, wrong
+#: arity, offset bugs), so the author's weakness retired the critic's verdict.
+HYPOTHESIS_AUTHOR_ATTEMPTS = 3
+
+#: Patch rounds ran out while the hypothesis stood accepted and the last rejection
+#: was the AUTHOR's (a critic-pass-2 defect, or a compile/correctness gate). The row
+#: carries an author checkpoint so the next draw re-authors it (`resume.py`), with
+#: every patch rejection so far as author feedback. Not a verdict on the idea.
+PATCH_ROUNDS_EXHAUSTED = "patch_rounds_exhausted"
+#: Patch rounds ran out and the last rejection said the mechanism cannot be written
+#: inside the admitted route (critic pass 2 tagged it `SCOPE`, or the `op_scope` rule
+#: gate refused it). Resumable, but only once the scope rules change
+#: (`scope_rules_fingerprint`): a widening re-admits it with no operator action.
+SCOPE_BLOCKED = "scope_blocked"
+#: The accepted hypothesis spent its authoring budget on author failures. Terminal,
+#: no checkpoint; the reason names the budget and carries every patch rejection.
+HYPOTHESIS_RETIRED = "hypothesis_retired"
+#: Iteration outcomes whose row keeps an accepted hypothesis pending authoring.
+PENDING_HYPOTHESIS_STATUSES = frozenset({PATCH_ROUNDS_EXHAUSTED, SCOPE_BLOCKED})
+#: Most patch rejections an author checkpoint carries forward (newest kept).
+MAX_CARRIED_PATCH_REJECTIONS = 8
+#: How critic pass 2 tags a SCOPE rejection: the reason begins `SCOPE: ...` or
+#: `SCOPE[<rule or route>]: ...`. Structured critics may set `Review.scope_rule`.
+_SCOPE_TAG = re.compile(r"^\s*\**\s*SCOPE\s*(?:\[(?P<rule>[^\]]{1,400})\])?\s*\**\s*[:\-—]\s*",
+                        re.IGNORECASE)
 
 #: NOT an error and NOT a refusal. The run was told to stop while this candidate was
 #: still forming, so the lane abandons rather than drawing further actor calls for a
@@ -251,6 +280,11 @@ class Review:
     validator_kind: str = ""
     independence: str = ""
     evidence_inspected: tuple[str, ...] = ()
+    #: Critic pass 2 only: non-empty when the patch was rejected because the
+    #: mechanism cannot be implemented without touching a region the admitted route
+    #: refuses; names that route or rule. A `SCOPE:` reason prefix means the same
+    #: (`classify_patch_rejection`).
+    scope_rule: str = ""
 
     def __post_init__(self) -> None:
         if not self.accepted and not self.reason.strip():
@@ -329,6 +363,10 @@ class Outcome:
     # author's reply carried no report; `author_report_recovery` says why and what.
     report_source: str | None = None
     author_report_recovery: dict | None = None
+    # PATCH_ROUNDS_EXHAUSTED / SCOPE_BLOCKED / HYPOTHESIS_RETIRED: the accepted
+    # hypothesis's authoring state (class, attempts used/budget/remaining, and for a
+    # scope block the route and rule that blocked it).
+    hypothesis_pending: dict | None = None
 
     def to_attempt(self) -> dict:
         row = {"status": self.status, "turn_recorded_at": _now()}
@@ -372,6 +410,8 @@ class Outcome:
         if self.report_source is not None:
             row["report_source"] = self.report_source
             row["author_report_recovery"] = self.author_report_recovery
+        if self.hypothesis_pending is not None:
+            row["hypothesis_pending"] = dict(self.hypothesis_pending)
         for key in ("spawn_parent", "branch_id", "width", "depth"):
             if getattr(self, key) is not None:
                 row[key] = getattr(self, key)
@@ -409,6 +449,55 @@ def gate_rules_fingerprint() -> str:
     """
     import hashlib
     return hashlib.sha256(Path(gates.__file__).read_bytes()).hexdigest()
+
+
+def scope_rules_fingerprint() -> str:
+    """Digest of what defines the ADMITTED ROUTES a scope rejection was made under.
+
+    The routes are enforced by `gates.affected_op_scope` and described to every actor
+    by `program.md`; a `scope_blocked` checkpoint records this and `resume.py` keeps
+    it unresumable until it changes. Coarse on purpose, like `gate_rules_fingerprint`:
+    any edit to either file re-opens the question, and the resumed hypothesis is
+    re-authored and re-reviewed from scratch.
+    """
+    import hashlib
+    digest = hashlib.sha256()
+    for path in (Path(gates.__file__), PROGRAM):
+        digest.update(path.name.encode() + b"\0")
+        try:
+            digest.update(path.read_bytes())
+        except OSError:
+            digest.update(b"<missing>")
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def classify_patch_rejection(reason: str, *, scope_rule: str = "",
+                             source: str = "critic:patch") -> dict:
+    """What a patch rejection says about the HYPOTHESIS, never about the idea's merit.
+
+    "scope"     -- the mechanism cannot be written inside the admitted route: the
+                   critic set `scope_rule`, or began its reason `SCOPE:` /
+                   `SCOPE[<rule>]:`, or a RULE gate (`op_scope`) refused the diff.
+    "authoring" -- everything else: the patch was wrong, the idea stands.
+    """
+    text = str(reason or "")
+    rule = str(scope_rule or "").strip()
+    if not rule:
+        match = _SCOPE_TAG.match(text)
+        if match is not None:
+            rule = (match.group("rule") or "").strip() \
+                or text[match.end():].strip().split(". ")[0][:400] or "unnamed scope rule"
+    if not rule and source.startswith("gate:") and source.partition(":")[2] in _RULE_GATES:
+        rule = text[:400] or f"{source} refused"
+    if rule:
+        return {"class": "scope", "rule": rule[:400], "source": source}
+    return {"class": "authoring", "rule": None, "source": source}
+
+
+#: Deterministic pre-build RULE gates (mirrors `resume.RULE_GATES`): a refusal by one
+#: is a scope verdict of the rule, not an authoring defect of the patch.
+_RULE_GATES = frozenset({"op_scope"})
 
 
 def _mark_report_source(outcome: "Outcome", progress: Mapping[str, Any]) -> None:
@@ -601,7 +690,8 @@ def iterate(*, planner: Planner, critic: Critic,
             formation_guard=None, reserve_candidate=None,
             record_abandoned: Callable[[Outcome], None] | None = None,
             resume=None,
-            author_lane: tuple[Path, str] | None = None
+            author_lane: tuple[Path, str] | None = None,
+            author_attempts: int = HYPOTHESIS_AUTHOR_ATTEMPTS
             ) -> Outcome:
     """One full turn. Pure control flow: every side effect is an injected callable.
 
@@ -635,6 +725,16 @@ def iterate(*, planner: Planner, critic: Critic,
     reply that carries no report (`AuthorReportMissing`) is answered from the lane diff
     (`integrity.lane_diff_report`, recorded `report_source: "lane_diff"`), and the
     normal gates judge that diff. Without it, or with no diff, the transient stands.
+
+    An ACCEPTED hypothesis whose patch rounds all end in rejection is not thrown back
+    to the planner. The iteration ends as `patch_rounds_exhausted` (the last rejection
+    was the author's) or `scope_blocked` (the last rejection said the mechanism cannot
+    be written inside the admitted route), carrying an AUTHOR checkpoint with every
+    patch rejection as author feedback, so the next draw re-authors it before the
+    planner is asked (`resume.py`). `author_attempts` bounds that per hypothesis
+    across iterations: each authoring attempt of `patch_rounds` rounds that ends on an
+    author failure spends one, and the last one retires it (`hypothesis_retired`). A
+    scope-blocked attempt spends none: it waits for the scope rules to change.
     """
     working = dict(context)
     abandoned: list[dict] = []
@@ -698,7 +798,8 @@ def iterate(*, planner: Planner, critic: Critic,
                         round_telemetry=round_telemetry,
                         validator_provenance=validator_provenance,
                         record_abandoned=record_abandoned, abandoned=abandoned,
-                        resume=resume, progress=progress, author_lane=author_lane))
+                        resume=resume, progress=progress, author_lane=author_lane,
+                        author_attempts=author_attempts))
     except TailRefused as exc:
         # The candidate was formed and never measured. Carry the hypothesis: the
         # patch may well still help against the champion that displaced it, and the
@@ -748,7 +849,8 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
              formation_guard=lambda _hypothesis, _context: None,
              reserve_candidate=None, round_telemetry=None,
              validator_provenance=None, record_abandoned=None,
-             abandoned=None, resume=None, progress=None, author_lane=None) -> Outcome:
+             abandoned=None, resume=None, progress=None, author_lane=None,
+             author_attempts=HYPOTHESIS_AUTHOR_ATTEMPTS) -> Outcome:
     last_proposed: Hypothesis | None = None
     round_telemetry = round_telemetry if round_telemetry is not None else {}
     validator_provenance = (validator_provenance if validator_provenance is not None
@@ -774,6 +876,15 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                 return dict(row)
         return None
 
+    def attempts_used(hypothesis) -> int:
+        """Authoring attempts this accepted hypothesis already spent (carried)."""
+        if not is_resumed(hypothesis):
+            return 0
+        try:
+            return max(0, int(resume.checkpoint.get("author_attempts_used") or 0))
+        except (TypeError, ValueError):
+            return 0
+
     def checkpoint(stage: str, hypothesis, **fields) -> dict:
         """What a later launch needs to resume this candidate at `stage`.
 
@@ -785,7 +896,59 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                 "critic_hypothesis": latest_accepted("critic:hypothesis"),
                 "hypothesis_round": int(round_telemetry.get("hypothesis_round", 0)),
                 "patch_round": int(round_telemetry.get("patch_round", 0)),
+                "author_attempts_used": attempts_used(hypothesis),
+                # A pending hypothesis interrupted mid-attempt keeps its budget (and so
+                # its chain-depth allowance, `resume.depth_limit`) on the new checkpoint.
+                **({"author_attempts_budget": resume.checkpoint["author_attempts_budget"]}
+                   if is_resumed(hypothesis)
+                   and resume.checkpoint.get("author_attempts_budget") is not None else {}),
                 **lineage(hypothesis), **fields}
+
+    def exhausted(hypothesis, patch_reasons: list[str],
+                  rejections: list[dict]) -> Outcome:
+        """Every patch round of an ACCEPTED hypothesis ended in a rejection.
+
+        The idea stands (critic pass 1 accepted it and nothing since judged it), so
+        it stays pending at the author instead of going back to the planner.
+        """
+        last = rejections[-1]
+        scope = last["class"] == "scope"
+        budget = max(1, int(author_attempts))
+        used = attempts_used(hypothesis) + (0 if scope else 1)
+        carried = list(patch_reasons)[-MAX_CARRIED_PATCH_REJECTIONS:]
+        state = {"class": SCOPE_BLOCKED if scope else PATCH_ROUNDS_EXHAUSTED,
+                 "author_attempts_used": used, "author_attempts_budget": budget,
+                 "author_attempts_remaining": max(0, budget - used),
+                 "patch_rounds_per_attempt": int(patch_rounds),
+                 "last_rejection": {key: last[key] for key in ("class", "source", "rule")}}
+        rounds = f"{len(rejections)} patch round(s)"
+        if not scope and used >= budget:
+            state["class"] = HYPOTHESIS_RETIRED
+            return Outcome(HYPOTHESIS_RETIRED, hypothesis, [
+                f"retired: the accepted hypothesis spent its authoring budget "
+                f"({used}/{budget} attempts of {int(patch_rounds)} patch rounds) on "
+                f"author failures; the critic's acceptance of the idea was never "
+                f"withdrawn", *carried], refusal_gate="author_attempts",
+                hypothesis_pending=state)
+        fields = {"prior_patch_rejections": carried,
+                  "patch_rounds_remaining": int(patch_rounds),
+                  "author_attempts_used": used, "author_attempts_budget": budget}
+        if scope:
+            state["scope_block"] = fields["scope_block"] = {
+                "route": f"{hypothesis.target_surface}::{hypothesis.target_symbol}",
+                "rule": last["rule"], "source": last["source"],
+                "scope_rules_fingerprint": scope_rules_fingerprint()}
+            summary = (f"scope_blocked: the accepted hypothesis cannot be written inside "
+                       f"the admitted route ({last['source']}: {last['rule']}); kept "
+                       f"pending until the scope rules change")
+        else:
+            summary = (f"patch_rounds_exhausted: {rounds} ended on author failures while "
+                       f"the hypothesis stood accepted; pending re-authoring with that "
+                       f"feedback ({budget - used} of {budget} attempts left)")
+        return Outcome(state["class"], hypothesis, [summary, *carried],
+                       refusal_gate=last["source"],
+                       resume_checkpoints=[checkpoint("author", hypothesis, **fields)],
+                       hypothesis_pending=state)
 
     def dispose(hypothesis, status: str, reason: str | None, *, refusal_gate: str,
                 verdicts=(), resume_checkpoint: dict | None = None) -> None:
@@ -963,6 +1126,11 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
         round_count = (1 if hypothesis.runtime_pair is not None
                        else max(1, int(resumed.patch_rounds)) if resumed is not None
                        else patch_rounds)
+        #: One classification per round that ended in a patch rejection (critic pass
+        #: 2 or a pre-build gate), and whether a RESUME was refused instead: only the
+        #: former leaves an accepted hypothesis pending (`exhausted`).
+        rejections: list[dict] = []
+        resume_refused = False
         for patch_index in range(round_count):
             # Round 1 of a build or critic2 resume restores retained bytes instead of
             # authoring; a critic2 resume's later rounds author normally.
@@ -996,6 +1164,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                         dispose(hypothesis, RESUME_REJECTED,
                                 f"resume re-validation refused: {exc}",
                                 refusal_gate=f"resume:{getattr(exc, 'check', 'materialize')}")
+                        resume_refused = True
                         break
                 else:
                     on_step("authoring the patch")
@@ -1051,6 +1220,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                         dispose(hypothesis, RESUME_REJECTED,
                                 f"resume re-validation refused (integrity): {exc}",
                                 refusal_gate="resume:integrity")
+                        resume_refused = True
                         break
                     return Outcome(
                         "integrity_refused", hypothesis, [str(exc)],
@@ -1076,6 +1246,9 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                     # The hypothesis is untouched: a bad patch is not evidence against
                     # the idea it was trying to implement.
                     patch_reasons.append(patch_verdict.reason)
+                    rejections.append(classify_patch_rejection(
+                        patch_verdict.reason,
+                        scope_rule=getattr(patch_verdict, "scope_rule", "") or ""))
                     dispose(hypothesis, "patch_rejected", patch_verdict.reason,
                             refusal_gate="critic:patch")
                     continue
@@ -1147,6 +1320,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                         if resumed_build:
                             # The CURRENT gates refused a resumed patch: the old
                             # verdict is never trusted, and a refusal is final.
+                            resume_refused = True
                             dispose(hypothesis, RESUME_REJECTED,
                                     "resume re-validation refused (current gate "
                                     f"{refusing_gate}): {patch_reasons[-1]}",
@@ -1157,6 +1331,8 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                         # gate stopped it and where its diff is kept. It carries a
                         # build checkpoint: if that rule changes, the next launch can
                         # take this exact patch straight to the build (`resume.py`).
+                        rejections.append(classify_patch_rejection(
+                            patch_reasons[-1], source=f"gate:{refusing_gate}"))
                         dispose(hypothesis, "gate_refused", patch_reasons[-1],
                                 refusal_gate=refusing_gate, verdicts=verdicts,
                                 resume_checkpoint=checkpoint(
@@ -1262,8 +1438,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
                             else _null_reason(comparison)],
                            comparison, verdicts)
 
-        # Patch budget spent. Control returns to the HYPOTHESIS loop, so the planner
-        # may refine H knowing it could not be implemented cleanly.
+        # Patch budget spent.
         progress["inflight"] = progress["critic2"] = None
         progress["resumed_active"] = False
         if materialized and restored_untouched:
@@ -1272,6 +1447,13 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             # patch was rejected with rounds left), the lane is the author's, exactly
             # as after any fresh patch round.
             resumed.discard()
+        if rejections and not resume_refused and hypothesis.runtime_pair is None:
+            # The hypothesis is still ACCEPTED: every round was a verdict on a patch.
+            # It stays pending at the author (or is retired on its attempt budget)
+            # rather than being dropped for the planner's next proposal.
+            return exhausted(hypothesis, patch_reasons, rejections)
+        # A refused RESUME (stale bytes, moved anchor, a current gate): control
+        # returns to the HYPOTHESIS loop and fresh work is drawn, as before.
         hypothesis_reasons.extend(patch_reasons)
 
     # Hypothesis budget spent. H is NOT retired: it re-enters the pool carrying its
@@ -1293,6 +1475,9 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
 # module's control flow now, and the pool is its only driver.
 
 __all__ = ["CANDIDATE_DISPOSITIONS", "CHECKPOINT_SCHEMA", "PATCH_STAGES", "RESUMABLE_STATUSES",
+           "HYPOTHESIS_AUTHOR_ATTEMPTS", "HYPOTHESIS_RETIRED", "PATCH_ROUNDS_EXHAUSTED",
+           "PENDING_HYPOTHESIS_STATUSES", "SCOPE_BLOCKED", "classify_patch_rejection",
+           "scope_rules_fingerprint",
            "RESUME_REJECTED", "STOPPED_AFTER_DISPOSALS", "gate_rules_fingerprint", "Abstain", "ActorStopped", "ActorTransient", "AuthorReportMissing", "REPORT_SOURCE_LANE_DIFF", "ConfirmVetoed", "InteractionRegression", "TailRefused", "RunAborted", "MeasurementInvalid", "MeasurementFailed", "Critic",
            "HYPOTHESIS_ROUNDS", "Hypothesis", "Outcome", "PATCH_ROUNDS",
            "Planner", "Review", "STOPPED_MID_FORMATION", "iterate"]

@@ -181,7 +181,8 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
              validate_candidate=None, formation_guard=None,
              reserve_candidate=None,
              record_abandoned: Callable[[Worker, loop_mod.Outcome], None] | None = None,
-             next_resume: Callable[[Worker, str], Any] | None = None
+             next_resume: Callable[[Worker, str], Any] | None = None,
+             author_attempts: int = loop_mod.HYPOTHESIS_AUTHOR_ATTEMPTS
              ) -> list[loop_mod.Outcome]:
     """Drive `iterations` iterations across `workers` concurrent lanes.
 
@@ -344,7 +345,9 @@ def run_pool(*, workers: Sequence[Worker], make_planner, make_critic, build_cont
                     record_abandoned=abandoned, resume=resumed,
                     # The lane and the commit reset_to_champion put it on for THIS
                     # draw: the only lane an empty author report may be derived from.
-                    author_lane=(worker.worktree, base))
+                    author_lane=(worker.worktree, base),
+                    # Per-hypothesis authoring budget across iterations (loop.py).
+                    author_attempts=author_attempts)
             except Superseded as exc:
                 # `iterate` already converted this into an Outcome carrying the
                 # hypothesis; reaching here means it escaped before one was formed.

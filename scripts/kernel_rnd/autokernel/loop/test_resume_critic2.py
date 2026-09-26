@@ -297,8 +297,18 @@ class ResumesAtCritic2(Fixture):
                                measure=lambda h, p: base.comparison(0.0),
                                gate=base.passing_gate, commit=lambda h, p, c: None,
                                hypothesis_rounds=1, resume=point)
-        self.assertEqual(clean_at_propose, [True])
-        self.assertEqual(outcome.hypothesis.mechanism_id, "akm-fresh")
+        # The restored bytes are reversed, and the resumed hypothesis -- still
+        # ACCEPTED, only its patch was refused -- stays pending at the author instead
+        # of the planner being asked for fresh work.
+        self.assertEqual(base.git(self.repo, "status", "--porcelain").strip(), "")
+        self.assertEqual(clean_at_propose, [])
+        self.assertEqual(outcome.status, loop.PATCH_ROUNDS_EXHAUSTED)
+        self.assertEqual(outcome.hypothesis.mechanism_id, "akm-demo-hoist")
+        self.assertEqual(outcome.resumed_from, point.checkpoint_id)
+        (checkpoint,) = outcome.resume_checkpoints
+        self.assertEqual((checkpoint["stage"], checkpoint["author_attempts_used"],
+                          checkpoint["prior_patch_rejections"]),
+                         ("author", 1, ["wrong symbol"]))
 
     def test_a_second_critic_failure_carries_the_same_bytes_forward(self):
         self.lose_at_critic2()
@@ -447,10 +457,11 @@ class Critic2VersusBuild(Fixture):
         self.assertEqual([row["stage"] for row in report["queued"]], ["build"])
         point = queue.take(base.Worker(self.repo), self.anchor)
         self.assertEqual(point.stage, "build")
-        # The transient row's author and critic2 checkpoints: superseded, never resumed.
+        # The transient row's author and critic2 checkpoints, and the scope_blocked
+        # row's author checkpoint: superseded, never resumed.
         siblings = [row["state"] for key, row in self.claims().items()
                     if key != point.checkpoint_id]
-        self.assertEqual(siblings, ["superseded", "superseded"])
+        self.assertEqual(siblings, ["superseded", "superseded", "superseded"])
 
 
 class CriticVerdictClassification(unittest.TestCase):
