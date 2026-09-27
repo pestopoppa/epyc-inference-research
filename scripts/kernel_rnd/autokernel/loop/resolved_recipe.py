@@ -512,7 +512,7 @@ _CANONICAL_VALUE_FLAGS = frozenset({
     "--flash-attn", "-fa", "-ctk", "-ctv", "--chat-template-file", "--spec-type",
     "--spec-draft-n-max", "--spec-draft-p-min", "--reasoning", "--slot-save-path", "--device", "-lv",
     "--device-draft", "-ngl", "-md", "-ngld",
-    "--draft-p-min", "--threads-draft", "--log-colors",
+    "--draft-p-min", "--threads-draft", "--log-colors", "--load-threads",
 })
 _CANONICAL_SWITCH_FLAGS = frozenset({
     "--jinja", "--mlock", "--no-mmap", "--kv-unified", "--no-kv-unified",
@@ -563,6 +563,8 @@ def _canonical_command(command: tuple[str, ...]) -> tuple[str, dict[str, str | b
         _canonical_int(parsed, "-lv")
     if "--threads-draft" in parsed:
         _canonical_int(parsed, "--threads-draft")
+    if "--load-threads" in parsed and _canonical_int(parsed, "--load-threads") < 0:
+        raise ResolutionError("canonical --load-threads must be a non-negative integer")
     if "--log-colors" in parsed and parsed["--log-colors"] not in {"on", "off", "auto"}:
         raise ResolutionError("canonical log colors must be on, off or auto")
     return executable, parsed
@@ -621,7 +623,8 @@ def canonical_recipe_projection(*, name: str, command_argv: Sequence[str],
     extra: tuple[str, ...] = ()
     if "--device-draft" in parsed:
         extra = ("--device-draft", str(parsed["--device-draft"]))
-    for flag in ("--draft-p-min", "--threads-draft", "--log-colors"):
+    # `--load-threads` is LAST so a runtime arm that appends it keeps projection order.
+    for flag in ("--draft-p-min", "--threads-draft", "--log-colors", "--load-threads"):
         if flag in parsed:
             extra += (flag, str(parsed[flag]))
     if "-tb" in parsed and _canonical_int(parsed, "-tb") != _canonical_int(parsed, "-t"):
@@ -1138,6 +1141,12 @@ def _capability(template: serving.Recipe, backend: str, drafter: ArtifactDigest 
             consumed.update({index, index + 1})
         elif flag.startswith("--device-draft="):
             consumed.add(index)
+        elif (flag == "--load-threads" and index + 1 < len(flags)
+              and re.fullmatch(r"[0-9]+", flags[index + 1])):
+            # The model-loader reader team: an explicit non-negative integer that decides
+            # load-time threading only (no workload, request or arithmetic change), carried
+            # verbatim in the normalized command and so in the execution digest.
+            consumed.update({index, index + 1})
     if any(index not in consumed for index in range(len(flags))):
         reasons.append(CapabilityReason(
             "extra_flags_unsupported",

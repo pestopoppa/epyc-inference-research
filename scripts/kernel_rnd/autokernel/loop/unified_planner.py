@@ -40,7 +40,8 @@ OBSERVATION_STATES = frozenset({
     "accepted_unmeasured", "unknown", "inconclusive", "failed_correctness",
     "invalid_instrument", "bounded_null", "positive",
 })
-DIMENSIONS = frozenset({"threads", "cpu_list", "numa_policy", "env", "batch", "ubatch"})
+DIMENSIONS = frozenset({"threads", "cpu_list", "numa_policy", "env", "batch", "ubatch",
+                        "load_threads"})
 
 
 class PlanningRefused(ValueError):
@@ -152,6 +153,13 @@ class RuntimeDimension:
             for value in (self.anchor, self.candidate):
                 if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
                     raise PlanningRefused(f"{self.kind} values must be positive integers")
+        elif self.kind == "load_threads":
+            # The model loader's reader team (`--load-threads`). None = the flag is absent
+            # (the build's auto team); a value is a positive thread count.
+            for value in (self.anchor, self.candidate):
+                if value is not None and (isinstance(value, bool) or not isinstance(value, int)
+                                          or value <= 0):
+                    raise PlanningRefused("load_threads values must be positive integers or null")
         elif self.kind in {"cpu_list", "numa_policy"}:
             _text(self.anchor, "cpu_list.anchor")
             _text(self.candidate, "cpu_list.candidate")
@@ -204,6 +212,18 @@ def _mutate_template(template: serving.Recipe, dimension: RuntimeDimension,
         return replace(template, cpu_list=value)
     if dimension.kind == "numa_policy":
         return template
+    if dimension.kind == "load_threads":
+        flags, extra = list(template.extra_flags), []
+        index = 0
+        while index < len(flags):
+            if flags[index] == "--load-threads":
+                index += 2
+                continue
+            extra.append(flags[index])
+            index += 1
+        if value is not None:
+            extra += ["--load-threads", str(value)]
+        return replace(template, extra_flags=tuple(extra))
     # Canonical production recipes intentionally project argv into a neutral
     # template. Environment state is frozen separately under EnvironmentPolicy.
     assert dimension.kind == "env"
@@ -238,6 +258,16 @@ def _resolve_variant(anchor: ResolvedRecipe | CanonicalResolvedRecipe,
                 prefix = prefix[:-1] + (value,)
             else:
                 raise PlanningRefused("CPU-list sweep requires canonical taskset topology")
+        elif dimension.kind == "load_threads":
+            positions = [i for i, token in enumerate(command) if token == "--load-threads"]
+            if len(positions) > 1:
+                raise PlanningRefused("canonical command repeats --load-threads")
+            if positions and value is None:
+                command = command[:positions[0]] + command[positions[0] + 2:]
+            elif positions:
+                command = _replace_flag(command, "--load-threads", str(value))
+            elif value is not None:
+                command = tuple(command) + ("--load-threads", str(value))
         elif dimension.kind == "numa_policy":
             if len(prefix) >= 6 and prefix[0] == "numactl" and prefix[2] == "--":
                 prefix = ("numactl", value, "--") + prefix[3:]

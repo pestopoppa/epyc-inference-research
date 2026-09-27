@@ -796,3 +796,70 @@ def test_serial_preview_keeps_batches_full_while_declared_arms_are_unsettled(tmp
     arms_file.write_text("{not json")
     selected = cpu_screen.preview_batch(argv, None)
     assert selected["scope"] == "full" and "unreadable" in selected["reason"]
+
+
+# ------------------------------------------------------------------ load_threads (argv arm)
+
+LOAD = {"arm_id": "load-threads-48", "kind": "load_threads", "candidate": 48,
+        "numerics": "bit_exact",
+        "rationale": "model-loader reader team = -t, so no smaller OpenMP team precedes compute"}
+
+
+def test_load_threads_argv_arm_is_a_single_field_launch_delta(tmp_path):
+    from . import actors
+    anchor = _launch(tmp_path / "gen-1")
+    assert "--load-threads" not in anchor.command_argv
+    context = _context(anchor)
+    pair = actors._runtime_pair(ra.RuntimeArm.from_dict(LOAD).treatment(), context,
+                                "runtime-arm-load-threads-48")
+    assert pair.dimension.anchor is None and pair.dimension.candidate == 48
+    assert pair.candidate.command_argv[-2:] == ("--load-threads", "48")
+    assert pair.candidate.template.extra_flags[-2:] == ("--load-threads", "48")
+    assert pair.candidate.launch_env == pair.anchor.launch_env
+    assert pair.candidate.template.threads == pair.anchor.template.threads
+    assert pair.candidate.capability.supported
+    assert ra.surface_digest(pair.candidate) != ra.surface_digest(pair.anchor)
+    assert ra.is_declared(pair, _declaration(LOAD))
+    # After adoption the arm is an exact no-op on the adopted recipe (champion/challenger).
+    adopted = {**context, "runtime_anchor": pair.candidate.to_dict()}
+    with pytest.raises(actors.ProviderTransient):
+        actors._runtime_pair(ra.RuntimeArm.from_dict(LOAD).treatment(), adopted, "again")
+    # ... and the OMP_PLACES fallback then challenges ON TOP of --load-threads 48.
+    fallback = actors._runtime_pair(ra.RuntimeArm.from_dict(A2).treatment(), adopted,
+                                    "runtime-arm-" + A2["arm_id"])
+    assert fallback.candidate.command_argv[-2:] == ("--load-threads", "48")
+    assert dict(fallback.candidate.launch_env)["OMP_PLACES"] == "{2}:47:2,{1}"
+    with pytest.raises(ra.ArmDeclarationRefused, match="positive int"):
+        _declaration(dict(LOAD, candidate=0))
+
+
+def test_canonical_grammar_accepts_load_threads_and_refuses_negative(tmp_path):
+    anchor = _launch(tmp_path / "gen-1")
+    command = tuple(anchor.command_argv) + ("--load-threads", "32")
+    projected = rr.canonical_recipe_projection(name="x", command_argv=command,
+        topology_prefix=anchor.topology_prefix, n_predict=256, temperature=0.0, top_k=1)
+    assert projected.extra_flags[-2:] == ("--load-threads", "32")
+    with pytest.raises(rr.ResolutionError, match="non-negative"):
+        rr.canonical_recipe_projection(name="x", command_argv=tuple(anchor.command_argv)
+            + ("--load-threads", "-1"), topology_prefix=anchor.topology_prefix,
+            n_predict=256, temperature=0.0, top_k=1)
+
+
+DS41_LAUNCH = Path("/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/inputs/"
+                   "ds41-cpu-t48-dspark.launch.json")
+
+
+@pytest.mark.skipif(not DS41_LAUNCH.exists(), reason="DS41 campaign inputs not on this host")
+def test_declared_ds41_arms_enumerate_against_the_live_launch():
+    """Read-only: the prepared DS41 arms are launch-valid single-field deltas."""
+    from . import actors
+    launch = rr.CanonicalResolvedRecipe.from_dict(json.loads(DS41_LAUNCH.read_text()))
+    context = {"runtime_anchor": launch.to_dict(), "runtime_observation_only": True,
+               "runtime_env_keys": sorted(run._runtime_env_keys(launch, launch))}
+    load = actors._runtime_pair(ra.RuntimeArm.from_dict(LOAD).treatment(), context,
+                                "runtime-arm-load-threads-48")
+    places = actors._runtime_pair(ra.RuntimeArm.from_dict(A2).treatment(), context,
+                                  "runtime-arm-" + A2["arm_id"])
+    assert load.candidate.capability.supported and places.candidate.capability.supported
+    assert dict(load.candidate.launch_env) == dict(launch.launch_env)
+    assert dict(places.candidate.launch_env)["OMP_PLACES"] == "{2}:47:2,{1}"

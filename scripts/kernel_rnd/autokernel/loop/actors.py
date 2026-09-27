@@ -2521,6 +2521,10 @@ def _runtime_pair(treatment, context, mechanism_id):
         value = anchor.template.threads
     elif kind == "cpu_list":
         value = anchor.template.cpu_list
+    elif kind == "load_threads":
+        command = list(anchor.command_argv)
+        value = (int(command[command.index("--load-threads") + 1])
+                 if "--load-threads" in command else None)
     elif kind == "numa_policy":
         policies = [token for token in anchor.topology_prefix
                     if token.startswith(("--interleave=", "--membind="))]
@@ -2882,7 +2886,7 @@ class AgentPlanner:
         if context.get("runtime_anchor") is not None:
             prompt += ("\nAlternatively propose ONE runtime treatment of the original serving launch, "
                        "without source edits or rebuilding. Add runtime_treatment={kind: threads|"
-                       "cpu_list|numa_policy|env, candidate: <exact value>}. For env, candidate is "
+                       "cpu_list|numa_policy|load_threads|env, candidate: <exact value>}. For env, candidate is "
                        "{key: <one listed runtime_env_keys key>, value: <string or null>}. "
                        "Keep the same model, request bytes, context, sampling and speculation. "
                        "Describe the mechanism and falsifier; target_surface/target_symbol name "

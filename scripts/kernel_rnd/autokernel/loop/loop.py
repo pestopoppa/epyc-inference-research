@@ -1520,7 +1520,7 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
         prevalidated_runtime = (
             pair is not None and pair.anchor.backend in {"cpu", "gpu"}
             and pair.anchor.to_dict() == working.get("runtime_anchor")
-            and pair.dimension.kind in {"threads", "cpu_list", "numa_policy", "env"}
+            and pair.dimension.kind in {"threads", "cpu_list", "numa_policy", "load_threads", "env"}
             and (pair.dimension.kind != "env" or pair.dimension.candidate["key"]
                  in working.get("runtime_env_keys", ())))
         if resumed is not None and resumed.stage != "critic1":

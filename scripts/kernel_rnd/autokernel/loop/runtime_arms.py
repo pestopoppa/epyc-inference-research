@@ -86,7 +86,7 @@ STRICT_SELECTION_SCHEMA = "epyc.autokernel.direct_runtime_selection.v1"
 #: (`RuntimeAdmission`: A/A + neutral calibration, control panel, e-process selection and
 #: confirmation windows).
 EVIDENCE_MODES = ("keep_grade", "strict")
-KINDS = ("threads", "cpu_list", "numa_policy", "env")
+KINDS = ("threads", "cpu_list", "numa_policy", "load_threads", "env")
 NUMERICS = ("bit_exact", "not_bit_exact")
 #: ``bit_exact_only`` refuses a declaration naming a non-bit-exact arm.
 #: ``evaluator_coherence_gate`` admits one, and it then faces the evaluator's
@@ -146,10 +146,10 @@ class RuntimeArm:
                     f"arm {self.arm_id}: env candidate must be {{key: <str>, value: <str|null>}}")
             object.__setattr__(self, "candidate", {"key": self.candidate["key"],
                                                    "value": self.candidate["value"]})
-        elif self.kind == "threads":
+        elif self.kind in ("threads", "load_threads"):
             if isinstance(self.candidate, bool) or not isinstance(self.candidate, int) \
                     or self.candidate <= 0:
-                raise ArmDeclarationRefused(f"arm {self.arm_id}: threads must be a positive int")
+                raise ArmDeclarationRefused(f"arm {self.arm_id}: {self.kind} must be a positive int")
         else:
             _text(self.candidate, f"arm {self.arm_id}: {self.kind} candidate")
 
