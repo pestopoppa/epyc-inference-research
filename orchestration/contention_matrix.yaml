@@ -40,20 +40,26 @@ host_provenance:
 binary:
   llama_server_path: "/mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82/bin/llama-server"
   git_commit: ""
-topology_hash: "4893e37e5d603c80"
+# ARCHSWAP-20260927 DECLARED RELABEL (tools/relabel_contention_matrix.py, epyc-root
+# artifacts/operator/stack-change-archswap-20260927). The role labels architect_general <->
+# architect_critic were swapped inside `pairs`/`unknown_pairs` ONLY; the (cpu_list, port,
+# threads) of every relabeled instance was asserted equal to the post-swap NUMA_CONFIG, and no
+# measured value, date or provenance changed. topology_hash restamped 4893e37e5d603c80 -> 5d772b2c4698b2ae.
+# A relabel is not a re-measurement: re-run contention_matrix.py when placement next changes.
+topology_hash: "5d772b2c4698b2ae"
 default_floor: 0.85
 
 pairs:
-  - roles: ['architect_critic', 'worker_vision']
-    instance_a: {"cpu_list": "0-95", "instance_idx": 0, "label": "full", "port": 8074, "regions": ["q0", "q1", "q2", "q3"], "role": "architect_critic", "threads": 96}
+  - roles: ['architect_general', 'worker_vision']
+    instance_a: {"cpu_list": "0-95", "instance_idx": 0, "label": "full", "port": 8074, "regions": ["q0", "q1", "q2", "q3"], "role": "architect_general", "threads": 96}
     instance_b: {"cpu_list": "184-191", "instance_idx": 0, "label": "inst0", "port": 8086, "regions": [], "role": "worker_vision", "threads": 8}
     seq_aggregate_tps: 55.82
     parallel_aggregate_tps: 4.36
     ratio: 0.08
     samples: 1
     verdict: "block"
-  - roles: ['architect_general', 'worker_vision']
-    instance_a: {"cpu_list": "184-191", "instance_idx": 0, "label": "inst0", "port": 8083, "regions": [], "role": "architect_general", "threads": 8}
+  - roles: ['architect_critic', 'worker_vision']
+    instance_a: {"cpu_list": "184-191", "instance_idx": 0, "label": "inst0", "port": 8083, "regions": [], "role": "architect_critic", "threads": 8}
     instance_b: {"cpu_list": "184-191", "instance_idx": 0, "label": "inst0", "port": 8086, "regions": [], "role": "worker_vision", "threads": 8}
     seq_aggregate_tps: 45.2
     parallel_aggregate_tps: 47.1
@@ -68,17 +74,17 @@ pairs:
     ratio: 1.41
     samples: 1
     verdict: "allow"
-  - roles: ['architect_general', 'frontdoor']
-    instance_a: {"cpu_list": "184-191", "instance_idx": 0, "label": "inst0", "port": 8083, "regions": [], "role": "architect_general", "threads": 8}
+  - roles: ['architect_critic', 'frontdoor']
+    instance_a: {"cpu_list": "184-191", "instance_idx": 0, "label": "inst0", "port": 8083, "regions": [], "role": "architect_critic", "threads": 8}
     instance_b: {"cpu_list": "0-47,96-143", "instance_idx": 1, "label": "half0", "port": 8080, "regions": ["q0", "q1"], "role": "frontdoor", "threads": 48}
     seq_aggregate_tps: 34.15
     parallel_aggregate_tps: 57.68
     ratio: 1.69
     samples: 1
     verdict: "allow"
-  - roles: ['architect_critic', 'architect_general']
-    instance_a: {"cpu_list": "0-95", "instance_idx": 0, "label": "full", "port": 8074, "regions": ["q0", "q1", "q2", "q3"], "role": "architect_critic", "threads": 96}
-    instance_b: {"cpu_list": "184-191", "instance_idx": 0, "label": "inst0", "port": 8083, "regions": [], "role": "architect_general", "threads": 8}
+  - roles: ['architect_general', 'architect_critic']
+    instance_a: {"cpu_list": "0-95", "instance_idx": 0, "label": "full", "port": 8074, "regions": ["q0", "q1", "q2", "q3"], "role": "architect_general", "threads": 96}
+    instance_b: {"cpu_list": "184-191", "instance_idx": 0, "label": "inst0", "port": 8083, "regions": [], "role": "architect_critic", "threads": 8}
     seq_aggregate_tps: 10.49
     parallel_aggregate_tps: 55.65
     ratio: 5.3
@@ -86,7 +92,7 @@ pairs:
     verdict: "allow"
 
 unknown_pairs:
-  - roles: ['architect_critic', 'frontdoor']
+  - roles: ['architect_general', 'frontdoor']
     reason: "overlap_substituted (overlap_measured): no disjoint live placement exists for this role pair; an overlapping-geometry number must not enter the role-keyed gate as the pair's verdict — re-bench the geometry you want with `bench-nway` from a manifest"
 
 
