@@ -127,9 +127,15 @@ CASES: dict[str, dict[str, Any]] = {
 }
 
 
-@pytest.fixture
-def client(monkeypatch):
+@pytest.fixture(params=["v1_escalation_off", "v1_escalation_on_key_absent"])
+def client(monkeypatch, request):
+    # TE-1: escalation is opt-in per request, so turning the flag on must not move
+    # these bytes for a request that sends no x_escalation.
     monkeypatch.setenv("ORCHESTRATOR_MOCK_MODE", "false")
+    if request.param == "v1_escalation_off":
+        monkeypatch.delenv("ORCHESTRATOR_V1_ESCALATION", raising=False)
+    else:
+        monkeypatch.setenv("ORCHESTRATOR_V1_ESCALATION", "1")
     reset_features()
     reset_state()
     get_state()

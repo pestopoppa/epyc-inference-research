@@ -316,6 +316,35 @@ def _write_structured_event(path: str, event: dict[str, Any]) -> None:
         return
 
 
+def emit_request_event(event_type: str, **fields: Any) -> bool:
+    """Append one REQUEST-level event to the structured tap stream.
+
+    Unlike a ``tap_section``, this belongs to no single model call: it records
+    a fact about a whole API request (TE-1: the /v1 escalation receipt). It
+    writes to the JSONL events file only (never the plaintext tap) and carries
+    NO ``request_id`` key on purpose: request_id identifies one model call, and
+    the dashboard groups events by it, so a request-level event carrying one
+    would render as a phantom in-flight call. Callers identify the request with
+    their own keys (``chat_id``, ``request_keys``). Returns False, with no I/O
+    beyond the O(1) activity check, when the tap is off.
+    """
+    if not is_active():
+        return False
+    path = _structured_event_path()
+    if not path:
+        return False
+    event = {
+        "event": event_type,
+        "ts": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+        "ts_epoch": _time.time(),
+        "pid": os.getpid(),
+        "topology_hash": _topology_hash(),
+        **{k: v for k, v in fields.items() if k != "request_id"},
+    }
+    _write_structured_event(path, event)
+    return True
+
+
 def annotate_current_tap(**metadata: Any) -> bool:
     """Attach metadata to the active tap section, if one exists."""
     writer = _current_writer.get()

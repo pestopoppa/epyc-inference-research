@@ -31,6 +31,14 @@ from src.api.models import (
     OpenAIUsage,
 )
 from src.api.routes.chat_pipeline.routing_decision import normalize_ingress_role
+from src.api.routes.v1_escalation import (
+    STAGE_DIRECT,
+    STAGE_REPL,
+    V1EscalationPlan,
+    escalate_answer,
+    plan_v1_escalation,
+    record_escalation,
+)
 from src.api.routes.v1_subagent_link import (
     SubagentLink,
     log_subagent_link,
@@ -397,7 +405,7 @@ def _apply_openai_tool_contract_metadata(
 
 
 # ── HS-4 P0.2: typed request keys ────────────────────────────────────────────
-_REQUEST_KEY_FIELDS = ("x_session_id", "x_user_id", "x_memory", "x_tool_mode")
+_REQUEST_KEY_FIELDS = ("x_session_id", "x_user_id", "x_memory", "x_tool_mode", "x_escalation")
 
 
 def _request_keys(request: OpenAIChatRequest) -> dict[str, str]:
@@ -592,8 +600,9 @@ def _run_client_tool_completion(
     backend's own token counts (see ``_client_usage``).
 
     Routing: ``role`` is the SAME resolved role the default mode would use
-    (x_force_role > x_force_model > x_orchestrator_role > model alias). No REPL, no
-    escalation — /v1 has none today in either mode.
+    (x_force_role > x_force_model > x_orchestrator_role > model alias). No REPL and
+    no escalation HERE: with flag ``v1_escalation`` the route applies /chat's
+    post-answer hooks to the returned answer (``v1_escalation.escalate_answer``).
 
     Output size: ``llm_call``'s ``output_cap`` (8192-char truncation) does NOT
     apply in client mode; ``max_tokens`` is the only bound.
@@ -717,6 +726,98 @@ def _sampling_metadata(sampling_kwargs: dict[str, Any]) -> dict[str, Any]:
 
 def _role_name(role: str | Role) -> str:
     return role.value if isinstance(role, Role) else str(role)
+
+
+def _plan_escalation(
+    request: OpenAIChatRequest,
+    role: object,
+    *,
+    flag_on: bool,
+    image_input: bool,
+    request_keys: dict[str, Any],
+) -> V1EscalationPlan | None:
+    """TE-1: None unless flag ``v1_escalation`` is on or x_escalation was sent."""
+    plan = plan_v1_escalation(
+        flag_on=flag_on,
+        requested=request.x_escalation,
+        role=role,
+        role_override=any(getattr(request, name, None) for name in _ROLE_OVERRIDE_FIELDS),
+        image_input=image_input,
+    )
+    if plan is not None:
+        plan.base_trace_keys = dict(request_keys)
+    return plan
+
+
+def _escalated_client_usage(
+    usage: OpenAIUsage | None, plan: V1EscalationPlan | None
+) -> OpenAIUsage | None:
+    """Client-mode usage plus the escalation calls' own server counts (TE-1).
+
+    The default path already sums every call of the request; client mode reports
+    the one backend call, so an escalated answer adds its calls here.
+    """
+    if usage is None or plan is None or not plan.fired:
+        return usage
+    extra_prompt, extra_completion = plan.usage_delta()
+    prompt_tokens = usage.prompt_tokens + extra_prompt
+    completion_tokens = usage.completion_tokens + extra_completion
+    return OpenAIUsage(
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=prompt_tokens + completion_tokens,
+        prompt_tokens_details=usage.prompt_tokens_details,
+    )
+
+
+def _escalation_stage(
+    *,
+    client_mode: bool,
+    client_tool_calls: list[dict[str, Any]],
+    image_input: bool,
+    disable_repl: bool,
+    repl_final_answered: bool,
+) -> str | None:
+    """Which /chat post-answer stage a finished /v1 answer maps to (TE-1).
+
+    Client mode and x_disable_repl are one direct completion -> /chat's direct
+    stage; a FINAL answer of the REPL bridge -> /chat's REPL stage. A tool-call
+    turn, image input and an unfinished REPL loop are not answers: no stage.
+    """
+    if client_mode:
+        return None if client_tool_calls else STAGE_DIRECT
+    if image_input:
+        return None
+    if disable_repl:
+        return STAGE_DIRECT
+    return STAGE_REPL if repl_final_answered else None
+
+
+async def _escalate_v1_answer(
+    plan: V1EscalationPlan | None,
+    stage: str | None,
+    *,
+    answer: str,
+    question: str,
+    direct_prompt: str,
+    primitives: Any,
+    state: AppState,
+    chat_id: str,
+) -> str:
+    """Run /chat's post-answer hooks off the event loop; no-op when not enabled."""
+    if plan is None or not plan.enabled or stage is None or primitives is None:
+        return answer
+    return await asyncio.to_thread(
+        escalate_answer,
+        plan,
+        stage=stage,
+        answer=answer,
+        question=question,
+        direct_prompt=direct_prompt,
+        primitives=primitives,
+        state=state,
+        task_id=chat_id,
+    )
 
 
 async def _run_openai_vision_completion(
@@ -1032,6 +1133,14 @@ async def openai_chat_completions(
     use_real_mode = (
         state.registry is not None and not f.mock_mode  # Respect mock_mode feature flag
     )
+    # TE-1: None (nothing changes) unless flag v1_escalation is on or x_escalation was sent.
+    escalation_plan = _plan_escalation(
+        request,
+        role,
+        flag_on=bool(getattr(f, "v1_escalation", False)),
+        image_input=bool(prompt_parts.image_base64),
+        request_keys=request_keys,
+    )
 
     # Build real primitives with server_urls (matching /chat endpoint pattern)
     primitives = None
@@ -1107,6 +1216,7 @@ async def openai_chat_completions(
                 if primitives:
                     # Build combined context
                     combined_context = _combined_prompt_with_context(prompt, context)
+                    repl_final_answered = False
 
                     if client_mode:
                         # HS-4 P0.1: the backend call is buffered (tool calls
@@ -1330,6 +1440,7 @@ async def openai_chat_completions(
 
                             if result.is_final:
                                 response_text = result.final_answer or ""
+                                repl_final_answered = True
                                 break
                             elif result.output:
                                 response_text = result.output
@@ -1338,6 +1449,30 @@ async def openai_chat_completions(
                             response_text = response_text or f"[Completed {max_turns} turns]"
 
                         total_tokens = primitives.total_tokens_generated
+
+                    # TE-1: /chat's post-answer escalation hooks (flag v1_escalation).
+                    if escalation_plan is not None and escalation_plan.enabled:
+                        escalated_text = await _escalate_v1_answer(
+                            escalation_plan,
+                            _escalation_stage(
+                                client_mode=client_mode,
+                                client_tool_calls=client_tool_calls,
+                                image_input=bool(prompt_parts.image_base64),
+                                disable_repl=disable_repl,
+                                repl_final_answered=repl_final_answered,
+                            ),
+                            answer=response_text,
+                            question=prompt,
+                            direct_prompt=combined_context,
+                            primitives=primitives,
+                            state=state,
+                            chat_id=chat_id,
+                        )
+                        if escalated_text != response_text:
+                            response_text = escalated_text
+                            finish_reason = "stop"
+                        total_tokens = primitives.total_tokens_generated
+                        client_usage = _escalated_client_usage(client_usage, escalation_plan)
 
                     # Stream the response character by character (OpenAI format)
                     first_chunk = True
@@ -1383,6 +1518,9 @@ async def openai_chat_completions(
                             chunk["x_role"] = role
                         yield f"data: {json.dumps(chunk)}\n\n"
 
+            escalation_receipt = record_escalation(
+                escalation_plan, chat_id=chat_id, request_keys=request_keys, primitives=primitives,
+            )
             # Final chunk with finish_reason
             final_chunk = {
                 "id": chat_id,
@@ -1416,6 +1554,8 @@ async def openai_chat_completions(
                         request_tools=request.tools,
                         repl=locals().get("repl_for_metadata"),
                     )
+                if escalation_receipt is not None:
+                    meta["escalation"] = escalation_receipt
                 _apply_request_key_metadata(meta, request_keys)
                 final_chunk["x_orchestrator_metadata"] = meta
             yield f"data: {json.dumps(final_chunk)}\n\n"
@@ -1470,6 +1610,7 @@ async def openai_chat_completions(
                     )
 
                 combined_context = _combined_prompt_with_context(prompt, context)
+                repl_final_answered = False
 
                 if client_mode:
                     response_text, client_tool_calls, finish_reason, client_usage = (
@@ -1552,9 +1693,33 @@ async def openai_chat_completions(
 
                         if result.is_final:
                             response_text = result.final_answer or ""
+                            repl_final_answered = True
                             break
                         elif result.output:
                             response_text = result.output
+
+                # TE-1: /chat's post-answer escalation hooks (flag v1_escalation).
+                if escalation_plan is not None and escalation_plan.enabled:
+                    escalated_text = await _escalate_v1_answer(
+                        escalation_plan,
+                        _escalation_stage(
+                            client_mode=client_mode,
+                            client_tool_calls=client_tool_calls,
+                            image_input=bool(prompt_parts.image_base64),
+                            disable_repl=disable_repl,
+                            repl_final_answered=repl_final_answered,
+                        ),
+                        answer=response_text,
+                        question=prompt,
+                        direct_prompt=combined_context,
+                        primitives=primitives,
+                        state=state,
+                        chat_id=chat_id,
+                    )
+                    if escalated_text != response_text:
+                        response_text = escalated_text
+                        finish_reason = "stop"
+                    client_usage = _escalated_client_usage(client_usage, escalation_plan)
 
                 total_tokens = primitives.total_tokens_generated
 
@@ -1583,6 +1748,9 @@ async def openai_chat_completions(
                 ) from e
 
         elapsed = time.perf_counter() - start_time
+        escalation_receipt = record_escalation(
+            escalation_plan, chat_id=chat_id, request_keys=request_keys, primitives=primitives,
+        )
 
         if client_tool_calls:
             response_message = OpenAIMessage(
@@ -1609,6 +1777,8 @@ async def openai_chat_completions(
                     request_tools=request.tools,
                     repl=repl_for_metadata,
                 )
+            if escalation_receipt is not None:
+                response_meta["escalation"] = escalation_receipt
             _apply_request_key_metadata(response_meta, request_keys)
         else:
             response_meta = None

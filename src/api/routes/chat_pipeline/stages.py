@@ -52,10 +52,14 @@ def _quality_escalate(
     initial_role,
     *,
     allow_escalation: bool = True,
+    escalation_role: Role = Role.CODER_ESCALATION,
 ) -> tuple[str, "Role"]:
     """Detect quality issue and escalate to coder_escalation if needed.
 
     Returns (answer, role) — either unchanged or with escalated answer and role.
+    ``escalation_role`` is the role that re-answers; /chat always uses the
+    default. /v1 (TE-1, ``x_escalation=architect_general``) pins the consultant
+    here so the trigger is /chat's while the target is the one the caller named.
     """
     if not allow_escalation:
         return answer, initial_role
@@ -66,10 +70,10 @@ def _quality_escalate(
         return answer, initial_role
     try:
         escalated = primitives.llm_call(
-            prompt, role="coder_escalation", n_tokens=2048, skip_suffix=True,
+            prompt, role=str(escalation_role), n_tokens=2048, skip_suffix=True,
         )
         if escalated.strip():
-            return escalated.strip(), Role.CODER_ESCALATION
+            return escalated.strip(), escalation_role
     except Exception as exc:
         log.debug("Quality escalation failed: %s", exc)
     return answer, initial_role
