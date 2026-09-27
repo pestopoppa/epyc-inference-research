@@ -9,7 +9,7 @@
 set -euo pipefail
 [ "${MMQ_JCAP_WINDOW:-}" = 1 ] || { echo "refusing: set MMQ_JCAP_WINDOW=1 inside a CPU window" >&2; exit 2; }
 
-A_BIN=/mnt/raid0/llm/kernels/production/gpu
+A_BIN=$(readlink -f /mnt/raid0/llm/kernels/production/gpu)   # resolved path: verify_ggml_linkage compares unresolved paths
 B_BIN=/mnt/raid0/llm/llama.cpp-experimental-mmq-jcap-20260927/build-hip-jcap/bin
 VERIFY=/mnt/raid0/llm/epyc-inference-research/scripts/utils/verify_ggml_linkage.sh
 M27=/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf                    # dense Q8_0, production GPU model
