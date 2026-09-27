@@ -359,9 +359,19 @@ def log_subagent_link(
         }
         if link.session_id_source != "body":
             data["session_id_source"] = link.session_id_source
-        progress_logger.log(
-            ProgressEntry(event_type=EventType.SESSION_CREATED, task_id=chat_id, data=data)
-        )
+        entry = ProgressEntry(event_type=EventType.SESSION_CREATED, task_id=chat_id, data=data)
+        # A lineage row is a durable record read back by other processes (the
+        # HS-19a acceptance S6, stage-2 tree rebuilds): write it through now
+        # instead of leaving it in this worker's batch buffer (buffer_size=10,
+        # one buffer per uvicorn worker) until later traffic or shutdown.
+        log_durable = getattr(progress_logger, "log_durable", None)
+        if callable(log_durable):
+            log_durable(entry)
+        else:
+            progress_logger.log(entry)
+            flush = getattr(progress_logger, "flush", None)
+            if callable(flush):
+                flush()
         return True
     except Exception:
         logger.debug("HS-19a subagent-link session log failed", exc_info=True)

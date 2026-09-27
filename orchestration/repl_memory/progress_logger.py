@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -26,6 +27,13 @@ from src.orchestration.interaction import (
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 logger = logging.getLogger(__name__)
+
+# Serializes flushes within a process. ``flush`` runs on the event loop (buffer full,
+# durable rows) AND from worker threads (Q-scoring via asyncio.to_thread / the scoring
+# pool), so two unserialized flushes could write the same entries twice or drop one
+# appended between the write loop and ``clear()``. ``log`` stays lock-free: flush
+# removes exactly the prefix it wrote, so a concurrent append is never lost.
+_FLUSH_LOCK = threading.Lock()
 
 # Default log path (on RAID array, or fallback to workspace for devcontainer)
 _RAID_LOG_PATH = _REPO_ROOT / "logs/progress"
@@ -328,27 +336,50 @@ class ProgressLogger:
         if len(self._buffer) >= self.buffer_size:
             self.flush()
 
+    def log_durable(self, entry: ProgressEntry) -> None:
+        """Log an entry that must be on disk when this call returns.
+
+        For records other processes read back promptly — e.g. the HS-19a
+        parent->child lineage row. ``log`` batches per process (``buffer_size``)
+        and the API runs several uvicorn workers, each with its own buffer, so a
+        low-traffic row can otherwise sit in memory until later traffic or
+        shutdown. The entry is appended behind anything already buffered and the
+        whole buffer is flushed, so on-disk order within this process is kept.
+        Batching of ordinary ``log`` calls is unchanged.
+        """
+        if self._disabled:
+            return
+        self._buffer.append(entry)
+        self.flush()
+
     def flush(self) -> None:
         """Flush buffered entries to disk."""
         if self._disabled or not self._buffer:
             return
 
-        # Group entries by date
-        by_date: Dict[str, List[ProgressEntry]] = {}
-        for entry in self._buffer:
-            date_key = entry.timestamp.strftime("%Y-%m-%d")
-            if date_key not in by_date:
-                by_date[date_key] = []
-            by_date[date_key].append(entry)
+        with _FLUSH_LOCK:
+            # Snapshot, write, then drop exactly the written prefix: an entry a
+            # concurrent ``log`` appends meanwhile stays for the next flush.
+            pending = list(self._buffer)
+            if not pending:
+                return
 
-        # Write to files
-        for date_key, entries in by_date.items():
-            log_path = self.log_dir / f"{date_key}.jsonl"
-            with open(log_path, "a") as f:
-                for entry in entries:
-                    f.write(entry.to_json() + "\n")
+            # Group entries by date
+            by_date: Dict[str, List[ProgressEntry]] = {}
+            for entry in pending:
+                date_key = entry.timestamp.strftime("%Y-%m-%d")
+                if date_key not in by_date:
+                    by_date[date_key] = []
+                by_date[date_key].append(entry)
 
-        self._buffer.clear()
+            # Write to files
+            for date_key, entries in by_date.items():
+                log_path = self.log_dir / f"{date_key}.jsonl"
+                with open(log_path, "a") as f:
+                    for entry in entries:
+                        f.write(entry.to_json() + "\n")
+
+            del self._buffer[: len(pending)]
 
     def log_task_started(
         self,

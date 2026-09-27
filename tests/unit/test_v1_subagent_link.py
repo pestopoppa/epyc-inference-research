@@ -232,6 +232,34 @@ def test_session_log_row_for_a_newly_linked_child_only():
     }
 
 
+def test_session_log_flushes_a_logger_without_log_durable():
+    """A logger lacking log_durable still gets the lineage row flushed at once."""
+
+    class _Flushing(_FakeProgressLogger):
+        def __init__(self) -> None:
+            super().__init__()
+            self.flushed_with: list[int] = []
+
+        def flush(self) -> None:
+            self.flushed_with.append(len(self.entries))
+
+    class _Durable(_FakeProgressLogger):
+        def __init__(self) -> None:
+            super().__init__()
+            self.durable: list[Any] = []
+
+        def log_durable(self, entry) -> None:
+            self.durable.append(entry)
+
+    child = _resolve({"x-parent-session-id": PARENT}, session=CHILD)
+    pl = _Flushing()
+    assert log_subagent_link(pl, child, chat_id="c", user_id=None)
+    assert pl.flushed_with == [1]
+    dl = _Durable()
+    assert log_subagent_link(dl, child, chat_id="c", user_id=None)
+    assert len(dl.durable) == 1 and dl.entries == []
+
+
 def test_session_log_is_fail_silent():
     child = _resolve({"x-parent-session-id": PARENT}, session=CHILD)
     assert log_subagent_link(_FakeProgressLogger(fail=True), child, chat_id="c", user_id=None) is False
