@@ -41,6 +41,7 @@ from . import actor_opencode_config
 from . import epoch_aliases
 from . import scratch
 from . import ak_check
+from . import cpu_window
 from . import resume as resume_mod
 from . import bestof
 
@@ -79,6 +80,14 @@ class ServingComparison:
     def to_dict(self):
         return {**self.row, "surface": self.surface,
                 "baseline_scope": self.baseline_scope}
+
+
+@contextmanager
+def _stacked(outer, inner):
+    """Enter `outer` then `inner`; used to put the CPU window around a quiet window."""
+    with outer:
+        with inner:
+            yield
 
 
 def _serving_comparison(invoke, baseline_scope, *, measurement_window=nullcontext):
@@ -1334,7 +1343,27 @@ def main(argv: list[str] | None = None) -> int:
                              "alone; anything else = an argv with {worktree}/{base}/{paths}/"
                              "{scratch}/{build_dir} placeholders (exit 0 passes, 2 is "
                              "inconclusive) (default: %(default)r)")
+    parser.add_argument("--cpu-window-yield", choices=("on", "off"), default="on",
+                        help="CPU windows (operator proposal 2026-09-26): release the CPU-region "
+                             "claim while every lane is in an actor phase (planner, critics, "
+                             "author), publish the window for peers, and re-acquire it (waiting "
+                             "on a peer, never pre-empting it) before every build, measurement "
+                             "and at teardown; see cpu_window.py. Off = the claim is held for "
+                             "the whole batch, byte for byte (default: %(default)s)")
+    parser.add_argument("--cpu-window-wait-bound-s", type=float,
+                        default=cpu_window.DEFAULT_WAIT_BOUND_S,
+                        help="how long a re-acquire waits on a peer before it is logged as "
+                             "overdue; it keeps waiting either way (default: %(default)s)")
+    parser.add_argument("--cpu-window-path", type=Path, default=cpu_window.DEFAULT_PATH,
+                        help="the well-known window file; a per-campaign copy is written to "
+                             "<store>/cpu-window.json (default: %(default)s)")
+    parser.add_argument("--cpu-window-bus-agent", default=cpu_window.DEFAULT_BUS_AGENT,
+                        help="session-bus roster id whose OWN outbox receives the window "
+                             "events as `status` broadcasts; 'off' (or empty) disables the bus "
+                             "(the window file and its events.jsonl remain) (default: %(default)s)")
     args = parser.parse_args(argv)
+    if args.cpu_window_wait_bound_s <= 0:
+        parser.error("--cpu-window-wait-bound-s must be > 0")
     if args.hypothesis_author_attempts < 1:
         parser.error("--hypothesis-author-attempts must be >= 1")
     budget_error = _actor_budget_error(args)
@@ -2728,6 +2757,8 @@ def main(argv: list[str] | None = None) -> int:
     scratch_registry: list = [None]
 
     stopping = {"asked": False}
+    #: The CPU window of this run (`--cpu-window-yield on` with a CPU claim), else None.
+    cpu_window_ref: list = [None]
 
     def _ask_stop(signum, _frame) -> None:
         # Never abort mid-measurement: a killed A/B wastes the device time already
@@ -2746,10 +2777,14 @@ def main(argv: list[str] | None = None) -> int:
         return stopping["asked"] or pool.stop_requested(args.store)
 
     def cpu_measurement_window():
-        return _q3_cpu_gpu_quiet_window(
+        quiet = _q3_cpu_gpu_quiet_window(
             cpu_launch, should_stop=should_stop,
             on_wait=lambda: publish("running", latest,
                 step="q3 CPU measurement waiting for MI210 GPU item to release"))
+        if cpu_window_ref[0] is None:
+            return quiet
+        # A CPU measurement never runs on a yielded claim, wherever it is called from.
+        return _stacked(cpu_window_ref[0].cpu_step("measurement"), quiet)
 
     def measured_serving_compare(*args_, **kwargs_):
         with cpu_measurement_window():
@@ -3917,7 +3952,8 @@ def main(argv: list[str] | None = None) -> int:
             next_resume=(resume_queue[0].take if resume_queue[0] is not None else None),
             **({"make_author_panel": make_author_panel} if author_plan.panel else {}),
             champion_tree=args.worktree, branch=args.champion_branch,
-            on_step=step_pooled)
+            on_step=step_pooled,
+            **({"cpu_window": cpu_window_ref[0]} if cpu_window_ref[0] is not None else {}))
 
     claim_started = None
     original_claims = []
@@ -4030,6 +4066,23 @@ def main(argv: list[str] | None = None) -> int:
             print(f"warning: lineage belief export unavailable: {type(exc).__name__}: "
                   f"{exc}", file=sys.stderr)
 
+    cpu_win = None
+    if args.cpu_window_yield == "on" and (owned_cpu_list is not None or cpu_launch):
+        cpu_win = cpu_window.CpuWindow(
+            campaign=(resolved_campaign.campaign_id if selected_target is not None
+                      else "ak-loop"),
+            path=args.cpu_window_path, campaign_path=args.store / cpu_window.CAMPAIGN_NAME,
+            ledger_dir=args.out, wait_bound_s=args.cpu_window_wait_bound_s,
+            should_stop=should_stop,
+            estimator=cpu_window.PhaseEstimator(
+                args.worker_root / actors.ACTOR_REPLY_DIR / actors.ACTOR_CALL_LOG,
+                planner_budget_s=args.actor_planner_budget_s or args.actor_timeout_s,
+                author_budget_s=args.actor_author_budget_s or args.actor_timeout_s,
+                critic_timeout_s=args.actor_timeout_s),
+            bus=cpu_window.BusPublisher(
+                None if args.cpu_window_bus_agent in ("", "off") else args.cpu_window_bus_agent))
+    cpu_window_ref[0] = cpu_win
+
     if direct_launch:
         report_runtime_progress()
     try:
@@ -4053,6 +4106,17 @@ def main(argv: list[str] | None = None) -> int:
             ownership.callback(scratch_registry[0].close)
             scratch_registry[0].sweep()
             ownership.enter_context(scratch.adopt_tempfile(run_scope))
+            if cpu_win is not None:
+                # Registered BEFORE the claim, so it runs AFTER the claim's release:
+                # the last word is `closed`, no claim, an expired heartbeat.
+                ownership.callback(cpu_win.finalize)
+
+            def hold_cpu_claim(cpu_list):
+                if cpu_win is None:
+                    return ownership.enter_context(claim.hold_cpu(cpu_list))
+                return cpu_win.acquire_initial(
+                    lambda: ownership.enter_context(claim.hold_cpu(cpu_list)))
+
             try:
                 if owned_cpu_list is not None:
                     # This thread and future actor/oracle children inherit the declared
@@ -4061,14 +4125,20 @@ def main(argv: list[str] | None = None) -> int:
                     from ..execution.cpu_region_claim import parse_cpu_list
                     os.sched_setaffinity(0, set(parse_cpu_list(owned_cpu_list)))
                     ownership.callback(os.sched_setaffinity, 0, previous_affinity)
-                    receipt = ownership.enter_context(claim.hold_cpu(owned_cpu_list))
+                    receipt = hold_cpu_claim(owned_cpu_list)
                     original_claims.append(receipt)
                 elif cpu_launch:
-                    receipt = ownership.enter_context(claim.hold_cpu(cpu_launch.template.cpu_list))
+                    receipt = hold_cpu_claim(cpu_launch.template.cpu_list)
                     original_claims.append(receipt)
+                if cpu_win is not None and original_claims:
+                    cpu_win.set_reserved(cpu_window.ak_check_cpus())
+                    cpu_win.bind(original_claims[0])
                 if not cpu_launch:
                     receipt = ownership.enter_context(claim.hold())
                     original_claims.append(receipt)
+                if cpu_win is not None:
+                    # Runs FIRST on unwind: the claim's close observation needs it held.
+                    ownership.callback(cpu_win.teardown)
             except BaseException as acquisition_error:
                 try:
                     publish_preclaim_failure(acquisition_error)
