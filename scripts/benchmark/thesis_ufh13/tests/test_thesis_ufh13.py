@@ -13,7 +13,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
-from scripts.benchmark.thesis_ufh13 import records, run_thesis, score, suite, transports  # noqa: E402
+from scripts.benchmark.thesis_ufh13 import (  # noqa: E402
+    pilot_pool,
+    records,
+    run_thesis,
+    score,
+    suite,
+    transports,
+)
 from scripts.benchmark.thesis_ufh13.suite import Item  # noqa: E402
 
 ROOT_TEMPLATE = Path("/mnt/raid0/llm/epyc-root/harness/opencode-plugin/config/opencode.jsonc.template")
@@ -303,7 +310,9 @@ class RunnerTests(unittest.TestCase):
                           fired=bool(steps), steps=steps)
             rows.append({"arm": "A2", "status": "ok", "correct": i % 2 == 0, "wall_s": 1.0,
                          **records.summarize_receipts("A2", [rec])})
-        report = run_thesis.pilot_report(rows)
+        report = run_thesis.pilot_report(rows, {"pilot_pool_sha256": "abc",
+                                                "pilot_items_composition": {"gpqa": {"n": 10}}})
+        self.assertEqual(report["pilot_pool_sha256"], "abc")
         self.assertEqual(report["n_items"], 10)
         self.assertEqual(report["escalation_rate"], 0.4)
         self.assertEqual(report["items_by_trigger"]["review_gate"], {"items": 3, "rate": 0.3})
@@ -333,15 +342,6 @@ class SuiteAndTransportTests(unittest.TestCase):
             moved.write_bytes(suite.SUITE_PATH.read_bytes() + b" ")
             with self.assertRaises(suite.SuiteError):
                 suite.load_suite(moved)
-
-    def test_stratified_pilot_is_proportional_and_spread(self):
-        items = suite.load_suite()
-        picked = suite.stratified_sample(items, 20, seed=7)
-        self.assertEqual(len(picked), 20)
-        self.assertEqual(len({i.item_id for i in picked}), 20)
-        self.assertEqual(sum(1 for i in picked if i.suite == "mmlu_pro"), 10)
-        self.assertGreaterEqual(len({i.stratum for i in picked if i.suite == "mmlu_pro"}), 8)
-        self.assertEqual(picked, suite.stratified_sample(items, 20, seed=7))
 
     def test_v1_body_per_arm(self):
         sid = transports.session_id_for("run 1", "A2", "gpqa_Organic Chemistry_0098")
@@ -397,6 +397,98 @@ class SuiteAndTransportTests(unittest.TestCase):
                                                       {"type": "text", "text": "ANSWER: C"}]},
         ]}
         self.assertEqual(transports.assistant_text(session), "ANSWER: C")
+
+
+class PilotPoolTests(unittest.TestCase):
+    """The pilot draws from OUTSIDE the frozen 395, by construction and by refusal."""
+
+    def test_committed_pool_is_pinned_disjoint_and_mix_matched(self):
+        pool, sha = pilot_pool.load_pool()
+        self.assertEqual(sha, pilot_pool.POOL_SHA256)
+        frozen = suite.load_suite()
+        self.assertFalse({i.item_id for i in pool} & {i.item_id for i in frozen})
+        guard = pilot_pool.frozen_hashes(frozen)
+        for item in pool:
+            self.assertFalse(set(pilot_pool.question_hashes(item)) & guard, item.item_id)
+        comp = pilot_pool.composition(pool)
+        frozen_mmlu = pilot_pool.composition([i for i in frozen if i.suite == "mmlu_pro"])
+        self.assertEqual(comp["mmlu_pro"], frozen_mmlu["mmlu_pro"])  # exact subject mix
+        self.assertEqual(comp["gpqa"]["n"], 253)  # every non-suite GPQA main item on disk
+
+    def test_drifted_pool_file_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            moved = Path(tmp) / "pool.json"
+            moved.write_bytes(pilot_pool.POOL_PATH.read_bytes() + b" ")
+            with self.assertRaises(pilot_pool.PoolError):
+                pilot_pool.load_pool(moved)
+
+    def test_frozen_question_is_refused_even_under_another_id_or_whitespace(self):
+        frozen = suite.load_suite()
+        guard = pilot_pool.frozen_hashes(frozen)
+        victim = frozen[0]
+        disguised = Item("mmlu_pro_other_99999", victim.suite,
+                         victim.prompt.replace(" ", "  ", 1).upper().replace("\n\nA) ", "\n\nA) ", 1),
+                         victim.expected)
+        with self.assertRaises(pilot_pool.PoolError):
+            pilot_pool.refuse_frozen([disguised], guard)
+        same_stem = Item("mmlu_pro_law_99998", victim.suite,
+                         victim.prompt.split("\n\nA) ")[0] + "\n\nA) other\nB) options", "A")
+        with self.assertRaises(pilot_pool.PoolError):
+            pilot_pool.refuse_frozen([same_stem], guard)
+        pilot_pool.refuse_frozen([Item("x", "gpqa", "A new question?\n\nA) y", "A")], guard)
+
+    def test_loading_a_pool_that_contains_a_frozen_question_is_refused(self):
+        data = json.loads(pilot_pool.POOL_PATH.read_text())
+        victim = suite.load_suite()[5]
+        data["items"].append({"id": "mmlu_pro_law_77777", "suite": victim.suite,
+                              "prompt": victim.prompt, "expected": victim.expected})
+        with tempfile.TemporaryDirectory() as tmp:
+            bad = Path(tmp) / "pool.json"
+            bad.write_text(json.dumps(data))
+            with self.assertRaises(pilot_pool.PoolError):
+                pilot_pool.load_pool(bad, expected_sha256=suite.file_sha256(bad))
+
+    def test_mix_matched_sample_follows_the_frozen_mix(self):
+        pool, _ = pilot_pool.load_pool()
+        frozen = suite.load_suite()
+        picked = pilot_pool.mix_matched_sample(pool, frozen, 40, seed=7)
+        self.assertEqual(len(picked), 40)
+        self.assertEqual(len({i.item_id for i in picked}), 40)
+        comp = pilot_pool.composition(picked)
+        self.assertEqual((comp["mmlu_pro"]["n"], comp["gpqa"]["n"]), (20, 20))
+        mmlu = comp["mmlu_pro"]["by_subject"]
+        self.assertGreaterEqual(mmlu.get("business", 0), mmlu.get("history", 0))
+        self.assertEqual(picked, pilot_pool.mix_matched_sample(pool, frozen, 40, seed=7))
+        big = pilot_pool.mix_matched_sample(pool, frozen, 300, seed=1)
+        self.assertEqual(len(big), 300)
+        self.assertEqual(len({i.item_id for i in big}), 300)
+        pilot_pool.refuse_frozen(big, pilot_pool.frozen_hashes(frozen))
+
+    def test_renderers_reproduce_frozen_items_from_synthetic_rows(self):
+        mmlu = pilot_pool.render_mmlu_pro(3, {"question": "Q?", "options": ["x", "y"],
+                                              "answer": "B", "answer_index": 1,
+                                              "category": "law"})
+        self.assertEqual(mmlu.item_id, "mmlu_pro_law_00003")
+        self.assertEqual(mmlu.prompt, "Q?\n\nA) x\nB) y\n\nAnswer with the letter only (A through J).")
+        self.assertEqual(mmlu.expected, "B")
+        with self.assertRaises(pilot_pool.PoolError):
+            pilot_pool.render_mmlu_pro(0, {"question": "Q", "options": ["x"], "answer": "B",
+                                           "answer_index": 0})
+
+    def test_pool_build_excludes_frozen_rows_and_their_questions(self):
+        frozen = [Item("mmlu_pro_law_00000", "mmlu_pro",
+                       "Old?\n\nA) a\nB) b\n\nAnswer with the letter only (A through J).", "A")]
+        rows = [{"question": "Old?", "options": ["a", "b"], "answer": "A", "answer_index": 0,
+                 "category": "law"},
+                {"question": "Old?", "options": ["c", "d"], "answer": "A", "answer_index": 0,
+                 "category": "law"},  # same question, other options: refused by stem hash
+                {"question": "New?", "options": ["a", "b"], "answer": "B", "answer_index": 1,
+                 "category": "law"}]
+        pool = pilot_pool.build_pool(rows, [], frozen, seed=1)
+        self.assertEqual([i["id"] for i in pool["items"]], ["mmlu_pro_law_00002"])
+        self.assertEqual(pool["sources"]["mmlu_pro"]["eligible"], 1)
+        with self.assertRaises(pilot_pool.PoolError):  # a frozen item that does not re-render
+            pilot_pool.build_pool(rows, [], [Item("mmlu_pro_law_00000", "mmlu_pro", "x", "A")])
 
 
 if __name__ == "__main__":

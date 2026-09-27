@@ -46,7 +46,7 @@ An unmeasured cost is recorded as `None`, never as 0.
 # zero network
 python3 scripts/benchmark/thesis_ufh13/run_thesis.py plan
 
-# SENDS INFERENCE. A2 only on N stratified items; writes pilot_report.json
+# SENDS INFERENCE. A2 only on N pilot-pool items (outside the frozen 395); writes pilot_report.json
 python3 scripts/benchmark/thesis_ufh13/run_thesis.py pilot 20 \
     --out /mnt/raid0/llm/tmp/ufh13/pilot-<date> --run-id pilot-<date> --seed 7 \
     --orchestrator-commit <sha the live API serves>
@@ -72,18 +72,40 @@ come from the tap `v1_escalation` events, joined on the OpenCode session id. Two
 - The plugin forwards only `x_*` keys, so it cannot pin seed or temperature. This must be settled
   before the TE-3 freeze.
 
-## Pilot report
+## Pilot (`pilot_pool.py`): outside the frozen 395 by construction
 
-The pilot answers one question: does A2 escalate at all? It reports:
+The pilot draws only from `data/ufh13-thesis/pilot_pool.json` (sha256 `0898013e…a3c5`, pinned). The
+pool was built once, from data already on disk, with nothing downloaded, by
+`python -m scripts.benchmark.thesis_ufh13.pilot_pool` under the research venv (it needs pyarrow).
+
+| part | source | items | subject mix |
+|---|---|---|---|
+| MMLU-Pro | TIGER-Lab test snapshot `b189ec76` (sha `0e24a191…`, 12,032 rows) | 200 | exactly the frozen suite's 14 category counts |
+| GPQA | `ankner/gpqa` train, the 448-question main set (sha `f6a75ab5…`) | 253 | every non-suite main item; 121 are also diamond questions, 132 are main-only |
+
+- **Why all 253 GPQA items:** the frozen 195 GPQA items are a main-set sample, 78 of which are also diamond
+  questions. No extended split is on disk, and the diamond mirror is a subset of main. So the 253 are
+  all the non-suite GPQA data available. Their subdomain mix cannot match the suite's: main's 62
+  Molecular Biology items are all in the suite.
+- **Proof of rendering:** the build re-renders all 395 frozen items from their source rows. They are
+  byte-identical to the frozen file, so pool items are rendered exactly as the suite's items were.
+- **What the build excludes:** the frozen rows, and any candidate whose normalised question stem or
+  full prompt hashes to a frozen question. Duplicate questions inside the sources are also dropped.
+  In total 391 MMLU-Pro rows go.
+- **The runner refuses** a pool file whose sha256 has changed. It also refuses any pilot item whose
+  question hash is in the frozen suite, checked both when the pool loads and again before the pilot runs.
+- **`pilot N` sampling:** it takes N pool items allocated by the frozen suite's mix, first across
+  suites, then across subjects within each suite (largest remainder, capped by availability). The
+  sample is deterministic per `--seed`.
+
+The pilot report adds `pilot_pool_sha256` and `pilot_items_composition` to these fields:
 
 - `escalation_rate`, plus `items_by_trigger` for `review_gate`, `review_gate_revision` and `quality_escalation`;
 - `review_verdicts`, where `wrong` means a revision and `ok_or_unavailable` means the frontdoor answer was kept;
 - `escalation_to_roles`, `escalation_models` and `escalation_not_enabled`;
 - consultant seconds.
 
-Pilot items come from the frozen suite. The records are flagged `pilot: true`, and `score` refuses a
-pilot run. Seeing A2's outputs on suite items before the freeze is a pre-registration deviation, so
-log it as such if the pilot runs before TE-3.
+`score` refuses a pilot run.
 
 ## Scorer (`score.py`)
 

@@ -9,8 +9,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import random
-from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -69,37 +67,3 @@ def load_suite(path: Path = SUITE_PATH, expected_sha256: str = SUITE_SHA256) -> 
     if len({item.item_id for item in items}) != len(items):
         raise SuiteError("duplicate item ids")
     return items
-
-
-def stratified_sample(items: list[Item], n: int, seed: int) -> list[Item]:
-    """``n`` items spread proportionally over suites, then round-robin over subjects.
-
-    Deterministic for a given (items, n, seed). Used by the pilot only.
-    """
-    if n <= 0:
-        return []
-    n = min(n, len(items))
-    rng = random.Random(seed)
-    by_suite: dict[str, list[Item]] = defaultdict(list)
-    for item in items:
-        by_suite[item.suite].append(item)
-    total = len(items)
-    quotas = {suite: round(n * len(rows) / total) for suite, rows in by_suite.items()}
-    while sum(quotas.values()) > n:
-        quotas[max(quotas, key=quotas.get)] -= 1
-    while sum(quotas.values()) < n:
-        quotas[max(by_suite, key=lambda s: len(by_suite[s]) - quotas[s])] += 1
-    picked: list[Item] = []
-    for suite in sorted(by_suite):
-        strata: dict[str, list[Item]] = defaultdict(list)
-        for item in by_suite[suite]:
-            strata[item.stratum].append(item)
-        pools = [rng.sample(strata[key], len(strata[key])) for key in sorted(strata)]
-        rng.shuffle(pools)
-        taken: list[Item] = []
-        while len(taken) < quotas[suite] and any(pools):
-            for pool in pools:
-                if pool and len(taken) < quotas[suite]:
-                    taken.append(pool.pop())
-        picked.extend(taken)
-    return picked

@@ -6,9 +6,11 @@ Run from the research repo root. The main session runs the inference commands in
 bus-granted window, with AutoPilot quiesced and the orchestrator flag ``v1_escalation`` ON.
 
   plan          print the arms, the suite fingerprint and the checks; no network.
-  pilot N       A2 ONLY on N stratified items -> escalation rate by trigger and the review
-                verdict distribution. Answers "does A2 escalate at all?" before the full window.
-                Pilot records are flagged and can never be scored against the rule.
+  pilot N       A2 ONLY on N items from the PILOT POOL (outside the frozen 395; see
+                pilot_pool.py), allocated by the frozen suite's subject mix -> escalation rate
+                by trigger and the review verdict distribution. Answers "does A2 escalate at
+                all?" before the full window. Any pilot item whose question hash is in the
+                frozen suite is refused. Pilot records can never be scored against the rule.
   run           A0/A1/A2 over the frozen 395 items, interleaved per item in seeded random order
                 (blocks of 3). Resumable: rerun the same command to continue.
   score         apply the pre-registered rule to a finished run; writes score.json and the
@@ -49,7 +51,14 @@ from .records import (  # noqa: E402
     summarize_receipts,
 )
 from .score import SCORER_PATH, is_correct, score_run  # noqa: E402
-from .suite import SUITE_PATH, SUITE_SHA256, Item, file_sha256, load_suite, stratified_sample  # noqa: E402
+from .pilot_pool import (  # noqa: E402
+    composition,
+    frozen_hashes,
+    load_pool,
+    mix_matched_sample,
+    refuse_frozen,
+)
+from .suite import SUITE_PATH, SUITE_SHA256, Item, file_sha256, load_suite  # noqa: E402
 from .transports import OpenCodeTransport, Transport, V1Transport, session_id_for  # noqa: E402
 
 RUNNER_VERSION = "ufh13-runner/v1"
@@ -82,9 +91,12 @@ def schedule(items: list[Item], arms: list[str], seed: int) -> list[tuple[str, I
 
 
 def build_manifest(args: argparse.Namespace, *, pilot: bool, arms: list[str],
-                   items: list[Item], transport: Transport) -> dict[str, Any]:
+                   items: list[Item], transport: Transport,
+                   pilot_pool_sha256: str | None = None) -> dict[str, Any]:
     prereg = Path(args.preregistration) if args.preregistration else None
     return {
+        "pilot_pool_sha256": pilot_pool_sha256,
+        "pilot_items_composition": composition(items) if pilot else None,
         "runner": RUNNER_VERSION,
         "run_id": args.run_id,
         "pilot": pilot,
@@ -108,7 +120,7 @@ def build_manifest(args: argparse.Namespace, *, pilot: bool, arms: list[str],
 
 # Fields that must match on resume (a changed one is a different experiment).
 _RESUME_KEYS = ("runner", "run_id", "pilot", "arms", "generation", "seed", "items",
-                "suite_sha256", "scorer_sha256", "transport")
+                "suite_sha256", "scorer_sha256", "transport", "pilot_pool_sha256")
 
 
 def open_run(out: Path, manifest: dict[str, Any]) -> None:
@@ -168,8 +180,10 @@ def run_items(out: Path, plan: list[tuple[str, Item]], transport: Transport, *, 
     return len(todo)
 
 
-def pilot_report(records: list[dict[str, Any]]) -> dict[str, Any]:
+def pilot_report(records: list[dict[str, Any]],
+                 manifest: dict[str, Any] | None = None) -> dict[str, Any]:
     """Escalation rate by trigger, review verdicts, costs. Answers "does A2 escalate at all?"."""
+    manifest = manifest or {}
     rows = [r for r in records if r.get("arm") == "A2"]
     n = len(rows)
     ok = [r for r in rows if r.get("status") == "ok"]
@@ -194,6 +208,8 @@ def pilot_report(records: list[dict[str, Any]]) -> dict[str, Any]:
                   if r.get("consultant_device_seconds") is not None]
     disabled = Counter(reason for r in rows for reason in r.get("escalation_disabled_reasons") or [])
     return {
+        "pilot_pool_sha256": manifest.get("pilot_pool_sha256"),
+        "pilot_items_composition": manifest.get("pilot_items_composition"),
         "n_items": n,
         "statuses": dict(Counter(r.get("status") for r in rows)),
         "accuracy": round(sum(1 for r in ok if r.get("correct")) / n, 4) if n else None,
@@ -272,23 +288,30 @@ def main(argv: list[str] | None = None) -> int:
                                                  "G_ci95", "gap_ci95")}, indent=2))
         return 0
     if args.cmd == "pilot-report":
-        report = pilot_report(read_records(Path(args.out) / RECORDS_NAME))
+        report = pilot_report(read_records(Path(args.out) / RECORDS_NAME),
+                              json.loads((Path(args.out) / MANIFEST_NAME).read_text()))
         print(json.dumps(report, indent=2, sort_keys=True))
         return 0
 
     out = Path(args.out)
-    items = load_suite()
+    frozen = load_suite()
     pilot = args.cmd == "pilot"
+    pool_sha = None
     if pilot:
-        items = stratified_sample(items, args.n, args.seed)
+        pool, pool_sha = load_pool()
+        items = mix_matched_sample(pool, frozen, args.n, args.seed)
+        refuse_frozen(items, frozen_hashes(frozen))  # by construction, and checked again here
         arms = ["A2"]
     else:
+        items = frozen
         arms = list(ARMS)
     transport = make_transport(args, out)
-    open_run(out, build_manifest(args, pilot=pilot, arms=arms, items=items, transport=transport))
+    manifest = build_manifest(args, pilot=pilot, arms=arms, items=items, transport=transport,
+                              pilot_pool_sha256=pool_sha)
+    open_run(out, manifest)
     run_items(out, schedule(items, arms, args.seed), transport, run_id=args.run_id, pilot=pilot)
     if pilot:
-        report = pilot_report(read_records(out / RECORDS_NAME))
+        report = pilot_report(read_records(out / RECORDS_NAME), manifest)
         (out / "pilot_report.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
         print(json.dumps(report, indent=2, sort_keys=True))
     return 0
