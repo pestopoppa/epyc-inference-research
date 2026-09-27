@@ -401,12 +401,24 @@ _REQUEST_KEY_FIELDS = ("x_session_id", "x_user_id", "x_memory", "x_tool_mode")
 
 
 def _request_keys(request: OpenAIChatRequest) -> dict[str, str]:
-    """The typed HS-4 keys the caller actually sent (validated by the model)."""
-    return {
+    """The typed HS-4 keys the caller actually sent (validated by the model).
+
+    A role override the caller sent (x_force_role, x_force_model, x_orchestrator_role)
+    is echoed too, verbatim and only when set, so the inference tap records the pin a
+    call carried. Without it a harness verify cannot tell a pinned call from an
+    unpinned one (HS-19a S4-no-force-pin read request_keys that never held the key).
+    A request without an override keeps exactly the keys it had before.
+    """
+    keys = {
         name: value
         for name in _REQUEST_KEY_FIELDS
         if (value := getattr(request, name, None)) is not None
     }
+    for name in _ROLE_OVERRIDE_FIELDS:
+        value = getattr(request, name, None)
+        if value:
+            keys[name] = value
+    return keys
 
 
 def _apply_request_key_metadata(meta: dict[str, Any], request_keys: dict[str, Any]) -> dict[str, Any]:

@@ -338,3 +338,56 @@ def test_model_field_is_not_validated_by_this_change(client, monkeypatch):
     r = client.post("/v1/chat/completions", json=_body(model="some-unknown-model"))
 
     assert r.status_code != 422
+
+
+# ── the override a call carried is recorded (task-delegation probe, 2026-09-27) ──
+
+
+@pytest.mark.parametrize(
+    ("override", "value"),
+    [
+        ("x_force_role", "architect_general"),
+        ("x_force_model", "architect_general"),
+        ("x_orchestrator_role", "coder_escalation"),
+    ],
+)
+def test_sent_override_is_echoed_in_request_keys_and_trace(client, monkeypatch, override, value):
+    """A harness verify reads the tap's request_keys to prove a pin present or absent."""
+    primitives = _install(monkeypatch)
+
+    r = client.post("/v1/chat/completions", json=_body(**{override: value}))
+
+    assert r.status_code == 200, r.text
+    keys = r.json()["x_orchestrator_metadata"]["request_keys"]
+    assert keys[override] == value
+    assert {"x_session_id", "x_tool_mode"} <= set(keys)
+    primitives.set_request_trace_keys.assert_called_once_with(keys)
+
+
+def test_request_without_override_keeps_its_exact_keys(client, monkeypatch):
+    primitives = _install(monkeypatch)
+
+    r = client.post("/v1/chat/completions", json=_body())
+
+    keys = r.json()["x_orchestrator_metadata"]["request_keys"]
+    assert keys == {"x_session_id": "ses_role_contract", "x_tool_mode": "client"}
+    assert not [k for k in keys if k.startswith("x_force_") or k == "x_orchestrator_role"]
+    primitives.set_request_trace_keys.assert_called_once_with(keys)
+
+
+def test_echo_is_the_value_sent_not_the_normalised_role(client, monkeypatch):
+    primitives = _install(monkeypatch)
+
+    r = client.post("/v1/chat/completions", json=_body(x_force_role="architect"))
+
+    assert _captured_role(primitives) == "architect_general"
+    assert r.json()["x_orchestrator_metadata"]["request_keys"]["x_force_role"] == "architect"
+
+
+def test_refused_override_is_never_recorded(client, monkeypatch):
+    primitives = _install(monkeypatch)
+
+    r = client.post("/v1/chat/completions", json=_body(x_force_role="no_such_role"))
+
+    assert r.status_code == 422
+    primitives.set_request_trace_keys.assert_not_called()
