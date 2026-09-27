@@ -1751,8 +1751,16 @@ def start_server(
     gpu_shadow_lane_mode: bool = False,
     numa_instance: int = 0,
     bench_force: bool = False,
+    env_override: dict[str, str] | None = None,
 ) -> ProcessInfo | None:
-    """Start a llama-server for the given roles."""
+    """Start a llama-server for the given roles.
+
+    ``env_override`` is the one-shot experiment env (UFH-12 arm A3,
+    scripts/server/embedder_env_override.py). It is honoured ONLY for embedders
+    and applied last, over the declared env; every other branch refuses it.
+    """
+    if env_override and not embedding_mode:
+        raise ValueError("env_override is only honoured for embedders (embedding_mode=True)")
     detached_stdio = {
         "stdin": subprocess.DEVNULL,
         "start_new_session": True,
@@ -2005,6 +2013,11 @@ def start_server(
             # The embedding branch has no binary override, so it used to pass ambient GGML_*
             # straight through. Strip it like every other branch (2026-09-26).
             _strip_ambient_ggml(env, _role_env_overrides(roles[0]), label="embedding")
+            if env_override:
+                # One-shot experiment env (UFH-12 A3): applied last, recorded by the caller in
+                # logs/embedder_env_override.json, and never read back by any later launch.
+                env.update(env_override)
+                print(f"    [EXPERIMENT] env override: {env_override}")
             # NOTE: Do NOT set OMP_NUM_THREADS=1 - it disables parallel tensor repack (2.2x slower loading)
             proc = subprocess.Popen(
                 spawn_prefix + cmd,
@@ -3214,6 +3227,30 @@ def main() -> int:
         "--profile",
         choices=sorted(ORCHESTRATOR_PROFILES.keys()),
         help="Optional orchestrator API env profile (used when reloading orchestrator)",
+    )
+    reload_parser.add_argument(
+        "--embedder-env-override",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help=(
+            "EXPERIMENT ONLY (UFH-12 A3): relaunch the embedders with this OpenMP env over the "
+            "declared one. Only with the single component `embedders`, only OMP_WAIT_POLICY / "
+            "KMP_BLOCKTIME / KMP_LIBRARY, and only with --experiment-id. Recorded in "
+            "logs/embedder_env_override.json; a plain `reload embedders` restores and clears it."
+        ),
+    )
+    reload_parser.add_argument(
+        "--experiment-id",
+        default=None,
+        help="Experiment id recorded with --embedder-env-override (required with it)",
+    )
+    reload_parser.add_argument(
+        "--override-ttl-s",
+        type=float,
+        default=5400.0,
+        help="Expiry of the recorded override; past it env_attestation reports the deviation "
+        "as an ERROR again (default 5400 s, max 14400 s)",
     )
 
     # Status command

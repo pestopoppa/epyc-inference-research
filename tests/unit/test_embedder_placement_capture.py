@@ -194,6 +194,7 @@ def test_gate_main_writes_record_then_sidecar(tmp_path, monkeypatch):
     keys, and the capture runs only after the record is on disk."""
     base = _record(load_mode="raw")
     monkeypatch.setattr(gate, "_healthy", lambda port: True)
+    monkeypatch.setattr(gate, "embedder_env_readback", lambda ports: {})  # no live /proc in unit tests
     monkeypatch.setattr(gate, "g2", lambda window_s, load_factory: base["g2_pool_scaling"])
     monkeypatch.setattr(gate, "g1", lambda fd, pairs, n, load_factory: base["g1_frontdoor_decode"])
     monkeypatch.setattr(gate, "_capture_window",
@@ -212,6 +213,7 @@ def test_gate_main_writes_record_then_sidecar(tmp_path, monkeypatch):
 def test_gate_main_refused_capture_keeps_record_and_exits_4(tmp_path, monkeypatch):
     base = _record(load_mode="raw")
     monkeypatch.setattr(gate, "_healthy", lambda port: True)
+    monkeypatch.setattr(gate, "embedder_env_readback", lambda ports: {})  # no live /proc in unit tests
     monkeypatch.setattr(gate, "g2", lambda window_s, load_factory: base["g2_pool_scaling"])
     monkeypatch.setattr(gate, "g1", lambda fd, pairs, n, load_factory: base["g1_frontdoor_decode"])
     monkeypatch.setattr(gate, "_capture_window", lambda fd: cap.CaptureWindow(

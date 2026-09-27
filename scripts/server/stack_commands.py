@@ -2061,12 +2061,41 @@ def cmd_reload(args: argparse.Namespace) -> int:
             registry = RegistryLoader()
         return registry
 
+    # UFH-12 arm A3: a one-shot, recorded embedder env override (embedder_env_override.py).
+    from scripts.server import embedder_env_override as _emb_override
+
+    override_items = list(getattr(args, "embedder_env_override", None) or [])
+    experiment_id = getattr(args, "experiment_id", None)
+    try:
+        env_override = _emb_override.parse_overrides(override_items)
+    except _emb_override.OverrideError as exc:
+        print(f"[REFUSED] {exc}")
+        return 2
+    if env_override:
+        if list(args.components) != ["embedders"]:
+            print("[REFUSED] --embedder-env-override applies only to `reload embedders` on its own "
+                  f"(got components {list(args.components)})")
+            return 2
+        if not (experiment_id and str(experiment_id).strip()):
+            print("[REFUSED] --embedder-env-override needs --experiment-id")
+            return 2
+        ttl_s = float(getattr(args, "override_ttl_s", _emb_override.DEFAULT_TTL_S))
+        if not 0 < ttl_s <= _emb_override.MAX_TTL_S:
+            print(f"[REFUSED] --override-ttl-s must be in (0, {_emb_override.MAX_TTL_S:.0f}]")
+            return 2
+    elif experiment_id:
+        print("[REFUSED] --experiment-id without --embedder-env-override records nothing")
+        return 2
+
     for component in args.components:
         print(f"Reloading {component}...")
 
         # Special case: reload all embedders at once
         if component == "embedders":
             print("  Reloading all 6 BGE embedder instances...")
+            if env_override:
+                print(f"  [EXPERIMENT {experiment_id}] env override {env_override} "
+                      f"(expires in {ttl_s:.0f}s; restore = plain `reload embedders`)")
 
             # Kill by state file entries
             for port in EMBEDDER_PORTS:
@@ -2092,6 +2121,7 @@ def cmd_reload(args: argparse.Namespace) -> int:
 
             # Start all embedders
             success_count = 0
+            launched_pids: dict[int, int] = {}
             for port in EMBEDDER_PORTS:
                 role = "embedder" if port == 8090 else f"embedder_{port - 8090}"
                 info = start_server(
@@ -2101,13 +2131,32 @@ def cmd_reload(args: argparse.Namespace) -> int:
                     dev_mode=False,
                     embedding_mode=True,
                     bench_force=bench_force,
+                    **({"env_override": env_override} if env_override else {}),
                 )
                 if info:
                     state[f"server_{port}"] = info
                     state[role] = info
                     success_count += 1
+                    launched_pids[int(port)] = int(info.pid)
 
             print(f"  [OK] {success_count}/{len(EMBEDDER_PORTS)} embedders restarted")
+            if env_override:
+                # Record even a partial launch: every pid that got the override deviates.
+                if launched_pids:
+                    rec = _emb_override.write_active(
+                        experiment_id=str(experiment_id), env=env_override, pids=launched_pids,
+                        ttl_s=ttl_s, argv=list(sys.argv))
+                    print(f"  [EXPERIMENT] recorded {_emb_override.record_path()} "
+                          f"(expires_at {rec['expires_at']})")
+            else:
+                # A plain reload IS the restore: archive any recorded override with a readback.
+                cleared = _emb_override.clear(
+                    reason="restored by plain `reload embedders`",
+                    readback_after=_emb_override.readback(launched_pids))
+                if cleared is not None:
+                    print("  [EXPERIMENT] override record cleared "
+                          f"({(cleared.get('record') or {}).get('experiment_id')}); "
+                          f"archived to {_emb_override.history_path()}")
             if success_count == 0:
                 return 1
             continue

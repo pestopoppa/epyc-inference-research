@@ -68,7 +68,11 @@ SIDECAR_SUFFIX = ".belief_measurements.jsonl"
 HOOK_SINCE = "2026-09-27T00:00:00Z"
 #: The hook runs at report time. A capture later than this after ``finished_at`` is a backfill.
 MAX_EMIT_LAG_S = 3600
-LABELS = {"pre": "BASELINE", "post": "CANDIDATE", "post-cap": "CANDIDATE"}
+#: arm-baseline / arm-candidate (2026-09-27): the two sides of a pre-registered UFH-12 arm ABA
+#: (A0 cap 0, A3 embedder OpenMP env); the arm's name, policy overrides and embedder env readback
+#: ride in the record's params, hence in ``provenance.instrument.method``.
+LABELS = {"pre": "BASELINE", "post": "CANDIDATE", "post-cap": "CANDIDATE",
+          "arm-baseline": "BASELINE", "arm-candidate": "CANDIDATE"}
 LOAD_MODES = ("raw", "scheduler")
 
 #: metric -> (gate, unit, direction, per_port)
@@ -646,6 +650,8 @@ def build_rows(record: Mapping[str, Any], *, record_path: str | Path, window: Ca
     provenance = json.loads(json.dumps(provenance))
     record_sha = file_sha256(record_path)
     run_id = f"{label}@{record['started_at']}"
+    arm = params.get("arm")
+    claim_label = f"{label} {arm}" if isinstance(arm, str) and arm.strip() else label
     rows = []
     for metric, port, gate, samples, reps, basis in _rows_for_record(record):
         try:
@@ -660,7 +666,7 @@ def build_rows(record: Mapping[str, Any], *, record_path: str | Path, window: Ca
                                                    metric=metric, record_sha256=record_sha),
             "metric": metric, "gate": gate, "port": port, "value": value, "unit": unit,
             "metric_direction": direction, "category": LABELS[label],
-            "claim": _claim(metric, port, value, samples, label, load_mode,
+            "claim": _claim(metric, port, value, samples, claim_label, load_mode,
                             provenance["load"]["in_flight_total"]),
             "protocol_id": "", "reps": reps, "reps_basis": basis,
             "samples": json.loads(json.dumps(samples)),

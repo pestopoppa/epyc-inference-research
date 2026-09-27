@@ -1196,11 +1196,15 @@ def _declared_env_attestation_step() -> PipelineStep:
         )
     details = [f"compared: {line}" for line in result.compared]
     details += [f"not attested (no declared env contract): {line}" for line in result.not_attested]
+    # UFH-12 A3: deviations covered by a live, unexpired embedder env override record are
+    # recorded as warnings naming the experiment -- visible, never an error, never silent.
+    expected = [f"EXPECTED env deviation: {line}" for line in getattr(result, "expected", [])]
     if result.verdict == "failed":
         return PipelineStep(
             name="declared_env_attestation",
             status="failed",
             errors=[f"declared env drift: {line}" for line in result.errors],
+            warnings=expected,
             details=details,
         )
     if result.verdict == "could-not-check":
@@ -1211,7 +1215,7 @@ def _declared_env_attestation_step() -> PipelineStep:
                       "(a lane worktree has none); this is not a pass"],
             details=details,
         )
-    return PipelineStep(name="declared_env_attestation", status="ok", details=details)
+    return PipelineStep(name="declared_env_attestation", status="ok", warnings=expected, details=details)
 
 
 def _stack_manifest_registry_step(

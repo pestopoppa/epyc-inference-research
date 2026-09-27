@@ -19,6 +19,12 @@ and fails on any key the stack DECLARES for it that is missing or different:
 A process with no declared env contract (the API, docker services) is listed as not
 attested, never as passing. If no managed process can be read at all, the verdict is
 COULD-NOT-CHECK, which is not a pass.
+
+EXPECTED DEVIATIONS (UFH-12 arm A3, 2026-09-27). A one-shot experiment may relaunch the embedders
+with a recorded env override (scripts/server/embedder_env_override.py). A mismatch is EXPECTED --
+listed in ``expected``, surfaced as a warning naming the experiment, never an error and never
+silent -- only when the record is unexpired, names that pid, and declares exactly the live value.
+Anything else (an expired record, another pid, another key or value) stays an error.
 """
 
 from __future__ import annotations
@@ -35,6 +41,8 @@ class EnvAttestation:
     compared: list[str] = field(default_factory=list)      # "name:port pid N (k keys)"
     not_attested: list[str] = field(default_factory=list)  # no declared env contract
     errors: list[str] = field(default_factory=list)        # declared key missing/different, or unreadable
+    expected: list[str] = field(default_factory=list)      # deviations covered by a live override record
+    override_record: dict | None = None                    # the embedder env override record read, if any
 
     @property
     def verdict(self) -> str:
@@ -71,15 +79,34 @@ def declared_env_for(name: str, role: str, cmdline: str, aux_services: dict) -> 
     return None
 
 
-def attest(state: dict, *, aux_services: dict | None = None, pids_on_port=None) -> EnvAttestation:
+_READ_OVERRIDE = object()
+
+
+def _read_override_record() -> dict | None:
+    from scripts.server.embedder_env_override import read_record
+
+    return read_record()
+
+
+def attest(state: dict, *, aux_services: dict | None = None, pids_on_port=None,
+           override_record=_READ_OVERRIDE) -> EnvAttestation:
     """Compare every live managed process's environ with the env the stack declares for it.
 
     `state` maps name -> ProcessInfo-like (role, pid, port). Several names share one process
     (aliases, server_<port> rows); each PID is attested once, under its primary role.
+    `override_record` defaults to the live embedder env override record (None = no record).
     """
     if aux_services is None:
         from scripts.server.stack_manifest import AUX_SERVICES as aux_services  # noqa: N811
     out = EnvAttestation()
+    if override_record is _READ_OVERRIDE:
+        try:
+            override_record = _read_override_record()
+        except Exception as exc:  # noqa: BLE001 — an unreadable record covers nothing, loudly
+            out.errors.append(f"embedder env override record unreadable ({exc}); no deviation is expected")
+            override_record = None
+    out.override_record = override_record
+    from scripts.server.embedder_env_override import covers, is_expired
     by_pid: dict[int, tuple[str, object]] = {}
     for name, info in sorted(state.items()):
         pid = int(getattr(info, "pid", -1))
@@ -111,10 +138,26 @@ def attest(state: dict, *, aux_services: dict | None = None, pids_on_port=None) 
         for key, want in sorted(declared.items()):
             got = live.get(key)
             if got != want:
-                out.errors.append(
-                    f"{tag} ({role}): declared {key}={want!r} but live has "
-                    + ("it MISSING" if got is None else f"{key}={got!r}")
-                )
+                drift = (f"{tag} ({role}): declared {key}={want!r} but live has "
+                         + ("it MISSING" if got is None else f"{key}={got!r}"))
+                if covers(override_record, pid=pid, key=key, live_value=got):
+                    out.expected.append(
+                        f"{drift} -- EXPECTED under experiment "
+                        f"{override_record.get('experiment_id')!r} (expires {override_record.get('expires_at')})")
+                    continue
+                if override_record and is_expired(override_record) and \
+                        (override_record.get("env") or {}).get(key) == got:
+                    drift += (f" -- override record {override_record.get('experiment_id')!r} EXPIRED at "
+                              f"{override_record.get('expires_at')}: restore with `reload embedders`")
+                out.errors.append(drift)
+        for key in sorted(set((override_record or {}).get("env") or {}) - set(declared)):
+            # An override of a key the stack does not declare (e.g. KMP_LIBRARY) is still a deviation.
+            got = live.get(key)
+            if got is None:
+                continue
+            if covers(override_record, pid=pid, key=key, live_value=got):
+                out.expected.append(f"{tag} ({role}): undeclared {key}={got!r} -- EXPECTED under "
+                                    f"experiment {override_record.get('experiment_id')!r}")
         n = len(declared)
         if is_llama:
             n += 1
@@ -143,10 +186,17 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  compared      {line}")
     for line in result.not_attested:
         print(f"  not-attested  {line} (no declared env contract)")
+    for line in result.expected:
+        print(f"  EXPECTED      {line}")
     for line in result.errors:
         print(f"  ERROR         {line}")
+    if result.override_record is not None:
+        rec = result.override_record
+        print(f"  override-record experiment={rec.get('experiment_id')!r} env={rec.get('env')} "
+              f"expires_at={rec.get('expires_at')}")
     print(f"declared_env_attestation: {result.verdict} "
-          f"({len(result.compared)} compared, {len(result.not_attested)} not attested, {len(result.errors)} errors)")
+          f"({len(result.compared)} compared, {len(result.not_attested)} not attested, {len(result.errors)} errors, "
+          f"{len(result.expected)} expected deviations)")
     return {"ok": 0, "failed": 1}.get(result.verdict, 2)
 
 
