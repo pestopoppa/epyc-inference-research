@@ -1,0 +1,606 @@
+baseline  /mnt/raid0/llm/kernels/builds/gpu-20260810-0db32c06e/bin/libggml-hip.so.0.16.0 18192805ae84178e
+candidate /mnt/raid0/llm/kernels/production/gpu/libggml-hip.so.0.16.0 f26a166b8ea3089d
+common kernels 1433  FAIL 83  WARN 376  INFO 144
+INFO fa-mma DKQ=112 DV=112 c1=16 c2=1                 improved                   vgpr_total 252 -> 250
+WARN fa-mma DKQ=112 DV=112 c1=16 c2=2                 sgpr_spill                 32 -> 34
+WARN fa-mma DKQ=112 DV=112 c1=16 c2=2                 hot_waitcnt_lgkmcnt0       156 -> 157
+FAIL fa-mma DKQ=112 DV=112 c1=16 c2=4                 vgpr_spill                 36 -> 37
+WARN fa-mma DKQ=112 DV=112 c1=16 c2=4                 sgpr_spill                 51 -> 54
+FAIL fa-mma DKQ=112 DV=112 c1=16 c2=4                 hot_spill_reloads          48 -> 50
+WARN fa-mma DKQ=112 DV=112 c1=16 c2=4                 private_bytes              148 -> 152
+WARN fa-mma DKQ=112 DV=112 c1=16 c2=4                 hot_waitcnt_lgkmcnt0       233 -> 237
+WARN fa-mma DKQ=112 DV=112 c1=2 c2=8                  sgpr_spill                 29 -> 31
+WARN fa-mma DKQ=112 DV=112 c1=2 c2=8                  vgpr_total                 243 -> 244
+WARN fa-mma DKQ=112 DV=112 c1=2 c2=8                  hot_waitcnt_vmcnt0         45 -> 47
+WARN fa-mma DKQ=112 DV=112 c1=2 c2=8                  hot_waitcnt_lgkmcnt0       112 -> 115
+WARN fa-mma DKQ=112 DV=112 c1=32 c2=1                 hot_waitcnt_vmcnt0         96 -> 110
+WARN fa-mma DKQ=112 DV=112 c1=32 c2=1                 hot_waitcnt_lgkmcnt0       196 -> 220
+INFO fa-mma DKQ=112 DV=112 c1=32 c2=1                 improved                   vgpr_spill 44 -> 42; hot_spill_reloads 58 -> 56
+WARN fa-mma DKQ=112 DV=112 c1=32 c2=2                 sgpr_spill                 48 -> 51
+WARN fa-mma DKQ=112 DV=112 c1=32 c2=2                 hot_waitcnt_lgkmcnt0       230 -> 234
+WARN fa-mma DKQ=112 DV=112 c1=4 c2=4                  sgpr_spill                 29 -> 31
+WARN fa-mma DKQ=112 DV=112 c1=4 c2=4                  vgpr_total                 241 -> 242
+WARN fa-mma DKQ=112 DV=112 c1=4 c2=4                  hot_waitcnt_vmcnt0         45 -> 47
+WARN fa-mma DKQ=112 DV=112 c1=4 c2=4                  hot_waitcnt_lgkmcnt0       112 -> 115
+FAIL fa-mma DKQ=112 DV=112 c1=4 c2=8                  vgpr_spill                 22 -> 23
+WARN fa-mma DKQ=112 DV=112 c1=4 c2=8                  sgpr_spill                 31 -> 33
+FAIL fa-mma DKQ=112 DV=112 c1=4 c2=8                  hot_spill_reloads          36 -> 38
+WARN fa-mma DKQ=112 DV=112 c1=4 c2=8                  private_bytes              92 -> 96
+WARN fa-mma DKQ=112 DV=112 c1=4 c2=8                  hot_waitcnt_vmcnt0         79 -> 81
+WARN fa-mma DKQ=112 DV=112 c1=64 c2=1                 sgpr_spill                 169 -> 173
+INFO fa-mma DKQ=112 DV=112 c1=64 c2=1                 improved                   vgpr_spill 123 -> 120; hot_spill_reloads 339 -> 249
+WARN fa-mma DKQ=112 DV=112 c1=8 c2=2                  sgpr_spill                 26 -> 29
+WARN fa-mma DKQ=112 DV=112 c1=8 c2=2                  vgpr_total                 239 -> 240
+WARN fa-mma DKQ=112 DV=112 c1=8 c2=2                  hot_waitcnt_vmcnt0         44 -> 46
+FAIL fa-mma DKQ=112 DV=112 c1=8 c2=4                  vgpr_spill                 19 -> 20
+WARN fa-mma DKQ=112 DV=112 c1=8 c2=4                  sgpr_spill                 31 -> 32
+FAIL fa-mma DKQ=112 DV=112 c1=8 c2=4                  hot_spill_reloads          26 -> 28
+WARN fa-mma DKQ=112 DV=112 c1=8 c2=4                  private_bytes              80 -> 84
+WARN fa-mma DKQ=112 DV=112 c1=8 c2=8                  sgpr_spill                 49 -> 53
+WARN fa-mma DKQ=112 DV=112 c1=8 c2=8                  hot_waitcnt_lgkmcnt0       231 -> 234
+INFO fa-mma DKQ=112 DV=112 c1=8 c2=8                  improved                   vgpr_spill 33 -> 32; hot_spill_reloads 43 -> 42
+WARN fa-wmma D=112 nc=16 nw=4 float                   hot_waitcnt_vmcnt0         20 -> 22
+WARN fa-wmma D=112 nc=16 nw=4 float                   hot_waitcnt_lgkmcnt0       49 -> 52
+WARN fa-wmma D=112 nc=32 nw=4 half                    hot_waitcnt_vmcnt0         18 -> 19
+WARN fa-wmma D=112 nc=32 nw=4 half                    hot_waitcnt_lgkmcnt0       82 -> 84
+WARN fa-wmma D=112 nc=32 nw=4 float                   hot_waitcnt_lgkmcnt0       91 -> 98
+WARN fa-mma DKQ=128 DV=128 c1=16 c2=1                 sgpr_spill                 66 -> 68
+INFO fa-mma DKQ=128 DV=128 c1=16 c2=1                 improved                   hot_spill_reloads 11 -> 10
+WARN fa-mma DKQ=128 DV=128 c1=16 c2=1 sc              sgpr_spill                 69 -> 74
+INFO fa-mma DKQ=128 DV=128 c1=16 c2=1 sc              improved                   vgpr_spill 13 -> 10; hot_spill_reloads 18 -> 14
+WARN fa-mma DKQ=128 DV=128 c1=16 c2=2                 sgpr_spill                 21 -> 23
+INFO fa-mma DKQ=128 DV=128 c1=16 c2=2                 improved                   vgpr_spill 49 -> 48; hot_spill_reloads 72 -> 71
+WARN fa-mma DKQ=128 DV=128 c1=16 c2=2 sc              hot_waitcnt_lgkmcnt0       169 -> 170
+FAIL fa-mma DKQ=128 DV=128 c1=16 c2=4                 vgpr_spill                 110 -> 112
+WARN fa-mma DKQ=128 DV=128 c1=16 c2=4                 sgpr_spill                 55 -> 57
+FAIL fa-mma DKQ=128 DV=128 c1=16 c2=4                 hot_spill_reloads          204 -> 208
+WARN fa-mma DKQ=128 DV=128 c1=16 c2=4                 private_bytes              444 -> 452
+WARN fa-mma DKQ=128 DV=128 c1=16 c2=4                 hot_waitcnt_vmcnt0         248 -> 253
+WARN fa-mma DKQ=128 DV=128 c1=16 c2=4                 hot_waitcnt_lgkmcnt0       243 -> 258
+WARN fa-mma DKQ=128 DV=128 c1=16 c2=4 sc              hot_waitcnt_lgkmcnt0       255 -> 269
+INFO fa-mma DKQ=128 DV=128 c1=16 c2=4 sc              improved                   vgpr_spill 68 -> 57; hot_spill_reloads 90 -> 88
+FAIL fa-mma DKQ=128 DV=128 c1=2 c2=8                  vgpr_spill                 10 -> 12
+WARN fa-mma DKQ=128 DV=128 c1=2 c2=8                  sgpr_spill                 22 -> 24
+FAIL fa-mma DKQ=128 DV=128 c1=2 c2=8                  hot_spill_reloads          15 -> 17
+WARN fa-mma DKQ=128 DV=128 c1=2 c2=8                  private_bytes              44 -> 52
+FAIL fa-mma DKQ=128 DV=128 c1=32 c2=1                 vgpr_spill                 52 -> 53
+WARN fa-mma DKQ=128 DV=128 c1=32 c2=1                 sgpr_spill                 83 -> 84
+FAIL fa-mma DKQ=128 DV=128 c1=32 c2=1                 hot_spill_reloads          68 -> 69
+WARN fa-mma DKQ=128 DV=128 c1=32 c2=1                 private_bytes              240 -> 256
+WARN fa-mma DKQ=128 DV=128 c1=32 c2=1                 hot_waitcnt_vmcnt0         113 -> 126
+WARN fa-mma DKQ=128 DV=128 c1=32 c2=1                 hot_waitcnt_lgkmcnt0       219 -> 241
+WARN fa-mma DKQ=128 DV=128 c1=32 c2=1 sc              sgpr_spill                 87 -> 88
+INFO fa-mma DKQ=128 DV=128 c1=32 c2=1 sc              improved                   vgpr_spill 54 -> 53; hot_spill_reloads 70 -> 69
+WARN fa-mma DKQ=128 DV=128 c1=32 c2=2                 sgpr_spill                 61 -> 64
+WARN fa-mma DKQ=128 DV=128 c1=32 c2=2                 hot_waitcnt_lgkmcnt0       249 -> 253
+INFO fa-mma DKQ=128 DV=128 c1=32 c2=2                 improved                   vgpr_spill 126 -> 121; hot_spill_reloads 249 -> 231
+INFO fa-mma DKQ=128 DV=128 c1=32 c2=2 sc              improved                   vgpr_spill 90 -> 83; hot_spill_reloads 139 -> 134
+FAIL fa-mma DKQ=128 DV=128 c1=4 c2=4                  vgpr_spill                 4 -> 6
+WARN fa-mma DKQ=128 DV=128 c1=4 c2=4                  sgpr_spill                 22 -> 24
+FAIL fa-mma DKQ=128 DV=128 c1=4 c2=4                  hot_spill_reloads          8 -> 11
+WARN fa-mma DKQ=128 DV=128 c1=4 c2=4                  private_bytes              20 -> 28
+WARN fa-mma DKQ=128 DV=128 c1=4 c2=4                  hot_waitcnt_vmcnt0         49 -> 50
+INFO fa-mma DKQ=128 DV=128 c1=4 c2=4 sc               improved                   hot_spill_reloads 16 -> 14
+FAIL fa-mma DKQ=128 DV=128 c1=4 c2=8                  vgpr_spill                 65 -> 66
+WARN fa-mma DKQ=128 DV=128 c1=4 c2=8                  sgpr_spill                 25 -> 26
+FAIL fa-mma DKQ=128 DV=128 c1=4 c2=8                  hot_spill_reloads          136 -> 138
+WARN fa-mma DKQ=128 DV=128 c1=4 c2=8                  private_bytes              264 -> 268
+WARN fa-mma DKQ=128 DV=128 c1=4 c2=8 sc               hot_waitcnt_lgkmcnt0       170 -> 171
+FAIL fa-mma DKQ=128 DV=128 c1=64 c2=1                 vgpr_spill                 98 -> 102
+WARN fa-mma DKQ=128 DV=128 c1=64 c2=1                 sgpr_spill                 173 -> 180
+FAIL fa-mma DKQ=128 DV=128 c1=64 c2=1                 hot_spill_reloads          148 -> 150
+WARN fa-mma DKQ=128 DV=128 c1=64 c2=1 sc              sgpr_spill                 201 -> 210
+WARN fa-mma DKQ=128 DV=128 c1=64 c2=1 sc              private_bytes              640 -> 656
+FAIL fa-mma DKQ=128 DV=128 c1=8 c2=2                  vgpr_spill                 5 -> 6
+WARN fa-mma DKQ=128 DV=128 c1=8 c2=2                  sgpr_spill                 19 -> 21
+FAIL fa-mma DKQ=128 DV=128 c1=8 c2=2                  hot_spill_reloads          10 -> 12
+WARN fa-mma DKQ=128 DV=128 c1=8 c2=2                  private_bytes              24 -> 28
+WARN fa-mma DKQ=128 DV=128 c1=8 c2=2                  hot_waitcnt_vmcnt0         49 -> 51
+FAIL fa-mma DKQ=128 DV=128 c1=8 c2=4                  vgpr_spill                 52 -> 53
+WARN fa-mma DKQ=128 DV=128 c1=8 c2=4                  sgpr_spill                 21 -> 23
+FAIL fa-mma DKQ=128 DV=128 c1=8 c2=4                  hot_spill_reloads          92 -> 93
+WARN fa-mma DKQ=128 DV=128 c1=8 c2=4                  private_bytes              212 -> 216
+WARN fa-mma DKQ=128 DV=128 c1=8 c2=4                  hot_waitcnt_vmcnt0         125 -> 127
+WARN fa-mma DKQ=128 DV=128 c1=8 c2=4                  hot_waitcnt_lgkmcnt0       169 -> 170
+WARN fa-mma DKQ=128 DV=128 c1=8 c2=4 sc               hot_waitcnt_lgkmcnt0       169 -> 171
+FAIL fa-mma DKQ=128 DV=128 c1=8 c2=8                  vgpr_spill                 134 -> 136
+WARN fa-mma DKQ=128 DV=128 c1=8 c2=8                  sgpr_spill                 55 -> 59
+FAIL fa-mma DKQ=128 DV=128 c1=8 c2=8                  hot_spill_reloads          258 -> 266
+WARN fa-mma DKQ=128 DV=128 c1=8 c2=8                  private_bytes              540 -> 548
+WARN fa-mma DKQ=128 DV=128 c1=8 c2=8                  hot_waitcnt_vmcnt0         280 -> 283
+WARN fa-mma DKQ=128 DV=128 c1=8 c2=8                  hot_waitcnt_lgkmcnt0       247 -> 258
+WARN fa-mma DKQ=128 DV=128 c1=8 c2=8 sc               hot_waitcnt_lgkmcnt0       255 -> 265
+INFO fa-mma DKQ=128 DV=128 c1=8 c2=8 sc               improved                   vgpr_spill 95 -> 90; hot_spill_reloads 170 -> 147
+WARN fa-wmma D=128 nc=16 nw=4 float                   vgpr_total                 160 -> 164
+WARN fa-wmma D=128 nc=16 nw=4 float                   hot_waitcnt_lgkmcnt0       54 -> 57
+WARN fa-wmma D=128 nc=32 nw=4 float                   vgpr_total                 240 -> 244
+WARN fa-wmma D=128 nc=32 nw=4 float                   hot_waitcnt_lgkmcnt0       88 -> 95
+WARN fa-mma DKQ=192 DV=128 c1=1 c2=16                 sgpr_spill                 23 -> 25
+WARN fa-mma DKQ=192 DV=128 c1=1 c2=16                 hot_waitcnt_vmcnt0         52 -> 59
+WARN fa-mma DKQ=192 DV=128 c1=1 c2=16                 hot_waitcnt_lgkmcnt0       127 -> 136
+INFO fa-mma DKQ=192 DV=128 c1=1 c2=16                 improved                   hot_accvgpr_copies 350 -> 332; vgpr_total 310 -> 301; agpr 54 -> 45
+WARN fa-mma DKQ=192 DV=128 c1=2 c2=16                 sgpr_spill                 25 -> 26
+FAIL fa-mma DKQ=192 DV=128 c1=2 c2=16                 hot_accvgpr_copies         706 -> 708
+WARN fa-mma DKQ=192 DV=128 c1=2 c2=16                 agpr                       106 -> 108
+WARN fa-mma DKQ=192 DV=128 c1=2 c2=16                 vgpr_total                 362 -> 364
+WARN fa-mma DKQ=192 DV=128 c1=2 c2=16                 kern_accvgpr_copies        1086 -> 1090
+WARN fa-mma DKQ=192 DV=128 c1=2 c2=8                  sgpr_spill                 22 -> 24
+WARN fa-mma DKQ=192 DV=128 c1=2 c2=8                  hot_waitcnt_vmcnt0         52 -> 59
+WARN fa-mma DKQ=192 DV=128 c1=2 c2=8                  hot_waitcnt_lgkmcnt0       126 -> 136
+INFO fa-mma DKQ=192 DV=128 c1=2 c2=8                  improved                   hot_accvgpr_copies 360 -> 349; vgpr_total 311 -> 301; agpr 55 -> 45
+WARN fa-mma DKQ=192 DV=128 c1=4 c2=16                 sgpr_spill                 25 -> 26
+INFO fa-mma DKQ=192 DV=128 c1=4 c2=16                 improved                   vgpr_spill 67 -> 66; hot_spill_reloads 139 -> 137
+WARN fa-mma DKQ=192 DV=128 c1=4 c2=8                  sgpr_spill                 25 -> 26
+FAIL fa-mma DKQ=192 DV=128 c1=4 c2=8                  hot_accvgpr_copies         690 -> 692
+WARN fa-mma DKQ=192 DV=128 c1=4 c2=8                  agpr                       97 -> 99
+WARN fa-mma DKQ=192 DV=128 c1=4 c2=8                  vgpr_total                 353 -> 355
+WARN fa-mma DKQ=192 DV=128 c1=4 c2=8                  kern_accvgpr_copies        1060 -> 1064
+WARN fa-mma DKQ=192 DV=128 c1=8 c2=8                  sgpr_spill                 25 -> 26
+INFO fa-mma DKQ=192 DV=128 c1=8 c2=8                  improved                   vgpr_spill 49 -> 48; hot_spill_reloads 88 -> 81
+WARN fa-wmma D=256 nc=16 nw=4 float                   hot_waitcnt_lgkmcnt0       54 -> 56
+WARN fa-wmma D=256 nc=16 nw=4 float sc                hot_waitcnt_vmcnt0         20 -> 21
+INFO fa-wmma D=256 nc=16 nw=4 float sc                improved                   vgpr_total 196 -> 192
+WARN fa-mma DKQ=256 DV=256 c1=16 c2=1                 sgpr_spill                 81 -> 87
+FAIL fa-mma DKQ=256 DV=256 c1=16 c2=1                 hot_accvgpr_copies         818 -> 820
+WARN fa-mma DKQ=256 DV=256 c1=16 c2=1                 agpr                       157 -> 158
+WARN fa-mma DKQ=256 DV=256 c1=16 c2=1                 vgpr_total                 413 -> 414
+WARN fa-mma DKQ=256 DV=256 c1=16 c2=1                 kern_accvgpr_copies        1241 -> 1246
+WARN fa-mma DKQ=256 DV=256 c1=16 c2=1 sc              sgpr_spill                 88 -> 90
+FAIL fa-mma DKQ=256 DV=256 c1=16 c2=1 sc              hot_accvgpr_copies         807 -> 810
+WARN fa-mma DKQ=256 DV=256 c1=16 c2=1 sc              agpr                       164 -> 165
+WARN fa-mma DKQ=256 DV=256 c1=16 c2=1 sc              vgpr_total                 420 -> 421
+WARN fa-mma DKQ=256 DV=256 c1=16 c2=1 sc              kern_accvgpr_copies        1226 -> 1227
+WARN fa-mma DKQ=256 DV=256 c1=16 c2=2                 sgpr_spill                 21 -> 24
+WARN fa-mma DKQ=256 DV=256 c1=16 c2=2                 hot_waitcnt_vmcnt0         91 -> 104
+WARN fa-mma DKQ=256 DV=256 c1=16 c2=2                 hot_waitcnt_lgkmcnt0       262 -> 277
+INFO fa-mma DKQ=256 DV=256 c1=16 c2=2                 improved                   hot_accvgpr_copies 1671 -> 1657; vgpr_total 503 -> 499; agpr 247 -> 243
+WARN fa-mma DKQ=256 DV=256 c1=16 c2=2 sc              kern_accvgpr_copies        2525 -> 2531
+WARN fa-mma DKQ=256 DV=256 c1=16 c2=2 sc              hot_waitcnt_vmcnt0         173 -> 177
+WARN fa-mma DKQ=256 DV=256 c1=16 c2=2 sc              hot_waitcnt_lgkmcnt0       274 -> 281
+INFO fa-mma DKQ=256 DV=256 c1=16 c2=2 sc              improved                   vgpr_spill 49 -> 48; hot_spill_reloads 94 -> 92; hot_accvgpr_copies 1613 -> 1610
+WARN fa-mma DKQ=256 DV=256 c1=16 c2=4                 sgpr_spill                 24 -> 26
+INFO fa-mma DKQ=256 DV=256 c1=16 c2=4                 improved                   vgpr_spill 317 -> 315; hot_spill_reloads 870 -> 656
+FAIL fa-mma DKQ=256 DV=256 c1=16 c2=4 sc              vgpr_spill                 210 -> 211
+FAIL fa-mma DKQ=256 DV=256 c1=16 c2=4 sc              hot_spill_reloads          622 -> 680
+WARN fa-mma DKQ=256 DV=256 c1=16 c2=4 sc              private_bytes              648 -> 656
+WARN fa-mma DKQ=256 DV=256 c1=16 c2=4 sc              hot_waitcnt_vmcnt0         547 -> 585
+WARN fa-mma DKQ=256 DV=256 c1=2 c2=8                  sgpr_spill                 23 -> 24
+FAIL fa-mma DKQ=256 DV=256 c1=2 c2=8                  hot_accvgpr_copies         849 -> 853
+WARN fa-mma DKQ=256 DV=256 c1=2 c2=8                  agpr                       161 -> 162
+WARN fa-mma DKQ=256 DV=256 c1=2 c2=8                  vgpr_total                 417 -> 418
+WARN fa-mma DKQ=256 DV=256 c1=2 c2=8                  kern_accvgpr_copies        1278 -> 1282
+WARN fa-mma DKQ=256 DV=256 c1=2 c2=8                  hot_waitcnt_vmcnt0         68 -> 73
+FAIL fa-mma DKQ=256 DV=256 c1=2 c2=8 sc               hot_accvgpr_copies         863 -> 867
+WARN fa-mma DKQ=256 DV=256 c1=2 c2=8 sc               agpr                       165 -> 166
+WARN fa-mma DKQ=256 DV=256 c1=2 c2=8 sc               vgpr_total                 421 -> 422
+WARN fa-mma DKQ=256 DV=256 c1=2 c2=8 sc               kern_accvgpr_copies        1296 -> 1300
+WARN fa-mma DKQ=256 DV=256 c1=2 c2=8 sc               hot_waitcnt_lgkmcnt0       189 -> 203
+FAIL fa-mma DKQ=256 DV=256 c1=32 c2=1                 vgpr_spill                 81 -> 85
+WARN fa-mma DKQ=256 DV=256 c1=32 c2=1                 sgpr_spill                 99 -> 103
+FAIL fa-mma DKQ=256 DV=256 c1=32 c2=1                 hot_spill_reloads          124 -> 129
+WARN fa-mma DKQ=256 DV=256 c1=32 c2=1                 private_bytes              368 -> 384
+WARN fa-mma DKQ=256 DV=256 c1=32 c2=1                 hot_waitcnt_vmcnt0         218 -> 223
+WARN fa-mma DKQ=256 DV=256 c1=32 c2=1 sc              sgpr_spill                 107 -> 116
+FAIL fa-mma DKQ=256 DV=256 c1=32 c2=1 sc              hot_accvgpr_copies         1693 -> 1700
+WARN fa-mma DKQ=256 DV=256 c1=32 c2=1 sc              kern_accvgpr_copies        2665 -> 2673
+INFO fa-mma DKQ=256 DV=256 c1=32 c2=1 sc              improved                   vgpr_spill 5 -> 3; hot_spill_reloads 10 -> 6
+WARN fa-mma DKQ=256 DV=256 c1=32 c2=2                 sgpr_spill                 24 -> 26
+WARN fa-mma DKQ=256 DV=256 c1=32 c2=2                 hot_waitcnt_vmcnt0         454 -> 472
+WARN fa-mma DKQ=256 DV=256 c1=32 c2=2                 hot_waitcnt_lgkmcnt0       304 -> 342
+INFO fa-mma DKQ=256 DV=256 c1=32 c2=2                 improved                   vgpr_spill 319 -> 314; hot_spill_reloads 837 -> 756
+WARN fa-mma DKQ=256 DV=256 c1=32 c2=2 sc              hot_waitcnt_lgkmcnt0       301 -> 306
+INFO fa-mma DKQ=256 DV=256 c1=32 c2=2 sc              improved                   vgpr_spill 215 -> 214; hot_spill_reloads 665 -> 661
+WARN fa-mma DKQ=256 DV=256 c1=4 c2=4                  sgpr_spill                 23 -> 24
+FAIL fa-mma DKQ=256 DV=256 c1=4 c2=4                  hot_accvgpr_copies         837 -> 841
+WARN fa-mma DKQ=256 DV=256 c1=4 c2=4                  agpr                       155 -> 156
+WARN fa-mma DKQ=256 DV=256 c1=4 c2=4                  vgpr_total                 411 -> 412
+WARN fa-mma DKQ=256 DV=256 c1=4 c2=4                  kern_accvgpr_copies        1260 -> 1264
+WARN fa-mma DKQ=256 DV=256 c1=4 c2=4                  hot_waitcnt_vmcnt0         68 -> 69
+WARN fa-mma DKQ=256 DV=256 c1=4 c2=4                  hot_waitcnt_lgkmcnt0       192 -> 194
+FAIL fa-mma DKQ=256 DV=256 c1=4 c2=4 sc               hot_accvgpr_copies         851 -> 859
+WARN fa-mma DKQ=256 DV=256 c1=4 c2=4 sc               agpr                       158 -> 159
+WARN fa-mma DKQ=256 DV=256 c1=4 c2=4 sc               vgpr_total                 414 -> 415
+WARN fa-mma DKQ=256 DV=256 c1=4 c2=4 sc               kern_accvgpr_copies        1278 -> 1291
+WARN fa-mma DKQ=256 DV=256 c1=4 c2=4 sc               hot_waitcnt_vmcnt0         83 -> 87
+FAIL fa-mma DKQ=256 DV=256 c1=4 c2=8                  vgpr_spill                 0 -> 67
+WARN fa-mma DKQ=256 DV=256 c1=4 c2=8                  sgpr_spill                 25 -> 26
+FAIL fa-mma DKQ=256 DV=256 c1=4 c2=8                  hot_spill_reloads          0 -> 125
+WARN fa-mma DKQ=256 DV=256 c1=4 c2=8                  agpr                       243 -> 256
+WARN fa-mma DKQ=256 DV=256 c1=4 c2=8                  vgpr_total                 499 -> 512
+WARN fa-mma DKQ=256 DV=256 c1=4 c2=8                  private_bytes              0 -> 272
+WARN fa-mma DKQ=256 DV=256 c1=4 c2=8                  hot_waitcnt_vmcnt0         103 -> 180
+INFO fa-mma DKQ=256 DV=256 c1=4 c2=8                  improved                   hot_accvgpr_copies 1684 -> 1588
+WARN fa-mma DKQ=256 DV=256 c1=4 c2=8 sc               kern_accvgpr_copies        2433 -> 2437
+WARN fa-mma DKQ=256 DV=256 c1=4 c2=8 sc               hot_waitcnt_vmcnt0         184 -> 188
+WARN fa-mma DKQ=256 DV=256 c1=4 c2=8 sc               hot_waitcnt_lgkmcnt0       278 -> 281
+INFO fa-mma DKQ=256 DV=256 c1=4 c2=8 sc               improved                   vgpr_spill 67 -> 65; hot_spill_reloads 125 -> 117
+FAIL fa-mma DKQ=256 DV=256 c1=64 c2=1                 vgpr_spill                 220 -> 223
+FAIL fa-mma DKQ=256 DV=256 c1=64 c2=1                 hot_spill_reloads          692 -> 710
+WARN fa-mma DKQ=256 DV=256 c1=64 c2=1                 private_bytes              768 -> 784
+WARN fa-mma DKQ=256 DV=256 c1=64 c2=1                 hot_waitcnt_vmcnt0         591 -> 603
+WARN fa-mma DKQ=256 DV=256 c1=64 c2=1                 hot_waitcnt_lgkmcnt0       343 -> 357
+WARN fa-mma DKQ=256 DV=256 c1=64 c2=1 sc              sgpr_spill                 90 -> 91
+INFO fa-mma DKQ=256 DV=256 c1=64 c2=1 sc              improved                   vgpr_spill 243 -> 227; hot_spill_reloads 847 -> 713
+WARN fa-mma DKQ=256 DV=256 c1=8 c2=2                  sgpr_spill                 19 -> 21
+FAIL fa-mma DKQ=256 DV=256 c1=8 c2=2                  hot_accvgpr_copies         785 -> 789
+WARN fa-mma DKQ=256 DV=256 c1=8 c2=2                  agpr                       157 -> 158
+WARN fa-mma DKQ=256 DV=256 c1=8 c2=2                  vgpr_total                 413 -> 414
+WARN fa-mma DKQ=256 DV=256 c1=8 c2=2                  kern_accvgpr_copies        1268 -> 1271
+FAIL fa-mma DKQ=256 DV=256 c1=8 c2=2 sc               hot_accvgpr_copies         845 -> 848
+WARN fa-mma DKQ=256 DV=256 c1=8 c2=2 sc               kern_accvgpr_copies        1298 -> 1307
+WARN fa-mma DKQ=256 DV=256 c1=8 c2=2 sc               hot_waitcnt_lgkmcnt0       190 -> 194
+WARN fa-mma DKQ=256 DV=256 c1=8 c2=4                  sgpr_spill                 21 -> 24
+FAIL fa-mma DKQ=256 DV=256 c1=8 c2=4                  hot_accvgpr_copies         1646 -> 1662
+WARN fa-mma DKQ=256 DV=256 c1=8 c2=4                  kern_accvgpr_copies        2486 -> 2570
+INFO fa-mma DKQ=256 DV=256 c1=8 c2=4                  improved                   vgpr_spill 1 -> 0
+WARN fa-mma DKQ=256 DV=256 c1=8 c2=4 sc               hot_waitcnt_vmcnt0         172 -> 176
+WARN fa-mma DKQ=256 DV=256 c1=8 c2=4 sc               hot_waitcnt_lgkmcnt0       275 -> 281
+INFO fa-mma DKQ=256 DV=256 c1=8 c2=4 sc               improved                   vgpr_spill 53 -> 50; hot_spill_reloads 101 -> 97; hot_accvgpr_copies 1620 -> 1612
+FAIL fa-mma DKQ=256 DV=256 c1=8 c2=8                  vgpr_spill                 188 -> 190
+WARN fa-mma DKQ=256 DV=256 c1=8 c2=8                  sgpr_spill                 27 -> 30
+FAIL fa-mma DKQ=256 DV=256 c1=8 c2=8                  hot_spill_reloads          667 -> 671
+WARN fa-mma DKQ=256 DV=256 c1=8 c2=8                  private_bytes              692 -> 696
+FAIL fa-mma DKQ=256 DV=256 c1=8 c2=8 sc               vgpr_spill                 196 -> 197
+FAIL fa-mma DKQ=256 DV=256 c1=8 c2=8 sc               hot_spill_reloads          687 -> 741
+WARN fa-mma DKQ=256 DV=256 c1=8 c2=8 sc               private_bytes              712 -> 716
+WARN fa-mma DKQ=256 DV=256 c1=8 c2=8 sc               hot_waitcnt_vmcnt0         550 -> 586
+INFO fa-wmma D=256 nc=32 nw=4 half                    improved                   vgpr_total 271 -> 270; agpr 15 -> 14
+INFO fa-wmma D=256 nc=32 nw=4 half sc                 improved                   vgpr_total 272 -> 271; agpr 16 -> 15
+FAIL fa-mma DKQ=320 DV=256 c1=1 c2=32                 vgpr_spill                 102 -> 129
+WARN fa-mma DKQ=320 DV=256 c1=1 c2=32                 sgpr_spill                 24 -> 26
+FAIL fa-mma DKQ=320 DV=256 c1=1 c2=32                 hot_spill_reloads          205 -> 249
+WARN fa-mma DKQ=320 DV=256 c1=1 c2=32                 private_bytes              412 -> 520
+WARN fa-mma DKQ=320 DV=256 c1=1 c2=32                 hot_waitcnt_vmcnt0         212 -> 231
+INFO fa-mma DKQ=320 DV=256 c1=1 c2=32                 improved                   hot_accvgpr_copies 1662 -> 1630
+FAIL fa-mma DKQ=320 DV=256 c1=2 c2=32                 vgpr_spill                 273 -> 300
+WARN fa-mma DKQ=320 DV=256 c1=2 c2=32                 sgpr_spill                 99 -> 115
+FAIL fa-mma DKQ=320 DV=256 c1=2 c2=32                 hot_spill_reloads          609 -> 714
+WARN fa-mma DKQ=320 DV=256 c1=2 c2=32                 private_bytes              864 -> 968
+WARN fa-mma DKQ=320 DV=256 c1=2 c2=32                 hot_waitcnt_vmcnt0         591 -> 625
+INFO fa-mma DKQ=320 DV=256 c1=2 c2=32                 improved                   hot_accvgpr_copies 2951 -> 2914
+WARN fa-wmma D=64 nc=16 nw=4 float                    hot_waitcnt_lgkmcnt0       54 -> 57
+WARN fa-wmma D=64 nc=32 nw=4 float                    hot_waitcnt_lgkmcnt0       88 -> 95
+WARN fa-mma DKQ=64 DV=64 c1=16 c2=1                   sgpr_spill                 61 -> 63
+WARN fa-mma DKQ=64 DV=64 c1=16 c2=1                   hot_waitcnt_lgkmcnt0       98 -> 106
+WARN fa-mma DKQ=64 DV=64 c1=16 c2=2                   sgpr_spill                 21 -> 23
+WARN fa-mma DKQ=64 DV=64 c1=16 c2=2                   hot_waitcnt_lgkmcnt0       97 -> 98
+INFO fa-mma DKQ=64 DV=64 c1=16 c2=2                   improved                   vgpr_total 182 -> 180
+FAIL fa-mma DKQ=64 DV=64 c1=16 c2=4                   vgpr_spill                 151 -> 157
+WARN fa-mma DKQ=64 DV=64 c1=16 c2=4                   sgpr_spill                 30 -> 32
+WARN fa-mma DKQ=64 DV=64 c1=16 c2=4                   private_bytes              432 -> 440
+WARN fa-mma DKQ=64 DV=64 c1=16 c2=4                   hot_waitcnt_vmcnt0         164 -> 171
+WARN fa-mma DKQ=64 DV=64 c1=2 c2=8                    vgpr_total                 158 -> 166
+WARN fa-mma DKQ=64 DV=64 c1=32 c2=1                   sgpr_spill                 73 -> 76
+INFO fa-mma DKQ=64 DV=64 c1=32 c2=1                   improved                   vgpr_total 212 -> 210
+FAIL fa-mma DKQ=64 DV=64 c1=32 c2=2                   vgpr_spill                 166 -> 174
+WARN fa-mma DKQ=64 DV=64 c1=32 c2=2                   sgpr_spill                 32 -> 34
+FAIL fa-mma DKQ=64 DV=64 c1=32 c2=2                   hot_spill_reloads          205 -> 211
+WARN fa-mma DKQ=64 DV=64 c1=32 c2=2                   private_bytes              448 -> 468
+WARN fa-mma DKQ=64 DV=64 c1=4 c2=4                    vgpr_total                 156 -> 164
+WARN fa-mma DKQ=64 DV=64 c1=4 c2=8                    sgpr_spill                 25 -> 26
+INFO fa-mma DKQ=64 DV=64 c1=4 c2=8                    improved                   vgpr_total 176 -> 173
+WARN fa-mma DKQ=64 DV=64 c1=64 c2=1                   sgpr_spill                 128 -> 131
+FAIL fa-mma DKQ=64 DV=64 c1=64 c2=1                   hot_spill_reloads          429 -> 497
+WARN fa-mma DKQ=64 DV=64 c1=64 c2=1                   hot_waitcnt_vmcnt0         354 -> 449
+INFO fa-mma DKQ=64 DV=64 c1=64 c2=1                   improved                   vgpr_spill 192 -> 185
+WARN fa-mma DKQ=64 DV=64 c1=8 c2=2                    sgpr_spill                 21 -> 23
+WARN fa-mma DKQ=64 DV=64 c1=8 c2=2                    vgpr_total                 162 -> 165
+WARN fa-mma DKQ=64 DV=64 c1=8 c2=4                    sgpr_spill                 19 -> 21
+WARN fa-mma DKQ=64 DV=64 c1=8 c2=4                    hot_waitcnt_lgkmcnt0       96 -> 98
+INFO fa-mma DKQ=64 DV=64 c1=8 c2=4                    improved                   vgpr_total 176 -> 174
+FAIL fa-mma DKQ=64 DV=64 c1=8 c2=8                    vgpr_spill                 141 -> 143
+WARN fa-mma DKQ=64 DV=64 c1=8 c2=8                    sgpr_spill                 28 -> 30
+INFO fa-mma DKQ=64 DV=64 c1=8 c2=8                    improved                   hot_spill_reloads 185 -> 180
+WARN fa-wmma D=80 nc=16 nw=4 float                    hot_waitcnt_lgkmcnt0       49 -> 53
+WARN fa-wmma D=80 nc=32 nw=4 half                     hot_waitcnt_vmcnt0         19 -> 20
+WARN fa-wmma D=80 nc=32 nw=4 half                     hot_waitcnt_lgkmcnt0       82 -> 84
+WARN fa-wmma D=80 nc=32 nw=4 float                    hot_waitcnt_lgkmcnt0       91 -> 98
+WARN fa-mma DKQ=80 DV=80 c1=16 c2=1                   sgpr_spill                 65 -> 80
+INFO fa-mma DKQ=80 DV=80 c1=16 c2=1                   improved                   vgpr_total 202 -> 200
+WARN fa-mma DKQ=80 DV=80 c1=16 c2=2                   sgpr_spill                 29 -> 32
+WARN fa-mma DKQ=80 DV=80 c1=16 c2=2                   vgpr_total                 217 -> 219
+WARN fa-mma DKQ=80 DV=80 c1=16 c2=2                   hot_waitcnt_lgkmcnt0       122 -> 123
+WARN fa-mma DKQ=80 DV=80 c1=16 c2=4                   vgpr_total                 228 -> 230
+WARN fa-mma DKQ=80 DV=80 c1=16 c2=4                   hot_waitcnt_lgkmcnt0       177 -> 178
+WARN fa-mma DKQ=80 DV=80 c1=2 c2=8                    sgpr_spill                 28 -> 31
+WARN fa-mma DKQ=80 DV=80 c1=32 c2=1                   sgpr_spill                 81 -> 83
+INFO fa-mma DKQ=80 DV=80 c1=32 c2=1                   improved                   vgpr_total 249 -> 247
+WARN fa-mma DKQ=80 DV=80 c1=32 c2=2                   vgpr_total                 238 -> 240
+WARN fa-mma DKQ=80 DV=80 c1=32 c2=2                   hot_waitcnt_lgkmcnt0       178 -> 179
+WARN fa-mma DKQ=80 DV=80 c1=4 c2=4                    sgpr_spill                 28 -> 31
+WARN fa-mma DKQ=80 DV=80 c1=4 c2=8                    sgpr_spill                 30 -> 33
+WARN fa-mma DKQ=80 DV=80 c1=4 c2=8                    hot_waitcnt_lgkmcnt0       121 -> 122
+WARN fa-mma DKQ=80 DV=80 c1=64 c2=1                   sgpr_spill                 148 -> 157
+INFO fa-mma DKQ=80 DV=80 c1=64 c2=1                   improved                   vgpr_spill 26 -> 25; hot_spill_reloads 34 -> 32
+WARN fa-mma DKQ=80 DV=80 c1=8 c2=2                    sgpr_spill                 23 -> 25
+WARN fa-mma DKQ=80 DV=80 c1=8 c2=2                    vgpr_total                 187 -> 188
+WARN fa-mma DKQ=80 DV=80 c1=8 c2=2                    hot_waitcnt_vmcnt0         34 -> 37
+WARN fa-mma DKQ=80 DV=80 c1=8 c2=4                    sgpr_spill                 25 -> 27
+WARN fa-mma DKQ=80 DV=80 c1=8 c2=4                    vgpr_total                 211 -> 213
+WARN fa-mma DKQ=80 DV=80 c1=8 c2=4                    hot_waitcnt_lgkmcnt0       116 -> 117
+WARN fa-mma DKQ=80 DV=80 c1=8 c2=8                    sgpr_spill                 33 -> 37
+WARN fa-mma DKQ=80 DV=80 c1=8 c2=8                    vgpr_total                 222 -> 224
+WARN fa-mma DKQ=80 DV=80 c1=8 c2=8                    hot_waitcnt_lgkmcnt0       177 -> 179
+WARN fa-wmma D=96 nc=16 nw=4 half                     hot_waitcnt_lgkmcnt0       46 -> 47
+WARN fa-wmma D=96 nc=16 nw=4 float                    vgpr_total                 156 -> 160
+WARN fa-wmma D=96 nc=16 nw=4 float                    hot_waitcnt_lgkmcnt0       50 -> 54
+WARN fa-wmma D=96 nc=32 nw=4 half                     hot_waitcnt_lgkmcnt0       80 -> 81
+WARN fa-wmma D=96 nc=32 nw=4 float                    vgpr_total                 240 -> 244
+WARN fa-wmma D=96 nc=32 nw=4 float                    hot_waitcnt_lgkmcnt0       87 -> 98
+WARN fa-mma DKQ=96 DV=96 c1=16 c2=1                   sgpr_spill                 61 -> 64
+WARN fa-mma DKQ=96 DV=96 c1=16 c2=1                   hot_waitcnt_lgkmcnt0       151 -> 152
+INFO fa-mma DKQ=96 DV=96 c1=16 c2=1                   improved                   vgpr_total 220 -> 216
+WARN fa-mma DKQ=96 DV=96 c1=16 c2=2                   sgpr_spill                 27 -> 29
+WARN fa-mma DKQ=96 DV=96 c1=16 c2=2                   vgpr_total                 244 -> 246
+WARN fa-mma DKQ=96 DV=96 c1=16 c2=2                   hot_waitcnt_vmcnt0         41 -> 46
+WARN fa-mma DKQ=96 DV=96 c1=16 c2=2                   hot_waitcnt_lgkmcnt0       127 -> 135
+FAIL fa-mma DKQ=96 DV=96 c1=16 c2=4                   vgpr_spill                 50 -> 55
+WARN fa-mma DKQ=96 DV=96 c1=16 c2=4                   sgpr_spill                 41 -> 43
+FAIL fa-mma DKQ=96 DV=96 c1=16 c2=4                   hot_spill_reloads          79 -> 87
+WARN fa-mma DKQ=96 DV=96 c1=16 c2=4                   private_bytes              204 -> 224
+WARN fa-mma DKQ=96 DV=96 c1=16 c2=4                   hot_waitcnt_lgkmcnt0       201 -> 204
+WARN fa-mma DKQ=96 DV=96 c1=2 c2=8                    sgpr_spill                 25 -> 26
+WARN fa-mma DKQ=96 DV=96 c1=2 c2=8                    vgpr_total                 212 -> 213
+WARN fa-mma DKQ=96 DV=96 c1=32 c2=1                   sgpr_spill                 78 -> 82
+INFO fa-mma DKQ=96 DV=96 c1=32 c2=1                   improved                   vgpr_spill 17 -> 16; hot_spill_reloads 22 -> 20
+WARN fa-mma DKQ=96 DV=96 c1=32 c2=2                   sgpr_spill                 41 -> 45
+WARN fa-mma DKQ=96 DV=96 c1=32 c2=2                   hot_waitcnt_vmcnt0         107 -> 111
+INFO fa-mma DKQ=96 DV=96 c1=32 c2=2                   improved                   vgpr_spill 69 -> 65; hot_spill_reloads 106 -> 104
+WARN fa-mma DKQ=96 DV=96 c1=4 c2=4                    sgpr_spill                 25 -> 27
+WARN fa-mma DKQ=96 DV=96 c1=4 c2=4                    vgpr_total                 208 -> 209
+WARN fa-mma DKQ=96 DV=96 c1=4 c2=8                    sgpr_spill                 27 -> 28
+WARN fa-mma DKQ=96 DV=96 c1=4 c2=8                    vgpr_total                 238 -> 240
+WARN fa-mma DKQ=96 DV=96 c1=4 c2=8                    hot_waitcnt_vmcnt0         38 -> 43
+WARN fa-mma DKQ=96 DV=96 c1=4 c2=8                    hot_waitcnt_lgkmcnt0       126 -> 136
+WARN fa-mma DKQ=96 DV=96 c1=64 c2=1                   sgpr_spill                 149 -> 152
+FAIL fa-mma DKQ=96 DV=96 c1=64 c2=1                   hot_spill_reloads          145 -> 148
+WARN fa-mma DKQ=96 DV=96 c1=8 c2=2                    sgpr_spill                 22 -> 23
+WARN fa-mma DKQ=96 DV=96 c1=8 c2=2                    vgpr_total                 206 -> 211
+WARN fa-mma DKQ=96 DV=96 c1=8 c2=4                    sgpr_spill                 26 -> 28
+WARN fa-mma DKQ=96 DV=96 c1=8 c2=4                    vgpr_total                 239 -> 241
+WARN fa-mma DKQ=96 DV=96 c1=8 c2=4                    hot_waitcnt_vmcnt0         37 -> 42
+WARN fa-mma DKQ=96 DV=96 c1=8 c2=4                    hot_waitcnt_lgkmcnt0       127 -> 136
+WARN fa-mma DKQ=96 DV=96 c1=8 c2=8                    sgpr_spill                 42 -> 43
+WARN fa-mma DKQ=96 DV=96 c1=8 c2=8                    hot_waitcnt_lgkmcnt0       201 -> 204
+INFO fa-mma DKQ=96 DV=96 c1=8 c2=8                    improved                   vgpr_spill 50 -> 49; hot_spill_reloads 75 -> 74
+WARN mmq Q2_K J=16 chk=0                              hot_waitcnt_lgkmcnt0       5 -> 15
+INFO mmq Q2_K J=16 chk=0                              improved                   vgpr_total 177 -> 132
+WARN mmq Q2_K J=16 chk=1                              hot_waitcnt_lgkmcnt0       4 -> 26
+INFO mmq Q2_K J=16 chk=1                              improved                   vgpr_total 199 -> 136
+WARN mmq Q2_K J=32 chk=0                              hot_waitcnt_lgkmcnt0       4 -> 10
+INFO mmq Q2_K J=32 chk=0                              improved                   vgpr_total 256 -> 191
+FAIL mmq Q2_K J=32 chk=1                              vgpr_spill                 0 -> 2
+WARN mmq Q2_K J=32 chk=1                              private_bytes              0 -> 12
+INFO mmq Q2_K J=48 chk=0                              improved                   vgpr_spill 144 -> 18; hot_spill_reloads 70 -> 4
+WARN mmq Q2_K J=64 chk=0                              hot_waitcnt_lgkmcnt0       38 -> 39
+INFO mmq Q2_K J=64 chk=0                              improved                   vgpr_spill 346 -> 35; hot_spill_reloads 184 -> 36
+WARN mmq Q2_K J=64 chk=1                              hot_waitcnt_lgkmcnt0       35 -> 37
+INFO mmq Q2_K J=64 chk=1                              improved                   vgpr_spill 351 -> 32; hot_spill_reloads 170 -> 26
+INFO mmq Q3_K J=16 chk=0                              improved                   vgpr_total 110 -> 109
+INFO mmq Q3_K J=16 chk=1                              improved                   vgpr_total 121 -> 117
+WARN mmq Q3_K J=32 chk=0                              vgpr_total                 160 -> 163
+WARN mmq Q3_K J=32 chk=1                              hot_waitcnt_lgkmcnt0       16 -> 17
+INFO mmq Q3_K J=32 chk=1                              improved                   vgpr_total 163 -> 161
+WARN mmq Q3_K J=48 chk=0                              vgpr_total                 173 -> 212
+WARN mmq Q3_K J=64 chk=0                              hot_waitcnt_lgkmcnt0       6 -> 8
+INFO mmq Q3_K J=64 chk=0                              improved                   vgpr_total 128 -> 108
+WARN mmq Q3_K J=64 chk=1                              vgpr_total                 120 -> 122
+INFO mmq Q4_K J=16 chk=0                              improved                   vgpr_total 137 -> 120; occupancy 2.0 -> 4.0
+WARN mmq Q4_K J=16 chk=1                              hot_waitcnt_lgkmcnt0       8 -> 9
+INFO mmq Q4_K J=16 chk=1                              improved                   vgpr_total 162 -> 127; occupancy 2.0 -> 4.0
+INFO mmq Q4_K J=32 chk=0                              improved                   vgpr_total 131 -> 127; occupancy 2.0 -> 4.0
+WARN mmq Q4_K J=32 chk=1                              vgpr_total                 164 -> 172
+WARN mmq Q4_K J=64 chk=0                              vgpr_total                 108 -> 110
+WARN mmq Q4_K J=64 chk=1                              hot_waitcnt_lgkmcnt0       6 -> 16
+INFO mmq Q4_K J=64 chk=1                              improved                   vgpr_total 132 -> 110; occupancy 2.0 -> 4.0
+INFO mmq Q5_K J=16 chk=0                              improved                   vgpr_total 148 -> 124; occupancy 2.0 -> 4.0
+WARN mmq Q5_K J=16 chk=1                              hot_waitcnt_lgkmcnt0       8 -> 9
+INFO mmq Q5_K J=16 chk=1                              improved                   vgpr_total 179 -> 138
+INFO mmq Q5_K J=32 chk=0                              improved                   vgpr_total 135 -> 131
+WARN mmq Q5_K J=32 chk=1                              vgpr_total                 163 -> 167
+WARN mmq Q5_K J=64 chk=0                              vgpr_total                 112 -> 114
+WARN mmq Q5_K J=64 chk=1                              vgpr_total                 118 -> 122
+WARN mmq Q6_K J=16 chk=0                              vgpr_total                 118 -> 119
+WARN mmq Q6_K J=16 chk=0                              hot_waitcnt_lgkmcnt0       4 -> 5
+WARN mmq Q6_K J=16 chk=1                              hot_waitcnt_vmcnt0         2 -> 11
+WARN mmq Q6_K J=16 chk=1                              hot_waitcnt_lgkmcnt0       4 -> 8
+INFO mmq Q6_K J=16 chk=1                              improved                   vgpr_total 170 -> 126; occupancy 2.0 -> 4.0
+INFO mmq Q6_K J=32 chk=0                              improved                   vgpr_total 88 -> 83
+INFO mmq Q6_K J=32 chk=1                              improved                   vgpr_total 120 -> 115
+INFO mmq Q6_K J=48 chk=0                              improved                   vgpr_total 87 -> 79; occupancy 4.0 -> 6.0
+WARN mmq Q6_K J=64 chk=0                              hot_waitcnt_lgkmcnt0       4 -> 6
+INFO mmq Q6_K J=64 chk=0                              improved                   vgpr_total 101 -> 90
+WARN mmq Q6_K J=64 chk=1                              vgpr_total                 109 -> 122
+WARN mmq IQ2_XXS J=16 chk=0                           hot_waitcnt_lgkmcnt0       6 -> 7
+WARN mmq IQ2_XXS J=16 chk=1                           hot_waitcnt_lgkmcnt0       9 -> 13
+WARN mmq IQ2_XXS J=32 chk=0                           hot_waitcnt_vmcnt0         2 -> 6
+INFO mmq IQ2_XXS J=32 chk=0                           improved                   vgpr_total 170 -> 136
+INFO mmq IQ2_XXS J=32 chk=1                           improved                   vgpr_total 174 -> 160
+WARN mmq IQ2_XXS J=48 chk=0                           hot_waitcnt_lgkmcnt0       5 -> 6
+INFO mmq IQ2_XXS J=48 chk=0                           improved                   vgpr_total 248 -> 200
+INFO mmq IQ2_XXS J=64 chk=0                           improved                   vgpr_spill 16 -> 4; hot_spill_reloads 13 -> 0
+FAIL mmq IQ2_XXS J=64 chk=1                           vgpr_spill                 17 -> 26
+WARN mmq IQ2_XXS J=64 chk=1                           private_bytes              72 -> 108
+INFO mmq IQ2_XXS J=64 chk=1                           improved                   hot_spill_reloads 12 -> 4
+INFO mmq IQ2_XS J=16 chk=0                            improved                   vgpr_total 125 -> 124
+WARN mmq IQ2_XS J=16 chk=1                            hot_waitcnt_vmcnt0         2 -> 14
+WARN mmq IQ2_XS J=16 chk=1                            hot_waitcnt_lgkmcnt0       6 -> 11
+INFO mmq IQ2_XS J=16 chk=1                            improved                   vgpr_total 160 -> 127; occupancy 2.0 -> 4.0
+WARN mmq IQ2_XS J=32 chk=0                            vgpr_total                 160 -> 163
+WARN mmq IQ2_XS J=32 chk=0                            hot_waitcnt_lgkmcnt0       6 -> 7
+WARN mmq IQ2_XS J=32 chk=1                            vgpr_total                 166 -> 170
+WARN mmq IQ2_XS J=32 chk=1                            hot_waitcnt_lgkmcnt0       6 -> 7
+WARN mmq IQ2_XS J=48 chk=0                            vgpr_total                 176 -> 207
+INFO mmq IQ2_XS J=64 chk=0                            improved                   vgpr_total 120 -> 100
+INFO mmq IQ2_XS J=64 chk=1                            improved                   vgpr_total 130 -> 112; occupancy 2.0 -> 4.0
+WARN mmq IQ3_XXS J=16 chk=0                           hot_waitcnt_lgkmcnt0       9 -> 11
+INFO mmq IQ3_XXS J=16 chk=0                           improved                   vgpr_total 128 -> 124
+WARN mmq IQ3_XXS J=16 chk=1                           hot_waitcnt_lgkmcnt0       10 -> 11
+INFO mmq IQ3_XXS J=32 chk=0                           improved                   vgpr_total 172 -> 151
+INFO mmq IQ3_XXS J=32 chk=1                           improved                   vgpr_total 174 -> 161
+WARN mmq IQ3_XXS J=48 chk=0                           hot_waitcnt_lgkmcnt0       5 -> 6
+INFO mmq IQ3_XXS J=48 chk=0                           improved                   vgpr_total 250 -> 200
+INFO mmq IQ3_XXS J=64 chk=0                           improved                   vgpr_spill 13 -> 5; hot_spill_reloads 11 -> 0
+FAIL mmq IQ3_XXS J=64 chk=1                           vgpr_spill                 16 -> 27
+WARN mmq IQ3_XXS J=64 chk=1                           private_bytes              68 -> 108
+INFO mmq IQ3_XXS J=64 chk=1                           improved                   hot_spill_reloads 11 -> 4
+WARN mmq IQ1_S J=16 chk=0                             hot_waitcnt_lgkmcnt0       4 -> 6
+INFO mmq IQ1_S J=16 chk=0                             improved                   vgpr_total 111 -> 104
+WARN mmq IQ1_S J=16 chk=1                             vgpr_total                 115 -> 120
+WARN mmq IQ1_S J=32 chk=0                             hot_waitcnt_lgkmcnt0       5 -> 9
+INFO mmq IQ1_S J=32 chk=0                             improved                   vgpr_total 142 -> 137
+WARN mmq IQ1_S J=32 chk=1                             vgpr_total                 130 -> 142
+WARN mmq IQ1_S J=64 chk=0                             vgpr_total                 96 -> 98
+WARN mmq IQ1_S J=64 chk=1                             vgpr_total                 106 -> 108
+WARN mmq IQ4_NL J=16 chk=0                            hot_waitcnt_lgkmcnt0       6 -> 7
+INFO mmq IQ4_NL J=16 chk=0                            improved                   vgpr_total 120 -> 92
+INFO mmq IQ4_NL J=16 chk=1                            improved                   vgpr_total 136 -> 124; occupancy 2.0 -> 4.0
+WARN mmq IQ4_NL J=32 chk=0                            hot_waitcnt_lgkmcnt0       5 -> 6
+INFO mmq IQ4_NL J=32 chk=0                            improved                   vgpr_total 172 -> 150
+WARN mmq IQ4_NL J=32 chk=1                            hot_waitcnt_lgkmcnt0       5 -> 7
+INFO mmq IQ4_NL J=32 chk=1                            improved                   vgpr_total 212 -> 186
+WARN mmq IQ4_NL J=48 chk=0                            hot_waitcnt_lgkmcnt0       5 -> 7
+INFO mmq IQ4_NL J=48 chk=0                            improved                   vgpr_total 250 -> 210
+FAIL mmq IQ4_NL J=64 chk=0                            vgpr_spill                 32 -> 41
+FAIL mmq IQ4_NL J=64 chk=0                            hot_spill_reloads          12 -> 14
+WARN mmq IQ4_NL J=64 chk=0                            private_bytes              84 -> 112
+WARN mmq IQ4_NL J=64 chk=1                            hot_waitcnt_vmcnt0         6 -> 7
+INFO mmq IQ4_NL J=64 chk=1                            improved                   vgpr_spill 39 -> 33
+WARN mmq IQ3_S J=16 chk=0                             hot_waitcnt_lgkmcnt0       9 -> 11
+WARN mmq IQ3_S J=16 chk=1                             hot_waitcnt_lgkmcnt0       10 -> 11
+INFO mmq IQ3_S J=32 chk=0                             improved                   vgpr_total 170 -> 154
+INFO mmq IQ3_S J=32 chk=1                             improved                   vgpr_total 172 -> 163
+WARN mmq IQ3_S J=48 chk=0                             hot_waitcnt_lgkmcnt0       5 -> 8
+INFO mmq IQ3_S J=48 chk=0                             improved                   vgpr_total 250 -> 202
+INFO mmq IQ3_S J=64 chk=0                             improved                   vgpr_spill 16 -> 6; hot_spill_reloads 14 -> 0
+FAIL mmq IQ3_S J=64 chk=1                             vgpr_spill                 22 -> 29
+WARN mmq IQ3_S J=64 chk=1                             private_bytes              88 -> 112
+INFO mmq IQ3_S J=64 chk=1                             improved                   hot_spill_reloads 15 -> 4
+WARN mmq IQ2_S J=16 chk=1                             vgpr_total                 127 -> 128
+WARN mmq IQ2_S J=32 chk=0                             vgpr_total                 160 -> 161
+WARN mmq IQ2_S J=32 chk=1                             hot_waitcnt_lgkmcnt0       8 -> 12
+INFO mmq IQ2_S J=32 chk=1                             improved                   vgpr_total 162 -> 160
+WARN mmq IQ2_S J=48 chk=0                             vgpr_total                 178 -> 205
+INFO mmq IQ2_S J=64 chk=0                             improved                   vgpr_total 118 -> 98
+INFO mmq IQ2_S J=64 chk=1                             improved                   vgpr_total 128 -> 108
+WARN mmq IQ4_XS J=16 chk=0                            hot_waitcnt_lgkmcnt0       5 -> 7
+INFO mmq IQ4_XS J=16 chk=0                            improved                   vgpr_total 120 -> 92
+INFO mmq IQ4_XS J=16 chk=1                            improved                   vgpr_total 138 -> 126; occupancy 2.0 -> 4.0
+WARN mmq IQ4_XS J=32 chk=0                            hot_waitcnt_lgkmcnt0       5 -> 6
+INFO mmq IQ4_XS J=32 chk=0                            improved                   vgpr_total 172 -> 150
+WARN mmq IQ4_XS J=32 chk=1                            hot_waitcnt_lgkmcnt0       5 -> 7
+INFO mmq IQ4_XS J=32 chk=1                            improved                   vgpr_total 214 -> 188
+WARN mmq IQ4_XS J=48 chk=0                            hot_waitcnt_lgkmcnt0       5 -> 8
+INFO mmq IQ4_XS J=48 chk=0                            improved                   vgpr_total 252 -> 212
+FAIL mmq IQ4_XS J=64 chk=0                            vgpr_spill                 35 -> 38
+FAIL mmq IQ4_XS J=64 chk=0                            hot_spill_reloads          14 -> 15
+WARN mmq IQ4_XS J=64 chk=0                            private_bytes              96 -> 100
+WARN mmq IQ4_XS J=64 chk=0                            hot_waitcnt_vmcnt0         3 -> 4
+WARN mmq IQ4_XS J=64 chk=0                            hot_waitcnt_lgkmcnt0       6 -> 7
+WARN mmq IQ4_XS J=64 chk=1                            hot_waitcnt_vmcnt0         7 -> 8
+INFO mmq IQ4_XS J=64 chk=1                            improved                   vgpr_spill 43 -> 32; hot_spill_reloads 30 -> 28
+WARN mmq Q4_0 J=16 chk=0                              hot_waitcnt_lgkmcnt0       4 -> 7
+INFO mmq Q4_0 J=16 chk=0                              improved                   vgpr_total 122 -> 92
+INFO mmq Q4_0 J=16 chk=1                              improved                   vgpr_total 128 -> 121
+WARN mmq Q4_0 J=32 chk=0                              hot_waitcnt_lgkmcnt0       5 -> 6
+INFO mmq Q4_0 J=32 chk=0                              improved                   vgpr_total 172 -> 140
+WARN mmq Q4_0 J=32 chk=1                              vgpr_total                 170 -> 178
+WARN mmq Q4_0 J=48 chk=0                              hot_waitcnt_lgkmcnt0       7 -> 9
+INFO mmq Q4_0 J=48 chk=0                              improved                   vgpr_spill 5 -> 0; vgpr_total 256 -> 224
+WARN mmq Q4_0 J=64 chk=0                              hot_waitcnt_vmcnt0         12 -> 13
+FAIL mmq Q4_0 J=64 chk=1                              vgpr_spill                 0 -> 32
+FAIL mmq Q4_0 J=64 chk=1                              hot_spill_reloads          0 -> 30
+WARN mmq Q4_0 J=64 chk=1                              vgpr_total                 234 -> 256
+WARN mmq Q4_0 J=64 chk=1                              private_bytes              0 -> 132
+WARN mmq MXFP4 J=16 chk=0                             hot_waitcnt_lgkmcnt0       5 -> 7
+INFO mmq MXFP4 J=16 chk=0                             improved                   vgpr_total 120 -> 92
+INFO mmq MXFP4 J=16 chk=1                             improved                   vgpr_total 138 -> 126; occupancy 2.0 -> 4.0
+WARN mmq MXFP4 J=32 chk=0                             hot_waitcnt_lgkmcnt0       5 -> 7
+INFO mmq MXFP4 J=32 chk=0                             improved                   vgpr_total 172 -> 152
+WARN mmq MXFP4 J=32 chk=1                             hot_waitcnt_lgkmcnt0       5 -> 7
+INFO mmq MXFP4 J=32 chk=1                             improved                   vgpr_total 214 -> 188
+WARN mmq MXFP4 J=48 chk=0                             hot_waitcnt_lgkmcnt0       5 -> 8
+INFO mmq MXFP4 J=48 chk=0                             improved                   vgpr_total 252 -> 212
+FAIL mmq MXFP4 J=64 chk=0                             vgpr_spill                 36 -> 42
+FAIL mmq MXFP4 J=64 chk=0                             hot_spill_reloads          12 -> 14
+WARN mmq MXFP4 J=64 chk=0                             private_bytes              100 -> 112
+FAIL mmq MXFP4 J=64 chk=1                             hot_spill_reloads          26 -> 34
+WARN mmq MXFP4 J=64 chk=1                             private_bytes              136 -> 160
+WARN mmq MXFP4 J=64 chk=1                             hot_waitcnt_vmcnt0         5 -> 8
+WARN mmq Q4_1 J=16 chk=0                              hot_waitcnt_lgkmcnt0       5 -> 7
+INFO mmq Q4_1 J=16 chk=0                              improved                   vgpr_total 117 -> 103
+WARN mmq Q4_1 J=16 chk=1                              vgpr_total                 124 -> 127
+WARN mmq Q4_1 J=32 chk=0                              hot_waitcnt_lgkmcnt0       14 -> 17
+INFO mmq Q4_1 J=32 chk=0                              improved                   vgpr_total 140 -> 138
+WARN mmq Q4_1 J=32 chk=1                              hot_waitcnt_vmcnt0         2 -> 13
+WARN mmq Q4_1 J=32 chk=1                              hot_waitcnt_lgkmcnt0       17 -> 19
+INFO mmq Q4_1 J=32 chk=1                              improved                   vgpr_total 142 -> 122; occupancy 2.0 -> 4.0
+WARN mmq Q4_1 J=64 chk=0                              vgpr_total                 110 -> 112
+FAIL mmq Q4_1 J=64 chk=1                              occupancy_waves_per_simd   4.0 -> 2.0
+WARN mmq Q4_1 J=64 chk=1                              vgpr_total                 128 -> 130
+INFO mmq NVFP4 J=16 chk=0                             improved                   vgpr_total 136 -> 105; occupancy 2.0 -> 4.0
+INFO mmq NVFP4 J=16 chk=1                             improved                   vgpr_total 138 -> 116; occupancy 2.0 -> 4.0
+INFO mmq NVFP4 J=32 chk=0                             improved                   vgpr_total 178 -> 160
+WARN mmq NVFP4 J=32 chk=1                             hot_waitcnt_lgkmcnt0       8 -> 10
+INFO mmq NVFP4 J=32 chk=1                             improved                   vgpr_total 238 -> 162
+WARN mmq NVFP4 J=48 chk=0                             vgpr_total                 136 -> 147
+INFO mmq NVFP4 J=64 chk=0                             improved                   vgpr_total 120 -> 102
+INFO mmq NVFP4 J=64 chk=1                             improved                   vgpr_total 132 -> 114; occupancy 2.0 -> 4.0
+INFO mmq Q1_0 J=16 chk=0                              improved                   vgpr_total 124 -> 101
+WARN mmq Q1_0 J=16 chk=1                              hot_waitcnt_lgkmcnt0       5 -> 7
+INFO mmq Q1_0 J=16 chk=1                              improved                   vgpr_total 182 -> 154
+WARN mmq Q1_0 J=32 chk=0                              hot_waitcnt_vmcnt0         2 -> 3
+WARN mmq Q1_0 J=32 chk=0                              hot_waitcnt_lgkmcnt0       7 -> 11
+INFO mmq Q1_0 J=32 chk=0                              improved                   vgpr_total 170 -> 130
+WARN mmq Q1_0 J=32 chk=1                              hot_waitcnt_lgkmcnt0       5 -> 7
+INFO mmq Q1_0 J=32 chk=1                              improved                   vgpr_total 242 -> 214
+WARN mmq Q1_0 J=48 chk=0                              hot_waitcnt_lgkmcnt0       6 -> 8
+INFO mmq Q1_0 J=48 chk=0                              improved                   vgpr_total 248 -> 218
+FAIL mmq Q1_0 J=64 chk=0                              vgpr_spill                 21 -> 61
+FAIL mmq Q1_0 J=64 chk=0                              hot_spill_reloads          12 -> 30
+WARN mmq Q1_0 J=64 chk=0                              private_bytes              80 -> 160
+WARN mmq Q1_0 J=64 chk=0                              hot_waitcnt_vmcnt0         4 -> 5
+INFO mmq Q1_0 J=64 chk=1                              improved                   vgpr_spill 78 -> 27; hot_spill_reloads 28 -> 24
+WARN mmq Q5_0 J=16 chk=0                              hot_waitcnt_vmcnt0         2 -> 4
+WARN mmq Q5_0 J=16 chk=0                              hot_waitcnt_lgkmcnt0       6 -> 7
+INFO mmq Q5_0 J=16 chk=0                              improved                   vgpr_total 126 -> 98
+INFO mmq Q5_0 J=16 chk=1                              improved                   vgpr_total 128 -> 118
+INFO mmq Q5_0 J=32 chk=0                              improved                   vgpr_total 180 -> 158
+WARN mmq Q5_0 J=32 chk=1                              hot_waitcnt_lgkmcnt0       5 -> 7
+INFO mmq Q5_0 J=32 chk=1                              improved                   vgpr_total 204 -> 176
+WARN mmq Q5_0 J=48 chk=0                              hot_waitcnt_lgkmcnt0       5 -> 7
+INFO mmq Q5_0 J=48 chk=0                              improved                   vgpr_spill 5 -> 0; vgpr_total 256 -> 216
+FAIL mmq Q5_0 J=64 chk=0                              vgpr_spill                 15 -> 46
+FAIL mmq Q5_0 J=64 chk=0                              hot_spill_reloads          8 -> 19
+WARN mmq Q5_0 J=64 chk=0                              private_bytes              52 -> 132
+WARN mmq Q5_0 J=64 chk=0                              hot_waitcnt_vmcnt0         3 -> 4
+FAIL mmq Q5_0 J=64 chk=1                              vgpr_spill                 22 -> 27
+FAIL mmq Q5_0 J=64 chk=1                              hot_spill_reloads          14 -> 22
+WARN mmq Q5_0 J=64 chk=1                              private_bytes              88 -> 112
+WARN mmq Q5_1 J=16 chk=0                              vgpr_total                 118 -> 120
+WARN mmq Q5_1 J=16 chk=1                              vgpr_total                 126 -> 127
+WARN mmq Q5_1 J=32 chk=1                              vgpr_total                 140 -> 178
+WARN mmq Q5_1 J=64 chk=0                              vgpr_total                 112 -> 114
+WARN mmq Q5_1 J=64 chk=1                              vgpr_total                 130 -> 132
+WARN mmq Q8_0 J=16 chk=0                              hot_waitcnt_lgkmcnt0       7 -> 8
+INFO mmq Q8_0 J=16 chk=0                              improved                   vgpr_total 112 -> 90
+WARN mmq Q8_0 J=16 chk=1                              hot_waitcnt_lgkmcnt0       5 -> 7
+INFO mmq Q8_0 J=16 chk=1                              improved                   vgpr_total 152 -> 124; occupancy 2.0 -> 4.0
+WARN mmq Q8_0 J=32 chk=0                              hot_waitcnt_lgkmcnt0       5 -> 6
+INFO mmq Q8_0 J=32 chk=0                              improved                   vgpr_total 172 -> 148
+WARN mmq Q8_0 J=32 chk=1                              hot_waitcnt_vmcnt0         2 -> 3
+WARN mmq Q8_0 J=32 chk=1                              hot_waitcnt_lgkmcnt0       5 -> 7
+INFO mmq Q8_0 J=32 chk=1                              improved                   vgpr_total 214 -> 162
+WARN mmq Q8_0 J=48 chk=0                              hot_waitcnt_lgkmcnt0       5 -> 8
+INFO mmq Q8_0 J=48 chk=0                              improved                   vgpr_total 250 -> 210
+FAIL mmq Q8_0 J=64 chk=0                              vgpr_spill                 32 -> 37
+WARN mmq Q8_0 J=64 chk=0                              private_bytes              92 -> 100
+INFO mmq Q8_0 J=64 chk=0                              improved                   hot_spill_reloads 13 -> 12
+FAIL mmq Q8_0 J=64 chk=1                              vgpr_spill                 27 -> 34
+FAIL mmq Q8_0 J=64 chk=1                              hot_spill_reloads          14 -> 29
+WARN mmq Q8_0 J=64 chk=1                              private_bytes              96 -> 140
+WARN mmq Q8_0 J=64 chk=1                              hot_waitcnt_vmcnt0         8 -> 15
+INFO fa-wmma D=128 nc=16 nw=8 half                    kernel_added               vspill=0 hot_reload=0 hot_acc=0
+INFO fa-wmma D=128 nc=16 nw=8 half sc                 kernel_added               vspill=0 hot_reload=0 hot_acc=0
+INFO fa-wmma D=128 nc=16 nw=8 float                   kernel_added               vspill=0 hot_reload=0 hot_acc=0
+INFO fa-wmma D=128 nc=16 nw=8 float sc                kernel_added               vspill=0 hot_reload=0 hot_acc=0

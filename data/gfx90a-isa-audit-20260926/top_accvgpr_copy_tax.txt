@@ -1,0 +1,62 @@
+family     kernel                                         wg vgpr arch agpr sgpr vspl  priv    lds   occ  lim hot h.rld h.acc h.mfma h.bar h.vm0 h.lg0 phases k.acc
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------
+fattn_mma  fa-mma DKQ=320 DV=256 c1=2 c2=32              256  512  256  256  104  300   968      0   1.0 vgpr   1   714  2914    576    24   625   535     15  4480
+fattn_wmma fa-wmma D=256 nc=32 nw=4 half sc              256  271  256   15   96    0     0  33792   1.0 vgpr   1     0  1984    256     5    18    77      3  1999
+fattn_wmma fa-wmma D=256 nc=32 nw=4 half                 256  270  256   14   96    0     0  33792   1.0 vgpr   1     0  1984    256     5    18    77      3  1996
+fattn_mma  fa-mma DKQ=256 DV=256 c1=32 c2=1 sc           256  512  256  256  104    3    48      0   1.0 vgpr   1     6  1700    256    30   117   368     16  2673
+fattn_mma  fa-mma DKQ=256 DV=256 c1=8 c2=4               256  503  256  247  106    0     0      0   1.0 vgpr   1     0  1662    256    30   100   278     14  2570
+fattn_mma  fa-mma DKQ=256 DV=256 c1=16 c2=2              256  499  256  243  106    0     0      0   1.0 vgpr   1     0  1657    256    30   104   277     15  2554
+fattn_mma  fa-mma DKQ=256 DV=256 c1=32 c2=1              256  512  256  256  106   85   384      0   1.0 vgpr   1   129  1654    256    30   223   358     15  2567
+fattn_mma  fa-mma DKQ=320 DV=256 c1=1 c2=32              256  512  256  256  104  129   520      0   1.0 vgpr   1   249  1630    288    30   231   284     15  2503
+fattn_mma  fa-mma DKQ=256 DV=256 c1=8 c2=4 sc            256  512  256  256  104   50   204      0   1.0 vgpr   1    97  1612    256    30   176   281     16  2517
+fattn_mma  fa-mma DKQ=256 DV=256 c1=16 c2=2 sc           256  512  256  256  104   48   196      0   1.0 vgpr   1    92  1610    256    30   177   281     16  2531
+fattn_mma  fa-mma DKQ=256 DV=256 c1=4 c2=8 sc            256  512  256  256  104   65   264      0   1.0 vgpr   1   117  1595    256    30   188   281     16  2437
+fattn_mma  fa-mma DKQ=256 DV=256 c1=4 c2=8               256  512  256  256  104   67   272      0   1.0 vgpr   1   125  1588    256    30   180   276     16  2417
+fattn_wmma fa-wmma D=256 nc=16 nw=4 half                 256  164  148   16   80    0     0  16896   3.0 vgpr   1     0   992    128     5    74    49      3   992
+fattn_wmma fa-wmma D=256 nc=16 nw=4 half sc              256  168  152   16   80    0     0  16896   3.0 vgpr   1     0   992    128     5    74    49      3   992
+fattn_wmma fa-wmma D=128 nc=32 nw=4 half                 256  208  200    8   96    0     0  25600   2.0 vgpr   1     0   976    128     5    18    82      3   976
+fattn_wmma fa-wmma D=128 nc=32 nw=4 half sc              256  208  200    8   96    0     0  25600   2.0 vgpr   1     0   976    128     5    18    82      3   976
+fattn_mma  fa-mma DKQ=256 DV=256 c1=2 c2=8 sc            256  422  256  166  100    0     0      0   1.0 vgpr   1     0   867    128    30    83   203     15  1300
+fattn_mma  fa-mma DKQ=256 DV=256 c1=4 c2=4 sc            256  415  256  159  100    0     0      0   1.0 vgpr   1     0   859    128    30    87   203     15  1291
+fattn_mma  fa-mma DKQ=256 DV=256 c1=2 c2=8               256  418  256  162  100    0     0      0   1.0 vgpr   1     0   853    128    30    73   179     15  1282
+fattn_mma  fa-mma DKQ=256 DV=256 c1=8 c2=2 sc            256  412  256  156  100    0     0      0   1.0 vgpr   1     0   848    128    30    80   194     14  1307
+fattn_mma  fa-mma DKQ=256 DV=256 c1=4 c2=4               256  412  256  156  100    0     0      0   1.0 vgpr   1     0   841    128    30    69   194     14  1264
+fattn_mma  fa-mma DKQ=256 DV=256 c1=16 c2=1              256  414  256  158  106    0    32      0   1.0 vgpr   1     0   820    128    30    89   274     15  1246
+fattn_mma  fa-mma DKQ=256 DV=256 c1=16 c2=1 sc           256  421  256  165  106    0    32      0   1.0 vgpr   1     0   810    128    30    89   274     14  1227
+fattn_wmma fa-wmma D=112 nc=32 nw=4 half                 256  216  208    8   71    0     0  38400   1.0  lds   1     0   808    112     5    19    84      3   808
+fattn_mma  fa-mma DKQ=256 DV=256 c1=8 c2=2               256  414  256  158  100    0     0      0   1.0 vgpr   1     0   789    128    30    72   177     15  1271
+fattn_wmma fa-wmma D=96 nc=32 nw=4 half                  256  208  200    8   71    0     0  23552   2.0 vgpr   1     0   712     96     5    18    81      3   712
+fattn_mma  fa-mma DKQ=192 DV=128 c1=2 c2=16              256  364  256  108  100    0     0      0   1.0 vgpr   1     0   708    160    38    69   188     24  1090
+fattn_mma  fa-mma DKQ=192 DV=128 c1=4 c2=8               256  355  256   99  100    0     0      0   1.0 vgpr   1     0   692    160    38    70   188     22  1064
+fattn_wmma fa-wmma D=80 nc=32 nw=4 half                  256  200  184   16   71    0     0  28160   2.0 vgpr   1     0   568     80     5    20    84      3   568
+fattn_wmma fa-wmma D=128 nc=32 nw=4 float                256  244  212   32   97    0     0  42496   1.0  lds   1     0   496    128     5    32    95      3   496
+fattn_wmma fa-wmma D=128 nc=32 nw=4 float sc             256  244  212   32  100    0     0  42496   1.0  lds   1     0   496    128     5    34   112      3   496
+fattn_wmma fa-wmma D=256 nc=16 nw=4 float                256  192  176   16   81    0     0  25344   2.0 vgpr   1     0   496    128     5    19    56      3   496
+fattn_wmma fa-wmma D=256 nc=16 nw=4 float sc             256  192  176   16   84    0     0  25344   2.0 vgpr   1     0   496    128     5    21    65      3   496
+fattn_wmma fa-wmma D=128 nc=16 nw=4 half                 256  132  120   12   80    0     0  12800   3.0 vgpr   1     0   488     64     5    41    49      3   488
+fattn_wmma fa-wmma D=128 nc=16 nw=4 half sc              256  132  120   12   80    0     0  12800   3.0 vgpr   1     0   488     64     5    41    49      3   488
+fattn_wmma fa-wmma D=64 nc=32 nw=4 half                  256  196  180   16   68    0     0  21504   2.0 vgpr   1     0   472     64     5    18    80      3   472
+fattn_wmma fa-wmma D=112 nc=16 nw=4 half                 256  148  136   12   60    0     0  19200   3.0 vgpr   1     0   404     56     5    15    47      3   404
+fattn_wmma fa-wmma D=112 nc=32 nw=4 float                256  244  212   32   76    0     0  41472   1.0  lds   1     0   392    112     5    34    98      3   392
+fattn_wmma fa-wmma D=96 nc=32 nw=4 float                 256  244  212   32   76    0     0  40448   1.0  lds   1     0   360     96     5    32    98      3   360
+fattn_wmma fa-wmma D=96 nc=16 nw=4 half                  256  152  140   12   60    0     0  11776   3.0 vgpr   1     0   356     48     5    12    47      3   356
+fattn_mma  fa-mma DKQ=192 DV=128 c1=2 c2=8               256  301  256   45  100    0     0      0   1.0 vgpr   1     0   349     80    38    59   136     22   525
+fattn_mma  fa-mma DKQ=192 DV=128 c1=1 c2=16              256  301  256   45  100    0     0      0   1.0 vgpr   1     0   332     80    38    59   136     20   509
+fattn_wmma fa-wmma D=80 nc=16 nw=4 half                  256  124  112   12   60    0     0  14080   4.0 vgpr   1     0   284     40     5    29    44      3   284
+fattn_wmma fa-wmma D=80 nc=32 nw=4 float                 256  224  192   32   76    0     0  39424   1.0  lds   1     0   280     80     5    32    98      3   280
+fattn_wmma fa-wmma D=128 nc=16 nw=4 float                256  164  148   16   79    0     0  21248   3.0 vgpr   1     0   248     64     5    17    57      3   248
+fattn_wmma fa-wmma D=128 nc=16 nw=4 float sc             256  164  148   16   82    0     0  21248   3.0 vgpr   1     0   248     64     5    19    66      3   248
+fattn_wmma fa-wmma D=64 nc=32 nw=4 float                 256  220  188   32   72    0     0  38400   1.0  lds   1     0   248     64     5    32    95      3   248
+fattn_wmma fa-wmma D=64 nc=16 nw=4 half                  256  104   92   12   57    0     0  10752   4.0 vgpr   1     0   236     32     5    11    47      3   236
+fattn_wmma fa-wmma D=112 nc=16 nw=4 float                256  156  140   16   64    0     0  20736   3.0 vgpr   1     0   196     56     5    22    52      3   196
+fattn_wmma fa-wmma D=96 nc=16 nw=4 float                 256  160  144   16   64    0     0  20224   3.0 vgpr   1     0   180     48     5    18    54      3   180
+fattn_wmma fa-wmma D=80 nc=16 nw=4 float                 256  144  128   16   64    0     0  19712   3.0 vgpr   1     0   140     40     5    18    53      3   140
+fattn_wmma fa-wmma D=64 nc=16 nw=4 float                 256  116  100   16   56    0     0  19200   3.0  lds   1     0   124     32     5    16    57      3   124
+mmf        mmf-ids 15__hip_bfloat162 [64, 10, 1]          64  152  132   20  100    0     0      0   3.0 vgpr   1     0    32     32     0     2    14      1    64
+mmf        mmf-ids 15__hip_bfloat162 [64, 10, 2]         128  152  132   20  100    0     0      0   3.0 vgpr   1     0    32     32     0     2    14      1    64
+mmf        mmf-ids 15__hip_bfloat162 [64, 10, 3]         192  152  132   20  100    0     0      0   3.0 vgpr   1     0    32     32     0     2    14      1    64
+mmf        mmf-ids 15__hip_bfloat162 [64, 10, 4]         256  152  132   20  100    0     0      0   3.0 vgpr   1     0    32     32     0     2    14      1    64
+mmf        mmf-ids 15__hip_bfloat162 [64, 11, 1]          64  152  132   20  100    0     0      0   3.0 vgpr   1     0    32     32     0     2    15      1    64
+mmf        mmf-ids 15__hip_bfloat162 [64, 11, 2]         128  152  132   20  100    0     0      0   3.0 vgpr   1     0    32     32     0     2    15      1    64
+mmf        mmf-ids 15__hip_bfloat162 [64, 11, 3]         192  152  132   20  100    0     0      0   3.0 vgpr   1     0    32     32     0     2    15      1    64
+mmf        mmf-ids 15__hip_bfloat162 [64, 11, 4]         256  152  132   20  100    0     0      0   3.0 vgpr   1     0    32     32     0     2    15      1    64

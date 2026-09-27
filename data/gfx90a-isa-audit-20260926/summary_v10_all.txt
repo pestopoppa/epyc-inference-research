@@ -1,0 +1,16 @@
+source /mnt/raid0/llm/kernels/production/gpu/libggml-hip.so.0.16.0 sha256 f26a166b8ea3089d19a395ae00afa22e917df8eba71ca6ef4be5235d65ea8079
+toolchain AMD clang version 18.0.0git (https://github.com/RadeonOpenCompute/llvm-project roc-6.2.0 24292 26466ce804ac523b398608f17388eb6d605a3f09)
+mfma_form_regime ['mayneedagprs_rule_pre_159493']
+unique kernels 4049 (+2092 trap-only stubs excluded)
+
+family      n  n_agpr  n_vspill  n_hot_reload  n_hot_acc  max_vgpr  max_hot_reload
+fattn_mma  104      22        60            60         22       512             756
+fattn_other 408       0         0             0          0        51               0
+fattn_tile 136       0         2             0          0       256               0
+fattn_vec   41       2         2             0          0       368               0
+fattn_wmma  34      30         0             0         30       271               0
+mmf        1152     576         0             0        394       164               0
+mmq        147       0        23            19          0       256              36
+mmq_fixup  672       0         0             0          0        90               0
+mmvq       279       0         0             0          0       200               0
+other      1076       0         5             0          0       128               0
