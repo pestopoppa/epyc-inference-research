@@ -273,9 +273,28 @@ def input_binding(argv) -> dict:
     return {"argv": _without(argv, _CHANGING_FLAGS), "documents": documents}
 
 
+#: Options of the prospective RUNTIME protocol only. Enabling or re-declaring it does
+#: not change a source/anchor continuation's stable inputs, and the runtime owner
+#: binds its own frame: the statistics digest keys the runtime epoch and scope,
+#: `declare_statistics` refuses a changed declaration for one frame, and a declared
+#: arm is settled per runtime surface from the owner's own attempt records. The
+#: execution documents (launch, requests, campaign) remain bound.
+RUNTIME_PROTOCOL_FLAGS = frozenset({"--runtime-statistics", "--runtime-calibration-max-launches",
+                                    "--runtime-arms", "--runtime-control-escalation",
+                                    "--runtime-nominal-khz"})
+RUNTIME_PROTOCOL_SWITCHES = frozenset({"--calibrate-runtime"})
+
+
 def resume_binding(argv) -> dict:
-    """Prior-child binding before adding a newly selected runtime recipe."""
-    return input_binding(_without(argv, {"--runtime-recipe-reference", "--runtime-recovery-reference"}))
+    """Prior-child binding before adding a newly selected runtime recipe.
+
+    The runtime protocol's own options are excluded too, so a continuation can turn
+    the strict runtime path on (or re-declare its arms) at a batch boundary without
+    orphaning the source/anchor lineage it continues."""
+    stripped = _without(argv, {"--runtime-recipe-reference", "--runtime-recovery-reference",
+                               *RUNTIME_PROTOCOL_FLAGS})
+    stripped = [item for item in stripped if item not in RUNTIME_PROTOCOL_SWITCHES]
+    return input_binding(stripped)
 
 
 def load_resume(path: Path, current_argv):

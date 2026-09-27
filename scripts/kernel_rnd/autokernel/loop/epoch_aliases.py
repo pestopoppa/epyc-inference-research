@@ -59,10 +59,16 @@ def launch_epoch_inputs(*, cpu_execution_digest: str | None = None,
                         enrolled_manifest_digest: str | None = None,
                         enrolled_target: Mapping[str, Any] | None = None,
                         screen_state: Mapping[str, Any] | None = None,
-                        serving_instrument: Mapping[str, Any] | None = None
+                        serving_instrument: Mapping[str, Any] | None = None,
+                        runtime_recipe_surface_digest: str | None = None
                         ) -> dict[str, Any]:
     """The full epoch's host state, as `run.main` declares it. ONE derivation: the
-    launch and the backfill both call this, so they cannot drift apart."""
+    launch and the backfill both call this, so they cannot drift apart.
+
+    `runtime_recipe_surface_digest` is present only while the launch carries a
+    runtime recipe the loop ADOPTED (`runtime_arms.surface_digest` of the selected
+    recipe): the adopted runtime surface is a measured input, so it moves both the
+    full and the measurement epoch. Absent, the historical inputs are unchanged."""
     inputs: dict[str, Any] = {}
     if cpu_execution_digest is not None:
         inputs.update(cpu_execution_digest=cpu_execution_digest,
@@ -79,6 +85,8 @@ def launch_epoch_inputs(*, cpu_execution_digest: str | None = None,
         inputs["cpu_screen"] = dict(screen_state)
     if serving_instrument is not None:
         inputs["serving_instrument"] = dict(serving_instrument)
+    if runtime_recipe_surface_digest is not None:
+        inputs["runtime_recipe_surface_digest"] = runtime_recipe_surface_digest
     return inputs
 
 
@@ -182,7 +190,8 @@ def derive_from_loop_run(path: Path, resolved: Sequence[tuple[Path, Any]]
         enrolled_manifest_digest=manifest_digest, enrolled_target=original_target,
         screen_state=screen if isinstance(screen, Mapping) else None,
         serving_instrument=({"version": instrument, "pairs": pairs}
-                            if instrument == MATCHED_INSTRUMENT else None))
+                            if instrument == MATCHED_INSTRUMENT else None),
+        runtime_recipe_surface_digest=body.get("runtime_recipe_surface_digest"))
     record = experiments.epoch_alias_record(
         anchor_commit=anchor, build_recipe=build_recipe.NATIVE_CPU_RECIPE.to_dict(),
         host_state=inputs, measurement_digest=resolved_campaign.measurement_digest,

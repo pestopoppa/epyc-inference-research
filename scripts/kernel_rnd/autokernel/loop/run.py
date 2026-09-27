@@ -652,6 +652,26 @@ def _moot_budgets(args) -> list[str]:
             if int(getattr(args, flag)) and int(getattr(args, flag)) >= int(args.actor_timeout_s)]
 
 
+#: Runtime env keys a runtime treatment may change, per backend. A key is INSTALLED
+#: only when the campaign's environment policy also lists it as a measurement key,
+#: so adding one here is inert for every campaign that does not declare it.
+#: GGML_IQK_Q8_0: the existing dense-Q8_0 iqk opt-in (default off since aebb556b1).
+#: GGML_REPACK_THREADS: the load-time repack team size (repack.cpp; unset = the
+#: OpenMP ICVs), a load-thread cap with no decode-path numerics.
+CPU_RUNTIME_ENV_KEYS = frozenset({"GGML_IQK", "GGML_IQK_Q8_0", "GGML_REPACK_THREADS",
+                                  "OMP_NUM_THREADS", "OMP_PROC_BIND", "OMP_PLACES",
+                                  "OMP_WAIT_POLICY"})
+GPU_RUNTIME_ENV_KEYS = frozenset({"OMP_NUM_THREADS", "OMP_PROC_BIND", "OMP_PLACES",
+                                  "OMP_WAIT_POLICY"})
+
+
+def _runtime_env_keys(direct_launch, cpu_launch) -> set:
+    if not direct_launch:
+        return set()
+    return set(direct_launch.environment_policy.measurement_keys) & (
+        CPU_RUNTIME_ENV_KEYS if cpu_launch else GPU_RUNTIME_ENV_KEYS)
+
+
 def _cpu_arm(original, build: Path, *, extra_env: dict | None = None):
     """Rebind only built executable/DSOs; preserve the selected target's launch.
 
@@ -1081,6 +1101,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="original serial-owned retained recipe reference; never a floor or launch permit")
     parser.add_argument("--runtime-recovery-reference", type=Path,
                         help="target-local original serial teardown reference; not admission or a claim")
+    parser.add_argument("--runtime-arms", type=Path,
+                        help="declared runtime arms (runtime_arms.RuntimeArmDeclaration): the loop "
+                             "draws each unsettled arm before planner proposals and runs it through "
+                             "the unchanged strict runtime admission; requires --runtime-statistics")
     parser.add_argument("--calibrate-runtime", action="store_true",
                         help="collect/reopen strict CPU anchor A/A and neutral calibration under the existing claim; "
                              "does not qualify controls or bank a runtime treatment")
@@ -1669,6 +1693,8 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("retained runtime recipe requires its explicit prospective --runtime-statistics")
     if args.runtime_statistics is None and args.runtime_calibration_max_launches is not None:
         parser.error("runtime calibration launch budget requires --runtime-statistics")
+    if args.runtime_arms is not None and args.runtime_statistics is None:
+        parser.error("declared runtime arms require explicit prospective --runtime-statistics")
     experimental = direct_launch is not None and args.experimental_branch is not None
     owned_cpu_list = None
     build_cpu_list = cpu_launch.template.cpu_list if cpu_launch else "96-183"
@@ -1822,6 +1848,22 @@ def main(argv: list[str] | None = None) -> int:
           f"divergences={[f.name for f in recipe.divergences()] or 'none'}")
 
     anchor_commit = _git(args.worktree, "rev-parse", "HEAD")
+    # A carried runtime selection (a previous launch ADOPTED a runtime recipe) is a
+    # measured input (P-AK-SEARCH-1-A3.1 Clause 1a): its build-independent runtime
+    # surface enters the epoch, so rows measured under the adopted recipe never share
+    # an epoch with rows measured under the one it replaced. Read before any claim from
+    # the same retained bytes `restore_selection` reopens later; the restored recipe is
+    # re-checked against this digest under the claim. No selection -> no key -> the
+    # exact historical epoch.
+    runtime_recipe_surface_digest = None
+    if args.runtime_recipe_reference is not None and runtime_capable:
+        from . import runtime_arms
+        try:
+            runtime_recipe_surface_digest = runtime_arms.surface_digest(
+                runtime_arms.selection_current_recipe(
+                    args.store, _read_cpu_document(args.runtime_recipe_reference)))
+        except (OSError, ValueError) as exc:
+            parser.error(f"retained runtime recipe reference unreadable before claim: {exc}")
     # ONE derivation of the declared host state (`epoch_aliases.launch_epoch_inputs`):
     # the OP-60 alias backfill re-derives legacy launches' epochs through it.
     epoch_inputs = epoch_aliases.launch_epoch_inputs(
@@ -1838,7 +1880,8 @@ def main(argv: list[str] | None = None) -> int:
         serving_instrument=({"version": args.serving_instrument,
                              "pairs": args.serving_pairs}
                             if args.serving_instrument == serving.MATCHED_INSTRUMENT
-                            else None))
+                            else None),
+        runtime_recipe_surface_digest=runtime_recipe_surface_digest)
     epoch = archive.epoch_for(anchor_commit=anchor_commit,
                               build_recipe=recipe.to_dict(),
                               **({"host_state": epoch_inputs} if epoch_inputs else {}))
@@ -1883,6 +1926,22 @@ def main(argv: list[str] | None = None) -> int:
                 max_launches=args.runtime_calibration_max_launches)
         except (OSError, ValueError, runtime_calibration.RuntimeCalibrationRefused) as exc:
             parser.error(f"runtime calibration preflight refused before resource claim: {exc}")
+    runtime_arm_declaration = None
+    if args.runtime_arms is not None:
+        from . import runtime_arms
+        try:
+            runtime_arm_declaration = runtime_arms.load(args.runtime_arms)
+            runtime_arm_declaration.preflight(
+                campaign_id=(resolved_campaign.campaign_id if selected_target is not None
+                             else "ak-loop"),
+                runtime_env_keys=_runtime_env_keys(direct_launch, cpu_launch),
+                max_candidates=runtime_statistical.controls.max_candidates)
+        except (OSError, ValueError) as exc:
+            parser.error(f"declared runtime arms refused before resource claim: {exc}")
+        print(f"runtime   {len(runtime_arm_declaration.arms)} declared arm(s) "
+              f"[{runtime_arm_declaration.numerics_policy}] "
+              + ", ".join(arm.arm_id for arm in runtime_arm_declaration.arms)
+              + f"; sha256 {runtime_arm_declaration.digest()[:12]}")
     print(f"anchor    {anchor_commit[:12]}   epoch {epoch[:12]}   "
           f"measurement-epoch {measurement_epoch[:12]}")
     # OP-60: register this launch's own full -> measurement mapping (self-verifying),
@@ -2096,6 +2155,8 @@ def main(argv: list[str] | None = None) -> int:
                    "runtime probes cannot select a recipe or keep") if runtime_probe_enabled else
                   "strict runtime requires an eligible full serving target; source research is unchanged"})
     runtime_owner = [None]
+    runtime_adoptions: list[dict] = []
+    runtime_arm_events: list[dict] = []
     source_floor_refresh = [False]
     runtime_recipe_reference = [None]
     runtime_status = [None]
@@ -2103,13 +2164,7 @@ def main(argv: list[str] | None = None) -> int:
     source_loo_result = None
     if source_authoring:
         source_validation_reference = dict(resumed["source_validation"])
-    # GGML_IQK_Q8_0: the existing dense-Q8_0 iqk opt-in (default off since aebb556b1).
-    # Admitted only when the campaign's environment policy also lists it.
-    runtime_env_keys = (set(direct_launch.environment_policy.measurement_keys) &
-        ({"GGML_IQK", "GGML_IQK_Q8_0", "OMP_NUM_THREADS", "OMP_PROC_BIND", "OMP_PLACES",
-          "OMP_WAIT_POLICY"}
-         if cpu_launch else {"OMP_NUM_THREADS", "OMP_PROC_BIND", "OMP_PLACES", "OMP_WAIT_POLICY"})
-        if direct_launch else set())
+    runtime_env_keys = _runtime_env_keys(direct_launch, cpu_launch)
     feedback = serving_beliefs.PlannerFeedback(args.store, args.belief_root_repo)
     shared_history = archive.SharedHistory(args.shared_history_root, current_store=args.store,
                                            batch_directory=args.out)
@@ -3669,6 +3724,8 @@ def main(argv: list[str] | None = None) -> int:
             """
             if hypothesis.runtime_pair is not None:
                 nonlocal direct_launch, cpu_launch, serving_recipe
+                previous_recipe = feedback_anchor[0]
+                previous_floor = runtime_preparation.get("source_comparison_floor")
                 selected = runtime_owner[0].retain(comparison.row, feedback_anchor[0])
                 direct_launch = selected
                 cpu_launch = selected if selected.backend == "cpu" else None
@@ -3681,6 +3738,8 @@ def main(argv: list[str] | None = None) -> int:
                     selected_recipe=comparison.row["runtime_admission"])
                 runtime_recipe_reference[0] = runtime_owner[0].selection_reference(
                     selected, current_source_commit=current_anchor_commit[0])
+                record_runtime_adoption(previous_recipe, selected, comparison,
+                                        hypothesis.runtime_pair, previous_floor)
                 report_runtime_progress()
                 reprofile()
                 return None
@@ -3906,8 +3965,28 @@ def main(argv: list[str] | None = None) -> int:
                                                **_actor_knobs(args), **_actor_limits(args),
                                                **_actor_budgets(args),
                                                **_actor_thinking(args), **sandbox_seat))
-            return (runtime_recovery.PendingPlanner(ordinary, pending_slot)
-                    if pending_pair is not None else ordinary)
+            planner = (runtime_recovery.PendingPlanner(ordinary, pending_slot)
+                       if pending_pair is not None else ordinary)
+            if runtime_arm_declaration is not None and runtime_enabled:
+                from . import runtime_arms
+
+                def arm_event(row):
+                    runtime_arm_events.append(row)
+                    del runtime_arm_events[:-64]
+                    runtime_preparation["declared_arms"] = {
+                        "declaration_sha256": runtime_arm_declaration.digest(),
+                        "events": list(runtime_arm_events[-16:])}
+                    print(f"runtime   declared arm {row.get('arm_id')}: {row.get('status')}"
+                          + (f" ({row['reason']})" if row.get("reason") else ""), flush=True)
+
+                # A pending interrupted pair (PendingPlanner) still owns the first draw;
+                # declared arms come next, the ordinary planner after every arm settles.
+                planner = runtime_arms.DeclaredArmPlanner(
+                    planner, runtime_arm_declaration,
+                    store_root=lambda: (runtime_store.root if runtime_store is not None
+                                        and runtime_enabled else None),
+                    on_event=arm_event)
+            return planner
 
         def make_author_panel(worker):
             """Best-of-N (`--actor-authors`, N >= 2): one panel per lane, its members
@@ -3998,6 +4077,64 @@ def main(argv: list[str] | None = None) -> int:
     original_claims = []
     runtime_store = None
     runtime_deadline = None
+
+    def record_runtime_adoption(previous_recipe, selected, comparison, runtime_pair,
+                                previous_floor) -> None:
+        """The durable, auditable receipt of a loop-adopted runtime recipe.
+
+        Written after `RuntimeAdmission.retain` re-derived the admission from its
+        original records and before any further measurement. It names both recipes,
+        the admitted dimension, the admission/selection references, the epoch the
+        comparison was measured under and the epoch input the next launch folds in,
+        the floor it invalidated, and the accumulator it re-based. A receipt failure
+        is loud but never un-does the retained selection (the admission record is
+        the authority; this is its audit view)."""
+        from . import runtime_arms
+        rebased = None
+        try:
+            if serving_recipe is not None and bundle[0].champion_of_record != bundle[0].tip:
+                # COR vs tip was compounded under the previous recipe: that magnitude is
+                # cross-epoch now. It may no longer fire the threshold trigger; the next
+                # keep re-measures tip vs COR under the adopted recipe (both arms), and
+                # the serving gate spends only on that fresh reading.
+                rebased = {"champion_of_record": bundle[0].champion_of_record,
+                           "tip": bundle[0].tip, "keeps": list(bundle[0].keeps),
+                           "compounded_bench_pct_previous_recipe":
+                               bundle[0].compounded_bench_pct,
+                           "measurement_validity_before": bundle[0].measurement_validity,
+                           "measurement_validity_after":
+                               accumulate.MEASUREMENT_STALE_RUNTIME_RECIPE}
+                bundle[0].measurement_validity = accumulate.MEASUREMENT_STALE_RUNTIME_RECIPE
+                bundle[0].save(args.store)
+            body = runtime_arms.adoption_receipt(
+                campaign_id=(resolved_campaign.campaign_id if selected_target is not None
+                             else "ak-loop"),
+                previous=previous_recipe, adopted=selected,
+                admission=comparison.row.get("runtime_admission"),
+                selection_reference=runtime_recipe_reference[0],
+                runtime_pair=runtime_pair.to_dict(), comparison=comparison.row,
+                epoch=epoch, measurement_epoch=measurement_epoch,
+                anchor_commit=current_anchor_commit[0],
+                statistics_sha256=(None if runtime_statistical is None else
+                                   hashlib.sha256(json.dumps(runtime_statistical.to_dict(),
+                                       sort_keys=True, separators=(",", ":")).encode()).hexdigest()),
+                declaration=runtime_arm_declaration, invalidated_floor=previous_floor,
+                accumulator=rebased)
+            path = runtime_arms.write_adoption_receipt(args.store, body)
+            runtime_adoptions.append({"receipt": str(path),
+                                      "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                                      "adopted_surface_digest":
+                                          body["adopted_recipe"]["runtime_surface_digest"]})
+            runtime_preparation["adoptions"] = list(runtime_adoptions)
+            print(f"runtime   ADOPTED runtime recipe "
+                  f"{body['adopted_recipe']['runtime_surface_digest'][:12]} "
+                  f"(was {body['previous_recipe']['runtime_surface_digest'][:12]}): "
+                  f"{json.dumps(body['surface_change'], sort_keys=True)[:300]}; receipt {path}; "
+                  f"the next launch opens a new measurement epoch")
+        except Exception as exc:     # noqa: BLE001 -- loud, never un-select
+            print(f"runtime   WARNING adoption receipt failed: {type(exc).__name__}: {exc}",
+                  file=sys.stderr)
+            runtime_preparation["adoption_receipt_error"] = f"{type(exc).__name__}: {exc}"[:512]
 
     def install_runtime_owner():
         nonlocal direct_launch, cpu_launch, serving_recipe
@@ -4214,6 +4351,14 @@ def main(argv: list[str] | None = None) -> int:
                         source_commit=current_anchor_commit[0], build=anchor_build[0], prompts=manifest,
                         source_anchor=(source_resumed["current_anchor"] if source_resumed is not None
                                        else None))
+                    from . import runtime_arms
+                    if runtime_arms.surface_digest(selected) != runtime_recipe_surface_digest:
+                        # The epoch was derived pre-claim from these same retained bytes;
+                        # a restored recipe with another runtime surface would record rows
+                        # under an epoch that does not describe what ran.
+                        raise loop.RunAborted(
+                            "restored runtime recipe surface differs from the epoch input "
+                            "derived before the claim; no measurement under a mislabeled epoch")
                     direct_launch = selected
                     cpu_launch = selected if selected.backend == "cpu" else None
                     serving_recipe = selected.template
@@ -4627,6 +4772,11 @@ def main(argv: list[str] | None = None) -> int:
                 **({"runtime_preparation": dict(runtime_preparation)} if direct_launch else {}),
                 **({"runtime_recipe_reference": runtime_recipe_reference[0]}
                    if runtime_recipe_reference[0] is not None else {}),
+                **({"runtime_recipe_surface_digest": runtime_recipe_surface_digest}
+                   if runtime_recipe_surface_digest is not None else {}),
+                **({"runtime_adoptions": list(runtime_adoptions)} if runtime_adoptions else {}),
+                **({"runtime_arms_sha256": runtime_arm_declaration.digest()}
+                   if runtime_arm_declaration is not None else {}),
                 "surface": args.surface, "pairs": args.serving_pairs if direct_launch else args.pairs,
                 "noise_floor_pct": floor, "elapsed_s": round(elapsed, 1),
                 "workers": args.workers,

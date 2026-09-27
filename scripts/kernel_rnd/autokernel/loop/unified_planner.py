@@ -207,6 +207,14 @@ def _mutate_template(template: serving.Recipe, dimension: RuntimeDimension,
     # Canonical production recipes intentionally project argv into a neutral
     # template. Environment state is frozen separately under EnvironmentPolicy.
     assert dimension.kind == "env"
+    key = value["key"]
+    if key in (template.env or {}) or key in template.explicit_unsets:
+        # A template that DECLARES this key (the DS41 recipe carries its whole OMP
+        # stack, e.g. OMP_PLACES=cores) must carry the arm's value as well: the
+        # canonical consistency check refuses a template env that differs from the
+        # frozen launch, which made every env arm on a declared key un-enumerable.
+        # The name is kept; the recipe hash moves, and floors key on the hash.
+        return template.with_env(name=template.name, **{key: value["value"]})
     return template
 
 

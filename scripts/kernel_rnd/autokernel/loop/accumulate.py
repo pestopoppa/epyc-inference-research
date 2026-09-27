@@ -79,6 +79,11 @@ JOURNAL_DIRNAME = "journal"
 MEASUREMENT_CURRENT = "current_snapshot"
 MEASUREMENT_UNKNOWN_LEGACY = "unknown_legacy"
 MEASUREMENT_STALE_TIP_ADVANCE = "stale_external_tip_advance"
+#: The loop adopted a runtime recipe after this magnitude was measured: tip vs COR
+#: was compounded under the previous execution recipe, a different measurement
+#: epoch. It never fires the threshold trigger; the next keep re-measures both arms
+#: under the adopted recipe (`add_keep` restores MEASUREMENT_CURRENT).
+MEASUREMENT_STALE_RUNTIME_RECIPE = "stale_runtime_recipe_epoch"
 BUNDLE_SCHEMA_V1 = journal.LOOP_BUNDLE_SNAPSHOT_SCHEMA_V1
 BUNDLE_SCHEMA_V2 = journal.LOOP_BUNDLE_SNAPSHOT_SCHEMA_V2
 
