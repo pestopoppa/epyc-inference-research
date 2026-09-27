@@ -1805,7 +1805,10 @@ server_mode:
       recipe_id: qwen38-flash-next-cpu-mtp
       module: epyc-inference-research/scripts/lib/qwen38_flash_next_recipe.py
       surface: cpu-decode
-      threads: 48        # on a 0-95 cpuset. = scripts/lib/qwen38_flash_next_recipe.py THREADS.
+      threads: 96        # on a 0-95 cpuset. DAR-LAT-3h gate G1 outcome T96*: the SERVING -t is 96,
+                         # decided by a served launch ABA on production v10 (the G1 receipt is the
+                         # citation). The module's THREADS = 48 stays the champion MEASUREMENT
+                         # recipe's -t, which is a different object.
                          # ⚠ CORRECTED 2026-09-26 (DAR-LAT-3h): this used to say "the SERVED decode
                          # optimum". No served 48-vs-96 comparison existed; the 48 rests on pre-BIOS
                          # bare llama-bench (D4/C5, tg128 t48 10.09 vs t96 9.67). The live :8074 ran
@@ -1814,7 +1817,7 @@ server_mode:
                          # (epyc-root, operator artifact dir stack-change-dar-lat-3h-20260926)
                          # decides; its receipt replaces this note. epyc-orchestrator tests/unit/
                          # test_critic_shape_recipe_parity.py now diffs this row against the topology.
-      cpu_shape: NUMA_FULL_T48
+      cpu_shape: NUMA_FULL      # was NUMA_FULL_T48 (lineup-change C3); superseded by the G1 receipt
       # ── C3 RESOLVED (operator ruling: "add the needed cpu shape") ─────────────────
       # An earlier draft recorded -t 48 on a 0-95 cpuset as an UNRESOLVED CONFLICT with
       # stack_numa._assert_instance_invariants, which raises at import when a non-GPU
@@ -1849,12 +1852,11 @@ server_mode:
         # pipeline's declared_env_attestation step checks the live /proc/<pid>/environ.
         GGML_FUSED_DECODE_OFF: "1"     # the recipe's graph path. Inert while MTP serves (the fused
                                        # path needs !embeddings_nextn); G1 arm T96-vs-L checks that.
+        GGML_NOHUGEPAGE_PROCESS: "1"   # CHAMP-2 THP shim. ADOPTED for serving by DAR-LAT-3h gate G1
+                                       # (outcome ending in N: >= 2% wall-time gain at the chosen -t,
+                                       # THP_enabled 0 verified per launch). The G1 receipt is the citation.
       # Knobs of the champion MEASUREMENT recipe that are NOT serving env (yet). Not read by anything.
       env_not_serving:
-        GGML_NOHUGEPAGE_PROCESS: "1"   # CHAMP-2 THP shim (+5.23%, lower launch sd) vs v10 common.cpp
-                                       # CHAMPION-3 (+1.48% with it OFF): conflicting, neither at the
-                                       # served shape on v10. Own factor in DAR-LAT-3h gate G1; moves
-                                       # into `env` only on a G1 outcome ending in N.
         GGML_FA_SPLIT_KV: "0"          # BE-2 row-exact reduction order. Correctness-affecting, and a
                                        # perf risk at long context (single-row decode loses KV-axis
                                        # parallelism) while the critic serves n_ctx 262144. Task
