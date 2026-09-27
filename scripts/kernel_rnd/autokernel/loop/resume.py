@@ -187,7 +187,9 @@ CRITIC2_BACKFILL_SCHEMA = "epyc.autokernel.resume_backfill_critic2.v1"
 #: Deterministic pre-build rule gates. A refusal by one of these is a verdict of the
 #: RULE, not of the patch, so it is resumable once the rule changes. A compile or
 #: correctness failure is the patch's own and is never resumed at build.
-RULE_GATES = frozenset({"op_scope"})
+#: `oracle_unavailable` is the harness failing to run or prove the oracle, never a
+#: numerical verdict (`loop._RULE_GATES`, DS41-C67).
+RULE_GATES = frozenset({"op_scope", "oracle_unavailable"})
 #: A stop during a resumed candidate writes a new checkpoint; bound the chain.
 MAX_RESUME_DEPTH = 3
 #: `lane_error` rows carry a checkpoint only when an authored patch was waiting on

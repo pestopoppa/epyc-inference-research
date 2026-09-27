@@ -618,7 +618,25 @@ def gate_rules_fingerprint() -> str:
     candidate re-runs every current gate before any build or measurement.
     """
     import hashlib
-    return hashlib.sha256(Path(gates.__file__).read_bytes()).hexdigest()
+    here = Path(gates.__file__).parent
+    digest = hashlib.sha256(Path(gates.__file__).read_bytes())
+    # The oracles the gates delegate to decide `oracle_unavailable`; a fix there must
+    # re-open what they refused (DS41-C67), exactly as a gates.py change does.
+    for name in ORACLE_MODULES:
+        digest.update(b"\0" + name.encode() + b"\0")
+        try:
+            digest.update((here / name).read_bytes())
+        except OSError:
+            digest.update(b"<missing>")
+    return digest.hexdigest()
+
+
+#: Oracle and witness sources behind the gates' independent-reference checks.
+ORACLE_MODULES = ("iqk_witness.py", "iqk_gdb_probe.py", "cpu_quant_reference.py",
+                  "cpu_quant_reference_probe.cpp", "cpu_route_witness.py",
+                  "cpu_route_gdb_probe.py", "cpu_norm_reference.py",
+                  "cpu_norm_reference_probe.cpp", "gdn_reference.py",
+                  "gdn_reference_probe.cpp")
 
 
 def scope_rules_fingerprint() -> str:
@@ -648,7 +666,8 @@ def classify_patch_rejection(reason: str, *, scope_rule: str = "",
 
     "scope"     -- the mechanism cannot be written inside the admitted route: the
                    critic set `scope_rule`, or began its reason `SCOPE:` /
-                   `SCOPE[<rule>]:`, or a RULE gate (`op_scope`) refused the diff.
+                   `SCOPE[<rule>]:`, or a RULE gate (`op_scope`, or the harness's
+                   `oracle_unavailable`) refused the diff.
     "authoring" -- everything else: the patch was wrong, the idea stands.
     """
     text = str(reason or "")
@@ -667,7 +686,11 @@ def classify_patch_rejection(reason: str, *, scope_rule: str = "",
 
 #: Deterministic pre-build RULE gates (mirrors `resume.RULE_GATES`): a refusal by one
 #: is a scope verdict of the rule, not an authoring defect of the patch.
-_RULE_GATES = frozenset({"op_scope"})
+#: `oracle_unavailable` is the harness (the independent oracle could not run or could
+#: not prove path engagement), never wrong-kernel evidence: it spends no authoring
+#: attempt and its build checkpoint resumes once the gate or oracle code changes
+#: (DS41-C67: a witness defect burned 2 of 3 attempts of a critic-accepted patch).
+_RULE_GATES = frozenset({"op_scope", "oracle_unavailable"})
 
 
 def _mark_report_source(outcome: "Outcome", progress: Mapping[str, Any]) -> None:

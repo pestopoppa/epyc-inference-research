@@ -741,6 +741,45 @@ class TheStopPathWritesACheckpoint(Fixture):
         self.assertEqual(caught.exception.check, "depth")
 
 
+class OracleUnavailableIsTheHarness(unittest.TestCase):
+    """DS41-C67: a witness defect refused a critic-accepted patch `oracle_unavailable`
+    three times, spent two authoring attempts, and parked the patch forever."""
+
+    def candidate(self, **fields):
+        return resume.Candidate("x#0", "x", "t", "gate_refused", "akm-demo", {
+            "stage": "build", "hypothesis": {"mechanism_id": "akm-demo"},
+            "retained_patch": {"patch_sha256": "ab" * 32},
+            "refusal_gate": "oracle_unavailable", **fields})
+
+    def test_its_build_checkpoint_resumes_once_gate_or_oracle_code_changes(self):
+        now = loop.gate_rules_fingerprint()
+        self.assertIsNone(resume.ineligible_reason(
+            self.candidate(gate_rules_fingerprint="0" * 64), rules_fingerprint=now))
+        self.assertIn("unchanged", resume.ineligible_reason(
+            self.candidate(gate_rules_fingerprint=now), rules_fingerprint=now))
+        self.assertIn("verdict on the patch", resume.ineligible_reason(
+            self.candidate(refusal_gate="correctness", gate_rules_fingerprint="0" * 64),
+            rules_fingerprint=now))
+
+    def test_it_spends_no_authoring_attempt(self):
+        self.assertEqual(loop.classify_patch_rejection(
+            "exact fused helper and dot specialization hits in candidate DSO not proven",
+            source="gate:oracle_unavailable")["class"], "scope")
+        self.assertEqual(loop.classify_patch_rejection(
+            "wrong output", source="gate:correctness")["class"], "authoring")
+        self.assertEqual(loop._RULE_GATES, resume.RULE_GATES)
+
+    def test_the_fingerprint_covers_every_oracle_module(self):
+        here = Path(loop.__file__).parent
+        for name in loop.ORACLE_MODULES:
+            self.assertTrue((here / name).is_file(), name)
+        for path in here.glob("*"):
+            if path.suffix in (".py", ".cpp") and not path.name.startswith("test_") and \
+                    ("witness" in path.name or "reference" in path.name or
+                     "gdb_probe" in path.name) and "native_" not in path.name:
+                self.assertIn(path.name, loop.ORACLE_MODULES)
+
+
 class ResumeFlag(unittest.TestCase):
 
     def test_run_py_scans_only_with_resume_on_and_threads_the_queue(self):
