@@ -2254,10 +2254,14 @@ def main(argv: list[str] | None = None) -> int:
             # Widened single-file CPU routes (gates.CPU_SOURCE_ROUTES): same pre-build
             # inputs as the IQK routes (post-image, HEAD image, -U0 hunks).
             route_paths = set(gates.CPU_SOURCE_ROUTE_PATHS)
+            # ops.cpp hosts a route AND the older GATED_DELTA_NET rule: a change is governed
+            # by a widened route only when its target symbol resolves to one.
+            route_edit = len(changed) == 1 and changed[0] in route_paths and \
+                gates.cpu_source_route(changed[0], hypothesis.target_symbol) is not None
             if len(changed) == 1 and changed[0] in iqk_paths and not cpu_launch:
                 return False, [gates.Verdict(
                     "op_scope", False, "CPU IQK source route requires a CPU target recipe")]
-            if len(changed) == 1 and changed[0] in route_paths and not cpu_launch:
+            if route_edit and not cpu_launch:
                 return False, [gates.Verdict(
                     "op_scope", False, "CPU source route requires a CPU target recipe")]
             scope_source = (cpu_ops if changed == ("ggml/src/ggml-cpu/ops.cpp",) else
@@ -2296,7 +2300,7 @@ def main(argv: list[str] | None = None) -> int:
                     checks.append(lambda: gates.check_cpu_iqk_reference(
                         worker.build_dir, worker.worktree, resolved_recipe=arm,
                         target_symbol=hypothesis.target_symbol))
-                if cpu_launch and len(changed) == 1 and changed[0] in route_paths:
+                if cpu_launch and route_edit:
                     checks.append(lambda: gates.check_cpu_route_reference(
                         worker.build_dir, worker.worktree, resolved_recipe=arm,
                         path=changed[0], target_symbol=hypothesis.target_symbol))
@@ -2330,7 +2334,7 @@ def main(argv: list[str] | None = None) -> int:
                     worker.build_dir, worker.worktree,
                     resolved_recipe=_cpu_arm(direct_launch, worker.build_dir),
                     target_symbol=hypothesis.target_symbol))
-            if cpu_launch and len(changed) == 1 and changed[0] in route_paths:
+            if cpu_launch and route_edit:
                 checks.append(lambda: gates.check_cpu_route_reference(
                     worker.build_dir, worker.worktree,
                     resolved_recipe=_cpu_arm(direct_launch, worker.build_dir),

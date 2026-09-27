@@ -125,7 +125,7 @@ comparison requires its own validated reference and threshold.
 
 ### Widened CPU source routes (operator decision 2026-09-26)
 
-Five more single-file CPU routes are admitted (`gates.CPU_SOURCE_ROUTES`). Each needs the
+Six more single-file CPU routes are admitted (`gates.CPU_SOURCE_ROUTES`). Each needs the
 named `target_symbol`, hunks inside the named bodies in both HEAD and the candidate, and
 byte-identical headers (marker line through opening brace). A marker that recurs
 elsewhere in the file never widens the boundary: markers are resolved inside the named
@@ -178,6 +178,49 @@ class, or before the disabled-build stub.
     scalar F16/BF16/F32 `MUL_MAT` fixture at widths 1–8 (40 rows on an 8-thread team, so
     inside the narrow-M regime; analytic bounds) plus a trusted GDB hit on the F16
     `tinyBLAS<...>::gemm<...>` in the candidate DSO for the sole selected case.
+- **`cpu_norm_rowsplit`**: `ggml/src/ggml-cpu/ops.cpp`, target
+  `ggml_compute_forward_rms_norm_f32` (or the dispatchers `ggml_compute_forward_rms_norm` /
+  `ggml_compute_forward_rms_norm_mul_fused`, which resolve to the same body).
+  - **Scope:** only the body of the `ggml_compute_forward_rms_norm_f32` template (F32).
+    HEAD deals whole rows to threads. DS41's `hc_mixes` input norm is [20480, nt] with
+    nt = 2–3 in serving verify (80 per graph, unfused: its consumer is the `hc_mixes`
+    MUL_MAT), so 3 of 48 threads work. The mechanism is a within-row split for few, long
+    rows. Every thread recomputes the FULL row sum of squares in HEAD's order, then scales
+    only its own column segment. `get_rowcol_split` in `common.h` is the existing helper
+    (see its use in `ggml_compute_forward_repeat_f32`). The same body serves the fused
+    RMS_NORM+MUL, so the fused branch must split the same way or keep HEAD's code.
+  - **In place** (`dst->data == src0->data`): keep the row split. Otherwise a thread
+    scales its segment while another thread is still summing the row.
+  - **Refused:** the header, the dispatchers, NORM/GROUP_NORM/RMS_NORM_BACK, and every
+    other function. HEAD's `sum`/`mean`/`scale`/`eps` lines and the fused product line
+    may be re-added verbatim, with any loop index. No other added code line may name
+    `sum`, `mean`, `scale`, `eps`, `ggml_float`/`double`, `sqrt*`/`fma*`, a square
+    `x[i] * x[j]`, `_mm*`/`__m*`/`GGML_F*`, `ggml_vec_*` other than
+    `ggml_vec_scale_f32`/`ggml_vec_cpy_f32`, `#pragma` or `ggml_barrier`. RMS_NORM is
+    tiny-solo eligible, and an in-op barrier on a solo node deadlocks. Comments go on
+    `//` lines.
+  - **Measured bound (2026-09-27, anchor-gen-001 ggml, 8 threads on cores 96-103):**
+    the node is the serial double-add chain of the row sum: one [20480] row takes
+    10.7 µs on one thread, and 12.0-12.3 µs for 2-3 rows on 8 threads. A correct
+    one-task-per-thread split measured 11.4-11.9 µs, hot or with x and y evicted to
+    DRAM, i.e. at most 0.4 µs (about 3%) of the node. Each split task recomputes that
+    chain, so a split that deals a thread two (row, chunk) tasks doubles the node:
+    `get_rowcol_split` with 3 rows on 8 threads measured 21.5 µs. Price a proposal
+    against this bound. The 3.1-3.5% cycle share is the chain, and a bit-exact split
+    cannot shorten it.
+  - **Ops:** `RMS_NORM` and `RMS_NORM_MUL_ADD` (the fused-graph native suite).
+  - **Bit-exactness:** the sum and the scale are computed exactly as HEAD computes them,
+    only on more threads. The output must be bit-identical to HEAD. Say so; there is no
+    tolerance to spend.
+  - **Reference:** `use_ref` runs the same rms_norm body, so the native suite is not
+    independent. The independent evidence is two checks:
+    - `cpu_norm_reference`: 16 fixed cases on an 8-thread team, bit for bit against
+      HEAD's arithmetic emulated without ggml, plus a float64 bound of 2^-20 relative.
+      The cases are narrow (rows < 8, including [20480, 2|3], a 3-D walk, a strided
+      view, in place ×16 repetitions, fused broadcast and full weights) and wide/solo.
+    - trusted GDB hits in the candidate DSO on `ggml_compute_forward_rms_norm` (sole
+      RMS_NORM case) and `ggml_compute_forward_rms_norm_mul_fused` (sole
+      RMS_NORM_MUL_ADD case).
 - **`cpu_graph_sync`**: `ggml/src/ggml-cpu/ggml-cpu.c`, target `ggml_barrier`,
   `ggml_cpu_node_is_solo`, `ggml_cpu_try_fuse_ops` or `ggml_graph_compute_thread`.
   - **Scope:** barrier implementation, per-node sync, tiny-solo selection and
