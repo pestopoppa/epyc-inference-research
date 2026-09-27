@@ -34,6 +34,15 @@ MODES
   tail refuses -- for every lane of the pool, since all lanes share the worker root.
   As a second line (and the only one for a loop running older code), it also refuses
   when the process tree of the loop that launched it holds a measuring binary.
+* PEER CPU REGIONS. The loop yields its own CPU-region claim during actor phases
+  (`cpu_window.py`), so another session may hold the SAME physical cores ak-check
+  compiles/op-tests on via `region-lock run --cpu-list ... --role bench ...` (or a live
+  orchestrator role) to take a real measurement -- a compile there would add noise to
+  it. Before compiling, ak-check reads the orchestrator's own region-lock occupancy
+  (read-only, never a lock of its own; see `default_peer_status`) and, if a peer OTHER
+  than the loop's own region role covers its chosen cores, waits (polling every ~15 s)
+  up to `AK_CHECK_PEER_WAIT_S` (default 600 s) for it to clear, then proceeds. Past the
+  bound it refuses (EXIT_REFUSED): not evidence about the patch, an author may retry.
 
 SCRATCH. ak-check never creates a build dir of its own: the loop allocates one per
 lane per iteration and passes it as `AK_CHECK_SCRATCH` (or `--scratch`); without it
@@ -76,6 +85,7 @@ ENV_OP_TEST = "AK_CHECK_OP_TEST"
 ENV_CALL_ID = "AK_CHECK_CALL_ID"
 ENV_LOG = "AK_CHECK_LOG"
 ENV_CPUS = "AK_CHECK_CPUS"
+ENV_PEER_WAIT_S = "AK_CHECK_PEER_WAIT_S"
 
 #: The fence lives in the campaign's worker root (every lane's parent), so every lane of
 #: a pool shares it.
@@ -98,6 +108,16 @@ LINK_TIMEOUT_S = 120
 #: is OP_TEST_TIMEOUT_S plus process start; this is well past it).
 TAIL_WAIT_S = 900
 LANE_WAIT_S = 60
+#: How long ak-check waits for a PEER's CPU-region claim (another session's
+#: `region-lock run`, or a live orchestrator role) to clear its chosen cores before
+#: refusing. `AK_CHECK_PEER_WAIT_S` overrides; polled every PEER_POLL_S.
+DEFAULT_PEER_WAIT_S = 600.0
+PEER_POLL_S = 15.0
+#: `claim.hold_cpu`'s own region-lock role (`autokernel-cpu`, `claim.py`): the loop's
+#: own claim, never a peer -- it has already released it during actor phases anyway
+#: (`cpu_window.py`). Duplicated as a literal (not imported) so this stays correct even
+#: if ak-check runs standalone, outside the loop's package.
+LOOP_REGION_ROLE = "autokernel-cpu"
 MAX_HEADER_TUS_COMPILE = 3
 MAX_OP_TEST_TUS = 24
 MAX_DIAG_LINES, MAX_DIAG_CHARS = 60, 6000
@@ -246,6 +266,150 @@ def measuring_processes(pid: int | None = None,
             found.append(f"pid {current}: {' '.join(argv)[:160]}")
         stack.extend(children.get(current, ()))
     return found
+
+
+# --------------------------------------------------------------------------------------
+# Peer CPU-region occupancy (another SESSION, not the loop, measuring on these cores).
+
+def _orchestrator_root() -> Path | None:
+    """The orchestrator checkout that owns the CPU-region lock files, or None.
+
+    Same resolution `claim._ensure_orchestrator_importable` uses, duplicated here (not
+    imported: ak-check's shim runs this file by PATH as a standalone script, with no
+    parent package, so a package-relative `from . import claim` is not available)."""
+    configured = Path(os.environ.get("EPYC_ROOT_REPO", "/workspace")).resolve()
+    candidates = [configured, configured / "repos" / "epyc-orchestrator"]
+    git_marker = configured / ".git"
+    try:
+        if git_marker.is_file():
+            prefix, sep, value = git_marker.read_text(encoding="utf-8").strip().partition(":")
+            if prefix == "gitdir" and sep:
+                git_dir = Path(value.strip())
+                if not git_dir.is_absolute():
+                    git_dir = configured / git_dir
+                common = Path((git_dir / "commondir").read_text(encoding="utf-8").strip())
+                if not common.is_absolute():
+                    common = git_dir / common
+                candidates.append(common.resolve().parent / "repos" / "epyc-orchestrator")
+    except OSError:
+        pass
+    for candidate in candidates:
+        if (candidate / "src" / "runtime" / "cpu_region_lock.py").is_file():
+            return candidate
+    return None
+
+
+def _ensure_region_lock_importable() -> None:
+    """Best-effort: make `src.runtime.cpu_region_lock` importable.
+
+    A no-op when it already is (a real PYTHONPATH, or -- in tests -- a fake already
+    planted in `sys.modules`, the same seam `test_cpu_window.py`'s `provider` fixture
+    uses): the bare import is tried FIRST, so nothing here ever needs to resolve a real
+    path against a fake filesystem. Only on failure does it resolve `_orchestrator_root`
+    and extend `sys.path`; still nothing raises here -- an unresolvable root leaves the
+    following import to fail, and the caller treats that as UNKNOWN, not busy."""
+    try:
+        import src.runtime.cpu_region_lock  # noqa: F401
+        return
+    except ImportError:
+        pass
+    root = _orchestrator_root()
+    if root is not None:
+        path = str(root)
+        if path not in sys.path:
+            sys.path.insert(0, path)
+
+
+def _flock_currently_held(path: Path) -> bool:
+    """True if some process holds an exclusive flock on `path` right now.
+
+    Probes with LOCK_EX|LOCK_NB and releases immediately on success -- the same
+    non-disturbing check the orchestrator's `region-lock status` uses -- so this never
+    blocks and never disturbs a real holder. A path that does not exist is never held."""
+    if not path.exists():
+        return False
+    try:
+        with open(path, "a+b") as handle:
+            try:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                return True
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            return False
+    except OSError:
+        return True
+
+
+def default_peer_status(cpus: Sequence[int], *,
+                        exclude_role: str = LOOP_REGION_ROLE) -> dict[str, list[str]] | None:
+    """Read-only: {region: [role, ...]} of atomic CPU regions overlapping `cpus` that
+    some role OTHER than `exclude_role` currently holds a live region-lock flock on.
+
+    Mirrors `region-lock status` (`src/runtime/region_lock_cli.py`) without shelling out
+    or acquiring anything of its own. Returns None -- UNKNOWN, not "clear" -- when the
+    orchestrator's region-lock module tree cannot be found: a courtesy check that cannot
+    run must not become a de facto extra refusal reason, so `wait_for_peer_region`
+    proceeds on it exactly like "no peer"."""
+    _ensure_region_lock_importable()
+    try:
+        from src.runtime.cpu_region_lock import region_lock_path
+        from src.runtime.instance_topology import ATOMIC_REGIONS, cores_to_regions
+    except Exception:
+        return None
+    try:
+        regions = sorted(r for r in cores_to_regions(cpus) if r in ATOMIC_REGIONS)
+        if not regions:
+            return None
+        lock_dir = region_lock_path("x", "y").parent
+        held: dict[str, list[str]] = {}
+        for region in regions:
+            suffix = f".{region}.lock"
+            for lock_file in sorted(lock_dir.glob(f"cpu_region.*{suffix}")):
+                role = lock_file.name[len("cpu_region."):-len(suffix)]
+                if role in ("GLOBAL", exclude_role):
+                    continue
+                if _flock_currently_held(lock_file):
+                    held.setdefault(region, []).append(role)
+        return held or None
+    except OSError:
+        return None
+
+
+def peer_wait_bound_s() -> float:
+    """`AK_CHECK_PEER_WAIT_S` if set (and parseable), else DEFAULT_PEER_WAIT_S. Never
+    negative -- a bad or negative value degrades to an immediate bound, never a hang."""
+    try:
+        return max(0.0, float(os.environ.get(ENV_PEER_WAIT_S, DEFAULT_PEER_WAIT_S)))
+    except (TypeError, ValueError):
+        return DEFAULT_PEER_WAIT_S
+
+
+def wait_for_peer_region(cpus: Sequence[int], *, wait_s: float, poll_s: float = PEER_POLL_S,
+                         status_provider=None, exclude_role: str = LOOP_REGION_ROLE,
+                         clock=time.monotonic, sleep=time.sleep,
+                         log=lambda text: print(text)) -> dict:
+    """Bounded wait for a peer's CPU-region claim covering `cpus` to clear.
+
+    Never raises: returns {"waited_s", "refused", "peer"} and lets the caller (`main`)
+    decide what a bound-exceeded wait means. `status_provider(cpus, exclude_role=...)`
+    -- default `default_peer_status`, injectable for tests -- returns the peer's held
+    regions on `cpus`, or a false-y value when there is none (or none knowable). The
+    loop's OWN claim (`exclude_role`) is never a peer -- it has already released its own
+    claim during actor phases anyway (`cpu_window.py`)."""
+    provider = status_provider or default_peer_status
+    started = clock()
+    peer = provider(cpus, exclude_role=exclude_role)
+    if not peer:
+        return {"waited_s": 0.0, "refused": False, "peer": None}
+    log(f"ak-check    waiting for a peer measurement holding CPU region(s) "
+        f"{sorted(peer)} that cover cores {_cpu_text(cpus)} (bound {wait_s:.0f}s) ...")
+    while peer:
+        waited = clock() - started
+        if waited >= wait_s:
+            return {"waited_s": round(waited, 1), "refused": True, "peer": peer}
+        sleep(min(poll_s, max(0.0, wait_s - waited)))
+        peer = provider(cpus, exclude_role=exclude_role)
+    return {"waited_s": round(clock() - started, 1), "refused": False, "peer": None}
 
 
 # --------------------------------------------------------------------------------------
@@ -889,7 +1053,9 @@ def usage_summary(log: Path | str | None, call_id: str | None) -> dict | None:
     out: dict = {"calls": len(rows), "seconds": round(sum(r.get("seconds") or 0 for r in rows), 1),
                  "bytes_created": sum(max(0, r.get("scratch_bytes_delta") or 0) for r in rows),
                  "scratch_bytes": rows[-1].get("scratch_bytes_after"),
-                 "last_status": rows[-1].get("status"), "by_mode": {}}
+                 "last_status": rows[-1].get("status"),
+                 "peer_wait_s": round(sum(r.get("peer_wait_s") or 0 for r in rows), 1),
+                 "refused_peer": sum(1 for r in rows if r.get("refused_peer")), "by_mode": {}}
     for status in ("pass", "fail", "refused", "error", "nothing", "skipped"):
         out[status] = sum(1 for r in rows if r.get("status") == status)
     for mode in sorted({r.get("mode") for r in rows}):
@@ -1044,6 +1210,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                  "started_at": started_at}
     scratch: Path | None = None
     before = 0
+    peer_metrics = {"peer_wait_s": 0.0, "refused_peer": False}
     result: dict
     try:
         scratch = _scratch_dir(args.scratch)
@@ -1068,10 +1235,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                               + "; ".join(busy[:3]))
             with lane_lock(scratch):
                 off = os.environ.get(ENV_OP_TEST, "")
-                if args.op_test and off.startswith("off"):
+                degraded = bool(args.op_test and off.startswith("off"))
+                cpu_count = OP_TEST_CPUS if (args.op_test and not degraded) else COMPILE_CPUS
+                cpus = parse_cpus(args.cpus)[:cpu_count] if args.cpus \
+                    else default_cpus(cpu_count)
+                peer = wait_for_peer_region(cpus, wait_s=peer_wait_bound_s())
+                peer_metrics.update(peer_wait_s=peer["waited_s"], refused_peer=peer["refused"])
+                if peer["refused"]:
+                    raise Refused(
+                        "a peer measurement holds the CPU region covering ak-check's "
+                        "cores; not evidence about the patch -- retry later")
+                if degraded:
                     reason = off.partition(":")[2] or "disabled by the loop"
-                    cpus = parse_cpus(args.cpus)[:COMPILE_CPUS] if args.cpus \
-                        else default_cpus(COMPILE_CPUS)
                     result = compile_check(lane=lane, build_dir=args.build_dir,
                                            db_path=db_path, scratch=scratch, base=args.base,
                                            cpus=cpus)
@@ -1080,16 +1255,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                     result["op_test_skipped"] = reason
                     mode = row["mode"] = "op-test-degraded"
                 elif args.op_test:
-                    cpus = parse_cpus(args.cpus)[:OP_TEST_CPUS] if args.cpus \
-                        else default_cpus(OP_TEST_CPUS)
                     result = op_test(lane=lane, build_dir=args.build_dir, db_path=db_path,
                                      scratch=scratch, base=args.base, cpus=cpus,
                                      deadline=time.monotonic() + OP_TEST_TIMEOUT_S,
                                      types=args.types.split(",") if args.types else None,
                                      ops=args.ops.split(",") if args.ops else None)
                 else:
-                    cpus = parse_cpus(args.cpus)[:COMPILE_CPUS] if args.cpus \
-                        else default_cpus(COMPILE_CPUS)
                     result = compile_check(lane=lane, build_dir=args.build_dir,
                                            db_path=db_path, scratch=scratch, base=args.base,
                                            cpus=cpus, syntax_only=args.syntax_only)
@@ -1100,11 +1271,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         result = {"status": "error", "reason": f"sandbox error: {type(exc).__name__}: {exc}"}
     result["mode"] = mode
     result["seconds"] = round(time.monotonic() - started, 1)
+    if peer_metrics["peer_wait_s"]:
+        result["notes"] = [f"waited {peer_metrics['peer_wait_s']:.0f}s for a peer "
+                           "CPU-region measurement to clear before checking"] \
+            + list(result.get("notes") or [])
     after = tree_bytes(scratch) if scratch is not None and scratch.is_dir() else 0
     row.update({"status": result["status"], "seconds": result["seconds"],
                 "scratch": str(scratch) if scratch else None,
                 "scratch_bytes_before": before, "scratch_bytes_after": after,
                 "scratch_bytes_delta": after - before,
+                "peer_wait_s": peer_metrics["peer_wait_s"],
+                "refused_peer": peer_metrics["refused_peer"],
                 "units": [{k: u[k] for k in ("tu", "ok", "cached", "seconds") if k in u}
                           for u in result.get("units") or ()],
                 "oracle": ({k: result["oracle"][k] for k in
@@ -1118,11 +1295,13 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 __all__ = ["OP_TEST_SCRATCH_BYTES", "SCRATCH_KIND", "SCRATCH_MARKER", "scratch_provider",
-           "ALLOWED_COMMANDS", "COMMAND", "ENV_CALL_ID", "ENV_LOG", "ENV_OP_TEST",
-           "ENV_SCRATCH", "FENCE_DIR_NAME", "Refused", "TailFenceTimeout", "author_env",
-           "changed_files", "compile_check", "fence_dir", "measuring_processes", "op_test",
-           "rewrite_command", "sandbox_slot", "select_units", "tail_fence",
-           "touched_types", "usage_summary"]
+           "ALLOWED_COMMANDS", "COMMAND", "DEFAULT_PEER_WAIT_S", "ENV_CALL_ID", "ENV_LOG",
+           "ENV_OP_TEST", "ENV_PEER_WAIT_S", "ENV_SCRATCH", "FENCE_DIR_NAME",
+           "LOOP_REGION_ROLE", "PEER_POLL_S", "Refused", "TailFenceTimeout", "author_env",
+           "changed_files", "compile_check", "default_peer_status", "fence_dir",
+           "measuring_processes", "op_test", "peer_wait_bound_s", "rewrite_command",
+           "sandbox_slot", "select_units", "tail_fence", "touched_types", "usage_summary",
+           "wait_for_peer_region"]
 
 if __name__ == "__main__":
     sys.exit(main())

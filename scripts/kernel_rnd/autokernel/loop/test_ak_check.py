@@ -22,9 +22,11 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import threading
 import time
+from types import ModuleType
 import unittest
 from unittest import mock
 
@@ -411,7 +413,11 @@ class ScratchContract(unittest.TestCase):
         build.mkdir(exist_ok=True)
         (build / "compile_commands.json").write_text("[]")
         lane = self.tmp / "workers" / "lane0"
-        lane.mkdir(parents=True, exist_ok=True)
+        if not (lane / ".git").exists():
+            lane.mkdir(parents=True, exist_ok=True)
+            _git(lane, "init", "-q")
+            _git(lane, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "base",
+                "--allow-empty")
         out = []
         with mock.patch.dict(os.environ, env or {}, clear=False), \
                 mock.patch("builtins.print", side_effect=lambda text: out.append(text)):
@@ -463,6 +469,41 @@ class ScratchContract(unittest.TestCase):
                                                      "seconds": 12.0})
         self.assertEqual(ak_check.usage_summary(log, "zzz"), {"calls": 0})
         self.assertIsNone(ak_check.usage_summary(None, "a"))
+
+    def test_no_peer_proceeds_and_logs_zero_wait(self):
+        scratch = self.tmp / "s-nopeer"
+        scratch.mkdir()
+        (scratch / ak_check.SCRATCH_MARKER).write_text("{}")
+        log = self.tmp / "calls-nopeer.jsonl"
+        env = {ak_check.ENV_SCRATCH: str(scratch), ak_check.ENV_LOG: str(log),
+               ak_check.ENV_CALL_ID: "c-nopeer"}
+        with mock.patch.object(ak_check, "default_peer_status",
+                              lambda cpus, exclude_role=ak_check.LOOP_REGION_ROLE: None):
+            code, _text = self._main(env=env)
+        self.assertEqual(code, ak_check.EXIT_PASS)
+        row = json.loads(log.read_text().splitlines()[-1])
+        self.assertEqual((row["peer_wait_s"], row["refused_peer"]), (0.0, False))
+
+    def test_a_peer_past_the_bound_refuses_exit_2_and_records_metrics(self):
+        # AK_CHECK_PEER_WAIT_S=0 makes any reported peer exceed the bound on the very
+        # first check -- no real waiting needed to exercise the refusal path.
+        scratch = self.tmp / "s-peer"
+        scratch.mkdir()
+        (scratch / ak_check.SCRATCH_MARKER).write_text("{}")
+        log = self.tmp / "calls-peer.jsonl"
+        env = {ak_check.ENV_SCRATCH: str(scratch), ak_check.ENV_LOG: str(log),
+               ak_check.ENV_CALL_ID: "c-peer", ak_check.ENV_PEER_WAIT_S: "0"}
+        with mock.patch.object(
+                ak_check, "default_peer_status",
+                lambda cpus, exclude_role=ak_check.LOOP_REGION_ROLE: {"q3": ["bench"]}):
+            code, text = self._main(env=env)
+        self.assertEqual(code, ak_check.EXIT_REFUSED)
+        self.assertIn("a peer measurement holds the CPU region covering ak-check's cores", text)
+        self.assertIn("retry later", text)
+        row = json.loads(log.read_text().splitlines()[-1])
+        self.assertEqual(row["status"], "refused")
+        self.assertTrue(row["refused_peer"])
+        self.assertGreaterEqual(row["peer_wait_s"], 0.0)
 
 
 class Permissions(unittest.TestCase):
@@ -629,6 +670,130 @@ class AuthorCall(unittest.TestCase):
         row = json.loads((self.lane.parent / actors.ACTOR_REPLY_DIR / actors.ACTOR_CALL_LOG)
                          .read_text().splitlines()[-1])
         self.assertNotIn("ak_check", row, "rows without the sandbox are unchanged")
+
+
+class PeerCpuRegionStatus(unittest.TestCase):
+    """`default_peer_status`: read-only region occupancy against a FAKE orchestrator
+    module tree in `sys.modules` (the `test_cpu_window.py` `provider` fixture's own
+    seam) -- no real orchestrator checkout, no lock ever taken by this test."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.lock_dir = Path(self._tmp.name)
+        # cores 0-3 -> q0, cores 4-7 -> q1: enough to test overlap and disjointness.
+        region_of = {0: "q0", 1: "q0", 2: "q0", 3: "q0", 4: "q1", 5: "q1", 6: "q1", 7: "q1"}
+        crl = ModuleType("src.runtime.cpu_region_lock")
+        crl.region_lock_path = lambda role, region: self.lock_dir / f"cpu_region.{role}.{region}.lock"
+        topo = ModuleType("src.runtime.instance_topology")
+        topo.ATOMIC_REGIONS = ("q0", "q1")
+        topo.cores_to_regions = lambda cpus: frozenset(region_of[c] for c in cpus if c in region_of)
+        patcher = mock.patch.dict(sys.modules, {"src.runtime.cpu_region_lock": crl,
+                                                "src.runtime.instance_topology": topo})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.addCleanup(self._tmp.cleanup)
+
+    def _hold(self, role: str, region: str):
+        path = self.lock_dir / f"cpu_region.{role}.{region}.lock"
+        handle = open(path, "a")
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        self.addCleanup(handle.close)
+        return handle
+
+    def test_no_lock_file_at_all_is_no_peer(self):
+        self.assertIsNone(ak_check.default_peer_status([0, 1]))
+
+    def test_a_peer_role_holding_the_overlapping_region_is_reported(self):
+        self._hold("bench", "q0")
+        self.assertEqual(ak_check.default_peer_status([0, 1]), {"q0": ["bench"]})
+
+    def test_a_peer_on_disjoint_cores_is_not_reported(self):
+        self._hold("bench", "q1")
+        self.assertIsNone(ak_check.default_peer_status([0, 1, 2, 3]))
+
+    def test_the_loops_own_claim_is_ignored(self):
+        self._hold(ak_check.LOOP_REGION_ROLE, "q0")
+        self.assertIsNone(ak_check.default_peer_status([0, 1]))
+
+    def test_the_global_pseudo_role_is_ignored(self):
+        self._hold("GLOBAL", "q0")
+        self.assertIsNone(ak_check.default_peer_status([0]))
+
+    def test_a_lock_file_present_but_not_currently_flocked_is_not_a_peer(self):
+        # A stale/never-acquired lock file (created, never flocked) is not a live holder.
+        (self.lock_dir / "cpu_region.bench.q0.lock").touch()
+        self.assertIsNone(ak_check.default_peer_status([0]))
+
+    def test_an_explicit_exclude_role_overrides_the_default(self):
+        self._hold("bench", "q0")
+        self.assertIsNone(ak_check.default_peer_status([0], exclude_role="bench"))
+
+
+class WaitForPeerRegion(unittest.TestCase):
+    """`wait_for_peer_region`'s bounded-wait loop, against a fake status provider (a
+    fake clock/sleep so "waiting" never actually sleeps): no peer proceeds at once, a
+    peer that clears in time proceeds, a peer past the bound refuses with the reason."""
+
+    class _Clock:
+        def __init__(self):
+            self.t = 0.0
+
+        def __call__(self):
+            return self.t
+
+        def advance(self, seconds):
+            self.t += seconds
+
+    def test_no_peer_proceeds_without_waiting(self):
+        result = ak_check.wait_for_peer_region(
+            [0], wait_s=100, status_provider=lambda cpus, exclude_role: None)
+        self.assertEqual(result, {"waited_s": 0.0, "refused": False, "peer": None})
+
+    def test_a_peer_that_clears_in_time_lets_it_proceed(self):
+        clock = self._Clock()
+        calls = {"n": 0}
+
+        def provider(cpus, exclude_role):
+            calls["n"] += 1
+            return {"q3": ["bench"]} if calls["n"] < 3 else None
+
+        logged = []
+        result = ak_check.wait_for_peer_region(
+            [88], wait_s=100, poll_s=10, status_provider=provider,
+            clock=clock, sleep=clock.advance, log=logged.append)
+        self.assertEqual(result, {"waited_s": 20.0, "refused": False, "peer": None})
+        self.assertTrue(any("waiting for a peer measurement" in line for line in logged))
+
+    def test_a_peer_past_the_bound_refuses_with_the_reason(self):
+        clock = self._Clock()
+        result = ak_check.wait_for_peer_region(
+            [88], wait_s=10, poll_s=3,
+            status_provider=lambda cpus, exclude_role: {"q3": ["bench"]},
+            clock=clock, sleep=clock.advance)
+        self.assertTrue(result["refused"])
+        self.assertGreaterEqual(result["waited_s"], 10)
+        self.assertEqual(result["peer"], {"q3": ["bench"]})
+
+    def test_a_peer_on_disjoint_cores_never_enters_the_wait_loop(self):
+        # The region-overlap filtering itself is `default_peer_status`'s job (see
+        # PeerCpuRegionStatus); here a provider that already reflects "no overlap"
+        # (falsy) must make wait_for_peer_region proceed without ever sleeping.
+        sleeps = []
+        result = ak_check.wait_for_peer_region(
+            [0], wait_s=100, status_provider=lambda cpus, exclude_role: {},
+            sleep=sleeps.append)
+        self.assertFalse(result["refused"])
+        self.assertEqual(sleeps, [])
+
+    def test_the_loops_own_role_is_excluded_by_default(self):
+        seen = {}
+
+        def provider(cpus, exclude_role):
+            seen["exclude_role"] = exclude_role
+            return None
+
+        ak_check.wait_for_peer_region([0], wait_s=1, status_provider=provider)
+        self.assertEqual(seen["exclude_role"], ak_check.LOOP_REGION_ROLE)
 
 
 if __name__ == "__main__":
