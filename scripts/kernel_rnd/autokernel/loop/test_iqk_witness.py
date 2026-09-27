@@ -118,6 +118,27 @@ class IQKWitnessTests(TestCase):
                 records[:1], DSO, dot_quant="Q4_K", width=3).status,
                 "unavailable")
 
+    def test_dot_hit_accepts_moe_entry_helpers_only_with_a_dot_hit(self):
+        # DS41-C66: the DS41 lineage has no iqk_moe_fused_up_gate caller, so
+        # the dot template is entered via iqk_mul_mat_moe(_rows).
+        with mock.patch.object(Path, "resolve", return_value=DSO):
+            for helper in ("iqk_mul_mat_moe", "iqk_mul_mat_moe_rows"):
+                records = [json.loads(_record("candidate_helper", helper)),
+                           json.loads(_record("candidate_dot", "mul_mat_qX_K_q8_2_X4_T"))]
+                records[1].update(quant="Q5_K", width=1)
+                self.assertEqual(witness._assess_fused_hit_records(
+                    records, DSO, dot_quant="Q5_K", width=1).status, "pass")
+                # The fused-only witness (no dot request) still demands the
+                # fused helper itself.
+                self.assertEqual(witness._assess_fused_hit_records(
+                    records[:1], DSO, dot_quant=None, width=1).status,
+                    "unavailable")
+            records = [json.loads(_record("candidate_helper", "ggml_vec_dot_q4_K_q8_K")),
+                       json.loads(_record("candidate_dot", "mul_mat_qX_K_q8_2_X4_T"))]
+            records[1].update(quant="Q4_K", width=2)
+            self.assertEqual(witness._assess_fused_hit_records(
+                records, DSO, dot_quant="Q4_K", width=2).status, "unavailable")
+
     def test_q45_dot_reference_requires_all_widths_direct_then_fused(self):
         from . import cpu_quant_reference
         recipe = mock.Mock(backend="cpu", launch_env={"GGML_IQK": "1"},

@@ -158,10 +158,22 @@ def check(build_dir: Path, *, resolved_recipe, source_root: Path) -> Result:
                   "is not claimed", "\n".join((scalar.detail, *hits)))
 
 
+# Trusted IQK MoE entry helpers that may carry the Q4/Q5 dot template into
+# a fused up-gate graph. A tree with the fused op wired enters through
+# iqk_moe_fused_up_gate; the DS41 lineage has no caller for it and runs the
+# same graph as two MUL_MAT_IDs, entering through iqk_mul_mat_moe_rows at one
+# activation row and iqk_mul_mat_moe above that (DS41-C66, gdb-traced on the
+# anchor-gen-002 DSO). Each is a breakpoint in the candidate DSO, and the first
+# dot hit after it must still be exactly the expected quant and width.
+DOT_HELPERS = ("iqk_moe_fused_up_gate", "iqk_mul_mat_moe", "iqk_mul_mat_moe_rows")
+
+
 def _assess_fused_hit_records(records: list[dict], dso: Path, *,
                               dot_quant: str | None, width: int) -> Result:
+    helper = (records[0].get("symbol") if records and dot_quant is not None and
+              records[0].get("symbol") in DOT_HELPERS else "iqk_moe_fused_up_gate")
     expected = [{"schema": "epyc.autokernel.iqk_case_hit.v1", "status": "hit",
-                 "role": "candidate_helper", "symbol": "iqk_moe_fused_up_gate",
+                 "role": "candidate_helper", "symbol": helper,
                  "dso": str(dso.resolve())}]
     if dot_quant is not None:
         expected.append({"schema": "epyc.autokernel.iqk_case_hit.v1",
@@ -203,15 +215,17 @@ def run_fused_probe(binary: Path, quant: str, *, dso: Path,
             "-ex", "set pagination off", "-ex", "set confirm off",
             "-ex", "set debuginfod enabled off", "-ex", "set auto-load off",
             "-ex", "set print thread-events off", "-ex", "set breakpoint pending on",
-            "-ex", "break iqk_moe_fused_up_gate",
+            *(arg for helper in (DOT_HELPERS if dot_quant is not None
+                                 else ("iqk_moe_fused_up_gate",))
+              for arg in ("-ex", f"break {helper}")),
             "-ex", f"python import os; os.set_inheritable({write_fd}, False)",
             "-ex", "unset environment AK_IQK_WITNESS_FD",
             "-ex", "unset environment AK_IQK_WITNESS_DSO",
             "-ex", "unset environment AK_IQK_DOT_QUANT",
             "-ex", "unset environment AK_IQK_DOT_WIDTH",
-            "-ex", "run", "-x", str(script), "-ex", "disable 1"]
+            "-ex", "run", "-x", str(script), "-ex", "disable"]
     if dot_quant is not None:
-        # At this point the fused helper breakpoint has loaded the candidate
+        # At this point the entry helper breakpoint has loaded the candidate
         # CPU DSO.  rbreak can now resolve its local template specialization;
         # before DSO load a regex breakpoint would not be pending reliably.
         # Match all instantiations, then fail closed unless the *first* actual
