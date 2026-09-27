@@ -3,6 +3,11 @@
 Zero-GPU, read-only audit of existing binaries with `scripts/kernel_rnd/gfx90a_isa_audit.py`.
 `regen.sh` reproduces every file in this directory.
 
+These audits were written by tool sha256 `035db8e4…` (research commit a3ab5e96), before
+the belief-kernel write-side hook existed. They carry no `category`, so they project
+**zero** SC84 claims, by design. The first governed read is the next audit run with
+`--category/--source-commit`.
+
 ## Inputs
 
 - **Production:** `kernels/production/gpu/libggml-hip.so.0.16.0`, sha256 `f26a166b…8079`

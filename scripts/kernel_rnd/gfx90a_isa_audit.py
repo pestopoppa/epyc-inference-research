@@ -692,7 +692,8 @@ def canonical(obj) -> bytes:
 
 
 def run_audit(path: Path, families: tuple[str, ...], match: str | None, jobs: int,
-              label: str | None = None) -> dict:
+              label: str | None = None, category: str | None = None,
+              source_commit: str | None = None, flags_pragmas: str | None = None) -> dict:
     objs = load_code_objects(path)
     if not objs:
         raise AuditError(f"{path}: no gfx90a code objects found")
@@ -720,6 +721,9 @@ def run_audit(path: Path, families: tuple[str, ...], match: str | None, jobs: in
         "schema": SCHEMA, "tool_id": TOOL_ID, "tool_sha256": file_sha256(Path(__file__)),
         "created_utc": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "label": label,
+        # Claim identity for the belief-kernel write side (SC84/SC84a). Absent unless the
+        # caller states them; a document without a category projects no claims.
+        "category": category, "source_commit": source_commit, "flags_pragmas": flags_pragmas,
         "source": {"path": str(path), "resolved": str(path.resolve()), "sha256": binary_sha,
                    "size": path.stat().st_size, "n_code_objects": len(objs)},
         "toolchain": chains, "mfma_form_regime": regimes, "families": list(families),
@@ -926,13 +930,23 @@ CLAIM_METRICS = (  # SC84 base + SC84a widening; all lower-is-better counts
 )
 
 
-def claim_projection(row: dict, doc: dict, *, category: str, attestation_path: str,
-                     attestation_sha256: str, date: str) -> list[dict]:
+CLAIM_CATEGORIES = ("BASELINE", "CANDIDATE", "OPTIMUM")
+
+
+def claim_projection(row: dict, doc: dict, *, attestation_path: str, attestation_sha256: str,
+                     category: str | None = None, date: str | None = None) -> list[dict]:
     """ClaimTuple keyword sets for one audit row (OBSERVATION grade, protocol_id='').
 
-    Pure projection for a root-side adapter: it never grades and never fills an
-    absent element (a metric the row lacks is skipped, not defaulted).
+    Pure projection for a root-side adapter: it never grades and never fills an absent
+    element. A metric the row lacks is skipped, and a document that states no
+    ``category`` (every audit written before the write-side hook) projects nothing.
     """
+    category = category or doc.get("category")
+    if category not in CLAIM_CATEGORIES or row.get("stub"):
+        return []
+    date = date or str(doc.get("created_utc", ""))[:10]
+    if not date:
+        return []
     out = []
     for metric, unit in CLAIM_METRICS:
         value = row.get(metric)
@@ -952,7 +966,9 @@ def claim_projection(row: dict, doc: dict, *, category: str, attestation_path: s
             "extra": {"schema": SCHEMA, "tool_id": doc["tool_id"], "tool_sha256": doc["tool_sha256"],
                       "row_id": row["row_id"], "self_sha256": row["self_sha256"],
                       "binary_sha256": row["binary_sha256"], "toolchain": doc["toolchain"],
-                      "mfma_form_regime": doc["mfma_form_regime"], "family": row["family"],
+                      "mfma_form_regime": doc["mfma_form_regime"],
+                      "source_commit": doc.get("source_commit"),
+                      "flags_pragmas": doc.get("flags_pragmas"), "family": row["family"],
                       "params": row["params"], "accum_offset": row.get("accum_offset"),
                       "wg_max": row["wg_max"], "hot": row.get("hot"),
                       "hot_mfma_barrier_segments": row.get("hot_mfma_barrier_segments"),
@@ -985,6 +1001,10 @@ def main(argv=None) -> int:
     a.add_argument("--match", default=None, help="regex on the mangled kernel name")
     a.add_argument("--jobs", type=int, default=len(os.sched_getaffinity(0)))
     a.add_argument("--label", default=None)
+    a.add_argument("--category", choices=("BASELINE", "CANDIDATE", "OPTIMUM"), default=None,
+                   help="claim category for the belief kernel (omit: the audit projects no claims)")
+    a.add_argument("--source-commit", default=None, help="source commit the binary was built from")
+    a.add_argument("--flags", default=None, help="compile flag/pragma set of this arm (free text)")
     a.add_argument("--json", type=Path, default=None, help="write the audit document here")
     a.add_argument("--table", type=Path, default=None, help="write the readable table here")
     a.add_argument("--sort", choices=sorted(SORTS), default="spill")
@@ -1005,7 +1025,8 @@ def main(argv=None) -> int:
     args = ap.parse_args(argv)
 
     if args.cmd == "audit":
-        doc = run_audit(args.binary, _families(args.families), args.match, max(1, args.jobs), args.label)
+        doc = run_audit(args.binary, _families(args.families), args.match, max(1, args.jobs),
+                        args.label, args.category, args.source_commit, args.flags)
         text = summarize(doc) + "\n\n" + format_table(
             sorted(dedupe(select_rows(doc, None, None)), key=SORTS[args.sort]))
         if args.json:

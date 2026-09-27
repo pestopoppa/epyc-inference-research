@@ -347,9 +347,12 @@ def test_claim_projection_is_observation_grade_and_skips_absent():
                hot_mfma_barrier_segments=[[0, 25, 7, 32]])
     del row["arch_vgpr"]
     doc = {"tool_id": ga.TOOL_ID, "tool_sha256": "c" * 64, "toolchain": ["AMD clang 18"],
-           "mfma_form_regime": ["mayneedagprs_rule_pre_159493"]}
-    claims = ga.claim_projection(row, doc, category="BASELINE", attestation_path="a.json",
-                                 attestation_sha256="d" * 64, date="2026-09-26")
+           "mfma_form_regime": ["mayneedagprs_rule_pre_159493"], "created_utc": "2026-09-26T00:00:00Z"}
+    att = {"attestation_path": "a.json", "attestation_sha256": "d" * 64}
+    assert ga.claim_projection(row, doc, **att) == []  # pre-hook audit: no category, no claims
+    assert ga.claim_projection(dict(row, stub=True), dict(doc, category="BASELINE"), **att) == []
+    claims = ga.claim_projection(row, dict(doc, category="BASELINE", source_commit="ffc1bac8"), **att)
+    assert claims[0]["date"] == "2026-09-26" and claims[0]["extra"]["source_commit"] == "ffc1bac8"
     metrics = [c["metric"] for c in claims]
     assert "gfx90a_static.arch_vgpr" not in metrics  # absent is skipped, never defaulted
     assert "gfx90a_static.hot_spill_reloads" in metrics

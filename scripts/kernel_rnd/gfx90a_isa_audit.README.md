@@ -109,11 +109,20 @@ copy is used.
 OBSERVATION grade (`protocol_id=""`, `lower_better`, one static read), one per SC84/SC84a
 metric: `vgpr_total`, `arch_vgpr`, `agpr`, `sgpr`, `vgpr_spill`, `sgpr_spill`,
 `private_bytes`, `hot_spill_reloads` and `hot_accvgpr_copies`. `accum_offset`, the hot
-counters, the MFMA/barrier segments and the MFMA-form regime travel in `extra`.
+counters, the MFMA/barrier segments, the MFMA-form regime, `source_commit` and
+`flags_pragmas` travel in `extra`.
 
-The projection never grades. It skips an absent metric instead of defaulting it. The
-test suite checks that the root `claim_tuple.ClaimTuple` accepts its output. The root
-adapter and the ingest wiring are SC84/SC84a. They are not done here.
+The claim identity is stated at audit time:
+
+```bash
+$T audit LIB --category BASELINE|CANDIDATE --source-commit SHA --flags "..." --json run.json
+```
+
+An audit written without `--category` projects **no** claims. That is the pre-hook case,
+and the missing category is recorded as absent, never filled. Stub rows and absent
+metrics are also skipped. The projection never grades. The test suite checks that the
+root `claim_tuple.ClaimTuple` accepts its output. The root adapter and the ingest wiring
+are SC84/SC84a. They are not done here.
 
 ## Tests
 
