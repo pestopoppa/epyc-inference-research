@@ -1,0 +1,2 @@
+f26a166b8ea3089d19a395ae00afa22e917df8eba71ca6ef4be5235d65ea8079  /mnt/raid0/llm/kernels/production/gpu/libggml-hip.so.0.16.0
+0be8dd8523f5bafa540b54caea48345cad6a43045febbde250c94b1dc8da6415  /mnt/raid0/llm/llama.cpp-experimental-mmq-jcap-20260927/build-hip-jcap/bin/libggml-hip.so.0.16.0

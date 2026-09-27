@@ -1,0 +1,31 @@
+baseline  /mnt/raid0/llm/kernels/production/gpu/libggml-hip.so.0.16.0 f26a166b8ea3089d
+candidate /mnt/raid0/llm/llama.cpp-experimental-mmq-jcap-20260927/build-hip-jcap/bin/libggml-hip.so.0.16.0 0be8dd8523f5bafa
+common kernels 128  FAIL 0  WARN 19  INFO 9
+WARN mmq Q2_K J=48 chk=0                              kernel_removed             absent from candidate
+WARN mmq Q2_K J=64 chk=0                              kernel_removed             absent from candidate
+WARN mmq Q2_K J=64 chk=1                              kernel_removed             absent from candidate
+WARN mmq IQ2_XXS J=64 chk=1                           kernel_removed             absent from candidate
+WARN mmq IQ3_XXS J=64 chk=1                           kernel_removed             absent from candidate
+WARN mmq IQ4_NL J=64 chk=0                            kernel_removed             absent from candidate
+WARN mmq IQ4_NL J=64 chk=1                            kernel_removed             absent from candidate
+WARN mmq IQ3_S J=64 chk=1                             kernel_removed             absent from candidate
+WARN mmq IQ4_XS J=64 chk=0                            kernel_removed             absent from candidate
+WARN mmq IQ4_XS J=64 chk=1                            kernel_removed             absent from candidate
+WARN mmq Q4_0 J=64 chk=1                              kernel_removed             absent from candidate
+WARN mmq MXFP4 J=64 chk=0                             kernel_removed             absent from candidate
+WARN mmq MXFP4 J=64 chk=1                             kernel_removed             absent from candidate
+WARN mmq Q1_0 J=64 chk=0                              kernel_removed             absent from candidate
+WARN mmq Q1_0 J=64 chk=1                              kernel_removed             absent from candidate
+WARN mmq Q5_0 J=64 chk=0                              kernel_removed             absent from candidate
+WARN mmq Q5_0 J=64 chk=1                              kernel_removed             absent from candidate
+WARN mmq Q8_0 J=64 chk=0                              kernel_removed             absent from candidate
+WARN mmq Q8_0 J=64 chk=1                              kernel_removed             absent from candidate
+INFO mmq IQ2_XXS J=48 chk=1                           kernel_added               vspill=0 hot_reload=0 hot_acc=0
+INFO mmq IQ3_XXS J=48 chk=1                           kernel_added               vspill=0 hot_reload=0 hot_acc=0
+INFO mmq IQ4_NL J=48 chk=1                            kernel_added               vspill=0 hot_reload=0 hot_acc=0
+INFO mmq IQ3_S J=48 chk=1                             kernel_added               vspill=0 hot_reload=0 hot_acc=0
+INFO mmq IQ4_XS J=48 chk=1                            kernel_added               vspill=0 hot_reload=0 hot_acc=0
+INFO mmq Q4_0 J=48 chk=1                              kernel_added               vspill=0 hot_reload=0 hot_acc=0
+INFO mmq MXFP4 J=48 chk=1                             kernel_added               vspill=0 hot_reload=0 hot_acc=0
+INFO mmq Q5_0 J=48 chk=1                              kernel_added               vspill=0 hot_reload=0 hot_acc=0
+INFO mmq Q8_0 J=48 chk=1                              kernel_added               vspill=0 hot_reload=0 hot_acc=0
