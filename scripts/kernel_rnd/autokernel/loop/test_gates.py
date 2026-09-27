@@ -609,6 +609,200 @@ class AffectedOpAndIndependentReference(unittest.TestCase):
                 source_text=src, pre_source_text=src,
                 patch_text=self._hunk(src, token)).passed)
 
+    _OPS = ("static void ggml_compute_forward_norm_f32(\n"
+            "        const ggml_compute_params * params,\n        ggml_tensor * dst) {\n"
+            "    float sum = 0.0;\n    layer_norm();\n}\n"
+            "template <ggml_rms_norm_fuse_op FUSE_OP>\n"
+            "static void ggml_compute_forward_rms_norm_f32(\n"
+            "        const ggml_compute_params * params,\n"
+            "        ggml_tensor * dst_rms_norm,\n"
+            "        ggml_tensor * dst_fused = nullptr) {\n"
+            "    const int nth = params->nth;\n"
+            "    for (int64_t i01 = ith; i01 < ne01; i01 += nth) {\n"
+            "        ggml_float sum = 0.0;\n"
+            "        for (int64_t i00 = 0; i00 < ne00; i00++) {\n"
+            "            sum += (ggml_float)(x[i00] * x[i00]);\n        }\n"
+            "        const float mean  = sum/ne00;\n"
+            "        const float scale = 1.0f/sqrtf(mean + eps);\n"
+            "        if constexpr (FUSE_OP == GGML_RMS_NORM_FUSE_OP_MUL) {\n"
+            "            for (int64_t i00 = 0; i00 < ne00; i00++) {\n"
+            "                y[i00] = x[i00] * scale * w[i00];\n            }\n"
+            "        } else {\n"
+            "            memcpy(y, x, ne00 * sizeof(float));\n"
+            "            ggml_vec_scale_f32(ne00, y, scale);\n        }\n    }\n}\n"
+            "void ggml_compute_forward_rms_norm(\n"
+            "        const ggml_compute_params * params,\n        ggml_tensor * dst) {\n"
+            "    dispatch_plain();\n}\n"
+            "void ggml_compute_forward_rms_norm_mul_fused(\n"
+            "        const ggml_compute_params * params,\n"
+            "        ggml_tensor * dst_rms_norm,\n        ggml_tensor * dst_mul) {\n"
+            "    dispatch_fused();\n}\n"
+            "static void ggml_compute_forward_rms_norm_back_f32(\n"
+            "        const ggml_compute_params * params,\n        ggml_tensor * dst) {\n"
+            "    backward();\n}\n"
+            "static void ggml_compute_forward_group_norm_f32(\n"
+            "        const ggml_compute_params * params,\n        ggml_tensor * dst) {\n"
+            "    group();\n}\n")
+
+    def test_cpu_norm_rowsplit_route_is_the_rms_norm_body_only(self):
+        path = "ggml/src/ggml-cpu/ops.cpp"
+        src = self._OPS
+        inner = "        const float mean  = sum/ne00;"
+        ops = ("RMS_NORM", "RMS_NORM_MUL_ADD")
+        for symbol in ("ggml_compute_forward_rms_norm_f32",
+                       "ggml_compute_forward_rms_norm_f32<GGML_RMS_NORM_FUSE_OP_MUL>",
+                       "ggml_compute_forward_rms_norm", "ggml_compute_forward_rms_norm_mul_fused",
+                       "ggml_compute_forward_rms_norm_f32 (narrow rows: split within the row)"):
+            self.assertEqual(gates.cpu_source_route(path, symbol).route, "cpu_norm_rowsplit")
+            self.assertEqual(gates.affected_op_scope(
+                (path,), target_surface=path, target_symbol=symbol,
+                source_text=src, pre_source_text=src,
+                patch_text=self._hunk(src, inner, "+" + inner + "\n")), ops)
+        for symbol in ("ggml_compute_forward_norm_f32", "ggml_compute_forward_group_norm_f32",
+                       "ggml_compute_forward_rms_norm_back_f32"):
+            self.assertIsNone(gates.cpu_source_route(path, symbol), symbol)
+        # the other norms, the dispatchers and the header stay outside the boundary
+        for token in ("    layer_norm();", "    dispatch_plain();", "    dispatch_fused();",
+                      "    backward();", "    group();",
+                      "        ggml_tensor * dst_fused = nullptr) {",
+                      "template <ggml_rms_norm_fuse_op FUSE_OP>"):
+            refused = gates.affected_op_scope(
+                (path,), target_surface=path, target_symbol="ggml_compute_forward_rms_norm",
+                source_text=src, pre_source_text=src, patch_text=self._hunk(src, token))
+            self.assertFalse(refused.passed, token)
+            self.assertIn("cpu_norm_rowsplit route refused", refused.reason)
+        header = src.replace("        ggml_tensor * dst_fused = nullptr) {",
+                             "        ggml_tensor * dst_fused = nullptr, int split = 0) {")
+        self.assertFalse(gates.affected_op_scope(
+            (path,), target_surface=path, target_symbol="ggml_compute_forward_rms_norm_f32",
+            source_text=header, pre_source_text=src,
+            patch_text=self._hunk(src, inner)).passed)
+
+    def test_cpu_norm_rowsplit_holds_heads_numerics_textually(self):
+        path = "ggml/src/ggml-cpu/ops.cpp"
+        src = self._OPS
+        inner = "        const float mean  = sum/ne00;"
+        admitted = (
+            # HEAD's numerics, moved/re-indented, any loop index
+            "ggml_float sum = 0.0;", "sum += (ggml_float)(x[i00] * x[i00]);",
+            "sum += (ggml_float)(x[j] * x[j]);", "const float mean  = sum/ne00;",
+            "const float scale = 1.0f/sqrtf(mean + eps);", "assert(scale > 0.0f);",
+            "y[i00] = x[i00] * scale * w[i00];", "y[c] = x[c] * scale * w[c]; // own segment",
+            "ggml_vec_scale_f32(c1 - c0, y + c0, scale);", "float eps;",
+            "memcpy(&eps, dst_rms_norm->op_params, sizeof(float));",
+            "GGML_ASSERT(eps >= 0.0f);",
+            # the split itself
+            "const int64_t nr = ne01*ne02*ne03;",
+            "if (nth > 1 && nr < nth && dst->data != src0->data && ggml_rowcol_split_enabled()) {",
+            "const ggml_rowcol_split split = get_rowcol_split(params, nr, ne00, sizeof(float));",
+            "split.unpack(t, ne00, ir, c0, c1);",
+            "memcpy(y + c0, x + c0, (c1 - c0) * sizeof(float));",
+            "ggml_vec_cpy_f32(c1 - c0, y + c0, x + c0);",
+            "for (int64_t i00 = c0; i00 < c1; i00++) {",
+            "// every thread recomputes the full row sum, then scales its segment",
+            "/* the scale is HEAD's */")
+        for line in admitted:
+            self.assertEqual(gates.affected_op_scope(
+                (path,), target_surface=path, target_symbol="ggml_compute_forward_rms_norm_f32",
+                source_text=src, pre_source_text=src,
+                patch_text=self._hunk(src, inner, "+            " + line + "\n")),
+                ("RMS_NORM", "RMS_NORM_MUL_ADD"), line)
+        refused = (
+            "float sum = 0.0f;", "double sum = 0.0;", "ggml_float sum = 0;",
+            "sum += x[i00] * x[i00];", "sum += (ggml_float)x[i00] * (ggml_float)x[i00];",
+            "acc += (ggml_float)(x[i00] * x[i00]);", "partial[ith] = sum;",
+            "const float mean  = total/ne00;", "const float scale = 1.0f/sqrtf(mean) + eps;",
+            "const float inv = 1.0f/sqrtf(m + e);", "y[i00] = x[i00] * (scale * w[i00]);",
+            "y[i00] = x[i00] / scale;", "ggml_vec_scale_f32(n, y, scale * 2.0f);",
+            "ggml_vec_dot_f32(ne00, &s, 0, x, 0, x, 0, 1);", "ggml_vec_norm_f32(ne00, &s, x);",
+            "__m512 v = _mm512_loadu_ps(x + i00);", "GGML_F32_VEC v = GGML_F32_VEC_LOAD(x);",
+            "#pragma omp simd reduction(+:acc)", "ggml_barrier(params->threadpool);",
+            "const float r = rsqrtf(q);", "acc = fmaf(v, v, acc);",
+            "auto s = std::accumulate(x, x + ne00, 0.0);",
+            "/* sum */ acc = 1;", "q += x[i] * x[i];")
+        for line in refused:
+            verdict = gates.affected_op_scope(
+                (path,), target_surface=path, target_symbol="ggml_compute_forward_rms_norm_f32",
+                source_text=src, pre_source_text=src,
+                patch_text=self._hunk(src, inner, "+            " + line + "\n"))
+            self.assertFalse(verdict.passed, line)
+            self.assertIn("forbidden pattern", verdict.reason)
+
+    def test_ops_cpp_route_leaves_the_gated_delta_net_rule_alone(self):
+        path = "ggml/src/ggml-cpu/ops.cpp"
+        self.assertIsNone(gates.cpu_source_route(path, "ggml_compute_forward_gated_delta_net_f32"))
+        # run.py runs the widened-route reference only for an edit a route governs:
+        # ops.cpp now hosts a route, and a GDN edit there must not acquire (and fail) it.
+        source = (Path(__file__).resolve().parent / "run.py").read_text(encoding="utf-8")
+        self.assertIn("route_edit = len(changed) == 1 and changed[0] in route_paths and \\\n"
+                      "                gates.cpu_source_route(changed[0], "
+                      "hypothesis.target_symbol) is not None", source)
+        self.assertEqual(source.count("if cpu_launch and route_edit:"), 2)
+        self.assertNotIn("changed[0] in route_paths and not cpu_launch", source)
+        self.assertNotIn("and len(changed) == 1 and changed[0] in route_paths:", source)
+
+    @unittest.skipUnless(Path("/mnt/raid0/llm/llama.cpp-experimental-fastload-ds41-20260925"
+                              "/ggml/src/ggml-cpu/ops.cpp").is_file(),
+                         "DS41 anchor tree not present")
+    def test_cpu_norm_rowsplit_admits_the_split_on_the_ds41_anchor(self):
+        import difflib
+        path = "ggml/src/ggml-cpu/ops.cpp"
+        head = (Path("/mnt/raid0/llm/llama.cpp-experimental-fastload-ds41-20260925") /
+                path).read_text(encoding="utf-8")
+        start = head.index("    // TODO: optimize\n",
+                           head.index("static void ggml_compute_forward_rms_norm_f32("))
+        split = (
+            "    const int64_t nr = ne01*ne02*ne03;\n"
+            "    if (nth > 1 && nr < nth && dst->data != src0->data && ggml_rowcol_split_enabled()) {\n"
+            "        const ggml_rowcol_split split = get_rowcol_split(params, nr, ne00, sizeof(float));\n"
+            "        for (int64_t t = split.t0; t < split.t1; ++t) {\n"
+            "            int64_t ir, c0, c1;\n"
+            "            split.unpack(t, ne00, ir, c0, c1);\n"
+            "            const int64_t i01 = ir % ne01;\n"
+            "            const int64_t i02 = (ir / ne01) % ne02;\n"
+            "            const int64_t i03 = ir / (ne01*ne02);\n"
+            "            const float * x = (float *) ((char *) src0->data + i01*nb01 + i02*nb02 + i03*nb03);\n"
+            "            ggml_float sum = 0.0;\n"
+            "            for (int64_t i00 = 0; i00 < ne00; i00++) {\n"
+            "                sum += (ggml_float)(x[i00] * x[i00]);\n"
+            "            }\n"
+            "            const float mean  = sum/ne00;\n"
+            "            const float scale = 1.0f/sqrtf(mean + eps);\n"
+            "            float * y = (float *) ((char *) dst->data + i01*nb1 + i02*nb2 + i03*nb3);\n"
+            "            if constexpr (FUSE_OP == GGML_RMS_NORM_FUSE_OP_MUL) {\n"
+            "                const float * w = (float *) ((char *) src1->data + (i01 % ne11)*nb11 + (i02 % ne12)*nb12 + (i03 % ne13)*nb13);\n"
+            "                for (int64_t i00 = c0; i00 < c1; i00++) {\n"
+            "                    y[i00] = x[i00] * scale * w[i00];\n"
+            "                }\n"
+            "            } else {\n"
+            "                memcpy(y + c0, x + c0, (c1 - c0) * sizeof(float));\n"
+            "                ggml_vec_scale_f32(c1 - c0, y + c0, scale);\n"
+            "            }\n"
+            "        }\n"
+            "        return;\n"
+            "    }\n")
+
+        def verdict(candidate):
+            patch = "".join(difflib.unified_diff(head.splitlines(True),
+                                                 candidate.splitlines(True), n=0))
+            return gates.affected_op_scope(
+                (path,), target_surface=path, target_symbol="ggml_compute_forward_rms_norm_f32",
+                source_text=candidate, pre_source_text=head, patch_text=patch)
+
+        good = head[:start] + split + head[start:]
+        self.assertEqual(verdict(good), ("RMS_NORM", "RMS_NORM_MUL_ADD"))
+        for old, new in (("            ggml_float sum = 0.0;\n", "            float sum = 0.0f;\n"),
+                         ("y[i00] = x[i00] * scale * w[i00];",
+                          "y[i00] = x[i00] * (scale * w[i00]);")):
+            bad = verdict(head[:start] + split.replace(old, new) + head[start:])
+            self.assertFalse(bad.passed, new)
+            self.assertIn("forbidden pattern", bad.reason)
+        # the same split placed in NORM's body is outside the route
+        norm = head.index("static void ggml_compute_forward_norm_f32(")
+        norm_body = head.index("    for (int64_t i03 = 0; i03 < ne03; i03++) {", norm)
+        self.assertFalse(verdict(head[:norm_body] + "    const int64_t nr = ne01;\n" +
+                                 head[norm_body:]).passed)
+
     @unittest.skipUnless(Path("/mnt/raid0/llm/llama.cpp-experimental-fastload-ds41-20260925"
                               "/ggml/src/ggml-cpu/ggml-cpu.c").is_file(),
                          "DS41 anchor tree not present")
@@ -639,6 +833,13 @@ class AffectedOpAndIndependentReference(unittest.TestCase):
                     Path("/build"), Path("/source"), resolved_recipe=object(),
                     path="ggml/src/ggml-cpu/llamafile/sgemm.cpp", target_symbol="tinyBLAS::matmul")
             self.assertEqual(check.call_args.kwargs["route"], "float_tinyblas_plan")
+            with mock.patch.object(cpu_route_witness, "check",
+                    return_value=iqk_witness.Result(status, "reason", "detail")) as check:
+                gates.check_cpu_route_reference(
+                    Path("/build"), Path("/source"), resolved_recipe=object(),
+                    path="ggml/src/ggml-cpu/ops.cpp",
+                    target_symbol="ggml_compute_forward_rms_norm_f32<GGML_RMS_NORM_FUSE_OP_NONE>")
+            self.assertEqual(check.call_args.kwargs["route"], "cpu_norm_rowsplit")
         unknown = gates.check_cpu_route_reference(
             Path("/build"), Path("/source"), resolved_recipe=object(),
             path="ggml/src/ggml-cpu/ops.cpp", target_symbol="ggml_compute_forward_concat")
@@ -689,6 +890,59 @@ class AffectedOpAndIndependentReference(unittest.TestCase):
         self.assertIsNotNone(_re.search(float_route.symbol_pattern, hit))
         self.assertIsNone(_re.search(float_route.symbol_pattern, hit.replace(
             "unsigned short, unsigned short", "float, float")))
+        norm = cpu_route_witness.WITNESSES["cpu_norm_rowsplit"]
+        self.assertEqual(norm.reference, "rms_norm")
+        self.assertEqual([(w.op, w.breakpoint) for w in (norm, *norm.also)],
+                         [("RMS_NORM", ("break", "ggml_compute_forward_rms_norm")),
+                          ("RMS_NORM_MUL_ADD",
+                           ("break", "ggml_compute_forward_rms_norm_mul_fused"))])
+        self.assertIsNotNone(_re.search(norm.symbol_pattern, "ggml_compute_forward_rms_norm"))
+        for other in ("ggml_compute_forward_rms_norm_mul_fused",
+                      "ggml_compute_forward_rms_norm_back"):
+            self.assertIsNone(_re.search(norm.symbol_pattern, other))
+        self.assertIsNone(_re.search(norm.also[0].symbol_pattern,
+                                     "ggml_compute_forward_rms_norm"))
+        # the exact vars() strings of the anchor's registered cases (VARS_TO_STR5)
+        self.assertEqual(norm.case, "type=f32,ne=[64,5,4,3],v=0,eps=0.000001,inplace=0")
+        self.assertEqual(norm.also[0].case,
+                         "type=f32,ne=[64,5,4,3],eps=0.000001,broadcast=0,multi_add=0")
+
+    def test_rms_norm_witness_needs_both_entry_hits_then_the_norm_reference(self):
+        from autokernel.loop import cpu_norm_reference, cpu_quant_reference, cpu_route_witness
+        from autokernel.loop.iqk_witness import Result
+        recipe = SimpleNamespace(backend="cpu", launch_env={"GGML_IQK": "1"},
+                                 topology_prefix=("taskset", "-c", "96-103"),
+                                 template=None, port=None, validate_launch=lambda *a: None)
+        with tempfile.TemporaryDirectory() as root:
+            (Path(root) / "ggml/src/ggml-cpu").mkdir(parents=True)
+            (Path(root) / "ggml/src/ggml-cpu/ops.cpp").write_text("", encoding="utf-8")
+
+            def run(hits, norm_status="pass"):
+                with mock.patch.object(cpu_route_witness, "_engagement",
+                                       side_effect=hits) as engage, \
+                     mock.patch.object(cpu_norm_reference, "check_rms_norm_suite",
+                                       return_value=cpu_norm_reference.NormResult(
+                                           norm_status, "norm reason", "norm detail")) as norm, \
+                     mock.patch.object(cpu_quant_reference, "check_cpu_quant_suite") as quant:
+                    result = cpu_route_witness.check(
+                        Path("/build"), resolved_recipe=recipe, source_root=Path(root),
+                        route="cpu_norm_rowsplit", source_path="ggml/src/ggml-cpu/ops.cpp")
+                quant.assert_not_called()
+                return result, engage, norm
+
+            ok = Result("pass", "hit", "detail")
+            result, engage, norm = run([ok, ok])
+            self.assertEqual(result.status, "pass")
+            self.assertEqual([call.args[1].op for call in engage.call_args_list],
+                             ["RMS_NORM", "RMS_NORM_MUL_ADD"])
+            self.assertEqual(norm.call_args.kwargs["topology_prefix"],
+                             ("taskset", "-c", "96-103"))
+            # the fused entry not hit: refused before any numerics
+            result, _engage, norm = run([ok, Result("unavailable", "no fused hit")])
+            self.assertEqual(result.status, "unavailable")
+            norm.assert_not_called()
+            result, _engage, _norm = run([ok, ok], norm_status="wrong")
+            self.assertEqual((result.status, result.reason), ("wrong", "norm reason"))
 
     def test_every_widened_route_reaches_the_actors(self):
         program = (Path(__file__).resolve().parent / "program.md").read_text()

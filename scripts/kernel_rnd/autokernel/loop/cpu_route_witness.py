@@ -8,7 +8,10 @@ iqk dispatch routes) the engagement marker for the expected type must print.  Th
 numerical verdict comes from `cpu_quant_reference`, which decodes stored quant bytes
 without ggml -- the only independent reference for llamafile (use_ref does not bypass
 it) and for scheduling edits (the scalar result does not run through the candidate's
-barrier).
+barrier).  The RMS_NORM route instead uses `cpu_norm_reference` (bit identity with
+HEAD's arithmetic plus a float64 bound): use_ref runs the same rms_norm body, so the
+native suite is not independent there either.  A witness may name further engagement
+cases (`also`), each of which must hit in its own debugger run.
 """
 from __future__ import annotations
 
@@ -29,6 +32,10 @@ SCRIPT = Path(__file__).with_name("cpu_route_gdb_probe.py")
 _DENSE = "bs=[1,1],nr=[1,1],per=[0,1,2,3],k_v=0,o=1"
 _F16_TINYBLAS_GEMM = ("tinyBLAS<16, float __vector.16., float __vector.16., "
                       "unsigned short, unsigned short, float>::gemm<")
+# test_rms_norm(f32, {64,5,4,3}, v=false, 1e-6f) and test_rms_norm_mul_add(f32, {64,5,4,3},
+# 1e-6f, broadcast=false): each registered exactly once in the anchor's test-backend-ops.
+_RMS_NORM_CASE = "type=f32,ne=[64,5,4,3],v=0,eps=0.000001,inplace=0"
+_RMS_NORM_MUL_ADD_CASE = "type=f32,ne=[64,5,4,3],eps=0.000001,broadcast=0,multi_add=0"
 
 
 @dataclass(frozen=True)
@@ -41,6 +48,11 @@ class RouteWitness:
     quants: tuple[str, ...]
     ops: tuple[str, ...]
     expert_modes: tuple[str, ...] = ("alternating",)
+    # Further engagement cases that must ALSO hit (e.g. a fused entry of the same body).
+    also: tuple["RouteWitness", ...] = ()
+    # Numerical reference: "quant" = cpu_quant_reference (MUL_MAT/MUL_MAT_ID fixture),
+    # "rms_norm" = cpu_norm_reference (bit identity with HEAD plus a float64 bound).
+    reference: str = "quant"
 
 
 # Case strings are the reviewed backend-ops fixture's vars(): test_mul_mat(type, f32,
@@ -77,6 +89,23 @@ WITNESSES = {
         breakpoint=("rbreak", _F16_TINYBLAS_GEMM),
         symbol_pattern=_F16_TINYBLAS_GEMM,
         active=None, quants=("F16", "BF16", "F32"), ops=("MUL_MAT",)),
+    # The rms_norm template is inlined into its two exported dispatchers, so each entry
+    # proves its instantiation ran in the candidate DSO: the plain case enters
+    # ggml_compute_forward_rms_norm, and the fused RMS_NORM_MUL_ADD case (verified to fuse
+    # on anchor-gen-001; use_ref disables fusion, so only the candidate reaches it) enters
+    # ggml_compute_forward_rms_norm_mul_fused. The numerical verdict is cpu_norm_reference:
+    # bit identity with HEAD's arithmetic on an 8-thread team, rows < 8 for the split.
+    "cpu_norm_rowsplit": RouteWitness(
+        op="RMS_NORM", case=_RMS_NORM_CASE,
+        breakpoint=("break", "ggml_compute_forward_rms_norm"),
+        symbol_pattern=r"^ggml_compute_forward_rms_norm$",
+        active=None, quants=("F32",), ops=("RMS_NORM", "RMS_NORM_MUL_ADD"),
+        also=(RouteWitness(
+            op="RMS_NORM_MUL_ADD", case=_RMS_NORM_MUL_ADD_CASE,
+            breakpoint=("break", "ggml_compute_forward_rms_norm_mul_fused"),
+            symbol_pattern=r"^ggml_compute_forward_rms_norm_mul_fused$",
+            active=None, quants=("F32",), ops=("RMS_NORM_MUL_ADD",)),),
+        reference="rms_norm"),
     # Every node passes the barrier, so entry proves nothing; the numerical suite over
     # every quant, op and width is the witness that publish-before-consume still holds.
     "cpu_graph_sync": RouteWitness(
@@ -191,11 +220,26 @@ def check(build_dir: Path, *, resolved_recipe, source_root: Path, route: str,
     if not (Path(source_root) / source_path).is_file():
         return Result("unavailable", "candidate route source is missing")
     details = []
-    if witness.breakpoint is not None:
-        hit = _engagement(Path(build_dir), witness, resolved_recipe=resolved_recipe)
+    for engaged in (witness, *witness.also):
+        if engaged.breakpoint is None:
+            continue
+        hit = _engagement(Path(build_dir), engaged, resolved_recipe=resolved_recipe)
         if hit.status != "pass":
             return hit
         details.append(hit.detail)
+    if witness.reference == "rms_norm":
+        from . import cpu_norm_reference
+        norm = cpu_norm_reference.check_rms_norm_suite(
+            build_dir, source_root, launch_env=resolved_recipe.launch_env,
+            topology_prefix=tuple(resolved_recipe.topology_prefix))
+        if norm.status != "pass":
+            return Result(norm.status, norm.reason, norm.detail)
+        details.append(norm.detail)
+        return Result("pass", f"{route}: route-entry witnesses ("
+                      f"{', '.join(w.op for w in (witness, *witness.also))}) and "
+                      f"{norm.reason}; branch coverage not claimed", "\n".join(details))
+    if witness.reference != "quant":
+        return Result("unavailable", f"route {route!r} names an unknown reference")
     from . import cpu_quant_reference
     for mode in witness.expert_modes:
         scalar = cpu_quant_reference.check_cpu_quant_suite(

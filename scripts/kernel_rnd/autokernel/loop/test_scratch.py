@@ -721,6 +721,7 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     "archive.py:keep:TemporaryDirectory": (1, _SELF_CLEANING + " (private git index)"),
     "archive.py:keep:write_text": (1, "commit message inside the self-cleaning private-index dir"),
     "cpu_quant_reference.py:check_cpu_quant_suite:TemporaryDirectory": (1, _SELF_CLEANING + " (probe build)"),
+    "cpu_norm_reference.py:check_rms_norm_suite:TemporaryDirectory": (1, _SELF_CLEANING + " (probe build)"),
     "gdn_reference.py:check_cpu_gdn:TemporaryDirectory": (1, _SELF_CLEANING + " (probe build)"),
     "hotspots.py:profile:TemporaryDirectory": (1, _SELF_CLEANING + " (rocprof trace)"),
     "integrity.py:candidate_tree:mkstemp": (1, "temp git index unlinked in finally; lands in the run scope's tmp"),

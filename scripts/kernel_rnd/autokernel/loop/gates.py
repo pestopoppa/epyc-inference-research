@@ -274,6 +274,33 @@ _DS41_SYNC_OPS = ("MUL_MAT", "MUL_MAT_ID", "ADD", "MUL", "RMS_NORM", "SCALE", "C
                   "CONT", "CPY", "CONCAT", "GLU", "UNARY", "SUM_ROWS", "GET_ROWS",
                   "SET_ROWS", "ROPE", "SOFT_MAX", "ARGSORT", "FLASH_ATTN_EXT")
 
+# cpu_norm_rowsplit: HEAD's rms_norm numerics, spelled as HEAD spells them. A within-row
+# split may re-add these lines (moved or re-indented), but no other added code line may
+# name the accumulator, mean, scale or eps, an accumulation type, a square of x, a
+# SIMD/vector reduction, a pragma, or an in-op barrier (RMS_NORM is tiny-solo eligible: a
+# solo node runs on thread 0 alone, so an in-op ggml_barrier would deadlock). The loop
+# index name is free (backreferenced); order, types and association are not. Comment-only
+# lines (`//`, one-line `/* */`) are exempt.
+_RMS_NORM_CANONICAL = (
+    r"ggml_float sum = 0\.0;",
+    r"sum \+= \(ggml_float\)\(x\[(?P<si>\w+)\] \* x\[(?P=si)\]\);",
+    r"const float mean\s+= sum/ne00;",
+    r"const float scale = 1\.0f/sqrtf\(mean \+ eps\);",
+    r"assert\(scale > 0\.0f\);",
+    r"y\[(?P<yi>\w+)\] = x\[(?P=yi)\] \* scale \* w\[(?P=yi)\];",
+    r"ggml_vec_scale_f32\((?:(?!\bscale\b)[^;])*,\s*scale\);",
+    r"float eps;",
+    r"memcpy\(&eps, dst_rms_norm->op_params, sizeof\(float\)\);",
+    r"GGML_ASSERT\(eps >= 0\.0f\);",
+)
+_RMS_NORM_FORBIDDEN = (
+    r"^\+(?!\s*(?://.*|/\*(?:(?!\*/).)*\*/\s*|(?:" + "|".join(_RMS_NORM_CANONICAL) +
+    r")\s*(?://.*)?)$).*?(?:"
+    r"\b(?:sum|mean|scale|eps|ggml_float|double|sqrtf?|rsqrtf?|fmaf?|ggml_barrier|"
+    r"accumulate|inner_product|reduce|transform_reduce)\b"
+    r"|_mm\w*|__m\d+\w*|\bGGML_F\d+\w*|\bggml_vec_(?!(?:scale|cpy)_f32\b)\w+"
+    r"|#\s*pragma|\bx\s*\[[^\]]*\]\s*\*\s*x\s*\[)")
+
 
 @dataclass(frozen=True)
 class CpuSourceRoute:
@@ -373,6 +400,35 @@ CPU_SOURCE_ROUTES = (
         admitted_text=("hunks inside the class tinyBLAS matmul body (tile plan: which "
                        "mnpack<RM, RN, BM> and SIZE_N/BN it calls); mnpack, gemm_bloc, gemm, "
                        "load/madd/hsum, other classes and direct A/B/C access unchanged")),
+    # Narrow-row F32 RMS_NORM split: HEAD deals whole rows to threads, so DS41's hc_mixes
+    # input norm ([20480, nt], nt = 2..3 in serving verify, 80 per graph, unfused: its
+    # consumer is the hc_mixes MUL_MAT) keeps 3 of 48 threads busy. The admitted mechanism
+    # is a bit-exact within-row split: every thread recomputes the FULL row sum in HEAD's
+    # order, then scales only its own column segment (`get_rowcol_split` in common.h is
+    # the existing helper). The one template body serves both RMS_NORM and the fused
+    # RMS_NORM+MUL (`ggml_compute_forward_rms_norm_mul_fused`), so both ops are in scope.
+    # NORM/GROUP_NORM/RMS_NORM_BACK and the dispatchers stay outside the boundary.
+    # Measured (2026-09-27, see program.md): the node is the serial double-add chain of
+    # the row sum, which every split task recomputes, so the split's bound is the scale
+    # pass (<= 0.4 us of a ~12 us node), not the node's 3.1-3.5% cycle share.
+    CpuSourceRoute(
+        route="cpu_norm_rowsplit",
+        path="ggml/src/ggml-cpu/ops.cpp",
+        symbols=("ggml_compute_forward_rms_norm_f32", "ggml_compute_forward_rms_norm",
+                 "ggml_compute_forward_rms_norm_mul_fused"),
+        bodies=(("ggml_compute_forward_rms_norm_f32",
+                 "static void ggml_compute_forward_rms_norm_f32("),),
+        ops=("RMS_NORM", "RMS_NORM_MUL_ADD"),
+        forbidden_added=_RMS_NORM_FORBIDDEN,
+        admitted_text=("hunks inside the ggml_compute_forward_rms_norm_f32 template body "
+                       "(work split only: every thread recomputes the full row sum in HEAD's "
+                       "order, then scales its own column segment; in place, i.e. dst->data == "
+                       "src0->data, keep the row split). HEAD's sum/mean/scale/eps and fused "
+                       "product lines may be re-added verbatim (any loop index); no other "
+                       "added code line may name sum/mean/scale/eps, ggml_float/double, "
+                       "sqrt/fma, x[i]*x[j], _mm*/GGML_F*/ggml_vec_* other than "
+                       "ggml_vec_scale_f32/ggml_vec_cpy_f32, #pragma or ggml_barrier. The "
+                       "header, the dispatchers, NORM/GROUP_NORM/RMS_NORM_BACK unchanged")),
 )
 CPU_SOURCE_ROUTE_PATHS = tuple(sorted({route.path for route in CPU_SOURCE_ROUTES}))
 
