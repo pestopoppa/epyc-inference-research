@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""TE-1 (UFH-13) — with ``v1_escalation`` OFF, client tool mode stays byte-identical.
+"""TE-1 (UFH-13) — without an explicit x_escalation, client tool mode stays byte-identical.
+
+Every case runs twice: flag ``v1_escalation`` off, and flag ON with the key
+absent (escalation is opt-in per request). Both must match the same golden.
 
 The fixture was captured from the route BEFORE ``v1_escalation`` existed
 (origin/main b020a1a8). The default REPL/direct modes are pinned by
@@ -88,10 +91,14 @@ CASES: dict[str, dict[str, Any]] = {
 _BACKEND_USAGE = {"prompt_tokens": 91, "completion_tokens": 17, "cached_tokens": 64}
 
 
-@pytest.fixture
-def client(monkeypatch):
+@pytest.fixture(params=["flag_off", "flag_on_key_absent"])
+def client(monkeypatch, request):
+    """Flag off, and flag ON with no x_escalation (opt-in): both pinned to one golden."""
     monkeypatch.setenv("ORCHESTRATOR_MOCK_MODE", "false")
-    monkeypatch.delenv("ORCHESTRATOR_V1_ESCALATION", raising=False)
+    if request.param == "flag_off":
+        monkeypatch.delenv("ORCHESTRATOR_V1_ESCALATION", raising=False)
+    else:
+        monkeypatch.setenv("ORCHESTRATOR_V1_ESCALATION", "1")
     reset_features()
     reset_state()
     get_state()

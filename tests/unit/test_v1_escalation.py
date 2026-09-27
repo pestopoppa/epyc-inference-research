@@ -339,12 +339,24 @@ def test_auto_keeps_chat_targets_quality_escalation_goes_to_coder_escalation(env
     assert step["consultant"] is (urls["coder_escalation"] == urls["architect_general"])
 
 
-def test_flag_on_and_key_absent_means_auto(env):
+def test_flag_on_and_key_absent_is_off_opt_in(env):
+    """Opt-in: the flag alone never escalates unkeyed traffic, and records nothing."""
     holder = _install(env)
     r = env.client.post("/v1/chat/completions", json=_body())
     assert r.status_code == 200
+    meta = r.json()["x_orchestrator_metadata"]
+    assert "escalation" not in meta
+    assert "x_escalation" not in meta["request_keys"]
+    assert [c["role"] for c in holder["fake"].calls] == ["frontdoor"]
+    assert r.json()["choices"][0]["message"]["content"] == FRONTDOOR_ANSWER
+    assert not [e for e in _tap_events(env) if e["event"] == "v1_escalation"]
+
+
+def test_explicit_auto_escalates_with_chat_default_targets(env):
+    holder = _install(env)
+    r = env.client.post("/v1/chat/completions", json=_body(x_escalation="auto"))
     receipt = r.json()["x_orchestrator_metadata"]["escalation"]
-    assert receipt["requested"] is None and receipt["enabled"] is True
+    assert receipt["requested"] == "auto" and receipt["enabled"] is True
     assert receipt["target"] == "chat_default"
     assert [c["role"] for c in holder["fake"].calls] == [
         "frontdoor",
@@ -459,10 +471,16 @@ def test_disable_repl_gets_the_direct_chain(env):
     ("overrides", "reason"),
     [
         ({"x_escalation": "off"}, "x_escalation_off"),
-        ({"x_force_role": "architect_general"}, "role_override"),
-        ({"x_orchestrator_role": "architect_general"}, "role_override"),
-        ({"x_force_model": "frontdoor"}, "role_override"),
-        ({"model": "worker_general"}, "not_frontdoor"),
+        (
+            {"x_escalation": "architect_general", "x_force_role": "architect_general"},
+            "role_override",
+        ),
+        (
+            {"x_escalation": "architect_general", "x_orchestrator_role": "architect_general"},
+            "role_override",
+        ),
+        ({"x_escalation": "auto", "x_force_model": "frontdoor"}, "role_override"),
+        ({"x_escalation": "auto", "model": "worker_general"}, "not_frontdoor"),
     ],
 )
 def test_disabled_paths_make_no_escalation_call(env, overrides, reason):
@@ -606,16 +624,21 @@ def test_quality_escalate_default_target_is_unchanged_for_chat(monkeypatch):
     reset_features()
 
 
-def test_plan_is_none_when_flag_off_and_no_key():
+def test_plan_is_none_whenever_no_key_was_sent():
     from src.api.routes.v1_escalation import plan_v1_escalation
 
-    assert (
-        plan_v1_escalation(
-            flag_on=False, requested=None, role="frontdoor", role_override=False, image_input=False
+    for flag_on in (False, True):
+        assert (
+            plan_v1_escalation(
+                flag_on=flag_on,
+                requested=None,
+                role="frontdoor",
+                role_override=False,
+                image_input=False,
+            )
+            is None
         )
-        is None
-    )
     plan = plan_v1_escalation(
-        flag_on=True, requested=None, role="frontdoor", role_override=False, image_input=True
+        flag_on=True, requested="auto", role="frontdoor", role_override=False, image_input=True
     )
     assert plan.enabled is False and plan.disabled_reason == "image_input"

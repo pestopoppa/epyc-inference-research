@@ -1,8 +1,11 @@
 """TE-1 (UFH-13) / HS-4 P4 subset — /v1 escalation parity with /chat.
 
 Flag ``v1_escalation`` (default OFF) plus the per-request key ``x_escalation``
-(``auto`` | ``off`` | ``architect_general``). With the flag off and no key sent,
-nothing here runs and the route is byte-identical (golden-pinned).
+(``auto`` | ``off`` | ``architect_general``). Escalation is OPT-IN per request:
+with the key absent nothing here runs and the route is byte-identical whether
+the flag is on or off (golden-pinned both ways), so turning the flag on for an
+experiment never changes other /v1 traffic. Only an explicit ``auto`` or
+``architect_general`` escalates, and only with the flag on.
 
 ``auto`` keeps /chat's targets verbatim (quality escalation -> coder_escalation,
 review verdict -> architect_general). ``architect_general`` keeps /chat's
@@ -216,14 +219,15 @@ def plan_v1_escalation(
     role_override: bool,
     image_input: bool,
 ) -> V1EscalationPlan | None:
-    """Decide eligibility. ``None`` = flag off and no key sent: touch nothing.
+    """Decide eligibility. ``None`` = no key sent: touch nothing, flag on or off.
 
-    Flag on + key absent means ``auto`` (the flag is the switch; the key opts a
-    request out or names the consultant). Flag off + key sent is recorded as
-    disabled (``flag_off``) so a run that believes it is escalating can see that
-    it is not.
+    Opt-in: only an explicit ``auto`` / ``architect_general`` can escalate, and
+    only with the flag on. An explicit ``off`` gets a disabled receipt (the
+    experiment's no-escalation arm proves it was off). Flag off + key sent is
+    recorded as disabled (``flag_off``) so a run that believes it is escalating
+    can see that it is not.
     """
-    if not flag_on and requested is None:
+    if requested is None:
         return None
     from_role = _role_name(role)
     reason: str | None = None
