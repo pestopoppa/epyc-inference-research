@@ -1,0 +1,224 @@
+{
+ "baseline": {
+  "n_code_objects": 135,
+  "path": "/mnt/raid0/llm/kernels/production/gpu/libggml-hip.so.0.16.0",
+  "resolved": "/mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/libggml-hip.so.0.16.0",
+  "sha256": "f26a166b8ea3089d19a395ae00afa22e917df8eba71ca6ef4be5235d65ea8079",
+  "size": 68250624
+ },
+ "candidate": {
+  "n_code_objects": 135,
+  "path": "/mnt/raid0/llm/llama.cpp-experimental-mmq-jcap-20260927/build-hip-jcap/bin/libggml-hip.so.0.16.0",
+  "resolved": "/mnt/raid0/llm/llama.cpp-experimental-mmq-jcap-20260927/build-hip-jcap/bin/libggml-hip.so.0.16.0",
+  "sha256": "0be8dd8523f5bafa540b54caea48345cad6a43045febbde250c94b1dc8da6415",
+  "size": 68026152
+ },
+ "counts": {
+  "FAIL": 0,
+  "INFO": 9,
+  "WARN": 19
+ },
+ "families": [
+  "mmq"
+ ],
+ "findings": [
+  {
+   "check": "kernel_removed",
+   "detail": "absent from candidate",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type10ELi48ELb0EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq Q2_K J=48 chk=0",
+   "severity": "WARN"
+  },
+  {
+   "check": "kernel_removed",
+   "detail": "absent from candidate",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type10ELi64ELb0EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq Q2_K J=64 chk=0",
+   "severity": "WARN"
+  },
+  {
+   "check": "kernel_removed",
+   "detail": "absent from candidate",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type10ELi64ELb1EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq Q2_K J=64 chk=1",
+   "severity": "WARN"
+  },
+  {
+   "check": "kernel_removed",
+   "detail": "absent from candidate",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type16ELi64ELb1EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq IQ2_XXS J=64 chk=1",
+   "severity": "WARN"
+  },
+  {
+   "check": "kernel_removed",
+   "detail": "absent from candidate",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type18ELi64ELb1EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq IQ3_XXS J=64 chk=1",
+   "severity": "WARN"
+  },
+  {
+   "check": "kernel_removed",
+   "detail": "absent from candidate",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type20ELi64ELb0EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq IQ4_NL J=64 chk=0",
+   "severity": "WARN"
+  },
+  {
+   "check": "kernel_removed",
+   "detail": "absent from candidate",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type20ELi64ELb1EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq IQ4_NL J=64 chk=1",
+   "severity": "WARN"
+  },
+  {
+   "check": "kernel_removed",
+   "detail": "absent from candidate",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type21ELi64ELb1EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq IQ3_S J=64 chk=1",
+   "severity": "WARN"
+  },
+  {
+   "check": "kernel_removed",
+   "detail": "absent from candidate",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type23ELi64ELb0EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq IQ4_XS J=64 chk=0",
+   "severity": "WARN"
+  },
+  {
+   "check": "kernel_removed",
+   "detail": "absent from candidate",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type23ELi64ELb1EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq IQ4_XS J=64 chk=1",
+   "severity": "WARN"
+  },
+  {
+   "check": "kernel_removed",
+   "detail": "absent from candidate",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type2ELi64ELb1EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq Q4_0 J=64 chk=1",
+   "severity": "WARN"
+  },
+  {
+   "check": "kernel_removed",
+   "detail": "absent from candidate",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type39ELi64ELb0EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq MXFP4 J=64 chk=0",
+   "severity": "WARN"
+  },
+  {
+   "check": "kernel_removed",
+   "detail": "absent from candidate",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type39ELi64ELb1EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq MXFP4 J=64 chk=1",
+   "severity": "WARN"
+  },
+  {
+   "check": "kernel_removed",
+   "detail": "absent from candidate",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type41ELi64ELb0EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq Q1_0 J=64 chk=0",
+   "severity": "WARN"
+  },
+  {
+   "check": "kernel_removed",
+   "detail": "absent from candidate",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type41ELi64ELb1EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq Q1_0 J=64 chk=1",
+   "severity": "WARN"
+  },
+  {
+   "check": "kernel_removed",
+   "detail": "absent from candidate",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type6ELi64ELb0EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq Q5_0 J=64 chk=0",
+   "severity": "WARN"
+  },
+  {
+   "check": "kernel_removed",
+   "detail": "absent from candidate",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type6ELi64ELb1EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq Q5_0 J=64 chk=1",
+   "severity": "WARN"
+  },
+  {
+   "check": "kernel_removed",
+   "detail": "absent from candidate",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type8ELi64ELb0EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq Q8_0 J=64 chk=0",
+   "severity": "WARN"
+  },
+  {
+   "check": "kernel_removed",
+   "detail": "absent from candidate",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type8ELi64ELb1EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq Q8_0 J=64 chk=1",
+   "severity": "WARN"
+  },
+  {
+   "check": "kernel_added",
+   "detail": "vspill=0 hot_reload=0 hot_acc=0",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type16ELi48ELb1EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq IQ2_XXS J=48 chk=1",
+   "severity": "INFO"
+  },
+  {
+   "check": "kernel_added",
+   "detail": "vspill=0 hot_reload=0 hot_acc=0",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type18ELi48ELb1EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq IQ3_XXS J=48 chk=1",
+   "severity": "INFO"
+  },
+  {
+   "check": "kernel_added",
+   "detail": "vspill=0 hot_reload=0 hot_acc=0",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type20ELi48ELb1EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq IQ4_NL J=48 chk=1",
+   "severity": "INFO"
+  },
+  {
+   "check": "kernel_added",
+   "detail": "vspill=0 hot_reload=0 hot_acc=0",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type21ELi48ELb1EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq IQ3_S J=48 chk=1",
+   "severity": "INFO"
+  },
+  {
+   "check": "kernel_added",
+   "detail": "vspill=0 hot_reload=0 hot_acc=0",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type23ELi48ELb1EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq IQ4_XS J=48 chk=1",
+   "severity": "INFO"
+  },
+  {
+   "check": "kernel_added",
+   "detail": "vspill=0 hot_reload=0 hot_acc=0",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type2ELi48ELb1EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq Q4_0 J=48 chk=1",
+   "severity": "INFO"
+  },
+  {
+   "check": "kernel_added",
+   "detail": "vspill=0 hot_reload=0 hot_acc=0",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type39ELi48ELb1EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq MXFP4 J=48 chk=1",
+   "severity": "INFO"
+  },
+  {
+   "check": "kernel_added",
+   "detail": "vspill=0 hot_reload=0 hot_acc=0",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type6ELi48ELb1EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq Q5_0 J=48 chk=1",
+   "severity": "INFO"
+  },
+  {
+   "check": "kernel_added",
+   "detail": "vspill=0 hot_reload=0 hot_acc=0",
+   "kernel": "_ZL9mul_mat_qIL9ggml_type8ELi48ELb1EEvPKcPKiS4_S4_PfS5_15HIP_vector_typeIjLj3EEiiiiiS7_S7_iiiS7_S7_iiiS7_",
+   "label": "mmq Q8_0 J=48 chk=1",
+   "severity": "INFO"
+  }
+ ],
+ "match": null,
+ "n_common": 128
+}
