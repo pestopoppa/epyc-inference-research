@@ -12,6 +12,9 @@ produced with `scripts/kernel_rnd/gfx90a_isa_audit.py` at research commit e60321
 | BASELINE | `kernels/production/gpu/libggml-hip.so.0.16.0` | `f26a166b…8079` | production-consolidated-v10 @ `ffc1bac82` |
 | CANDIDATE | `llama.cpp-experimental-mmq-jcap-20260927/build-hip-jcap/bin/libggml-hip.so.0.16.0` | `0be8dd85…6415` | `experimental/mmq-jcap-20260927` @ `cb28e8bd2` |
 
+The branch tip is `36e83c0f2`. It adds only test-backend-ops perf cases on top of `cb28e8bd2`,
+and its rebuilt `libggml-hip` has the same sha256 (`0be8dd85…`).
+
 The candidate's HIP compile flags are identical to the production build's. This was checked
 against `kernels/builds/gpu-20260921-ffc1bac82/compile_commands.json`. Both binaries were
 built with ROCm 6.2.0 AMD clang 18.
@@ -65,3 +68,4 @@ this gate.
 | `top_mmq_spill_jcap.txt` | candidate MMQ instances ranked by spill |
 | `diff_v10_to_jcap_mmq.{txt,json}`, `diff_exit_code.txt` | the accept gate |
 | `binaries.sha256` | input identities |
+| `window_ab.sh` | the GPU window, not run yet: correctness (test-backend-ops), then kernel-level and llama-bench ABAB timing, then greedy pairing; guarded by `MMQ_JCAP_WINDOW=1` |
