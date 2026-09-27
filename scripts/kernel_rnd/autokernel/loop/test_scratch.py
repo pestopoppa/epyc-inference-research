@@ -780,6 +780,7 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     "runtime_calibration.py:neutral_material:os-open-create": (1, "evidence: direct-neutral executable (O_EXCL)"),
     "seed.py:install:copyfile": (1, "state: operator seed placed in the inbox"),
     "seed.py:install:mkdir": (1, "state: operator inbox"),
+    "serial_build_retention.py:append_decision:open-write": (1, "evidence: append-only retention decision log in the state dir"),
     "serial_build_retention.py:_write_retry:open-write": (1, "state: retained-build retry marker (atomic)"),
     "serial_run.py:_BoundedChildOutput.finish:open-write": (1, "evidence: bounded child log tails in the batch dir"),
     "serial_run.py:_drive.request_stop:touch": (1, "state: STOP request file"),

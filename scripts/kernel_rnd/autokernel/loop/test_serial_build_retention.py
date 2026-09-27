@@ -65,13 +65,16 @@ def test_pressure_plan_preserves_current_recent_and_locked_states(tmp_path):
     fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
     try:
         planned = retention.plan(
-            tmp_path, current, free_bytes=0, trigger_free_bytes=1,
+            tmp_path, current, free_bytes=0, trigger_free_bytes=1, hard_floor_free_bytes=0,
             target_free_bytes=10**9, recent_state_caches=1, max_build_dirs=4)
     finally:
         os.close(descriptor)
     assert [Path(row["state_root"]).name for row in planned["selected"]] == ["old"]
     assert planned["protected_recent"] == [str(recent / "targets/target/builds")]
-    assert "locked" not in json.dumps(planned)
+    assert "locked" not in json.dumps(
+        [planned["selected"], planned["protected_recent"]])
+    assert {"state_root": str(locked),
+            "reason": "locked_active_or_not_serial_state"} in planned["skipped"]
 
 
 def test_execute_revalidates_then_removes_only_generated_build_root(tmp_path):
@@ -82,7 +85,7 @@ def test_execute_revalidates_then_removes_only_generated_build_root(tmp_path):
     build = old / "targets/target/builds"
     receipt = old / "batches/batch-000000/measurement.json"
     planned = retention.plan(
-        tmp_path, current, free_bytes=0, trigger_free_bytes=1,
+        tmp_path, current, free_bytes=0, trigger_free_bytes=1, hard_floor_free_bytes=0,
         target_free_bytes=10**9, recent_state_caches=0, max_build_dirs=1)
     preview = retention.execute(planned, dry_run=True)
     assert build.is_dir() and preview["removed"] == []
@@ -103,7 +106,7 @@ def test_unreconciled_active_state_is_never_a_candidate(tmp_path):
     state["active"] = {"pid": 999999, "batch_dir": "unreconciled"}
     state_path.write_text(json.dumps(state))
     planned = retention.plan(
-        tmp_path, current, free_bytes=0, trigger_free_bytes=1,
+        tmp_path, current, free_bytes=0, trigger_free_bytes=1, hard_floor_free_bytes=0,
         target_free_bytes=10**9, recent_state_caches=0, max_build_dirs=4)
     assert planned["selected"] == []
     assert (root / "targets/target/builds").is_dir()
@@ -116,7 +119,7 @@ def test_failed_quarantine_removal_restores_retryable_build_root(tmp_path, monke
     old = _state(tmp_path, "old", source, commit, 10)
     build = old / "targets/target/builds"
     planned = retention.plan(
-        tmp_path, current, free_bytes=0, trigger_free_bytes=1,
+        tmp_path, current, free_bytes=0, trigger_free_bytes=1, hard_floor_free_bytes=0,
         target_free_bytes=10**9, recent_state_caches=0, max_build_dirs=1)
     real_rmtree = retention.shutil.rmtree
     def partial_failure(path):
@@ -134,9 +137,121 @@ def test_failed_quarantine_removal_restores_retryable_build_root(tmp_path, monke
 
     monkeypatch.setattr(retention.shutil, "rmtree", real_rmtree)
     retry = retention.plan(
-        tmp_path, current, free_bytes=0, trigger_free_bytes=1,
+        tmp_path, current, free_bytes=0, trigger_free_bytes=1, hard_floor_free_bytes=0,
         target_free_bytes=10**9, recent_state_caches=0, max_build_dirs=1)
     assert retry["selected"][0]["build_root"] == str(build)
     assert retention.execute(retry)["removed"][0]["build_root"] == str(build)
     assert not build.exists()
     assert not (old / retention.RETRY_FILENAME).exists()
+
+
+GIB = 1024 ** 3
+
+
+def _disk(monkeypatch, gib):
+    monkeypatch.setattr(retention.shutil, "disk_usage",
+                        lambda _path: type("Usage", (), {"free": int(gib * GIB)})())
+
+
+def _policy(**overrides):
+    return {"trigger_free_bytes": 250 * GIB, "target_free_bytes": 320 * GIB,
+            "hard_floor_free_bytes": 100 * GIB, "recent_state_caches": 0,
+            "max_build_dirs": 4} | overrides
+
+
+def test_defaults_are_reachable_on_the_production_host():
+    assert retention.DEFAULT_HARD_FLOOR_FREE_BYTES == 100 * GIB
+    assert retention.DEFAULT_TRIGGER_FREE_BYTES == 250 * GIB
+    assert retention.DEFAULT_TARGET_FREE_BYTES == 320 * GIB
+
+
+def test_above_trigger_is_a_logged_noop(tmp_path, monkeypatch):
+    source, commit = _git(tmp_path)
+    current = tmp_path / "current"
+    current.mkdir()
+    old = _state(tmp_path, "old", source, commit, 10)
+    _disk(monkeypatch, 300)
+    planned = retention.plan(tmp_path, current, **_policy())
+    assert planned["selected"] == []
+    assert {"state_root": str(old), "build_root": str(old / "targets/target/builds"),
+            "reason": "free_at_or_above_trigger"}.items() <= next(
+        row for row in planned["skipped"] if row["state_root"] == str(old)).items()
+    result = retention.execute(planned)
+    decision = retention.decide(planned, result)
+    assert decision == decision | {"verdict": "noop_above_trigger", "refuse": False}
+    record = retention.append_decision(current, planned, result, decision)
+    assert (old / "targets/target/builds").is_dir()
+    [line] = (current / retention.DECISION_LOG).read_text().splitlines()
+    assert json.loads(line) == record and record["reclaimed_bytes"] == 0
+
+
+def test_below_trigger_reclaims_and_logs(tmp_path, monkeypatch):
+    source, commit = _git(tmp_path)
+    current = tmp_path / "current"
+    current.mkdir()
+    old = _state(tmp_path, "old", source, commit, 10)
+    _disk(monkeypatch, 200)
+    planned = retention.plan(tmp_path, current, **_policy(target_free_bytes=200 * GIB + 1,
+                                                          trigger_free_bytes=200 * GIB + 1))
+    assert [row["state_root"] for row in planned["selected"]] == [str(old)]
+    result = retention.execute(planned)
+    assert not (old / "targets/target/builds").exists()
+    assert result["reclaimed_bytes"] > 0
+    _disk(monkeypatch, 201)  # disk_usage after the reclaim
+    result["free_bytes_after"] = retention.shutil.disk_usage(tmp_path).free
+    decision = retention.decide(planned, result)
+    assert decision["verdict"] == "reclaimed_to_target" and not decision["refuse"]
+    record = retention.append_decision(current, planned, result, decision)
+    assert record["removed"] == [{"build_root": str(old / "targets/target/builds"),
+                                  "bytes": planned["selected"][0]["bytes"]}]
+    assert record["free_bytes_before"] == 200 * GIB
+
+
+def test_unreachable_target_above_floor_warns_and_continues(tmp_path, monkeypatch):
+    source, commit = _git(tmp_path)
+    current = tmp_path / "current"
+    current.mkdir()
+    old = _state(tmp_path, "old", source, commit, 10)
+    _disk(monkeypatch, 150)
+    planned = retention.plan(tmp_path, current, **_policy())
+    result = retention.execute(planned)
+    assert result["removed"][0]["build_root"] == str(old / "targets/target/builds")
+    decision = retention.decide(planned, result)
+    assert decision["verdict"] == "target_unreachable_continuing"
+    assert decision["refuse"] is False
+    assert decision["message"].startswith("WARNING:")
+    assert "150.0 -> 150.0 GiB" in decision["message"]
+
+
+def test_below_hard_floor_refuses(tmp_path, monkeypatch):
+    current = tmp_path / "current"
+    current.mkdir()
+    _disk(monkeypatch, 50)
+    planned = retention.plan(tmp_path, current, **_policy())
+    result = retention.execute(planned)
+    decision = retention.decide(planned, result)
+    assert decision["verdict"] == "refused_below_hard_floor" and decision["refuse"]
+    assert "hard safety floor" in decision["message"]
+
+
+def test_live_build_root_of_the_launch_is_never_selected(tmp_path):
+    # A relaunch may point --target-root into a retired sibling state; that
+    # sibling's build root is the one the new run builds in.
+    source, commit = _git(tmp_path)
+    current = tmp_path / "current"
+    current.mkdir()
+    old = _state(tmp_path, "old", source, commit, 10)
+    planned = retention.plan(tmp_path, current, free_bytes=0,
+                             protected_paths=[old / "targets"],
+                             **_policy(recent_state_caches=0))
+    assert planned["selected"] == []
+    assert planned["protected_live"] == [str((old / "targets").resolve())]
+    assert [row["reason"] for row in planned["skipped"]
+            if row["state_root"] == str(old)] == ["protected_live_build_root"]
+
+
+def test_floor_above_trigger_is_an_invalid_policy(tmp_path):
+    import pytest
+    with pytest.raises(retention.BuildRetentionRefused):
+        retention.plan(tmp_path, tmp_path / "current",
+                       **_policy(hard_floor_free_bytes=300 * GIB))

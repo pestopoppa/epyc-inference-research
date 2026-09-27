@@ -229,6 +229,7 @@ def _inputs(tmp_path, monkeypatch, *, mode="good", rounds=2):
         files += ["--target-args", str(path)]
     return state, [*files, "--batch-iterations", "1", "--rounds", str(rounds),
                    "--state-dir", str(state),
+                   "--retention-hard-floor-free-gb", "0",
                    "--retention-trigger-free-gb", "0",
                    "--retention-target-free-gb", "0"]
 
@@ -276,21 +277,82 @@ def test_serial_child_wiring_persists_bounded_output_evidence(tmp_path, monkeypa
             "retained_bytes": maximum, "truncated": True}
 
 
-def test_retention_pressure_refuses_before_any_child(tmp_path, monkeypatch):
-    state, argv = _inputs(tmp_path, monkeypatch, rounds=1)
-    trigger = argv.index("--retention-trigger-free-gb") + 1
-    target = argv.index("--retention-target-free-gb") + 1
-    argv[trigger], argv[target] = "1", "2"
+def _retention_policy(argv, floor, trigger, target):
+    for flag, value in (("--retention-hard-floor-free-gb", floor),
+                        ("--retention-trigger-free-gb", trigger),
+                        ("--retention-target-free-gb", target)):
+        argv[argv.index(flag) + 1] = str(value)
+
+
+def _free(monkeypatch, gib):
     monkeypatch.setattr(serial_build_retention.shutil, "disk_usage",
-                        lambda _path: type("Usage", (), {"free": 0})())
-    with pytest.raises(sr.SerialRefused, match="could not restore"):
+                        lambda _path: type("Usage", (), {"free": int(gib * 1024 ** 3)})())
+
+
+def _decisions(state):
+    return [json.loads(line) for line in
+            (state / serial_build_retention.DECISION_LOG).read_text().splitlines()]
+
+
+def test_retention_below_hard_floor_refuses_before_any_child(tmp_path, monkeypatch):
+    state, argv = _inputs(tmp_path, monkeypatch, rounds=1)
+    _retention_policy(argv, 1, 2, 3)
+    _free(monkeypatch, 0)
+    with pytest.raises(sr.SerialRefused, match="hard safety floor"):
         sr.main(argv)
     assert not (state / "batches").exists()
+    [record] = _decisions(state)
+    assert record["verdict"] == "refused_below_hard_floor" and record["refuse"] is True
+
+
+def test_retention_unreachable_target_above_floor_warns_and_drives(tmp_path, monkeypatch, capsys):
+    # The 09-26/09-27 relaunch refusals: below trigger, nothing reclaimable, target
+    # unreachable, yet far above any safety floor. That must warn and run.
+    state, argv = _inputs(tmp_path, monkeypatch, rounds=1)
+    _retention_policy(argv, 1, 3, 4)
+    _free(monkeypatch, 2)
+    driven = []
+    monkeypatch.setattr(sr, "_drive", lambda *a, **k: driven.append(a) or 0)
+    assert sr.main(argv) == 0
+    assert driven
+    assert "WARNING: build retention could not reach" in capsys.readouterr().err
+    [record] = _decisions(state)
+    assert record["verdict"] == "target_unreachable_continuing"
+    assert record["refuse"] is False and record["reclaimed_bytes"] == 0
+    assert record["free_bytes_before"] == record["free_bytes_after"] == 2 * 1024 ** 3
+
+
+def test_retention_above_trigger_is_logged_noop(tmp_path, monkeypatch):
+    state, argv = _inputs(tmp_path, monkeypatch, rounds=1)
+    _retention_policy(argv, 1, 2, 3)
+    _free(monkeypatch, 5)
+    monkeypatch.setattr(sr, "_drive", lambda *a, **k: 0)
+    assert sr.main(argv) == 0
+    [record] = _decisions(state)
+    assert record["verdict"] == "noop_above_trigger" and record["removed"] == []
+
+
+def test_retention_floor_above_trigger_is_rejected(tmp_path):
+    state = tmp_path / "state"
+    with pytest.raises(SystemExit):
+        sr.main(["--state-dir", str(state), "--retention-plan-only",
+                 "--retention-hard-floor-free-gb", "300",
+                 "--retention-trigger-free-gb", "250"])
+
+
+def test_retention_defaults_values(capsys, tmp_path):
+    state = tmp_path / "state"
+    assert sr.main(["--state-dir", str(state), "--retention-plan-only"]) == 0
+    plan = json.loads(capsys.readouterr().out)
+    assert plan["trigger_free_bytes"] == 250 * 1024 ** 3
+    assert plan["target_free_bytes"] == 320 * 1024 ** 3
+    assert plan["hard_floor_free_bytes"] == 100 * 1024 ** 3
 
 
 def test_retention_plan_only_prints_and_never_drives(tmp_path, capsys):
     state = tmp_path / "state"
     assert sr.main(["--state-dir", str(state), "--retention-plan-only",
+                    "--retention-hard-floor-free-gb", "0",
                     "--retention-trigger-free-gb", "0",
                     "--retention-target-free-gb", "0"]) == 0
     plan = json.loads(capsys.readouterr().out)

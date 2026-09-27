@@ -514,8 +514,13 @@ def pending_collisions(targets, last_results):
     blocked = {}
     for key, reference in last_results.items():
         index = int(key)
-        receipt, sha = serial_run.load_completed(Path(reference["path"]),
-            expected_binding=serial_run.input_binding(targets[index]))
+        # The prior result may predate a runtime-protocol flag change on this serial
+        # epoch (e.g. declared runtime arms added at a boundary). Compare the STABLE
+        # inputs only, exactly as `serial_run.load_resume` does for the continuation.
+        receipt, sha = serial_run.load_completed(Path(reference["path"]))
+        if (serial_run.resume_binding(receipt["input_argv"])
+                != serial_run.resume_binding(targets[index])):
+            raise serial_run.SerialRefused("result workload/input binding differs")
         if sha != reference["sha256"]:
             raise ScreenRefused("pending continuation bytes changed")
         if (receipt.get("cpu_screen") or {}).get("candidate") is None:

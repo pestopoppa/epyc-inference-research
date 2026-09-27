@@ -103,6 +103,23 @@ def _serving_comparison(invoke, baseline_scope, *, measurement_window=nullcontex
         raise
 
 
+def anchor_build_jobs(recipe, build_jobs: int) -> int:
+    """`-j` for the champion builds that must be bit-identical: the promoted anchor and
+    the anchor guard's fresh comparison build (`build_champion`).
+
+    HIP recipes stay SERIAL (R23-40): `-j64` hipcc builds of one commit differed in
+    every code section on this host, and R23-41 (hipcc determinism at -j64) is
+    unresolved. CPU recipes (GGML_HIP=OFF, gcc) take the run's normal `build_jobs`:
+    C46 (2026-09-27) built DS41 anchor c0ef3961 twice at -j64, and the loop's own
+    `anchor_integrity.object_digest` was identical across both AND the serial
+    anchor-gen-002 build (85e39de6...), as were the `.text/.rodata` code digests of
+    libggml-cpu/libggml-base/libggml/libllama (evidence:
+    artifacts/c46-cpu-j64-reproducibility/). An absent or unrecognised GGML_HIP
+    value is treated as HIP -- the serial, safe side."""
+    hip = str(dict(recipe.cmake_defines()).get("GGML_HIP", "ON")).upper()
+    return max(1, int(build_jobs)) if hip == "OFF" else 1
+
+
 @contextmanager
 def _q3_cpu_gpu_quiet_window(launch, *, on_wait, should_stop):
     """Exclude a GPU item only while a q3 CPU measurement is active."""
@@ -2963,18 +2980,18 @@ def main(argv: list[str] | None = None) -> int:
         hashes `bin/libggml-hip.so` alone, and paying server link time per keep for
         a binary nobody runs would buy nothing. Candidate lane builds (`gate_for`)
         stay narrow for the same reason at hundreds of iterations per run."""
-        # R23-40 (2026-09-03): jobs=1, NOT 64. This recipe feeds BOTH the promoted
-        # anchor and the guard's fresh comparison build, and `-j64` HIP builds of one
-        # commit are NON-reproducible on this host -- three same-recipe builds of
-        # 445e93a8 differed in every code section (.text/.hip_fatbin/.rodata), so the
-        # digest guard aborted the run (Run-18 fault class). The build-path sections
-        # are already excluded from the digest (R21-10), so this is genuine parallel-
-        # build non-determinism. Serial build makes the promoted anchor and the fresh
-        # guard build bit-identical. Cost is per-KEEP only (rare), never per-iteration:
-        # lane candidate builds (`gate_for`) keep jobs=64. A future toolchain-flag fix
-        # (hipcc determinism at -j64) could restore parallel anchor builds; filed R23-41.
+        # R23-40 (2026-09-03): HIP recipes build at jobs=1, NOT 64. This recipe feeds
+        # BOTH the promoted anchor and the guard's fresh comparison build, and `-j64`
+        # HIP builds of one commit are NON-reproducible on this host -- three
+        # same-recipe builds of 445e93a8 differed in every code section
+        # (.text/.hip_fatbin/.rodata), so the digest guard aborted the run (Run-18
+        # fault class). Serial build makes the promoted anchor and the fresh guard
+        # build bit-identical; R23-41 (hipcc determinism at -j64) is still open.
+        # C46 (2026-09-27): CPU/gcc recipes ARE reproducible at -j64, so they take the
+        # run's normal `build_jobs`. `anchor_build_jobs` owns the split.
         return gates.compiles(args.worktree, dest, cmake_defines=recipe.cmake_defines(),
-                              jobs=1, cpu_list=build_cpu_list,
+                              jobs=anchor_build_jobs(recipe, build_jobs),
+                              cpu_list=build_cpu_list,
                               targets=gates.PROMOTION_TARGETS if direct_launch else targets)
 
     def build_baseline(dest: Path, commit: str):
