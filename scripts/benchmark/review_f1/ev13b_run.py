@@ -4,7 +4,7 @@
 Models are served ONE AT A TIME (sequential by construction), each by a fresh llama-server owned
 by this process, with GPU residency sampled across its lifetime and the GPU claim held throughout.
 
-  reader  Qwen3.8-27B-Q8_0 -- the production `architect_general` argv resolved from the orchestrator's
+  reader  Qwen3.8-27B-Q8_0 -- the production :8083 27B argv (role `architect_critic` since ARCHSWAP-20260927; was `architect_general`) resolved from the orchestrator's
           own builder (v9 build-hip, MTP n-max 8, q8_0 KV, terse template, reasoning off), with
           declared deltas: port, scratch --slot-save-path, and `-np 1 -c 131072` (the largest
           Augment-v1 diff is ~250 KB, ~70k tokens; production's 32k/slot would refuse it).
@@ -56,8 +56,8 @@ sys.path.insert(0, 'scripts/server'); sys.path.insert(0, '.')
 import orchestrator_stack as o
 from stack_numa import _numa_prefix
 reg = o.RegistryLoader()
-rc = reg.get_role_config('architect_general') if hasattr(reg, 'get_role_config') else reg.roles['architect_general']
-print(json.dumps({'prefix': _numa_prefix('architect_general'),
+rc = reg.get_role_config('architect_critic') if hasattr(reg, 'get_role_config') else reg.roles['architect_critic']
+print(json.dumps({'prefix': _numa_prefix('architect_critic'),
                   'cmd': o.build_server_command(rc, %d, prepare_runtime_dirs=False)}))
 """
 

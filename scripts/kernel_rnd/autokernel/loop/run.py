@@ -1208,7 +1208,7 @@ def main(argv: list[str] | None = None) -> int:
                              "a provider/model id via opencode (external provider: the "
                              "prompt egresses off-host), orch:<role|auto> via the "
                              "orchestrator's /chat (INF-78 OAB-2 opt-in: orch:auto lets it "
-                             "route, orch:architect_general pins the 27B; AK_ORCHESTRATOR_URL / "
+                             "route, orch:architect_critic pins the 27B (ARCHSWAP-20260927); AK_ORCHESTRATOR_URL / "
                              "AK_ORCHESTRATOR_ROOT override its API and CLI tree), anything "
                              "else via codex (default: %(default)s)")
     parser.add_argument("--planner-effort", default=actors.PLANNER_DEFAULT.effort)
