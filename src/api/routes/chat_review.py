@@ -104,8 +104,14 @@ def _architect_verdict(
     primitives: "LLMPrimitives",
     worker_digests: list[dict] | None = None,
     context_digest: str = "",
+    role: str | None = None,
 ) -> str | None:
     """Get architect's hyper-concise verdict on an answer.
+
+    ``role`` defaults to the reviewer binding (``resolve_reviewer_role()``,
+    ``architect_critic`` since ARCHSWAP-20260927: review/plan work stays on the 27B).
+    An explicit ``role`` is for callers that PIN the consultant (the /v1 TE-1
+    ``x_escalation=architect_general`` experiment arm).
 
     The architect emits ONLY a short verdict (~20-50 tokens at 6.75 t/s → ~6s).
     Returns None if OK, or "WRONG: <corrections>" if incorrect.
@@ -132,7 +138,7 @@ def _architect_verdict(
         # consultant role architect_general (now CPU Flash-Next).
         result = primitives.llm_call(
             prompt,
-            role=str(_resolve_reviewer_role()),
+            role=role or str(_resolve_reviewer_role()),
             n_tokens=80,  # Hard cap — verdict only
         )
         text = result.strip()

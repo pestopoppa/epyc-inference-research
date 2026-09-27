@@ -8,7 +8,7 @@ experiment never changes other /v1 traffic. Only an explicit ``auto`` or
 ``architect_general`` escalates, and only with the flag on.
 
 ``auto`` keeps /chat's targets verbatim (quality escalation -> coder_escalation,
-review verdict -> architect_general). ``architect_general`` keeps /chat's
+review verdict -> the reviewer binding, architect_critic since ARCHSWAP-20260927). ``architect_general`` keeps /chat's
 TRIGGERS but pins every consultant call to that role: after the pending role
 swap coder_escalation stays on the 27B while architect_general becomes
 Flash-Next, so an arm that must measure Flash-Next as the consultant (UFH-13
@@ -33,8 +33,9 @@ order /chat calls them:
   2. ``review_gate`` — ``chat_review._should_review`` (MemRL: the answering
      role's mean Q-value for this answer is below
      ``chat.review_low_q_threshold``; never for an architect role or an answer
-     under 50 chars) -> ``chat_review._architect_verdict`` (``architect_general``,
-     80-token verdict) -> on ``WRONG``, ``chat_review._fast_revise``
+     under 50 chars) -> ``chat_review._architect_verdict`` (80-token verdict; the
+     reviewer binding, ``architect_critic`` since ARCHSWAP-20260927, under ``auto``;
+     the pinned consultant under ``x_escalation=architect_general``) -> on ``WRONG``, ``chat_review._fast_revise``
      (``worker_general`` rewrites the answer with the corrections; recorded as
      ``review_gate_revision``, which is NOT a consultant call).
 
@@ -408,14 +409,21 @@ def _escalate_answer(
         and not answer.startswith("[ERROR")
         and chat_review._should_review(state, task_id, role, answer)
     ):
-        # _architect_verdict always asks architect_general, the only pinnable
-        # consultant (PINNED_TARGETS), so auto and pinned agree on this call.
+        # ARCHSWAP-20260927: /chat's verdict goes to the REVIEWER binding
+        # (resolve_reviewer_role(), default architect_critic = the 27B), so ``auto``
+        # keeps that target verbatim. A pinned consultant (``x_escalation=
+        # architect_general``, UFH-13 A2) pins this call too, as it pins every
+        # consultant call, and the step records the role actually asked.
+        from src.roles import resolve_reviewer_role
+
+        verdict_role = plan.target_role or str(resolve_reviewer_role())
         before = _counters(primitives)
-        with _tagged_trace(plan, primitives, TRIGGER_REVIEW, role, CONSULTANT_ROLE):
+        with _tagged_trace(plan, primitives, TRIGGER_REVIEW, role, verdict_role):
             verdict = chat_review._architect_verdict(
                 question=question,
                 answer=answer,
                 primitives=primitives,
+                role=verdict_role,
             )
         wrong = bool(verdict) and verdict.upper().startswith("WRONG")
         _record_step(
@@ -423,7 +431,7 @@ def _escalate_answer(
             primitives,
             trigger=TRIGGER_REVIEW,
             from_role=role,
-            to_role=CONSULTANT_ROLE,
+            to_role=verdict_role,
             before=before,
             outcome="wrong" if wrong else "ok_or_unavailable",
         )

@@ -51,6 +51,7 @@ TOOL_CALL = {
 TIMINGS = {
     "frontdoor": (40.0, 160.0, 17, 91),
     "architect_general": (1250.0, 3750.5, 12, 300),
+    "architect_critic": (1250.0, 3750.5, 12, 300),
     "coder_escalation": (900.0, 2100.0, 40, 280),
     "worker_general": (100.0, 400.0, 30, 150),
 }
@@ -167,6 +168,8 @@ def _install(env, *, client_result=None, answers=None) -> dict[str, Any]:
     holder: dict[str, Any] = {}
     default_answers = {
         "architect_general": "WRONG: it is nitrogen, about 78% by volume",
+        # ARCHSWAP-20260927: under ``auto`` the verdict goes to the reviewer binding.
+        "architect_critic": "WRONG: it is nitrogen, about 78% by volume",
         "worker_general": REVISED_ANSWER,
         "coder_escalation": QUALITY_ANSWER,
         "frontdoor": '"the answer"',
@@ -358,9 +361,11 @@ def test_explicit_auto_escalates_with_chat_default_targets(env):
     receipt = r.json()["x_orchestrator_metadata"]["escalation"]
     assert receipt["requested"] == "auto" and receipt["enabled"] is True
     assert receipt["target"] == "chat_default"
+    # ARCHSWAP-20260927: /chat's default verdict target is the reviewer binding
+    # (architect_critic, the 27B); only a pinned consultant sends it to architect_general.
     assert [c["role"] for c in holder["fake"].calls] == [
         "frontdoor",
-        "architect_general",
+        "architect_critic",
         "worker_general",
     ]
 
