@@ -278,6 +278,16 @@ def test_actual_owner_reduced_positive_automatically_confirms_same_source_build(
                 debts = cpu_screen.pending_collisions([argv, alias, unrelated], {"0": prior})
                 assert set(debts) == {1} and "pending full confirmation" in debts[1]
                 assert not cpu_screen.pending_collisions([argv, alias], {})
+                # Declared runtime arms added at a boundary (runtime-protocol flags only)
+                # must not orphan the prior result: stable inputs are unchanged (DS41 run
+                # 10l died on exactly this, 2026-09-27).
+                with_arms = argv + ["--runtime-arms", "/tmp/arms.json",
+                                    "--runtime-arm-evidence", "keep_grade"]
+                debts = cpu_screen.pending_collisions([with_arms, alias, unrelated], {"0": prior})
+                assert set(debts) == {1}
+                changed = sr._without(argv, {"--target-id"}) + ["--target-id", "other-id"]
+                with pytest.raises(sr.SerialRefused, match="binding differs"):
+                    cpu_screen.pending_collisions([changed, alias], {"0": prior})
                 # Original selection is stable even after its history changed.
                 with mock.patch.object(cpu_screen, "mechanism_hint", side_effect=AssertionError("reselected")):
                     assert sr._batch_argv(argv, None, 1, batch1) == first
