@@ -125,7 +125,7 @@ comparison requires its own validated reference and threshold.
 
 ### Widened CPU source routes (operator decision 2026-09-26)
 
-Four more single-file CPU routes are admitted (`gates.CPU_SOURCE_ROUTES`). Each needs the
+Five more single-file CPU routes are admitted (`gates.CPU_SOURCE_ROUTES`). Each needs the
 named `target_symbol`, hunks inside the named bodies in both HEAD and the candidate, and
 byte-identical headers (marker line through opening brace). A marker that recurs
 elsewhere in the file never widens the boundary: markers are resolved inside the named
@@ -163,6 +163,21 @@ class, or before the disabled-build stub.
   - **Reference:** scalar Q4_K/Q5_K/Q8_0 at widths 1–8, plus a GDB entry hit and the
     dense ACTIVE marker. Routing Q8_0 into iqk changes the activation quantization.
     The outputs are therefore not bit-identical to tinyBLAS: say so and price it.
+- **`float_tinyblas_plan`**: `ggml/src/ggml-cpu/llamafile/sgemm.cpp`, target `tinyBLAS`
+  or `matmul` (class-qualified names resolve to the class they name).
+  - **Scope:** only the `matmul` body of the float `class tinyBLAS` (F32/F16/BF16): the
+    tile plan, i.e. which `mnpack<RM, RN, BM>` it calls and with what `SIZE_N`/`BN`.
+    Narrow-M matrices get fewer jobs than threads today: DS41 `hc_mixes` (F16
+    [20480, 24], 80 nodes per verify at N=3) runs as 24/8 = 3 jobs on 48 threads.
+  - **Refused:** `mnpack`, `gemm_bloc`, the barrier-bearing `gemm`, `load`/`madd`/`hsum`,
+    other classes, and added lines touching `A[`/`B[`/`C[`, `_mm*` or those helpers.
+  - **Op:** `MUL_MAT`.
+  - **Bit-exactness:** `gemm_bloc` accumulates each output element over k in one order
+    whatever RM/RN/BM or thread computes it, so a plan-only edit is bit-exact. Say so.
+  - **Reference:** `use_ref` does not bypass llamafile. The independent evidence is the
+    scalar F16/BF16/F32 `MUL_MAT` fixture at widths 1–8 (40 rows on an 8-thread team, so
+    inside the narrow-M regime; analytic bounds) plus a trusted GDB hit on the F16
+    `tinyBLAS<...>::gemm<...>` in the candidate DSO for the sole selected case.
 - **`cpu_graph_sync`**: `ggml/src/ggml-cpu/ggml-cpu.c`, target `ggml_barrier`,
   `ggml_cpu_node_is_solo`, `ggml_cpu_try_fuse_ops` or `ggml_graph_compute_thread`.
   - **Scope:** barrier implementation, per-node sync, tiny-solo selection and

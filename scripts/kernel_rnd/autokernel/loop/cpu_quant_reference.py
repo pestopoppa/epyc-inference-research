@@ -1,4 +1,4 @@
-"""Independent output check for fixed CPU Q4_K/Q5_K/Q8_0 matmul probes.
+"""Independent output check for fixed CPU Q4_K/Q5_K/Q8_0 (and F16/BF16/F32) matmul probes.
 
 The probe runs the candidate ggml graph and emits the *stored quantized bytes*.
 This module decodes those bytes without ggml and computes scalar dot products.
@@ -24,11 +24,15 @@ MARKER = "AK_CPU_QUANT_REFERENCE_V1"
 METRIC_MARKER = "AK_CPU_QUANT_METRIC_V1"
 PROBE = Path(__file__).with_name("cpu_quant_reference_probe.cpp")
 QUANTS = ("Q4_K", "Q5_K", "Q8_0")
+# Float weight types for the float tinyBLAS plan route (DS41 inbox 52). MUL_MAT only; the
+# probe runs them on an 8-thread team (see cpu_quant_reference_probe.cpp). Not part of
+# the QUANTS default, so every existing caller's suite is unchanged.
+FLOAT_TYPES = ("F16", "BF16", "F32")
 OPS = ("MUL_MAT", "MUL_MAT_ID")
 FUSED_OP = "FUSED_UP_GATE"
 K, ROWS, TOKENS = 256, 40, 2
 SUPPORTED_WIDTHS = tuple(range(1, 9))
-ROW_BYTES = {"Q4_K": 144, "Q5_K": 176, "Q8_0": 272}
+ROW_BYTES = {"Q4_K": 144, "Q5_K": 176, "Q8_0": 272, "F16": 512, "BF16": 512, "F32": 1024}
 # Also constrain the encoding against the fixed F32 input. Otherwise a broken
 # quantizer that writes all zeroes could agree with its own all-zero matmul.
 # Empirical fixed-fixture bounds, not a general quant accuracy policy. On the
@@ -37,7 +41,12 @@ ROW_BYTES = {"Q4_K": 144, "Q5_K": 176, "Q8_0": 272}
 # Q8_0 0.00344849. Rounded allowances here preserve roughly 2-3x headroom
 # for Q4_K/Q8_0 and a small absolute allowance for Q5_K, while zeroed rows
 # remain decisively wrong.
-QUANT_ABS_TOL = {"Q4_K": 0.10, "Q5_K": 0.005, "Q8_0": 0.01}
+QUANT_ABS_TOL = {"Q4_K": 0.10, "Q5_K": 0.005, "Q8_0": 0.01,
+                 # Float types: ANALYTIC, not calibrated. Every fixture weight is n/2048 with
+                 # integer -1008 <= n <= 1464, so |w| < 0.72: F32 and F16 (11-bit significand,
+                 # ulp 2^-11 in [0.5, 1)) store it exactly; BF16 rounds by at most half an
+                 # ulp in [0.5, 1) = 2^-9 (the fixture attains it). BF16 allowance = 2x that.
+                 "F16": 1e-6, "BF16": 2.0 ** -8, "F32": 1e-6}
 # On that same anchor, max scalar-vs-graph |error| across both ops was
 # Q4_K 0.00516272, Q5_K 0.00492007, Q8_0 0.000077963. 0.01 is <2.1x
 # the worst observed absolute error. Relative allowance matters only for
@@ -50,6 +59,13 @@ REL_TOL = 0.005
 # matmul tolerance just because both contain a dot product.
 FUSED_ABS_TOL = 0.0005
 FUSED_REL_TOL = 0.001
+# Float weights, ANALYTIC: each output sums 4 nonzero products of a stored weight (the
+# reference uses the decoded stored value) and an activation in {1, -0.5}; both operands
+# and every product are exact in F32, so the only error is F32 rounding of a 4-term sum of
+# magnitude < 2.9: at most 3 * 2^-23 ~ 3.6e-7. 1e-5 keeps >25x margin while a dropped,
+# duplicated or misplaced row/column tile is off by a whole fixture weight.
+FLOAT_ABS_TOL = 1e-5
+FLOAT_REL_TOL = 1e-6
 
 
 @dataclass(frozen=True)
@@ -106,6 +122,13 @@ def _scale_min(scales: bytes, group: int) -> tuple[int, int]:
 def _decode_row(quant: str, row: bytes) -> tuple[float, ...]:
     if len(row) != ROW_BYTES[quant]:
         raise ValueError("quant row byte length mismatch")
+    if quant == "F16":
+        return struct.unpack(f"<{len(row) // 2}e", row)
+    if quant == "BF16":
+        return tuple(struct.unpack("<f", struct.pack("<I", half << 16))[0]
+                     for half in struct.unpack(f"<{len(row) // 2}H", row))
+    if quant == "F32":
+        return struct.unpack(f"<{len(row) // 4}f", row)
     if quant == "Q8_0":
         values = []
         for offset in range(0, len(row), 34):
@@ -217,8 +240,9 @@ def _parse_and_compare(output: str, quant: str, op: str, width: int = TOKENS,
                 max_quant_abs_error = max(max_quant_abs_error, quant_abs_error)
     max_output_abs_error = 0.0
     max_output_limit_fraction = 0.0
-    abs_tol, rel_tol = ((FUSED_ABS_TOL, FUSED_REL_TOL)
-                        if op == FUSED_OP else (ABS_TOL, REL_TOL))
+    abs_tol, rel_tol = ((FUSED_ABS_TOL, FUSED_REL_TOL) if op == FUSED_OP else
+                        (FLOAT_ABS_TOL, FLOAT_REL_TOL) if quant in FLOAT_TYPES else
+                        (ABS_TOL, REL_TOL))
     for token in range(width):
         for row in range(ROWS):
             actual = observed[token, row]
@@ -261,7 +285,8 @@ def check_cpu_quant_suite(build_dir: Path, source_root: Path, *,
     Infrastructure/malformed-output failures are `unavailable`, never numerical
     `wrong`. The caller must separately establish dispatch-path engagement.
     """
-    if not quants or not ops or any(q not in QUANTS for q in quants) or \
+    if not quants or not ops or any(q not in (*QUANTS, *FLOAT_TYPES) for q in quants) or \
+            (any(q in FLOAT_TYPES for q in quants) and ops != ("MUL_MAT",)) or \
             any(op not in (*OPS, FUSED_OP) for op in ops) or \
             not widths or any(width not in SUPPORTED_WIDTHS for width in widths):
         raise ValueError("unsupported or empty quant/op/width selection")
@@ -350,4 +375,4 @@ def check_cpu_quant_suite(build_dir: Path, source_root: Path, *,
                        path_verified=require_fused_hit or require_dot_hit)
 
 
-__all__ = ["QuantResult", "check_cpu_quant_suite"]
+__all__ = ["FLOAT_TYPES", "QuantResult", "check_cpu_quant_suite"]
