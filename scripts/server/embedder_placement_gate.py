@@ -256,6 +256,12 @@ class _SchedulerLoad:
             self.done = 0
             self.errors = 0
             self.deferred = 0
+            # The peaks describe the SAMPLE, not the warm-up: during warm-up the frontdoor is
+            # idle, so every embedder is legitimately uncapped at its full slots, and a
+            # lifetime peak reports that width forever (post-cap-20260927: peak 4 everywhere).
+            reset = getattr(getattr(self._client, "scheduler", None), "reset_peaks", None)
+            if reset is not None:
+                reset()
             self.stats_start = self._snapshot()
         self.t0 = time.monotonic()
         return self
@@ -281,7 +287,11 @@ class _SchedulerLoad:
             "errors": self.errors,
             "counters_delta": {k: end.get(k, 0) - start.get(k, 0) for k in sorted(set(end) | set(start))},
             "effective_caps_at_end": self.stats_end.get("effective_caps", {}),
+            # peak_in_flight: raw in-flight high-water mark over the sample (includes texts
+            # admitted before busy detection flipped). peak_in_flight_capped: the high-water
+            # mark reached by grants made while capped — the cap-enforcement evidence.
             "peak_in_flight": self.stats_end.get("peak_in_flight", {}),
+            "peak_in_flight_capped": self.stats_end.get("peak_in_flight_capped", {}),
             "busy_at_end": self.stats_end.get("busy", {}),
         }
 

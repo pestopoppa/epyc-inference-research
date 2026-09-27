@@ -73,7 +73,15 @@ class EmbeddingScheduler:
         self._clock = clock
         self._lock = threading.Lock()
         self._inflight: dict[int, int] = {p: 0 for p in topology.ports}
+        # Two peaks, both since construction or the last ``reset_peaks()``:
+        # ``_peak`` is the raw high-water mark of the in-flight ledger. It includes phases in
+        # which the instance was NOT capped (idle neighbours, a warm-up), and texts granted
+        # before busy detection flipped, which drain at their pre-flip width (admission never
+        # preempts). It is therefore not evidence about the cap.
+        # ``_peak_capped`` is the high-water mark reached by grants made WHILE the instance was
+        # capped: the enforcement claim is ``_peak_capped[p] <= neighbour_cap.max_in_flight``.
         self._peak: dict[int, int] = {p: 0 for p in topology.ports}
+        self._peak_capped: dict[int, int] = {p: 0 for p in topology.ports}
         self._backoff_until: dict[int, float] = {}
         self._busy = BusySnapshot(taken_at=float("-inf"))
         self._refreshing = False
@@ -159,6 +167,17 @@ class EmbeddingScheduler:
         with self._lock:
             return dict(self._peak)
 
+    def peak_in_flight_capped(self) -> dict[int, int]:
+        with self._lock:
+            return dict(self._peak_capped)
+
+    def reset_peaks(self) -> None:
+        """Start a new measurement window: the raw peak restarts from the current in-flight
+        (texts already admitted are still in flight), the capped peak from zero."""
+        with self._lock:
+            self._peak = dict(self._inflight)
+            self._peak_capped = {p: 0 for p in self.topology.ports}
+
     def healthy_ports(self) -> list[int]:
         now = self._clock()
         with self._lock:
@@ -216,6 +235,8 @@ class EmbeddingScheduler:
                 self._peak[port] = max(self._peak[port], self._inflight[port])
                 self._grant_seq += 1
                 tier, capped = meta[port]
+                if capped:
+                    self._peak_capped[port] = max(self._peak_capped[port], self._inflight[port])
                 grants.append(
                     Grant(
                         port=port,
@@ -259,6 +280,7 @@ class EmbeddingScheduler:
                 "counters": dict(self._stats),
                 "in_flight": dict(self._inflight),
                 "peak_in_flight": dict(self._peak),
+                "peak_in_flight_capped": dict(self._peak_capped),
                 "effective_caps": {p: self._effective_cap_locked(p) for p in self.topology.ports},
                 "busy": self._busy.as_dict(),
             }
