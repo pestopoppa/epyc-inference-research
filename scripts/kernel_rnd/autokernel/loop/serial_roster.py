@@ -70,9 +70,14 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None, s
                   "--cpu-window-bus-agent",
                   # Best-of-N author wall budgets (bestof.WallBudget): a time policy.
                   "--actor-authors-wall", "--actor-authors-panel-wall",
-                  "--actor-authors-cancel-factor"}
+                  "--actor-authors-cancel-factor",
+                  # Declared runtime arms and their evidence protocol (runtime_arms.py,
+                  # P-AK-SEARCH-1-A4): a search policy over the SAME launch. Each arm is a
+                  # single-field delta the child builds from the target's own launch; the
+                  # launch, request and campaign documents are not overridden.
+                  *sr.RUNTIME_PROTOCOL_FLAGS}
         # Bare switches: instruments and rankers, never identities.
-        switches = {"--rank-prior-experiments", "--node-profile"}
+        switches = {"--rank-prior-experiments", "--node-profile", *sr.RUNTIME_PROTOCOL_SWITCHES}
         iterator = iter(extra)
         for arg in iterator:
             flag, equals, value = arg.partition("=")

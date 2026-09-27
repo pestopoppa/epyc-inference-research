@@ -863,3 +863,23 @@ def test_declared_ds41_arms_enumerate_against_the_live_launch():
     assert load.candidate.capability.supported and places.candidate.capability.supported
     assert dict(load.candidate.launch_env) == dict(launch.launch_env)
     assert dict(places.candidate.launch_env)["OMP_PLACES"] == "{2}:47:2,{1}"
+
+
+def test_serial_common_args_admit_the_runtime_protocol_options(tmp_path):
+    from . import serial_roster, serial_run as sr
+    from .test_serial_roster import _inputs
+    _resolved, _owners, argv = _inputs(tmp_path, backends=("cpu",))
+    common = tmp_path / "common.json"
+    common.write_text(json.dumps(["--workers", "1", "--runtime-arms", str(tmp_path / "arms.json"),
+                                  "--runtime-arm-evidence", "keep_grade"]))
+    targets, _skipped, _cpus = serial_roster.build_targets(
+        Path(sr.option(argv, "--resolved-campaign")), Path(sr.option(argv, "--owned-targets")),
+        target_root=Path(sr.option(argv, "--state-dir")) / "targets", common_path=common)
+    assert sr.option(targets[0], "--runtime-arm-evidence") == "keep_grade"
+    assert sr.option(targets[0], "--runtime-arms") == str(tmp_path / "arms.json")
+    # Still refused: identities (the launch) may never ride in common args.
+    common.write_text(json.dumps(["--cpu-serving-launch", "/x.json"]))
+    with pytest.raises(sr.SerialRefused, match="not a shared"):
+        serial_roster.build_targets(
+            Path(sr.option(argv, "--resolved-campaign")), Path(sr.option(argv, "--owned-targets")),
+            target_root=Path(sr.option(argv, "--state-dir")) / "targets", common_path=common)
