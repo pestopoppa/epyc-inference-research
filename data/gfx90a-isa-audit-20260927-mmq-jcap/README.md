@@ -69,3 +69,5 @@ this gate.
 | `diff_v10_to_jcap_mmq.{txt,json}`, `diff_exit_code.txt` | the accept gate |
 | `binaries.sha256` | input identities |
 | `window_ab.sh` | the GPU window, not run yet: correctness (test-backend-ops), then kernel-level and llama-bench ABAB timing, then greedy pairing; guarded by `MMQ_JCAP_WINDOW=1` |
+
+`window_ab.sh` fixes (2026-09-27, not yet run): kernel timing uses `test-backend-ops --output sql` (the csv printer has no `time_us`) and writes `tbo_perf_summary.tsv` (per-case median us per arm, B/A); MoE llama-bench arms drop `--autokernel-harden` because production itself is non-deterministic on MoE; timing/pairing arms fail independently into `arm_status.tsv` with a summary table and exit 6 if any failed (linkage and B correctness remain gates).
