@@ -3,7 +3,13 @@
 This is intentionally not a general tmp cleaner.  It recognizes only build roots
 named by a validated AutoKernel continuation, never treats a dirty Git worktree as
 evidence that generated build output is unique, and never removes receipts, logs,
-patches, source worktrees, stores, anchors, or the current state's cache.
+patches, source worktrees, stores, anchors, the current state's cache, or a build
+root the launching configuration still names (``protected_paths``).
+
+Launch policy (``decide``): below ``trigger`` it reclaims what is eligible, bounded
+by ``target`` and ``max_build_dirs``. An unreachable target is a loud WARNING, not a
+refusal; only free space below the hard safety floor refuses a launch. Every
+decision is appended to ``build-retention-decisions.jsonl`` in the state dir.
 """
 from __future__ import annotations
 
@@ -22,8 +28,14 @@ from typing import Any, Sequence
 PLAN_SCHEMA = "epyc.autokernel.serial_build_retention_plan.v1"
 RETRY_SCHEMA = "epyc.autokernel.serial_build_retention_retry.v1"
 RETRY_FILENAME = "build-retention-retry.json"
-DEFAULT_TRIGGER_FREE_BYTES = 400 * 1024 ** 3
-DEFAULT_TARGET_FREE_BYTES = 500 * 1024 ** 3
+DECISION_SCHEMA = "epyc.autokernel.serial_build_retention_decision.v1"
+DECISION_LOG = "build-retention-decisions.jsonl"
+# Reachable on the 3.7 TB host that runs ~3.3 TB used (~370 GiB free, 2026-09-27).
+# The earlier 400/500 GiB pair sat above steady-state free space, so every launch
+# either refused or had its trigger hand-lowered below current free (never firing).
+DEFAULT_TRIGGER_FREE_BYTES = 250 * 1024 ** 3
+DEFAULT_TARGET_FREE_BYTES = 320 * 1024 ** 3
+DEFAULT_HARD_FLOOR_FREE_BYTES = 100 * 1024 ** 3
 DEFAULT_RECENT_STATE_CACHES = 1
 DEFAULT_MAX_BUILD_DIRS = 8
 
@@ -237,34 +249,63 @@ def plan(parent: Path, current: Path, *, free_bytes: int | None = None,
          trigger_free_bytes: int = DEFAULT_TRIGGER_FREE_BYTES,
          target_free_bytes: int = DEFAULT_TARGET_FREE_BYTES,
          recent_state_caches: int = DEFAULT_RECENT_STATE_CACHES,
-         max_build_dirs: int = DEFAULT_MAX_BUILD_DIRS) -> dict[str, Any]:
-    """Return an exact bounded plan. No bytes are removed here."""
-    if (trigger_free_bytes < 0 or target_free_bytes < trigger_free_bytes
+         max_build_dirs: int = DEFAULT_MAX_BUILD_DIRS,
+         hard_floor_free_bytes: int = DEFAULT_HARD_FLOOR_FREE_BYTES,
+         protected_paths: Sequence[Path] = ()) -> dict[str, Any]:
+    """Return an exact bounded plan. No bytes are removed here.
+
+    ``protected_paths`` are build/worker roots the launching configuration still
+    uses (a relaunch may point ``--target-root`` into a retired sibling state); a
+    cache at, above or below any of them is never selected.
+    """
+    if (not 0 <= hard_floor_free_bytes <= trigger_free_bytes <= target_free_bytes
             or recent_state_caches < 0 or max_build_dirs < 1):
         raise BuildRetentionRefused("invalid build-retention policy")
     parent, current = parent.resolve(), current.resolve()
+    live = sorted({Path(item).resolve() for item in protected_paths})
     free = shutil.disk_usage(parent).free if free_bytes is None else free_bytes
-    caches = []
+    caches, skipped = [], []
     for root in sorted(parent.iterdir()):
         if root.resolve() == current or not root.is_dir() or root.is_symlink():
             continue
         inactive = _inactive_state(root)
         if inactive is None:
+            skipped.append({"state_root": str(root),
+                            "reason": "locked_active_or_not_serial_state"})
             continue
         cache = _cache_from_state(root, *inactive)
-        if cache is not None:
-            caches.append(cache)
+        if cache is None:
+            skipped.append({"state_root": str(root),
+                            "reason": "no_validated_generated_build_cache"})
+            continue
+        if any(cache.build_root == item or item in cache.build_root.parents
+               or cache.build_root in item.parents for item in live):
+            skipped.append({"state_root": str(root), "build_root": str(cache.build_root),
+                            "bytes": cache.bytes, "reason": "protected_live_build_root"})
+            continue
+        caches.append(cache)
     caches.sort(key=lambda item: (item.state_mtime_ns, str(item.state_root)), reverse=True)
     recent = caches[:recent_state_caches]
     eligible = list(reversed(caches[recent_state_caches:]))
+    skipped += [{"state_root": str(item.state_root), "build_root": str(item.build_root),
+                 "bytes": item.bytes, "reason": "protected_recent"} for item in recent]
     selected = []
     projected = free
-    if free < trigger_free_bytes:
-        for cache in eligible:
-            if len(selected) >= max_build_dirs or projected >= target_free_bytes:
-                break
-            selected.append(cache)
-            projected += cache.bytes
+    for cache in eligible:
+        reason = None
+        if free >= trigger_free_bytes:
+            reason = "free_at_or_above_trigger"
+        elif len(selected) >= max_build_dirs:
+            reason = "max_build_dirs_reached"
+        elif projected >= target_free_bytes:
+            reason = "target_reached"
+        if reason is not None:
+            skipped.append({"state_root": str(cache.state_root),
+                            "build_root": str(cache.build_root),
+                            "bytes": cache.bytes, "reason": reason})
+            continue
+        selected.append(cache)
+        projected += cache.bytes
     body = {
         "schema": PLAN_SCHEMA,
         "created_at_ns": time.time_ns(),
@@ -275,7 +316,10 @@ def plan(parent: Path, current: Path, *, free_bytes: int | None = None,
         "target_free_bytes": target_free_bytes,
         "recent_state_caches": recent_state_caches,
         "max_build_dirs": max_build_dirs,
+        "hard_floor_free_bytes": hard_floor_free_bytes,
+        "protected_live": [str(item) for item in live],
         "protected_recent": [str(item.build_root) for item in recent],
+        "skipped": skipped,
         "selected": [{"state_root": str(item.state_root),
                       "build_root": str(item.build_root),
                       "source_worktree": str(item.source_worktree),
@@ -354,6 +398,69 @@ def execute(plan_body: dict[str, Any], *, dry_run: bool = False) -> dict[str, An
             "free_bytes_after": shutil.disk_usage(Path(body["parent"])).free}
 
 
-__all__ = ["BuildRetentionRefused", "DEFAULT_MAX_BUILD_DIRS",
+_GIB = 1024 ** 3
+
+
+def decide(plan_body: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+    """Launch verdict for one executed plan. Refuses ONLY below the hard floor.
+
+    The target is best effort: reclaim is bounded by what retired states can prove
+    reproducible and by ``max_build_dirs``, and most of a full disk is not build
+    cache at all. Missing it while above the floor is a warning and the run goes on.
+    """
+    before, after = plan_body["free_bytes_before"], result["free_bytes_after"]
+    trigger, target = plan_body["trigger_free_bytes"], plan_body["target_free_bytes"]
+    floor = plan_body.get("hard_floor_free_bytes", 0)
+    numbers = (f"free {before / _GIB:.1f} -> {after / _GIB:.1f} GiB, reclaimed "
+               f"{result['reclaimed_bytes'] / _GIB:.1f} GiB from "
+               f"{len(result['removed'])} build root(s); trigger {trigger / _GIB:.1f}, "
+               f"target {target / _GIB:.1f}, hard floor {floor / _GIB:.1f} GiB")
+    if after < floor:
+        return {"verdict": "refused_below_hard_floor", "refuse": True,
+                "message": ("build retention refuses the launch: free space is below "
+                            f"the hard safety floor ({after} < {floor} bytes; {numbers})")}
+    if before >= trigger:
+        return {"verdict": "noop_above_trigger", "refuse": False,
+                "message": f"build retention not needed ({numbers})"}
+    if after >= target:
+        return {"verdict": "reclaimed_to_target", "refuse": False,
+                "message": f"build retention restored the target ({numbers})"}
+    return {"verdict": "target_unreachable_continuing", "refuse": False,
+            "message": ("WARNING: build retention could not reach the free-space target; "
+                        "continuing because free space is above the hard safety floor "
+                        f"({numbers}; {len(result['skipped'])} selected root(s) skipped, "
+                        f"{len(plan_body.get('skipped', []))} sibling(s) not eligible — see "
+                        f"{DECISION_LOG})")}
+
+
+def append_decision(state_root: Path, plan_body: dict[str, Any],
+                    result: dict[str, Any], decision: dict[str, Any]) -> dict[str, Any]:
+    """Append one self-contained decision record (JSONL) to the state dir."""
+    record = {
+        "schema": DECISION_SCHEMA, "at_ns": time.time_ns(),
+        "verdict": decision["verdict"], "refuse": decision["refuse"],
+        "message": decision["message"], "plan_digest": plan_body.get("plan_digest"),
+        "dry_run": result.get("dry_run"),
+        "free_bytes_before": plan_body["free_bytes_before"],
+        "free_bytes_after": result["free_bytes_after"],
+        "trigger_free_bytes": plan_body["trigger_free_bytes"],
+        "target_free_bytes": plan_body["target_free_bytes"],
+        "hard_floor_free_bytes": plan_body.get("hard_floor_free_bytes"),
+        "reclaimed_bytes": result["reclaimed_bytes"],
+        "removed": result["removed"],
+        "skipped_selected": result["skipped"],
+        "not_selected": plan_body.get("skipped", []),
+    }
+    line = json.dumps(record, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    with (state_root / DECISION_LOG).open("a", encoding="utf-8") as handle:
+        handle.write(line + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+    return record
+
+
+__all__ = ["BuildRetentionRefused", "DECISION_LOG", "DECISION_SCHEMA",
+           "DEFAULT_HARD_FLOOR_FREE_BYTES", "DEFAULT_MAX_BUILD_DIRS",
            "DEFAULT_RECENT_STATE_CACHES", "DEFAULT_TARGET_FREE_BYTES",
-           "DEFAULT_TRIGGER_FREE_BYTES", "PLAN_SCHEMA", "RETRY_SCHEMA", "execute", "plan"]
+           "DEFAULT_TRIGGER_FREE_BYTES", "PLAN_SCHEMA", "RETRY_SCHEMA",
+           "append_decision", "decide", "execute", "plan"]

@@ -1223,10 +1223,14 @@ def main(argv=None) -> int:
     parser.add_argument("--rounds", type=int, default=1,
                         help="0 schedules until its configured budget or STOP")
     parser.add_argument("--state-dir", type=Path, required=True)
-    parser.add_argument("--retention-trigger-free-gb", type=float, default=400.0,
-                        help="reclaim retired serial build caches below this free-space watermark")
-    parser.add_argument("--retention-target-free-gb", type=float, default=500.0,
-                        help="bounded cleanup target; receipts and source trees are never removed")
+    parser.add_argument("--retention-trigger-free-gb", type=float, default=250.0,
+                        help="reclaim retired serial build caches below this free-space "
+                             "watermark; a FIXED policy value, never current-free-minus-margin")
+    parser.add_argument("--retention-target-free-gb", type=float, default=320.0,
+                        help="best-effort cleanup target; missing it warns and continues "
+                             "(receipts and source trees are never removed)")
+    parser.add_argument("--retention-hard-floor-free-gb", type=float, default=100.0,
+                        help="the ONLY free-space level that refuses a launch")
     parser.add_argument("--retention-recent-state-caches", type=int, default=1,
                         help="newest inactive serial-state build caches to preserve")
     parser.add_argument("--retention-max-build-dirs", type=int, default=8,
@@ -1247,7 +1251,8 @@ def main(argv=None) -> int:
          and (args.batch_iterations is None or args.batch_iterations <= 0
               or not (args.target_args or args.resolved_campaign)))
             or args.rounds < 0
-            or not 0 <= args.retention_trigger_free_gb <= args.retention_target_free_gb
+            or not (0 <= args.retention_hard_floor_free_gb <= args.retention_trigger_free_gb
+                    <= args.retention_target_free_gb)
             or args.retention_recent_state_caches < 0
             or args.retention_max_build_dirs < 1
             or (args.retention_plan_only and (args.retention_dry_run
@@ -1323,14 +1328,8 @@ def main(argv=None) -> int:
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
     if args.retention_plan_only:
-        from . import serial_build_retention
         root = args.state_dir.resolve()
-        retention_plan = serial_build_retention.plan(
-            root.parent, root,
-            trigger_free_bytes=int(args.retention_trigger_free_gb * 1024 ** 3),
-            target_free_bytes=int(args.retention_target_free_gb * 1024 ** 3),
-            recent_state_caches=args.retention_recent_state_caches,
-            max_build_dirs=args.retention_max_build_dirs)
+        retention_plan = _retention_plan(args, root, targets)
         print(json.dumps(retention_plan, indent=2))
         return 0
     if args.dry_run:
@@ -1376,25 +1375,20 @@ def main(argv=None) -> int:
             # Retired serial states are independent cache owners. Reclaim only
             # generated build roots, after proving each sibling lock is free.
             from . import serial_build_retention
-            retention_plan = serial_build_retention.plan(
-                root.parent, root,
-                trigger_free_bytes=int(args.retention_trigger_free_gb * 1024 ** 3),
-                target_free_bytes=int(args.retention_target_free_gb * 1024 ** 3),
-                recent_state_caches=args.retention_recent_state_caches,
-                max_build_dirs=args.retention_max_build_dirs)
+            retention_plan = _retention_plan(args, root, targets)
             status.write_json(root, "build-retention-plan.json", retention_plan,
                               prefix=".build-retention-plan-")
             retention_result = serial_build_retention.execute(
                 retention_plan, dry_run=args.retention_dry_run)
             status.write_json(root, "build-retention-result.json", retention_result,
                               prefix=".build-retention-result-")
-            if (retention_plan["free_bytes_before"] < retention_plan["trigger_free_bytes"]
-                    and retention_result["free_bytes_after"]
-                        < retention_plan["target_free_bytes"]):
-                raise SerialRefused(
-                    "build retention could not restore the required free-space reserve: "
-                    f"{retention_result['free_bytes_after']} < "
-                    f"{retention_plan['target_free_bytes']} bytes")
+            decision = serial_build_retention.decide(retention_plan, retention_result)
+            serial_build_retention.append_decision(
+                root, retention_plan, retention_result, decision)
+            if decision["refuse"]:
+                raise SerialRefused(decision["message"])
+            if decision["verdict"] != "noop_above_trigger":
+                print(f"retention {decision['message']}", file=sys.stderr, flush=True)
             result = _drive(root, targets, args.batch_iterations, args.rounds, child_prefix=child_prefix,
                             scheduler_manifest=scheduler_manifest,
                             source_validation_priority_dir=args.source_validation_priority_dir,
@@ -1405,6 +1399,24 @@ def main(argv=None) -> int:
         finally:
             if pointer is not None:
                 _publish_current_run(pointer, root, run_id, terminal_phase)
+
+
+def _retention_plan(args, root, targets):
+    """Plan retention for ``root``, protecting every root the launch still uses."""
+    from . import serial_build_retention
+    protected = [Path(value) for row in targets
+                 for flag in ("--worker-build-root", "--worker-root")
+                 if (value := option(row, flag))]
+    if args.target_root is not None:
+        protected.append(args.target_root)
+    return serial_build_retention.plan(
+        root.parent, root,
+        trigger_free_bytes=int(args.retention_trigger_free_gb * 1024 ** 3),
+        target_free_bytes=int(args.retention_target_free_gb * 1024 ** 3),
+        hard_floor_free_bytes=int(args.retention_hard_floor_free_gb * 1024 ** 3),
+        recent_state_caches=args.retention_recent_state_caches,
+        max_build_dirs=args.retention_max_build_dirs,
+        protected_paths=protected)
 
 
 def _source_owner_key(argv):
