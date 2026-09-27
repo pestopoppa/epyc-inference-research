@@ -162,8 +162,9 @@ class OpenAIChatRequest(BaseModel):
         description="Requested escalation-tier cap. Values: 'A' (frontdoor only), 'B1' (coder), "
         "'B2' (architect), 'C' (worker). METADATA ONLY on /v1 today: the value is recorded "
         "in routing metadata and NOT enforced -- role/override resolution applies no "
-        "escalation cap, and client tool mode performs no escalation at all. Enforcement "
-        "is HS-4 P4 work; until then this field does not prevent anything.",
+        "escalation cap. Escalation itself is governed by x_escalation (flag v1_escalation), "
+        "never by this field. Enforcement is HS-4 P4 work; until then this field does not "
+        "prevent anything.",
     )
     x_force_role: str | None = Field(
         default=None,
@@ -234,7 +235,25 @@ class OpenAIChatRequest(BaseModel):
         "'client': tools, tool_choice and tool history are forwarded to the backend and "
         "tool_calls are returned for the client to execute; tool_choice is validated (422), "
         "image input is refused (400), and x_session_id may be required (422, "
-        "v1_client_session_guard flag). Neither mode escalates.",
+        "v1_client_session_guard flag). Neither mode escalates unless the v1_escalation flag "
+        "is on (see x_escalation).",
+    )
+    # TE-1 (UFH-13) — per-request escalation switch, read only with flag v1_escalation.
+    x_escalation: Literal["auto", "off", "architect_general"] | None = Field(
+        default=None,
+        description="Escalation switch (TE-1; flag v1_escalation, default off). With the flag "
+        "ON, a frontdoor answer passes the SAME post-answer hooks /chat applies. Client tool "
+        "mode and x_disable_repl (a turn with no tool calls) get /chat's direct-stage chain: "
+        "quality escalation (generation_monitor flag) then the MemRL review gate "
+        "(architect_general verdict, worker_general revision on WRONG). The default REPL "
+        "mode gets /chat's REPL-stage hook, the review gate, on a FINAL answer. 'auto' (the "
+        "default when absent and the flag is on) keeps /chat's targets (quality escalation "
+        "-> coder_escalation). 'architect_general' keeps the triggers but pins every "
+        "consultant call to architect_general. 'off' serves the answer exactly as the "
+        "flag-off route does. Never applied to a role-overridden request (x_force_role / "
+        "x_force_model / x_orchestrator_role), a non-frontdoor role or image input. With the "
+        "flag OFF the value is validated and recorded (request_keys, metadata "
+        "escalation.disabled_reason='flag_off') and nothing escalates.",
     )
     # HS-19a stage 1 — harness subagent tree. Typed Any on purpose: they are read
     # ONLY when the v1_subagent_link flag is on, and then validated (422) by

@@ -197,6 +197,12 @@ _FEATURE_REGISTRY: tuple[FeatureSpec, ...] = (
     # inference-tap request_keys and the progress (session) log. RECORD ONLY: model
     # selection is unchanged. Default OFF in test and prod; off = byte-identical.
     FeatureSpec("v1_subagent_link", False, False, "V1_SUBAGENT_LINK", "HS-19a stage 1: record harness subagent parent/child links on /v1 (tap + session log); never changes model selection"),
+    # TE-1 (UFH-13) / HS-4 P4 subset: let a /v1 frontdoor answer take /chat's own
+    # post-answer escalation hooks (quality escalation to coder_escalation and the
+    # MemRL review gate to architect_general), per request via x_escalation=auto|off,
+    # with an escalation receipt in the tap. Default OFF in test and prod; off =
+    # byte-identical (golden-pinned in test_v1_escalation_off_golden.py).
+    FeatureSpec("v1_escalation", False, False, "V1_ESCALATION", "TE-1: /v1 frontdoor answers may escalate through /chat's quality-escalation and review-gate hooks (x_escalation=auto|off); default off"),
     # Web research reranking
     FeatureSpec("web_research_rerank", False, False, "WEB_RESEARCH_RERANK", "ColBERT snippet reranking in web_research pipeline"),
     # Routing telemetry
@@ -567,6 +573,7 @@ class Features:
     claude_code_mcp_chat: bool = False  # MCP tools for delegating chat to running orchestrator
     v1_client_session_guard: bool = False  # HS-4: 422 on OpenCode/client-mode /v1 requests without x_session_id
     v1_subagent_link: bool = False  # HS-19a stage 1: record /v1 subagent parent links (tap + session log); default off
+    v1_escalation: bool = False  # TE-1: /v1 frontdoor escalation via /chat's post-answer hooks (x_escalation); default off
 
     # Web research reranking (ColBERT snippet pre-fetch filtering)
     web_research_rerank: bool = False  # Rerank DDG snippets via ColBERT before page fetch
