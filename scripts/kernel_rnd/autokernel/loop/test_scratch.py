@@ -697,6 +697,8 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     "actors.py:_record_metrics:open-write": (1, "evidence: actor_call_metrics log (append)"),
     "belief_context.py:write_receipt:mkdir": (1, "evidence: belief receipt log"),
     "belief_context.py:write_receipt:open-write": (1, "evidence: belief receipt log (append)"),
+    "cpu_window.py:CpuWindow._event:mkdir": (1, "evidence: CPU window event log beside the published window file"),
+    "cpu_window.py:CpuWindow._event:open-write": (1, "evidence: CPU window event log (append) peers tail"),
     # -- ak-check sandbox (lane/ak-sandbox): everything it builds lives in the check dir
     #    the loop allocates per iteration (ak_check.scratch_provider -> Scope.dir) ------
     "ak_check.py:author_env:mkdir": (1, _IN_SCOPE + " (ak-check shim; no check dir: one per-lane shim beside the lane)"),

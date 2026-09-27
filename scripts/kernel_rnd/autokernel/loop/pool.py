@@ -310,13 +310,19 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
           validate_candidate=None, formation_guard=None,
           make_author_panel=None,
           reserve_candidate=None, record_abandoned=None,
-          next_resume=None, author_sandbox: bool = False) -> PoolResult:
+          next_resume=None, author_sandbox: bool = False,
+          cpu_window=None) -> PoolResult:
     """Run `iterations` iterations across `workers` lanes and report the accounting.
 
     Everything device-shaped is still injected; this only binds the git side and the
     per-lane clock. The GPU claim is NOT taken here: `run.py` holds one claim for the
     whole process, and a second `flock` on a second file descriptor in the same
     process would refuse itself.
+
+    `cpu_window` (`cpu_window.CpuWindow`, `--cpu-window-yield on`) sees every step
+    label, so it can yield the CPU claim while the lanes are in actor phases, and
+    wraps the tail's fence so every build/oracle/measure/commit session re-acquires
+    the claim first. None is the historical pool, unchanged.
     """
     check_lanes_are_disjoint(workers)
     clock = PhaseClock()
@@ -328,12 +334,16 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
         from . import ak_check
         fences = {ak_check.fence_dir(worker.worktree) for worker in workers}
         fence = lambda: ak_check.tail_fence(fences)   # noqa: E731
+    if cpu_window is not None:
+        fence = cpu_window.wrap_fence(fence)
     tail = pipeline.SerializedTail(lambda: champion_head(champion_tree, branch), fence=fence)
 
     def step(worker_name: str, label: str) -> None:
         clock.note(worker_name, label)
         if on_step is not None:
             on_step(worker_name, label)
+        if cpu_window is not None:
+            cpu_window.note_step(worker_name, label)
 
     started = time.monotonic()
     outcomes = pipeline.run_pool(

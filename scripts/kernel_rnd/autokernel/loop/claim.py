@@ -18,6 +18,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import threading
 import time
 from typing import Iterator
 
@@ -70,7 +71,8 @@ class HeldCpuClaim(dict):
 
     Dictionary serialization remains the old receipt. This live object only observes
     locks its owning context already acquired; it cannot acquire, restore or transfer
-    ownership and is inactive after that context exits.
+    ownership and is inactive after that context exits. A CPU context's yield lease
+    (`CpuClaimLease`, `yield_lease`) is owned by `hold_cpu`, not by this receipt.
     """
 
     def __init__(self, receipt, lock_paths, *, region_fraction=0.0, affinity=()):
@@ -257,20 +259,35 @@ def hold_cpu(cpu_list: str) -> Iterator[dict]:
     if not regions:
         raise ClaimRefused("CPU affinity maps to no physical regions")
     receipt = None
+    lease = None
     with ExitStack() as release:
         owner = cpu_region_lock("autokernel-cpu", regions, timeout_s=1.0,
                                 request_tag="autokernel-experimental-serving")
         held = owner.__enter__()
+        # The provider context currently holding the regions. Only a yield lease
+        # (`CpuClaimLease`, opt-in by the loop's CPU window) ever empties or
+        # refills it; without one this is the original owner until close.
+        slot = [owner]
 
         def close_original(*error):
             try:
                 if receipt is not None:
+                    if slot[0] is None and lease is not None:
+                        # Yielded at close: take the same regions back so the close
+                        # observation is a real one. A failure leaves it "lost".
+                        try:
+                            lease.reacquire(reason="close")
+                        except Exception as reacquire_error:
+                            print(f"cpu claim close could not reacquire: {reacquire_error}",
+                                  file=sys.stderr)
                     try:
                         receipt._closing()
                     except Exception as observation_error:
                         receipt._close_observation_failed(observation_error)
             finally:
-                result = owner.__exit__(*error)
+                current = slot[0]
+                slot[0] = None
+                result = current.__exit__(*error) if current is not None else False
             # Reached only after the original provider's exit returned. An
             # uncertain release never produces completed interval evidence.
             if receipt is not None:
@@ -286,7 +303,151 @@ def hold_cpu(cpu_list: str) -> Iterator[dict]:
                [*held.values(), *(global_region_lock_path(region) for region in sorted(held))],
                region_fraction=len(regions) / len(ATOMIC_REGIONS),
                affinity=tuple(str(cpu) for cpu in sorted(_cpu_numbers(cpu_list))))
+        lease = CpuClaimLease(
+            receipt, slot, regions=regions,
+            acquire=lambda timeout_s, cancel_check: cpu_region_lock(
+                "autokernel-cpu", regions, timeout_s=timeout_s, cancel_check=cancel_check,
+                request_tag="autokernel-experimental-serving"),
+            preflight=lambda: _preflight(strict=True))
+        receipt._yield_lease = lease
         yield receipt
+
+
+def region_lock_busy(error: BaseException) -> bool:
+    """True when the provider refused because another holder has the regions.
+
+    Matched by the provider's class name: the orchestrator owns
+    `CpuRegionLockTimeout`, and importing it here would make this module's import
+    depend on the orchestrator checkout being resolvable.
+    """
+    return type(error).__name__ == "CpuRegionLockTimeout"
+
+
+class CpuClaimLease:
+    """Yield and re-acquire the SAME physical regions under the original CPU context.
+
+    Opt-in (the loop's `--cpu-window-yield on`); a context whose lease is never
+    used behaves exactly as before. The receipt (`HeldCpuClaim`) is unchanged: it
+    still cannot acquire or restore anything itself, and its open/close
+    observations remain real kernel-lock observations taken while this process
+    holds the regions. What a lease adds is honesty about the gaps: every
+    release/re-acquire is a numbered `segments` row (`generation` counts
+    acquisitions), published beside the held-claim evidence by the loop, so the
+    envelope interval is never read as continuous ownership.
+
+    Release is the provider's own exit (the region-lock protocol has no other
+    release: closing the flock fds IS the release, exactly as `region-lock run`
+    releases when its child exits). Re-acquire is a fresh provider acquisition of
+    the same regions, verified to land on the same lock files and to observe as
+    held by this process before it is reported held.
+    """
+
+    def __init__(self, receipt, slot, *, regions, acquire, preflight=None,
+                 clock=time.time, monotonic=time.monotonic, sleep=time.sleep):
+        self._receipt = receipt
+        self._slot = slot
+        self._regions = frozenset(regions)
+        self._acquire = acquire
+        self._preflight = preflight
+        self._clock, self._monotonic, self._sleep = clock, monotonic, sleep
+        self._mutex = threading.RLock()
+        self.generation = 1
+        self.segments = [{"generation": 1, "acquired_at": clock(), "released_at": None,
+                          "release_reason": None, "acquire_reason": "initial",
+                          "waited_s": 0.0, "wait_exceeded_bound": False}]
+
+    @property
+    def held(self) -> bool:
+        return self._slot[0] is not None
+
+    def release(self, *, reason: str) -> bool:
+        """Exit the current provider context. False when already released."""
+        with self._mutex:
+            owner = self._slot[0]
+            if owner is None:
+                return False
+            self._slot[0] = None
+            try:
+                owner.__exit__(None, None, None)
+            finally:
+                self.segments[-1]["released_at"] = self._clock()
+                self.segments[-1]["release_reason"] = reason
+            return True
+
+    def reacquire(self, *, reason: str, should_stop=None, wait_bound_s: float | None = None,
+                  poll_s: float = 5.0, on_wait=None, on_bound=None) -> dict:
+        """Take the same regions back, waiting (never bounded) while a peer holds them.
+
+        `on_wait(waited_s)` is called about once per `poll_s` while waiting and
+        `on_bound(waited_s)` once when `wait_bound_s` is exceeded; waiting then
+        CONTINUES -- no measurement may start without the claim, and a peer's
+        process is never touched. `should_stop()` true while waiting raises
+        `ClaimRefused` with the regions still released.
+        """
+        with self._mutex:
+            if self._slot[0] is not None:
+                return self.segments[-1]
+            if self._preflight is not None:
+                problem = self._preflight()
+                if problem:
+                    raise ClaimRefused(problem)
+            started = self._monotonic()
+            warned = False
+            while True:
+                owner = self._acquire(poll_s, should_stop)
+                try:
+                    held = owner.__enter__()
+                except Exception as exc:
+                    if not region_lock_busy(exc):
+                        raise
+                    waited = self._monotonic() - started
+                    if should_stop is not None and should_stop():
+                        raise ClaimRefused(
+                            f"stop requested while waiting {waited:.0f} s to re-acquire the "
+                            "CPU regions from a peer; nothing was measured") from None
+                    if (not warned and wait_bound_s is not None and waited >= wait_bound_s):
+                        warned = True
+                        if on_bound is not None:
+                            on_bound(waited)
+                    if on_wait is not None:
+                        on_wait(waited)
+                    continue
+                if set(held) != set(self._regions) or {
+                        key: str(value) for key, value in held.items()} != self._receipt["lock_paths"]:
+                    owner.__exit__(None, None, None)
+                    raise ClaimRefused("re-acquired CPU regions are not the original lock files")
+                self._slot[0] = owner
+                observed = self._receipt.observe()
+                if observed["status"] != "held":
+                    self._slot[0] = None
+                    owner.__exit__(None, None, None)
+                    raise ClaimRefused(
+                        f"re-acquired CPU claim does not observe as held: {observed['error']}")
+                waited = round(self._monotonic() - started, 3)
+                self.generation += 1
+                self.segments.append({
+                    "generation": self.generation, "acquired_at": self._clock(),
+                    "released_at": None, "release_reason": None, "acquire_reason": reason,
+                    "waited_s": waited, "wait_exceeded_bound": warned})
+                return self.segments[-1]
+
+    def ledger(self) -> dict:
+        """The yield ledger of this context: never scheduler evidence by itself."""
+        with self._mutex:
+            return {"schema": "epyc.autokernel.cpu_yield_segments.v1",
+                    "context_id": getattr(self._receipt, "_context_id", None),
+                    "cpu_list": self._receipt.get("cpu_list"),
+                    "regions": sorted(self._regions), "generation": self.generation,
+                    "held": self.held, "segments": [dict(row) for row in self.segments],
+                    "continuous": len(self.segments) == 1}
+
+
+def yield_lease(receipt) -> CpuClaimLease | None:
+    """The yield lease of an original CPU context, or None (GPU claim, other provider)."""
+    if type(receipt) is not HeldCpuClaim:
+        return None
+    lease = getattr(receipt, "_yield_lease", None)
+    return lease if type(lease) is CpuClaimLease else None
 
 
 def _cpu_numbers(cpu_list):
@@ -294,4 +455,5 @@ def _cpu_numbers(cpu_list):
     return parse_cpu_list(cpu_list)
 
 
-__all__ = ["ClaimRefused", "DEVICE_ID", "DEVICE_LOCK", "hold", "hold_cpu"]
+__all__ = ["ClaimRefused", "CpuClaimLease", "DEVICE_ID", "DEVICE_LOCK", "hold", "hold_cpu",
+           "region_lock_busy", "yield_lease"]
