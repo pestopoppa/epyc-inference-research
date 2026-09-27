@@ -1076,7 +1076,7 @@ class TestEditModeFailClosed:
             )
 
         def _fake_consult(**kwargs):
-            assert kwargs["consultant_role"] == "architect_general"
+            assert kwargs["consultant_role"] == "architect_critic"  # ARCHSWAP-20260927: review follows the reviewer binding
             assert kwargs["requester_role"] == "coder_escalation"
             assert kwargs["skill"] == "review_before_commit"
             assert "VALUE = 2" in kwargs["context"]

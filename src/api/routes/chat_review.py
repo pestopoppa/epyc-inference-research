@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 from src.config import get_config as _get_config
 from src.constants import TASK_IR_OBJECTIVE_LEN
 from src.roles import Role, chain_name_to_role
+from src.roles import resolve_reviewer_role as _resolve_reviewer_role
 from src.task_ir import canonicalize_task_ir
 from src.prompt_builders import (
     build_review_verdict_prompt,
@@ -126,9 +127,12 @@ def _architect_verdict(
         worker_digests=worker_digests,
     )
     try:
+        # ARCHSWAP-20260927: the verdict is REVIEW work, so it follows the reviewer
+        # binding (default architect_critic, the MI210 27B) rather than the
+        # consultant role architect_general (now CPU Flash-Next).
         result = primitives.llm_call(
             prompt,
-            role="architect_general",
+            role=str(_resolve_reviewer_role()),
             n_tokens=80,  # Hard cap — verdict only
         )
         text = result.strip()
@@ -294,7 +298,8 @@ def _architect_plan_review(
         return None
 
     # RD-1/RD-5/TM-3: the reviewer role is resolved via the config-level binding
-    # inside the service (default → architect_general, so no behavior change).
+    # inside the service (default → architect_critic since ARCHSWAP-20260927, i.e. the
+    # same MI210 27B that reviewed before the swap).
     # review_plan() emits an always-on shadow trace event regardless of whether the
     # plan_review feature acts — this is the DECOUPLED shadow-emission path: the
     # trace flows even though the plan_review flag itself requires memrl (features.py
@@ -438,7 +443,7 @@ def _store_plan_review_episode(
             ProgressEntry(
                 event_type=EventType.PLAN_REVIEWED,
                 task_id=task_id,
-                agent_role="architect_general",
+                agent_role=str(_resolve_reviewer_role()),
                 data=_review_context,
                 outcome="success" if review.is_ok else "corrected",
             )

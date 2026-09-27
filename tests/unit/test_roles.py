@@ -119,7 +119,7 @@ class TestRoleEnum:
         assert Role.from_string("coder") == Role.CODER_ESCALATION
         assert Role.from_string("coder_agent") == Role.CODER_ESCALATION
         assert Role.from_string("researcher") == Role.WORKER_GENERAL
-        assert Role.from_string("reviewer") == Role.ARCHITECT_GENERAL
+        assert Role.from_string("reviewer") == Role.ARCHITECT_CRITIC  # ARCHSWAP-20260927: reviewer default = the 27B
         assert Role.from_string("worker_explore") == Role.WORKER_GENERAL
         assert Role.from_string("worker_fast") == Role.WORKER_GENERAL
 
@@ -383,3 +383,34 @@ class TestChainNameMapping:
         """Test role_to_chain_name returns value for unmapped roles."""
         # Thinking reasoning should map to coder
         assert role_to_chain_name(Role.THINKING_REASONING) == "coder"
+
+
+class TestArchswapPlannerAndReviewerBindings:
+    """ARCHSWAP-20260927: review/plan work stays on the 27B; only escalation moves."""
+
+    def test_planner_default_is_architect_critic(self, monkeypatch):
+        from src.roles import DEFAULT_PLANNER_ROLE, resolve_planner_role
+
+        monkeypatch.delenv("ORCHESTRATOR_PLANNER_ROLE", raising=False)
+        assert DEFAULT_PLANNER_ROLE is Role.ARCHITECT_CRITIC
+        assert resolve_planner_role() is Role.ARCHITECT_CRITIC
+
+    def test_planner_env_override_and_unknown_fallback(self, monkeypatch):
+        from src.roles import resolve_planner_role
+
+        monkeypatch.setenv("ORCHESTRATOR_PLANNER_ROLE", "architect_general")
+        assert resolve_planner_role() is Role.ARCHITECT_GENERAL
+        monkeypatch.setenv("ORCHESTRATOR_PLANNER_ROLE", "no_such_role")
+        assert resolve_planner_role() is Role.ARCHITECT_CRITIC
+        assert resolve_planner_role(override="worker_math") is Role.WORKER_MATH
+
+    def test_reviewer_default_is_architect_critic(self, monkeypatch):
+        from src.roles import resolve_reviewer_role
+
+        monkeypatch.delenv("ORCHESTRATOR_REVIEWER_ROLE", raising=False)
+        assert resolve_reviewer_role(config=object()) is Role.ARCHITECT_CRITIC
+
+    def test_escalation_terminal_is_architect_general(self):
+        assert Role.CODER_ESCALATION.escalates_to() is Role.ARCHITECT_GENERAL
+        assert Role.ARCHITECT_CRITIC.escalates_to() is Role.ARCHITECT_GENERAL
+        assert Role.ARCHITECT_GENERAL.escalates_to() is None

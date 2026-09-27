@@ -51,7 +51,7 @@ class _FakePrimitives:
 
 
 def test_load_review_before_commit_skill() -> None:
-    skill = load_interaction_skill("architect_general", "review_before_commit")
+    skill = load_interaction_skill("architect_critic", "review_before_commit")
 
     assert skill.kind == "consult"
     assert skill.max_output_tokens == 400
@@ -66,17 +66,17 @@ def test_load_review_before_commit_skill() -> None:
 
 
 def test_build_consult_prompt_names_roles_and_schema() -> None:
-    skill = load_interaction_skill("architect_general", "review_before_commit")
+    skill = load_interaction_skill("architect_critic", "review_before_commit")
 
     prompt = build_consult_prompt(
         requester_role="coder_escalation",
-        consultant_role="architect_general",
+        consultant_role="architect_critic",
         skill=skill,
         context="draft",
     )
 
     assert "coder_escalation" in prompt
-    assert "architect_general" in prompt
+    assert "architect_critic" in prompt
     assert "review_before_commit" in prompt
     assert "JSON schema" in prompt
 
@@ -85,7 +85,7 @@ def test_consult_calls_llm_with_schema_and_scheduler_context() -> None:
     primitives = _FakePrimitives()
 
     advisory, stats = consult(
-        "architect_general",
+        "architect_critic",
         "coder_escalation",
         "review_before_commit",
         "draft context",
@@ -102,7 +102,7 @@ def test_consult_calls_llm_with_schema_and_scheduler_context() -> None:
             "max_queue_wait_ms": 2000,
         }
     ]
-    assert primitives.calls[0]["role"] == "architect_general"
+    assert primitives.calls[0]["role"] == "architect_critic"
     assert primitives.calls[0]["n_tokens"] == 400
     assert primitives.calls[0]["json_schema"]["type"] == "object"
 
@@ -112,7 +112,7 @@ def test_consult_rejects_schema_violations() -> None:
 
     with pytest.raises(ConsultationDenied) as exc_info:
         consult(
-            "architect_general",
+            "architect_critic",
             "coder_escalation",
             "review_before_commit",
             "draft context",
@@ -127,7 +127,7 @@ def test_consult_translates_contention_to_consultation_denied() -> None:
 
     with pytest.raises(ConsultationDenied) as exc_info:
         consult(
-            "architect_general",
+            "architect_critic",
             "coder_escalation",
             "review_before_commit",
             "draft context",
@@ -205,7 +205,7 @@ def test_consult_injects_dcp_augmented_context(monkeypatch) -> None:
     primitives = _FakePrimitives()
 
     consult(
-        "architect_general",
+        "architect_critic",
         "coder_escalation",
         "review_before_commit",
         "draft context",

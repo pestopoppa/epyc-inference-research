@@ -1131,13 +1131,17 @@ async def _handle_chat(
                 def _review_before_commit(review_context: str) -> tuple[dict, dict]:
                     from src.orchestration.consultation import consult
 
-                    # ARCHSWAP-20260927: the consultant stays the ROLE architect_general
-                    # (meant to be the strongest model), which since the 2026-09-27
-                    # ARCHITECT SWAP is Qwen3.8-Flash-Next on the full CPU instance
-                    # (:8074, serial, whole-machine region lock) — no longer the MI210
-                    # 27B the skill's 2 s max_queue_wait_ms was sized for.
+                    from src.roles import resolve_reviewer_role
+
+                    # ARCHSWAP-20260927: review/plan work stays on the 27B. This is
+                    # REVIEW work, so it follows the reviewer binding (default
+                    # architect_critic = the MI210 27B the skill's 2 s max_queue_wait_ms
+                    # was sized for), not the consultant role architect_general (now CPU
+                    # Flash-Next). The skill is declared under architect_critic in
+                    # orchestration/interaction_skills.yaml; a reviewer override must
+                    # name a role that carries it.
                     return consult(
-                        consultant_role="architect_general",
+                        consultant_role=str(resolve_reviewer_role()),
                         requester_role=str(initial_role),
                         skill="review_before_commit",
                         context=review_context,

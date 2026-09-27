@@ -25,6 +25,7 @@ from src.api.structured_logging import task_extra
 from src.features import features
 from src.llm_primitives import LLMPrimitives
 from src.structured_output.repair import RepairResult, parse_with_repair, primitives_completer
+from src.roles import resolve_planner_role
 from src.task_ir import canonicalize_task_ir
 
 log = logging.getLogger(__name__)
@@ -137,7 +138,7 @@ async def _decompose_plan_steps(
 ) -> list[dict]:
     """TD-21.20: fish first via the unchanged `_parse_plan_steps` (byte-
     identical happy path, 0 repair calls); on a miss, ONE repair turn back to
-    the SAME `architect_general` role instead of the old silent `[]`
+    the SAME planner role (`resolve_planner_role()`) instead of the old silent `[]`
     fall-through. Every outcome is counted under
     `STRUCTURED_OUTPUT_REPAIR_COUNTS` (site `_PLAN_STEPS_REPAIR_SITE`); a
     terminal repair failure is ALSO logged explicitly here (not left to the
@@ -150,7 +151,9 @@ async def _decompose_plan_steps(
     if steps:
         return steps
 
-    complete = primitives_completer(primitives, "architect_general")
+    # ARCHSWAP-20260927: review/plan work stays on the 27B — the repair turn goes back
+    # to the SAME planner binding that produced the plan (resolve_planner_role).
+    complete = primitives_completer(primitives, str(resolve_planner_role()))
 
     def _repair() -> RepairResult:
         return parse_with_repair(
@@ -238,8 +241,12 @@ async def _execute_proactive(
         extra=task_extra(task_id=routing.task_id, stage="execute", mode="proactive"),
     )
 
-    # Ask architect to decompose into parallel steps
+    # Ask the planner to decompose into parallel steps. ARCHSWAP-20260927:
+    # review/plan work stays on the 27B (resolve_planner_role, default
+    # architect_critic); only escalation targets architect_general.
     from src.prompt_builders import build_task_decomposition_prompt
+
+    planner_role = str(resolve_planner_role())
 
     plan_prompt = build_task_decomposition_prompt(
         request.prompt,
@@ -250,7 +257,7 @@ async def _execute_proactive(
         if _should_inline_plan_call_for_test(primitives):
             plan_json_str = primitives.llm_call(
                 plan_prompt,
-                role="architect_general",
+                role=planner_role,
                 n_tokens=256,
             )
         else:
@@ -258,7 +265,7 @@ async def _execute_proactive(
             plan_json_str = await asyncio.to_thread(
                 primitives.llm_call,
                 plan_prompt,
-                role="architect_general",
+                role=planner_role,
                 n_tokens=256,
             )
     except Exception as e:
@@ -331,8 +338,8 @@ async def _execute_proactive(
             details=f"Proactive delegation: {n_subtasks} subtasks, {elapsed:.3f}s",
             completion_meta={
                 "producer_role": "proactive_delegation",
-                "delegation_lineage": result.roles_used or ["architect_general"],
-                "final_answer_role": (result.roles_used or ["architect_general"])[-1],
+                "delegation_lineage": result.roles_used or [str(resolve_planner_role())],
+                "final_answer_role": (result.roles_used or [str(resolve_planner_role())])[-1],
                 **llm_completion_meta(primitives),
                 # M-11a2b
                 **work_completion_meta(answer=answer),
@@ -363,7 +370,7 @@ async def _execute_proactive(
         real_mode=True,
         cache_stats=cache_stats,
         routed_to="proactive_delegation",
-        role_history=result.roles_used or ["architect_general"],
+        role_history=result.roles_used or [str(resolve_planner_role())],
         routing_strategy="proactive",
         mode="proactive",
         tokens_generated=primitives.total_tokens_generated,

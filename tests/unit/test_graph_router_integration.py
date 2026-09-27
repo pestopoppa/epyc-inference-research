@@ -183,7 +183,7 @@ class TestHybridRouterGraphBlending:
 
         router = HybridRouter(retriever=retriever, rule_based_router=rule_router)
         assert router._parse_routing_action("plan_review:drop") == []
-        assert router._parse_routing_action("reviewer:direct") == ["architect_general"]
+        assert router._parse_routing_action("reviewer:direct") == ["architect_critic"]  # ARCHSWAP-20260927 reviewer default
 
     def test_with_graph_router(self, retriever, rule_router):
         """With graph_router, blending happens before routing decision."""

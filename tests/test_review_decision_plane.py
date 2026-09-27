@@ -81,10 +81,11 @@ def _review(decision=ReviewDecision.REJECT, evidence=None, tripwire=False, **kw)
 
 
 class TestReviewerRoleBinding:
-    def test_default_resolves_to_architect_general(self, monkeypatch):
+    def test_default_resolves_to_architect_critic(self, monkeypatch):
+        # ARCHSWAP-20260927: reviews stay on the MI210 27B (operator, 2026-09-27).
         monkeypatch.delenv("ORCHESTRATOR_REVIEWER_ROLE", raising=False)
         assert resolve_reviewer_role() is DEFAULT_REVIEWER_ROLE
-        assert resolve_reviewer_role() is Role.ARCHITECT_GENERAL
+        assert resolve_reviewer_role() is Role.ARCHITECT_CRITIC
 
     def test_env_override_targets_different_model(self, monkeypatch):
         monkeypatch.setenv("ORCHESTRATOR_REVIEWER_ROLE", "coder_escalation")
@@ -99,10 +100,10 @@ class TestReviewerRoleBinding:
         assert resolve_reviewer_role(override="worker_math") is Role.WORKER_MATH
 
     def test_service_default_role_unchanged(self, monkeypatch):
-        """Default service role is still architect_general (zero behavior change)."""
+        """Default service role is architect_critic — the 27B that reviewed before ARCHSWAP-20260927."""
         monkeypatch.delenv("ORCHESTRATOR_REVIEWER_ROLE", raising=False)
         svc = _service()
-        assert svc.architect_role == "architect_general"
+        assert svc.architect_role == "architect_critic"
 
     def test_service_reviewer_role_override(self):
         svc = _service(reviewer_role="coder_escalation")
@@ -244,7 +245,7 @@ class TestAlwaysOnEmission:
         for ev in events:
             assert json.loads(ev.detail_json)["assigned_role"] == "verifier"
             # Orthogonality: the model role stays the reviewer's model binding.
-            assert ev.role == "architect_general"
+            assert ev.role == "architect_critic"  # ARCHSWAP-20260927 reviewer default (the 27B)
 
     def test_write_through_to_temp_db(self, tmp_path):
         """Real emit.py write-through lands a durable row (no injected sink)."""

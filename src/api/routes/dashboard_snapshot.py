@@ -218,7 +218,7 @@ def scan_orchestrator_tasks(
                     plan_reviews[tid] = {
                         "plan_review_decision": data.get("decision") or "",
                         "plan_review_feedback": (data.get("feedback") or "")[:200],
-                        "plan_review_role": e.get("agent_role") or "architect_general",
+                        "plan_review_role": e.get("agent_role") or "architect_critic",  # ARCHSWAP-20260927: reviewer default
                     }
                 elif ev in ("task_completed", "task_failed", "escalation_triggered"):
                     terminal_events[tid] = {

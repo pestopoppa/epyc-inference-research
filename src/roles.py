@@ -376,9 +376,17 @@ def architect_repl_allowed(role: object, *, task_root: object = None) -> bool:
 # the string aliases below survive only so ``Role("reviewer")`` remains a stable
 # enum-resolution fallback (they point at the same default the resolver returns).
 #
-# The default binding is ARCHITECT_GENERAL → resolving with no override / no env /
-# no config attribute yields exactly the pre-RD-1 behavior (zero behavior change).
-DEFAULT_REVIEWER_ROLE: Role = Role.ARCHITECT_GENERAL
+# ARCHSWAP-20260927: review/plan work stays on the 27B. The default binding is
+# ARCHITECT_CRITIC — the Qwen3.8-27B Q8 on the MI210 (:8083), the process that served
+# architect_general until the swap — so reviews keep running on the model/process they
+# always ran on. Only ESCALATION moves: it targets architect_general, now
+# Qwen3.8-Flash-Next on the CPU (:8074).
+# This constant is the persistent source of truth: no registry key and no launch env
+# sets the reviewer (ORCHESTRATOR_REVIEWER_ROLE is an override, unset in the stack),
+# and DelegationConfig has no reviewer_role field. Every review call site resolves
+# through resolve_reviewer_role(): the plan review (ArchitectReviewService), the answer
+# verdict (chat_review) and review_before_commit (chat.py).
+DEFAULT_REVIEWER_ROLE: Role = Role.ARCHITECT_CRITIC
 
 # Operator/stack-level binding knob. Kept as an env var (+ a forward-compatible
 # ``delegation.reviewer_role`` config attribute read via ``getattr``) so the
@@ -407,6 +415,36 @@ _LEGACY_ROLE_ALIASES: dict[str, Role] = {
 }
 
 
+# ── Planner role binding (ARCHSWAP-20260927) ─────────────────────────────────
+#
+# Inline per-request planning — proactive_stage's plan decomposition and its repair
+# turn — was hard-coded to the literal "architect_general". It is not escalation, so
+# it stays on the 27B with review: it resolves through this binding instead of
+# following the architect_general label to CPU Flash-Next. Same shape as the reviewer
+# binding: explicit override > ORCHESTRATOR_PLANNER_ROLE env > DEFAULT_PLANNER_ROLE.
+DEFAULT_PLANNER_ROLE: Role = Role.ARCHITECT_CRITIC
+PLANNER_ROLE_ENV = "ORCHESTRATOR_PLANNER_ROLE"
+
+
+def resolve_planner_role(override: "Role | str | None" = None) -> Role:
+    """Resolve the inline-planning role binding (default ``architect_critic``).
+
+    An unknown binding string falls back to the default rather than raising, so a
+    misconfiguration never breaks planning.
+    """
+    candidate: "Role | str | None" = override
+    if candidate is None:
+        env_val = os.environ.get(PLANNER_ROLE_ENV)
+        if env_val:
+            candidate = env_val.strip()
+    if candidate is None:
+        return DEFAULT_PLANNER_ROLE
+    if isinstance(candidate, Role):
+        return candidate
+    role = Role.from_string(str(candidate))
+    return role if role is not None else DEFAULT_PLANNER_ROLE
+
+
 def resolve_reviewer_role(
     override: "Role | str | None" = None,
     config: object | None = None,
@@ -419,7 +457,7 @@ def resolve_reviewer_role(
       3. ``config.delegation.reviewer_role`` attribute, if present (forward-compatible
          with a future ``DelegationConfig.reviewer_role`` field — read via ``getattr``
          so no config-schema edit is required in this module)
-      4. ``DEFAULT_REVIEWER_ROLE`` (``architect_general``)
+      4. ``DEFAULT_REVIEWER_ROLE`` (``architect_critic`` since ARCHSWAP-20260927)
 
     Returns a valid :class:`Role`; an unknown binding string falls back to the
     default rather than raising, so a misconfiguration never breaks review.

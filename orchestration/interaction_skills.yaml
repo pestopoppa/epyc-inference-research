@@ -32,7 +32,8 @@ interaction_skills:
   #
   # NOTE ON max_queue_wait_ms / max_output_tokens: the long queue wait is
   # deliberate — this is a considered consult, not an inline check like
-  # architect_general.review_before_commit (400 tokens, 2 s wait).
+  # architect_critic.review_before_commit (400 tokens, 2 s wait; moved from
+  # architect_general by ARCHSWAP-20260927).
   architect_critic:
     critique_plan:
       kind: consult
@@ -85,11 +86,10 @@ interaction_skills:
       tools_budget: 0
       cache_ttl_seconds: 3600
 
-  # architect_general — SERVED BY Qwen3.8-Flash-Next UD-IQ4_XS on the full CPU
-  # instance (:8074, serial, whole-machine region-lock holder) since the
-  # 2026-09-27 ARCHITECT SWAP; the MI210 27B (:8083) before it. The 2 s queue wait
-  # below was sized for the 27B GPU process.
-  architect_general:
+    # ARCHSWAP-20260927: review/plan work stays on the 27B. review_before_commit MOVED
+    # here from architect_general. It is REVIEW work, the
+    # caller resolves the consultant through src.roles.resolve_reviewer_role() (default
+    # architect_critic), and its 2 s max_queue_wait_ms was sized for this MI210 27B.
     review_before_commit:
       kind: consult
       description: "Advisory review of a coder draft before it commits."

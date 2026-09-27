@@ -72,7 +72,7 @@ class TestResolveRoleAlias:
         # Test directly via the method
         assert repl._resolve_role_alias("researcher_agent") == "worker_general"
         assert repl._resolve_role_alias("coder_agent") == "coder_escalation"
-        assert repl._resolve_role_alias("reviewer_agent") == "architect_general"
+        assert repl._resolve_role_alias("reviewer_agent") == "architect_critic"  # ARCHSWAP-20260927 reviewer default
 
     def test_resolve_unknown_returns_original(self):
         """Test unknown aliases return original value."""
@@ -126,8 +126,8 @@ class TestEscalate:
         result = repl.execute("escalate('Need review', 'reviewer_agent')")
 
         assert result.error is None
-        # reviewer_agent should resolve to architect_general
-        assert repl.artifacts.get("_escalation_target") == "architect_general"
+        # reviewer_agent should resolve to architect_critic (the reviewer default since ARCHSWAP-20260927)
+        assert repl.artifacts.get("_escalation_target") == "architect_critic"
 
     def test_escalate_returns_message(self):
         """Test escalate() returns acknowledgment message."""
