@@ -21,6 +21,13 @@ G2  pool scaling. Embedding texts/s with 4 in flight on ONE port versus 4 in
 The same ~130-token text is used in both runs so it fits the OLD 256-token
 slot as well as the new 512 one; the arms differ only in placement.
 
+BELIEF CAPTURE (VB-UFH12-PLACEMENT, 2026-09-27). After the record is written, the gate writes
+`<out-stem>.belief_measurements.jsonl` beside it through `embedder_placement_capture.py`: one
+self-hashed row per gate x port x metric, with the serving identity (pid, argv, cpuset, binary
+digest, mapped libggml, frontdoor /props build_info, topology hash) snapshotted before the first and
+after the last timed sample. The snapshots sit outside every timed window, so the measurement is
+unchanged. A refused capture never touches the record; the gate then exits 4 and says why.
+
 This script only sends HTTP requests. It starts, stops and signals nothing,
 and it refuses to run if a declared pool port is not answering /health.
 
@@ -47,6 +54,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import statistics
 import sys
@@ -60,6 +68,9 @@ from typing import Any, Callable
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 POOL_PORTS = [8090, 8091, 8092, 8093, 8094, 8095]
+PER_PORT_IN_FLIGHT = 4
+LOAD_WARMUP_S = 3.0
+CAPTURE_EXIT = 4
 FD_PROMPT = (
     "Write a detailed, step-by-step explanation of how a hash map handles collisions, "
     "covering separate chaining and open addressing, with the trade-offs of each."
@@ -127,7 +138,7 @@ class _Load:
                 t = threading.Thread(target=self._worker, args=(port,), daemon=True)
                 t.start()
                 self._threads.append(t)
-        time.sleep(3.0)  # let every server reach steady state before sampling
+        time.sleep(LOAD_WARMUP_S)  # let every server reach steady state before sampling
         with self._lock:
             self.done = 0
             self.errors = 0
@@ -165,7 +176,7 @@ class _SchedulerLoad:
 
     def __init__(self, ports: list[int], per_port: int, *,
                  client_factory: Callable[[list[int]], Any] | None = None,
-                 admission_wait_s: float = 30.0, warmup_s: float = 3.0) -> None:
+                 admission_wait_s: float = 30.0, warmup_s: float = LOAD_WARMUP_S) -> None:
         self.ports, self.per_port = ports, per_port
         self.client_factory = client_factory or _default_pool_client
         self.admission_wait_s = admission_wait_s
@@ -290,7 +301,7 @@ def g1(fd_ports: list[int], pairs: int, n_predict: int, load_factory: Callable[[
         s_loads: list[dict] = []
         for _ in range(pairs):
             q.append(_decode_tps(port, n_predict))
-            with load_factory(POOL_PORTS, 4) as load:
+            with load_factory(POOL_PORTS, PER_PORT_IN_FLIGHT) as load:
                 s.append(_decode_tps(port, n_predict))
             if load.errors:
                 raise SystemExit(f"G1 :{port}: {load.errors} embedding errors under load; refuse")
@@ -316,7 +327,7 @@ def g1(fd_ports: list[int], pairs: int, n_predict: int, load_factory: Callable[[
 def g2(window_s: float, load_factory: Callable[[list[int], int], Any] = _Load) -> dict:
     res = {}
     for name, ports in (("one_port", POOL_PORTS[:1]), ("whole_pool", POOL_PORTS)):
-        with load_factory(ports, 4) as load:
+        with load_factory(ports, PER_PORT_IN_FLIGHT) as load:
             time.sleep(window_s)
         if load.errors:
             raise SystemExit(f"G2 {name}: {load.errors} embedding errors; refuse")
@@ -325,6 +336,27 @@ def g2(window_s: float, load_factory: Callable[[list[int], int], Any] = _Load) -
             res[name]["load"] = load.summary()
     res["scaling_ratio"] = res["whole_pool"]["texts_per_s"] / res["one_port"]["texts_per_s"]
     return res
+
+
+def _capture_window(fd_ports: list[int]) -> Any:
+    from scripts.server.embedder_placement_capture import CaptureWindow
+
+    return CaptureWindow(POOL_PORTS + fd_ports, fd_ports)
+
+
+def _write_capture(out: Path, record: dict, window: Any) -> int:
+    """The belief sidecar. Runs after the record is on disk; a refusal is loud, never silent."""
+    from scripts.server.embedder_placement_capture import CaptureError, write_belief_measurements
+
+    try:
+        sidecar = write_belief_measurements(
+            out, record, window=window, producer="epyc-orchestrator scripts/server/embedder_placement_gate.py",
+            gate_path=Path(__file__).resolve())
+    except (CaptureError, OSError, ValueError) as exc:
+        print(f"belief capture REFUSED (record kept at {out}): {exc}", file=sys.stderr)
+        return CAPTURE_EXIT
+    print(f"belief capture: {sidecar}")
+    return 0
 
 
 def main() -> int:
@@ -346,12 +378,24 @@ def main() -> int:
     down = [p for p in POOL_PORTS + fd_ports if not _healthy(p)]
     if down:
         raise SystemExit(f"refusing: ports not healthy: {down}")
+    if str(_REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(_REPO_ROOT))
     load_factory = _load_for(args.load_mode, admission_wait_s=args.sched_admission_wait_s)
+    window = _capture_window(fd_ports)
+    window.begin()  # serving-identity snapshot, before any timed sample
     record: dict = {
         "schema": "epyc.embedder_placement_gate.v1",
         "label": args.label,
         "load_mode": args.load_mode,
         "started_at": datetime.now(UTC).isoformat(),
+        "params": {
+            "fd_ports": fd_ports, "pool_ports": POOL_PORTS,
+            "per_port_in_flight": PER_PORT_IN_FLIGHT, "load_warmup_s": LOAD_WARMUP_S,
+            "pairs": args.pairs, "n_predict": args.n_predict, "g2_window_s": args.g2_window_s,
+            "sched_admission_wait_s": args.sched_admission_wait_s,
+            "fd_prompt_sha256": hashlib.sha256(FD_PROMPT.encode()).hexdigest(),
+            "emb_text_sha256": hashlib.sha256(EMB_TEXT.encode()).hexdigest(),
+        },
     }
     if args.load_mode == "scheduler":
         if str(_REPO_ROOT) not in sys.path:
@@ -362,15 +406,23 @@ def main() -> int:
         policy = load_policy()
         record["scheduler_policy"] = policy.as_dict()
         record["pool_topology"] = live_topology(policy.neighbour_cap.guarded_roles).describe()
+    t0 = datetime.now(UTC).isoformat()
     record["g2_pool_scaling"] = g2(args.g2_window_s, load_factory)
+    t1 = datetime.now(UTC).isoformat()
     record["g1_frontdoor_decode"] = g1(fd_ports, args.pairs, args.n_predict, load_factory)
+    t2 = datetime.now(UTC).isoformat()
+    record["gate_windows"] = {"g2": {"started_at": t0, "finished_at": t1},
+                              "g1": {"started_at": t1, "finished_at": t2}}
+    window.mark("g2", t0, t1)
+    window.mark("g1", t1, t2)
     record["finished_at"] = datetime.now(UTC).isoformat()
+    window.finish()  # serving-identity snapshot, after the last timed sample
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(record, indent=2) + "\n")
     print(json.dumps({k: record[k] for k in ("label", "load_mode", "g2_pool_scaling")}, indent=2))
     for port, row in record["g1_frontdoor_decode"].items():
         print(f"G1 :{port} S/Q median {row['s_over_q_median']:.3f}  A/A floor {row['aa_noise_floor_rel_median']:.3%}")
-    return 0
+    return _write_capture(args.out, record, window)
 
 
 if __name__ == "__main__":
