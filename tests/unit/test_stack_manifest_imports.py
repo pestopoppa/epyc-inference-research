@@ -507,7 +507,9 @@ def test_resolve_slots_returns_the_master_declaration_not_the_serial_policy() ->
         (ROOT / "orchestration" / "model_registry.yaml").read_text()
     )["server_mode"]
 
-    for role in ("frontdoor", "architect_critic"):
+    # 2026-09-27 ARCHITECT SWAP: the serial full-CPU Flash-Next process is
+    # architect_general now (architect_critic is the non-serial :8083 27B).
+    for role in ("frontdoor", "architect_general"):
         assert role in SERIAL_ROLES
         decision = resolve_slots(role, "default")
         assert decision.slots == DECLARED_SLOTS[role]

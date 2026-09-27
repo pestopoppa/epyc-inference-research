@@ -254,7 +254,9 @@ def test_llm_judge_orchestrator_shape_success(monkeypatch) -> None:
     assert body["mock_mode"] is False
     assert body["force_mode"] == "direct"
     assert body["workload_class"] == "eval_batch"
-    assert body["force_role"] == "architect_general"
+    # 2026-09-27 ARCHITECT SWAP: the default GPU judge (the :8083 27B) is
+    # architect_critic.
+    assert body["force_role"] == "architect_critic"
     assert body["batch_id"] == "evaltower-test-100q"
     assert body["client_deadline_unix_s"] > 0
     assert body["max_queue_wait_ms"] == 1250

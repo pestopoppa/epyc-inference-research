@@ -8,7 +8,9 @@
 # FRONTDOOR-CONTENTION CAVEAT (measured, not a rule of this file): every core in 0-95 is in
 # the CPU frontdoor's -t 96 set. With a frontdoor generation running, STT RTF went to 1.5-2.9,
 # TTS RTF to 7.8-9.4 and the frontdoor to 0.3-7.4 tok/s. Voice turns must therefore reason on
-# the GPU (architect_general); that routing is the voice pipeline's requirement.
+# the GPU (the :8083 MI210 27B = architect_critic since the 2026-09-27 ARCHITECT SWAP; it was
+# architect_general before); that routing is the voice pipeline's requirement. architect_general
+# is now Flash-Next on the full 0-95 CPU instance and would contend with speech like the frontdoor.
 #
 # Evidence: epyc-inference-research artifacts/speech_cpu_realtime_20260924/
 #   (README.md; raw/whisper_bench_encoder_matrix.txt; raw/concurrent*.stdout)

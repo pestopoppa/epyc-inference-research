@@ -127,7 +127,9 @@ region that is likely contended when CPU is stressed:
   rather than spread.
 - The roles sharing those cores are the q3 quarter instances (frontdoor 8380,
   worker_general 8382, ingest 8485, vision_escalation 8087) and the full-machine
-  instances (architect_general 8083, worker_general 8072).
+  instances (architect_general 8074 — the full-machine instance was
+  architect_critic 2026-08-01 → 2026-09-27 and is architect_general again since
+  the 2026-09-27 ARCHITECT SWAP — worker_general 8072).
 
 So the net benefit of shedding is **(GPU aggregate throughput gained) − (q3 CPU
 throughput lost)**, not the GPU throughput alone. That difference has never been
@@ -322,7 +324,7 @@ second is the one a naive check misses:
 | Basis | Instances | Why it contends |
 |---|---|---|
 | `smt_sibling_overlap` — the instance's own cpuset literally lists 168-191 | frontdoor q3 **8380**, worker_general q3 **8382**, ingest_long_context q3 **8485**, vision_escalation **8087** | direct string overlap; any check finds these |
-| `physical_core_overlap` — the instance lists physical cores only | **architect_general 8083** (`0-95`), **worker_general 8072** (`0-95`) | shares cores 88-95 with the lane's siblings while sharing **no literal CPU id**. A raw string overlap of "184-191" vs "0-95" returns EMPTY. |
+| `physical_core_overlap` — the instance lists physical cores only | **architect_general 8074** (`0-95`; the port was misprinted 8083 here, and the role was architect_critic 2026-08-01 → 2026-09-27), **worker_general 8072** (`0-95`) | shares cores 88-95 with the lane's siblings while sharing **no literal CPU id**. A raw string overlap of "184-191" vs "0-95" returns EMPTY. |
 
 **P2-3 correction (2026-07-28):** the second row was missing from this spec and
 from the recert set. `architect_general` occupies all 96 physical cores — it is

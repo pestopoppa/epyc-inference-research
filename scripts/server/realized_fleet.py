@@ -64,7 +64,7 @@ def full_instance_ports(numa_config: dict[str, Any] | None = None) -> set[int]:
     Only roles with ``full_instance_idx`` AND more than one instance qualify —
     these are exactly the ports that are LIVE in ``full`` mode and DEAD in
     ``quarter`` mode (frontdoor 8070, worker_general 8072, ingest 8085).
-    Single-instance roles (architect 8083, vision 8086/8087) are excluded: they
+    Single-instance roles (architects 8074/8083, vision 8086/8087) are excluded: they
     are present in every mode and are not a full/quarter discriminator.
     """
     out: set[int] = set()

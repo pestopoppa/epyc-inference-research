@@ -108,7 +108,12 @@ _ROLE_ENV_BLOCKS: dict[str, dict[str, str]] = {
     # critic is now Qwen3.8-Flash-Next, not the 122B the Probe-B tuning measured.
     # Re-porting the interleave is a kernel-lineage question (AutoKernel DS41 inbox
     # AK-H-NRI-1), not a stack_env setting.
-    "architect_critic": {},
+    # 2026-09-27 ARCHITECT SWAP (operator-decided): this block belongs to the
+    # Flash-Next full-CPU PROCESS on :8074, which now serves architect_general, so it
+    # moved with the process from "architect_critic" to "architect_general". The
+    # MI210 27B on :8083 (now architect_critic) has no block, as it had none while it
+    # was architect_general. BINDING follows the PROCESS.
+    "architect_general": {},
     # Hybrid SSM dense (Nemotron-9B-v2-class) — c3 = CPU1 stack + mbind off.
     # Activate when a hybrid_ssm_dense model is rostered.
     # 2026-06-26 v6 cutover: removed GGML_CCD_POOLS / GGML_CCD_WORK_DIST /
@@ -278,14 +283,21 @@ def _role_env_overrides(role: str) -> dict[str, str]:
     # formalizer (MathSmith-Qwen3-8B Q8 dense) routes to dense_q8 — it's not MoE at all.
     arch_aliases = {
         # 2026-08-01 W1 CUTOVER: coder_escalation no longer shares frontdoor's GGUF.
-        # It is an alias on architect_general's MI210 27B, so it must inherit THAT
-        # role's env block — inheriting frontdoor's CPU EP-stack env on a ROCm
-        # process was the concrete risk flagged in the cutover audit.
-        "coder_escalation": "architect_general",
+        # It is an alias on the MI210 27B, so it must inherit THAT process's env
+        # block — inheriting frontdoor's CPU EP-stack env on a ROCm process was the
+        # concrete risk flagged in the cutover audit.
+        # 2026-09-27 ARCHITECT SWAP: the 27B process now serves architect_critic;
+        # pointing this at architect_general would hand a ROCm alias Flash-Next's
+        # full-CPU env block.
+        "coder_escalation": "architect_critic",
         "vision_escalation": "worker_vision",  # one MI210 :8086 process serves both
         "worker_summarize": "frontdoor",   # Qwen3.6-35B-A3B Q8 (same model as frontdoor since 2026-05-06 swap)
         "general_gemma_3_27b_it_qat": "dense_q4",
-        "ingest_long_context": "hybrid_ssm_moe",  # Qwen3-Next-80B-A3B
+        # 2026-09-27: ingest_long_context is an alias on the MI210 27B (host
+        # architect_critic since the 2026-09-27 ARCHITECT SWAP); Qwen3-Next-80B-A3B,
+        # which the old hybrid_ssm_moe mapping described, was retired 2026-09-22.
+        # Follow the host process, like coder_escalation above.
+        "ingest_long_context": "architect_critic",
         "formalizer": "dense_q8",                 # MathSmith-Qwen3-8B Q8 dense; NOT MoE at all
         "toolrunner": "worker_general",           # gemma4-26B-A4B Q4_K_M MTP (shares with worker_general)
     }

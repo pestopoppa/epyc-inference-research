@@ -491,7 +491,8 @@ def _append_spec_decode_args(
 # serving knob is a registry + compiler change, not a new branch in every builder.
 #
 # n_gpu_layers allows a string because the registry declares it both ways:
-# worker_vision as `n_gpu_layers: 999`, architect_general as `ngl: all`. Both are
+# worker_vision as `n_gpu_layers: 999`, the 27B (architect_critic since the
+# 2026-09-27 ARCHITECT SWAP; architect_general before) as `ngl: all`. Both are
 # valid llama-server values on this kernel.
 #
 # chat_template_file is a filesystem PATH, so it is emitted only when the file
@@ -1345,13 +1346,17 @@ _NO_SPEC_DECODE = NO_SPEC_DECODE_ROLES
 # --kv-hadamard: production binary rebuilt with Hadamard support (commit b51c905ec, 2026-03-28).
 # 2026-09-22 lineup change: built from the roles that HAVE their own launch
 # context, instead of indexing two fixed names. ingest_long_context became an
-# ALIAS on architect_general's :8083 server and no longer has an entry here, so
+# ALIAS on architect_general's :8083 server (architect_critic's since the
+# 2026-09-27 swap) and no longer has an entry here, so
 # the old literal `LAUNCH_CONTEXT_TOKENS["ingest_long_context"]` raised KeyError
 # at import and took down every entry point that imports this module -- the
 # stack launcher included. An alias has no context of its own by definition; it
 # inherits its host's, and a table keyed on "roles that launch a server" is the
 # thing that stays true across lineups.
-_KV_CONTEXT_ROLES = ("architect_general", "ingest_long_context")
+# 2026-09-27 ARCHITECT SWAP: the :8083 27B host (and ingest's host) is
+# architect_critic; architect_general is the :8074 Flash-Next launch row. Both
+# launch a server, so both carry their own launch context fallback.
+_KV_CONTEXT_ROLES = ("architect_general", "architect_critic", "ingest_long_context")
 _KV_CONTEXT_SIZES = {
     role: str(LAUNCH_CONTEXT_TOKENS[role])
     for role in _KV_CONTEXT_ROLES

@@ -337,12 +337,17 @@ class TestServerURLsDefaults:
         assert cfg.architect_general == (
             f"http://localhost:{_registry_serving_port('architect_general')}"
         )
-        # W1 cutover: coder_escalation is an `alias_of: architect_general` row —
-        # it must resolve to architect_general's process, not to frontdoor's.
+        assert cfg.architect_critic == (
+            f"http://localhost:{_registry_serving_port('architect_critic')}"
+        )
+        # W1 cutover: coder_escalation is an alias row on the MI210 27B process —
+        # it must resolve to its host's process, not to frontdoor's. The host is
+        # architect_critic since the 2026-09-27 ARCHITECT SWAP (architect_general
+        # before); resolve it from the registry rather than naming it.
         assert cfg.coder_escalation == (
             f"http://localhost:{_registry_serving_port('coder_escalation')}"
         )
-        assert cfg.coder_escalation == cfg.architect_general
+        assert cfg.coder_escalation == getattr(cfg, _registry_host("coder_escalation"))
         assert cfg.worker_fast == "http://localhost:8102"
         # worker_summarize is declared in frontdoor.shared_with, so it must carry
         # frontdoor's whole fleet string, not just its own endpoint.

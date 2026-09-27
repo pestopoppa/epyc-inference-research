@@ -47,7 +47,8 @@ forcing implementation runs. Either way the stack never runs the weak form.
 
 GPU ROLES
 ---------
-`gpu_host_lane: true` roles (architect_general, worker_vision) hold their
+`gpu_host_lane: true` roles (architect_critic since the 2026-09-27 ARCHITECT
+SWAP — architect_general before —, worker_vision) hold their
 weights in VRAM and pin host threads to 184-191 == NPS4 node 3. There is
 nothing to interleave and a 42 GiB forced reclaim on node 3 would only evict
 the page cache the GPU co-tenant relies on. `pre_evict_gib_for_role` returns

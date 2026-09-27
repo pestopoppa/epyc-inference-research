@@ -228,10 +228,13 @@ def _stack_prior_role_tiers(
 # alias_of) are NOT listed: they resolve to their host through the registry in
 # _degraded_serving_host, which is what the live derivation does too (a stack-
 # prior record carries its host process's mem_gb).
+# 2026-09-27 ARCHITECT SWAP (operator-decided): tier follows the PROCESS (model
+# mem_gb), so architect_general (now the ~90 GB Flash-Next CPU :8074 process) is
+# tier_1 and architect_critic (now the 27.05 GB MI210 27B :8083) is tier_2.
 _DEGRADED_PROCESS_TIERS: dict[str, str] = {
-    "architect_critic": "tier_1",
+    "architect_general": "tier_1",
     "thinking_exploration": "tier_1",
-    "architect_general": "tier_2",
+    "architect_critic": "tier_2",
     "coder_general": "tier_2",
     "frontdoor": "tier_2",
     "worker_vision": "tier_3",
@@ -277,6 +280,13 @@ def _degraded_role_tier(role_name: str) -> str | None:
         STRONGEST model in the fleet no risk discount at all.
       * ``vision_escalation`` tier_2 -> tier_3 — it is an alias on the 17.3 GB
         worker_vision process, which is below ``_TIER_2_MIN_MODEL_MEM_GB``.
+
+    2026-09-27 ARCHITECT SWAP (operator-decided): the two architect labels swapped
+    over unchanged processes, so the two tiers swap with them —
+    ``architect_general`` tier_2 -> tier_1 (now Flash-Next, ~90 GB CPU :8074) and
+    ``architect_critic`` tier_1 -> tier_2 (now the 27.05 GB MI210 27B :8083). The
+    coder_escalation / ingest_long_context aliases resolve through the registry to
+    their host (architect_critic) and stay tier_2.
 
     2026-09-26: the hand table still held worker_general, worker_math and
     toolrunner at tier_3 after the operator-signed 2026-09-22 cutover

@@ -104,25 +104,39 @@ class Role(str, Enum):
     # Tier B: Specialists
     # =========================================================================
     CODER_ESCALATION = "coder_escalation"
-    """Primary code generation specialist (Qwen2.5-Coder-32B, port 8081).
+    """Primary code generation specialist.
 
     Handles coding tasks: implementation, refactoring, debugging.
-    Uses speculative decoding with Qwen2.5-Coder-0.5B draft.
     Frontdoor and workers escalate here on failure.
+
+    An ALIAS with no process of its own: since the 2026-09-27 ARCHITECT SWAP it
+    rides ``architect_critic``'s process (Qwen3.8-27B Q8, MI210, :8083); before
+    that it rode the same process under the ``architect_general`` label. (The
+    Qwen2.5-Coder-32B :8081 server this docstring once named is long retired.)
     """
 
     INGEST_LONG_CONTEXT = "ingest_long_context"
     """Long-context document ingestion.
 
-    Processes documents >8K tokens. Uses SSM architecture (Qwen3-Next)
-    which is incompatible with speculative decoding - expert reduction only.
+    Processes documents >8K tokens. An ALIAS with no process of its own: since
+    the 2026-09-27 ARCHITECT SWAP it rides ``architect_critic``'s process
+    (Qwen3.8-27B Q8, MI210, :8083); from the 2026-09-22 lineup cutover until the
+    swap it rode the same process under the ``architect_general`` label.
     """
 
     ARCHITECT_GENERAL = "architect_general"
-    """General architecture and system design.
+    """General architecture and system design — the terminal escalation rung.
 
     Handles high-level design, invariants, system architecture decisions.
-    Top of escalation chain for most tasks.
+    Top of escalation chain for most tasks: ``_ESCALATION_MAP`` has no entry for
+    it, and every other architect-bound rung ends here.
+
+    2026-09-27 ARCHITECT SWAP (operator-decided): serves Qwen3.8-Flash-Next
+    UD-IQ4_XS on the full CPU instance, port 8074 (whole-machine CPU region-lock
+    holder). Before the swap this role was the Qwen3.8-27B Q8 on the MI210
+    (:8083), which now serves ``architect_critic``. The pydantic-graph's
+    escalation paths (``src/graph/nodes.py`` ArchitectNode, chat delegation)
+    target this role BY NAME, so they reach Flash-Next with no routing change.
     """
 
     ARCHITECT_CODING = "architect_general"
@@ -133,17 +147,24 @@ class Role(str, Enum):
     """
 
     ARCHITECT_CRITIC = "architect_critic"
-    """Adversarial plan critic — the terminal rung of the escalation ladder.
+    """Adversarial plan critic.
 
-    Added 2026-08-01 (W1 cutover) on the full CPU instance, port 8074, that
-    ``architect_general`` vacated when it moved to the MI210 (originally serving
-    the Qwen3.5-122B-A10B UD-Q4_K_M). Since the 2026-09-22 lineup cutover it
-    serves Qwen3.8-Flash-Next UD-IQ4_XS on that same CPU instance (:8074).
+    2026-09-27 ARCHITECT SWAP (operator-decided): serves Qwen3.8-27B Q8 on the
+    MI210 (ROCm0), port 8083, and is the HOST of the ``coder_escalation`` and
+    ``ingest_long_context`` aliases (same process, same port). It is NO LONGER
+    the terminal rung: it escalates to ``architect_general`` (Flash-Next, CPU
+    :8074). It stays consultable via the ``critique_plan`` interaction skill and
+    reachable by direct request (``force_role`` / explicit role).
 
-    "Terminal rung" holds for ``Role.escalates_to()`` / EscalationPolicy only.
+    History: added 2026-08-01 (W1 cutover) on the full CPU instance, port 8074
+    (originally the Qwen3.5-122B-A10B UD-Q4_K_M; Qwen3.8-Flash-Next UD-IQ4_XS
+    from the 2026-09-22 lineup cutover until the 2026-09-27 swap moved that
+    process to ``architect_general``).
+
     The pydantic-graph never escalates to this role: ``src/graph/nodes.py`` has
     no critic node and ``_ROLE_TO_NODE`` has no ARCHITECT_CRITIC entry
-    (``select_start_node`` falls back to FrontdoorNode).
+    (``select_start_node`` falls back to FrontdoorNode). RI-21 (no critic node)
+    is deliberately left open by the 2026-09-27 swap.
 
     THIS MEMBER IS LOAD-BEARING, not documentation. ``stack_priors.py:325`` emits
     the arm into the live action space via
@@ -325,7 +346,9 @@ class Role(str, Enum):
 
 # ── INF-78: architect REPL scoped exception ──────────────────────────────────
 #
-# Operator ruling 2026-09-24: the architect (27B, :8083) stays out of REPL mode.
+# Operator ruling 2026-09-24: the architect (then the 27B, :8083) stays out of REPL mode.
+# 2026-09-27 ARCHITECT SWAP: the ruling is keyed by ROLE NAME, so it now covers
+# architect_general = Flash-Next (CPU :8074) and architect_critic = 27B (MI210 :8083).
 # Operator ruling 2026-09-25 (INF-78 scoped exception): the architect MAY run in REPL
 # mode for task-scoped requests (`task_root` set, i.e. AutoKernel planner/author calls
 # confined to a lane worktree). Every other architect request stays direct/delegated.
@@ -474,28 +497,36 @@ _ESCALATION_MAP: dict[Role, Role] = {
     Role.TOOLRUNNER: Role.CODER_ESCALATION,
     # Frontdoor escalates to coder
     Role.FRONTDOOR: Role.CODER_ESCALATION,
-    # 2026-08-01 W1 CUTOVER: coder_escalation is now an ALIAS on architect_general's
-    # :8083 process — same model, same server (Qwen3.8-27B Q8 on the MI210 since
-    # 2026-08-20). Escalating one to the other was a null hop that burned a rung of
-    # the ladder without changing anything. Both now escalate to architect_critic
-    # (Qwen3.8-Flash-Next UD-IQ4_XS on the full CPU instance, :8074, since the
-    # 2026-09-22 lineup cutover; the 122B before that), which is a genuinely
-    # different model on genuinely different hardware.
+    # 2026-09-27 ARCHITECT SWAP (operator-decided): escalation follows MODEL
+    # strength, so the terminal rung is Qwen3.8-Flash-Next UD-IQ4_XS (full CPU
+    # instance, :8074), which now serves architect_general. The Qwen3.8-27B Q8 on
+    # the MI210 (:8083) now serves architect_critic and hosts the coder_escalation
+    # and ingest_long_context aliases. Every architect-bound rung ends at
+    # ARCHITECT_GENERAL:
+    #   * CODER_ESCALATION / THINKING_REASONING -> ARCHITECT_GENERAL: a real hop
+    #     off the 27B's process onto Flash-Next (was -> ARCHITECT_CRITIC, which
+    #     named the same Flash-Next process before the swap).
+    #   * ARCHITECT_CRITIC -> ARCHITECT_GENERAL: 27B -> Flash-Next.
+    #   * INGEST_LONG_CONTEXT -> ARCHITECT_GENERAL: unchanged target; before the
+    #     swap it was a same-process null hop (both on :8083), now a real hop.
+    #   * ARCHITECT_GENERAL: no entry — terminal (was -> ARCHITECT_CRITIC).
+    # (Pre-swap history: 2026-08-01 W1 cutover made coder_escalation an alias on
+    # :8083 and routed it past the same-process architect_general to the critic.)
     #
     # SCOPE NOTE: this map drives Role.escalates_to()/get_escalation_chain() —
     # i.e. EscalationPolicy (src/orchestration/escalation.py), the proactive
     # delegator and the REPL's advertised escalation chain. The pydantic-graph
-    # does NOT follow it to the critic: src/graph/nodes.py hard-wires
-    # CoderEscalationNode -> ArchitectNode (terminal), has no critic node, and
-    # _ROLE_TO_NODE has no ARCHITECT_CRITIC entry (select_start_node falls back
-    # to FrontdoorNode). So in-graph escalation never reaches ARCHITECT_CRITIC.
-    Role.CODER_ESCALATION: Role.ARCHITECT_CRITIC,
-    Role.THINKING_REASONING: Role.ARCHITECT_CRITIC,
-    # Ingest escalates to architect
+    # has its own wiring: src/graph/nodes.py hard-wires CoderEscalationNode ->
+    # ArchitectNode (Role.ARCHITECT_GENERAL, terminal), which after the swap agrees
+    # with this map. There is still no critic node and _ROLE_TO_NODE has no
+    # ARCHITECT_CRITIC entry (select_start_node falls back to FrontdoorNode), so
+    # in-graph escalation never reaches ARCHITECT_CRITIC (RI-21, deliberately open).
+    Role.CODER_ESCALATION: Role.ARCHITECT_GENERAL,
+    Role.THINKING_REASONING: Role.ARCHITECT_GENERAL,
+    Role.ARCHITECT_CRITIC: Role.ARCHITECT_GENERAL,
+    # Ingest escalates to architect (a real hop since the 2026-09-27 swap).
     Role.INGEST_LONG_CONTEXT: Role.ARCHITECT_GENERAL,
-    # architect_general now HAS an escalation: the critic is the terminal rung.
-    Role.ARCHITECT_GENERAL: Role.ARCHITECT_CRITIC,
-    # architect_critic is the top of the chain and does not escalate.
+    # architect_general is the top of the chain and does not escalate.
     # Draft models don't escalate (they support other models)
 }
 
@@ -507,6 +538,8 @@ _FALLBACK_MAP: dict[Role, list[Role]] = {
     # SAME PROCESS ON THE SAME PORT — an infrastructure fallback that retries the
     # exact backend whose circuit just opened. architect_critic is a different
     # model on a different device, so it is a real fallback.
+    # 2026-09-27 ARCHITECT SWAP: both edges unchanged and still cross-fleet —
+    # architect_general = Flash-Next (CPU :8074), architect_critic = 27B (MI210 :8083).
     Role.ARCHITECT_GENERAL: [Role.ARCHITECT_CRITIC],
     Role.ARCHITECT_CRITIC: [Role.ARCHITECT_GENERAL],
     # Still valid: frontdoor is a separate CPU process with a separate GGUF.
@@ -518,14 +551,23 @@ _FALLBACK_MAP: dict[Role, list[Role]] = {
     # WORKER_MATH -> WORKER_GENERAL and INGEST_LONG_CONTEXT -> ARCHITECT_GENERAL
     # both retried the process whose circuit had just opened. Each role now falls
     # back to a different serving process:
-    #   * worker_math -> architect_general: a different model on a different
+    #   * worker_math -> (then) architect_general: a different model on a different
     #     device (MI210). It is also the process worker_math already escalates to,
     #     through the coder_escalation alias.
-    #   * ingest_long_context -> architect_critic: its host's own real fallback.
+    #   * ingest_long_context -> (then) architect_critic: its host's own real fallback.
+    # 2026-09-27 ARCHITECT SWAP (operator-decided): both edges follow the PROCESS,
+    # not the role label.
+    #   * WORKER_MATH -> ARCHITECT_CRITIC: the MI210 27B (:8083) now serves
+    #     architect_critic; still the process worker_math escalates to via the
+    #     coder_escalation alias.
+    #   * INGEST_LONG_CONTEXT -> ARCHITECT_GENERAL: ingest's host is now
+    #     architect_critic (:8083), so [ARCHITECT_CRITIC] would be a forbidden
+    #     same-fleet edge; architect_general (Flash-Next, CPU :8074) is the real
+    #     fallback.
     # tests/unit/test_concept_integration.py guards the whole table against
     # same-GGUF edges, using the registry.
-    Role.WORKER_MATH: [Role.ARCHITECT_GENERAL],
-    Role.INGEST_LONG_CONTEXT: [Role.ARCHITECT_CRITIC],
+    Role.WORKER_MATH: [Role.ARCHITECT_CRITIC],
+    Role.INGEST_LONG_CONTEXT: [Role.ARCHITECT_GENERAL],
     Role.FRONTDOOR: [],  # Always-on, no fallback
     Role.WORKER_VISION: [],  # Hardware-specific, no fallback
 }

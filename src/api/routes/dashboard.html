@@ -7462,8 +7462,8 @@ async function updateRegionLocks(
                 // "no locks held" must never be the operator's last word on
                 // whether the machine is working. Two things can be true at
                 // once: no CPU REGION lock is held, AND inference is running.
-                //  - GPU-resident roles (architect_general, worker_vision,
-                //    speech) have NO CPU lock domain by design — see
+                //  - GPU-resident roles (architect_critic since the 2026-09-27
+                //    swap, worker_vision, speech) have NO CPU lock domain by design — see
                 //    region_locks.non_lock_roles.
                 //  - the host-wide GLOBAL.* admission lock is a separate
                 //    domain that this grid does not have a row for.

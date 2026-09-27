@@ -1,5 +1,12 @@
 interaction_skills:
-  # architect_critic — Qwen3.5-122B-A10B UD-Q4_K_M, CPU, port 8074, tier hot.
+  # architect_critic — SERVED BY Qwen3.8-27B Q8 on the MI210 (ROCm0), port 8083,
+  # tier hot, since the 2026-09-27 ARCHITECT SWAP (operator-decided). The skill
+  # stays with the ROLE (identity), so critique_plan now runs on the 27B, the same
+  # process that hosts coder_escalation / ingest_long_context. Before the swap this
+  # role was the CPU :8074 process (Qwen3.5-122B-A10B UD-Q4_K_M when the notes
+  # below were written; Qwen3.8-Flash-Next UD-IQ4_XS 2026-09-22 → 2026-09-27),
+  # which now serves architect_general. The tier-hot and THROUGHPUT notes below
+  # describe that 122B CPU process and are NOT re-attributable to the 27B.
   #
   # CORRECTED 2026-07-31: an earlier version of this comment said architect_critic
   # was "deliberately NOT a routed role". That was wrong. It is BOTH consultable
@@ -78,6 +85,10 @@ interaction_skills:
       tools_budget: 0
       cache_ttl_seconds: 3600
 
+  # architect_general — SERVED BY Qwen3.8-Flash-Next UD-IQ4_XS on the full CPU
+  # instance (:8074, serial, whole-machine region-lock holder) since the
+  # 2026-09-27 ARCHITECT SWAP; the MI210 27B (:8083) before it. The 2 s queue wait
+  # below was sized for the 27B GPU process.
   architect_general:
     review_before_commit:
       kind: consult

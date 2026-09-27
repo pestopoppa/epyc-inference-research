@@ -594,7 +594,8 @@ def placements_conflict(a: Placement, b: Placement) -> bool:
     Region overlap is necessary but not sufficient: if EITHER side is a
     resolved GPU placement, the overlap is a shared host lane rather than
     contended DRAM bandwidth, and the pair does not conflict. Two GPU roles
-    sharing one host lane — which `architect_general` and `worker_vision` do
+    sharing one host lane — which `architect_critic` (the 27B, since the
+    2026-09-27 ARCHITECT SWAP; `architect_general` before) and `worker_vision` do
     right now on `184-191` — are likewise not in conflict here; what they
     actually contend for is VRAM, a capacity constraint that belongs to the
     feasibility/capacity artifact, not to this region-overlap predicate.

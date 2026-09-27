@@ -581,7 +581,8 @@ def _ps_llama_scan() -> str:
 # On this host the GPU inference kernels live in HIP/ROCm build trees
 # (`.../llama.cpp/build-hip/bin/llama-server`), so the marker is in argv[0].
 # Derived per PROCESS because role names carry no substrate (architect_general
-# is a GPU role today and nothing in its name says so), and a hardcoded
+# was a GPU role until the 2026-09-27 ARCHITECT SWAP made it the CPU :8074
+# process, and nothing in its name said either), and a hardcoded
 # role→substrate list is exactly the drift class RTG-47 removes.
 _SUBSTRATE_MARKER_RE = re.compile(r"hip|rocm|gfx", re.IGNORECASE)
 

@@ -322,7 +322,9 @@ def test_ap3_all_role_restart_knobs_registered() -> None:
         assert spec.section == "role_restart"
         assert spec.restart_cost == "role_restart"
         assert spec.apply_key == f"role_restart.{name}"
-        assert spec.role in {"frontdoor", "worker_general", "architect_general"}
+        # 2026-09-27 ARCHITECT SWAP: the architect_* launch knobs follow the
+        # MI210 27B process, now architect_critic.
+        assert spec.role in {"frontdoor", "worker_general", "architect_critic"}
         if spec.kind == "enum":
             assert spec.allowed_values
         else:

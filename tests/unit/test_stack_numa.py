@@ -83,9 +83,11 @@ def test_numa_prefix_wraps_with_numactl_when_policy_present() -> None:
 
     # The two live forms are genuinely different: a full-machine CPU role
     # interleaves across every node, a GPU host lane binds to the card's node.
-    assert NUMA_CONFIG["architect_critic"]["numactl_policy"].startswith("interleave")
-    assert NUMA_CONFIG["architect_general"]["numactl_policy"].startswith("membind")
-    assert NUMA_CONFIG["architect_general"].get("gpu_host_lane") is True
+    # 2026-09-27 ARCHITECT SWAP: architect_general = the full-machine CPU
+    # Flash-Next (:8074), architect_critic = the MI210 27B's GPU host lane (:8083).
+    assert NUMA_CONFIG["architect_general"]["numactl_policy"].startswith("interleave")
+    assert NUMA_CONFIG["architect_critic"]["numactl_policy"].startswith("membind")
+    assert NUMA_CONFIG["architect_critic"].get("gpu_host_lane") is True
 
 
 def test_numa_prefix_returns_empty_for_unknown_role() -> None:

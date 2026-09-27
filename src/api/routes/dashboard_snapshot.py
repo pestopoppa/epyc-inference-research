@@ -33,7 +33,10 @@ logger = logging.getLogger(__name__)
 INFLIGHT_MAX_AGE_DEFAULT_S = 300.0
 INFLIGHT_MAX_AGE_BY_ROLE_S: dict[str, float] = {
     "ingest_long_context": 1800.0,   # long-context ingest, ~0.5 t/s
-    "architect_general": 900.0,      # long reasoning, ~0.4 t/s
+    "architect_general": 900.0,      # long reasoning, ~0.4 t/s (full-CPU Flash-Next since 2026-09-27)
+    # 2026-09-27 ARCHITECT SWAP: the :8083 27B is architect_critic and hosts
+    # coder_escalation + ingest_long_context; same ceiling as its coder alias.
+    "architect_critic": 900.0,
     "coder_escalation": 900.0,
 }
 

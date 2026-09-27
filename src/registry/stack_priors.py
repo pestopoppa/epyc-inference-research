@@ -722,7 +722,8 @@ def _quality_for_role(
     Capabilities are a property of the ROLE (`roles.<role>.candidate_roles`),
     while a descriptor is per MODEL and is shared by every role bound to it.
     Resolving on the descriptor therefore gave every co-hosted role the same
-    axis: architect_general and coder_escalation both run the 27B, so
+    axis: architect_general and coder_escalation both ran the 27B (its host is
+    architect_critic since the 2026-09-27 ARCHITECT SWAP), so
     coder_escalation inherited `reasoning` when the axis it should be judged
     on is `agentic_coding`. Same weights, different job, different yardstick.
     """
@@ -1598,8 +1599,9 @@ def _n_gpu_layers_prior(
 
     The master registry declares this TWICE, under two spellings and two types:
     ``roles.worker_vision.serving.n_gpu_layers: 999`` (int) and
-    ``server_mode.architect_general.ngl: "all"`` (str). Reading only the first
-    spelling is how architect_general would end up emitting ``--device ROCm0`` with
+    ``server_mode.architect_general.ngl: "all"`` (str; the 27B's row, which is
+    ``server_mode.architect_critic`` since the 2026-09-27 ARCHITECT SWAP). Reading
+    only the first spelling is how that role would end up emitting ``--device ROCm0`` with
     no ``-ngl`` at all — a GPU launch in name only, since the device is then selected
     and nothing is offloaded to it. ``-ngl all`` is a valid llama-server value on
     this kernel (the GPU shadow-lane builder already emits it), so the string form is

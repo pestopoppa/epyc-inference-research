@@ -517,9 +517,12 @@ class TestCallCachingBackend:
             )
 
         mock_backend.infer.side_effect = infer_while_locked
+        # 2026-09-27 ARCHITECT SWAP: architect_general is the full-machine
+        # Flash-Next instance on :8074 (the port resolves the topology role);
+        # :8083 is the architect_critic GPU host lane.
         prims = LLMPrimitives(
             mock_mode=False,
-            server_urls={"architect_general": "http://localhost:8083"},
+            server_urls={"architect_general": "http://localhost:8074"},
         )
 
         result = prims._call_caching_backend(

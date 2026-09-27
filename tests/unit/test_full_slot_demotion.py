@@ -50,7 +50,10 @@ FD = "frontdoor"
 CE = "coder_escalation"
 WS = "worker_summarize"
 
-AG = "architect_general"
+# The MI210 27B host of coder_escalation. It was architect_general until the
+# 2026-09-27 ARCHITECT SWAP (operator-decided) relabelled that :8083 process
+# architect_critic. The name is kept as AG ("architect host") for diff stability.
+AG = "architect_critic"
 
 
 def _topology_ports(role: str) -> tuple[int, list[int]]:
@@ -512,7 +515,7 @@ def test_frontdoor_shared_fields_match_frontdoor_default(
         # points it at THAT host's endpoint — not frontdoor's fleet, whose ports
         # do not serve its model.
         assert _registry_alias_to_host()[CE] == AG
-        assert cfg.coder_escalation == cfg.architect_general
+        assert cfg.coder_escalation == getattr(cfg, AG)
         assert cfg.coder_escalation != cfg.frontdoor
     finally:
         reset_stack_prior_server_url_cache()
@@ -536,7 +539,7 @@ def test_frontdoor_shared_backends_build_four_quarters_under_frontdoor_topology(
         cfg = ServerURLsConfig()
         # frontdoor MUST be co-present so the aliases' topology role is resolvable
         # by matching (full-stripped) URL lists.
-        role_urls = {FD: cfg.frontdoor, AG: cfg.architect_general, CE: cfg.coder_escalation}
+        role_urls = {FD: cfg.frontdoor, AG: getattr(cfg, AG), CE: cfg.coder_escalation}
         role_urls.update({alias: getattr(cfg, alias) for alias in fd_aliases})
         backends = _build(role_urls)
     finally:

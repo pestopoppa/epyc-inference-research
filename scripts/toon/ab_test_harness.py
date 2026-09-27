@@ -245,7 +245,8 @@ def run_ttft_benchmark(port: int = 8083, n_trials: int = 5) -> dict[str, float]:
     Requires a running llama-server on the specified port.
 
     Args:
-        port: Server port (default 8083 for architect_general).
+        port: Server port (default 8083: the MI210 27B, architect_critic since the
+            2026-09-27 ARCHITECT SWAP; architect_general before).
         n_trials: Number of trials per format.
 
     Returns:

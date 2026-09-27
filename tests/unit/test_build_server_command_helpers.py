@@ -1003,7 +1003,7 @@ def test_append_kv_quant_args_emits_q8_for_frontdoor() -> None:
     assert cmd == ["-ctk", "q8_0", "-ctv", "q8_0"]
 
 
-def test_append_kv_quant_args_emits_declared_pair_for_architect_critic() -> None:
+def test_append_kv_quant_args_emits_declared_pair_for_flash_next_architect() -> None:
     """Renamed from ``test_append_kv_quant_args_emits_q4_f16_for_architect_critic``.
 
     History: the (q4_0, f16) pair belonged to the Qwen3.5-122B UD-Q4_K_M and moved
@@ -1012,25 +1012,29 @@ def test_append_kv_quant_args_emits_declared_pair_for_architect_critic() -> None
     UD-IQ4_XS and master declares ``server_mode.architect_critic.serving_shape
     .kv_quant = f16/f16``. The KV pair follows the model, so the expectation is
     read from the role's OWN declaration (not an alias's) instead of restated.
+    2026-09-27 ARCHITECT SWAP: the Flash-Next process is architect_general now.
     """
     from scripts.server import stack_manifest
 
-    declared, source = stack_manifest.master_declared("architect_critic", "kv_quant")
-    assert source == "architect_critic/direct.serving_shape"
+    # 2026-09-27 ARCHITECT SWAP: the Flash-Next :8074 process now serves
+    # architect_general, so its declared pair is read under that host row.
+    declared, source = stack_manifest.master_declared("architect_general", "kv_quant")
+    assert source == "architect_general/direct.serving_shape"
     assert isinstance(declared, dict) and declared.get("k") and declared.get("v")
 
     cmd: list[str] = []
-    oss._append_kv_quant_args(cmd, "architect_critic")
+    oss._append_kv_quant_args(cmd, "architect_general")
     assert cmd == ["-ctk", str(declared["k"]), "-ctv", str(declared["v"])]
 
 
-def test_append_kv_quant_args_emits_q8_for_architect_general() -> None:
-    """2026-08-01 W1 cutover: architect_general is now Qwen3.6-27B dense Q8 on
-    MI210 and takes q8_0/q8_0 (was q4_0/f16 under the 122B). It MUST match
-    coder_escalation, which is an alias on the very same :8083 process — two
-    aliases declaring different KV shapes for one server is incoherent."""
+def test_append_kv_quant_args_emits_q8_for_the_27b_architect() -> None:
+    """2026-08-01 W1 cutover: the MI210 27B dense Q8 takes q8_0/q8_0 (was q4_0/f16
+    under the 122B). It MUST match coder_escalation, which is an alias on the very
+    same :8083 process — two aliases declaring different KV shapes for one server is
+    incoherent. The 27B serves architect_critic since the 2026-09-27 ARCHITECT SWAP
+    (architect_general before)."""
     cmd: list[str] = []
-    oss._append_kv_quant_args(cmd, "architect_general")
+    oss._append_kv_quant_args(cmd, "architect_critic")
     assert cmd == ["-ctk", "q8_0", "-ctv", "q8_0"]
 
 
@@ -1527,15 +1531,18 @@ def test_role_level_numa_policy_still_applies_to_all_instances() -> None:
     # 2026-08-01 W1 cutover: the full-machine `interleave=all` instance under test
     # here used to be architect_general's; it moved WITH the 122B to
     # architect_critic (:8074, cpus 0-95). Same policy, same shape, new role name.
-    assert oss._numa_prefix("architect_critic", 0)[:3] == [
+    # 2026-09-27 ARCHITECT SWAP: the labels swapped back over unchanged processes —
+    # the :8074 full-machine instance is architect_general, the GPU host-lane
+    # membind=3 instance (:8083) is architect_critic.
+    assert oss._numa_prefix("architect_general", 0)[:3] == [
         "numactl",
         "--interleave=all",
         "--",
     ]
-    # architect_general kept a role-level (not per-instance) policy across the
-    # cutover — it is now the GPU host quarter on NPS4 node 3. Asserted so the
-    # "role-level policy applies" contract still has a witness on this role.
-    assert oss._numa_prefix("architect_general", 0)[:3] == [
+    # The GPU host-lane 27B keeps a role-level (not per-instance) policy — NPS4
+    # node 3. Asserted so the "role-level policy applies" contract still has a
+    # witness on this process.
+    assert oss._numa_prefix("architect_critic", 0)[:3] == [
         "numactl",
         "--membind=3",
         "--",
@@ -1632,8 +1639,9 @@ def _np_without_priors(build, *args, **kwargs) -> str:
     ("role", "port"),
     [
         ("frontdoor", 8070),
-        ("architect_general", 8083),
-        ("architect_critic", 8074),
+        # 2026-09-27 ARCHITECT SWAP: labels swapped over unchanged processes.
+        ("architect_general", 8074),
+        ("architect_critic", 8083),
         ("ingest_long_context", 8085),
     ],
 )
@@ -1738,14 +1746,18 @@ def test_serial_roles_no_longer_shrinks_the_launched_slot_count() -> None:
     """SERIAL_ROLES is an admission policy; adding a role to it must not move -np."""
     from scripts.server import stack_manifest
 
+    # The 27B GPU process on :8083 (architect_critic since the 2026-09-27 ARCHITECT
+    # SWAP) is NOT serial, so adding it to SERIAL_ROLES is a real perturbation.
+    # (architect_general is now the serial Flash-Next process, already in the set.)
     role_config = SimpleNamespace(
-        name="architect_general",
-        model=SimpleNamespace(full_path="/models/a.gguf", name="architect_general"),
+        name="architect_critic",
+        model=SimpleNamespace(full_path="/models/a.gguf", name="architect_critic"),
         acceleration=SimpleNamespace(type="none", draft_role=None, experts=None, k=None),
     )
+    assert "architect_critic" not in stack_manifest.SERIAL_ROLES
     before = _np_without_priors(oss._build_role_command, role_config, 8083)
     with patch.object(
-        stack_manifest, "SERIAL_ROLES", stack_manifest.SERIAL_ROLES | {"architect_general"}
+        stack_manifest, "SERIAL_ROLES", stack_manifest.SERIAL_ROLES | {"architect_critic"}
     ):
         after = _np_without_priors(oss._build_role_command, role_config, 8083)
     # 2 -> 8 (operator-ratified 2026-08-02). The invariant under test is the
@@ -1754,4 +1766,4 @@ def test_serial_roles_no_longer_shrinks_the_launched_slot_count() -> None:
     from scripts.server.stack_manifest import DECLARED_SLOTS
 
     assert before == after
-    assert before == str(DECLARED_SLOTS["architect_general"])
+    assert before == str(DECLARED_SLOTS["architect_critic"])

@@ -181,12 +181,14 @@ numa_config:
   # epyc-inference-research/data/cpu_optimization/2026-05-04-qwen35-122b-arch-probe/
   # Reopen 4× per-NUMA-node wiring (16.86 t/s aggregate) ONLY if THIS role's workload
   # shifts to 4+ concurrent batch eval — see findings_phase2.md. (The record above was
-  # written while the 122B was architect_general; post-2026-08-01 W1 cutover it is
+  # written while the 122B was architect_general; post-2026-08-01 W1 cutover it was
   # architect_critic, same model, same placement — see the cutover note below. The
-  # measured figures are unchanged and are NOT re-attributable to today's
-  # architect_general, which is the GPU-resident 27B.)
+  # measured figures are unchanged and are NOT re-attributable to Flash-Next, which
+  # since the 2026-09-27 ARCHITECT SWAP serves this instance as architect_general.)
   #
-  # ROLE DEFINITION (operator, 2026-07-30) — read this before "fixing" the
+  # ROLE DEFINITION (operator, 2026-07-30; written for architect_critic, i.e. this
+  # PROCESS, before the 2026-09-27 ARCHITECT SWAP relabelled it architect_general
+  # and made it the terminal escalation rung) — read this before "fixing" the
   # all-region hold below. This role is a **reasoning boost / critic**, invoked
   # only in select circumstances: autopilot planning when running fully local,
   # and dedicated high-value focused reasoning sessions. It is NOT a general
@@ -221,7 +223,13 @@ numa_config:
   # on the MI210 (:8083) since 2026-08-20, and architect_critic serves
   # Qwen3.8-Flash-Next UD-IQ4_XS on this instance (:8074) since 2026-09-22.
   # The 122B is retired from the lineup.
-  architect_critic:
+  # ── 2026-09-27 ARCHITECT SWAP (operator-decided) ─────────────────────────
+  # The role labels swapped over unchanged processes: this full CPU instance
+  # (Flash-Next, :8074, NUMA_FULL, whole-machine region-lock holder) now serves
+  # architect_general — the terminal escalation rung — and the MI210 27B on :8083
+  # now serves architect_critic (block below). BINDING follows the PROCESS: every
+  # placement fact in this block is unchanged; only the key moved.
+  architect_general:
     instances:
       - {cpu_shape: NUMA_FULL, port: 8074}   # 1×96t physical cores, all 4 NUMA nodes
     mlock: true
@@ -238,9 +246,11 @@ numa_config:
     # `explicit_request` only rather than letting timeouts summon it. Do not
     # widen those triggers before `region_lock_wait_s_by_holder` telemetry exists.
 
-  # architect_general on the GPU still needs HOST threads for tokenization,
-  # sampling and request handling.
-  architect_general:
+  # architect_critic on the GPU still needs HOST threads for tokenization,
+  # sampling and request handling. (2026-09-27 ARCHITECT SWAP: this MI210 27B
+  # process on :8083 was architect_general until the swap; it hosts the
+  # coder_escalation and ingest_long_context aliases.)
+  architect_critic:
     # 2026-08-01, operator-ratified: the shared GPU host lane, NOT an NPS4
     # quarter. This is the placement the 27B's SWE-bench evidence was taken
     # under (taskset -c 184-191, -t 8). The interim wiring of a 24-thread
@@ -260,6 +270,7 @@ numa_config:
   # ingest_long_context and worker_general numa_config blocks REMOVED 2026-09-22
   # (lineup change). Both roles stopped being their own CPU servers:
   #   ingest_long_context -> alias of architect_general on :8083 (GPU, no NUMA fanout)
+  #                          (host label architect_critic since the 2026-09-27 swap)
   #   worker_general      -> alias of frontdoor on :8070 with halves :8080/:8180,
   #                          whose numa_config above already declares that wiring.
   # Leaving them would have kept the launcher declaring :8072/:8082/:8182 and
@@ -275,7 +286,8 @@ numa_config:
   # registry, or the membind is accepted and silently does nothing.
   worker_vision:
     # 2026-08-01: moved off the node-1 CPU quarter onto the SHARED GPU host
-    # lane, co-tenant with architect_general. This is the placement the
+    # lane, co-tenant with architect_general (the :8083 27B; architect_critic since
+    # the 2026-09-27 swap). This is the placement the
     # MMMU-250 cutover measured (taskset -c 184-191, -t 8). The 24-thread
     # node-1 quarter was sized for a ~4 GB host-resident 7B; the 30B is
     # VRAM-resident and needs host threads, not host cores.

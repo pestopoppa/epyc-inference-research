@@ -1524,8 +1524,18 @@ def _filter_instance_regions_for_mode(
     return out
 
 
+# 2026-09-27 ARCHITECT SWAP (operator-decided): the MI210 27B (:8083) now serves
+# architect_critic (host of coder_escalation + ingest_long_context); architect_general
+# is Flash-Next on the full CPU instance (:8074) and DOES hold CPU region locks.
+# ingest_long_context added: it has ridden the :8083 GPU process since 2026-09-22.
 _GPU_RESIDENT_ROLES = frozenset(
-    {"architect_general", "coder_escalation", "worker_vision", "vision_escalation"}
+    {
+        "architect_critic",
+        "coder_escalation",
+        "ingest_long_context",
+        "worker_vision",
+        "vision_escalation",
+    }
 )
 _SPEECH_ROLES = frozenset({"whisper", "tts"})
 
@@ -2254,7 +2264,8 @@ def _region_locks_payload(
         "coherence": coherence,
         # Display-only completeness rows: active/configured serving roles with
         # NO cpu_region lock domain (full-span roles, aliases, embedders).
-        # NOTE: these roles (GPU-resident: architect_general, worker_vision,
+        # NOTE: these roles (GPU-resident: architect_critic since the 2026-09-27
+        # swap — architect_general before —, worker_vision,
         # speech) NEVER take a CPU region lock by design. Inference on them is
         # real but invisible to this panel — that is why the lock grid must
         # never be read as the fleet's activity signal. `/slots` occupancy in
@@ -6532,7 +6543,8 @@ def _build_topology_nodes(numa_mode: str | None = None) -> list[dict[str, Any]]:
         if proc.get("marker_stale"):
             node["marker_stale"] = True
         # Substrate (gpu/cpu) from the process's binary path — role names carry
-        # no substrate (architect_general is a GPU role and nothing in its name
+        # no substrate (architect_general was a GPU role until the 2026-09-27
+        # ARCHITECT SWAP made it the CPU :8074 process, and nothing in its name
         # says so), so the page must not be left to guess from role lists.
         # `substrate_source` says WHICH evidence produced the value: "process"
         # (binary path / /proc), "role-kind" (the mi210 testbed kind), or —

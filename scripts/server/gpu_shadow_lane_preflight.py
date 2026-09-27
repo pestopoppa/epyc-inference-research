@@ -25,8 +25,9 @@ server, or sending any inference:
       * "unpinned"          — full-host masks (e.g. unpinned embedders inherit
                               0-191): informational only
       * "static-co-tenant"  — overlap EXPLAINED by a static NUMA_CONFIG cpuset
-                              (Q1B quarters 72-95,168-191; architect_general /
-                              worker_general full 0-95 whose physical cores
+                              (Q1B quarters 72-95,168-191; architect_general
+                              (the :8074 full instance again since the
+                              2026-09-27 swap) / worker_general full 0-95 whose physical cores
                               88-95 are the lane's SMT siblings): WARNING —
                               these are the Step-4 contention-recert set,
                               not a launch conflict
@@ -152,13 +153,15 @@ def static_smt_overlap_roles(host_cpuset: str = LANE_HOST_CPUSET) -> dict[str, l
     lane's host cpuset, SMT-sibling-folded (static topology fact — this is the
     Step-4 contention-recert set, not a live blocker).
 
-    P1-2: folding makes the full-machine instances (0-95 — architect_critic
-    8074, frontdoor 8070, ingest_long_context 8085, worker_general 8072) visible
+    P1-2: folding makes the full-machine instances (0-95 — architect_general
+    8074 [architect_critic until the 2026-09-27 ARCHITECT SWAP], frontdoor 8070,
+    ingest_long_context 8085, worker_general 8072) visible
     as co-tenants of 184-191 — their physical cores 88-95 ARE the lane slice's
     SMT siblings — alongside the instances that name the lane's logical CPUs
     directly: the half-B instances (frontdoor 8180, worker_general 8182, ingest
     8285, cpuset 48-95,144-191) and the two GPU host-lane roles themselves
-    (architect_general 8083, worker_vision 8086).
+    (architect_critic 8083 [architect_general until the 2026-09-27 swap],
+    worker_vision 8086).
 
     The parenthetical here used to read "frontdoor 8380, worker_general 8382,
     ingest 8485, vision_escalation 8087". Those ports are retired: the quarter

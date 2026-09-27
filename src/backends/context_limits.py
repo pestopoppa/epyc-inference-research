@@ -537,8 +537,10 @@ def context_overflow_roles() -> list[str]:
     """Ordered roles a too-large request may be rerouted to.
 
     ``ORCHESTRATOR_CONTEXT_OVERFLOW_ROLES`` (comma list) overrides. The default
-    is only the long-context specialist; widening it (e.g. to architect_critic,
-    262144 per request at -np 1) is a routing-policy choice for the operator.
+    is only the long-context specialist; widening it (e.g. to the Flash-Next
+    full-CPU process, 262144 per request at -np 1 — architect_general since the
+    2026-09-27 ARCHITECT SWAP, architect_critic before) is a routing-policy choice
+    for the operator.
     """
     raw = os.environ.get("ORCHESTRATOR_CONTEXT_OVERFLOW_ROLES")
     if raw is not None:

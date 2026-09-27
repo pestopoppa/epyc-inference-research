@@ -65,7 +65,8 @@ def _registry_host_fleets() -> frozenset[str]:
 # 2026-09-26: this used to be a literal naming worker_general and
 # ingest_long_context as fleets. The operator-signed 2026-09-22 cutover
 # (orchestrator 860b0b2d) made them aliases (of frontdoor's :8070 CPU fleet and
-# architect_general's :8083 GPU process) and deleted their numa_config entries.
+# architect_general's :8083 GPU process — architect_critic since the 2026-09-27
+# swap) and deleted their numa_config entries.
 # The set is now DERIVED from the registry's host rows, so the next lineup
 # change moves it with the registry.
 REQUIRED_COVERED_ROLES = _registry_host_fleets()
@@ -194,9 +195,13 @@ class TestTemplateSideMutationsGoRed:
 
     def test_changed_threads_fails(self, source, template_document):
         """This is defect c3: an SMT-oversubscribed thread count frozen into a
-        template that no gate re-derives. It must go red now."""
+        template that no gate re-derives. It must go red now.
+
+        The mutated row is the 8-thread GPU host-lane 27B (:8083) — architect_critic
+        since the 2026-09-27 ARCHITECT SWAP. (architect_general is now the 96-thread
+        full-CPU instance, where threads=96 is the TRUE value and would not go red.)"""
         doc = _mutate_template(
-            template_document, lambda r: r["architect_general"]["full"].update(threads=96)
+            template_document, lambda r: r["architect_critic"]["full"].update(threads=96)
         )
         report = _check(source, doc)
         assert not report.ok

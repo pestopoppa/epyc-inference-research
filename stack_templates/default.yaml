@@ -12,12 +12,16 @@
 #     1×96t FULL instance + 2×48t HALF instances. The four-quarter lineup
 #     (8280/8380, 8282/8382, 8385/8485, 8187..8487) was RETIRED and its ports
 #     freed — they must not be revived here.
-#   * architect_general and worker_vision are MI210 roles: the model is on the
+#   * architect_critic and worker_vision are MI210 roles: the model is on the
 #     GPU and only 8 HOST threads are pinned, on GPU_HOST_LANE (184-191).
-#   * architect_critic (:8074) is the whole-machine 122B that vacated
-#     architect_general; coder_escalation now aliases architect_general, and
-#     vision_escalation aliases worker_vision (both are the SAME server process
+#   * architect_general (:8074) is the whole-machine CPU process (the 122B that
+#     vacated architect_general on 2026-08-01, Qwen3.8-Flash-Next since
+#     2026-09-22); coder_escalation and ingest_long_context alias architect_critic,
+#     and vision_escalation aliases worker_vision (all are the SAME server process
 #     as their target, not a second instance).
+#   * 2026-09-27 ARCHITECT SWAP (operator-decided): the two architect labels
+#     swapped over unchanged processes — architect_general = Flash-Next CPU :8074,
+#     architect_critic = 27B MI210 :8083.
 #
 # Embedding roles (embedder, embedder_1..5):
 #   6×BGE single-port embedding servers, no NUMA pinning, optional at launch
@@ -96,9 +100,10 @@ roles:
   coder_escalation:
     # 2026-08-01 W1: moved off frontdoor's 35B onto architect_general's :8083
     # 27B (registry: roles.coder_escalation.alias_of + server_mode
-    # architect_general.shared_with) — one process, two names.
+    # <host>.shared_with) — one process, two names.
+    # 2026-09-27 ARCHITECT SWAP: same :8083 process, host label now architect_critic.
     tier: ALIAS
-    alias_to: architect_general
+    alias_to: architect_critic
 
   worker_summarize:
     tier: ALIAS
@@ -121,8 +126,23 @@ roles:
     tier: ALIAS
     alias_to: frontdoor   # 2026-09-22: was worker_general, itself now an alias
   architect_general:
-    # 2026-07-31/08-01: repointed to the 27B on MI210; the 122B vacated to the
-    # new architect_critic role (:8074). Was Qwen3.5-122B-A10B / Q4_K_M / 69 GB.
+    # 2026-09-27 ARCHITECT SWAP (operator-decided): this is the whole-machine CPU
+    # process on :8074 (was architect_critic 2026-08-01 → 2026-09-27; the 122B that
+    # used to sit on architect_general before that). Terminal rung of the
+    # escalation ladder.
+    model: Qwen3.8-Flash-Next-UD-IQ4_XS   # 2026-09-22: was Qwen3.5-122B-A10B (retired)
+    quant: UD-IQ4_XS
+    tier: HOT
+    ram_gb: 69
+    full:
+      port: 8074
+      numa: FULL
+      threads: 96
+
+  architect_critic:
+    # 2026-09-27 ARCHITECT SWAP (operator-decided): this is the 27B MI210 process on
+    # :8083 (architect_general 2026-07-31/08-01 → 2026-09-27), host of the
+    # coder_escalation and ingest_long_context aliases.
     model: Qwen3.8-27B-Q8_0
     quant: Q8_0
     tier: HOT
@@ -142,24 +162,13 @@ roles:
         draft_max: 4
         p_split: 0
 
-  architect_critic:
-    # 2026-07-31/08-01: the 122B that used to sit on architect_general. Whole
-    # machine, CPU-resident. Terminal rung of the escalation ladder.
-    model: Qwen3.8-Flash-Next-UD-IQ4_XS   # 2026-09-22: was Qwen3.5-122B-A10B (retired)
-    quant: UD-IQ4_XS
-    tier: HOT
-    ram_gb: 69
-    full:
-      port: 8074
-      numa: FULL
-      threads: 96
-
   ingest_long_context:
     # 2026-09-22 lineup change: Qwen3-Next-80B-A3B retired. The role moved onto
     # architect_general's Qwen3.8-27B GPU server at :8083 (n_ctx 196608), so it no longer
     # launches its own CPU server and :8085/:8185/:8285 are vacated.
+    # 2026-09-27 ARCHITECT SWAP: same :8083 process, host label now architect_critic.
     tier: ALIAS
-    alias_to: architect_general
+    alias_to: architect_critic
   worker_vision:
     # 2026-07-31: Qwen2.5-VL-7B retired on both vision roles (MMMU-250 52.4% ->
     # 63.6%). Was Qwen2.5-VL-7B / 4.4 GB.

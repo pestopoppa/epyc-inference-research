@@ -1080,7 +1080,8 @@ class InferenceMixin:
             # Phase 3 of per-region-lock migration (2026-05-22): while the
             # feature flag is on, ConcurrencyAwareBackend takes precise locks
             # internally for multi-instance pools. Direct single-instance
-            # CachingBackend roles (architect_general, worker_vision) still
+            # CachingBackend roles (architect_general — the full-CPU :8074
+            # instance since the 2026-09-27 swap —, architect_critic, worker_vision) still
             # need an external idx=0 region lock; otherwise they can stream
             # without appearing in /proc/locks or the contention gate snapshot.
             _per_region_on = _per_region_locks_enabled()

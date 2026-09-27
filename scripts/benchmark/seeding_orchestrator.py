@@ -676,7 +676,10 @@ def _recover_heavy_ports_if_stuck(url: str, busy_ports: list[int]) -> bool:
     port_to_component = {
         8070: "frontdoor",  # frontdoor / coder_escalation / worker_summarize all share this server
         8072: "worker_general",
-        8083: "architect_general",
+        # 2026-09-27 ARCHITECT SWAP: :8074 = architect_general (Flash-Next CPU),
+        # :8083 = architect_critic (the MI210 27B; coder_escalation/ingest ride it).
+        8074: "architect_general",
+        8083: "architect_critic",
         8085: "ingest_long_context",
         8087: "vision_escalation",
     }

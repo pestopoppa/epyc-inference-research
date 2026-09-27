@@ -114,9 +114,17 @@ class TestShouldHalt:
         # mem_gb, so the expensive role moved with the weights — the live priors
         # now list architect_critic alone. Asserting against architect_general
         # would be asserting that a 27B model is expensive.
-        _assert_same_tier("coder_escalation", "architect_critic")
-        result = should_halt("coder_escalation", "architect_critic")
+        # 2026-09-27 ARCHITECT SWAP (operator-decided): the big CPU model
+        # (Flash-Next, :8074) now serves architect_general (Tier A) and the 27B
+        # serves architect_critic, so the expensive role is architect_general
+        # again. The same-tier pair that reaches HIGH_COST is frontdoor (A) ->
+        # architect_general (A); coder_escalation -> architect_critic is now a
+        # same-process, not-expensive pair.
+        _assert_same_tier("frontdoor", "architect_general")
+        result = should_halt("frontdoor", "architect_general")
         assert result == HaltReason.HIGH_COST
+        _assert_same_tier("coder_escalation", "architect_critic")
+        assert should_halt("coder_escalation", "architect_critic") is None
 
     def test_generated_stack_priors_drive_high_cost_roles(self, tmp_path):
         set_features(Features(approval_gates=True))

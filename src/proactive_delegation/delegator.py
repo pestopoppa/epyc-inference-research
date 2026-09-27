@@ -738,9 +738,10 @@ class ProactiveDelegator:
             dispatching, so ``None`` is not a legal return);
           * a string that is not a known role still falls back to
             ``architect_general``.
-        Terminal rungs (``architect_critic``, which has no escalation target) return
-        the input unchanged — the old map expressed exactly that for the then-terminal
-        ``architect_general``.
+        Terminal rungs (``architect_general`` — terminal again since the 2026-09-27
+        ARCHITECT SWAP; ``architect_critic`` was terminal 2026-08-01 → 2026-09-27)
+        return the input unchanged — the old map expressed exactly that for the
+        then-terminal ``architect_general``.
         """
         role = Role.from_string(current_role)
         if role is None:

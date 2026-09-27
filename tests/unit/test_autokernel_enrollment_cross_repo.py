@@ -52,7 +52,9 @@ def test_actual_cpu_gpu_export_resolves_reaches_campaign_cli_and_fake_measuremen
         revision="caller-declared-test", instance_mode="full")
     first = export_production_enrollment(context)
     pins = []
-    for role in ("frontdoor", "architect_general"):
+    # The GPU leg is the MI210 27B on :8083. Its primary role is architect_critic
+    # since the 2026-09-27 ARCHITECT SWAP (target_id architect_general@8083 before).
+    for role in ("frontdoor", "architect_critic"):
         row = next(item for item in first["targets"] if item["primary_role"] == role)
         command = row["command_argv"]
         pins.extend((
@@ -67,7 +69,7 @@ def test_actual_cpu_gpu_export_resolves_reaches_campaign_cli_and_fake_measuremen
                 hashlib.sha256(f"{role}:dso:{index}".encode()).hexdigest()))
     export = export_production_enrollment(replace(context, artifacts=tuple(pins)))
     selected = [row for row in export["targets"]
-                if row["primary_role"] in {"frontdoor", "architect_general"}]
+                if row["primary_role"] in {"frontdoor", "architect_critic"}]
     allowed_env = sorted({key for row in selected for key in row["environment"]
                           if key != "LD_LIBRARY_PATH"})
     policy = {"schema": resolved_recipe.ENVIRONMENT_POLICY_SCHEMA,
@@ -98,7 +100,7 @@ def test_actual_cpu_gpu_export_resolves_reaches_campaign_cli_and_fake_measuremen
                    for row in dry["production_enrollment"]["targets"]}
     assert diagnostics["speech:whisper"]["status"] == "unsupported"
     assert diagnostics["speech:tts"]["status"] == "unsupported"
-    assert {"frontdoor@8070", "architect_general@8083"}.issubset(
+    assert {"frontdoor@8070", "architect_critic@8083"}.issubset(
         {target_id for target in dry["resolved_campaign"]["targets"]
          for target_id in target["target_ids"]})
 
@@ -128,7 +130,7 @@ def test_actual_cpu_gpu_export_resolves_reaches_campaign_cli_and_fake_measuremen
         return Response(json.dumps({"stop": True, "timings": {
             "predicted_n": 256, "predicted_per_second": 10.0}}).encode())
 
-    for target_id in ("frontdoor@8070", "architect_general@8083"):
+    for target_id in ("frontdoor@8070", "architect_critic@8083"):
         item = next(row for row in result["targets"] if row["target_id"] == target_id)
         assert item["status"] == "resolved"
         frozen = resolved_recipe.resolved_recipe_from_dict(item["resolved_recipe"])

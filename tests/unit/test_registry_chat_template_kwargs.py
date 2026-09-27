@@ -7,16 +7,22 @@ rl = importlib.import_module("src.registry.registry_loader")
 # Operator-signed 2026-09-22 lineup cutover (master registry 96651eae, lean
 # registry 860b0b2d), ruling C1: architect_general (:8083 Qwen3.8-27B) runs
 # thinking ON at MEDIUM reasoning effort. Ruling C2: ingest_long_context became
-# an alias of architect_general and carries the same kwargs.
+# an alias of architect_general and carries the same kwargs. Since the 2026-09-27
+# ARCHITECT SWAP that :8083 process (and its kwargs) is architect_critic.
 _ARCHITECT_THINKING = {"enable_thinking": True, "reasoning_effort": "medium"}
 
 
 def test_chat_template_kwargs_for_role_reads_server_mode():
     # frontdoor / coder_escalation declare enable_thinking=false;
-    # architect_general declares thinking on at medium effort (ruling C1).
+    # the :8083 27B declares thinking on at medium effort (ruling C1).
+    # 2026-09-27 ARCHITECT SWAP (operator-decided): the kwargs moved WITH the
+    # process in the master registry — the 27B's thinking-on declaration now sits
+    # under architect_critic, and architect_general (Flash-Next, :8074) carries
+    # Flash-Next's own enable_thinking=false (its critic-era declaration).
     assert rl.chat_template_kwargs_for_role("frontdoor") == {"enable_thinking": False}
     assert rl.chat_template_kwargs_for_role("coder_escalation") == {"enable_thinking": False}
-    assert rl.chat_template_kwargs_for_role("architect_general") == _ARCHITECT_THINKING
+    assert rl.chat_template_kwargs_for_role("architect_critic") == _ARCHITECT_THINKING
+    assert rl.chat_template_kwargs_for_role("architect_general") == {"enable_thinking": False}
 
 
 def test_chat_template_kwargs_ingest_stays_thinking_on():

@@ -8189,7 +8189,10 @@ _FALLBACK_SLOT_QUERY_PORTS: dict[str, list[int]] = {
     "frontdoor": [8070],
     "coder": [8070],  # shares server with frontdoor (same Qwen3.6-35B Q8 GGUF)
     "worker": [8072],
-    "architect_general": [8083],
+    # 2026-09-27 ARCHITECT SWAP: architect_general = Flash-Next CPU :8074,
+    # architect_critic = the MI210 27B :8083.
+    "architect_general": [8074],
+    "architect_critic": [8083],
 }
 
 

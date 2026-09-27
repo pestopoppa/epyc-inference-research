@@ -385,7 +385,11 @@ class TestServerURLsConfig:
 
     def test_default_architect_urls(self) -> None:
         cfg = ServerURLsConfig()
-        assert "http://localhost:8083" in cfg.architect_general
+        # 2026-09-27 ARCHITECT SWAP: architect_general = Flash-Next CPU :8074,
+        # architect_critic = the MI210 27B :8083 (host of coder_escalation).
+        assert "http://localhost:8074" in cfg.architect_general
+        assert "http://localhost:8083" in cfg.architect_critic
+        assert cfg.coder_escalation == cfg.architect_critic
         assert _RETIRED_ARCHITECT_ROLE not in cfg.as_dict()
 
     def test_defaults_derive_from_stack_priors(self, tmp_path: Path) -> None:

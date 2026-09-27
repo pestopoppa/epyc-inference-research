@@ -180,7 +180,8 @@ def test_recover_heavy_ports_if_stuck_handles_disabled_fail_and_success(tmp_path
             assert _MOD._recover_heavy_ports_if_stuck("http://localhost:8000", [8070, 8083]) is True
             cmd = run.call_args.args[0]
             assert "frontdoor" in cmd
-            assert "architect_general" in cmd
+            # 2026-09-27 ARCHITECT SWAP: :8083 is the architect_critic process.
+            assert "architect_critic" in cmd
 
         with (
             patch("subprocess.run", side_effect=RuntimeError("reload boom")),

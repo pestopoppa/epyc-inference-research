@@ -529,7 +529,7 @@ def test_eval_resource_lanes_collapse_gpu_alias_and_use_native_width(monkeypatch
     lanes, capacities = eval_tower._eval_resource_lanes(
         [
             {"force_role": "frontdoor"},
-            {"force_role": "architect_general"},
+            {"force_role": "architect_critic"},
             {"force_role": "coder_escalation"},
         ]
     )
@@ -539,10 +539,11 @@ def test_eval_resource_lanes_collapse_gpu_alias_and_use_native_width(monkeypatch
     assert lanes[0].capacity == min(int(fd["slots"]), int(fd["serving_shape"]["slots_by_shape"]["full"]))
     assert lanes[0].units == 1
     assert lanes[0].device == "cpu-native-batch"
-    # coder_escalation is bound onto architect_general's GPU process, so both
-    # collapse to ONE lane whose width is that process's declared slot count.
+    # coder_escalation is bound onto the MI210 27B's GPU process (architect_critic
+    # since the 2026-09-27 ARCHITECT SWAP), so both collapse to ONE lane whose
+    # width is that process's declared slot count.
     gpu_host = _host_fleet_of("coder_escalation")
-    assert gpu_host == "architect_general"  # non-vacuity: the alias collapse under test
+    assert gpu_host == "architect_critic"  # non-vacuity: the alias collapse under test
     gpu_url = str(mode[gpu_host]["url"])
     gpu_slots = max(int(r.get("slots") or 1) for r in mode.values() if r.get("url") == gpu_url)
     assert lanes[1].key == lanes[2].key == gpu_url

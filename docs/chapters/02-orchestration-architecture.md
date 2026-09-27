@@ -502,12 +502,15 @@ When a backend is circuit-open or times out, same-tier alternatives are tried be
 
 | Primary | Fallbacks |
 |---------|-----------|
-| architect_general | coder_escalation |
-| coder_escalation | architect_general |
-| worker_math | worker_general |
+| architect_general | architect_critic |
+| architect_critic | architect_general |
+| coder_escalation | frontdoor |
+| worker_math | architect_critic |
 | ingest_long_context | architect_general |
 | frontdoor | (none) |
 | worker_vision | (none) |
+
+(As of the 2026-09-27 ARCHITECT SWAP. Every edge crosses physical fleets; a same-fleet edge is forbidden.)
 
 **Note**: `architect_coding` was eliminated 2026-05-06 and removed from the fallback map. <!-- stack-change-guard: allow historical retired-role note -->
 

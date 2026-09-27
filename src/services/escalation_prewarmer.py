@@ -33,12 +33,19 @@ DEFAULT_STACK_PRIORS_PATH = PROJECT_ROOT / "orchestration" / "derived" / "stack_
 # Explicit degraded fallbacks. Normal operation derives architect endpoint and
 # model hint from generated stack priors so model/port swaps update prewarming
 # without touching this module.
+# 2026-09-27 ARCHITECT SWAP (operator-decided): architect_general = Qwen3.8-Flash-Next
+# on the full CPU instance (:8074); architect_critic = Qwen3.8-27B Q8 on the MI210
+# (:8083). The prewarm target is the ROLE the graph escalates to (architect_general),
+# so it now prefills the CPU :8074 process. (The 8083 -> "Qwen3.5-122B-A10B" hint that
+# stood here had been stale since the 2026-08-01 W1 cutover.)
 _DEGRADED_ARCHITECT_PORTS = {
-    "architect_general": 8083,
+    "architect_general": 8074,
+    "architect_critic": 8083,
 }
 
 _DEGRADED_ARCHITECT_PORT_MODEL_HINT = {
-    8083: "Qwen3.5-122B-A10B",
+    8074: "Qwen3.8-Flash-Next-UD-IQ4_XS",
+    8083: "Qwen3.8-27B-Q8_0",
 }
 
 # System prompt prefix used across architect roles (warm this into KV cache)

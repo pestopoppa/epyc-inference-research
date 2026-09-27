@@ -644,7 +644,8 @@ VISION_WORKER_MMPROJ = _VISION_WORKER["mmproj"]
 # DERIVED (phase 2) from server_mode.worker_vision.device. The launcher used to
 # declare `device: ROCm0` in vision.worker; that second copy is exactly the
 # surface the `--device none` incident ran through, and master also declares
-# architect_general's device — a role this block could not name at all.
+# the 27B's device (architect_general until the 2026-09-27 ARCHITECT SWAP,
+# architect_critic since) — a role this block could not name at all.
 _VISION_WORKER_DEVICE, _VISION_WORKER_DEVICE_SOURCE = master_declared("worker_vision", "device")
 if not isinstance(_VISION_WORKER_DEVICE, str) or not _VISION_WORKER_DEVICE:
     raise ValueError(
@@ -1933,7 +1934,9 @@ def validate_model_paths() -> list[str]:
     # A role whose master row declares no path is not this check's business; the
     # declaration-parity guard owns that.
     # 2026-05-06: architect_coding REMOVED (REAP-246B role eliminated; 139 GB freed).
-    for role in ("frontdoor", "architect_general", "ingest_long_context"):
+    # 2026-09-27 ARCHITECT SWAP: architect_critic added — it is now the host row
+    # of the :8083 27B GGUF; architect_general is the :8074 Flash-Next row.
+    for role in ("frontdoor", "architect_general", "architect_critic", "ingest_long_context"):
         declared = _master_declared_model_path(role)
         if declared and not Path(declared).exists():
             errors.append(f"[HOT] {role}: {declared}")

@@ -91,7 +91,7 @@
   entry_type: pattern
   title: Sweep per-role sampling temperature
   description: per role sampling temp in numeric_swarm
-  insight: Sweep per-role generation temperature from 0.1 to 0.3 with a fixed seed; architect_general needs chat-completions when enable_thinking=false.
+  insight: Sweep per-role generation temperature from 0.1 to 0.3 with a fixed seed; architect_general needs chat-completions when enable_thinking=false (written for the 27B, which serves architect_critic since the 2026-09-27 ARCHITECT SWAP).
   evidence_trial_ids: []
   source_handoff: prompt-construction-determinism
   seeded_reason: Retain the per-role temperature sweep as a numeric hint

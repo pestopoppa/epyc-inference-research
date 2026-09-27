@@ -126,7 +126,8 @@ def test_dead_numa_repack_interleave_knob_is_not_emitted() -> None:
         env = build_launch_env(role, base_env={})
         assert "GGML_NUMA_REPACK_INTERLEAVE" not in env, role
 
-    # ...and the ROCm guard still holds for the GPU architect.
-    assert registry["architect_general"]["device"] == "ROCm0"
-    gpu_env = build_launch_env("architect_general", base_env={})
+    # ...and the ROCm guard still holds for the GPU architect (the MI210 27B,
+    # architect_critic since the 2026-09-27 ARCHITECT SWAP).
+    assert registry["architect_critic"]["device"] == "ROCm0"
+    gpu_env = build_launch_env("architect_critic", base_env={})
     assert "GGML_NUMA_REPACK_INTERLEAVE" not in gpu_env

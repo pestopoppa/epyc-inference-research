@@ -292,8 +292,9 @@ def _baseline_quality_by_role(priors: dict | None = None) -> Dict[str, float]:
         # the role-relevant capability axis when it can rank the fleet, else the
         # universal aggregate, with `basis` recording which. Reading this rather
         # than a model-keyed constant is what makes quality multidimensional at
-        # the point of use: architect_general and coder_escalation run the SAME
-        # 27B weights and now score 0.862 (reasoning/mmlu_pro) and 0.839
+        # the point of use: architect_general and coder_escalation ran the SAME
+        # 27B weights (its host is architect_critic since the 2026-09-27 ARCHITECT
+        # SWAP) and scored 0.862 (reasoning/mmlu_pro) and 0.839
         # (coding/livecodebench_v6) respectively, because they do different jobs.
         for_role = (record.get("priors") or {}).get("quality_for_role")
         if isinstance(for_role, dict):

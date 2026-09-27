@@ -332,7 +332,10 @@ def compute_layer_adaptive_weights(
 # property of the model a process serves, not of the roles riding it.
 _HOST_MODEL_LAYER_COUNTS = {
     "frontdoor": 28,  # Qwen3.6-35B-A3B
-    "architect_general": 64,  # Qwen3.8-27B (MI210)
+    # 2026-09-27 ARCHITECT SWAP: the 64-layer Qwen3.8-27B MI210 process (:8083) is
+    # the architect_critic host now; architect_general (Flash-Next, :8074) has no
+    # degraded row and falls back to uniform compression, as architect_critic did.
+    "architect_critic": 64,  # Qwen3.8-27B (MI210)
 }
 
 
@@ -362,7 +365,7 @@ def _registry_layer_count_aliases(hosts: dict[str, int]) -> dict[str, str]:
 # 2026-08-01 W1 cutover (coder_escalation) and at the operator-signed 2026-09-22
 # cutover (orchestrator 860b0b2d), after which ingest_long_context still claimed
 # 32 layers (the retired Qwen3-Next-80B) while it served on architect_general's
-# 64-layer :8083 process.
+# 64-layer :8083 process (architect_critic's since the 2026-09-27 swap).
 MODEL_LAYER_COUNT_ALIASES = _registry_layer_count_aliases(_HOST_MODEL_LAYER_COUNTS)
 
 MODEL_LAYER_COUNTS = {

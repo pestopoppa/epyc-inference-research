@@ -63,6 +63,9 @@ PRODUCTION_ROLE_NAMES = frozenset(
         "coder_escalation",
         "worker_general",
         "architect_general",
+        # Added 2026-09-27 (ARCHITECT SWAP): a live production role (the :8083
+        # 27B) since 2026-08-01 that this deny-list never named.
+        "architect_critic",
         "ingest_long_context",
         "vision_escalation",
         "eval_batch_frontdoor",

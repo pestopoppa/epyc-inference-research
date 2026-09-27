@@ -37,8 +37,11 @@ GIB_MB = 1024
 # process, so it has no pre-evict decision of its own. The test below now
 # cross-checks that claim against the registry (every `alias_of` row is absent
 # from NUMA_CONFIG, and every host it names is present).
-CPU_LLAMA_SERVER_ROLES = {"frontdoor", "eval_batch_frontdoor", "architect_critic"}
-GPU_HOST_LANE_ROLES = {"architect_general", "worker_vision"}
+# 2026-09-27 ARCHITECT SWAP (operator-decided): the full-CPU Flash-Next process
+# (:8074, pre-evicts 40 GiB) is architect_general; the MI210 27B GPU host lane
+# (:8083, never evicts) is architect_critic.
+CPU_LLAMA_SERVER_ROLES = {"frontdoor", "eval_batch_frontdoor", "architect_general"}
+GPU_HOST_LANE_ROLES = {"architect_critic", "worker_vision"}
 
 
 def _registry_alias_rows() -> dict[str, str]:
@@ -413,9 +416,10 @@ def test_cpu_role_launch_pre_evicts_then_logs_placement(monkeypatch, tmp_path, c
 
 
 def test_gpu_role_launch_runs_no_eviction_but_still_logs_placement(monkeypatch, tmp_path, capsys):
-    """architect_general takes the same default branch as the CPU roles; it is
-    a gpu_host_lane role and must never evict (VRAM weights, lane on node 3)."""
-    calls = _drive_start_server(monkeypatch, tmp_path, "architect_general")
+    """The MI210 27B (architect_critic since the 2026-09-27 ARCHITECT SWAP) takes
+    the same default branch as the CPU roles; it is a gpu_host_lane role and must
+    never evict (VRAM weights, lane on node 3)."""
+    calls = _drive_start_server(monkeypatch, tmp_path, "architect_critic")
     out = capsys.readouterr().out
     assert calls == []
     assert "[numa-pre-evict]" not in out

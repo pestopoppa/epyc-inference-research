@@ -61,9 +61,16 @@ def test_architect_helpers_keep_degraded_fallback_when_priors_missing(tmp_path):
     missing = tmp_path / "missing_stack_priors.yaml"
 
     assert escalation_prewarmer.architect_ports_from_stack_priors(missing) == {}
-    assert escalation_prewarmer.architect_port_for_role("architect_general", missing) == 8083
-    assert escalation_prewarmer.architect_model_hint_for_port(8083, missing) == "Qwen3.5-122B-A10B"
-    assert escalation_prewarmer.ARCHITECT_PORTS == {"architect_general": 8083}
+    # 2026-09-27 ARCHITECT SWAP: architect_general = Flash-Next CPU :8074,
+    # architect_critic = the MI210 27B :8083.
+    assert escalation_prewarmer.architect_port_for_role("architect_general", missing) == 8074
+    assert escalation_prewarmer.architect_port_for_role("architect_critic", missing) == 8083
+    assert escalation_prewarmer.architect_model_hint_for_port(8074, missing) == "Qwen3.8-Flash-Next-UD-IQ4_XS"
+    assert escalation_prewarmer.architect_model_hint_for_port(8083, missing) == "Qwen3.8-27B-Q8_0"
+    assert escalation_prewarmer.ARCHITECT_PORTS == {
+        "architect_general": 8074,
+        "architect_critic": 8083,
+    }
 
 
 def test_prewarm_if_complex_uses_stack_prior_architect_port(tmp_path, monkeypatch):

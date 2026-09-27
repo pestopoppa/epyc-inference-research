@@ -261,8 +261,9 @@ def test_case1_real_registry_collapses_shared_roles_to_one_fleet():
     assert "coder_escalation" not in fleets
     assert "coder_escalation" not in fleets["frontdoor"].bound_roles
     ce = resolve_binding("coder_escalation", bindings)
-    assert ce is not None and ce.fleet_id == "architect_general"
-    assert resolve_binding("coder", bindings).fleet_id == "architect_general"
+    # 2026-09-27 ARCHITECT SWAP: the :8083 27B host row is architect_critic.
+    assert ce is not None and ce.fleet_id == "architect_critic"
+    assert resolve_binding("coder", bindings).fleet_id == "architect_critic"
 
     # worker_fast is a DISTINCT physical server, never a worker alias.
     wf = resolve_binding("worker_fast", bindings)

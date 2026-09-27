@@ -303,7 +303,10 @@ def test_registry_without_server_mode_yields_no_false_positives(numa_config: dic
 def test_topology_projection_drops_only_the_full_instance(numa_config: dict) -> None:
     """Pins the projection convention the registry copy is measured against."""
     assert rv._topology_fleet_ports(numa_config["frontdoor"]) == [8080, 8180]
-    assert rv._topology_fleet_ports(numa_config["architect_critic"]) == [8074]
+    # 2026-09-27 ARCHITECT SWAP: the single-instance :8074 CPU block is
+    # architect_general (Flash-Next); architect_critic is the :8083 GPU host lane.
+    assert rv._topology_fleet_ports(numa_config["architect_general"]) == [8074]
+    assert rv._topology_fleet_ports(numa_config["architect_critic"]) == [8083]
     assert rv._topology_fleet_ports({"instances": [("0-1", 1234, 2)]}) == [1234]
     assert rv._topology_fleet_ports(
         {"instances": [("0-1", 1, 2), ("2-3", 2, 2)], "full_instance_idx": 0}

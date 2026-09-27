@@ -19,7 +19,9 @@ code. Each reply is one to three line commands the ORCHESTRATOR executes itself 
 ``READ <path> <first> <last>`` / ``GREP <text> <path>`` — or the final ``SUMMARY``. No write
 command exists, and every path is confined to the request's task scope
 (``task_root`` + ``read_roots``, ``TaskScope.read_denial``), so read-only is structural. That
-also makes the stage role-agnostic: it can run on the frontdoor or on the architect (:8083)
+also makes the stage role-agnostic: it can run on the frontdoor or on an architect (the
+:8083 27B is architect_critic since the 2026-09-27 ARCHITECT SWAP; architect_general is now
+the serial full-CPU :8074 Flash-Next, where free-slot scouts degrade to none)
 without putting the architect into REPL mode (operator ruling 2026-09-24,
 ``seeding_types.ARCHITECT_MODES``).
 

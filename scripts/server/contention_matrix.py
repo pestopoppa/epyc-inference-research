@@ -1304,7 +1304,11 @@ def enumerate_n_way(
 #     it (it has exactly one instance either way) and is kept only so the set
 #     keeps meaning "never gets quartered", which is still accurate.
 #     The whole-machine solo blocker did not disappear, it was RENAMED:
-#     `architect_critic` now holds the 0-95 interleave=all instance on :8074.
+#     `architect_critic` held the 0-95 interleave=all instance on :8074.
+#   - 2026-09-27 ARCHITECT SWAP (operator-decided): renamed BACK. architect_general
+#     is again the whole-machine 0-95 instance (Flash-Next, :8074), so its
+#     membership here is load-bearing again and accurate; architect_critic is now
+#     the MI210 27B GPU host lane (one instance, never quartered).
 # This is the per-role "quarterable" property the WP-5 placement policy needs:
 # small MoE-light models (gemma4-26B, frontdoor-35B-A3B, vision-30B-A3B) quarter
 # well; large models stay full/half; the GPU lanes do not quarter at all.

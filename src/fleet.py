@@ -87,7 +87,16 @@ def _derive_degraded_fallback_ports() -> dict[str, tuple[int, ...]]:
     """
     cfg = _default_numa_config()
     out: dict[str, tuple[int, ...]] = {}
-    for role in ("frontdoor", "worker_general", "architect_general", "ingest_long_context"):
+    # 2026-09-27 ARCHITECT SWAP: architect_critic added — it is now the host row of
+    # the :8083 27B fleet (coder_escalation + ingest_long_context ride it);
+    # architect_general is the :8074 full-CPU row.
+    for role in (
+        "frontdoor",
+        "worker_general",
+        "architect_general",
+        "architect_critic",
+        "ingest_long_context",
+    ):
         entry = cfg.get(role) if isinstance(cfg, Mapping) else None
         instances = (entry or {}).get("instances") if isinstance(entry, Mapping) else None
         if not instances:

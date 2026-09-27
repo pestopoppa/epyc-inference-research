@@ -544,6 +544,10 @@ def _numa_prefix(role: str, instance_idx: int = 0) -> list[str]:
     numactl_policy membind=3 — the SMT siblings of 88-95, per
     stack_topology.yaml's GPU_HOST_LANE shape class). Citing it as the
     interleave=all exemplar sent readers to a membind role.
+    2026-09-27 ARCHITECT SWAP (operator-decided): the labels swapped back over
+    unchanged processes — the full-machine interleave=all instance (:8074,
+    Flash-Next) is architect_GENERAL again, and architect_CRITIC is now the GPU
+    host-lane membind=3 role (:8083, 27B). Cite the :8074 process, not a role name.
     """
     cfg = NUMA_CONFIG.get(role)
     if cfg and instance_idx < len(cfg["instances"]):

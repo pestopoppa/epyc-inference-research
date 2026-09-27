@@ -417,30 +417,39 @@ class TestRoleEscalation:
                 continue
             assert delegator._escalate_role(role.value) == target.value
 
-    def test_escalate_role_coder_no_longer_null_hops_to_architect_general(self):
-        """coder_escalation is an ALIAS on architect_general's :8083 process.
+    def test_escalate_role_coder_no_longer_null_hops_to_its_own_host(self):
+        """coder_escalation is an ALIAS on the MI210 27B's :8083 process — the
+        architect_general host until the 2026-09-27 ARCHITECT SWAP, architect_critic
+        since.
 
-        The deleted private map sent it to architect_general — the same GGUF in the
-        same process, so the "escalation" could only reroll the sampling seed.
+        The deleted private map sent it to its own host — the same GGUF in the same
+        process, so the "escalation" could only reroll the sampling seed. After the
+        swap it escalates to architect_general (Flash-Next, CPU :8074), a real hop.
         """
         escalated = self._delegator()._escalate_role("coder_escalation")
 
         assert escalated == Role.CODER_ESCALATION.escalates_to().value
-        assert escalated != "architect_general"
+        assert escalated != "architect_critic"
+        assert escalated == "architect_general"
 
-    def test_escalate_role_architect_general_is_not_a_self_loop(self):
-        """The deleted private map had architect_general -> architect_general."""
-        escalated = self._delegator()._escalate_role("architect_general")
+    def test_escalate_role_architect_critic_is_not_a_self_loop(self):
+        """architect_critic (the 27B since the 2026-09-27 swap) escalates to
+        architect_general (Flash-Next), never to itself."""
+        escalated = self._delegator()._escalate_role("architect_critic")
 
-        assert escalated != "architect_general"
-        assert escalated == Role.ARCHITECT_GENERAL.escalates_to().value
+        assert escalated != "architect_critic"
+        assert escalated == Role.ARCHITECT_CRITIC.escalates_to().value == "architect_general"
 
     def test_escalate_role_terminal_rung_returns_itself(self):
-        """A role with no escalation target stays put — never a downgrade."""
+        """A role with no escalation target stays put — never a downgrade.
+
+        The terminal architect rung is architect_general (Flash-Next) since the
+        2026-09-27 ARCHITECT SWAP (it was architect_critic before)."""
         terminal = [role for role in Role if role.escalates_to() is None]
-        assert Role.ARCHITECT_CRITIC in terminal
+        assert Role.ARCHITECT_GENERAL in terminal
+        assert Role.ARCHITECT_CRITIC not in terminal
         delegator = self._delegator()
-        assert delegator._escalate_role(Role.ARCHITECT_CRITIC.value) == "architect_critic"
+        assert delegator._escalate_role(Role.ARCHITECT_GENERAL.value) == "architect_general"
 
     def test_escalate_role_unknown_string_keeps_historical_fallback(self):
         """Behaviour preserved for anything outside the ladder."""

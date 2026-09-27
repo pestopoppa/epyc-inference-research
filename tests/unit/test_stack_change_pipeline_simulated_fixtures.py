@@ -547,21 +547,23 @@ def _swapped_vision_registry(path: Path) -> Path:
 
 # 2026-09-22 lineup cutover (epyc-orchestrator 860b0b2d): ingest_long_context's
 # three dedicated CPU instances on :8085/:8185/:8285 are RETIRED. The role is an
-# ALIAS on architect_general's :8083 process — launch manifest PORT_MAP
+# ALIAS on architect_critic's :8083 process — launch manifest PORT_MAP
 # ingest_long_context -> 8083, its role_launch_meta entry removed, and the real
-# master's `server_mode.architect_general.shared_with` names it. The launch view
+# master's `server_mode.architect_critic.shared_with` names it. The launch view
 # is the REAL repo's (scripts/server/stack_manifest.py loads
 # orchestration/launch_manifest.yaml at import), so this builder's old
 # standalone :8085 row made the guard resolve the role to its manifest host,
-# find no architect_general row here, and report COULD-NOT-CHECK for the
+# find no architect_critic row here, and report COULD-NOT-CHECK for the
 # model_path comparison. The simulated registry now declares the host row and the
 # alias rides it; the model data is still the Qwen3-Next fixture data, so the
 # Q4_K_M -> Q8_0 swap assertions are unchanged.
 #
-# architect_general is an ACTIVE role in the scenario: an alias launches nothing,
+# architect_critic is an ACTIVE role in the scenario: an alias launches nothing,
 # so the process-level consumers (dashboard port labels, the host's runtime row)
 # only exist through the host's record. See INGEST_PROCESS_ROLES.
-INGEST_PROCESS_ROLES = {"architect_general", "ingest_long_context"}
+# 2026-09-27 ARCHITECT SWAP (operator-decided): the :8083 process that hosts
+# ingest_long_context is architect_critic now (it was architect_general).
+INGEST_PROCESS_ROLES = {"architect_critic", "ingest_long_context"}
 
 
 def _ingest_registry(
@@ -578,7 +580,7 @@ def _ingest_registry(
     gguf = f"{model}.gguf"
 
     def process_role() -> dict[str, Any]:
-        # architect_general and ingest_long_context describe the SAME resident
+        # architect_critic and ingest_long_context describe the SAME resident
         # model: one process, one GGUF. Built fresh per role (no YAML anchors).
         return {
             "model": {
@@ -599,20 +601,20 @@ def _ingest_registry(
         }
 
     ingest_role = process_role()
-    ingest_role["alias_of"] = "architect_general"
-    ingest_role["model"]["shared_gguf_with"] = "architect_general"
+    ingest_role["alias_of"] = "architect_critic"
+    ingest_role["model"]["shared_gguf_with"] = "architect_critic"
     return _write_yaml(
         path,
         {
             "server_mode": {
-                "architect_general": {
+                "architect_critic": {
                     "url": "http://localhost:8083",
                     "port": 8083,
                     "tier": "hot",
                     "slots": 1,
                     "model": gguf,
                     "model_path": f"/models/{gguf}",
-                    "model_role": "architect_general",
+                    "model_role": "architect_critic",
                     "shared_with": ["ingest_long_context"],
                     "memory_gb": memory_gb,
                     "throughput": throughput,
@@ -621,7 +623,7 @@ def _ingest_registry(
                 }
             },
             "roles": {
-                "architect_general": process_role(),
+                "architect_critic": process_role(),
                 "ingest_long_context": ingest_role,
             },
         },
@@ -1351,13 +1353,14 @@ def test_simulated_ingest_swap_updates_generated_consumers_with_approval(
     # master's serving_shape.n_ctx). Since the 2026-09-22 cutover (860b0b2d) the
     # role is an alias and has NO launch context of its own — it inherits its
     # host's, architect_general's (196608 at the time of writing; it was the
-    # role's own 262144 before). The fixture exercises the model/descriptor swap,
+    # role's own 262144 before; the host is architect_critic since the 2026-09-27
+    # ARCHITECT SWAP). The fixture exercises the model/descriptor swap,
     # not the serving shape, so it tracks the ambient HOST value rather than
     # pinning a literal that has moved twice.
     from scripts.server.stack_manifest import LAUNCH_CONTEXT_TOKENS
 
     assert "ingest_long_context" not in LAUNCH_CONTEXT_TOKENS
-    host_context = LAUNCH_CONTEXT_TOKENS["architect_general"]
+    host_context = LAUNCH_CONTEXT_TOKENS["architect_critic"]
     assert role["serving"]["effective_context_tokens"] == host_context
     assert role["serving"]["launch"]["runtime"]["cache"]["context_tokens"] == host_context
 
@@ -1379,12 +1382,12 @@ def test_simulated_ingest_swap_updates_generated_consumers_with_approval(
     expected_port = _primary_port_for_roles(priors, roles)
     assert _stack_prior_backend_urls(config.stack_priors) == {
         # One :8083 process, grouped under the sorted role set on that port.
-        "architect_general/ingest_long_context": f"http://localhost:{expected_port}"
+        "architect_critic/ingest_long_context": f"http://localhost:{expected_port}"
     }
     port_hints = _stack_prior_port_hints(config.stack_priors)
     # The dashboard labels a port by the process that LAUNCHES it; an alias
     # (launch.primary_roles excludes it) never claims a port label.
-    assert port_hints[expected_port].split(".", 1)[0] == "architect_general"
+    assert port_hints[expected_port].split(".", 1)[0] == "architect_critic"
     assert "ingest_long_context" not in {label.split(".", 1)[0] for label in port_hints.values()}
     # The alias rides :8083; none of its retired dedicated ports may resurface.
     assert expected_port == 8083
@@ -1599,9 +1602,11 @@ def test_simulated_context_kv_and_acceleration_drift_are_rejected(
                     "throughput": 20.0,
                     "memory_gb": 7,
                 },
+                # 2026-09-27 ARCHITECT SWAP: architect_general launches on :8074
+                # (the full-CPU instance); the real launch manifest is ambient here.
                 "architect_general": {
-                    "url": "http://localhost:8083",
-                    "port": 8083,
+                    "url": "http://localhost:8074",
+                    "port": 8074,
                     "tier": "hot",
                     "model_role": "architect_general",
                     "model": "Qwen3.5-122B-A3B-Instruct-Q4_K_M.gguf",

@@ -608,6 +608,9 @@ role_restart_knobs:
     semantics: Worker homogeneous KV profile; mixed K/V remains lane-gated.
     provenance: AP-3 per-role KV config
 
+  # 2026-09-27 ARCHITECT SWAP (operator-decided): the role_restart.architect_*
+  # knobs tune the MI210 27B's launch (spec-decode geometry, q8_0 KV), so they
+  # follow that process to architect_critic (:8083). Names unchanged.
   - name: role_restart.architect_spec_type
     dtype: enum
     param_type: enum
@@ -616,8 +619,8 @@ role_restart_knobs:
     restart_cost: role_restart
     application: registry_launch
     tuning_surface_class: 2
-    role: architect_general
-    registry_path: server_mode.architect_general.acceleration.spec_type
+    role: architect_critic
+    registry_path: server_mode.architect_critic.acceleration.spec_type
     enforcement_seam: config_applicator.apply_role_restart_params
     semantics: Architect composed-spec launch type; quality-gated before live use.
     provenance: AP-3 spec-dec launch tuning
@@ -631,8 +634,8 @@ role_restart_knobs:
     restart_cost: role_restart
     application: registry_launch
     tuning_surface_class: 2
-    role: architect_general
-    registry_path: server_mode.architect_general.acceleration.draft_max
+    role: architect_critic
+    registry_path: server_mode.architect_critic.acceleration.draft_max
     enforcement_seam: --spec-draft-n-max
     semantics: Architect NEXTN/draft-mtp max drafted tokens per verification step.
     provenance: AP-3 spec-dec launch tuning
@@ -646,8 +649,8 @@ role_restart_knobs:
     restart_cost: role_restart
     application: registry_launch
     tuning_surface_class: 2
-    role: architect_general
-    registry_path: server_mode.architect_general.acceleration.draft_min
+    role: architect_critic
+    registry_path: server_mode.architect_critic.acceleration.draft_min
     enforcement_seam: --spec-draft-n-min
     semantics: Architect minimum drafted tokens requested from the spec decoder.
     provenance: AP-3b source-proven llama.cpp flag audit
@@ -661,8 +664,8 @@ role_restart_knobs:
     restart_cost: role_restart
     application: registry_launch
     tuning_surface_class: 2
-    role: architect_general
-    registry_path: server_mode.architect_general.acceleration.draft_p_min
+    role: architect_critic
+    registry_path: server_mode.architect_critic.acceleration.draft_p_min
     enforcement_seam: --draft-p-min
     semantics: Architect draft probability floor for launch-time spec decode.
     provenance: AP-3b source-proven llama.cpp flag audit
@@ -676,8 +679,8 @@ role_restart_knobs:
     restart_cost: role_restart
     application: registry_launch
     tuning_surface_class: 2
-    role: architect_general
-    registry_path: server_mode.architect_general.acceleration.draft_p_split
+    role: architect_critic
+    registry_path: server_mode.architect_critic.acceleration.draft_p_split
     enforcement_seam: --draft-p-split
     semantics: Architect draft split probability threshold for launch-time spec decode.
     provenance: AP-3b source-proven llama.cpp flag audit
@@ -691,8 +694,8 @@ role_restart_knobs:
     restart_cost: role_restart
     application: registry_launch
     tuning_surface_class: 2
-    role: architect_general
-    registry_path: server_mode.architect_general.acceleration.ngram_mod_n_min
+    role: architect_critic
+    registry_path: server_mode.architect_critic.acceleration.ngram_mod_n_min
     enforcement_seam: --spec-ngram-mod-n-min
     semantics: Architect ngram-mod minimum drafted n-gram length.
     provenance: AP-3b source-proven llama.cpp flag audit
@@ -706,8 +709,8 @@ role_restart_knobs:
     restart_cost: role_restart
     application: registry_launch
     tuning_surface_class: 2
-    role: architect_general
-    registry_path: server_mode.architect_general.acceleration.ngram_mod_n_max
+    role: architect_critic
+    registry_path: server_mode.architect_critic.acceleration.ngram_mod_n_max
     enforcement_seam: --spec-ngram-mod-n-max
     semantics: Architect ngram-mod maximum drafted n-gram length.
     provenance: AP-3b source-proven llama.cpp flag audit
@@ -721,8 +724,8 @@ role_restart_knobs:
     restart_cost: role_restart
     application: registry_launch
     tuning_surface_class: 2
-    role: architect_general
-    registry_path: server_mode.architect_general.acceleration.ngram_mod_n_match
+    role: architect_critic
+    registry_path: server_mode.architect_critic.acceleration.ngram_mod_n_match
     enforcement_seam: --spec-ngram-mod-n-match
     semantics: Architect ngram-mod required match length before drafting.
     provenance: AP-3b source-proven llama.cpp flag audit
@@ -735,8 +738,8 @@ role_restart_knobs:
     restart_cost: role_restart
     application: registry_launch
     tuning_surface_class: 4
-    role: architect_general
-    registry_path: server_mode.architect_general.kv_quant
+    role: architect_critic
+    registry_path: server_mode.architect_critic.kv_quant
     enforcement_seam: -ctk/-ctv launch args
     semantics: Architect homogeneous KV profile; mixed K/V remains lane-gated.
     provenance: AP-3 per-role KV config

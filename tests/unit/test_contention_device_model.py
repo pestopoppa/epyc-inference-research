@@ -390,25 +390,29 @@ def test_seam_stays_inert_with_flags_off(monkeypatch) -> None:
     monkeypatch.delenv("ORCHESTRATOR_SHAPE_AWARE_CONTENTION", raising=False)
     monkeypatch.delenv("ORCHESTRATOR_CROSS_ROLE_DISJOINT_PLACEMENT", raising=False)
     assert seam_admit(
-        "architect_general", 0, {"worker_general": frozenset({"q0", "q1", "q2", "q3"})},
+        "architect_critic", 0, {"worker_general": frozenset({"q0", "q1", "q2", "q3"})},
         traffic_class=TrafficClass.BACKGROUND, matrix=_empty_matrix(),
     ) is None
 
 
 def test_seam_with_flags_on_admits_gpu_beside_cpu_holder(monkeypatch) -> None:
-    """Flag-on behaviour, exercised through the exact dual-flag runtime gate."""
+    """Flag-on behaviour, exercised through the exact dual-flag runtime gate.
+
+    The GPU role is resolved from the LIVE topology/priors: since the 2026-09-27
+    ARCHITECT SWAP the MI210 27B (:8083, GPU host lane) is architect_critic;
+    architect_general is the full-CPU Flash-Next process."""
     monkeypatch.setenv("ORCHESTRATOR_SHAPE_AWARE_CONTENTION", "1")
     monkeypatch.setenv("ORCHESTRATOR_CROSS_ROLE_DISJOINT_PLACEMENT", "1")
     regions = {
-        ("architect_general", 0): frozenset(),  # live lane 184-191 → no region
+        ("architect_critic", 0): frozenset(),  # live lane 184-191 → no region
         ("worker_general", 0): frozenset({"q0", "q1", "q2", "q3"}),
     }
     out = seam_admit(
-        "architect_general", 0,
+        "architect_critic", 0,
         {"worker_general": frozenset({"q0", "q1", "q2", "q3"})},
         traffic_class=TrafficClass.BACKGROUND,
         instance_regions=regions,
-        matrix=_matrix_allowing(("worker_general", "architect_general")),
+        matrix=_matrix_allowing(("worker_general", "architect_critic")),
     )
     assert out is PairDecision.ALLOW
 
@@ -441,7 +445,8 @@ def test_live_topology_device_map_is_consistent() -> None:
 
     resolved = resolve_device_classes(NUMA_CONFIG.keys(), numa_config=NUMA_CONFIG)
     gpu = {r for r, rd in resolved.items() if rd.is_gpu}
-    assert gpu == {"architect_general", "worker_vision"}
+    # 2026-09-27 ARCHITECT SWAP: the MI210 27B is architect_critic.
+    assert gpu == {"architect_critic", "worker_vision"}
     for role in gpu:
         assert resolved[role].corroborated, f"{role} device is uncorroborated"
 

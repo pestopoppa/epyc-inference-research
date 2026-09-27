@@ -40,7 +40,14 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 _SCORER_TMP_ROOT = Path("/mnt/raid0/llm/tmp")
-DEFAULT_LLM_JUDGE_ROLE = "architect_general"
+# 2026-09-27 ARCHITECT SWAP (operator-decided): the default judge follows the
+# PROCESS — the Qwen3.8-27B Q8 on the MI210 (:8083), which now serves
+# architect_critic. Keeping the label on architect_general would silently rebind the
+# judge MODEL to Flash-Next on the serial whole-machine CPU instance (:8074): a
+# measurement-instrument change (CJ-11 judge binding) plus a scorer tail sized for
+# the GPU lane (30 s judge timeout). Rebinding the judge MODEL is an operator/CJ-11
+# decision, not a side effect of a role relabel.
+DEFAULT_LLM_JUDGE_ROLE = "architect_critic"
 
 # ``start_new_session`` keeps an untrusted scorer's descendants out of the
 # caller's process group, but it also means an externally interrupted caller
@@ -161,7 +168,8 @@ EXCLUDE_UNPARSEABLE_ANSWERS = True
 # touches neither role resolution nor endpoint precedence — every site below
 # still resolves the judge via the SAME existing seam
 # (`scoring_config["judge_role"]` > `LLM_JUDGE_ROLE` env >
-# `architect_general`, `_llm_judge_force_role`) and only constrains + parses
+# `architect_critic` [the :8083 27B; `architect_general` before the 2026-09-27
+# ARCHITECT SWAP], `_llm_judge_force_role`) and only constrains + parses
 # whatever judge that seam already points at. Rebinding the judge later
 # (CJ-11/CJ-13/CJ-14) changes nothing here.
 #
@@ -1358,7 +1366,8 @@ def _score_llm_judge(answer: str, expected: str, config: dict[str, Any]) -> bool
             llama-server protocol).
         judge_role: Text role to pin the orchestrator judge to (force_role).
             Defaults to ``LLM_JUDGE_ROLE`` env, else the disjoint GPU
-            ``architect_general`` lane.
+            ``architect_critic`` lane (the :8083 27B; ``architect_general``
+            before the 2026-09-27 ARCHITECT SWAP).
         timeout: HTTP timeout in seconds (default: 30).
         _eval_batch_id: Internal EvalTower batch correlation identifier.
     """
@@ -1649,7 +1658,8 @@ def _llm_judge_force_role(config: dict[str, Any]) -> str:
 
     An equivalence judge must land on a text model, not be auto-routed to a
     vision/code specialist. Precedence: ``scoring_config['judge_role']`` >
-    ``LLM_JUDGE_ROLE`` env > ``architect_general`` (the disjoint GPU judge).
+    ``LLM_JUDGE_ROLE`` env > ``architect_critic`` (the disjoint GPU judge — the
+    :8083 27B, labelled ``architect_general`` before the 2026-09-27 ARCHITECT SWAP).
     """
     import os
 

@@ -367,7 +367,8 @@ def test_runtime_selected_aliases_do_not_fall_back_to_dead_static_ports() -> Non
     host_ports = {
         "frontdoor": [8080],
         "worker_general": [8082, 8182],
-        "architect_general": [8083],
+        # 2026-09-27 ARCHITECT SWAP: the :8083 27B host is architect_critic.
+        "architect_critic": [8083],
         "worker_vision": [8086],
     }
     # Every host named by the alias table must be represented in the fixture —

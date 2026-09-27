@@ -295,7 +295,8 @@ _LEGACY_SERVER_URL_FALLBACKS: dict[str, str] = {
         "http://localhost:8180"
     ),
     # 2026-08-01 W1 CUTOVER: coder_escalation left the frontdoor fleet for
-    # architect_general's single GPU process. It has no half-fleet siblings — the
+    # architect_general's single GPU process (since the 2026-09-27 ARCHITECT SWAP
+    # that process serves architect_critic; same :8083). It has no half-fleet siblings — the
     # 27B is one MI210 server, not a 1-full-plus-2-halves CPU lineup, so the
     # "full:" multi-URL form would advertise ports that do not exist.
     "coder_escalation": "http://localhost:8083",
@@ -334,10 +335,16 @@ _LEGACY_SERVER_URL_FALLBACKS: dict[str, str] = {
     "vision_escalation": "http://localhost:8086",  # 2026-08-01 W1: alias, same process (was :8087)
     "worker_fast": "http://localhost:8102",
     "worker_summarize": "full:http://localhost:8070,http://localhost:8080,http://localhost:8180",  # frontdoor-fleet alias, parity-guarded
-    "architect_general": "http://localhost:8083",
-    "architect_critic": "http://localhost:8074",  # NEW 2026-08-01 (W1): the 122B on CPU
-    # 2026-09-23 (SSU-F8): ingest_long_context is an alias on architect_general's
-    # single GPU process (server_mode.architect_general.shared_with), not a three-
+    # 2026-09-27 ARCHITECT SWAP (operator-decided): the role labels swapped over
+    # unchanged processes. architect_general = Qwen3.8-Flash-Next UD-IQ4_XS on the
+    # full CPU instance (:8074); architect_critic = Qwen3.8-27B Q8 on the MI210
+    # (:8083) and host of coder_escalation + ingest_long_context.
+    # (architect_critic was added 2026-08-01 (W1) on :8074 as the 122B on CPU.)
+    "architect_general": "http://localhost:8074",
+    "architect_critic": "http://localhost:8083",
+    # 2026-09-23 (SSU-F8): ingest_long_context is an alias on its host's single GPU
+    # process (server_mode.<host>.shared_with; host = architect_critic since the
+    # 2026-09-27 swap, architect_general before), not a three-
     # instance CPU fleet of its own. The :8085/:8185/:8285 fleet this row named was
     # retired with the role's own server; recomputed from its host it is the bare
     # :8083 the host declares. Found by the sixth-surface check, not by a reader.
@@ -368,9 +375,12 @@ _RUNTIME_SELECTED_ROLE_ALIASES: dict[str, str] = {
     # 2026-08-01 W1 CUTOVER: coder_escalation's host moved frontdoor -> architect_general.
     # This table OVERRIDES the registry at runtime, so leaving it stale would land
     # coder_escalation requests back on :8070 no matter what the registry declares.
+    # 2026-09-27 ARCHITECT SWAP: the :8083 27B process now serves architect_critic,
+    # so the host label is architect_critic (leaving it on architect_general would
+    # land coder_escalation on Flash-Next :8074).
     # Kept in lockstep with the identical tables in src/api/routes/health.py and
     # scripts/server/stack_env.py.
-    "coder_escalation": "architect_general",
+    "coder_escalation": "architect_critic",
     "vision_escalation": "worker_vision",
     "worker_summarize": "frontdoor",
     "worker_explore": "worker_general",
@@ -996,7 +1006,9 @@ class ServerURLsConfig:
     # The comment that stood here said "server_mode.coder_escalation is pinned to
     # frontdoor port 8070, shared mmap". That ceased to be true at the cutover: the
     # role moved to architect_general's MI210 :8083 process and is a different model
-    # on a different device.
+    # on a different device. (2026-09-27 ARCHITECT SWAP: that same :8083 process now
+    # serves architect_critic; the field still asks for its OWN name, so the
+    # resolver follows the host through `shared_with` with no edit here.)
     # This was the LAST copy still pointing at the old host. `PORT_MAP`,
     # `_LEGACY_SERVER_URL_FALLBACKS` and `_RUNTIME_SELECTED_ROLE_ALIASES` were all
     # updated in the cutover commit; this field default was missed, and because it

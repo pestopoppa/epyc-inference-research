@@ -1131,6 +1131,11 @@ async def _handle_chat(
                 def _review_before_commit(review_context: str) -> tuple[dict, dict]:
                     from src.orchestration.consultation import consult
 
+                    # ARCHSWAP-20260927: the consultant stays the ROLE architect_general
+                    # (meant to be the strongest model), which since the 2026-09-27
+                    # ARCHITECT SWAP is Qwen3.8-Flash-Next on the full CPU instance
+                    # (:8074, serial, whole-machine region lock) — no longer the MI210
+                    # 27B the skill's 2 s max_queue_wait_ms was sized for.
                     return consult(
                         consultant_role="architect_general",
                         requester_role=str(initial_role),

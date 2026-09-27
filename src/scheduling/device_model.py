@@ -90,7 +90,8 @@ DEFAULT_DEVICE_CAPACITY_PATH = (
 #     `vram_caveat`, which warns that load-time budgets run ~1 GiB optimistic.)
 #   * 2.0 GiB covers that measured 0.93 GiB growth with ~2x margin and still
 #     leaves the live GPU set (architect_general 36.70 + worker_vision 20.56
-#     = 57.26 GiB) feasible with ~4.7 GiB to spare.
+#     = 57.26 GiB) feasible with ~4.7 GiB to spare. (The 36.70 GiB 27B process
+#     serves architect_critic since the 2026-09-27 ARCHITECT SWAP.)
 #
 # This is a HARD constraint that fails CLOSED (rider §4), so erring large is
 # the correct direction. Override with `ORCHESTRATOR_VRAM_HEADROOM_GIB`.

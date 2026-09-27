@@ -66,7 +66,9 @@ port_map:
   # It is now an alias on architect_general's :8083 MI210 27B dense Q8 — a
   # DIFFERENT model on a DIFFERENT device, so the coder chain is a real
   # escalation for the first time since the 2026-05-09 consolidation.
-  coder_escalation: 8083   # Alias -> architect_general shared Qwen3.8-27B GPU server (Qwen3.6-27B until 2026-08-20)
+  # 2026-09-27 ARCHITECT SWAP (operator-decided): same :8083 process, whose host
+  # label is now architect_critic (was architect_general).
+  coder_escalation: 8083   # Alias -> architect_critic shared Qwen3.8-27B GPU server (host was architect_general until 2026-09-27; Qwen3.6-27B until 2026-08-20)
   worker_summarize: 8070   # Alias -> frontdoor shared Qwen3.6 server (its ONLY alias now)
   worker_general: 8070     # Alias -> frontdoor shared Qwen3.6-35B-A3B server (gemma4 retired 2026-09-22; halves 8080/8180)
   worker_explore: 8070     # Alias -> frontdoor (legacy name; pre-2026-03-19)
@@ -78,15 +80,20 @@ port_map:
   worker_coder: 8102       # Fast coding worker semantic role (1.5B backend) — DEPRECATED (worker_pool)
   worker_fast: 8102        # Fast worker (1.5B, WARM, 4 slots) — DEPRECATED (worker_pool)
   # Specialists (no pre-warm — already multi-instance or too large for quarters)
-  architect_general: 8083
-  # 2026-08-01 W1 CUTOVER: architect_critic took the full CPU instance the 122B
-  # UD-Q4_K_M vacated in architect_general. Since the 2026-09-22 lineup change the
-  # critic serves Qwen3.8-Flash-Next UD-IQ4_XS on that same instance (122B retired).
+  # 2026-09-27 ARCHITECT SWAP (operator-decided): the labels swapped over
+  # unchanged processes. architect_general = Qwen3.8-Flash-Next UD-IQ4_XS on the
+  # full CPU instance (:8074, the terminal escalation rung); architect_critic =
+  # Qwen3.8-27B Q8 on the MI210 (:8083), host of coder_escalation +
+  # ingest_long_context.
+  # History: 2026-08-01 W1 CUTOVER — architect_critic took the full CPU instance
+  # the 122B UD-Q4_K_M vacated in architect_general; from the 2026-09-22 lineup
+  # change it served Qwen3.8-Flash-Next on that instance (122B retired).
   # Port 8074 is deliberate: 8084 and 8071 belonged to the removed
   # architect_coding role and stack_change_guard.py L326/L346 reject them.
-  architect_critic: 8074
+  architect_general: 8074
+  architect_critic: 8083
   # architect_coding REMOVED 2026-05-06 — REAP-246B 70% coder < frontdoor 97%; role eliminated. 139 GB freed.
-  ingest_long_context: 8083  # Alias -> architect_general Qwen3.8-27B GPU server (Next-80B retired 2026-09-22)
+  ingest_long_context: 8083  # Alias -> architect_critic Qwen3.8-27B GPU server (host was architect_general until 2026-09-27; Next-80B retired 2026-09-22)
   # Embedding servers (6 parallel instances for redundancy)
   embedder: 8090           # Primary embedding server
   embedder_1: 8091
@@ -119,8 +126,8 @@ hot_roles:
   - coder_escalation
   - worker_general
   - embedder
-  - architect_general
-  - architect_critic   # 2026-08-01 W1: tier hot per OPERATOR DECISION D1 ("keep it hot")
+  - architect_general  # 2026-09-27 swap: now the :8074 Flash-Next process, which D1 keeps hot
+  - architect_critic   # 2026-08-01 W1: tier hot per OPERATOR DECISION D1 ("keep it hot"); the :8083 27B since the 2026-09-27 swap
   - ingest_long_context
   - worker_vision
   - vision_escalation
@@ -149,9 +156,14 @@ hot_roles:
 #     declaring slots: 1. Serializing one alias but not the other served no one.
 #   - architect_critic ADDED: one full 0-95 instance that holds all four CPU
 #     region locks while it runs. Concurrency here serializes the whole machine.
+#
+# 2026-09-27 ARCHITECT SWAP (operator-decided): the full 0-95 Flash-Next process
+# (:8074) now serves architect_general, so it is architect_general that is serial
+# (aligned to the PROCESS). architect_critic is now the :8083 27B GPU process
+# (slots: 2, not serial), host of coder_escalation.
 serial_roles:
   - worker_summarize
-  - architect_critic
+  - architect_general
   - worker_vision
   # 2026-05-11: frontdoor added to test -np 1 vs -np 2 single-instance throughput.
   # -np 2 was inherited from quarter-mode (4×48t) where two slots gave round-robin
@@ -231,20 +243,23 @@ role_launch_meta:
   frontdoor:
     tier: hot
     mode: default
-  # 2026-08-01 W1 CUTOVER: architect_general moved to a dense 27B Q8 on MI210
-  # (ROCm0) and HOSTS coder_escalation as an alias on its :8083 process. Model:
-  # Qwen3.6-27B from 2026-08-01, Qwen3.8-27B-Q8_0 since 2026-08-20. Since the
-  # 2026-09-22 lineup change it also hosts ingest_long_context.
+  # 2026-09-27 ARCHITECT SWAP (operator-decided): the two architect launch rows
+  # swapped labels over unchanged processes.
+  # architect_general — the full CPU instance, port 8074, tier hot per OPERATOR D1.
+  # Qwen3.8-Flash-Next UD-IQ4_XS (served as architect_critic 2026-09-22 → 2026-09-27;
+  # the 122B UD-Q4_K_M as architect_critic from 2026-08-01, and as architect_general
+  # on this instance before that).
   architect_general:
     tier: hot
     mode: default
-    # aliases DERIVED: server_mode.architect_general.shared_with -> [coder_escalation, ingest_long_context]
-  # architect_critic — NEW 2026-08-01 on the full CPU instance architect_general
-  # vacated, port 8074, tier hot per OPERATOR D1. Model: the 122B UD-Q4_K_M until
-  # 2026-09-22, Qwen3.8-Flash-Next UD-IQ4_XS since.
+  # architect_critic — a dense 27B Q8 on MI210 (ROCm0), port 8083, HOSTS
+  # coder_escalation and ingest_long_context as aliases on its :8083 process.
+  # Model: Qwen3.6-27B from 2026-08-01, Qwen3.8-27B-Q8_0 since 2026-08-20; served
+  # as architect_general until the 2026-09-27 swap.
   architect_critic:
     tier: hot
     mode: default
+    # aliases DERIVED: server_mode.architect_critic.shared_with -> [coder_escalation, ingest_long_context]
   # 2026-08-01 W1 CUTOVER: one MI210 vision process serving BOTH role names.
   # vision_escalation lost its own entry — it no longer launches anything.
   worker_vision:
@@ -388,7 +403,7 @@ embedding:
   #
   # WHY SMT SIBLINGS. No logical CPU on this host lacks a physical sibling in
   # 0-95 (kernel-verified 2026-09-07), so "free cores" do not exist; the choice
-  # is only WHO pays. Siblings charge frontdoor/critic only while an embedder
+  # is only WHO pays. Siblings charge frontdoor/Flash-Next (:8074) only while an embedder
   # computes (KMP_BLOCKTIME=10 releases idle teams); carving physical cores out
   # of 0-95 would charge every decode forever and re-shape NUMA_FULL. The cost
   # is a MEASUREMENT GATE (G1 in the package), not an assumption.
@@ -401,7 +416,8 @@ embedding:
   #   node 1 (136-143) -> half A :8080 (nodes 0,1)
   #   node 2 (144-151) -> half B :8180 (nodes 2,3)
   #   node 3 (176-183) -> the GPU host lane 184-191 (:8083 27B, :8086 VL), and half B
-  #   full :8070 / critic :8074 span all four nodes, so every instance is adjacent.
+  #   full :8070 / Flash-Next :8074 (architect_general since the 2026-09-27 swap)
+  #   span all four nodes, so every instance is adjacent.
   placement:
     8090: {cpuset: "136-139"}   # node 1, siblings of 40-43
     8091: {cpuset: "140-143"}   # node 1, siblings of 44-47
@@ -455,7 +471,8 @@ vision:
     # read `device: ROCm0` right here, a second copy of the declaration whose
     # whole failure history is being shadowed: `--device none` beat a declared
     # `device: ROCm0` and a 27B ran on CPU with the GPU idle. Master also
-    # declares architect_general's device, which this block had no way to
+    # declares the :8083 27B's device (architect_critic since the 2026-09-27
+    # swap; architect_general before), which this block had no way to
     # express — so master's coverage strictly contains the launcher's and the
     # launcher-side copy bought nothing but a second thing to forget.
     # Two launch flags this model DEPENDS ON, both discovered 2026-07-31:
@@ -560,7 +577,9 @@ launch_shape:
   # move recorded reality rather than changing it. `parity.derived_from_master`
   # now fails the import if the key comes back.
 
-  # 2026-06-26 v6 cutover: architect_general MTP enabled (NEXTN draft-mtp);
+  # 2026-06-26 v6 cutover: architect_general MTP enabled (NEXTN draft-mtp) — the
+  # 122B process of that date, which is the :8074 instance that serves
+  # architect_general again since the 2026-09-27 swap;
   # M-RoPE assertion resolved in v6, smoke-gated at cutover.
   no_spec_decode_roles: []
 
@@ -845,7 +864,8 @@ aux_services:
     #           --convert until ffmpeg exists.
     #
     # 2026-09-24 GPU-RESIDENCY CHANGE SET: :9000 MOVES TO THE CPU (operator-directed),
-    # freeing ~2.2 GB of MI210 VRAM for architect_general's 4 slots. Same frozen
+    # freeing ~2.2 GB of MI210 VRAM for architect_general's 4 slots (the :8083 27B,
+    # which serves architect_critic since the 2026-09-27 ARCHITECT SWAP). Same frozen
     # production-speech-v1 binary and tree (`backend: stt`, linkage check unchanged);
     # `-ng` + HIP_VISIBLE_DEVICES=-1 keep it off the GPU. Evidence and hazards:
     # epyc-inference-research artifacts/speech_cpu_realtime_20260924/README.md.
@@ -856,7 +876,10 @@ aux_services:
     #     it only via scripts/voice/check_speech_layout.py, which enforces that rule.
     #   * ⚠ A GENERATING CPU frontdoor collapses both speech servers (STT RTF 1.5-2.9,
     #     TTS RTF 7.8-9.4): every core in 0-95 is in the frontdoor's -t 96 set. Voice
-    #     turns must reason on the GPU (architect_general) — voice-pipeline requirement.
+    #     turns must reason on the GPU (the :8083 27B = architect_critic since the
+    #     2026-09-27 ARCHITECT SWAP; it was architect_general before) — voice-pipeline
+    #     requirement. architect_general is now Flash-Next on the full 0-95 CPU
+    #     instance, which collapses speech exactly like a generating frontdoor.
     #   * cpuset is honoured exactly: the bench guard may refuse it, never re-pin it
     #     (orchestrator_stack._aux_spawn_prefix).
     #   * Latency: ~2 s per utterance of any length on CPU (30 s window padding) vs

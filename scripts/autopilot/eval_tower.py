@@ -139,7 +139,14 @@ _INSTRUMENT_LEDGER_PATH = Path(
 # Keep these human-readable and stamp them into every EvalResult/journal row.
 EVAL_EXECUTION_INSTRUMENT_ID = "resource_lanes_v10_history_scoped_quiescence"
 EVAL_SCORING_SCHEDULE_ID = "model_judge_tail_v4_gpu_lifecycle_quiescence"
-DEFAULT_LLM_JUDGE_ROLE = "architect_general"
+# 2026-09-27 ARCHITECT SWAP (operator-decided): the default judge follows the
+# PROCESS — the Qwen3.8-27B Q8 on the MI210 (:8083), which now serves
+# architect_critic. Keeping the label on architect_general would silently rebind the
+# judge MODEL to Flash-Next on the serial whole-machine CPU instance (:8074): a
+# measurement-instrument change (CJ-11 judge binding) plus a scorer tail sized for
+# the GPU lane (30 s judge timeout). Rebinding the judge MODEL is an operator/CJ-11
+# decision, not a side effect of a role relabel.
+DEFAULT_LLM_JUDGE_ROLE = "architect_critic"
 
 
 def question_tier_mix(questions: Sequence[dict[str, Any]]) -> dict[str, int]:
@@ -1800,6 +1807,8 @@ def _same_role_certification_allows_eval_fanout(
 
 # Reference certified safe-N: frontdoor=3, ingest_long_context=3,
 # vision_escalation=3, worker_general=1, architect_general=1, worker_vision=1.
+# (Historical labels: architect_general here was the :8083 27B, which serves
+# architect_critic since the 2026-09-27 ARCHITECT SWAP.)
 def _same_role_matrix_allows_eval_fanout(role: str) -> bool:
     try:
         from scripts.server.stack_numa import NUMA_CONFIG  # type: ignore[import-not-found]
@@ -2553,7 +2562,16 @@ def _eval_resource_lane(
         physical_cfg.get("device")
         or physical_cfg.get("vram_gib")
         or physical_cfg.get("vram_mb")
-        or role in {"architect_general", "coder_escalation", "worker_vision", "vision_escalation"}
+        # 2026-09-27 ARCHITECT SWAP: the MI210 27B's labels are architect_critic +
+        # its aliases; architect_general is now the CPU :8074 process.
+        or role
+        in {
+            "architect_critic",
+            "coder_escalation",
+            "ingest_long_context",
+            "worker_vision",
+            "vision_escalation",
+        }
     )
 
     allowed_shared = {
@@ -3328,7 +3346,8 @@ class _GenOutcome:
 #
 # The `llm_judge` scoring path (`debug_scorer._score_llm_judge`) does NOT
 # gate on this: the live production lineup is entirely Qwen-family (every
-# served generator AND the default `architect_general` judge), so a fail-
+# served generator AND the default judge — `architect_general` when this was
+# written, `architect_critic` since the 2026-09-27 swap, same 27B), so a fail-
 # closed GATE there would turn every one of the ~3.8k live llm_judge rows
 # (physreason/zeroscrolls/leval/physics) into scoring_failed/excluded. EV-6b
 # instead LABELS the row — see `QuestionResult.judge_independence` and
@@ -3365,7 +3384,7 @@ def _llm_judge_verifier_identity(scoring_config: Mapping[str, Any]) -> str:
 
     Reuses `debug_scorer._llm_judge_force_role`'s own precedence
     (`scoring_config['judge_role']` > `LLM_JUDGE_ROLE` env >
-    `architect_general`) via the same private, module-identity-safe loader
+    `DEFAULT_LLM_JUDGE_ROLE`) via the same private, module-identity-safe loader
     `seeding_scoring` uses for the scorer itself, rather than restating that
     precedence a second time and letting the two drift.
     """

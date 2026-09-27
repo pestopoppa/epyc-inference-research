@@ -45,9 +45,8 @@ All servers run on a single AMD EPYC 9655 via the `production-consolidated-v5` l
 |---|---|---|---|---|
 | frontdoor / worker_summarize | Qwen3.6-35B-A3B-MTP | Q8_0 (37 GB) | 8070, 8080, 8180 | Shared GGUF mmap. `enable_thinking=False` mandatory. 1 full (`-np 16`) + 2 halves (`-np 4`). |
 | worker_general / worker_explore / worker_math / toolrunner | gemma-4-26B-A4B-it | Q4_K_M (16 GB) | 8072, 8082, 8182 | Try-cheap-first worker. MTP. Needs `KMP_BLOCKTIME=10` (OMP idle-spin fix). |
-| architect_general / coder_escalation | Qwen3.6-27B-MTP | Q8_0 (27 GB) | 8083 | **GPU (MI210)**. Dense, hybrid SSM/attention. `coder_escalation` moved here off the 35B on 2026-08-01. |
-| architect_critic | Qwen3.5-122B-A10B-UD | Q4_K_M (69 GB) | 8074 | Consult-only; no routed traffic. Took the 122B when it vacated `architect_general` on 2026-07-31. |
-| ingest_long_context | Qwen3-Next-80B-A3B-Instruct | Q4_K_M (45 GB) | 8085, 8185, 8285 | SSM+MoE hybrid. The one role where the halves beat the full under load. |
+| architect_general | Qwen3.8-Flash-Next | UD-IQ4_XS (~87 GiB) | 8074 | CPU, one full 0-95 instance holding all four region locks (serial). Terminal escalation rung. Served `architect_critic` until the 2026-09-27 ARCHITECT SWAP. |
+| architect_critic / coder_escalation / ingest_long_context | Qwen3.8-27B | Q8_0 (27 GB) | 8083 | **GPU (MI210)**. One process, three names; hosts `critique_plan`. Served `architect_general` until the 2026-09-27 ARCHITECT SWAP. |
 | worker_vision / vision_escalation | Qwen3-VL-30B-A3B-Instruct | Q4_K_M (17 GB) | 8086 | **GPU (MI210)**. One process, both names; `:8087` retired. Needs `max_tokens >= 1024`. |
 | embedder pool ×6 | BGE-large-en-v1.5 | f16 (0.6 GB) | 8090–8095 | 1024-dim embeddings. |
 
@@ -139,8 +138,9 @@ Request → FastAPI (:8000) → ChatPipeline → Mode selection
                                             └── Delegated → Architect plan → Worker execution
 
 Model stack (NPS4; 1 full + 2 half instances per CPU role — quarters retired):
-  Tier A: frontdoor + architect_general (Qwen3.6-35B-A3B Q8 CPU; Qwen3.6-27B Q8 on MI210)
-  Tier B: architect_critic (Qwen3.5-122B-A10B Q4), ingest_long_context (Qwen3-Next-80B SSM-hybrid)
+  Tier A: frontdoor + architect_general (Qwen3.6-35B-A3B Q8 CPU; Qwen3.8-Flash-Next UD-IQ4_XS, full CPU :8074)
+  Tier B: architect_critic (Qwen3.8-27B Q8 on MI210 :8083; hosts coder_escalation + ingest_long_context)
+  (2026-09-27 ARCHITECT SWAP: the two architect labels swapped over unchanged processes.)
   Tier C: Workers (gemma-4-26B-A4B MTP ×3 instances), vision (Qwen3-VL-30B on MI210)
   Tier D: Embedders (6× BGE-large)
   Speech: whisper.cpp STT :9000 + qwentts TTS :9002, both on MI210 (live 2026-08-02)

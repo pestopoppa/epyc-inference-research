@@ -93,6 +93,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_STACK_PRIORS_PATH = PROJECT_ROOT / "orchestration" / "derived" / "stack_priors.yaml"
 
 _HIGH_COST_MIN_MODEL_MEM_GB = 60.0
+# Degraded fallback for the >= 60 GB model role. It read architect_general while
+# the 2026-08-01 → 2026-09-27 lineup put the big CPU model on architect_critic (so
+# the degraded path gated the wrong role); since the 2026-09-27 ARCHITECT SWAP
+# architect_general IS the ~90 GB Flash-Next CPU :8074 process again.
 _DEGRADED_HIGH_COST_ROLES = frozenset({"architect_general"})
 _STACK_PRIOR_HIGH_COST_ROLES_CACHE: frozenset[str] | None = None
 

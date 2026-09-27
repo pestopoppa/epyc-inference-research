@@ -107,6 +107,9 @@ EDIT_MODE_DIRECT = "direct"
 #: exception, amending 2026-09-24): the architect (27B, :8083) MAY run REPL for task-scoped
 #: requests, which this CLI always sends (`task_root`), so `--role architect_general` with
 #: the default mode is allowed here; unscoped architect traffic stays direct/delegated.
+#: 2026-09-27 ARCHITECT SWAP: the ruling is enforced by ROLE NAME (`ARCHITECT_REPL_ROLES`
+#: covers both), but the 27B on :8083 is now `architect_critic`; `--role architect_general`
+#: now reaches Flash-Next on the full CPU instance (:8074, whole-machine region lock).
 FORCE_MODE = "repl"
 AUTO_MODE = "auto"
 #: Attribution. NB `resolve_timeout` lets only `eval_batch` EXTEND past the role SLA

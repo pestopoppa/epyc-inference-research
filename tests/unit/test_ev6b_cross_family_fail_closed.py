@@ -216,7 +216,11 @@ def test_llm_judge_force_role_precedence_is_unchanged():
     # existing judge-role precedence (judge_role > LLM_JUDGE_ROLE env >
     # architect_general) is untouched, since eval_tower's label computation
     # (below) reuses it rather than restating it.
-    assert debug_scorer._llm_judge_force_role({}) == "architect_general"
+    # 2026-09-27 ARCHITECT SWAP: the default judge follows the MI210 27B process
+    # ("the disjoint GPU judge"), which is architect_critic now. Only the label
+    # moved; the precedence order under test is unchanged.
+    assert debug_scorer._llm_judge_force_role({}) == debug_scorer.DEFAULT_LLM_JUDGE_ROLE
+    assert debug_scorer.DEFAULT_LLM_JUDGE_ROLE == "architect_critic"
     assert debug_scorer._llm_judge_force_role({"judge_role": "worker_general"}) == "worker_general"
 
 

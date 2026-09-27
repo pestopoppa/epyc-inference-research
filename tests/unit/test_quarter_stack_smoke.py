@@ -86,11 +86,14 @@ def test_derived_chat_ports_drop_retired_ports_and_pick_up_live_ones() -> None:
         if alias in PORT_MAP:
             assert PORT_MAP[alias] == PORT_MAP[host] and PORT_MAP[alias] in derived, alias
     assert PORT_MAP["worker_general"] in derived
-    # architect_critic (:8074) went HOT on 2026-08-01; the literal never listed it.
+    # The :8074 full-CPU instance went HOT on 2026-08-01 (as architect_critic);
+    # the literal never listed it. It serves architect_general since the
+    # 2026-09-27 ARCHITECT SWAP.
+    assert PORT_MAP["architect_general"] in derived
     assert PORT_MAP["architect_critic"] in derived
     # Aliases share their host process's port rather than adding one.
     assert PORT_MAP["vision_escalation"] == PORT_MAP["worker_vision"]
-    assert PORT_MAP["coder_escalation"] == PORT_MAP["architect_general"]
+    assert PORT_MAP["coder_escalation"] == PORT_MAP["architect_critic"]
 
 
 def test_topology_errors_flags_a_role_that_port_map_disagrees_about(monkeypatch) -> None:

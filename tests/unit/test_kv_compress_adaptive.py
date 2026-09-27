@@ -117,9 +117,10 @@ class TestComputeLayerAdaptiveWeights:
     def test_current_live_roles_expose_stack_prior_layer_counts(self):
         """Current live KV-adaptive roles should use generated stack-prior metadata."""
         assert _stack_prior_layer_count_for_role("frontdoor") == MODEL_LAYER_COUNTS["frontdoor"]
+        # 2026-09-27 ARCHITECT SWAP: the 64-layer MI210 27B host is architect_critic.
         assert (
-            _stack_prior_layer_count_for_role("architect_general")
-            == MODEL_LAYER_COUNTS["architect_general"]
+            _stack_prior_layer_count_for_role("architect_critic")
+            == MODEL_LAYER_COUNTS["architect_critic"]
         )
         assert (
             _stack_prior_layer_count_for_role("ingest_long_context")
