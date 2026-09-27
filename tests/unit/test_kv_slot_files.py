@@ -326,10 +326,12 @@ def test_backend_sweep_rate_limited(tmp_path):
 # ── policy ───────────────────────────────────────────────────────────────
 
 
-def test_repo_policy_parses_and_defaults_safe():
+def test_repo_policy_parses_with_operator_enabled_sweep():
+    # The repo policy file carries the operator's 2026-09-27 decision (sweep ON);
+    # the SAFE fallback for an unusable file stays OFF (test below).
     pol = KS.load_policy()
     assert pol.unlink_on_terminal is True
-    assert pol.sweep_enabled is False
+    assert pol.sweep_enabled is True
     assert pol.sweep_min_age_minutes == 60
 
 
