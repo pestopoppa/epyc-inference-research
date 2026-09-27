@@ -78,8 +78,22 @@ EXPECT="${2:-$(cd "$(dirname "$BIN")" && pwd)}"
 
 [ -x "$BIN" ] || { echo "FAIL: $BIN is not executable"; exit 1; }
 
+# Compare CANONICAL paths on both sides (2026-09-27). The v10 kernel store serves
+# from symlinks (kernels/production/gpu -> builds/gpu-<date>-<sha>/bin), and a
+# RUNPATH of $ORIGIN makes ldd report the RESOLVED build dir, so a textual
+# prefix match read every library of a correctly linked store binary as BAD.
+# Resolving the expected root and each library path with `readlink -f` before
+# the prefix test removes that false FAIL without widening what counts as
+# inside: a library that resolves out of the tree is still BAD. Printed rows keep
+# ldd's own path so existing consumers' row regexes are unchanged.
+# No 2>/dev/null on readlink: under AutoKernel's Landlock sandbox that shell
+# redirection itself is denied (see the ldd note below).
+EXPECT_REAL="$(readlink -f -- "$EXPECT" || true)"
+[ -n "$EXPECT_REAL" ] || EXPECT_REAL="$EXPECT"
+
 echo "binary : $BIN"
 echo "expect : libraries under $EXPECT"
+[ "$EXPECT_REAL" = "$EXPECT" ] || echo "         (resolves to $EXPECT_REAL)"
 echo
 
 # ggml splits across libggml-base / libggml-cpu / libggml-hip|cuda / libggml.
@@ -97,8 +111,10 @@ while read -r name arrow path rest; do
   [ -n "${path:-}" ] || continue
   FOUND=$((FOUND+1))
   case "$name" in libggml-base.so*) CORE=$((CORE+1)) ;; esac
-  case "$path" in
-    "$EXPECT"/*) printf "  OK   %-28s -> %s\n" "$name" "$path" ;;
+  path_real="$(readlink -f -- "$path" || true)"
+  [ -n "$path_real" ] || path_real="$path"
+  case "$path_real" in
+    "$EXPECT_REAL"/*) printf "  OK   %-28s -> %s\n" "$name" "$path" ;;
     *)           printf "  BAD  %-28s -> %s\n" "$name" "$path"; BAD=$((BAD+1)) ;;
   esac
 # Do not redirect ldd diagnostics through /dev/null.  AutoKernel runs this
