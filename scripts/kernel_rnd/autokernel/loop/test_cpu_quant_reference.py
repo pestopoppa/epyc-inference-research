@@ -407,6 +407,67 @@ class QuantReferenceTest(unittest.TestCase):
                         permuted_scale_output(quant, "MUL_MAT", 8, ADJACENT_SWAP),
                         quant, "MUL_MAT", 8).status, "pass")
 
+    # --- float weights (float_tinyblas_plan route, DS41 inbox 52) ---------------------
+
+    @staticmethod
+    def _float_row(quant: str, expert: int, row: int) -> bytes:
+        values = [fixture._source_weight(expert, row, column) for column in range(fixture.K)]
+        if quant == "F16":
+            return struct.pack(f"<{fixture.K}e", *values)
+        if quant == "F32":
+            return struct.pack(f"<{fixture.K}f", *values)
+        halves = []
+        for value in values:  # round-to-nearest-even, as ggml_fp32_to_bf16 does
+            bits = struct.unpack("<I", struct.pack("<f", value))[0]
+            halves.append((bits + 0x7FFF + ((bits >> 16) & 1)) >> 16)
+        return struct.pack(f"<{fixture.K}H", *halves)
+
+    def _float_output(self, quant: str, width: int, tile_shift: int = 0,
+                      nudge: float = 0.0) -> str:
+        """Probe output; `tile_shift` computes row r from row r+shift (a mis-planned tile)."""
+        lines = [f"{fixture.MARKER} {quant} MUL_MAT 256 40 {width} {fixture.ROW_BYTES[quant]}"]
+        rows = {(0, row): self._float_row(quant, 0, row) for row in range(fixture.ROWS)}
+        lines += [f"A 0 {row} {rows[0, row].hex()}" for row in range(fixture.ROWS)]
+        for token in range(width):
+            for row in range(fixture.ROWS):
+                value = fixture._reference(quant, "MUL_MAT", rows, token,
+                                           (row + tile_shift) % fixture.ROWS)
+                lines.append(f"O {token} {row} {(value + nudge).hex()}")
+        return "\n".join(lines) + "\n"
+
+    def test_float_weights_decode_exactly_and_pass(self):
+        for quant in fixture.FLOAT_TYPES:
+            for width in (1, 3, 8):
+                with self.subTest(quant=quant, width=width):
+                    result = fixture._parse_and_compare(self._float_output(quant, width),
+                                                        quant, "MUL_MAT", width)
+                    self.assertEqual(result.status, "pass", result.detail)
+                    metric = json.loads(result.detail.split(" ", 1)[1])
+                    self.assertLessEqual(metric["max_quant_abs_error"],
+                                         fixture.QUANT_ABS_TOL[quant] / 2)
+                    self.assertEqual(metric["output_abs_tol"], fixture.FLOAT_ABS_TOL)
+
+    def test_float_weights_catch_a_misplanned_tile_and_a_tiny_error(self):
+        for quant in fixture.FLOAT_TYPES:
+            with self.subTest(quant=quant, defect="row tile"):
+                self.assertEqual(fixture._parse_and_compare(
+                    self._float_output(quant, 3, tile_shift=8), quant, "MUL_MAT", 3).status,
+                    "wrong")
+            with self.subTest(quant=quant, defect="1e-4 error"):
+                # the float bound is analytic (~3.6e-7 worst case), not the 0.01 quant bound
+                self.assertEqual(fixture._parse_and_compare(
+                    self._float_output(quant, 3, nudge=1e-4), quant, "MUL_MAT", 3).status,
+                    "wrong")
+
+    def test_float_weights_are_mul_mat_only_and_not_in_the_default_suite(self):
+        self.assertTrue(set(fixture.FLOAT_TYPES).isdisjoint(fixture.QUANTS))
+        with self.assertRaisesRegex(ValueError, "unsupported"):
+            fixture.check_cpu_quant_suite(Path("/build"), Path("/source"),
+                                          quants=("F16",), ops=("MUL_MAT", "MUL_MAT_ID"))
+        with self.assertRaisesRegex(ValueError, "unsupported"):
+            fixture.check_cpu_quant_suite(Path("/build"), Path("/source"),
+                                          quants=("F16", "Q8_0"), ops=("MUL_MAT_ID",))
+
     def test_missing_rows_and_identity_are_untrusted(self):
         output = q8_output()
         with self.assertRaisesRegex(ValueError, "identity"):

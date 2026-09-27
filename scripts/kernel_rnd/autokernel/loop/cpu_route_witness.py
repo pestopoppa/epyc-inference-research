@@ -27,6 +27,8 @@ from .iqk_witness import Result
 TIMEOUT_S = 180
 SCRIPT = Path(__file__).with_name("cpu_route_gdb_probe.py")
 _DENSE = "bs=[1,1],nr=[1,1],per=[0,1,2,3],k_v=0,o=1"
+_F16_TINYBLAS_GEMM = ("tinyBLAS<16, float __vector.16., float __vector.16., "
+                      "unsigned short, unsigned short, float>::gemm<")
 
 
 @dataclass(frozen=True)
@@ -63,6 +65,18 @@ WITNESSES = {
         symbol_pattern=r"^ggml_iqk_try_mul_mat$",
         active=r"\[iqk\] ACTIVE: ik_llama GEMM kernels engaged \(first mul_mat type=12 ",
         quants=("Q4_K", "Q5_K", "Q8_0"), ops=("MUL_MAT", "MUL_MAT_ID")),
+    # tinyBLAS::matmul is inlined into llamafile_sgemm; the NOINLINE gemm it dispatches to
+    # is the class's entry with a symbol. Any RM/RN/BM instantiation (or constprop clone)
+    # counts, so a plan change still proves engagement. `.` stands for the parentheses
+    # because GDB's rbreak regex and Python's disagree on whether `\(` is literal. The
+    # float scalar fixture runs on an 8-thread team with 40 rows (5 y-tiles of 8 under
+    # HEAD's plan), i.e. inside the narrow-M regime the route exists to re-plan; branch
+    # coverage is still not claimed.
+    "float_tinyblas_plan": RouteWitness(
+        op="MUL_MAT", case=f"type_a=f16,type_b=f32,m=16,n=16,k=256,{_DENSE}",
+        breakpoint=("rbreak", _F16_TINYBLAS_GEMM),
+        symbol_pattern=_F16_TINYBLAS_GEMM,
+        active=None, quants=("F16", "BF16", "F32"), ops=("MUL_MAT",)),
     # Every node passes the barrier, so entry proves nothing; the numerical suite over
     # every quant, op and width is the witness that publish-before-consume still holds.
     "cpu_graph_sync": RouteWitness(

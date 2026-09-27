@@ -48,10 +48,16 @@ int main(int argc, char ** argv) {
     if (std::strcmp(argv[1], "Q4_K") == 0) type = GGML_TYPE_Q4_K;
     else if (std::strcmp(argv[1], "Q5_K") == 0) type = GGML_TYPE_Q5_K;
     else if (std::strcmp(argv[1], "Q8_0") == 0) type = GGML_TYPE_Q8_0;
+    else if (std::strcmp(argv[1], "F16") == 0) type = GGML_TYPE_F16;
+    else if (std::strcmp(argv[1], "BF16") == 0) type = GGML_TYPE_BF16;
+    else if (std::strcmp(argv[1], "F32") == 0) type = GGML_TYPE_F32;
     else return 2;
+    const bool float_weights = type == GGML_TYPE_F16 || type == GGML_TYPE_BF16 ||
+                               type == GGML_TYPE_F32;
     const bool fused = std::strcmp(argv[2], "FUSED_UP_GATE") == 0;
     const bool id_op = fused || std::strcmp(argv[2], "MUL_MAT_ID") == 0;
     if (!id_op && std::strcmp(argv[2], "MUL_MAT") != 0) return 2;
+    if (float_weights && id_op) return 2;  // the float tinyBLAS route is MUL_MAT only
     const int experts = id_op ? 2 : 1;
     const size_t row_bytes = ggml_row_size(type, K);
     std::vector<float> source(K * ROWS * experts);
@@ -60,8 +66,11 @@ int main(int argc, char ** argv) {
             for (int column = 0; column < K; ++column)
                 source[column + K * (row + ROWS * expert)] = weight(expert, row, column);
     std::vector<unsigned char> quantized(row_bytes * ROWS * experts);
-    if (ggml_quantize_chunk(type, source.data(), quantized.data(), 0,
-                            ROWS * experts, K, nullptr) != quantized.size()) return 3;
+    if (type == GGML_TYPE_F32) {
+        // ggml_quantize_chunk has no F32 case; the stored bytes are the source floats.
+        std::memcpy(quantized.data(), source.data(), quantized.size());
+    } else if (ggml_quantize_chunk(type, source.data(), quantized.data(), 0,
+                                   ROWS * experts, K, nullptr) != quantized.size()) return 3;
     // A distinct gate matrix is essential: reusing the up weights could hide
     // operand swaps or a missing half of the fused computation.
     std::vector<float> gate_source;
@@ -100,6 +109,12 @@ int main(int argc, char ** argv) {
     ggml_build_forward_expand(graph, out);
     ggml_backend_t backend = ggml_backend_cpu_init();
     if (!backend) return 5;
+    // Float weights run on an 8-thread team. tinyBLAS::matmul plans ROWS = 40 as 5 y-tiles
+    // of 8 rows, so 8 threads put the probe in the narrow-M regime (fewer jobs than
+    // threads) that the float_tinyblas_plan route exists to re-plan. The default team
+    // (GGML_DEFAULT_N_THREADS = 4) would be fully fed and never reach it. Quant arms keep
+    // the default, unchanged.
+    if (float_weights) ggml_backend_cpu_set_n_threads(backend, 8);
     ggml_backend_buffer_t buffer = ggml_backend_alloc_ctx_tensors(ctx, backend);
     if (!buffer) return 6;
     std::vector<float> activations(K * tokens);

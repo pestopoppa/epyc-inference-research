@@ -475,6 +475,83 @@ class AffectedOpAndIndependentReference(unittest.TestCase):
             source_text=self._SGEMM, pre_source_text=self._SGEMM,
             patch_text=self._hunk(self._SGEMM, "        pack();")).passed)
 
+    _SGEMM_FLOAT = ("template <int KN, typename D, typename V, typename TA, typename TB, typename TC>\n"
+                    "class tinyBLAS {\n  public:\n"
+                    "    bool matmul(int64_t m, int64_t n) {\n"
+                    "        if (k % KN != 0)\n            return false;\n"
+                    "        mnpack<4, 6, 2>(m, n, SIZE_N, 12); // { brace in a comment\n"
+                    "        return true;\n    }\n"
+                    "  private:\n"
+                    "    template <int RM, int RN, int BM>\n"
+                    "    inline void mnpack(int64_t m, int64_t n, int64_t SIZE_N, int64_t BN) {\n"
+                    "        descend();\n    }\n"
+                    "    template <int RM, int RN>\n"
+                    "    inline void gemm_bloc(int64_t ii, int64_t jj) {\n"
+                    "        accumulate();\n    }\n"
+                    "    template <int RM, int RN, int BM>\n"
+                    "    NOINLINE void gemm(int64_t m, int64_t n, int64_t BN) {\n"
+                    "        barrier_and_jobs();\n    }\n};\n"
+                    "template <typename TA, typename TB, typename TC>\n"
+                    "class tinyBLAS_Q0_AVX {\n"
+                    "    bool matmul(int64_t m, int64_t n) {\n"
+                    "        q0_plan();\n    }\n};\n")
+
+    def test_float_tinyblas_plan_route_is_matmul_body_only(self):
+        path = "ggml/src/ggml-cpu/llamafile/sgemm.cpp"
+        src = self._SGEMM_FLOAT
+        plan = "        mnpack<4, 6, 2>(m, n, SIZE_N, 12); // { brace in a comment"
+        for symbol in ("matmul", "tinyBLAS",
+                       "tinyBLAS<16, float __vector(16), float __vector(16), unsigned short, "
+                       "unsigned short, float>::matmul (small-M plan)"):
+            self.assertEqual(gates.cpu_source_route(path, symbol).route, "float_tinyblas_plan")
+            self.assertEqual(gates.affected_op_scope(
+                (path,), target_surface=path, target_symbol=symbol,
+                source_text=src, pre_source_text=src,
+                patch_text=self._hunk(src, plan, "+        mnpack<1, 6, 1>(m, n, 2, 1);\n")),
+                ("MUL_MAT",))
+        # numerics, the barrier-bearing gemm, the other class: all outside the boundary
+        for token in ("        descend();", "        accumulate();",
+                      "        barrier_and_jobs();", "        q0_plan();",
+                      "class tinyBLAS {"):
+            refused = gates.affected_op_scope(
+                (path,), target_surface=path, target_symbol="tinyBLAS::matmul",
+                source_text=src, pre_source_text=src, patch_text=self._hunk(src, token))
+            self.assertFalse(refused.passed, token)
+            self.assertIn("float_tinyblas_plan route refused", refused.reason)
+        for added in ("+        C[0] = 0;\n", "+        gemm_bloc<1, 3>(0, 0);\n",
+                      "+        auto v = madd(a, b, c);\n", "+        _mm512_setzero_ps();\n"):
+            refused = gates.affected_op_scope(
+                (path,), target_surface=path, target_symbol="matmul",
+                source_text=src, pre_source_text=src, patch_text=self._hunk(src, plan, added))
+            self.assertFalse(refused.passed, added)
+            self.assertIn("forbidden pattern", refused.reason)
+        header = src.replace("    bool matmul(int64_t m, int64_t n) {\n        if",
+                             "    bool matmul(int64_t m, int64_t n, int t) {\n        if")
+        self.assertFalse(gates.affected_op_scope(
+            (path,), target_surface=path, target_symbol="matmul",
+            source_text=header, pre_source_text=src,
+            patch_text=self._hunk(src, plan)).passed)
+
+    def test_class_qualified_symbols_pick_their_own_tinyblas_route(self):
+        path = "ggml/src/ggml-cpu/llamafile/sgemm.cpp"
+        # the Q0 route keeps its names, qualified or bare
+        for symbol in ("gemm", "gemm4xN", "tinyBLAS_Q0_AVX<block_q8_0, block_q8_0, float>::gemm",
+                       "tinyBLAS_Q0_AVX<block_q8_0, block_q8_0, float>::mnpack(long, long, long, long)"):
+            self.assertEqual(gates.cpu_source_route(path, symbol).route, "dense_q8_tinyblas",
+                             symbol)
+        # a float-class member the plan route does not admit falls back by bare name and
+        # is then refused by the Q0 class boundary (or resolves to nothing): fail-closed
+        written = ("tinyBLAS<16, float __vector(16), float __vector(16), unsigned short, "
+                   "unsigned short, float>::gemm<4, 3, 2>(long, long, long)")
+        self.assertEqual(gates.cpu_source_route(path, written).route, "dense_q8_tinyblas")
+        demangled = "void (anonymous namespace)::" + written + " [clone .constprop.0]"
+        for symbol in (written, demangled):
+            refused = gates.affected_op_scope(
+                (path,), target_surface=path, target_symbol=symbol,
+                source_text=self._SGEMM_FLOAT, pre_source_text=self._SGEMM_FLOAT,
+                patch_text=self._hunk(self._SGEMM_FLOAT, "        barrier_and_jobs();"))
+            self.assertFalse(refused.passed, symbol)
+
     _DISPATCH = ("namespace {\n"
                  "inline bool iqk_q8_0_enabled() {\n    return off();\n}\n"
                  "}\n"
@@ -556,6 +633,12 @@ class AffectedOpAndIndependentReference(unittest.TestCase):
                     path="ggml/src/ggml-cpu/llamafile/sgemm.cpp", target_symbol="gemm4xN")
             self.assertEqual((verdict.gate, verdict.passed), (gate, status == "pass"))
             self.assertEqual(check.call_args.kwargs["route"], "dense_q8_tinyblas")
+            with mock.patch.object(cpu_route_witness, "check",
+                    return_value=iqk_witness.Result(status, "reason", "detail")) as check:
+                gates.check_cpu_route_reference(
+                    Path("/build"), Path("/source"), resolved_recipe=object(),
+                    path="ggml/src/ggml-cpu/llamafile/sgemm.cpp", target_symbol="tinyBLAS::matmul")
+            self.assertEqual(check.call_args.kwargs["route"], "float_tinyblas_plan")
         unknown = gates.check_cpu_route_reference(
             Path("/build"), Path("/source"), resolved_recipe=object(),
             path="ggml/src/ggml-cpu/ops.cpp", target_symbol="ggml_compute_forward_concat")
@@ -587,6 +670,25 @@ class AffectedOpAndIndependentReference(unittest.TestCase):
         two_cases = output.replace("1/1 tests passed", "2/2 tests passed")
         self.assertEqual(cpu_route_witness.assess_case(witness, ok, two_cases, 0,
                                                        dso).status, "unavailable")
+
+    def test_every_widened_route_has_a_reviewed_witness(self):
+        from autokernel.loop import cpu_quant_reference, cpu_route_witness
+        for route in gates.CPU_SOURCE_ROUTES:
+            witness = cpu_route_witness.WITNESSES[route.route]
+            self.assertTrue(set(witness.ops) >= set(route.ops) or
+                            route.route == "cpu_graph_sync", route.route)
+            self.assertTrue(set(witness.quants) <= set(cpu_quant_reference.QUANTS) |
+                            set(cpu_quant_reference.FLOAT_TYPES), route.route)
+        float_route = cpu_route_witness.WITNESSES["float_tinyblas_plan"]
+        # every float type the tinyBLAS class is instantiated for on AVX512 is checked
+        self.assertEqual(set(float_route.quants), {"F16", "BF16", "F32"})
+        import re as _re
+        hit = ("void (anonymous namespace)::tinyBLAS<16, float __vector(16), float __vector(16), "
+               "unsigned short, unsigned short, float>::gemm<4, 6, 2>(long, long, long) "
+               "[clone .constprop.0]")
+        self.assertIsNotNone(_re.search(float_route.symbol_pattern, hit))
+        self.assertIsNone(_re.search(float_route.symbol_pattern, hit.replace(
+            "unsigned short, unsigned short", "float, float")))
 
     def test_every_widened_route_reaches_the_actors(self):
         program = (Path(__file__).resolve().parent / "program.md").read_text()

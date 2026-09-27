@@ -355,6 +355,24 @@ CPU_SOURCE_ROUTES = (
         admitted_text=("hunks inside the ggml_barrier, ggml_cpu_node_is_solo, "
                        "ggml_cpu_try_fuse_ops or ggml_graph_compute_thread bodies; headers, "
                        "globals, op kernels and every other function unchanged")),
+    # Float (F32/F16/BF16) GEMM tile PLAN: the type-generic `tinyBLAS::matmul` picks
+    # RM*BM = 8- or 16-row y-tiles, so a narrow-M matrix gets fewer jobs than threads.
+    # DS41 hc_mixes (F16 [20480, 24], 80 nodes per verify at N=3) yields 24/8 = 3 jobs
+    # for 48 threads (DS41 inbox 52). gemm_bloc accumulates every output element over k
+    # in the same order whatever RM/RN/BM or thread it lands on, so an edit confined to
+    # the plan is bit-exact; gemm_bloc/load/madd/hsum and the barrier-bearing gemm body
+    # stay outside the boundary, and added lines may not touch the numerics or operands.
+    CpuSourceRoute(
+        route="float_tinyblas_plan",
+        path="ggml/src/ggml-cpu/llamafile/sgemm.cpp",
+        symbols=("tinyBLAS", "matmul"),
+        container="class tinyBLAS {",
+        bodies=(("matmul", "    bool matmul(int64_t m, int64_t n) {"),),
+        ops=("MUL_MAT",),
+        forbidden_added=r"\b(madd|hsum|load|gemm_bloc)\b|_mm\w*|\b[ABC]\s*\[",
+        admitted_text=("hunks inside the class tinyBLAS matmul body (tile plan: which "
+                       "mnpack<RM, RN, BM> and SIZE_N/BN it calls); mnpack, gemm_bloc, gemm, "
+                       "load/madd/hsum, other classes and direct A/B/C access unchanged")),
 )
 CPU_SOURCE_ROUTE_PATHS = tuple(sorted({route.path for route in CPU_SOURCE_ROUTES}))
 
@@ -373,8 +391,9 @@ def _route_symbol_names(target_symbol: str) -> list[str]:
         if stripped == text:
             break
         text = stripped
-    parts = [part.strip() for part in text.split("::") if part.strip()]
-    return list(dict.fromkeys(reversed(parts)))
+    # `gemm(long, long, long)` as a demangler prints it: drop the parameter list.
+    parts = [re.sub(r"\(.*$", "", part).strip() for part in text.split("::")]
+    return list(dict.fromkeys(reversed([part for part in parts if part])))
 
 
 def cpu_source_route(path: str, target_symbol: str) -> CpuSourceRoute | None:
@@ -383,7 +402,16 @@ def cpu_source_route(path: str, target_symbol: str) -> CpuSourceRoute | None:
     exact = next((route for route in candidates if target_symbol in route.symbols), None)
     if exact is not None:
         return exact
-    for name in _route_symbol_names(target_symbol):
+    names = _route_symbol_names(target_symbol)
+    # A class-qualified symbol picks the route that admits the member AND its class:
+    # sgemm.cpp has two tinyBLAS routes, and bare-name order must not hand
+    # `tinyBLAS<...>::matmul` or a Q0 member to the other class's route.
+    if len(names) > 1:
+        qualified = next((route for route in candidates
+                          if names[0] in route.symbols and names[1] in route.symbols), None)
+        if qualified is not None:
+            return qualified
+    for name in names:
         route = next((route for route in candidates if name in route.symbols), None)
         if route is not None:
             return route
