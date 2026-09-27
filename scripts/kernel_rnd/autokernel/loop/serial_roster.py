@@ -67,7 +67,10 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None, s
                   "--shared-history-root", "--node-profile-level", "--actor-timeout-s",
                   # CPU windows (cpu_window.py): a claim-yield policy, not an identity.
                   "--cpu-window-yield", "--cpu-window-wait-bound-s",
-                  "--cpu-window-bus-agent"}
+                  "--cpu-window-bus-agent",
+                  # Best-of-N author wall budgets (bestof.WallBudget): a time policy.
+                  "--actor-authors-wall", "--actor-authors-panel-wall",
+                  "--actor-authors-cancel-factor"}
         # Bare switches: instruments and rankers, never identities.
         switches = {"--rank-prior-experiments", "--node-profile"}
         iterator = iter(extra)

@@ -498,6 +498,9 @@ class AuthorPlan:
     specs: tuple = ()
     budget: object = None
     note: str = ""
+    #: `bestof.WallBudget`: per-member wall by thinking mode, the panel's hard wall and
+    #: the early-cancel factor (`--actor-authors-wall` / `-panel-wall` / `-cancel-factor`).
+    walls: object = None
 
     @property
     def panel(self) -> bool:
@@ -513,6 +516,13 @@ def _author_plan(args, planner_kind: str | None = None) -> AuthorPlan:
     lanes would share :8083's pool. N=1 (`single`, or one mode) is the single path."""
     explicit = args.actor_authors is not None
     spec = args.actor_authors if explicit else DEFAULT_ACTOR_AUTHORS
+    # The wall knobs are refused whatever N is (a typo must not wait for a panel run).
+    # They bound best-of-N panels only: N=1 keeps the single path's timeout and retry.
+    walls = bestof.wall_budget(
+        getattr(args, "actor_authors_wall", None),
+        getattr(args, "actor_authors_panel_wall", bestof.DEFAULT_PANEL_WALL_S),
+        getattr(args, "actor_authors_cancel_factor", bestof.DEFAULT_CANCEL_FACTOR),
+        allowed=tuple(actor_opencode_config.THINKING_CHOICES))
     if str(spec).strip() == SINGLE_AUTHOR:
         return AuthorPlan(note="single author (--actor-authors single)")
     try:
@@ -542,12 +552,15 @@ def _author_plan(args, planner_kind: str | None = None) -> AuthorPlan:
     budget = bestof.panel_budget(
         specs, pool_tokens=int(args.actor_pool_tokens),
         modes=bestof.parse_mode_budgets(getattr(args, "actor_authors_budget", None)))
-    return AuthorPlan(specs=specs, budget=budget,
+    return AuthorPlan(specs=specs, budget=budget, walls=walls,
                       note=(f"best-of-{len(specs)} "
                             + " ".join(f"{m.label}(context={m.context_limit} "
-                                       f"output={m.output_limit} compaction@{m.compaction_at})"
+                                       f"output={m.output_limit} compaction@{m.compaction_at} "
+                                       f"wall={walls.for_member(m):.0f}s)"
                                        for m in budget.members)
-                            + f" pool={budget.pool_tokens}-{budget.reserve}"))
+                            + f" pool={budget.pool_tokens}-{budget.reserve}"
+                            + f" panel_wall={walls.panel_s}s"
+                            + f" cancel_factor={walls.cancel_factor:g}"))
 
 
 def _author_validator(args):
@@ -1333,6 +1346,25 @@ def main(argv: list[str] | None = None) -> int:
                                  f"{mode}={weight}:{output}" for mode, (weight, output)
                                  in bestof.DEFAULT_MODE_BUDGETS.items())
                              + " (off,medium on 196608: 65536/16384 and 114688/40960)")
+    parser.add_argument("--actor-authors-wall", default="",
+                        help="best-of-N per-member wall budget by thinking mode, merged over "
+                             "the defaults: comma list of <mode>=<seconds>. At its budget a "
+                             "member's call is ended (process-group stop), its lane diff is "
+                             "salvaged, and it is never retried in-round. Defaults: "
+                             + ",".join(f"{mode}={seconds}" for mode, seconds
+                                        in bestof.DEFAULT_MEMBER_WALL_S.items())
+                             + " (operator 2026-09-27). Panels only: N=1 is unchanged")
+    parser.add_argument("--actor-authors-panel-wall", default=str(bestof.DEFAULT_PANEL_WALL_S),
+                        help="best-of-N hard wall for the whole panel (authoring and the "
+                             "winner check), seconds; caps every member's budget "
+                             "(default: %(default)s)")
+    parser.add_argument("--actor-authors-cancel-factor",
+                        default=str(bestof.DEFAULT_CANCEL_FACTOR),
+                        help="best-of-N early cancel: once one member finishes (a winner, a "
+                             "genuine abstention or a diff that failed the check), end any "
+                             "member still authoring past this multiple of the finisher's "
+                             "wall without an ak-check-passing patch; 0 = off, else >= 1 "
+                             "(default: %(default)s)")
     parser.add_argument("--actor-pool-tokens", type=int, default=bestof.DEFAULT_POOL_TOKENS,
                         help=":8083's unified KV pool the concurrent authors share "
                              "(np4 --kv-unified; default: %(default)s)")
@@ -3893,6 +3925,9 @@ def main(argv: list[str] | None = None) -> int:
                 return actors.AgentPlanner(
                     workspace=Path(workspace), backend=planner_backend,
                     timeout_s=args.actor_timeout_s, should_stop=member_stop,
+                    # A member that hits the hard timeout spent its budget: never
+                    # retried in-round (operator 2026-09-27, DS41 run 10j).
+                    retry_timeouts=False,
                     belief_context=args.actor_belief_context,
                     belief_root=args.belief_root_repo, **sandbox_kw,
                     seat=actors.ActorSeat(**sandbox_seat_kw,
@@ -3913,7 +3948,7 @@ def main(argv: list[str] | None = None) -> int:
                 scratch=scratch_registry[0], budget=budget,
                 validator=_author_validator(args),
                 retain=lambda **patch: archive.retain_patch_bytes(args.store, **patch),
-                should_stop=should_stop)
+                should_stop=should_stop, walls=author_plan.walls)
 
         pooled_lanes = pool.provision(args.workers, champion_tree=args.worktree,
                                       champion_branch=args.champion_branch,

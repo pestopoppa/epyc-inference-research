@@ -47,6 +47,34 @@ reported a change it never made on an uncapped final step), else by raising the
 provider exception with the records attached (`author_failures`). A member whose final
 step hit the output cap with no diff is recorded `failure_class: output_capped_empty`.
 
+WALL BUDGET (operator 2026-09-27, after DS41 run 10j round 1 on `akm-q4k-x4t-avx512`:
+a0-off gave up after 61 min, a1-medium hit the 7200 s actor timeout, was retried
+in-round as an uncharged harness failure and spent another 6667 s -- 3.9 h for one
+round, whose winning patch critic2 then proved wrong). `WallBudget`:
+
+  * each member has a wall budget by thinking mode (off 2700 s, medium 4500 s, default
+    4500 s; `--actor-authors-wall`) and the whole panel a hard wall (5400 s;
+    `--actor-authors-panel-wall`), enforced as the member's stop predicate: the
+    actor's own C22 path TERMs the call's process group. Nothing is killed by name.
+    At its budget a member stops and its lane diff is salvaged (`integrity.
+    lane_diff_report` against the base, only an edit made by this call; the validator
+    then decides whether it is usable, exactly as for a report-missing reply);
+  * a member is never retried in-round after a timeout or a budget stop (its seat runs
+    `retry_timeouts=False`, and a budget stop ends `_with_backoff` as a stop): if
+    another member produced a diff the loser simply loses; if none did the round is an
+    uncharged `authoring_harness_failure` (`failure_class: member_budget_exhausted`;
+    `loop.AUTHOR_HARNESS_FAILURE_CAP` still charges the third in a row);
+  * early cancel (`--actor-authors-cancel-factor`, default 2.0, 0 = off): once one
+    member FINISHES (a winner, a genuine abstention, or a diff that failed the
+    validator), any member still authoring past factor x the finisher's wall without
+    an ak-check-passing patch (its own sandbox log's last result) is ended, recorded
+    `result: cancelled`, `reason: early_cancel`. A member already in the winner check
+    is left to it (the panel wall still bounds it).
+
+The panel row carries `walls` (the budgets, factor, panel wall and the round's wall),
+and each member its `wall_budget_s`, `budget_stopped`, `stop_cause` and
+`early_cancelled`.
+
 DISK. Every scratch tree is allocated from, and released by, the flow-level scratch
 registry (`scratch.py`): marker-owned, released on every exit path of the scope, the
 loser early. This module never creates, sweeps or removes a worktree itself, and never
@@ -67,8 +95,8 @@ import time
 from typing import Any, Callable, Iterator, Mapping, Sequence
 
 from . import actor_metrics, archive, integrity
-from .loop import (Abstain, ActorStopped, ActorTransient, AuthoringFailure, AuthorReportMissing,
-                   author_failure_record)
+from .loop import (MEMBER_BUDGET_EXHAUSTED, Abstain, ActorStopped, ActorTransient,
+                   AuthoringFailure, AuthorReportMissing, author_failure_record)
 
 #: :8083's unified KV pool (np4, --kv-unified, MTP draft) and the tokens that always stay
 #: free for the other slots (operator 2026-09-26).
@@ -317,6 +345,120 @@ def panel_budget(specs: Sequence["AuthorSpec"], *, pool_tokens: int = DEFAULT_PO
     return budget
 
 
+# ----------------------------------------------------------------- wall budget
+
+
+#: Per-member wall budget by thinking mode, seconds (operator 2026-09-27, DS41 run 10j).
+DEFAULT_MEMBER_WALL_S: dict[str, float] = {"off": 2700, "medium": 4500, "default": 4500}
+#: The whole panel's hard wall, seconds: authoring AND the winner check.
+DEFAULT_PANEL_WALL_S = 5400
+#: A member still authoring past this multiple of a finisher's wall is ended (0 = off).
+DEFAULT_CANCEL_FACTOR = 2.0
+
+#: Why a member's call was ended by the panel (`_Member.stop_cause`).
+STOP_RUN = "run_stop"
+STOP_WINNER = "winner"
+STOP_EARLY_CANCEL = "early_cancel"
+STOP_MEMBER_BUDGET = "member_budget"
+STOP_PANEL_WALL = "panel_wall"
+BUDGET_STOPS = frozenset({STOP_MEMBER_BUDGET, STOP_PANEL_WALL})
+
+
+class MemberBudgetExhausted(ActorTransient):
+    """A panel member stopped at its wall budget with no usable diff. An
+    `ActorTransient`, never an `ActorStopped`: `iterate` must record an uncharged
+    authoring harness failure, not a run stop."""
+
+    failure_class = MEMBER_BUDGET_EXHAUSTED
+
+    def __init__(self, message: str, *, failure_class: str | None = MEMBER_BUDGET_EXHAUSTED):
+        super().__init__(message)
+        self.failure_class = failure_class or MEMBER_BUDGET_EXHAUSTED
+
+
+@dataclass(frozen=True)
+class WallBudget:
+    """How long a panel may take: each member's budget by thinking mode, the panel's
+    hard wall, and the early-cancel factor (0 = off)."""
+    member_s: Mapping[str, float] = field(default_factory=lambda: dict(DEFAULT_MEMBER_WALL_S))
+    panel_s: float = DEFAULT_PANEL_WALL_S
+    cancel_factor: float = DEFAULT_CANCEL_FACTOR
+
+    def for_member(self, spec: "AuthorSpec") -> float:
+        """The member's own budget, never above the panel wall. A mode with no entry
+        runs to the panel wall."""
+        own = self.member_s.get(spec.thinking)
+        return float(self.panel_s if own is None else min(float(own), float(self.panel_s)))
+
+    def to_dict(self) -> dict:
+        return {"member_s": {mode: _num(value) for mode, value in sorted(self.member_s.items())},
+                "panel_s": _num(self.panel_s), "cancel_factor": float(self.cancel_factor)}
+
+
+def parse_member_walls(text: str | None, *,
+                       allowed: Sequence[str] = AUTHOR_MODES) -> dict[str, float]:
+    """`--actor-authors-wall "off=2700,medium=4500"` -> {mode: seconds}, merged over
+    `DEFAULT_MEMBER_WALL_S` (a mode not named keeps its default). Empty or None is the
+    defaults. Refused: an entry that is not <mode>=<seconds>, an unknown mode, a
+    non-positive or non-integer number of seconds, a mode named twice."""
+    walls = dict(DEFAULT_MEMBER_WALL_S)
+    seen: set[str] = set()
+    for part in [item.strip() for item in str(text or "").split(",") if item.strip()]:
+        mode, sep, value = part.partition("=")
+        mode = mode.strip()
+        try:
+            seconds = int(value.strip())
+        except ValueError:
+            seconds = None
+        if not sep or not mode or seconds is None:
+            raise ValueError(f"--actor-authors-wall entry {part!r}: need <mode>=<seconds>")
+        if mode not in allowed:
+            raise ValueError(f"--actor-authors-wall entry {part!r}: unknown thinking mode "
+                             f"{mode!r}; this build supports {list(allowed)}")
+        if seconds <= 0:
+            raise ValueError(f"--actor-authors-wall entry {part!r}: seconds must be positive")
+        if mode in seen:
+            raise ValueError(f"--actor-authors-wall names {mode!r} twice")
+        seen.add(mode)
+        walls[mode] = seconds
+    return walls
+
+
+def parse_panel_wall(value: Any) -> int:
+    """`--actor-authors-panel-wall 5400` -> seconds; a positive integer, else refused."""
+    try:
+        seconds = int(str(value).strip())
+    except (TypeError, ValueError):
+        raise ValueError(f"--actor-authors-panel-wall needs a positive integer number of "
+                         f"seconds, got {value!r}") from None
+    if seconds <= 0:
+        raise ValueError(f"--actor-authors-panel-wall must be positive, got {seconds}")
+    return seconds
+
+
+def parse_cancel_factor(value: Any) -> float:
+    """`--actor-authors-cancel-factor 2.0` -> the factor; 0 turns early cancel off.
+    Refused: not a finite number, negative, or between 0 and 1 (a member would be
+    cancelled before it had run as long as the finisher)."""
+    try:
+        factor = float(str(value).strip())
+    except (TypeError, ValueError):
+        raise ValueError(f"--actor-authors-cancel-factor needs a number, got {value!r}") from None
+    if factor != factor or factor in (float("inf"), float("-inf")):
+        raise ValueError(f"--actor-authors-cancel-factor must be finite, got {value!r}")
+    if factor != 0 and factor < 1:
+        raise ValueError(f"--actor-authors-cancel-factor must be 0 (off) or >= 1, got {factor}")
+    return factor
+
+
+def wall_budget(member_walls: str | None = None, panel_wall: Any = DEFAULT_PANEL_WALL_S,
+                cancel_factor: Any = DEFAULT_CANCEL_FACTOR, *,
+                allowed: Sequence[str] = AUTHOR_MODES) -> WallBudget:
+    """The three knobs, parsed and refused together (run.py resolves them at startup)."""
+    return WallBudget(parse_member_walls(member_walls, allowed=allowed),
+                      parse_panel_wall(panel_wall), parse_cancel_factor(cancel_factor))
+
+
 # ----------------------------------------------------------------- validation
 
 
@@ -530,6 +672,19 @@ class _Member:
     extra: list = field(default_factory=list)
     #: `actor_metrics.failure_evidence` of its last call (set by `_harvest_metrics`).
     evidence: dict = field(default_factory=dict)
+    #: Its tree when its author call started (a salvage counts only this call's edit).
+    before_tree: str | None = None
+    #: Its wall budget (seconds from its start; `WallBudget.for_member`).
+    wall_budget_s: float | None = None
+    #: Why the panel ended its call (`STOP_*`), set once by its stop predicate.
+    stop_cause: str | None = None
+    budget_stopped: bool = False
+    early_cancelled: bool = False
+    timed_out: bool = False
+    #: True while its diff is in the winner check (early cancel leaves it alone).
+    validating: bool = False
+    #: The lane-diff salvage of a budget-stopped / timed-out call ({usable, reason}).
+    salvage: dict | None = None
 
 
 class AuthorPanel:
@@ -544,6 +699,10 @@ class AuthorPanel:
     allocates a detached worktree released on every exit path (and `release(path)`, when
     it has one, releases one early); `ensure_free(bytes)` says whether the space exists.
 
+    `walls` (`WallBudget`, default: the operator's 2026-09-27 budgets) bounds each
+    member by thinking mode, the panel by its hard wall, and sets the early-cancel
+    factor; `clock` is the monotonic clock those are measured on.
+
     `validator(hypothesis, workspace, base, paths, should_stop)` returns a `Validation`
     (default: `integrity_validator`; run.py chains ak-check in front of the build once
     it is wired). `retain(**patch)` publishes a member's patch bytes to the patch store
@@ -557,6 +716,7 @@ class AuthorPanel:
                  retain: Callable[..., Path | None] | None = None,
                  should_stop: Callable[[], bool] | None = None,
                  scratch_bytes_per_author: int = SCRATCH_BYTES_PER_AUTHOR,
+                 walls: WallBudget | None = None,
                  clock: Callable[[], float] = time.monotonic) -> None:
         if len(specs) < 2:
             raise ValueError("an author panel needs N >= 2; N=1 is the single-author path")
@@ -576,6 +736,7 @@ class AuthorPanel:
         self.retain = retain
         self.should_stop = should_stop or (lambda: False)
         self.scratch_bytes_per_author = int(scratch_bytes_per_author)
+        self.walls = walls if walls is not None else WallBudget()
         self.clock = clock
         self._rounds = 0
         self._book = threading.RLock()
@@ -599,6 +760,7 @@ class AuthorPanel:
             "n": len(self.specs), "pool": self.budget.to_dict(),
             "validator": getattr(self.validator, "__name__", type(self.validator).__name__),
             "selection": None, "winner": None, "fallback_reason": None,
+            "walls": self.walls.to_dict(),
             "members": [], "scratch": {}, "recorded_at": _now()}
         emitted = [False]
 
@@ -724,18 +886,70 @@ class AuthorPanel:
         order: list[_Member] = []
         origin = self.clock()
         row["started_at"] = _now()
+        panel_s = float(self.walls.panel_s)
+        factor = float(self.walls.cancel_factor or 0.0)
+        #: The first GENUINE finish (not a winner: that cancels everyone anyway):
+        #: {label, wall_s, threshold_s}; members still authoring past the threshold
+        #: without an ak-check-passing patch are ended.
+        finish: dict[str, Any] = {}
+        for member in members:
+            member.wall_budget_s = self.walls.for_member(member.spec)
 
-        def stop_member() -> bool:
-            return cancel.is_set() or self.should_stop()
+        def elapsed() -> float:
+            return self.clock() - origin
+
+        def author_stop(member: _Member) -> Callable[[], bool]:
+            """The member's actor stop predicate (the C22 path TERMs its process group
+            when it turns True). The first cause is kept; it stays True after."""
+            def stop() -> bool:
+                if member.stop_cause is not None:
+                    return True
+                cause = None
+                if self.should_stop():
+                    cause = STOP_RUN
+                elif cancel.is_set():
+                    cause = STOP_WINNER
+                else:
+                    now = elapsed()
+                    ran = now - (member.started or 0.0)
+                    threshold = finish.get("threshold_s")
+                    if now >= panel_s:
+                        cause = STOP_PANEL_WALL
+                    elif member.wall_budget_s is not None and ran >= member.wall_budget_s:
+                        cause = STOP_MEMBER_BUDGET
+                    elif threshold is not None and ran > threshold \
+                            and not self._check_passing(member):
+                        cause = STOP_EARLY_CANCEL
+                if cause is None:
+                    return False
+                member.stop_cause = cause
+                return True
+            return stop
+
+        def validate_stop(member: _Member) -> Callable[[], bool]:
+            """The winner check's stop: a winner, a run stop, or the panel wall (never
+            the member's own budget: a budget-stopped member's salvaged diff is
+            checked, and early cancel leaves a member in its check alone)."""
+            def stop() -> bool:
+                if self.should_stop() or cancel.is_set():
+                    return True
+                if elapsed() >= panel_s:
+                    if member.stop_cause is None:
+                        member.stop_cause = STOP_PANEL_WALL
+                    return True
+                return False
+            return stop
 
         def run(member: _Member) -> None:
-            member.started = self.clock() - origin
+            member.started = elapsed()
             try:
-                self._author_one(member, hypothesis, context, base, stop_member)
+                self._author_one(member, hypothesis, context, base, author_stop(member))
+                self._after_author(member, hypothesis, base)
                 if member.outcome == "diff":
+                    member.validating = True
                     try:
                         member.validation = self.validator(hypothesis, member.workspace, base,
-                                                           member.paths, stop_member,
+                                                           member.paths, validate_stop(member),
                                                            context=context)
                     except ValidationStopped as exc:
                         member.validation = Validation(False, -1, str(exc), {"stopped": True},
@@ -744,8 +958,10 @@ class AuthorPanel:
                         member.validation = Validation(
                             False, -1, f"validator failed: {type(exc).__name__}: {exc}"[:500],
                             {"error": True}, "error")
+                    finally:
+                        member.validating = False
             finally:
-                member.finished = self.clock() - origin
+                member.finished = elapsed()
                 self._harvest_metrics(member)
                 with lock:
                     order.append(member)
@@ -757,6 +973,11 @@ class AuthorPanel:
                         winner.append(member)
                         member.result = "won"
                         cancel.set()
+                    elif factor > 0 and not winner and "threshold_s" not in finish \
+                            and self._genuine_finish(member):
+                        wall = round(max(0.0, member.finished - member.started), 3)
+                        finish.update(label=member.spec.label, wall_s=wall,
+                                      threshold_s=round(factor * wall, 3))
                     # Losers already finished when the winner lands, or this member
                     # finishing after it: retained for the record, released at once.
                     losers = ([m for m in order if m is not member] if won else
@@ -776,10 +997,18 @@ class AuthorPanel:
                  if m.started is not None and m.finished is not None]
         row["overlap_s"] = (round(max(0.0, min(f for _s, f in spans) - max(s for s, _f in spans)), 3)
                             if len(spans) >= 2 else 0.0)
+        walls = row.setdefault("walls", self.walls.to_dict())
+        walls["panel_wall_s"] = round(elapsed(), 3)
+        walls["panel_wall_hit"] = any(m.stop_cause == STOP_PANEL_WALL for m in members)
+        walls["early_cancel"] = (dict(finish, cancelled=[m.spec.label for m in members
+                                                          if m.early_cancelled])
+                                 if finish else None)
         for member in members:
             ended = member.outcome == "stopped" or (
                 member.validation is not None and member.validation.validator == "stopped")
-            if winner and member.result != "won" and ended:
+            # A member that spent its budget simply LOST to the winner (it was not
+            # cancelled by it).
+            if winner and member.result != "won" and ended and not member.budget_stopped:
                 member.result = "cancelled"
         if winner:
             selected = winner[0]
@@ -819,6 +1048,7 @@ class AuthorPanel:
             before = integrity.candidate_tree(member.workspace)
         except Exception:      # noqa: BLE001 -- recovery then refuses
             before = None
+        member.before_tree = before
         try:
             author = self.make_author(member.spec, member.workspace, should_stop)
             result = author.author(hypothesis, dict(context))
@@ -859,11 +1089,115 @@ class AuthorPanel:
         report = getattr(result, "report", None)
         member.report = dict(report) if isinstance(report, Mapping) else None
 
+    def _after_author(self, member: _Member, hypothesis, base: str) -> None:
+        """Say how a member's call ended when the panel (or its budget) ended it.
+
+        Budget stop (its own wall, or the panel's): `budget_stopped`, and its lane diff
+        is salvaged; with none usable it is a `member_budget_exhausted` harness failure
+        (an `ActorTransient`, never a run stop). Early cancel: `result: cancelled`,
+        `reason: early_cancel`. A hard timeout (`ActorTimedOut`, never retried in a
+        panel): its lane diff is salvaged the same way. (A seat's per-call
+        `budget_exhausted` keeps its existing handling: a harness failure, no salvage.)"""
+        cause = member.stop_cause
+        if member.outcome == "stopped" and cause in BUDGET_STOPS:
+            member.budget_stopped = True
+            detail = member.reason
+            budget = panel_s = float(self.walls.panel_s)
+            if cause == STOP_MEMBER_BUDGET and member.wall_budget_s is not None:
+                budget = member.wall_budget_s
+            what = ("its wall budget" if cause == STOP_MEMBER_BUDGET
+                    else "the panel's hard wall")
+            self._salvage(member, hypothesis, base,
+                          f"stopped at {what} ({_num(budget)} s)", detail)
+            if member.outcome != "diff":
+                member.reason = (f"{MEMBER_BUDGET_EXHAUSTED}: stopped at {what} "
+                                 f"({_num(budget)} s; panel wall {_num(panel_s)} s) with no "
+                                 f"usable diff ({(member.salvage or {}).get('reason')}); "
+                                 f"{detail}")[:500]
+                member.error = MemberBudgetExhausted(member.reason)
+        elif member.outcome == "stopped" and cause == STOP_EARLY_CANCEL:
+            member.early_cancelled = True
+            member.result = "cancelled"
+            member.reason = STOP_EARLY_CANCEL
+        elif member.outcome == "transient" and getattr(member.error, "timed_out", False):
+            member.timed_out = True
+            self._salvage(member, hypothesis, base, "timed out", member.reason)
+
+    def _salvage(self, member: _Member, hypothesis, base: str, how: str, detail: str) -> None:
+        """A stopped member's own edit, as the report-missing recovery reads it: the
+        lane diff against the base, only when THIS call changed the tree. Usable or
+        not, the validator (and then the normal gates) decide what it is worth."""
+        try:
+            integrity.take_report_artifacts(Path(member.workspace))
+        except Exception:      # noqa: BLE001 -- the diff read below then refuses a stray
+            pass
+        try:
+            derived = integrity.lane_diff_report(member.workspace, base,
+                                                 target_surface=hypothesis.target_surface,
+                                                 before_tree=member.before_tree)
+        except Exception as exc:      # noqa: BLE001 -- LaneDiffRefused, git faults
+            member.salvage = {"usable": False, "reason": f"lane diff not usable: {exc}"[:400]}
+            return
+        if not derived:
+            member.salvage = {"usable": False, "reason": "no diff made by this call"}
+            return
+        member.salvage = {"usable": True, "paths": list(derived)}
+        member.outcome, member.paths = "diff", tuple(derived)
+        member.reason = f"salvaged after it {how}: {detail}"[:500]
+        member.report = {"report_source": "lane_diff", "base": base, "paths": list(derived),
+                         "failure_class": (MEMBER_BUDGET_EXHAUSTED if member.budget_stopped
+                                           else getattr(member.error, "failure_class", None)),
+                         "path_normalized": False, "reply_refusal": str(detail)[:500],
+                         "salvaged": how}
+        member.error = None
+
+    def _check_passing(self, member: _Member) -> bool:
+        """Whether the member's own ak-check sandbox (`ak-check-<tree>.jsonl` in its reply
+        dir) last PASSED: a member holding an ak-check-passing patch is never cancelled
+        early. Evidence only: an unreadable log is "no"."""
+        if member.workspace is None:
+            return False
+        workspace = Path(member.workspace)
+        log = workspace.parent / actor_metrics.REPLY_DIR_NAME / f"ak-check-{workspace.name}.jsonl"
+        try:
+            lines = log.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            return False
+        for line in reversed(lines):
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            return isinstance(row, Mapping) and row.get("status") == "pass"
+        return False
+
+    @staticmethod
+    def _genuine_finish(member: _Member) -> bool:
+        """A finish that starts the early-cancel clock: a genuine abstention, or a diff
+        the validator judged (not a budget stop, timeout, cancel or harness failure)."""
+        if member.budget_stopped or member.timed_out or member.early_cancelled:
+            return False
+        if member.outcome == "abstained":
+            return True
+        return (member.outcome == "diff" and member.validation is not None
+                and member.validation.validator not in ("stopped", "error"))
+
     def failure_record(self, member: _Member, panel_id: str = "") -> dict:
         """`loop.author_failure_record` for one member that produced no diff."""
+        evidence = dict(member.evidence)
+        if member.wall_budget_s is not None:
+            evidence["wall_budget_s"] = _num(member.wall_budget_s)
+        if member.budget_stopped:
+            evidence.update(failure_class=MEMBER_BUDGET_EXHAUSTED, budget_stopped=True)
+        if member.timed_out:
+            evidence["timed_out"] = True
+        if member.early_cancelled:
+            evidence["early_cancelled"] = True
         return author_failure_record(
             label=member.spec.label, thinking=member.spec.thinking, outcome=member.outcome,
-            reason=member.reason, evidence=member.evidence, patch=member.patch,
+            reason=member.reason, evidence=evidence, patch=member.patch,
             validation=None if member.validation is None else member.validation.to_dict(),
             panel_id=panel_id or member.panel_id)
 
@@ -894,6 +1228,10 @@ class AuthorPanel:
             errors = [m.error for m in members if m.error is not None]
             failure = errors[0] if errors else ActorTransient(
                 f"author panel: no author produced a diff ({summary})")
+        if isinstance(failure, ActorStopped):
+            # No run stop was asked (checked above): the panel ended these calls itself
+            # (a budget, a cancel). `iterate` must read a harness failure, not a stop.
+            failure = ActorTransient(f"author panel: every author failed ({summary})")
         try:
             failure.author_failures = records
         except Exception:      # noqa: BLE001 -- an exception type without __dict__
@@ -1051,7 +1389,15 @@ class AuthorPanel:
                 "report_source": (member.report or {}).get("report_source"),
                 "validation": None if member.validation is None else member.validation.to_dict(),
                 "patch": member.patch, "workspace": None if member.workspace is None
-                else str(member.workspace), **member.metrics}
+                else str(member.workspace), **member.metrics,
+                "wall_budget_s": (None if member.wall_budget_s is None
+                                  else _num(member.wall_budget_s)),
+                "budget_stopped": member.budget_stopped,
+                "early_cancelled": member.early_cancelled,
+                "stop_cause": member.stop_cause, "timed_out": member.timed_out or None,
+                "salvage": member.salvage}
+        if member.budget_stopped:
+            body["failure_class"] = MEMBER_BUDGET_EXHAUSTED
         try:
             body["budget"] = self.budget.for_member(member.spec).to_dict()
         except KeyError:
@@ -1113,6 +1459,12 @@ def _size(path: Path) -> int:
         return 0
 
 
+def _num(value: Any) -> int | float:
+    """Seconds as an int when whole (records read 2700, not 2700.0)."""
+    value = float(value)
+    return int(value) if value.is_integer() else round(value, 3)
+
+
 def _sum(totals: Sequence[Mapping[str, Any]], key: str) -> int | None:
     values = [t.get(key) for t in totals if isinstance(t.get(key), (int, float))
               and not isinstance(t.get(key), bool)]
@@ -1165,4 +1517,7 @@ __all__ = ["AUTHOR_MODES", "AUTHOR_OUTPUT_LIMIT", "AuthorPanel", "AuthorSpec",
            "ValidationStopped", "CHECK_DIR_KIND", "CHECK_DIR_NAME", "ak_check_validator",
            "author_budget", "chain_validators", "command_validator",
            "integrity_validator", "parse_authors", "CONTEXT_GRANULE", "DEFAULT_MODE_BUDGETS",
-           "MemberBudget", "panel_budget", "parse_mode_budgets"]
+           "MemberBudget", "panel_budget", "parse_mode_budgets",
+           "DEFAULT_CANCEL_FACTOR", "DEFAULT_MEMBER_WALL_S", "DEFAULT_PANEL_WALL_S",
+           "MemberBudgetExhausted", "WallBudget", "parse_cancel_factor",
+           "parse_member_walls", "parse_panel_wall", "wall_budget"]

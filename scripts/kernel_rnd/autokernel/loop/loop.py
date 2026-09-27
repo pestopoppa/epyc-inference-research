@@ -84,11 +84,18 @@ CRITIC1_RETRIES = 3
 #: Iteration outcomes whose row keeps an accepted hypothesis pending authoring.
 PENDING_HYPOTHESIS_STATUSES = frozenset({PATCH_ROUNDS_EXHAUSTED, SCOPE_BLOCKED,
                                          AUTHORING_FAILED, AUTHORING_HARNESS_FAILURE})
+#: A best-of-N panel member stopped at its own wall budget (`bestof.WallBudget`:
+#: by thinking mode, capped by the panel's hard wall; operator 2026-09-27, DS41 run
+#: 10j). The member spent its budget: no in-round retry, and when no member produced
+#: a diff the round is an uncharged `authoring_harness_failure`.
+MEMBER_BUDGET_EXHAUSTED = "member_budget_exhausted"
 #: Actor-call `failure_class` values (`actor_metrics`) that say the HARNESS ended the
 #: author call: an output-capped empty final step, a per-call wall budget, opencode's
-#: own store refusing a write, a refused tool permission that ended the session.
+#: own store refusing a write, a refused tool permission that ended the session, a
+#: panel member's wall budget.
 HARNESS_FAILURE_CLASSES = frozenset({"output_capped_empty", "budget_exhausted",
-                                     "opencode_store_error", "permission_rejected"})
+                                     "opencode_store_error", "permission_rejected",
+                                     MEMBER_BUDGET_EXHAUSTED})
 #: Author-member outcomes that are never the author's verdict (`bestof._Member.outcome`
 #: vocabulary, shared by the single path): a provider transient, a contained error, a
 #: call ended without a run stop.
@@ -323,7 +330,9 @@ def author_failure_record(*, label: str, outcome: str, reason: str,
               "reason": str(reason or "")[:600], **verdict,
               "failure_class": failure_class}
     for key in ("final_step_capped", "output_capped_steps", "output_limit", "context_limit",
-                "timed_out", "steps", "decoded_tokens", "ak_check"):
+                "timed_out", "steps", "decoded_tokens", "ak_check",
+                # A best-of-N member's wall budget and how it ended (`bestof`).
+                "wall_budget_s", "budget_stopped", "early_cancelled"):
         if evidence.get(key) is not None:
             record[key] = evidence[key]
     if isinstance(patch, Mapping) and patch.get("patch_sha256"):
@@ -1959,6 +1968,7 @@ __all__ = ["AUTHORING_FAILED", "AUTHORING_HARNESS_FAILURE", "AUTHOR_HARNESS_FAIL
            "CRITIC1_RETRIES",
            "AuthoringFailure", "HARNESS_FAILURE_CLASSES", "HARNESS_OUTCOMES",
            "author_failure_feedback", "author_failure_record", "classify_author_failure",
+           "MEMBER_BUDGET_EXHAUSTED",
            "CANDIDATE_DISPOSITIONS", "CHECKPOINT_SCHEMA", "PATCH_STAGES", "RESUMABLE_STATUSES",
            "HYPOTHESIS_AUTHOR_ATTEMPTS", "HYPOTHESIS_RETIRED", "PATCH_ROUNDS_EXHAUSTED",
            "PENDING_HYPOTHESIS_STATUSES", "SCOPE_BLOCKED", "classify_patch_rejection",

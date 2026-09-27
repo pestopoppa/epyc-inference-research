@@ -2088,7 +2088,8 @@ def _author_failure_records(status: str, body: Mapping[str, Any],
                 continue
             evidence = {key: member.get(key) for key in (
                 "failure_class", "final_step_capped", "output_capped_steps", "output_limit",
-                "context_limit", "steps", "decoded_tokens", "ak_check")
+                "context_limit", "steps", "decoded_tokens", "ak_check", "timed_out",
+                "wall_budget_s", "budget_stopped", "early_cancelled")
                 if member.get(key) is not None}
             joined = calls.get((str(panel.get("panel_id")), str(member.get("label"))))
             if joined:

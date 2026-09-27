@@ -357,6 +357,16 @@ class OpencodeStoreError(ProviderTransient):
     failure_class = actor_metrics.OPENCODE_STORE_ERROR
 
 
+class ActorTimedOut(ProviderTransient):
+    """The call hit its hard `timeout_s` and its process group was ended. A provider
+    transient like any other for the single path (`_with_backoff` retries it). A
+    best-of-N panel member runs with `retry_timeouts=False` (operator 2026-09-27, DS41
+    run 10j: a1-medium timed out at 7200 s, was retried in-round and spent another
+    6667 s): a timeout there means the member used up its budget, not a glitch."""
+
+    timed_out = True
+
+
 class ActorBudgetExhausted(ProviderTransient):
     """The call spent its per-call wall budget (OAB-23, `ActorSeat.planner_budget_s`)
     without a complete reply, and was ended through the stop path (process group TERM,
@@ -716,7 +726,7 @@ def _run_agent_in(attempt: "scratch.Scope", prompt: str, *, workspace: Path,
             _record_call(workspace, backend, prompt, returncode=-1,
                          wall_s=time.monotonic() - started, env=env, schema=schema,
                          reply=reply, timed_out=True)
-            raise ProviderTransient(f"actor exceeded {timeout_s}s") from exc
+            raise ActorTimedOut(f"actor exceeded {timeout_s}s") from exc
         done = subprocess.CompletedProcess(
             args=argv, returncode=done.returncode,
             stdout=_captured(done.stdout, out), stderr=_captured(done.stderr, err))
@@ -1787,7 +1797,8 @@ def _has_answer(text: str, schema: Mapping[str, Any] | None) -> bool:
 def _with_backoff(call, *, attempts: int = len(BACKOFF_S),
                   sleep=time.sleep,
                   should_stop: Callable[[], bool] | None = None,
-                  store_attempts: int = len(STORE_ERROR_BACKOFF_S) + 1) -> tuple[Any, int]:
+                  store_attempts: int = len(STORE_ERROR_BACKOFF_S) + 1,
+                  retry_timeouts: bool = True) -> tuple[Any, int]:
     """Retry a provider call, backing off. Returns (result, transient_streak).
 
     Two bounded budgets: a `ProviderTransient` spends `attempts` on `BACKOFF_S`; an
@@ -1798,7 +1809,8 @@ def _with_backoff(call, *, attempts: int = len(BACKOFF_S),
     asked: the backoff sleeps in `STOP_POLL_S` slices and raises `ActorStopped`. An
     `ActorStopped` from the call itself is never retried (it is not a
     `ProviderTransient`, so it propagates untouched). Nor is an `ActorBudgetExhausted`
-    (OAB-23): it propagates on its first occurrence."""
+    (OAB-23): it propagates on its first occurrence. With `retry_timeouts=False` (a
+    best-of-N panel member) neither is an `ActorTimedOut`."""
     stop = should_stop or (lambda: False)
     streak = provider_failures = store_failures = 0
     last: Exception | None = None
@@ -1811,6 +1823,8 @@ def _with_backoff(call, *, attempts: int = len(BACKOFF_S),
         except ActorBudgetExhausted:
             raise   # OAB-23: a spent budget is never re-spent on the same prompt
         except ProviderTransient as exc:
+            if isinstance(exc, ActorTimedOut) and not retry_timeouts:
+                raise   # a panel member's timeout is its budget spent, never a glitch
             last = exc
             streak += 1
             if isinstance(exc, OpencodeStoreError):
@@ -2664,6 +2678,10 @@ class AgentPlanner:
     #: iteration, or None; a reason to degrade `--op-test` to the compile check, or
     #: None). Without it the author sandbox stays off whatever the seat says.
     sandbox_scratch: Callable[[], tuple[Path | None, str | None]] | None = None
+    #: False for a best-of-N panel member (run.py): an author call that hits its hard
+    #: timeout ends the member (`ActorTimedOut`, never retried in-round). True (the
+    #: single path) keeps `_with_backoff`'s retry of a timeout, byte for byte.
+    retry_timeouts: bool = True
 
     def _stop_kw(self) -> dict[str, Any]:
         return {} if self.should_stop is None else {"should_stop": self.should_stop}
@@ -2986,7 +3004,8 @@ class AgentPlanner:
                                timeout_s=self.timeout_s, backend=backend,
                                schema=PATHS_SCHEMA, env=env, **self._stop_kw(),
                                **self._budget_kw("author")),
-            should_stop=self.should_stop)
+            should_stop=self.should_stop,
+            **({} if self.retry_timeouts else {"retry_timeouts": False}))
         self.transient_streak = streak
         precheck = _precheck_reply(raw, PATHS_SCHEMA)
         early = _abstention(precheck.body) if precheck.schema_valid else None
@@ -3194,5 +3213,6 @@ class AgentCritic:
 
 __all__ = ["BACKOFF_S", "Backend", "CLAUDE", "CODEX", "CRITIC_DEFAULT", "OPENCODE",
            "PLANNER_DEFAULT", "STORE_ERROR_BACKOFF_S", "AgentCritic", "AgentPlanner",
-           "AuthorPaths", "AuthorReplyMissing", "OpencodeStoreError", "ProviderTransient",
+           "ActorTimedOut", "AuthorPaths", "AuthorReplyMissing", "OpencodeStoreError",
+           "ProviderTransient",
            "backend_for", "render_context"]
