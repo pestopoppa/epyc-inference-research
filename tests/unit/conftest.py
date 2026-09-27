@@ -89,6 +89,40 @@ def pytest_configure(config: pytest.Config) -> None:
         "inference-lock/contention-gate fixture and exercise the real "
         "env-derived lock path / gate host reads.",
     )
+    config.addinivalue_line(
+        "markers",
+        "real_kv_slot_io: opt out of the tests/unit/ hermetic KV-slot fixture "
+        "(real llama-server slot HTTP helpers + real kv_slots directory).",
+    )
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_kv_slot_io(request, monkeypatch):
+    """Keep unit tests off the LIVE llama-servers' slot API and slot directory.
+
+    `ConcurrencyAwareBackend` tests build backends on `http://localhost:8070`
+    (+ 8080/8180), which are the live frontdoor full and halves on this host.
+    Any test that reached `_migrate_kv` without stubbing the slot helpers made
+    the live :8070 server write a ~66 MB `kv_migrate_frontdoor_old-sess_*.bin`
+    into `/mnt/raid0/llm/cache/kv_slots/frontdoor`, restored it on a live half
+    and ERASED live slot 0 — two files per suite run, 142 files / 11.2 GiB by
+    2026-09-27 (disk-leak audit item 3). The helpers are replaced with offline
+    doubles that fail closed (a save that fails aborts the migration cold), and
+    the slot-dir resolver returns nothing so no backend ever lists or sweeps
+    the real directory. A test that stubs the helpers itself overrides these
+    (its monkeypatch applies after this fixture).
+    """
+    if request.node.get_closest_marker("real_kv_slot_io") is not None:
+        yield
+        return
+    import src.backends.concurrency_aware as ca_mod
+    import src.backends.kv_slot_files as ks_mod
+
+    monkeypatch.setattr(ca_mod, "_slot_save", lambda *a, **k: None)
+    monkeypatch.setattr(ca_mod, "_slot_restore", lambda *a, **k: None)
+    monkeypatch.setattr(ca_mod, "_slot_erase", lambda *a, **k: False)
+    monkeypatch.setattr(ks_mod, "default_slot_save_dirs", lambda *roles: [])
+    yield
 
 
 @pytest.fixture(autouse=True)

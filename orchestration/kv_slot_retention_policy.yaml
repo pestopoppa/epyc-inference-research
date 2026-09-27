@@ -1,0 +1,34 @@
+# KV-migration slot-file retention — disk-leak audit 2026-09-27, item 3.
+#
+# ConcurrencyAwareBackend._migrate_kv / _reverse_migrate_kv make llama-server
+# write `<--slot-save-path>/kv_migrate_<role>_<session>_<txn>.bin` (~66 MB for
+# frontdoor) on every migration. The HTTP `erase` clears only the in-memory slot;
+# before this policy nothing removed the file.
+#
+# Loaded by src/backends/kv_slot_files.py. Unknown keys are rejected; an unusable
+# file falls back to the SAFE default (unlink_on_terminal: true, sweep disabled).
+# Only bare `kv_migrate_*.bin` regular files in the role's own slot dir are ever
+# touched; prefix-cache `slot_<id>_<hash>.bin` files and symlinks never are.
+
+version: 1
+
+# Remove a migration's own slot file once its transaction is terminal AND no
+# restore can still be reading it: COMMITTED, aborted at save, or aborted on a
+# token-count mismatch (the server answered the restore). A `restore_failed`
+# abort (client timeout / transport error — the server may still be reading)
+# keeps the file for the sweep. No retry path reuses a file: the name embeds the
+# per-transaction txn_id and a retry is a new transaction.
+unlink_on_terminal: true
+
+sweep:
+  # Age-gated sweep of orphans (process died mid-migration, restore_failed).
+  # Runs at backend construction and after each terminal migration, at most once
+  # per interval, and never while a migration is in flight on that backend.
+  # When disabled it still runs REPORT-ONLY and logs a warning with the count and
+  # bytes of stale files, so a regrowth is visible instead of silent.
+  enabled: false
+  # A file younger than this is never touched (floor 5; a migration is bounded
+  # by the 30 s save + 30 s restore client timeouts).
+  min_age_minutes: 60
+  interval_minutes: 10
+  max_files_per_sweep: 500

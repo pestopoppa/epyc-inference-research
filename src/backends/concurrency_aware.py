@@ -36,8 +36,11 @@ import re
 import threading
 import time
 from contextlib import contextmanager
+from os import PathLike
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
+from src.backends import kv_slot_files as _kv_slot_files
 from src.runtime.quiescence import suppress as _quiescence_suppress
 from src.scheduling import gate_observation
 
@@ -204,6 +207,37 @@ def _slot_erase(base_url: str, slot_id: int = 0) -> bool:
         return False
 
 
+# Aborts after which no restore can still be reading the slot file: the save
+# never produced a restorable file, or the server ANSWERED the restore (with a
+# wrong count). `restore_failed` is deliberately absent — it includes a client
+# timeout while the server may still be reading, so that file is left for the
+# age-gated sweep.
+_SLOT_FILE_DONE_ABORTS = frozenset({"save_failed", "restore_token_mismatch"})
+
+
+def _slot_file_safe_to_unlink(transaction: Any) -> bool:
+    """True once a migration's slot file can no longer be read by any restore.
+
+    The file name embeds the per-transaction ``txn_id`` and a retry is a new
+    transaction, so no retry path ever reuses a previous file.
+    """
+    if transaction is None:
+        return False
+    from src.scheduling.migration_transaction import MigrationState
+
+    state = getattr(transaction, "state", None)
+    if state in (
+        MigrationState.VERIFIED,        # restore returned the saved count
+        MigrationState.SOURCE_ERASED,
+        MigrationState.COMMITTED,
+    ):
+        return True
+    return (
+        state is MigrationState.ABORTED
+        and getattr(transaction, "detail", "") in _SLOT_FILE_DONE_ABORTS
+    )
+
+
 class ConcurrencyAwareBackend:
     """Routes requests between full-speed and quarter instances based on load.
 
@@ -227,6 +261,8 @@ class ConcurrencyAwareBackend:
         quarter_topology_idxs: list[int] | None = None,
         health_tracker: Any = None,
         native_batch_width: int = 1,
+        slot_save_dir: "str | PathLike[str] | None" = None,
+        kv_slot_policy: "_kv_slot_files.KvSlotRetentionPolicy | None" = None,
     ):
         if not quarter_backends:
             raise ValueError("ConcurrencyAwareBackend requires at least one quarter backend")
@@ -357,6 +393,103 @@ class ConcurrencyAwareBackend:
             "enabled" if self._kv_migration_enabled else "disabled",
             self._per_region_locks_enabled(),
         )
+
+        # Disk-leak audit 2026-09-27 item 3: slot files the servers write under
+        # --slot-save-path. None → derived like the launcher does (cache_dir /
+        # kv_slots / <role>); the policy is orchestration/kv_slot_retention_policy.yaml.
+        self._slot_save_dir_override = Path(slot_save_dir) if slot_save_dir else None
+        self._kv_slot_policy = (
+            kv_slot_policy if kv_slot_policy is not None else _kv_slot_files.load_policy()
+        )
+        self._inflight_slot_files: set[str] = set()
+        self._last_slot_sweep: float | None = None
+        self._maybe_sweep_slot_files()  # startup sweep (report-only unless enabled)
+
+    # === KV-migration slot files (disk-leak audit 2026-09-27) ===
+
+    def _slot_save_dirs(self) -> list[Path]:
+        if self._slot_save_dir_override is not None:
+            return [self._slot_save_dir_override]
+        return _kv_slot_files.default_slot_save_dirs(self._topology_role, self._role)
+
+    def _slot_file_begin(self, filename: str) -> None:
+        with self._lock:
+            self._inflight_slot_files.add(filename)
+
+    def _slot_file_end(self, filename: str, transaction: Any) -> None:
+        """Terminal bookkeeping for one migration's slot file. Never raises."""
+        try:
+            with self._lock:
+                self._inflight_slot_files.discard(filename)
+            if not _slot_file_safe_to_unlink(transaction):
+                if transaction is not None:
+                    logger.info(
+                        "kv slot file %s kept (state=%s detail=%s); left for the age-gated sweep",
+                        filename,
+                        getattr(getattr(transaction, "state", None), "value", None),
+                        getattr(transaction, "detail", ""),
+                    )
+            elif self._kv_slot_policy.unlink_on_terminal:
+                reason = (
+                    f"migration_terminal txn={getattr(transaction, 'txn_id', '?')} "
+                    f"state={transaction.state.value}"
+                )
+                for slot_dir in self._slot_save_dirs():
+                    if _kv_slot_files.unlink_slot_file(slot_dir, filename, reason=reason):
+                        break
+            self._maybe_sweep_slot_files()
+        except Exception as exc:  # pragma: no cover - hygiene must never break migration
+            logger.warning("kv slot file bookkeeping failed for %s: %s", filename, exc)
+
+    def _maybe_sweep_slot_files(self, force: bool = False) -> list[Any] | None:
+        """Age-gated orphan sweep of this backend's slot dir(s). Never raises.
+
+        Skipped entirely while ANY migration of this backend is in flight, and
+        rate-limited to one pass per policy interval. With the sweep disabled by
+        policy it runs report-only and warns about stale files instead.
+        """
+        try:
+            policy = self._kv_slot_policy
+            now = time.monotonic()
+            with self._lock:
+                if self._inflight_slot_files:
+                    return None
+                if (
+                    not force
+                    and self._last_slot_sweep is not None
+                    and now - self._last_slot_sweep < policy.sweep_interval_s
+                ):
+                    return None
+                self._last_slot_sweep = now
+                in_flight = set(self._inflight_slot_files)
+            results = []
+            for slot_dir in self._slot_save_dirs():
+                res = _kv_slot_files.sweep_orphan_slot_files(
+                    slot_dir,
+                    min_age_s=policy.sweep_min_age_s,
+                    in_flight=in_flight,
+                    max_files=policy.sweep_max_files,
+                    dry_run=not policy.sweep_enabled,
+                )
+                results.append(res)
+                if res.dry_run and res.stale:
+                    logger.warning(
+                        "kv slot dir %s holds %d stale kv_migrate_*.bin file(s) "
+                        "(%.2f GiB) older than %.0f min; orphan sweep disabled by "
+                        "orchestration/kv_slot_retention_policy.yaml",
+                        res.slot_dir, len(res.stale), res.stale_bytes / 2**30,
+                        policy.sweep_min_age_minutes,
+                    )
+                elif res.removed:
+                    logger.info(
+                        "kv slot sweep %s: removed %d orphan file(s), %.2f GiB%s",
+                        res.slot_dir, len(res.removed), res.removed_bytes / 2**30,
+                        " (capped; more remain)" if res.truncated else "",
+                    )
+            return results
+        except Exception as exc:  # pragma: no cover - hygiene must never break serving
+            logger.warning("kv slot sweep failed: %s", exc)
+            return None
 
     def kv_migration_status(self) -> dict[str, Any]:
         """Operator-visible status of the KV-migration subsystem.
@@ -662,105 +795,113 @@ class ConcurrencyAwareBackend:
 
         slot_filename = _slot_filename(self._role, session_id, transaction.txn_id)
 
-        transaction.advance(MigrationState.SAVING)
-        saved = _slot_save(self._full_url, filename=slot_filename)
-        n_saved = _reported_tokens(saved)
-        # `not saved` now also catches a 0-token save, which is an HTTP 200 and
-        # was previously indistinguishable from a real one. Nine such 752-byte
-        # artifacts sit in the slot cache; four share a name class with 64 real
-        # saves, so this is a failure mode of the normal path, not of probes.
-        if not saved:
-            transaction.advance(MigrationState.ABORTED, detail="save_failed")
-            # State-only update, NOT _finalize_quarter_assignment: an ABORTED
-            # migration must not write the HARD affinity map (`_session_quarter`),
-            # which is the SUCCESS path's commit record. The asymmetry is safe
-            # because `_quarter_for_session_locked` falls back to the session
-            # STATE and already treats _STATE_MIGRATION_FAILED_COLD as a reserved
-            # quarter assignment — so dispatch still pins this session to
-            # `target_quarter` while nothing downstream mistakes a failed
-            # handover for a committed one.
-            with self._lock:
-                self._set_session_state(
-                    session_id,
-                    state=_STATE_MIGRATION_FAILED_COLD,
-                    quarter=target_quarter,
-                    detail="save_failed",
+        # The file is written by the SOURCE server and read by the TARGET's
+        # restore; `_slot_erase` below clears only in-memory state, so the file
+        # is removed here once no restore can still read it (see
+        # _slot_file_safe_to_unlink) — on every exit, including exceptions.
+        self._slot_file_begin(slot_filename)
+        try:
+            transaction.advance(MigrationState.SAVING)
+            saved = _slot_save(self._full_url, filename=slot_filename)
+            n_saved = _reported_tokens(saved)
+            # `not saved` now also catches a 0-token save, which is an HTTP 200 and
+            # was previously indistinguishable from a real one. Nine such 752-byte
+            # artifacts sit in the slot cache; four share a name class with 64 real
+            # saves, so this is a failure mode of the normal path, not of probes.
+            if not saved:
+                transaction.advance(MigrationState.ABORTED, detail="save_failed")
+                # State-only update, NOT _finalize_quarter_assignment: an ABORTED
+                # migration must not write the HARD affinity map (`_session_quarter`),
+                # which is the SUCCESS path's commit record. The asymmetry is safe
+                # because `_quarter_for_session_locked` falls back to the session
+                # STATE and already treats _STATE_MIGRATION_FAILED_COLD as a reserved
+                # quarter assignment — so dispatch still pins this session to
+                # `target_quarter` while nothing downstream mistakes a failed
+                # handover for a committed one.
+                with self._lock:
+                    self._set_session_state(
+                        session_id,
+                        state=_STATE_MIGRATION_FAILED_COLD,
+                        quarter=target_quarter,
+                        detail="save_failed",
+                    )
+                    self._migration_failures += 1
+                logger.warning(
+                    "KV migration save failed for %s session=%s, quarter %d starts cold (txn=%s)",
+                    self._role, session_id, target_quarter, transaction.txn_id,
                 )
-                self._migration_failures += 1
-            logger.warning(
-                "KV migration save failed for %s session=%s, quarter %d starts cold (txn=%s)",
-                self._role, session_id, target_quarter, transaction.txn_id,
+                return transaction
+
+            transaction.advance(MigrationState.RESTORING)
+            restored = _slot_restore(target_url, filename=slot_filename)
+            n_restored = _reported_tokens(restored)
+            if not restored:
+                transaction.advance(MigrationState.ABORTED, detail="restore_failed")
+                # See the save_failed branch above: state-only, no hard affinity.
+                with self._lock:
+                    self._set_session_state(
+                        session_id,
+                        state=_STATE_MIGRATION_FAILED_COLD,
+                        quarter=target_quarter,
+                        detail="restore_failed",
+                    )
+                    self._migration_failures += 1
+                logger.warning(
+                    "KV migration restore failed for %s session=%s quarter %d; session will run cold (txn=%s)",
+                    self._role, session_id, target_quarter, transaction.txn_id,
+                )
+                return transaction
+
+            # VERIFIED must mean "the KV came back", not "the request was served".
+            # HTTP 200 proves transport; n_restored proves reuse. Until 2026-08-22
+            # this advanced on the status code alone and the NEXT statement erased
+            # the source, so a zero-token restore destroyed the only good copy and
+            # recorded it as a success. The server already returns the number and
+            # _slot_restore already parsed it; nothing read it.
+            if n_saved is not None and n_restored is not None and n_restored != n_saved:
+                transaction.advance(MigrationState.ABORTED, detail="restore_token_mismatch")
+                with self._lock:
+                    self._set_session_state(
+                        session_id,
+                        state=_STATE_MIGRATION_FAILED_COLD,
+                        quarter=target_quarter,
+                        detail="restore_token_mismatch",
+                    )
+                    self._migration_failures += 1
+                logger.error(
+                    "KV migration restore returned %d tokens but %d were saved for %s "
+                    "session=%s quarter %d; SOURCE SLOT PRESERVED and session runs cold (txn=%s)",
+                    n_restored, n_saved, self._role, session_id, target_quarter,
+                    transaction.txn_id,
+                )
+                return transaction
+
+            # Restore confirmed — placement waiters may now proceed (audit refinement:
+            # incoming request must wait for VERIFIED before placing on the freed slot).
+            transaction.advance(MigrationState.VERIFIED, detail="restore_confirmed")
+
+            # Source erase happens AFTER verification — destructive on failure, so
+            # we want to be 100% sure the restore succeeded before clearing source.
+            # That certainty now comes from the token-count equality gate above.
+            _slot_erase(self._full_url)
+            transaction.advance(MigrationState.SOURCE_ERASED)
+
+            self._finalize_quarter_assignment(
+                session_id,
+                target_quarter,
+                state=_STATE_ASSIGNED_QUARTER,
+                detail="restored",
+            )
+            transaction.advance(MigrationState.COMMITTED)
+
+            logger.info(
+                "KV migration complete: %s session=%s full → quarter %d (%.0fms, txn=%s)",
+                self._role, session_id, target_quarter,
+                transaction.elapsed_ms, transaction.txn_id,
             )
             return transaction
-
-        transaction.advance(MigrationState.RESTORING)
-        restored = _slot_restore(target_url, filename=slot_filename)
-        n_restored = _reported_tokens(restored)
-        if not restored:
-            transaction.advance(MigrationState.ABORTED, detail="restore_failed")
-            # See the save_failed branch above: state-only, no hard affinity.
-            with self._lock:
-                self._set_session_state(
-                    session_id,
-                    state=_STATE_MIGRATION_FAILED_COLD,
-                    quarter=target_quarter,
-                    detail="restore_failed",
-                )
-                self._migration_failures += 1
-            logger.warning(
-                "KV migration restore failed for %s session=%s quarter %d; session will run cold (txn=%s)",
-                self._role, session_id, target_quarter, transaction.txn_id,
-            )
-            return transaction
-
-        # VERIFIED must mean "the KV came back", not "the request was served".
-        # HTTP 200 proves transport; n_restored proves reuse. Until 2026-08-22
-        # this advanced on the status code alone and the NEXT statement erased
-        # the source, so a zero-token restore destroyed the only good copy and
-        # recorded it as a success. The server already returns the number and
-        # _slot_restore already parsed it; nothing read it.
-        if n_saved is not None and n_restored is not None and n_restored != n_saved:
-            transaction.advance(MigrationState.ABORTED, detail="restore_token_mismatch")
-            with self._lock:
-                self._set_session_state(
-                    session_id,
-                    state=_STATE_MIGRATION_FAILED_COLD,
-                    quarter=target_quarter,
-                    detail="restore_token_mismatch",
-                )
-                self._migration_failures += 1
-            logger.error(
-                "KV migration restore returned %d tokens but %d were saved for %s "
-                "session=%s quarter %d; SOURCE SLOT PRESERVED and session runs cold (txn=%s)",
-                n_restored, n_saved, self._role, session_id, target_quarter,
-                transaction.txn_id,
-            )
-            return transaction
-
-        # Restore confirmed — placement waiters may now proceed (audit refinement:
-        # incoming request must wait for VERIFIED before placing on the freed slot).
-        transaction.advance(MigrationState.VERIFIED, detail="restore_confirmed")
-
-        # Source erase happens AFTER verification — destructive on failure, so
-        # we want to be 100% sure the restore succeeded before clearing source.
-        # That certainty now comes from the token-count equality gate above.
-        _slot_erase(self._full_url)
-        transaction.advance(MigrationState.SOURCE_ERASED)
-
-        self._finalize_quarter_assignment(
-            session_id,
-            target_quarter,
-            state=_STATE_ASSIGNED_QUARTER,
-            detail="restored",
-        )
-        transaction.advance(MigrationState.COMMITTED)
-
-        logger.info(
-            "KV migration complete: %s session=%s full → quarter %d (%.0fms, txn=%s)",
-            self._role, session_id, target_quarter,
-            transaction.elapsed_ms, transaction.txn_id,
-        )
-        return transaction
+        finally:
+            self._slot_file_end(slot_filename, transaction)
 
     def _release(self, idx: int, is_full: bool) -> None:
         with self._lock:
@@ -881,6 +1022,8 @@ class ConcurrencyAwareBackend:
             MigrationTransaction,
         )
 
+        slot_filename: str | None = None
+        txn: Any = None
         try:
             if not self._full_url:
                 return
@@ -900,6 +1043,7 @@ class ConcurrencyAwareBackend:
                 target_url=self._full_url,
             )
             slot_filename = _slot_filename(self._role, session_id, txn.txn_id)
+            self._slot_file_begin(slot_filename)
 
             txn.advance(MigrationState.SAVING)
             rev_saved = _slot_save(source_url, filename=slot_filename)
@@ -959,6 +1103,8 @@ class ConcurrencyAwareBackend:
                 self._role, session_id, source_quarter, txn.elapsed_ms, txn.txn_id,
             )
         finally:
+            if slot_filename is not None:
+                self._slot_file_end(slot_filename, txn)
             with self._lock:
                 self._reverse_migration_in_flight.pop(session_id, None)
 
