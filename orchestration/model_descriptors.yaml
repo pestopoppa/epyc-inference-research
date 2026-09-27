@@ -1,16 +1,16 @@
 descriptor_version: 3
-compiled_at: '2026-09-27T05:13:01Z'
+compiled_at: '2026-09-27T19:13:12Z'
 status: compiled
 coverage_scope: active_roles_from_stack_manifest
 source_registries:
   lean:
     path: orchestration/model_registry.yaml
-    repo_commit: a6426199
-    sha256: ebce52ee43a2a203030130e96e92cb621e65856986f2396041ab61d5fef78e2f
+    repo_commit: b020a1a8
+    sha256: 26733449e47913cae19589b1dd4b1a21c1610fed079e9e02fcff98173028f5c7
   research:
     path: /mnt/raid0/llm/epyc-inference-research/orchestration/model_registry.yaml
-    repo_commit: 7640269b
-    sha256: 1f68de64b594eb9bb7b1601b193f6ee3e65efa7cbf22e6a3c86c25cb8eff3989
+    repo_commit: 61af24fa
+    sha256: 3a19aaae84596c20be0c8a8e40791b53a1bd3c38315a43b17d0ad5f7934dbe2d
 model_id_policy:
   canonical_shape: family-params-active-quant
   invariant: model records are keyed by physical model identity, never by role name
@@ -361,12 +361,12 @@ models:
   - text
   role_bindings:
     roles:
-    - architect_general
+    - architect_critic
     - coder_escalation
     - ingest_long_context
     - qwen38_27b_q8_local
     server_roles:
-    - architect_general
+    - architect_critic
     - coder_escalation
     - ingest_long_context
     runtime_aliases: []
@@ -425,7 +425,7 @@ models:
     - date: null
       protocol: registry performance block
       value:
-        inherits_from: architect_general
+        inherits_from: architect_critic
         baseline_tps: 30.87
         optimized_tps: 47.79
         optimized_tps_long_context: 36.71
@@ -490,7 +490,7 @@ models:
     mlock: false
     ports:
     - 8083
-    server_role: architect_general
+    server_role: architect_critic
     requirements: {}
   known_gaps: []
   architecture:
@@ -510,10 +510,10 @@ models:
   - text
   role_bindings:
     roles:
-    - architect_critic
+    - architect_general
     - qwen38_flash_next_ud_iq4xs_local
     server_roles:
-    - architect_critic
+    - architect_general
     runtime_aliases: []
     shared_mmap: true
   quality:
@@ -595,7 +595,7 @@ models:
     mlock: true
     ports:
     - 8074
-    server_role: architect_critic
+    server_role: architect_general
     requirements: {}
   known_gaps: []
   architecture:

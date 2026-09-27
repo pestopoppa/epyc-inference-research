@@ -48,239 +48,57 @@ contract:
   - quality_overall
   - memory_cost
   fallback_policy: Consumers may use local fallback values only as explicit degraded mode when this generated contract is missing or invalid.
-compiled_at: '2026-09-27T05:13:02Z'
+compiled_at: '2026-09-27T19:13:13Z'
 status: compiled
 coverage_scope: descriptor_role_bindings
 precedence_spec: docs/reference/stack-truth-precedence.md
 source_artifacts:
   registry:
     path: orchestration/model_registry.yaml
-    sha256: ebce52ee43a2a203030130e96e92cb621e65856986f2396041ab61d5fef78e2f
-    repo_commit: a6426199
+    sha256: 26733449e47913cae19589b1dd4b1a21c1610fed079e9e02fcff98173028f5c7
+    repo_commit: b020a1a8
   descriptors:
     path: orchestration/model_descriptors.yaml
-    sha256: cc844327883d48eaefb1835ea44b63bdabcac11c82064439572c4785cfb3a61a
-    repo_commit: a6426199
+    sha256: 64873545e41513ea50304299c8b6ed1e7507fd18207f38d0af7abbe578429301
+    repo_commit: b020a1a8
   stack_manifest:
     path: scripts/server/stack_manifest.py
-    sha256: f57ab87bc91f1a21826d03109349f49b0c70ed1dd3b052c4597d5e893c94aef7
-    repo_commit: a6426199
+    sha256: 5f7acb6d067e4420edfc2bcc662148cd8fc7aff6c90682c51ece207666171610
+    repo_commit: b020a1a8
   stack_numa:
     path: scripts/server/stack_numa.py
-    sha256: 8a9e4eade957c71b9694160668f982deff31960d3ec5ad0f2d8fc50369b3c703
-    repo_commit: a6426199
+    sha256: edfdb41035ec638d3eab60631024ebece56a5e2d9b577851bf02e05a446e0c32
+    repo_commit: b020a1a8
   launch_manifest:
     path: orchestration/launch_manifest.yaml
-    sha256: 0d859839ffa6d165a3d4669ee3af78c28712f473ba701083fd41e59752f083cd
-    repo_commit: a6426199
+    sha256: 66fe456dc9c3fe323239571d4f32794c93391741986bffb875a925729b54b8c1
+    repo_commit: b020a1a8
   stack_topology:
     path: orchestration/stack_topology.yaml
-    sha256: 73a9fa42fa2977ecead1a2e7edaf1d956be722ac0a3cae6a4d1b6643295b27c6
-    repo_commit: a6426199
+    sha256: 33f3f36a285659bdd63477dfbe1bd86f734a04137257674001a83e79f76a0bac
+    repo_commit: b020a1a8
   orchestrator_stack:
     path: scripts/server/orchestrator_stack.py
-    sha256: bcac0512eea7678fc173934450ef1a8ddecf6884210ca44ff1e8e12a7dc40a1f
-    repo_commit: a6426199
+    sha256: a58ef568b46899e60c25ba35365a262d886baca7ff40399d58b09e60166f1985
+    repo_commit: b020a1a8
   stack_paths:
     path: scripts/server/stack_paths.py
     sha256: 4a7ca842a87b6ffec022f4f6433d755751cac32b9102747d88f3f4f2e4cb24de
-    repo_commit: a6426199
+    repo_commit: b020a1a8
   stack_runtime:
     path: scripts/server/stack_runtime.py
     sha256: 984d27262e1f1d5a5332d0b4a3e6fb96fb8095fc890ddaa93da07bff52eb1c99
-    repo_commit: a6426199
+    repo_commit: b020a1a8
 roles:
   architect_critic:
     role: architect_critic
-    deployment_status: live_stack
-    status: compiled
-    model_id: qwen3.8-flash-next-ud-iq4_xs
-    display_name: Qwen3.8-Flash-Next-UD-IQ4_XS
-    serving:
-      endpoint: http://localhost:8074
-      server_role: architect_critic
-      binding: server_mode.direct
-      ports:
-      - 8074
-      slots: 1
-      tier: hot
-      effective_context_tokens: 262144
-      binary: llama.cpp
-      binary_dir: null
-      numa_policy: single_96t
-      shared_mmap: true
-      launch:
-        entries:
-        - port: 8074
-          primary_role: architect_critic
-          mode: default
-          alias: false
-          cpu_shape_class: full
-          slots: 1
-        primary_roles:
-        - architect_critic
-        modes:
-        - default
-        requirements:
-          model_path: /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
-          draft_model_path: /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf
-        runtime:
-          binary_family: llama.cpp
-          binary_path: /mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82/bin/llama-server
-          binary_dir: /mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82/bin
-          ld_library_path: []
-          env_policy: canonical
-          kmp_blocktime: null
-          cache:
-            context_tokens: 262144
-            slots: 1
-            slots_by_port:
-              8074: 1
-            ubatch: 2048
-            kv_type_k: f16
-            kv_type_v: f16
-            kv_hadamard: false
-            kv_unified: null
-            draft_kv_type_k: null
-            draft_kv_type_v: null
-            no_mmap: true
-            mlock: true
-            slot_save_path: /mnt/raid0/llm/cache/kv_slots/architect_critic
-          flags:
-            flash_attn: true
-            jinja: true
-            device: null
-            device_draft: null
-            n_gpu_layers: null
-            image_min_tokens: null
-            cache_ram: 32768
-            chat_template_file: null
-            reasoning: 'off'
-            override_kv: []
-            spec:
-              enabled: true
-              type: draft-mtp
-              disabled_by: null
-              draft_model_path: /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf
-              draft_max: 4
-              draft_min: null
-              draft_p_min: 0.5
-              draft_p_split: null
-              threads_draft: null
-              ngram_mod_n_min: null
-              ngram_mod_n_max: null
-              ngram_mod_n_match: null
-    policy:
-      lock_class: exclusive
-      contention_class: heavy
-      tap_safe_non_stream: true
-      high_cost: true
-      model_mem_gb: 87.25
-      source: stack_priors.compile
-      thresholds:
-        tap_safe_non_stream_min_mem_gb: 64.0
-        high_cost_min_mem_gb: 60.0
-    priors:
-      throughput_tps: 52.7
-      quality_overall: null
-      quality_by_axis:
-        local:
-          mmlu_pro: 0.755
-          gpqa: 0.6513
-      quality_for_role: null
-      quality_advisories:
-      - No whole-suite quality prior; domain evidence only (gpqa, mmlu_pro). quality_overall is null BY DESIGN — read the per-axis evidence instead of expecting a scalar.
-      memory_cost: 1.0
-    acceleration:
-      spec_type: draft-mtp
-      draft_compat:
-      - mtp-qwen3.8-flash-next-shared-q8_0
-      enable_thinking: false
-      thinking_control:
-        mode: toggle_off
-        source: chat_template_kwargs.enable_thinking
-      kv:
-        k: null
-        v: null
-      draft_max: 4
-      draft_p_min: 0.5
-      k: 4
-      p_split: 0
-      lookup: false
-    model:
-      family: qwen3.8-flash-next-ud-iq4_xs
-      arch: qwen4exp
-      params_b: null
-      active_b: null
-      quant: UD-IQ4_XS
-      mem_gb: 87.25
-      ctx_max: 262144
-      ctx_model_max: null
-      modalities:
-      - text
-      n_layers: 48
-      attention_layers: 12
-    evidence:
-      precedence:
-        serving: server_mode/stack_manifest outrank roles metadata
-        memory_cost: server_mode.tier
-        spec: docs/reference/stack-truth-precedence.md
-      descriptor_server_roles:
-      - architect_critic
-      alias_overrides: []
-      quality:
-      - date: null
-        protocol: registry performance block
-        value:
-          baseline_tps: 27.893
-          optimized_tps: 43.281
-          speedup: 1.55x
-          measurement_scope: -c 8192, -np 1, IQ4_XS-uniform, build 10241 — NOT the served shape
-          quality_score: null
-          general_suite_quality:
-            suite_mmlu_pro:
-              accuracy: 0.755
-              n: 200
-              truncated: 0
-              max_tokens: 8192
-            suite_gpqa:
-              accuracy: 0.6513
-              n: 195
-              truncated: 0
-              max_tokens: 16384
-            measured_on: 2026-09-23
-            kernel: production-consolidated-v10 (ffc1bac82, build 10303)
-            instrument_class: serving
-            scope: 'Live :8074 IN ITS DEPLOYED CONFIGURATION (-t 96, -c 262144, -np 1, f16/f16, --spec-draft-n-max 4, unsloth UD-IQ4_XS 3-shard). NOT a llama-bench arm and NOT the recipe''s measured shape
-              -- the served process does not run its own recipe (SSU-F11: threads 48 and the recipe env block are declared and never read). So these are never comparable to optimized_tps above, which was
-              taken at -t 48 on build 10241 with the THP shim.'
-            cap_convergence: 'THE TOKEN CAP IS PART OF THE CLAIM, and these are the CONVERGED figures: the cap was raised per suite until truncation reached zero, so pooled == untruncated and nothing is
-              scored wrong merely for being cut off. At the promotion gate''s conventional 64-token cap this same model on these same 200 items scores 0.5650 with 46 truncated, which reads as a regression
-              against the retired Qwen3.5-122B''s 0.6450 and is not one: that model truncated 0/200 at the same cap because it answers with a letter while this one derives in the visible channel. NEVER
-              quote a capped figure against an uncapped one. See promotion_gates.yaml gates.quality.truncation_audit.'
-            incumbent_comparison: Qwen3.5-122B (retired) recorded mmlu_pro 0.6450 / gpqa 0.5692 at max_tokens 64 with 0 truncated. Those are its GATE numbers and were never re-run at a raised cap, so the
-              comparison is like-for-like only in that both sides are untruncated; treat the incumbent's as a lower bound of unknown tightness.
-          measurement_category: OBSERVATION
-          measurement_date: '2026-09-08'
-          contention_note: 'This role''s single full instance on 0-95 holds ALL FOUR CPU region locks; while it runs it serializes the entire CPU NUMA topology (stack_numa.py:274-276). That is inherent
-            and accepted for this role, but it is the real cost of tier:hot — not the 69 GB — which is now 90 GiB. ⚠ 2026-09-22: THIS IS WHY ingest_long_context WAS NOT ALIASED HERE. An earlier draft merged
-            it onto this instance, which would have put routine traffic (Stage 1 of three_stage_summarization) behind the whole-machine lock. The D2 ruling (2026-07-31) narrowed the `reasoning` escalation
-            chain to explicit_request ONLY so routine traffic could never summon it, and D2''s named prerequisite — `region_lock_wait_s_by_holder` telemetry — still does not exist anywhere in the codebase.
-            Operator ruling C2 sent ingest_long_context to the GPU 27B instead. This instance remains single-role, and the `reasoning` chain remains the only routed path to it.'
-      speed:
-      - date: '2026-09-14'
-        protocol: server_mode throughput
-        value_tps: 52.7
-    known_gaps: []
-  architect_general:
-    role: architect_general
     deployment_status: live_stack
     status: compiled
     model_id: qwen3.8-27b-q8_0
     display_name: Qwen3.8-27B-Q8_0
     serving:
       endpoint: http://localhost:8083
-      server_role: architect_general
+      server_role: architect_critic
       binding: server_mode.direct
       ports:
       - 8083
@@ -294,13 +112,13 @@ roles:
       launch:
         entries:
         - port: 8083
-          primary_role: architect_general
+          primary_role: architect_critic
           mode: default
           alias: false
           cpu_shape_class: gpu_host_lane
           slots: 4
         primary_roles:
-        - architect_general
+        - architect_critic
         modes:
         - default
         requirements:
@@ -329,7 +147,7 @@ roles:
             draft_kv_type_v: null
             no_mmap: true
             mlock: false
-            slot_save_path: /mnt/raid0/llm/cache/kv_slots/architect_general
+            slot_save_path: /mnt/raid0/llm/cache/kv_slots/architect_critic
           flags:
             flash_attn: true
             jinja: true
@@ -412,7 +230,7 @@ roles:
         memory_cost: server_mode.tier
         spec: docs/reference/stack-truth-precedence.md
       descriptor_server_roles:
-      - architect_general
+      - architect_critic
       - coder_escalation
       - ingest_long_context
       alias_overrides: []
@@ -460,7 +278,7 @@ roles:
       - date: null
         protocol: registry performance block
         value:
-          inherits_from: architect_general
+          inherits_from: architect_critic
           baseline_tps: 30.87
           optimized_tps: 47.79
           optimized_tps_long_context: 36.71
@@ -498,6 +316,188 @@ roles:
         protocol: server_mode throughput
         value_tps: 47.79
     known_gaps: []
+  architect_general:
+    role: architect_general
+    deployment_status: live_stack
+    status: compiled
+    model_id: qwen3.8-flash-next-ud-iq4_xs
+    display_name: Qwen3.8-Flash-Next-UD-IQ4_XS
+    serving:
+      endpoint: http://localhost:8074
+      server_role: architect_general
+      binding: server_mode.direct
+      ports:
+      - 8074
+      slots: 1
+      tier: hot
+      effective_context_tokens: 262144
+      binary: llama.cpp
+      binary_dir: null
+      numa_policy: single_96t
+      shared_mmap: true
+      launch:
+        entries:
+        - port: 8074
+          primary_role: architect_general
+          mode: default
+          alias: false
+          cpu_shape_class: full
+          slots: 1
+        primary_roles:
+        - architect_general
+        modes:
+        - default
+        requirements:
+          model_path: /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf
+          draft_model_path: /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf
+        runtime:
+          binary_family: llama.cpp
+          binary_path: /mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82/bin/llama-server
+          binary_dir: /mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82/bin
+          ld_library_path: []
+          env_policy: canonical
+          kmp_blocktime: null
+          cache:
+            context_tokens: 262144
+            slots: 1
+            slots_by_port:
+              8074: 1
+            ubatch: 2048
+            kv_type_k: f16
+            kv_type_v: f16
+            kv_hadamard: false
+            kv_unified: null
+            draft_kv_type_k: null
+            draft_kv_type_v: null
+            no_mmap: true
+            mlock: true
+            slot_save_path: /mnt/raid0/llm/cache/kv_slots/architect_general
+          flags:
+            flash_attn: true
+            jinja: true
+            device: null
+            device_draft: null
+            n_gpu_layers: null
+            image_min_tokens: null
+            cache_ram: 32768
+            chat_template_file: null
+            reasoning: 'off'
+            override_kv: []
+            spec:
+              enabled: true
+              type: draft-mtp
+              disabled_by: null
+              draft_model_path: /mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/MTP/mtp-Qwen3.8-Flash-Next-shared-Q8_0.gguf
+              draft_max: 4
+              draft_min: null
+              draft_p_min: 0.5
+              draft_p_split: null
+              threads_draft: null
+              ngram_mod_n_min: null
+              ngram_mod_n_max: null
+              ngram_mod_n_match: null
+    policy:
+      lock_class: exclusive
+      contention_class: heavy
+      tap_safe_non_stream: true
+      high_cost: true
+      model_mem_gb: 87.25
+      source: stack_priors.compile
+      thresholds:
+        tap_safe_non_stream_min_mem_gb: 64.0
+        high_cost_min_mem_gb: 60.0
+    priors:
+      throughput_tps: 52.7
+      quality_overall: null
+      quality_by_axis:
+        local:
+          mmlu_pro: 0.755
+          gpqa: 0.6513
+      quality_for_role: null
+      quality_advisories:
+      - No whole-suite quality prior; domain evidence only (gpqa, mmlu_pro). quality_overall is null BY DESIGN — read the per-axis evidence instead of expecting a scalar.
+      memory_cost: 1.0
+    acceleration:
+      spec_type: draft-mtp
+      draft_compat:
+      - mtp-qwen3.8-flash-next-shared-q8_0
+      enable_thinking: false
+      thinking_control:
+        mode: toggle_off
+        source: chat_template_kwargs.enable_thinking
+      kv:
+        k: null
+        v: null
+      draft_max: 4
+      draft_p_min: 0.5
+      k: 4
+      p_split: 0
+      lookup: false
+    model:
+      family: qwen3.8-flash-next-ud-iq4_xs
+      arch: qwen4exp
+      params_b: null
+      active_b: null
+      quant: UD-IQ4_XS
+      mem_gb: 87.25
+      ctx_max: 262144
+      ctx_model_max: null
+      modalities:
+      - text
+      n_layers: 48
+      attention_layers: 12
+    evidence:
+      precedence:
+        serving: server_mode/stack_manifest outrank roles metadata
+        memory_cost: server_mode.tier
+        spec: docs/reference/stack-truth-precedence.md
+      descriptor_server_roles:
+      - architect_general
+      alias_overrides: []
+      quality:
+      - date: null
+        protocol: registry performance block
+        value:
+          baseline_tps: 27.893
+          optimized_tps: 43.281
+          speedup: 1.55x
+          measurement_scope: -c 8192, -np 1, IQ4_XS-uniform, build 10241 — NOT the served shape
+          quality_score: null
+          general_suite_quality:
+            suite_mmlu_pro:
+              accuracy: 0.755
+              n: 200
+              truncated: 0
+              max_tokens: 8192
+            suite_gpqa:
+              accuracy: 0.6513
+              n: 195
+              truncated: 0
+              max_tokens: 16384
+            measured_on: 2026-09-23
+            kernel: production-consolidated-v10 (ffc1bac82, build 10303)
+            instrument_class: serving
+            scope: 'Live :8074 IN ITS DEPLOYED CONFIGURATION (-t 96, -c 262144, -np 1, f16/f16, --spec-draft-n-max 4, unsloth UD-IQ4_XS 3-shard). NOT a llama-bench arm and NOT the recipe''s measured shape
+              -- the served process does not run its own recipe (SSU-F11: threads 48 and the recipe env block are declared and never read). So these are never comparable to optimized_tps above, which was
+              taken at -t 48 on build 10241 with the THP shim.'
+            cap_convergence: 'THE TOKEN CAP IS PART OF THE CLAIM, and these are the CONVERGED figures: the cap was raised per suite until truncation reached zero, so pooled == untruncated and nothing is
+              scored wrong merely for being cut off. At the promotion gate''s conventional 64-token cap this same model on these same 200 items scores 0.5650 with 46 truncated, which reads as a regression
+              against the retired Qwen3.5-122B''s 0.6450 and is not one: that model truncated 0/200 at the same cap because it answers with a letter while this one derives in the visible channel. NEVER
+              quote a capped figure against an uncapped one. See promotion_gates.yaml gates.quality.truncation_audit.'
+            incumbent_comparison: Qwen3.5-122B (retired) recorded mmlu_pro 0.6450 / gpqa 0.5692 at max_tokens 64 with 0 truncated. Those are its GATE numbers and were never re-run at a raised cap, so the
+              comparison is like-for-like only in that both sides are untruncated; treat the incumbent's as a lower bound of unknown tightness.
+          measurement_category: OBSERVATION
+          measurement_date: '2026-09-08'
+          contention_note: 'This role''s single full instance on 0-95 holds ALL FOUR CPU region locks; while it runs it serializes the entire CPU NUMA topology (stack_numa.py:274-276). That is inherent
+            and accepted for this role, but it is the real cost of tier:hot — not the 69 GB — which is now 90 GiB. ⚠ 2026-09-22: THIS IS WHY ingest_long_context WAS NOT ALIASED HERE. An earlier draft merged
+            it onto this instance, which would have put routine traffic (Stage 1 of three_stage_summarization) behind the whole-machine lock. The D2 ruling (2026-07-31) narrowed the `reasoning` escalation
+            chain to explicit_request ONLY so routine traffic could never summon it, and D2''s named prerequisite — `region_lock_wait_s_by_holder` telemetry — still does not exist anywhere in the codebase.
+            Operator ruling C2 sent ingest_long_context to the GPU 27B instead. This instance remains single-role, and the `reasoning` chain remains the only routed path to it.'
+      speed:
+      - date: '2026-09-14'
+        protocol: server_mode throughput
+        value_tps: 52.7
+    known_gaps: []
   coder_escalation:
     role: coder_escalation
     deployment_status: live_stack
@@ -506,7 +506,7 @@ roles:
     display_name: Qwen3.8-27B-Q8_0
     serving:
       endpoint: http://localhost:8083
-      server_role: architect_general
+      server_role: architect_critic
       binding: stack_manifest.alias->server_mode.direct
       ports:
       - 8083
@@ -520,13 +520,13 @@ roles:
       launch:
         entries:
         - port: 8083
-          primary_role: architect_general
+          primary_role: architect_critic
           mode: default
           alias: true
           cpu_shape_class: gpu_host_lane
           slots: 4
         primary_roles:
-        - architect_general
+        - architect_critic
         modes:
         - default
         requirements:
@@ -555,7 +555,7 @@ roles:
             draft_kv_type_v: null
             no_mmap: true
             mlock: false
-            slot_save_path: /mnt/raid0/llm/cache/kv_slots/architect_general
+            slot_save_path: /mnt/raid0/llm/cache/kv_slots/architect_critic
           flags:
             flash_attn: true
             jinja: true
@@ -638,7 +638,7 @@ roles:
         memory_cost: server_mode.tier
         spec: docs/reference/stack-truth-precedence.md
       descriptor_server_roles:
-      - architect_general
+      - architect_critic
       - coder_escalation
       - ingest_long_context
       alias_overrides: []
@@ -686,7 +686,7 @@ roles:
       - date: null
         protocol: registry performance block
         value:
-          inherits_from: architect_general
+          inherits_from: architect_critic
           baseline_tps: 30.87
           optimized_tps: 47.79
           optimized_tps_long_context: 36.71
@@ -948,7 +948,7 @@ roles:
     display_name: Qwen3.8-27B-Q8_0
     serving:
       endpoint: http://localhost:8083
-      server_role: architect_general
+      server_role: architect_critic
       binding: stack_manifest.alias->server_mode.direct
       ports:
       - 8083
@@ -962,13 +962,13 @@ roles:
       launch:
         entries:
         - port: 8083
-          primary_role: architect_general
+          primary_role: architect_critic
           mode: default
           alias: true
           cpu_shape_class: gpu_host_lane
           slots: 4
         primary_roles:
-        - architect_general
+        - architect_critic
         modes:
         - default
         requirements:
@@ -997,7 +997,7 @@ roles:
             draft_kv_type_v: null
             no_mmap: true
             mlock: false
-            slot_save_path: /mnt/raid0/llm/cache/kv_slots/architect_general
+            slot_save_path: /mnt/raid0/llm/cache/kv_slots/architect_critic
           flags:
             flash_attn: true
             jinja: true
@@ -1080,7 +1080,7 @@ roles:
         memory_cost: server_mode.tier
         spec: docs/reference/stack-truth-precedence.md
       descriptor_server_roles:
-      - architect_general
+      - architect_critic
       - coder_escalation
       - ingest_long_context
       alias_overrides: []
@@ -1128,7 +1128,7 @@ roles:
       - date: null
         protocol: registry performance block
         value:
-          inherits_from: architect_general
+          inherits_from: architect_critic
           baseline_tps: 30.87
           optimized_tps: 47.79
           optimized_tps_long_context: 36.71
@@ -1393,7 +1393,7 @@ roles:
         memory_cost: server_mode.tier
         spec: docs/reference/stack-truth-precedence.md
       descriptor_server_roles:
-      - architect_general
+      - architect_critic
       - coder_escalation
       - ingest_long_context
       alias_overrides: []
@@ -1441,7 +1441,7 @@ roles:
       - date: null
         protocol: registry performance block
         value:
-          inherits_from: architect_general
+          inherits_from: architect_critic
           baseline_tps: 30.87
           optimized_tps: 47.79
           optimized_tps_long_context: 36.71
@@ -1487,7 +1487,7 @@ roles:
     display_name: Qwen3.8-Flash-Next-UD-IQ4_XS
     serving:
       endpoint: http://localhost:8074
-      server_role: architect_critic
+      server_role: architect_general
       binding: server_mode.model_role
       ports:
       - 8074
@@ -1560,7 +1560,7 @@ roles:
         memory_cost: server_mode.tier
         spec: docs/reference/stack-truth-precedence.md
       descriptor_server_roles:
-      - architect_critic
+      - architect_general
       alias_overrides: []
       quality:
       - date: null

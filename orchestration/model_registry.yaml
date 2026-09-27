@@ -10,8 +10,8 @@
 # temporarily skip the compile (e.g. during a master schema change), set
 # ORCHESTRATOR_REGISTRY_NO_COMPILE=1.
 #
-# Compiled at: 2026-09-26T18:09:38+00:00
-# Cache key:   a29cd4186cd7e278...
+# Compiled at: 2026-09-27T18:57:44+00:00
+# Cache key:   124f808d4f4b3d45...
 # Active roles: architect_critic, architect_general, coder_escalation, embedder, embedder_1, embedder_2, embedder_3, embedder_4, embedder_5, embedder_bge_m3, embedder_granite_97m_r2, embedder_multilingual_e5_base, frontdoor, ingest_long_context, toolrunner, vision_escalation, worker, worker_explore, worker_fast, worker_general, worker_math, worker_summarize, worker_vision
 # =============================================================================
 
@@ -395,8 +395,8 @@ escalation_chains:
     chain:
     - worker_general
     - frontdoor
-    - architect_general
     - architect_critic
+    - architect_general
     triggers:
     - error_categories:
       - timeout
@@ -404,18 +404,18 @@ escalation_chains:
     - explicit_request: true
     max_escalations: 3
   reasoning:
-    description: Boosted-reasoning escalation — terminal hop is the 122B adversarial critic
+    description: Boosted-reasoning escalation — terminal hop is Qwen3.8-Flash-Next (architect_general since the 2026-09-27 ARCHSWAP; was the critic)
     chain:
     - frontdoor
-    - architect_general
     - architect_critic
+    - architect_general
     triggers:
     - explicit_request: true
     max_escalations: 2
 routing_hints:
 - if: '''boosted reasoning'' in objective or ''deep reasoning'' in objective'
   use:
-  - architect_critic
+  - architect_general
 - if: '''critique'' in objective or ''adversarial review'' in objective'
   use:
   - architect_critic
@@ -485,10 +485,10 @@ routing_hints:
   notes: Frontdoor detects vague requirements needing formalization
 - if: escalation.max_level == 'B3' and task_type == 'code'
   use:
-  - architect_critic
+  - architect_general
 - if: escalation.max_level == 'B3' and 'reasoning' in objective
   use:
-  - architect_critic
+  - architect_general
 - if: escalation.max_level == 'B3'
   use:
   - architect_general
@@ -1733,8 +1733,9 @@ server_mode:
       enable_thinking: false
     model_role: qwen38_27b_q8_local
     description: 'Coding escalation — Qwen3.8-27B dense Q8 MTP on MI210 (ROCm0). 2026-08-20: artifact swapped from Qwen3.6-27B-MTP-Q8_0. 2026-07-31: MOVED off frontdoor''s :8070 shared 35B process onto
-      architect_general''s :8083 GPU process; alias, launches no server of its own. Quality on this model NOT yet measured for the coder suite. Former Qwen2.5-Coder-32B-Q4 preserved as qwen25_coder_32b_q4km.'
-    alias_of: architect_general
+      architect_general''s :8083 GPU process; alias, launches no server of its own. 2026-09-27 ARCHSWAP: the :8083 host role is now architect_critic (same process, same model). Quality on this model NOT
+      yet measured for the coder suite. Former Qwen2.5-Coder-32B-Q4 preserved as qwen25_coder_32b_q4km.'
+    alias_of: architect_critic
     benchmark_date: null
     benchmark_score: null
     model: Qwen3.8-27B-Q8_0.gguf
@@ -1747,7 +1748,7 @@ server_mode:
     tier: hot
     acceleration:
       type: none
-      inherits_spec_from: architect_general
+      inherits_spec_from: architect_critic
       lookup: false
       corpus_retrieval: true
     throughput: 47.79
@@ -1809,7 +1810,7 @@ server_mode:
     acceleration:
       type: baseline
     throughput: 112.2
-  architect_general:
+  architect_critic:
     no_mmap: true
     url: http://localhost:8083
     port: 8083
@@ -1860,7 +1861,7 @@ server_mode:
     - 8083
     throughput: 47.79
     previous_model: Qwen3-235B-A22B-Q4_K_M.gguf
-  architect_critic:
+  architect_general:
     no_mmap: true
     url: http://localhost:8074
     port: 8074
@@ -1923,16 +1924,16 @@ server_mode:
     kv_quant:
       k: q8_0
       v: q8_0
-    alias_of: architect_general
+    alias_of: architect_critic
     model_role: qwen38_27b_q8_local
     chat_template_kwargs:
       enable_thinking: true
       reasoning_effort: medium
-    description: 'Long-context ingest alias — resolves to the architect_general process (Qwen3.8-27B dense Q8, MI210 ROCm0, :8083). Not a distinct model and not a distinct server. 2026-09-22: replaces Qwen3-Next-80B-A3B-Instruct-Q4_K_M
-      (RETIRED), which ran three dedicated CPU instances on :8085/:8185/:8285.'
+    description: 'Long-context ingest alias — resolves to the :8083 process (architect_general until 2026-09-27, architect_critic since the ARCHSWAP) (Qwen3.8-27B dense Q8, MI210 ROCm0, :8083). Not a distinct
+      model and not a distinct server. 2026-09-22: replaces Qwen3-Next-80B-A3B-Instruct-Q4_K_M (RETIRED), which ran three dedicated CPU instances on :8085/:8185/:8285.'
     alias_note: '⚠ THE ROLE''S DEFINING PROPERTY DOES NOT FULLY SURVIVE THE SWAP. The 27B''s ctx_max is 262144, so the model can carry the role''s declared context in principle, but the DEPLOYED context
       on :8083 is a UNIFIED 196608-token pool (2026-09-24 -kvu): a lone request may use all of it, two concurrent requests share it. Raising it is an OPERATOR call, not an arithmetic impossibility: on the
-      2026-09-22 corrected KV rate -c 262144 would fit with ~1.0 GiB of margin instead of 3.15 — see server_mode.architect_general.serving_shape. 196608 is the allocation the operator took. Any caller that
+      2026-09-22 corrected KV rate -c 262144 would fit with ~1.0 GiB of margin instead of 3.15 — see server_mode.architect_critic.serving_shape. 196608 is the allocation the operator took. Any caller that
       relies on 262144 must be re-pointed or must accept truncation.'
     previous_model: Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf
     agent_file_compression_operating_point: medium
@@ -1942,7 +1943,7 @@ server_mode:
     device: ROCm0
     acceleration:
       type: none
-      inherits_spec_from: architect_general
+      inherits_spec_from: architect_critic
       spec_type: draft-mtp
       draft_max: 4
       lookup: false
@@ -2038,11 +2039,11 @@ roles:
     - general
     acceleration:
       type: none
-      inherits_spec_from: architect_general
+      inherits_spec_from: architect_critic
       lookup: false
       corpus_retrieval: true
     performance:
-      inherits_from: architect_general
+      inherits_from: architect_critic
       baseline_tps: 30.87
       optimized_tps: 47.79
       optimized_tps_long_context: 36.71
@@ -2084,8 +2085,8 @@ roles:
       '
   ingest_long_context:
     tier: B
-    description: 'Large document ingestion, synthesis & summarization. 2026-09-22: ALIAS on architect_general''s :8083 MI210 process (Qwen3.8-27B dense Q8) — was three dedicated CPU instances of Qwen3-Next-80B-A3B-Instruct
-      Q4_K_M on :8085/:8185/:8285, RETIRED.'
+    description: 'Large document ingestion, synthesis & summarization. 2026-09-22: ALIAS on the :8083 MI210 process (host role architect_critic since the 2026-09-27 ARCHSWAP) (Qwen3.8-27B dense Q8) — was
+      three dedicated CPU instances of Qwen3-Next-80B-A3B-Instruct Q4_K_M on :8085/:8185/:8285, RETIRED.'
     agent_file_compression_operating_point: medium
     model:
       name: Qwen3.8-27B-Q8_0
@@ -2096,7 +2097,7 @@ roles:
       attention_layers: 64
       mtp_capable: true
       ctx_max: 262144
-      shared_gguf_with: architect_general
+      shared_gguf_with: architect_critic
       use_chat_api: true
       disable_thinking: false
       reasoning: auto
@@ -2108,7 +2109,7 @@ roles:
     - architect
     acceleration:
       type: none
-      inherits_spec_from: architect_general
+      inherits_spec_from: architect_critic
       spec_type: draft-mtp
       draft_max: 4
     performance:
@@ -2140,98 +2141,8 @@ roles:
       '
   architect_general:
     tier: A
-    description: 'System architecture, invariants, acceptance tests - emits IR only. 2026-08-22: E-7 stamps at terse template 1443ea9ab4bb — math 85.0%, mmlu_pro 27.5%, gpqa_diamond 47.5%, cruxeval 22.5%,
-      gpqa_diamond_cot 75.0% (45/60 @4096). 2026-07-31: dense 27B Q8 MTP on MI210 (ROCm0) — Qwen3.6-27B from 2026-07-31, Qwen3.8-27B-Q8_0 since 2026-08-20; PRIMARY for the :8083 process, with coder_escalation
-      and (since 2026-09-22) ingest_long_context aliased onto it.'
-    agent_file_compression_operating_point: none
-    model:
-      name: Qwen3.8-27B-Q8_0
-      path: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
-      quant: Q8_0
-      size_gb: 27.05
-      architecture: qwen35
-      attention_layers: 64
-      n_embd: 5120
-      ctx_max: 262144
-      use_chat_api: true
-      disable_thinking: false
-      reasoning: auto
-      max_tokens_multiplier: 4
-      previous_model: 'Qwen3.5-122B-A10B UD-Q4_K_M (2026-07-31: 122B vacated to the new architect_critic role, CPU :8074). Prior: Qwen3-235B-A22B-Q4_K_M (swapped 2026-03-19).'
-    candidate_roles:
-    - architect
-    - general
-    - coder
-    acceleration:
-      type: speculative_decoding
-      spec_type: draft-mtp
-      draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
-      draft_max: 4
-      k: 4
-      p_split: 0
-      lookup: false
-      notes: '2026-07-31: architect MTP via the MTP-embedded Qwen3.6-27B variant (draft = same GGUF as model; launcher omits -md for same-realpath drafts). Served on MI210 (ROCm0) with -ngl all -fa on.
-        The 122B NEXTN history moved with the model to architect_critic.
-
-        '
-      benchmarked: 2026-07-31
-    performance:
-      superseded_model_history:
-        model: Qwen3-235B-A22B-Q4_K_M
-        note: category=BASELINE / historical. Never a headline, never a decision input.
-        baseline_tps: 5.3
-        moe4_baseline_tps: 3.87
-        moe4_spec_tps: 8.21
-        full_spec_tps: 6.08
-      superseded_model_history_122b:
-        model: Qwen3.5-122B-A10B UD-Q4_K_M
-        note: Relocated to roles.architect_critic. Retained here only as the swap breadcrumb.
-        qwen35_122b_probe_b_tps: 12.19
-        optimized_tps: 24.0
-        optimized_tps_long_context: 15.76
-        quality_score: 2.57/3
-        spec_acceptance_moe4: 54.8%
-        spec_acceptance_full: 52.7%
-      baseline_tps: 30.87
-      optimized_tps: 47.79
-      optimized_tps_long_context: 36.71
-      optimized_tps_attest: '[published stack measurement record §01, 2026-07-31, production-optimal rows]'
-      contended_tps: 19.81
-      speedup: 1.55x
-      vram_gib: 36.7
-      swe_verified_pct: null
-      swe_verified_raw: null
-      swe_verified_instrument: 'VOIDED 2026-08-22: was ''SWE-bench Verified, oracle-file, v4 tail replay, n=40, 2026-07-27'' measured on Qwen3.6-27B-MTP (arm A3). The role now serves Qwen3.8-27B + terse
-        template; SWE not re-measured.'
-      swe_verified_comparators: 'VOIDED with the row above. Historical: A1 37.5% (15/40) · A4 32.5% (13/40).'
-      swe_verified_shape_caveat: VOIDED with the row above.
-      swe_verified_transfer_basis: VOIDED with the row above.
-      math_suite: 34/40 (85.0%)
-      mmlu_pro_suite: 11/40 (27.5%)
-      gpqa_diamond_suite: 19/40 (47.5%)
-      cruxeval_suite: 9/40 (22.5%)
-      gpqa_diamond_cot_suite: 45/60 (75.0%)
-      quality_score: null
-      benchmark_date: 2026-08-22
-    memory:
-      residency: hot
-      pinned: false
-    paged_attention:
-      recommended: false
-      reason: '2026-07-31: the 69GB host-RAM-bandwidth rationale was the 122B''s. The 27B is VRAM-resident under -ngl all; revisit only with GPU-side evidence.'
-    generation_defaults:
-      n_tokens: -1
-      temperature: 0.1
-    system_prompt_suffix: 'Be maximally concise. Use bullet points, not prose.
-
-      Output structured plans, not narrative.
-
-      Other agents will elaborate — stop once the decision is clear.
-
-      '
-  architect_critic:
-    tier: B
-    description: Adversarial plan critic — fatal flaws, unstated assumptions, and an explicit DELETE lens; emits structured critique only
+    description: 'System architecture, invariants, acceptance tests - emits IR only. 2026-09-27 ARCHSWAP (operator-decided): served by Qwen3.8-Flash-Next UD-IQ4_XS on the full CPU instance (:8074, the process
+      that was architect_critic) so the graph''s existing escalation paths reach the strongest model. Top of the escalation chain. The 27B''s E-7 stamps moved with the 27B to roles.architect_critic.'
     agent_file_compression_operating_point: aggressive
     backend:
       type: local
@@ -2311,6 +2222,96 @@ roles:
       recommended: true
       block_size: 64
       reason: 87 GiB model is memory-bound, benefits from block prefetching
+    generation_defaults:
+      n_tokens: -1
+      temperature: 0.1
+    system_prompt_suffix: 'Be maximally concise. Use bullet points, not prose.
+
+      Output structured plans, not narrative.
+
+      Other agents will elaborate — stop once the decision is clear.
+
+      '
+  architect_critic:
+    tier: B
+    description: Adversarial plan critic — fatal flaws, unstated assumptions, and an explicit DELETE lens; emits structured critique only — 2026-09-27 ARCHSWAP (operator-decided), served by Qwen3.8-27B
+      Q8 on the MI210 (:8083, the process that was architect_general; host of coder_escalation + ingest_long_context). Reached by direct request and the critique_plan consult skill; not an escalation target.
+    agent_file_compression_operating_point: none
+    model:
+      name: Qwen3.8-27B-Q8_0
+      path: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
+      quant: Q8_0
+      size_gb: 27.05
+      architecture: qwen35
+      attention_layers: 64
+      n_embd: 5120
+      ctx_max: 262144
+      use_chat_api: true
+      disable_thinking: false
+      reasoning: auto
+      max_tokens_multiplier: 4
+      previous_model: 'Qwen3.5-122B-A10B UD-Q4_K_M (2026-07-31: 122B vacated to the new architect_critic role, CPU :8074). Prior: Qwen3-235B-A22B-Q4_K_M (swapped 2026-03-19).'
+    candidate_roles:
+    - architect
+    - general
+    - coder
+    acceleration:
+      type: speculative_decoding
+      spec_type: draft-mtp
+      draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
+      draft_max: 4
+      k: 4
+      p_split: 0
+      lookup: false
+      notes: '2026-07-31: architect MTP via the MTP-embedded Qwen3.6-27B variant (draft = same GGUF as model; launcher omits -md for same-realpath drafts). Served on MI210 (ROCm0) with -ngl all -fa on.
+        The 122B NEXTN history moved with the model to architect_critic.
+
+        '
+      benchmarked: 2026-07-31
+    performance:
+      superseded_model_history:
+        model: Qwen3-235B-A22B-Q4_K_M
+        note: category=BASELINE / historical. Never a headline, never a decision input.
+        baseline_tps: 5.3
+        moe4_baseline_tps: 3.87
+        moe4_spec_tps: 8.21
+        full_spec_tps: 6.08
+      superseded_model_history_122b:
+        model: Qwen3.5-122B-A10B UD-Q4_K_M
+        note: Relocated to roles.architect_critic. Retained here only as the swap breadcrumb.
+        qwen35_122b_probe_b_tps: 12.19
+        optimized_tps: 24.0
+        optimized_tps_long_context: 15.76
+        quality_score: 2.57/3
+        spec_acceptance_moe4: 54.8%
+        spec_acceptance_full: 52.7%
+      baseline_tps: 30.87
+      optimized_tps: 47.79
+      optimized_tps_long_context: 36.71
+      optimized_tps_attest: '[published stack measurement record §01, 2026-07-31, production-optimal rows]'
+      contended_tps: 19.81
+      speedup: 1.55x
+      vram_gib: 36.7
+      swe_verified_pct: null
+      swe_verified_raw: null
+      swe_verified_instrument: 'VOIDED 2026-08-22: was ''SWE-bench Verified, oracle-file, v4 tail replay, n=40, 2026-07-27'' measured on Qwen3.6-27B-MTP (arm A3). The role now serves Qwen3.8-27B + terse
+        template; SWE not re-measured.'
+      swe_verified_comparators: 'VOIDED with the row above. Historical: A1 37.5% (15/40) · A4 32.5% (13/40).'
+      swe_verified_shape_caveat: VOIDED with the row above.
+      swe_verified_transfer_basis: VOIDED with the row above.
+      math_suite: 34/40 (85.0%)
+      mmlu_pro_suite: 11/40 (27.5%)
+      gpqa_diamond_suite: 19/40 (47.5%)
+      cruxeval_suite: 9/40 (22.5%)
+      gpqa_diamond_cot_suite: 45/60 (75.0%)
+      quality_score: null
+      benchmark_date: 2026-08-22
+    memory:
+      residency: hot
+      pinned: false
+    paged_attention:
+      recommended: false
+      reason: '2026-07-31: the 69GB host-RAM-bandwidth rationale was the 122B''s. The 27B is VRAM-resident under -ngl all; revisit only with GPU-side evidence.'
     generation_defaults:
       n_tokens: -1
       temperature: 0.1
@@ -2743,7 +2744,7 @@ roles:
   qwen38_flash_next_ud_iq4xs_local:
     tier: A
     description: 'Qwen3.8-Flash-Next UD-IQ4_XS exact local artifact (3 shards). 2026-09-22: PROMOTED from research-campaign artifact to the PRODUCTION model backing architect_critic (:8074, CPU), single-role:
-      ingest_long_context is NOT aliased here — operator ruling C2 sent it to architect_general''s :8083 GPU Qwen3.8-27B (server_mode.ingest_long_context.alias_of, server_mode.architect_general.shared_with).
+      ingest_long_context is NOT aliased here — operator ruling C2 sent it to architect_general''s :8083 GPU Qwen3.8-27B (server_mode.ingest_long_context.alias_of, server_mode.architect_critic.shared_with).
       ⚠ THIS IS NOT THE ARTIFACT THE CAMPAIGN MEASURED — the codified recipe''s TRUNK_GGUF is the IQ4_XS-uniform SINGLE FILE (98,392,912,256 B, sha256 4bfb9849...f8957). Reconciling served-vs-anchor is
       PROD-3''s open job and the recipe module says so itself. Every performance figure attached to this model was taken on the uniform file.'
     model:
@@ -2776,7 +2777,7 @@ roles:
         mtp-shared-Q8_0-headIQ4_XS.gguf: B12 candidate, 1.097x wall vs borrowed q6_K — NO-GO
         mtp-shared-Q8_0-headQ4_K.gguf: B12 candidate, 1.077x wall vs borrowed q6_K — NO-GO
     candidate_roles:
-    - architect_critic
+    - architect_general
     - ingest_long_context
     - architect
     - critic
@@ -2850,7 +2851,7 @@ roles:
       file_bytes: 29047086048
       provenance: unsloth/Qwen3.8-27B-GGUF
     candidate_roles:
-    - architect_general
+    - architect_critic
     - coder_escalation
     - architect
     - general
