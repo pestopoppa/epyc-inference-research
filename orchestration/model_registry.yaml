@@ -1849,12 +1849,11 @@ server_mode:
         # pipeline's declared_env_attestation step checks the live /proc/<pid>/environ.
         GGML_FUSED_DECODE_OFF: "1"     # the recipe's graph path. Inert while MTP serves (the fused
                                        # path needs !embeddings_nextn); G1 arm T96-vs-L checks that.
+        GGML_NOHUGEPAGE_PROCESS: "1"   # CHAMP-2 THP shim. ADOPTED for serving by DAR-LAT-3h gate G1
+                                       # (outcome ending in N: >= 2% wall-time gain at the chosen -t,
+                                       # THP_enabled 0 verified per launch). The G1 receipt is the citation.
       # Knobs of the champion MEASUREMENT recipe that are NOT serving env (yet). Not read by anything.
       env_not_serving:
-        GGML_NOHUGEPAGE_PROCESS: "1"   # CHAMP-2 THP shim (+5.23%, lower launch sd) vs v10 common.cpp
-                                       # CHAMPION-3 (+1.48% with it OFF): conflicting, neither at the
-                                       # served shape on v10. Own factor in DAR-LAT-3h gate G1; moves
-                                       # into `env` only on a G1 outcome ending in N.
         GGML_FA_SPLIT_KV: "0"          # BE-2 row-exact reduction order. Correctness-affecting, and a
                                        # perf risk at long context (single-row decode loses KV-axis
                                        # parallelism) while the critic serves n_ctx 262144. Task
