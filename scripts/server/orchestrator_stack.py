@@ -2221,6 +2221,11 @@ PRODUCTION_FEATURE_WAVE_OVERRIDES: dict[str, bool] = {
     # HTTP 200 schema-valid {"result": 51}; 3/3 off -> HTTP 200 bare "51". The suspended
     # 13:41Z failures were a held CPU region (AutoKernel calibration), not this flag.
     "final_schema_validation": True,
+    # HS-19a stage 1 ("Linked"), operator-approved 2026-09-27 for production: record
+    # harness subagent parent->child session links (x-parent-session-id / body key) in
+    # the inference tap and session log. Metadata only: no routing, admission or
+    # response change (orch f58db8be; 45 unit tests). Enables the HS-19a live run.
+    "v1_subagent_link": True,
 }
 
 LANGGRAPH_PHASE3_LIVE_ENV_VARS: tuple[str, ...] = (
