@@ -26,7 +26,9 @@ sweep:
   # per interval, and never while a migration is in flight on that backend.
   # When disabled it still runs REPORT-ONLY and logs a warning with the count and
   # bytes of stale files, so a regrowth is visible instead of silent.
-  enabled: false
+  # Operator 2026-09-27: ENABLED after the 149-file backlog was cleared (the sweep is
+  # the only thing that reclaims restore_failed files).
+  enabled: true
   # A file younger than this is never touched (floor 5; a migration is bounded
   # by the 30 s save + 30 s restore client timeouts).
   min_age_minutes: 60
