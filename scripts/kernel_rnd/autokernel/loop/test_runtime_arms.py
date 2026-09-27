@@ -7,6 +7,7 @@ writes it, and strict admission itself is exercised by test_runtime_admission.
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 import pytest
 
@@ -421,7 +422,7 @@ def _with_arms(monkeypatch, declaration_body, *, expect_exit=None):
         path = Path(argv[argv.index("--store") + 1]).parent / "runtime-arms.json"
         path.write_text(json.dumps(declaration_body))
         seen["path"] = path
-        return original_main([*argv, "--runtime-arms", str(path)])
+        return original_main([*argv, "--runtime-arms", str(path), "--runtime-arm-evidence", "strict"])
 
     monkeypatch.setattr(run, "main", with_arms)
     if expect_exit is not None:
@@ -501,3 +502,297 @@ def test_env_arm_on_a_key_the_template_declares_is_enumerable(tmp_path):
     assert pair.candidate.template.recipe_hash != declared.template.recipe_hash
     assert pair.anchor.to_dict() == declared.to_dict()
     assert pair.candidate.capability.supported
+
+
+# ------------------------------------------------------------------ keep-grade evidence
+
+def _fake_measure(calls, *, candidate_bonus=0.0):
+    import time
+
+    def measure(recipe, build, port, *, evidence, **kwargs):
+        started = time.time()
+        calls.append((recipe.threads, dict(recipe.env or {})))
+        evidence.append({"schema": serving.RESIDENCY_SCHEMA, "backend": "cpu",
+                         "status": "not_applicable", "window_start": started,
+                         "window_end": time.time(), "samples": 0})
+        base = 10 + (len(calls) % 7) / 100
+        return base * (1 + candidate_bonus) if recipe.threads == 49 else base
+    return measure
+
+
+def _keep_grade_inputs(tmp_path, monkeypatch, *, bonus):
+    from .unified_planner import RuntimeDimension, enumerate_runtime_dimensions
+    anchor = _launch(tmp_path / "gen-1")
+    requests = (("p", json.dumps({"prompt": [1], "n_predict": 256, "temperature": 0.0,
+                                  "top_k": 1}).encode()),)
+    calls = []
+    monkeypatch.setattr(serving, "_measure_once", _fake_measure(calls, candidate_bonus=bonus))
+    floor = serving.calibrate_floor(anchor.template, Path(anchor.build_dir), samples=24,
+        port=anchor.port, resolved_recipe=anchor, frozen_requests=requests,
+        instrument=serving.MATCHED_INSTRUMENT, pairs=5)
+    pair = enumerate_runtime_dimensions(anchor, (RuntimeDimension(
+        "runtime-arm-threads-49", "threads", 48, 49, "declared"),))[0]
+    return anchor, requests, floor, pair, calls
+
+
+@pytest.mark.parametrize("bonus", [0.10, 0.0])
+def test_keep_grade_runtime_ab_uses_the_matched_floor_of_the_current_recipe(
+        tmp_path, monkeypatch, bonus):
+    anchor, requests, floor, pair, calls = _keep_grade_inputs(tmp_path, monkeypatch, bonus=bonus)
+    assert len(calls) == 48
+    out = serving.compare(pair.anchor.template, Path(anchor.build_dir), Path(anchor.build_dir),
+        pairs=5, port=anchor.port, floor_pct=floor["floor_pct"], floor_unit=serving.COMPARE_EFFECT_UNIT,
+        floor_record=floor, instrument=serving.MATCHED_INSTRUMENT,
+        anchor_resolved_recipe=pair.anchor, candidate_resolved_recipe=pair.candidate,
+        frozen_requests=requests,
+        floor_request_digest=serving.request_digest(anchor.template, requests),
+        runtime_pair=pair, runtime_evidence="keep_grade")
+    assert len(calls) == 58 and out["admission"] == "keep_grade_matched_serving_floor"
+    assert out["measurement_plan"]["instrument"] == serving.MATCHED_INSTRUMENT
+    assert out["floor_sha256"] == floor["content_sha256"]
+    assert sorted(threads for threads, _ in calls[48:]) == [48] * 5 + [49] * 5
+    assert out["decisive"] == (abs(out["effect"]) * 100 >= floor["floor_pct"])
+    assert out["decisive"] is (bonus > 0)
+
+
+def test_keep_grade_refusals_keep_every_other_runtime_path_closed(tmp_path, monkeypatch):
+    anchor, requests, floor, pair, calls = _keep_grade_inputs(tmp_path, monkeypatch, bonus=0.1)
+    common = dict(pairs=5, port=anchor.port, anchor_resolved_recipe=pair.anchor,
+                  candidate_resolved_recipe=pair.candidate, frozen_requests=requests,
+                  runtime_pair=pair)
+    digest = serving.request_digest(anchor.template, requests)
+    build = Path(anchor.build_dir)
+    anchor = SimpleNamespace(template=pair.anchor.template)
+    # Without keep-grade evidence, a runtime pair still may not borrow the floor.
+    with pytest.raises(serving.ServingFloorMismatch, match="cannot qualify a runtime"):
+        serving.compare(anchor.template, build, build, floor_pct=floor["floor_pct"],
+                        floor_unit=serving.COMPARE_EFFECT_UNIT, floor_record=floor,
+                        instrument=serving.MATCHED_INSTRUMENT, floor_request_digest=digest,
+                        **common)
+    # Keep-grade needs the matched instrument and a floor record.
+    with pytest.raises(serving.ServingFloorMismatch, match="keep-grade runtime evidence needs"):
+        serving.compare(anchor.template, build, build, floor_pct=None,
+                        instrument=serving.MATCHED_INSTRUMENT, runtime_evidence="keep_grade",
+                        **common)
+    with pytest.raises(serving.RecipeError, match="unknown runtime evidence"):
+        serving.compare(anchor.template, build, build, floor_pct=None,
+                        runtime_evidence="loose", **common)
+    # A floor calibrated under ANOTHER recipe (the candidate's) is refused.
+    other = dict(floor, recipe_hash=pair.candidate.template.recipe_hash)
+    with pytest.raises(serving.ServingFloorMismatch):
+        serving.compare(anchor.template, build, build, floor_pct=floor["floor_pct"],
+                        floor_unit=serving.COMPARE_EFFECT_UNIT, floor_record=other,
+                        instrument=serving.MATCHED_INSTRUMENT, floor_request_digest=digest,
+                        runtime_evidence="keep_grade", **common)
+    assert len(calls) == 48     # nothing launched by any refusal
+
+
+def test_is_declared_matches_mechanism_and_exact_treatment(tmp_path):
+    anchor = _launch(tmp_path / "gen-1")
+    declaration = _declaration(A2)
+    context = _context(anchor)
+    from . import actors
+    declared = actors._runtime_pair(ra.RuntimeArm.from_dict(A2).treatment(), context,
+                                    "runtime-arm-" + A2["arm_id"])
+    assert ra.is_declared(declared, declaration)
+    renamed = actors._runtime_pair(ra.RuntimeArm.from_dict(A2).treatment(), context, "planner-id")
+    assert not ra.is_declared(renamed, declaration)
+    other = actors._runtime_pair(ra.RuntimeArm.from_dict(A1).treatment(), context,
+                                 "runtime-arm-" + A2["arm_id"])
+    assert not ra.is_declared(other, declaration)
+    assert not ra.is_declared(declared, None)
+
+
+def test_keep_grade_attempt_ledger_settles_the_arm(tmp_path):
+    anchor = _launch(tmp_path / "gen-1")
+    root = tmp_path / "runtime-preparation"
+    declaration = _declaration(A2)
+    planner = ra.DeclaredArmPlanner(_Ordinary(), declaration, store_root=lambda: root,
+                                    evidence="keep_grade")
+    # keep-grade: planner treatments are observation-only, declared arms are not.
+    served = planner.propose(_context(anchor, observation_only=True))
+    assert served.mechanism_id == "runtime-arm-" + A2["arm_id"]
+    ra.record_attempt(root, pair=served.runtime_pair.to_dict(),
+                      comparison={"effect": 0.01, "decisive": False, "extra": 1},
+                      declaration=declaration)
+    assert ra.arm_state(root, declaration, anchor) == {A2["arm_id"]: "settled"}
+    assert planner.propose(_context(anchor, observation_only=True)) == "planner-hypothesis"
+    body = json.loads((root / ra.ATTEMPTS_NAME).read_text())
+    assert "extra" not in body["attempts"][0]["comparison"]
+    with pytest.raises(ra.ArmDeclarationRefused, match="evidence"):
+        ra.DeclaredArmPlanner(_Ordinary(), declaration, store_root=lambda: root, evidence="x")
+
+
+def test_keep_grade_selection_restores_and_rebinds_to_a_new_build(tmp_path):
+    from dataclasses import replace
+    anchor = _launch(tmp_path / "gen-1")
+    context = _context(anchor)
+    from . import actors
+    pair = actors._runtime_pair(ra.RuntimeArm.from_dict(A2).treatment(), context,
+                                "runtime-arm-" + A2["arm_id"])
+    (tmp_path / "store").mkdir()
+    store = mc.ArtifactStore(tmp_path / "store" / "runtime-preparation")
+    try:
+        body = ra.keep_grade_selection(adopted=pair.candidate, previous=pair.anchor,
+            runtime_pair=pair.to_dict(), comparison={"effect": 0.09, "decisive": True},
+            declaration=_declaration(A2), current_source_commit="c" * 40)
+        reference = store.write(ra.KEEP_GRADE_SELECTION_NAMESPACE, body).to_dict()
+        same = ra.restore_keep_grade_selection(store, reference, build=Path(anchor.build_dir),
+                                               rebind=lambda *a: pytest.fail("no rebind"))
+        assert same.to_dict() == pair.candidate.to_dict()
+        rebuilt = _launch(tmp_path / "gen-2", {"OMP_PLACES": "{2}:47:2,{1}"})
+        moved = ra.restore_keep_grade_selection(store, reference, build=tmp_path / "gen-2",
+                                                rebind=lambda recipe, build: rebuilt)
+        assert moved is rebuilt and ra.surface_digest(moved) == body["adopted_surface_digest"]
+        with pytest.raises(ra.ArmDeclarationRefused, match="rebind"):
+            ra.restore_keep_grade_selection(store, reference, build=tmp_path / "gen-2",
+                                            rebind=lambda recipe, build: _launch(build))
+        strict = store.write("direct-runtime-selection", {
+            "schema": ra.STRICT_SELECTION_SCHEMA, "current_recipe": pair.candidate.to_dict()}
+        ).to_dict()
+        with pytest.raises(ra.ArmDeclarationRefused):
+            ra.restore_keep_grade_selection(store, strict, build=tmp_path / "gen-1",
+                                            rebind=lambda *a: None)
+    finally:
+        store.close()
+    # The pre-claim epoch read is evidence-scoped.
+    assert ra.surface_digest(ra.selection_current_recipe(
+        tmp_path / "store", reference, evidence="keep_grade")) == body["adopted_surface_digest"]
+    with pytest.raises(ra.ArmDeclarationRefused, match="strict evidence"):
+        ra.selection_current_recipe(tmp_path / "store", reference, evidence="strict")
+
+
+def test_main_keep_grade_arm_is_adopted_then_restored_into_a_new_epoch(monkeypatch, tmp_path):
+    """run.main end to end with pool.drive replaced: the declared arm is served by the
+    wrapped planner, measured at keep-grade against the matched floor, adopted through the
+    real keep closure, and the next launch restores it under a new epoch."""
+    from contextlib import contextmanager
+    from . import claim, cpu_profile, pool, test_promotion_targets as fixtures
+    from .test_cpu_screen import _inputs as cpu_inputs
+    monkeypatch.setattr(claim, "DEVICE_LOCK", tmp_path / "mi210.lock")
+    fixture = fixtures.TheKeepBuildsAProductionCompleteAnchor()
+    fixture.setUp()
+    try:
+        launch, prompts, options, _ = cpu_inputs(fixture)
+        arms_path = fixture.root / "runtime-arms.json"
+        arms_path.write_text(json.dumps({
+            "schema": ra.SCHEMA, "campaign_id": "unified-ak-test",
+            "numerics_policy": "bit_exact_only",
+            "arms": [{"arm_id": "threads-plus-one", "kind": "threads",
+                      "candidate": launch.template.threads + 1, "numerics": "bit_exact",
+                      "rationale": "fixture thread arm"}]}))
+        calls, seen = [], {}
+        reference_file = fixture.root / "runtime-recipe-reference.json"
+
+        def measure_once(recipe, build, port, *, evidence, **kwargs):
+            import time
+            calls.append(recipe.threads)
+            evidence.append({"schema": serving.RESIDENCY_SCHEMA, "backend": "cpu",
+                             "status": "not_applicable", "window_start": time.time(),
+                             "window_end": time.time(), "samples": 0})
+            base = 10 + (len(calls) % 7) / 100
+            return base * 1.2 if recipe.threads == launch.template.threads + 1 else base
+
+        @contextmanager
+        def hold(*_args):
+            yield {"device_id": "synthetic-cpu-claim"}
+
+        def drive(**kwargs):
+            context = kwargs["build_context"]()
+            seen.setdefault("anchors", []).append(context["runtime_anchor"])
+            seen.setdefault("preparation", []).append(dict(context["runtime_preparation"]))
+            worker = SimpleNamespace(name="lane0", worktree=fixture.root / "lane0",
+                                     build_dir=fixture.startup_anchor)
+            planner = kwargs["make_planner"](worker)
+            if reference_file.exists():
+                # Launch 2: the adopted value IS the current recipe, so the arm is an exact
+                # no-op and the ordinary planner is consulted; a source comparison then
+                # recalibrates the matched floor under the adopted recipe first.
+                with pytest.raises(AssertionError, match="ordinary planner consulted"):
+                    planner.propose(context)
+                seen["source_row"] = kwargs["make_measure"](worker)(
+                    SimpleNamespace(runtime_pair=None), ()).row
+                return pool.PoolResult()
+            hypothesis = planner.propose(context)
+            seen.setdefault("served", []).append(getattr(hypothesis, "mechanism_id", None))
+            if not isinstance(hypothesis, run.loop.Hypothesis) or hypothesis.runtime_pair is None:
+                return pool.PoolResult()
+            comparison = kwargs["make_measure"](worker)(hypothesis, ())
+            seen.setdefault("rows", []).append(comparison.row)
+            if comparison.decisive and comparison.effect > 0:
+                kwargs["commit"](worker, hypothesis, (), comparison)
+            return pool.PoolResult()
+
+        class _NoActor:
+            def __init__(self, *a, **k):
+                pass
+
+            def propose(self, context):
+                raise AssertionError("ordinary planner consulted while a declared arm is open")
+
+        def invoke(argv):
+            argv += options + ["--serving-pairs", "5", "--serving-instrument",
+                               serving.MATCHED_INSTRUMENT, "--runtime-arms", str(arms_path)]
+            if reference_file.exists():
+                argv += ["--runtime-recipe-reference", str(reference_file)]
+            with mock.patch.object(run.claim, "hold_cpu", hold), \
+                    mock.patch.object(run.os, "sched_getaffinity", return_value={0, 1}), \
+                    mock.patch.object(run.os, "sched_setaffinity"), \
+                    mock.patch.object(run.workload_contract, "read_census", return_value=SimpleNamespace(
+                        n_embd=1536, dominant_quant="Q5_0")), \
+                    mock.patch.object(cpu_profile, "profile_loop",
+                                      side_effect=cpu_profile.CpuProfileRefused("fixture")), \
+                    mock.patch.object(serving, "_measure_once", measure_once), \
+                    mock.patch.object(run.actors, "AgentPlanner", _NoActor), \
+                    mock.patch.object(run.gates, "op_correctness",
+                                      return_value=run.gates.Verdict("correctness", True, "fixture")), \
+                    mock.patch.object(pool, "provision", return_value=[]), \
+                    mock.patch.object(pool, "drive", drive):
+                return real_main(argv)
+
+        real_main = run.main
+        with mock.patch.object(run, "main", invoke):
+            assert fixture._run_one_keep()[0] == 0
+        # Launch 1: 48-launch floor on the original recipe, then ONE 10-launch keep-grade A/B.
+        assert len(calls) == 58 and seen["served"] == ["runtime-arm-threads-plus-one"]
+        row = seen["rows"][0]
+        assert row["admission"] == "keep_grade_matched_serving_floor" and row["decisive"]
+        assert seen["preparation"][0]["status"] == "keep_grade_declared_arms"
+        receipts = sorted((fixture.store / ra.ADOPTION_DIR).glob("*.json"))
+        assert len(receipts) == 1
+        receipt = json.loads(receipts[0].read_text())
+        assert receipt["evidence"] == "keep_grade"
+        assert receipt["comparison"]["floor_sha256"] == row["floor_sha256"]
+        reference_file.write_text(json.dumps(receipt["selection_reference"]))
+        attempts = json.loads((fixture.store / "runtime-preparation" / ra.ATTEMPTS_NAME).read_text())
+        assert len(attempts["attempts"]) == 1
+        # Launch 2 carries the selection: the adopted recipe is the anchor, its own floor is
+        # calibrated (48 launches), and the arm is an exact no-op now, so the planner runs.
+        with mock.patch.object(run, "main", invoke):
+            assert fixture._run_one_keep()[0] == 0
+        assert seen["anchors"][1]["template"]["threads"] == launch.template.threads + 1
+        # Floor recompute: the adopted recipe got its own 24-pair matched floor (48 launches),
+        # every one of them under the adopted thread count.
+        assert len(calls) == 58 + 48 + 10
+        assert set(calls[58:]) == {launch.template.threads + 1}
+        assert seen["source_row"]["recipe_hash"] != row["recipe_hash"]
+        assert ra.surface_digest(seen["anchors"][1]) == \
+            receipt["epoch_transition"]["next_epoch_input"]["runtime_recipe_surface_digest"]
+    finally:
+        fixture.doCleanups()
+
+
+def test_serial_preview_keeps_batches_full_while_declared_arms_are_unsettled(tmp_path):
+    from . import cpu_screen
+    anchor = _launch(tmp_path / "gen-1")
+    launch_file, arms_file = tmp_path / "launch.json", tmp_path / "arms.json"
+    launch_file.write_text(json.dumps(anchor.to_dict()))
+    arms_file.write_text(json.dumps(_declaration(A2).to_dict()))
+    (tmp_path / "store").mkdir()
+    argv = ["--cpu-serving-launch", str(launch_file), "--resolved-campaign", str(tmp_path / "c.json"),
+            "--store", str(tmp_path / "store"), "--runtime-arms", str(arms_file)]
+    selected = cpu_screen.preview_batch(argv, None)
+    assert selected["scope"] == "full" and "unsettled" in selected["reason"]
+    arms_file.write_text("{not json")
+    selected = cpu_screen.preview_batch(argv, None)
+    assert selected["scope"] == "full" and "unreadable" in selected["reason"]

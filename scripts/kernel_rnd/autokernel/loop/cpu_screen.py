@@ -338,10 +338,30 @@ def preview_batch(original, prior, *, batch_iterations=1):
                     "confirm_from": prior["path"]}
         recent = receipt.get("last_outcome_reference")
         prior_profile = receipt.get("cpu_profile_reference")
+        if receipt.get("runtime_recipe_reference") is not None:
+            # A carried runtime recipe exists only on the full target: reduced scopes are
+            # derived from the campaign launch and would measure the replaced recipe.
+            return {"scope": "full", "candidate": None,
+                    "reason": "a runtime recipe is carried; reduced scopes are not defined for it"}
     if batch_iterations != 1 or serial_run.option(original, "--resolved-campaign") is None:
         return {"scope": "full", "candidate": None}
     full = rr.CanonicalResolvedRecipe.from_dict(serial_run._json(Path(
         serial_run.option(original, "--cpu-serving-launch")))[0])
+    arms = serial_run.option(original, "--runtime-arms")
+    if arms is not None:
+        # Declared runtime arms run only on the full target; keep batches full until every
+        # arm is settled for the full launch's runtime surface.
+        from . import runtime_arms
+        try:
+            state = runtime_arms.arm_state(
+                Path(serial_run.option(original, "--store")) / "runtime-preparation",
+                runtime_arms.load(Path(arms)), full)
+        except (OSError, ValueError) as exc:
+            return {"scope": "full", "candidate": None,
+                    "reason": f"declared runtime arms unreadable: {type(exc).__name__}: {exc}"[:512]}
+        if any(value != "settled" for value in state.values()):
+            return {"scope": "full", "candidate": None,
+                    "reason": "declared runtime arms are unsettled; they run on the full target only"}
     if prior_profile is not None:
         from . import cpu_profile
         try:

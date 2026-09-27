@@ -1103,8 +1103,14 @@ def main(argv: list[str] | None = None) -> int:
                         help="target-local original serial teardown reference; not admission or a claim")
     parser.add_argument("--runtime-arms", type=Path,
                         help="declared runtime arms (runtime_arms.RuntimeArmDeclaration): the loop "
-                             "draws each unsettled arm before planner proposals and runs it through "
-                             "the unchanged strict runtime admission; requires --runtime-statistics")
+                             "draws each unsettled arm before planner proposals and adopts a winner "
+                             "under --runtime-arm-evidence")
+    parser.add_argument("--runtime-arm-evidence", choices=("keep_grade", "strict"),
+                        default="keep_grade",
+                        help="keep_grade (default): a declared bit-exact arm is judged by the same "
+                             "matched paired serving A/B a source keep clears, against the current "
+                             "recipe's matched serving floor; strict: the prospective runtime frame "
+                             "(requires --runtime-statistics)")
     parser.add_argument("--calibrate-runtime", action="store_true",
                         help="collect/reopen strict CPU anchor A/A and neutral calibration under the existing claim; "
                              "does not qualify controls or bank a runtime treatment")
@@ -1678,6 +1684,21 @@ def main(argv: list[str] | None = None) -> int:
     # select runtime recipes.
     runtime_capable = _runtime_serving_capable(direct_launch, selected_target,
         screen_scope=args.cpu_screen_scope, confirm_from=args.cpu_confirm_from)
+    #: Declared runtime arms judged at keep-grade evidence (the default evidence mode).
+    #: It is an ALTERNATIVE to the strict frame, never combined with it.
+    runtime_keep_grade = (runtime_capable and args.runtime_arms is not None
+                          and args.runtime_arm_evidence == "keep_grade")
+    if args.runtime_arms is not None and args.runtime_arm_evidence == "keep_grade":
+        if not runtime_capable:
+            # A reduced/common-scope batch never adopts a runtime recipe; the declared arms
+            # simply wait for the next full-target batch (serial preview keeps batches full
+            # while any arm is unsettled).
+            print("runtime   declared arms inactive: this batch is not the full selected target")
+        if args.runtime_statistics is not None or args.calibrate_runtime:
+            parser.error("keep-grade runtime arms and the strict runtime frame are alternative "
+                         "evidence modes; pass --runtime-arm-evidence strict to use the frame")
+        if args.serving_instrument != serving.MATCHED_INSTRUMENT:
+            parser.error("keep-grade runtime arms require the matched serving instrument")
     runtime_enabled = runtime_capable and args.runtime_statistics is not None
     # A full CPU launch can test a topology/NUMA hypothesis without claiming the
     # strict runtime protocol has admitted a recipe. Reduced source screens cannot.
@@ -1689,12 +1710,15 @@ def main(argv: list[str] | None = None) -> int:
                      "target; source-only and reduced-screen campaigns remain unchanged")
     if args.calibrate_runtime and args.runtime_statistics is None:
         parser.error("runtime calibration requires explicit prospective --runtime-statistics")
-    if args.runtime_recipe_reference is not None and args.runtime_statistics is None:
-        parser.error("retained runtime recipe requires its explicit prospective --runtime-statistics")
+    if args.runtime_recipe_reference is not None and args.runtime_statistics is None \
+            and not runtime_keep_grade:
+        parser.error("retained runtime recipe requires its explicit prospective --runtime-statistics "
+                     "or keep-grade --runtime-arms")
     if args.runtime_statistics is None and args.runtime_calibration_max_launches is not None:
         parser.error("runtime calibration launch budget requires --runtime-statistics")
-    if args.runtime_arms is not None and args.runtime_statistics is None:
-        parser.error("declared runtime arms require explicit prospective --runtime-statistics")
+    if args.runtime_arms is not None and args.runtime_arm_evidence == "strict" \
+            and args.runtime_statistics is None:
+        parser.error("strict runtime arm evidence requires explicit prospective --runtime-statistics")
     experimental = direct_launch is not None and args.experimental_branch is not None
     owned_cpu_list = None
     build_cpu_list = cpu_launch.template.cpu_list if cpu_launch else "96-183"
@@ -1861,7 +1885,8 @@ def main(argv: list[str] | None = None) -> int:
         try:
             runtime_recipe_surface_digest = runtime_arms.surface_digest(
                 runtime_arms.selection_current_recipe(
-                    args.store, _read_cpu_document(args.runtime_recipe_reference)))
+                    args.store, _read_cpu_document(args.runtime_recipe_reference),
+                    evidence="keep_grade" if runtime_keep_grade else "strict"))
         except (OSError, ValueError) as exc:
             parser.error(f"retained runtime recipe reference unreadable before claim: {exc}")
     # ONE derivation of the declared host state (`epoch_aliases.launch_epoch_inputs`):
@@ -1935,11 +1960,16 @@ def main(argv: list[str] | None = None) -> int:
                 campaign_id=(resolved_campaign.campaign_id if selected_target is not None
                              else "ak-loop"),
                 runtime_env_keys=_runtime_env_keys(direct_launch, cpu_launch),
-                max_candidates=runtime_statistical.controls.max_candidates)
+                max_candidates=(runtime_statistical.controls.max_candidates
+                                if runtime_statistical is not None else runtime_arms.MAX_ARMS))
+            if runtime_keep_grade and runtime_arm_declaration.numerics_policy != "bit_exact_only":
+                raise ValueError("keep-grade runtime evidence admits bit-exact arms only; "
+                                 "declare numerics_policy bit_exact_only (non-bit-exact arms need "
+                                 "--runtime-arm-evidence strict)")
         except (OSError, ValueError) as exc:
             parser.error(f"declared runtime arms refused before resource claim: {exc}")
         print(f"runtime   {len(runtime_arm_declaration.arms)} declared arm(s) "
-              f"[{runtime_arm_declaration.numerics_policy}] "
+              f"[{runtime_arm_declaration.numerics_policy}, {args.runtime_arm_evidence} evidence] "
               + ", ".join(arm.arm_id for arm in runtime_arm_declaration.arms)
               + f"; sha256 {runtime_arm_declaration.digest()[:12]}")
     print(f"anchor    {anchor_commit[:12]}   epoch {epoch[:12]}   "
@@ -2149,7 +2179,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if (args.calibrate_runtime or args.runtime_statistics is not None) and not direct_launch:
         parser.error("direct runtime calibration requires the original serving launch")
-    runtime_preparation = ({} if runtime_enabled else {"status": (
+    runtime_preparation = ({} if runtime_enabled else {"status": "keep_grade_declared_arms",
+        "reason": ("declared bit-exact runtime arms are judged by the matched paired serving A/B "
+                   "against the current recipe's matched floor; planner-proposed runtime "
+                   "treatments remain observation-only")} if runtime_keep_grade else {"status": (
         "observation_only" if runtime_probe_enabled else "unavailable"),
         "reason": ("runtime calibration needs explicit prospective statistics and complete-launch budget; "
                    "runtime probes cannot select a recipe or keep") if runtime_probe_enabled else
@@ -2574,7 +2607,9 @@ def main(argv: list[str] | None = None) -> int:
             nonlocal runtime_enabled
             if hypothesis.runtime_pair is not None:
                 pair = hypothesis.runtime_pair
-                from . import runtime_calibration
+                from . import runtime_arms, runtime_calibration
+                if runtime_keep_grade and runtime_arms.is_declared(pair, runtime_arm_declaration):
+                    return keep_grade_runtime_compare(pair)
                 if runtime_enabled:
                     try:
                         def strict_compare():
@@ -2647,6 +2682,36 @@ def main(argv: list[str] | None = None) -> int:
         serving_floor_provenance = reading.provenance
         source_floor_refresh[0] = False
         runtime_preparation["source_comparison_floor"] = str(reading.path)
+
+    def keep_grade_runtime_compare(pair):
+        """A declared runtime arm at keep-grade evidence: the matched paired serving A/B
+        against the CURRENT recipe's own matched floor, same instrument, pairs and order
+        randomization as a source candidate's keep A/B; both arms run the anchor build."""
+        from . import runtime_arms
+        anchor_recipe = _cpu_arm(direct_launch, anchor_build[0])
+        if anchor_recipe.execution_digest != pair.anchor.execution_digest:
+            raise loop.TailRefused("declared runtime arm was built against a different anchor recipe")
+        ensure_source_floor(anchor_recipe, anchor_build[0])
+        if floor is None or not isinstance(floor_record, dict):
+            raise loop.TailRefused("keep-grade runtime arm needs the current recipe's matched "
+                                   "serving floor; none is calibrated")
+        comparison = _serving_comparison(lambda: serving.compare(
+            pair.anchor.template, anchor_build[0], anchor_build[0], pairs=args.serving_pairs,
+            floor_pct=floor, floor_unit=serving_floor_unit, port=pair.anchor.port,
+            anchor_resolved_recipe=pair.anchor, candidate_resolved_recipe=pair.candidate,
+            frozen_requests=frozen_requests, floor_request_digest=floor_request_digest,
+            runtime_pair=pair, runtime_evidence="keep_grade",
+            instrument=args.serving_instrument, floor_record=floor_record),
+            "experimental_runtime_treatment_not_source_champion",
+            measurement_window=cpu_measurement_window)
+        try:
+            runtime_arms.record_attempt(runtime_store.root, pair=pair.to_dict(),
+                                        comparison=comparison.row,
+                                        declaration=runtime_arm_declaration)
+        except Exception as exc:     # noqa: BLE001 -- the comparison stands; the arm re-serves
+            print(f"runtime   WARNING keep-grade attempt not recorded: {type(exc).__name__}: {exc}",
+                  file=sys.stderr)
+        return comparison
 
     def cpu_compare(a_build, c_build, *, rebind_feedback=True):
         anchor_recipe = _cpu_arm(direct_launch, a_build)
@@ -3061,7 +3126,7 @@ def main(argv: list[str] | None = None) -> int:
         # rather than at wherever the time went hours ago.
         reprofile()
         runtime_original_build = (runtime_owner[0].retained_build(runtime_recipe_reference[0])
-            if runtime_recipe_reference[0] is not None else None)
+            if runtime_recipe_reference[0] is not None and runtime_owner[0] is not None else None)
         cleanup = pool.prune_anchor_generations(
             args.store, current=anchor_build[0],
             protect=[cor_build[0]] + ([runtime_original_build] if runtime_original_build is not None else []))
@@ -3726,7 +3791,18 @@ def main(argv: list[str] | None = None) -> int:
                 nonlocal direct_launch, cpu_launch, serving_recipe
                 previous_recipe = feedback_anchor[0]
                 previous_floor = runtime_preparation.get("source_comparison_floor")
-                selected = runtime_owner[0].retain(comparison.row, feedback_anchor[0])
+                if runtime_keep_grade:
+                    from . import runtime_arms
+                    pair = hypothesis.runtime_pair
+                    if (not runtime_arms.is_declared(pair, runtime_arm_declaration)
+                            or comparison.row.get("admission") != "keep_grade_matched_serving_floor"
+                            or pair.anchor.execution_digest
+                            != _cpu_arm(direct_launch, anchor_build[0]).execution_digest):
+                        raise loop.TailRefused("runtime keep lacks keep-grade evidence for the "
+                                               "current recipe")
+                    selected = pair.candidate
+                else:
+                    selected = runtime_owner[0].retain(comparison.row, feedback_anchor[0])
                 direct_launch = selected
                 cpu_launch = selected if selected.backend == "cpu" else None
                 serving_recipe = selected.template
@@ -3735,9 +3811,20 @@ def main(argv: list[str] | None = None) -> int:
                 # A recipe keep neither transfers it nor promotes any source.
                 invalidate_source_floor()
                 runtime_preparation.update(status="selected_runtime_recipe",
-                    selected_recipe=comparison.row["runtime_admission"])
-                runtime_recipe_reference[0] = runtime_owner[0].selection_reference(
-                    selected, current_source_commit=current_anchor_commit[0])
+                    selected_recipe=comparison.row.get("runtime_admission"),
+                    evidence="keep_grade" if runtime_keep_grade else "strict")
+                if runtime_keep_grade:
+                    runtime_recipe_reference[0] = runtime_store.write(
+                        runtime_arms.KEEP_GRADE_SELECTION_NAMESPACE,
+                        runtime_arms.keep_grade_selection(
+                            adopted=selected, previous=previous_recipe,
+                            runtime_pair=pair.to_dict(), comparison=comparison.row,
+                            declaration=runtime_arm_declaration,
+                            current_source_commit=current_anchor_commit[0])).to_dict()
+                    runtime_preparation["selected_recipe"] = runtime_recipe_reference[0]
+                else:
+                    runtime_recipe_reference[0] = runtime_owner[0].selection_reference(
+                        selected, current_source_commit=current_anchor_commit[0])
                 record_runtime_adoption(previous_recipe, selected, comparison,
                                         hypothesis.runtime_pair, previous_floor)
                 report_runtime_progress()
@@ -3967,7 +4054,7 @@ def main(argv: list[str] | None = None) -> int:
                                                **_actor_thinking(args), **sandbox_seat))
             planner = (runtime_recovery.PendingPlanner(ordinary, pending_slot)
                        if pending_pair is not None else ordinary)
-            if runtime_arm_declaration is not None and runtime_enabled:
+            if runtime_arm_declaration is not None and (runtime_enabled or runtime_keep_grade):
                 from . import runtime_arms
 
                 def arm_event(row):
@@ -3984,8 +4071,9 @@ def main(argv: list[str] | None = None) -> int:
                 planner = runtime_arms.DeclaredArmPlanner(
                     planner, runtime_arm_declaration,
                     store_root=lambda: (runtime_store.root if runtime_store is not None
-                                        and runtime_enabled else None),
-                    on_event=arm_event)
+                                        and (runtime_enabled or runtime_keep_grade) else None),
+                    on_event=arm_event,
+                    evidence="keep_grade" if runtime_keep_grade else "strict")
             return planner
 
         def make_author_panel(worker):
@@ -4119,7 +4207,8 @@ def main(argv: list[str] | None = None) -> int:
                                    hashlib.sha256(json.dumps(runtime_statistical.to_dict(),
                                        sort_keys=True, separators=(",", ":")).encode()).hexdigest()),
                 declaration=runtime_arm_declaration, invalidated_floor=previous_floor,
-                accumulator=rebased)
+                accumulator=rebased,
+                evidence="keep_grade" if runtime_keep_grade else "strict")
             path = runtime_arms.write_adoption_receipt(args.store, body)
             runtime_adoptions.append({"receipt": str(path),
                                       "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
@@ -4338,6 +4427,27 @@ def main(argv: list[str] | None = None) -> int:
                       f"demonstrated advances only)")
             # Profiles the CURRENT anchor on the SAME surface the A/B will measure, and
             # is re-run whenever a keep advances the champion.
+            if runtime_keep_grade:
+                from .measurement_capture import ArtifactStore
+                from . import runtime_arms
+                runtime_store = ArtifactStore(args.store / "runtime-preparation")
+                ownership.callback(runtime_store.close)
+                if args.runtime_recipe_reference is not None:
+                    reference = _read_cpu_document(args.runtime_recipe_reference)
+                    selected = runtime_arms.restore_keep_grade_selection(
+                        runtime_store, reference, build=anchor_build[0], rebind=_cpu_arm)
+                    if runtime_arms.surface_digest(selected) != runtime_recipe_surface_digest:
+                        raise loop.RunAborted(
+                            "restored keep-grade runtime recipe surface differs from the epoch "
+                            "input derived before the claim")
+                    direct_launch = selected
+                    cpu_launch = selected if selected.backend == "cpu" else None
+                    serving_recipe = selected.template
+                    feedback_anchor[0] = selected
+                    invalidate_source_floor()
+                    runtime_recipe_reference[0] = reference
+                    runtime_preparation["selected_recipe"] = reference
+                report_runtime_progress()
             if runtime_enabled:
                 from .measurement_capture import ArtifactStore
                 runtime_store = ArtifactStore(args.store / "runtime-preparation")

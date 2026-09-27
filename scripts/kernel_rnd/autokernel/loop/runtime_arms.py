@@ -27,6 +27,13 @@ current runtime anchor. From there the unchanged path owns everything:
   solely when the anchor is measured ``bitwise_unstable``);
 * the keep -> ``RuntimeAdmission.retain`` -> recipe switch in ``run.commit_pooled``.
 
+Keep-grade evidence (``--runtime-arm-evidence keep_grade``, the default) instead
+measures a declared arm with the matched serving instrument against the current
+recipe's matched floor, exactly as a source candidate's keep A/B, and admits only
+declarations restricted to bit-exact arms. Its attempts are recorded in
+``runtime-arms-attempts.json`` and an adoption writes a keep-grade selection record
+the next batch restores (``restore_keep_grade_selection``).
+
 "Adopt the best one" is champion/challenger: every arm is a single-field delta
 applied to the CURRENT recipe. After an adoption the remaining arms become
 unsettled again (their anchor surface changed) and are compared against the
@@ -68,6 +75,17 @@ ADOPTION_SCHEMA = "epyc.autokernel.runtime_recipe_adoption.v1"
 LEDGER_SCHEMA = "epyc.autokernel.runtime_arm_ledger.v1"
 LEDGER_NAME = "runtime-arms-ledger.json"
 ADOPTION_DIR = "runtime-adoptions"
+ATTEMPTS_SCHEMA = "epyc.autokernel.runtime_arm_attempts.v1"
+ATTEMPTS_NAME = "runtime-arms-attempts.json"
+KEEP_GRADE_SELECTION_SCHEMA = "epyc.autokernel.keep_grade_runtime_selection.v1"
+KEEP_GRADE_SELECTION_NAMESPACE = "keep-grade-runtime-selection"
+STRICT_SELECTION_SCHEMA = "epyc.autokernel.direct_runtime_selection.v1"
+#: How a declared arm is judged. `keep_grade` (default): the same matched, order-
+#: randomized paired serving A/B a source candidate clears, against the current recipe's
+#: matched serving floor, bit-exact arms only. `strict`: the prospective runtime frame
+#: (`RuntimeAdmission`: A/A + neutral calibration, control panel, e-process selection and
+#: confirmation windows).
+EVIDENCE_MODES = ("keep_grade", "strict")
 KINDS = ("threads", "cpu_list", "numa_policy", "env")
 NUMERICS = ("bit_exact", "not_bit_exact")
 #: ``bit_exact_only`` refuses a declaration naming a non-bit-exact arm.
@@ -308,10 +326,19 @@ def _json(path: Path, limit: int) -> Any:
 
 
 def attempts(store_root: Path):
-    """Every (pair, finished) row the runtime-selection state files hold."""
+    """Every (pair, finished) row: strict runtime-selection state files and the
+    keep-grade attempt ledger."""
     root = Path(store_root)
     if not root.is_dir():
         return
+    ledger = root / ATTEMPTS_NAME
+    if ledger.exists():
+        body = _json(ledger, 4 * 1024 * 1024)
+        if body.get("schema") != ATTEMPTS_SCHEMA or not isinstance(body.get("attempts"), list):
+            raise ValueError("keep-grade runtime arm attempt ledger schema differs")
+        for row in body["attempts"]:
+            if isinstance(row.get("pair"), Mapping):
+                yield row["pair"], True
     for path in sorted(root.glob("runtime-selection-*.json")):
         state = _json(path, 128 * 1024)
         for row in state.get("attempts", ()):
@@ -347,6 +374,40 @@ def arm_state(store_root: Path, declaration: RuntimeArmDeclaration,
         state[arm.arm_id] = ("settled" if any(finished) else
                              "pending" if finished else "open")
     return state
+
+
+def record_attempt(store_root: Path, *, pair: Mapping[str, Any], comparison: Mapping[str, Any],
+                   declaration: "RuntimeArmDeclaration") -> None:
+    """A completed keep-grade comparison settles its arm for the anchor's surface."""
+    from . import status
+    path = Path(store_root) / ATTEMPTS_NAME
+    body = (_json(path, 4 * 1024 * 1024) if path.exists()
+            else {"schema": ATTEMPTS_SCHEMA, "attempts": []})
+    if body.get("schema") != ATTEMPTS_SCHEMA:
+        raise ValueError("keep-grade runtime arm attempt ledger schema differs")
+    body["attempts"].append({
+        "recorded_at": _now(), "pair": dict(pair), "declaration_sha256": declaration.digest(),
+        "anchor_surface_digest": surface_digest(pair["anchor"]),
+        "comparison": {key: comparison.get(key) for key in (
+            "effect", "effect_pct", "pairs", "decisive", "noise_floor_pct", "floor_sha256",
+            "anchor_samples", "candidate_samples", "admission")}})
+    status.write_json(path.parent, path.name, body, prefix=".runtime-arms-attempts-")
+
+
+def is_declared(pair: Any, declaration: "RuntimeArmDeclaration | None") -> bool:
+    """The pair IS one of the declared arms (mechanism id and exact treatment)."""
+    if declaration is None or pair is None:
+        return False
+    dimension = pair.dimension
+    for arm in declaration.arms:
+        if dimension.dimension_id != arm.mechanism_id or dimension.kind != arm.kind:
+            continue
+        candidate = dimension.candidate
+        if arm.kind == "env":
+            candidate = {"key": candidate["key"], "value": candidate["value"]}
+        if candidate == arm.candidate:
+            return True
+    return False
 
 
 class Ledger:
@@ -386,9 +447,13 @@ class DeclaredArmPlanner:
 
     def __init__(self, ordinary, declaration: RuntimeArmDeclaration, *,
                  store_root: Callable[[], Path | None],
-                 on_event: Callable[[dict], None] | None = None):
+                 on_event: Callable[[dict], None] | None = None,
+                 evidence: str = "strict"):
+        if evidence not in EVIDENCE_MODES:
+            raise ArmDeclarationRefused(f"runtime arm evidence must be one of {EVIDENCE_MODES}")
         self.ordinary = ordinary
         self.declaration = declaration
+        self.evidence = evidence
         self._store_root = store_root
         self._on_event = on_event
         self._lock = threading.Lock()
@@ -408,7 +473,11 @@ class DeclaredArmPlanner:
     def next_arm(self, context: Mapping[str, Any]):
         """The Hypothesis for the next arm, or None to defer to the planner."""
         anchor = context.get("runtime_anchor")
-        if anchor is None or context.get("runtime_observation_only", True):
+        if anchor is None:
+            return None
+        # Planner-proposed runtime treatments stay observation-only under keep-grade
+        # evidence; only the DECLARED arms carry keep-grade authority.
+        if self.evidence == "strict" and context.get("runtime_observation_only", True):
             return None
         root = self._store_root()
         if root is None:
@@ -460,7 +529,23 @@ class DeclaredArmPlanner:
 
 # ------------------------------------------------------------------ selection epoch
 
-def selection_current_recipe(store_root: Path, reference: Mapping[str, Any]) -> dict[str, Any]:
+def keep_grade_selection(*, adopted: Any, previous: Any, runtime_pair: Mapping[str, Any],
+                         comparison: Mapping[str, Any], declaration: RuntimeArmDeclaration,
+                         current_source_commit: str) -> dict[str, Any]:
+    """The retained keep-grade selection the next batch restores."""
+    return {"schema": KEEP_GRADE_SELECTION_SCHEMA, "evidence": "keep_grade",
+            "current_recipe": dict(_recipe_dict(adopted)),
+            "previous_recipe_surface_digest": surface_digest(previous),
+            "adopted_surface_digest": surface_digest(adopted),
+            "runtime_pair": dict(runtime_pair), "declaration_sha256": declaration.digest(),
+            "comparison": {key: comparison.get(key) for key in (
+                "effect", "effect_pct", "pairs", "decisive", "noise_floor_pct", "floor_sha256",
+                "request_digest", "anchor_samples", "candidate_samples", "admission")},
+            "current_source_commit": current_source_commit}
+
+
+def selection_current_recipe(store_root: Path, reference: Mapping[str, Any], *,
+                             evidence: str | None = None) -> dict[str, Any]:
     """Read a retained runtime selection's current recipe BEFORE any claim.
 
     The same bytes `runtime_admission.restore_selection` later reopens and
@@ -478,10 +563,45 @@ def selection_current_recipe(store_root: Path, reference: Mapping[str, Any]) -> 
         body = _plain(store.read(reference["locator"], reference["sha256"]))
     finally:
         store.close()
-    if body.get("schema") != "epyc.autokernel.direct_runtime_selection.v1" \
-            or not isinstance(body.get("current_recipe"), Mapping):
-        raise ArmDeclarationRefused("runtime recipe reference is not a runtime selection")
+    schemas = {"keep_grade": {KEEP_GRADE_SELECTION_SCHEMA}, "strict": {STRICT_SELECTION_SCHEMA},
+               None: {KEEP_GRADE_SELECTION_SCHEMA, STRICT_SELECTION_SCHEMA}}[evidence]
+    if body.get("schema") not in schemas or not isinstance(body.get("current_recipe"), Mapping):
+        raise ArmDeclarationRefused(
+            "runtime recipe reference is not a runtime selection"
+            + (f" of {evidence} evidence" if evidence else ""))
     return dict(body["current_recipe"])
+
+
+def restore_keep_grade_selection(store, reference: Mapping[str, Any], *, build: Path,
+                                 rebind: Callable[[Any, Path], Any]):
+    """Reopen a retained keep-grade selection and rebind it to the current anchor build.
+
+    The selection names the adopted recipe (captured on the build it was measured on);
+    a later source keep moved the build, never the runtime surface. The rebound recipe
+    must keep that exact surface and template, or the restore refuses."""
+    from .observation_binding import _plain
+    from .resolved_recipe import CanonicalResolvedRecipe
+    if not isinstance(reference, Mapping) or not {"locator", "sha256"} <= set(reference):
+        raise ArmDeclarationRefused("keep-grade runtime selection reference shape is invalid")
+    body = _plain(store.read(reference["locator"], reference["sha256"]))
+    if body.get("schema") != KEEP_GRADE_SELECTION_SCHEMA or body.get("evidence") != "keep_grade":
+        raise ArmDeclarationRefused("runtime recipe reference is not a keep-grade selection")
+    try:
+        verified = store.verify(KEEP_GRADE_SELECTION_NAMESPACE, body)
+    except Exception as exc:
+        raise ArmDeclarationRefused(f"keep-grade runtime selection namespace differs: {exc}") from exc
+    if (verified.locator, verified.sha256) != (reference["locator"], reference["sha256"]):
+        raise ArmDeclarationRefused("keep-grade runtime selection namespace differs")
+    adopted = CanonicalResolvedRecipe.from_dict(body["current_recipe"])
+    if surface_digest(adopted) != body["adopted_surface_digest"]:
+        raise ArmDeclarationRefused("keep-grade selection surface differs from its own record")
+    current = (adopted if Path(adopted.build_dir).resolve() == Path(build).resolve()
+               else rebind(adopted, Path(build)))
+    if surface_digest(current) != body["adopted_surface_digest"] \
+            or current.template.to_dict() != adopted.template.to_dict():
+        raise ArmDeclarationRefused("keep-grade selection does not rebind to the current build "
+                                    "with its runtime surface unchanged")
+    return current
 
 
 # ------------------------------------------------------------------ adoption receipt
@@ -492,7 +612,7 @@ def adoption_receipt(*, campaign_id: str, previous: Any, adopted: Any, admission
                      anchor_commit: str, statistics_sha256: str | None,
                      declaration: RuntimeArmDeclaration | None,
                      invalidated_floor: Any, accumulator: Mapping[str, Any] | None,
-                     adopted_at: str | None = None) -> dict[str, Any]:
+                     adopted_at: str | None = None, evidence: str = "strict") -> dict[str, Any]:
     before, after = runtime_surface(previous), runtime_surface(adopted)
     mechanism = ((runtime_pair or {}).get("dimension") or {}).get("dimension_id")
     arm = None
@@ -503,10 +623,16 @@ def adoption_receipt(*, campaign_id: str, previous: Any, adopted: Any, admission
     return {
         "schema": ADOPTION_SCHEMA, "campaign_id": campaign_id,
         "adopted_at": adopted_at or _now(),
-        "authority": ("loop runtime-recipe adoption under the strict runtime admission "
-                      "(calibrated paired selection + confirmation, measured control panel, "
-                      "evaluator correctness/coherence gates); experimental execution recipe "
-                      "only, never a production, registry or serving-lineup change"),
+        "evidence": evidence,
+        "authority": (("loop runtime-recipe adoption at keep-grade evidence (declared bit-exact "
+                       "arm; matched, order-randomized paired serving A/B that cleared the current "
+                       "recipe's matched serving floor; op correctness on the candidate recipe)"
+                       if evidence == "keep_grade" else
+                       "loop runtime-recipe adoption under the strict runtime admission "
+                       "(calibrated paired selection + confirmation, measured control panel, "
+                       "evaluator correctness/coherence gates)")
+                      + "; experimental execution recipe only, never a production, registry or "
+                        "serving-lineup change"),
         "previous_recipe": {"execution_digest": _recipe_dict(previous).get("execution_digest"),
                             "runtime_surface_digest": _digest(before)},
         "adopted_recipe": {"execution_digest": _recipe_dict(adopted).get("execution_digest"),
@@ -518,7 +644,8 @@ def adoption_receipt(*, campaign_id: str, previous: Any, adopted: Any, admission
         "admission": admission, "selection_reference": selection_reference,
         "statistics_sha256": statistics_sha256,
         "comparison": {key: comparison.get(key) for key in (
-            "effect", "pairs", "decisive", "noise_floor_pct", "runtime_status", "qualified")},
+            "effect", "pairs", "decisive", "noise_floor_pct", "floor_sha256", "admission",
+            "anchor_samples", "candidate_samples", "runtime_status", "qualified")},
         "measured_under": {"epoch": epoch, "measurement_epoch": measurement_epoch,
                            "anchor_commit": anchor_commit},
         "epoch_transition": {
@@ -546,7 +673,9 @@ def write_adoption_receipt(store_root: Path, body: Mapping[str, Any]) -> Path:
     return Path(store_root) / ADOPTION_DIR / name
 
 
-__all__ = ["ADOPTION_SCHEMA", "ArmDeclarationRefused", "DeclaredArmPlanner", "Ledger",
+__all__ = ["ADOPTION_SCHEMA", "ArmDeclarationRefused", "DeclaredArmPlanner", "EVIDENCE_MODES",
+           "KEEP_GRADE_SELECTION_SCHEMA", "Ledger", "is_declared", "keep_grade_selection",
+           "record_attempt", "restore_keep_grade_selection",
            "RuntimeArm", "RuntimeArmDeclaration", "SCHEMA", "adoption_receipt", "arm_state",
            "load", "runtime_surface", "selection_current_recipe", "surface_digest",
            "write_adoption_receipt"]

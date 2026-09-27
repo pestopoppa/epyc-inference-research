@@ -1377,7 +1377,7 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
             anchor_resolved_recipe=None, candidate_resolved_recipe=None,
             frozen_requests=None, floor_request_digest: str | None = None,
             runtime_pair=None, instrument=LEGACY_INSTRUMENT, floor_record=None,
-            floor_unit: str | None = None) -> dict:
+            floor_unit: str | None = None, runtime_evidence: str | None = None) -> dict:
     """Paired, alternating serving A/B: anchor vs candidate, `pairs` times, each pair a
     fresh server per side (drift control). Effect = median(candidate)/median(anchor) - 1.
     `decisive` is None when uncalibrated (no floor), so the keep gate fails closed.
@@ -1385,9 +1385,23 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
     `floor_unit` is the unit of the bar in `floor_pct` and is REQUIRED whenever a bar is
     given (R23-55): the effect here is `process`-unit by construction, and a floor
     measured in another unit -- or one that cannot say -- is refused, never rescaled.
+
+    `runtime_evidence="keep_grade"` is the ONE way a runtime pair may be judged against a
+    floor: a DECLARED runtime arm (`runtime_arms`), measured with the matched instrument
+    against the CURRENT recipe's own matched serving floor -- the same keep-grade A/B a
+    source candidate clears. The floor is validated against the anchor arm (its recipe,
+    requests and placement/environment frame); the candidate arm may differ from it only
+    by the pair's single registered runtime dimension (`RuntimeArmPair.validate`).
     """
     matched = _instrument(instrument, pairs)
-    if matched and runtime_pair is not None:
+    keep_grade = runtime_evidence == "keep_grade"
+    if runtime_evidence not in (None, "keep_grade"):
+        raise RecipeError("unknown runtime evidence mode")
+    if keep_grade and (runtime_pair is None or not matched or floor_pct is None
+                       or not isinstance(floor_record, dict)):
+        raise ServingFloorMismatch("keep-grade runtime evidence needs a runtime pair, the matched "
+                                   "instrument and the current recipe's matched floor record")
+    if matched and runtime_pair is not None and not keep_grade:
         raise ServingFloorMismatch("matched source floor cannot qualify a runtime treatment")
     candidate_recipe = recipe
     if runtime_pair is not None:
@@ -1399,7 +1413,7 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
                 or runtime_pair.anchor.to_dict() != anchor_resolved_recipe.to_dict() \
                 or runtime_pair.candidate.to_dict() != candidate_resolved_recipe.to_dict():
             raise RecipeError("runtime comparison differs from its original serving arm pair")
-        if floor_pct is not None or floor_request_digest is not None:
+        if (floor_pct is not None or floor_request_digest is not None) and not keep_grade:
             raise ServingFloorMismatch("runtime treatment needs original strict frame admission, not a source floor")
         candidate_recipe = runtime_pair.candidate.template
     # The bar's UNIT, checked after the frame refusals above (a runtime treatment may not
@@ -1430,7 +1444,16 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
     measurement_plan = _matched_plan(pairs) if matched else None
     if matched:
         frame = _matched_frame(recipe, anchor_resolved_recipe, frozen_requests)
-        if frame != _matched_frame(candidate_recipe, candidate_resolved_recipe, frozen_requests):
+        other = _matched_frame(candidate_recipe, candidate_resolved_recipe, frozen_requests)
+        if keep_grade:
+            # The runtime dimension legitimately moves the recipe hash, environment or
+            # topology; everything else in the frame (requests, backend, model, drafter)
+            # must still match. RuntimeArmPair.validate proved the sole difference.
+            runtime_fields = ("recipe_hash", "environment", "topology_prefix")
+            frame_rest = {k: v for k, v in frame.items() if k not in runtime_fields}
+            if frame_rest != {k: v for k, v in other.items() if k not in runtime_fields}:
+                raise ServingFloorMismatch("keep-grade runtime arms differ beyond their runtime dimension")
+        elif frame != other:
             raise ServingFloorMismatch("matched source arms differ beyond their source/build treatment")
         if floor_pct is not None:
             if not isinstance(floor_record, dict):
@@ -1573,7 +1596,8 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
             out.update(schema="epyc.autokernel.serving_runtime_ab.v1",
                        runtime_pair=runtime_pair.to_dict(),
                        candidate_recipe_hash=candidate_recipe.recipe_hash,
-                       admission="observation_only_original_strict_evidence_unavailable")
+                       admission=("keep_grade_matched_serving_floor" if keep_grade else
+                                  "observation_only_original_strict_evidence_unavailable"))
         if invalid_history:
             out["rescheduled_invalid_arms"] = list(invalid_history)
         if belief_inputs is not None:

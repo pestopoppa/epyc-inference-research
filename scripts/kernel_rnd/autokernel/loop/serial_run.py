@@ -280,7 +280,8 @@ def input_binding(argv) -> dict:
 #: arm is settled per runtime surface from the owner's own attempt records. The
 #: execution documents (launch, requests, campaign) remain bound.
 RUNTIME_PROTOCOL_FLAGS = frozenset({"--runtime-statistics", "--runtime-calibration-max-launches",
-                                    "--runtime-arms", "--runtime-control-escalation",
+                                    "--runtime-arms", "--runtime-arm-evidence",
+                                    "--runtime-control-escalation",
                                     "--runtime-nominal-khz"})
 RUNTIME_PROTOCOL_SWITCHES = frozenset({"--calibrate-runtime"})
 
