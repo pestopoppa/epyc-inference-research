@@ -1,0 +1,61 @@
+{
+ "object_digest": {
+  "j1-anchor-gen-002": "85e39de65e11e4171274a0f67b644d4649be5debcea4278b8807ab41d8b08022",
+  "j64-a": "85e39de65e11e4171274a0f67b644d4649be5debcea4278b8807ab41d8b08022",
+  "j64-b": "85e39de65e11e4171274a0f67b644d4649be5debcea4278b8807ab41d8b08022"
+ },
+ "object_diff": {
+  "j64-a__vs__j64-b": {
+   "n_objects": 300,
+   "n_differing": 1,
+   "objects_differing": [
+    "tools/ui/CMakeFiles/llama-ui.dir/ui.cpp.o"
+   ],
+   "only_in_anchor": [],
+   "only_in_scratch": [],
+   "linker_only": false
+  },
+  "j1-anchor-gen-002__vs__j64-a": {
+   "n_objects": 300,
+   "n_differing": 1,
+   "objects_differing": [
+    "tools/ui/CMakeFiles/llama-ui.dir/ui.cpp.o"
+   ],
+   "only_in_anchor": [],
+   "only_in_scratch": [],
+   "linker_only": false
+  },
+  "j1-anchor-gen-002__vs__j64-b": {
+   "n_objects": 300,
+   "n_differing": 1,
+   "objects_differing": [
+    "tools/ui/CMakeFiles/llama-ui.dir/ui.cpp.o"
+   ],
+   "only_in_anchor": [],
+   "only_in_scratch": [],
+   "linker_only": false
+  }
+ },
+ "code_digest": {
+  "libggml-cpu.so": {
+   "j1-anchor-gen-002": "001eca62350f5093dcc96d2e79d3499d5a7e17acaf78e156f820070656f5d744",
+   "j64-a": "001eca62350f5093dcc96d2e79d3499d5a7e17acaf78e156f820070656f5d744",
+   "j64-b": "001eca62350f5093dcc96d2e79d3499d5a7e17acaf78e156f820070656f5d744"
+  },
+  "libggml-base.so": {
+   "j1-anchor-gen-002": "4d101c9cc3776855cf05a2a371575e53222d60817921e5b8d4b857ed8148cf95",
+   "j64-a": "4d101c9cc3776855cf05a2a371575e53222d60817921e5b8d4b857ed8148cf95",
+   "j64-b": "4d101c9cc3776855cf05a2a371575e53222d60817921e5b8d4b857ed8148cf95"
+  },
+  "libggml.so": {
+   "j1-anchor-gen-002": "046670d4c92baf288b92575ea7cb48179f45f0e158b9e40435a0147ea764bebb",
+   "j64-a": "046670d4c92baf288b92575ea7cb48179f45f0e158b9e40435a0147ea764bebb",
+   "j64-b": "046670d4c92baf288b92575ea7cb48179f45f0e158b9e40435a0147ea764bebb"
+  },
+  "libllama.so": {
+   "j1-anchor-gen-002": "beca30880ce93124cebeaa10a965dbde90cb406a44d98780bd41be91332febe6",
+   "j64-a": "beca30880ce93124cebeaa10a965dbde90cb406a44d98780bd41be91332febe6",
+   "j64-b": "beca30880ce93124cebeaa10a965dbde90cb406a44d98780bd41be91332febe6"
+  }
+ }
+}

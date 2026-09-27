@@ -1,0 +1,11 @@
+[region-lock] acquiring regions ['q0', 'q1', 'q2', 'q3'] as role='bench' (timeout_s=0.0) …
+[region-lock] held ['q0', 'q1', 'q2', 'q3'] after 274.8s wait; running: /mnt/raid0/llm/tmp/c46-repro/build.sh
+[10:35:54] window at start: open 3299
+[10:35:54] configure /mnt/raid0/llm/tmp/c46-repro/j64-a
+[10:35:59] build /mnt/raid0/llm/tmp/c46-repro/j64-a -j64
+[10:37:44] build a done in 105s
+[10:37:44] configure /mnt/raid0/llm/tmp/c46-repro/j64-b
+[10:37:49] build /mnt/raid0/llm/tmp/c46-repro/j64-b -j64
+[10:39:34] build b done in 105s
+[10:39:34] ALL DONE
+exit=0
