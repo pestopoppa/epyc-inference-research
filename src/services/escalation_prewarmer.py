@@ -10,6 +10,15 @@ escalation that hits the pre-warmed slot.
 
 Risk: Medium. Pre-warm occupies a slot. We check /slots before pre-warming
 to avoid evicting hot slots.
+
+CPU region claim (ARCHSWAP 2026-09-27, item A-3): a prewarm whose target is a
+CPU-resident server takes the SAME ``cpu_region_lock`` claim the normal call
+path takes for that instance (``src.runtime.direct_region_claim``), with one
+non-blocking attempt. A contended or failed claim SKIPS the prewarm (counted in
+``get_stats()["prewarm_skipped_region_claim"]``); it never waits, and it never
+fails the request. GPU targets own no CPU regions and take no claim. The legacy
+global ``inference_lock`` is never used here: its timeout erases the holder's
+slots.
 """
 
 from __future__ import annotations
@@ -126,6 +135,11 @@ def __getattr__(name: str) -> Any:
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
+#: One non-blocking claim attempt: every stage of ``cpu_region_lock`` tries once and
+#: raises on the first miss (``timeout_s <= 0`` would mean "block forever").
+PREWARM_CLAIM_TIMEOUT_S = 1e-6
+
+
 class EscalationPrewarmer:
     """Speculatively pre-warms architect KV cache for complex tasks.
 
@@ -146,6 +160,8 @@ class EscalationPrewarmer:
         self._prewarm_hits = 0  # Incremented externally when prewarm slot is used
         self._prewarm_by_port: dict[int, int] = {}
         self._prewarm_hits_by_role: dict[str, int] = {}
+        self._prewarm_region_claimed = 0
+        self._prewarm_skipped_region_claim = 0
         self._lock = threading.Lock()
 
     async def prewarm_if_complex(
@@ -167,8 +183,9 @@ class EscalationPrewarmer:
         if complexity_level not in ("COMPLEX",):
             return False
 
+        role = "architect_general"
         port = target_port or architect_port_for_role(
-            "architect_general",
+            role,
             self._stack_priors_path,
         )
 
@@ -178,8 +195,34 @@ class EscalationPrewarmer:
             logger.debug("Pre-warm skipped: no idle slot on port %d", port)
             return False
 
-        # Send non-blocking prefill request
-        return await self._send_prewarm(port, objective)
+        # A CPU-resident target is claimed like any other call to it (A-3); a GPU
+        # target owns no CPU regions and is sent unchanged.
+        try:
+            from src.runtime.direct_region_claim import region_claim, resolve_claim_target
+
+            target = resolve_claim_target(role, port=port)
+            if target is None:
+                return await self._send_prewarm(port, objective)
+            claim = region_claim(
+                target,
+                timeout_s=PREWARM_CLAIM_TIMEOUT_S,
+                request_tag="architect_prewarm",
+            )
+            claim.__enter__()
+        except Exception as exc:  # noqa: BLE001 -- contended (CpuRegionLockTimeout) or unresolvable
+            with self._lock:
+                self._prewarm_skipped_region_claim += 1
+            logger.debug(
+                "Pre-warm skipped: CPU region claim not available on port %d: %s", port, exc
+            )
+            return False
+        with self._lock:
+            self._prewarm_region_claimed += 1
+        try:
+            # Send non-blocking prefill request
+            return await self._send_prewarm(port, objective)
+        finally:
+            claim.__exit__(None, None, None)
 
     async def _check_slot_available(self, port: int) -> bool:
         """Check /slots endpoint for an idle slot."""
@@ -264,11 +307,15 @@ class EscalationPrewarmer:
             prewarm_hits = self._prewarm_hits
             prewarm_by_port = dict(self._prewarm_by_port)
             prewarm_hits_by_role = dict(self._prewarm_hits_by_role)
+            prewarm_region_claimed = self._prewarm_region_claimed
+            prewarm_skipped_region_claim = self._prewarm_skipped_region_claim
         return {
             "prewarm_count": prewarm_count,
             "prewarm_hits": prewarm_hits,
             "prewarm_by_port": prewarm_by_port,
             "prewarm_hits_by_role": prewarm_hits_by_role,
+            "prewarm_region_claimed": prewarm_region_claimed,
+            "prewarm_skipped_region_claim": prewarm_skipped_region_claim,
             "hit_rate": (
                 prewarm_hits / prewarm_count
                 if prewarm_count > 0

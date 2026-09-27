@@ -49,6 +49,18 @@ gives ``free = slots - processing``; at most ``free - reserve_slots`` scouts run
 ``reserve_slots >= 1`` always leaves a slot for the planner and for other traffic. Unknown
 occupancy runs no scouts. The scouts are visible to every other reader of ``/slots``.
 
+CPU region claim (ARCHSWAP 2026-09-27, item A-3): bypassing ``LLMPrimitives`` must not
+mean bypassing the CPU region lock. When the scouts' target server is CPU-resident, the
+stage takes the SAME exclusive ``cpu_region_lock`` claim the normal call path takes for
+that instance (``src.runtime.direct_region_claim``) ONCE for the whole stage, not per model
+call, and runs the scouts concurrently inside it: same-server scout concurrency is kept,
+and every outside contender (AutoKernel CPU windows, other orchestrator calls on those
+cores) is excluded while they run. The claim waits like a normal call does (request
+deadline, plus the stage's stop flag: budget, disconnect); if it cannot be had, the
+scouts get status ``error`` and the planner still runs. A target with no CPU regions (a
+GPU server) takes no claim. One stage has one ``url``, so there is exactly one instance
+to claim. ``report["region_claim"]`` records what was claimed and how long it waited.
+
 Lifecycle and quiescence
 ------------------------
 The stage is awaited inside ``_handle_chat``; every scout finishes, times out or is
@@ -819,7 +831,7 @@ async def run_scouts(
         "launched": 0, "completed": 0, "failed": 0, "skipped": 0,
         "max_concurrency": 0, "max_inflight_calls": 0, "wall_s": 0.0, "cap": None, "budget_s": None,
         "block_chars": 0, "block_sha256": None, "prompt_tokens": 0, "completion_tokens": 0,
-        "turns": 0, "scouts": [], "error": None,
+        "turns": 0, "scouts": [], "error": None, "region_claim": None,
     }
     wanted = targets[:config.max_scouts]
     results = [ScoutResult(index=i, target=t) for i, t in enumerate(wanted)]
@@ -862,6 +874,49 @@ async def run_scouts(
 
     reader.should_stop = should_stop
 
+    # A-3: claim a CPU-resident target's regions once for the whole stage (GPU: no claim).
+    claim_report: dict[str, Any] = {"target": None, "status": "none", "wait_s": None,
+                                    "error": None, "released": False}
+    report["region_claim"] = claim_report
+    claim = None
+    try:
+        from src.runtime.direct_region_claim import region_claim, resolve_claim_target
+
+        claim_target = resolve_claim_target(role, url or "")
+        if claim_target is not None:
+            claim_report["target"] = claim_target.as_dict()
+            claim = region_claim(claim_target, deadline_s=request_deadline_s,
+                                 cancel_check=should_stop, request_tag=f"scouts:{role}")
+    except Exception as exc:  # noqa: BLE001 -- an unresolvable claim fails closed
+        claim_report.update(status="error", error=f"{type(exc).__name__}: {exc}"[:500])
+    if claim is not None:
+        claim_started = clock()
+        acquire = asyncio.ensure_future(asyncio.to_thread(claim.__enter__))
+        try:
+            await asyncio.shield(acquire)
+        except asyncio.CancelledError:
+            # The request was cancelled mid-wait: stop the acquire (it polls should_stop)
+            # and release the claim if it landed anyway, so no lock outlives the handler.
+            stop.set()
+            await asyncio.wait([acquire])
+            if not acquire.cancelled() and acquire.exception() is None:
+                claim.__exit__(None, None, None)
+            raise
+        except Exception as exc:  # noqa: BLE001 -- CpuRegionLockTimeout: contended/cancelled
+            claim_report.update(status="timeout" if "Timeout" in type(exc).__name__ else "error",
+                                error=f"{type(exc).__name__}: {exc}"[:500],
+                                wait_s=round(clock() - claim_started, 3))
+            claim = None
+        else:
+            claim_report.update(status="held", wait_s=round(clock() - claim_started, 3))
+    if claim_report["status"] in ("timeout", "error"):
+        log.info("scouts: CPU region claim for role %s not acquired (%s); %d scout(s) not run",
+                 role, claim_report["error"], n_run)
+        for r in results[:n_run]:
+            r.status, r.error = "error", f"region claim {claim_report['status']}: {claim_report['error']}"[:500]
+        stop.set()
+        return _finish(report, results, t0, clock, "", role, cap["cap"])
+
     active = 0
     peak = 0
     inflight = 0
@@ -899,27 +954,33 @@ async def run_scouts(
             with lock:
                 active -= 1
 
-    tasks = [asyncio.ensure_future(asyncio.to_thread(_one, i)) for i in range(n_run)]
     try:
-        # The threads watch the deadline and the cancel flag themselves; this wait only
-        # bounds a thread stuck in a blocking read (connect/read timeouts bound those).
-        done, pending = await asyncio.wait(tasks, timeout=budget + CONNECT_TIMEOUT_S + 5.0)
-        if pending:
+        tasks = [asyncio.ensure_future(asyncio.to_thread(_one, i)) for i in range(n_run)]
+        try:
+            # The threads watch the deadline and the cancel flag themselves; this wait only
+            # bounds a thread stuck in a blocking read (connect/read timeouts bound those).
+            done, pending = await asyncio.wait(tasks, timeout=budget + CONNECT_TIMEOUT_S + 5.0)
+            if pending:
+                stop.set()
+                # Bounded: a thread stuck in a blocking read is logged and abandoned rather
+                # than holding the request open indefinitely (its read timeout still ends it).
+                _, still = await asyncio.wait(pending, timeout=ABANDON_WAIT_S)
+                if still:
+                    log.warning("scouts: %d scout thread(s) did not return %.0fs after stop; "
+                                "abandoning them", len(still), ABANDON_WAIT_S)
+        except asyncio.CancelledError:
+            # The request itself was cancelled: stop the scouts and still wait for every
+            # thread to return before propagating, so no decode continues after the handler
+            # unwinds.
             stop.set()
-            # Bounded: a thread stuck in a blocking read is logged and abandoned rather than
-            # holding the request open indefinitely (its read timeout still ends it).
-            _, still = await asyncio.wait(pending, timeout=ABANDON_WAIT_S)
-            if still:
-                log.warning("scouts: %d scout thread(s) did not return %.0fs after stop; "
-                            "abandoning them", len(still), ABANDON_WAIT_S)
-    except asyncio.CancelledError:
-        # The request itself was cancelled: stop the scouts and still wait for every thread
-        # to return before propagating, so no decode continues after the handler unwinds.
-        stop.set()
-        await asyncio.gather(*tasks, return_exceptions=True)
-        raise
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
+        finally:
+            stop.set()
     finally:
-        stop.set()
+        if claim is not None:
+            claim.__exit__(None, None, None)
+            claim_report["released"] = True
     for i, task in enumerate(tasks):
         if not task.done():
             results[i].status, results[i].error = "timeout", "scout thread abandoned after stop"
