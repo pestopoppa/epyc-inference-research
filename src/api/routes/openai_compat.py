@@ -31,6 +31,11 @@ from src.api.models import (
     OpenAIUsage,
 )
 from src.api.routes.chat_pipeline.routing_decision import normalize_ingress_role
+from src.api.routes.v1_subagent_link import (
+    SubagentLink,
+    log_subagent_link,
+    resolve_subagent_link,
+)
 from src.api.state import AppState
 from src.autopilot_core.measurement_guards import inband_error_text
 from src.prompt_builders import (
@@ -404,7 +409,7 @@ def _request_keys(request: OpenAIChatRequest) -> dict[str, str]:
     }
 
 
-def _apply_request_key_metadata(meta: dict[str, Any], request_keys: dict[str, str]) -> dict[str, Any]:
+def _apply_request_key_metadata(meta: dict[str, Any], request_keys: dict[str, Any]) -> dict[str, Any]:
     """Echo the typed keys. Absent keys leave ``meta`` untouched (golden-pinned)."""
     if request_keys:
         meta["request_keys"] = dict(request_keys)
@@ -431,13 +436,23 @@ def _session_guard_trigger(request: OpenAIChatRequest, user_agent: str) -> str |
     return None
 
 
-def _enforce_client_session_guard(request: OpenAIChatRequest, http_request: Request) -> None:
+def _enforce_client_session_guard(
+    request: OpenAIChatRequest,
+    http_request: Request,
+    subagent_link: SubagentLink | None = None,
+) -> None:
     """HS-4 P0.2 guard (flag ``v1_client_session_guard``).
 
     OpenCode only LOGS a plugin that fails to load, and ``OPENCODE_PURE``
     skips plugins entirely; the session-stamping plugin is what sends
     ``x_session_id``. Refusing here turns a silently missing plugin into a
     visible 422 instead of an unkeyed session.
+
+    HS-16 (only when ``subagent_link`` is given, i.e. flag ``v1_subagent_link``
+    is on): a header-resolved session id satisfies the guard for every trigger
+    EXCEPT an OpenCode user-agent. A header gives identity, not
+    ``x_tool_mode``, so a plugin-less OpenCode turn keeps its 422 rather than
+    silently falling into REPL-bridge mode.
     """
     if request.x_session_id is not None:
         return
@@ -445,8 +460,15 @@ def _enforce_client_session_guard(request: OpenAIChatRequest, http_request: Requ
 
     if not getattr(_features(), "v1_client_session_guard", False):
         return
-    trigger = _session_guard_trigger(request, http_request.headers.get("user-agent", ""))
+    user_agent = http_request.headers.get("user-agent", "")
+    trigger = _session_guard_trigger(request, user_agent)
     if trigger is None:
+        return
+    if (
+        subagent_link is not None
+        and subagent_link.session_id is not None
+        and _OPENCODE_USER_AGENT_MARKER not in user_agent.lower()
+    ):
         return
     raise HTTPException(
         status_code=422,
@@ -455,6 +477,26 @@ def _enforce_client_session_guard(request: OpenAIChatRequest, http_request: Requ
             "(is the epyc-orchestrator session plugin loaded?). "
             "Disable with ORCHESTRATOR_V1_CLIENT_SESSION_GUARD=0."
         ),
+    )
+
+
+def _resolve_subagent_link(
+    request: OpenAIChatRequest, http_request: Request
+) -> SubagentLink | None:
+    """HS-19a stage 1 (flag ``v1_subagent_link``): resolve the parent link.
+
+    Returns None with the flag off, so the route is byte-identical to before.
+    Raises 422 for malformed or spoofed ids (see ``v1_subagent_link``).
+    """
+    from src.features import features as _features
+
+    if not getattr(_features(), "v1_subagent_link", False):
+        return None
+    return resolve_subagent_link(
+        body_session_id=request.x_session_id,
+        body_parent_session_id=request.x_parent_session_id,
+        body_agent_name=request.x_agent_name,
+        headers=http_request.headers,
     )
 
 
@@ -940,9 +982,13 @@ async def openai_chat_completions(
 
     # HS-4 P0.2 typed keys; HS-4 P0.1 client-executed tool mode. Routing above
     # is shared: client mode changes WHO executes tools, never which role runs.
-    request_keys = _request_keys(request)
+    request_keys: dict[str, Any] = _request_keys(request)
     client_mode = request.x_tool_mode == "client"
-    _enforce_client_session_guard(request, http_request)
+    # HS-19a stage 1: record-only parent link (None while the flag is off).
+    subagent_link = _resolve_subagent_link(request, http_request)
+    if subagent_link is not None:
+        request_keys = subagent_link.request_keys(request_keys)
+    _enforce_client_session_guard(request, http_request, subagent_link)
     client_messages: list[dict[str, Any]] = []
     if client_mode:
         if prompt_parts.image_base64:
@@ -957,6 +1003,13 @@ async def openai_chat_completions(
 
     chat_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
     created = int(time.time())
+    if subagent_link is not None:
+        log_subagent_link(
+            getattr(state, "progress_logger", None),
+            subagent_link,
+            chat_id=chat_id,
+            user_id=request.x_user_id,
+        )
 
     # Determine if we should use real inference
     # Real mode requires: registry loaded AND mock_mode disabled via env

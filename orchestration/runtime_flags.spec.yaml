@@ -128,6 +128,7 @@ flags:
   ure_uncertainty_shadow_log: baseline
   user_modeling: baseline
   v1_client_session_guard: baseline
+  v1_subagent_link: baseline
   web_research_rerank: baseline
   worker_call_budget: baseline
 

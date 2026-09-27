@@ -236,6 +236,26 @@ class OpenAIChatRequest(BaseModel):
         "image input is refused (400), and x_session_id may be required (422, "
         "v1_client_session_guard flag). Neither mode escalates.",
     )
+    # HS-19a stage 1 — harness subagent tree. Typed Any on purpose: they are read
+    # ONLY when the v1_subagent_link flag is on, and then validated (422) by
+    # src/api/routes/v1_subagent_link.py with the x_session_id rules. With the
+    # flag off they are ignored exactly as unknown keys were before, so no live
+    # request changes (not even a type error).
+    x_parent_session_id: Any = Field(
+        default=None,
+        description="Parent session id (string) of a harness subagent request (HS-19a). Read "
+        "ONLY when the v1_subagent_link flag is on: then validated like x_session_id (422 on "
+        "a bad, self-referencing or cycle-closing value), preferred over the "
+        "x-parent-session-id header, and RECORDED ONLY (inference-tap request_keys and the "
+        "session log). It never changes model selection. Ignored while the flag is off.",
+    )
+    x_agent_name: Any = Field(
+        default=None,
+        description="Harness agent name (string), e.g. OpenCode's 'general' sub-agent "
+        "(HS-19a). Read ONLY when the v1_subagent_link flag is on: then validated (422 on a "
+        "bad value) and RECORDED ONLY. It never changes model selection. Ignored while the "
+        "flag is off.",
+    )
 
     @model_validator(mode="after")
     def _refuse_conflicting_force_role_alias(self) -> "OpenAIChatRequest":

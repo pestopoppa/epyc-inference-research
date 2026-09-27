@@ -191,6 +191,12 @@ _FEATURE_REGISTRY: tuple[FeatureSpec, ...] = (
     # (OpenCode user-agent or x_tool_mode=client) — a failed session plugin is only
     # logged by OpenCode, so without this it degrades silently. Other clients unaffected.
     FeatureSpec("v1_client_session_guard", True, True, "V1_CLIENT_SESSION_GUARD", "HS-4: require x_session_id from OpenCode/client-tool-mode /v1 requests"),
+    # HS-19a stage 1 ("Linked"): record the harness subagent tree on /v1 — the
+    # x-parent-session-id header OpenCode already sends (plus HS-16's session-header
+    # fallback and the typed x_parent_session_id / x_agent_name body keys) into the
+    # inference-tap request_keys and the progress (session) log. RECORD ONLY: model
+    # selection is unchanged. Default OFF in test and prod; off = byte-identical.
+    FeatureSpec("v1_subagent_link", False, False, "V1_SUBAGENT_LINK", "HS-19a stage 1: record harness subagent parent/child links on /v1 (tap + session log); never changes model selection"),
     # Web research reranking
     FeatureSpec("web_research_rerank", False, False, "WEB_RESEARCH_RERANK", "ColBERT snippet reranking in web_research pipeline"),
     # Routing telemetry
@@ -560,6 +566,7 @@ class Features:
     # Claude Code Local Integration (CC Local)
     claude_code_mcp_chat: bool = False  # MCP tools for delegating chat to running orchestrator
     v1_client_session_guard: bool = False  # HS-4: 422 on OpenCode/client-mode /v1 requests without x_session_id
+    v1_subagent_link: bool = False  # HS-19a stage 1: record /v1 subagent parent links (tap + session log); default off
 
     # Web research reranking (ColBERT snippet pre-fetch filtering)
     web_research_rerank: bool = False  # Rerank DDG snippets via ColBERT before page fetch
