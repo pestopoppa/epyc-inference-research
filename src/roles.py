@@ -163,8 +163,10 @@ class Role(str, Enum):
 
     The pydantic-graph never escalates to this role: ``src/graph/nodes.py`` has
     no critic node and ``_ROLE_TO_NODE`` has no ARCHITECT_CRITIC entry
-    (``select_start_node`` falls back to FrontdoorNode). RI-21 (no critic node)
-    is deliberately left open by the 2026-09-27 swap.
+    (``select_start_node`` falls back to FrontdoorNode). That is deliberate: RI-21
+    closed with the ARCHSWAP (escalation reaches the strongest model as
+    ``architect_general``), and a critic node is out of scope (receipt
+    RATIFY-ARCHSWAP-20260927 ``not_in_scope``).
 
     THIS MEMBER IS LOAD-BEARING, not documentation. ``stack_priors.py:325`` emits
     the arm into the live action space via
@@ -558,7 +560,8 @@ _ESCALATION_MAP: dict[Role, Role] = {
     # ArchitectNode (Role.ARCHITECT_GENERAL, terminal), which after the swap agrees
     # with this map. There is still no critic node and _ROLE_TO_NODE has no
     # ARCHITECT_CRITIC entry (select_start_node falls back to FrontdoorNode), so
-    # in-graph escalation never reaches ARCHITECT_CRITIC (RI-21, deliberately open).
+    # in-graph escalation never reaches ARCHITECT_CRITIC. Deliberate: RI-21 closed
+    # with the ARCHSWAP; a critic node is out of scope (receipt not_in_scope).
     Role.CODER_ESCALATION: Role.ARCHITECT_GENERAL,
     Role.THINKING_REASONING: Role.ARCHITECT_GENERAL,
     Role.ARCHITECT_CRITIC: Role.ARCHITECT_GENERAL,
