@@ -94,6 +94,47 @@ def pytest_configure(config: pytest.Config) -> None:
         "real_kv_slot_io: opt out of the tests/unit/ hermetic KV-slot fixture "
         "(real llama-server slot HTTP helpers + real kv_slots directory).",
     )
+    config.addinivalue_line(
+        "markers",
+        "real_inference_tap: opt out of the tests/unit/ hermetic inference-tap "
+        "fixture (real INFERENCE_TAP_* env + real on-disk tap sentinel).",
+    )
+
+
+@pytest.fixture(scope="session")
+def _hermetic_inference_tap_dir(tmp_path_factory):
+    return tmp_path_factory.mktemp("hermetic_inference_tap")
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_inference_tap(request, monkeypatch, _hermetic_inference_tap_dir):
+    """Keep unit tests out of the LIVE production inference tap.
+
+    `src.runtime.inference_tap.is_active()` is true when EITHER the
+    `INFERENCE_TAP_FILE` env var is set OR the on-disk sentinel
+    (`<paths.tmp_dir>/.inference_tap_active`, written by the autopilot TUI and
+    left in place on this host) names a tap file. A unit test that drives the
+    real `LLMPrimitives._real_call()` with mocked backends therefore appended
+    fake sections (`ROLE=role_a`/`role_b`, `prompt A`, `edit prompt`, ...) to
+    `/mnt/raid0/llm/tmp/inference_tap.log` and its `inference_tap_events.jsonl`
+    -- the files the dashboard reads as live traffic (738 sections from pytest
+    PIDs by 2026-09-28). This fixture clears the env keys and points the
+    module's cached sentinel path at a file that never exists, so the tap is
+    OFF by default. A test that exercises the tap sets `INFERENCE_TAP_FILE`
+    (or its own `_SENTINEL`) itself; its monkeypatch applies after this one.
+    """
+    if request.node.get_closest_marker("real_inference_tap") is not None:
+        yield
+        return
+    import src.runtime.inference_tap as tap_mod
+
+    monkeypatch.delenv("INFERENCE_TAP_FILE", raising=False)
+    monkeypatch.delenv("INFERENCE_TAP_EVENTS_FILE", raising=False)
+    monkeypatch.setattr(
+        tap_mod, "_SENTINEL", str(_hermetic_inference_tap_dir / ".inference_tap_active")
+    )
+    monkeypatch.setattr(tap_mod, "_sentinel_cache", ("", 0.0))
+    yield
 
 
 @pytest.fixture(autouse=True)
