@@ -590,11 +590,9 @@ class _ContextMixin:
                     offered_choices=offered,
                     requested_model=f"role:{self.role}",
                 )
-        typed_arguments = (
-            self._typed_tool_arguments(tool_name)
-            if prepared is not None or not typed_enabled
-            else None
-        )
+        # Only a prepared action consumes typed arguments; with the flag off
+        # (or nothing offered) the result would be discarded, so skip the call.
+        typed_arguments = self._typed_tool_arguments(tool_name) if prepared is not None else None
         selection_ms = (time.perf_counter() - decision_started) * 1000
         validation = None
         authorized = False

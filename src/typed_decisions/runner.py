@@ -85,7 +85,7 @@ _TOKENS_PER_LABEL = 9
 # 24-question decision_set_v1 catalogue -- the MINIMAL valid answer for that
 # exact catalogue measured ~999 tokens compact / ~1621 tokens pretty-printed
 # (Qwen3-family tokenizer, offline proxy for frontdoor's Qwen3.6 tokenizer;
-# see tests/unit/test_typed_decisions_runner.py), against the old 1600-token
+# see tests/unit/test_typed_decisions.py::TestDefaultNTokens), against the old 1600-token
 # TOTAL budget -- i.e. pretty-printed JSON alone (a formatting choice models
 # commonly make even under schema-constrained decoding) already exceeded the
 # whole budget with zero margin for anything else. 1.6x covers

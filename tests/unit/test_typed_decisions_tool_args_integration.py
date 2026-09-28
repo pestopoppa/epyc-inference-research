@@ -4,7 +4,7 @@ Covers the integration contract in
 ``src/typed_decisions/tool_args_integration.py``: the flag gate, the
 all-arguments-mappable gate, the exact assembled dict from canned primitives,
 typed/transport/assembly failures, and the call-site wiring in
-``src/repl_environment/context.py`` (wired and inert when off, typed
+``src/repl_environment/context.py`` (typed path skipped when off, typed
 arguments used when on). No model/server call: the primitives seam is a
 canned-response fake, mirroring ``tests/unit/test_typed_decisions_tool_args.py``.
 """
@@ -572,7 +572,51 @@ def _make_repl(primitives, registry) -> Any:
     return _TestRepl(registry=registry, primitives=primitives, context=STATE)
 
 
-def test_call_site_is_wired_and_inert_when_off(monkeypatch, disabled):
+def test_call_site_skips_typed_path_when_off(monkeypatch, disabled):
+    """Flag off: the typed-args path is never entered (no dead work per dispatch)."""
+    recorded: list[dict] = []
+    helper_calls: list[str] = []
+
+    def _recording(**kwargs):
+        recorded.append(kwargs)
+        return None
+
+    monkeypatch.setattr(integration, "maybe_typed_arguments", _recording)
+
+    primitives = _FakePrimitives("{}")
+    registry = _FakeRegistry(_Tool("deploy", _REGISTRY_PARAMETERS))
+    repl = _make_repl(primitives, registry)
+    original_helper = repl._typed_tool_arguments
+
+    def _helper_spy(tool_name):
+        helper_calls.append(tool_name)
+        return original_helper(tool_name)
+
+    monkeypatch.setattr(repl, "_typed_tool_arguments", _helper_spy)
+
+    result = repl._dispatch_tool("deploy", mode="fast", dry_run=False)
+
+    assert result == "tool-result"
+    assert helper_calls == []
+    assert recorded == []
+    assert primitives.calls == []
+    assert getattr(repl, "_last_decision_receipt", None) is None
+    assert registry.invocations == [
+        {"tool_name": "deploy", "role": "worker", "kwargs": {"mode": "fast", "dry_run": False}}
+    ]
+
+
+def test_call_site_forwards_schema_and_state_when_on(enabled, monkeypatch, tmp_path):
+    """Flag on: the call site hands the tool's projected schema and task state over."""
+    from types import SimpleNamespace
+
+    import src.config
+
+    monkeypatch.setattr(
+        src.config,
+        "get_config",
+        lambda: SimpleNamespace(paths=SimpleNamespace(artifacts_dir=tmp_path)),
+    )
     recorded: list[dict] = []
     original = integration.maybe_typed_arguments
 
@@ -582,21 +626,20 @@ def test_call_site_is_wired_and_inert_when_off(monkeypatch, disabled):
 
     monkeypatch.setattr(integration, "maybe_typed_arguments", _recording)
 
-    primitives = _FakePrimitives("{}")
+    schema = registry_parameters_to_schema(_REGISTRY_PARAMETERS)
+    mapping = tool_schema_to_questions("deploy", schema)
+    primitives = _FakePrimitives(
+        _canned_response(mapping.questions, {"mode": "safe", "dry_run": True})
+    )
     registry = _FakeRegistry(_Tool("deploy", _REGISTRY_PARAMETERS))
     repl = _make_repl(primitives, registry)
 
-    result = repl._dispatch_tool("deploy", mode="fast", dry_run=False)
+    repl._dispatch_tool("deploy", mode="fast", dry_run=False)
 
-    assert result == "tool-result"
     assert len(recorded) == 1
     assert recorded[0]["tool_name"] == "deploy"
     assert recorded[0]["parameters"]["properties"]["mode"]["enum"] == ["fast", "safe"]
     assert recorded[0]["state"] == STATE
-    assert primitives.calls == []
-    assert registry.invocations == [
-        {"tool_name": "deploy", "role": "worker", "kwargs": {"mode": "fast", "dry_run": False}}
-    ]
 
 
 def test_call_site_uses_typed_arguments_when_on(enabled, monkeypatch, tmp_path):
