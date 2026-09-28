@@ -114,6 +114,30 @@ def record_report_source(replies_dir: Path, record: Mapping[str, Any]) -> None:
     except OSError:
         pass
 
+
+#: A sibling row in the same `actor-calls.jsonl`, written once per PLANNER salvage turn
+#: (`actors.AgentPlanner`, `--actor-planner-salvage-s`): a planner call ended by its wall
+#: budget with no complete reply, and the loop continued that same opencode session once
+#: (`opencode run --session <id>`) asking for the proposal JSON now. Records whether the
+#: turn ran, how it ended, and (on success) the mechanism it produced. Its own schema, so
+#: the metrics summarizer, the VB-AK-SEAT reader and the CPU-window estimator (all filter
+#: by schema) are unaffected. The salvage CALL itself also writes the usual metrics and
+#: v1 rows (seat arm suffixed `+salvage`).
+SALVAGE_SCHEMA = "epyc.autokernel.actor_salvage_turn.v1"
+
+
+def record_salvage_turn(replies_dir: Path, record: Mapping[str, Any]) -> None:
+    """Append one `SALVAGE_SCHEMA` row. Never raises: evidence, not control."""
+    row = {"schema": SALVAGE_SCHEMA, "role": "planner",
+           "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), **dict(record)}
+    try:
+        Path(replies_dir).mkdir(parents=True, exist_ok=True)
+        with open(Path(replies_dir) / CALL_LOG_NAME, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(row, sort_keys=True) + "\n")
+    except OSError:
+        pass
+
+
 def metric_rows_since(log: Path, offset: int = 0, *, role: str | None = None) -> list[dict]:
     """`METRICS_SCHEMA` rows appended to one `actor-calls.jsonl` past byte `offset`
     (optionally one role's), oldest first. Missing file: []."""
@@ -293,7 +317,11 @@ def parse_export(path: Path) -> dict[str, Any]:
     truncated export -- a mid-write file, a pipe-truncated capture, .... The caller
     (`collect`) turns that into `metrics_error`; this function stays a pure parser
     so it can be unit-tested directly against a saved export with no subprocess."""
-    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    return parse_export_data(json.loads(Path(path).read_text(encoding="utf-8")))
+
+
+def parse_export_data(data: Mapping[str, Any]) -> dict[str, Any]:
+    """`parse_export` on an already-loaded export object (`{"messages": [...]}`)."""
     msgs = data["messages"]
     assistant = [m["info"] for m in msgs if m.get("info", {}).get("role") == "assistant"]
     parts = [p for m in msgs for p in m.get("parts", [])]
@@ -410,6 +438,74 @@ def collect(workspace: Path, before_ids: set[str], replies_dir: Path, *, stamp: 
         }
     except Exception as exc:  # noqa: BLE001 -- evidence, never a reason to fail the call
         return _empty_result(f"{type(exc).__name__}: {exc}"[:500])
+
+
+def root_session_id(stats: Mapping[str, Any] | None) -> str | None:
+    """The ROOT opencode session of one call, from `collect`'s result: the one session
+    whose export carries no `info.parentID` (a fan-out scout is a child session). None
+    when it cannot be named unambiguously -- collection failed, an export is unreadable,
+    or zero or several parentless sessions -- so a caller that continues the session
+    (the planner salvage turn) never continues a guess. Never raises."""
+    try:
+        if not isinstance(stats, Mapping) or stats.get("metrics_error"):
+            return None
+        roots = []
+        for session in stats.get("sessions") or ():
+            ref = session.get("export") if isinstance(session, Mapping) else None
+            path = ref.get("path") if isinstance(ref, Mapping) else None
+            if not path:
+                return None
+            data = json.loads(Path(path).read_text(encoding="utf-8"))
+            info = data.get("info") if isinstance(data.get("info"), Mapping) else {}
+            sid = info.get("id") or session.get("session_id")
+            if not info.get("parentID") and sid:
+                roots.append(str(sid))
+        return roots[0] if len(roots) == 1 else None
+    except Exception:  # noqa: BLE001 -- unknown is None, never a raise
+        return None
+
+
+def _created_ms(message: Mapping[str, Any]) -> int | None:
+    info = message.get("info") if isinstance(message, Mapping) else None
+    created = ((info or {}).get("time") or {}).get("created") if isinstance(info, Mapping) else None
+    return int(created) if isinstance(created, (int, float)) and not isinstance(created, bool) else None
+
+
+def collect_continued(workspace: Path, session_id: str, replies_dir: Path, *, stamp: str,
+                      started_at: float | None = None) -> dict[str, Any]:
+    """`collect` for a call that CONTINUED a known session (`opencode run --session`,
+    the planner salvage turn) and so created none: `collect`'s new-session filter would
+    find nothing. Exports that session to a file and parses only the messages created at
+    or after `started_at` (the continuation's own steps; a message with no creation time
+    cannot be shown to belong to it and is dropped), so role totals do not count the
+    original call twice. Same result shape as `collect`, plus `continued: True`. Never
+    raises."""
+    try:
+        out_path = Path(replies_dir) / f"{stamp}-export-{session_id}.json"
+        export_session(workspace, session_id, out_path)
+        data = json.loads(out_path.read_text(encoding="utf-8"))
+        msgs = list(data["messages"])
+        if started_at is not None:
+            since_ms = int(started_at * 1000)
+            msgs = [m for m in msgs if (_created_ms(m) or -1) >= since_ms]
+        parsed = parse_export_data({"messages": msgs})
+        parsed["session_id"] = session_id
+        parsed["export"] = _file_ref(out_path)
+        return {
+            "metrics_error": None,
+            "continued": True,
+            "session_ids": [session_id],
+            "primary_session_id": session_id,
+            "sessions": [parsed],
+            "totals": {key: int(parsed.get(key) or 0) for key in TOTAL_FIELDS},
+            "context_first_tokens": parsed.get("context_first_tokens"),
+            "context_max_tokens": parsed.get("context_max_tokens") or 0,
+            "final_step_capped": bool(parsed.get("final_step_capped")),
+            "final_finish": parsed.get("final_finish"),
+            "permission_rejected": int(parsed.get("permission_rejected") or 0),
+        }
+    except Exception as exc:  # noqa: BLE001 -- evidence, never a reason to fail the call
+        return {**_empty_result(f"{type(exc).__name__}: {exc}"[:500]), "continued": True}
 
 
 # --------------------------------------------------------------------------- summarizer

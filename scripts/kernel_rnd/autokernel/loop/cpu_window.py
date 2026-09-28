@@ -184,12 +184,26 @@ def _cpu_text(cpus) -> str:
     return ",".join(parts)
 
 
+#: `actors.SALVAGE_ARM_SUFFIX`, kept literal so this module stays import-free of `actors`
+#: (a test pins the two equal).
+SALVAGE_ARM_SUFFIX = "+salvage"
+
+
+def _salvage_row(row: dict) -> bool:
+    seat = row.get("seat")
+    arm = seat.get("arm") if isinstance(seat, dict) else None
+    return isinstance(arm, str) and arm.endswith(SALVAGE_ARM_SUFFIX)
+
+
 class PhaseEstimator:
     """Seconds an actor phase is expected to take: recent median wall, capped by budget.
 
     Budgets: the planner's per-call budget (else the actor timeout), the author's
     (else the actor timeout), the critic's timeout. Medians come from the last
-    `samples` completed `actor_call.v1` rows of that role in actor-calls.jsonl.
+    `samples` completed `actor_call.v1` rows of that role in actor-calls.jsonl. A planner
+    SALVAGE turn (seat arm ending `SALVAGE_ARM_SUFFIX`) is not a proposal call -- it is a
+    short continuation of one that spent its budget -- so its row is skipped rather than
+    pulling the planner median down.
     """
 
     def __init__(self, call_log: Path | None, *, planner_budget_s: float,
@@ -219,6 +233,7 @@ class PhaseEstimator:
                 continue
             if (isinstance(row, dict) and row.get("schema") == "epyc.autokernel.actor_call.v1"
                     and row.get("role") in walls
+                    and not _salvage_row(row)
                     and type(row.get("wall_s")) in (int, float) and row["wall_s"] > 0):
                 walls[row["role"]].append(float(row["wall_s"]))
         return walls

@@ -413,6 +413,11 @@ class Hypothesis:
     #: historical row.
     relies_on_claims: tuple[str, ...] = ()
     belief_receipt_id: str = ""
+    #: Where the planner's proposal came from when it was NOT its own call's reply:
+    #: "salvage_turn" (`actors.AgentPlanner._salvage_proposal`: the call spent its wall
+    #: budget and one continuation of its session produced the proposal). Empty (and
+    #: absent from `to_dict`) for every ordinary proposal and every historical row.
+    planner_report_source: str = ""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "relies_on_claims", tuple(self.relies_on_claims or ()))
@@ -432,6 +437,8 @@ class Hypothesis:
             row["relies_on_claims"] = list(self.relies_on_claims)
         if self.belief_receipt_id:
             row["belief_receipt_id"] = self.belief_receipt_id
+        if self.planner_report_source:
+            row["planner_report_source"] = self.planner_report_source
         return row
 
 

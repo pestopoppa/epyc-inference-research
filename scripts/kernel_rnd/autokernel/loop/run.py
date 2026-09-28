@@ -483,6 +483,7 @@ def _actor_config(args, resolved_campaign=None) -> dict[str, Any]:
         "actor_author_output_limit": get("actor_author_output_limit"),
         "actor_planner_budget_s": get("actor_planner_budget_s"),
         "actor_author_budget_s": get("actor_author_budget_s"),
+        "actor_planner_salvage_s": get("actor_planner_salvage_s"),
         "actor_timeout_s": get("actor_timeout_s"),
         "actor_trim_instructions": get("actor_trim_instructions"),
         "actor_trim_tools": get("actor_trim_tools"),
@@ -631,6 +632,13 @@ def _actor_budgets(args) -> dict[str, int | bool]:
             "author_budget_s": int(args.actor_author_budget_s)}
 
 
+def _actor_salvage(args) -> dict[str, int]:
+    """The planner-only salvage-turn budget as an ActorSeat field (`planner_salvage_s`).
+    Only the proposal planner's seat takes it: never an author panel member, never the
+    critic. A Namespace without the flag (an older caller) is 0: off."""
+    return {"planner_salvage_s": int(getattr(args, "actor_planner_salvage_s", 0) or 0)}
+
+
 def _actor_budget_error(args) -> str | None:
     """Why the OAB-22/23 knobs are unusable, or None."""
     for flag in ("actor_context_limit", "actor_output_limit", "actor_planner_output_limit",
@@ -638,6 +646,8 @@ def _actor_budget_error(args) -> str | None:
                  "actor_author_budget_s"):
         if int(getattr(args, flag)) < 0:
             return f"--{flag.replace('_', '-')} must be >= 0"
+    if int(getattr(args, "actor_planner_salvage_s", 0) or 0) < 0:
+        return "--actor-planner-salvage-s must be >= 0"
     context = int(args.actor_context_limit)
     if not context:
         return None
@@ -1567,6 +1577,19 @@ def main(argv: list[str] | None = None) -> int:
                              "path and recorded failure_class=budget_exhausted; a complete "
                              "reply is salvaged, otherwise the iteration ends (never retried). "
                              "0 = none (default: %(default)s)")
+    # DS41 run 10m (2026-09-28): 5 of 9 planner calls ran 21-46 tool steps into the
+    # budget and never wrote the proposal; each wasted 45-75 min. One continuation of the
+    # same session asks for the JSON now (actors.AgentPlanner._salvage_proposal).
+    parser.add_argument("--actor-planner-salvage-s", type=int, default=900,
+                        help="opencode planner: when a proposal call ends by "
+                             "--actor-planner-budget-s with no complete reply and its "
+                             "session is known, run ONE follow-up call continuing that "
+                             "session (opencode run --session) that asks for the proposal "
+                             "JSON now, with no tool calls, under this wall budget "
+                             "(seconds; capped by what is left of --actor-timeout-s). A "
+                             "valid proposal proceeds (planner_report_source=salvage_turn); "
+                             "anything else ends the iteration budget_exhausted as before. "
+                             "0 = off (default: %(default)s)")
     parser.add_argument("--actor-author-budget-s", type=int, default=0,
                         help="opencode author (OAB-23): the same wall budget for authoring "
                              "calls; 0 = none (default: %(default)s)")
@@ -2367,6 +2390,7 @@ def main(argv: list[str] | None = None) -> int:
           + " "
           f"concise={args.actor_concise} planner-budget={args.actor_planner_budget_s}s "
           f"author-budget={args.actor_author_budget_s}s "
+          f"planner-salvage={args.actor_planner_salvage_s}s "
           f"author-thinking={args.actor_author_thinking} "
           f"author-action-rule={args.actor_author_action_rule}")
     for moot in _moot_budgets(args):
@@ -4288,7 +4312,8 @@ def main(argv: list[str] | None = None) -> int:
                                                context_mode=args.actor_context_mode,
                                                **_actor_knobs(args), **_actor_limits(args),
                                                **_actor_budgets(args),
-                                               **_actor_thinking(args), **sandbox_seat))
+                                               **_actor_thinking(args), **sandbox_seat,
+                                               **_actor_salvage(args)))
             planner = (runtime_recovery.PendingPlanner(ordinary, pending_slot)
                        if pending_pair is not None else ordinary)
             if runtime_arm_declaration is not None and (runtime_enabled or runtime_keep_grade):

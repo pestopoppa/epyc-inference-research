@@ -249,6 +249,12 @@ class ActorSeat:
     #: from, and meant to sit under, the hard per-call timeout.
     planner_budget_s: int = 0
     author_budget_s: int = 0
+    #: Planner salvage turn (DS41 run 10m, 2026-09-28): when a PLANNER call ends by
+    #: `planner_budget_s` with no complete reply and its opencode session is known, ONE
+    #: follow-up call continues that session (`opencode run --session <id>`) with
+    #: `PLANNER_SALVAGE_MESSAGE`, under this wall budget (seconds; 0 = off, the historical
+    #: behaviour byte for byte). Never for the author or the critic. run.py defaults it on.
+    planner_salvage_s: int = 0
     #: OAB-24: "off" sends `chat_template_kwargs: {"enable_thinking": false}` on every
     #: request of an AUTHOR call (its per-call config's model `options`; see
     #: `actor_opencode_config.model_thinking`). Planner and critic calls never carry it.
@@ -374,9 +380,16 @@ class ActorBudgetExhausted(ProviderTransient):
     the same prompt. It still ends only the ITERATION (`iterate` records a
     `planner_transient` outcome whose reason starts with `budget_exhausted`, carrying the
     iteration's abandoned candidates and resume checkpoint). DS41 run 10, 2026-09-25:
-    a 61-minute planner call filled 183,710 of :8083's 196,608 pool tokens."""
+    a 61-minute planner call filled 183,710 of :8083's 196,608 pool tokens.
+
+    `session_id`: the call's ROOT opencode session when the export named it
+    (`actor_metrics.root_session_id`), else None; `started_monotonic`: when the call was
+    launched (`time.monotonic()`). Both are read only by the planner salvage turn
+    (`AgentPlanner._salvage_proposal`)."""
 
     failure_class = actor_metrics.BUDGET_EXHAUSTED
+    session_id: str | None = None
+    started_monotonic: float | None = None
 
 
 class AuthorReplyMissing(ProviderTransient, AuthorReportMissing):
@@ -396,6 +409,32 @@ class AuthorReplyMissing(ProviderTransient, AuthorReportMissing):
 #: and from a lane-root report file it wrote instead (`integrity.take_report_artifacts`).
 REPORT_SOURCE_REPLY = "reply"
 REPORT_SOURCE_REPLY_FILE = "reply_file"
+#: `planner_report_source` of a hypothesis the planner produced in its SALVAGE TURN
+#: (`AgentPlanner._salvage_proposal`) rather than in its own call's reply.
+REPORT_SOURCE_SALVAGE_TURN = "salvage_turn"
+
+#: The one message of the planner salvage turn. DS41 run 10m (2026-09-28): 5 of 9
+#: planner calls of the thinking-on 27B ran 21-46 tool steps (up to ~87k output tokens)
+#: into the wall budget, investigation done, and never stopped to answer. An opencode
+#: step cap is no substitute: at the cap opencode 1.18.31 injects "CRITICAL - MAXIMUM
+#: STEPS REACHED ... MUST provide a text response summarizing work done", which asks for
+#: a summary, not the proposal JSON. Names the fields without placeholders, so an echo
+#: of this message cannot pass for a hypothesis.
+PLANNER_SALVAGE_MESSAGE = (
+    "Your time for this proposal is up. Stop investigating now: do not call any tool "
+    "(no reads, searches, greps or commands). Using only what you have already found in "
+    "this session, reply immediately with the ONE proposal JSON object the task asked "
+    "for -- the same fields: mechanism_id (starting with akm-), statement, falsifier, "
+    "target_surface and target_symbol -- and nothing else: no summary of your work, no "
+    "prose before or after the object. If what you found supports no honest, feasible "
+    "hypothesis, reply instead with a JSON object whose only key is abstain, giving the "
+    "specific reason.")
+#: The salvage call's seat arm: the planner call's arm plus this suffix, on both the
+#: metrics row and the VB-AK-SEAT v1 row, so an A/B never groups a salvage turn with the
+#: arm's own proposal calls (and `cpu_window.PhaseEstimator` skips it).
+SALVAGE_ARM_SUFFIX = "+salvage"
+#: Below this much wall left under the hard `timeout_s`, no salvage turn is attempted.
+PLANNER_SALVAGE_MIN_S = 30
 
 #: One line of the author prompt's output contract (DS41 run 10d: prose inside the path
 #: string, and the report written to `reply.json` with prose on stdout).
@@ -626,23 +665,41 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
                schema: Mapping[str, Any] | None = None,
                env: Mapping[str, str] | None = None,
                should_stop: Callable[[], bool] | None = None,
-               budget_s: float | None = None) -> str:
+               budget_s: float | None = None,
+               session_id: str | None = None) -> str:
     """One actor process, inside its own `call` scope: the orchestrator's per-call
-    sidecar inputs and the process's TMPDIR are registry-owned and released after."""
+    sidecar inputs and the process's TMPDIR are registry-owned and released after.
+
+    `session_id` (opencode only): continue that existing session (`opencode run
+    --session <id>`) instead of starting a new one -- the planner salvage turn."""
     with _scratch_scope(workspace).scope("call", "attempt") as attempt:
         return _run_agent_in(attempt, prompt, workspace=workspace, timeout_s=timeout_s,
                              backend=backend, read_only=read_only, schema=schema, env=env,
-                             should_stop=should_stop, budget_s=budget_s)
+                             should_stop=should_stop, budget_s=budget_s,
+                             session_id=session_id)
+
+
+def _continue_session_argv(backend: Backend, argv: list[str], session_id: str | None
+                           ) -> list[str]:
+    """`argv` continuing opencode session `session_id` (`--session <id>`, opencode
+    1.18.31 `run`: "session id to continue"; the message is still read from stdin and
+    appended). Unchanged for no session or a non-opencode backend."""
+    if not session_id or backend.kind != "opencode":
+        return argv
+    return [*argv, "--session", str(session_id)]
 
 
 def _run_agent_in(attempt: "scratch.Scope", prompt: str, *, workspace: Path,
                   timeout_s: int, backend: Backend, read_only: bool,
                   schema: Mapping[str, Any] | None, env: Mapping[str, str] | None,
-                  should_stop: Callable[[], bool] | None, budget_s: float | None) -> str:
+                  should_stop: Callable[[], bool] | None, budget_s: float | None,
+                  session_id: str | None = None) -> str:
     # The orchestrator kind sends the caller's schema to the server (`--schema`), so
     # its argv is the one that needs it (INF-78 OAB-2, `actor_orchestrator`).
     argv = (backend.argv(prompt, workspace, read_only=read_only, schema=schema)
             if backend.kind == "orchestrator" else backend.argv(prompt, workspace, read_only=read_only))
+    argv = _continue_session_argv(backend, argv, session_id)
+    continued = session_id if backend.kind == "opencode" and session_id else None
     payload = backend.stdin_payload(prompt)
     started = time.monotonic()
     started_at = time.time()
@@ -661,8 +718,11 @@ def _run_agent_in(attempt: "scratch.Scope", prompt: str, *, workspace: Path,
     arm = (env or {}).get(SEAT_ENV_ARM)
     before_session_ids: set[str] = set()
     if collect_metrics:
+        # A continued session is exported by id afterwards (`collect_continued`): no
+        # before-listing is needed to tell it apart.
         try:
-            before_session_ids = actor_metrics.list_session_ids(workspace)
+            before_session_ids = (set() if continued
+                                  else actor_metrics.list_session_ids(workspace))
         except Exception:  # noqa: BLE001 -- metrics are evidence, never a call failure
             before_session_ids = set()
         # The CALL starts here, after the listing: a session counts as this call's
@@ -692,7 +752,8 @@ def _run_agent_in(attempt: "scratch.Scope", prompt: str, *, workspace: Path,
                 workspace, backend, prompt, argv=argv, returncode=spent.returncode,
                 stdout=_captured(None, out), stderr=_captured(None, err), started=started,
                 started_at=started_at, before_ids=before_session_ids, arm=arm, env=env,
-                collect_metrics=collect_metrics, schema=schema, budget_s=budget_s)
+                collect_metrics=collect_metrics, schema=schema, budget_s=budget_s,
+                continued_session=continued)
         except _StoppedChild as stop:
             reply = _persist_reply(workspace, backend, subprocess.CompletedProcess(
                 args=argv, returncode=stop.returncode,
@@ -702,7 +763,7 @@ def _run_agent_in(attempt: "scratch.Scope", prompt: str, *, workspace: Path,
                             timed_out=False, before_ids=before_session_ids, arm=arm, env=env,
                             collect_metrics=collect_metrics, schema=schema,
                             final_text=None, salvaged=False, started_at=started_at,
-                            budget_s=budget_s)
+                            budget_s=budget_s, continued_session=continued)
             _record_call(workspace, backend, prompt, returncode=stop.returncode,
                          wall_s=time.monotonic() - started, env=env, schema=schema,
                          reply=reply)
@@ -722,7 +783,8 @@ def _run_agent_in(attempt: "scratch.Scope", prompt: str, *, workspace: Path,
                             wall_s=time.monotonic() - started, timed_out=True,
                             before_ids=before_session_ids, arm=arm, env=env, collect_metrics=collect_metrics,
                             schema=schema, final_text=None, salvaged=False,
-                            started_at=started_at, budget_s=budget_s)
+                            started_at=started_at, budget_s=budget_s,
+                            continued_session=continued)
             _record_call(workspace, backend, prompt, returncode=-1,
                          wall_s=time.monotonic() - started, env=env, schema=schema,
                          reply=reply, timed_out=True)
@@ -777,7 +839,8 @@ def _run_agent_in(attempt: "scratch.Scope", prompt: str, *, workspace: Path,
         schema=schema, final_text=final_text, salvaged=salvage_text is not None,
         started_at=started_at, budget_s=budget_s,
         failure_class=OpencodeStoreError.failure_class if store_error else None,
-        empty_reply=salvage_text is None and not (done.stdout or "").strip())
+        empty_reply=salvage_text is None and not (done.stdout or "").strip(),
+        continued_session=continued)
     _record_call(workspace, backend, prompt, returncode=done.returncode,
                  wall_s=time.monotonic() - started, env=env, schema=schema, reply=reply)
     if salvage_text is not None:
@@ -822,11 +885,13 @@ def _budget_exhausted(workspace: Path, backend: Backend, prompt: str, *, argv: l
                       returncode: int, stdout: str, stderr: str, started: float,
                       started_at: float, before_ids: set[str], arm: str | None,
                       env: Mapping[str, str] | None, collect_metrics: bool,
-                      schema: Mapping[str, Any] | None, budget_s: float | None) -> str:
+                      schema: Mapping[str, Any] | None, budget_s: float | None,
+                      continued_session: str | None = None) -> str:
     """OAB-23: the call's wall budget ran out and its process group was ended. Keep the
     raw streams, record `failure_class: budget_exhausted`, and return the reply when it
     is complete (`_budget_salvage`); otherwise raise `ActorBudgetExhausted`, which
-    `_with_backoff` never retries."""
+    `_with_backoff` never retries. The exception names the call's root opencode session
+    when the export identified one (`session_id`, for the planner salvage turn)."""
     reply = _persist_reply(workspace, backend, subprocess.CompletedProcess(
         args=argv, returncode=returncode, stdout=stdout, stderr=stderr))
     salvage_text = None
@@ -835,20 +900,26 @@ def _budget_exhausted(workspace: Path, backend: Backend, prompt: str, *, argv: l
             salvage_text = text
             break
     wall_s = time.monotonic() - started
+    stats: dict[str, Any] = {}
     _record_metrics(workspace, backend, role=_safe_role(schema), returncode=returncode,
                     wall_s=wall_s, timed_out=False, before_ids=before_ids, arm=arm, env=env,
                     collect_metrics=collect_metrics, schema=schema, final_text=salvage_text,
                     salvaged=salvage_text is not None, started_at=started_at,
                     failure_class=ActorBudgetExhausted.failure_class, budget_s=budget_s,
-                    budget_exhausted=True)
+                    budget_exhausted=True, continued_session=continued_session,
+                    stats_out=stats)
     _record_call(workspace, backend, prompt, returncode=returncode, wall_s=wall_s, env=env,
                  schema=schema, reply=reply)
     if salvage_text is not None:
         return salvage_text
-    raise ActorBudgetExhausted(
+    spent = ActorBudgetExhausted(
         f"{ActorBudgetExhausted.failure_class}: the {_safe_role(schema) or 'actor'} call "
         f"spent its {budget_s:.0f}s budget without a complete reply and was ended "
         f"(rc {returncode}) after {wall_s:.0f}s [{backend.describe()}] -- not retried")
+    if collect_metrics:
+        spent.session_id = continued_session or actor_metrics.root_session_id(stats)
+    spent.started_monotonic = started
+    raise spent
 
 
 #: Where raw actor replies land: a sibling of the worker tree, never inside it (a
@@ -937,7 +1008,9 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
                     failure_class: str | None = None,
                     budget_s: float | None = None,
                     budget_exhausted: bool = False,
-                    empty_reply: bool = False) -> str | None:
+                    empty_reply: bool = False,
+                    continued_session: str | None = None,
+                    stats_out: dict[str, Any] | None = None) -> str | None:
     """A sibling line in `actor-calls.jsonl`, ahead of the `_record_call` line so a
     reader taking "the last line" for the v1 record (as the existing tests and any
     VB-AK-SEAT consumer do) is unaffected by this addition: the per-call
@@ -953,7 +1026,12 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
 
     Returns the `failure_class` it recorded. An unclassified call whose reply is empty
     (`empty_reply`) and whose export shows the final step ended on the output cap is
-    classified `OUTPUT_CAPPED_EMPTY` here, the one place that reads the export."""
+    classified `OUTPUT_CAPPED_EMPTY` here, the one place that reads the export.
+
+    `continued_session` (the planner salvage turn): the call continued that session, so
+    its numbers come from `actor_metrics.collect_continued` and the row says so
+    (`salvage_turn`, `continued_session_id`). `stats_out`, when given, receives the
+    collected opencode stats (the budget path reads the root session id from them)."""
     try:
         finished = time.time()
         schema_valid = repair_ran = None
@@ -969,8 +1047,14 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
             target = Path(workspace).parent / ACTOR_REPLY_DIR
             target.mkdir(parents=True, exist_ok=True)
             stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime(finished))
-            opencode_stats = actor_metrics.collect(Path(workspace), before_ids, target,
-                                                   stamp=stamp, started_at=started_at)
+            opencode_stats = (
+                actor_metrics.collect_continued(Path(workspace), continued_session, target,
+                                                stamp=stamp, started_at=started_at)
+                if continued_session else
+                actor_metrics.collect(Path(workspace), before_ids, target,
+                                      stamp=stamp, started_at=started_at))
+            if stats_out is not None:
+                stats_out.update(opencode_stats)
             if failure_class is None and empty_reply and not timed_out \
                     and opencode_stats.get("final_step_capped"):
                 failure_class = actor_metrics.OUTPUT_CAPPED_EMPTY
@@ -1010,6 +1094,9 @@ def _record_metrics(workspace: Path, backend: Backend, *, role: str | None,
             "metrics_error": (opencode_stats or {}).get("metrics_error") if collect_metrics else None,
             **_seat_provenance(env),
         }
+        if continued_session:
+            record["salvage_turn"] = True
+            record["continued_session_id"] = continued_session
         if orchestrator_stats is not None:
             record["orchestrator"] = orchestrator_stats
             record["metrics_error"] = orchestrator_stats.get("metrics_error")
@@ -2931,14 +3018,107 @@ class AgentPlanner:
     def _proposal_from_agent(self, prompt: str, backend: Backend, env: dict[str, str] | None,
                              context: Mapping[str, Any]) -> tuple[Hypothesis | Abstain, Any]:
         """One planner call and its parsed reply, plus the reply's raw `relies_on_claims`
-        declaration (validated against the presented claims by the caller)."""
-        raw, streak = _with_backoff(
-            lambda: _run_agent(prompt, workspace=self.workspace,
-                               timeout_s=self.timeout_s, backend=backend,
-                               schema=HYPOTHESIS_SCHEMA, env=env, **self._stop_kw(),
-                               **self._budget_kw("planner")),
-            should_stop=self.should_stop)
+        declaration (validated against the presented claims by the caller). A call ended
+        by its wall budget gets one salvage turn when the seat allows it
+        (`_salvage_proposal`)."""
+        try:
+            raw, streak = _with_backoff(
+                lambda: _run_agent(prompt, workspace=self.workspace,
+                                   timeout_s=self.timeout_s, backend=backend,
+                                   schema=HYPOTHESIS_SCHEMA, env=env, **self._stop_kw(),
+                                   **self._budget_kw("planner")),
+                should_stop=self.should_stop)
+        except ActorBudgetExhausted as spent:
+            return self._salvage_proposal(spent, backend, env, context)
         self.transient_streak = streak
+        return self._proposal_from_raw(raw, context)
+
+    def _salvage_proposal(self, spent: ActorBudgetExhausted, backend: Backend,
+                          env: dict[str, str] | None, context: Mapping[str, Any]
+                          ) -> tuple[Hypothesis | Abstain, Any]:
+        """The planner salvage turn (`ActorSeat.planner_salvage_s`): `spent` ended the
+        planner call by its wall budget with no complete reply. When the seat allows it,
+        the backend is opencode and the call's root session is known, run ONE more call
+        continuing that session (`--session`, same backend/model/variant/agent, same
+        per-call OPENCODE_CONFIG and env, same lane) with `PLANNER_SALVAGE_MESSAGE`,
+        under min(salvage budget, what is left of the hard `timeout_s` minus the stop
+        grace), through the same stop path as every actor call. Its reply goes through
+        the planner's normal parser; a valid PROPOSAL is returned stamped
+        `planner_report_source="salvage_turn"`. Anything else -- an abstention, junk, an
+        error, its own budget or timeout -- re-raises the budget exhaustion (the
+        iteration ends `planner_transient`, reason still `budget_exhausted...`, with the
+        salvage outcome appended). A stop asked during the turn is a stop
+        (`ActorStopped`). Every attempt or skip writes one `actor_metrics.SALVAGE_SCHEMA`
+        row; with the knob at 0 nothing at all changes."""
+        salvage_s = int(self.seat.planner_salvage_s) if self.seat is not None else 0
+        if salvage_s <= 0 or backend.kind != "opencode":
+            raise spent
+        replies = Path(self.workspace).parent / ACTOR_REPLY_DIR
+        session_id = getattr(spent, "session_id", None)
+        started = getattr(spent, "started_monotonic", None)
+        record: dict[str, Any] = {"salvage_s": salvage_s, "session_id": session_id,
+                                  "planner_reason": str(spent)[:500]}
+
+        def skip(reason: str):
+            actor_metrics.record_salvage_turn(replies, {**record, "result": "skipped",
+                                                        "reason": reason})
+            raise spent
+        if not session_id:
+            skip("session_unknown")
+        if started is None:
+            skip("call_start_unknown")
+        if self.should_stop is not None and self.should_stop():
+            skip("stop_asked")
+        # The whole planner phase stays under the hard per-call timeout: the salvage call
+        # gets what is left of it, less the grace its process group may take to end.
+        remaining = float(self.timeout_s) - (time.monotonic() - started) - STOP_GRACE_S
+        budget = min(float(salvage_s), remaining)
+        if budget < PLANNER_SALVAGE_MIN_S:
+            skip("no_time_left_under_actor_timeout")
+        timeout = max(1, int(remaining))
+        salvage_env = {**(env or {}),
+                       SEAT_ENV_ARM: ((env or {}).get(SEAT_ENV_ARM) or "plain")
+                       + SALVAGE_ARM_SUFFIX}
+        record.update(budget_s=round(budget, 1), timeout_s=timeout)
+        call_started = time.monotonic()
+
+        def finish(result: str, reason: str | None = None, **extra: Any) -> None:
+            actor_metrics.record_salvage_turn(replies, {
+                **record, "result": result, "wall_s": round(time.monotonic() - call_started, 1),
+                **({"reason": reason[:500]} if reason else {}), **extra})
+        try:
+            raw = _run_agent(PLANNER_SALVAGE_MESSAGE, workspace=self.workspace,
+                             timeout_s=timeout, backend=backend, schema=HYPOTHESIS_SCHEMA,
+                             env=salvage_env, **self._stop_kw(), budget_s=budget,
+                             session_id=session_id)
+            result, declared = self._proposal_from_raw(
+                raw, context, report_source=REPORT_SOURCE_SALVAGE_TURN)
+        except ActorStopped as exc:
+            finish("stopped", str(exc))
+            raise
+        except ActorBudgetExhausted as exc:
+            outcome, reason = "budget_exhausted", str(exc)
+        except ActorTimedOut as exc:
+            outcome, reason = "timed_out", str(exc)
+        except ProviderTransient as exc:
+            outcome, reason = "no_proposal", str(exc)
+        except Exception as exc:  # noqa: BLE001 -- the salvage turn never fails the run
+            outcome, reason = "error", f"{type(exc).__name__}: {exc}"
+        else:
+            if not isinstance(result, Abstain):
+                finish("proposal", mechanism_id=result.mechanism_id)
+                return result, declared
+            outcome, reason = "abstained", result.reason
+        finish(outcome, reason)
+        failed = ActorBudgetExhausted(f"{spent}; salvage turn: {outcome} ({reason[:200]})")
+        failed.session_id = spent.session_id
+        failed.started_monotonic = spent.started_monotonic
+        raise failed from spent
+
+    def _proposal_from_raw(self, raw: str, context: Mapping[str, Any], *,
+                           report_source: str = "") -> tuple[Hypothesis | Abstain, Any]:
+        """A planner reply -> (hypothesis or abstention, raw `relies_on_claims`).
+        `report_source` (only the salvage turn sets it) is stamped on the hypothesis."""
         body = _parse_reply(raw, schema=HYPOTHESIS_SCHEMA, backend=self.backend, workspace=self.workspace)
         declared = body.get(belief_context.RELIANCE_FIELD) if isinstance(body, dict) else None
         abstention = _abstention(body)
@@ -2964,7 +3144,8 @@ class AgentPlanner:
             target_symbol=str(body["target_symbol"]),
             runtime_pair=(_runtime_pair(body["runtime_treatment"], context,
                                         str(body["mechanism_id"]))
-                          if "runtime_treatment" in body else None)), declared
+                          if "runtime_treatment" in body else None),
+            **({"planner_report_source": report_source} if report_source else {})), declared
 
     @_in_call_scope("author")
     def author(self, hypothesis: Hypothesis,
