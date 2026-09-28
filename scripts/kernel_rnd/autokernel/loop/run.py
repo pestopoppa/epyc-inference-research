@@ -1556,7 +1556,12 @@ def main(argv: list[str] | None = None) -> int:
                              "(derive each fact once, analysis under ~4,000 tokens, reply is "
                              "the JSON object only). Off = the historical prompt byte for "
                              "byte (default: %(default)s)")
-    parser.add_argument("--actor-planner-budget-s", type=int, default=2700,
+    # 2700 -> 4500 (DS41-C71, 2026-09-28): run 10m batches 7 and 9 ended budget_exhausted
+    # at 2700 s mid-session (22 and 39 tool steps; single reasoning steps of 15-16k output
+    # tokens on the thinking-on 27B), batch 8 on the output cap in between. The planner
+    # phase holds no CPU measurement (the CPU window is open to peers), so the longer
+    # wall costs only GPU time; 4500 s matches the thinking-on author's member budget.
+    parser.add_argument("--actor-planner-budget-s", type=int, default=4500,
                         help="opencode planner (OAB-23): wall budget per proposal call, under "
                              "--actor-timeout-s. Past it the call is ended through the stop "
                              "path and recorded failure_class=budget_exhausted; a complete "

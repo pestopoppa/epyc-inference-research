@@ -582,7 +582,7 @@ class CliKnobs(unittest.TestCase):
         from autokernel.loop import run
         source = Path(run.__file__).read_text(encoding="utf-8")
         for flag, default in (("--actor-concise", 'default="on"'),
-                              ("--actor-planner-budget-s", "default=2700"),
+                              ("--actor-planner-budget-s", "default=4500"),
                               ("--actor-author-budget-s", "default=0"),
                               ("--actor-context-limit", "DEFAULT_CONTEXT_LIMIT"),
                               ("--actor-output-limit", "DEFAULT_OUTPUT_LIMIT")):
