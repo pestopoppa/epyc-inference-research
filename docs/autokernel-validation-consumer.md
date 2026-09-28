@@ -20,7 +20,7 @@ or mismatched native arms, build, recipe, model, workload, protocol, serving ins
 or calibration become explicit debt. Both arms' complete DSO sets use the canonical
 planned-serving identity: the exact ordered loader-name plus SHA-256 rows must match
 the `BuildIdentity.dsos` closure. Missing, changed, or extra libraries are structural
-debt that no semantic callback can erase. The existing cadence owns four keeps or the
+debt that no semantic callback can erase. The existing cadence owns eight keeps (four until 2026-09-28) or the
 configured gain trigger and completed-run reset. The consumer adds no time policy and
 does not clear validation debt on an inconclusive or prerequisite-only completion.
 

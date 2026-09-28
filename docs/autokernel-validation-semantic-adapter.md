@@ -139,7 +139,7 @@ Reviewed local source map (2026-09-09 branch base):
 - `loop/serving.py` SHA-256 `3eb5b56574e65c4f4540da3c609aad02bfc66010a26c71cfd20532e33561f311`:
   paired serving measurement and floor-based `decisive` field;
 - `loop/accumulate.py` SHA-256 `6bb9973814ec22173b74d05dd143690a1e0815c195e128373cd31f0dfd6be354`:
-  `SERVING_GATE_EVERY_KEEPS=4`, `classify_serving`, and `resolve`;
+  `SERVING_GATE_EVERY_KEEPS=8` (4 until 2026-09-28), `classify_serving`, and `resolve`;
 - `loop/run.py` SHA-256 `1f25f61884cb48be3aa0002d0445df14cb2a1587eca324d5bf3588263dc95c7b`:
   actual comparison/resolve call and experimental champion-of-record update;
 - `loop/experiment_plan.py` SHA-256 `9038f713354394d29c02607c6ff21e0236b1bbb011c43e8b1feb650a5e130e23`:

@@ -339,7 +339,9 @@ def test_advanced_tip_clears_threshold_inheritance_but_retains_four_keep_cadence
     bundle.save(tmp_path)
     restored, _ = A.load_bundle(
         tmp_path, anchor_commit="k4", is_ancestor=_linear("cor0", "k3", "k4", "k5"))
-    policy = A.AccumulatorPolicy()
+    # Pinned to the 4-keep cadence this test was written against: it exercises the
+    # inheritance mechanism, not the default N (8 since 2026-09-28).
+    policy = A.AccumulatorPolicy(every_keeps=4)
     assert restored.champion_of_record == "cor0"
     assert restored.keeps == ["m1", "m2", "m3"]
     assert restored.compounded_bench_pct == 50.0

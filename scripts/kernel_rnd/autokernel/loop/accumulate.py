@@ -36,8 +36,9 @@ decision and leaves the git/build mechanics to the loop.
 R23-54 (operator 2026-09-08) ADDED A SECOND, MANDATORY TRIGGER. `fire_multiple` is a
 heuristic over the proxy, and the gate's first firing showed the proxy failing at that
 very job (+5.958% bench vs -2.18% serving, n=10). So the gate now also fires every
-`SERVING_GATE_EVERY_KEEPS` = 4 keeps regardless of the compounded estimate, and every
-gate record names its `trigger` -- "threshold", "cadence" or "both".
+`SERVING_GATE_EVERY_KEEPS` keeps regardless of the compounded estimate, and every
+gate record names its `trigger` -- "threshold", "cadence" or "both". The operator raised
+the cadence from 4 to 8 keeps on 2026-09-28 (see the constant).
 
 This module is pure: it holds NO build directories and runs NO measurements. The loop
 injects the compounded-bench number and the serving-gate row; `accumulate` decides.
@@ -71,10 +72,16 @@ from . import status
 #: cheap early signal -- but it no longer holds a veto over the schedule: after N keeps
 #: the gate runs on cadence and the bundle gets a real serving reading either way.
 #:
-#: N = 4: four 1-3% keeps is the batch size at which the ~3.5% serving floor has a
-#: plausible chance of resolving the bundle, and it bounds how far the accumulator can
-#: drift from serving-demonstrated reality (at most 4 keeps of unverified bench gain).
-SERVING_GATE_EVERY_KEEPS = 4
+#: N = 4 (2026-09-08): four 1-3% keeps is the batch size at which the ~3.5% serving floor
+#: has a plausible chance of resolving the bundle, and it bounds how far the accumulator
+#: can drift from serving-demonstrated reality.
+#:
+#: N = 8 (operator 2026-09-28, amending R23-54): every promotion spends serving-gate time,
+#: and advancing the champion at +13% rather than +20% makes little difference; the
+#: operator can always force an advance. Eight keeps still bounds the unverified bench
+#: drift, and the DS41 floor fell to 1.876% under the adopted load-threads-48 recipe, so a
+#: bundle resolves sooner than the 4-keep sizing assumed.
+SERVING_GATE_EVERY_KEEPS = 8
 JOURNAL_DIRNAME = "journal"
 MEASUREMENT_CURRENT = "current_snapshot"
 MEASUREMENT_UNKNOWN_LEGACY = "unknown_legacy"
@@ -150,7 +157,7 @@ class AccumulatorPolicy:
     value is the module constant `SERVING_GATE_EVERY_KEEPS`."""
     fire_multiple: float = 2.5
     on_divergence: DivergenceAction = DivergenceAction.HOLD  # operator 2026-09-04
-    every_keeps: int = SERVING_GATE_EVERY_KEEPS              # operator 2026-09-08 (R23-54)
+    every_keeps: int = SERVING_GATE_EVERY_KEEPS              # R23-54; 4 -> 8 operator 2026-09-28
 
     def fire_threshold_pct(self, serving_floor_pct: float) -> float:
         return self.fire_multiple * serving_floor_pct

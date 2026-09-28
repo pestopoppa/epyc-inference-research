@@ -1,5 +1,7 @@
 """R23-54 (operator ruling 2026-09-08): the serving gate fires on a fixed KEEP CADENCE —
-every 4 keeps — REGARDLESS of the compounded bench estimate.
+every N keeps — REGARDLESS of the compounded bench estimate. N was 4; the operator raised
+it to 8 on 2026-09-28. The behaviour tests below pin `every_keeps=4` explicitly so they
+exercise the mechanism independent of the current default.
 
 WHY THESE TESTS EXIST. The gate's first firing (2026-09-08) measured the bench proxy
 saying +5.958% while serving said "cannot tell, probably slightly negative" (-2.18%,
@@ -16,7 +18,7 @@ from pathlib import Path
 from autokernel.loop import accumulate as A
 
 
-P = A.AccumulatorPolicy(fire_multiple=2.5)
+P = A.AccumulatorPolicy(fire_multiple=2.5, every_keeps=4)
 FLOOR = 3.536          # the calibrated serving floor; threshold = 8.84%
 UNDER = 1.0            # a compounded gain nowhere near the threshold
 
@@ -25,9 +27,10 @@ def _bundle(pct=0.0):
     return A.Bundle(champion_of_record="cor0", tip="cor0", compounded_bench_pct=pct)
 
 
-def test_the_ruling_is_four_keeps():
-    assert A.SERVING_GATE_EVERY_KEEPS == 4
-    assert A.AccumulatorPolicy().every_keeps == 4
+def test_the_ruling_is_eight_keeps():
+    # R23-54 set 4; the operator raised it to 8 on 2026-09-28.
+    assert A.SERVING_GATE_EVERY_KEEPS == 8
+    assert A.AccumulatorPolicy().every_keeps == 8
 
 
 def test_counter_increments_on_every_keep():

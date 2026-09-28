@@ -3630,7 +3630,7 @@ def main(argv: list[str] | None = None) -> int:
                            else round(bundle[0].compounded_bench_pct, 3))
         comp = (round(bundle[0].compounded_bench_pct, 3)
                 if measurement_current else None)
-        # R23-54: the cadence half of the trigger, so the card can say "2/4 keeps to the
+        # R23-54: the cadence half of the trigger, so the card can say "2/8 keeps to the
         # mandatory gate" and name the reason the last gate fired instead of leaving a
         # reader to infer it from the compounded number that 2026-09-08 proved unreliable.
         trig = accumulate.gate_trigger(bundle[0], serving_floor_pct, accum_policy)
