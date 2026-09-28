@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import threading
 import time
 import uuid
@@ -703,6 +704,47 @@ def _combined_prompt_with_context(prompt: str, context: str | None) -> str:
     return prompt
 
 
+def _direct_call_prompt(prompt: str, role: str | Role, registry: Any) -> str:
+    """The x_disable_repl direct call's prompt: /chat's direct-stage contract.
+
+    A role whose backend speaks ``/completion`` gets NO server-side chat
+    template, so the orchestrator must wrap the turn itself (as /chat's
+    direct stage does, chat.py); a ``/v1/chat/completions`` role is templated
+    by llama-server --jinja and must stay bare. The caller passes
+    ``skip_suffix=True`` with this prompt: the registry's
+    ``system_prompt_suffix`` appended AFTER the user's text reads as a
+    continuation (a raw completion echoes it) or as a second user request.
+    Before this, the direct call sent the bare question + suffix to
+    ``/completion`` for every thinking-on role (the :8083 27B's
+    architect_critic / coder_escalation / ingest_long_context).
+    """
+    from src.chat_completions_roles import chat_completions_roles
+
+    role_name = _role_name(role)
+    if role_name in chat_completions_roles():
+        return prompt
+    from src.api.routes.chat_utils import apply_chat_template_for_role
+
+    return apply_chat_template_for_role(role_name, prompt, registry=registry)
+
+
+_LEADING_THINK_RE = re.compile(r"\A\s*<think>(.*?)</think>\s*", re.DOTALL)
+
+
+def _split_leading_reasoning(text: str) -> tuple[str | None, str]:
+    """Split a leading, CLOSED ``<think>...</think>`` block off a direct answer.
+
+    The ``/completion`` lane does no reasoning parsing (llama-server fills
+    ``reasoning_content`` only on /v1/chat/completions), so a thinking-on
+    role's reasoning arrives inline. Returns ``(reasoning, answer)``; an
+    unclosed or non-leading block is left in the answer untouched.
+    """
+    match = _LEADING_THINK_RE.match(text or "")
+    if match is None:
+        return None, text
+    return match.group(1).strip(), text[match.end():]
+
+
 def _sampling_kwargs(request: OpenAIChatRequest) -> dict[str, Any]:
     """Return only caller-explicit sampling controls for downstream inference."""
     explicit_fields = getattr(request, "model_fields_set", set())
@@ -1168,6 +1210,7 @@ async def openai_chat_completions(
             start_time = time.perf_counter()
             total_tokens = 0
             response_text = ""
+            response_reasoning: str | None = None
             finish_reason = "stop"
             client_tool_calls: list[dict[str, Any]] = []
             client_usage: OpenAIUsage | None = None
@@ -1299,11 +1342,17 @@ async def openai_chat_completions(
                             return
                         total_tokens = primitives.total_tokens_generated
                     elif disable_repl:
-                        # Direct LLM call — no REPL, no code execution
+                        # Direct LLM call — no REPL, no code execution.
+                        # /chat's direct-stage prompt contract (_direct_call_prompt).
                         try:
                             response_text = primitives.llm_call(
-                                combined_context, role=role,
+                                _direct_call_prompt(
+                                    combined_context, role,
+                                    getattr(state, "registry", None),
+                                ),
+                                role=role,
                                 n_tokens=request.max_tokens,
+                                skip_suffix=True,
                                 **sampling_kwargs,
                             )
                         except ContentionDenied as e:
@@ -1350,6 +1399,9 @@ async def openai_chat_completions(
                             )
                             yield "data: [DONE]\n\n"
                             return
+                        response_reasoning, response_text = _split_leading_reasoning(
+                            response_text
+                        )
                         total_tokens = primitives.total_tokens_generated
                     else:
                         # Create REPL environment
@@ -1470,12 +1522,37 @@ async def openai_chat_completions(
                         )
                         if escalated_text != response_text:
                             response_text = escalated_text
+                            response_reasoning = None  # belonged to the replaced answer
                             finish_reason = "stop"
                         total_tokens = primitives.total_tokens_generated
                         client_usage = _escalated_client_usage(client_usage, escalation_plan)
 
-                    # Stream the response character by character (OpenAI format)
                     first_chunk = True
+                    if response_reasoning:
+                        # The direct call's split-off <think> block, as one
+                        # reasoning_content delta ahead of the content deltas.
+                        chunk = {
+                            "id": chat_id,
+                            "object": "chat.completion.chunk",
+                            "created": created,
+                            "model": request.model,
+                            "choices": [
+                                {
+                                    "index": 0,
+                                    "delta": {
+                                        "role": "assistant",
+                                        "reasoning_content": response_reasoning,
+                                    },
+                                    "finish_reason": None,
+                                }
+                            ],
+                        }
+                        first_chunk = False
+                        if request.x_show_routing:
+                            chunk["x_role"] = role
+                        yield f"data: {json.dumps(chunk)}\n\n"
+
+                    # Stream the response character by character (OpenAI format)
                     for char in response_text:
                         chunk = {
                             "id": chat_id,
@@ -1594,6 +1671,7 @@ async def openai_chat_completions(
         finish_reason = "stop"
         client_tool_calls: list[dict[str, Any]] = []
         client_usage: OpenAIUsage | None = None
+        response_reasoning: str | None = None
 
         if not use_real_mode:
             # Mock mode fallback
@@ -1630,10 +1708,15 @@ async def openai_chat_completions(
                         task_id=chat_id,
                     )
                 elif disable_repl:
-                    # Direct LLM call — no REPL, no code execution
+                    # Direct LLM call — no REPL, no code execution.
+                    # /chat's direct-stage prompt contract (_direct_call_prompt).
                     response_text = primitives.llm_call(
-                        combined_context, role=role,
+                        _direct_call_prompt(
+                            combined_context, role, getattr(state, "registry", None),
+                        ),
+                        role=role,
                         n_tokens=request.max_tokens,
+                        skip_suffix=True,
                         **sampling_kwargs,
                     )
                     # llm_call does not raise on backend failure — it returns an
@@ -1646,6 +1729,9 @@ async def openai_chat_completions(
                             status_code=502,
                             detail=f"Backend failed: {inband_error}",
                         )
+                    response_reasoning, response_text = _split_leading_reasoning(
+                        response_text
+                    )
                 else:
                     repl = REPLEnvironment(
                         context=combined_context,
@@ -1718,6 +1804,7 @@ async def openai_chat_completions(
                     )
                     if escalated_text != response_text:
                         response_text = escalated_text
+                        response_reasoning = None  # belonged to the replaced answer
                         finish_reason = "stop"
                     client_usage = _escalated_client_usage(client_usage, escalation_plan)
 
@@ -1759,7 +1846,11 @@ async def openai_chat_completions(
                 tool_calls=client_tool_calls,
             )
         else:
-            response_message = OpenAIMessage(role="assistant", content=response_text)
+            response_message = OpenAIMessage(
+                role="assistant",
+                content=response_text,
+                reasoning_content=response_reasoning,
+            )
 
         if request.x_show_routing:
             response_meta = {

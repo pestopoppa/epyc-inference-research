@@ -33,7 +33,8 @@
         ],
         "kwargs": {
           "n_tokens": 1024,
-          "role": "frontdoor"
+          "role": "frontdoor",
+          "skip_suffix": true
         }
       }
     ],
@@ -82,7 +83,8 @@
         ],
         "kwargs": {
           "n_tokens": 1024,
-          "role": "frontdoor"
+          "role": "frontdoor",
+          "skip_suffix": true
         }
       }
     ],
@@ -96,7 +98,8 @@
         ],
         "kwargs": {
           "n_tokens": 1024,
-          "role": "frontdoor"
+          "role": "frontdoor",
+          "skip_suffix": true
         }
       }
     ],
@@ -111,7 +114,8 @@
         ],
         "kwargs": {
           "n_tokens": 1024,
-          "role": "frontdoor"
+          "role": "frontdoor",
+          "skip_suffix": true
         }
       }
     ],

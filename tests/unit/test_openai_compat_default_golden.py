@@ -13,7 +13,10 @@ existed (origin/main 09bdb998). Each case records two things:
 Regenerate ONLY when a default-mode change is intended:
 ``HS4_REGEN_GOLDEN=1 pytest tests/unit/test_openai_compat_default_golden.py``.
 The ``*_include_usage`` cases were added by HS-4 P0.4; the pre-existing cases
-were not regenerated.
+were not regenerated. 2026-09-28 (intended): the ``direct_*`` cases' ``llm_call``
+now carries ``skip_suffix=True`` — the x_disable_repl direct call follows /chat's
+direct-stage prompt contract (tests/unit/test_openai_direct_prompt_contract.py);
+the response bytes did not change.
 """
 
 from __future__ import annotations

@@ -28,6 +28,18 @@ class OpenAIMessage(BaseModel):
         default=None,
         description="Optional participant or tool name",
     )
+    reasoning_content: str | None = Field(
+        default=None,
+        description="Assistant reasoning split off the answer (response only; "
+        "omitted when there is none)",
+    )
+
+    @model_serializer(mode="wrap")
+    def _omit_absent_reasoning(self, handler) -> dict[str, Any]:
+        data = handler(self)
+        if isinstance(data, dict) and data.get("reasoning_content") is None:
+            data.pop("reasoning_content", None)
+        return data
 
     @model_validator(mode="after")
     def _require_content_or_tool_call(self) -> "OpenAIMessage":
