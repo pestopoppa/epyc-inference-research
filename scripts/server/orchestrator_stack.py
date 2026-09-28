@@ -2277,6 +2277,11 @@ PRODUCTION_FEATURE_WAVE_OVERRIDES: dict[str, bool] = {
     # the inference tap and session log. Metadata only: no routing, admission or
     # response change (orch f58db8be; 45 unit tests). Enables the HS-19a live run.
     "v1_subagent_link": True,
+    # UFH-13 TE-1, operator-approved 2026-09-28 for production: /v1 frontdoor
+    # escalation. Opt-in per request (x_escalation=auto|architect_general); a request
+    # without the key is served exactly as with the flag off (orch 280059cc). Enables
+    # the thesis experiment's A2 arm.
+    "v1_escalation": True,
 }
 
 LANGGRAPH_PHASE3_LIVE_ENV_VARS: tuple[str, ...] = (
