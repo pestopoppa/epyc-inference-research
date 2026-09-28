@@ -260,6 +260,13 @@ a heavy tail.
 claim an effect smaller than the floor for the pair count used. Decode has heavier
 tails and converges slowly; prefill is the cheaper surface to detect on.
 
+**Serving floor across a source-only anchor change (DS41-C69, operator 2026-09-28).** The
+matched serving floor is looked up as: exact anchor identity, then the champion-of-record's,
+then the newest sealed floor of the SAME runtime recipe hash, carried read-only
+(`serving_floor_provenance=carried_forward`) only when every later anchor-guard A/A on the
+current anchor sits inside it. Otherwise the loop recalibrates (24 pairs, ~3 h); a runtime-recipe
+change never carries (P-AK-SEARCH-1-A4), and `--no-floor-carry-forward` restores recalibration.
+
 ## The workload
 
 `DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf` — n_embd 1536 (divisible by the

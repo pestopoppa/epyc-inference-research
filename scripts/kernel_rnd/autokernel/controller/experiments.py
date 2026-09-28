@@ -747,6 +747,28 @@ class ExperimentStore:
                 (epoch,)).fetchall()
         return sorted(row["mechanism_id"] for row in rows)
 
+    def rows_for_mechanism(self, mechanism_id: str) -> list[dict[str, Any]]:
+        """Every row filed under one mechanism id, oldest first, payload decoded.
+
+        Evidence selection by exact mechanism (the indexed column), independent of
+        epoch: e.g. the loop's floor carry-forward (DS41-C69) reads every
+        `anchor-aa-guard` verdict to find the A/A recorded on the current anchor.
+        A payload that does not decode is returned as None, never guessed.
+        """
+        rows = self._connection.execute(
+            "SELECT attempt_id, recorded_at, epoch_sha256, mechanism_id, status, "
+            "effect_fraction, payload FROM experiments WHERE mechanism_id = ? "
+            "ORDER BY recorded_at, rowid", (mechanism_id,)).fetchall()
+        out = []
+        for row in rows:
+            item = dict(row)
+            try:
+                item["payload"] = json.loads(item["payload"])
+            except (TypeError, ValueError):
+                item["payload"] = None
+            out.append(item)
+        return out
+
     def count(self) -> int:
         return int(self._connection.execute(
             "SELECT COUNT(*) FROM experiments").fetchone()[0])

@@ -813,6 +813,210 @@ def _load_heldout_floor(store: Path, recipe, launch, *, tip_build: Path,
     return floor_store, reading
 
 
+#: `serving_floor_provenance` of a floor admitted by `_carry_forward_floor`: a sealed
+#: floor of an EARLIER execution identity in this recipe's lineage, re-used read-only on
+#: the strength of a fresh anchor-guard A/A on the current anchor. Never "verified".
+FLOOR_CARRY_PROVENANCE = "carried_forward"
+FLOOR_CARRY_SCHEMA = "epyc.autokernel.serving_floor_carry.v1"
+
+
+def _floor_calibrated_at(row) -> float | None:
+    """Wall-clock end of the calibration's last launch, from INSIDE the sealed row.
+
+    A matched floor carries no free-standing timestamp, but its folded `residency`
+    block (sealed by `content_sha256`) records the window of the launches that defined
+    it. A row that cannot state it is not carry-eligible: "was this A/A measured after
+    the floor?" must be answered from sealed evidence, never from a file mtime.
+    """
+    block = row.get("residency")
+    value = block.get("window_end") if isinstance(block, dict) else None
+    if type(value) not in (int, float) or not value > 0 or value != value:
+        return None
+    return float(value)
+
+
+def _iso_epoch(text) -> float | None:
+    from datetime import datetime
+    if not isinstance(text, str) or not text:
+        return None
+    try:
+        stamp = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return stamp.timestamp() if stamp.tzinfo is not None else None
+
+
+def _carry_forward_floor(store: Path, recipe, anchor, *, frozen_requests, instrument: str,
+                         pairs: int, anchor_commits):
+    """DS41-C69: carry the lineage's newest matched floor across a SOURCE-only change.
+
+    Operator directive 2026-09-28 ("let's be more clever about this. Wasting sooo much
+    time over this is silly."): after the 01:14Z COR promotion neither the tip nor the
+    new COR had an exact floor, so the loop spent ~3 h on 48 A/A launches although the
+    new COR's anchor-guard A/A had just measured -2.202% against the 5.525% floor.
+    measurement/protocols/kernel-research.md: the floor is a property of the instrument
+    under this host state, not of any candidate -- a source-only anchor change may carry
+    it; a runtime-recipe change may not (P-AK-SEARCH-1-A4).
+
+    Returns `(FloorReading, carry_record)` when admitted, else `(None, reason)`. Each
+    clause fails closed:
+
+    * matched instrument only; candidates are ONLY floors under
+      `runtime-source-floors/<recipe.recipe_hash>/` -- the SAME runtime recipe, so a
+      runtime-recipe change can never carry, by construction;
+    * each candidate must pass `serving._validate_matched_floor` against the CURRENT
+      anchor launch (workload, request bytes, pairs, instrument, estimator, unit,
+      placement/environment frame, sealed content) and be the sealed floor of the
+      identity directory it is filed under -- every exact-floor check except the
+      baseline execution digest, which is precisely what a source treatment changes;
+    * only the NEWEST valid floor is considered (never shopping for a wider bar);
+    * admitted only when the campaign experiment store holds anchor-guard A/A rows for
+      one of `anchor_commits`, on this recipe, request bytes and pair count, recorded
+      after that floor's calibration ended, and EVERY such row is `anchor_verified`
+      with |effect_fraction x 100| <= the carried floor_pct (one excursion refuses);
+    * READ-ONLY, like the COR fallback: the carried row is never copied into the new
+      identity directory, so the immutable exact-identity floor rule stands.
+    """
+    from datetime import datetime, timezone
+    from .anchor import MECHANISM_ID as anchor_guard_id
+
+    if instrument != serving.MATCHED_INSTRUMENT:
+        return None, "floor carry-forward applies to the matched instrument only"
+    lineage = Path(store) / "runtime-source-floors" / recipe.recipe_hash
+    if not lineage.is_dir():
+        return None, f"no floor lineage under runtime recipe {recipe.recipe_hash[:12]}"
+    name = serving.floor_path(Path(), recipe, frozen_requests=frozen_requests,
+                              instrument=instrument, pairs=pairs).name
+    candidates = []
+    for identity_dir in sorted(lineage.iterdir()):
+        path = identity_dir / name
+        if identity_dir.name == anchor.execution_digest or not path.is_file():
+            continue
+        try:
+            raw = path.read_bytes()
+            row = json.loads(raw)
+            serving._validate_matched_floor(row, recipe, frozen_requests, pairs,
+                                            resolved=anchor)
+            baseline = row.get("baseline_resolved_recipe")
+            if (not isinstance(baseline, dict)
+                    or baseline.get("execution_digest") != identity_dir.name):
+                continue  # not the sealed floor of the identity it is filed under
+            reading = serving.FloorReading(row["floor_pct"], FLOOR_CARRY_PROVENANCE, path, row)
+            if reading.gate_floor(effect_unit=serving.COMPARE_EFFECT_UNIT) is None:
+                continue
+        except (OSError, ValueError, TypeError, KeyError, AttributeError,
+                serving.ServingFloorMismatch, serving.RecipeError):
+            continue
+        calibrated_at = _floor_calibrated_at(row)
+        if calibrated_at is not None:
+            candidates.append((calibrated_at, path, raw, row, reading))
+    if not candidates:
+        return None, "no sealed lineage floor validates on the current complete frame"
+    calibrated_at, path, raw, row, reading = max(candidates, key=lambda item: item[0])
+    if not (Path(store) / "experiments.db").is_file():
+        return None, "no campaign experiment store: no A/A evidence on the current anchor"
+    commits = {str(commit) for commit in anchor_commits if commit}
+    digest = serving.request_digest(recipe, frozen_requests)
+    with experiments.ExperimentStore(store, read_only=True, bounded=False) as memory:
+        rows = memory.rows_for_mechanism(anchor_guard_id)
+    evidence = []
+    for item in rows:
+        payload = item.get("payload")
+        guard = payload.get("anchor_guard") if isinstance(payload, dict) else None
+        comparison = guard.get("comparison") if isinstance(guard, dict) else None
+        if not isinstance(comparison, dict) or guard.get("champion_commit") not in commits:
+            continue
+        plan = comparison.get("measurement_plan")
+        if (comparison.get("schema") != "epyc.autokernel.serving_ab.v2"
+                or comparison.get("recipe_hash") != recipe.recipe_hash
+                or comparison.get("request_digest") != digest
+                or comparison.get("pairs") != pairs
+                or not isinstance(plan, dict) or plan.get("instrument") != instrument):
+            continue
+        recorded = _iso_epoch(item.get("recorded_at"))
+        if recorded is None or recorded <= calibrated_at:
+            continue
+        evidence.append((recorded, item))
+    if not evidence:
+        return None, (f"no anchor-guard A/A on the current anchor recorded after lineage "
+                      f"floor {path.parent.name[:12]} was calibrated")
+    for _recorded, item in evidence:
+        effect = item.get("effect_fraction")
+        if (item.get("status") != "anchor_verified" or type(effect) not in (int, float)
+                or not abs(effect * 100.0) <= row["floor_pct"]):
+            return None, (f"anchor-guard A/A {str(item.get('attempt_id'))[:12]} "
+                          f"({item.get('status')}, effect_fraction {effect!r}) does not "
+                          f"sit inside the carried {row['floor_pct']}% floor")
+    _recorded, aa = max(evidence, key=lambda pair: pair[0])
+    carry = {
+        "schema": FLOOR_CARRY_SCHEMA, "provenance": FLOOR_CARRY_PROVENANCE,
+        "rule": "DS41-C69 lineage floor carry-forward (operator 2026-09-28)",
+        "recipe_hash": recipe.recipe_hash, "request_digest": digest,
+        "floor_pct": row["floor_pct"],
+        "parent_floor_path": str(path),
+        "parent_floor_sha256": hashlib.sha256(raw).hexdigest(),
+        "parent_content_sha256": row["content_sha256"],
+        "parent_execution_digest": path.parent.name,
+        "parent_calibrated_at": datetime.fromtimestamp(
+            calibrated_at, timezone.utc).isoformat().replace("+00:00", "Z"),
+        "anchor_execution_digest": anchor.execution_digest,
+        "anchor_commits": sorted(commits),
+        "aa_attempt_id": aa.get("attempt_id"), "aa_recorded_at": aa.get("recorded_at"),
+        "aa_status": aa.get("status"),
+        "aa_effect_pct": round(aa["effect_fraction"] * 100.0, 6),
+        "aa_rows_considered": len(evidence)}
+    return reading, carry
+
+
+def _select_source_floor(store: Path, recipe, launch, *, frozen_requests, instrument: str,
+                         pairs: int, cor_build: Path | None = None, anchor_commits=(),
+                         carry_forward: bool = True, dynamic: bool = False):
+    """The source floor a launch gates against: `(floor_store, reading, carry)`.
+
+    Order, each step only when the one before found nothing: (1) the exact floor of
+    this anchor execution identity; (2) for the matched instrument, the protected
+    champion-of-record's exact floor (`cor_build`); (3) DS41-C69, the carried-forward
+    lineage floor (`_carry_forward_floor`), unless `carry_forward` is False
+    (`--no-floor-carry-forward`). `carry` is the carry record for (3), else None.
+    Steps (1) and (2) are exactly the pre-C69 behaviour.
+    """
+    floor_store, reading = _load_source_floor(
+        store, recipe, launch, frozen_requests=frozen_requests, instrument=instrument,
+        pairs=pairs, dynamic=dynamic)
+    matched = instrument == serving.MATCHED_INSTRUMENT
+    # A source treatment changes executable/DSO identity, not the matched process
+    # noise frame.  Once an accumulator has advanced, its protected champion-of-record
+    # remains the calibrated reference for the same workload, request bytes,
+    # placement and environment.  Reuse that verified frame instead of demanding 48
+    # fresh A/A launches after every source keep.  serving.compare revalidates the
+    # complete frame against both treatment arms before admitting the floor.
+    if reading.floor_pct is None and matched and cor_build is not None:
+        _cor_store, cor_reading = _load_source_floor(
+            store, recipe, _cpu_arm(launch, cor_build), frozen_requests=frozen_requests,
+            instrument=instrument, pairs=pairs, dynamic=dynamic)
+        if cor_reading.floor_pct is not None:
+            reading = cor_reading
+    carry = None
+    if reading.floor_pct is None and matched and carry_forward:
+        # DS41-C69 (operator 2026-09-28: "let's be more clever about this. Wasting sooo
+        # much time over this is silly."): neither exact floor exists -- typically right
+        # after a COR promotion -- so try the lineage floor under the SAME runtime
+        # recipe hash, admitted only on a fresh in-floor anchor-guard A/A. Read-only;
+        # a refusal falls through to the ordinary 24-pair calibration.
+        carried, detail = _carry_forward_floor(
+            store, recipe, launch, frozen_requests=frozen_requests, instrument=instrument,
+            pairs=pairs, anchor_commits=anchor_commits)
+        if carried is not None:
+            reading, carry = carried, detail
+            print(f"serving   floor carried forward from {detail['parent_floor_path']} "
+                  f"({detail['floor_pct']}%): anchor-guard A/A {detail['aa_attempt_id'][:12]} "
+                  f"measured {detail['aa_effect_pct']:+.3f}% after it was calibrated "
+                  "[DS41-C69; --no-floor-carry-forward restores recalibration]")
+        else:
+            print(f"serving   floor carry-forward refused: {detail}")
+    return floor_store, reading, carry
+
+
 def _gate_floor(reading) -> tuple[float | None, str | None]:
     """A floor reading AS THE BAR for this loop's serving comparisons: (pct, unit).
 
@@ -1094,6 +1298,10 @@ def main(argv: list[str] | None = None) -> int:
                         choices=(serving.LEGACY_INSTRUMENT, serving.MATCHED_INSTRUMENT),
                         help="matched_process_v2 uses counterbalanced process pairs and a matching floor; "
                              "direct CLI defaults to the historical v1 instrument")
+    parser.add_argument("--no-floor-carry-forward", dest="floor_carry_forward",
+                        action="store_false", default=True,
+                        help="DS41-C69 escape hatch: never carry a lineage serving floor across "
+                             "a source-only anchor change; recalibrate (24 pairs) as before")
     parser.add_argument("--cpu-serving-launch", type=Path,
                         help="selected target's canonical resolved CPU launch JSON")
     parser.add_argument("--gpu-serving-launch", type=Path,
@@ -2049,6 +2257,9 @@ def main(argv: list[str] | None = None) -> int:
     #: a session sd 0.501% vs between launches sd 2.793% is ~13x, and the arm-unit reading
     #: sized one experiment 1200-fold wrong.
     serving_floor_unit = None
+    #: DS41-C69: the carry record when `serving_floor_provenance == "carried_forward"`
+    #: (parent floor path + sha256, the admitting anchor-guard A/A attempt), else None.
+    serving_floor_carry = None
     floor_request_digest = None
     floor_record = None
     source_instrument = ({"instrument": args.serving_instrument, "pairs": args.serving_pairs}
@@ -2057,26 +2268,14 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("matched_process_v2 requires an explicit resolved serving launch")
     if direct_launch:
         serving_recipe = direct_launch.template
-        floor_store, floor_reading = _load_source_floor(
+        # exact tip floor -> champion-of-record floor -> DS41-C69 carried-forward
+        # lineage floor (same runtime recipe hash, fresh in-floor anchor-guard A/A on
+        # this anchor) -> otherwise the ordinary 24-pair calibration below.
+        floor_store, floor_reading, serving_floor_carry = _select_source_floor(
             args.store, serving_recipe, direct_launch,
             frozen_requests=frozen_requests, instrument=args.serving_instrument,
-            pairs=args.serving_pairs)
-        # A source treatment changes executable/DSO identity, not the matched
-        # process noise frame.  Once an accumulator has advanced, its protected
-        # champion-of-record remains the calibrated reference for the same
-        # workload, request bytes, placement and environment.  Reuse that
-        # verified frame instead of demanding 48 fresh A/A launches after every
-        # source keep.  serving.compare revalidates the complete frame against
-        # both treatment arms before admitting the floor.
-        if (floor_reading.floor_pct is None and source_instrument
-                and args.cor_build is not None):
-            cor_floor_launch = _cpu_arm(direct_launch, args.cor_build)
-            _cor_floor_store, cor_floor_reading = _load_source_floor(
-                args.store, serving_recipe, cor_floor_launch,
-                frozen_requests=frozen_requests, instrument=args.serving_instrument,
-                pairs=args.serving_pairs)
-            if cor_floor_reading.floor_pct is not None:
-                floor_reading = cor_floor_reading
+            pairs=args.serving_pairs, cor_build=args.cor_build,
+            anchor_commits=(anchor_commit,), carry_forward=args.floor_carry_forward)
         floor_record = floor_reading.row or None
         serving_floor_pct, serving_floor_unit = _gate_floor(floor_reading)
         floor = serving_floor_pct
@@ -2224,11 +2423,13 @@ def main(argv: list[str] | None = None) -> int:
         """Drop the prior in-memory bar after, never during, a successful keep."""
         nonlocal floor, floor_request_digest, floor_record, calibrated
         nonlocal serving_floor_pct, serving_floor_provenance, serving_floor_unit
+        nonlocal serving_floor_carry
         floor = serving_floor_pct = None
         floor_request_digest = None
         floor_record = None
         calibrated = False
         serving_floor_provenance = "absent"
+        serving_floor_carry = None
         serving_floor_unit = None
         source_floor_refresh[0] = True
 
@@ -2670,15 +2871,22 @@ def main(argv: list[str] | None = None) -> int:
     def ensure_source_floor(anchor_recipe, a_build) -> None:
         nonlocal floor, floor_request_digest, floor_record, calibrated
         nonlocal serving_floor_pct, serving_floor_provenance, serving_floor_unit
+        nonlocal serving_floor_carry
         if not source_floor_refresh[0]:
             return
         # Resolve the newly retained anchor's floor before either candidate arm
         # can launch. A different executable/DSO identity gets a distinct
         # immutable artifact even when recipe and requests are unchanged.
-        floor_store, reading = _load_source_floor(
+        # DS41-C69 (operator 2026-09-28): before paying 48 launches, carry the
+        # lineage floor under the SAME runtime recipe hash when the promoted
+        # anchor's own anchor-guard A/A (recorded by `verify_anchor` at this
+        # keep) sits inside it. Read-only; never written under this identity.
+        floor_store, reading, carry = _select_source_floor(
             args.store, serving_recipe, anchor_recipe,
             frozen_requests=frozen_requests, instrument=args.serving_instrument,
-            pairs=args.serving_pairs, dynamic=True)
+            pairs=args.serving_pairs, dynamic=True,
+            anchor_commits=(current_anchor_commit[0],),
+            carry_forward=args.floor_carry_forward)
         if reading.floor_pct is None:
             value = measured_serving_calibrate(serving_recipe, a_build,
                 samples=serving.MATCHED_CALIBRATION_PAIRS if source_instrument else max(2, args.serving_pairs),
@@ -2698,6 +2906,7 @@ def main(argv: list[str] | None = None) -> int:
         floor_record = reading.row or None
         calibrated = floor is not None
         serving_floor_provenance = reading.provenance
+        serving_floor_carry = carry if reading.provenance == FLOOR_CARRY_PROVENANCE else None
         source_floor_refresh[0] = False
         runtime_preparation["source_comparison_floor"] = str(reading.path)
 
@@ -3320,6 +3529,7 @@ def main(argv: list[str] | None = None) -> int:
         # the reason a reader must never have to infer which one happened.
         last_gate[0] = {"trigger": trigger, "outcome": plan["outcome"].value,
                         "floor_provenance": serving_floor_provenance,
+                        "floor_carry": serving_floor_carry,
                         "at_commit": head, "keeps": len(bundle[0].keeps),
                         "compounded_bench_pct": round(bundle[0].compounded_bench_pct, 3),
                         "serving_effect_pct": sv_row.get("effect_pct"),
@@ -3332,6 +3542,7 @@ def main(argv: list[str] | None = None) -> int:
              # to this recipe. A grandfathered floor still gates, but it must never be
              # indistinguishable from a verified one in the record it produced.
              "floor_provenance": serving_floor_provenance,
+             "floor_carry": serving_floor_carry,
              "keeps_since_serving_gate": bundle[0].keeps_since_serving_gate,
              "gate_every_keeps": accum_policy.every_keeps,
              "bundled_keeps": list(bundle[0].keeps),
@@ -3348,6 +3559,7 @@ def main(argv: list[str] | None = None) -> int:
              "status": "measured_serving_gate" if promoted else "measured_divergence",
              "hypothesis": plan["reason"], "planner_evidence": plan.get("planner_evidence"),
              "trigger": trigger, "floor_provenance": serving_floor_provenance,
+             "floor_carry": serving_floor_carry,
              "gate_outcome": plan["outcome"].value,
              "bundled_keeps": list(bundle[0].keeps),
              "champion_of_record": cor_commit[0], "at_commit": head,
@@ -3435,6 +3647,8 @@ def main(argv: list[str] | None = None) -> int:
             # recipe looked exactly like one that did. R23-55's, beside it: a floor whose
             # UNIT nobody recorded looked exactly like one measured in the effect's unit.
             "serving_floor_provenance": serving_floor_provenance,
+            # DS41-C69: which sealed parent floor was carried and which A/A admitted it.
+            "serving_floor_carry": serving_floor_carry,
             "serving_floor_unit": serving_floor_unit,
             "fire_multiple": accum_policy.fire_multiple,
             "fire_threshold_pct": round(thr, 3) if thr is not None else None,
@@ -4683,6 +4897,7 @@ def main(argv: list[str] | None = None) -> int:
                 calibrated = floor is not None
                 serving_floor_provenance = floor_reading.provenance
                 floor_request_digest = floor_reading.request_digest
+                serving_floor_carry = None
 
             if (cpu_launch and heldout_requests is not None
                     and args.cpu_calibrate_heldout is not None
@@ -4765,6 +4980,7 @@ def main(argv: list[str] | None = None) -> int:
                         calibrated = floor is not None
                         serving_floor_provenance = floor_reading.provenance
                         floor_request_digest = floor_reading.request_digest
+                        serving_floor_carry = None
                     publish("running", step=(f"{direct_launch.backend.upper()} whole-source "
                                              "validation: original anchor vs propagated source"))
                     original_launch = _cpu_arm(direct_launch, validation_anchor_build)
