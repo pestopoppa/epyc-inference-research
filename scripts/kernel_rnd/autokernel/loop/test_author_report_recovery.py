@@ -340,15 +340,15 @@ class PerRoleOutputLimits(unittest.TestCase):
 
     def test_defaults(self):
         self.assertEqual((aoc.DEFAULT_PLANNER_OUTPUT_LIMIT, aoc.DEFAULT_AUTHOR_OUTPUT_LIMIT,
-                          aoc.DEFAULT_CONTEXT_LIMIT), (16384, 40960, 180224))
+                          aoc.DEFAULT_CONTEXT_LIMIT), (32000, 40960, 180224))
 
     def test_each_plain_role_config_carries_its_own_output_limit(self):
         seat = actors.ActorSeat(bounded=False, **self.SEAT)
-        expected = {"planner": 16384, "critic": 16384, "author": 40960}
+        expected = {"planner": 32000, "critic": 32000, "author": 40960}
         for role, output in expected.items():
             env = actors._seat_call(seat, self.backend, role, self.ws, {})
             self.assertEqual(self._limit(env), {"context": 180224, "output": output}, role)
-            self.assertIn(f"+out{output // 1024}k", env[actors.SEAT_ENV_ARM], role)
+            self.assertIn(aoc.limits_label(output_limit=output), env[actors.SEAT_ENV_ARM], role)
             self.assertEqual(json.loads(env[actors.SEAT_ENV_BUDGETS])["output_limit"], output)
 
     def test_the_bounded_author_config_carries_the_author_limit(self):
@@ -357,7 +357,7 @@ class PerRoleOutputLimits(unittest.TestCase):
         _backend, env = planner._seated("author", {})
         self.assertEqual(self._limit(env), {"context": 180224, "output": 40960})
         _backend, env = planner._seated("planner", {})
-        self.assertEqual(self._limit(env), {"context": 180224, "output": 16384})
+        self.assertEqual(self._limit(env), {"context": 180224, "output": 32000})
 
     def test_a_zero_role_limit_falls_back_to_the_shared_one(self):
         seat = actors.ActorSeat(bounded=False, context_limit=131072, output_limit=8192)
@@ -379,10 +379,10 @@ class PerRoleOutputLimits(unittest.TestCase):
         args = self._args()
         self.assertIsNone(run._actor_budget_error(args))
         self.assertEqual(run._effective_output_limits(args),
-                         {"planner": 16384, "critic": 16384, "author": 40960})
+                         {"planner": 32000, "critic": 32000, "author": 40960})
         seat = actors.ActorSeat(bounded=False, **run._actor_limits(args))
         self.assertEqual(seat.output_limit_for("author"), 40960)
-        self.assertEqual(seat.output_limit_for("critic"), 16384)
+        self.assertEqual(seat.output_limit_for("critic"), 32000)
         for flag in ("actor_author_output_limit", "actor_planner_output_limit",
                      "actor_output_limit"):
             # Operator pool budget 2026-09-26: output < context - 32768.

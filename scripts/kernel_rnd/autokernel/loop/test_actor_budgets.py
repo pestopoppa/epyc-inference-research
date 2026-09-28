@@ -572,7 +572,7 @@ class CliKnobs(unittest.TestCase):
         args = self._args()
         self.assertEqual(run._actor_limits(args),
                          {"context_limit": 180224, "output_limit": 8192,
-                          "planner_output_limit": 16384, "author_output_limit": 40960})
+                          "planner_output_limit": 32000, "author_output_limit": 40960})
         self.assertEqual(run._actor_budgets(args), {"concise": True, "planner_budget_s": 2700,
                                                     "author_budget_s": 0})
         self.assertIsNone(run._actor_budget_error(args))

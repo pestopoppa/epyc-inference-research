@@ -143,7 +143,13 @@ DEFAULT_OUTPUT_LIMIT = 8_192
 #: ended on ONE 8,192-token step with no report -- a file-write tool call's arguments are
 #: output -- and the planner hit 8,192 once but still replied. The author's 40,960 is
 #: above opencode's 32,000 ceiling, so its calls carry `output_ceiling_env`.
-DEFAULT_PLANNER_OUTPUT_LIMIT = 16_384
+#: Planner raised 16,384 -> 32,000 (DS41-C70, 2026-09-28): run 10m batch 8's planner ended
+#: on ONE final step of pure reasoning that hit 16,384 (finish=length, 0-char report,
+#: output_capped_empty) after batch 7's ran out its 2700 s budget; the thinking-on 27B
+#: routinely spends >16k tokens reasoning before its report. 32,000 is exactly opencode's
+#: own ceiling, so no output_ceiling_env is needed; compaction
+#: now triggers at ~148k context.
+DEFAULT_PLANNER_OUTPUT_LIMIT = 32_000
 DEFAULT_AUTHOR_OUTPUT_LIMIT = 40_960
 
 

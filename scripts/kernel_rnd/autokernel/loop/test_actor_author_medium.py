@@ -61,7 +61,7 @@ class Defaults(unittest.TestCase):
         self.assertEqual(aoc.DEFAULT_AUTHOR_THINKING, "medium")
         self.assertEqual(aoc.THINKING_CHOICES, ("default", "off", "medium"))
         self.assertEqual((aoc.DEFAULT_CONTEXT_LIMIT, aoc.DEFAULT_AUTHOR_OUTPUT_LIMIT,
-                          aoc.DEFAULT_PLANNER_OUTPUT_LIMIT), (180224, 40960, 16384))
+                          aoc.DEFAULT_PLANNER_OUTPUT_LIMIT), (180224, 40960, 32000))
         self.assertEqual(aoc.MAX_CONTEXT_LIMIT, 196608 - 16384)
 
     def test_parser_wiring(self):
@@ -138,7 +138,7 @@ class ThinkingMedium(unittest.TestCase):
                 env = actors._seat_call(seat, self.backend, role, self.ws, {})
                 config = json.loads(Path(env["OPENCODE_CONFIG"]).read_text())
                 self.assertEqual(_model_entry(config),
-                                 {"limit": {"context": 180224, "output": 16384}})
+                                 {"limit": {"context": 180224, "output": 32000}})
                 self.assertNotIn(aoc.OUTPUT_TOKEN_MAX_ENV, env)
                 self.assertNotIn("think", env[actors.SEAT_ENV_ARM])
                 self.assertNotIn("act-rule", env[actors.SEAT_ENV_ARM])
@@ -190,7 +190,7 @@ class ThinkingMedium(unittest.TestCase):
                 self.assertIn(f"+think-{mode}", env[actors.SEAT_ENV_ARM])
                 # The planner of the same seat is untouched by the author values.
                 self.assertEqual(seat.limits_for("planner"),
-                                 {"context_limit": 90112, "output_limit": 16384})
+                                 {"context_limit": 90112, "output_limit": 32000})
                 self.assertEqual(seat.thinking_for("planner"), "default")
         # The builders take every value per call, explicitly.
         self.assertEqual(_model_entry(aoc.build_plain_config(
@@ -402,7 +402,7 @@ class OpencodeMockBodyMedium(unittest.TestCase):
         self.assertTrue(bodies, f"opencode sent no chat completion; stderr: {err}")
         for body in bodies:
             self.assertNotIn("chat_template_kwargs", body)
-        self.assertTrue(any(b.get("max_tokens") == 16384 for b in bodies))
+        self.assertTrue(any(b.get("max_tokens") == 32000 for b in bodies))
 
 
 if __name__ == "__main__":
