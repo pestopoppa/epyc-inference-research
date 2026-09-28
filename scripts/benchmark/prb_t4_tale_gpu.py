@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""PRB-T4 -- the PRB-T2 TALE-EP evaluation on architect_general's model, served on the MI210.
+"""PRB-T4 -- the PRB-T2 TALE-EP evaluation on the Qwen3.8-27B (architect_critic since ARCHSWAP-20260927), served on the MI210.
 
 Handoff: `handoffs/active/per-request-reasoning-budget.md` (PRB-T2 design, PRB-T4 run).
 
-SERVER. The production `architect_general` launch, resolved at run time from the orchestrator's
+SERVER. The production :8083 27B launch (role `architect_critic` since ARCHSWAP-20260927; was
+`architect_general`), resolved at run time from the orchestrator's
 own builder (`orchestrator_stack.build_server_command(..., prepare_runtime_dirs=False)` +
 `stack_numa._numa_prefix`) -- never transcribed. Two deltas, both stated in the record:
 the port (not :8083, which is production's) and `--slot-save-path` (a scratch dir, so this run
@@ -15,7 +16,7 @@ research `52595b9b`; the 2026-09-16 run used `a454b7fd`, whose file-order sample
 The question pool is untracked, so it is passed explicitly (`--pool`, default the canonical clone's
 `benchmarks/prompts/question_pool.jsonl`) and must exist before the server starts.
 Each suite runs separately at the handoff's own n (math 150, olympiadbench 100, mmlu_pro 150,
-livecodebench 100), all three arms, `--budget-unit tokens`, temperature = architect_general's
+livecodebench 100), all three arms, `--budget-unit tokens`, temperature = the 27B role's (architect_critic since ARCHSWAP-20260927)
 declared `generation_defaults.temperature` (0.1, `orchestration/model_registry.yaml`), seed 42,
 `chat_template_kwargs {"enable_thinking": false}`. The CPU `frontdoor` replicate is dropped
 (no CPU inference in this window).
@@ -54,7 +55,7 @@ CANONICAL_RESEARCH = Path("/mnt/raid0/llm/epyc-inference-research")
 DEFAULT_POOL = CANONICAL_RESEARCH / "benchmarks/prompts/question_pool.jsonl"
 PORT = 18383
 SUITES = {"math": 150, "olympiadbench": 100, "mmlu_pro": 150, "livecodebench": 100}
-TEMPERATURE = 0.1  # model_registry.yaml roles.architect_general.generation_defaults.temperature
+TEMPERATURE = 0.1  # model_registry.yaml roles.architect_critic.generation_defaults.temperature
 GGUF = "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf"
 CONDITIONS = ("baseline", "static", "tale")
 #: the research repo's own venv (the harness needs httpx; system python lacks it)
@@ -66,8 +67,8 @@ sys.path.insert(0, 'scripts/server'); sys.path.insert(0, '.')
 import orchestrator_stack as o
 from stack_numa import _numa_prefix
 reg = o.RegistryLoader()
-rc = reg.get_role_config('architect_general') if hasattr(reg, 'get_role_config') else reg.roles['architect_general']
-print(json.dumps({'prefix': _numa_prefix('architect_general'),
+rc = reg.get_role_config('architect_critic') if hasattr(reg, 'get_role_config') else reg.roles['architect_critic']
+print(json.dumps({'prefix': _numa_prefix('architect_critic'),
                   'cmd': o.build_server_command(rc, %d, prepare_runtime_dirs=False)}))
 """
 
