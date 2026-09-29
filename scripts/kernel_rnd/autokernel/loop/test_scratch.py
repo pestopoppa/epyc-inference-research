@@ -689,6 +689,8 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     "actor_metrics.py:export_session:open-write": (1, "evidence: opencode session export, bound by digest on actor_call_metrics"),
     "actor_metrics.py:record_report_source:mkdir": (1, "evidence: actor call log"),
     "actor_metrics.py:record_report_source:open-write": (1, "evidence: actor call log (append)"),
+    "actor_metrics.py:record_salvage_turn:mkdir": (1, "evidence: actor call log (planner salvage-turn row)"),
+    "actor_metrics.py:record_salvage_turn:open-write": (1, "evidence: actor call log (append)"),
     "actors.py:_persist_reply:mkdir": (1, "evidence: raw replies, bound by digest in the call record"),
     "actors.py:_persist_reply:write_bytes": (1, "evidence: raw replies, bound by digest in the call record"),
     "actors.py:_record_call:mkdir": (1, "evidence: VB-AK-SEAT call record log"),
@@ -712,6 +714,7 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     "ak_check.py:_open_lock:open-write": (1, "state: ak-check flock files (fence gate/slot, per-check-dir lane lock)"),
     "ak_check.py:record_call:mkdir": (1, "evidence: ak-check calls log, read back into the actor_call_metrics row"),
     "ak_check.py:record_call:open-write": (1, "evidence: ak-check calls log (append)"),
+    "ak_check.py:_flock_currently_held:open-write": (1, "state: non-blocking flock probe of an EXISTING lock file (a+b after an exists check); creates nothing"),
     # -- best-of panel (lane/ak-bestof): member trees are Scope.worktree/dir -------------
     "bestof.py:AuthorPanel._harvest_metrics:mkdir": (1, "evidence: member actor-call rows moved into the LANE's actor-calls.jsonl"),
     "bestof.py:AuthorPanel._harvest_metrics:open-write": (2, "evidence: the lane's actor-calls.jsonl (append) and the member log truncation"),
