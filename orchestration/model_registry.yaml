@@ -2,7 +2,7 @@
 # AUTO-GENERATED — MASTER-COMPILED RUNTIME VIEW.
 #
 # This file is compiled at every `orchestrator_stack.py start` from the master
-# registry at /mnt/raid0/llm/epyc-inference-research/orchestration/model_registry.yaml
+# registry at /mnt/raid0/llm/tmp/ri23a-20260929/research/orchestration/model_registry.yaml
 # by src/registry/registry_compiler.py.
 #
 # Runtime stack truth lives in the MASTER registry. The next start detects master
@@ -10,8 +10,8 @@
 # temporarily skip the compile (e.g. during a master schema change), set
 # ORCHESTRATOR_REGISTRY_NO_COMPILE=1.
 #
-# Compiled at: 2026-09-27T18:57:44+00:00
-# Cache key:   124f808d4f4b3d45...
+# Compiled at: 2026-09-29T10:29:10+00:00
+# Cache key:   0f7451edfead1a61...
 # Active roles: architect_critic, architect_general, coder_escalation, embedder, embedder_1, embedder_2, embedder_3, embedder_4, embedder_5, embedder_bge_m3, embedder_granite_97m_r2, embedder_multilingual_e5_base, frontdoor, ingest_long_context, toolrunner, vision_escalation, worker, worker_explore, worker_fast, worker_general, worker_math, worker_summarize, worker_vision
 # =============================================================================
 
@@ -1730,7 +1730,8 @@ server_mode:
     port: 8083
     slots: 1
     chat_template_kwargs:
-      enable_thinking: false
+      enable_thinking: true
+      reasoning_effort: medium
     model_role: qwen38_27b_q8_local
     description: 'Coding escalation — Qwen3.8-27B dense Q8 MTP on MI210 (ROCm0). 2026-08-20: artifact swapped from Qwen3.6-27B-MTP-Q8_0. 2026-07-31: MOVED off frontdoor''s :8070 shared 35B process onto
       architect_general''s :8083 GPU process; alias, launches no server of its own. 2026-09-27 ARCHSWAP: the :8083 host role is now architect_critic (same process, same model). Quality on this model NOT
@@ -2031,7 +2032,7 @@ roles:
       previous_model: 'Qwen3.6-35B-A3B-MTP-Q8_0 (2026-07-31: role moved off frontdoor''s shared :8070 35B process onto architect_general''s :8083 GPU 27B). Prior: Qwen3-Coder-30B-A3B-Instruct-Q4_K_M (swapped
         2026-05-06).'
       use_chat_api: true
-      disable_thinking: true
+      disable_thinking: false
       reasoning: auto
       max_tokens_multiplier: 4
     candidate_roles:
