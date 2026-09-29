@@ -541,6 +541,9 @@ def _run_closed_case(
     else:
         record["failure_count"] = len(result.failures)
         record["prompt_sha256"] = result.prompt_sha256
+        native_keys = _native_keys(result.decisions)
+        if native_keys:
+            record["native_keys"] = native_keys
         try:
             record["arguments"] = assemble_arguments(
                 mapping.questions, result.decisions, case.parameters
@@ -645,6 +648,20 @@ def _parse_free_form_arguments(
 
 
 # ── Records, metrics, agreement ───────────────────────────────────────────
+
+
+def _native_keys(decisions: Sequence[Any]) -> dict[str, dict[str, Any]]:
+    """Key -> resolved value per re-keyed native decision (TD-29 single-token keys).
+
+    Only decisions whose closed set was re-keyed carry ``native_key``; the
+    block is omitted from the record when there are none, so JSON-mode and
+    directly bound native receipts keep their pre-TD-29 shape.
+    """
+    return {
+        decision.question_id: {"key": decision.native_key, "value": decision.value}
+        for decision in decisions
+        if getattr(decision, "native_key", None) is not None
+    }
 
 
 def _case_record(case: PilotCase, *, question_ids: list[str] | None) -> dict[str, Any]:
@@ -838,6 +855,7 @@ def _arm_case_view(record: dict[str, Any], expected: Mapping[str, Any]) -> dict[
         "prompt_ms": record.get("prompt_ms"),
         "gen_ms": record.get("gen_ms"),
         "calls": record.get("calls", []),
+        **({"native_keys": record["native_keys"]} if "native_keys" in record else {}),
     }
 
 

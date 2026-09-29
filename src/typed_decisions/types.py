@@ -99,7 +99,10 @@ class Decision:
     (option string / level int / ``"true"``/``"false"`` JSON label) to a
     normalized probability. ``token_logprob`` is filled by native mode
     (TD-1a) and stays ``None`` on the JSON path, which has no token-level
-    capture.
+    capture. ``native_key`` is the single-token key the model actually chose
+    when native mode re-keyed a multi-token closed set (TD-29 single-token
+    keys); ``value`` is always the ORIGINAL label's typed value, and the key
+    stays ``None`` on the JSON path and for sets native bound directly.
     """
 
     question_id: str
@@ -109,6 +112,7 @@ class Decision:
     confidence: float
     mode: str
     token_logprob: float | None = None
+    native_key: str | None = None
 
 
 @dataclass(frozen=True)

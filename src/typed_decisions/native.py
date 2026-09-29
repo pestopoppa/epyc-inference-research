@@ -112,6 +112,25 @@ Natural noul surface forms:
     audit; a real capture with the question's own cue in context should keep
     the two aligned.
 
+TD-29 — single-token keys for multi-token closed sets:
+    The 2026-09-29 champion-sidecar native run of the TD-4 tool-args pilot
+    lost 6/18 cases, all to the ``p1``..``p4`` severity enum: each label is
+    two tokens, so TD-1b excluded the question and argument assembly failed.
+    A set whose labels are NOT all single tokens is now re-keyed with the
+    TD-9 routing code alphabet (``A``..``Z``, ``0``..``9``; reused from
+    ``routing_replay``): each label takes the next code whose bare or spaced
+    form is exactly one token for the SERVED tokenizer (probed through the
+    same ``/tokenize`` seam) and whose ids collide with no earlier key. The
+    prompt renders ``A = p1 | B = p2 ...`` and asks for the key, the grammar
+    binds the key ids, and the decision maps back: ``Decision.value`` is the
+    original label and ``Decision.native_key`` the code chosen; the layout
+    carries both. Gated on need: a set whose labels already bind is never
+    re-keyed, so its prompt, grammar, layout and decisions are byte-identical
+    to TD-1b. More labels than codes, or an alphabet exhausted by multi-token
+    or colliding codes, falls back exactly as before
+    (``native_unsupported_candidates``) with the reason in the detail.
+    ``single_token_keys=False`` restores the TD-1b behavior outright.
+
 Tokenizer seam:
     ``tokenize_fn: Callable[[str], Sequence[int] | None]`` is injectable on
     this runner and forwarded by ``runner.run_typed_decisions`` in native mode
@@ -337,11 +356,17 @@ class _NativeCandidate:
     distinct, its space-prefixed form; noul labels additionally carry their
     natural surface forms (see ``_NOUL_SURFACE_FORMS``). More than one id
     means the label has several tokenizations; their captured weights sum.
+
+    ``key`` is set only when the question was re-keyed (TD-29 single-token
+    keys, see ``_bind_single_token_keys``): ``token_ids`` / ``token_texts``
+    then bind the KEY's single-token variants, while ``label`` stays the
+    original declared value the key resolves to.
     """
 
     label: str
     token_ids: tuple[int, ...]
     token_texts: tuple[str, ...]
+    key: str | None = None
 
     @property
     def alternatives(self) -> int:
@@ -356,6 +381,13 @@ class _NativeQuestion:
     question: Question
     candidates: tuple[_NativeCandidate, ...]
     cue_token_ids: tuple[int, ...] = ()
+
+    @property
+    def keys(self) -> tuple[str, ...] | None:
+        """The single-token keys in candidate order, or ``None`` when not re-keyed."""
+        if not any(candidate.key is not None for candidate in self.candidates):
+            return None
+        return tuple(str(candidate.key) for candidate in self.candidates)
 
     @property
     def alternatives(self) -> int:
@@ -393,6 +425,7 @@ def run_typed_decisions_native(
     n_probs: int | None = None,
     cue_style: CueStyle | str = CueStyle.ID_ONLY,
     tokenize_fn: TokenizeFn | None = None,
+    single_token_keys: bool = True,
 ) -> DecisionResult:
     """Score one question catalogue in a single constrained generation.
 
@@ -430,6 +463,13 @@ def run_typed_decisions_native(
             ``primitives`` and uses its ``POST /tokenize`` endpoint. When no
             tokenizer can be resolved, no model call is made and every
             question fails with ``native_tokenizer_unavailable``.
+        single_token_keys: TD-29 single-token keys (default on). A closed set
+            whose labels are not all single tokens is re-keyed with
+            single-token codes (``_bind_single_token_keys``); the model picks
+            a code and the decision carries the original value plus
+            ``Decision.native_key``. Sets whose labels already bind are never
+            re-keyed. ``False`` restores the TD-1b behavior (the whole
+            question fails ``native_unsupported_candidates``).
 
     Returns:
         ``DecisionResult`` with ``mode="native"``. ``decisions`` holds the
@@ -456,6 +496,7 @@ def run_typed_decisions_native(
             n_probs=n_probs,
             cue_style=style,
             tokenize=tokenize,
+            single_token_keys=single_token_keys,
         )
     finally:
         if own_tokenizer is not None:
@@ -472,6 +513,7 @@ def _score_native_batch(
     n_probs: int | None,
     cue_style: CueStyle,
     tokenize: TokenizeFn | None,
+    single_token_keys: bool = True,
 ) -> DecisionResult:
     """Tokenize, generate and slice one catalogue (tokenizer already resolved)."""
     if tokenize is None:
@@ -486,10 +528,13 @@ def _score_native_batch(
         ]
     else:
         native_questions, tokenizer_failures = _tokenize_catalogue(
-            catalogue, tokenize, cue_style=cue_style
+            catalogue, tokenize, cue_style=cue_style, single_token_keys=single_token_keys
         )
 
-    prompt = build_native_prompt(state, [native.question for native in native_questions])
+    # The token-bound questions (not bare ``Question`` objects) are rendered so
+    # a re-keyed set shows its ``key = label`` legend; unkeyed sets render
+    # byte-identically either way.
+    prompt = build_native_prompt(state, native_questions)
     prompt_sha256 = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
 
     if not native_questions:
@@ -647,14 +692,7 @@ def _native_layout(
                     "levels": list(question.levels),
                     "criteria": list(question.criteria),
                 },
-                "candidates": [
-                    {
-                        "label": candidate.label,
-                        "token_ids": list(candidate.token_ids),
-                        "token_texts": list(candidate.token_texts),
-                    }
-                    for candidate in native.candidates
-                ],
+                "candidates": [_layout_candidate(candidate) for candidate in native.candidates],
             }
         )
     return {
@@ -667,6 +705,22 @@ def _native_layout(
         "positions": positions,
         "excluded": [{"reason": failure.reason, "detail": failure.detail} for failure in excluded],
     }
+
+
+def _layout_candidate(candidate: _NativeCandidate) -> dict[str, Any]:
+    """One candidate's layout binding; ``key`` appears ONLY for a re-keyed set.
+
+    Omitting the field for directly bound labels keeps the pre-TD-29 layout
+    byte-comparable.
+    """
+    entry: dict[str, Any] = {
+        "label": candidate.label,
+        "token_ids": list(candidate.token_ids),
+        "token_texts": list(candidate.token_texts),
+    }
+    if candidate.key is not None:
+        entry["key"] = candidate.key
+    return entry
 
 
 def _record_native_layout(primitives: Any, layout: Mapping[str, Any]) -> None:
@@ -826,6 +880,7 @@ def _tokenize_catalogue(
     questions: Sequence[Question],
     tokenize: TokenizeFn,
     cue_style: CueStyle = CueStyle.ID_ONLY,
+    single_token_keys: bool = True,
 ) -> tuple[list[_NativeQuestion], list[ParseFailure]]:
     """Partition the catalogue into token-bound questions and typed failures.
 
@@ -849,7 +904,14 @@ def _tokenize_catalogue(
     failures: list[ParseFailure] = []
     for question in questions:
         try:
-            native.append(_tokenize_question(question, tokenize_cached, cue_style=cue_style))
+            native.append(
+                _tokenize_question(
+                    question,
+                    tokenize_cached,
+                    cue_style=cue_style,
+                    single_token_keys=single_token_keys,
+                )
+            )
         except _CandidateTokenizationError as exc:
             failures.append(ParseFailure(exc.reason, f"question {question.id!r}: {exc.detail}"))
     return native, failures
@@ -859,16 +921,24 @@ def _tokenize_question(
     question: Question,
     tokenize: TokenizeFn,
     cue_style: CueStyle = CueStyle.ID_ONLY,
+    single_token_keys: bool = True,
 ) -> _NativeQuestion:
     """Bind every candidate label of one question — and its cue — to token ids.
 
+    When some label is not a single token and ``single_token_keys`` is on, the
+    WHOLE set is re-keyed with single-token codes (TD-29, see
+    ``_bind_single_token_keys``); a set whose labels all bind is never
+    re-keyed, so its binding, prompt and grammar are byte-identical to TD-1b.
+
     Raises:
-        _CandidateTokenizationError: when a candidate or cue text cannot be
-            tokenized at all (``native_tokenizer_unavailable``), or when any
-            label is not a single token / two labels collide on one token id
-            (``native_unsupported_candidates``). Partial eligibility is not a
-            thing: an answer that could have chosen an unsupported label must
-            go to the JSON fallback as a whole question.
+        _CandidateTokenizationError: when a candidate, key or cue text cannot
+            be tokenized at all (``native_tokenizer_unavailable``), or when a
+            label is not a single token and no single-token key set could be
+            bound (keys disabled, the set exceeds the key alphabet, or the
+            alphabet ran out of usable codes), or two labels collide on one
+            token id (``native_unsupported_candidates``). Partial eligibility
+            is not a thing: an answer that could have chosen an unsupported
+            label must go to the JSON fallback as a whole question.
     """
     candidates: list[_NativeCandidate] = []
     unsupported: list[str] = []
@@ -897,13 +967,19 @@ def _tokenize_question(
             )
         )
     if unsupported:
-        raise _CandidateTokenizationError(
-            REASON_NATIVE_UNSUPPORTED_CANDIDATES,
+        not_single = (
             f"candidate labels {unsupported!r} do not tokenize to exactly one token "
-            "(with or without a leading space); ask this question in JSON mode",
+            "(with or without a leading space)"
         )
+        if not single_token_keys:
+            raise _CandidateTokenizationError(
+                REASON_NATIVE_UNSUPPORTED_CANDIDATES,
+                f"{not_single}; ask this question in JSON mode",
+            )
+        candidates = _bind_single_token_keys(question, tokenize, not_single=not_single)
     _reject_token_id_collisions(candidates)
-    cue_text = _cue_text(question, cue_style)
+    keys = tuple(str(candidate.key) for candidate in candidates) if unsupported else None
+    cue_text = _cue_text(question, cue_style, keys=keys)
     cue_ids = tokenize(cue_text)
     if cue_ids is None or not cue_ids:
         raise _CandidateTokenizationError(
@@ -916,6 +992,100 @@ def _tokenize_question(
         candidates=tuple(candidates),
         cue_token_ids=tuple(cue_ids),
     )
+
+
+def _single_token_key_alphabet() -> str:
+    """The TD-9 single-token code alphabet (A-Z then 0-9, 36 symbols).
+
+    Reused from ``routing_replay`` so routing codes and native keys are one
+    mechanism. Lazy import: ``routing_replay`` pulls ``llm_primitives``
+    statistics that the native hot path should not load at import time.
+    """
+    from src.typed_decisions.routing_replay import _CODE_ALPHABET
+
+    return _CODE_ALPHABET
+
+
+def _bind_single_token_keys(
+    question: Question,
+    tokenize: TokenizeFn,
+    *,
+    not_single: str,
+) -> list[_NativeCandidate]:
+    """Re-key a closed set whose labels are not all single tokens (TD-29).
+
+    Each declared label, in declaration order, takes the next code of the
+    TD-9 alphabet whose bare or space-prefixed form is exactly ONE token for
+    the served tokenizer (probed through the same ``/tokenize`` seam as the
+    labels) and whose token id(s) collide with no key already bound. A code
+    that is itself a DIFFERENT label of this set is skipped so the legend can
+    never read ``B = A``. The assignment depends only on candidate order and
+    the tokenizer, so it is stable across runs. ``label`` stays the original
+    value; the grammar binds the key's ids and the decision maps back.
+
+    The key set is all-or-nothing and it falls back exactly as before: more
+    labels than codes, or an alphabet exhausted by multi-token/colliding
+    codes, raises ``native_unsupported_candidates`` with the reason recorded
+    in the detail; a key probe the tokenizer cannot answer raises
+    ``native_tokenizer_unavailable``.
+    """
+    alphabet = _single_token_key_alphabet()
+    labels = _candidate_labels(question)
+    if len(labels) > len(alphabet):
+        raise _CandidateTokenizationError(
+            REASON_NATIVE_UNSUPPORTED_CANDIDATES,
+            f"{not_single}, and single-token keys cannot be bound: {len(labels)} "
+            f"candidates exceed the {len(alphabet)} single-token key codes (A-Z, 0-9); "
+            "ask this question in JSON mode",
+        )
+    label_texts = {label.strip() for label in labels}
+    used_ids: set[int] = set()
+    rejected: list[str] = []
+    codes = iter(alphabet)
+    candidates: list[_NativeCandidate] = []
+    for label in labels:
+        for code in codes:
+            if code in label_texts and code != label.strip():
+                rejected.append(f"{code} (a different label of this set)")
+                continue
+            token_ids: list[int] = []
+            token_texts: list[str] = []
+            for text in _candidate_variants(code):
+                ids = tokenize(text)
+                if ids is None:
+                    raise _CandidateTokenizationError(
+                        REASON_NATIVE_TOKENIZER_UNAVAILABLE,
+                        f"{not_single}, and the tokenizer returned no ids for the "
+                        f"single-token key probe {text!r}; ask this question in JSON mode",
+                    )
+                if len(ids) == 1:
+                    token_ids.append(ids[0])
+                    token_texts.append(text)
+            if not token_ids:
+                rejected.append(f"{code} (not a single token)")
+                continue
+            if used_ids.intersection(token_ids):
+                rejected.append(f"{code} (token id collides with an earlier key)")
+                continue
+            used_ids.update(token_ids)
+            candidates.append(
+                _NativeCandidate(
+                    label=label,
+                    token_ids=tuple(token_ids),
+                    token_texts=tuple(token_texts),
+                    key=code,
+                )
+            )
+            break
+        else:
+            raise _CandidateTokenizationError(
+                REASON_NATIVE_UNSUPPORTED_CANDIDATES,
+                f"{not_single}, and single-token keys cannot be bound: the "
+                f"{len(alphabet)}-code alphabet ran out after binding {len(candidates)} "
+                f"of {len(labels)} candidates (rejected codes: {rejected!r}); "
+                "ask this question in JSON mode",
+            )
+    return candidates
 
 
 def _candidate_variants(label: str) -> tuple[str, ...]:
@@ -1001,7 +1171,12 @@ def _build_native_grammar(questions: Sequence[_NativeQuestion]) -> str:
     return "\n".join([root, *rules]) + "\n"
 
 
-def _cue_text(question: Question, cue_style: CueStyle | str = CueStyle.ID_ONLY) -> str:
+def _cue_text(
+    question: Question,
+    cue_style: CueStyle | str = CueStyle.ID_ONLY,
+    *,
+    keys: Sequence[str] | None = None,
+) -> str:
     """The fixed cue replayed immediately before this question's answer token.
 
     ``ID_ONLY`` (default since TD-6) keeps just ``"\\n<id>: "``: a minimal
@@ -1010,7 +1185,9 @@ def _cue_text(question: Question, cue_style: CueStyle | str = CueStyle.ID_ONLY) 
     and the declared labels, ending on an explicit answer delimiter. ``SHORT``
     keeps the id and the first ``_SHORT_CUE_WORDS`` words of the question.
     Every style starts with a newline so the generated transcript stays
-    readable.
+    readable. ``keys`` (a re-keyed set, TD-29) replaces the declared labels in
+    the ``FULL`` answer list, since the answer token is a key; ``ID_ONLY`` and
+    ``SHORT`` never list candidates and are unaffected.
     """
     style = _normalize_cue_style(cue_style)
     if style is CueStyle.ID_ONLY:
@@ -1018,7 +1195,7 @@ def _cue_text(question: Question, cue_style: CueStyle | str = CueStyle.ID_ONLY) 
     if style is CueStyle.SHORT:
         excerpt = " ".join(question.text.split()[:_SHORT_CUE_WORDS])
         return f"\nQ {question.id}: {excerpt}\n"
-    labels = _candidate_labels(question)
+    labels = list(keys) if keys is not None else _candidate_labels(question)
     return f"\nQ {question.id}: {question.text}\nAnswer (one of: {', '.join(labels)}): "
 
 
@@ -1040,22 +1217,31 @@ def build_native_prompt(
     from this catalogue.
 
     Accepts plain ``Question`` objects or the runner's token-bound
-    ``_NativeQuestion`` (whose ``.question`` is used); the runner calls it with
+    ``_NativeQuestion`` (whose ``.question`` is used; a re-keyed one renders
+    its ``key = label`` legend and asks for the key, TD-29); the runner calls it with
     only the native-capable questions, so a preview built from a full
     catalogue may be longer than the exact runtime prompt. The exact runtime
     prompt is stored on the layout side channel (``_last_native_layout``).
     """
-    prompt_questions = [_as_question(question) for question in questions]
     lines = [_NATIVE_INSTRUCTIONS, ""]
     lines.append(f"STATE:\n{state}")
     lines.append("")
     lines.append("QUESTION SEQUENCE:")
-    for index, question in enumerate(prompt_questions, start=1):
+    for index, item in enumerate(questions, start=1):
+        question = _as_question(item)
         labels = _candidate_labels(question)
+        keys = item.keys if isinstance(item, _NativeQuestion) else None
         lines.append(f"{index}. id={question.id} kind={question.kind.value}")
         lines.append(f"   question: {question.text}")
-        lines.append(f"   candidates: {' | '.join(labels)}")
-        lines.append(f"   Answer (one of: {', '.join(labels)}):")
+        if keys is None:
+            lines.append(f"   candidates: {' | '.join(labels)}")
+            lines.append(f"   Answer (one of: {', '.join(labels)}):")
+        else:
+            # TD-29 single-token keys: the label stays the display text, the
+            # answer token is its key.
+            legend = " | ".join(f"{key} = {label}" for key, label in zip(keys, labels))
+            lines.append(f"   candidates: {legend}")
+            lines.append(f"   Answer with the key (one of: {', '.join(keys)}):")
     return "\n".join(lines) + "\n"
 
 
@@ -1104,6 +1290,7 @@ def run_typed_decisions_native_parallel(
     tokenize_fn: TokenizeFn | None = None,
     pin_slots: bool = False,
     warm_prefix: bool = False,
+    single_token_keys: bool = True,
 ) -> DecisionResult:
     """Answer the catalogue with ONE constrained read per question, fanned out.
 
@@ -1123,8 +1310,8 @@ def run_typed_decisions_native_parallel(
             instance-level (module docstring), so each worker reads its own
             object's meta right after its own call. ``len(pool)`` is the
             fan-out width; a pool of one is the same shape run serially.
-        state, questions, role, n_probs, cue_style, tokenize_fn: As for
-            ``run_typed_decisions_native``. ``n_probs`` defaults to the same
+        state, questions, role, n_probs, cue_style, tokenize_fn,
+            single_token_keys: As for ``run_typed_decisions_native``. ``n_probs`` defaults to the same
             per-batch value the serial runner would use.
         pin_slots: When true, worker ``i`` passes ``slot_id=i`` on every call
             so all of its reads share one server slot's prompt cache (the
@@ -1179,13 +1366,13 @@ def run_typed_decisions_native_parallel(
             ]
         else:
             native_questions, tokenizer_failures = _tokenize_catalogue(
-                catalogue, tokenize, cue_style=style
+                catalogue, tokenize, cue_style=style, single_token_keys=single_token_keys
             )
     finally:
         if own_tokenizer is not None:
             own_tokenizer.close()
 
-    prefix = build_native_prompt(state, [native.question for native in native_questions])
+    prefix = build_native_prompt(state, native_questions)
     prompt_sha256 = hashlib.sha256(prefix.encode("utf-8")).hexdigest()
     if not native_questions:
         return DecisionResult(
@@ -1217,7 +1404,7 @@ def run_typed_decisions_native_parallel(
             f"<[{token_id}]>" for candidate in native.candidates for token_id in candidate.token_ids
         )
         grammar = f"root ::= {alternatives}\n"
-        prompt = prefix + _cue_text(native.question, style)
+        prompt = prefix + _cue_text(native.question, style, keys=native.keys)
         jobs.append((index, answer_only, prompt, grammar))
 
     outcomes: dict[int, tuple[str, Any]] = {}
@@ -1520,6 +1707,7 @@ def _decision_from_weights(
         confidence=confidence,
         mode="native",
         token_logprob=token_logprob,
+        native_key=value_candidate.key,
     )
 
 
@@ -1819,6 +2007,7 @@ def _native_from_layout(position: Mapping[str, Any]) -> _NativeQuestion:
             label=str(candidate.get("label", "")),
             token_ids=tuple(int(token_id) for token_id in candidate.get("token_ids", ()) or ()),
             token_texts=tuple(str(text) for text in candidate.get("token_texts", ()) or ()),
+            key=str(candidate["key"]) if candidate.get("key") is not None else None,
         )
         for candidate in position.get("candidates", ()) or ()
         if isinstance(candidate, Mapping)

@@ -557,6 +557,46 @@ class TestPilotClosedMode:
         )
         assert all("mode" not in call and "cue_style" not in call for call in seen)
 
+    def test_receipt_records_native_key_and_resolved_value(self, tmp_path: Path, monkeypatch):
+        # TD-29 single-token keys: a re-keyed decision carries its key, and the
+        # case record carries key AND resolved value; un-keyed cases omit it.
+        import dataclasses
+
+        import src.typed_decisions.tool_args_pilot as pilot
+
+        real = pilot.run_typed_decisions
+
+        def keyed(primitives, **kwargs):
+            kwargs.pop("mode", None)
+            kwargs.pop("cue_style", None)
+            result = real(primitives, **kwargs)
+            decisions = tuple(
+                dataclasses.replace(d, native_key="B") if d.question_id == "severity" else d
+                for d in result.decisions
+            )
+            return dataclasses.replace(result, decisions=decisions)
+
+        monkeypatch.setattr(pilot, "run_typed_decisions", keyed)
+        receipt = run_tool_args_pilot(
+            _FakePrimitives(),
+            role=ROLE,
+            receipt_path=tmp_path / "p.json",
+            closed_mode="native",
+            arms=["closed_set"],
+        )
+
+        rows = {row["case_id"]: row["closed_set"] for row in receipt["results"]["cases"]}
+        ticket = rows["ticket-01"]
+        assert ticket["native_keys"] == {"severity": {"key": "B", "value": "p2"}}
+        assert ticket["exact_match"] is True
+        assert "native_keys" not in rows["meeting-01"]
+
+    def test_json_mode_records_carry_no_native_keys(self, tmp_path: Path):
+        receipt = run_tool_args_pilot(
+            _FakePrimitives(), role=ROLE, receipt_path=tmp_path / "p.json", arms=["closed_set"]
+        )
+        assert all("native_keys" not in row["closed_set"] for row in receipt["results"]["cases"])
+
     def test_invalid_mode_combinations_are_rejected(self):
         with pytest.raises(ValueError):
             run_tool_args_pilot(_FakePrimitives(), role=ROLE, closed_mode="bogus")

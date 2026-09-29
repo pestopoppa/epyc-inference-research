@@ -638,7 +638,15 @@ class TestTokenizedEligibility:
         )
         primitives = _FakePrimitives("", meta=_build_meta([noul], [answer_row], tokenizer))
 
-        result = _run(primitives, [choice, noul], tokenize_fn=tokenizer, cue_style=CueStyle.FULL)
+        # TD-1b legacy path pinned: with TD-29 single-token keys on, the
+        # multi-token set would be re-keyed (see TestSingleTokenKeys).
+        result = _run(
+            primitives,
+            [choice, noul],
+            tokenize_fn=tokenizer,
+            cue_style=CueStyle.FULL,
+            single_token_keys=False,
+        )
 
         # Only the single-token noul question entered the native batch, in order.
         call = primitives.calls[0]
@@ -750,7 +758,9 @@ class TestMultiTokenFallback:
         tokenizer = _FakeTokenizer(vocab)
         primitives = _FakePrimitives("", meta=_main_meta(tokenizer))
 
-        result = _run(primitives, [NOUL], tokenize_fn=tokenizer)
+        # TD-1b legacy path pinned (keys off); with keys on, the partial piece
+        # is still never generated because the grammar binds whole key tokens.
+        result = _run(primitives, [NOUL], tokenize_fn=tokenizer, single_token_keys=False)
 
         assert primitives.calls == []
         assert result.decisions == ()
@@ -1752,6 +1762,7 @@ class TestNativeParallel:
             questions=[MULTI_TOKEN],
             role=ROLE,
             tokenize_fn=tokenizer,
+            single_token_keys=False,  # TD-1b legacy path pinned
         )
 
         assert result.mode == "native_parallel"
@@ -1929,9 +1940,9 @@ class TestNativeParallel:
         """
         import inspect
 
-        default = inspect.signature(run_typed_decisions_native_parallel).parameters[
-            "cue_style"
-        ].default
+        default = (
+            inspect.signature(run_typed_decisions_native_parallel).parameters["cue_style"].default
+        )
         assert default is CueStyle.ID_ONLY
 
 
@@ -1948,9 +1959,7 @@ class TestNativeParallelWithRealPrimitives:
         from src.llm_primitives import LLMPrimitives
         from src.model_server import InferenceResult
 
-        prims = LLMPrimitives(
-            mock_mode=False, server_urls={role: "http://localhost:0"}
-        )
+        prims = LLMPrimitives(mock_mode=False, server_urls={role: "http://localhost:0"})
         backend = Mock(spec=[])
         backend.infer = Mock(
             return_value=InferenceResult(
@@ -2073,9 +2082,7 @@ class TestPostSamplingProbsOnTheWire:
         def _noop_lock(*_args, **_kwargs):
             yield
 
-        monkeypatch.setattr(
-            "src.runtime.inference_lock.inference_lock", _noop_lock
-        )
+        monkeypatch.setattr("src.runtime.inference_lock.inference_lock", _noop_lock)
 
         primitives = LLMPrimitives(
             mock_mode=False,
@@ -2126,9 +2133,7 @@ class TestPostSamplingProbsOnTheWire:
         }
         return response
 
-    def test_post_sampling_probs_reaches_the_wire_through_the_real_stack(
-        self, monkeypatch
-    ):
+    def test_post_sampling_probs_reaches_the_wire_through_the_real_stack(self, monkeypatch):
         primitives = self._live_primitives(monkeypatch)
         backend = primitives._backends["frontdoor"].backend
         captured: dict[str, Any] = {}
@@ -2164,3 +2169,296 @@ class TestPostSamplingProbsOnTheWire:
         # Full round trip resolves too -- not just "the key is present somewhere".
         assert result.failures == (), result.failures
         assert _by_id(result)["noul"].value is True
+
+
+# ── TD-29: single-token keys for multi-token closed sets ──────────────────
+
+_SEVERITY = Question(
+    id="severity",
+    kind=QuestionKind.CHOICE,
+    text="Choose the value for argument 'severity' of tool 'file_ticket'.",
+    options=("p1", "p2", "p3", "p4"),
+)
+
+
+def _key_vocab(extra: Mapping[str, tuple[int, ...]] | None = None) -> dict[str, tuple[int, ...]]:
+    """Default vocab + multi-token p1..p4 + single-token A..Z / 0..9 keys."""
+    vocab = dict(_DEFAULT_VOCAB)
+    for index, label in enumerate(("p1", "p2", "p3", "p4")):
+        vocab[label] = (200 + index, 300 + index)  # "p" + digit: two tokens
+        vocab[" " + label] = (210 + index, 300 + index)
+    from src.typed_decisions.routing_replay import _CODE_ALPHABET
+
+    for index, code in enumerate(_CODE_ALPHABET):
+        vocab[code] = (3000 + 2 * index,)
+        vocab[" " + code] = (3001 + 2 * index,)
+    vocab.update(extra or {})
+    return vocab
+
+
+def _key_ids(vocab: Mapping[str, tuple[int, ...]]) -> dict[str, int]:
+    return {text: ids[0] for text, ids in vocab.items() if len(ids) == 1}
+
+
+class TestSingleTokenKeys:
+    def _severity_run(self, emitted: str, top, **kwargs):
+        vocab = _key_vocab()
+        tokenizer = _FakeTokenizer(vocab, fallback=(_CUE_TOKEN,))
+        row = _v9_row(emitted, top[0][1], top, ids=_key_ids(vocab))
+        primitives = _FakePrimitives("", meta=_build_meta([_SEVERITY], [row], tokenizer, "id_only"))
+        result = _run(primitives, [_SEVERITY], tokenize_fn=tokenizer, **kwargs)
+        return result, primitives, tokenizer
+
+    def test_multi_token_enum_resolves_through_keys(self):
+        result, primitives, tokenizer = self._severity_run(
+            " C",
+            [(" C", math.log(0.7)), ("A", math.log(0.2)), (" B", math.log(0.1))],
+        )
+
+        assert result.failures == ()
+        decision = result.decisions[0]
+        assert decision.value == "p3"  # the ORIGINAL label, never the key
+        assert decision.native_key == "C"
+        assert dict(decision.probabilities) == {
+            "p1": pytest.approx(0.2),
+            "p2": pytest.approx(0.1),
+            "p3": pytest.approx(0.7),
+            "p4": pytest.approx(0.0),
+        }
+        assert decision.token_logprob == pytest.approx(math.log(0.7))
+
+        call = primitives.calls[0]
+        # The grammar binds the KEY tokens (bare and spaced), in candidate order.
+        assert (
+            "answer-0 ::= <[3000]> | <[3001]> | <[3002]> | <[3003]> | <[3004]> | "
+            in (call["grammar"])
+        )
+        assert "<[200]>" not in call["grammar"]
+        # The label stays the display text; the model is asked for the key.
+        assert "   candidates: A = p1 | B = p2 | C = p3 | D = p4\n" in call["prompt"]
+        assert "   Answer with the key (one of: A, B, C, D):\n" in call["prompt"]
+        # Keys were verified through the tokenizer seam, not assumed.
+        assert {"A", " A", "D", " D"} <= set(tokenizer.calls)
+        assert "E" not in tokenizer.calls
+        # Receipts: the layout carries key AND label for every candidate.
+        layout = primitives._last_native_layout
+        assert [(c["key"], c["label"]) for c in layout["positions"][0]["candidates"]] == [
+            ("A", "p1"),
+            ("B", "p2"),
+            ("C", "p3"),
+            ("D", "p4"),
+        ]
+
+    @pytest.mark.parametrize(("key", "label"), [("A", "p1"), ("B", "p2"), ("C", "p3"), ("D", "p4")])
+    def test_key_to_value_round_trip(self, key, label):
+        result, primitives, _ = self._severity_run(key, [(key, math.log(0.9))])
+
+        decision = result.decisions[0]
+        assert (decision.native_key, decision.value) == (key, label)
+        # The layout side channel rebuilds the same binding for diagnostics.
+        diagnostics = native_diagnostics(result, primitives)
+        question = diagnostics["positions"][0]
+        assert question["emitted_label"] == label
+        assert question["argmax_label"] == label
+
+    def test_tool_arguments_assemble_from_keyed_severity(self):
+        # The TD-29 failure shape: every file_ticket case failed native with
+        # "required argument 'severity' was not answered" (p1..p4 multi-token).
+        from src.typed_decisions.tool_args import assemble_arguments, tool_schema_to_questions
+        from src.typed_decisions.tool_args_pilot import build_cases
+
+        vocab = _key_vocab({str(level): (4000 + level,) for level in range(4, 9)})
+        ids = _key_ids(vocab)
+        for case in (case for case in build_cases() if case.tool == "file_ticket"):
+            mapping = tool_schema_to_questions(case.tool, case.parameters)
+            severity_key = "ABCD"[("p1", "p2", "p3", "p4").index(case.expected["severity"])]
+            tokens = []
+            for question in mapping.questions:
+                if question.id == "severity":
+                    tokens.append(severity_key)
+                elif question.kind is QuestionKind.SCORE:
+                    tokens.append(str(case.expected["effort_points"]))
+                else:
+                    if question.id == "escalate":
+                        truth = case.expected["escalate"]
+                    else:
+                        truth = question.id.split("__", 1)[1] in case.expected["categories"]
+                    tokens.append("true" if truth else "false")
+            rows = [_v9_row(token, 0.0, [(token, 0.0)], ids=ids) for token in tokens]
+            tokenizer = _FakeTokenizer(vocab, fallback=(_CUE_TOKEN,))
+            primitives = _FakePrimitives(
+                "", meta=_build_meta(mapping.questions, rows, tokenizer, "id_only")
+            )
+
+            result = _run(primitives, mapping.questions, tokenize_fn=tokenizer)
+
+            assert result.failures == (), case.case_id
+            arguments = assemble_arguments(mapping.questions, result.decisions, case.parameters)
+            assert arguments == case.expected, case.case_id
+            keyed = {d.question_id: d.native_key for d in result.decisions if d.native_key}
+            assert keyed == {"severity": severity_key}
+
+    def test_single_token_sets_are_byte_identical_with_keys_on(self):
+        runs = []
+        for keys_on in (True, False):
+            tokenizer = _FakeTokenizer(fallback=(_CUE_TOKEN,))
+            primitives = _FakePrimitives("", meta=_main_meta(tokenizer))
+            result = _run(primitives, QUESTIONS, tokenize_fn=tokenizer, single_token_keys=keys_on)
+            runs.append((result, primitives, tokenizer))
+
+        (on, p_on, t_on), (off, p_off, t_off) = runs
+        assert p_on.calls == p_off.calls  # prompt, grammar, n_tokens, n_probs
+        assert p_on._last_native_layout == p_off._last_native_layout
+        assert on.decisions == off.decisions
+        assert on.prompt_sha256 == off.prompt_sha256
+        assert all(decision.native_key is None for decision in on.decisions)
+        assert all(
+            "key" not in c for p in p_on._last_native_layout["positions"] for c in p["candidates"]
+        )
+        assert t_on.calls == t_off.calls  # no key was even probed
+
+    def test_mixed_catalogue_keys_only_the_multi_token_set(self):
+        vocab = _key_vocab()
+        ids = _key_ids(vocab)
+        tokenizer = _FakeTokenizer(vocab, fallback=(_CUE_TOKEN,))
+        rows = [
+            _v9_row("blue", 0.0, [("blue", 0.0)], ids=ids),
+            _v9_row(" B", 0.0, [(" B", 0.0)], ids=ids),
+        ]
+        primitives = _FakePrimitives(
+            "", meta=_build_meta([CHOICE, _SEVERITY], rows, tokenizer, "id_only")
+        )
+
+        result = _run(primitives, [CHOICE, _SEVERITY], tokenize_fn=tokenizer)
+
+        by_id = _by_id(result)
+        assert (by_id["choice"].value, by_id["choice"].native_key) == ("blue", None)
+        assert (by_id["severity"].value, by_id["severity"].native_key) == ("p2", "B")
+        prompt = primitives.calls[0]["prompt"]
+        assert "   candidates: red | blue | green\n" in prompt
+        assert "   candidates: A = p1 | B = p2 | C = p3 | D = p4\n" in prompt
+
+    def test_colliding_and_multi_token_codes_are_skipped_deterministically(self):
+        vocab = _key_vocab(
+            {
+                "B": (3000,),  # collides with A's bare id
+                " B": (3000,),
+                "C": (91, 92),  # multi-token both ways
+                " C": (93, 94),
+            }
+        )
+        ids = _key_ids(vocab)
+        tokenizer = _FakeTokenizer(vocab, fallback=(_CUE_TOKEN,))
+        row = _v9_row("E", 0.0, [("E", 0.0)], ids=ids)
+        primitives = _FakePrimitives("", meta=_build_meta([_SEVERITY], [row], tokenizer, "id_only"))
+
+        result = _run(primitives, [_SEVERITY], tokenize_fn=tokenizer)
+
+        keys = [c["key"] for c in primitives._last_native_layout["positions"][0]["candidates"]]
+        assert keys == ["A", "D", "E", "F"]
+        assert (result.decisions[0].value, result.decisions[0].native_key) == ("p3", "E")
+        # No two keys share a token id.
+        bound = [
+            token_id
+            for c in primitives._last_native_layout["positions"][0]["candidates"]
+            for token_id in c["token_ids"]
+        ]
+        assert len(bound) == len(set(bound))
+
+    def test_code_equal_to_another_label_is_skipped(self):
+        question = Question(
+            id="pick",
+            kind=QuestionKind.CHOICE,
+            text="Pick.",
+            options=("B", "the long option"),
+        )
+        tokenizer = _FakeTokenizer(_key_vocab())  # "the long option" -> one id per char
+        primitives = _FakePrimitives("", meta={"completion_probabilities": []})
+
+        _run(primitives, [question], tokenize_fn=tokenizer)
+
+        prompt = primitives.calls[0]["prompt"]
+        assert "   candidates: A = B | C = the long option\n" in prompt
+
+    def test_overflow_falls_back_with_reason(self):
+        options = tuple(f"option number {index}" for index in range(37))
+        question = Question(id="big", kind=QuestionKind.CHOICE, text="Pick.", options=options)
+        tokenizer = _FakeTokenizer(_key_vocab())
+        primitives = _FakePrimitives("")
+
+        result = _run(primitives, [question], tokenize_fn=tokenizer)
+
+        assert primitives.calls == []
+        assert result.decisions == ()
+        failure = result.failures[0]
+        assert failure.reason == REASON_NATIVE_UNSUPPORTED_CANDIDATES
+        assert "37 candidates exceed the 36 single-token key codes" in failure.detail
+        assert "JSON mode" in failure.detail
+
+    def test_exhausted_alphabet_falls_back_with_reason(self):
+        # Every code tokenizes to two ids, bare and spaced: nothing can be keyed.
+        from src.typed_decisions.routing_replay import _CODE_ALPHABET
+
+        multi = {code: (7, 8) for code in _CODE_ALPHABET}
+        multi.update({" " + code: (7, 8) for code in _CODE_ALPHABET})
+        tokenizer = _FakeTokenizer(_key_vocab(multi))
+        primitives = _FakePrimitives("")
+
+        result = _run(primitives, [_SEVERITY], tokenize_fn=tokenizer)
+
+        assert primitives.calls == []
+        failure = result.failures[0]
+        assert failure.reason == REASON_NATIVE_UNSUPPORTED_CANDIDATES
+        assert "alphabet ran out after binding 0 of 4 candidates" in failure.detail
+        assert "(not a single token)" in failure.detail
+
+    def test_unanswered_key_probe_is_tokenizer_unavailable(self):
+        tokenizer = _FakeTokenizer(_key_vocab(), failing=(" A",))
+        primitives = _FakePrimitives("")
+
+        result = _run(primitives, [_SEVERITY], tokenize_fn=tokenizer)
+
+        assert primitives.calls == []
+        assert result.failures[0].reason == REASON_NATIVE_TOKENIZER_UNAVAILABLE
+        assert "key probe ' A'" in result.failures[0].detail
+
+    def test_keys_off_keeps_td1b_failure(self):
+        tokenizer = _FakeTokenizer(_key_vocab())
+        primitives = _FakePrimitives("")
+
+        result = _run(primitives, [_SEVERITY], tokenize_fn=tokenizer, single_token_keys=False)
+
+        assert primitives.calls == []
+        assert result.failures[0].reason == REASON_NATIVE_UNSUPPORTED_CANDIDATES
+        assert "single-token keys" not in result.failures[0].detail
+        assert "A" not in tokenizer.calls
+
+    def test_full_cue_lists_keys_not_labels(self):
+        vocab = _key_vocab()
+        tokenizer = _FakeTokenizer(vocab)
+        primitives = _FakePrimitives("", meta={"completion_probabilities": []})
+
+        _run(primitives, [_SEVERITY], tokenize_fn=tokenizer, cue_style=CueStyle.FULL)
+
+        keyed_cue = _cue_text(_SEVERITY, CueStyle.FULL, keys=("A", "B", "C", "D"))
+        assert keyed_cue.endswith("Answer (one of: A, B, C, D): ")
+        assert keyed_cue in tokenizer.calls
+        assert _cue_text(_SEVERITY, CueStyle.FULL) not in tokenizer.calls
+        assert _cue_text(_SEVERITY, CueStyle.ID_ONLY, keys=("A",)) == "\nseverity: "
+
+    def test_parallel_path_resolves_keys(self):
+        vocab = _key_vocab()
+        ids = _key_ids(vocab)
+        tokenizer = _FakeTokenizer(vocab, fallback=(_CUE_TOKEN,))
+        row = _v9_row(" D", 0.0, [(" D", 0.0)], ids=ids)
+        pool = [_FakePrimitives("", meta={"completion_probabilities": [row]})]
+
+        result = run_typed_decisions_native_parallel(
+            pool, state=STATE, questions=[_SEVERITY], role=ROLE, tokenize_fn=tokenizer
+        )
+
+        assert result.failures == ()
+        assert (result.decisions[0].value, result.decisions[0].native_key) == ("p4", "D")
+        prompt = pool[0].calls[0]["prompt"]
+        assert "   candidates: A = p1 | B = p2 | C = p3 | D = p4\n" in prompt
+        assert prompt.endswith("\nseverity: ")
