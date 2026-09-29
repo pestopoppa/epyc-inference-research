@@ -1045,7 +1045,13 @@ server_mode:
     port: 8083
     slots: 1
     chat_template_kwargs:
-      enable_thinking: false
+      # RI-23a (2026-09-29, OP-69 (a)): was `enable_thinking: false` — DEAD while this role
+      # rode /completion (the kwarg only applies on /v1/chat/completions), and it contradicted
+      # the :8083 process, which runs thinking ON at medium (server_mode.architect_critic).
+      # With orchestrator flag thinking_roles_chat_lane ON this row becomes LIVE, so it now
+      # mirrors the host row: coder_escalation is a thinking-on role (operator OP-69 (a)).
+      enable_thinking: true
+      reasoning_effort: medium
     # 2026-08-20 Qwen3.6->Qwen3.8 swap: this MUST move with model_path. model_role is load-bearing —
     # model_descriptors.py:1233-1244 substitutes the model_role role's config when an alias's model id
     # differs from its server_mode entry (recording ignored_model_id), so a stale value here would
@@ -2811,7 +2817,7 @@ roles:
       ctx_max: 262144
       previous_model: "Qwen3.6-35B-A3B-MTP-Q8_0 (2026-07-31: role moved off frontdoor's shared :8070 35B process onto architect_general's :8083 GPU 27B). Prior: Qwen3-Coder-30B-A3B-Instruct-Q4_K_M (swapped 2026-05-06)."
       use_chat_api: true
-      disable_thinking: true
+      disable_thinking: false   # RI-23a 2026-09-29: the :8083 process thinks (medium); see server_mode.coder_escalation
       reasoning: auto
       max_tokens_multiplier: 4
     candidate_roles:
