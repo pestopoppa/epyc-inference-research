@@ -2296,14 +2296,24 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
     # resolved failures in one mechanism family as a signal to change the QUESTION,
     # not merely the implementation. This is formation guidance only: it neither
     # changes a recorded result nor assigns a magnitude to a historical observation.
+    #
+    # DS41-C76: a keep resets the family, as it does for the family-level block below.
+    # Recall is newest-first, so failures older than the family's latest keep were
+    # formed against source that keep has since changed. Without the reset, the
+    # "local quant/dot kernel" family (any `q8_0`/`q8-` text) stayed exhausted
+    # straight through the dense Q8_0 keeps it had just produced.
     exhausted: dict[str, list[Mapping[str, Any]]] = {}
     terminal = {"measured_null", "regression", "refused_at_formation", "authoring_refused",
                 "screened_out", "hypothesis_retired"}
+    kept_families: set[str] = set()
     for row in prior:
-        if row.get("status") not in terminal:
-            continue
         family = _mechanism_family(row)
-        if family:
+        if not family or family in kept_families:
+            continue
+        status = row.get("status")
+        if status in {"kept", "keep_candidate"}:
+            kept_families.add(family)
+        elif status in terminal:
             exhausted.setdefault(family, []).append(row)
     exhausted = {family: rows for family, rows in exhausted.items()
                  if len(rows) >= 3}
@@ -2315,19 +2325,21 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
         # four categories were themselves tried, both DS41 lanes abstained on every
         # iteration (rows 134-143, 2026-09-29) -- including a planner that named the
         # dense MUL_MAT per-core efficiency gap, the route every kept win came from.
-        # The ban is on the exhausted families; the rest of the search stays open.
+        # The families are keyword buckets (`_mechanism_family`), and "local quant/dot
+        # kernel" alone covers most of a quantized model's hot path, so the rule bans
+        # cosmetic variants of the listed mechanisms, not the whole bucket.
         lines.append(
-            "Repeated nulls/refusals show that the families below are exhausted. "
-            "Do NOT propose another implementation variant in one of them. Choose "
-            "EITHER a family that is not listed here (any hot node or kernel route "
-            "the current profile supports, including a different mechanism in a "
-            "route that already produced keeps), OR escalate the causal question -- "
-            "why the hot work is waiting, imbalanced, poorly partitioned, remotely "
-            "placed, or serialised (graph scheduling, row/work partitioning, "
-            "NUMA/memory placement, expert/load balance). Name the evidence that "
-            "distinguishes your mechanism from the exhausted ones. Every escalation "
-            "category being closed is NOT grounds to abstain while an unlisted "
-            "family remains.")
+            "Repeated nulls/refusals show that the mechanisms below are exhausted. "
+            "Do NOT propose a cosmetic variant of them (same bottleneck, same code "
+            "region, reworded or re-parameterised). Choose EITHER a materially "
+            "different mechanism -- a different bottleneck or code region the current "
+            "profile supports, which may sit in a listed family or in a route that "
+            "already produced keeps -- stating why the listed failures do not predict "
+            "it, OR escalate the causal question: why the hot work is waiting, "
+            "imbalanced, poorly partitioned, remotely placed, or serialised (graph "
+            "scheduling, row/work partitioning, NUMA/memory placement, expert/load "
+            "balance). Every escalation category being closed is NOT grounds to "
+            "abstain while a materially different mechanism remains.")
         for family, rows in sorted(exhausted.items()):
             mechanisms = list(dict.fromkeys(
                 str(row.get("mechanism_id")) for row in rows

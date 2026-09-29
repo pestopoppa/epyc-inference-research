@@ -184,8 +184,27 @@ class ContextBundle(unittest.TestCase):
         ]
         text = actors.render_context({"prior_experiments": rows})
         self.assertNotIn("MUST target one of", text)
-        self.assertIn("a family that is not listed here", text)
+        self.assertIn("materially different mechanism", text)
         self.assertIn("NOT grounds to abstain", text)
+
+    def test_a_keep_resets_an_exhausted_family(self):
+        # DS41-C76: recall is newest-first; failures older than the family's latest
+        # keep were formed against source that keep changed.
+        older_failures = [
+            {"status": "regression", "mechanism_id": f"akm-q8_0-{name}"}
+            for name in ("a", "b", "c")
+        ]
+        kept = {"status": "kept", "mechanism_id": "akm-dense-q8-offset-vnni"}
+        text = actors.render_context({"prior_experiments": [kept, *older_failures]})
+        self.assertNotIn("DIMINISHING-RETURNS ESCAPE", text)
+        newer_failures = [
+            {"status": "measured_null", "mechanism_id": f"akm-q8_0-new-{name}"}
+            for name in ("a", "b", "c")
+        ]
+        text = actors.render_context(
+            {"prior_experiments": [*newer_failures, kept, *older_failures]})
+        self.assertIn("DIMINISHING-RETURNS ESCAPE", text)
+        self.assertIn("local quant/dot kernel", text)
 
     def test_two_family_failures_do_not_force_an_early_escape(self):
         rows = [
