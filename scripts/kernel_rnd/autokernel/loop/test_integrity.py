@@ -318,3 +318,53 @@ def test_held_out_gap_is_persisted_on_actual_outcome():
     assert outcome.status == "kept"
     assert outcome.integrity_screen["public_to_held_out_speedup_gap"] == [0.015]
     assert outcome.to_attempt()["integrity_screen"]["held_out_identities"][0][0] == "tg192"
+
+
+# DS41-C73: flipping the default of an opt-in the anchor already reads with getenv is
+# not a new environment probe; any other probe still is.
+_OPT_IN = ('inline bool q8_enabled() {\n'
+           '    static const bool e = []() {\n'
+           '        const char * s = getenv("GGML_IQK_Q8_0");\n'
+           '        return s && atoi(s) != 0;\n'
+           '    }();\n'
+           '    return e;\n'
+           '}\n')
+
+
+@pytest.fixture
+def opt_in_repo(repo):
+    (repo / "ggml/src/kernel.cpp").write_text(_OPT_IN)
+    _git(repo, "commit", "-qam", "opt-in")
+    return repo
+
+
+def test_rewriting_an_existing_getenv_opt_in_is_not_a_new_probe(opt_in_repo):
+    (opt_in_repo / "ggml/src/kernel.cpp").write_text(
+        'inline bool q8_enabled() {\n'
+        '    static const bool e = []() { const char * s = getenv("GGML_IQK_Q8_0");\n'
+        '        return (s == nullptr || *s == \'\\0\') ? true : (atoi(s) != 0); }();\n'
+        '    return e;\n'
+        '}\n')
+    integrity.validate_candidate(opt_in_repo, ("ggml/src/kernel.cpp",))
+
+
+@pytest.mark.parametrize("line", [
+    'const char * t = getenv("AUTOKERNEL_CASE");',
+    'const char * t = getenv("GGML_IQK_Q8_0"); int p = getpid();',
+    'int cpu = sched_getcpu();',
+])
+def test_new_or_mixed_environment_probes_are_still_refused(opt_in_repo, line):
+    (opt_in_repo / "ggml/src/kernel.cpp").write_text(_OPT_IN + line + "\n")
+    with pytest.raises(integrity.IntegrityRefused) as caught:
+        integrity.validate_candidate(opt_in_repo, ("ggml/src/kernel.cpp",))
+    assert caught.value.refusal_class == "reward_hack_scan"
+    assert "environment_probe" in str(caught.value)
+
+
+def test_a_new_file_gets_no_anchor_exemption(opt_in_repo):
+    path = opt_in_repo / "ggml/src/extra.cpp"
+    path.write_text('const char * s = getenv("GGML_IQK_Q8_0");\n')
+    _git(opt_in_repo, "add", "-N", "ggml/src/extra.cpp")
+    with pytest.raises(integrity.IntegrityRefused) as caught:
+        integrity.validate_candidate(opt_in_repo, ("ggml/src/extra.cpp",))
+    assert caught.value.refusal_class == "reward_hack_scan"

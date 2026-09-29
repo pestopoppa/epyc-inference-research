@@ -373,6 +373,49 @@ def require_unseen_confirmation(candidate: CandidateIntegrity, *, screen_surface
             "held_out_identities": [[surface, confirm_model] for surface in unseen]}
 
 
+_GETENV_LITERAL = re.compile(
+    r'\b(?:std::)?(?:secure_)?getenv\s*\(\s*"([A-Za-z_][A-Za-z0-9_]*)"\s*\)')
+
+
+def _without_preexisting_env_reads(worktree: Path, diff: str,
+                                   findings: Sequence[str]) -> tuple[str, ...]:
+    """Drop an `environment_probe` finding whose only probes re-read a variable the
+    anchor's version of the SAME file already reads with `getenv("NAME")`.
+
+    DS41-C73: the admitted `iqk_dense_dispatch` route names `iqk_q8_0_enabled`, whose
+    body IS a `getenv("GGML_IQK_Q8_0")` opt-in; flipping that default rewrites the
+    existing line, and the added-lines scan refused the candidate as a new environment
+    probe. The candidate cannot set variables in the resolved launch environment, so
+    re-reading one the anchor already reads changes only the default -- visible to the
+    critic. Any other probe on the line (a new variable name, getpid, sched_getcpu,
+    /proc, a tool name) keeps the finding; a new file has no anchor copy and keeps it."""
+    added = {(row.path, row.line): reward_hack_scan._code(row.text)
+             for row in reward_hack_scan._added_lines(diff)}
+    anchor_names: dict[str, set[str] | None] = {}
+    kept: list[str] = []
+    for finding in findings:
+        path, _, rest = finding.partition(":")
+        line, _, _kind = rest.partition(":")
+        code = added.get((path, int(line))) if line.isdigit() else None
+        if code is None:
+            kept.append(finding)
+            continue
+        if path not in anchor_names:
+            try:
+                text = _git(worktree, "show", f"HEAD:{path}").decode("utf-8", "replace")
+                anchor_names[path] = set(_GETENV_LITERAL.findall(text))
+            except IntegrityRefused:
+                anchor_names[path] = None
+        names = anchor_names[path]
+        reads = set(_GETENV_LITERAL.findall(code))
+        residual = _GETENV_LITERAL.sub("", code)
+        if (names and reads and reads <= names
+                and not reward_hack_scan._ENVIRONMENT.search(residual)):
+            continue
+        kept.append(finding)
+    return tuple(kept)
+
+
 def validate_candidate(worktree: Path, declared_paths: Sequence[str], *,
                        oracle_shape: dict | None = None,
                        bench_shape: dict | None = None) -> CandidateIntegrity:
@@ -391,7 +434,7 @@ def validate_candidate(worktree: Path, declared_paths: Sequence[str], *,
         "utf-8", "replace")
     scan = reward_hack_scan.scan_unified_diff(diff)
     findings = tuple(finding for value in (
-        scan.environment_probe_findings,
+        _without_preexisting_env_reads(worktree, diff, scan.environment_probe_findings),
         scan.timing_dependent_branch_findings,
         scan.stream_creation_findings,
         scan.async_escape_findings,
