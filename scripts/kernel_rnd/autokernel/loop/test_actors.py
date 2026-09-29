@@ -171,8 +171,21 @@ class ContextBundle(unittest.TestCase):
         text = actors.render_context({"prior_experiments": rows})
         self.assertIn("DIMINISHING-RETURNS ESCAPE", text)
         self.assertIn("synchronization/barrier", text)
-        self.assertIn("MUST target one of graph scheduling", text)
+        self.assertIn("graph scheduling", text)
         self.assertIn("expert/load balance", text)
+
+    def test_family_escape_bans_the_family_not_the_rest_of_the_search(self):
+        # DS41-C76: a mandate that confined the turn to four escalation categories
+        # made both lanes abstain once those categories were tried.
+        rows = [
+            {"status": "measured_null", "mechanism_id": f"akm-barrier-{name}",
+             "statement": "change the OpenMP barrier implementation"}
+            for name in ("spin", "yield", "tree")
+        ]
+        text = actors.render_context({"prior_experiments": rows})
+        self.assertNotIn("MUST target one of", text)
+        self.assertIn("a family that is not listed here", text)
+        self.assertIn("NOT grounds to abstain", text)
 
     def test_two_family_failures_do_not_force_an_early_escape(self):
         rows = [

@@ -2309,14 +2309,25 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
                  if len(rows) >= 3}
     if exhausted:
         lines.append("\n## DIMINISHING-RETURNS ESCAPE — mandatory for this turn")
+        # DS41-C76: this block used to order that the next hypothesis "MUST target one
+        # of graph scheduling, row/work partitioning, NUMA/memory placement, or
+        # expert/load balance" whenever ANY family reached three failures. Once those
+        # four categories were themselves tried, both DS41 lanes abstained on every
+        # iteration (rows 134-143, 2026-09-29) -- including a planner that named the
+        # dense MUL_MAT per-core efficiency gap, the route every kept win came from.
+        # The ban is on the exhausted families; the rest of the search stays open.
         lines.append(
             "Repeated nulls/refusals show that the families below are exhausted. "
-            "Do NOT propose another implementation variant in one of them. Escalate "
-            "the causal question: determine why the hot work is waiting, imbalanced, "
-            "poorly partitioned, remotely placed, or serialised. The next hypothesis "
-            "MUST target one of graph scheduling, row/work partitioning, NUMA/memory "
-            "placement, or expert/load balance, and name evidence that distinguishes "
-            "that diagnosis from the exhausted local mechanism.")
+            "Do NOT propose another implementation variant in one of them. Choose "
+            "EITHER a family that is not listed here (any hot node or kernel route "
+            "the current profile supports, including a different mechanism in a "
+            "route that already produced keeps), OR escalate the causal question -- "
+            "why the hot work is waiting, imbalanced, poorly partitioned, remotely "
+            "placed, or serialised (graph scheduling, row/work partitioning, "
+            "NUMA/memory placement, expert/load balance). Name the evidence that "
+            "distinguishes your mechanism from the exhausted ones. Every escalation "
+            "category being closed is NOT grounds to abstain while an unlisted "
+            "family remains.")
         for family, rows in sorted(exhausted.items()):
             mechanisms = list(dict.fromkeys(
                 str(row.get("mechanism_id")) for row in rows
