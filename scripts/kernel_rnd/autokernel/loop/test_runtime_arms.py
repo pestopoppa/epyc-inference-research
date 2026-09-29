@@ -334,7 +334,14 @@ def test_enabling_the_runtime_protocol_keeps_the_continuation_binding(tmp_path):
     before = serial_run.resume_binding(enabled)
     launch.write_text('{"changed": true}')
     assert serial_run.resume_binding(enabled) != before
-    assert serial_run.resume_binding(enabled + ["--workers", "2"]) != \
+    # The pool width and per-lane actor models are not continuation identity
+    # (serial_run.POOL_ACTOR_FLAGS, operator 2026-09-29); other stable inputs still bind.
+    assert serial_run.resume_binding(
+        enabled + ["--workers", "2", "--lane-actor-models", "1=deepseek/deepseek-flash"]) == \
+        serial_run.resume_binding(base)
+    assert serial_run.resume_binding(enabled + ["--pairs", "9"]) != \
+        serial_run.resume_binding(base)
+    assert serial_run.resume_binding(enabled + ["--planner-model", "x/y"]) != \
         serial_run.resume_binding(base)
 
 
@@ -883,3 +890,32 @@ def test_serial_common_args_admit_the_runtime_protocol_options(tmp_path):
         serial_roster.build_targets(
             Path(sr.option(argv, "--resolved-campaign")), Path(sr.option(argv, "--owned-targets")),
             target_root=Path(sr.option(argv, "--state-dir")) / "targets", common_path=common)
+
+
+def test_pooled_lanes_never_serve_the_same_open_arm_at_once(tmp_path):
+    anchor = _launch(tmp_path / "gen-1")
+    root = tmp_path / "runtime-preparation"
+    declaration = _declaration(A2)
+    # Historical (no shared view): two lanes drawing at once both serve the one arm.
+    alone = [ra.DeclaredArmPlanner(_Ordinary(), declaration, store_root=lambda: root)
+             for _ in range(2)]
+    assert {planner.propose(_context(anchor)).mechanism_id for planner in alone} == {
+        "runtime-arm-" + A2["arm_id"]}
+    shared = ra.ArmLanes()
+    ordinary = [_Ordinary(), _Ordinary()]
+    lane0, lane1 = (ra.DeclaredArmPlanner(ordinary[index], declaration,
+                                          store_root=lambda: tmp_path / "pooled",
+                                          lanes=shared, lane=f"lane{index}")
+                    for index in range(2))
+    served = lane0.propose(_context(anchor))
+    assert served.mechanism_id == "runtime-arm-" + A2["arm_id"]
+    # lane1 skips the arm lane0 is measuring and falls through to its own planner.
+    assert lane1.propose(_context(anchor)) == "planner-hypothesis"
+    assert (ordinary[0].calls, ordinary[1].calls) == (0, 1)
+    # lane0 drawing again ends its previous draw: the still-open arm is its to serve.
+    assert lane0.propose(_context(anchor)).mechanism_id == served.mechanism_id
+    ra.record_attempt(tmp_path / "pooled", pair=served.runtime_pair.to_dict(),
+                      comparison={"effect": 0.0}, declaration=declaration)
+    assert lane1.propose(_context(anchor)) == "planner-hypothesis"
+    assert lane0.propose(_context(anchor)) == "planner-hypothesis"
+    assert shared.serving == {}

@@ -31,6 +31,7 @@ device and this is about the tree, so it is stated rather than inferred.
 """
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 import json
 import os
@@ -327,6 +328,7 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
     check_lanes_are_disjoint(workers)
     clock = PhaseClock()
     fence = None
+    fence_env = nullcontext()
     if author_sandbox:
         # `ak-check` (the author's sandbox) runs as a separate process: every tail session
         # takes the cross-process fence of every lane's worker root, so a check never
@@ -334,6 +336,10 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
         from . import ak_check
         fences = {ak_check.fence_dir(worker.worktree) for worker in workers}
         fence = lambda: ak_check.tail_fence(fences)   # noqa: E731
+        # Every check this pool's actors or best-of winner checks start (a panel
+        # member's tree is NOT under the worker root) takes its slot in THIS fence
+        # (OAB-28), so the tail waits for it and a check refuses during a tail.
+        fence_env = ak_check.shared_fence_env(fences)
     if cpu_window is not None:
         fence = cpu_window.wrap_fence(fence)
     tail = pipeline.SerializedTail(lambda: champion_head(champion_tree, branch), fence=fence)
@@ -346,23 +352,24 @@ def drive(*, workers: Sequence[pipeline.Worker], make_planner, make_critic,
             cpu_window.note_step(worker_name, label)
 
     started = time.monotonic()
-    outcomes = pipeline.run_pool(
-        workers=workers, make_planner=make_planner, make_critic=make_critic,
-        build_context=build_context, make_gate=make_gate, make_measure=make_measure,
-        commit=commit or (lambda worker, hypothesis, paths, comparison:
-                          advance_champion(worker, hypothesis, paths, comparison,
-                                           champion_tree=champion_tree, branch=branch)),
-        champion_head=lambda: champion_head(champion_tree, branch),
-        reset_to_champion=reset or (lambda worker: reset_to_champion(
-            worker, champion_tree=champion_tree, branch=branch)),
-        record=record, iterations=iterations, on_step=step, tail=tail,
-        should_stop=should_stop,
-        accumulate_valid_positive=accumulate_valid_positive,
-        author_attempts=author_attempts,
-        validate_candidate=validate_candidate, formation_guard=formation_guard,
-        **({"make_author_panel": make_author_panel} if make_author_panel is not None else {}),
-        reserve_candidate=reserve_candidate, record_abandoned=record_abandoned,
-        next_resume=next_resume)
+    with fence_env:
+        outcomes = pipeline.run_pool(
+            workers=workers, make_planner=make_planner, make_critic=make_critic,
+            build_context=build_context, make_gate=make_gate, make_measure=make_measure,
+            commit=commit or (lambda worker, hypothesis, paths, comparison:
+                              advance_champion(worker, hypothesis, paths, comparison,
+                                               champion_tree=champion_tree, branch=branch)),
+            champion_head=lambda: champion_head(champion_tree, branch),
+            reset_to_champion=reset or (lambda worker: reset_to_champion(
+                worker, champion_tree=champion_tree, branch=branch)),
+            record=record, iterations=iterations, on_step=step, tail=tail,
+            should_stop=should_stop,
+            accumulate_valid_positive=accumulate_valid_positive,
+            author_attempts=author_attempts,
+            validate_candidate=validate_candidate, formation_guard=formation_guard,
+            **({"make_author_panel": make_author_panel} if make_author_panel is not None else {}),
+            reserve_candidate=reserve_candidate, record_abandoned=record_abandoned,
+            next_resume=next_resume)
     clock.close()
     return PoolResult(outcomes=outcomes, phase_seconds=clock.totals(),
                       wall_seconds=time.monotonic() - started,

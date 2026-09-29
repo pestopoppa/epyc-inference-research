@@ -262,6 +262,10 @@ def one_iteration_outcome(terminal: str, outcome_counts: Mapping[str, int]) -> s
     ((status, count),) = outcome_counts.items()
     if count != 1:
         raise SerialSchedulingRefused("scheduled child must cover exactly one research iteration")
+    return _iteration_class(status)
+
+
+def _iteration_class(status: str) -> str:
     if status in VALID_COMPARISONS:
         return "valid_comparison"
     if status == "abstained":
@@ -273,6 +277,37 @@ def one_iteration_outcome(terminal: str, outcome_counts: Mapping[str, int]) -> s
     if status in FAILED_OUTCOMES:
         return "failed"
     raise SerialSchedulingRefused(f"scheduled child outcome is unsupported: {status}")
+
+
+#: Most severe first. A multi-iteration stage settles as its WORST iteration class, so
+#: a failed or invalid iteration keeps the scheduler's duration-overrun fence armed
+#: (fail closed); only when every iteration is a valid comparison or an abstention is
+#: the stage exempt, and one valid comparison outranks abstentions (the seed ledger
+#: counts a stage that measured something).
+_STAGE_SEVERITY = ("failed", "invalid", "valid_comparison", "abstained")
+
+
+def stage_outcome(terminal: str, outcome_counts: Mapping[str, int], iterations: int) -> str:
+    """The scheduler outcome of ONE child that covered `iterations` research iterations.
+
+    `iterations == 1` is exactly `one_iteration_outcome` (the historical contract,
+    unchanged). A multi-iteration child (a pooled `--batch-iterations N` stage; see
+    `serial_run._scheduled_batch_refusal`) must be a complete child whose counts cover
+    exactly its finite batch; a stopped child is `failed`, as for one iteration."""
+    if type(iterations) is not int or iterations < 1:
+        raise SerialSchedulingRefused("scheduled child iteration count is invalid")
+    if iterations == 1:
+        return one_iteration_outcome(terminal, outcome_counts)
+    if terminal == "stopped":
+        return "failed"
+    if (terminal != "complete" or not isinstance(outcome_counts, Mapping) or not outcome_counts
+            or any(not isinstance(key, str) or type(value) is not int or value < 1
+                   for key, value in outcome_counts.items())
+            or sum(outcome_counts.values()) != iterations):
+        raise SerialSchedulingRefused(
+            "scheduled child outcome counts do not cover its finite batch")
+    classes = {_iteration_class(status) for status in outcome_counts}
+    return next(item for item in _STAGE_SEVERITY if item in classes)
 
 
 def _closed(value: Any, fields: set[str], label: str) -> Mapping[str, Any]:
@@ -433,5 +468,5 @@ def reopen_held_receipts(batch_dir: Path, reference: Mapping[str, Any], *,
 __all__ = [
     "MANIFEST_SCHEMA", "SerialSchedulerManifest", "SerialSchedulingRefused",
     "one_iteration_outcome", "reopen_held_receipts", "select_target",
-    "validate_target_bindings",
+    "stage_outcome", "validate_target_bindings",
 ]

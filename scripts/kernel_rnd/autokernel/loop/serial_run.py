@@ -286,14 +286,25 @@ RUNTIME_PROTOCOL_FLAGS = frozenset({"--runtime-statistics", "--runtime-calibrati
 RUNTIME_PROTOCOL_SWITCHES = frozenset({"--calibrate-runtime"})
 
 
+#: Pool width and per-lane actor models (operator 2026-09-29, "2nd lane on external
+#: model"): how many concurrent lanes author candidates and which model a lane's
+#: planner/author calls. Neither is an identity of what a continuation carries -- its
+#: source/anchor lineage, COR, runtime recipe and floor are measured on the same
+#: serialized tail whatever the lane count, and actor config is provenance, never the
+#: measurement epoch (OP-60). Binding them orphaned the whole source lineage whenever
+#: the pool changed: DS41 run 10h (`--workers 1`, 2026-09-26) had to relaunch unseeded.
+POOL_ACTOR_FLAGS = frozenset({"--workers", "--lane-actor-models"})
+
+
 def resume_binding(argv) -> dict:
     """Prior-child binding before adding a newly selected runtime recipe.
 
     The runtime protocol's own options are excluded too, so a continuation can turn
     the strict runtime path on (or re-declare its arms) at a batch boundary without
-    orphaning the source/anchor lineage it continues."""
+    orphaning the source/anchor lineage it continues; so are the pool width and the
+    per-lane actor models (`POOL_ACTOR_FLAGS`)."""
     stripped = _without(argv, {"--runtime-recipe-reference", "--runtime-recovery-reference",
-                               *RUNTIME_PROTOCOL_FLAGS})
+                               *RUNTIME_PROTOCOL_FLAGS, *POOL_ACTOR_FLAGS})
     stripped = [item for item in stripped if item not in RUNTIME_PROTOCOL_SWITCHES]
     return input_binding(stripped)
 
@@ -1098,8 +1109,13 @@ def _scheduler_bindings(targets):
     return bindings
 
 
-def _derived_scheduler_manifest(targets, resolved_path, rounds):
-    """Derive ordinary roster scheduling from its enrolled resource declaration."""
+def _derived_scheduler_manifest(targets, resolved_path, rounds, batch_iterations=1):
+    """Derive ordinary roster scheduling from its enrolled resource declaration.
+
+    `batch_iterations` > 1 (one child covers several pooled iterations; admitted only
+    by `_scheduled_batch_refusal`) scales the declared per-stage bound by that count:
+    each iteration may run its own keep lifecycle inside the same held invocation.
+    The default 1 derives the historical manifest byte-for-byte."""
     # This pure mirror is structurally tested against the installed provider and
     # avoids importing the orchestrator's mutable package graph during routing.
     from ..execution.cpu_region_claim import ATOMIC_REGIONS, cpu_list_to_regions
@@ -1114,6 +1130,8 @@ def _derived_scheduler_manifest(targets, resolved_path, rounds):
     # overrun remains charged and successor-fenced.
     max_stage = (3 * resolved.resources.build_timeout_s
                  + 8 * resolved.resources.stage_timeout_s)
+    if batch_iterations != 1:
+        max_stage *= batch_iterations
     attempt_cap = rounds * len(targets) if rounds else 1000
     proposals = {}
     has_gpu = False
@@ -1162,6 +1180,34 @@ def _derived_scheduler_manifest(targets, resolved_path, rounds):
         "scheduler_id": f"serial:{resolved.manifest_digest}",
         "config": config.to_dict(),
         "targets": {key: value.to_dict() for key, value in proposals.items()}})
+
+
+def _scheduled_batch_refusal(*, batch_iterations, explicit_manifest, targets):
+    """Why a scheduled child may NOT cover `batch_iterations` iterations, or None.
+
+    History (c63e579f, 2026-09-10): the scheduler accounts ONE stage per child from its
+    held-claim receipts and classifies it by `one_iteration_outcome`, so scheduled mode
+    was pinned to one iteration per child. A pooled DS41 lane pair needs one child to
+    draw one iteration per lane. It is admitted only where the scheduler's own inputs
+    stay exact:
+
+    * the roster has exactly ONE target, so every child is the same selection (no
+      apportionment across targets is distorted by a longer stage);
+    * the manifest is DERIVED (`--resolved-campaign`), whose per-stage bound is scaled
+      by the batch (`_derived_scheduler_manifest`); an explicit `--scheduler-manifest`
+      declares a one-iteration bound this owner cannot re-derive.
+
+    The child's outcome folds by `serial_scheduling.stage_outcome` (worst iteration
+    class; fail closed). Validation stages still run one iteration (`_batch_argv`)."""
+    if batch_iterations == 1:
+        return None
+    if explicit_manifest:
+        return ("scheduled serial mode requires one iteration per child with an explicit "
+                "--scheduler-manifest (its declared stage bound covers one iteration)")
+    if len(targets) != 1:
+        return ("scheduled serial mode requires one iteration per child unless the derived "
+                f"roster has exactly one target (it has {len(targets)})")
+    return None
 
 
 def _child_command(argv):
@@ -1317,14 +1363,33 @@ def main(argv=None) -> int:
                 scheduler_manifest, _scheduler_bindings(targets))
         elif args.resolved_campaign is not None:
             from . import serial_scheduling
+            refusal = _scheduled_batch_refusal(
+                batch_iterations=args.batch_iterations, explicit_manifest=False,
+                targets=targets)
+            if refusal is not None:
+                raise SerialRefused(refusal)
             scheduler_manifest = _derived_scheduler_manifest(
-                targets, args.resolved_campaign, args.rounds)
+                targets, args.resolved_campaign, args.rounds,
+                batch_iterations=args.batch_iterations)
             serial_scheduling.validate_target_bindings(
                 scheduler_manifest, _scheduler_bindings(targets))
-        if scheduler_manifest is not None and args.batch_iterations != 1:
-            raise SerialRefused("scheduled serial mode requires one iteration per child")
+        if scheduler_manifest is not None:
+            refusal = _scheduled_batch_refusal(
+                batch_iterations=args.batch_iterations,
+                explicit_manifest=args.scheduler_manifest is not None, targets=targets)
+            if refusal is not None:
+                raise SerialRefused(refusal)
         initial_continuation = (_initial_continuation(args.initial_continuation, targets)
                                 if args.initial_continuation is not None else None)
+        if (initial_continuation is not None and scheduler_manifest is not None
+                and args.batch_iterations != 1):
+            seeded, _seed_sha = load_completed(Path(initial_continuation["path"]))
+            if (seeded.get("cpu_screen") or {}).get("candidate") is not None:
+                # `cpu_screen.preview_batch` would refuse it mid-run: a reduced-screen
+                # candidate owes its original single-candidate full confirmation.
+                raise SerialRefused(
+                    "initial continuation carries a pending CPU-screen candidate; its full "
+                    "confirmation requires --batch-iterations 1")
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
     if args.retention_plan_only:
@@ -1851,18 +1916,22 @@ def _batch_argv(original, prior, batch_iterations, directory, *, scheduler_selec
             child_argv.append("--validate-source-continuation")
         if validate_loo:
             child_argv.append("--validate-source-loo")
+    # A whole-source validation (or LOO) stage is ONE scheduled stage (run.py refuses
+    # it with --iterations != 1) whatever the ordinary batch size; at batch size 1 this
+    # is the historical value.
+    stage_iterations = 1 if (validate_source or validate_loo) else batch_iterations
     # Prospective common-scope selection remains inside these original child
     # arguments. Scheduler selection/claims must agree before this child launches.
     from . import cpu_screen
     child_argv, _screen_selection = cpu_screen.prepare_batch(
-        child_argv, prior, directory, batch_iterations=batch_iterations, previewed=scope_preview)
+        child_argv, prior, directory, batch_iterations=stage_iterations, previewed=scope_preview)
     if recovery_reference is not None and _screen_selection["scope"] == "full":
         reference_path = Path(directory) / "runtime-recovery-reference.json"
         raw = json.dumps(recovery_reference, sort_keys=True, separators=(",", ":")).encode() + b"\n"
         from . import archive
         archive._retain_bytes(reference_path, raw)
         child_argv += ["--runtime-recovery-reference", str(reference_path.resolve())]
-    child_argv += ["--iterations", str(batch_iterations), "--out", str(directory)]
+    child_argv += ["--iterations", str(stage_iterations), "--out", str(directory)]
     if scheduler_selection is not None:
         child_argv += ["--scheduler-selection", str(Path(scheduler_selection).resolve())]
     return child_argv
@@ -2042,12 +2111,15 @@ def _scheduled_account(state, manifest, active, body, batch_dir):
         batch_dir, body["held_claim_evidence"], selection=selection,
         target=body["selected_target"])
     scheduler_state = scheduling.SchedulerState.from_dict(state["scheduler_state"])
-    outcome = serial_scheduling.one_iteration_outcome(
-        body["terminal"], body["outcome_counts"])
+    # One iteration per child: exactly `one_iteration_outcome`. A multi-iteration
+    # child (single-target derived schedule) folds to its worst iteration class.
+    outcome = serial_scheduling.stage_outcome(
+        body["terminal"], body["outcome_counts"], body.get("iterations_requested", 1))
     settled = scheduling.account_stage_components(
         manifest.config, scheduler_state, selection, receipts, outcome=outcome)
     # Only a NEW, completed measured search with unchanged source/runtime anchor
-    # trains the forecast. A keep changes future setup; failures/invalids remain
+    # trains the forecast (a multi-iteration child never matches the exact
+    # one-iteration counts below, so it charges but never trains). A keep changes future setup; failures/invalids remain
     # charged above but cannot train successful duration from a truncated prefix.
     if (settled.campaign_attempts > scheduler_state.campaign_attempts
             and body["terminal"] == "complete"

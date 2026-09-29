@@ -436,6 +436,20 @@ class Ledger:
         return row[arm_id]
 
 
+class ArmLanes:
+    """The declared arms one POOL is serving, shared by its lanes' planners.
+
+    Each lane wraps its own planner in a `DeclaredArmPlanner`; without a shared view two
+    lanes drawing at once both served the same open arm (a duplicate measurement of one
+    runtime treatment, and two ledger serves for one attempt). A lane's claim lasts
+    until that lane asks for its next arm (its previous draw has ended) or the arm
+    settles; meanwhile another lane skips it and falls through to its own planner."""
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.serving: dict[tuple[str, str], str] = {}
+
+
 class DeclaredArmPlanner:
     """Serve the next unsettled declared arm before any planner proposal.
 
@@ -448,7 +462,8 @@ class DeclaredArmPlanner:
     def __init__(self, ordinary, declaration: RuntimeArmDeclaration, *,
                  store_root: Callable[[], Path | None],
                  on_event: Callable[[dict], None] | None = None,
-                 evidence: str = "strict"):
+                 evidence: str = "strict", lanes: ArmLanes | None = None,
+                 lane: str | None = None):
         if evidence not in EVIDENCE_MODES:
             raise ArmDeclarationRefused(f"runtime arm evidence must be one of {EVIDENCE_MODES}")
         self.ordinary = ordinary
@@ -456,7 +471,10 @@ class DeclaredArmPlanner:
         self.evidence = evidence
         self._store_root = store_root
         self._on_event = on_event
-        self._lock = threading.Lock()
+        #: A pool's shared serving view (None: this planner alone, the historical path).
+        self._lanes = lanes
+        self._lane = lane
+        self._lock = lanes.lock if lanes is not None else threading.Lock()
         self._skipped: dict[tuple[str, str], str] = {}
 
     def __getattr__(self, name):
@@ -488,10 +506,17 @@ class DeclaredArmPlanner:
         with self._lock:
             state = arm_state(root, self.declaration, anchor)
             ledger = Ledger(root)
+            serving = self._lanes.serving if self._lanes is not None else None
+            if serving is not None:
+                # This lane is drawing again: its previous arm draw has ended.
+                for key in [key for key, owner in serving.items() if owner == self._lane]:
+                    del serving[key]
             for arm in self.declaration.arms:
                 key = (surface, arm.arm_id)
                 if state[arm.arm_id] == "settled" or key in self._skipped:
                     continue
+                if serving is not None and serving.get(key) not in (None, self._lane):
+                    continue    # another lane is measuring this arm now
                 if state[arm.arm_id] == "open" \
                         and ledger.count(surface, arm.arm_id) >= MAX_UNATTEMPTED_SERVES:
                     self._skipped[key] = "served without reaching an attempt"
@@ -511,6 +536,8 @@ class DeclaredArmPlanner:
                     ledger.increment(surface, arm.arm_id)
                 self._event(arm_id=arm.arm_id, surface=surface, status="served",
                             continuation=state[arm.arm_id] == "pending")
+                if serving is not None:
+                    serving[key] = self._lane
                 return Hypothesis(
                     arm.mechanism_id,
                     f"Declared runtime arm {arm.arm_id}: {arm.rationale}",
@@ -673,7 +700,8 @@ def write_adoption_receipt(store_root: Path, body: Mapping[str, Any]) -> Path:
     return Path(store_root) / ADOPTION_DIR / name
 
 
-__all__ = ["ADOPTION_SCHEMA", "ArmDeclarationRefused", "DeclaredArmPlanner", "EVIDENCE_MODES",
+__all__ = ["ADOPTION_SCHEMA", "ArmDeclarationRefused", "ArmLanes", "DeclaredArmPlanner",
+           "EVIDENCE_MODES",
            "KEEP_GRADE_SELECTION_SCHEMA", "Ledger", "is_declared", "keep_grade_selection",
            "record_attempt", "restore_keep_grade_selection",
            "RuntimeArm", "RuntimeArmDeclaration", "SCHEMA", "adoption_receipt", "arm_state",

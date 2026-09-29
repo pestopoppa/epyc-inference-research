@@ -86,6 +86,13 @@ ENV_CALL_ID = "AK_CHECK_CALL_ID"
 ENV_LOG = "AK_CHECK_LOG"
 ENV_CPUS = "AK_CHECK_CPUS"
 ENV_PEER_WAIT_S = "AK_CHECK_PEER_WAIT_S"
+#: The fence dir a check takes its slot in, set by the loop for the duration of a pool
+#: (`pool.drive`): the lanes' SHARED fence (`fence_dir(<a lane>)`). Without it a check
+#: fences beside its own `--lane` -- right for a lane tree, but a best-of-N member's
+#: scratch tree lives elsewhere, so its checks sat in a fence no tail takes (OAB-28):
+#: harmless with one lane (authoring and the tail never overlap), a measurement beside
+#: a compile with two.
+ENV_FENCE = "AK_CHECK_FENCE"
 
 #: The fence lives in the campaign's worker root (every lane's parent), so every lane of
 #: a pool shares it.
@@ -153,6 +160,33 @@ class TailFenceTimeout(RuntimeError):
 
 def fence_dir(lane: Path) -> Path:
     return Path(lane).parent / FENCE_DIR_NAME
+
+
+def check_fence_dir(lane: Path, environ: Mapping[str, str] | None = None) -> Path:
+    """The fence a check of `lane` takes: the loop's shared fence (`ENV_FENCE`), else
+    the one beside `lane`."""
+    value = (os.environ if environ is None else environ).get(ENV_FENCE, "")
+    return Path(value) if value else fence_dir(lane)
+
+
+@contextmanager
+def shared_fence_env(fences: Iterable[Path]) -> Iterator[None]:
+    """`ENV_FENCE` for the duration of a pool when every lane shares ONE fence dir (the
+    pool's worker root); restored after. Several fence dirs: unchanged (no single dir
+    names them all; each lane-tree check still fences beside its lane)."""
+    unique = sorted({Path(fence) for fence in fences})
+    if len(unique) != 1:
+        yield
+        return
+    previous = os.environ.get(ENV_FENCE)
+    os.environ[ENV_FENCE] = str(unique[0])
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop(ENV_FENCE, None)
+        else:
+            os.environ[ENV_FENCE] = previous
 
 
 def _open_lock(path: Path):
@@ -1224,7 +1258,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON <the anchor CMakeCache flags>` (no build "
                 "step runs), then pass --compile-db")
         if not args.no_fence:
-            slot = sandbox_slot(fence_dir(lane))
+            slot = sandbox_slot(check_fence_dir(lane))
         else:
             from contextlib import nullcontext
             slot = nullcontext()
@@ -1295,6 +1329,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 __all__ = ["OP_TEST_SCRATCH_BYTES", "SCRATCH_KIND", "SCRATCH_MARKER", "scratch_provider",
+           "check_fence_dir", "shared_fence_env", "ENV_FENCE",
            "ALLOWED_COMMANDS", "COMMAND", "DEFAULT_PEER_WAIT_S", "ENV_CALL_ID", "ENV_LOG",
            "ENV_OP_TEST", "ENV_PEER_WAIT_S", "ENV_SCRATCH", "FENCE_DIR_NAME",
            "LOOP_REGION_ROLE", "PEER_POLL_S", "Refused", "TailFenceTimeout", "author_env",

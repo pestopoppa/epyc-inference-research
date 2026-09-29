@@ -104,6 +104,41 @@ def test_scheduled_outcome_refuses_batched_or_unknown_result():
     assert ss.one_iteration_outcome("stopped", {}) == "failed"
 
 
+@pytest.mark.parametrize("native", ["kept", "measured_null", "abstained", "superseded",
+                                    "lane_error", "patch_rounds_exhausted"])
+def test_one_iteration_stage_outcome_is_exactly_the_historical_contract(native):
+    assert ss.stage_outcome("complete", {native: 1}, 1) == \
+        ss.one_iteration_outcome("complete", {native: 1})
+    assert ss.stage_outcome("stopped", {}, 1) == "failed"
+    with pytest.raises(ss.SerialSchedulingRefused, match="exactly one"):
+        ss.stage_outcome("complete", {"measured_null": 2}, 1)
+
+
+@pytest.mark.parametrize("counts,expected", [
+    ({"measured_null": 2}, "valid_comparison"),
+    ({"kept": 1, "abstained": 1}, "valid_comparison"),
+    ({"abstained": 2}, "abstained"),
+    # A pooled peer superseded by the other lane's keep is INVALID: worst class wins.
+    ({"kept": 1, "superseded": 1}, "invalid"),
+    ({"measured_null": 1, "lane_error": 1}, "failed"),
+    ({"superseded": 1, "planner_transient": 1}, "failed"),
+])
+def test_multi_iteration_stage_folds_to_its_worst_iteration_class(counts, expected):
+    assert ss.stage_outcome("complete", counts, sum(counts.values())) == expected
+
+
+def test_multi_iteration_stage_refuses_counts_that_do_not_cover_the_batch():
+    assert ss.stage_outcome("stopped", {"kept": 1}, 2) == "failed"
+    with pytest.raises(ss.SerialSchedulingRefused, match="finite batch"):
+        ss.stage_outcome("complete", {"measured_null": 1}, 2)
+    with pytest.raises(ss.SerialSchedulingRefused, match="finite batch"):
+        ss.stage_outcome("complete", {}, 2)
+    with pytest.raises(ss.SerialSchedulingRefused, match="unsupported"):
+        ss.stage_outcome("complete", {"measured_null": 1, "new_status": 1}, 2)
+    with pytest.raises(ss.SerialSchedulingRefused, match="iteration count"):
+        ss.stage_outcome("complete", {"measured_null": 1}, 0)
+
+
 def test_manifest_detaches_caller_and_is_immutable():
     source = manifest()
     row = source.to_dict()

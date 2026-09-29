@@ -71,6 +71,9 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None, s
                   # Best-of-N author wall budgets (bestof.WallBudget): a time policy.
                   "--actor-authors-wall", "--actor-authors-panel-wall",
                   "--actor-authors-cancel-factor",
+                  # Per-lane planner/author models (lane_actors.py): actor provenance,
+                  # never a target/workload identity (serial_run.POOL_ACTOR_FLAGS).
+                  "--lane-actor-models",
                   # Declared runtime arms and their evidence protocol (runtime_arms.py,
                   # P-AK-SEARCH-1-A4): a search policy over the SAME launch. Each arm is a
                   # single-field delta the child builds from the target's own launch; the

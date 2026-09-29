@@ -117,14 +117,92 @@ def test_generated_dry_run_reaches_actual_owner_without_side_effects(
 
 
 def test_resolved_campaign_refuses_batched_scheduled_child_before_launch(tmp_path, monkeypatch, capsys):
-    _, _, argv = _inputs(tmp_path, backends=("cpu",))
+    # Several targets: a longer stage would distort the scheduler's apportionment, so a
+    # batched child stays refused (the single-target roster below is admitted).
+    _, _, argv = _inputs(tmp_path, backends=("cpu", "gpu"))
     argv[argv.index("--batch-iterations") + 1] = "2"
     _forbid_execution(monkeypatch)
     with pytest.raises(SystemExit) as caught:
         sr.main(argv + ["--dry-run"])
     assert caught.value.code == 2
-    assert "scheduled serial mode requires one iteration per child" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "scheduled serial mode requires one iteration per child" in err
+    assert "exactly one target (it has 2)" in err
     assert not (tmp_path / "router").exists()
+
+
+def test_single_target_derived_schedule_admits_a_batched_child_and_scales_its_bound(
+        tmp_path, monkeypatch, capsys):
+    resolved, _, argv = _inputs(tmp_path, backends=("cpu",))
+    argv[argv.index("--batch-iterations") + 1] = "2"
+    _forbid_execution(monkeypatch)
+    monkeypatch.setattr(run, "main", lambda child: 0 if "--dry-run" in child else
+                        pytest.fail("a dry run launched a child"))
+    assert sr.main(argv + ["--dry-run"]) == 0
+    out = capsys.readouterr().out
+    printed = json.JSONDecoder().raw_decode(out)[0]
+    one = (3 * resolved.resources.build_timeout_s + 8 * resolved.resources.stage_timeout_s)
+    assert printed["scheduler"]["config"]["max_stage_seconds"] == 2 * one
+    assert not (tmp_path / "router").exists()
+    # One iteration per child derives the historical manifest byte for byte.
+    targets, _, _ = _build(argv)
+    targets = [sr._validate_target_args(row, owner_anchor_waiver=True) for row in targets]
+    resolved_path = Path(sr.option(argv, "--resolved-campaign"))
+    assert (sr._derived_scheduler_manifest(targets, resolved_path, 2).to_dict()
+            == sr._derived_scheduler_manifest(targets, resolved_path, 2,
+                                              batch_iterations=1).to_dict())
+    assert sr._derived_scheduler_manifest(targets, resolved_path, 2).config.max_stage_seconds == one
+
+
+def test_batched_schedule_refuses_an_explicit_manifest_and_a_pending_screen_seed(
+        tmp_path, monkeypatch, capsys):
+    assert sr._scheduled_batch_refusal(batch_iterations=1, explicit_manifest=True,
+                                       targets=[[], []]) is None
+    assert "explicit --scheduler-manifest" in sr._scheduled_batch_refusal(
+        batch_iterations=2, explicit_manifest=True, targets=[[]])
+    assert sr._scheduled_batch_refusal(batch_iterations=3, explicit_manifest=False,
+                                       targets=[[]]) is None
+    # A seed carrying a reduced-screen candidate owes its one-candidate confirmation.
+    _, _, argv = _inputs(tmp_path, backends=("cpu",))
+    argv[argv.index("--batch-iterations") + 1] = "2"
+    seed = tmp_path / "seed" / "loop-continuation.json"
+    _forbid_execution(monkeypatch)
+    monkeypatch.setattr(sr, "_initial_continuation", lambda path, targets: {
+        "target_index": 0, "path": str(path), "sha256": "0" * 64})
+    monkeypatch.setattr(sr, "load_completed", lambda path, **_kw: (
+        {"cpu_screen": {"candidate": {"hypothesis": {}}}}, "0" * 64))
+    with pytest.raises(SystemExit) as caught:
+        sr.main(argv + ["--initial-continuation", str(seed), "--dry-run"])
+    assert caught.value.code == 2
+    assert "pending CPU-screen candidate" in capsys.readouterr().err
+
+
+def test_single_target_batched_schedule_drives_children_and_accounts_each_stage(
+        tmp_path, monkeypatch):
+    _, _, argv = _inputs(tmp_path, backends=("cpu",))
+    argv[argv.index("--batch-iterations") + 1] = "2"
+    child = tmp_path / "tiny.py"
+    child.write_text(CHILD)
+    monkeypatch.setattr(sr, "_child_command", lambda args: [sr.sys.executable, str(child), *args])
+    here = Path(sr.__file__).resolve()
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join((str(here.parents[4]), str(here.parents[2]))))
+    assert sr.main(argv) == 0
+    state_dir = tmp_path / "router"
+    seen = [json.loads(line)["argv"] for line in (state_dir / "seen.jsonl").read_text().splitlines()]
+    assert len(seen) == 2 and all(sr.option(row, "--iterations") == "2" for row in seen)
+    assert all(sr.option(row, "--scheduler-selection") for row in seen)
+    state = json.loads((state_dir / "serial-state.json").read_text())
+    assert state["batch_iterations"] == 2 and state["next_batch"] == 2
+    scheduler = state["scheduler_state"]
+    assert scheduler["campaign_attempts"] == 2 and not scheduler["successor_fences"]
+    assert {row["outcome"] for row in scheduler["accounted_receipts"]} == {"valid_comparison"}
+    for number in range(2):
+        body, _sha = sr.load_completed(
+            state_dir / "batches" / f"batch-{number:06d}" / "loop-continuation.json")
+        assert body["iterations_completed"] == 2 and body["outcome_counts"] == {"measured_null": 2}
+    # A completed restart replays nothing.
+    assert sr.main(argv) == 0
+    assert len((state_dir / "seen.jsonl").read_text().splitlines()) == 2
 
 
 @pytest.mark.parametrize("experimental_gpu", [False, True])
@@ -269,3 +347,15 @@ def test_invalid_generated_inputs_refuse_before_launch(tmp_path, monkeypatch, ca
         sr.main(argv)
     assert caught.value.code == 2
     assert not (tmp_path / "router").exists()
+
+
+def test_a_validation_stage_stays_one_iteration_under_a_batched_schedule(tmp_path):
+    original = ["--target-id", "t", "--worktree", str(tmp_path / "source")]
+    ordinary = sr._batch_argv(original, None, 2, tmp_path / "b0")
+    assert sr.option(ordinary, "--iterations") == "2"
+    for flags in ({"validate_source": True}, {"validate_loo": True}):
+        staged = sr._batch_argv(original, None, 2, tmp_path / "b1", **flags)
+        assert sr.option(staged, "--iterations") == "1"
+    # Batch size 1: the historical argv whatever the stage.
+    assert sr._batch_argv(original, None, 1, tmp_path / "b2") == \
+        sr._batch_argv(original, None, 1, tmp_path / "b2", validate_source=True)

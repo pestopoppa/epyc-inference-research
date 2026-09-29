@@ -214,7 +214,11 @@ class PhaseEstimator:
                         "critic": float(critic_timeout_s)}
         self.samples = samples
 
-    def _walls(self) -> dict[str, list[float]]:
+    def _walls(self, models: Mapping[str, str] | None = None) -> dict[str, list[float]]:
+        """Recent walls per role. With `models` (role -> the model THIS lane calls; set
+        only when lanes run different models, `--lane-actor-models`) a role keeps only
+        its model's rows, falling back to every row of the role when that model has
+        none yet: one lane's median must not be another model's."""
         walls: dict[str, list[float]] = {"planner": [], "author": [], "critic": []}
         if self.call_log is None:
             return walls
@@ -226,6 +230,7 @@ class PhaseEstimator:
                 data = stream.read()
         except OSError:
             return walls
+        matched: dict[str, list[float]] = {"planner": [], "author": [], "critic": []}
         for line in data.splitlines():
             try:
                 row = json.loads(line)
@@ -236,10 +241,17 @@ class PhaseEstimator:
                     and not _salvage_row(row)
                     and type(row.get("wall_s")) in (int, float) and row["wall_s"] > 0):
                 walls[row["role"]].append(float(row["wall_s"]))
+                if models is not None:
+                    backend = row.get("backend")
+                    model = backend.get("model") if isinstance(backend, dict) else None
+                    if model is not None and model == models.get(row["role"]):
+                        matched[row["role"]].append(float(row["wall_s"]))
+        if models is not None:
+            walls = {role: (matched[role] or rows) for role, rows in walls.items()}
         return walls
 
-    def estimate(self, phases) -> tuple[float, dict]:
-        walls = self._walls()
+    def estimate(self, phases, models: Mapping[str, str] | None = None) -> tuple[float, dict]:
+        walls = self._walls(models)
         total, basis = 0.0, {}
         for phase in phases:
             role = _ROLE[phase]
@@ -334,7 +346,8 @@ class CpuWindow:
                  heartbeat_s: float | None = HEARTBEAT_S, ttl_s: float = TTL_S,
                  clock: Callable[[], float] = time.time,
                  log: Callable[[str], None] | None = None,
-                 on_change: Callable[[dict], None] | None = None) -> None:
+                 on_change: Callable[[dict], None] | None = None,
+                 lane_models: Mapping[str, Mapping[str, str]] | None = None) -> None:
         self.campaign = campaign
         self.path = Path(path)
         self.campaign_path = Path(campaign_path) if campaign_path is not None else None
@@ -356,6 +369,12 @@ class CpuWindow:
         self._tail_active = 0
         self._reacquiring = False
         self._lanes: dict[str, str | None] = {}
+        #: lane -> role -> model, only when lanes call different models
+        #: (`--lane-actor-models`); None keeps one pooled median per role.
+        self.lane_models = ({str(lane): dict(models) for lane, models in lane_models.items()}
+                            if lane_models else None)
+        #: lane -> (epoch its actor phases are expected to end, the phase it is in).
+        self._lane_eta: dict[str, tuple[float | None, str]] = {}
         self._finalized = False
         self._published = False
         self._write_errors = 0
@@ -557,11 +576,14 @@ class CpuWindow:
                           generation=lease.generation)
             return True
 
-    def _estimate(self, phase: str) -> tuple[float | None, dict | None]:
+    def _estimate(self, phase: str, lane: str | None = None) -> tuple[float | None, dict | None]:
         if self.estimator is None:
             return None, None
         try:
-            seconds, basis = self.estimator.estimate(_AHEAD[phase])
+            models = (self.lane_models.get(lane) if self.lane_models is not None
+                      and lane is not None else None)
+            seconds, basis = (self.estimator.estimate(_AHEAD[phase], models=models)
+                              if models else self.estimator.estimate(_AHEAD[phase]))
         except Exception:      # noqa: BLE001 -- an ETA is advice
             return None, None
         return seconds, {"phases": list(_AHEAD[phase]), "per_phase": basis,
@@ -593,14 +615,30 @@ class CpuWindow:
                 # A lane owns the tail (the claim stays held), or a re-acquire is in
                 # flight: this transition changes nothing about the claim.
                 return
-            seconds, basis = self._estimate(phase)
+            seconds, basis = self._estimate(phase, lane)
             est = None if seconds is None else _iso(now + seconds)
+            closing = phase == "critic2"
+            self._lane_eta[lane] = (None if seconds is None else now + seconds, phase)
+            # Several lanes in actor phases (a pool): the window closes when the FIRST
+            # of them needs the CPU, not when the lane that just moved does. One lane:
+            # exactly the historical estimate.
+            actor_lanes = {name: self._lane_eta[name] for name, current in self._lanes.items()
+                           if current is not None and name in self._lane_eta}
+            if len(actor_lanes) > 1:
+                etas = [eta for eta, _phase in actor_lanes.values()]
+                if all(eta is not None for eta in etas):
+                    est = _iso(min(etas))
+                basis = {**(basis or {}),
+                         "lanes": {name: {"phase": lane_phase, "est_close_at": _iso(eta)}
+                                   for name, (eta, lane_phase) in sorted(actor_lanes.items())},
+                         "lanes_note": "the window closes when the first lane needs the CPU"}
+                closing = any(lane_phase == "critic2"
+                              for _eta, lane_phase in actor_lanes.values())
             if self.lease.held:
                 self.lease.release(reason=f"actor:{phase}")
                 opened_at = _iso(now)
             else:
                 opened_at = self._window["opened_at"] or _iso(now)
-            closing = phase == "critic2"
             self._publish(state="closing" if closing else "open", loop_holds_claim=False,
                           phase=phase, phase_label=label, phase_started_at=_iso(now),
                           opened_at=opened_at, est_close_at=est, est_close_basis=basis,

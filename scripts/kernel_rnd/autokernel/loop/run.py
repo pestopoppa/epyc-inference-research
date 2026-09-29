@@ -489,6 +489,14 @@ def _actor_config(args, resolved_campaign=None) -> dict[str, Any]:
         "actor_trim_tools": get("actor_trim_tools"),
         "actor_lane_guard": get("actor_lane_guard"),
     }
+    # Per-lane planner/author models (`lane_actors`): present only when a lane is
+    # overridden, so a run without `--lane-actor-models` records the historical keys.
+    lane_spec = get("lane_actor_models")
+    if isinstance(lane_spec, str) and lane_spec.strip():
+        from . import lane_actors
+        config.update(lane_actors.provenance(
+            lane_actors.parse(lane_spec, workers=int(get("workers", 1) or 1)),
+            get("planner_effort")))
     if resolved_campaign is not None:
         config["manifest_actors"] = {key: value for key, value in resolved_campaign.actors}
         config["manifest_fallbacks"] = {key: list(values)
@@ -523,6 +531,16 @@ class AuthorPlan:
     @property
     def panel(self) -> bool:
         return len(self.specs) >= 2
+
+
+def _shared_pool_lanes(args) -> int:
+    """Lanes whose planner/author calls share the global planner's server (all of them
+    unless `--lane-actor-models` moves a lane to another provider)."""
+    from . import lane_actors
+    workers = int(args.workers)
+    return lane_actors.shared_pool_lanes(
+        workers, lane_actors.parse(getattr(args, "lane_actor_models", None), workers=workers),
+        getattr(args, "planner_model", None))
 
 
 def _author_plan(args, planner_kind: str | None = None) -> AuthorPlan:
@@ -560,7 +578,9 @@ def _author_plan(args, planner_kind: str | None = None) -> AuthorPlan:
         if explicit:
             raise ValueError(reason)
         return AuthorPlan(note=f"single author: {reason}")
-    if planner_kind == "opencode" and int(args.workers) > 1:
+    # Lanes whose planner/author run on ANOTHER provider (`--lane-actor-models`) do not
+    # share :8083's pool: the panel budget still holds exactly one lane's authors there.
+    if planner_kind == "opencode" and int(args.workers) > 1 and _shared_pool_lanes(args) > 1:
         reason = (f"{len(specs)} concurrent authors per lane with --workers {args.workers}: "
                   "the pool budget holds one lane's authors on :8083's unified pool, and "
                   "other lanes' calls would share it")
@@ -1609,6 +1629,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--worker-build-root", type=Path,
                         default=pool.WORKER_BUILD_ROOT,
                         help="parent of the per-lane candidate build directories")
+    parser.add_argument("--lane-actor-models", default="",
+                        help="per-lane planner+author model override (operator 2026-09-29, "
+                             "'2nd lane on external model'): comma list of "
+                             "K=provider/model[@effort] for lanes 1..workers-1. That lane's "
+                             "planner and SINGLE author run on the model (effort defaults to "
+                             "--planner-effort; no qwen-gpu reasoning kwargs); the critic stays "
+                             "global; lane 0 is never overridden. Actor provenance only, never "
+                             "an epoch or continuation identity (see lane_actors.py)")
     scratch.add_arguments(parser)
     parser.add_argument("--actor-authors", default=None,
                         help="best-of-N authoring (operator 2026-09-26): a comma list of "
@@ -1684,6 +1712,11 @@ def main(argv: list[str] | None = None) -> int:
     budget_error = _actor_budget_error(args)
     if budget_error:
         parser.error(budget_error)
+    from . import lane_actors
+    try:
+        lane_actor_models = lane_actors.parse(args.lane_actor_models, workers=args.workers)
+    except ValueError as exc:
+        parser.error(str(exc))
     try:
         # The backend-dependent refusals come with the backends (provider setup must
         # not run before the selection refusals below).
@@ -1698,6 +1731,7 @@ def main(argv: list[str] | None = None) -> int:
                 or (args.cpu_screen_scope and args.cpu_confirm_from)):
             parser.error("CPU screen/confirmation requires one enrolled CPU iteration/lane and --out")
         args.workers = 1  # One finite candidate owns the retained build until confirmation.
+        args.lane_actor_models, lane_actor_models = "", {}   # one lane: lane 0 only
     if args.cpu_serving_launch and args.gpu_serving_launch:
         parser.error("select only one CPU or GPU serving launch")
     if args.gpu_serving_launch and not args.resolved_campaign:
@@ -2393,6 +2427,11 @@ def main(argv: list[str] | None = None) -> int:
           f"planner-salvage={args.actor_planner_salvage_s}s "
           f"author-thinking={args.actor_author_thinking} "
           f"author-action-rule={args.actor_author_action_rule}")
+    lane_backends = {index: actors.backend_for(lane.model, lane.effort_or(args.planner_effort))
+                     for index, lane in lane_actor_models.items()}
+    for index, backend in sorted(lane_backends.items()):
+        print(f"actors    lane{index} planner+author={backend.describe()} (single author, "
+              "author reasoning kwargs off; critic global) -- --lane-actor-models")
     for moot in _moot_budgets(args):
         print(f"actors    WARNING {moot} is not below --actor-timeout-s={args.actor_timeout_s}: "
               "the hard timeout ends those calls first, so the budget never fires")
@@ -4296,16 +4335,29 @@ def main(argv: list[str] | None = None) -> int:
             return (ak_check.scratch_provider(sandbox_scratch, worker.name)
                     if sandbox_scratch is not None else None)
 
+        arm_lanes = None
+        if runtime_arm_declaration is not None and int(args.workers) > 1:
+            from . import runtime_arms as _runtime_arms
+            arm_lanes = _runtime_arms.ArmLanes()
+
+        def lane_backend(worker):
+            """The lane's planner/author backend: the global one unless overridden."""
+            lane = lane_actors.for_worker(lane_actor_models, worker)
+            return planner_backend if lane is None else lane_backends[lane.lane]
+
+        def lane_seat(worker, seat):
+            return lane_actors.seat_for(lane_actors.for_worker(lane_actor_models, worker), seat)
+
         def make_planner(worker):
             if screen_confirmation:
                 return cpu_screen.RetainedPlanner(screen_confirmation, worker, screen_prepared["launch"])
-            ordinary = actors.AgentPlanner(workspace=worker.worktree, backend=planner_backend,
+            ordinary = actors.AgentPlanner(workspace=worker.worktree, backend=lane_backend(worker),
                                            timeout_s=args.actor_timeout_s,
                                            should_stop=should_stop,
                                            belief_context=args.actor_belief_context,
                                            belief_root=args.belief_root_repo,
                                            sandbox_scratch=sandbox_for(worker),
-                                           seat=actors.ActorSeat(
+                                           seat=lane_seat(worker, actors.ActorSeat(
                                                bounded=args.actor_seat == "bounded",
                                                fan_out=args.actor_fan_out,
                                                steps=args.actor_steps,
@@ -4313,7 +4365,7 @@ def main(argv: list[str] | None = None) -> int:
                                                **_actor_knobs(args), **_actor_limits(args),
                                                **_actor_budgets(args),
                                                **_actor_thinking(args), **sandbox_seat,
-                                               **_actor_salvage(args)))
+                                               **_actor_salvage(args))))
             planner = (runtime_recovery.PendingPlanner(ordinary, pending_slot)
                        if pending_pair is not None else ordinary)
             if runtime_arm_declaration is not None and (runtime_enabled or runtime_keep_grade):
@@ -4335,7 +4387,11 @@ def main(argv: list[str] | None = None) -> int:
                     store_root=lambda: (runtime_store.root if runtime_store is not None
                                         and (runtime_enabled or runtime_keep_grade) else None),
                     on_event=arm_event,
-                    evidence="keep_grade" if runtime_keep_grade else "strict")
+                    evidence="keep_grade" if runtime_keep_grade else "strict",
+                    # Several lanes: one shared serving view, so two lanes never
+                    # measure the same open arm at once (one lane: the historical path).
+                    **({"lanes": arm_lanes, "lane": worker.name}
+                       if int(args.workers) > 1 else {}))
             return planner
 
         def make_author_panel(worker):
@@ -4345,6 +4401,8 @@ def main(argv: list[str] | None = None) -> int:
             single-author path (N=1, a retained screen, or no scratch registry)."""
             if not author_plan.panel or screen_confirmation:
                 return None
+            if lane_actors.for_worker(lane_actor_models, worker) is not None:
+                return None   # an overridden lane authors single (`lane_actors`)
             if scratch_registry[0] is None:
                 # The run registry is created by the run body before any lane draws;
                 # without it there is nowhere marked to put the members' trees.
@@ -4390,7 +4448,11 @@ def main(argv: list[str] | None = None) -> int:
                                       execute=True)
         lanes_by_name.update({lane.name: lane for lane in pooled_lanes})
         return pool.drive(
-            author_sandbox=sandbox_seat["author_sandbox"],
+            # A best-of panel's winner check runs ak-check even with the author sandbox
+            # off; beside ANOTHER lane's tail (--workers > 1, `--lane-actor-models`)
+            # that is a compile during a measurement unless the tail takes the fence.
+            author_sandbox=(sandbox_seat["author_sandbox"]
+                            or (author_plan.panel and int(args.workers) > 1)),
             commit=commit_pooled,
             reset=reset_retained,
             workers=pooled_lanes,
@@ -4607,7 +4669,17 @@ def main(argv: list[str] | None = None) -> int:
                 author_budget_s=args.actor_author_budget_s or args.actor_timeout_s,
                 critic_timeout_s=args.actor_timeout_s),
             bus=cpu_window.BusPublisher(
-                None if args.cpu_window_bus_agent in ("", "off") else args.cpu_window_bus_agent))
+                None if args.cpu_window_bus_agent in ("", "off") else args.cpu_window_bus_agent),
+            # Lanes on different planner/author models (`--lane-actor-models`): each
+            # lane's phase ETA uses its own model's recent walls. None: pooled, as ever.
+            lane_models=({f"lane{index}": {
+                              "planner": (lane_backends[index].model if index in lane_backends
+                                          else planner_backend.model),
+                              "author": (lane_backends[index].model if index in lane_backends
+                                         else planner_backend.model),
+                              "critic": critic_backend.model}
+                          for index in range(int(args.workers))}
+                         if lane_backends else None))
     cpu_window_ref[0] = cpu_win
 
     if direct_launch:
