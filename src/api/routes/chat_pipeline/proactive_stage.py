@@ -253,21 +253,27 @@ async def _execute_proactive(
         request.context or "",
     )
 
+    from src.chat_completions_roles import thinking_off
+
     try:
-        if _should_inline_plan_call_for_test(primitives):
-            plan_json_str = primitives.llm_call(
-                plan_prompt,
-                role=planner_role,
-                n_tokens=256,
-            )
-        else:
-            # Keep model I/O off the event loop in production runtime paths.
-            plan_json_str = await asyncio.to_thread(
-                primitives.llm_call,
-                plan_prompt,
-                role=planner_role,
-                n_tokens=256,
-            )
+        # RI-23: a 256-token plan JSON is not a reasoning budget — thinking OFF on the
+        # chat lane (no-op while thinking_roles_chat_lane is off). asyncio.to_thread
+        # copies this context, so the override reaches the offloaded call.
+        with thinking_off():
+            if _should_inline_plan_call_for_test(primitives):
+                plan_json_str = primitives.llm_call(
+                    plan_prompt,
+                    role=planner_role,
+                    n_tokens=256,
+                )
+            else:
+                # Keep model I/O off the event loop in production runtime paths.
+                plan_json_str = await asyncio.to_thread(
+                    primitives.llm_call,
+                    plan_prompt,
+                    role=planner_role,
+                    n_tokens=256,
+                )
     except Exception as e:
         log.warning(
             "Proactive delegation: architect plan call failed: %s",

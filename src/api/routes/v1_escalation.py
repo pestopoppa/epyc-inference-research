@@ -419,14 +419,14 @@ def _escalate_answer(
         verdict_role = plan.target_role or str(resolve_reviewer_role())
         before = _counters(primitives)
         with _tagged_trace(plan, primitives, TRIGGER_REVIEW, role, verdict_role):
-            verdict = chat_review._architect_verdict(
+            verdict, verdict_status = chat_review._architect_verdict_with_status(
                 question=question,
                 answer=answer,
                 primitives=primitives,
                 role=verdict_role,
             )
         wrong = bool(verdict) and verdict.upper().startswith("WRONG")
-        _record_step(
+        review_step = _record_step(
             plan,
             primitives,
             trigger=TRIGGER_REVIEW,
@@ -435,6 +435,10 @@ def _escalate_answer(
             before=before,
             outcome="wrong" if wrong else "ok_or_unavailable",
         )
+        if review_step is not None:
+            # RI-22: split ok_or_unavailable. `outcome` keeps its established values
+            # (the UFH-13 thesis report buckets on them); this names which one it was.
+            review_step["verdict_status"] = verdict_status
         if wrong:
             corrections = verdict.split(":", 1)[1].strip() if ":" in verdict else verdict
             before = _counters(primitives)

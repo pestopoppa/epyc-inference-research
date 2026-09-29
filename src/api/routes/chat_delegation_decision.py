@@ -624,12 +624,17 @@ def _apply_decision_guards(
                 f"Answer with the letter only (A, B, C, or D).\n\nDecision:"
             )
             try:
-                forced_raw = primitives.llm_call(
-                    force_prompt,
-                    role=architect_role,
-                    skip_suffix=True,
-                    n_tokens=128,
-                )
+                from src.chat_completions_roles import thinking_off
+
+                # RI-23: a 128-token letter answer — thinking OFF on the chat lane
+                # (no-op while thinking_roles_chat_lane is off).
+                with thinking_off():
+                    forced_raw = primitives.llm_call(
+                        force_prompt,
+                        role=architect_role,
+                        skip_suffix=True,
+                        n_tokens=128,
+                    )
                 forced_stripped = _strip_think(forced_raw).strip()
                 forced_decision = _extract_toon_decision(forced_stripped)
                 if forced_decision and forced_decision.startswith("D|"):

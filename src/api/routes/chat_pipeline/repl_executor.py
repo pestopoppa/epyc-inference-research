@@ -38,7 +38,8 @@ from src.session.protocol import normalize_checkpoint_for_repl_restore
 from src.structured_output.repair import parse_with_repair, primitives_completer
 
 from src.api.routes.chat_review import (
-    _architect_verdict,
+    VERDICT_UNAVAILABLE,
+    _architect_verdict_with_status,
     _fast_revise,
     _should_review,
 )
@@ -787,8 +788,8 @@ async def _execute_repl_body(
             task_id,
             extra=task_extra(task_id=task_id, role=current_role, stage="review"),
         )
-        verdict = await asyncio.to_thread(
-            _architect_verdict,
+        verdict, verdict_status = await asyncio.to_thread(
+            _architect_verdict_with_status,
             question=request.prompt,
             answer=answer,
             primitives=primitives,
@@ -806,6 +807,12 @@ async def _execute_repl_body(
                 original_answer=answer,
                 corrections=corrections,
                 primitives=primitives,
+            )
+        elif verdict_status == VERDICT_UNAVAILABLE:
+            # RI-22: a failed/empty/unparseable verdict keeps the answer but is NOT an OK.
+            log.warning(
+                "Review verdict: UNAVAILABLE — answer kept unreviewed",
+                extra=task_extra(task_id=task_id, role=current_role, stage="review"),
             )
         else:
             log.info(

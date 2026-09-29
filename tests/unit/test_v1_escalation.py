@@ -377,6 +377,19 @@ def test_review_gate_ok_verdict_keeps_the_frontdoor_answer(env):
     receipt = r.json()["x_orchestrator_metadata"]["escalation"]
     assert receipt["fired"] is True and receipt["final_answer_role"] == "frontdoor"
     assert [s["outcome"] for s in receipt["steps"]] == ["ok_or_unavailable"]
+    assert [s["verdict_status"] for s in receipt["steps"]] == ["ok"]
+    assert [c["role"] for c in holder["fake"].calls] == ["frontdoor", "architect_general"]
+
+
+def test_review_gate_unparseable_verdict_is_recorded_unavailable(env):
+    # RI-22: a verdict that is neither OK nor WRONG (here a thinking block cut at the
+    # 80-token cap) keeps the answer — but the receipt says unavailable, not OK.
+    holder = _install(env, answers={"architect_general": "<think>The user asks"})
+    r = env.client.post("/v1/chat/completions", json=_body(x_escalation="architect_general"))
+    assert r.json()["choices"][0]["message"]["content"] == FRONTDOOR_ANSWER
+    receipt = r.json()["x_orchestrator_metadata"]["escalation"]
+    assert [s["outcome"] for s in receipt["steps"]] == ["ok_or_unavailable"]
+    assert [s["verdict_status"] for s in receipt["steps"]] == ["unavailable"]
     assert [c["role"] for c in holder["fake"].calls] == ["frontdoor", "architect_general"]
 
 

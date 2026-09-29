@@ -121,6 +121,11 @@ class InferenceRequest:
     # user turn. A real field (not a dynamic attr) so dataclasses.replace() in
     # the prefix-cache router preserves it.
     chat_payload: dict[str, Any] | None = field(default=None, repr=False)
+    # RI-23: per-call chat_template_kwargs override (``chat_completions_roles.
+    # thinking_off()`` -> ``{"enable_thinking": False}``), merged OVER the role's
+    # registry kwargs on the /v1/chat/completions lane; inert on /completion. A real
+    # field for the same dataclasses.replace() reason as chat_payload.
+    chat_template_kwargs: dict[str, Any] | None = field(default=None, repr=False)
 
     def __post_init__(self):
         """Sync max_tokens ↔ n_tokens bidirectionally.
@@ -180,6 +185,11 @@ class InferenceResult:
     # inference layer raises src.exceptions.ContextOverflowError from it
     # instead of a generic failure (src/backends/context_overflow.py).
     context_overflow: dict[str, Any] | None = None
+    # RI-23: the server-split reasoning (``message.reasoning_content`` / streamed
+    # ``delta.reasoning_content``) on the /v1/chat/completions lane. None = the server
+    # returned none (every /completion call, thinking-off chat calls). Deliberately NOT
+    # in to_dict(): surfaced through the primitives' inference meta instead.
+    reasoning_content: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""

@@ -159,8 +159,11 @@ class BackendMixin:
             # 2643 tokens / 4 turns thinking-on — ~10x fewer tokens, single turn. (An earlier
             # "0 tokens" reading was a max_turns=1 probe artifact, not a backend bug.)
             # ingest_long_context is EXCLUDED — thinking-on is load-bearing for Qwen3-Next-80B.
-            from src.chat_completions_roles import chat_completions_roles
-            _chat_completion_roles = chat_completions_roles()  # shared SoT (was a divergent inline default)
+            # RI-23: bake only the STATIC set. Flag-admitted thinking roles
+            # (thinking_roles_chat_lane) are routed per request inside
+            # LlamaServerBackend, so a live flag flip cannot strand a baked backend.
+            from src.chat_completions_roles import static_chat_completions_roles
+            _chat_completion_roles = static_chat_completions_roles()  # shared SoT (was a divergent inline default)
             if _chat_completion_roles:
                 _log.info(
                     "Roles using /v1/chat/completions backend: %s",

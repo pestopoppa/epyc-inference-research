@@ -205,6 +205,15 @@ _FEATURE_REGISTRY: tuple[FeatureSpec, ...] = (
     # on with the key absent, = byte-identical (golden-pinned in
     # test_v1_escalation_off_golden.py), so enabling it changes no unkeyed traffic.
     FeatureSpec("v1_escalation", False, False, "V1_ESCALATION", "TE-1: /v1 frontdoor answers may escalate through /chat's quality-escalation and review-gate hooks, opt-in per request (x_escalation=auto|architect_general; absent/off = none); default off"),
+    # RI-23 / OP-69 (a), 2026-09-29: thinking-on roles (live stack priors: --jinja AND
+    # acceleration.enable_thinking true — today the :8083 27B's architect_critic /
+    # coder_escalation / ingest_long_context) move from /completion to the
+    # /v1/chat/completions lane, so their GGUF chat template and registry
+    # chat_template_kwargs (enable_thinking, reasoning_effort) take effect and the server
+    # splits reasoning into reasoning_content. Read LIVE per request by both the backend
+    # router and the orchestrator-side template skip, so the two cannot disagree across a
+    # runtime flip. Default OFF in test and prod; flag off = byte-identical (RI-23b A/B).
+    FeatureSpec("thinking_roles_chat_lane", False, False, "THINKING_ROLES_CHAT_LANE", "RI-23: thinking-on roles (jinja + enable_thinking) route through /v1/chat/completions so chat_template_kwargs apply and reasoning_content is split and surfaced; short structured calls (review verdict, plan review/plan JSON) run thinking-off per call; default off pending the RI-23b A/B"),
     # Web research reranking
     FeatureSpec("web_research_rerank", False, False, "WEB_RESEARCH_RERANK", "ColBERT snippet reranking in web_research pipeline"),
     # Routing telemetry
@@ -576,6 +585,7 @@ class Features:
     v1_client_session_guard: bool = False  # HS-4: 422 on OpenCode/client-mode /v1 requests without x_session_id
     v1_subagent_link: bool = False  # HS-19a stage 1: record /v1 subagent parent links (tap + session log); default off
     v1_escalation: bool = False  # TE-1: opt-in /v1 frontdoor escalation via /chat's post-answer hooks (explicit x_escalation); default off
+    thinking_roles_chat_lane: bool = False  # RI-23: thinking-on roles on /v1/chat/completions (kwargs + reasoning_content); default off
 
     # Web research reranking (ColBERT snippet pre-fetch filtering)
     web_research_rerank: bool = False  # Rerank DDG snippets via ColBERT before page fetch

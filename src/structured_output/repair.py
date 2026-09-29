@@ -1019,22 +1019,31 @@ def primitives_completer(
     entry should expect (and may need to fence out) a thinking preamble in
     `content`.
 
+    RI-23: with ``thinking_roles_chat_lane`` on, the repair turn runs under
+    ``chat_completions_roles.thinking_off()`` — a per-call
+    ``enable_thinking: false`` override on the chat lane, which now also carries the
+    thinking-on roles. A repair turn is a schema-shaped emission, not a reasoning
+    budget. Flag off: unchanged (the override is a no-op).
+
     Since TD-21.0 (orch `b284ede3`, 2026-09-24) `json_schema` reaches the wire on
     BOTH lanes: as `json_schema` on `/completion` and as an OpenAI
     `response_format` on `/v1/chat/completions`.
     """
 
     def complete(messages: Sequence[Mapping[str, Any]], schema: Mapping[str, Any]) -> str:
+        from src.chat_completions_roles import thinking_off
+
         prompt = "\n\n".join(
             f"[{m.get('role', 'user')}]\n{m.get('content', '')}" for m in messages
         )
-        return primitives.llm_call(
-            prompt,
-            role=role,
-            json_schema=dict(schema),
-            temperature=temperature,
-            n_tokens=n_tokens,
-            skip_suffix=True,
-        )
+        with thinking_off():
+            return primitives.llm_call(
+                prompt,
+                role=role,
+                json_schema=dict(schema),
+                temperature=temperature,
+                n_tokens=n_tokens,
+                skip_suffix=True,
+            )
 
     return complete

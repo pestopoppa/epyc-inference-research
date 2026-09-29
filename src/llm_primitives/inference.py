@@ -886,6 +886,11 @@ class InferenceMixin:
         role_timeout = self._clamp_timeout_to_request_budget(role_timeout)
 
         chat_payload = _request_chat_payload(self)
+        # RI-23: per-call thinking-off override (chat_completions_roles.thinking_off();
+        # None unless thinking_roles_chat_lane is on and the caller asked).
+        from src.chat_completions_roles import current_chat_template_kwargs_override
+
+        ctk_override = current_chat_template_kwargs_override()
         request = InferenceRequest(
             role=role,
             prompt=prompt,
@@ -904,6 +909,7 @@ class InferenceMixin:
             # HS-4 P0.1: only passed when set, so the default request is
             # constructed exactly as before.
             **({"chat_payload": chat_payload} if chat_payload is not None else {}),
+            **({"chat_template_kwargs": ctk_override} if ctk_override is not None else {}),
         )
         # Dynamic attrs consumed by ConcurrencyAwareBackend's dispatch-time
         # placement-aware contention gate. The local dataclass has no slots.
@@ -1342,6 +1348,14 @@ class InferenceMixin:
                 ),
             }
             self._set_last_inference_meta(call_meta)
+            _reasoning = getattr(result, "reasoning_content", None)
+            if isinstance(_reasoning, str) and _reasoning:
+                from src.chat_completions_roles import thinking_roles_chat_lane_enabled
+
+                if thinking_roles_chat_lane_enabled():
+                    # RI-23: the server-split reasoning, for /v1 reasoning_content and
+                    # telemetry. Key absent unless the flag is on (flag-off meta unchanged).
+                    call_meta["reasoning_content"] = _reasoning
             if getattr(request, "chat_payload", None) is not None:
                 call_meta["tool_calls"] = list(
                     getattr(result, "tool_calls", None) or []

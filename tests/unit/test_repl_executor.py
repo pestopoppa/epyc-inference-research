@@ -1001,13 +1001,13 @@ class TestQualityReviewGate:
                     "src.api.routes.chat_pipeline.repl_executor._should_review"
                 ) as mock_should_review:
                     with patch(
-                        "src.api.routes.chat_pipeline.repl_executor._architect_verdict"
+                        "src.api.routes.chat_pipeline.repl_executor._architect_verdict_with_status"
                     ) as mock_verdict:
                         with patch(
                             "src.api.routes.chat_pipeline.repl_executor._fast_revise"
                         ) as mock_revise:
                             mock_should_review.return_value = True
-                            mock_verdict.return_value = "WRONG: The answer is 42, not 41"
+                            mock_verdict.return_value = ("WRONG: The answer is 42, not 41", "wrong")
                             mock_revise.return_value = "The answer is 42"
 
                             response = await _execute_repl(
@@ -1045,13 +1045,13 @@ class TestQualityReviewGate:
                     "src.api.routes.chat_pipeline.repl_executor._should_review"
                 ) as mock_should_review:
                     with patch(
-                        "src.api.routes.chat_pipeline.repl_executor._architect_verdict"
+                        "src.api.routes.chat_pipeline.repl_executor._architect_verdict_with_status"
                     ) as mock_verdict:
                         with patch(
                             "src.api.routes.chat_pipeline.repl_executor._fast_revise"
                         ) as mock_revise:
                             mock_should_review.return_value = True
-                            mock_verdict.return_value = "OK"  # Correct
+                            mock_verdict.return_value = (None, "ok")  # Correct
 
                             response = await _execute_repl(
                                 request=basic_request,

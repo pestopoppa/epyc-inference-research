@@ -8,6 +8,8 @@ architect verdict, fast revision, and plan review pipeline.
 from __future__ import annotations
 
 import logging
+import threading
+from collections import Counter
 from typing import TYPE_CHECKING
 
 from src.config import get_config as _get_config
@@ -98,6 +100,113 @@ def _should_review(state: "AppState", task_id: str, role: str, answer: str) -> b
         return False
 
 
+# RI-22: the verdict's three outcomes. ``unavailable`` = the call raised, came back empty,
+# or produced text that starts with neither OK nor WRONG (e.g. a thinking block cut at the
+# 80-token cap). Callers still keep the answer on ``unavailable`` (a review never blocks),
+# but it is logged and counted as unavailable — never recorded as a silent OK.
+VERDICT_OK = "ok"
+VERDICT_WRONG = "wrong"
+VERDICT_UNAVAILABLE = "unavailable"
+
+_verdict_status_counts: Counter[str] = Counter()
+_verdict_status_lock = threading.Lock()
+
+
+def classify_verdict(text: str | None) -> str:
+    """Classify raw verdict text as ``ok`` / ``wrong`` / ``unavailable`` (RI-22)."""
+    stripped = (text or "").strip()
+    if not stripped:
+        return VERDICT_UNAVAILABLE
+    upper = stripped.upper()
+    if upper.startswith("OK"):
+        return VERDICT_OK
+    if upper.startswith("WRONG"):
+        return VERDICT_WRONG
+    return VERDICT_UNAVAILABLE
+
+
+def verdict_status_counts() -> dict[str, int]:
+    """Process-lifetime verdict outcome counts (``ok`` / ``wrong`` / ``unavailable``)."""
+    with _verdict_status_lock:
+        return dict(_verdict_status_counts)
+
+
+def reset_verdict_status_counts() -> None:
+    """Zero the verdict outcome counters (tests)."""
+    with _verdict_status_lock:
+        _verdict_status_counts.clear()
+
+
+def _record_verdict_status(status: str, role: str, detail: str) -> None:
+    with _verdict_status_lock:
+        _verdict_status_counts[status] += 1
+    if status == VERDICT_UNAVAILABLE:
+        log.warning(
+            "Review verdict UNAVAILABLE (role=%s): %s — answer kept unreviewed, "
+            "counted as unavailable, not OK",
+            role,
+            detail,
+        )
+
+
+def _architect_verdict_with_status(
+    question: str,
+    answer: str,
+    primitives: "LLMPrimitives",
+    worker_digests: list[dict] | None = None,
+    context_digest: str = "",
+    role: str | None = None,
+) -> tuple[str | None, str]:
+    """``_architect_verdict`` plus its RI-22 status (``ok`` / ``wrong`` / ``unavailable``).
+
+    The returned verdict is exactly ``_architect_verdict``'s; the status is what telemetry
+    records. RI-23: with ``thinking_roles_chat_lane`` on, the call runs thinking-OFF (the
+    80-token cap is a verdict budget, not a reasoning budget) and without the registry
+    ``system_prompt_suffix`` (``skip_suffix``), which reads as a second request after the
+    verdict instruction. Flag off: the call is unchanged.
+    """
+    from src.chat_completions_roles import thinking_off, thinking_roles_chat_lane_enabled
+
+    prompt = build_review_verdict_prompt(
+        question,
+        answer,
+        context_digest=context_digest,
+        worker_digests=worker_digests,
+    )
+    verdict_role = role or str(_resolve_reviewer_role())
+    call_kwargs: dict = {}
+    if thinking_roles_chat_lane_enabled():
+        call_kwargs["skip_suffix"] = True
+    try:
+        # ARCHSWAP-20260927: the verdict is REVIEW work, so it follows the reviewer
+        # binding (default architect_critic, the MI210 27B) rather than the
+        # consultant role architect_general (now CPU Flash-Next).
+        with thinking_off():
+            result = primitives.llm_call(
+                prompt,
+                role=verdict_role,
+                n_tokens=80,  # Hard cap — verdict only
+                **call_kwargs,
+            )
+        text = result.strip()
+    except Exception as exc:
+        log.debug("Architect verdict call failed: %s", exc)
+        _record_verdict_status(VERDICT_UNAVAILABLE, verdict_role, f"call failed: {exc}")
+        return None, VERDICT_UNAVAILABLE  # On error, don't block — return original answer
+    status = classify_verdict(text)
+    if status == VERDICT_UNAVAILABLE:
+        _record_verdict_status(
+            status,
+            verdict_role,
+            "empty verdict" if not text else f"unparseable verdict {text[:80]!r}",
+        )
+    else:
+        _record_verdict_status(status, verdict_role, "")
+    if text.upper().startswith("OK"):
+        return None, status
+    return text, status  # "WRONG: <corrections>" (or unparseable text: callers act on WRONG only)
+
+
 def _architect_verdict(
     question: str,
     answer: str,
@@ -114,7 +223,9 @@ def _architect_verdict(
     ``x_escalation=architect_general`` experiment arm).
 
     The architect emits ONLY a short verdict (~20-50 tokens at 6.75 t/s → ~6s).
-    Returns None if OK, or "WRONG: <corrections>" if incorrect.
+    Returns None if OK, or "WRONG: <corrections>" if incorrect. A failed, empty or
+    unparseable verdict also returns None / the raw text as before, but is logged and
+    counted as ``unavailable`` (RI-22; see ``_architect_verdict_with_status``).
 
     Args:
         question: Original user question.
@@ -126,28 +237,15 @@ def _architect_verdict(
     Returns:
         None if answer is OK, or "WRONG: ..." string if corrections needed.
     """
-    prompt = build_review_verdict_prompt(
+    verdict, _status = _architect_verdict_with_status(
         question,
         answer,
-        context_digest=context_digest,
+        primitives,
         worker_digests=worker_digests,
+        context_digest=context_digest,
+        role=role,
     )
-    try:
-        # ARCHSWAP-20260927: the verdict is REVIEW work, so it follows the reviewer
-        # binding (default architect_critic, the MI210 27B) rather than the
-        # consultant role architect_general (now CPU Flash-Next).
-        result = primitives.llm_call(
-            prompt,
-            role=role or str(_resolve_reviewer_role()),
-            n_tokens=80,  # Hard cap — verdict only
-        )
-        text = result.strip()
-        if text.upper().startswith("OK"):
-            return None
-        return text  # "WRONG: <corrections>"
-    except Exception as exc:
-        log.debug("Architect verdict call failed: %s", exc)
-        return None  # On error, don't block — return original answer
+    return verdict
 
 
 def _fast_revise(

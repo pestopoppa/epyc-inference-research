@@ -121,6 +121,42 @@ def _chat_payload(request: Any) -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
+def _thinking_chat_lane(role_config: Any, request: Any) -> bool:
+    """RI-23: per-request chat-lane admission of a thinking-on role (flag-gated, live).
+
+    False whenever ``thinking_roles_chat_lane`` is off, so flag-off routing is unchanged.
+    """
+    try:
+        from src.chat_completions_roles import thinking_chat_lane_role
+
+        return thinking_chat_lane_role(
+            getattr(request, "role", None) or getattr(role_config, "name", None)
+        )
+    except Exception:
+        return False
+
+
+def _chat_template_kwargs(role_config: Any, request: Any) -> dict[str, Any] | None:
+    """The chat_template_kwargs for one /v1/chat/completions request.
+
+    J12: an explicit ``request.extra`` value wins; otherwise the role's registry default.
+    RI-23: a per-call override (``request.chat_template_kwargs``, set by
+    ``chat_completions_roles.thinking_off()``) is merged OVER that — a new dict, the
+    cached registry dict is never mutated. No override = exactly the pre-RI-23 value.
+    """
+    ctk = request.extra.get("chat_template_kwargs") if getattr(request, "extra", None) else None
+    if not ctk:
+        try:
+            from src.registry.registry_loader import chat_template_kwargs_for_role
+            ctk = chat_template_kwargs_for_role(getattr(request, "role", None) or role_config.name)
+        except Exception:
+            ctk = None
+    override = getattr(request, "chat_template_kwargs", None)
+    if isinstance(override, dict) and override:
+        ctk = {**(ctk or {}), **override}
+    return ctk
+
+
 def _response_text(response: Any) -> str:
     try:
         text = response.text
@@ -399,7 +435,12 @@ class LlamaServerBackend(ModelBackend):
         # HS-4 P0.1: a structured chat payload (the /v1 client-executed tool
         # mode) can only be expressed on /v1/chat/completions, whatever this
         # backend's default endpoint is.
-        if self.config.use_chat_completions or _chat_payload(request) is not None:
+        # RI-23: thinking-on roles join per request while thinking_roles_chat_lane is on.
+        if (
+            self.config.use_chat_completions
+            or _chat_payload(request) is not None
+            or _thinking_chat_lane(role_config, request)
+        ):
             return self._infer_chat_completions(role_config, request, start_time)
 
         # Build request payload
@@ -730,13 +771,7 @@ class LlamaServerBackend(ModelBackend):
         # feedback_qwen3x_enable_thinking_false). Explicit request override wins;
         # otherwise fall back to the role's registry default. Only meaningful on
         # this /v1/chat/completions path (the GGUF jinja template applies the kwarg).
-        ctk = request.extra.get("chat_template_kwargs") if getattr(request, "extra", None) else None
-        if not ctk:
-            try:
-                from src.registry.registry_loader import chat_template_kwargs_for_role
-                ctk = chat_template_kwargs_for_role(getattr(request, "role", None) or role_config.name)
-            except Exception:
-                ctk = None
+        ctk = _chat_template_kwargs(role_config, request)
         if ctk:
             payload["chat_template_kwargs"] = ctk
 
@@ -782,9 +817,14 @@ class LlamaServerBackend(ModelBackend):
             completion_reason = "stop"
             chat_logprob_rows: list[dict[str, Any]] = []
             tool_calls: list[dict[str, Any]] = []
+            reasoning_content: str | None = None
             if choices:
                 msg = choices[0].get("message", {})
                 output = msg.get("content", "") or ""
+                # RI-23: llama-server's reasoning parser splits thinking out of content.
+                _rc = msg.get("reasoning_content")
+                if isinstance(_rc, str) and _rc:
+                    reasoning_content = _rc
                 raw_tool_calls = msg.get("tool_calls") if chat_payload is not None else None
                 if isinstance(raw_tool_calls, list):
                     tool_calls = [tc for tc in raw_tool_calls if isinstance(tc, dict)]
@@ -876,6 +916,7 @@ class LlamaServerBackend(ModelBackend):
                 tool_calls=tool_calls,
                 prompt_tokens=int(prompt_tokens) if prompt_tokens else None,
                 cached_prompt_tokens=cached_prompt_tokens,
+                reasoning_content=reasoning_content,
             )
         except httpx.HTTPStatusError as e:
             elapsed = time.time() - start_time
@@ -1017,7 +1058,7 @@ class LlamaServerBackend(ModelBackend):
         # OpenAI streaming format emits the same kind of incremental
         # content deltas, so we can route through /v1/chat/completions
         # without changing the on_chunk contract.
-        if self.config.use_chat_completions:
+        if self.config.use_chat_completions or _thinking_chat_lane(role_config, request):
             return self._infer_stream_text_chat_completions(
                 role_config, request, on_chunk, start_time,
             )
@@ -1640,17 +1681,12 @@ class LlamaServerBackend(ModelBackend):
             payload["stop"] = request.stop_sequences
         self._apply_schema_constraint(payload, request)
 
-        ctk = request.extra.get("chat_template_kwargs") if getattr(request, "extra", None) else None
-        if not ctk:
-            try:
-                from src.registry.registry_loader import chat_template_kwargs_for_role
-                ctk = chat_template_kwargs_for_role(getattr(request, "role", None) or role_config.name)
-            except Exception:
-                ctk = None
+        ctk = _chat_template_kwargs(role_config, request)
         if ctk:
             payload["chat_template_kwargs"] = ctk
 
         chunks: list[str] = []
+        reasoning_chunks: list[str] = []
         completion_reason = "stop"
 
         try:
@@ -1704,6 +1740,11 @@ class LlamaServerBackend(ModelBackend):
                                 choices = evt.get("choices") or []
                                 if choices:
                                     delta = choices[0].get("delta") or {}
+                                    # RI-23: reasoning deltas are collected, never fed to
+                                    # on_chunk (FINAL/early-stop checks see content only).
+                                    _rc = delta.get("reasoning_content")
+                                    if isinstance(_rc, str) and _rc:
+                                        reasoning_chunks.append(_rc)
                                     content = delta.get("content")
                                     if content:
                                         chunks.append(content)
@@ -1731,6 +1772,10 @@ class LlamaServerBackend(ModelBackend):
             output = "".join(chunks)
             elapsed = time.time() - start_time
             tokens_generated = len(output) // 4 + len(chunks)  # rough estimate from chunks
+            if reasoning_chunks:
+                # RI-23: reasoning tokens are model-decoded too (Pareto speed objective).
+                _reasoning = "".join(reasoning_chunks)
+                tokens_generated += len(_reasoning) // 4 + len(reasoning_chunks)
             if request.n_tokens > 0:
                 # The streaming OpenAI shim does not send final usage/timings.
                 # llama-server still enforces max_tokens, so keep telemetry from
@@ -1774,6 +1819,7 @@ class LlamaServerBackend(ModelBackend):
                 completion_reason=(
                     "empty_generation" if empty_generation else completion_reason
                 ),
+                reasoning_content="".join(reasoning_chunks) or None,
             )
         except Exception as e:
             elapsed = time.time() - start_time

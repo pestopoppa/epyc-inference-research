@@ -582,6 +582,18 @@ Rules:
         self._parse_failure_count = 0
         self._model_call_failures = 0
 
+    def _llm_call_no_think(self, *args: Any, **kwargs: Any) -> Any:
+        """``self.primitives.llm_call`` with thinking OFF (RI-23).
+
+        Every reviewer call here is a short structured emission (128-256 tokens, often
+        schema-constrained) that a thinking block would consume. A no-op wrapper while
+        ``thinking_roles_chat_lane`` is off.
+        """
+        from src.chat_completions_roles import thinking_off
+
+        with thinking_off():
+            return self.primitives.llm_call(*args, **kwargs)
+
     @property
     def parse_failure_count(self) -> int:
         """Distinct count of reviewer emissions that failed to parse (RD-12)."""
@@ -754,7 +766,7 @@ Rules:
         try:
             # Call architect with strict token limit. TD-21.6/TD-21.0: schema on the
             # wire constrains the reviewer at generation time, not only at parse time.
-            response = self.primitives.llm_call(
+            response = self._llm_call_no_think(
                 prompt,
                 role=self.architect_role,
                 n_tokens=self.max_review_tokens,
@@ -919,7 +931,7 @@ Rules:
         parse_failure: str | None = None
         repaired = False
         try:
-            response = self.primitives.llm_call(
+            response = self._llm_call_no_think(
                 prompt,
                 role=self.architect_role,
                 n_tokens=self.max_plan_review_tokens,
@@ -1065,7 +1077,7 @@ Rules:
             }
 
         try:
-            response = self.primitives.llm_call(
+            response = self._llm_call_no_think(
                 prompt,
                 role=self.architect_role,
                 n_tokens=self.max_taskir_tokens,
@@ -1259,7 +1271,7 @@ Rules:
         model_call_failed = False
         repaired = False
         try:
-            response = self.primitives.llm_call(
+            response = self._llm_call_no_think(
                 prompt,
                 role=self.architect_role,
                 n_tokens=self.max_review_tokens,
@@ -1713,7 +1725,7 @@ Rules:
         model_call_failed = False
         repaired = False
         try:
-            response = self.primitives.llm_call(
+            response = self._llm_call_no_think(
                 prompt,
                 role=self.architect_role,
                 n_tokens=self.max_plan_review_tokens,

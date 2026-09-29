@@ -117,6 +117,7 @@ flags:
   structured_tool_output: baseline
   swarm_fanout: baseline
   task_token_budget: baseline
+  thinking_roles_chat_lane: baseline
   tool_output_compression: baseline
   tool_result_clearing: baseline
   tools: baseline

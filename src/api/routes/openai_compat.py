@@ -745,6 +745,27 @@ def _split_leading_reasoning(text: str) -> tuple[str | None, str]:
     return match.group(1).strip(), text[match.end():]
 
 
+def _last_call_reasoning(primitives: Any) -> str | None:
+    """RI-23: the server-split ``reasoning_content`` of the primitives' last call, or None.
+
+    Present only when ``thinking_roles_chat_lane`` is on and the call ran on the
+    /v1/chat/completions lane (the primitives layer records it in the inference meta only
+    then), so flag-off responses are unchanged. Read immediately after the call, in the
+    same context, before anything else can make another call.
+    """
+    getter = getattr(primitives, "get_last_inference_meta", None)
+    if not callable(getter):
+        return None
+    try:
+        meta = getter()
+    except Exception:
+        return None
+    if not isinstance(meta, dict):
+        return None
+    reasoning = meta.get("reasoning_content")
+    return reasoning if isinstance(reasoning, str) and reasoning.strip() else None
+
+
 def _sampling_kwargs(request: OpenAIChatRequest) -> dict[str, Any]:
     """Return only caller-explicit sampling controls for downstream inference."""
     explicit_fields = getattr(request, "model_fields_set", set())
@@ -1402,6 +1423,9 @@ async def openai_chat_completions(
                         response_reasoning, response_text = _split_leading_reasoning(
                             response_text
                         )
+                        if response_reasoning is None:
+                            # RI-23: chat lane — the server already split it off.
+                            response_reasoning = _last_call_reasoning(primitives)
                         total_tokens = primitives.total_tokens_generated
                     else:
                         # Create REPL environment
@@ -1436,6 +1460,7 @@ async def openai_chat_completions(
                                     n_tokens=1024,
                                     **sampling_kwargs,
                                 )
+                                turn_reasoning = _last_call_reasoning(primitives)
                                 # In-band guard: "[ERROR: ...]" at start-of-answer
                                 # is a backend failure, not a generation — do not
                                 # extract/auto-wrap/execute it as the answer.
@@ -1492,6 +1517,8 @@ async def openai_chat_completions(
 
                             if result.is_final:
                                 response_text = result.final_answer or ""
+                                # RI-23: the reasoning of the turn that answered.
+                                response_reasoning = turn_reasoning
                                 repl_final_answered = True
                                 break
                             elif result.output:
@@ -1732,6 +1759,9 @@ async def openai_chat_completions(
                     response_reasoning, response_text = _split_leading_reasoning(
                         response_text
                     )
+                    if response_reasoning is None:
+                        # RI-23: chat lane — the server already split it off.
+                        response_reasoning = _last_call_reasoning(primitives)
                 else:
                     repl = REPLEnvironment(
                         context=combined_context,
@@ -1763,6 +1793,7 @@ async def openai_chat_completions(
                             n_tokens=1024,
                             **sampling_kwargs,
                         )
+                        turn_reasoning = _last_call_reasoning(primitives)
                         # Same in-band guard as the direct path: an "[ERROR: ...]"
                         # generation is a backend failure, not code to auto-wrap
                         # and execute as the model's final answer.
@@ -1779,6 +1810,8 @@ async def openai_chat_completions(
 
                         if result.is_final:
                             response_text = result.final_answer or ""
+                            # RI-23: the reasoning of the turn that answered.
+                            response_reasoning = turn_reasoning
                             repl_final_answered = True
                             break
                         elif result.output:
