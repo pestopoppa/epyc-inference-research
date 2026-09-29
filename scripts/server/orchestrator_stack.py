@@ -2282,6 +2282,12 @@ PRODUCTION_FEATURE_WAVE_OVERRIDES: dict[str, bool] = {
     # without the key is served exactly as with the flag off (orch 280059cc). Enables
     # the thesis experiment's A2 arm.
     "v1_escalation": True,
+    # RI-23 / OP-69 option (a), operator-approved 2026-09-29 for production: thinking-on roles
+    # (architect_critic, coder_escalation, ingest_long_context) use the llama-server chat lane so
+    # their template + chat_template_kwargs apply and reasoning is server-split; the review verdict
+    # runs thinking-off with skip_suffix (fixes the RI-22 no-op gate). RI-23b A/B 2026-09-29:
+    # verdicts parse (0/2 -> 2/2), code/ingest/REPL probes correct and faster.
+    "thinking_roles_chat_lane": True,
 }
 
 LANGGRAPH_PHASE3_LIVE_ENV_VARS: tuple[str, ...] = (
