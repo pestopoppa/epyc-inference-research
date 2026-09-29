@@ -224,6 +224,42 @@ class RunFlag(unittest.TestCase):
                           if k != "planner_reasoning_history"}, keep)
 
 
+#: DS41 lane-0 arm B/C deltas over the run's common args (the planner context arms).
+ARM_C = ["--actor-context-limit", "90112", "--actor-planner-reasoning-history", "drop",
+         "--actor-authors", "single", "--actor-context-mode", "variable"]
+
+
+def test_arm_flags_are_not_continuation_identity(tmp_path):
+    """An arm switch at a batch boundary carries the source lineage (POOL_ACTOR_FLAGS)."""
+    from autokernel.loop import serial_run
+    launch = tmp_path / "launch.json"
+    launch.write_text("{}")
+    base = ["--worktree", "/w", "--cpu-serving-launch", str(launch), "--workers", "2",
+            "--planner-model", MODEL]
+    assert serial_run.resume_binding([*base, *ARM_C]) == serial_run.resume_binding(base)
+    assert serial_run.resume_binding(
+        [*base, "--actor-context-limit=90112"]) == serial_run.resume_binding(base)
+    # Other stable inputs still bind.
+    assert serial_run.resume_binding([*base, "--pairs", "9"]) != serial_run.resume_binding(base)
+    assert serial_run.resume_binding([*base, "--actor-output-limit", "4096"]) != \
+        serial_run.resume_binding(base)
+
+
+def test_serial_common_args_admit_the_arm_flags(tmp_path):
+    from autokernel.loop import serial_roster, serial_run
+    from autokernel.loop.test_serial_roster import _inputs
+    _, _, argv = _inputs(tmp_path, backends=("cpu",))
+    common = tmp_path / "common.json"
+    common.write_text(json.dumps(["--workers", "2", "--lane-actor-models", f"1={DEEPSEEK}",
+                                  *ARM_C]))
+    targets, _skipped, _cpus = serial_roster.build_targets(
+        Path(serial_run.option(argv, "--resolved-campaign")),
+        Path(serial_run.option(argv, "--owned-targets")),
+        target_root=tmp_path / "targets", common_path=common)
+    for flag, value in zip(ARM_C[::2], ARM_C[1::2]):
+        assert serial_run.option(targets[0], flag) == value
+
+
 # -------------------------------------------------------------------------------------
 # The wire: installed opencode -> scripted mock model with a reasoning tool chain.
 # -------------------------------------------------------------------------------------

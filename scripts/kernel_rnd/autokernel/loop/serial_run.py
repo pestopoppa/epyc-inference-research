@@ -293,7 +293,14 @@ RUNTIME_PROTOCOL_SWITCHES = frozenset({"--calibrate-runtime"})
 #: serialized tail whatever the lane count, and actor config is provenance, never the
 #: measurement epoch (OP-60). Binding them orphaned the whole source lineage whenever
 #: the pool changed: DS41 run 10h (`--workers 1`, 2026-09-26) had to relaunch unseeded.
-POOL_ACTOR_FLAGS = frozenset({"--workers", "--lane-actor-models"})
+#: The planner context arms (2026-09-29: fit a planner session under a ~90k context cap
+#: so two 27B lanes share the pool) change the same kind of thing -- the actor seat's
+#: opencode context cap, the planner's reasoning history, where the context bundle lives
+#: and how many authors race -- and are excluded for the same reason: an arm switch at a
+#: batch boundary must carry the source lineage, not orphan it.
+POOL_ACTOR_FLAGS = frozenset({"--workers", "--lane-actor-models",
+                              "--actor-context-limit", "--actor-planner-reasoning-history",
+                              "--actor-context-mode", "--actor-authors"})
 
 
 def resume_binding(argv) -> dict:
