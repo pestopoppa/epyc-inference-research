@@ -259,6 +259,77 @@ def output_ceiling_env(output_limit: int) -> dict[str, str]:
     return {}
 
 
+# --------------------------------------------------------------------------------------
+# The PLANNER's reasoning history (`--actor-planner-reasoning-history {keep,drop}`,
+# 2026-09-29). Goal: a planner session that fits a ~90k context cap, so two 27B lanes (or
+# lane 0 plus other load) fit :8083's 196,608-token unified pool. DS41 planner sessions
+# decode 24-182k chars of reasoning, and every step's reasoning is re-sent in every later
+# request of the call. Read from the installed opencode 1.18.31 binary (read-only) and
+# llama.cpp production-consolidated-v10, and captured on the wire (mock provider,
+# `test_actor_reasoning_history.py`):
+#
+# * `MessageV2.toModelMessages` keeps every prior assistant step's reasoning part (same
+#   model) as `{type: "reasoning", text}`; `ProviderTransform.message` leaves it there
+#   unless the model has `capabilities.interleaved = {field}`.
+# * `@ai-sdk/openai-compatible`'s message converter concatenates an assistant message's
+#   reasoning parts and sends them as `reasoning_content` on that history message: step N
+#   re-sends the reasoning of steps 0..N-1.
+# * llama-server (`common_chat_msgs_parse_oaicompat`) keeps `reasoning_content` and hands
+#   it to the served template (`qwen3.8-froggeric-v22.3`), which renders
+#   `<think>REASONING</think>` for an assistant turn when `_preserve_thinking` (the
+#   `preserve_thinking`/`preserve_reasoning` kwarg, default true) OR the turn follows the
+#   last real user message. An `opencode run` is ONE user message plus a tool chain, so
+#   every step follows it: `preserve_thinking: false` changes nothing inside a call
+#   (rendered and checked). No server/template kwarg drops in-chain reasoning.
+# * The supported opencode switch is the model's `interleaved: {field: F}` (config schema
+#   `ConfigProviderV1` model: `interleaved: boolean | string | {field: string}`, any
+#   string). With it `ProviderTransform.message` REMOVES the reasoning parts from every
+#   assistant history message and puts their text in `providerOptions.openaiCompatible[F]`,
+#   which the converter spreads onto the message as key F. With F = REASONING_DROP_FIELD
+#   (not a key llama-server reads: its parser keeps only role, content, tool_calls,
+#   reasoning_content, name and tool_call_id), the reasoning never reaches the template,
+#   which then renders the turn with an empty `<think>\n\n</think>`. The CURRENT step's
+#   reasoning is untouched: the model still thinks, it just does not re-read old thoughts.
+#
+# Costs, by construction: the text still travels in the POST body (bytes, not KV); the
+# slot's prompt cache diverges at the previous step's `<think>` (the server decoded the
+# reasoning into KV, the next prompt renders it empty), so each step re-prefills from the
+# last assistant turn on -- one tool call and its result; and Qwen's own guidance is to
+# keep reasoning inside a tool chain, so drop is a quality A/B, not a free win. The
+# bounded seat's discipline rule "keep notes in your reasoning" is wrong under drop.
+# llama-server only: a provider that validates message keys or requires reasoning_content
+# back in a tool chain (DeepSeek's API; opencode itself defaults DeepSeek models to
+# `interleaved: reasoning_content`) must never get it, hence REASONING_DROP_PROVIDERS.
+# --------------------------------------------------------------------------------------
+
+#: `--actor-planner-reasoning-history` choices; "keep" writes nothing (byte-identical).
+REASONING_HISTORY_CHOICES = ("keep", "drop")
+DEFAULT_PLANNER_REASONING_HISTORY = "keep"
+#: The message key the dropped reasoning is moved to: one llama-server never reads.
+REASONING_DROP_FIELD = "reasoning_history_dropped"
+#: Providers in the host's global opencode config that are llama-server
+#: (`@ai-sdk/openai-compatible` on 127.0.0.1), where an unknown message key is ignored.
+REASONING_DROP_PROVIDERS = frozenset({"qwen-gpu", "qwen-local"})
+
+
+def model_reasoning_history(model: str | None, history: str = "keep") -> dict:
+    """The `provider` block that stops the call re-sending prior steps' reasoning, or {}."""
+    if history not in REASONING_HISTORY_CHOICES:
+        raise ValueError(f"reasoning history must be one of {REASONING_HISTORY_CHOICES}, "
+                         f"got {history!r}")
+    if history == "keep":
+        return {}
+    if not model or "/" not in model:
+        raise ValueError(f"reasoning history {history!r} needs a provider/model id, "
+                         f"got {model!r}")
+    provider, model_id = model.split("/", 1)
+    if provider not in REASONING_DROP_PROVIDERS:
+        raise ValueError(f"reasoning history {history!r} is llama-server only "
+                         f"({sorted(REASONING_DROP_PROVIDERS)}); {model!r} is not")
+    return {"provider": {provider: {"models": {model_id: {
+        "interleaved": {"field": REASONING_DROP_FIELD}}}}}}
+
+
 def _merge(a: dict, b: dict) -> dict:
     out = dict(a)
     for key, value in b.items():
@@ -268,10 +339,13 @@ def _merge(a: dict, b: dict) -> dict:
 
 
 def model_block(model: str | None, *, context_limit: int = 0, output_limit: int = 0,
-                thinking: str = "default") -> dict:
-    """`model_limits` and `model_thinking` for one call's model, merged ({} when both off)."""
-    return _merge(model_limits(model, context_limit=context_limit, output_limit=output_limit),
-                  model_thinking(model, thinking))
+                thinking: str = "default", reasoning_history: str = "keep") -> dict:
+    """`model_limits`, `model_thinking` and `model_reasoning_history` for one call's
+    model, merged ({} when all are off)."""
+    return _merge(_merge(model_limits(model, context_limit=context_limit,
+                                      output_limit=output_limit),
+                         model_thinking(model, thinking)),
+                  model_reasoning_history(model, reasoning_history))
 
 
 def limits_label(*, context_limit: int = 0, output_limit: int = 0) -> str:
@@ -355,7 +429,8 @@ def build_actor_config(*, role: str, lane: Path, profiles: Sequence[Path] = (),
                        build_dir: str | Path | None = None,
                        model: str | None = None, context_limit: int = 0,
                        output_limit: int = 0, thinking: str = "default",
-                       author_sandbox: bool = False) -> dict:
+                       author_sandbox: bool = False,
+                       reasoning_history: str = "keep") -> dict:
     """The opencode config (a dict ready for ``json.dump``) for one actor run.
 
     By default the seat's guidance is ADDED to opencode's own system prompt through
@@ -372,7 +447,8 @@ def build_actor_config(*, role: str, lane: Path, profiles: Sequence[Path] = (),
     becomes the lane-only guard (an agent rule is evaluated after the top-level one).
 
     `context_limit` / `output_limit` (OAB-23, 0 = off) add `model_limits(model, ...)`;
-    `thinking` "off"/"medium" (OAB-24) adds `model_thinking(model, thinking)` on the same model entry."""
+    `thinking` "off"/"medium" (OAB-24) adds `model_thinking(model, thinking)` on the same model entry;
+    `reasoning_history` "drop" adds `model_reasoning_history(model, "drop")` there too."""
     if role not in AGENT_NAMES:
         raise ValueError(f"unknown actor role {role!r}; expected one of "
                          f"{sorted(AGENT_NAMES)}")
@@ -424,7 +500,7 @@ def build_actor_config(*, role: str, lane: Path, profiles: Sequence[Path] = (),
                           lane_guard=lane_guard, keep_task=fan_out, edit_rule=False,
                           author_sandbox=author_sandbox)
     limits = model_block(model, context_limit=context_limit, output_limit=output_limit,
-                         thinking=thinking)
+                         thinking=thinking, reasoning_history=reasoning_history)
     return {
         "$schema": "https://opencode.ai/config.json",
         **SNAPSHOT_OFF,
@@ -801,11 +877,12 @@ def seat_label(base: str, *, trim_instructions: bool = False, trim_tools: bool =
                author_sandbox: bool = False,
                lane_guard: bool = False, context_limit: int = 0, output_limit: int = 0,
                concise: bool = False, budget_s: int = 0, thinking_off: bool = False,
-               thinking: str = "default", action_rule: bool = False) -> str:
+               thinking: str = "default", action_rule: bool = False,
+               reasoning_history: str = "") -> str:
     """`plain` / `bounded` plus one suffix per knob that is on (free text in VB-AK-SEAT).
     OAB-22/23 add `+ctx<C>+out<O>`, `+concise` and `+budget<B>s`; OAB-24 adds
-    `+think-off` (or `+think-<thinking>`), and the author action rule `+act-rule`
-    (all off: unchanged)."""
+    `+think-off` (or `+think-<thinking>`), the author action rule `+act-rule` and the
+    planner's reasoning-history drop `+reason-drop` (all off: unchanged)."""
     if thinking_off:
         thinking = "off"
     return (base + "".join(suffix for on, suffix in (
@@ -814,6 +891,8 @@ def seat_label(base: str, *, trim_instructions: bool = False, trim_tools: bool =
         + limits_label(context_limit=context_limit, output_limit=output_limit)
         + (f"+think-{thinking}" if thinking and thinking != "default" else "")
         + ("+concise" if concise else "") + ("+act-rule" if action_rule else "")
+        + (f"+reason-{reasoning_history}" if reasoning_history
+           and reasoning_history != "keep" else "")
         + (f"+budget{budget_s}s" if budget_s else ""))
 
 
@@ -823,7 +902,7 @@ def build_plain_config(*, role: str, lane: Path, build_dir: str | Path | None = 
                        author_note_path: Path | None = None,
                        model: str | None = None, context_limit: int = 0,
                        output_limit: int = 0, thinking: str = "default",
-                       read_roots: tuple = ()) -> dict:
+                       read_roots: tuple = (), reasoning_history: str = "keep") -> dict:
     """The per-call `OPENCODE_CONFIG` for the PLAIN seat: `snapshot: false`, a permission
     block (plus the author's style note as an `instructions` file) and nothing else -- no
     agent, no MCP, no tool_output cap, so the plain seat stays the plain seat. With every
@@ -831,7 +910,8 @@ def build_plain_config(*, role: str, lane: Path, build_dir: str | Path | None = 
     its never-ask permission block): the plain seat ALWAYS gets a per-call config,
     because snapshot tracking is on by default and bloats the store.
     `context_limit` / `output_limit` (OAB-23, 0 = off) add `model_limits(model, ...)`;
-    `thinking` "off"/"medium" (OAB-24) adds `model_thinking(model, thinking)`."""
+    `thinking` "off"/"medium" (OAB-24) adds `model_thinking(model, thinking)`;
+    `reasoning_history` "drop" adds `model_reasoning_history(model, "drop")`."""
     permission = seat_permission(role, lane=lane, build_dir=build_dir,
                                  trim_instructions=trim_instructions,
                                  trim_tools=trim_tools, lane_guard=lane_guard,
@@ -839,7 +919,8 @@ def build_plain_config(*, role: str, lane: Path, build_dir: str | Path | None = 
     note = trim_instructions and role == "author" and author_note_path is not None
     config: dict = {"$schema": "https://opencode.ai/config.json", **SNAPSHOT_OFF,
                     **model_block(model, context_limit=context_limit,
-                                  output_limit=output_limit, thinking=thinking)}
+                                  output_limit=output_limit, thinking=thinking,
+                                  reasoning_history=reasoning_history)}
     if permission:
         config["permission"] = permission
     if note:
@@ -867,7 +948,9 @@ __all__ = ["actor_instructions", "AGENT_NAMES", "AK_CHECK_ALLOW", "AK_CHECK_DENY
            "OPENCODE_OUTPUT_TOKEN_MAX", "output_ceiling_env", "POOL_TOKENS",
            "POOL_RESERVE", "MAX_CONTEXT_LIMIT", "MIN_COMPACTION_HEADROOM", "gitnexus_repo_for",
            "GITNEXUS_DENY", "GITNEXUS_READS", "gitnexus_allow",
-           "model_block", "model_thinking",
+           "model_block", "model_thinking", "model_reasoning_history",
+           "REASONING_HISTORY_CHOICES", "DEFAULT_PLANNER_REASONING_HISTORY",
+           "REASONING_DROP_FIELD", "REASONING_DROP_PROVIDERS",
            "DEFAULT_CONTEXT_LIMIT", "DEFAULT_OUTPUT_LIMIT", "DEFAULT_PLANNER_OUTPUT_LIMIT", "limits_label", "model_limits", "AUTHOR_EDIT_GUARD",
            "AUTHOR_STYLE_NOTE",
            "BUILD_DENY", "CRITIC_NEVER_ASK", "CRITIC_READ_RULES", "MAX_CONCURRENT_SUBAGENTS", "MCP_SERVER", "PLAIN_ROLES",

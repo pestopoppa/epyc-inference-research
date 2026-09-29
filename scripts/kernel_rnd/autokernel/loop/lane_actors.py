@@ -19,7 +19,10 @@ build+measure tail (`pipeline.SerializedTail`), so CPU measurements never overla
 * the critic stays global for every lane;
 * an overridden lane authors SINGLE (no best-of panel), and its seat sends no
   qwen-gpu-template reasoning kwargs (`author_thinking="default"`: the author's
-  `chat_template_kwargs` rides the served llama.cpp template only). Context/output
+  `chat_template_kwargs` rides the served llama.cpp template only), and its planner keeps
+  its reasoning history (`planner_reasoning_history="keep"`: the drop renames a message
+  key only llama-server ignores; DeepSeek's API wants `reasoning_content` back inside a
+  tool chain). Context/output
   limits and the planner/author wall budgets stay as the run's (the critic already runs
   deepseek with those same limits), and the planner salvage turn stays on: it continues
   the call's own opencode session, which is provider-agnostic.
@@ -113,10 +116,11 @@ def shared_pool_lanes(workers: int, lanes: Mapping[int, LaneActor],
 
 def seat_for(lane: LaneActor | None, seat):
     """The lane's planner/author seat: the global seat unchanged (the same object) for
-    a lane without an override; else no qwen-gpu reasoning kwargs on its author."""
+    a lane without an override; else no qwen-gpu reasoning kwargs on its author and no
+    llama-server-only reasoning-history drop on its planner."""
     if lane is None or seat is None:
         return seat
-    return replace(seat, author_thinking="default")
+    return replace(seat, author_thinking="default", planner_reasoning_history="keep")
 
 
 def provenance(lanes: Mapping[int, LaneActor], default_effort: str | None) -> dict[str, Any]:

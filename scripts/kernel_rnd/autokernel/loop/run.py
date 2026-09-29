@@ -489,6 +489,11 @@ def _actor_config(args, resolved_campaign=None) -> dict[str, Any]:
         "actor_trim_tools": get("actor_trim_tools"),
         "actor_lane_guard": get("actor_lane_guard"),
     }
+    # Present only when the planner drops its reasoning history, so a keep run records
+    # the historical keys.
+    history = get("actor_planner_reasoning_history")
+    if history and history != actor_opencode_config.DEFAULT_PLANNER_REASONING_HISTORY:
+        config["planner_reasoning_history"] = history
     # Per-lane planner/author models (`lane_actors`): present only when a lane is
     # overridden, so a run without `--lane-actor-models` records the historical keys.
     lane_spec = get("lane_actor_models")
@@ -509,6 +514,32 @@ def _actor_thinking(args) -> dict[str, Any]:
     Only the planner/author seat takes them; the critic seat never does."""
     return {"author_thinking": str(args.actor_author_thinking),
             "author_action_rule": getattr(args, "actor_author_action_rule", "off") == "on"}
+
+
+def _actor_reasoning_history(args) -> dict[str, str]:
+    """The planner-only reasoning-history knob as the ActorSeat field. Only the proposal
+    planner's seat takes it: never an author panel member, never the critic. A Namespace
+    without the flag (an older caller) is "keep"."""
+    return {"planner_reasoning_history": str(getattr(
+        args, "actor_planner_reasoning_history",
+        actor_opencode_config.DEFAULT_PLANNER_REASONING_HISTORY))}
+
+
+def _reasoning_history_error(args) -> str | None:
+    """Why `--actor-planner-reasoning-history drop` cannot run as written, or None. The
+    drop renames the history messages' reasoning key to one llama-server ignores, so it
+    needs an opencode planner on a llama-server provider (`REASONING_DROP_PROVIDERS`);
+    an overridden lane (`--lane-actor-models`) keeps its history (`lane_actors.seat_for`)."""
+    history = str(getattr(args, "actor_planner_reasoning_history", "keep") or "keep")
+    if history == "keep":
+        return None
+    model = str(getattr(args, "planner_model", "") or "")
+    provider = model.split("/", 1)[0] if "/" in model else ""
+    if provider not in actor_opencode_config.REASONING_DROP_PROVIDERS:
+        return (f"--actor-planner-reasoning-history {history} needs an opencode planner on a "
+                f"llama-server provider ({', '.join(sorted(actor_opencode_config.REASONING_DROP_PROVIDERS))}); "
+                f"--planner-model is {model!r}")
+    return None
 
 
 #: run.py's `--actor-authors` default (operator decision 2026-09-26: best-of-2, a mixed
@@ -1581,6 +1612,18 @@ def main(argv: list[str] | None = None) -> int:
                              "the GCC headers, signatures match callers, stay in scope or "
                              "abstain). Off = the historical prompt byte for byte "
                              "(default: %(default)s)")
+    parser.add_argument("--actor-planner-reasoning-history",
+                        choices=actor_opencode_config.REASONING_HISTORY_CHOICES,
+                        default=actor_opencode_config.DEFAULT_PLANNER_REASONING_HISTORY,
+                        help="opencode PLANNER only (2026-09-29): 'drop' stops a planner "
+                             "call re-sending its earlier steps' reasoning -- opencode sends "
+                             "every prior step's reasoning as reasoning_content and the served "
+                             "Qwen template renders it inside the tool chain whatever "
+                             "preserve_thinking says -- via the per-call config's model "
+                             "`interleaved` field (llama-server providers only; lane overrides "
+                             "keep theirs). The current step still reasons. Costs a re-prefill "
+                             "from the last assistant turn per step. 'keep' = the historical "
+                             "config byte for byte (default: %(default)s)")
     parser.add_argument("--actor-concise", choices=("on", "off"), default="on",
                         help="opencode planner/author (OAB-22): append the concision rule "
                              "(derive each fact once, analysis under ~4,000 tokens, reply is "
@@ -1709,7 +1752,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--cpu-window-wait-bound-s must be > 0")
     if args.hypothesis_author_attempts < 1:
         parser.error("--hypothesis-author-attempts must be >= 1")
-    budget_error = _actor_budget_error(args)
+    budget_error = _actor_budget_error(args) or _reasoning_history_error(args)
     if budget_error:
         parser.error(budget_error)
     from . import lane_actors
@@ -2426,7 +2469,8 @@ def main(argv: list[str] | None = None) -> int:
           f"author-budget={args.actor_author_budget_s}s "
           f"planner-salvage={args.actor_planner_salvage_s}s "
           f"author-thinking={args.actor_author_thinking} "
-          f"author-action-rule={args.actor_author_action_rule}")
+          f"author-action-rule={args.actor_author_action_rule} "
+          f"planner-reasoning-history={args.actor_planner_reasoning_history}")
     lane_backends = {index: actors.backend_for(lane.model, lane.effort_or(args.planner_effort))
                      for index, lane in lane_actor_models.items()}
     for index, backend in sorted(lane_backends.items()):
@@ -4365,7 +4409,8 @@ def main(argv: list[str] | None = None) -> int:
                                                **_actor_knobs(args), **_actor_limits(args),
                                                **_actor_budgets(args),
                                                **_actor_thinking(args), **sandbox_seat,
-                                               **_actor_salvage(args))))
+                                               **_actor_salvage(args),
+                                               **_actor_reasoning_history(args))))
             planner = (runtime_recovery.PendingPlanner(ordinary, pending_slot)
                        if pending_pair is not None else ordinary)
             if runtime_arm_declaration is not None and (runtime_enabled or runtime_keep_grade):

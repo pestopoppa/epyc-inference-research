@@ -265,10 +265,19 @@ class ActorSeat:
     #: Operator 2026-09-26: append `AUTHOR_ACTION_RULE` to the AUTHOR prompt (opencode
     #: only). Off here (the historical prompt, byte for byte); run.py defaults it on.
     author_action_rule: bool = False
+    #: "drop" (2026-09-29): a PLANNER call stops re-sending prior steps' reasoning in its
+    #: history messages (per-call config: the model's `interleaved` field, see
+    #: `actor_opencode_config.model_reasoning_history`; llama-server providers only).
+    #: Never the author or the critic. "keep" here and in run.py (byte-identical).
+    planner_reasoning_history: str = "keep"
 
     def thinking_for(self, role: str) -> str:
         """The reasoning switch for one call of `role`: the author's knob, else default."""
         return self.author_thinking if role == "author" else "default"
+
+    def reasoning_history_for(self, role: str) -> str:
+        """Prior-step reasoning in one call of `role`'s history: the planner's knob, else keep."""
+        return self.planner_reasoning_history if role == "planner" else "keep"
 
     def for_author(self, *, thinking: str | None = None, context_limit: int | None = None,
                    output_limit: int | None = None) -> "ActorSeat":
@@ -323,7 +332,9 @@ class ActorSeat:
                 "budget_s": self.budget_for(role),
                 "thinking": ("" if self.thinking_for(role) == "default"
                              else self.thinking_for(role)),
-                "action_rule": self.author_action_rule and role == "author"}
+                "action_rule": self.author_action_rule and role == "author",
+                "reasoning_history": ("" if self.reasoning_history_for(role) == "keep"
+                                      else self.reasoning_history_for(role))}
 
 
 def _profile_dirs(context: Mapping[str, Any]) -> tuple[Path, ...]:
@@ -1147,6 +1158,9 @@ def _budgets_of(env: Mapping[str, str] | None, budget_s: float | None,
         # OAB-24: the reasoning switch the call's config applied ("default" = none).
         "thinking": applied.get("thinking", "default"),
         "action_rule": bool(applied.get("action_rule", False)),
+        # Planner reasoning-history drop: only on rows whose call applied it.
+        **({"reasoning_history": applied["reasoning_history"]}
+           if "reasoning_history" in applied else {}),
         **({"error": applied["error"]} if "error" in applied else {}),
         "budget_s": budget_s or 0,
         "budget_exhausted": budget_exhausted,
@@ -2679,6 +2693,8 @@ def _budget_env(seat: "ActorSeat | None", role: str) -> dict[str, str]:
         applied["thinking"] = seat.thinking_for(role)
     if seat.author_action_rule and role == "author":
         applied["action_rule"] = True
+    if seat.reasoning_history_for(role) != "keep":
+        applied["reasoning_history"] = seat.reasoning_history_for(role)
     if not any(applied.values()):
         return {}
     return {SEAT_ENV_BUDGETS: json.dumps(applied, sort_keys=True)}
@@ -2718,6 +2734,7 @@ def _seat_call(seat: "ActorSeat | None", backend: Backend, role: str, workspace:
     knobs = seat.knobs if seat is not None else {}
     limits = seat.limits_for(role) if seat is not None else {}
     thinking = seat.thinking_for(role) if seat is not None else "default"
+    history = seat.reasoning_history_for(role) if seat is not None else "keep"
     label = seat.label_knobs(role) if seat is not None else {}
     env: dict[str, str] = {}
     if any(label.values()):
@@ -2731,10 +2748,12 @@ def _seat_call(seat: "ActorSeat | None", backend: Backend, role: str, workspace:
         path = seat_config.write_plain_config(
             target, role=role, lane=Path(workspace), build_dir=_anchor_build_dir(context),
             model=backend.model, thinking=thinking, **knobs, **limits,
+            **({"reasoning_history": history} if history != "keep" else {}),
             **({"read_roots": _read_roots(context)} if role == "critic"
                and _read_roots(context) else {}))
     except OSError as exc:
-        if any(knobs.values()) or any(limits.values()) or thinking != "default":
+        if (any(knobs.values()) or any(limits.values()) or thinking != "default"
+                or history != "keep"):
             raise   # a knob's fence (or a context cap, or thinking off) must never silently drop
         # Knobs off: the config only turns snapshots off. Unwritable, the call runs as
         # it always did rather than failing an actor call over store hygiene.
@@ -2836,6 +2855,7 @@ class AgentPlanner:
             python=self.seat.tools_python, steps=self.seat.steps, fan_out=self.seat.fan_out,
             build_dir=_anchor_build_dir(context), model=self.backend.model,
             thinking=self.seat.thinking_for(role),
+            reasoning_history=self.seat.reasoning_history_for(role),
             **self.seat.knobs, **self.seat.limits_for(role))
         trim = seat_config.TRIM_ENV if self.seat.trim_instructions else {}
         return (dataclasses.replace(self.backend, agent=seat_config.AGENT_NAMES[role]),
