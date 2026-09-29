@@ -454,3 +454,84 @@ class TestMetaSnapshotRealPrimitives:
                 self._last_inference_meta = {"completion_reason": "eos"}
 
         assert _meta_snapshot(_Bare()) == {"completion_reason": "eos"}
+
+
+# ── TD-29.M0: per-arm call accounting and sidecar CLI options ─────────────
+class TestBenchCallAccounting:
+    def test_json_retry_calls_are_counted_and_summed(self):
+        class _RetryPrimitives(_BenchPrimitives):
+            def llm_call(self, prompt: str, **kwargs: Any) -> str:
+                if "json_schema" in kwargs and not _json_calls(self):
+                    self.calls.append({"prompt": prompt, **kwargs})
+                    self._last_inference_meta = {
+                        "tokens": 70,
+                        "prompt_tokens": 400,
+                        "cached_prompt_tokens": 0,
+                    }
+                    return "not json"
+                out = super().llm_call(prompt, **kwargs)
+                if "json_schema" in kwargs:
+                    self._last_inference_meta.update(
+                        {"prompt_tokens": 420, "cached_prompt_tokens": 400}
+                    )
+                return out
+
+        report = _run(_RetryPrimitives(), modes=("json",))
+
+        arm = report["arms"]["json"]
+        assert arm["call_count"] == 2
+        assert arm["tokens_generated"] == 50
+        assert arm["tokens_generated_total"] == 120.0
+        assert arm["prompt_tokens_total"] == 820.0
+        assert arm["cache_n_total"] == 400.0
+        assert arm["prompt_n_total"] == 420.0
+        assert len(arm["calls"]) == 2
+
+    def test_native_arm_counts_its_single_call(self):
+        report = _run(_BenchPrimitives(), modes=("native",))
+        arm = report["arms"]["native"]
+        assert arm["call_count"] == 1
+        assert arm["tokens_generated_total"] == arm["tokens_generated"]
+        assert arm["prompt_n_total"] is None
+
+    def test_main_forwards_server_url_and_embeds_provenance(self, monkeypatch, tmp_path):
+        captured: dict[str, Any] = {}
+
+        def fake_live(**kwargs: Any) -> object:
+            captured.update(kwargs)
+            return object()
+
+        monkeypatch.setattr(
+            "src.typed_decisions.bench.run_mode_benchmark", lambda primitives, **kw: {"ok": True}
+        )
+        monkeypatch.setattr("src.typed_decisions.bench._live_primitives", fake_live)
+        monkeypatch.setattr("src.typed_decisions.bench._load_state", lambda path: STATE)
+        monkeypatch.setattr(
+            "src.typed_decisions.bench._load_questions", lambda path: list(QUESTIONS)
+        )
+        provenance = tmp_path / "prov.json"
+        provenance.write_text(json.dumps({"binary_sha256": "abc"}), encoding="utf-8")
+        out = tmp_path / "report.json"
+
+        code = main(
+            [
+                "--live",
+                "--state-file",
+                "s.json",
+                "--questions-file",
+                "q.json",
+                "--server-url",
+                "frontdoor=http://127.0.0.1:8199",
+                "--provenance-file",
+                str(provenance),
+                "--out",
+                str(out),
+            ]
+        )
+
+        assert code == 0
+        assert captured == {"server_url_overrides": {"frontdoor": "http://127.0.0.1:8199"}}
+        assert json.loads(out.read_text(encoding="utf-8")) == {
+            "ok": True,
+            "provenance": {"binary_sha256": "abc"},
+        }

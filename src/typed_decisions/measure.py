@@ -1410,15 +1410,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
-def _live_primitives() -> Any:
-    """Build live ``LLMPrimitives`` for --live runs; import stays lazy/offline."""
+def _live_primitives(server_url_overrides: Mapping[str, str] | None = None) -> Any:
+    """Build live ``LLMPrimitives`` for --live runs; import stays lazy/offline.
+
+    ``server_url_overrides`` (role -> base URL) points roles at a side instance
+    — e.g. a champion-kernel sidecar on a spare port — instead of the
+    configured stack, without editing any config (TD-29 test bed, operator
+    ruling 6, 2026-09-29). Every other role keeps its configured URL.
+    """
     from src.config import get_config
     from src.llm_primitives import LLMPrimitives
 
     config = get_config()
+    server_urls = dict(config.server_urls.as_dict())
+    server_urls.update(server_url_overrides or {})
     primitives = LLMPrimitives(
         mock_mode=False,
-        server_urls=config.server_urls.as_dict(),
+        server_urls=server_urls,
         num_slots=config.server.num_slots,
     )
     if not getattr(primitives, "_backends", None):
@@ -1426,6 +1434,37 @@ def _live_primitives() -> Any:
             "no LLM backends available for the configured server URLs; start the stack first"
         )
     return primitives
+
+
+def parse_server_url_overrides(items: Sequence[str]) -> dict[str, str]:
+    """Parse repeatable ``ROLE=URL`` CLI values into a role -> URL mapping.
+
+    Raises ``ValueError`` on a malformed item, an empty role, a URL that is not
+    ``http(s)://``, or the same role given twice with different URLs.
+    """
+    overrides: dict[str, str] = {}
+    for item in items:
+        role, separator, url = str(item).partition("=")
+        role = role.strip()
+        url = url.strip().rstrip("/")
+        if not separator or not role or not url:
+            raise ValueError(f"--server-url expects ROLE=URL, got {item!r}")
+        if not url.startswith(("http://", "https://")):
+            raise ValueError(f"--server-url URL must start with http:// or https://, got {url!r}")
+        if role in overrides and overrides[role] != url:
+            raise ValueError(f"--server-url gives role {role!r} two URLs")
+        overrides[role] = url
+    return overrides
+
+
+def _load_provenance(path: str | Path | None) -> dict[str, Any] | None:
+    """Load a ``--provenance-file`` JSON object (embedded verbatim in receipts)."""
+    if path is None:
+        return None
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(payload, Mapping):
+        raise ValueError(f"provenance file {path} must contain a JSON object")
+    return dict(payload)
 
 
 def _load_questions(path: str | Path) -> list[Question]:

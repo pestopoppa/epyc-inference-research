@@ -39,6 +39,28 @@ mapping rules:
   bounded 0..8 ``effort_points`` -> Score, ``categories`` array-of-enum ->
   per-value Noul; ``assignee`` (string) is skipped.
 
+TD-29 / TD-29.M0 extensions (2026-09-29):
+
+* ``closed_mode`` (CLI ``--closed-mode``) picks the closed-set arm's decode
+  path: ``"json"`` (the TD-4 arm, the default) or ``"native"`` (one constrained
+  token per question, ``cue_style`` forwarded; needs token probabilities, which
+  only the champion kernel returns on the MTP accept path, SW-9);
+* ``arms`` (CLI ``--arm``, repeatable) runs a subset, so a driver can persist
+  one receipt per arm and resume at arm granularity; the absent arm's counts
+  are ``None`` and agreement is ``None``;
+* per case, every ``llm_call`` is logged (``call_recorder``): ``tokens`` is the
+  SUM over the case's calls (corrective retries included; before M0 it was the
+  last call only, kept as ``tokens_last_call``), plus ``call_count``,
+  ``prompt_tokens``, ``cache_n``, ``prompt_n`` (evaluated prefill),
+  ``prompt_ms``, ``gen_ms`` and the per-call list; arm summaries carry the
+  totals. ``receipt["token_accounting"]`` states this;
+* ``case_log_path`` (CLI ``--case-log``) appends one JSON line per finished
+  case, so an interrupted arm leaves its completed cases on disk;
+* ``provenance`` (CLI ``--provenance-file``) is embedded verbatim, e.g. the
+  server build commit and binary digest;
+* CLI ``--server-url ROLE=URL`` (repeatable) points a role at a side instance
+  (e.g. a champion sidecar) without touching the configured stack.
+
 Receipts follow the ``measure`` convention (``timestamp``, ``mode``,
 ``role``, ``counts``, ``results`` plus explicit ``metric_directions``) and
 are written to ``receipt_path`` or
@@ -63,13 +85,16 @@ from typing import Any
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError, ValidationError
 
+from src.typed_decisions.call_recorder import CallLog, record_llm_calls
 from src.typed_decisions.measure import (
     MeasurementError,
     _last_inference_meta,
     _live_primitives,
+    _load_provenance,
     _now_iso,
     _require_primitives,
     _write_receipt,
+    parse_server_url_overrides,
 )
 from src.typed_decisions.runner import _extract_json_object, run_typed_decisions
 from src.typed_decisions.tool_args import (
@@ -78,7 +103,15 @@ from src.typed_decisions.tool_args import (
     tool_schema_to_questions,
 )
 
-__all__ = ["PilotCase", "build_cases", "main", "run_tool_args_pilot"]
+__all__ = ["ARMS", "CLOSED_MODES", "PilotCase", "build_cases", "main", "run_tool_args_pilot"]
+
+ARMS: tuple[str, ...] = ("closed_set", "free_form")
+CLOSED_MODES: tuple[str, ...] = ("json", "native")
+_TOKEN_ACCOUNTING = (
+    "per-case tokens = SUM over every llm_call of the case, corrective retries included "
+    "(TD-29.M0); tokens_last_call = the pre-M0 last-call figure; prompt_n = prompt_tokens - "
+    "cache_n (evaluated prefill); None = not reported by the backend"
+)
 
 _SCHEMA_DRAFT = "https://json-schema.org/draft/2020-12/schema"
 
@@ -278,8 +311,13 @@ def run_tool_args_pilot(
     receipt_path: str | Path | None = None,
     artifacts_dir: str | Path | None = None,
     dry_run: bool = False,
+    closed_mode: str = "json",
+    cue_style: str | None = None,
+    arms: Sequence[str] = ARMS,
+    case_log_path: str | Path | None = None,
+    provenance: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Run both arms over ``build_cases()`` and return the receipt dict.
+    """Run the selected arms over ``build_cases()`` and return the receipt dict.
 
     Args:
         primitives: The ``LLMPrimitives`` seam (anything exposing
@@ -290,6 +328,12 @@ def run_tool_args_pilot(
         artifacts_dir: Base directory for the default receipt path.
         dry_run: Return the case plan without calling the model and without
             writing a receipt (CLI ``--dry-run``).
+        closed_mode: Closed-set decode path, ``"json"`` or ``"native"``.
+        cue_style: Native cue style (``id_only``/``short``/``full``); ``None``
+            keeps the runner default. Rejected with ``closed_mode="json"``.
+        arms: Non-empty subset of ``ARMS``; run order is always closed first.
+        case_log_path: Append one JSON line per finished case (incremental).
+        provenance: Embedded verbatim as ``receipt["provenance"]``.
 
     Returns:
         The receipt dict (``timestamp``, ``mode``, ``role``, ``counts``,
@@ -300,6 +344,14 @@ def run_tool_args_pilot(
         MeasurementError: no live primitives were supplied for a real run.
     """
     cases = build_cases()
+    arm_list = _validate_arms(arms)
+    if closed_mode not in CLOSED_MODES:
+        raise ValueError(f"unknown closed_mode {closed_mode!r}; expected one of {CLOSED_MODES}")
+    if cue_style is not None and closed_mode != "native":
+        raise ValueError("cue_style applies to closed_mode='native' only")
+    closed_decode = (
+        "typed_json" if closed_mode == "json" else f"typed_native:{cue_style or 'default'}"
+    )
 
     if dry_run:
         return {
@@ -308,7 +360,9 @@ def run_tool_args_pilot(
             "plan": {
                 "role": role,
                 "mode": "closed_set_vs_free_form",
-                "arms": ["closed_set", "free_form"],
+                "arms": arm_list,
+                "closed_mode": closed_mode,
+                "cue_style": cue_style,
                 "cases": [_case_plan(case) for case in cases],
                 "counts": {
                     "cases": len(cases),
@@ -319,45 +373,72 @@ def run_tool_args_pilot(
 
     _require_primitives(primitives, "tool-args pilot")
 
-    closed_records, closed_wall_ms = _run_closed_arm(primitives, cases, role)
-    free_records, free_wall_ms = _run_free_arm(primitives, cases, role)
+    case_log = Path(case_log_path) if case_log_path is not None else None
     expected_by_case = {case.case_id: case.expected for case in cases}
-    closed_summary = _arm_summary(
-        closed_records, expected_by_case, wall_ms=closed_wall_ms, decode="typed_json"
-    )
-    free_summary = _arm_summary(
-        free_records, expected_by_case, wall_ms=free_wall_ms, decode="free_form_text"
-    )
-    compared, agreeing = _agreement(closed_records, free_records)
+    closed_records: list[dict[str, Any]] | None = None
+    free_records: list[dict[str, Any]] | None = None
+    closed_summary: dict[str, Any] | None = None
+    free_summary: dict[str, Any] | None = None
+    if "closed_set" in arm_list:
+        closed_records, closed_wall_ms = _run_closed_arm(
+            primitives,
+            cases,
+            role,
+            mode=closed_mode,
+            cue_style=cue_style,
+            case_log=case_log,
+        )
+        closed_summary = _arm_summary(
+            closed_records, expected_by_case, wall_ms=closed_wall_ms, decode=closed_decode
+        )
+    if "free_form" in arm_list:
+        free_records, free_wall_ms = _run_free_arm(primitives, cases, role, case_log=case_log)
+        free_summary = _arm_summary(
+            free_records, expected_by_case, wall_ms=free_wall_ms, decode="free_form_text"
+        )
+    compared: int | None = None
+    agreeing: int | None = None
+    agreement: dict[str, Any] | None = None
+    if closed_records is not None and free_records is not None:
+        compared, agreeing = _agreement(closed_records, free_records)
+        agreement = {
+            "compared": compared,
+            "agreeing": agreeing,
+            "rate": agreeing / compared if compared else None,
+        }
+
+    def _count(summary: dict[str, Any] | None, key: str) -> Any:
+        return summary[key] if summary is not None else None
 
     receipt = {
         "study": "tool_args_pilot",
         "timestamp": _now_iso(),
         "mode": "closed_set_vs_free_form",
         "role": role,
+        "arms_run": arm_list,
+        "closed_mode": closed_mode if "closed_set" in arm_list else None,
+        "cue_style": cue_style if "closed_set" in arm_list else None,
+        "token_accounting": _TOKEN_ACCOUNTING,
+        "provenance": dict(provenance) if provenance is not None else None,
         "counts": {
             "cases": len(cases),
             "tools": len({case.tool for case in cases}),
-            "closed_set_resolved": closed_summary["resolved"],
-            "closed_set_exact_match": closed_summary["exact_match"],
-            "closed_set_failures": closed_summary["failures"],
-            "free_form_resolved": free_summary["resolved"],
-            "free_form_exact_match": free_summary["exact_match"],
-            "free_form_failures": free_summary["failures"],
+            "closed_set_resolved": _count(closed_summary, "resolved"),
+            "closed_set_exact_match": _count(closed_summary, "exact_match"),
+            "closed_set_failures": _count(closed_summary, "failures"),
+            "free_form_resolved": _count(free_summary, "resolved"),
+            "free_form_exact_match": _count(free_summary, "exact_match"),
+            "free_form_failures": _count(free_summary, "failures"),
             "agreement_compared": compared,
             "agreement_agreeing": agreeing,
         },
         "results": {
-            "cases": _merged_case_records(closed_records, free_records, expected_by_case),
+            "cases": _merged_case_records(closed_records, free_records, cases, expected_by_case),
             "arms": {
                 "closed_set": closed_summary,
                 "free_form": free_summary,
             },
-            "agreement": {
-                "compared": compared,
-                "agreeing": agreeing,
-                "rate": agreeing / compared if compared else None,
-            },
+            "agreement": agreement,
         },
         "metric_directions": {
             "exact_match": "higher_better",
@@ -367,12 +448,32 @@ def run_tool_args_pilot(
         },
         "prompt_sha256": [
             record["prompt_sha256"]
-            for record in closed_records + free_records
+            for record in (closed_records or []) + (free_records or [])
             if record["prompt_sha256"] is not None
         ],
     }
     _write_receipt(receipt, receipt_path=receipt_path, artifacts_dir=artifacts_dir)
     return receipt
+
+
+def _validate_arms(arms: Sequence[str]) -> list[str]:
+    requested = list(dict.fromkeys(arms))
+    if not requested:
+        raise ValueError("at least one arm is required")
+    unknown = [arm for arm in requested if arm not in ARMS]
+    if unknown:
+        raise ValueError(f"unknown arm(s) {unknown!r}; expected a subset of {ARMS}")
+    return [arm for arm in ARMS if arm in requested]
+
+
+def _append_case_log(case_log: Path | None, arm: str, record: Mapping[str, Any]) -> None:
+    if case_log is None:
+        return
+    case_log.parent.mkdir(parents=True, exist_ok=True)
+    line = json.dumps({"arm": arm, **record}, sort_keys=True, default=str)
+    with case_log.open("a", encoding="utf-8") as handle:
+        handle.write(line + "\n")
+        handle.flush()
 
 
 def _case_plan(case: PilotCase) -> dict[str, Any]:
@@ -394,26 +495,47 @@ def _run_closed_arm(
     primitives: Any,
     cases: Sequence[PilotCase],
     role: str,
+    *,
+    mode: str = "json",
+    cue_style: str | None = None,
+    case_log: Path | None = None,
 ) -> tuple[list[dict[str, Any]], float]:
     records: list[dict[str, Any]] = []
     started = time.perf_counter()
     for case in cases:
-        records.append(_run_closed_case(primitives, case, role))
+        record = _run_closed_case(primitives, case, role, mode=mode, cue_style=cue_style)
+        records.append(record)
+        _append_case_log(case_log, "closed_set", record)
     return records, (time.perf_counter() - started) * 1000.0
 
 
-def _run_closed_case(primitives: Any, case: PilotCase, role: str) -> dict[str, Any]:
+def _run_closed_case(
+    primitives: Any,
+    case: PilotCase,
+    role: str,
+    *,
+    mode: str = "json",
+    cue_style: str | None = None,
+) -> dict[str, Any]:
     mapping = tool_schema_to_questions(case.tool, case.parameters)
     record = _case_record(case, question_ids=[q.id for q in mapping.questions])
     record["skipped"] = list(mapping.skipped)
+    runner_kwargs: dict[str, Any] = {}
+    if mode != "json":
+        runner_kwargs["mode"] = mode
+    if cue_style is not None:
+        runner_kwargs["cue_style"] = cue_style
     started = time.perf_counter()
+    call_log = CallLog()
     try:
-        result = run_typed_decisions(
-            primitives,
-            state=case.state,
-            questions=mapping.questions,
-            role=role,
-        )
+        with record_llm_calls(primitives) as call_log:
+            result = run_typed_decisions(
+                primitives,
+                state=case.state,
+                questions=mapping.questions,
+                role=role,
+                **runner_kwargs,
+            )
     except Exception as exc:
         record["error"] = f"{type(exc).__name__}: {exc}"
     else:
@@ -427,7 +549,7 @@ def _run_closed_case(primitives: Any, case: PilotCase, role: str) -> dict[str, A
         except ToolArgumentError as exc:
             record["error"] = str(exc)
     record["wall_ms"] = (time.perf_counter() - started) * 1000.0
-    _attach_meta(record, primitives)
+    _attach_meta(record, primitives, call_log)
     return record
 
 
@@ -438,11 +560,15 @@ def _run_free_arm(
     primitives: Any,
     cases: Sequence[PilotCase],
     role: str,
+    *,
+    case_log: Path | None = None,
 ) -> tuple[list[dict[str, Any]], float]:
     records: list[dict[str, Any]] = []
     started = time.perf_counter()
     for case in cases:
-        records.append(_run_free_case(primitives, case, role))
+        record = _run_free_case(primitives, case, role)
+        records.append(record)
+        _append_case_log(case_log, "free_form", record)
     return records, (time.perf_counter() - started) * 1000.0
 
 
@@ -452,17 +578,19 @@ def _run_free_case(primitives: Any, case: PilotCase, role: str) -> dict[str, Any
     record["skipped"] = []
     record["prompt_sha256"] = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
     started = time.perf_counter()
+    call_log = CallLog()
     try:
-        raw_text = str(
-            primitives.llm_call(
-                prompt,
-                role=role,
-                n_tokens=_FREE_FORM_N_TOKENS,
-                temperature=0.0,
-                seed=_DECODE_SEED,
+        with record_llm_calls(primitives) as call_log:
+            raw_text = str(
+                primitives.llm_call(
+                    prompt,
+                    role=role,
+                    n_tokens=_FREE_FORM_N_TOKENS,
+                    temperature=0.0,
+                    seed=_DECODE_SEED,
+                )
+                or ""
             )
-            or ""
-        )
     except Exception as exc:
         record["error"] = f"{type(exc).__name__}: {exc}"
     else:
@@ -471,7 +599,7 @@ def _run_free_case(primitives: Any, case: PilotCase, role: str) -> dict[str, Any
         record["error"] = error
         record["resolved"] = error is None
     record["wall_ms"] = (time.perf_counter() - started) * 1000.0
-    _attach_meta(record, primitives)
+    _attach_meta(record, primitives, call_log)
     return record
 
 
@@ -533,15 +661,46 @@ def _case_record(case: PilotCase, *, question_ids: list[str] | None) -> dict[str
         "prompt_sha256": None,
         "wall_ms": None,
         "tokens": None,
+        "tokens_last_call": None,
+        "call_count": 0,
+        "prompt_tokens": None,
+        "cache_n": None,
+        "prompt_n": None,
+        "prompt_ms": None,
+        "gen_ms": None,
+        "calls": [],
         "meta": None,
     }
 
 
-def _attach_meta(record: dict[str, Any], primitives: Any) -> None:
+def _attach_meta(record: dict[str, Any], primitives: Any, call_log: CallLog | None = None) -> None:
+    """Attach the last call's meta plus the whole case's per-call accounting (TD-29.M0).
+
+    ``tokens`` sums every call of the case when the call log saw calls; without
+    one it falls back to the last call's figure, as before M0.
+    """
     meta = _last_inference_meta(primitives)
     record["meta"] = meta
-    if isinstance(meta, Mapping) and isinstance(meta.get("tokens"), (int, float)):
-        record["tokens"] = float(meta["tokens"])
+    raw_tokens = meta.get("tokens") if isinstance(meta, Mapping) else None
+    last_tokens = (
+        float(raw_tokens)
+        if isinstance(raw_tokens, (int, float)) and not isinstance(raw_tokens, bool)
+        else None
+    )
+    record["tokens_last_call"] = last_tokens
+    record["tokens"] = last_tokens
+    if call_log is None or not call_log.calls:
+        return
+    summary = call_log.summary()
+    record["calls"] = list(call_log.calls)
+    record["call_count"] = summary["call_count"]
+    record["tokens"] = summary["tokens_total"]
+    record["tokens_last_call"] = summary["tokens_last_call"]
+    record["prompt_tokens"] = summary["prompt_tokens_total"]
+    record["cache_n"] = summary["cache_n_total"]
+    record["prompt_n"] = summary["prompt_n_total"]
+    record["prompt_ms"] = summary["prompt_ms_total"]
+    record["gen_ms"] = summary["gen_ms_total"]
 
 
 def _canonical(value: Any) -> str:
@@ -568,11 +727,13 @@ def _arm_summary(
     tokens: list[float] = []
     per_case_ms: list[float] = []
     per_case_tokens: list[float | None] = []
+    per_case_calls: list[int] = []
     for record in records:
         expected = expected_by_case[record["case_id"]]
         per_arg_total += len(expected)
         per_case_ms.append(record["wall_ms"])
         per_case_tokens.append(record["tokens"])
+        per_case_calls.append(int(record.get("call_count", 0)))
         if record["tokens"] is not None:
             tokens.append(record["tokens"])
         if not record["resolved"]:
@@ -601,7 +762,19 @@ def _arm_summary(
         "tokens_generated": sum(tokens) if tokens else None,
         "calls_with_token_meta": len(tokens),
         "per_case_tokens": per_case_tokens,
+        "calls_total": sum(per_case_calls),
+        "per_case_calls": per_case_calls,
+        "prompt_tokens_total": _column_total(records, "prompt_tokens"),
+        "cache_n_total": _column_total(records, "cache_n"),
+        "prompt_n_total": _column_total(records, "prompt_n"),
+        "prompt_ms_total": _column_total(records, "prompt_ms"),
+        "gen_ms_total": _column_total(records, "gen_ms"),
     }
+
+
+def _column_total(records: Sequence[Mapping[str, Any]], key: str) -> float | None:
+    values = [record.get(key) for record in records if record.get(key) is not None]
+    return float(sum(values)) if values else None
 
 
 def _agreement(
@@ -620,21 +793,26 @@ def _agreement(
 
 
 def _merged_case_records(
-    closed_records: Sequence[dict[str, Any]],
-    free_records: Sequence[dict[str, Any]],
+    closed_records: Sequence[dict[str, Any]] | None,
+    free_records: Sequence[dict[str, Any]] | None,
+    cases: Sequence[PilotCase],
     expected_by_case: Mapping[str, dict[str, Any]],
 ) -> list[dict[str, Any]]:
+    closed_by_id = {record["case_id"]: record for record in closed_records or []}
+    free_by_id = {record["case_id"]: record for record in free_records or []}
     merged: list[dict[str, Any]] = []
-    for closed, free in zip(closed_records, free_records, strict=True):
-        expected = expected_by_case[closed["case_id"]]
+    for case in cases:
+        expected = expected_by_case[case.case_id]
+        closed = closed_by_id.get(case.case_id)
+        free = free_by_id.get(case.case_id)
         merged.append(
             {
-                "case_id": closed["case_id"],
-                "family": closed["family"],
-                "tool": closed["tool"],
+                "case_id": case.case_id,
+                "family": case.family,
+                "tool": case.tool,
                 "expected": expected,
-                "closed_set": _arm_case_view(closed, expected),
-                "free_form": _arm_case_view(free, expected),
+                "closed_set": _arm_case_view(closed, expected) if closed is not None else None,
+                "free_form": _arm_case_view(free, expected) if free is not None else None,
             }
         )
     return merged
@@ -652,6 +830,14 @@ def _arm_case_view(record: dict[str, Any], expected: Mapping[str, Any]) -> dict[
         "wall_ms": record["wall_ms"],
         "prompt_sha256": record["prompt_sha256"],
         "tokens": record["tokens"],
+        "tokens_last_call": record.get("tokens_last_call"),
+        "call_count": record.get("call_count", 0),
+        "prompt_tokens": record.get("prompt_tokens"),
+        "cache_n": record.get("cache_n"),
+        "prompt_n": record.get("prompt_n"),
+        "prompt_ms": record.get("prompt_ms"),
+        "gen_ms": record.get("gen_ms"),
+        "calls": record.get("calls", []),
     }
 
 
@@ -690,6 +876,42 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="directory for the default receipt path",
     )
+    parser.add_argument(
+        "--closed-mode",
+        choices=CLOSED_MODES,
+        default="json",
+        help="closed-set arm decode path (default json; native needs token probabilities)",
+    )
+    parser.add_argument(
+        "--cue-style",
+        choices=("id_only", "short", "full"),
+        default=None,
+        help="native cue style (closed-mode native only; default: the runner default)",
+    )
+    parser.add_argument(
+        "--arm",
+        action="append",
+        choices=ARMS,
+        default=None,
+        help="arm to run; repeatable (default: both)",
+    )
+    parser.add_argument(
+        "--case-log",
+        default=None,
+        help="append one JSON line per finished case to this file (incremental persistence)",
+    )
+    parser.add_argument(
+        "--provenance-file",
+        default=None,
+        help="JSON object embedded verbatim as receipt['provenance'] (e.g. server build)",
+    )
+    parser.add_argument(
+        "--server-url",
+        action="append",
+        default=None,
+        metavar="ROLE=URL",
+        help="override one role's server URL, e.g. frontdoor=http://127.0.0.1:8199; repeatable",
+    )
     return parser
 
 
@@ -706,13 +928,26 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     try:
-        primitives = _live_primitives() if (args.live and not args.dry_run) else None
+        overrides = parse_server_url_overrides(args.server_url or ())
+        provenance = _load_provenance(args.provenance_file)
+        primitives = None
+        if args.live and not args.dry_run:
+            primitives = (
+                _live_primitives(server_url_overrides=overrides)
+                if overrides
+                else _live_primitives()
+            )
         receipt = run_tool_args_pilot(
             primitives,
             role=args.role,
             receipt_path=args.receipt,
             artifacts_dir=args.artifacts_dir,
             dry_run=args.dry_run,
+            closed_mode=args.closed_mode,
+            cue_style=args.cue_style,
+            arms=tuple(args.arm) if args.arm else ARMS,
+            case_log_path=args.case_log,
+            provenance=provenance,
         )
     except (MeasurementError, ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)

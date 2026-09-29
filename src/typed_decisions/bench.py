@@ -26,6 +26,16 @@ and agreement is the parity question TD-1d asks. With exactly one cue style the
 native arm keeps its legacy ``"native"`` key and the report keeps its legacy
 shape (plus the additive ``cue_styles``/``agreements`` keys).
 
+Per-call accounting (TD-29.M0, 2026-09-29): every arm's ``llm_call``s are
+logged (``call_recorder``), so each arm record also carries ``call_count``,
+``tokens_generated_total`` (summed over the arm's calls, JSON corrective retries
+included — ``tokens_generated`` stays the LAST call's figure for continuity with
+older receipts), ``prompt_tokens_total``, ``cache_n_total``, ``prompt_n_total``
+(evaluated prefill), ``prompt_ms_total``, ``gen_ms_total`` and the per-call
+list. The CLI's ``--server-url ROLE=URL`` points a role at a side instance
+(e.g. the champion sidecar) and ``--provenance-file`` embeds a JSON object as
+``report["provenance"]``.
+
 Fabrication guard: the harness refuses to run against primitives in
 ``mock_mode`` or without an ``llm_call`` seam, and raises ``BenchmarkError``
 when neither arm resolves a single question (there would be nothing to
@@ -47,7 +57,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from src.typed_decisions.call_recorder import CallLog, record_llm_calls
 from src.typed_decisions.native import CueStyle, TokenizeFn, run_typed_decisions_native
+from src.typed_decisions.measure import _load_provenance, parse_server_url_overrides
 from src.typed_decisions.runner import run_typed_decisions
 from src.typed_decisions.types import DecisionResult, Question
 
@@ -130,38 +142,43 @@ def run_mode_benchmark(
     for mode in mode_list:
         if mode == "json":
             started = time.perf_counter()
-            result = run_typed_decisions(
-                primitives,
-                state=state,
-                questions=catalogue,
-                role=role,
-                mode="json",
-                n_tokens=n_tokens,
-            )
+            with record_llm_calls(primitives) as call_log:
+                result = run_typed_decisions(
+                    primitives,
+                    state=state,
+                    questions=catalogue,
+                    role=role,
+                    mode="json",
+                    n_tokens=n_tokens,
+                )
             wall_ms = (time.perf_counter() - started) * 1000.0
             # Meta is instance-level: read immediately after the arm's calls
-            # (the JSON arm may have retried, so this is the LAST attempt's).
+            # (the JSON arm may have retried, so this is the LAST attempt's;
+            # the call log carries every attempt, TD-29.M0).
             meta = _meta_snapshot(primitives)
             results["json"] = result
-            arms["json"] = _arm_record("json", result, wall_ms, meta)
+            arms["json"] = _arm_record("json", result, wall_ms, meta, call_log=call_log)
             continue
         for style in style_list:
             arm_name = "native" if len(style_list) == 1 else f"native:{style.value}"
             started = time.perf_counter()
-            result = run_typed_decisions_native(
-                primitives,
-                state=state,
-                questions=catalogue,
-                role=role,
-                n_tokens=n_tokens,
-                n_probs=n_probs,
-                cue_style=style,
-                tokenize_fn=tokenize_fn,
-            )
+            with record_llm_calls(primitives) as call_log:
+                result = run_typed_decisions_native(
+                    primitives,
+                    state=state,
+                    questions=catalogue,
+                    role=role,
+                    n_tokens=n_tokens,
+                    n_probs=n_probs,
+                    cue_style=style,
+                    tokenize_fn=tokenize_fn,
+                )
             wall_ms = (time.perf_counter() - started) * 1000.0
             meta = _meta_snapshot(primitives)
             results[arm_name] = result
-            arms[arm_name] = _arm_record(arm_name, result, wall_ms, meta, cue_style=style)
+            arms[arm_name] = _arm_record(
+                arm_name, result, wall_ms, meta, cue_style=style, call_log=call_log
+            )
             native_arm_names.append(arm_name)
 
     if not any(result.decisions for result in results.values()):
@@ -249,7 +266,9 @@ def _arm_record(
     meta: Mapping[str, Any] | None,
     *,
     cue_style: CueStyle | None = None,
+    call_log: CallLog | None = None,
 ) -> dict[str, Any]:
+    calls = call_log.summary() if call_log is not None else CallLog().summary()
     slice_sums = [
         {
             "question_id": decision.question_id,
@@ -279,6 +298,14 @@ def _arm_record(
         "completion_reason": completion_reason if isinstance(completion_reason, str) else None,
         "candidate_slice_sums": slice_sums,
         "candidate_slice_sum_range": ([min(sums), max(sums)] if sums else None),
+        "call_count": calls["call_count"],
+        "tokens_generated_total": calls["tokens_total"],
+        "prompt_tokens_total": calls["prompt_tokens_total"],
+        "cache_n_total": calls["cache_n_total"],
+        "prompt_n_total": calls["prompt_n_total"],
+        "prompt_ms_total": calls["prompt_ms_total"],
+        "gen_ms_total": calls["gen_ms_total"],
+        "calls": list(call_log.calls) if call_log is not None else [],
     }
 
 
@@ -390,6 +417,18 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--n-tokens", type=int, default=None, help="optional output budget")
     parser.add_argument("--n-probs", type=int, default=None, help="optional native top-K capture")
     parser.add_argument("--out", default=None, help="write the report JSON to this path too")
+    parser.add_argument(
+        "--server-url",
+        action="append",
+        default=None,
+        metavar="ROLE=URL",
+        help="override one role's server URL, e.g. frontdoor=http://127.0.0.1:8199; repeatable",
+    )
+    parser.add_argument(
+        "--provenance-file",
+        default=None,
+        help="JSON object embedded verbatim as report['provenance'] (e.g. server build)",
+    )
     return parser
 
 
@@ -404,7 +443,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     try:
-        primitives = _live_primitives()
+        overrides = parse_server_url_overrides(args.server_url or ())
+        provenance = _load_provenance(args.provenance_file)
+        primitives = (
+            _live_primitives(server_url_overrides=overrides) if overrides else _live_primitives()
+        )
         report = run_mode_benchmark(
             primitives,
             state=_load_state(args.state_file),
@@ -419,6 +462,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
+    if provenance is not None:
+        report["provenance"] = provenance
     text = json.dumps(report, indent=2, sort_keys=True, default=str)
     if args.out:
         Path(args.out).write_text(text + "\n", encoding="utf-8")
@@ -426,15 +471,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0
 
 
-def _live_primitives() -> Any:
-    """Build live ``LLMPrimitives`` for --live runs; import stays lazy/offline."""
+def _live_primitives(server_url_overrides: Mapping[str, str] | None = None) -> Any:
+    """Build live ``LLMPrimitives`` for --live runs; import stays lazy/offline.
+
+    ``server_url_overrides`` (role -> URL) points roles at a side instance.
+    """
     from src.config import get_config
     from src.llm_primitives import LLMPrimitives
 
     config = get_config()
+    server_urls = dict(config.server_urls.as_dict())
+    server_urls.update(server_url_overrides or {})
     primitives = LLMPrimitives(
         mock_mode=False,
-        server_urls=config.server_urls.as_dict(),
+        server_urls=server_urls,
         num_slots=config.server.num_slots,
     )
     if not getattr(primitives, "_backends", None):

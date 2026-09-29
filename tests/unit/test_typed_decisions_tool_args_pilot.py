@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 from jsonschema import Draft202012Validator
@@ -393,3 +394,221 @@ class TestPilotCli:
         receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
         assert receipt["counts"]["cases"] == 18
         assert receipt["counts"]["closed_set_exact_match"] == 18
+
+
+# ── 5. TD-29 / TD-29.M0: per-call accounting, arm subsets, native forwarding ──
+
+
+class _AccountingPrimitives(_FakePrimitives):
+    """Publishes server-style usage meta; call N reports N tokens, 1000 prompt, 600 cached."""
+
+    def llm_call(self, prompt: str, **kwargs):
+        result = super().llm_call(prompt, **kwargs)
+        number = len(self.calls)
+        self._last_inference_meta = {
+            "tokens": number,
+            "prompt_tokens": 1000,
+            "cached_prompt_tokens": 600,
+            "prompt_ms": 5.0,
+            "gen_ms": 7.0,
+        }
+        return result
+
+
+class TestPilotCallAccounting:
+    def test_retry_tokens_are_summed_and_last_call_kept(self, tmp_path: Path):
+        attempts: dict[str, int] = {}
+
+        def flaky(case: PilotCase) -> str:
+            attempts[case.case_id] = attempts.get(case.case_id, 0) + 1
+            if case.case_id == "meeting-01" and attempts[case.case_id] == 1:
+                return "not json at all"
+            return _closed_response(case)
+
+        primitives = _AccountingPrimitives(closed=flaky)
+        receipt = run_tool_args_pilot(primitives, role=ROLE, receipt_path=tmp_path / "p.json")
+
+        row = _case_rows(receipt)["meeting-01"]["closed_set"]
+        assert row["resolved"] is True
+        assert row["call_count"] == 2
+        assert row["tokens"] == 1.0 + 2.0
+        assert row["tokens_last_call"] == 2.0
+        assert row["prompt_tokens"] == 2000.0
+        assert row["cache_n"] == 1200.0
+        assert row["prompt_n"] == 800.0
+        assert row["prompt_ms"] == 10.0
+        assert len(row["calls"]) == 2
+
+        closed = receipt["results"]["arms"]["closed_set"]
+        assert closed["calls_total"] == 19
+        assert closed["per_case_calls"][0] == 2
+        assert closed["prompt_n_total"] == 19 * 400.0
+        assert closed["prompt_tokens_total"] == 19 * 1000.0
+        assert closed["cache_n_total"] == 19 * 600.0
+        assert closed["tokens_generated"] == float(sum(range(1, 20)))
+        assert receipt["token_accounting"].startswith("per-case tokens = SUM")
+
+    def test_single_call_cases_keep_the_pre_m0_token_figure(self, tmp_path: Path):
+        receipt = run_tool_args_pilot(
+            _FakePrimitives(), role=ROLE, receipt_path=tmp_path / "p.json"
+        )
+        rows = _case_rows(receipt)
+        assert all(row["closed_set"]["call_count"] == 1 for row in rows.values())
+        assert all(row["closed_set"]["tokens"] == 9.0 for row in rows.values())
+        assert all(row["closed_set"]["prompt_n"] is None for row in rows.values())
+
+
+class TestPilotArmSubsets:
+    def test_closed_only_run_reports_absent_arm_as_none(self, tmp_path: Path):
+        primitives = _FakePrimitives()
+        receipt = run_tool_args_pilot(
+            primitives, role=ROLE, receipt_path=tmp_path / "p.json", arms=["closed_set"]
+        )
+
+        assert receipt["arms_run"] == ["closed_set"]
+        assert receipt["closed_mode"] == "json"
+        counts = receipt["counts"]
+        assert counts["closed_set_exact_match"] == 18
+        assert counts["free_form_resolved"] is None
+        assert counts["agreement_compared"] is None
+        assert receipt["results"]["agreement"] is None
+        assert receipt["results"]["arms"]["free_form"] is None
+        assert all(row["free_form"] is None for row in receipt["results"]["cases"])
+        assert len(primitives.calls) == 18
+        assert all(call.get("json_schema") is not None for call in primitives.calls)
+
+    def test_free_only_run(self, tmp_path: Path):
+        primitives = _FakePrimitives()
+        receipt = run_tool_args_pilot(
+            primitives, role=ROLE, receipt_path=tmp_path / "p.json", arms=["free_form"]
+        )
+        assert receipt["arms_run"] == ["free_form"]
+        assert receipt["closed_mode"] is None
+        assert receipt["counts"]["free_form_exact_match"] == 18
+        assert receipt["results"]["arms"]["closed_set"] is None
+        assert all(call.get("json_schema") is None for call in primitives.calls)
+
+    def test_unknown_or_empty_arms_are_rejected(self):
+        with pytest.raises(ValueError):
+            run_tool_args_pilot(_FakePrimitives(), role=ROLE, arms=["bogus"])
+        with pytest.raises(ValueError):
+            run_tool_args_pilot(_FakePrimitives(), role=ROLE, arms=[])
+
+    def test_case_log_is_written_per_case(self, tmp_path: Path):
+        log = tmp_path / "cases.jsonl"
+        run_tool_args_pilot(
+            _FakePrimitives(), role=ROLE, receipt_path=tmp_path / "p.json", case_log_path=log
+        )
+        lines = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+        assert len(lines) == 36
+        assert [line["arm"] for line in lines] == ["closed_set"] * 18 + ["free_form"] * 18
+        assert lines[0]["case_id"] == _CASES[0].case_id
+        assert "call_count" in lines[0]
+
+    def test_provenance_is_embedded(self, tmp_path: Path):
+        receipt = run_tool_args_pilot(
+            _FakePrimitives(),
+            role=ROLE,
+            receipt_path=tmp_path / "p.json",
+            provenance={"server_commit": "90c12df42", "binary_sha256": "abc"},
+        )
+        assert receipt["provenance"] == {"server_commit": "90c12df42", "binary_sha256": "abc"}
+
+
+class TestPilotClosedMode:
+    def test_native_mode_and_cue_style_reach_the_runner(self, tmp_path: Path, monkeypatch):
+        import src.typed_decisions.tool_args_pilot as pilot
+
+        seen: list[tuple[Any, Any]] = []
+        real = pilot.run_typed_decisions
+
+        def spy(primitives, **kwargs):
+            seen.append((kwargs.pop("mode", None), kwargs.pop("cue_style", None)))
+            return real(primitives, **kwargs)
+
+        monkeypatch.setattr(pilot, "run_typed_decisions", spy)
+        receipt = run_tool_args_pilot(
+            _FakePrimitives(),
+            role=ROLE,
+            receipt_path=tmp_path / "p.json",
+            closed_mode="native",
+            cue_style="id_only",
+            arms=["closed_set"],
+        )
+
+        assert seen == [("native", "id_only")] * 18
+        assert receipt["closed_mode"] == "native"
+        assert receipt["cue_style"] == "id_only"
+        assert receipt["results"]["arms"]["closed_set"]["decode"] == "typed_native:id_only"
+
+    def test_json_mode_passes_no_mode_kwarg(self, tmp_path: Path, monkeypatch):
+        import src.typed_decisions.tool_args_pilot as pilot
+
+        seen: list[dict] = []
+        real = pilot.run_typed_decisions
+
+        def spy(primitives, **kwargs):
+            seen.append(dict(kwargs))
+            return real(primitives, **kwargs)
+
+        monkeypatch.setattr(pilot, "run_typed_decisions", spy)
+        run_tool_args_pilot(
+            _FakePrimitives(), role=ROLE, receipt_path=tmp_path / "p.json", arms=["closed_set"]
+        )
+        assert all("mode" not in call and "cue_style" not in call for call in seen)
+
+    def test_invalid_mode_combinations_are_rejected(self):
+        with pytest.raises(ValueError):
+            run_tool_args_pilot(_FakePrimitives(), role=ROLE, closed_mode="bogus")
+        with pytest.raises(ValueError):
+            run_tool_args_pilot(_FakePrimitives(), role=ROLE, cue_style="id_only")
+
+
+class TestPilotCliSidecar:
+    def test_cli_forwards_sidecar_options(self, tmp_path: Path, monkeypatch):
+        primitives = _FakePrimitives()
+        captured: dict[str, Any] = {}
+
+        def fake_live(**kwargs):
+            captured.update(kwargs)
+            return primitives
+
+        monkeypatch.setattr("src.typed_decisions.tool_args_pilot._live_primitives", fake_live)
+        provenance = tmp_path / "prov.json"
+        provenance.write_text(json.dumps({"server_commit": "90c12df42"}), encoding="utf-8")
+        receipt_path = tmp_path / "pilot.json"
+        case_log = tmp_path / "cases.jsonl"
+
+        code = main(
+            [
+                "--live",
+                "--role",
+                "frontdoor",
+                "--receipt",
+                str(receipt_path),
+                "--arm",
+                "free_form",
+                "--server-url",
+                "frontdoor=http://127.0.0.1:8199",
+                "--provenance-file",
+                str(provenance),
+                "--case-log",
+                str(case_log),
+            ]
+        )
+
+        assert code == 0
+        assert captured == {"server_url_overrides": {"frontdoor": "http://127.0.0.1:8199"}}
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        assert receipt["arms_run"] == ["free_form"]
+        assert receipt["provenance"] == {"server_commit": "90c12df42"}
+        assert len(case_log.read_text(encoding="utf-8").splitlines()) == 18
+
+    def test_cli_rejects_bad_server_url(self):
+        assert main(["--live", "--server-url", "frontdoor"]) == 1
+
+    def test_cli_rejects_cue_style_without_native(self, monkeypatch):
+        monkeypatch.setattr(
+            "src.typed_decisions.tool_args_pilot._live_primitives", lambda: _FakePrimitives()
+        )
+        assert main(["--live", "--cue-style", "id_only"]) == 1
