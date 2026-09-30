@@ -607,6 +607,22 @@ class Backends(unittest.TestCase):
         self.assertEqual(argv[argv.index("-C") + 1], "/ws")
         self.assertEqual(argv[-1], "PROMPT")
 
+    def test_an_oversized_prompt_goes_on_stdin_for_codex_and_claude(self):
+        # DS41-C85: a >128 KiB argv string is E2BIG; small prompts keep argv.
+        big = "x" * (actors.ARGV_PROMPT_LIMIT_BYTES + 1)
+        codex = actors.backend_for("gpt-6.1-sol", "low")
+        self.assertEqual(codex.argv(big, Path("/ws"))[-1], "-")
+        self.assertEqual(codex.stdin_payload(big), big)
+        self.assertEqual(codex.argv("PROMPT", Path("/ws"))[-1], "PROMPT")
+        self.assertIsNone(codex.stdin_payload("PROMPT"))
+        claude = actors.backend_for("claude-opus-5-5", "xhigh")
+        argv = claude.argv(big, Path("/ws"), read_only=True)
+        self.assertNotIn(big, argv)
+        self.assertEqual(argv[argv.index("--append-system-prompt") + 2:], [])
+        self.assertEqual(claude.stdin_payload(big), big)
+        self.assertEqual(claude.argv("PROMPT", Path("/ws"))[-1], "PROMPT")
+        self.assertIsNone(claude.stdin_payload("PROMPT"))
+
     def test_a_provider_slash_model_routes_to_opencode(self):
         b = actors.backend_for("deepseek/deepseek-v4-flash", "max")
         self.assertEqual(b.kind, "opencode")

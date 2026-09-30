@@ -67,6 +67,12 @@ CODEX_DAEMON = Path.home() / ".codex/packages/app-server-daemon/current/bin/code
 CODEX = (str(CODEX_DAEMON) if os.access(CODEX_DAEMON, os.X_OK)
          else "/usr/local/share/npm-global/bin/codex")
 CLAUDE = "/home/node/.local/bin/claude"
+#: DS41-C85 (2026-09-30): Linux caps ONE argv string at MAX_ARG_STRLEN = 131072 bytes.
+#: The first Opus critic pass-2 (diff review) prompt exceeded it and the lane died with
+#: "OSError: [Errno 7] Argument list too long". Above this, codex/claude read the
+#: prompt on stdin (`codex exec -`, `claude -p` with no prompt), both verified live
+#: with a 200 KB prompt. Below it argv stays, so worker stages (argv-only) still work.
+ARGV_PROMPT_LIMIT_BYTES = 100_000
 OPENCODE = "/usr/local/share/npm-global/bin/opencode"
 DEFAULT_TIMEOUT_S = 1800
 #: 30s -> 1800s. The streak is what the operator needs to see, not each retry.
@@ -113,13 +119,21 @@ class Backend:
     binary: str
     agent: str = ""  # opencode only: `--agent <name>` from the per-run actor config
 
+    def _prompt_on_stdin(self, prompt: str) -> bool:
+        """codex/claude take the prompt in argv unless it would breach the kernel's
+        per-argument limit (DS41-C85: an Opus critic pass-2 prompt died with E2BIG)."""
+        return self.kind in ("codex", "claude") and \
+            len(prompt.encode("utf-8")) > ARGV_PROMPT_LIMIT_BYTES
+
     def argv(self, prompt: str, workspace: Path, *, read_only: bool = False) -> list[str]:
+        on_stdin = self._prompt_on_stdin(prompt)
         if self.kind == "codex":
-            # `-c` takes TOML: the value must be quoted or codex rejects it.
+            # `-c` takes TOML: the value must be quoted or codex rejects it. `-` reads
+            # the instructions from stdin (codex exec --help).
             return [self.binary, "exec", "--skip-git-repo-check",
                     *(["-s", "read-only"] if read_only else []),
                     "-m", self.model, "-c", f'model_reasoning_effort="{self.effort}"',
-                    "-C", str(workspace), prompt]
+                    "-C", str(workspace), "-" if on_stdin else prompt]
         if self.kind == "claude":
             permissions = (["--permission-mode", "plan"] if read_only
                            else ["--dangerously-skip-permissions"])
@@ -128,7 +142,7 @@ class Backend:
                     "--model", self.model, "--effort", self.effort,
                     "--append-system-prompt",
                     _CLAUDE_CRITIC_NOTE if read_only else _CLAUDE_SANDBOX_NOTE,
-                    prompt]
+                    *([] if on_stdin else [prompt])]
         if self.kind == "opencode":
             # opencode drives an EXTERNAL provider (deepseek): the prompt egresses
             # off-host, unlike the codex/claude CLIs. `--variant` is opencode's name
@@ -152,8 +166,9 @@ class Backend:
         raise ValueError(f"unknown backend kind {self.kind!r}")
 
     def stdin_payload(self, prompt: str) -> str | None:
-        """What the backend reads on stdin: the prompt for opencode, else nothing."""
-        return prompt if self.kind == "opencode" else None
+        """What the backend reads on stdin: the prompt for opencode, and for codex/claude
+        a prompt too large for argv; else nothing."""
+        return prompt if self.kind == "opencode" or self._prompt_on_stdin(prompt) else None
 
     def describe(self) -> str:
         return f"{self.kind}:{self.model}@{self.effort}"
