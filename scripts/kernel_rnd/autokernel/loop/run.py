@@ -933,8 +933,12 @@ def _carry_forward_floor(store: Path, recipe, anchor, *, frozen_requests, instru
     * only the NEWEST valid floor is considered (never shopping for a wider bar);
     * admitted only when the campaign experiment store holds anchor-guard A/A rows for
       one of `anchor_commits`, on this recipe, request bytes and pair count, recorded
-      after that floor's calibration ended, and EVERY such row is `anchor_verified`
-      with |effect_fraction x 100| <= the carried floor_pct (one excursion refuses);
+      after that floor's calibration ended; every such row must be a passed guard
+      verdict (`anchor_verified`, or the hash-proven `anchor_guard_excursion`) with a
+      numeric effect, and FEWER THAN TWO of them may sit above the carried floor_pct
+      (|effect_fraction x 100| > floor_pct). DS41-C79, operator 2026-09-30: one
+      excursion is a single sample; two refuse (two-sample persistence). Before C79 a
+      single above-floor row refused the carry and forced a 48-launch recalibration;
     * READ-ONLY, like the COR fallback: the carried row is never copied into the new
       identity directory, so the immutable exact-identity floor rule stands.
     """
@@ -1001,13 +1005,27 @@ def _carry_forward_floor(store: Path, recipe, anchor, *, frozen_requests, instru
     if not evidence:
         return None, (f"no anchor-guard A/A on the current anchor recorded after lineage "
                       f"floor {path.parent.name[:12]} was calibrated")
+    excursions = []
     for _recorded, item in evidence:
         effect = item.get("effect_fraction")
-        if (item.get("status") != "anchor_verified" or type(effect) not in (int, float)
-                or not abs(effect * 100.0) <= row["floor_pct"]):
+        # A failed guard (`anchor_mismatch`) or an effect that is not a finite-comparable
+        # number still refuses outright: that is no usable sample, not a noise sample.
+        if (item.get("status") not in ("anchor_verified", "anchor_guard_excursion")
+                or type(effect) not in (int, float) or effect != effect):
             return None, (f"anchor-guard A/A {str(item.get('attempt_id'))[:12]} "
-                          f"({item.get('status')}, effect_fraction {effect!r}) does not "
-                          f"sit inside the carried {row['floor_pct']}% floor")
+                          f"({item.get('status')}, effect_fraction {effect!r}) is not a "
+                          f"passed guard reading with a numeric effect")
+        if not abs(effect * 100.0) <= row["floor_pct"]:
+            excursions.append(item)
+    # DS41-C79, operator 2026-09-30: one excursion is a single sample; two refuse
+    # (two-sample persistence). A lone above-floor A/A no longer voids the carry.
+    if len(excursions) >= 2:
+        return None, (f"{len(excursions)} anchor-guard A/As on the current anchor sit above "
+                      f"the carried {row['floor_pct']}% floor ("
+                      + ", ".join(f"{str(item.get('attempt_id'))[:12]} "
+                                  f"{item['effect_fraction'] * 100.0:+.3f}%"
+                                  for item in excursions)
+                      + "): two excursions refuse the carry [DS41-C79]")
     _recorded, aa = max(evidence, key=lambda pair: pair[0])
     carry = {
         "schema": FLOOR_CARRY_SCHEMA, "provenance": FLOOR_CARRY_PROVENANCE,
@@ -1025,7 +1043,9 @@ def _carry_forward_floor(store: Path, recipe, anchor, *, frozen_requests, instru
         "aa_attempt_id": aa.get("attempt_id"), "aa_recorded_at": aa.get("recorded_at"),
         "aa_status": aa.get("status"),
         "aa_effect_pct": round(aa["effect_fraction"] * 100.0, 6),
-        "aa_rows_considered": len(evidence)}
+        "aa_rows_considered": len(evidence),
+        # DS41-C79: how many of those rows sat above the carried floor (0 or 1 here).
+        "aa_excursions": len(excursions)}
     return reading, carry
 
 
@@ -1062,8 +1082,9 @@ def _select_source_floor(store: Path, recipe, launch, *, frozen_requests, instru
         # DS41-C69 (operator 2026-09-28: "let's be more clever about this. Wasting sooo
         # much time over this is silly."): neither exact floor exists -- typically right
         # after a COR promotion -- so try the lineage floor under the SAME runtime
-        # recipe hash, admitted only on a fresh in-floor anchor-guard A/A. Read-only;
-        # a refusal falls through to the ordinary 24-pair calibration.
+        # recipe hash, admitted on fresh anchor-guard A/A evidence with fewer than two
+        # above-floor readings (DS41-C79, operator 2026-09-30). Read-only; a refusal
+        # falls through to the ordinary 24-pair calibration.
         carried, detail = _carry_forward_floor(
             store, recipe, launch, frozen_requests=frozen_requests, instrument=instrument,
             pairs=pairs, anchor_commits=anchor_commits)
@@ -1071,8 +1092,9 @@ def _select_source_floor(store: Path, recipe, launch, *, frozen_requests, instru
             reading, carry = carried, detail
             print(f"serving   floor carried forward from {detail['parent_floor_path']} "
                   f"({detail['floor_pct']}%): anchor-guard A/A {detail['aa_attempt_id'][:12]} "
-                  f"measured {detail['aa_effect_pct']:+.3f}% after it was calibrated "
-                  "[DS41-C69; --no-floor-carry-forward restores recalibration]")
+                  f"measured {detail['aa_effect_pct']:+.3f}% after it was calibrated, "
+                  f"{detail['aa_excursions']}/{detail['aa_rows_considered']} A/A above it "
+                  "[DS41-C69/C79; --no-floor-carry-forward restores recalibration]")
         else:
             print(f"serving   floor carry-forward refused: {detail}")
     return floor_store, reading, carry

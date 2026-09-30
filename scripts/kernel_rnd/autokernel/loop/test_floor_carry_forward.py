@@ -135,20 +135,71 @@ def test_carry_admitted_on_same_recipe_with_fresh_in_floor_aa_and_compare_admits
     assert out["decisive"] == (abs(out["effect"]) * 100 >= row["floor_pct"])
 
 
-def test_refused_when_aa_is_outside_the_carried_floor(tmp_path):
+def test_aa_outside_the_carried_floor_counts_as_an_excursion(tmp_path):
+    """DS41-C79: an above-floor row is ONE excursion whatever its guard status -- a lone
+    one admits the carry, a second refuses it."""
     recipe = _recipe()
     _parent, row, _path = _calibrated(tmp_path, recipe, "/parent")
     _aa(tmp_path, recipe, effect_pct=row["floor_pct"] + 0.5, recorded_at=_later(row))
     _store, reading, carry = _select(tmp_path, recipe, _launch(recipe, BUILD))
+    assert reading.provenance == run.FLOOR_CARRY_PROVENANCE and carry["aa_excursions"] == 1
+    _aa(tmp_path, recipe, effect_pct=-(row["floor_pct"] + 0.5), recorded_at=_later(row, 90))
+    _store, reading, carry = _select(tmp_path, recipe, _launch(recipe, BUILD))
     assert reading.floor_pct is None and reading.provenance == "absent" and carry is None
 
 
-def test_refused_when_any_later_aa_is_an_excursion(tmp_path):
+def test_single_excursion_is_admitted(tmp_path):
+    """DS41-C79, operator 2026-09-30: one excursion is a single sample (the live
+    2026-09-29 case: a hash-proven -2.145% A/A against a 1.876% floor)."""
+    recipe = _recipe()
+    _parent, row, parent_path = _calibrated(tmp_path, recipe, "/parent")
+    _aa(tmp_path, recipe, effect_pct=-(row["floor_pct"] + 0.3), recorded_at=_later(row),
+        excursion=True)
+    _store, reading, carry = _select(tmp_path, recipe, _launch(recipe, BUILD))
+    assert reading.provenance == run.FLOOR_CARRY_PROVENANCE
+    assert reading.path == parent_path and reading.floor_pct == row["floor_pct"]
+    assert carry["aa_status"] == "anchor_guard_excursion"
+    assert carry["aa_rows_considered"] == 1 and carry["aa_excursions"] == 1
+
+
+def test_two_excursions_refuse(tmp_path):
+    """DS41-C79: two above-floor A/As on the current anchor persist -- refuse."""
     recipe = _recipe()
     _parent, row, _path = _calibrated(tmp_path, recipe, "/parent")
+    _aa(tmp_path, recipe, effect_pct=row["floor_pct"] + 1, recorded_at=_later(row, 60),
+        excursion=True)
+    _aa(tmp_path, recipe, effect_pct=-(row["floor_pct"] + 1), recorded_at=_later(row, 120),
+        excursion=True)
+    carried, reason = run._carry_forward_floor(
+        tmp_path, recipe, _launch(recipe, BUILD), frozen_requests=REQUESTS,
+        instrument=serving.MATCHED_INSTRUMENT, pairs=5, anchor_commits=(TIP,))
+    assert carried is None and "two excursions refuse" in reason and "DS41-C79" in reason
+    _store, reading, carry = _select(tmp_path, recipe, _launch(recipe, BUILD))
+    assert reading.floor_pct is None and reading.provenance == "absent" and carry is None
+
+
+def test_one_excursion_among_in_floor_rows_is_admitted(tmp_path):
+    recipe = _recipe()
+    _parent, row, parent_path = _calibrated(tmp_path, recipe, "/parent")
     _aa(tmp_path, recipe, effect_pct=0.0, recorded_at=_later(row, 60))
     _aa(tmp_path, recipe, effect_pct=row["floor_pct"] + 1, recorded_at=_later(row, 120),
         excursion=True)
+    _aa(tmp_path, recipe, effect_pct=-row["floor_pct"] / 2, recorded_at=_later(row, 180))
+    _store, reading, carry = _select(tmp_path, recipe, _launch(recipe, BUILD))
+    assert reading.provenance == run.FLOOR_CARRY_PROVENANCE and reading.path == parent_path
+    assert carry["aa_rows_considered"] == 3 and carry["aa_excursions"] == 1
+    # The newest row is still the one the carry record names.
+    assert carry["aa_status"] == "anchor_verified"
+    assert carry["aa_effect_pct"] == pytest.approx(-row["floor_pct"] / 2)
+
+
+def test_a_failed_guard_row_still_refuses_outright(tmp_path):
+    """C79 relaxes the noise rule only: an `anchor_mismatch` (the run-ending verdict)
+    is no usable A/A sample and refuses on its own, even inside the floor."""
+    recipe = _recipe()
+    _parent, row, _path = _calibrated(tmp_path, recipe, "/parent")
+    _aa(tmp_path, recipe, effect_pct=0.0, recorded_at=_later(row, 60))
+    _aa(tmp_path, recipe, effect_pct=0.0, recorded_at=_later(row, 120), passed=False)
     _store, reading, carry = _select(tmp_path, recipe, _launch(recipe, BUILD))
     assert reading.floor_pct is None and carry is None
 
