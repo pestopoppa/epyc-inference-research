@@ -87,6 +87,17 @@ class Registry:
         plus op_scope refusal, then 9d's resumed reserve plus lane_error, left the
         hoist at dispatch_count 2, so every retry would have been refused as
         "configuration closed infeasible" although it was never built.
+
+        The bound is per `attempt_identity`, whose key includes the CHAMPION the diff
+        was dispatched against (and the recipe, model and surface), so it closes a
+        configuration on ONE champion only; a champion advance reopens it. A
+        `superseded` candidate never reaches this ledger: the tail session refuses it
+        (`pipeline.SerializedTail._check_base`) before `reserve_candidate` runs, so it
+        spends no retry. DS41-C89 (rows 184-189): the refusal read "configuration
+        closed infeasible" and was taken for a permanent verdict on a superseded idea;
+        in fact two NON-ANSWER dispatches of the same bytes on the SAME new champion
+        (both `oracle_unavailable`, a harness fault) had spent the bound. The reason
+        now says what the refusal is scoped to and that it is not a verdict.
         """
         try:
             self.db.execute("BEGIN IMMEDIATE")
@@ -103,7 +114,9 @@ class Registry:
                                       prior_epoch=row[3], attempt_identity=identity)
             elif row[0] >= 2 and not resumed:
                 raise DispatchRefused(
-                    "identical NON-ANSWER already retried once; configuration closed infeasible",
+                    "identical NON-ANSWER already retried once on this champion; not "
+                    "re-dispatched until the champion, recipe or diff changes (NOT a "
+                    "verdict on the idea; a rule-gate build checkpoint still resumes)",
                     duplicate_of=identity, prior_effect=row[2], prior_epoch=row[3],
                     attempt_identity=identity)
             else:

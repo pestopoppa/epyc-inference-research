@@ -61,9 +61,99 @@ def test_non_answer_gets_one_identical_retry_then_closes_infeasible():
         registry.finish(identity(), status="bench_failed", effect=None, epoch="e0")
         assert registry.reserve(identity()).dispatch_count == 2
         registry.finish(identity(), status="planner_transient", effect=None, epoch="e0")
-        with pytest.raises(D.DispatchRefused, match="closed infeasible") as caught:
+        with pytest.raises(D.DispatchRefused, match="retried once") as caught:
             registry.reserve(identity())
         assert caught.value.attempt_identity == identity()
+
+
+class _SupersedingTail:
+    """`pipeline.SerializedTail` whose champion head is set by the test."""
+
+    def __init__(self, head):
+        from autokernel.loop import pipeline
+        self.head = head
+        self.tail = pipeline.SerializedTail(lambda: self.head)
+
+    def session(self, base):
+        return self.tail.session(base)
+
+
+def _iterate_on(tail, base, registry, reserved):
+    """One real `loop.iterate` whose reservation is keyed like `run.reserve_pooled`:
+    the SAME diff bytes, the champion the lane was formed on."""
+    from autokernel.loop import gates, loop
+
+    class Planner:
+        def propose(self, context):
+            return Hypothesis("akm-ds41-sumrows-solo-rowguard", "admit SUM_ROWS solo",
+                              "no tg gain", "ggml-cpu.c", "ggml_cpu_node_is_solo")
+
+        def author(self, hypothesis, context):
+            return ("ggml-cpu.c",)
+
+    class Critic:
+        def review_hypothesis(self, hypothesis, context):
+            return loop.Review(True)
+
+        def review_patch(self, hypothesis, paths, context):
+            return loop.Review(True)
+
+    def reserve(hypothesis, paths):
+        reserved.append(registry.reserve(identity(champion=base)))
+
+    def gate(hypothesis, paths):
+        return (False, [gates.Verdict("oracle_unavailable", False,
+                                        "harness fault, NOT evidence about the patch")])
+
+    return loop.iterate(planner=Planner(), critic=Critic(), context={},
+                        measure=lambda *a: None, gate=gate, commit=lambda *a: "x",
+                        tail_session=lambda: tail.session(base),
+                        reserve_candidate=reserve, patch_rounds=1)
+
+
+def test_superseded_then_reproposed_on_a_new_anchor_is_admitted():
+    """DS41-C89. A superseded candidate spends no non-answer retry: the tail refuses
+    it before the reservation, and the identity is keyed on the champion, so the
+    re-proposal against the champion that displaced it is a fresh dispatch."""
+    with tempfile.TemporaryDirectory() as tmp:
+        registry = D.Registry(Path(tmp))
+        reserved = []
+        tail = _SupersedingTail("ad897994")
+        stale = _iterate_on(tail, "6f8e232a", registry, reserved)
+        assert stale.status == "superseded"
+        assert reserved == [] and stale.attempt_identity is None
+        # Even had the OLD champion's identity spent its whole non-answer budget,
+        # the new champion's identity is independent of it.
+        for _ in range(2):
+            registry.reserve(identity(champion="6f8e232a"))
+            registry.finish(identity(champion="6f8e232a"), status="gate_refused",
+                            effect=None, epoch="e0")
+        fresh = _iterate_on(tail, "ad897994", registry, reserved)
+        assert fresh.status != "refused_duplicate"
+        assert [r.dispatch_count for r in reserved] == [1]
+        assert reserved[0].identity == identity(champion="ad897994")
+
+
+def test_superseded_then_reproposed_on_the_same_anchor_stays_bounded():
+    """The bound still holds on ONE champion: the re-proposal's own identical
+    non-answers spend it, whatever superseded before. The reason names that scope
+    and is not a permanent verdict (the text DS41-C89 misread)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        registry = D.Registry(Path(tmp))
+        reserved = []
+        tail = _SupersedingTail("ad897994")
+        assert _iterate_on(tail, "6f8e232a", registry, reserved).status == "superseded"
+        for expected in (1, 2):
+            _iterate_on(tail, "ad897994", registry, reserved)
+            assert reserved[-1].dispatch_count == expected
+            registry.finish(reserved[-1].identity, status="gate_refused", effect=None,
+                            epoch="e0")
+        third = _iterate_on(tail, "ad897994", registry, reserved)
+        assert third.status == "refused_duplicate"
+        assert third.attempt_identity == identity(champion="ad897994")
+        reason = " ".join(third.reasons)
+        assert "retried once on this champion" in reason
+        assert "NOT a verdict" in reason and "infeasible" not in reason
 
 
 def test_changed_recipe_or_champion_reopens_in_the_persistent_registry():
