@@ -63,14 +63,14 @@ def session_id_for(run_id: str, arm: str, item_id: str) -> str:
     return f"ufh13-{run}-{arm}-{digest}"
 
 
-def v1_body(arm: str, prompt: str, session_id: str) -> dict[str, Any]:
+def v1_body(arm: str, prompt: str, session_id: str, user_id: str = USER_ID) -> dict[str, Any]:
     return {
         "model": "orchestrator",
         "messages": [{"role": "user", "content": prompt}],
         "stream": False,
         "x_tool_mode": "client",
         "x_session_id": session_id,
-        "x_user_id": USER_ID,
+        "x_user_id": user_id,
         "x_show_routing": True,
         **GENERATION,
         **ARMS[arm].body_keys,
@@ -80,9 +80,10 @@ def v1_body(arm: str, prompt: str, session_id: str) -> dict[str, Any]:
 class V1Transport:
     name = "v1"
 
-    def __init__(self, base_url: str, timeout_s: float = 3600.0) -> None:
+    def __init__(self, base_url: str, timeout_s: float = 3600.0, user_id: str = USER_ID) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout_s = timeout_s
+        self.user_id = user_id  # RI-18 sends x_user_id=ri18; UFH-13 keeps the default
 
     def describe(self) -> dict[str, Any]:
         return {
@@ -93,7 +94,7 @@ class V1Transport:
         }
 
     def ask(self, arm: str, item_id: str, prompt: str, session_id: str) -> TransportResult:
-        body = json.dumps(v1_body(arm, prompt, session_id)).encode()
+        body = json.dumps(v1_body(arm, prompt, session_id, self.user_id)).encode()
         request = urllib.request.Request(
             f"{self.base_url}/v1/chat/completions",
             data=body,
