@@ -623,6 +623,21 @@ class Backends(unittest.TestCase):
         self.assertEqual(claude.argv("PROMPT", Path("/ws"))[-1], "PROMPT")
         self.assertIsNone(claude.stdin_payload("PROMPT"))
 
+    def test_json_extraction_survives_an_unbalanced_brace_in_a_summary(self):
+        # DS41-C88: a compaction summary with a stray `{` and an echoed abstain contract,
+        # then the real reply. The brace counter returned the echo.
+        text = ('Summary: the loop body is `for (i = 0; i < n; ++i) {` and the output '
+                'contract is {"abstain": "<reason>"}.\n'
+                'Final:\n{"paths": ["ggml/src/x.c"], "note": "braces } { in a string"}')
+        self.assertEqual(actors._extract_json(text),
+                         {"paths": ["ggml/src/x.c"], "note": "braces } { in a string"})
+
+    def test_json_extraction_takes_the_last_object_and_skips_nested_ones(self):
+        text = '{"a": {"b": 1}} then {"c": 2}'
+        self.assertEqual(actors._extract_json(text), {"c": 2})
+        with self.assertRaises(actors.ProviderTransient):
+            actors._extract_json("no json { here")
+
     def test_a_provider_slash_model_routes_to_opencode(self):
         b = actors.backend_for("deepseek/deepseek-v4-flash", "max")
         self.assertEqual(b.kind, "opencode")

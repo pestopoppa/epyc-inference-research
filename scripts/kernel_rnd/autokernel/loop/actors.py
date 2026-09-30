@@ -2017,28 +2017,31 @@ def _extract_json(text: str) -> dict:
     prompt's output contract -- `{"abstain":"<reason>"}` among it (DS41 2026-09-24,
     bounded-seat A/B). Taking the last object blindly made the echo the reply. The last
     NON-echo object wins; an echo is returned only when nothing else parsed, so the
-    placeholder guards downstream still see it and refuse it."""
-    depth = 0
-    start = None
+    placeholder guards downstream still see it and refuse it.
+
+    DS41-C88: objects are found by DECODING at each `{` (`raw_decode`), not by counting
+    braces. The brace counter ignored JSON strings and prose, so one unbalanced `{` in a
+    27B compaction summary kept the depth above zero for the rest of stdout: the real
+    final `{"paths": ...}` never closed at depth 0 and the summary's `{"abstain": ...}`
+    echo was returned -- a finished, op-test-passing patch recorded as "author
+    abstained" (C83 report). A failed decode skips one character; a decoded object is
+    skipped whole, so braces inside its strings are never re-scanned."""
+    decoder = json.JSONDecoder()
     best = None
     best_echo = None
-    for index, char in enumerate(text):
-        if char == "{":
-            if depth == 0:
-                start = index
-            depth += 1
-        elif char == "}" and depth:
-            depth -= 1
-            if depth == 0 and start is not None:
-                candidate = text[start:index + 1]
-                try:
-                    parsed = json.loads(candidate)
-                except json.JSONDecodeError:
-                    continue
-                if _is_template_echo(parsed):
-                    best_echo = parsed
-                else:
-                    best = parsed
+    index = text.find("{")
+    while index != -1:
+        try:
+            parsed, end = decoder.raw_decode(text, index)
+        except json.JSONDecodeError:
+            index = text.find("{", index + 1)
+            continue
+        if isinstance(parsed, dict):
+            if _is_template_echo(parsed):
+                best_echo = parsed
+            else:
+                best = parsed
+        index = text.find("{", end)
     if best is None:
         best = best_echo
     if best is None:
