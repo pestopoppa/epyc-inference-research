@@ -289,6 +289,114 @@ def _recover_legacy_cor_build(args, head: str, candidates, *, experimental: bool
     return None
 
 
+#: Continuation fields bound to the anchor they were recorded at (source lineage,
+#: whole-source validation, LOO, reduced CPU screen). Such a continuation is never
+#: advanced to a later anchor: its meaning is the recorded anchor.
+_ANCHOR_BOUND_CONTINUATION_FIELDS = ("experimental_source_keeps", "source_lineage_keeps",
+                                     "source_validation", "source_loo", "cpu_screen")
+
+
+def _exact_store_anchor(store: Path, worktree: Path, commit: str, *,
+                        experimental: bool) -> Path | None:
+    """The newest `anchor-gen-NNN` in `store` proven to BE `commit`'s exact build."""
+    from . import serial_run
+    numbered = []
+    for path in Path(store).glob("anchor-gen-*"):
+        suffix = path.name[len("anchor-gen-"):]
+        if suffix.isdigit() and path.is_dir() and not path.is_symlink():
+            numbered.append((int(suffix), path))
+    for _number, path in sorted(numbered, reverse=True):
+        try:
+            serial_run.verify_exact_anchor(path, worktree, commit, experimental=experimental)
+        except (champion.StartupRefused, ValueError, OSError):
+            continue
+        return path
+    return None
+
+
+def _advance_superseded_continuation(args, resumed: dict, *,
+                                     experimental: bool) -> dict | None:
+    """Resume a continuation whose anchor later keeps superseded (DS41-C78).
+
+    A continuation is written only when its batch ENDS. A batch that keeps, then
+    dies before its end (parent crash, host event), leaves the branch HEAD, the
+    store's anchor generation and the durable accumulator bundle advanced past the
+    newest complete continuation -- and `pool.prune_anchor_generations` has, by
+    design, already deleted the anchor and COR generations that continuation
+    names. Every relaunch seeded from it then died: FileNotFoundError rebinding
+    the deleted anchor's DSOs, and, were the directory kept, "continuation current
+    anchor differs from current source head". Keeping stale generations would not
+    help: resume measures against the EXACT HEAD build, never an ancestor.
+
+    So the continuation is advanced to exactly what that batch's own end would
+    have recorded: the current anchor is the store generation proven (exact
+    provenance + identity, `verify_exact_anchor`) to be HEAD's build, and the COR
+    is the durable bundle's champion of record with its proven build. Admitted
+    only when HEAD DESCENDS from the recorded anchor on the same branch and the
+    COR only moved forward; anything else (no proven build, a rolled-back or
+    foreign HEAD, an anchor-bound source/screen continuation) returns None and
+    the existing refusals stand. Nothing measured is carried: the floor is
+    selected for the advanced anchor exactly as on a clean boundary (exact floor,
+    COR floor, carried-forward, or fresh calibration), the retained CPU profile
+    (bound to the old anchor commit) is dropped so the new anchor is re-profiled,
+    and the epoch derives from HEAD as it always has.
+    """
+    from . import serial_run
+    prior = resumed["current_anchor"]
+    try:
+        head = serial_run.full_commit(args.worktree, "HEAD")
+    except ValueError:
+        return None
+    if prior["commit"] == head:
+        return None
+    if any(key in resumed for key in _ANCHOR_BOUND_CONTINUATION_FIELDS):
+        return None
+
+    def is_ancestor(a: str, b: str) -> bool:
+        return subprocess.run(["git", "-C", str(args.worktree), "merge-base",
+                               "--is-ancestor", a, b], capture_output=True).returncode == 0
+
+    if not is_ancestor(prior["commit"], head):
+        return None
+    tip = _exact_store_anchor(args.store, args.worktree, head, experimental=experimental)
+    if tip is None:
+        print(f"anchor    continuation anchor {prior['commit'][:12]} superseded by HEAD "
+              f"{head[:12]}, but no store generation is proven to be HEAD's build",
+              file=sys.stderr)
+        return None
+    cor = resumed["cor_anchor"]
+    if cor is not None:
+        try:
+            peek, _note = accumulate.load_bundle(args.store, anchor_commit=head,
+                                                 is_ancestor=is_ancestor, read_only=True)
+            cor_commit = serial_run.full_commit(args.worktree, peek.champion_of_record)
+        except (accumulate.BundleRecoveryRequired, OSError, ValueError) as exc:
+            print(f"cor       superseded continuation cannot be advanced: {exc}",
+                  file=sys.stderr)
+            return None
+        if not (is_ancestor(cor["commit"], cor_commit) and is_ancestor(cor_commit, head)):
+            return None
+        if cor_commit == cor["commit"] and Path(cor["path"]).is_dir():
+            cor_path = Path(cor["path"])  # unchanged; verified exact before the claim
+        else:
+            cor_path = _exact_store_anchor(args.store, args.worktree, cor_commit,
+                                           experimental=experimental)
+            if cor_path is None:
+                print(f"cor       champion of record {cor_commit[:12]} has no proven store "
+                      "build; superseded continuation not advanced", file=sys.stderr)
+                return None
+        cor = {"path": str(cor_path.resolve()), "commit": cor_commit}
+    advanced = dict(resumed)
+    advanced["current_anchor"] = {"path": str(tip.resolve()), "commit": head}
+    advanced["cor_anchor"] = cor
+    advanced.pop("cpu_profile_reference", None)
+    print(f"anchor    continuation anchor {prior['commit'][:12]} ({Path(prior['path']).name}) "
+          f"superseded by later keeps; resuming HEAD {head[:12]} = {tip.name}"
+          + (f", COR {cor['commit'][:12]} = {Path(cor['path']).name}" if cor else "")
+          + " (exact builds verified; floor and profile re-derived for this anchor)")
+    return advanced
+
+
 def _dry_run_accumulator_and_resume(args, *, anchor_commit: str, experimental: bool,
                                     epoch: str, measurement_epoch: str,
                                     actor_config, carry=None) -> None:
@@ -1823,6 +1931,15 @@ def main(argv: list[str] | None = None) -> int:
                 parser.error("preceding batch was stopped; explicit new session required")
             if Path(resumed["worktree"]).resolve() != args.worktree.resolve():
                 parser.error("continuation worktree differs")
+            if (resumed["branch"] == (args.experimental_branch or args.champion_branch)
+                    and args.source_anchor_continuation is None
+                    and not args.validate_source_continuation):
+                # DS41-C78: a batch that kept and then died left HEAD past this
+                # continuation's (already pruned) anchor. Advance only to proven builds.
+                resumed = _advance_superseded_continuation(
+                    args, resumed, experimental=bool(
+                        (args.cpu_serving_launch or args.gpu_serving_launch)
+                        and args.experimental_branch)) or resumed
             args.anchor_build = Path(resumed["current_anchor"]["path"])
             if resumed["cor_anchor"] is not None:
                 original_cor = Path(resumed["cor_anchor"]["path"])

@@ -1741,3 +1741,161 @@ def test_required_source_loo_routes_each_validated_target_once(tmp_path):
     assert sr._pending_source_loo(state, targets) == {}
     state["source_search_counts"]["1"] = 1
     assert sr._pending_source_loo(state, targets) == {1: "subject-b"}
+
+
+# --- DS41-C78: a continuation superseded by keeps of a batch that died -------------
+
+def _c78_repo(tmp_path):
+    """A linear lineage c0..c3 plus a side commit off c0 (a foreign/rolled-back HEAD)."""
+    import subprocess
+    repo = tmp_path / "tree"
+    repo.mkdir()
+
+    def git(*argv):
+        return subprocess.run(["git", "-C", str(repo), *argv], check=True,
+                              capture_output=True, text=True).stdout.strip()
+
+    git("init", "-q", "-b", "experimental/c78")
+    git("config", "user.email", "t@example.invalid")
+    git("config", "user.name", "t")
+    commits = []
+    for index in range(4):
+        (repo / "f").write_text(str(index))
+        git("add", "f")
+        git("commit", "-q", "-m", f"c{index}")
+        commits.append(git("rev-parse", "HEAD"))
+    git("checkout", "-q", "-b", "side", commits[0])
+    (repo / "f").write_text("side")
+    git("commit", "-q", "-am", "side")
+    side = git("rev-parse", "HEAD")
+    git("checkout", "-q", "experimental/c78")
+    return repo, commits, side, git
+
+
+def _c78_gen(store, number, commit):
+    gen = store / f"anchor-gen-{number:03d}"
+    gen.mkdir(parents=True)
+    (gen / "provenance.json").write_text(json.dumps({"champion_commit": commit}))
+    return gen
+
+
+def _c78_setup(tmp_path, *, cor_commit_index=2):
+    """The DS41 run-10r shape: the newest complete continuation names anchor c1 at a
+    pruned gen and COR c0 at a pruned gen; that batch's successor kept c2 (serving
+    gate promoted it to COR) and c3, then died before writing its continuation."""
+    from types import SimpleNamespace
+    repo, commits, side, git = _c78_repo(tmp_path)
+    store = tmp_path / "store"
+    store.mkdir()
+    cor_gen = _c78_gen(store, 2, commits[2])
+    tip_gen = _c78_gen(store, 3, commits[3])
+    (store / "anchor-gen-003-prof").mkdir()   # sibling dirs are never candidates
+    resumed = {
+        "branch": "experimental/c78", "worktree": str(repo), "terminal": "complete",
+        "current_anchor": {"path": str(store / "anchor-gen-001"), "commit": commits[1]},
+        "cor_anchor": {"path": str(store / "anchor-gen-000"), "commit": commits[0]},
+        "cpu_profile_reference": {"anchor_commit": commits[1]},
+        "runtime_recipe_reference": {"locator": "x"},
+    }
+    args = SimpleNamespace(worktree=repo, store=store)
+    bundle = SimpleNamespace(champion_of_record=commits[cor_commit_index])
+    return SimpleNamespace(repo=repo, commits=commits, side=side, git=git, store=store,
+                           cor_gen=cor_gen, tip_gen=tip_gen, resumed=resumed, args=args,
+                           bundle=bundle)
+
+
+def _c78_advance(case, **kwargs):
+    with mock.patch.object(run.accumulate, "load_bundle",
+                           return_value=(case.bundle, "peek")) as peek:
+        advanced = run._advance_superseded_continuation(
+            case.args, case.resumed, experimental=kwargs.pop("experimental", False))
+    return advanced, peek
+
+
+def test_c78_superseded_continuation_advances_to_proven_head_and_bundle_cor(tmp_path):
+    """The relaunch defect: seeded from the newest complete continuation, every
+    relaunch died on the pruned anchor-gen. It must resume exactly what the dead
+    batch's own end would have recorded, with nothing measured carried over."""
+    case = _c78_setup(tmp_path)
+    advanced, peek = _c78_advance(case)
+    assert advanced is not None
+    assert advanced["current_anchor"] == {"path": str(case.tip_gen.resolve()),
+                                          "commit": case.commits[3]}
+    assert advanced["cor_anchor"] == {"path": str(case.cor_gen.resolve()),
+                                      "commit": case.commits[2]}
+    # The profile is bound to the superseded anchor: dropped, so the new one reprofiles.
+    assert "cpu_profile_reference" not in advanced
+    # Everything else is carried verbatim, and the input dict is not mutated.
+    assert advanced["runtime_recipe_reference"] == {"locator": "x"}
+    assert case.resumed["current_anchor"]["commit"] == case.commits[1]
+    # The bundle is only PEEKED (read-only), bound to HEAD.
+    assert peek.call_args.kwargs["read_only"] is True
+    assert peek.call_args.kwargs["anchor_commit"] == case.commits[3]
+
+
+def test_c78_cor_promoted_to_head_resolves_to_the_tip_generation(tmp_path):
+    case = _c78_setup(tmp_path, cor_commit_index=3)
+    advanced, _ = _c78_advance(case)
+    assert advanced["cor_anchor"] == advanced["current_anchor"]
+
+
+def test_c78_unchanged_cor_keeps_its_recorded_build(tmp_path):
+    case = _c78_setup(tmp_path, cor_commit_index=0)
+    original_cor = tmp_path / "startup-build"
+    original_cor.mkdir()
+    case.resumed["cor_anchor"] = {"path": str(original_cor), "commit": case.commits[0]}
+    advanced, _ = _c78_advance(case)
+    assert advanced["cor_anchor"] == {"path": str(original_cor.resolve()),
+                                      "commit": case.commits[0]}
+
+
+def test_c78_current_continuation_is_untouched(tmp_path):
+    case = _c78_setup(tmp_path)
+    case.git("reset", "-q", "--hard", case.commits[1])
+    advanced, peek = _c78_advance(case)
+    assert advanced is None and not peek.called
+
+
+@pytest.mark.parametrize("hazard", ["foreign_head", "no_proven_head_build",
+                                    "unattested_head_build", "cor_moved_backwards",
+                                    "cor_without_build", "anchor_bound_field"])
+def test_c78_refuses_to_advance_anything_unproven(tmp_path, hazard):
+    """Every unproven shape returns None, leaving the existing refusals in place."""
+    import shutil
+    case = _c78_setup(tmp_path)
+    if hazard == "foreign_head":
+        case.git("checkout", "-q", "side")         # HEAD does not descend from c1
+        _c78_gen(case.store, 4, case.side)
+    elif hazard == "no_proven_head_build":
+        shutil.rmtree(case.tip_gen)                  # died between commit and promotion
+    elif hazard == "unattested_head_build":
+        (case.tip_gen / "provenance.json").unlink()  # a partial promotion build
+    elif hazard == "cor_moved_backwards":
+        case.resumed["cor_anchor"]["commit"] = case.commits[3]
+        case.bundle.champion_of_record = case.commits[2]
+    elif hazard == "cor_without_build":
+        shutil.rmtree(case.cor_gen)
+    elif hazard == "anchor_bound_field":
+        case.resumed["cpu_screen"] = {"scope": "reduced"}
+    advanced, _ = _c78_advance(case)
+    assert advanced is None
+
+
+def test_c78_legacy_null_cor_is_advanced_without_inventing_one(tmp_path):
+    case = _c78_setup(tmp_path)
+    case.resumed["cor_anchor"] = None
+    advanced, peek = _c78_advance(case)
+    assert advanced["cor_anchor"] is None and not peek.called
+    assert advanced["current_anchor"]["commit"] == case.commits[3]
+
+
+def test_c78_main_resume_block_advances_before_rebinding_the_anchor(tmp_path):
+    """Wiring: `main` advances the continuation BEFORE it binds --anchor-build (the
+    dry run died in `_cpu_arm` on the pruned directory), and only for the same
+    branch and a non-source resume."""
+    import inspect
+    source = inspect.getsource(run.main)
+    advance = source.index("_advance_superseded_continuation(")
+    bind = source.index('args.anchor_build = Path(resumed["current_anchor"]["path"])')
+    first_arm = source.index("direct_launch = _cpu_arm(direct_launch, args.anchor_build)")
+    assert advance < bind < first_arm
