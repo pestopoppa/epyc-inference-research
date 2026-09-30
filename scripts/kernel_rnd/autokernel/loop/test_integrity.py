@@ -143,6 +143,32 @@ def test_common_and_reversed_tensor_literal_predicates_are_flagged(repo, predica
     assert checked.needs_confirm
 
 
+@pytest.mark.parametrize("statement", [
+    # DS41-C90: the two lines that parked akm-ds41-mmid-verify-flat-slabs.
+    "if (slab_ok && (slab_gran <= 0 || ne01 % slab_gran != 0)) slab_ok = false;",
+    "if (!iqk_mul_mat_moe_rows(ne01, cne1, ne10, (int) ne11, tA, A, src0->nb[1], "
+    "activation_type, qact, act_row, (float *) dst->data, dst->nb[1], dst->nb[2], "
+    "rmap, first_x, nrc_x)) {",
+    "if (ne00 == nb_rows && n_threads > 1) return;",
+    "if ((src0->ne[0] >> 2) == blocks) return;",
+])
+def test_literals_not_compared_with_a_tensor_subject_are_not_shape_predicates(repo, statement):
+    (repo / "ggml/src/kernel.cpp").write_text("int base = 1;\n" + statement + "\n")
+    checked = integrity.validate_candidate(repo, ("ggml/src/kernel.cpp",))
+    assert not [row for row in checked.findings if row.kind == "literal_shape_predicate"]
+
+
+@pytest.mark.parametrize("statement", [
+    "if (ne01 % 32 == 0) return;",
+    "if ((int) ne11 > 64) return;",
+    "if (src0->type != GGML_TYPE_Q8_0) return;",
+])
+def test_tied_literal_shape_predicates_are_still_flagged(repo, statement):
+    (repo / "ggml/src/kernel.cpp").write_text("int base = 1;\n" + statement + "\n")
+    checked = integrity.validate_candidate(repo, ("ggml/src/kernel.cpp",))
+    assert [row for row in checked.findings if row.kind == "literal_shape_predicate"]
+
+
 def test_added_read_of_existing_mutable_global_is_flagged(repo):
     kernel = repo / "ggml/src/kernel.cpp"
     kernel.write_text("int call_count = 0;\nint base = 1;\n")

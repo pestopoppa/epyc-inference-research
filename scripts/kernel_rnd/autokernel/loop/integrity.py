@@ -74,14 +74,24 @@ _LITERAL = re.compile(
     r"(?:\b(?:0[xX][0-9A-Fa-f]+|\d+)\b|"
     r"\bGGML_(?:TYPE|OP)_[A-Z0-9_]+\b)")
 _COMPARISON = re.compile(r"==|!=|<=|>=|<|>")
+# DS41-C90 (2026-09-30): the three tests above were only required to hold SOMEWHERE in
+# the statement, and `>` matched inside `->`. So `f(ne01, ..., src0->nb[1])` (the `>` of
+# `->`, the `1` of `nb[1]`) and `slab_gran <= 0 || ne01 % slab_gran != 0` (a literal
+# compared with a tuning variable) were "literal shape predicates": a +2.285% MUL_MAT_ID
+# keep was parked as needs-confirm with no confirm rung configured. The literal must be
+# an OPERAND of a comparison whose other side is the tensor subject (optionally cast, or
+# reduced `% LIT` / `& LIT` -- `ne01 % 32 == 0` is still a shape special case).
+_CMP_OP = r"(?:==|!=|<=|>=|(?<![-<>])>(?![>=])|(?<![<])<(?![<=]))"
+_SUBJECT_TERM = (r"(?:\(\s*\w+\s*\)\s*)?" + _TENSOR_SUBJECT.pattern
+                 + r"(?:\s*[%&]\s*" + _LITERAL.pattern + r")?")
+_TIED_PREDICATE = re.compile(
+    _SUBJECT_TERM + r"\s*" + _CMP_OP + r"\s*(?:\(\s*\w+\s*\)\s*)?" + _LITERAL.pattern
+    + r"|" + _LITERAL.pattern + r"\s*" + _CMP_OP + r"\s*" + _SUBJECT_TERM)
 
 
 def _literal_tensor_branch(statement: str) -> bool:
     """Whether an added branch compares tensor identity/shape with a literal."""
-    return bool(_BRANCH.search(statement)
-                and _TENSOR_SUBJECT.search(statement)
-                and _COMPARISON.search(statement)
-                and _LITERAL.search(statement))
+    return bool(_BRANCH.search(statement) and _TIED_PREDICATE.search(statement))
 
 
 _MUTABLE_STATE = re.compile(
