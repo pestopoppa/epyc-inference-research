@@ -58,7 +58,14 @@ from .loop import (Abstain, ActorStopped, ActorTransient, AuthorReportMissing, H
 BELIEF_CONTEXT_MODES = ("off", "on")
 BELIEF_ENV = belief_context.ENV_KEY
 
-CODEX = "/usr/local/share/npm-global/bin/codex"
+#: DS41-C80 (2026-09-30): prefer the codex build the operator's own sessions run. The
+#: app-server daemon auto-updates `current`; the npm global CLI lags (0.157.0 when the
+#: daemon was at 0.159.1), and a newer model id (`gpt-6.1-sol`) is refused by an older
+#: client ("not supported when using Codex with a ChatGPT account"). The npm install is
+#: shared by long-running interactive codex sessions, so it is not upgraded in place.
+CODEX_DAEMON = Path.home() / ".codex/packages/app-server-daemon/current/bin/codex"
+CODEX = (str(CODEX_DAEMON) if os.access(CODEX_DAEMON, os.X_OK)
+         else "/usr/local/share/npm-global/bin/codex")
 CLAUDE = "/home/node/.local/bin/claude"
 OPENCODE = "/usr/local/share/npm-global/bin/opencode"
 DEFAULT_TIMEOUT_S = 1800

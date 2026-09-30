@@ -223,6 +223,17 @@ class ContextBundle(unittest.TestCase):
         self.assertNotIn("DIMINISHING-RETURNS ESCAPE", text)
 
 
+class CodexBinary(unittest.TestCase):
+
+    def test_prefers_the_auto_updated_daemon_build(self):
+        # DS41-C80: the npm CLI lagged the daemon and refused gpt-6.1-sol.
+        import os
+        if os.access(actors.CODEX_DAEMON, os.X_OK):
+            self.assertEqual(actors.CODEX, str(actors.CODEX_DAEMON))
+        else:
+            self.assertEqual(actors.CODEX, "/usr/local/share/npm-global/bin/codex")
+
+
 class PlannerContract(unittest.TestCase):
 
     def test_original_cpu_target_reaches_planner_author_and_critic_without_gpu_constraints(self):
