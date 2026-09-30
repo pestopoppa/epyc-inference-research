@@ -292,7 +292,12 @@ def _recover_legacy_cor_build(args, head: str, candidates, *, experimental: bool
 #: Continuation fields bound to the anchor they were recorded at (source lineage,
 #: whole-source validation, LOO, reduced CPU screen). Such a continuation is never
 #: advanced to a later anchor: its meaning is the recorded anchor.
-_ANCHOR_BOUND_CONTINUATION_FIELDS = ("experimental_source_keeps", "source_lineage_keeps",
+#: DS41-C86 (2026-09-30): `experimental_source_keeps` is NOT anchor-bound for this advance.
+#: It lists only the keeps of the batch that wrote the continuation (their fold receipts stay
+#: on disk under store/fold-receipts and in that continuation file); the next batch writes its
+#: own. Refusing it made C78 decline every seed written by a batch that kept, so a mid-batch
+#: stop after a keep crashed every relaunch on the pruned anchor (run10t, 07:19Z).
+_ANCHOR_BOUND_CONTINUATION_FIELDS = ("source_lineage_keeps",
                                      "source_validation", "source_loo", "cpu_screen")
 
 
@@ -390,6 +395,24 @@ def _advance_superseded_continuation(args, resumed: dict, *,
     advanced["current_anchor"] = {"path": str(tip.resolve()), "commit": head}
     advanced["cor_anchor"] = cor
     advanced.pop("cpu_profile_reference", None)
+    # DS41-C86: the prior batch's keep receipts describe ITS anchor (lineage[-1] is that
+    # anchor's commit); carried past it they would contradict the advanced anchor. They
+    # stay recorded in the unchanged continuation file. Keeps the dead batch made after it
+    # have no receipt at all (receipts are written at batch end): name them for the fold.
+    if advanced.pop("experimental_source_keeps", None):
+        receipted = set()
+        for path in (args.store / "fold-receipts").glob("*.json"):
+            try:
+                receipted.add(json.loads(path.read_text())["kept_commit"])
+            except (OSError, ValueError, KeyError, TypeError):
+                continue
+        span = subprocess.run(["git", "-C", str(args.worktree), "rev-list", "--reverse",
+                               f"{prior['commit']}..{head}"], capture_output=True, text=True)
+        missing = [c for c in span.stdout.split() if c not in receipted]
+        if missing:
+            print("lineage   kept commits past the continuation with no fold receipt (the "
+                  "batch died before writing them; reconstruct for the fold): "
+                  + ", ".join(c[:12] for c in missing), file=sys.stderr)
     print(f"anchor    continuation anchor {prior['commit'][:12]} ({Path(prior['path']).name}) "
           f"superseded by later keeps; resuming HEAD {head[:12]} = {tip.name}"
           + (f", COR {cor['commit'][:12]} = {Path(cor['path']).name}" if cor else "")

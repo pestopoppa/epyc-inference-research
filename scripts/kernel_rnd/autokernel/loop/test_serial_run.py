@@ -1833,6 +1833,25 @@ def test_c78_superseded_continuation_advances_to_proven_head_and_bundle_cor(tmp_
     assert peek.call_args.kwargs["anchor_commit"] == case.commits[3]
 
 
+def test_c86_a_seed_from_a_batch_that_kept_advances_and_names_unreceipted_keeps(tmp_path, capsys):
+    """DS41-C86: every seed written by a batch that kept carries experimental_source_keeps.
+    C78 refused it, so a stop after a keep crashed every relaunch on the pruned anchor."""
+    case = _c78_setup(tmp_path)
+    receipts = case.args.store / "fold-receipts"
+    receipts.mkdir(parents=True, exist_ok=True)
+    (receipts / "a.json").write_text(json.dumps({"kept_commit": case.commits[2]}))
+    case.resumed["experimental_source_keeps"] = [{"path": "/x", "sha256": "0" * 64}]
+    advanced, _ = _c78_advance(case)
+    assert advanced is not None
+    assert advanced["current_anchor"]["commit"] == case.commits[3]
+    # The prior batch's receipts describe ITS anchor: not carried past it.
+    assert "experimental_source_keeps" not in advanced
+    assert "experimental_source_keeps" in case.resumed
+    # commits[3] was kept after the continuation and has no receipt: named for the fold.
+    err = capsys.readouterr().err
+    assert case.commits[3][:12] in err and case.commits[2][:12] not in err
+
+
 def test_c78_cor_promoted_to_head_resolves_to_the_tip_generation(tmp_path):
     case = _c78_setup(tmp_path, cor_commit_index=3)
     advanced, _ = _c78_advance(case)
