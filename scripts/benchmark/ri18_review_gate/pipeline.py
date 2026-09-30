@@ -85,6 +85,9 @@ class Ctx:
     margin_s: float = 120.0
     cpuset: str = ""
     skip_window: bool = False           # dry-run / tests only
+    allow_announced_pause: bool = False  # --allow-announced-pause / WS8D_ALLOW_ANNOUNCED_PAUSE=1
+    pause_file: str = window_gate.PAUSE_FILE
+    last_window_mode: str | None = None  # the admitting mode last recorded (opt-in only)
     now: Callable[[], Any] | None = None
     log: Callable[[str], None] = print
     t0: float = field(default_factory=time.monotonic)
@@ -121,7 +124,10 @@ def window_ok(ctx: Ctx, need_s: float) -> dict[str, Any]:
     if ctx.skip_window:
         return {"ok": True, "skipped": True}
     now = ctx.now() if ctx.now else None
-    return window_gate.check(need_s, window_path=ctx.window_path, cpuset=ctx.cpuset, now=now)
+    if not ctx.allow_announced_pause:
+        return window_gate.check(need_s, window_path=ctx.window_path, cpuset=ctx.cpuset, now=now)
+    return window_gate.check(need_s, window_path=ctx.window_path, cpuset=ctx.cpuset, now=now,
+                             allow_announced_pause=True, pause_path=ctx.pause_file)
 
 
 def require_window(ctx: Ctx, seg: str, need_s: float) -> None:
@@ -129,6 +135,13 @@ def require_window(ctx: Ctx, seg: str, need_s: float) -> None:
     if not verdict["ok"]:
         ctx.run.segment_event({"event": "window_refused", "segment_id": seg, "verdict": verdict})
         raise Stop(RC_WINDOW, "CPU window refused: " + "; ".join(verdict.get("reasons") or []))
+    mode = verdict.get("mode")
+    if mode and mode != ctx.last_window_mode:
+        # opt-in only: record which mode admitted the segment's items (open | announced-pause)
+        ctx.run.segment_event({"event": "window_admitted", "segment_id": seg, "mode": mode,
+                               "verdict": verdict})
+        ctx.log(f"[{seg}] CPU window admitted (mode={mode})")
+        ctx.last_window_mode = mode
 
 
 def probe_served(base_url: str, timeout: float = 5.0) -> dict[str, Any]:

@@ -429,6 +429,152 @@ class WindowGateTests(unittest.TestCase):
             self.assertEqual(hashlib.sha256(src.read_bytes()).hexdigest(), window.SOURCE_SHA256)
 
 
+# ── announced DS41 pause (opt-in) ────────────────────────────────────────────
+
+
+def _dead_pid() -> int:
+    for pid in range(4_000_000, 3_000_000, -1):
+        if not os.path.exists(f"/proc/{pid}"):
+            return pid
+    raise RuntimeError("no free pid number")
+
+
+def _ticks(pid: int) -> int:
+    stat = Path(f"/proc/{pid}/stat").read_text()
+    return int(stat[stat.rfind(")") + 2:].split()[19])
+
+
+class AnnouncedPauseTests(unittest.TestCase):
+    """What an exited DS41 loop writes (CpuWindow.finalize) + a pause file -> admitted, opt-in only."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        (self.root / "c1" / "store").mkdir(parents=True)
+        self.pause_path = self.root / "pause.json"
+        self.now = dt.datetime.now(dt.timezone.utc)
+        self.write_pause()
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def write_pause(self, **over: Any) -> None:
+        doc = {"announced_at": (self.now - dt.timedelta(minutes=30)).isoformat(),
+               "by": "workspace-76", "expected_end": (self.now + dt.timedelta(hours=6)).isoformat(),
+               "note": "27B harness on :8083"}
+        doc.update(over)
+        self.pause_path.write_text(json.dumps(doc))
+
+    def exited(self, **over: Any) -> dict[str, Any]:
+        doc = {"schema": window.SCHEMA, "state": "closed", "loop_holds_claim": False,
+               "phase": "exited", "closing_reason": "loop_exit", "est_close_at": None,
+               "expires_at": (self.now - dt.timedelta(seconds=900)).isoformat(),
+               "phase_started_at": (self.now - dt.timedelta(seconds=900)).isoformat(),
+               "cpus_reserved_by_loop": "88-95", "campaign": "c1",
+               "campaign_path": str(self.root / "c1" / "store" / "cpu-window.json"),
+               "owner": {"pid": _dead_pid(), "start_ticks": 1, "boot_id": None}}
+        doc.update(over)
+        return doc
+
+    def ev(self, doc: dict[str, Any], *, allow: bool = True, need_s: float = 600,
+           mid_run: bool = False, cpuset: str = "", avoid: str = "") -> dict[str, Any]:
+        return window.evaluate(doc, now=self.now, need_s=need_s, mid_run=mid_run, cpuset=cpuset,
+                               allow_announced_pause=allow, pause_path=str(self.pause_path),
+                               avoid_cpus=avoid)
+
+    def test_without_opt_in_nothing_changes(self):
+        v = self.ev(self.exited(), allow=False)
+        self.assertFalse(v["ok"])
+        self.assertNotIn("mode", v)
+        self.assertEqual(v, window.evaluate(self.exited(), now=self.now, need_s=600))
+
+    def test_exited_loop_with_pause_file_is_admitted(self):
+        v = self.ev(self.exited())
+        self.assertTrue(v["ok"], v["reasons"])
+        self.assertEqual(v["mode"], "announced-pause")
+        self.assertGreater(v["pause_remaining_s"], 5 * 3600)
+
+    def test_open_window_keeps_mode_open(self):
+        v = self.ev(win_doc(expires_at=(self.now + dt.timedelta(seconds=100)).isoformat(),
+                            est_close_at=(self.now + dt.timedelta(hours=1)).isoformat()))
+        self.assertEqual((v["ok"], v["mode"]), (True, "open"))
+
+    def test_refusals(self):
+        me = {"pid": os.getpid(), "start_ticks": _ticks(os.getpid()), "boot_id": None}
+        cases = {
+            "claim held": (self.exited(loop_holds_claim=True), {}),
+            "new batch startup": (self.exited(phase="startup", loop_holds_claim=True,
+                                              closing_reason=None, owner=me), {}),
+            "new owner alive": (self.exited(owner=me), {}),
+            "legacy owner_pid alive": ({**{k: v for k, v in self.exited().items() if k != "owner"},
+                                        "owner_pid": os.getpid()}, {}),
+            "measuring": (self.exited(state="closing", phase="build_and_measure",
+                                      closing_reason="build_and_measure"), {}),
+            "exit too recent": (self.exited(phase_started_at=(
+                self.now - dt.timedelta(seconds=60)).isoformat()), {}),
+            "avoided cpus": (self.exited(), {"cpuset": "48-87", "avoid": "72-79"}),
+        }
+        for name, (doc, kw) in cases.items():
+            with self.subTest(name):
+                v = self.ev(doc, **kw)
+                self.assertFalse(v["ok"])
+                self.assertIsNone(v["mode"])
+
+    def test_pause_file_rules(self):
+        cases = {
+            "expired": {"expected_end": (self.now - dt.timedelta(minutes=1)).isoformat()},
+            "not by workspace-76": {"by": "workspace-8d"},
+            "span over 24 h": {"expected_end": (self.now + dt.timedelta(hours=30)).isoformat()},
+            "does not fit": {"expected_end": (self.now + dt.timedelta(seconds=200)).isoformat()},
+        }
+        for name, over in cases.items():
+            with self.subTest(name):
+                self.write_pause(**over)
+                self.assertFalse(self.ev(self.exited())["ok"])
+        self.pause_path.unlink()
+        self.assertFalse(self.ev(self.exited())["ok"])
+        self.write_pause(expected_end=(self.now + dt.timedelta(seconds=200)).isoformat())
+        self.assertTrue(self.ev(self.exited(), mid_run=True)["ok"])   # mid-run skips the fit only
+
+    def test_live_serial_parent_refuses_unless_control_paused(self):
+        state = self.root / "c1" / "state-live"
+        state.mkdir()
+        (state / "launcher.pid").write_text(f"{os.getpid()}\n")    # written after we started
+        self.assertFalse(self.ev(self.exited())["ok"])
+        status = {"serial_control": {"desired_state": "paused", "observed_state": "paused"},
+                  "generated_at": self.now.isoformat(), "stale_after_s": 180}
+        (state / "loop-status.json").write_text(json.dumps(status))
+        self.assertTrue(self.ev(self.exited())["ok"])
+        status["serial_control"]["observed_state"] = "running"
+        (state / "loop-status.json").write_text(json.dumps(status))
+        self.assertFalse(self.ev(self.exited())["ok"])
+
+    def test_segment_runs_under_pause_and_stops_when_ds41_resumes(self):
+        out = self.root / "run"
+        wf = self.root / "win.json"
+        wf.write_text(json.dumps(self.exited()))
+        base = ("--stub-orch", "--out", str(out), "--run-id", "t", "--window-file", str(wf),
+                "--pause-file", str(self.pause_path))
+        rc, _ = cli("answer", "--suite", "s2", "--limit", "2", *base)
+        self.assertEqual(rc, pipeline.RC_WINDOW)                  # no opt-in: refused as before
+        rc, log = cli("answer", "--suite", "s2", "--limit", "2", "--allow-announced-pause", *base)
+        self.assertEqual(rc, pipeline.RC_BUDGET)
+        self.assertIn("mode=announced-pause", log)
+        events = [json.loads(line) for line in (out / "segments.jsonl").read_text().splitlines()]
+        self.assertTrue(any(e.get("event") == "window_admitted" and e.get("mode") == "announced-pause"
+                            for e in events))
+        from unittest import mock
+
+        with mock.patch.dict(os.environ, {window.PAUSE_ENV: "1"}):     # env opt-in
+            rc, _ = cli("answer", "--suite", "s2", "--limit", "1", *base)
+            self.assertEqual(rc, pipeline.RC_BUDGET)
+            wf.write_text(json.dumps(self.exited(phase="startup", loop_holds_claim=True,
+                                                 closing_reason=None)))     # DS41 resumes
+            rc, _ = cli("answer", "--suite", "s2", "--limit", "2", *base)
+        self.assertEqual(rc, pipeline.RC_WINDOW)
+        self.assertEqual(len(RunDir(out).records("answer")), 3)
+
+
 # ── segments (stub orchestrator: pure python, no import of the orchestrator) ─
 
 

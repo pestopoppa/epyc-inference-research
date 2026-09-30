@@ -24,6 +24,12 @@ Commands (each segment is resumable per item; rerun the same command to continue
   gate           stage 6: offline gate against the snapshot (CPU embedders; CPU window)
   score          all metrics + the pre-registered rule -> score.json + belief sidecar (offline)
 
+``--allow-announced-pause`` (or env ``WS8D_ALLOW_ANNOUNCED_PAUSE=1``): the CPU window gate also admits
+an announced DS41 pause (``window.evaluate_pause``); each admitting mode is logged and written to
+segments.jsonl as a ``window_admitted`` event. Default off = the gate is unchanged. The GPU segments
+(verdict, noise-verdict) send one request at a time to :8083 (the canary pair and every item are
+sequential calls), with or without the opt-in.
+
 ``--dry-run``: fake transport/primitives/retriever (the REAL orchestrator review functions when
 ``--code-root`` imports; ``--stub-orch`` for none), no window check unless ``--window-file`` is
 given, output to a scratch dir. Exit codes: 0 done, 2 usage, 3 CPU window refused / region
@@ -172,22 +178,28 @@ def run_segment(args: argparse.Namespace) -> int:
                 _log("--run-id is required when opening a new run")
                 return pipeline.RC_USAGE
             run.open(pin)
+            allow_pause = bool(args.allow_announced_pause
+                               or os.environ.get(window.PAUSE_ENV) == "1")
             ctx = pipeline.Ctx(
                 run=run, items=items, workload=workload, mode=mode, limit=args.limit,
                 budget_s=args.budget_s or DEFAULT_BUDGET_S[kind],
                 window_path=args.window_file or window.WINDOW, margin_s=args.margin_s,
                 cpuset=args.cpuset, skip_window=(mode != "real" and args.window_file is None),
-                log=_log)
+                allow_announced_pause=allow_pause, pause_file=args.pause_file, log=_log)
             device = {"verdict": "gpu", "noise-verdict": "gpu", "revise": "cpu",
                       "noise-revise": "cpu"}.get(kind, "none")
             if kind in ("revise", "noise-revise", "gate", "answer") and not ctx.skip_window:
                 pre = window.check(pipeline.planning(
                     "answer" if kind == "answer" else kind,
                     {"s1": "S1", "s2": "S2"}.get(getattr(args, "suite", None)))[1] + args.margin_s,
-                    window_path=ctx.window_path, cpuset=ctx.cpuset)
+                    window_path=ctx.window_path, cpuset=ctx.cpuset,
+                    **({"allow_announced_pause": True, "pause_path": ctx.pause_file}
+                       if allow_pause else {}))
                 if not pre["ok"]:
                     _log(f"[{kind}] CPU window refused: {pre['reasons']}")
                     return pipeline.RC_WINDOW
+                if allow_pause:
+                    _log(f"[{kind}] CPU window admitted (mode={pre.get('mode')})")
             bridge = Bridge(mode=mode, device=device, code_root=args.code_root, run_dir=run.out,
                             segment_tag=f"{kind}-{time.strftime('%Y%m%dT%H%M%S')}",
                             gpu_url=args.gpu_url, cpu_url=args.cpu_url,
@@ -299,6 +311,9 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--margin-s", type=float, default=120.0)
         p.add_argument("--cpuset", default="",
                        help="restore the sidecar gate's loop-reserved-cpu overlap test")
+        p.add_argument("--allow-announced-pause", action="store_true",
+                       help=f"also admit an announced DS41 pause (or env {window.PAUSE_ENV}=1)")
+        p.add_argument("--pause-file", default=window.PAUSE_FILE)
         p.add_argument("--served-commit", default=None)
         p.add_argument("--base-url", default=DEFAULT_BASE_URL)
         p.add_argument("--gpu-url", default=GPU_URL)
