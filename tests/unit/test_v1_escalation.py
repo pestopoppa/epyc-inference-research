@@ -404,6 +404,45 @@ def test_high_q_no_quality_issue_means_no_escalation_call(env):
     assert r.json()["choices"][0]["message"]["content"] == FRONTDOOR_ANSWER
 
 
+# ── RI-18 C1: the persistent review_gate event on the /v1 path ────────────────
+
+
+def _review_gate_events(env) -> list[dict[str, Any]]:
+    return [e for e in _tap_events(env) if e.get("event") == "review_gate"]
+
+
+def test_review_gate_event_records_wrong_and_the_revision(env):
+    _install(env)
+    r = env.client.post("/v1/chat/completions", json=_body(x_escalation="architect_general"))
+    assert r.json()["choices"][0]["message"]["content"] == REVISED_ANSWER
+    (event,) = _review_gate_events(env)
+    assert event["schema"] == "review_gate/v1" and event["path"] == "v1"
+    assert event["role"] == "frontdoor" and event["triggered"] is True
+    assert event["skip_reason"] == "scored" and event["avg_q"] == pytest.approx(0.1)
+    assert event["verdict_status"] == "wrong"
+    assert event["reviewer_role"] == "architect_general"  # the pinned consultant
+    assert event["revision_applied"] is True
+    assert event["verdict_ms"] is not None and event["revision_ms"] is not None
+
+
+def test_review_gate_event_records_unavailable_not_ok(env):
+    _install(env, answers={"architect_general": "<think>The user asks"})
+    env.client.post("/v1/chat/completions", json=_body(x_escalation="architect_general"))
+    (event,) = _review_gate_events(env)
+    assert event["verdict_status"] == "unavailable"
+    assert event["revision_applied"] is False
+
+
+def test_review_gate_event_records_a_no_trigger_evaluation(env):
+    env.state.hybrid_router = SimpleNamespace(retriever=FakeRetriever(q=0.99))
+    _install(env)
+    env.client.post("/v1/chat/completions", json=_body(x_escalation="architect_general"))
+    (event,) = _review_gate_events(env)
+    assert event["triggered"] is False and event["avg_q"] == pytest.approx(0.99)
+    assert event["threshold"] == pytest.approx(0.6)
+    assert event["verdict_status"] is None and event["revision_applied"] is None
+
+
 def test_tool_call_turn_is_never_escalated(env):
     holder = _install(
         env, client_result={"content": "", "tool_calls": [TOOL_CALL], "finish_reason": "tool_calls"}
@@ -566,7 +605,10 @@ def test_hook_failure_is_recorded_and_serves_the_unescalated_answer(env):
     def _boom(*_a, **_k):
         raise RuntimeError("retriever exploded")
 
-    env.monkeypatch.setattr(chat_review, "_should_review", _boom)
+    # RI-18: the review sites score the gate through ``review_gate_score`` (the
+    # accessor ``_should_review``'s decision is pinned to); a raise there is the hook
+    # failure.
+    env.monkeypatch.setattr(chat_review, "review_gate_score", _boom)
     holder = _install(env)
     r = env.client.post("/v1/chat/completions", json=_body(x_escalation="architect_general"))
     assert r.status_code == 200

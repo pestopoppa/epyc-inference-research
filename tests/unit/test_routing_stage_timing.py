@@ -214,6 +214,7 @@ def test_direct_stage_times_review_gate_and_skips_it_for_force_role(
     mock_app_state, mock_llm_primitives
 ) -> None:
     from src.api.routes.chat_pipeline.direct_stage import _execute_direct
+    from src.api.routes.chat_review import GateScore
 
     def run(request: ChatRequest, task_id: str) -> dict:
         rst.begin(task_id, rst.PATH_CHAT)
@@ -236,7 +237,17 @@ def test_direct_stage_times_review_gate_and_skips_it_for_force_role(
             ),
             patch("src.api.routes.chat_pipeline.stages.features") as feats,
             patch(
-                "src.api.routes.chat_pipeline.direct_stage._should_review", return_value=False
+                # RI-18: the direct site scores the gate through the accessor, timed
+                # into ``review_gate`` by ``evaluate_review_gate``.
+                "src.api.routes.chat_review.review_gate_score",
+                return_value=GateScore(
+                    avg_q=0.9,
+                    n_results=5,
+                    n_role_rows=2,
+                    skip_reason="scored",
+                    threshold=0.6,
+                    answer_chars=13,
+                ),
             ) as gate,
             patch("src.api.routes.chat_pipeline.direct_stage.score_completed_task"),
         ):

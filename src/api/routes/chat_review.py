@@ -8,9 +8,12 @@ architect verdict, fast revision, and plan review pipeline.
 from __future__ import annotations
 
 import logging
+import math
 import threading
+import time
 from collections import Counter
-from typing import TYPE_CHECKING
+from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING, Any
 
 from src.config import get_config as _get_config
 from src.constants import TASK_IR_OBJECTIVE_LEN
@@ -22,6 +25,7 @@ from src.prompt_builders import (
     build_review_verdict_prompt,
     build_revision_prompt,
 )
+from src.prompt_builders.review import REVIEW_VERDICT_QUESTION_CAP
 
 log = logging.getLogger(__name__)
 
@@ -101,6 +105,147 @@ def _should_review(state: "AppState", task_id: str, role: str, answer: str) -> b
         return False
 
 
+# ── RI-18 C2: gate score accessor ─────────────────────────────────────────
+#
+# ``review_gate_score`` is ``_should_review`` with its inputs exposed: the same checks in
+# the same order, the same retrieval, the same average. ``_should_review`` is left
+# untouched on purpose (gitnexus rates it HIGH); the equivalence
+# ``_should_review(...) == review_gate_score(...).triggered`` is pinned by
+# ``tests/unit/test_review_gate_telemetry.py`` over a fixture grid. The review call
+# sites use the accessor (one KNN, not two) so the RI-18 C1 telemetry can record
+# ``avg_q``; the RI-18 driver uses it for the offline gate against a store snapshot.
+
+GATE_SKIP_NO_ROUTER = "no_router"
+GATE_SKIP_ARCHITECT = "architect_role"
+GATE_SKIP_SHORT = "short"
+GATE_SKIP_NO_RESULTS = "no_results"
+GATE_SKIP_NO_ROLE_ROWS = "no_role_rows"
+GATE_SKIP_ERROR = "error"
+GATE_SCORED = "scored"
+#: Answers shorter than this never reach the KNN (``_should_review``'s guard).
+GATE_MIN_ANSWER_CHARS = 50
+
+
+@dataclass(frozen=True)
+class GateScore:
+    """The review gate's inputs and decision for one answer.
+
+    ``avg_q`` is set only when ``skip_reason == "scored"``: the mean Q of the answering
+    role's rows among the retrieved memories. Every other reason is a structural
+    no-review (or a caller-side precondition, ``caller:<reason>``).
+    """
+
+    avg_q: float | None
+    n_results: int
+    n_role_rows: int
+    skip_reason: str
+    threshold: float
+    answer_chars: int
+    gate_ms: float | None = None
+
+    def fires_at(self, threshold: float) -> bool:
+        """The gate's decision at ``threshold`` (``avg_q < threshold``)."""
+        return self.avg_q is not None and self.avg_q < threshold
+
+    @property
+    def triggered(self) -> bool:
+        """The production decision (the configured threshold)."""
+        return self.fires_at(self.threshold)
+
+
+def _review_threshold_or_nan() -> float:
+    try:
+        return float(_get_config().chat.review_low_q_threshold)
+    except Exception:
+        return math.nan
+
+
+def review_gate_score(
+    state: "AppState",
+    role: str,
+    answer: str,
+    *,
+    key_text: str | None = None,
+) -> GateScore:
+    """``_should_review``'s computation, returning its inputs as well as its decision.
+
+    ``key_text`` replaces only the KNN key (default: the answer, as production does);
+    the RI-18 driver uses it for the exploratory question-keyed variant. The short-answer
+    guard always applies to ``answer``.
+    """
+    answer_chars = len(answer)
+
+    def _skip(reason: str, n_results: int = 0, n_role_rows: int = 0) -> GateScore:
+        return GateScore(
+            avg_q=None,
+            n_results=n_results,
+            n_role_rows=n_role_rows,
+            skip_reason=reason,
+            threshold=_review_threshold_or_nan(),
+            answer_chars=answer_chars,
+        )
+
+    if not state.hybrid_router:
+        return _skip(GATE_SKIP_NO_ROUTER)
+    if "architect" in str(role):
+        return _skip(GATE_SKIP_ARCHITECT)
+    if answer_chars < GATE_MIN_ANSWER_CHARS:
+        return _skip(GATE_SKIP_SHORT)
+    n_results = 0
+    n_role_rows = 0
+    try:
+        retriever = state.hybrid_router.retriever
+        key = answer if key_text is None else key_text
+        task_ir = canonicalize_task_ir(
+            {"task_type": "chat", "objective": key[:TASK_IR_OBJECTIVE_LEN]}
+        )
+        results = retriever.retrieve_for_routing(task_ir)
+        if not results:
+            return _skip(GATE_SKIP_NO_RESULTS)
+        n_results = len(results)
+        role_results = [r for r in results if r.memory.action == str(role)]
+        n_role_rows = len(role_results)
+        if not role_results:
+            return _skip(GATE_SKIP_NO_ROLE_ROWS, n_results)
+        avg_q = sum(r.q_value for r in role_results) / len(role_results)
+        threshold = float(_get_config().chat.review_low_q_threshold)
+        return GateScore(
+            avg_q=avg_q,
+            n_results=n_results,
+            n_role_rows=n_role_rows,
+            skip_reason=GATE_SCORED,
+            threshold=threshold,
+            answer_chars=answer_chars,
+        )
+    except Exception as exc:
+        log.debug("Q-value review gate score failed: %s", exc)
+        return _skip(GATE_SKIP_ERROR, n_results, n_role_rows)
+
+
+def evaluate_review_gate(state: "AppState", role: str, answer: str) -> GateScore:
+    """Score the gate at a review call site: timed into RI-16's ``review_gate`` stage.
+
+    ``gate_ms`` carries the local wall time too, for paths without an RI-16 timer.
+    """
+    start = time.perf_counter()
+    gate = routing_stage_timing.call_timed(
+        "review_gate", review_gate_score, state, role, answer, accumulate=True
+    )
+    return replace(gate, gate_ms=(time.perf_counter() - start) * 1000.0)
+
+
+def review_gate_skipped(reason: str, answer: str | None) -> GateScore:
+    """A review site whose caller-side precondition failed before the gate ran."""
+    return GateScore(
+        avg_q=None,
+        n_results=0,
+        n_role_rows=0,
+        skip_reason=f"caller:{reason}",
+        threshold=_review_threshold_or_nan(),
+        answer_chars=len(answer or ""),
+    )
+
+
 # RI-22: the verdict's three outcomes. ``unavailable`` = the call raised, came back empty,
 # or produced text that starts with neither OK nor WRONG (e.g. a thinking block cut at the
 # 80-token cap). Callers still keep the answer on ``unavailable`` (a review never blocks),
@@ -150,6 +295,134 @@ def _record_verdict_status(status: str, role: str, detail: str) -> None:
         )
 
 
+# ── RI-18 C1: persistent review-gate telemetry ────────────────────────────
+#
+# Before RI-18 a /chat review left no structured record: the verdict counter above is
+# process memory, and the INFO log lines never reach ``orchestrator.log``. Every review
+# call site now emits one ``review_gate`` event per gate evaluation — including a
+# no-trigger evaluation and a caller-side skip — to the inference tap's structured
+# events file. It is the write side of a belief-kernel source
+# (``scripts/vidya/adapters/README.md`` in epyc-root). Emission is a no-op with the
+# tap off and never raises.
+
+REVIEW_GATE_TAP_EVENT = "review_gate"
+REVIEW_GATE_SCHEMA = "review_gate/v1"
+
+#: ``path`` values: where the review ran.
+REVIEW_PATH_REPL = "repl"
+REVIEW_PATH_DIRECT = "direct"
+REVIEW_PATH_UNIFIED_STREAM = "unified_stream"
+REVIEW_PATH_LEGACY_STREAM = "legacy_stream"
+REVIEW_PATH_V1 = "v1"
+
+
+def review_ms_since(start: float) -> float:
+    """Milliseconds since ``start`` (a ``time.perf_counter()`` value)."""
+    return (time.perf_counter() - start) * 1000.0
+
+
+def _round_ms(value: float | None) -> float | None:
+    return round(float(value), 3) if value is not None else None
+
+
+def review_gate_event(
+    task_id: str,
+    role: str,
+    *,
+    gate: GateScore,
+    path: str,
+    verdict_status: str | None = None,
+    reviewer_role: str | None = None,
+    revision_applied: bool | None = None,
+    verdict_ms: float | None = None,
+    revision_ms: float | None = None,
+) -> dict[str, Any]:
+    """The ``review_gate`` event fields (pure; see :func:`record_review_gate`).
+
+    ``reviewer_role`` defaults to the reviewer binding when a verdict ran (the /chat
+    sites call the verdict with ``role=None``); /v1 passes the role it pinned.
+    Timing reuses RI-16's request-scoped ``stage_ms`` (``review_gate``,
+    ``review_verdict``) when this request is the timed one; otherwise the caller's local
+    measurements. ``revision_ms`` is always local (RI-16 does not time the revision).
+    """
+    if reviewer_role is None and verdict_status is not None:
+        try:
+            reviewer_role = str(_resolve_reviewer_role())
+        except Exception:
+            reviewer_role = None
+    stage = routing_stage_timing.telemetry_for(task_id)
+    stage_ms = stage.get("stage_ms", {}) if stage else {}
+    if stage_ms.get("review_gate") is not None:
+        gate_ms = stage_ms.get("review_gate")
+        timing_source = "stage_ms"
+        if verdict_status is not None and stage_ms.get("review_verdict") is not None:
+            verdict_ms = stage_ms.get("review_verdict")
+    else:
+        gate_ms = gate.gate_ms
+        timing_source = "local"
+    avg_q = gate.avg_q
+    threshold = gate.threshold
+    return {
+        "schema": REVIEW_GATE_SCHEMA,
+        "task_id": task_id,
+        "path": path,
+        "role": str(role),
+        "triggered": gate.triggered,
+        "avg_q": round(avg_q, 6) if avg_q is not None else None,
+        "threshold": None if math.isnan(threshold) else threshold,
+        "n_results": gate.n_results,
+        "n_role_rows": gate.n_role_rows,
+        "skip_reason": gate.skip_reason,
+        "answer_chars": gate.answer_chars,
+        "verdict_status": verdict_status,
+        "reviewer_role": reviewer_role,
+        "revision_applied": revision_applied,
+        "gate_ms": _round_ms(gate_ms),
+        "verdict_ms": _round_ms(verdict_ms),
+        "revision_ms": _round_ms(revision_ms),
+        "timing_source": timing_source,
+    }
+
+
+def record_review_gate(
+    task_id: str,
+    role: str,
+    *,
+    gate: GateScore,
+    path: str,
+    verdict_status: str | None = None,
+    reviewer_role: str | None = None,
+    revision_applied: bool | None = None,
+    verdict_ms: float | None = None,
+    revision_ms: float | None = None,
+) -> bool:
+    """Emit one ``review_gate`` tap event. Returns False (never raises) when not written.
+
+    ``verdict_status`` is ``ok`` / ``wrong`` / ``unavailable`` (RI-22) when the gate
+    triggered and the verdict ran, else None — an unavailable verdict is recorded as
+    ``unavailable``, never as ``ok``. ``revision_applied`` is True only when the revision
+    ran and returned text different from the original answer.
+    """
+    try:
+        from src.runtime.inference_tap import emit_request_event
+
+        fields = review_gate_event(
+            task_id,
+            role,
+            gate=gate,
+            path=path,
+            verdict_status=verdict_status,
+            reviewer_role=reviewer_role,
+            revision_applied=revision_applied,
+            verdict_ms=verdict_ms,
+            revision_ms=revision_ms,
+        )
+        return emit_request_event(REVIEW_GATE_TAP_EVENT, **fields)
+    except Exception as exc:  # telemetry must never affect the answer
+        log.debug("review_gate tap event failed: %s", exc)
+        return False
+
+
 @routing_stage_timing.timed_stage("review_verdict", accumulate=True)
 def _architect_verdict_with_status(
     question: str,
@@ -158,6 +431,8 @@ def _architect_verdict_with_status(
     worker_digests: list[dict] | None = None,
     context_digest: str = "",
     role: str | None = None,
+    *,
+    question_cap: int = REVIEW_VERDICT_QUESTION_CAP,
 ) -> tuple[str | None, str]:
     """``_architect_verdict`` plus its RI-22 status (``ok`` / ``wrong`` / ``unavailable``).
 
@@ -166,6 +441,9 @@ def _architect_verdict_with_status(
     80-token cap is a verdict budget, not a reasoning budget) and without the registry
     ``system_prompt_suffix`` (``skip_suffix``), which reads as a second request after the
     verdict instruction. Flag off: the call is unchanged.
+
+    ``question_cap`` is the verdict prompt's question truncation (RI-18 C3); the default
+    is the production prompt.
     """
     from src.chat_completions_roles import thinking_off, thinking_roles_chat_lane_enabled
 
@@ -174,6 +452,7 @@ def _architect_verdict_with_status(
         answer,
         context_digest=context_digest,
         worker_digests=worker_digests,
+        question_cap=question_cap,
     )
     verdict_role = role or str(_resolve_reviewer_role())
     call_kwargs: dict = {}

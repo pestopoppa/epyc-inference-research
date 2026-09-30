@@ -23,7 +23,8 @@ Which embed+KNN lookup each stage contains:
                         or the rules classifier again when there is no learned router.
 * ``mode``            — ``_select_mode`` -> ``HybridRouter.route_with_mode`` (KNN).
 * ``routing_context`` — streaming turn 0 ``build_routing_context`` (KNN).
-* ``review_gate``     — ``_should_review`` (KNN over the ANSWER text).
+* ``review_gate``     — ``chat_review.review_gate_score``, ``_should_review``'s decision
+                        with its inputs exposed (RI-18; KNN over the ANSWER text).
 * ``review_verdict``  — the architect verdict LLM call the gate triggers. Reported, but
                         NOT part of ``total``: it is generation, not a routing decision.
 

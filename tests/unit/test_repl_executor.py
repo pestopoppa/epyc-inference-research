@@ -24,6 +24,20 @@ from src.session import Session, SQLiteSessionStore
 _RETIRED_ARCHITECT_ROLE = "architect_" "coding"
 
 
+def _gate(triggered: bool):
+    """A scored RI-18 ``GateScore`` whose production decision is ``triggered``."""
+    from src.api.routes.chat_review import GateScore
+
+    return GateScore(
+        avg_q=0.1 if triggered else 0.9,
+        n_results=5,
+        n_role_rows=2,
+        skip_reason="scored",
+        threshold=0.6,
+        answer_chars=60,
+    )
+
+
 # ── Test Fixtures ───────────────────────────────────────────────────────
 
 
@@ -998,7 +1012,7 @@ class TestQualityReviewGate:
 
             with patch("src.api.routes.chat_pipeline.repl_executor.run_task", return_value=success_result):
                 with patch(
-                    "src.api.routes.chat_pipeline.repl_executor._should_review"
+                    "src.api.routes.chat_pipeline.repl_executor.evaluate_review_gate"
                 ) as mock_should_review:
                     with patch(
                         "src.api.routes.chat_pipeline.repl_executor._architect_verdict_with_status"
@@ -1006,7 +1020,7 @@ class TestQualityReviewGate:
                         with patch(
                             "src.api.routes.chat_pipeline.repl_executor._fast_revise"
                         ) as mock_revise:
-                            mock_should_review.return_value = True
+                            mock_should_review.return_value = _gate(True)
                             mock_verdict.return_value = ("WRONG: The answer is 42, not 41", "wrong")
                             mock_revise.return_value = "The answer is 42"
 
@@ -1042,7 +1056,7 @@ class TestQualityReviewGate:
 
             with patch("src.api.routes.chat_pipeline.repl_executor.run_task", return_value=success_result):
                 with patch(
-                    "src.api.routes.chat_pipeline.repl_executor._should_review"
+                    "src.api.routes.chat_pipeline.repl_executor.evaluate_review_gate"
                 ) as mock_should_review:
                     with patch(
                         "src.api.routes.chat_pipeline.repl_executor._architect_verdict_with_status"
@@ -1050,7 +1064,7 @@ class TestQualityReviewGate:
                         with patch(
                             "src.api.routes.chat_pipeline.repl_executor._fast_revise"
                         ) as mock_revise:
-                            mock_should_review.return_value = True
+                            mock_should_review.return_value = _gate(True)
                             mock_verdict.return_value = (None, "ok")  # Correct
 
                             response = await _execute_repl(

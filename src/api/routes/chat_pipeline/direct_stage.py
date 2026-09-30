@@ -12,9 +12,13 @@ import time
 
 from src.api.models import ChatRequest, ChatResponse
 from src.api.routes.chat_review import (
-    _architect_verdict,
+    REVIEW_PATH_DIRECT,
+    _architect_verdict_with_status,
     _fast_revise,
-    _should_review,
+    review_ms_since,
+    evaluate_review_gate,
+    record_review_gate,
+    review_gate_skipped,
 )
 from src.api.routes.chat_utils import (
     QWEN_STOP,
@@ -31,7 +35,6 @@ from src.api.routes.chat_pipeline.telemetry import (
 from src.api.services.memrl import failure_disposition_meta, score_completed_task
 from src.api.structured_logging import task_extra
 from src.llm_primitives import LLMPrimitives
-from src.runtime import routing_stage_timing
 
 from src.api.routes.chat_pipeline.stages import _quality_escalate
 
@@ -221,33 +224,49 @@ def _execute_direct(
 
     # MemRL-informed quality review gate (skip when force_role is set —
     # seeding/eval calls should not trigger expensive architect reviews)
-    if (
-        answer
-        and not answer.startswith("[ERROR")
-        and not request.force_role
-        and routing_stage_timing.call_timed(
-            "review_gate",
-            _should_review,
-            state,
-            routing.task_id,
-            initial_role,
-            answer,
-            accumulate=True,
-        )
-    ):
-        verdict = _architect_verdict(
+    if not answer:
+        review_gate = review_gate_skipped("no_answer", answer)
+    elif answer.startswith("[ERROR"):
+        review_gate = review_gate_skipped("error_answer", answer)
+    elif request.force_role:
+        review_gate = review_gate_skipped("force_role", answer)
+    else:
+        review_gate = evaluate_review_gate(state, initial_role, answer)
+    verdict_status = None
+    verdict_ms = None
+    revision_applied = None
+    revision_ms = None
+    if review_gate.triggered:
+        _t_review = time.perf_counter()
+        verdict, verdict_status = _architect_verdict_with_status(
             question=request.prompt,
             answer=answer,
             primitives=primitives,
         )
+        verdict_ms = review_ms_since(_t_review)
+        revision_applied = False
         if verdict and verdict.upper().startswith("WRONG"):
             corrections = verdict.split(":", 1)[1].strip() if ":" in verdict else verdict
-            answer = _fast_revise(
+            _t_review = time.perf_counter()
+            revised = _fast_revise(
                 question=request.prompt,
                 original_answer=answer,
                 corrections=corrections,
                 primitives=primitives,
             )
+            revision_ms = review_ms_since(_t_review)
+            revision_applied = revised != answer
+            answer = revised
+    record_review_gate(
+        routing.task_id,
+        initial_role,
+        gate=review_gate,
+        path=REVIEW_PATH_DIRECT,
+        verdict_status=verdict_status,
+        revision_applied=revision_applied,
+        verdict_ms=verdict_ms,
+        revision_ms=revision_ms,
+    )
 
     elapsed = time.perf_counter() - start_time
     state.increment_request(mock_mode=False, turns=1)

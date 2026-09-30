@@ -30,14 +30,16 @@ order /chat calls them:
      today an alias on architect_general's :8083 process, and it stays on the 27B
      after the role swap) or by the pinned consultant (``architect_general``),
      and that answer replaces it.
-  2. ``review_gate`` — ``chat_review._should_review`` (MemRL: the answering
+  2. ``review_gate`` — ``chat_review.evaluate_review_gate`` (``_should_review``'s
+     decision via its RI-18 score accessor; MemRL: the answering
      role's mean Q-value for this answer is below
      ``chat.review_low_q_threshold``; never for an architect role or an answer
      under 50 chars) -> ``chat_review._architect_verdict`` (80-token verdict; the
      reviewer binding, ``architect_critic`` since ARCHSWAP-20260927, under ``auto``;
      the pinned consultant under ``x_escalation=architect_general``) -> on ``WRONG``, ``chat_review._fast_revise``
      (``worker_general`` rewrites the answer with the corrections; recorded as
-     ``review_gate_revision``, which is NOT a consultant call).
+     ``review_gate_revision``, which is NOT a consultant call). Every gate
+     evaluation also emits the RI-18 ``review_gate`` tap event (path ``v1``).
 
 * ``repl`` stage — the default REPL bridge. /chat's REPL stage runs only the
   review gate after the graph (``chat_pipeline/repl_executor.py``), so that is
@@ -77,6 +79,7 @@ to ``x_orchestrator_metadata.escalation`` (with ``x_show_routing``).
 from __future__ import annotations
 
 import logging
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Iterator
@@ -404,11 +407,19 @@ def _escalate_answer(
     # The review gate reads MemRL Q-values; /chat initialises MemRL on its
     # routing path, /v1 does it here (idempotent; a no-op with memrl off).
     ensure_memrl_initialized(state)
-    if (
-        answer
-        and not answer.startswith("[ERROR")
-        and chat_review._should_review(state, task_id, role, answer)
-    ):
+    if not answer:
+        review_gate = chat_review.review_gate_skipped("no_answer", answer)
+    elif answer.startswith("[ERROR"):
+        review_gate = chat_review.review_gate_skipped("error_answer", answer)
+    else:
+        review_gate = chat_review.evaluate_review_gate(state, role, answer)
+    gate_role = role
+    verdict_role = None
+    verdict_status = None
+    verdict_ms = None
+    revision_applied = None
+    revision_ms = None
+    if review_gate.triggered:
         # ARCHSWAP-20260927: /chat's verdict goes to the REVIEWER binding
         # (resolve_reviewer_role(), default architect_critic = the 27B), so ``auto``
         # keeps that target verbatim. A pinned consultant (``x_escalation=
@@ -418,6 +429,7 @@ def _escalate_answer(
 
         verdict_role = plan.target_role or str(resolve_reviewer_role())
         before = _counters(primitives)
+        t_review = time.perf_counter()
         with _tagged_trace(plan, primitives, TRIGGER_REVIEW, role, verdict_role):
             verdict, verdict_status = chat_review._architect_verdict_with_status(
                 question=question,
@@ -425,6 +437,8 @@ def _escalate_answer(
                 primitives=primitives,
                 role=verdict_role,
             )
+        verdict_ms = chat_review.review_ms_since(t_review)
+        revision_applied = False
         wrong = bool(verdict) and verdict.upper().startswith("WRONG")
         review_step = _record_step(
             plan,
@@ -442,6 +456,7 @@ def _escalate_answer(
         if wrong:
             corrections = verdict.split(":", 1)[1].strip() if ":" in verdict else verdict
             before = _counters(primitives)
+            t_review = time.perf_counter()
             with _tagged_trace(plan, primitives, TRIGGER_REVISION, role, REVISION_ROLE):
                 revised = chat_review._fast_revise(
                     question=question,
@@ -449,7 +464,9 @@ def _escalate_answer(
                     corrections=corrections,
                     primitives=primitives,
                 )
+            revision_ms = chat_review.review_ms_since(t_review)
             changed = revised != answer
+            revision_applied = changed
             _record_step(
                 plan,
                 primitives,
@@ -461,6 +478,17 @@ def _escalate_answer(
             )
             if changed:
                 answer, role = revised, REVISION_ROLE
+    chat_review.record_review_gate(
+        task_id,
+        gate_role,
+        gate=review_gate,
+        path=chat_review.REVIEW_PATH_V1,
+        verdict_status=verdict_status,
+        reviewer_role=verdict_role,
+        revision_applied=revision_applied,
+        verdict_ms=verdict_ms,
+        revision_ms=revision_ms,
+    )
 
     plan.final_answer_role = role
     return answer

@@ -32,17 +32,20 @@ from src.graph import run_task, GraphConfig, TaskDeps, TaskState
 from src.llm_primitives import LLMPrimitives
 from src.constants import TOOL_OUTPUT_MATCH_LEN
 from src.repl_environment import REPLEnvironment
-from src.runtime import routing_stage_timing
 from src.session.lease import HeldSessionLease, SessionLeaseManager
 from src.session.models import Checkpoint
 from src.session.protocol import normalize_checkpoint_for_repl_restore
 from src.structured_output.repair import parse_with_repair, primitives_completer
 
 from src.api.routes.chat_review import (
+    REVIEW_PATH_REPL,
     VERDICT_UNAVAILABLE,
     _architect_verdict_with_status,
     _fast_revise,
-    _should_review,
+    review_ms_since,
+    evaluate_review_gate,
+    record_review_gate,
+    review_gate_skipped,
 )
 from src.api.routes.chat_summarization import (
     _run_two_stage_summarization,
@@ -777,26 +780,34 @@ async def _execute_repl_body(
 
     # Quality review gate (skip when force_role is set —
     # seeding/eval calls should not trigger expensive architect reviews)
-    if (
-        (graph_result.success or getattr(graph_result, 'partial', False))
-        and request.real_mode
-        and not request.force_role
-        and routing_stage_timing.call_timed(
-            "review_gate", _should_review, state, task_id, current_role, answer, accumulate=True
-        )
-    ):
+    if not (graph_result.success or getattr(graph_result, 'partial', False)):
+        review_gate = review_gate_skipped("not_success", answer)
+    elif not request.real_mode:
+        review_gate = review_gate_skipped("mock_mode", answer)
+    elif request.force_role:
+        review_gate = review_gate_skipped("force_role", answer)
+    else:
+        review_gate = evaluate_review_gate(state, current_role, answer)
+    verdict_status = None
+    verdict_ms = None
+    revision_applied = None
+    revision_ms = None
+    if review_gate.triggered:
         log.info(
             "Review gate triggered for %s (task %s)",
             current_role,
             task_id,
             extra=task_extra(task_id=task_id, role=current_role, stage="review"),
         )
+        _t_review = time.perf_counter()
         verdict, verdict_status = await asyncio.to_thread(
             _architect_verdict_with_status,
             question=request.prompt,
             answer=answer,
             primitives=primitives,
         )
+        verdict_ms = review_ms_since(_t_review)
+        revision_applied = False
         if verdict and verdict.upper().startswith("WRONG"):
             corrections = verdict.split(":", 1)[1].strip() if ":" in verdict else verdict
             log.info(
@@ -804,13 +815,17 @@ async def _execute_repl_body(
                 corrections,
                 extra=task_extra(task_id=task_id, role=current_role, stage="review"),
             )
-            answer = await asyncio.to_thread(
+            _t_review = time.perf_counter()
+            revised = await asyncio.to_thread(
                 _fast_revise,
                 question=request.prompt,
                 original_answer=answer,
                 corrections=corrections,
                 primitives=primitives,
             )
+            revision_ms = review_ms_since(_t_review)
+            revision_applied = revised != answer
+            answer = revised
         elif verdict_status == VERDICT_UNAVAILABLE:
             # RI-22: a failed/empty/unparseable verdict keeps the answer but is NOT an OK.
             log.warning(
@@ -822,6 +837,16 @@ async def _execute_repl_body(
                 "Review verdict: OK",
                 extra=task_extra(task_id=task_id, role=current_role, stage="review"),
             )
+    record_review_gate(
+        task_id,
+        current_role,
+        gate=review_gate,
+        path=REVIEW_PATH_REPL,
+        verdict_status=verdict_status,
+        revision_applied=revision_applied,
+        verdict_ms=verdict_ms,
+        revision_ms=revision_ms,
+    )
 
     # If max turns reached without FINAL() and graph returned empty
     if not answer:
