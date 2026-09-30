@@ -44,6 +44,13 @@ MODES
   up to `AK_CHECK_PEER_WAIT_S` (default 600 s) for it to clear, then proceeds. Past the
   bound it refuses (EXIT_REFUSED): not evidence about the patch, an author may retry.
 
+LIFETIME (DS41-C84). Nothing ak-check starts outlives it: each child carries
+PR_SET_PDEATHSIG=SIGKILL (`setpriv`), a TERM/HUP/INT of ak-check (opencode's shell-tool
+timeout, a panel stop) ends every child group before it exits, every timeout ends and
+verifies the whole group, and the fence slot and lane lock are inherited by the child
+so they are held for exactly as long as the work runs. A 25 h own-session
+test-backend-ops outlived a TERMed ak-check on 2026-09-29 and was measured beside.
+
 SCRATCH. ak-check never creates a build dir of its own: the loop allocates one per
 lane per iteration and passes it as `AK_CHECK_SCRATCH` (or `--scratch`); without it
 ak-check refuses. The loop's scratch registry owns its lifetime and disk budget; when
@@ -71,6 +78,7 @@ import shlex
 import signal
 import subprocess
 import sys
+import threading
 import time
 from typing import Iterable, Iterator, Mapping, Sequence
 
@@ -189,6 +197,21 @@ def shared_fence_env(fences: Iterable[Path]) -> Iterator[None]:
             os.environ[ENV_FENCE] = previous
 
 
+@contextmanager
+def _inherited_lock(handle) -> Iterator[None]:
+    """While held, `run_bounded` children inherit this lock's fd (`_INHERITED_LOCK_FDS`):
+    the lock is released only when the last holder -- ak-check or any child -- is gone."""
+    fd = handle.fileno()
+    _INHERITED_LOCK_FDS.append(fd)
+    try:
+        yield
+    finally:
+        try:
+            _INHERITED_LOCK_FDS.remove(fd)
+        except ValueError:
+            pass
+
+
 def _open_lock(path: Path):
     path.parent.mkdir(parents=True, exist_ok=True)
     return open(path, "a+")
@@ -220,7 +243,8 @@ def sandbox_slot(fence: Path) -> Iterator[None]:
                 raise
             raise Refused("a tail measurement/calibration of this campaign is active") from None
         fcntl.flock(gate, fcntl.LOCK_UN)
-        yield
+        with _inherited_lock(slot):
+            yield
     finally:
         gate.close()
         if slot is not None:
@@ -643,29 +667,130 @@ def _cpu_text(cpus: Sequence[int]) -> str:
     return ",".join(str(c) for c in cpus)
 
 
+#: The process groups of the children `run_bounded` is waiting on right now: what a
+#: SIGTERM/SIGHUP/SIGINT of ak-check itself ends before it exits (DS41-C84: opencode's
+#: shell-tool timeout TERMed ak-check, which died of the default action and left its
+#: own-session test-backend-ops running for 25 h). A group is listed only while its
+#: leader is unreaped, so its PGID cannot have been recycled.
+_LIVE_GROUPS: set[int] = set()
+#: Re-entrant: the signal handler runs on the main thread, possibly while it holds it.
+_LIVE_LOCK = threading.RLock()
+#: Lock fds (the fence slot, the lane lock) every child inherits, so a lock follows
+#: the WORK, not the Python process: a child that somehow outlives ak-check keeps the
+#: fence held, and the tail refuses (TailFenceTimeout) instead of measuring beside it.
+_INHERITED_LOCK_FDS: list[int] = []
+#: `setpriv --pdeathsig KILL` (util-linux) in front of the child: PR_SET_PDEATHSIG
+#: survives the nice/taskset execs, so a SIGKILLed ak-check takes its child with it.
+SETPRIV = "/usr/bin/setpriv"
+GROUP_END_GRACE_S = 5.0
+
+
+def _pdeathsig_prefix() -> list[str]:
+    return [SETPRIV, "--pdeathsig", "KILL"] if os.access(SETPRIV, os.X_OK) else []
+
+
+def _end_group(pgid: int, *, grace_s: float = GROUP_END_GRACE_S) -> bool:
+    """TERM the whole group, KILL it after `grace_s`, and verify it is EMPTY (True).
+
+    `killpg(pgid, 0)` answering ESRCH is the proof that no member is left. Callers
+    pass only the PGID of a child whose leader they have not reaped yet."""
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        try:
+            os.killpg(pgid, sig)
+        except ProcessLookupError:
+            return True
+        except PermissionError:
+            return False
+        deadline = time.monotonic() + grace_s
+        while time.monotonic() < deadline:
+            if not _group_has_live_member(pgid):
+                return True
+            time.sleep(0.05)
+    return not _group_has_live_member(pgid)
+
+
+def _group_has_live_member(pgid: int) -> bool:
+    """A member that is not a zombie (the unreaped leader stays a zombie until we
+    reap it, and still answers killpg(0))."""
+    try:
+        os.killpg(pgid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    try:
+        names = os.listdir("/proc")
+    except OSError:
+        return True
+    for name in names:
+        if not name.isdigit():
+            continue
+        try:
+            text = Path(f"/proc/{name}/stat").read_text(errors="replace")
+            fields = text[text.rfind(")") + 2:].split()
+            if int(fields[2]) == pgid and fields[0] != "Z":
+                return True
+        except (OSError, ValueError, IndexError):
+            continue
+    return False
+
+
+def end_live_children() -> None:
+    """End every group `run_bounded` is waiting on (the signal path)."""
+    with _LIVE_LOCK:
+        groups = sorted(_LIVE_GROUPS)
+    for pgid in groups:
+        _end_group(pgid, grace_s=1.0)
+
+
+def install_signal_cleanup() -> None:
+    """ak-check's own TERM/HUP/INT: end the children first, then exit 128+sig. SIGKILL
+    cannot be caught: the child's PR_SET_PDEATHSIG and the loop's call-scope sweep
+    (`procguard`) cover it."""
+    def handler(signum, _frame):
+        try:
+            end_live_children()
+        finally:
+            os._exit(128 + signum)
+    for sig in (signal.SIGTERM, signal.SIGHUP, signal.SIGINT):
+        signal.signal(sig, handler)
+
+
 def run_bounded(argv: Sequence[str], *, cpus: Sequence[int], timeout_s: float,
                 cwd: Path, env: Mapping[str, str] | None = None) -> tuple[int, str, bool]:
     """(returncode, stdout+stderr, timed_out). The child is `nice -n 19 taskset -c`,
-    in its own session so a timeout ends the whole group (compiler + cc1plus)."""
-    command = ["nice", "-n", "19", "taskset", "-c", _cpu_text(cpus), *argv]
+    in its own session so a timeout ends the whole group (compiler + cc1plus), with
+    PR_SET_PDEATHSIG=SIGKILL so it cannot outlive this process, and the held lock fds
+    inherited so the fence lasts as long as the child. A timeout, an exception in this
+    thread, or a signal to ak-check (`install_signal_cleanup`) ends the group and
+    verifies it empty before the leader is reaped."""
+    command = [*_pdeathsig_prefix(), "nice", "-n", "19", "taskset", "-c", _cpu_text(cpus),
+               *argv]
     proc = subprocess.Popen(command, cwd=str(cwd), env=dict(env) if env else None,
                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-                            errors="replace", start_new_session=True)
+                            errors="replace", start_new_session=True,
+                            pass_fds=tuple(_INHERITED_LOCK_FDS))
+    with _LIVE_LOCK:
+        _LIVE_GROUPS.add(proc.pid)
+    timed_out, out = False, ""
     try:
         out, _ = proc.communicate(timeout=max(1.0, timeout_s))
-        return proc.returncode, out, False
     except subprocess.TimeoutExpired:
-        for sig in (signal.SIGTERM, signal.SIGKILL):
+        timed_out = True
+    finally:
+        if proc.returncode is None:
+            # Unreaped leader (running, or a zombie): its PGID is still pinned.
+            _end_group(proc.pid)
             try:
-                os.killpg(proc.pid, sig)
-            except ProcessLookupError:
-                break
-            try:
-                out, _ = proc.communicate(timeout=5)
-                break
-            except subprocess.TimeoutExpired:
-                out = ""
+                rest, _ = proc.communicate(timeout=5)
+                out = (out or "") + (rest or "")
+            except (subprocess.TimeoutExpired, ValueError, OSError):
+                pass
+        with _LIVE_LOCK:
+            _LIVE_GROUPS.discard(proc.pid)
+    if timed_out:
         return -9, out or "", True
+    return proc.returncode, out, False
 
 
 _DIAG = re.compile(r":\d+:\d+: (?:fatal error|error|warning): ")
@@ -1207,7 +1332,8 @@ def lane_lock(scratch: Path, wait_s: float = LANE_WAIT_S) -> Iterator[None]:
                 if time.monotonic() >= deadline:
                     raise Refused("another ak-check of this lane is still running") from None
                 time.sleep(0.5)
-        yield
+        with _inherited_lock(handle):
+            yield
     finally:
         handle.close()
 
@@ -1339,4 +1465,7 @@ __all__ = ["OP_TEST_SCRATCH_BYTES", "SCRATCH_KIND", "SCRATCH_MARKER", "scratch_p
            "wait_for_peer_region"]
 
 if __name__ == "__main__":
+    # The shim runs this file by path: only a real ak-check process takes over its own
+    # TERM/HUP/INT (never an importer such as the loop or pytest).
+    install_signal_cleanup()
     sys.exit(main())

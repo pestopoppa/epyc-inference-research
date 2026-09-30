@@ -44,7 +44,7 @@ from typing import TYPE_CHECKING
 import urllib.request
 import urllib.error
 
-from . import headline_admissibility, lifecycle_observation, residency, status
+from . import headline_admissibility, lifecycle_observation, procguard, residency, status
 from . import native_server_response as server_response
 from .loop import MeasurementFailed, MeasurementInvalid
 
@@ -992,6 +992,19 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
         except Exception as exc:
             cpu_observer_error = f"{type(exc).__name__}: {exc}"[:256]
     observe("start", "setup")
+    # DS41-C84: before this CPU launch, end what is provably this campaign's orphan
+    # (a dead run's or a closed call's process, or one inside the campaign scratch);
+    # DURING it, a campaign process that is not this loop's own and burns CPU in two
+    # consecutive intervals is an observed contradiction -- the launch is refused
+    # (MeasurementInvalid), never silently contaminated. No-op without an installed
+    # campaign guard (run.py installs one).
+    guard_watch = None
+    guard_conditions: list[dict] = []
+    if backend == "cpu":
+        try:
+            guard_watch = procguard.measurement_watch(f"serving:{recipe.name}")
+        except Exception:
+            guard_watch = None
     sampler = None
     window_start = time.time()
     request_start: float | None = None
@@ -1187,6 +1200,11 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                 cpu_observer.finish()
             except Exception as exc:
                 cpu_observer_error = f"{type(exc).__name__}: {exc}"[:256]
+        if guard_watch is not None:
+            try:
+                guard_conditions = guard_watch.finish()
+            except Exception:
+                guard_conditions = []
         window_end = time.time()
         try:
             if sampler is not None:
@@ -1236,13 +1254,16 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
             not observer_finish_ok or not observation_session.shutdown_resolved):
         raise lifecycle_observation.ObserverShutdownUnresolved(
             "lifecycle observer ownership remains unresolved; refusing a successor unit")
+    if guard_conditions:
+        cpu_invalidity = list(cpu_invalidity) + guard_conditions
     if cpu_invalidity:
         raise MeasurementInvalid("CPU arm invalid: " + ", ".join(sorted(
             {item["condition"] for item in cpu_invalidity})), {
                 "schema": "epyc.autokernel.serving_invalid_arm.v1",
                 "status": "measurement_invalid", "failed_conditions": cpu_invalidity,
                 "recipe": recipe.to_dict(), "recipe_hash": recipe.recipe_hash,
-                "resolved_recipe": resolved_recipe.to_dict(), "build_dir": str(build_dir),
+                "resolved_recipe": (resolved_recipe.to_dict() if resolved_recipe is not None
+                                    else None), "build_dir": str(build_dir),
                 "request_digest": request_digest(recipe, frozen_requests),
                 "frozen_requests": None if frozen_requests is None else [
                     {"prompt_id": prompt_id, "body_base64": base64.b64encode(body).decode("ascii"),

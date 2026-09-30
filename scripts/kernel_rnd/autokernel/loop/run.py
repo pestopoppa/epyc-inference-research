@@ -40,6 +40,7 @@ from . import (accumulate, actors, anchor, archive, bench, champion, claim, gate
 from . import actor_opencode_config
 from . import epoch_aliases
 from . import scratch
+from . import procguard
 from . import ak_check
 from . import cpu_window
 from . import resume as resume_mod
@@ -4912,6 +4913,21 @@ def main(argv: list[str] | None = None) -> int:
                 "campaign": (resolved_campaign.campaign_id if selected_target is not None
                              else "ak-loop"),
                 "state_dir": str(args.store), "run_id": scratch_run_id, "pid": os.getpid()})
+            # DS41-C84: no process outlives the call, gate or run that spawned it. The
+            # guard is installed BEFORE the run scope, so it is still installed while
+            # the scopes release their dirs (each release vacates provably-ours
+            # processes first), and its run-end sweep runs last. The start sweep ends
+            # a dead run's leftovers (dead-owner cookies, orphans in this scratch).
+            proc_guard = procguard.install(procguard.Guard(
+                store=args.store, scratch_roots=(scratch_registry[0].root,)))
+
+            def _end_proc_guard(guard=proc_guard):
+                try:
+                    guard.sweep_stale("run_end")
+                finally:
+                    procguard.uninstall(guard)
+            ownership.callback(_end_proc_guard)
+            proc_guard.sweep_stale("run_start")
             run_scope = ownership.enter_context(
                 scratch_registry[0].scope("run", name=scratch_run_id))
             scratch.install(scratch_registry[0])

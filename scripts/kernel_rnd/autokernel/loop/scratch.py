@@ -513,7 +513,29 @@ class ScratchRegistry:
         if marker is None or marker.get("registry_root") != str(self.root):
             raise ScratchRefused(f"scratch: {path} carries no marker of this registry")
         self._guard_path(path)
+        self._vacate(path)
         shutil.rmtree(path)
+
+    def _vacate(self, path: Path) -> None:
+        """DS41-C84: never pull a scratch tree from under a running process. With a
+        campaign process guard installed (`procguard.install`, run.py), provably-ours
+        processes whose cwd or exe is inside `path` are ended and verified dead first;
+        any survivor refuses the release (journalled `release_failed`; the dir stays,
+        and the next sweep retries) -- the C84 orphan ran 25 h in a deleted scratch dir."""
+        from . import procguard
+        guard = procguard.installed()
+        if guard is None:
+            return
+        record = guard.sweep_path(path)
+        if record["targets"]:
+            self._journal({"event": "vacate", "path": str(path),
+                           "ended": [row["pid"] for row in record["targets"]],
+                           "survivors": [row["pid"] for row in record["survivors"]]})
+        if record["survivors"]:
+            raise ScratchRefused(
+                f"scratch: {path} still has running process(es) inside: "
+                + ", ".join(f"pid {row['pid']} ({row.get('exe') or '?'})"
+                            for row in record["survivors"][:4]))
 
     @staticmethod
     def _admin_dir_of(path: Path) -> Path | None:
@@ -541,6 +563,7 @@ class ScratchRegistry:
             raise ScratchRefused(f"scratch: {path} is not a marked worktree of this registry")
         repo = Path(repo or marker.get("repo") or "")
         if os.path.lexists(path):
+            self._vacate(path)
             done = _git("-C", str(repo), "worktree", "remove", "--force", str(path))
             if done.returncode != 0 and os.path.lexists(path):
                 raise ScratchError(f"scratch: git worktree remove failed for {path}: "

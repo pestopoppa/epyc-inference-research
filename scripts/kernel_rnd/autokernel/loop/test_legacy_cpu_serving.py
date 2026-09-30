@@ -13,6 +13,24 @@ from .test_resolved_recipe import _artifacts, _policy, _resolve
 from .test_serving_residency import _proof, _sampler_class
 
 
+#: Prelude for every out-of-process fake (llama-server, perf) a fixture writes: exit as
+#: soon as the process that started it is gone, and never live past a hard cap. A
+#: killed pytest cannot run the `finally` that terminates its fakes, so without this a
+#: fake `llama-server` outlived its run by 1.7 days (DS41-C84, pytest-6516/6517). The
+#: parent is polled (getppid), not PR_SET_PDEATHSIG: the death signal follows the
+#: spawning THREAD, and fixtures spawn from worker threads that may end first.
+FIXTURE_PARENT_WATCH = """
+import os as _ak_os, threading as _ak_threading, time as _ak_time
+def _ak_parent_watch(_parent=_ak_os.getppid(),
+                     _cap=float(_ak_os.environ.get("AK_FIXTURE_MAX_S", "900"))):
+    _end = _ak_time.monotonic() + _cap
+    while _parent != 1 and _ak_os.getppid() == _parent and _ak_time.monotonic() < _end:
+        _ak_time.sleep(0.25)
+    _ak_os._exit(0)
+_ak_threading.Thread(target=_ak_parent_watch, daemon=True, name="ak-parent-watch").start()
+"""
+
+
 def _requests():
     return tuple((f"prompt-{slot}", json.dumps({
         "prompt": f"original workload {slot}", "n_predict": 8, "temperature": 0.0,
@@ -26,6 +44,7 @@ def _server(build, template, port, rate):
     binary.parent.mkdir(parents=True)
     raw_log, pid_log = build / "requests.jsonl", build / "pids"
     binary.write_text(f'''#!{sys.executable}
+{FIXTURE_PARENT_WATCH}
 import http.server, json, os, sys
 from pathlib import Path
 Path({str(pid_log)!r}).open("a").write(str(os.getpid()) + "\\n")

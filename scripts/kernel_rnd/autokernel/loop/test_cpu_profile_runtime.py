@@ -18,6 +18,7 @@ from . import cpu_profile as cp, native_model_preparation as mp, planned_serving
 from . import profile_preparation as pp, resolved_recipe as rr, scheduling as sched
 from . import serving, standalone_inputs as si, unified_driver as ud
 from . import measurement_capture as mc
+from .test_legacy_cpu_serving import FIXTURE_PARENT_WATCH
 from .test_profile_preparation_runtime import SyntheticSelectedProfileProvider, _start
 from .test_standalone_inputs import _document, _verifier
 from .test_unified_driver import runtime_driver, _prompt_manifest
@@ -42,7 +43,7 @@ def fixture(tmp_path, *, perf_failure="", server_failure="", original_request=No
     events = tmp_path / "child-events"
     python = str(Path(sys.executable).resolve())
     server = build / "bin/llama-server"
-    server.write_text(f"#!{python}\n" + f'''
+    server.write_text(f"#!{python}\n" + FIXTURE_PARENT_WATCH + f'''
 import ctypes,json,os,sys,time
 from pathlib import Path
 from http.server import BaseHTTPRequestHandler,HTTPServer
@@ -70,7 +71,7 @@ HTTPServer(('127.0.0.1',int(sys.argv[sys.argv.index('--port')+1])),Handler).serv
 ''')
     server.chmod(0o700)
     perf = tmp_path / "synthetic-perf"
-    perf.write_text(f"#!{python}\n" + f'''
+    perf.write_text(f"#!{python}\n" + FIXTURE_PARENT_WATCH + f'''
 import json,os,select,signal,sys,time
 from pathlib import Path
 events=Path({str(events)!r})

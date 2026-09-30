@@ -18,6 +18,7 @@ from . import serving
 from .test_native_parent_evidence import _case
 from .test_planned_serving import _plan, _prompts, _recipes, Provider
 from .test_resolved_recipe import _resolve
+from .test_legacy_cpu_serving import FIXTURE_PARENT_WATCH
 from .test_serving_residency import _proof, _sampler_class
 
 
@@ -320,8 +321,9 @@ import subprocess
 import sys
 from unittest import mock
 from autokernel.loop import serving, worker_lifecycle as wl
+from autokernel.loop.test_legacy_cpu_serving import FIXTURE_PARENT_WATCH
 
-HTTP_SERVER = """
+HTTP_SERVER = FIXTURE_PARENT_WATCH + """
 import json, os, sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 class Handler(BaseHTTPRequestHandler):
@@ -377,6 +379,10 @@ def observed_measure(template, build_dir, port, **kwargs):
             mock.patch.object(serving, 'verify_env_readback', lambda *a, **k: None):
         return serving._measure_once(template, build_dir, port, **kwargs)
 '''
+# The contained script cannot import this test package: inline the fixture prelude.
+_CONTAINED_HTTP_FIXTURE = _CONTAINED_HTTP_FIXTURE.replace(
+    "from autokernel.loop.test_legacy_cpu_serving import FIXTURE_PARENT_WATCH",
+    "FIXTURE_PARENT_WATCH = " + repr(FIXTURE_PARENT_WATCH))
 
 
 def test_real_http_raw_capture_persists_after_requests_before_owned_teardown(tmp_path, monkeypatch):

@@ -49,7 +49,7 @@ import time
 from typing import Any, Callable, Mapping, Sequence
 import uuid
 
-from . import actor_metrics, belief_context, integrity, scratch
+from . import actor_metrics, belief_context, integrity, procguard, scratch
 from .loop import (Abstain, ActorStopped, ActorTransient, AuthorReportMissing, Hypothesis,
                    Review)
 
@@ -610,7 +610,23 @@ def _run_stoppable(argv: list[str], *, out, err, timeout_s: int, cwd: Path,
     `budget_s` (OAB-23): past it the group is ended the same way and `_BudgetSpent` is
     raised -- checked after the stop predicate and before the hard timeout, so a stop
     stays a stop and the timeout stays the timeout.
+
+    DS41-C84: the group kill cannot reach what the actor's tools start in sessions of
+    their own (opencode's shell tool runs every command detached; ak-check's children
+    run in yet another session). The call runs inside a `procguard` call scope: every
+    descendant carries the call's cookie, and when the call ends -- on EVERY path --
+    each process still carrying it is ended and verified dead.
     """
+    with procguard.current().call_scope(extra.get("env")) as env:
+        return _run_stoppable_in(argv, out=out, err=err, timeout_s=timeout_s, cwd=cwd,
+                                 should_stop=should_stop, extra={**extra, "env": env},
+                                 poll_s=poll_s, grace_s=grace_s, budget_s=budget_s)
+
+
+def _run_stoppable_in(argv: list[str], *, out, err, timeout_s: int, cwd: Path,
+                      should_stop: Callable[[], bool], extra: Mapping[str, Any],
+                      poll_s: float | None, grace_s: float | None,
+                      budget_s: float | None) -> subprocess.CompletedProcess:
     poll_s = STOP_POLL_S if poll_s is None else poll_s
     grace_s = STOP_GRACE_S if grace_s is None else grace_s
     payload = extra.get("input")
@@ -774,8 +790,12 @@ def _run_agent_in(attempt: "scratch.Scope", prompt: str, *, workspace: Path,
                                 dir=attempt.tmpdir()) as err:
         try:
             if should_stop is None and not budget_s:
-                done = subprocess.run(argv, stdout=out, stderr=err, text=True,
-                                      timeout=timeout_s, cwd=str(workspace), **extra)
+                # `subprocess.run` ends only the direct child on its timeout: the call
+                # scope ends every descendant still carrying this call's cookie.
+                with procguard.current().call_scope(extra.get("env")) as scoped_env:
+                    done = subprocess.run(argv, stdout=out, stderr=err, text=True,
+                                          timeout=timeout_s, cwd=str(workspace),
+                                          **{**extra, "env": scoped_env})
             else:
                 done = _run_stoppable(argv, out=out, err=err, timeout_s=timeout_s,
                                       cwd=workspace, should_stop=should_stop or (lambda: False),
