@@ -149,7 +149,7 @@ count = 0 if stopped[0] else int(sr.option(argv, "--iterations"))
 prior = sr.option(argv, "--resume-run")
 anchor = Path(sr.option(argv, "--anchor-build"))
 if prior:
-    original, _ = sr.load_completed(Path(prior), expected_binding=sr.resume_binding(argv))
+    original, _ = sr.load_resume(Path(prior), argv)
     anchor = Path(original["current_anchor"]["path"])
 row = sr.continuation(argv=argv, binding=sr.input_binding(argv),
     terminal="stopped" if stopped[0] else "complete",

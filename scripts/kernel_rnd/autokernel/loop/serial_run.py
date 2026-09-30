@@ -298,9 +298,15 @@ RUNTIME_PROTOCOL_SWITCHES = frozenset({"--calibrate-runtime"})
 #: opencode context cap, the planner's reasoning history, where the context bundle lives
 #: and how many authors race -- and are excluded for the same reason: an arm switch at a
 #: batch boundary must carry the source lineage, not orphan it.
+#: DS41-C80 (operator 2026-09-30, planner -> gpt-6.1-sol, critic -> claude-opus-5-5): the
+#: run-wide planner/critic models and efforts are the same kind of actor provenance --
+#: `--lane-actor-models` already let lane 1's model change at a boundary while lane 0's
+#: stayed bound, and a lineup change refused resume with "different stable resume inputs".
 POOL_ACTOR_FLAGS = frozenset({"--workers", "--lane-actor-models",
                               "--actor-context-limit", "--actor-planner-reasoning-history",
-                              "--actor-context-mode", "--actor-authors"})
+                              "--actor-context-mode", "--actor-authors",
+                              "--planner-model", "--planner-effort",
+                              "--critic-model", "--critic-effort"})
 
 
 def resume_binding(argv) -> dict:

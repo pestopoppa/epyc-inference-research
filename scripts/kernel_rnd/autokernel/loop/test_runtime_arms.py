@@ -341,7 +341,10 @@ def test_enabling_the_runtime_protocol_keeps_the_continuation_binding(tmp_path):
         serial_run.resume_binding(base)
     assert serial_run.resume_binding(enabled + ["--pairs", "9"]) != \
         serial_run.resume_binding(base)
-    assert serial_run.resume_binding(enabled + ["--planner-model", "x/y"]) != \
+    # DS41-C80: the planner/critic lineup is actor provenance too.
+    assert serial_run.resume_binding(
+        enabled + ["--planner-model", "gpt-6.1-sol", "--planner-effort", "low",
+                   "--critic-model", "claude-opus-5-5", "--critic-effort", "xhigh"]) == \
         serial_run.resume_binding(base)
 
 
