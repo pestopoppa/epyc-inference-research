@@ -44,8 +44,8 @@ _SCORER_TMP_ROOT = Path("/mnt/raid0/llm/tmp")
 # PROCESS — the Qwen3.8-27B Q8 on the MI210 (:8083), which now serves
 # architect_critic. Keeping the label on architect_general would silently rebind the
 # judge MODEL to Flash-Next on the serial whole-machine CPU instance (:8074): a
-# measurement-instrument change (CJ-11 judge binding) plus a scorer tail sized for
-# the GPU lane (30 s judge timeout). Rebinding the judge MODEL is an operator/CJ-11
+# measurement-instrument change (CJ-17 judge binding) plus a scorer tail sized for
+# the GPU lane (30 s judge timeout). Rebinding the judge MODEL is an operator/CJ-17
 # decision, not a side effect of a role relabel.
 DEFAULT_LLM_JUDGE_ROLE = "architect_critic"
 
@@ -164,14 +164,14 @@ EXCLUDE_UNPARSEABLE_ANSWERS = True
 # TD-21.9/21.10/21.15 (judge OUTPUT SHAPE; NOT YET RATIFIED — see the proposed
 # "E19" era text in the ratification script). TD-21.32 (handoff): judge
 # OUTPUT SHAPE (this flag) is orthogonal to judge BINDING (WHICH model —
-# CJ-11, `canonical-judge-suite-revamp.md`, `src/llm.py:61-64`). This flag
+# CJ-17 (was CJ-11), `canonical-judge-suite-revamp.md`, `src/llm.py:61-64`). This flag
 # touches neither role resolution nor endpoint precedence — every site below
 # still resolves the judge via the SAME existing seam
 # (`scoring_config["judge_role"]` > `LLM_JUDGE_ROLE` env >
 # `architect_critic` [the :8083 27B; `architect_general` before the 2026-09-27
 # ARCHITECT SWAP], `_llm_judge_force_role`) and only constrains + parses
 # whatever judge that seam already points at. Rebinding the judge later
-# (CJ-11/CJ-13/CJ-14) changes nothing here.
+# (CJ-17/CJ-13/CJ-14) changes nothing here.
 #
 # Flipping this to True changes THREE sites:
 #

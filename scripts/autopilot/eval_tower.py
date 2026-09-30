@@ -143,8 +143,8 @@ EVAL_SCORING_SCHEDULE_ID = "model_judge_tail_v4_gpu_lifecycle_quiescence"
 # PROCESS — the Qwen3.8-27B Q8 on the MI210 (:8083), which now serves
 # architect_critic. Keeping the label on architect_general would silently rebind the
 # judge MODEL to Flash-Next on the serial whole-machine CPU instance (:8074): a
-# measurement-instrument change (CJ-11 judge binding) plus a scorer tail sized for
-# the GPU lane (30 s judge timeout). Rebinding the judge MODEL is an operator/CJ-11
+# measurement-instrument change (CJ-17 judge binding) plus a scorer tail sized for
+# the GPU lane (30 s judge timeout). Rebinding the judge MODEL is an operator/CJ-17
 # decision, not a side effect of a role relabel.
 DEFAULT_LLM_JUDGE_ROLE = "architect_critic"
 
