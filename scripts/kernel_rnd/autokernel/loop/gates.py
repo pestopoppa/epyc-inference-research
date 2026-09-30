@@ -270,9 +270,46 @@ def _iqk_q45_dot_hunks_confined(source_text: str | None,
 #
 # route -> (path, container prefix, fence prefix, admitted bodies, native ops,
 #           forbidden added-line pattern, what the author is told)
-_DS41_SYNC_OPS = ("MUL_MAT", "MUL_MAT_ID", "ADD", "MUL", "RMS_NORM", "SCALE", "CLAMP",
-                  "CONT", "CPY", "CONCAT", "GLU", "UNARY", "SUM_ROWS", "GET_ROWS",
-                  "SET_ROWS", "ROPE", "SOFT_MAX", "ARGSORT", "FLASH_ATTN_EXT")
+_DS41_GRAPH_OPS = ("MUL_MAT", "MUL_MAT_ID", "ADD", "MUL", "RMS_NORM", "SCALE", "CLAMP",
+                   "CONT", "CPY", "CONCAT", "GLU", "UNARY", "SUM_ROWS", "GET_ROWS",
+                   "SET_ROWS", "ROPE", "SOFT_MAX", "ARGSORT", "FLASH_ATTN_EXT")
+# cpu_graph_sync edits decide WHICH nodes run solo on thread 0 and which barriers remain,
+# so every op `ggml_cpu_node_is_solo` admits is affected whether or not the DS41 list above
+# named it (DIV closes DS41's own MoE weight normalization).  TOPK_MOE is the one native
+# fixture that runs that normalization chain (GET_ROWS, SUM_ROWS, CLAMP, DIV; with norm and
+# SQRT_SOFTPLUS gating among its cases) as consecutive nodes of ONE graph through the
+# candidate's graph walk: a single-op case never forms the multi-node solo run a
+# solo-eligibility change collapses (DS41-C96).
+_SOLO_ELIGIBLE_OPS = ("SUB", "DIV", "SQR", "SQRT", "LOG", "SIN", "COS", "FILL", "DUP")
+_DS41_SYNC_OPS = (*_DS41_GRAPH_OPS, *_SOLO_ELIGIBLE_OPS, "TOPK_MOE")
+
+#: `test-backend-ops -o` compares its list against `ggml_op_desc()`, which names a UNARY
+#: or GLU node by its SUB-op (SILU, SWIGLU, ...) and never returns "UNARY" or "GLU". So
+#: `-o GLU` selected 0/0 CPU cases and every cpu_graph_sync candidate was refused
+#: `oracle_unavailable` at its GLU suite after ten passing ones: 10 gate refusals, 5
+#: scope_blocked hypotheses and the run10w abstention storm (DS41-C96). The scope keeps
+#: the ggml op TYPE; the oracle passes every sub-op name (ggml.c GGML_UNARY_OP_NAME /
+#: GGML_GLU_OP_NAME, in table order) except those in UNSELECTABLE_ON_ANCHOR.
+#:
+#: EXP and EXPM1 are left out because they FAIL ON THE ANCHOR ITSELF. Their f32 cases draw
+#: inputs from [-150, 150], exp(150) overflows to +inf in both arms, the error is
+#: non-finite and test-backend-ops prints "ERR is invalid ... FAIL". That is 8 of 196
+#: cases on anchor-gen-011 (2026-09-30). Selecting them would turn every cpu_graph_sync
+#: candidate into a "UNARY failed on CPU" correctness verdict that says nothing about the
+#: patch, so they are named here rather than silently absent. The other 20 unary sub-ops
+#: pass 180/180 on that anchor, and GLU passes 128/128.
+UNSELECTABLE_ON_ANCHOR = {"UNARY": ("EXP", "EXPM1")}
+BACKEND_OPS_SELECTORS = {
+    "UNARY": ("ABS", "SGN", "NEG", "STEP", "TANH", "ELU", "RELU", "SIGMOID", "GELU",
+              "GELU_QUICK", "SILU", "HARDSWISH", "HARDSIGMOID", "SOFTPLUS",
+              "GELU_ERF", "XIELU", "FLOOR", "CEIL", "ROUND", "TRUNC"),
+    "GLU": ("REGLU", "GEGLU", "SWIGLU", "SWIGLU_OAI", "GEGLU_ERF", "GEGLU_QUICK"),
+}
+
+
+def backend_ops_selector(op: str) -> str:
+    """The `test-backend-ops -o` list that selects the cases of ggml op `op`."""
+    return ",".join(BACKEND_OPS_SELECTORS.get(op, (op,)))
 
 # cpu_norm_rowsplit: HEAD's rms_norm numerics, spelled as HEAD spells them. A within-row
 # split may re-add these lines (moved or re-indented), but no other added code line may
@@ -366,7 +403,12 @@ CPU_SOURCE_ROUTES = (
                        "bodies; signatures, the stub and every other helper unchanged")),
     # Per-node synchronisation, graph walk, tiny-solo selection and in-backend fusion.
     # Numerics-free by construction, so the independent reference is the full scalar
-    # quant suite (it runs through the candidate's barriers) plus every DS41 op suite.
+    # quant suite (it runs through the candidate's barriers) plus every DS41 and
+    # solo-eligible op suite and the whole-graph TOPK_MOE chain. Those native suites are
+    # NOT independent of the walk: use_ref disables only fusion, so the reference arm runs
+    # the same edited scheduler (at 4 threads against the candidate's full team). They
+    # catch per-op numerics and publish-before-consume races; a deterministic walk defect
+    # shared by both arms is caught only where the scalar quant reference reaches it.
     CpuSourceRoute(
         route="cpu_graph_sync",
         path="ggml/src/ggml-cpu/ggml-cpu.c",
@@ -753,7 +795,8 @@ def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
     if require_reference and not re.fullmatch(r"ROCm[0-9]+", backend):
         return Verdict("oracle_unavailable", False,
                        "candidate-local CPU reference is not independent for a CPU source edit")
-    argv = [str(binary), "test", "-o", op, "-b", backend, "-j", "1"]
+    # `-o` takes op_desc names: UNARY/GLU expand to their sub-ops (DS41-C96).
+    argv = [str(binary), "test", "-o", backend_ops_selector(op), "-b", backend, "-j", "1"]
     environment = residency.loader_env(binary)
     if resolved_recipe is not None:
         resolved_recipe.validate_launch(resolved_recipe.template, build_dir, resolved_recipe.port)
@@ -799,8 +842,8 @@ def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
         # suite did not execute. Blaming the patch for this is how a harness fault
         # becomes a fabricated scientific result.
         return Verdict("oracle_unavailable", False,
-                       f"test-backend-ops did not prove a nonempty {backend} op suite; "
-                       "this is a harness fault, NOT evidence about the patch",
+                       f"test-backend-ops did not prove a nonempty {backend} op suite "
+                       f"for {op}; this is a harness fault, NOT evidence about the patch",
                        output[-2000:])
     if block.group(2) == "FAIL":
         return Verdict("correctness", False, f"{op} failed on {backend}",
@@ -821,7 +864,8 @@ def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
         selected = [case for frame in parsed.backends
                     if frame.name == backend and not frame.skipped
                     for case in frame.cases
-                    if case.op == op and case.status != "not_supported"]
+                    if case.op in backend_ops_selector(op).split(",")
+                    and case.status != "not_supported"]
         if (not selected or any(not case.passed or case.reference is None
                                 for case in selected)):
             return Verdict("oracle_unavailable", False,
@@ -947,9 +991,12 @@ def run_all(*checks: "Callable[[], Verdict]") -> tuple[bool, list[Verdict]]:
     return True, collected
 
 
-__all__ = ["BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S", "CPU_SOURCE_ROUTES",
+__all__ = ["BACKEND_OPS_SELECTORS", "BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S",
+           "CPU_SOURCE_ROUTES",
            "CPU_SOURCE_ROUTE_PATHS", "DEFAULT_TARGETS",
-           "PROMOTION_TARGETS", "Verdict", "compiles", "cpu_source_route", "deterministic",
+           "PROMOTION_TARGETS", "UNSELECTABLE_ON_ANCHOR", "Verdict",
+           "backend_ops_selector", "compiles",
+           "cpu_source_route", "deterministic",
            "affected_op_scope", "check_cpu_gdn_reference", "check_cpu_iqk_reference",
            "check_cpu_route_reference", "no_fallback_dispatch",
            "op_correctness", "run_all"]

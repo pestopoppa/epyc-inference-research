@@ -225,9 +225,17 @@ class, or before the disabled-build stub.
   `ggml_cpu_node_is_solo`, `ggml_cpu_try_fuse_ops` or `ggml_graph_compute_thread`.
   - **Scope:** barrier implementation, per-node sync, tiny-solo selection and
     in-backend fusion.
-  - **Ops:** every DS41 op suite (19).
+  - **Ops:** 29 native suites: the 19 DS41 ops, the solo-eligible ops that list lacked
+    (`SUB`, `DIV`, `SQR`, `SQRT`, `LOG`, `SIN`, `COS`, `FILL`, `DUP`), and `TOPK_MOE`, the
+    whole-graph fixture that runs the MoE weight normalization (`GET_ROWS`, `SUM_ROWS`,
+    `CLAMP`, `DIV`, SQRT_SOFTPLUS gating included) as one multi-node solo-run candidate.
+    `UNARY` and `GLU` run their sub-op cases (`SILU`, `SWIGLU`, ...), except `EXP` and
+    `EXPM1`, whose f32 cases fail on the anchor itself (overflow to inf in both arms). An
+    empty suite is a harness refusal, never a verdict on the patch.
   - **Reference:** the full scalar quant suite. It checks numbers independently of the
-    candidate's barrier.
+    candidate's barrier. The native suites are not independent of the graph walk
+    (`use_ref` only disables fusion), so they catch races and per-op numerics, not a
+    deterministic walk defect that both arms share.
   - These edits must be bit-exact by construction. Name the ordering argument.
 
 These routes retire nothing measured. They correct one premise: the "220 GB/s read

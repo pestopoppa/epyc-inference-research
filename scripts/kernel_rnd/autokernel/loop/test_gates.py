@@ -230,6 +230,104 @@ class AnOracleThatCannotRunIsNotAFailedPatch(unittest.TestCase):
             self.assertEqual(verdict.gate, "oracle_unavailable")
 
 
+_DS41_ANCHOR = Path("/mnt/raid0/llm/llama.cpp-experimental-fastload-ds41-20260925")
+
+
+class TheOpSelectorIsWhatTestBackendOpsMatches(unittest.TestCase):
+    """DS41-C96: `-o GLU` selected 0/0 CPU cases, on every cpu_graph_sync candidate.
+
+    test-backend-ops matches `-o` against `ggml_op_desc()`, which names a UNARY or GLU
+    node by its sub-op (SILU, SWIGLU, ...), never "UNARY" or "GLU". The route's ten
+    earlier suites passed (MUL_MAT 1139/1139 ... CONCAT 210/210) and the eleventh, GLU,
+    printed `0/0 tests passed`: 10 `oracle_unavailable` refusals and 5 scope_blocked
+    hypotheses (experiments rows 108-213), and a planner that abstained 8 of 12 times.
+    """
+
+    _PASS = ("Backend 1/1: CPU\n  SWIGLU(type=f32,ne_a=[128,2,2,2],v=0,swapped=0): OK\n"
+             "  48/48 tests passed\n  Backend CPU: OK\n1/1 backends passed\nOK\n")
+
+    def _run(self, op, stdout=_PASS, code=0):
+        with mock.patch.object(Path, "is_file", return_value=True), \
+             mock.patch.object(gates.residency, "loader_env", return_value={}), \
+             mock.patch.object(gates.subprocess, "run", return_value=mock.Mock(
+                 returncode=code, stdout=stdout, stderr="")) as invoke:
+            verdict = gates.op_correctness(Path("/build"), op=op, backend="CPU")
+        argv = invoke.call_args.args[0]
+        return verdict, argv[argv.index("-o") + 1]
+
+    def test_unary_and_glu_select_their_sub_ops_and_plain_ops_pass_through(self):
+        for op, names in gates.BACKEND_OPS_SELECTORS.items():
+            _verdict, selector = self._run(op)
+            self.assertEqual(tuple(selector.split(",")), names)
+            self.assertNotIn(op, selector.split(","))
+        for op in ("CLAMP", "SUM_ROWS", "TOPK_MOE", "MUL_MAT"):
+            self.assertEqual(self._run(op)[1], op)
+
+    def test_the_glu_suite_that_refused_every_candidate_now_passes_on_evidence(self):
+        verdict, _selector = self._run("GLU")
+        self.assertEqual((verdict.gate, verdict.passed), ("correctness", True))
+
+    def test_an_empty_or_failing_expanded_suite_still_refuses(self):
+        empty = ("Backend 1/1: CPU\n  0/0 tests passed\n  Backend CPU: OK\n"
+                 "1/1 backends passed\nOK\n")
+        verdict, _selector = self._run("GLU", empty)
+        self.assertEqual((verdict.gate, verdict.passed), ("oracle_unavailable", False))
+        self.assertIn("for GLU", verdict.reason)
+        failed = ("Backend 1/1: CPU\n  SWIGLU(type=f32,ne_a=[5,7,11,13],v=1,swapped=1): FAIL\n"
+                  "  47/48 tests passed\n  Backend CPU: FAIL\n0/1 backends passed\nFAIL\n")
+        verdict, _selector = self._run("GLU", failed, code=1)
+        self.assertEqual((verdict.gate, verdict.passed), ("correctness", False))
+        self.assertIn("GLU failed on CPU", verdict.reason)
+
+    def test_anchor_failing_sub_ops_are_named_not_selected(self):
+        for op, names in gates.UNSELECTABLE_ON_ANCHOR.items():
+            self.assertFalse(set(names) & set(gates.BACKEND_OPS_SELECTORS[op]), op)
+        self.assertEqual(gates.UNSELECTABLE_ON_ANCHOR, {"UNARY": ("EXP", "EXPM1")})
+
+    def test_no_route_hands_the_oracle_a_name_it_never_matches(self):
+        for route in gates.CPU_SOURCE_ROUTES:
+            for op in route.ops:
+                self.assertFalse(set(gates.backend_ops_selector(op).split(","))
+                                 & set(gates.BACKEND_OPS_SELECTORS), (route.route, op))
+
+    def test_graph_sync_scope_covers_every_solo_eligible_op_and_the_moe_chain(self):
+        route = next(r for r in gates.CPU_SOURCE_ROUTES if r.route == "cpu_graph_sync")
+        # ggml_cpu_node_is_solo's switch at the DS41 anchor (ggml-cpu.c, ad8979943).
+        solo = {"ADD", "SUB", "MUL", "DIV", "SCALE", "CLAMP", "FILL", "SQR", "SQRT", "LOG",
+                "SIN", "COS", "SUM_ROWS", "UNARY", "GLU", "CPY", "CONT", "DUP"}
+        self.assertLessEqual(solo, set(route.ops))
+        self.assertIn("TOPK_MOE", route.ops)
+        self.assertEqual(len(route.ops), len(set(route.ops)))
+        # the DS41 graph ops are all still there: coverage only grew
+        self.assertLessEqual(set(gates._DS41_GRAPH_OPS), set(route.ops))
+
+    @unittest.skipUnless((_DS41_ANCHOR / "ggml/src/ggml.c").is_file(),
+                         "DS41 anchor tree not present")
+    def test_selectors_and_solo_set_match_the_ds41_anchor_sources(self):
+        import re
+        ggml = (_DS41_ANCHOR / "ggml/src/ggml.c").read_text(encoding="utf-8")
+        start = ggml.index("const char * ggml_op_desc(")
+        desc = ggml[start:ggml.index("\n}\n", start)]
+        self.assertEqual(set(re.findall(r"t->op == GGML_OP_(\w+)", desc)),
+                         set(gates.BACKEND_OPS_SELECTORS))
+        for table, op in (("GGML_UNARY_OP_NAME", "UNARY"), ("GGML_GLU_OP_NAME", "GLU")):
+            start = ggml.index(f"static const char * {table}[")
+            names = tuple(re.findall(r'"(\w+)"', ggml[start:ggml.index("};", start)]))
+            excluded = gates.UNSELECTABLE_ON_ANCHOR.get(op, ())
+            self.assertEqual(tuple(name for name in names if name not in excluded),
+                             gates.BACKEND_OPS_SELECTORS[op], table)
+            self.assertLessEqual(set(excluded), set(names), table)
+        cpu = (_DS41_ANCHOR / "ggml/src/ggml-cpu/ggml-cpu.c").read_text(encoding="utf-8")
+        start = cpu.index("static bool ggml_cpu_node_is_solo(")
+        solo = set(re.findall(r"case GGML_OP_(\w+):", cpu[start:cpu.index("\n}\n", start)]))
+        route = next(r for r in gates.CPU_SOURCE_ROUTES if r.route == "cpu_graph_sync")
+        self.assertTrue(solo)
+        self.assertLessEqual(solo, set(route.ops))
+        tbo = (_DS41_ANCHOR / "tests/test-backend-ops.cpp").read_text(encoding="utf-8")
+        self.assertIn('return "TOPK_MOE";', tbo)
+        self.assertIn("GATING_FUNC_SQRT_SOFTPLUS", tbo)
+
+
 class AffectedOpAndIndependentReference(unittest.TestCase):
     def test_cpu_gdn_route_has_independent_reference(self):
         source = "// ggml_compute_forward_gated_delta_net\nold\nnew\n// ggml_compute_forward_next\n"
@@ -978,7 +1076,7 @@ class AffectedOpAndIndependentReference(unittest.TestCase):
         """The original op-selection argv remains the default form."""
         import inspect
         body = inspect.getsource(gates.op_correctness).split('"""', 2)[-1]
-        for token in ('"test"', '"-o", op', '"-b", backend', '"-j", "1"'):
+        for token in ('"test"', '"-o", backend_ops_selector(op)', '"-b", backend', '"-j", "1"'):
             self.assertIn(token, body, token)
 
 
