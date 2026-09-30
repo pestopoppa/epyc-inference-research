@@ -1380,6 +1380,23 @@ def pending_hypotheses_view(args, epoch: str, anchor_commit: str | None,
         return []
 
 
+def runtime_treatment_context(store, anchor, frozen_requests) -> dict:
+    """DS41-C97: the runtime treatments already measured in THIS frame (the original
+    launch's execution digest, recipe hash and frozen-request digest), for the planner
+    prompt and the loop's formation-time identity guard. Epoch is not part of the frame:
+    a source keep moves the epoch without touching the launch a treatment perturbs."""
+    from . import runtime_identity
+    try:
+        request = serving.request_digest(anchor.template, frozen_requests)
+    except (serving.RecipeError, AttributeError, TypeError, ValueError) as exc:
+        print(f"warning: runtime request digest unavailable: {type(exc).__name__}: {exc}",
+              file=sys.stderr)
+        request = None
+    return {"runtime_request_digest": request,
+            "runtime_treatments_observed": runtime_identity.observed(
+                store, anchor.to_dict(), request)}
+
+
 def prior_experiments(args, epoch: str, measurement_epoch: str | None = None) -> list[dict]:
     """The history the planner gets, and the one place `-A3` is turned on.
 
@@ -2815,7 +2832,8 @@ def main(argv: list[str] | None = None) -> int:
             "inbox": inbox.read_inbox(args.store / "inbox"),
             **({"runtime_anchor": feedback_anchor[0].to_dict(),
                 "runtime_env_keys": sorted(runtime_env_keys),
-                "runtime_observation_only": not runtime_enabled}
+                "runtime_observation_only": not runtime_enabled,
+                **runtime_treatment_context(args.store, feedback_anchor[0], frozen_requests)}
                if direct_launch and screen_state is None
                and (runtime_enabled or runtime_probe_enabled) else {}),
             **({"runtime_preparation": dict(runtime_preparation)}

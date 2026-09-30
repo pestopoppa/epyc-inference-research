@@ -543,7 +543,7 @@ class DeclaredArmPlanner:
                     f"Declared runtime arm {arm.arm_id}: {arm.rationale}",
                     "The original calibrated paired comparison does not admit an improvement "
                     "with the required correctness and control gates",
-                    "runtime", arm.kind, runtime_pair=pair)
+                    "runtime", arm.kind, runtime_pair=pair, declared_runtime_arm=arm.arm_id)
         return None
 
     def propose(self, context):

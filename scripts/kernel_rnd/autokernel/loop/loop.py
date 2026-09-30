@@ -35,7 +35,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol, Sequence
 
-from . import bench, gates, integrity
+from . import bench, gates, integrity, runtime_identity
 
 HYPOTHESIS_ROUNDS = 3
 PATCH_ROUNDS = 2
@@ -418,6 +418,11 @@ class Hypothesis:
     #: budget and one continuation of its session produced the proposal). Empty (and
     #: absent from `to_dict`) for every ordinary proposal and every historical row.
     planner_report_source: str = ""
+    #: The declared runtime arm this hypothesis serves (`runtime_arms.DeclaredArmPlanner`),
+    #: in memory only and never in `to_dict`. A declared arm's re-serves (a pending strict
+    #: calibration's continuation) are governed by the arm ledger, so the DS41-C97
+    #: runtime-treatment identity guard exempts it; planner proposals never set it.
+    declared_runtime_arm: str = ""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "relies_on_claims", tuple(self.relies_on_claims or ()))
@@ -1535,6 +1540,20 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             if repeat_reason:
                 return Outcome("refused_at_formation", hypothesis, [repeat_reason],
                                refusal_gate="do_not_repeat")
+            # DS41-C97: a runtime treatment has no source diff for the exact-attempt
+            # identity and its mechanism id is prose, so a renamed re-proposal of an
+            # already measured launch change reached a second ~35-minute measurement.
+            # Refuse it by WHAT it changes, in the same frame, before any slot is spent.
+            settled = (None if hypothesis.declared_runtime_arm else
+                       runtime_identity.duplicate(hypothesis.runtime_pair, working))
+            if settled is not None:
+                prior, proposed = settled
+                return Outcome("refused_duplicate", hypothesis,
+                               [runtime_identity.refusal_reason(prior, proposed)],
+                               duplicate_of=prior.get("attempt_id"),
+                               prior_effect=prior.get("effect"),
+                               prior_epoch=prior.get("epoch"),
+                               refusal_gate=runtime_identity.REFUSAL_GATE)
             if hypothesis.runtime_pair is None:
                 # Formed and not yet judged: a stop before critic pass 1 answers keeps it.
                 progress["inflight"] = critic1_checkpoint(hypothesis, 0)

@@ -20,6 +20,9 @@ INVALID_OUTCOMES = frozenset({
     "authoring_failed",
     "stopped_before_reschedule", "stopped_mid_formation", "superseded",
     "source_validation_failed", "source_validation_pending",
+    # A refusal before measurement: the exact-attempt identity, and (DS41-C97) a runtime
+    # treatment already measured in the same frame under another mechanism id.
+    "refused_duplicate",
 })
 FAILED_OUTCOMES = frozenset({"bench_failed", "lane_error", "planner_transient",
                              "authoring_harness_failure"})

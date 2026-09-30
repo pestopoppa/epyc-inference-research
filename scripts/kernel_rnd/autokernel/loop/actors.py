@@ -2493,6 +2493,27 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
                 f"[{', '.join(f'{v:+.2f}' for v in values)}]")
         lines.append("")
 
+    # DS41-C97: runtime treatments already measured on THIS original launch, keyed by
+    # what they change rather than by mechanism id. Run 10w re-proposed and re-measured
+    # OMP_WAIT_POLICY=passive under a second id; the loop now refuses that before
+    # measurement (`runtime_identity.duplicate`), and this says so up front.
+    runtime_settled = [row for row in (context.get("runtime_treatments_observed") or [])
+                       if isinstance(row, Mapping) and row.get("describe")]
+    if runtime_settled:
+        lines.append("## Runtime treatments already measured on this recipe — do NOT re-propose")
+        lines.append("Same original launch, recipe and frozen requests. A runtime treatment is "
+                     "identified by the launch change it makes, not by its mechanism id or "
+                     "wording: re-proposing one of these changes under a new name is refused "
+                     "before measurement. Propose a different change or a source mechanism.")
+        for row in runtime_settled[-limit:]:
+            effect = row.get("effect")
+            measured = f"{effect * 100:+.3f}%" if isinstance(effect, (int, float)) else "—"
+            lines.append(f"- runtime treatment `{row['describe']}` measured {measured} "
+                         f"({row.get('status')}) on this recipe as `{row.get('mechanism_id')}` "
+                         f"(row {str(row.get('attempt_id'))[:12]}, {row.get('recorded_at')}) "
+                         "— settled, do not re-propose")
+        lines.append("")
+
     lines.append("\n## Already tried")
     if prior:
         for row in list(prior)[:limit]:

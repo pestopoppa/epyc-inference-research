@@ -466,11 +466,25 @@ def record(store_root: Path, attempt: Mapping[str, Any], *, epoch: str,
     Idempotent on attempt identity, so a resumed loop re-recording its own rows
     cannot inflate the history it will later read back.
     """
+    receipts = journal_receipt_out if journal_receipt_out is not None else []
+    first_receipt = len(receipts)
     with experiments.ExperimentStore(store_root) as store:
         added = store.record(attempt, epoch=epoch, recorded_at=recorded_at,
                              campaign_id=campaign_id,
-                             receipt_out=journal_receipt_out)
+                             receipt_out=receipts)
         store.write_markdown(epoch=epoch)
+        if added and len(receipts) > first_receipt:
+            # DS41-C97: file the runtime treatment this row measured (if any) by WHAT
+            # it changed, from the attempt in hand, so the formation guard never has
+            # to re-parse multi-MB payloads. Auxiliary like the export below: a fault
+            # here cannot un-commit the row (`runtime_identity.reconcile` backfills).
+            try:
+                from . import runtime_identity
+                runtime_identity.observe(store_root, receipts[first_receipt]["attempt_id"],
+                                         attempt, epoch=epoch, recorded_at=recorded_at)
+            except Exception as exc:
+                print(f"warning: runtime treatment identity export failed after durable "
+                      f"archive: {type(exc).__name__}: {exc}", file=sys.stderr)
         if added:
             try:
                 from . import serving_beliefs
