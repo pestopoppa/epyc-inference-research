@@ -37,6 +37,7 @@ from src.constants import TASK_IR_OBJECTIVE_LEN
 from src.repl_environment import knowledge_fence
 from src.repl_environment import task_root as task_root_mod
 from src.runtime import quiescence
+from src.runtime import routing_stage_timing
 from src.scheduling import contention_gate_capture, gate_observation
 from src.delegation_reports import load_report
 from src.task_ir import canonicalize_task_ir
@@ -849,6 +850,10 @@ async def _handle_chat(
                 resp.difficulty_score = float(getattr(routing, "difficulty_score", 0.0) or 0.0)
                 resp.difficulty_band = str(getattr(routing, "difficulty_band", "") or "")
                 resp.xmas_meta = getattr(routing, "xmas_meta", None)
+                # RI-16: per-request routing-stage latency (ms).
+                stage_telemetry = routing_stage_timing.telemetry_for(routing.task_id)
+                if stage_telemetry is not None:
+                    resp.routing_stage_ms = stage_telemetry["stage_ms"]
             except Exception:
                 # Best-effort telemetry attachment; never break the response.
                 pass
@@ -1316,6 +1321,9 @@ async def chat_stream(
     async def generate() -> AsyncGenerator[dict, None]:
         start_time = time.perf_counter()
         use_mock = request.mock_mode and not request.real_mode
+        # RI-16: this path has no priors/route/mode stages; it times the turn-0
+        # routing context and the review gate.
+        routing_stage_timing.begin(task_id, routing_stage_timing.PATH_LEGACY_STREAM)
 
         # Construct task_ir and log start (MemRL integration)
         task_ir = {
@@ -1610,7 +1618,15 @@ async def chat_stream(
                 stream_answer = _resolve_answer(result, tool_outputs=tool_outputs)
 
                 # MemRL-informed quality review gate (blocking, streaming parity)
-                if _should_review(state, task_id, current_role, stream_answer):
+                if routing_stage_timing.call_timed(
+                    "review_gate",
+                    _should_review,
+                    state,
+                    task_id,
+                    current_role,
+                    stream_answer,
+                    accumulate=True,
+                ):
                     verdict = _architect_verdict(
                         question=request.prompt,
                         answer=stream_answer,

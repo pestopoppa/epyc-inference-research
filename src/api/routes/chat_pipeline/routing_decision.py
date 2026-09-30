@@ -18,6 +18,7 @@ from src.backends.context_limits import (
 )
 from src.features import features
 from src.roles import Role
+from src.runtime import routing_stage_timing
 
 log = logging.getLogger(__name__)
 
@@ -624,6 +625,11 @@ def routing_meta(
     meta["batch_id"] = getattr(request, "batch_id", None)
     meta["workload_class"] = getattr(request, "workload_class", None)
     meta["request_priority"] = getattr(request, "request_priority", None)
+    # RI-16: routing-stage latency snapshot (``routing_path`` + ``stage_ms``) for the
+    # request being routed. Observability only; absent when no timing is active.
+    stage_timing = routing_stage_timing.current()
+    if stage_timing is not None:
+        meta.update(stage_timing.telemetry())
     return meta
 
 

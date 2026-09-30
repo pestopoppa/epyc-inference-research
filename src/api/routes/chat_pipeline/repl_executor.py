@@ -32,6 +32,7 @@ from src.graph import run_task, GraphConfig, TaskDeps, TaskState
 from src.llm_primitives import LLMPrimitives
 from src.constants import TOOL_OUTPUT_MATCH_LEN
 from src.repl_environment import REPLEnvironment
+from src.runtime import routing_stage_timing
 from src.session.lease import HeldSessionLease, SessionLeaseManager
 from src.session.models import Checkpoint
 from src.session.protocol import normalize_checkpoint_for_repl_restore
@@ -780,7 +781,9 @@ async def _execute_repl_body(
         (graph_result.success or getattr(graph_result, 'partial', False))
         and request.real_mode
         and not request.force_role
-        and _should_review(state, task_id, current_role, answer)
+        and routing_stage_timing.call_timed(
+            "review_gate", _should_review, state, task_id, current_role, answer, accumulate=True
+        )
     ):
         log.info(
             "Review gate triggered for %s (task %s)",

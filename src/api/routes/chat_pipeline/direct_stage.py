@@ -31,6 +31,7 @@ from src.api.routes.chat_pipeline.telemetry import (
 from src.api.services.memrl import failure_disposition_meta, score_completed_task
 from src.api.structured_logging import task_extra
 from src.llm_primitives import LLMPrimitives
+from src.runtime import routing_stage_timing
 
 from src.api.routes.chat_pipeline.stages import _quality_escalate
 
@@ -224,7 +225,15 @@ def _execute_direct(
         answer
         and not answer.startswith("[ERROR")
         and not request.force_role
-        and _should_review(state, routing.task_id, initial_role, answer)
+        and routing_stage_timing.call_timed(
+            "review_gate",
+            _should_review,
+            state,
+            routing.task_id,
+            initial_role,
+            answer,
+            accumulate=True,
+        )
     ):
         verdict = _architect_verdict(
             question=request.prompt,

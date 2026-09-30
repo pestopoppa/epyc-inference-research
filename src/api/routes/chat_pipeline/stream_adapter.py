@@ -32,6 +32,7 @@ from src.prompt_builders import (
 from src.prompt_builders.builder import build_corpus_context
 from src.repl_environment import REPLEnvironment
 from src.roles import Role
+from src.runtime import routing_stage_timing
 from src.sse_utils import (
     done_event,
     error_event,
@@ -343,7 +344,15 @@ async def _stream_repl(
             tool_outputs = repl.artifacts.get("_tool_outputs", [])
             stream_answer = _resolve_answer(result, tool_outputs=tool_outputs)
 
-            if _should_review(state, task_id, current_role, stream_answer):
+            if routing_stage_timing.call_timed(
+                "review_gate",
+                _should_review,
+                state,
+                task_id,
+                current_role,
+                stream_answer,
+                accumulate=True,
+            ):
                 verdict = _architect_verdict(
                     question=request.prompt,
                     answer=stream_answer,
@@ -454,7 +463,9 @@ async def generate_stream(
     start_time = time.perf_counter()
 
     # Stage 1: Routing (shared with _handle_chat)
-    routing = _route_request(request, state)
+    routing = _route_request(
+        request, state, routing_path=routing_stage_timing.PATH_UNIFIED_STREAM
+    )
 
     # Stage 2: Preprocessing (shared with _handle_chat)
     _preprocess(request, state, routing)

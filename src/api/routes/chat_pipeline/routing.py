@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 import urllib.request
 import uuid
 
@@ -15,6 +16,7 @@ from src.config import get_config
 from src.constants import TASK_IR_OBJECTIVE_LEN
 from src.features import features
 from src.llm_primitives import LLMPrimitives
+from src.runtime import routing_stage_timing
 from src.task_ir import canonicalize_task_ir
 
 from src.api.routes.chat_pipeline.routing_decision import (
@@ -269,13 +271,22 @@ def _apply_xmas_enforce_override(
     return [str(suggested_role)], f"xmas_enforce:{routing_strategy}"
 
 
-def _route_request(request: ChatRequest, state) -> RoutingResult:
+def _route_request(
+    request: ChatRequest,
+    state,
+    routing_path: str = routing_stage_timing.PATH_CHAT,
+) -> RoutingResult:
     """Determine routing decision, strategy, and task metadata.
 
     Produces a RoutingResult that captures all routing decisions made
     before execution begins. Includes failure graph veto and MemRL logging.
+
+    RI-16: starts the request's routing-stage timing (``routing_path`` labels the
+    pipeline); the stage timers are observability-only and never alter the route.
     """
+    route_start = time.perf_counter()
     task_id = f"chat-{uuid.uuid4().hex[:8]}"
+    routing_stage_timing.begin(task_id, routing_path)
     task_ir = canonicalize_task_ir(
         {
             "task_type": "chat",
@@ -288,33 +299,37 @@ def _route_request(request: ChatRequest, state) -> RoutingResult:
 
     use_mock = request.mock_mode and not request.real_mode
     has_image = bool(request.image_path or request.image_base64)
-    heuristic_priors = _heuristic_role_priors(
-        request.prompt,
-        request.context or "",
-        has_image=has_image,
-    )
+    with routing_stage_timing.timed("priors"):
+        heuristic_priors = _heuristic_role_priors(
+            request.prompt,
+            request.context or "",
+            has_image=has_image,
+        )
 
     # Initialize MemRL early for real_mode to enable HybridRouter
     if request.real_mode and not use_mock:
-        ensure_memrl_initialized(state)
+        with routing_stage_timing.timed("memrl_init"):
+            ensure_memrl_initialized(state)
 
     # Determine routing using HybridRouter if available, otherwise rules
-    routing_decision, routing_strategy, skill_context = select_initial_route(
-        request,
-        state,
-        task_ir,
-        use_mock,
-        heuristic_priors,
-        _classify_and_route,
-    )
+    with routing_stage_timing.timed("route"):
+        routing_decision, routing_strategy, skill_context = select_initial_route(
+            request,
+            state,
+            task_ir,
+            use_mock,
+            heuristic_priors,
+            _classify_and_route,
+        )
     xmas_meta = None
     try:
         from src.classifiers.xmas_routing import build_xmas_routing_metadata
 
-        xmas_meta = build_xmas_routing_metadata(
-            request.prompt,
-            request.context or "",
-        )
+        with routing_stage_timing.timed("xmas"):
+            xmas_meta = build_xmas_routing_metadata(
+                request.prompt,
+                request.context or "",
+            )
         routing_decision, routing_strategy = _apply_xmas_enforce_override(
             request,
             routing_decision,
@@ -331,32 +346,35 @@ def _route_request(request: ChatRequest, state) -> RoutingResult:
         )
 
     role_for_signals = str(routing_decision[0]) if routing_decision else ""
-    _factual_risk_score, _factual_risk_band = assess_factual_risk(
-        request.prompt,
-        role_for_signals,
-        task_id,
-    )
+    with routing_stage_timing.timed("factual_risk"):
+        _factual_risk_score, _factual_risk_band = assess_factual_risk(
+            request.prompt,
+            role_for_signals,
+            task_id,
+        )
 
     # Failure graph veto — revert high-risk specialists to frontdoor
     # RI-5: Veto threshold modulated by factual-risk band.
     # High factual risk → lower veto threshold (more conservative routing).
     # Low factual risk → higher threshold (allow specialist attempts).
-    routing_decision, routing_strategy = apply_failure_veto(
-        state,
-        routing_decision,
-        routing_strategy,
-        _factual_risk_band,
-        task_id,
-        has_image=has_image,
-    )
+    with routing_stage_timing.timed("failure_veto"):
+        routing_decision, routing_strategy = apply_failure_veto(
+            state,
+            routing_decision,
+            routing_strategy,
+            _factual_risk_band,
+            task_id,
+            has_image=has_image,
+        )
 
     # Difficulty-signal scoring (shadow/enforce mode only — no-op when mode is "off")
     role_for_signals = str(routing_decision[0]) if routing_decision else ""
-    _difficulty_score, _difficulty_band = assess_difficulty(
-        request.prompt,
-        role_for_signals,
-        task_id,
-    )
+    with routing_stage_timing.timed("difficulty"):
+        _difficulty_score, _difficulty_band = assess_difficulty(
+            request.prompt,
+            role_for_signals,
+            task_id,
+        )
 
     # Ingest-triviality guard (opt-in): keep trivially-easy short prompts off the
     # ingest_long_context 80B specialist. Reuses _difficulty_band; no-op when the
@@ -373,7 +391,8 @@ def _route_request(request: ChatRequest, state) -> RoutingResult:
     # TR-3.2: Trinity tri-role classification (shadow mode). Always populates
     # `assigned_role` regardless of the ROLE_AWARE_ROUTING flag — TR-4 gates
     # acting on the role; TR-3.3 uses shadow telemetry to decide promotion.
-    _assigned_role = classify_trinity_role(request, routing_decision, task_id)
+    with routing_stage_timing.timed("trinity"):
+        _assigned_role = classify_trinity_role(request, routing_decision, task_id)
 
     # Estimated cost (tier weight × prompt tokens / 1M — relative units for Pareto)
     _estimated_cost = estimate_routing_cost(request, state, routing_decision)
@@ -388,6 +407,12 @@ def _route_request(request: ChatRequest, state) -> RoutingResult:
         )
     except Exception:
         _factual_risk_mode = ""
+
+    # RI-16: the pre-execution routing decision is complete here; close its wall
+    # timer so the routing_decision event below carries route_total.
+    timing = routing_stage_timing.current()
+    if timing is not None and timing.task_id == task_id:
+        timing.record("route_total", (time.perf_counter() - route_start) * 1000.0)
 
     # Log task start (MemRL integration). This must happen after all shadow
     # signals are computed so TR-3.3/W7 telemetry is durable in progress JSONL.

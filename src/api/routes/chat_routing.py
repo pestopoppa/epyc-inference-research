@@ -16,6 +16,7 @@ from typing import Any
 
 from src.constants import TASK_IR_OBJECTIVE_LEN
 from src.registry.stack_priors import live_stack_role_records
+from src.runtime import routing_stage_timing
 from src.task_ir import canonicalize_task_ir
 
 log = logging.getLogger(__name__)
@@ -141,6 +142,7 @@ def _should_use_direct(prompt: str, context: str | None) -> bool:
     return False
 
 
+@routing_stage_timing.timed_stage("mode")
 def _select_mode(
     prompt: str,
     context: str,

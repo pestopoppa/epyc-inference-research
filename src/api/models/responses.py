@@ -175,6 +175,14 @@ class ChatResponse(BaseModel):
         default=None,
         description="X-MAS routing metadata when shadow/enforce routing is enabled",
     )
+    routing_stage_ms: dict[str, float | None] | None = Field(
+        default=None,
+        description=(
+            "RI-16 per-stage routing-decision latency in ms (priors, route, mode, "
+            "review_gate, ..., total); a stage that did not run is null. Same dict as "
+            "the progress-log stage_ms (src/runtime/routing_stage_timing.py)."
+        ),
+    )
     mode: str = Field(
         default="", description="Execution mode: direct, react, repl, delegated, or mock"
     )

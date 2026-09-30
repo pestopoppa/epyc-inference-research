@@ -16,6 +16,7 @@ from src.config import get_config as _get_config
 from src.constants import TASK_IR_OBJECTIVE_LEN
 from src.roles import Role, chain_name_to_role
 from src.roles import resolve_reviewer_role as _resolve_reviewer_role
+from src.runtime import routing_stage_timing
 from src.task_ir import canonicalize_task_ir
 from src.prompt_builders import (
     build_review_verdict_prompt,
@@ -149,6 +150,7 @@ def _record_verdict_status(status: str, role: str, detail: str) -> None:
         )
 
 
+@routing_stage_timing.timed_stage("review_verdict", accumulate=True)
 def _architect_verdict_with_status(
     question: str,
     answer: str,

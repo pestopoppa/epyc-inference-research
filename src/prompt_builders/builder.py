@@ -29,6 +29,7 @@ from src.prompt_builders.constants import (
 )
 from src.prompt_builders.resolver import resolve_prompt
 from src.roles import Role, chain_name_to_role, get_tier
+from src.runtime import routing_stage_timing
 from src.task_ir import canonicalize_task_ir
 from src.features import features as _get_features
 
@@ -748,6 +749,7 @@ def build_stage2_review_prompt(
     )
 
 
+@routing_stage_timing.timed_stage("routing_context")
 def build_routing_context(
     role: str,
     hybrid_router: Any,

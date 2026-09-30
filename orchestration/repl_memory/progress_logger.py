@@ -573,6 +573,17 @@ class ProgressLogger:
                 completion_data["operator_verdict_details_ref"] = self._text_ref(
                     operator_verdict_details
                 )
+        try:
+            # RI-16: final routing-stage latency for this task (mode, review gate and
+            # total added since the routing_decision event). Context-local and
+            # task-id matched, so it is only ever attached to the timed request.
+            from src.runtime.routing_stage_timing import telemetry_for
+
+            stage_telemetry = telemetry_for(task_id)
+            if stage_telemetry is not None:
+                completion_data.update(stage_telemetry)
+        except Exception:
+            pass
         completed_at = datetime.now(timezone.utc)
         task_record = self._complete_task_record(
             task_id,
