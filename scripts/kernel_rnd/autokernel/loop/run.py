@@ -1064,7 +1064,8 @@ def _carry_forward_floor(store: Path, recipe, anchor, *, frozen_requests, instru
     * only the NEWEST valid floor is considered (never shopping for a wider bar);
     * admitted only when the campaign experiment store holds anchor-guard A/A rows for
       one of `anchor_commits`, on this recipe, request bytes and pair count, recorded
-      after that floor's calibration ended; every such row must be a passed guard
+      after that floor's calibration ended (DS41-C87: ZERO such rows admits too -- an
+      absent A/A is not a contradiction); every such row must be a passed guard
       verdict (`anchor_verified`, or the hash-proven `anchor_guard_excursion`) with a
       numeric effect, and FEWER THAN TWO of them may sit above the carried floor_pct
       (|effect_fraction x 100| > floor_pct). DS41-C79, operator 2026-09-30: one
@@ -1133,9 +1134,12 @@ def _carry_forward_floor(store: Path, recipe, anchor, *, frozen_requests, instru
         if recorded is None or recorded <= calibrated_at:
             continue
         evidence.append((recorded, item))
-    if not evidence:
-        return None, (f"no anchor-guard A/A on the current anchor recorded after lineage "
-                      f"floor {path.parent.name[:12]} was calibrated")
+    # DS41-C87, operator 2026-09-30 ("for the love of God don't waste time on more
+    # calibrations"): NO A/A on the new anchor yet is not a contradiction of the floor.
+    # Refusing it here sent every fresh anchor generation (each keep promotes one) into a
+    # 48-launch, ~2.7 h recalibration before it had any chance to measure. The carry now
+    # stands until the evidence contradicts it (two above-floor A/As, below); the
+    # anchor-guard A/A that runs on the new anchor anyway is that evidence.
     excursions = []
     for _recorded, item in evidence:
         effect = item.get("effect_fraction")
@@ -1157,7 +1161,7 @@ def _carry_forward_floor(store: Path, recipe, anchor, *, frozen_requests, instru
                                   f"{item['effect_fraction'] * 100.0:+.3f}%"
                                   for item in excursions)
                       + "): two excursions refuse the carry [DS41-C79]")
-    _recorded, aa = max(evidence, key=lambda pair: pair[0])
+    _recorded, aa = max(evidence, key=lambda pair: pair[0]) if evidence else (None, {})
     carry = {
         "schema": FLOOR_CARRY_SCHEMA, "provenance": FLOOR_CARRY_PROVENANCE,
         "rule": "DS41-C69 lineage floor carry-forward (operator 2026-09-28)",
@@ -1173,7 +1177,7 @@ def _carry_forward_floor(store: Path, recipe, anchor, *, frozen_requests, instru
         "anchor_commits": sorted(commits),
         "aa_attempt_id": aa.get("attempt_id"), "aa_recorded_at": aa.get("recorded_at"),
         "aa_status": aa.get("status"),
-        "aa_effect_pct": round(aa["effect_fraction"] * 100.0, 6),
+        "aa_effect_pct": (round(aa["effect_fraction"] * 100.0, 6) if aa else None),
         "aa_rows_considered": len(evidence),
         # DS41-C79: how many of those rows sat above the carried floor (0 or 1 here).
         "aa_excursions": len(excursions)}
@@ -1221,11 +1225,14 @@ def _select_source_floor(store: Path, recipe, launch, *, frozen_requests, instru
             pairs=pairs, anchor_commits=anchor_commits)
         if carried is not None:
             reading, carry = carried, detail
+            aa_note = (f"anchor-guard A/A {detail['aa_attempt_id'][:12]} measured "
+                       f"{detail['aa_effect_pct']:+.3f}% after it was calibrated, "
+                       f"{detail['aa_excursions']}/{detail['aa_rows_considered']} A/A above it"
+                       if detail["aa_attempt_id"] else
+                       "no A/A on this anchor yet (DS41-C87: absence is not a contradiction)")
             print(f"serving   floor carried forward from {detail['parent_floor_path']} "
-                  f"({detail['floor_pct']}%): anchor-guard A/A {detail['aa_attempt_id'][:12]} "
-                  f"measured {detail['aa_effect_pct']:+.3f}% after it was calibrated, "
-                  f"{detail['aa_excursions']}/{detail['aa_rows_considered']} A/A above it "
-                  "[DS41-C69/C79; --no-floor-carry-forward restores recalibration]")
+                  f"({detail['floor_pct']}%): {aa_note} "
+                  "[DS41-C69/C79/C87; --no-floor-carry-forward restores recalibration]")
         else:
             print(f"serving   floor carry-forward refused: {detail}")
     return floor_store, reading, carry

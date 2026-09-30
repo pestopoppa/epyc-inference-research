@@ -204,27 +204,34 @@ def test_a_failed_guard_row_still_refuses_outright(tmp_path):
     assert reading.floor_pct is None and carry is None
 
 
-def test_refused_when_no_aa_is_newer_than_the_floor(tmp_path):
+def test_no_aa_newer_than_the_floor_still_carries(tmp_path):
+    """DS41-C87, operator 2026-09-30: an absent A/A on the new anchor is not a
+    contradiction; refusing it recalibrated every fresh anchor generation (~2.7 h)."""
     recipe = _recipe()
     _parent, row, _path = _calibrated(tmp_path, recipe, "/parent")
     _aa(tmp_path, recipe, effect_pct=0.0, recorded_at=_later(row, -3600))
     _store, reading, carry = _select(tmp_path, recipe, _launch(recipe, BUILD))
-    assert reading.floor_pct is None and carry is None
-    # ... and no experiment store at all is also no evidence.
+    assert reading.floor_pct == row["floor_pct"]
+    assert carry["aa_rows_considered"] == 0 and carry["aa_attempt_id"] is None
+    assert carry["aa_effect_pct"] is None and carry["aa_excursions"] == 0
+    # ... but no experiment store at all is still refused.
     (tmp_path / "experiments.db").unlink()
     for side in ("experiments.db-wal", "experiments.db-shm"):
         (tmp_path / side).unlink(missing_ok=True)
     assert _select(tmp_path, recipe, _launch(recipe, BUILD))[1].floor_pct is None
 
 
-def test_refused_when_the_aa_is_for_another_commit_or_another_recipe(tmp_path):
+def test_aas_for_another_commit_or_recipe_are_not_evidence(tmp_path):
+    """They neither support nor contradict this anchor's carry (DS41-C87: absent
+    evidence carries); two above-floor ones for ANOTHER commit must not refuse it."""
     recipe = _recipe()
     _parent, row, _path = _calibrated(tmp_path, recipe, "/parent")
-    _aa(tmp_path, recipe, effect_pct=0.0, recorded_at=_later(row), commit=OLD)
-    _aa(tmp_path, recipe, effect_pct=0.0, recorded_at=_later(row, 90),
+    far = row["floor_pct"] * 3
+    _aa(tmp_path, recipe, effect_pct=far, recorded_at=_later(row), commit=OLD)
+    _aa(tmp_path, recipe, effect_pct=far, recorded_at=_later(row, 90),
         recipe_hash="f" * 64)
     _store, reading, carry = _select(tmp_path, recipe, _launch(recipe, BUILD))
-    assert reading.floor_pct is None and carry is None
+    assert reading.floor_pct == row["floor_pct"] and carry["aa_rows_considered"] == 0
 
 
 def test_refused_across_a_runtime_recipe_hash_change(tmp_path):
