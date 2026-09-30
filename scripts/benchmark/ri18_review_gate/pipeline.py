@@ -88,6 +88,7 @@ class Ctx:
     allow_announced_pause: bool = False  # --allow-announced-pause / WS8D_ALLOW_ANNOUNCED_PAUSE=1
     pause_file: str = window_gate.PAUSE_FILE
     last_window_mode: str | None = None  # the admitting mode last recorded (opt-in only)
+    pause_only: bool = False             # WS8D_PAUSE_ONLY=1: only mode=announced-pause admits
     now: Callable[[], Any] | None = None
     log: Callable[[str], None] = print
     t0: float = field(default_factory=time.monotonic)
@@ -130,8 +131,17 @@ def window_ok(ctx: Ctx, need_s: float) -> dict[str, Any]:
                              allow_announced_pause=True, pause_path=ctx.pause_file)
 
 
+def pause_only_refusal(verdict: dict[str, Any]) -> dict[str, Any]:
+    """The pause lane's rule: an `open` window means DS41 is running again, so it does not admit."""
+    return {**verdict, "ok": False, "reasons": [
+        f"pause-only: admitted as mode={verdict.get('mode')!r}, not 'announced-pause' "
+        "(the announced pause is over or DS41 resumed)"]}
+
+
 def require_window(ctx: Ctx, seg: str, need_s: float) -> None:
     verdict = window_ok(ctx, need_s)
+    if verdict["ok"] and ctx.pause_only and verdict.get("mode") != "announced-pause":
+        verdict = pause_only_refusal(verdict)
     if not verdict["ok"]:
         ctx.run.segment_event({"event": "window_refused", "segment_id": seg, "verdict": verdict})
         raise Stop(RC_WINDOW, "CPU window refused: " + "; ".join(verdict.get("reasons") or []))

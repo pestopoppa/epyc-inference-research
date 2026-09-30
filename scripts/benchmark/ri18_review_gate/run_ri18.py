@@ -26,7 +26,9 @@ Commands (each segment is resumable per item; rerun the same command to continue
 
 ``--allow-announced-pause`` (or env ``WS8D_ALLOW_ANNOUNCED_PAUSE=1``): the CPU window gate also admits
 an announced DS41 pause (``window.evaluate_pause``); each admitting mode is logged and written to
-segments.jsonl as a ``window_admitted`` event. Default off = the gate is unchanged. The GPU segments
+segments.jsonl as a ``window_admitted`` event. Default off = the gate is unchanged.
+``--announced-pause-only`` (or env ``WS8D_PAUSE_ONLY=1``, set by workspace-8d's pause lane) admits ONLY
+the announced pause: an ``open`` window means DS41 is running again, so CPU segments stop (exit 3). The GPU segments
 (verdict, noise-verdict) send one request at a time to :8083 (the canary pair and every item are
 sequential calls), with or without the opt-in.
 
@@ -178,14 +180,16 @@ def run_segment(args: argparse.Namespace) -> int:
                 _log("--run-id is required when opening a new run")
                 return pipeline.RC_USAGE
             run.open(pin)
-            allow_pause = bool(args.allow_announced_pause
+            pause_only = bool(args.announced_pause_only or os.environ.get("WS8D_PAUSE_ONLY") == "1")
+            allow_pause = bool(args.allow_announced_pause or pause_only
                                or os.environ.get(window.PAUSE_ENV) == "1")
             ctx = pipeline.Ctx(
                 run=run, items=items, workload=workload, mode=mode, limit=args.limit,
                 budget_s=args.budget_s or DEFAULT_BUDGET_S[kind],
                 window_path=args.window_file or window.WINDOW, margin_s=args.margin_s,
                 cpuset=args.cpuset, skip_window=(mode != "real" and args.window_file is None),
-                allow_announced_pause=allow_pause, pause_file=args.pause_file, log=_log)
+                allow_announced_pause=allow_pause, pause_file=args.pause_file,
+                pause_only=pause_only, log=_log)
             device = {"verdict": "gpu", "noise-verdict": "gpu", "revise": "cpu",
                       "noise-revise": "cpu"}.get(kind, "none")
             if kind in ("revise", "noise-revise", "gate", "answer") and not ctx.skip_window:
@@ -195,6 +199,8 @@ def run_segment(args: argparse.Namespace) -> int:
                     window_path=ctx.window_path, cpuset=ctx.cpuset,
                     **({"allow_announced_pause": True, "pause_path": ctx.pause_file}
                        if allow_pause else {}))
+                if pre["ok"] and pause_only and pre.get("mode") != "announced-pause":
+                    pre = pipeline.pause_only_refusal(pre)
                 if not pre["ok"]:
                     _log(f"[{kind}] CPU window refused: {pre['reasons']}")
                     return pipeline.RC_WINDOW
@@ -314,6 +320,9 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--allow-announced-pause", action="store_true",
                        help=f"also admit an announced DS41 pause (or env {window.PAUSE_ENV}=1)")
         p.add_argument("--pause-file", default=window.PAUSE_FILE)
+        p.add_argument("--announced-pause-only", action="store_true",
+                       help="the pause lane: ONLY an announced pause admits (implies "
+                            "--allow-announced-pause; or env WS8D_PAUSE_ONLY=1)")
         p.add_argument("--served-commit", default=None)
         p.add_argument("--base-url", default=DEFAULT_BASE_URL)
         p.add_argument("--gpu-url", default=GPU_URL)

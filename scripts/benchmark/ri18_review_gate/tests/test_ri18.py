@@ -574,6 +574,27 @@ class AnnouncedPauseTests(unittest.TestCase):
         self.assertEqual(rc, pipeline.RC_WINDOW)
         self.assertEqual(len(RunDir(out).records("answer")), 3)
 
+    def test_pause_only_refuses_an_open_window(self):
+        out = self.root / "run"
+        wf = self.root / "win.json"
+        base = ("--stub-orch", "--out", str(out), "--run-id", "t", "--window-file", str(wf),
+                "--pause-file", str(self.pause_path))
+        now = dt.datetime.now(dt.timezone.utc)
+        wf.write_text(json.dumps(win_doc(expires_at=(now + dt.timedelta(seconds=300)).isoformat(),
+                                         est_close_at=(now + dt.timedelta(hours=1)).isoformat())))
+        rc, _ = cli("answer", "--suite", "s2", "--limit", "1", "--allow-announced-pause", *base)
+        self.assertEqual(rc, pipeline.RC_BUDGET)                  # open admits without pause-only
+        rc, log = cli("answer", "--suite", "s2", "--limit", "1", "--announced-pause-only", *base)
+        self.assertEqual(rc, pipeline.RC_WINDOW)
+        self.assertIn("pause-only", log)
+        from unittest import mock
+
+        wf.write_text(json.dumps(self.exited()))
+        with mock.patch.dict(os.environ, {"WS8D_PAUSE_ONLY": "1"}):
+            rc, _ = cli("answer", "--suite", "s2", "--limit", "1", *base)
+        self.assertEqual(rc, pipeline.RC_BUDGET)
+        self.assertEqual(len(RunDir(out).records("answer")), 2)
+
 
 # ── segments (stub orchestrator: pure python, no import of the orchestrator) ─
 
