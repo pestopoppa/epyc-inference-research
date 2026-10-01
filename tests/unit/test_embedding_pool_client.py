@@ -39,7 +39,10 @@ DIM = 32
 def policy(**client) -> EmbeddingPoolPolicy:
     base = dict(embedding_dim=DIM, failure_backoff_s=60.0)
     base.update(client)
-    return EmbeddingPoolPolicy().with_client(**base)
+    # slots only (as test_embedding_pool_cap_enforcement): the ledger source reads the HOST's
+    # region locks, so a live orchestrator holding a frontdoor lock made these offline tests
+    # see every guarded instance busy and cap every embedder to 1 (4 failures, 2026-10-01).
+    return EmbeddingPoolPolicy().with_client(**base).with_cap(busy_sources=("slots",))
 
 
 def build(busy=(), pol=None, delay_s=0.0, topology=None):
