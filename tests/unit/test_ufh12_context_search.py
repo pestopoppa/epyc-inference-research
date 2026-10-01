@@ -391,3 +391,54 @@ def test_cli_sends_context_search_and_requires_the_echo(tmp_path):
 
     code, _, err = run_main(["--root", str(tmp_path), "--context-search"])
     assert code == 1 and "need --context-bundle" in err
+
+
+# ─────────────────────────────────────────────────────────────── golden: field off
+
+#: sha256 of each surface for ``_GOLDEN_PAYLOAD``, recorded on orchestrator main 08edc054 (before
+#: UFH-12 context.search existed). With ``context_search`` off, the bundle the model sees -- root
+#: block, REPL view, pull echo, payload -- must stay byte-identical to that pre-feature build.
+_GOLDEN_SHA256 = {
+    "root_block": "01595ea912e161913675ca5f353ade0c7b76d8eac05dbe2c717d90e3616083c3",
+    "repr": "48c397c66047c1b73f891941006440d1e2a3bfff8f40b696e14d9bddd81d0ddd",
+    "dir": "4b7f611a09a33c2205bca02f3bfa19a8223947039f7cdda43568ccab8fcce26e",
+    "accounting": "a1c29e8f3aed1cc68bb053b9f16a52093372dd34ef678936580a61ec24437cef",
+    "payload": "cf1623d8fb59e782e15b1a8f319a96cb4049e5a5b85f3f75193667211ea8ffcc",
+}
+_GOLDEN_PAYLOAD = {"sections": [
+    {"name": "spec", "text": "# Spec\nThe NUMA policy pins weights.\nUse interleave for decode.\n" * 20},
+    {"name": "data", "kind": "json", "text": json.dumps({"a": [1, 2, {"b": "numa"}], "c": "x" * 300})},
+    {"name": "notes", "text": "line one\nggml_vec_dot_q8_0 is hot\n" * 50, "inline": False,
+     "description": "perf notes"},
+]}
+
+
+@pytest.mark.parametrize("explicit", [False, True])
+def test_field_off_is_byte_identical_to_the_pre_feature_build(explicit):
+    import hashlib
+
+    kw = {"search_enabled": False} if explicit else {}
+    b = ContextBundle.from_payload(_GOLDEN_PAYLOAD, print_cap_bytes=1234, pull_budget_bytes=100000, **kw)
+    v = repl_view(b)
+    b.begin_turn(1)
+    v.get("spec", max_chars=50, offset=10)
+    v.grep("numa", k=3)
+    v.json("data.a[2].b")
+    v["notes"]
+    b.begin_turn(2)
+    b.record_printed(100, 80, True)
+    surfaces = {
+        "root_block": b.render_root_block(),
+        "repr": repr(v),
+        "dir": [a for a in dir(v) if not a.startswith("__")],
+        "accounting": b.accounting(),
+        "payload": b.to_payload(),
+    }
+    got = {
+        name: hashlib.sha256(
+            (obj if isinstance(obj, str) else json.dumps(obj, sort_keys=True)).encode()
+        ).hexdigest()
+        for name, obj in surfaces.items()
+    }
+    assert got == _GOLDEN_SHA256
+    assert "search" not in surfaces["accounting"]
