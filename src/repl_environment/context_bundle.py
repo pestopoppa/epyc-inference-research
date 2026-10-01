@@ -497,8 +497,11 @@ class ContextBundle:
         "mode"}`` -- char offsets into ``get(section)`` and no section text, so a search is
         not a pull and adds nothing to the pull accounting. Read a hit with
         ``get(section, offset=start, max_chars=end - start)``, which is counted as usual.
-        ``mode`` is ``"hybrid"`` when dense ranking took part, else ``"lexical"`` (no
-        embedder, or the pool refused the work -- never a pseudo-embedding)."""
+        ``mode`` is ``"hybrid"`` when dense ranking took part, ``"lexical"`` when dense is off
+        for this request (no embedder), and ``"lexical_fallback:<reason>"`` when an embedder
+        exists but could not take part this time (``index_timeout`` -- the build resumes on the
+        next search --, a pool refusal, ``too_large``, ``query_<reason>``); never a
+        pseudo-embedding. Budgets and limits: ``context_search`` module docstring."""
         from src.repl_environment.context_search import (
             QUERY_MAX_CHARS,
             SEARCH_MAX_K,
@@ -744,8 +747,8 @@ class ContextBundle:
             lines.append(
                 "- context.search(query, k=8, section=None) -> [{section, start, end, line, "
                 "score, via, mode}]: ranked POINTERS into the sections (no text), by meaning "
-                "and keywords together (mode \"hybrid\"; \"lexical\" when the embedder is "
-                "unavailable). Use it to find where something is discussed when you do not "
+                "and keywords together (mode \"hybrid\"; \"lexical...\" when only keywords "
+                "ranked). Use it to find where something is discussed when you do not "
                 "know the exact words; then read a hit with context.get(h[\"section\"], "
                 "offset=h[\"start\"], max_chars=h[\"end\"] - h[\"start\"])."
             )

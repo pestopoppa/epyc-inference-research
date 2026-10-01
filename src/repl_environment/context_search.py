@@ -17,9 +17,30 @@ the REPL's copy is ever searched):
   ``ggml_vec_dot_q8_0`` also contribute their ``_``-separated parts.
 * **dense** -- an EXISTING embedding pool, through the orchestration API's own scheduler
   (``src.embedding_pool``: placement-aware slot admission, the busy-frontdoor neighbour cap,
-  the sha256 chunk-vector cache). Nothing here starts, picks or addresses a server. With the
-  ``repl_embedding_pool`` flag off, or when the pool cannot take the work, the search is
-  LEXICAL and every hit says so (``mode: "lexical"``) -- there is no hash-vector fallback.
+  the sha256 chunk-vector cache). Nothing here starts, picks or addresses a server. There is
+  no hash-vector fallback; every hit carries a ``mode`` saying what ranked it:
+
+  - ``"hybrid"`` -- BM25 and dense both took part;
+  - ``"lexical"`` -- dense is OFF for this request (the ``repl_embedding_pool`` flag is off, or
+    the caller set no embedder): a deliberate lexical arm, not a failure;
+  - ``"lexical_fallback:<reason>"`` -- an embedder exists but dense could not take part this
+    time, e.g. ``index_timeout`` (the index build ran out of budget; it resumes on the next
+    search), ``saturated``/``all_failed`` (the pool refused), ``too_large`` (above
+    ``MAX_DENSE_CHUNKS``), ``query_<reason>`` (the query embedding failed) or
+    ``model_mismatch``. An experiment counts these per search in ``context_pulls.search.modes``.
+
+  **Index build budget and limits.** The chunk vectors are embedded in batches of
+  ``DENSE_BATCH_CHUNKS``; each finished batch is kept on the index (and cached by the pool by
+  sha256), so a build that runs out of time keeps its progress and the NEXT search resumes it --
+  "lexical now, index later" (D1). One search waits at most
+  ``index_build_timeout_s(remaining) = clamp(INDEX_TIMEOUT_BASE_S + remaining /
+  INDEX_ASSUMED_TEXTS_PER_S, INDEX_TIMEOUT_MIN_S, INDEX_TIMEOUT_MAX_S)`` = clamp(5 + n/25,
+  10, 60) s. 25 texts/s is the pool's rate under the busy-frontdoor cap (~27 texts/s, post-cap
+  G1 load 2026-09-27; 45.6 texts/s uncapped, G2 2026-09-26), so up to ~1,400 chunks (~1.1 MB of
+  bundle) index within one search, and a bundle at ``MAX_DENSE_CHUNKS`` (4,096 chunks, ~3.2 MB)
+  needs ~164 s, i.e. three searches. An attempt that embeds NOTHING counts as a failure: a
+  refusal is retried on later searches up to ``MAX_DENSE_ATTEMPTS`` times, and a timeout or a
+  degenerate vector with no progress is not retried in this request.
 * **fusion** -- ``src.trace.navigation.rrf_fuse`` over the BM25 and cosine rankings.
 
 An index belongs to ONE embedding model (UFH-12 invariant 4): the dense vectors carry the
@@ -49,17 +70,23 @@ SEARCH_MAX_K = 50
 QUERY_MAX_CHARS = 2000
 #: Candidates each ranker contributes to the fusion.
 CANDIDATES_PER_RANKER = 64
-#: Above this many chunks the dense side is skipped (labelled ``too_large``): embedding
-#: ~4k chunks at the pool's ~45 texts/s would stall a REPL turn for ~90 s.
+#: Above this many chunks the dense side is skipped (``lexical_fallback:too_large``). At the
+#: assumed capped rate a bundle this size indexes in ~164 s, three searches at the ceiling.
 MAX_DENSE_CHUNKS = 4096
-#: Dense index builds per request. A transient pool refusal (saturated, timeout) is retried
-#: on the next search -- D1's "lexical now, index later" -- at most this many times.
+#: Chunks per embed call during an index build; progress is kept per finished batch.
+DENSE_BATCH_CHUNKS = 128
+#: Index-build attempts that embedded NOTHING (pool refusals) before dense gives up for the
+#: request. An attempt that finished at least one batch is progress and never counts.
 MAX_DENSE_ATTEMPTS = 3
-#: Refusals not worth a retry inside one request: a build that ran out of time would only
-#: spend the same budget again (the REPL turn itself is bounded at ~30 s).
-_NO_RETRY = frozenset({"timeout", "degenerate"})
-#: Embedding budgets (s). The REPL turn waits on these (REPL timeout 30 s), so they are short.
-INDEX_TIMEOUT_S = 20.0
+#: Reasons a no-progress attempt is not retried at all: a build that embedded nothing within
+#: its whole budget, or a degenerate vector, would only spend the same budget again.
+_NO_RETRY = frozenset({"index_timeout", "degenerate"})
+#: Index-build budget per search (s): clamp(BASE + remaining / RATE, MIN, MAX). See the module
+#: docstring for where the rate comes from.
+INDEX_ASSUMED_TEXTS_PER_S = 25.0
+INDEX_TIMEOUT_BASE_S = 5.0
+INDEX_TIMEOUT_MIN_S = 10.0
+INDEX_TIMEOUT_MAX_S = 60.0
 INDEX_ADMISSION_WAIT_S = 2.0
 QUERY_TIMEOUT_S = 5.0
 QUERY_ADMISSION_WAIT_S = 0.5
@@ -67,8 +94,28 @@ BM25_K1 = 1.2
 BM25_B = 0.75
 RRF_K = 60
 
+#: Monotonic clock for the index-build deadline (a seam for tests).
+_clock = time.perf_counter
+
 MODE_HYBRID = "hybrid"
 MODE_LEXICAL = "lexical"
+MODE_FALLBACK_PREFIX = "lexical_fallback:"
+
+
+def index_build_timeout_s(remaining_chunks: int) -> float:
+    """One search's index-build budget for ``remaining_chunks`` not yet embedded."""
+    want = INDEX_TIMEOUT_BASE_S + max(0, int(remaining_chunks)) / INDEX_ASSUMED_TEXTS_PER_S
+    return float(min(INDEX_TIMEOUT_MAX_S, max(INDEX_TIMEOUT_MIN_S, want)))
+
+
+def mode_for(reason: str | None) -> str:
+    """``hybrid`` when dense took part; ``lexical`` when dense is off; else a labelled fallback."""
+    if reason is None:
+        return MODE_HYBRID
+    if reason == "disabled":
+        return MODE_LEXICAL
+    return MODE_FALLBACK_PREFIX + reason
+
 
 _WORD = re.compile(r"[A-Za-z0-9_]+")
 #: Retrieval-query instructions for embedding models that were trained with one.
@@ -265,45 +312,82 @@ class ContextSearchIndex:
         self._by_section: dict[str, list[int]] = {}
         for i, c in enumerate(self.chunks):
             self._by_section.setdefault(c.section, []).append(i)
-        self.vectors: Any = None
-        self.model_id: str | None = None
+        self.vectors: Any = None  # N x D once every chunk is embedded
+        self.model_id: str | None = None  # the model of ``vectors`` AND of any partial rows
+        self._parts: list[Any] = []  # finished batches, chunk order
+        self.dense_done = 0  # chunks embedded so far
         self.dense_reason: str | None = "not_built"
         self.dense_attempts = 0
+        self.dense_failures = 0  # attempts that embedded nothing
         self.dense_build_ms: float | None = None
+        self.dense_timeout_s: float | None = None  # the last attempt's budget
 
     # -- dense side --------------------------------------------------------------------------
+    def _reset_dense(self) -> None:
+        self.vectors, self.model_id, self._parts = None, None, []
+        self.dense_done = self.dense_attempts = self.dense_failures = 0
+        self.dense_reason, self.dense_build_ms, self.dense_timeout_s = "not_built", None, None
+
     def ensure_dense(self, embedder: DenseEmbedder | None) -> str | None:
-        """Make the dense side usable with ``embedder``; return None or the reason it isn't."""
+        """Make the dense side usable with ``embedder``; return None or the reason it isn't.
+
+        Embeds the chunks not yet embedded, batch by batch, within
+        ``index_build_timeout_s(remaining)``; finished batches are kept, so a timed-out build
+        resumes on the next call."""
         if embedder is None:
             return "disabled"
-        if self.vectors is not None and self.model_id == embedder.model_id:
-            return None
+        if self.model_id is not None and self.model_id != embedder.model_id:
+            # invariant 4: never score a query from one model against another's vectors, and
+            # never finish one model's partial index with another model's batches
+            self._reset_dense()
         if self.vectors is not None:
-            # invariant 4: never score a query from one model against another's vectors
-            self.vectors, self.model_id = None, None
-            self.dense_attempts = 0
+            return None
         if not self.chunks:
             return "empty"
         if len(self.chunks) > MAX_DENSE_CHUNKS:
             self.dense_reason = "too_large"
             return self.dense_reason
-        if self.dense_attempts >= MAX_DENSE_ATTEMPTS or (
-            self.dense_attempts and self.dense_reason in _NO_RETRY
+        if self.dense_failures and (
+            self.dense_failures >= MAX_DENSE_ATTEMPTS or self.dense_reason in _NO_RETRY
         ):
             return self.dense_reason or "unavailable"
+        import numpy as np
+
+        self.model_id = embedder.model_id
         self.dense_attempts += 1
-        t0 = time.perf_counter()
-        res = embedder.embed(
-            [c.text[:DENSE_INPUT_MAX_CHARS] for c in self.chunks],
-            timeout_s=INDEX_TIMEOUT_S,
-            admission_wait_s=INDEX_ADMISSION_WAIT_S,
-        )
-        self.dense_build_ms = round((time.perf_counter() - t0) * 1000, 2)
-        if res.vectors is None or len(res.vectors) != len(self.chunks):
-            self.dense_reason = res.reason or "shape_mismatch"
-            return self.dense_reason
-        self.vectors, self.model_id, self.dense_reason = res.vectors, res.model_id, None
-        return None
+        budget = index_build_timeout_s(len(self.chunks) - self.dense_done)
+        self.dense_timeout_s = budget
+        t0 = _clock()
+        deadline = t0 + budget
+        progressed = False
+        reason: str | None = None
+        while self.dense_done < len(self.chunks):
+            left = deadline - _clock()
+            if left <= 0:
+                reason = "index_timeout"
+                break
+            batch = self.chunks[self.dense_done : self.dense_done + DENSE_BATCH_CHUNKS]
+            res = embedder.embed(
+                [c.text[:DENSE_INPUT_MAX_CHARS] for c in batch],
+                timeout_s=left,
+                admission_wait_s=INDEX_ADMISSION_WAIT_S,
+            )
+            if res.vectors is None or len(res.vectors) != len(batch):
+                raw = res.reason or "shape_mismatch"
+                reason = "index_timeout" if raw == "timeout" else raw
+                break
+            self._parts.append(np.asarray(res.vectors, dtype=np.float32))
+            self.dense_done += len(batch)
+            progressed = True
+        self.dense_build_ms = round((self.dense_build_ms or 0.0) + (_clock() - t0) * 1000, 2)
+        if self.dense_done == len(self.chunks):
+            self.vectors = np.vstack(self._parts)
+            self._parts, self.dense_reason = [], None
+            return None
+        if not progressed:
+            self.dense_failures += 1
+        self.dense_reason = reason or "unavailable"
+        return self.dense_reason
 
     # -- query -------------------------------------------------------------------------------
     def candidates(self, section: str | None) -> list[int] | None:
@@ -335,12 +419,12 @@ class ContextSearchIndex:
             )
             dense_ms = round((time.perf_counter() - t0) * 1000, 2)
             if q.vectors is None or len(q.vectors) != 1:
-                reason = q.reason or "query_failed"
+                reason = "query_" + (q.reason or "failed")
             elif q.model_id != self.model_id:
                 reason = "model_mismatch"
             else:
                 ranked.append(self._dense_ranking(q.vectors[0], ids))
-        mode = MODE_HYBRID if reason is None else MODE_LEXICAL
+        mode = mode_for(reason)
         fused = rrf_fuse(ranked, key="id", k=RRF_K, limit=k)
         hits = []
         for row in fused:
@@ -377,7 +461,10 @@ class ContextSearchIndex:
             "embedder_model": self.model_id,
             "dense": self.vectors is not None,
             "dense_reason": self.dense_reason,
+            "dense_chunks_done": self.dense_done,
             "dense_attempts": self.dense_attempts,
+            "dense_failures": self.dense_failures,
+            "dense_timeout_s": self.dense_timeout_s,
             "lexical_build_ms": self.lexical_build_ms,
             "dense_build_ms": self.dense_build_ms,
         }
@@ -390,12 +477,15 @@ __all__ = [
     "ContextSearchIndex",
     "DenseEmbedder",
     "DenseResult",
+    "MODE_FALLBACK_PREFIX",
     "MODE_HYBRID",
     "MODE_LEXICAL",
     "OutcomeEmbedder",
     "SEARCH_DEFAULT_K",
     "SEARCH_MAX_K",
     "chunk_sections",
+    "index_build_timeout_s",
+    "mode_for",
     "pool_dense_embedder",
     "query_text",
     "tokenize",

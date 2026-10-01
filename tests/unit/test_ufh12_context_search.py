@@ -24,13 +24,19 @@ from src.api.models import ChatRequest
 from src.embedding_pool.fake import FakePooledEmbedder
 from src.repl_environment import REPLEnvironment
 from src.repl_environment.context_bundle import ContextBundle, repl_view
+from src.repl_environment import context_search as cs
 from src.repl_environment.context_search import (
+    DENSE_BATCH_CHUNKS,
+    INDEX_TIMEOUT_MAX_S,
+    INDEX_TIMEOUT_MIN_S,
     MAX_DENSE_ATTEMPTS,
+    MAX_DENSE_CHUNKS,
     BM25Index,
     ContextSearchIndex,
     DenseResult,
     OutcomeEmbedder,
     chunk_sections,
+    index_build_timeout_s,
     tokenize,
 )
 from src.trace.navigation import rrf_fuse
@@ -210,15 +216,15 @@ def test_refusing_pool_degrades_to_labelled_lexical_with_bounded_retries():
     bundle.set_embedder(emb)
     for _ in range(MAX_DENSE_ATTEMPTS + 2):
         hits = bundle.search("numa interleave")
-        assert hits and all(h["mode"] == "lexical" for h in hits)
+        assert hits and all(h["mode"] == "lexical_fallback:saturated" for h in hits)
     assert len(fake.calls) == MAX_DENSE_ATTEMPTS                 # index retried, then given up
     search = bundle.accounting()["search"]
-    assert search["modes"] == {"lexical": MAX_DENSE_ATTEMPTS + 2}
+    assert search["modes"] == {"lexical_fallback:saturated": MAX_DENSE_ATTEMPTS + 2}
     assert search["log"][0]["reason"] == "saturated"
     assert search["index"]["dense"] is False
 
 
-def test_a_timed_out_index_build_is_not_retried():
+def test_a_timed_out_index_build_with_no_progress_is_not_retried():
     class Slow:
         model_id = "slow"
         calls = 0
@@ -230,8 +236,9 @@ def test_a_timed_out_index_build_is_not_retried():
     bundle = _bundle(search_enabled=True)
     bundle.set_embedder(Slow())
     for _ in range(3):
-        assert all(h["mode"] == "lexical" for h in bundle.search("numa"))
+        assert all(h["mode"] == "lexical_fallback:index_timeout" for h in bundle.search("numa"))
     assert Slow.calls == 1
+    assert bundle.accounting()["search"]["modes"] == {"lexical_fallback:index_timeout": 3}
 
 
 def test_an_index_belongs_to_one_embedding_model():
@@ -259,7 +266,8 @@ def test_query_from_another_model_is_refused():
             return res if len(texts) > 1 else DenseResult(res.vectors, "other-model")
 
     hits, meta = idx.search("numa", 3, section=None, embedder=Liar({}))
-    assert meta["reason"] == "model_mismatch" and all(h["mode"] == "lexical" for h in hits)
+    assert meta["reason"] == "model_mismatch"
+    assert all(h["mode"] == "lexical_fallback:model_mismatch" for h in hits)
 
 
 # ─────────────────────────────────────────────────────────────── pull accounting unchanged
@@ -391,6 +399,126 @@ def test_cli_sends_context_search_and_requires_the_echo(tmp_path):
 
     code, _, err = run_main(["--root", str(tmp_path), "--context-search"])
     assert code == 1 and "need --context-bundle" in err
+
+
+# ─────────────────────────────────────────────────────────────── index build budget
+
+
+def test_index_build_budget_scales_with_chunks_under_a_hard_ceiling():
+    assert index_build_timeout_s(0) == INDEX_TIMEOUT_MIN_S == 10.0
+    assert index_build_timeout_s(100) == INDEX_TIMEOUT_MIN_S         # 5 + 4 s, floored
+    assert index_build_timeout_s(500) == pytest.approx(25.0)         # 5 + 500 / 25
+    assert index_build_timeout_s(1375) == pytest.approx(60.0)
+    assert index_build_timeout_s(MAX_DENSE_CHUNKS) == INDEX_TIMEOUT_MAX_S == 60.0
+    # a bundle at the chunk cap finishes in at most three searches at the assumed rate
+    per_search = (INDEX_TIMEOUT_MAX_S - cs.INDEX_TIMEOUT_BASE_S) * cs.INDEX_ASSUMED_TEXTS_PER_S
+    assert 3 * per_search >= MAX_DENSE_CHUNKS
+
+
+def _many_sections_payload(n_chunks: int):
+    # one ~700-char line per chunk, each with its own marker word
+    line = "{} " + "pad " * 170
+    text = "".join(line.format(f"mark{i}").rstrip() + "\n" for i in range(n_chunks))
+    return {"sections": [{"name": "spill", "text": text}]}
+
+
+class BatchBudget:
+    """Embeds ``per_attempt`` batches per index-build attempt, then reports a pool timeout;
+    a one-text call (the query) always succeeds. A pool too slow to finish in one budget."""
+
+    model_id = "batchy"
+
+    def __init__(self, per_attempt: int) -> None:
+        self.per_attempt = per_attempt
+        self.batches_this_attempt = 0
+        self.batch_sizes: list[int] = []
+
+    def embed(self, texts, *, timeout_s, admission_wait_s):
+        if len(texts) == 1:
+            return DenseResult(np.ones((1, 4), dtype=np.float32) / 2.0, self.model_id)
+        if self.batches_this_attempt >= self.per_attempt:
+            self.batches_this_attempt = 0
+            return DenseResult(None, self.model_id, "timeout")
+        self.batches_this_attempt += 1
+        self.batch_sizes.append(len(texts))
+        return DenseResult(np.ones((len(texts), 4), dtype=np.float32) / 2.0, self.model_id)
+
+
+def test_a_timed_out_build_keeps_its_progress_labels_it_and_resumes():
+    n = 3 * DENSE_BATCH_CHUNKS + 10                      # four batches
+    bundle = ContextBundle.from_payload(_many_sections_payload(n), search_enabled=True)
+    emb = BatchBudget(per_attempt=2)
+    bundle.set_embedder(emb)
+
+    first = bundle.search("mark3", k=3)
+    index = bundle.accounting()["search"]["index"]
+    assert index["chunks"] == n and index["dense"] is False
+    assert index["dense_chunks_done"] == 2 * DENSE_BATCH_CHUNKS     # progress kept
+    assert index["dense_reason"] == "index_timeout"
+    assert index["dense_timeout_s"] == pytest.approx(index_build_timeout_s(n))
+    assert first and all(h["mode"] == "lexical_fallback:index_timeout" for h in first)
+    assert all(h["via"] == ["bm25"] for h in first)                 # never a partial dense ranking
+
+    second = bundle.search("mark3", k=3)                            # resumes, finishes
+    index = bundle.accounting()["search"]["index"]
+    assert index["dense"] is True and index["dense_chunks_done"] == n
+    assert index["dense_attempts"] == 2 and index["dense_failures"] == 0
+    assert index["dense_timeout_s"] == pytest.approx(index_build_timeout_s(n - 2 * DENSE_BATCH_CHUNKS))
+    assert second and all(h["mode"] == "hybrid" for h in second)
+    # every chunk embedded exactly once, in batches of at most DENSE_BATCH_CHUNKS
+    assert sum(emb.batch_sizes) == n and max(emb.batch_sizes) == DENSE_BATCH_CHUNKS
+    # the experiment can count the fallback per search
+    assert bundle.accounting()["search"]["modes"] == {
+        "lexical_fallback:index_timeout": 1, "hybrid": 1}
+
+
+def test_the_build_budget_is_a_deadline_across_batches(monkeypatch):
+    n = 3 * DENSE_BATCH_CHUNKS
+    idx = ContextSearchIndex(ContextBundle.from_payload(_many_sections_payload(n)).sections)
+    clock = [1000.0]
+    monkeypatch.setattr(cs, "_clock", lambda: clock[0])
+    seen: list[float] = []
+
+    class Ticking:
+        """Each batch takes 8 s; a batch given less than that times out, as the pool does."""
+
+        model_id = "tick"
+
+        def embed(self, texts, *, timeout_s, admission_wait_s):
+            seen.append(timeout_s)
+            if timeout_s < 8.0:
+                clock[0] += timeout_s
+                return DenseResult(None, self.model_id, "timeout")
+            clock[0] += 8.0
+            return DenseResult(np.ones((len(texts), 4), dtype=np.float32) / 2.0, self.model_id)
+
+    budget = index_build_timeout_s(n)                        # 5 + 384 / 25 = 20.36 s
+    assert budget == pytest.approx(20.36)
+    assert idx.ensure_dense(Ticking()) == "index_timeout"   # 3 batches need 24 s
+    assert seen == pytest.approx([budget, budget - 8.0, budget - 16.0])
+    assert idx.dense_done == 2 * DENSE_BATCH_CHUNKS and idx.vectors is None
+    assert idx.dense_failures == 0                           # progress: not a failure
+    assert idx.ensure_dense(Ticking()) is None               # the next search finishes it
+    assert idx.vectors.shape == (n, 4)
+
+
+def test_too_large_and_query_failures_are_labelled_fallbacks(monkeypatch):
+    monkeypatch.setattr(cs, "MAX_DENSE_CHUNKS", 2)
+    bundle = _bundle(search_enabled=True)
+    emb, _ = _fake()
+    bundle.set_embedder(emb)
+    assert all(h["mode"] == "lexical_fallback:too_large" for h in bundle.search("numa"))
+    monkeypatch.undo()
+
+    class QueryTimesOut(ScriptedEmbedder):
+        def embed(self, texts, **kw):
+            res = super().embed(texts, **kw)
+            return res if len(texts) > 1 else DenseResult(None, self.model_id, "timeout")
+
+    idx = ContextSearchIndex(_bundle().sections)
+    hits, meta = idx.search("numa", 3, section=None, embedder=QueryTimesOut({}))
+    assert meta["reason"] == "query_timeout"
+    assert all(h["mode"] == "lexical_fallback:query_timeout" for h in hits)
 
 
 # ─────────────────────────────────────────────────────────────── golden: field off
