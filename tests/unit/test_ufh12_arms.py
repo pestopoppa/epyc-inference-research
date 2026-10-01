@@ -64,7 +64,10 @@ def test_policy_override_needs_the_scheduler():
 def test_cap_zero_starves_the_busy_neighbours_and_nothing_else():
     fake = FakeEmbeddingServers(NODES, dim=16, delay_s=0.01)
     fake.processing = {8180: 1}  # the frontdoor half on nodes 2-3 decoding
-    pol = EmbeddingPoolPolicy().with_client(embedding_dim=None).with_cap(max_in_flight=0)
+    # slots only (as test_embedding_pool_client): the default ledger source reads the HOST's
+    # region locks, so a live frontdoor lock would cap (here: starve) the idle half too.
+    pol = (EmbeddingPoolPolicy().with_client(embedding_dim=None)
+           .with_cap(max_in_flight=0, busy_sources=("slots",)))
 
     def build(ports):
         sched = EmbeddingScheduler(make_topology().restricted_to(ports), pol)

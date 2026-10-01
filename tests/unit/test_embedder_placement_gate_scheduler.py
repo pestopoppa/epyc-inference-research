@@ -21,7 +21,9 @@ from tests.unit.test_embedding_pool_scheduler import NODES, make_topology
 
 def _factory(fake: FakeEmbeddingServers):
     def build(ports):
-        pol = EmbeddingPoolPolicy().with_client(embedding_dim=None)
+        # slots only (as test_embedding_pool_client): the default ledger source reads the HOST's
+        # region locks, so a live frontdoor lock capped every fake embedder to 1 (2026-10-01).
+        pol = EmbeddingPoolPolicy().with_client(embedding_dim=None).with_cap(busy_sources=("slots",))
         sched = EmbeddingScheduler(make_topology().restricted_to(ports), pol)
         return PooledEmbeddingClient(sched, policy=pol, transport=fake.transport())
 
