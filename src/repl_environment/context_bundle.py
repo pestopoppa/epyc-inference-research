@@ -71,11 +71,17 @@ GREP_LINE_CHARS = 400
 TURN_PULLS_KEPT = 64
 #: Turn records kept in the echo (totals stay exact past it).
 TURNS_KEPT = 200
+#: UFH-12 search records kept in the echo (``search.calls`` stays exact past it).
+SEARCH_LOG_KEPT = 64
 
 KINDS = ("text", "json")
 _NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_-]{0,63}$")
 _JSON_FENCE = re.compile(r"```json\n(.*)\n```", re.S)
 _PATH_STEP = re.compile(r"\.([^.\[\]/]+)|\[(\d+)\]|/([^.\[\]/]+)")
+
+
+#: Sentinel: ``search`` resolves the orchestration API's embedding pool on each call.
+_POOL = object()
 
 
 class ContextPullBudgetExceeded(RuntimeError):
@@ -185,6 +191,7 @@ class ContextBundle:
         manifest: Mapping[str, Any] | None = None,
         print_cap_bytes: int = DEFAULT_PRINT_CAP_BYTES,
         pull_budget_bytes: int | None = None,
+        search_enabled: bool = False,
     ) -> None:
         placed: list[Section] = []
         offset = 0
@@ -223,6 +230,15 @@ class ContextBundle:
         self._shown_bytes = 0
         self._turns_capped = 0
         self._state_preview_bytes = 0
+        # UFH-12: context.search (pointers only; never a pull). Off unless the request asked.
+        self.search_enabled = bool(search_enabled)
+        self._search_index: Any = None
+        self._search_embedder: Any = _POOL  # resolved per search; set_embedder() overrides
+        self._search_lock = threading.Lock()
+        self._search_calls = 0
+        self._search_modes: dict[str, int] = {}
+        self._search_log: list[dict[str, Any]] = []
+        self._search_log_dropped = 0
 
     # ------------------------------------------------------------------ construction
 
@@ -233,6 +249,7 @@ class ContextBundle:
         *,
         print_cap_bytes: int = DEFAULT_PRINT_CAP_BYTES,
         pull_budget_bytes: int | None = None,
+        search_enabled: bool = False,
     ) -> "ContextBundle":
         """Validate a ``ChatRequest.context_bundle`` payload. Raises ValueError.
 
@@ -315,6 +332,7 @@ class ContextBundle:
             manifest=manifest,
             print_cap_bytes=print_cap_bytes,
             pull_budget_bytes=pull_budget_bytes,
+            search_enabled=search_enabled,
         )
 
     def to_payload(self) -> dict[str, Any]:
@@ -472,6 +490,69 @@ class ContextBundle:
             self._record(op, None, 0, path=pattern, count_call=False, checked=True)
         return hits
 
+    def search(self, query: str, k: int = 8, section: str | None = None) -> list[dict[str, Any]]:
+        """UFH-12: hybrid (BM25 + dense, RRF-fused) search over the sections.
+
+        Returns ranked POINTERS ``{"section", "start", "end", "line", "score", "via",
+        "mode"}`` -- char offsets into ``get(section)`` and no section text, so a search is
+        not a pull and adds nothing to the pull accounting. Read a hit with
+        ``get(section, offset=start, max_chars=end - start)``, which is counted as usual.
+        ``mode`` is ``"hybrid"`` when dense ranking took part, else ``"lexical"`` (no
+        embedder, or the pool refused the work -- never a pseudo-embedding)."""
+        from src.repl_environment.context_search import (
+            QUERY_MAX_CHARS,
+            SEARCH_MAX_K,
+            ContextSearchIndex,
+        )
+
+        if not isinstance(query, str) or not query.strip():
+            raise ValueError("context.search: query must be a non-empty string")
+        query = query[:QUERY_MAX_CHARS]
+        k = max(1, min(int(k), SEARCH_MAX_K))
+        if section is not None:
+            self._section(section)  # KeyError for an unknown name, like get()
+        # one search at a time per bundle: the lazy index is built once
+        with self._search_lock:
+            if self._search_index is None:
+                self._search_index = ContextSearchIndex(self._sections)
+            hits, meta = self._search_index.search(
+                query, k, section=section, embedder=self._resolve_embedder()
+            )
+            index_info = self._search_index.describe()
+        with self._lock:
+            self._search_calls += 1
+            self._search_modes[meta["mode"]] = self._search_modes.get(meta["mode"], 0) + 1
+            entry = {
+                "turn": self._turn,
+                "query": query[:200],
+                "k": k,
+                "section": section,
+                "mode": meta["mode"],
+                "reason": meta["reason"],
+                "embedder_model": index_info["embedder_model"],
+                "hits": [[h["section"], h["start"], h["end"]] for h in hits],
+            }
+            if len(self._search_log) < SEARCH_LOG_KEPT:
+                self._search_log.append(entry)
+            else:
+                self._search_log_dropped += 1
+        return hits
+
+    def set_embedder(self, embedder: Any) -> None:
+        """Inject the dense embedder for ``search`` (tests, or a caller-owned client):
+        an object with ``model_id`` and ``embed(texts, timeout_s=, admission_wait_s=)``
+        (see ``context_search.DenseEmbedder``), or None for lexical-only. Default: the
+        orchestration API's embedding pool, resolved on each search."""
+        with self._search_lock:
+            self._search_embedder = embedder
+
+    def _resolve_embedder(self) -> Any:
+        if self._search_embedder is _POOL:
+            from src.repl_environment.context_search import pool_dense_embedder
+
+            return pool_dense_embedder()
+        return self._search_embedder
+
     # legacy REPL helpers (peek()/grep()/chunk_context() with no file_path) ----------
 
     def page(self, n: int, offset: int = 0, *, op: str = "peek") -> str:
@@ -618,7 +699,26 @@ class ContextBundle:
                 "sections": sections,
                 "turns": copy.deepcopy(self._turns),
                 "turns_dropped": self._turns_dropped,
+                **({"search": self._search_accounting()} if self._search_echo() else {}),
             }
+
+    def _search_echo(self) -> bool:
+        return self.search_enabled or self._search_calls > 0
+
+    def _search_accounting(self) -> dict[str, Any]:
+        """UFH-12 search echo. Separate from the pull fields on purpose: a search moves no
+        section text, so ``totals``/``sections``/``turns`` are exactly what they would be
+        without it. ``log`` keeps the pointers each search returned, so a trajectory can
+        tell which hits the model pulled next."""
+        index = self._search_index
+        return {
+            "enabled": self.search_enabled,
+            "calls": self._search_calls,
+            "modes": dict(self._search_modes),
+            "index": None if index is None else index.describe(),
+            "log": copy.deepcopy(self._search_log),
+            "log_dropped": self._search_log_dropped,
+        }
 
     # ------------------------------------------------------------------ root prompt
 
@@ -640,6 +740,15 @@ class ContextBundle:
             "- context[\"name\"] -> str (text) or the parsed object (json); "
             "context.json(\"name.key[0]\") -> one field",
         ]
+        if self.search_enabled:
+            lines.append(
+                "- context.search(query, k=8, section=None) -> [{section, start, end, line, "
+                "score, via, mode}]: ranked POINTERS into the sections (no text), by meaning "
+                "and keywords together (mode \"hybrid\"; \"lexical\" when the embedder is "
+                "unavailable). Use it to find where something is discussed when you do not "
+                "know the exact words; then read a hit with context.get(h[\"section\"], "
+                "offset=h[\"start\"], max_chars=h[\"end\"] - h[\"start\"])."
+            )
         if self.pull_budget_bytes is not None:
             lines.append(
                 f"- Pull budget: {self.pull_budget_bytes:,} bytes for this whole call; a pull "
@@ -804,6 +913,9 @@ def repl_view(bundle: ContextBundle) -> Any:
     def grep(self, pattern: str, k: int = GREP_DEFAULT_K, section: str | None = None) -> list[dict[str, Any]]:
         return bundle.grep(pattern, k=k, section=section)
 
+    def search(self, query: str, k: int = 8, section: str | None = None) -> list[dict[str, Any]]:
+        return bundle.search(query, k=k, section=section)
+
     def keys(self) -> list[str]:
         return [s.name for s in bundle.sections]
 
@@ -819,11 +931,15 @@ def repl_view(bundle: ContextBundle) -> Any:
     def iterate(self):
         return iter([s.name for s in bundle.sections])
 
+    searchable = bool(bundle.search_enabled)
+
     def describe(self) -> str:
         return (
             f"<context bundle: {len(bundle.sections)} sections, {bundle.total_chars:,} chars; "
             "context.index() | context.get(name, max_chars, offset) | "
-            "context.grep(pattern, k) | context['name'] | context.json('name.key')>"
+            "context.grep(pattern, k) | "
+            + ("context.search(query, k) -> pointers | " if searchable else "")
+            + "context['name'] | context.json('name.key')>"
         )
 
     namespace = {
@@ -841,6 +957,8 @@ def repl_view(bundle: ContextBundle) -> Any:
         "__repr__": describe,
         "__str__": describe,
     }
+    if searchable:  # UFH-12: only when the request asked for it (an A/B arm stays clean)
+        namespace["search"] = search
     return type("ContextBundle", (), namespace)()
 
 

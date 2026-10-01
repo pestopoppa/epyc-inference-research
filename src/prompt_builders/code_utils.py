@@ -661,6 +661,7 @@ def auto_wrap_final(code: str) -> str:
         "context.get(",
         "context.json(",
         "context.index(",
+        "context.search(",  # UFH-12: returns pointers; the pull comes next turn
         "context[",
     ]
     for pattern in exploration_patterns:

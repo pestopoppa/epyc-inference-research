@@ -134,7 +134,9 @@ class ChatResponse(BaseModel):
             "'epyc.orchestrator.context_pulls.v1' -- the bundle digest and sizes, the print "
             "cap and pull budget, totals (pull_calls, bytes_pulled, unique_bytes, printed vs "
             "shown bytes, state_preview_bytes), per-section offered/pulled/unique bytes and "
-            "coverage, and per-turn pull records."
+            "coverage, and per-turn pull records. With context_search (UFH-12) it also "
+            "carries a `search` block (calls, modes, index, the pointers each search "
+            "returned) that is separate from, and never changes, the pull fields."
         ),
         **_omit_when_none(),
     )

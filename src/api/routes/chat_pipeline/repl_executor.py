@@ -387,6 +387,7 @@ async def _execute_repl_body(
             request.context_bundle,
             print_cap_bytes=request.context_print_cap_bytes,
             pull_budget_bytes=request.context_pull_budget_bytes,
+            search_enabled=bool(getattr(request, "context_search", False)),
         )
         root_prompt = f"{request.prompt}\n\n{context_bundle.render_root_block()}"
 

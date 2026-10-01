@@ -392,7 +392,8 @@ class ChatRequest(BaseModel):
             "{schema?: 'epyc.orchestrator.context_bundle.v1', sections: [{name, text, "
             "kind?: 'text'|'json', inline?: bool, description?: str}, ...], manifest?: {...}}. "
             "The root prompt gets an index of the sections (names, sizes); the model pulls "
-            "with context.index()/get()/grep()/json()/[name], pulls land in REPL variables, "
+            "with context.index()/get()/grep()/json()/[name] (and search() with "
+            "context_search), pulls land in REPL variables, "
             "and only what it prints reaches the root prompt, capped per turn at "
             "context_print_cap_bytes. Requires force_mode='repl'. The response echoes the "
             "pull accounting in `context_pulls`. Absent: production behaviour, unchanged."
@@ -411,6 +412,16 @@ class ChatRequest(BaseModel):
         description="INF-78 OAB-7 / OAB-12. Optional cap on the bytes the model may pull from "
         "the context_bundle over the whole call (a pull past it raises in the REPL). "
         "Requires context_bundle.",
+    )
+    context_search: bool = Field(
+        default=False,
+        description="UFH-12. Expose context.search(query, k=8, section=None) on the bundle: "
+        "hybrid lexical (BM25) + dense (the orchestrator's embedding pool, when the "
+        "repl_embedding_pool flag is on) retrieval fused with RRF, returning POINTERS "
+        "{section, start, end, line, score, via, mode} and never text; the model reads a hit "
+        "through context.get, so pull accounting is unchanged. The root prompt lists it and "
+        "context_pulls gains a `search` block. Requires context_bundle. Default off: the "
+        "bundle's prompt and API are byte-identical to before.",
     )
     scouts: ScoutsSpec | None = Field(
         default=None,
@@ -438,6 +449,8 @@ class ChatRequest(BaseModel):
                 raise ValueError("context_print_cap_bytes requires context_bundle")
             if self.context_pull_budget_bytes is not None:
                 raise ValueError("context_pull_budget_bytes requires context_bundle")
+            if self.context_search:
+                raise ValueError("context_search requires context_bundle")
             return self
         if self.force_mode != "repl":
             # Every other path (direct, react, delegated, edit, the proactive and

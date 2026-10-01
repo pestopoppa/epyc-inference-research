@@ -13,7 +13,7 @@ Contract::
         [--schema <file>] [--url http://127.0.0.1:8000] [--role auto|<role>]
         [--mode repl|auto] [--max-turns N] [--timeout-s S] [--provenance-out <file>]
         [--request-id ID] [--context-bundle <file> [--context-print-cap-bytes N]
-        [--context-pull-budget-bytes N]]
+        [--context-pull-budget-bytes N] [--context-search]]
         [--scout-targets <file>] [--scouts-max N] [--scout-role ROLE]
         [--scout-max-turns N] [--scout-budget-s S]
 
@@ -35,6 +35,10 @@ and the REPL exposes it as the variable ``context`` while the prompt on stdin ca
 the instructions and an index. The server's pull accounting (``context_pulls``) is copied
 into the sidecar whole; a server that does not echo it never attached the bundle, and the
 call fails (exit 1) instead of passing off an index-only prompt as a bundled one.
+``--context-search`` (UFH-12) also sends ``ChatRequest.context_search``: the REPL's ``context``
+gains ``search(query, k)`` (pointers, never text) and the root prompt lists it. A server whose
+``context_pulls`` echo lacks ``search.enabled`` did not honour it (an older build ignores the
+field), and the call fails (exit 1) rather than mislabel the arm.
 
 ``--provenance-out`` receives a small JSON sidecar (``epyc.autokernel.orchestrator_call.v1``)
 on EVERY outcome that reaches the request stage: the request fields sent (never the
@@ -95,6 +99,7 @@ FIELDS: dict[str, str] = {
     "context_bundle": "context_bundle",            # dict: the bundle payload
     "context_print_cap_bytes": "context_print_cap_bytes",
     "context_pull_budget_bytes": "context_pull_budget_bytes",
+    "context_search": "context_search",            # bool: UFH-12 context.search
     # --- OAB-8 (new) ---
     "scouts": "scouts",                   # {"enabled", "targets", "max", ...}: server-run scouts
 }
@@ -275,7 +280,8 @@ def build_request(prompt: str, *, root: str, read_only: bool, schema: Mapping[st
                   mode: str = FORCE_MODE, context_bundle: Mapping[str, Any] | None = None,
                   print_cap_bytes: int | None = None,
                   pull_budget_bytes: int | None = None,
-                  scouts: Mapping[str, Any] | None = None) -> dict[str, Any]:
+                  scouts: Mapping[str, Any] | None = None,
+                  context_search: bool = False) -> dict[str, Any]:
     body: dict[str, Any] = {
         FIELDS["prompt"]: prompt,
         FIELDS["real_mode"]: True,
@@ -300,6 +306,8 @@ def build_request(prompt: str, *, root: str, read_only: bool, schema: Mapping[st
             body[FIELDS["context_print_cap_bytes"]] = int(print_cap_bytes)
         if pull_budget_bytes is not None:
             body[FIELDS["context_pull_budget_bytes"]] = int(pull_budget_bytes)
+        if context_search:
+            body[FIELDS["context_search"]] = True
     if scouts:
         body[FIELDS["scouts"]] = dict(scouts)
     return body
@@ -387,6 +395,9 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
                         help="per-turn cap on printed REPL output with a bundle (server default 4096)")
     parser.add_argument("--context-pull-budget-bytes", type=int,
                         help="cap on bytes pulled from the bundle over the whole call")
+    parser.add_argument("--context-search", action="store_true",
+                        help="UFH-12: expose context.search(query, k) (hybrid retrieval that "
+                             "returns pointers) on the bundle; requires --context-bundle")
     # OAB-8: orchestrator-run read-only scouts before the planner turn (default off).
     parser.add_argument("--scout-targets", type=Path,
                         help="JSON list of {symbol,file,share,label,dso} targets; enables scouts")
@@ -450,10 +461,12 @@ def main(argv: list[str] | None = None, *, stdin=None, stdout=None, stderr=None)
                       "sha256": hashlib.sha256(raw_bundle).hexdigest(),
                       "bytes": len(raw_bundle), "sections": len(sections),
                       "print_cap_bytes": args.context_print_cap_bytes,
-                      "pull_budget_bytes": args.context_pull_budget_bytes}
-    elif args.context_print_cap_bytes is not None or args.context_pull_budget_bytes is not None:
-        return finish(1, None, error="--context-print-cap-bytes / --context-pull-budget-bytes "
-                                     "need --context-bundle")
+                      "pull_budget_bytes": args.context_pull_budget_bytes,
+                      "search": bool(args.context_search)}
+    elif (args.context_print_cap_bytes is not None or args.context_pull_budget_bytes is not None
+          or args.context_search):
+        return finish(1, None, error="--context-print-cap-bytes / --context-pull-budget-bytes / "
+                                     "--context-search need --context-bundle")
     prompt = stdin.read()
     if not prompt.strip():
         return finish(1, None, error="empty prompt on stdin")
@@ -469,7 +482,8 @@ def main(argv: list[str] | None = None, *, stdin=None, stdout=None, stderr=None)
                          role=args.role, max_turns=args.max_turns, timeout_s=args.timeout_s,
                          request_id=request_id, mode=args.mode, context_bundle=bundle,
                          print_cap_bytes=args.context_print_cap_bytes,
-                         pull_budget_bytes=args.context_pull_budget_bytes, scouts=scouts)
+                         pull_budget_bytes=args.context_pull_budget_bytes, scouts=scouts,
+                         context_search=bool(args.context_search))
     sidecar["request"] = {
         "fields_sent": sorted(body),
         "task_root": args.root,
@@ -515,6 +529,17 @@ def main(argv: list[str] | None = None, *, stdin=None, stdout=None, stderr=None)
                           error="server did not attach the context bundle (no context_pulls "
                                 "echo: a pre-OAB-7 build, or the request was served outside "
                                 "the REPL); the model saw only the index")
+        if args.context_search:
+            pulls = resp.get(ACK_CONTEXT_BUNDLE)
+            search_echo = pulls.get("search") if isinstance(pulls, dict) else None
+            sidecar["context_search_acknowledged"] = (
+                isinstance(search_echo, dict) and search_echo.get("enabled") is True)
+            if (status == 200 and not error_code
+                    and not sidecar["context_search_acknowledged"]):
+                return finish(1, reply, valid=valid,
+                              error="server did not enable context.search (no "
+                                    "context_pulls.search echo: a pre-UFH-12 build ignores "
+                                    "context_search); the arm would be mislabelled")
     if status != 200 or error_code:
         detail = str(resp.get("error_detail") or "")[:300]
         return finish(1, reply, valid=valid,
