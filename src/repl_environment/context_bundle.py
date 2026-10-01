@@ -84,6 +84,38 @@ _PATH_STEP = re.compile(r"\.([^.\[\]/]+)|\[(\d+)\]|/([^.\[\]/]+)")
 _POOL = object()
 
 
+_NO_DEFAULT: Any = object()
+
+
+def _is_char_count(value: Any) -> bool:
+    """True for a value ``get`` can use as ``max_chars``: an int, an integral float, or a
+    numeric string (back-compat with ``int()`` coercion). ``bool`` is a default, not a count."""
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return True
+    if isinstance(value, float):
+        return value.is_integer()
+    if isinstance(value, str):
+        try:
+            int(value.strip())
+        except ValueError:
+            return False
+        return True
+    return False
+
+
+def _as_char_count(arg: str, value: Any) -> int:
+    """``int(value)`` with an error the model can act on instead of ``int()``'s own."""
+    if not _is_char_count(value):
+        raise TypeError(
+            f"context.get: {arg} must be an int, got {value!r}. Signature: "
+            "context.get(name, max_chars=None, offset=0); for a fallback use "
+            "context.get(name, default=...) or `name in context`."
+        )
+    return int(value.strip()) if isinstance(value, str) else int(value)
+
+
 class ContextPullBudgetExceeded(RuntimeError):
     """A pull would exceed the request's ``context_pull_budget_bytes``."""
 
@@ -412,9 +444,33 @@ class ContextBundle:
             rows.append(row)
         return rows
 
-    def get(self, path: str, max_chars: int | None = None, offset: int = 0) -> str:
+    def get(
+        self,
+        path: str,
+        max_chars: int | None = None,
+        offset: int = 0,
+        *,
+        default: Any = _NO_DEFAULT,
+    ) -> Any:
         """Text of a section (paged by ``offset``/``max_chars``), or a JSON field path
-        (``"target.recipe.model"``, ``"target.requests[0]"``) rendered as JSON text."""
+        (``"target.recipe.model"``, ``"target.requests[0]"``) rendered as JSON text.
+
+        ``dict.get`` idiom: a second argument that is not a character count
+        (``context.get("inbox", "")``, ``context.get("cfg", {})``, or ``default=``)
+        is a DEFAULT, not ``max_chars``. That form returns what ``context[name]``
+        returns (text, or the parsed JSON object/field) when the path resolves, and the
+        default when it does not. Models write this idiom unprompted; reading ``""`` as
+        ``max_chars`` used to die in ``int("")`` with an opaque ValueError the model could
+        not act on (c95-smoke-orv, 2026-10-01: six identical retries, then HTTP 500)."""
+        if max_chars is not None and not _is_char_count(max_chars):
+            if default is not _NO_DEFAULT:
+                raise TypeError(
+                    "context.get(path, max_chars=None, offset=0, *, default=...): "
+                    f"max_chars must be an int or None, got {max_chars!r}"
+                )
+            default, max_chars = max_chars, None
+        if default is not _NO_DEFAULT:
+            return self._get_or_default(path, default)
         name, steps = self._split_path(path)
         section = self._section(name)
         if steps:
@@ -427,6 +483,20 @@ class ContextBundle:
         out = section.text[start:end]
         self._record("get", name, _nbytes(out), span=(start, end), path=str(path))
         return out
+
+    def _get_or_default(self, path: Any, default: Any) -> Any:
+        """``dict.get`` semantics: ``context[path]`` (or the JSON field) if it resolves,
+        else ``default``. A miss reads nothing, so it is not a pull."""
+        try:
+            name, steps = self._split_path(path)
+            section = self._section(name)
+            if steps:
+                self._walk(name, steps)  # resolve first: a miss must not count a pull
+        except (KeyError, TypeError):  # no such section/field, or a field of a text section
+            return default
+        if steps:
+            return self.json(path)
+        return self.item(section.name)
 
     def json(self, path: str | list | tuple) -> Any:
         """A JSON section, or one field of it, as a fresh Python object."""
@@ -839,11 +909,15 @@ class ContextBundle:
 
     @staticmethod
     def _page_bounds(text: str, max_chars: int | None, offset: int) -> tuple[int, int]:
-        offset = int(offset)
+        offset = _as_char_count("offset", offset)
         if offset < 0:
             offset = max(0, len(text) + offset)
         start = min(offset, len(text))
-        end = len(text) if max_chars is None else min(len(text), start + max(0, int(max_chars)))
+        end = (
+            len(text)
+            if max_chars is None
+            else min(len(text), start + max(0, _as_char_count("max_chars", max_chars)))
+        )
         return start, end
 
     def _check_budget(self, nbytes: int) -> None:
@@ -907,8 +981,15 @@ def repl_view(bundle: ContextBundle) -> Any:
     def index(self) -> list[dict[str, Any]]:
         return bundle.index()
 
-    def get(self, path: str, max_chars: int | None = None, offset: int = 0) -> str:
-        return bundle.get(path, max_chars=max_chars, offset=offset)
+    def get(
+        self,
+        path: str,
+        max_chars: int | None = None,
+        offset: int = 0,
+        *,
+        default: Any = _NO_DEFAULT,
+    ) -> Any:
+        return bundle.get(path, max_chars=max_chars, offset=offset, default=default)
 
     def json_(self, path: str | list | tuple) -> Any:
         return bundle.json(path)

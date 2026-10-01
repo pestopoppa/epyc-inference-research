@@ -660,3 +660,65 @@ def test_cli_bundle_flag_misuse(tmp_path):
     bad.write_text("[1, 2]")
     code, _, err = run_main(["--root", str(tmp_path), "--context-bundle", str(bad)])
     assert code == 1 and "not a bundle" in err
+
+
+# ───────────────────────────── dict.get idiom (c95-smoke-orv, 2026-10-01 HTTP 500)
+
+
+def test_repl_dict_get_idiom_with_empty_string_default_does_not_crash():
+    """Regression: ``context.get('inbox', '')`` put ``''`` in ``max_chars`` and died in
+    ``int('')`` -> ``ValueError: invalid literal for int() with base 10: ''``. The
+    architect_critic retried the same line six times and the request ended in HTTP 500."""
+    repl, bundle = _repl_with_bundle()
+    r = repl.execute(
+        "inbox_text = context.get('unicode', '').strip()\n"
+        "missing = context.get('inbox', '')\n"
+        "print(repr(missing), len(inbox_text))"
+    )
+    assert r.error is None, r.error
+    assert r.output.strip() == f"'' {len(bundle.sections[3].text.strip())}"
+
+
+def test_dict_get_idiom_semantics():
+    bundle = ContextBundle.from_payload(_payload())
+    unicode_text = bundle.sections[3].text
+    # present text section -> the text (what context[name] returns), counted as a pull
+    assert bundle.get("unicode", "") == unicode_text
+    assert bundle.accounting()["sections"]["unicode"]["bytes_pulled"] == len(unicode_text.encode())
+    # absent -> the default; a miss reads nothing and counts nothing
+    pulled = bundle.accounting()["totals"]["bytes_pulled"]
+    assert bundle.get("inbox", "") == ""
+    sentinel = object()
+    assert bundle.get("inbox", default=sentinel) is sentinel
+    assert bundle.get("inbox", {}) == {}
+    assert bundle.get("inbox", False) is False      # bool is a default, never a count
+    assert bundle.get("target.recipe.nope", {}) == {}
+    assert bundle.get("unicode.deep", "fallback") == "fallback"   # path into a text section
+    assert bundle.accounting()["totals"]["bytes_pulled"] == pulled
+    # present JSON section / field -> the parsed object, like context[name]
+    assert bundle.get("target", {})["recipe"]["template"]["threads"] == 96
+    assert bundle.get("target.requests[1]", "") == "b"
+
+
+def test_char_count_forms_keep_paging_and_bad_counts_say_why():
+    bundle = ContextBundle.from_payload(_payload())
+    big = bundle.sections[2].text
+    assert bundle.get("big", 10) == big[:10]
+    assert bundle.get("big", "10") == big[:10]            # numeric string: legacy int() coercion
+    assert bundle.get("big", 10.0) == big[:10]
+    assert bundle.get("big", 5, 3) == big[3:8]
+    with pytest.raises(TypeError, match="offset must be an int"):
+        bundle.get("big", 5, "")
+    with pytest.raises(TypeError, match="max_chars must be an int or None"):
+        bundle.get("big", "", default="x")
+    # strict lookup without a default still names the sections on a miss
+    with pytest.raises(KeyError, match="no context section 'inbox'"):
+        bundle.get("inbox")
+
+
+def test_view_get_forwards_default():
+    bundle = ContextBundle.from_payload(_payload())
+    view = repl_view(bundle)
+    assert view.get("inbox", "") == ""
+    assert view.get("inbox", default=[]) == []
+    assert view.get("big", 7) == bundle.sections[2].text[:7]
