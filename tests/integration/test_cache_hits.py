@@ -115,7 +115,12 @@ def sample_prompts():
 
 
 class TestPrefixRouterIntegration:
-    """Integration tests for PrefixRouter with CachingBackend."""
+    """Integration tests for PrefixRouter with CachingBackend (opt-in pinning mode)."""
+
+    @pytest.fixture(autouse=True)
+    def _pin_slots(self, monkeypatch):
+        # UFH14-B4: pinning is opt-in; these tests exercise the pinning mode.
+        monkeypatch.setenv("ORCHESTRATOR_PREFIX_ROUTER_PIN_SLOTS", "1")
 
     def test_same_prefix_hits_same_slot(self, mock_backend, mock_role_config, sample_prompts):
         """Prompts with same prefix should route to same slot."""

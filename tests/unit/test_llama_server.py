@@ -1118,6 +1118,7 @@ class TestChatCompletionsSchemaForwarding:
             "messages": [{"role": "user", "content": "hi"}],
             "max_tokens": 16,
             "stream": False,
+            "cache_prompt": True,  # UFH14-B4: explicit on the chat lane, as on /completion
             "temperature": 0.0,
             "top_k": 40,
             "top_p": 0.95,

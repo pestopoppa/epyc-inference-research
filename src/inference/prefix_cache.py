@@ -377,6 +377,30 @@ class CachingBackend:
         raw = os.environ.get("ORCHESTRATOR_PREFIX_CACHE_BYPASS_FRONTDOOR_REPL", "1")
         return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
+    @staticmethod
+    def _pin_slots_enabled() -> bool:
+        """Whether the client-side PrefixRouter may pin ``id_slot`` (default: NO).
+
+        UFH14-B4 (2026-10-03). Pinning is off by default because, against llama-server
+        v10, it can only lose:
+
+        * The router keys on the first 256 characters, and every root-LM prompt for a
+          role starts with the same static system prompt, so all of a role's calls
+          map to ONE slot. A pinned task whose slot is busy is DEFERRED by the server
+          (``server-context.cpp:2444-2449``) even while other slots are free — the
+          admission gates above, which count slots and tokens, cannot see that wait.
+        * ``num_slots`` is one process-wide value (``ORCHESTRATOR_SERVER_NUM_SLOTS``,
+          default 2), not each server's ``-np``.
+        * The server already does token-level affinity on its own: LCP-similarity
+          slot selection, then its host-RAM prompt cache (``--cache-ram``). Under
+          ``--kv-unified`` idle slots are cleared after every launch
+          (``server-context.cpp:2469-2484``), so a pinned slot holds nothing anyway.
+
+        Set ``ORCHESTRATOR_PREFIX_ROUTER_PIN_SLOTS=1`` to restore the old behaviour.
+        """
+        raw = os.environ.get("ORCHESTRATOR_PREFIX_ROUTER_PIN_SLOTS", "0")
+        return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
     def _should_bypass_slot_routing(self, request: "InferenceRequest") -> bool:  # noqa: F821
         """Return True when slot routing should be skipped for this request."""
         if not self._frontdoor_repl_bypass_enabled():
@@ -427,6 +451,10 @@ class CachingBackend:
             self.frontdoor_repl_bypass_count += 1
             return self.backend.infer(role_config, self._request_with_slot(request, None))
 
+        if not self._pin_slots_enabled():
+            # Server-side affinity (LCP + --cache-ram); an explicit caller slot_id is kept.
+            return self.backend.infer(role_config, request)
+
         # Get optimal slot from prefix router
         prompt = request.prompt or ""
         slot_id = self.router.get_slot_for_prompt(prompt, canonicalize=self.canonicalize)
@@ -458,6 +486,9 @@ class CachingBackend:
                 self._request_with_slot(request, None),
                 on_chunk=on_chunk,
             )
+
+        if not self._pin_slots_enabled():
+            return self.backend.infer_stream_text(role_config, request, on_chunk=on_chunk)
 
         prompt = request.prompt or ""
         slot_id = self.router.get_slot_for_prompt(prompt, canonicalize=self.canonicalize)

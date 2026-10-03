@@ -238,7 +238,12 @@ class TestPrefixRouter:
 
 
 class TestCachingBackend:
-    """Tests for CachingBackend class."""
+    """Tests for CachingBackend class (in its opt-in slot-pinning mode)."""
+
+    @pytest.fixture(autouse=True)
+    def _pin_slots(self, monkeypatch):
+        # UFH14-B4: pinning is opt-in; these tests exercise the pinning mode.
+        monkeypatch.setenv("ORCHESTRATOR_PREFIX_ROUTER_PIN_SLOTS", "1")
 
     @pytest.fixture
     def mock_backend(self):
@@ -489,3 +494,71 @@ class TestSharedServerSlotAllocation:
 
         assert same_server_role_1 is same_server_role_2
         assert other_server is not same_server_role_1
+
+
+class TestSlotPinningDefaultOff:
+    """UFH14-B4: by default the router never pins id_slot; the server picks the slot."""
+
+    @pytest.fixture
+    def backend(self):
+        backend = MagicMock()
+        backend.infer.return_value = MagicMock(role="test", output="r", tokens_generated=1)
+        backend.infer_stream_text.return_value = MagicMock(role="test", output="r", tokens_generated=1)
+        return backend
+
+    def test_infer_sends_no_slot_and_skips_router(self, backend, monkeypatch):
+        monkeypatch.delenv("ORCHESTRATOR_PREFIX_ROUTER_PIN_SLOTS", raising=False)
+        router = PrefixRouter(num_slots=4)
+        caching = CachingBackend(backend, router)
+        caching.infer(MagicMock(), InferenceRequest(role="architect_critic", prompt="p" * 600))
+        assert router.total_routes == 0
+        assert backend.infer.call_args[0][1].slot_id is None
+
+    def test_stream_sends_no_slot(self, monkeypatch):
+        monkeypatch.delenv("ORCHESTRATOR_PREFIX_ROUTER_PIN_SLOTS", raising=False)
+        seen = []
+
+        class _StreamBackend:
+            def infer(self, role_config, request):  # pragma: no cover - not the path under test
+                raise AssertionError("stream call fell back to infer")
+
+            def infer_stream_text(self, role_config, request, on_chunk=None):
+                seen.append(request.slot_id)
+                return MagicMock()
+
+        router = PrefixRouter(num_slots=4)
+        caching = CachingBackend(_StreamBackend(), router)
+        caching.infer_stream_text(MagicMock(), InferenceRequest(role="x", prompt="q" * 600), on_chunk=None)
+        assert router.total_routes == 0
+        assert seen == [None]
+
+    def test_same_system_prompt_no_longer_serializes_on_one_slot(self, backend, monkeypatch):
+        """The defect: a 256-char key maps every root-LM prompt of a role to one slot."""
+        shared_head = "You are the root LM. " * 20  # > 256 chars, identical across turns
+        monkeypatch.setenv("ORCHESTRATOR_PREFIX_ROUTER_PIN_SLOTS", "1")
+        pinned = CachingBackend(backend, PrefixRouter(num_slots=4))
+        slots = set()
+        for i in range(4):
+            pinned.infer(MagicMock(), InferenceRequest(role="r", prompt=shared_head + f"task {i}"))
+            slots.add(backend.infer.call_args[0][1].slot_id)
+        assert len(slots) == 1  # all four pinned to ONE slot
+        monkeypatch.setenv("ORCHESTRATOR_PREFIX_ROUTER_PIN_SLOTS", "0")
+        for i in range(4):
+            pinned.infer(MagicMock(), InferenceRequest(role="r", prompt=shared_head + f"task {i}"))
+            assert backend.infer.call_args[0][1].slot_id is None
+
+    def test_explicit_caller_slot_is_preserved(self, backend, monkeypatch):
+        monkeypatch.delenv("ORCHESTRATOR_PREFIX_ROUTER_PIN_SLOTS", raising=False)
+        caching = CachingBackend(backend, PrefixRouter(num_slots=4))
+        caching.infer(MagicMock(), InferenceRequest(role="x", prompt="p", slot_id=3))
+        assert backend.infer.call_args[0][1].slot_id == 3
+
+    @pytest.mark.parametrize("value", ["1", "true", "on", "yes"])
+    def test_opt_in_values(self, value, monkeypatch):
+        monkeypatch.setenv("ORCHESTRATOR_PREFIX_ROUTER_PIN_SLOTS", value)
+        assert CachingBackend._pin_slots_enabled() is True
+
+    @pytest.mark.parametrize("value", ["0", "", "off", "false", "no"])
+    def test_opt_out_values(self, value, monkeypatch):
+        monkeypatch.setenv("ORCHESTRATOR_PREFIX_ROUTER_PIN_SLOTS", value)
+        assert CachingBackend._pin_slots_enabled() is False

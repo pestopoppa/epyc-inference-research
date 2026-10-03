@@ -29,6 +29,12 @@ from src.model_server import InferenceRequest, InferenceResult
 pytestmark = pytest.mark.integration
 
 
+@pytest.fixture(autouse=True)
+def _pin_slots(monkeypatch):
+    """UFH14-B4: router slot pinning is opt-in; this module exercises the pinning mode."""
+    monkeypatch.setenv("ORCHESTRATOR_PREFIX_ROUTER_PIN_SLOTS", "1")
+
+
 @pytest.fixture
 def mock_llama_server_backend():
     """Create a mock LlamaServerBackend for testing."""
