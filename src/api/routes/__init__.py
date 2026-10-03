@@ -11,6 +11,7 @@ from src.api.routes.chat import router as chat_router
 from src.api.routes.gates import router as gates_router
 from src.api.routes.stats import router as stats_router
 from src.api.routes.openai_compat import router as openai_router
+from src.api.routes.passthrough import router as passthrough_router
 from src.api.routes.sessions import router as sessions_router
 from src.api.routes.documents import router as documents_router
 from src.api.routes.config import router as config_router
@@ -34,6 +35,8 @@ def create_api_router() -> APIRouter:
     router.include_router(gates_router, tags=["gates"])
     router.include_router(stats_router, tags=["stats"])
     router.include_router(openai_router, prefix="/v1", tags=["openai"])
+    # UFH14-B6: raw OpenAI passthrough for one role, behind the admission gate.
+    router.include_router(passthrough_router, prefix="/v1", tags=["passthrough"])
     router.include_router(sessions_router, tags=["sessions"])
     # Vision router requires optional native deps. Import lazily.
     try:
@@ -60,6 +63,7 @@ __all__ = [
     "gates_router",
     "stats_router",
     "openai_router",
+    "passthrough_router",
     "sessions_router",
     "documents_router",
     "config_router",
