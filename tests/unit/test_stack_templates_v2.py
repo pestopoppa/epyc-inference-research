@@ -335,8 +335,13 @@ class TestDefaultYamlRoundTrip:
 
     def test_hot_vs_loaded_breakdown(self):
         t = load_template("default")
-        # Production default stack is all-HOT
-        assert t.hot_ram_gb == t.loaded_ram_gb
+        # The default stack is no longer all-HOT: STACKCHG-DFLASH2-20261003 made worker_vision
+        # WARM (cold CPU, not started by a default start). loaded = hot + every WARM role,
+        # recomputed from the template rather than pinned. (This failed on HEAD since d3233170.)
+        warm = {name: r for name, r in t.roles.items() if r.tier == "WARM"}
+        assert "worker_vision" in warm
+        assert t.loaded_ram_gb == pytest.approx(
+            t.hot_ram_gb + sum(r.total_ram_gb for r in warm.values()))
         assert t.hot_ram_gb > 0
 
 

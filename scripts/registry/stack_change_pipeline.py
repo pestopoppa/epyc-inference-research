@@ -723,9 +723,14 @@ def _lean_registry_step(
 
         if cache_path.exists():
             cache_path.unlink()  # force, as the CLI's --force does
+        before = config.lean_registry.read_bytes() if config.lean_registry.exists() else None
         out = load_or_compile(
             config.research_registry, active, config.lean_registry, cache_path, topology
         )
+        changed = before != (
+            config.lean_registry.read_bytes() if config.lean_registry.exists() else None
+        )
+        evicted = _evict_lean_derived_modules(config) if changed else []
     except Exception as exc:  # noqa: BLE001
         return PipelineStep(
             name="lean_registry",
@@ -736,16 +741,52 @@ def _lean_registry_step(
                 f"drafter selection: {_topology_path(config)} (drafter_selection)",
             ],
         )
+    details = [
+        f"recompiled from master: {config.research_registry}"
+        f" -> {config.lean_registry}",
+        f"{len(out.get('roles', {}))} roles projected through the active manifest",
+    ]
+    if evicted:
+        details.append(
+            "lean changed: evicted " + ", ".join(evicted) + " so the later steps of this "
+            "run import it against the regenerated lean, not the one it was loaded from"
+        )
     return PipelineStep(
         name="lean_registry",
         status="ok",
         warnings=bootstrap_warnings,
-        details=[
-            f"recompiled from master: {config.research_registry}"
-            f" -> {config.lean_registry}",
-            f"{len(out.get('roles', {}))} roles projected through the active manifest",
-        ],
+        details=details,
     )
+
+
+# Modules whose MODULE-LEVEL constants are computed from the lean registry at import.
+_LEAN_DERIVED_MODULES = ("scripts.server.stack_manifest", "stack_manifest")
+
+
+def _evict_lean_derived_modules(config: StackChangePipelineConfig) -> list[str]:
+    """Forget stack_manifest after `update` rewrote the lean it reads.
+
+    STACKCHG-KVPOOL-20261003. stack_manifest derives LAUNCH_CONTEXT_TOKENS,
+    ROLE_LAUNCH_META, LAUNCH_KV_QUANT_CONFIGS, HOT/WARM_SERVERS, ... from the lean
+    AT IMPORT, and this run imported it (the step above, `_active_roles`) before
+    the lean was rewritten. Every later step of the same `update` then compiled
+    stack priors from the OLD lean: raising :8083 n_ctx 196608 -> 393216 wrote
+    `effective_context_tokens: 196608` into the priors, `update` reported
+    `guard: ok`, and the next `check` (a fresh process) failed with "stack-prior
+    artifact is stale" and three "serving.effective_context_tokens 196608 does not
+    match launch context 393216" guard errors. The consumers on this path import
+    it inside functions, so dropping it from sys.modules is enough for them to
+    re-execute it against the fresh lean (and re-run its import-time gates).
+    Only the lean stack_manifest actually reads is eligible.
+    """
+    default_lean = config.repo_root / "orchestration" / "model_registry.yaml"
+    if config.lean_registry.resolve() != default_lean.resolve():
+        return []
+    evicted = [name for name in _LEAN_DERIVED_MODULES if sys.modules.pop(name, None) is not None]
+    parent = sys.modules.get("scripts.server")
+    if parent is not None and "stack_manifest" in vars(parent):
+        delattr(parent, "stack_manifest")
+    return evicted
 
 
 def _launch_meta_from_sources(config: StackChangePipelineConfig) -> dict[str, dict]:

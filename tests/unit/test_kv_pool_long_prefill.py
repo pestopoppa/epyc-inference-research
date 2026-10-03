@@ -481,10 +481,19 @@ class TestPerRequestCap:
         assert lim.per_request_n_ctx == 262144 and lim.slot_n_ctx == 300_000
 
     def test_the_cap_comes_from_the_compiled_stack_priors(self):
+        from pathlib import Path
+
+        import yaml
+
         facts = registry_facts_by_port()
         assert facts, "compiled stack priors present in the tree"
         assert facts[8083]["ctx_max"] == 262144
-        assert facts[8083]["context_tokens"] == 196608
+        # The pool is whatever the lean declares for the :8083 host — recomputed, not pinned
+        # (was the literal 196608; STACKCHG-KVPOOL-20261003 raised it to 393216).
+        lean = yaml.safe_load((Path(__file__).resolve().parents[2]
+                               / "orchestration" / "model_registry.yaml").read_text())
+        declared = lean["server_mode"]["architect_critic"]["serving_shape"]["n_ctx"]
+        assert facts[8083]["context_tokens"] == declared
 
     def _prims(self, monkeypatch, facts):
         from src.llm_primitives import LLMPrimitives

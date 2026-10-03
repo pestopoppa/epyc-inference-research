@@ -152,16 +152,13 @@ roles:
       port: 8083
       numa: GPU_HOST_LANE
       threads: 8
-      spec_overrides:
-        # 2026-08-20: was 24, which SILENTLY OVERRODE the registry's measured optimum (4 for
-        # Qwen3.6-27B) — a spec_override here wins at stack-assembly time, so the stack was
-        # drafting at 24 against a measured-4 artifact. Now 8 = the measured optimum for
-        # Qwen3.8-27B (sweep: n6 55.22 / n8 55.46 / n12 51.14 t/s; curve turns over past 8).
-        # Keep in step with speculative_decoding_policy.draft_max in the MASTER registry.
-        # 2026-09-24: 8 -> 4 with the master (production shape np 4 + unified KV; depth 4 is
-        # equal-or-faster there: np_context_kvu_study_20260924/q38_27b_q8_depth).
-        draft_max: 4
-        p_split: 0
+      # spec_overrides {draft_max: 4, p_split: 0} DELETED 2026-10-03 (STACKCHG-KVPOOL-20261003).
+      # It was a THIRD copy of this server's draft depth, stale since DRAFT-SEL-1: the drafter
+      # and its draft_max are owned by the master's roles.qwen38_27b_q8_local.drafters, chosen
+      # by stack_topology.yaml drafter_selection (dflash2, draft_max 7). Nothing launches from
+      # this template today (stack_commands: "integration pending DS-7 Phase 2"), but the day it
+      # does, this block would have rewritten DFlash2's --spec-draft-n-max to 4. History of the
+      # deleted values: 24 -> 8 (2026-08-20, Qwen3.8-27B MTP sweep) -> 4 (2026-09-24, np 4 kvu).
 
   ingest_long_context:
     # 2026-09-22 lineup change: Qwen3-Next-80B-A3B retired. The role moved onto

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -1091,3 +1092,78 @@ def test_lean_bootstrap_roles_from_sources_match_role_launch_meta() -> None:
     )
     assert active_roles_from_launch_meta(pipeline._launch_meta_from_sources(cfg)) == \
         active_roles_from_launch_meta(ROLE_LAUNCH_META)
+
+
+# --- STACKCHG-KVPOOL-20261003: `update` must not compile priors from the lean it replaced ---
+
+_SM = "scripts.server.stack_manifest"
+
+
+@pytest.fixture
+def pin_stack_manifest():
+    """Swap BOTH bindings eviction touches (sys.modules and the package attribute) and
+    put the real ones back at teardown, whatever eviction left behind."""
+    import scripts.server as server_pkg
+
+    had_mod, mod = _SM in sys.modules, sys.modules.get(_SM)
+    had_attr, attr = "stack_manifest" in vars(server_pkg), vars(server_pkg).get("stack_manifest")
+
+    def pin(value) -> None:
+        sys.modules[_SM] = value
+        server_pkg.stack_manifest = value
+
+    yield pin
+    if had_mod:
+        sys.modules[_SM] = mod
+    else:
+        sys.modules.pop(_SM, None)
+    if had_attr:
+        server_pkg.stack_manifest = attr
+    elif "stack_manifest" in vars(server_pkg):
+        delattr(server_pkg, "stack_manifest")
+
+
+def test_evict_lean_derived_modules_only_for_the_lean_stack_manifest_reads(
+    pin_stack_manifest, tmp_path
+) -> None:
+    sentinel = object()
+    pin_stack_manifest(sentinel)
+    elsewhere = StackChangePipelineConfig(mode="update", repo_root=tmp_path,
+                                          lean_registry=tmp_path / "elsewhere.yaml")
+    assert pipeline._evict_lean_derived_modules(elsewhere) == []
+    assert sys.modules[_SM] is sentinel
+
+    default = StackChangePipelineConfig(
+        mode="update", repo_root=tmp_path,
+        lean_registry=tmp_path / "orchestration" / "model_registry.yaml")
+    assert _SM in pipeline._evict_lean_derived_modules(default)
+    assert _SM not in sys.modules
+
+
+def test_lean_update_evicts_stack_manifest_only_when_the_lean_changed(
+    pin_stack_manifest, tmp_path
+) -> None:
+    """Measured on the KVPOOL candidate: with stack_manifest imported before the lean was
+    rewritten, ONE `update` wrote `effective_context_tokens: 196608` for a 393216 lean and
+    the next `check` failed (evidence/pipeline-stale-priors-repro.txt)."""
+    master = _registry(tmp_path / "master" / "model_registry.yaml")
+    lean = tmp_path / "orchestration" / "model_registry.yaml"
+    config = StackChangePipelineConfig(mode="update", repo_root=tmp_path, lean_registry=lean,
+                                       research_registry=master, roles={"frontdoor"})
+    sentinel = object()
+
+    pin_stack_manifest(sentinel)
+    first = pipeline._lean_registry_step(config, check=False)
+    assert first.status == "ok", first.errors
+    assert _SM not in sys.modules
+    assert any("evicted scripts.server.stack_manifest" in d for d in first.details)
+
+    pin_stack_manifest(sentinel)
+    again = pipeline._lean_registry_step(config, check=False)  # same master: lean unchanged
+    assert again.status == "ok", again.errors
+    assert sys.modules[_SM] is sentinel
+    assert not any("evicted" in d for d in again.details)
+
+    _registry(master, throughput=99.0)  # master edit -> the lean changes -> evict again
+    third = pipeline._lean_registry_step(config, check=False)
+    assert _SM not in sys.modules and any("evicted" in d for d in third.details)

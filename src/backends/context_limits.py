@@ -19,13 +19,30 @@ Fallback order per URL: live ``/props`` (cached, TTL) → registry/stack priors
 (``runtime.cache.context_tokens`` / ``slots_by_port`` / ``kv_unified``) → None.
 
 Per-request cap (2026-10-03, :8083 KV-pool decision step 1): under unified KV the
-server lets ONE request use the whole ``-c``. Once ``-c`` exceeds the model's
-trained context (``n_ctx_train``) the server only warns, so the orchestrator caps
+server lets ONE request use the whole ``-c``. The orchestrator caps
 ``per_request_n_ctx`` at the model's ``ctx_max`` from the compiled stack priors
 (``roles.<role>.model.ctx_max``, sourced from the research registry). Nothing is
 hardcoded: today ``min(196608, 262144) = 196608``; after a relaunch at a larger
 ``-c`` the same rule yields 262144. ``server_n_ctx`` keeps the server's own slot
-n_ctx, which is what sizes the shared pool (``pool_tokens``).
+n_ctx.
+
+THE v10 SERVER CAPS TOO (STACKCHG-KVPOOL-20261003). Above ``n_ctx_train`` the
+server does not only warn: it clamps every slot, ``n_ctx_slot = min(n_ctx_seq,
+n_ctx_train)`` (llama.cpp ffc1bac82 ``tools/server/server-context.cpp:1316-1322``,
+WARN "the slot context (393216) exceeds the training context of the model
+(262144) - capping"), and ``/props`` reports the CLAMPED 262144. So for a capping
+server the slot n_ctx no longer equals ``-c`` under unified KV, and two things
+must not be read from it:
+
+* the unified/split inference — comparing the live n_ctx with the raw ``-c``
+  (262144 >= 393216 is False) reads the server as SPLIT, which turns
+  ``shared_pool`` off and DISARMS SharedKVPoolAdmission for :8083. It compares
+  against the midpoint of the two CAPPED expectations instead;
+* the pool — ``pool_n_ctx`` carries the declared ``-c`` (393216) when the server
+  has clamped its slots, so ``pool_tokens`` is the real pool, not 262144.
+
+A build that does not clamp (``/props`` n_ctx 393216) keeps the step-1 path:
+``per_request_n_ctx`` 262144 from the config cap, ``cap_binding`` True.
 There is no invented default here: a caller that gets None decides (and logs)
 its own degraded behaviour.
 
@@ -88,10 +105,13 @@ class ContextLimit:
     server_n_ctx: int | None = None
     # The model's trained context (``model.ctx_max``) when config declares it.
     request_cap: int | None = None
+    # The whole unified pool (-c) when the SERVER clamped its slots below it
+    # (n_ctx_slot = min(-c, n_ctx_train)); None = the slot n_ctx is the pool.
+    pool_n_ctx: int | None = None
 
     @property
     def slot_n_ctx(self) -> int:
-        """The server's per-slot n_ctx (what sizes the KV pool)."""
+        """The server's per-slot n_ctx."""
         return int(self.server_n_ctx or self.per_request_n_ctx)
 
     @property
@@ -108,7 +128,7 @@ class ContextLimit:
     def pool_tokens(self) -> int:
         """Total KV cells requests on this server compete for."""
         if self.kv_unified:
-            return self.slot_n_ctx
+            return max(self.slot_n_ctx, self.pool_n_ctx or 0)
         return self.slot_n_ctx * max(1, self.total_slots or 1)
 
     def fits(self, prompt_tokens: int, max_new_tokens: int = 0) -> bool:
@@ -183,7 +203,8 @@ def parse_props(
     if n_ctx is None:
         return None
     total_slots = _positive_int(props.get("total_slots"))
-    reg_ctx = registry.get("context_tokens") if registry else None
+    reg_ctx = _positive_int(registry.get("context_tokens")) if registry else None
+    request_cap = _positive_int(registry.get("ctx_max")) if registry else None
     kv_unified: bool | None
     if isinstance(props.get("kv_unified"), bool):
         kv_unified = props["kv_unified"]
@@ -192,22 +213,39 @@ def parse_props(
     elif total_slots and reg_ctx:
         # Live evidence beats the declaration (a declared-but-not-yet-reloaded
         # server is still split): split KV gives each slot -c/np, unified gives
-        # each slot all of -c.
-        kv_unified = n_ctx >= int(reg_ctx)
+        # each slot all of -c — and a capping server clamps BOTH at n_ctx_train.
+        # Decide on the midpoint of the two CAPPED expectations. The raw-(-c)
+        # comparison read a clamped unified server (262144 < 393216) as split and
+        # disarmed SharedKVPoolAdmission (STACKCHG-KVPOOL-20261003).
+        unified_slot = capped_n_ctx(reg_ctx, request_cap)
+        split_slot = capped_n_ctx(max(1, reg_ctx // total_slots), request_cap)
+        if unified_slot > split_slot:
+            kv_unified = 2 * n_ctx > unified_slot + split_slot
+        elif registry and isinstance(registry.get("kv_unified"), bool):
+            kv_unified = registry["kv_unified"]
+        else:
+            kv_unified = None  # both layouts give the same slot context
     elif registry and isinstance(registry.get("kv_unified"), bool):
         kv_unified = registry["kv_unified"]
     else:
         kv_unified = None
-    request_cap = _positive_int(registry.get("ctx_max")) if registry else None
+    # A unified server whose slot n_ctx sits AT the cap below the declared -c has
+    # clamped its slots; the pool is still the declared -c.
+    clamped_pool = (
+        reg_ctx
+        if kv_unified and request_cap and n_ctx >= request_cap and reg_ctx and reg_ctx > n_ctx
+        else None
+    )
     return ContextLimit(
         url=url,
         per_request_n_ctx=capped_n_ctx(n_ctx, request_cap),
         total_slots=total_slots,
         kv_unified=kv_unified,
         source="live_props",
-        registry_context_tokens=_positive_int(reg_ctx),
+        registry_context_tokens=reg_ctx,
         server_n_ctx=n_ctx,
         request_cap=request_cap,
+        pool_n_ctx=clamped_pool,
     )
 
 
@@ -554,8 +592,12 @@ class ContextLimitResolver:
             if base is not None and base.slot_n_ctx == n_ctx:
                 return
             if base is not None:
+                # A clamped pool survives only while the server still reports the
+                # clamped value; below the cap the slot n_ctx IS the unified pool.
+                clamped = (base.pool_n_ctx if base.request_cap and n_ctx >= base.request_cap
+                           else None)
                 limit = replace(base, per_request_n_ctx=capped_n_ctx(n_ctx, base.request_cap),
-                                server_n_ctx=n_ctx, source="observed")
+                                server_n_ctx=n_ctx, pool_n_ctx=clamped, source="observed")
             else:
                 limit = ContextLimit(url=url, per_request_n_ctx=n_ctx, total_slots=None,
                                      kv_unified=None, source="observed")
