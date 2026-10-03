@@ -1,4 +1,8 @@
-"""Architect-facing prompts: quality review, plan review, and delegation."""
+"""Architect-facing prompts: plan review and delegation.
+
+The answer-review verdict and revision prompts were removed by RI-18c (the RI-18
+review gate DROP).
+"""
 
 from __future__ import annotations
 
@@ -9,26 +13,6 @@ from src.registry.stack_priors import live_stack_role_records
 
 
 # ── Fallback Constants ──────────────────────────────────────────────────────
-
-_REVIEW_VERDICT_FALLBACK = """Judge this answer. Respond with ONLY one line:
-- "OK" if correct and complete
-- "WRONG: <what to fix>" if incorrect (max 30 words)
-{digest_section}
-Q: {question}
-A: {answer}
-
-Verdict:"""
-
-_REVISION_FALLBACK = """Rewrite this answer applying the corrections below.
-Keep the same style and depth. Only change what the corrections require.
-
-Question: {question}
-
-Original answer: {original}
-
-Corrections: {corrections}
-
-Revised answer:"""
 
 _PLAN_REVIEW_FALLBACK = """Review plan. Reply JSON ONLY:
 {{"d":"ok|reorder|drop|add|reroute","s":0.0-1.0,"f":"<15 words","p":[]}}
@@ -109,93 +93,6 @@ Specialist Report:
 {report}
 
 Decision:"""
-
-
-# ── Quality Review Prompts ──────────────────────────────────────────────────
-
-
-#: Verdict-prompt truncation caps. The defaults are the production prompt (RI-18: the
-#: question cap hides the options of most MC items — 86% of the UFH-13 pilot-pool
-#: prompts exceed 300 chars; RI-18's V-full arm measures the cost of that).
-REVIEW_VERDICT_QUESTION_CAP = 300
-REVIEW_VERDICT_ANSWER_CAP = 1500
-
-
-def build_review_verdict_prompt(
-    question: str,
-    answer: str,
-    context_digest: str = "",
-    worker_digests: list[dict] | None = None,
-    *,
-    question_cap: int = REVIEW_VERDICT_QUESTION_CAP,
-    answer_cap: int = REVIEW_VERDICT_ANSWER_CAP,
-) -> str:
-    """Build architect verdict prompt — forces hyper-concise output.
-
-    Uses TOON encoding for worker_digests (uniform array of section summaries)
-    to minimize tokens sent to architect. TOON achieves 40-65% reduction on
-    structured arrays vs JSON.
-
-    Args:
-        question: Original user question (truncated to ``question_cap`` chars).
-        answer: The answer to review (truncated to ``answer_cap`` chars).
-        context_digest: Optional compact text digest for context-dependent claims.
-        worker_digests: Optional list of worker digest dicts for TOON encoding.
-        question_cap: Question truncation (default 300 = the production prompt,
-            byte-identical to the pre-parameter builder).
-        answer_cap: Answer truncation (default 1500 = the production prompt).
-
-    Returns:
-        Prompt string for architect verdict.
-    """
-    if question_cap < 1 or answer_cap < 1:
-        raise ValueError(f"verdict prompt caps must be >= 1 (got {question_cap}, {answer_cap})")
-    digest_section = ""
-    if worker_digests:
-        # TOON-encode structured worker digests (uniform array → 40-65% savings)
-        try:
-            from src.services.toon_encoder import encode, is_available
-
-            if is_available():
-                digest_section = f"\nEvidence:\n{encode(worker_digests)}\n"
-            else:
-                import json
-
-                digest_section = f"\nEvidence:\n{json.dumps(worker_digests)}\n"
-        except Exception:
-            import json
-
-            digest_section = f"\nEvidence:\n{json.dumps(worker_digests)}\n"
-    elif context_digest:
-        digest_section = f"\nContext: {context_digest[:800]}\n"
-
-    return resolve_prompt(
-        "review_verdict",
-        _REVIEW_VERDICT_FALLBACK,
-        digest_section=digest_section,
-        question=question[:question_cap],
-        answer=answer[:answer_cap],
-    )
-
-
-def build_revision_prompt(question: str, original: str, corrections: str) -> str:
-    """Build fast model revision prompt — expands architect corrections.
-
-    Args:
-        question: Original user question.
-        original: The original answer to revise.
-        corrections: Architect's correction notes.
-
-    Returns:
-        Prompt string for the revision model.
-    """
-    return resolve_prompt(
-        "revision",
-        _REVISION_FALLBACK,
-        question=question[:300],
-        original=original[:1500],
-        corrections=corrections,
-    )
 
 
 # ── Plan Review Prompts ───────────────────────────────────────────────────

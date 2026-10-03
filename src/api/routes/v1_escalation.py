@@ -7,8 +7,8 @@ the flag is on or off (golden-pinned both ways), so turning the flag on for an
 experiment never changes other /v1 traffic. Only an explicit ``auto`` or
 ``architect_general`` escalates, and only with the flag on.
 
-``auto`` keeps /chat's targets verbatim (quality escalation -> coder_escalation,
-review verdict -> the reviewer binding, architect_critic since ARCHSWAP-20260927). ``architect_general`` keeps /chat's
+``auto`` keeps /chat's targets verbatim (quality escalation -> coder_escalation).
+``architect_general`` keeps /chat's
 TRIGGERS but pins every consultant call to that role: after the pending role
 swap coder_escalation stays on the 27B while architect_general becomes
 Flash-Next, so an arm that must measure Flash-Next as the consultant (UFH-13
@@ -30,20 +30,17 @@ order /chat calls them:
      today an alias on architect_general's :8083 process, and it stays on the 27B
      after the role swap) or by the pinned consultant (``architect_general``),
      and that answer replaces it.
-  2. ``review_gate`` — ``chat_review.evaluate_review_gate`` (``_should_review``'s
-     decision via its RI-18 score accessor; MemRL: the answering
-     role's mean Q-value for this answer is below
-     ``chat.review_low_q_threshold``; never for an architect role or an answer
-     under 50 chars) -> ``chat_review._architect_verdict`` (80-token verdict; the
-     reviewer binding, ``architect_critic`` since ARCHSWAP-20260927, under ``auto``;
-     the pinned consultant under ``x_escalation=architect_general``) -> on ``WRONG``, ``chat_review._fast_revise``
-     (``worker_general`` rewrites the answer with the corrections; recorded as
-     ``review_gate_revision``, which is NOT a consultant call). Every gate
-     evaluation also emits the RI-18 ``review_gate`` tap event (path ``v1``).
 
-* ``repl`` stage — the default REPL bridge. /chat's REPL stage runs only the
-  review gate after the graph (``chat_pipeline/repl_executor.py``), so that is
-  what applies here, to a FINAL answer only (/chat reviews a graph success).
+  The direct stage's review gate (``chat_review._should_review`` -> architect verdict
+  -> ``worker_general`` revision, triggers ``review_gate`` / ``review_gate_revision``)
+  was removed by RI-18c, applying RI-18's pre-registered DROP verdict: reviewing
+  every answer was net-harmful (-38.3 per 100) and the production 0.6 Q gate never
+  fired. /chat lost the same hook at every site, so parity is preserved.
+
+* ``repl`` stage — the default REPL bridge. /chat's REPL stage ran only that
+  review gate after the graph (``chat_pipeline/repl_executor.py``); with it removed
+  the stage runs no hook, here as in /chat. The stage is still classified so a
+  receipt records which /chat stage the answer mapped to.
 
 NOT reproduced, and why (so the semantics stay identical rather than invented):
 
@@ -79,7 +76,6 @@ to ``x_orchestrator_metadata.escalation`` (with ``x_show_routing``).
 from __future__ import annotations
 
 import logging
-import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Iterator
@@ -90,11 +86,8 @@ log = logging.getLogger(__name__)
 
 CONSULTANT_ROLE = str(Role.ARCHITECT_GENERAL)
 QUALITY_ESCALATION_ROLE = str(Role.CODER_ESCALATION)
-REVISION_ROLE = str(Role.WORKER_GENERAL)
 
 TRIGGER_QUALITY = "quality_escalation"
-TRIGGER_REVIEW = "review_gate"
-TRIGGER_REVISION = "review_gate_revision"
 
 STAGE_DIRECT = "direct"
 STAGE_REPL = "repl"
@@ -372,9 +365,7 @@ def _escalate_answer(
     state: Any,
     task_id: str,
 ) -> str:
-    from src.api.routes import chat_review
     from src.api.routes.chat_pipeline import stages as chat_stages
-    from src.api.services.memrl import ensure_memrl_initialized
 
     plan.consultant_url = _server_url(primitives, plan.consultant_role)
     role = plan.final_answer_role or plan.from_role
@@ -403,92 +394,6 @@ def _escalate_answer(
         )
         if adopted:
             answer, role = new_answer, _role_name(new_role)
-
-    # The review gate reads MemRL Q-values; /chat initialises MemRL on its
-    # routing path, /v1 does it here (idempotent; a no-op with memrl off).
-    ensure_memrl_initialized(state)
-    if not answer:
-        review_gate = chat_review.review_gate_skipped("no_answer", answer)
-    elif answer.startswith("[ERROR"):
-        review_gate = chat_review.review_gate_skipped("error_answer", answer)
-    else:
-        review_gate = chat_review.evaluate_review_gate(state, role, answer)
-    gate_role = role
-    verdict_role = None
-    verdict_status = None
-    verdict_ms = None
-    revision_applied = None
-    revision_ms = None
-    if review_gate.triggered:
-        # ARCHSWAP-20260927: /chat's verdict goes to the REVIEWER binding
-        # (resolve_reviewer_role(), default architect_critic = the 27B), so ``auto``
-        # keeps that target verbatim. A pinned consultant (``x_escalation=
-        # architect_general``, UFH-13 A2) pins this call too, as it pins every
-        # consultant call, and the step records the role actually asked.
-        from src.roles import resolve_reviewer_role
-
-        verdict_role = plan.target_role or str(resolve_reviewer_role())
-        before = _counters(primitives)
-        t_review = time.perf_counter()
-        with _tagged_trace(plan, primitives, TRIGGER_REVIEW, role, verdict_role):
-            verdict, verdict_status = chat_review._architect_verdict_with_status(
-                question=question,
-                answer=answer,
-                primitives=primitives,
-                role=verdict_role,
-            )
-        verdict_ms = chat_review.review_ms_since(t_review)
-        revision_applied = False
-        wrong = bool(verdict) and verdict.upper().startswith("WRONG")
-        review_step = _record_step(
-            plan,
-            primitives,
-            trigger=TRIGGER_REVIEW,
-            from_role=role,
-            to_role=verdict_role,
-            before=before,
-            outcome="wrong" if wrong else "ok_or_unavailable",
-        )
-        if review_step is not None:
-            # RI-22: split ok_or_unavailable. `outcome` keeps its established values
-            # (the UFH-13 thesis report buckets on them); this names which one it was.
-            review_step["verdict_status"] = verdict_status
-        if wrong:
-            corrections = verdict.split(":", 1)[1].strip() if ":" in verdict else verdict
-            before = _counters(primitives)
-            t_review = time.perf_counter()
-            with _tagged_trace(plan, primitives, TRIGGER_REVISION, role, REVISION_ROLE):
-                revised = chat_review._fast_revise(
-                    question=question,
-                    original_answer=answer,
-                    corrections=corrections,
-                    primitives=primitives,
-                )
-            revision_ms = chat_review.review_ms_since(t_review)
-            changed = revised != answer
-            revision_applied = changed
-            _record_step(
-                plan,
-                primitives,
-                trigger=TRIGGER_REVISION,
-                from_role=role,
-                to_role=REVISION_ROLE,
-                before=before,
-                outcome="revised" if changed else "kept_original",
-            )
-            if changed:
-                answer, role = revised, REVISION_ROLE
-    chat_review.record_review_gate(
-        task_id,
-        gate_role,
-        gate=review_gate,
-        path=chat_review.REVIEW_PATH_V1,
-        verdict_status=verdict_status,
-        reviewer_role=verdict_role,
-        revision_applied=revision_applied,
-        verdict_ms=verdict_ms,
-        revision_ms=revision_ms,
-    )
 
     plan.final_answer_role = role
     return answer

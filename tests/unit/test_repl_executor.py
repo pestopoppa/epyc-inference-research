@@ -24,20 +24,6 @@ from src.session import Session, SQLiteSessionStore
 _RETIRED_ARCHITECT_ROLE = "architect_" "coding"
 
 
-def _gate(triggered: bool):
-    """A scored RI-18 ``GateScore`` whose production decision is ``triggered``."""
-    from src.api.routes.chat_review import GateScore
-
-    return GateScore(
-        avg_q=0.1 if triggered else 0.9,
-        n_results=5,
-        n_role_rows=2,
-        skip_reason="scored",
-        threshold=0.6,
-        answer_chars=60,
-    )
-
-
 # ── Test Fixtures ───────────────────────────────────────────────────────
 
 
@@ -985,100 +971,6 @@ class TestDelegationLogging:
                 assert response.delegation_events is not None
                 assert len(response.delegation_events) == 1
                 assert response.delegation_success is True
-
-
-# ── Quality Review Gate ───────────────────────────────────────────────────
-
-
-class TestQualityReviewGate:
-    """Test quality review gate integration."""
-
-    @pytest.mark.asyncio
-    async def test_review_gate_revises_wrong_answer(
-        self, basic_request, basic_routing, mock_primitives, mock_state
-    ):
-        """Test that review gate revises wrong answers."""
-        with patch("src.api.routes.chat_pipeline.repl_executor.REPLEnvironment") as mock_repl_class:
-            mock_repl = MagicMock()
-            mock_repl.artifacts = {}
-            mock_repl._tool_invocations = 0
-            mock_repl.tool_registry = None
-            mock_repl.log_exploration_completed = MagicMock()
-            mock_repl_class.return_value = mock_repl
-
-            success_result = TaskResult(
-                answer="Wrong answer", success=True, turns=1, role_history=["worker_general"]
-            )
-
-            with patch("src.api.routes.chat_pipeline.repl_executor.run_task", return_value=success_result):
-                with patch(
-                    "src.api.routes.chat_pipeline.repl_executor.evaluate_review_gate"
-                ) as mock_should_review:
-                    with patch(
-                        "src.api.routes.chat_pipeline.repl_executor._architect_verdict_with_status"
-                    ) as mock_verdict:
-                        with patch(
-                            "src.api.routes.chat_pipeline.repl_executor._fast_revise"
-                        ) as mock_revise:
-                            mock_should_review.return_value = _gate(True)
-                            mock_verdict.return_value = ("WRONG: The answer is 42, not 41", "wrong")
-                            mock_revise.return_value = "The answer is 42"
-
-                            response = await _execute_repl(
-                                request=basic_request,
-                                routing=basic_routing,
-                                primitives=mock_primitives,
-                                state=mock_state,
-                                start_time=time.perf_counter(),
-                                initial_role=Role.WORKER_GENERAL,
-                            )
-
-                            # Should have revised the answer
-                            mock_revise.assert_called_once()
-                            assert response.answer == "The answer is 42"
-
-    @pytest.mark.asyncio
-    async def test_review_gate_accepts_correct_answer(
-        self, basic_request, basic_routing, mock_primitives, mock_state
-    ):
-        """Test that review gate accepts correct answers."""
-        with patch("src.api.routes.chat_pipeline.repl_executor.REPLEnvironment") as mock_repl_class:
-            mock_repl = MagicMock()
-            mock_repl.artifacts = {}
-            mock_repl._tool_invocations = 0
-            mock_repl.tool_registry = None
-            mock_repl.log_exploration_completed = MagicMock()
-            mock_repl_class.return_value = mock_repl
-
-            success_result = TaskResult(
-                answer="Correct answer", success=True, turns=1, role_history=["worker_general"]
-            )
-
-            with patch("src.api.routes.chat_pipeline.repl_executor.run_task", return_value=success_result):
-                with patch(
-                    "src.api.routes.chat_pipeline.repl_executor.evaluate_review_gate"
-                ) as mock_should_review:
-                    with patch(
-                        "src.api.routes.chat_pipeline.repl_executor._architect_verdict_with_status"
-                    ) as mock_verdict:
-                        with patch(
-                            "src.api.routes.chat_pipeline.repl_executor._fast_revise"
-                        ) as mock_revise:
-                            mock_should_review.return_value = _gate(True)
-                            mock_verdict.return_value = (None, "ok")  # Correct
-
-                            response = await _execute_repl(
-                                request=basic_request,
-                                routing=basic_routing,
-                                primitives=mock_primitives,
-                                state=mock_state,
-                                start_time=time.perf_counter(),
-                                initial_role=Role.WORKER_GENERAL,
-                            )
-
-                            # Should NOT have revised
-                            mock_revise.assert_not_called()
-                            assert response.answer == "Correct answer"
 
 
 # ── Execution Timeout ─────────────────────────────────────────────────────

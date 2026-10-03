@@ -1536,41 +1536,6 @@ def _numeric_param_validation_error(action: dict[str, Any]) -> str | None:
         return f"numeric_trial param {key_s!r} must be >= {low}; got {value!r}"
     if high is not None and value > high:
         return f"numeric_trial param {key_s!r} must be <= {high}; got {value!r}"
-    review_order_error = _chat_review_threshold_order_error({key_s: value})
-    if review_order_error:
-        return review_order_error
-    return None
-
-
-def _current_chat_review_thresholds() -> tuple[float, float]:
-    try:
-        from src.config import get_config
-
-        cfg = get_config().chat
-        return float(cfg.review_low_q_threshold), float(cfg.review_skip_q_threshold)
-    except Exception:
-        return 0.6, 0.6
-
-
-def _chat_review_threshold_order_error(params: dict[str, Any]) -> str | None:
-    low_key = "chat.review_low_q_threshold"
-    skip_key = "chat.review_skip_q_threshold"
-    if low_key not in params and skip_key not in params:
-        return None
-    try:
-        low, skip = _current_chat_review_thresholds()
-        if low_key in params:
-            low = float(params[low_key])
-        if skip_key in params:
-            skip = float(params[skip_key])
-    except (TypeError, ValueError) as exc:
-        return f"chat review thresholds must be numeric: {exc}"
-    if low > skip:
-        return (
-            "chat review thresholds require "
-            "chat.review_low_q_threshold <= chat.review_skip_q_threshold; "
-            f"got {low:.6g} > {skip:.6g}"
-        )
     return None
 
 

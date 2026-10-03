@@ -1,9 +1,10 @@
 """RI-16: per-stage routing-decision latency on the live /chat path.
 
 All mocked — no network, no model. Covers: every stage timer is populated on a
-routed request, ``total`` >= the sum of the sequential stages, a skipped review gate
-records ``None`` (never 0), and the emitted schema (routing_decision event,
-task_completed event, ChatResponse) is stable.
+routed request, ``total`` >= the sum of the sequential stages, a stage that did not
+run records ``None`` (never 0) — including ``review_gate`` / ``review_verdict``, which
+are always ``None`` since RI-18c removed the review gate — and the emitted schema
+(routing_decision event, task_completed event, ChatResponse) is stable.
 """
 
 from __future__ import annotations
@@ -162,8 +163,11 @@ def test_route_total_covers_its_sequential_stages() -> None:
 
 
 def test_full_request_stages_and_total(tmp_path: Path) -> None:
-    """Route -> mode -> routing context -> review gate -> verdict, one request."""
-    from src.api.routes.chat_review import _architect_verdict, _should_review
+    """Route -> mode -> routing context, one request.
+
+    RI-18c removed the answer review gate, so ``review_gate`` and ``review_verdict``
+    stay ``None`` on a full request and ``total`` is the remaining decision stages.
+    """
     from src.api.routes.chat_routing import _select_mode
     from src.prompt_builders import build_routing_context
 
@@ -178,25 +182,14 @@ def test_full_request_stages_and_total(tmp_path: Path) -> None:
 
     build_routing_context(role="frontdoor", hybrid_router=router, task_description="x")
 
-    review_state = MagicMock(hybrid_router=router)
-    answer = "A long enough answer to pass the fifty character minimum for review."
-    gate = rst.call_timed(
-        "review_gate", _should_review, review_state, result.task_id, "frontdoor", answer,
-        accumulate=True,
-    )
-    assert gate is False  # no memories -> no review
-
-    primitives = MagicMock()
-    primitives.llm_call.return_value = "OK"
-    assert _architect_verdict(question="q", answer=answer, primitives=primitives) is None
-
     stage_ms = rst.telemetry_for(result.task_id)["stage_ms"]
+    retired = ("review_gate", "review_verdict")
     for stage in GOLDEN_STAGE_KEYS:
-        assert isinstance(stage_ms[stage], float), stage
-    sequential = sum(stage_ms[s] for s in rst.TOTAL_COMPONENTS)
-    assert stage_ms["total"] >= sequential - 0.001 * len(rst.TOTAL_COMPONENTS)
-    # total is exactly the decision stages; the verdict (generation) is reported
-    # but excluded from it
+        if stage in retired:
+            assert stage_ms[stage] is None, stage
+        else:
+            assert isinstance(stage_ms[stage], float), stage
+    sequential = sum(stage_ms[s] or 0.0 for s in rst.TOTAL_COMPONENTS)
     assert stage_ms["total"] == pytest.approx(sequential, abs=0.005)
 
 
@@ -210,11 +203,10 @@ def test_forced_mode_and_skipped_review_gate_record_none() -> None:
     assert stage_ms["total"] == stage_ms["route_total"]
 
 
-def test_direct_stage_times_review_gate_and_skips_it_for_force_role(
-    mock_app_state, mock_llm_primitives
-) -> None:
+def test_direct_stage_records_no_review_gate(mock_app_state, mock_llm_primitives) -> None:
+    """RI-18c: the direct stage no longer runs the review gate or its verdict, so both
+    RI-16 stages stay ``None`` whether or not ``force_role`` is set."""
     from src.api.routes.chat_pipeline.direct_stage import _execute_direct
-    from src.api.routes.chat_review import GateScore
 
     def run(request: ChatRequest, task_id: str) -> dict:
         rst.begin(task_id, rst.PATH_CHAT)
@@ -225,49 +217,40 @@ def test_direct_stage_times_review_gate_and_skips_it_for_force_role(
             routing_decision=["frontdoor"],
             routing_strategy="deterministic",
         )
-        mock_llm_primitives.llm_call.return_value = "Direct answer"
+        mock_llm_primitives.llm_call.reset_mock()
+        mock_llm_primitives.llm_call.return_value = "Direct answer that is longer than fifty chars."
         with (
             patch(
                 "src.api.routes.chat_pipeline.direct_stage._truncate_looped_answer",
-                return_value="Direct answer",
+                side_effect=lambda answer, _prompt: answer,
             ),
             patch(
                 "src.api.routes.chat_pipeline.direct_stage._should_formalize",
                 return_value=(False, None),
             ),
             patch("src.api.routes.chat_pipeline.stages.features") as feats,
-            patch(
-                # RI-18: the direct site scores the gate through the accessor, timed
-                # into ``review_gate`` by ``evaluate_review_gate``.
-                "src.api.routes.chat_review.review_gate_score",
-                return_value=GateScore(
-                    avg_q=0.9,
-                    n_results=5,
-                    n_role_rows=2,
-                    skip_reason="scored",
-                    threshold=0.6,
-                    answer_chars=13,
-                ),
-            ) as gate,
             patch("src.api.routes.chat_pipeline.direct_stage.score_completed_task"),
         ):
             feats.return_value.generation_monitor = False
-            _execute_direct(
+            response = _execute_direct(
                 request, routing, mock_llm_primitives, mock_app_state, time.perf_counter(),
                 initial_role="frontdoor",
             )
-        return {"gate_calls": gate.call_count, **rst.telemetry_for(task_id)}
+        return {
+            "answer": response.answer,
+            "llm_calls": mock_llm_primitives.llm_call.call_count,
+            **rst.telemetry_for(task_id),
+        }
 
-    reviewed = run(ChatRequest(prompt="Direct question", real_mode=True), "direct-1")
-    assert reviewed["gate_calls"] == 1
-    assert isinstance(reviewed["stage_ms"]["review_gate"], float)
-
-    skipped = run(
-        ChatRequest(prompt="Direct question", real_mode=True, force_role="frontdoor"),
-        "direct-2",
-    )
-    assert skipped["gate_calls"] == 0
-    assert skipped["stage_ms"]["review_gate"] is None
+    for request, task_id in (
+        (ChatRequest(prompt="Direct question", real_mode=True), "direct-1"),
+        (ChatRequest(prompt="Direct question", real_mode=True, force_role="frontdoor"), "direct-2"),
+    ):
+        out = run(request, task_id)
+        assert out["answer"] == "Direct answer that is longer than fifty chars."
+        assert out["llm_calls"] == 1  # the answer only: no verdict, no revision
+        assert out["stage_ms"]["review_gate"] is None
+        assert out["stage_ms"]["review_verdict"] is None
 
 
 # ── where the telemetry lands ───────────────────────────────────────────

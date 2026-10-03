@@ -39,7 +39,6 @@ def test_approved_chat_threshold_params_map_to_env() -> None:
         {
             "chat.long_context_threshold_chars": 64000,
             "chat.summarization_threshold_tokens": 24000,
-            "chat.review_low_q_threshold": 0.55,
             "chat.review_skip_q_threshold": 0.72,
         }
     )
@@ -47,25 +46,20 @@ def test_approved_chat_threshold_params_map_to_env() -> None:
     assert env_changes == {
         "ORCHESTRATOR_CHAT_LONG_CONTEXT_THRESHOLD_CHARS": "64000",
         "ORCHESTRATOR_CHAT_SUMMARIZATION_THRESHOLD_TOKENS": "24000",
-        "ORCHESTRATOR_CHAT_REVIEW_LOW_Q_THRESHOLD": "0.55",
         "ORCHESTRATOR_CHAT_REVIEW_SKIP_Q_THRESHOLD": "0.72",
     }
 
 
-def test_review_threshold_order_rejects_incoherent_low(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(applicator, "_current_chat_review_thresholds", lambda: (0.6, 0.6))
-
-    result = applicator.EnvRestartApplicator(restart=False).apply(
-        {"chat.review_low_q_threshold": 0.7}
+def test_removed_review_low_threshold_maps_to_no_env() -> None:
+    """RI-18c removed chat.review_low_q_threshold; it is no longer a tunable surface."""
+    assert "review_low_q_threshold" not in applicator.ENV_PARAMS["chat"]
+    env_changes = applicator.EnvRestartApplicator(restart=False).env_changes_for(
+        {"chat.review_low_q_threshold": 0.55}
     )
-
-    assert result.status == "error"
-    assert "review_low_q_threshold <= chat.review_skip_q_threshold" in result.errors[0]
+    assert env_changes == {}
 
 
-def test_review_threshold_order_accepts_coherent_skip(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(applicator, "_current_chat_review_thresholds", lambda: (0.6, 0.6))
-
+def test_review_skip_threshold_is_staged() -> None:
     result = applicator.EnvRestartApplicator(restart=False).apply(
         {"chat.review_skip_q_threshold": 0.72}
     )

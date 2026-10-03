@@ -5,7 +5,7 @@ Reads the ``stage_ms`` telemetry that live ``/chat`` requests write
 (``src/runtime/routing_stage_timing.py``) and prints p50 / p95 / max per stage with n.
 
 One row per request: the ``task_completed`` / ``task_failed`` record is preferred
-(final: it includes ``mode``, ``review_gate`` and the final ``total``); a request
+(final: it includes ``mode`` and the final ``total``; ``review_gate`` is null since RI-18c); a request
 with only a ``routing_decision`` record (still running, or failed before its
 completion was logged) contributes its pre-execution snapshot. ``n`` per stage
 counts only requests where that stage RAN (``None`` = did not run, not 0 ms).

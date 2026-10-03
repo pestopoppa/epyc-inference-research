@@ -9,7 +9,7 @@ controllable mock LLMPrimitives. This exercises:
 - Stage 5: Plan review gate
 - Stage 7: Mode selection
 - Stage 8-9: Direct/React/Delegated execution, error annotation
-- Quality detection, output truncation, architect review
+- Quality detection, output truncation
 
 The mock_responses dict on LLMPrimitives controls what the "LLM" returns,
 allowing deterministic testing of post-processing logic.
@@ -492,78 +492,6 @@ class TestRealModeRouting:
         )
         data = response.json()
         assert data["formalization_applied"] is False
-
-
-# ── Group 6: Architect review functions ───────────────────────────────
-
-
-class TestArchitectReviewFunctions:
-    """Test review functions with mock state and primitives."""
-
-    def test_should_review_false_for_architect_role(self):
-        """Architect roles should never self-review."""
-        from src.api.routes.chat_review import _should_review
-
-        state = MagicMock()
-        state.hybrid_router = MagicMock()
-        assert _should_review(state, "task-1", "architect_general", "some answer" * 20) is False
-
-    def test_should_review_false_for_short_answer(self):
-        """Short answers should skip review."""
-        from src.api.routes.chat_review import _should_review
-
-        state = MagicMock()
-        state.hybrid_router = MagicMock()
-        assert _should_review(state, "task-1", "frontdoor", "short") is False
-
-    def test_should_review_false_without_hybrid_router(self):
-        """Without hybrid_router, should always return False."""
-        from src.api.routes.chat_review import _should_review
-
-        state = MagicMock()
-        state.hybrid_router = None
-        long_answer = "This is a detailed answer. " * 10
-        assert _should_review(state, "task-1", "frontdoor", long_answer) is False
-
-    def test_architect_verdict_returns_none_for_ok(self):
-        """Architect verdict should return None when answer is OK."""
-        from src.api.routes.chat_review import _architect_verdict
-
-        prims = LLMPrimitives(mock_mode=True, mock_responses={})
-        # Default mock returns "[MOCK] Response for role='architect_general': ..."
-        # which doesn't start with "OK", so let's set a custom response
-        # We need to match the full prompt, which is complex. Instead, test the
-        # function behavior by ensuring it handles the response parsing.
-        result = _architect_verdict("What is 2+2?", "4", prims)
-        # Mock response won't start with "OK" so it returns the response text
-        assert result is not None or result is None  # Either is valid behavior
-
-    def test_architect_verdict_handles_exception(self):
-        """Architect verdict should return None on LLM error."""
-        from src.api.routes.chat_review import _architect_verdict
-
-        prims = MagicMock()
-        prims.llm_call.side_effect = RuntimeError("Backend down")
-        result = _architect_verdict("q", "a", prims)
-        assert result is None  # Error returns None (don't block)
-
-    def test_fast_revise_returns_original_on_error(self):
-        """Fast revise should return original answer on LLM error."""
-        from src.api.routes.chat_review import _fast_revise
-
-        prims = MagicMock()
-        prims.llm_call.side_effect = RuntimeError("Backend down")
-        result = _fast_revise("q", "original answer", "fix X", prims)
-        assert result == "original answer"
-
-    def test_fast_revise_returns_revised_on_success(self):
-        """Fast revise should return revised text on success."""
-        from src.api.routes.chat_review import _fast_revise
-
-        prims = MagicMock()
-        prims.llm_call.return_value = "Revised answer with corrections"
-        result = _fast_revise("q", "original", "fix X", prims)
-        assert result == "Revised answer with corrections"
 
 
 # ── Group 7: Quality check integration in direct mode ─────────────────

@@ -30,8 +30,6 @@ class TestChatImportsResolve:
             build_stage2_review_prompt,
             build_long_context_exploration_prompt,
             build_routing_context,
-            build_review_verdict_prompt,
-            build_revision_prompt,
             extract_code_from_response,
             classify_error,
             auto_wrap_final,
@@ -72,9 +70,6 @@ class TestChatImportsResolve:
         """Import chat_review — catches missing functions."""
         from src.api.routes.chat_review import (  # noqa: F401
             _detect_output_quality_issue,
-            _should_review,
-            _architect_verdict,
-            _fast_revise,
             _needs_plan_review,
             _architect_plan_review,
             _apply_plan_review,

@@ -386,8 +386,9 @@ def architect_repl_allowed(role: object, *, task_root: object = None) -> bool:
 # This constant is the persistent source of truth: no registry key and no launch env
 # sets the reviewer (ORCHESTRATOR_REVIEWER_ROLE is an override, unset in the stack),
 # and DelegationConfig has no reviewer_role field. Every review call site resolves
-# through resolve_reviewer_role(): the plan review (ArchitectReviewService), the answer
-# verdict (chat_review) and review_before_commit (chat.py).
+# through resolve_reviewer_role(): the plan review (ArchitectReviewService) and
+# review_before_commit (chat.py). (The answer verdict in chat_review was removed by
+# RI-18c.)
 DEFAULT_REVIEWER_ROLE: Role = Role.ARCHITECT_CRITIC
 
 # Operator/stack-level binding knob. Kept as an env var (+ a forward-compatible

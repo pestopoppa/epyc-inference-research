@@ -33,20 +33,6 @@ from src.api.routes.chat_utils import RoutingResult
 _RETIRED_ARCHITECT_ROLE = "architect_" "coding"
 
 
-def _gate(triggered: bool):
-    """A scored RI-18 ``GateScore`` whose production decision is ``triggered``."""
-    from src.api.routes.chat_review import GateScore
-
-    return GateScore(
-        avg_q=0.1 if triggered else 0.9,
-        n_results=5,
-        n_role_rows=2,
-        skip_reason="scored",
-        threshold=0.6,
-        answer_chars=60,
-    )
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Fixtures
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1358,17 +1344,15 @@ class TestExecuteDirect:
                 mock_fmt.return_value = (False, None)
                 with patch("src.api.routes.chat_pipeline.stages.features") as mock_features:
                     mock_features.return_value.generation_monitor = False
-                    with patch("src.api.routes.chat_pipeline.direct_stage.evaluate_review_gate") as mock_review:
-                        mock_review.return_value = _gate(False)
-                        with patch("src.api.routes.chat_pipeline.direct_stage.score_completed_task"):
-                            result = _execute_direct(
-                                request,
-                                routing,
-                                mock_primitives,
-                                mock_state,
-                                start_time,
-                                initial_role="frontdoor",
-                            )
+                    with patch("src.api.routes.chat_pipeline.direct_stage.score_completed_task"):
+                        result = _execute_direct(
+                            request,
+                            routing,
+                            mock_primitives,
+                            mock_state,
+                            start_time,
+                            initial_role="frontdoor",
+                        )
 
         assert result is not None
         assert result.answer == "Direct answer"
@@ -1406,17 +1390,15 @@ class TestExecuteDirect:
                 mock_fmt.return_value = (False, None)
                 with patch("src.api.routes.chat_pipeline.stages.features") as mock_features:
                     mock_features.return_value.generation_monitor = False
-                    with patch("src.api.routes.chat_pipeline.direct_stage.evaluate_review_gate") as mock_review:
-                        mock_review.return_value = _gate(False)
-                        with patch("src.api.routes.chat_pipeline.direct_stage.score_completed_task"):
-                            result = _execute_direct(
-                                request,
-                                routing,
-                                mock_primitives,
-                                mock_state,
-                                start_time,
-                                initial_role="frontdoor",
-                            )
+                    with patch("src.api.routes.chat_pipeline.direct_stage.score_completed_task"):
+                        result = _execute_direct(
+                            request,
+                            routing,
+                            mock_primitives,
+                            mock_state,
+                            start_time,
+                            initial_role="frontdoor",
+                        )
 
         assert result.answer == "Direct answer"
         assert mock_primitives.llm_call.call_args.kwargs["n_tokens"] == 1024
@@ -1447,17 +1429,15 @@ class TestExecuteDirect:
             mock_trunc.return_value = '{"decision":"approve"}'
             with patch("src.api.routes.chat_pipeline.direct_stage._quality_escalate") as mock_quality:
                 mock_quality.side_effect = lambda answer, _prompt, _prims, role, **_kw: (answer, role)
-                with patch("src.api.routes.chat_pipeline.direct_stage.evaluate_review_gate") as mock_review:
-                    mock_review.return_value = _gate(False)
-                    with patch("src.api.routes.chat_pipeline.direct_stage.score_completed_task"):
-                        result = _execute_direct(
-                            request,
-                            routing,
-                            mock_primitives,
-                            mock_state,
-                            start_time,
-                            initial_role="frontdoor",
-                        )
+                with patch("src.api.routes.chat_pipeline.direct_stage.score_completed_task"):
+                    result = _execute_direct(
+                        request,
+                        routing,
+                        mock_primitives,
+                        mock_state,
+                        start_time,
+                        initial_role="frontdoor",
+                    )
 
         assert result.answer == '{"decision":"approve"}'
         assert mock_primitives.llm_call.call_args.kwargs["json_schema"] == schema
@@ -1489,17 +1469,15 @@ class TestExecuteDirect:
                 with patch("src.api.routes.chat_pipeline.direct_stage._formalize_output") as mock_fmt:
                     with patch("src.api.routes.chat_pipeline.stages.features") as mock_features:
                         mock_features.return_value.generation_monitor = False
-                        with patch("src.api.routes.chat_pipeline.direct_stage.evaluate_review_gate") as mock_review:
-                            mock_review.return_value = _gate(False)
-                            with patch("src.api.routes.chat_pipeline.direct_stage.score_completed_task"):
-                                result = _execute_direct(
-                                    request,
-                                    routing,
-                                    mock_primitives,
-                                    mock_state,
-                                    start_time,
-                                    initial_role="frontdoor",
-                                )
+                        with patch("src.api.routes.chat_pipeline.direct_stage.score_completed_task"):
+                            result = _execute_direct(
+                                request,
+                                routing,
+                                mock_primitives,
+                                mock_state,
+                                start_time,
+                                initial_role="frontdoor",
+                            )
 
         assert result.answer == "Direct answer"
         mock_should.assert_not_called()
@@ -1530,17 +1508,15 @@ class TestExecuteDirect:
                 mock_fmt.return_value = (False, None)
                 with patch("src.api.routes.chat_pipeline.stages.features") as mock_features:
                     mock_features.return_value.generation_monitor = False
-                    with patch("src.api.routes.chat_pipeline.direct_stage.evaluate_review_gate") as mock_review:
-                        mock_review.return_value = _gate(False)
-                        with patch("src.api.routes.chat_pipeline.direct_stage.score_completed_task"):
-                            _execute_direct(
-                                request,
-                                routing,
-                                mock_primitives,
-                                mock_state,
-                                start_time,
-                                initial_role="frontdoor",
-                            )
+                    with patch("src.api.routes.chat_pipeline.direct_stage.score_completed_task"):
+                        _execute_direct(
+                            request,
+                            routing,
+                            mock_primitives,
+                            mock_state,
+                            start_time,
+                            initial_role="frontdoor",
+                        )
 
         # Check that llm_call was called with context prepended
         call_args = mock_primitives.llm_call.call_args
@@ -1571,17 +1547,15 @@ class TestExecuteDirect:
                 mock_fmt.return_value = (False, None)
                 with patch("src.api.routes.chat_pipeline.stages.features") as mock_features:
                     mock_features.return_value.generation_monitor = False
-                    with patch("src.api.routes.chat_pipeline.direct_stage.evaluate_review_gate") as mock_review:
-                        mock_review.return_value = _gate(False)
-                        with patch("src.api.routes.chat_pipeline.direct_stage.score_completed_task"):
-                            result = _execute_direct(
-                                request,
-                                routing,
-                                mock_primitives,
-                                mock_state,
-                                start_time,
-                                initial_role="frontdoor",
-                            )
+                    with patch("src.api.routes.chat_pipeline.direct_stage.score_completed_task"):
+                        result = _execute_direct(
+                            request,
+                            routing,
+                            mock_primitives,
+                            mock_state,
+                            start_time,
+                            initial_role="frontdoor",
+                        )
 
         assert result.answer == "Retry success"
         assert mock_primitives.llm_call.call_count == 2
@@ -1616,17 +1590,15 @@ class TestExecuteDirect:
                 mock_fmt.return_value = (False, None)
                 with patch("src.api.routes.chat_pipeline.stages.features") as mock_features:
                     mock_features.return_value.generation_monitor = False
-                    with patch("src.api.routes.chat_pipeline.direct_stage.evaluate_review_gate") as mock_review:
-                        mock_review.return_value = _gate(False)
-                        with patch("src.api.routes.chat_pipeline.direct_stage.score_completed_task"):
-                            result = _execute_direct(
-                                request,
-                                routing,
-                                mock_primitives,
-                                mock_state,
-                                start_time,
-                                initial_role="frontdoor",
-                            )
+                    with patch("src.api.routes.chat_pipeline.direct_stage.score_completed_task"):
+                        result = _execute_direct(
+                            request,
+                            routing,
+                            mock_primitives,
+                            mock_state,
+                            start_time,
+                            initial_role="frontdoor",
+                        )
 
         assert result.answer == "Retry success"
         assert mock_primitives.llm_call.call_count == 2
@@ -1685,19 +1657,15 @@ class TestExecuteDirect:
                     mock_formal.return_value = '{"formatted": true}'
                     with patch("src.api.routes.chat_pipeline.stages.features") as mock_features:
                         mock_features.return_value.generation_monitor = False
-                        with patch(
-                            "src.api.routes.chat_pipeline.direct_stage.evaluate_review_gate"
-                        ) as mock_review:
-                            mock_review.return_value = _gate(False)
-                            with patch("src.api.routes.chat_pipeline.direct_stage.score_completed_task"):
-                                result = _execute_direct(
-                                    request,
-                                    routing,
-                                    mock_primitives,
-                                    mock_state,
-                                    start_time,
-                                    initial_role="frontdoor",
-                                )
+                        with patch("src.api.routes.chat_pipeline.direct_stage.score_completed_task"):
+                            result = _execute_direct(
+                                request,
+                                routing,
+                                mock_primitives,
+                                mock_state,
+                                start_time,
+                                initial_role="frontdoor",
+                            )
 
         assert result.answer == '{"formatted": true}'
 
@@ -1728,66 +1696,17 @@ class TestExecuteDirect:
                         "src.api.routes.chat_pipeline.stages._detect_output_quality_issue"
                     ) as mock_detect:
                         mock_detect.return_value = "repetitive"
-                        with patch(
-                            "src.api.routes.chat_pipeline.direct_stage.evaluate_review_gate"
-                        ) as mock_review:
-                            mock_review.return_value = _gate(False)
-                            with patch("src.api.routes.chat_pipeline.direct_stage.score_completed_task"):
-                                result = _execute_direct(
-                                    request,
-                                    routing,
-                                    mock_primitives,
-                                    mock_state,
-                                    start_time,
-                                    initial_role="frontdoor",
-                                )
+                        with patch("src.api.routes.chat_pipeline.direct_stage.score_completed_task"):
+                            result = _execute_direct(
+                                request,
+                                routing,
+                                mock_primitives,
+                                mock_state,
+                                start_time,
+                                initial_role="frontdoor",
+                            )
 
         assert result.answer == "Escalated answer"
-
-    def test_direct_review_gate_revises(self, mock_primitives, mock_state):
-        """Direct call uses review gate to revise answer when WRONG verdict."""
-        request = ChatRequest(prompt="Review test", real_mode=True)
-        routing = RoutingResult(
-            task_id="direct-007",
-            task_ir={},
-            use_mock=False,
-            routing_decision=["frontdoor"],
-            routing_strategy="deterministic",
-        )
-        start_time = time.perf_counter()
-
-        mock_primitives.llm_call.return_value = "Original answer"
-
-        with patch("src.api.routes.chat_pipeline.direct_stage._truncate_looped_answer") as mock_trunc:
-            mock_trunc.return_value = "Original answer"
-            with patch("src.api.routes.chat_pipeline.direct_stage._should_formalize") as mock_fmt:
-                mock_fmt.return_value = (False, None)
-                with patch("src.api.routes.chat_pipeline.stages.features") as mock_features:
-                    mock_features.return_value.generation_monitor = False
-                    with patch("src.api.routes.chat_pipeline.direct_stage.evaluate_review_gate") as mock_review:
-                        mock_review.return_value = _gate(True)
-                        with patch(
-                            "src.api.routes.chat_pipeline.direct_stage._architect_verdict_with_status"
-                        ) as mock_verdict:
-                            mock_verdict.return_value = ("WRONG: Missing key detail", "wrong")
-                            with patch(
-                                "src.api.routes.chat_pipeline.direct_stage._fast_revise"
-                            ) as mock_revise:
-                                mock_revise.return_value = "Revised answer"
-                                with patch(
-                                    "src.api.routes.chat_pipeline.direct_stage.score_completed_task"
-                                ):
-                                    result = _execute_direct(
-                                        request,
-                                        routing,
-                                        mock_primitives,
-                                        mock_state,
-                                        start_time,
-                                        initial_role="frontdoor",
-                                    )
-
-        assert result.answer == "Revised answer"
-        mock_revise.assert_called_once()
 
     def test_direct_empty_answer_logs_failed_completion(self, mock_primitives, mock_state):
         """Empty direct outputs must not be scored as successful completions."""
@@ -1806,17 +1725,15 @@ class TestExecuteDirect:
             mock_fmt.return_value = (False, None)
             with patch("src.api.routes.chat_pipeline.stages.features") as mock_features:
                 mock_features.return_value.generation_monitor = False
-                with patch("src.api.routes.chat_pipeline.direct_stage.evaluate_review_gate") as mock_review:
-                    mock_review.return_value = _gate(False)
-                    with patch("src.api.routes.chat_pipeline.direct_stage.score_completed_task"):
-                        result = _execute_direct(
-                            request,
-                            routing,
-                            mock_primitives,
-                            mock_state,
-                            start_time,
-                            initial_role="frontdoor",
-                        )
+                with patch("src.api.routes.chat_pipeline.direct_stage.score_completed_task"):
+                    result = _execute_direct(
+                        request,
+                        routing,
+                        mock_primitives,
+                        mock_state,
+                        start_time,
+                        initial_role="frontdoor",
+                    )
 
         assert result.answer == ""
         call = mock_state.progress_logger.log_task_completed.call_args
@@ -1847,15 +1764,13 @@ class TestExecuteDirect:
                 mock_fmt.return_value = (False, None)
                 with patch("src.api.routes.chat_pipeline.stages.features") as mock_features:
                     mock_features.return_value.generation_monitor = False
-                    with patch("src.api.routes.chat_pipeline.direct_stage.evaluate_review_gate") as mock_review:
-                        mock_review.return_value = _gate(False)
-                        result = _execute_direct(
-                            request,
-                            routing,
-                            mock_primitives,
-                            state,
-                            start_time,
-                            initial_role="frontdoor",
-                        )
+                    result = _execute_direct(
+                        request,
+                        routing,
+                        mock_primitives,
+                        state,
+                        start_time,
+                        initial_role="frontdoor",
+                    )
 
         assert result.answer == "Answer"
