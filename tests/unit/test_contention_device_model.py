@@ -446,9 +446,16 @@ def test_live_topology_device_map_is_consistent() -> None:
     resolved = resolve_device_classes(NUMA_CONFIG.keys(), numa_config=NUMA_CONFIG)
     gpu = {r for r, rd in resolved.items() if rd.is_gpu}
     # 2026-09-27 ARCHITECT SWAP: the MI210 27B is architect_critic.
-    assert gpu == {"architect_critic", "worker_vision"}
+    # STACKCHG-DFLASH2-20261003 (operator-signed): the VL-30B (worker_vision, :8086)
+    # left the MI210 for a cold CPU placement (NUMA_HALF_A, device none) so the 27B
+    # can carry DFlash2; the 27B is the ONLY GPU role.
+    assert gpu == {"architect_critic"}
     for role in gpu:
         assert resolved[role].corroborated, f"{role} device is uncorroborated"
+    # The moved role's two declarations must agree on CPU, not merely drop off the GPU.
+    vision = resolved["worker_vision"]
+    assert vision.device_class is DeviceClass.CPU and vision.device is None, vision
+    assert vision.corroborated, "worker_vision CPU placement is uncorroborated"
 
 
 # ── RTG-35: a stale matrix must not refuse the feasibility enumeration ──

@@ -8,7 +8,7 @@ from pathlib import Path
 import httpx
 import yaml
 
-from scripts.server.stack_manifest import HOT_SERVERS, PORT_MAP
+from scripts.server.stack_manifest import HOT_SERVERS, PORT_MAP, ROLE_LAUNCH_META
 from scripts.server.stack_numa import NUMA_CONFIG
 from scripts.smoke import quarter_stack_smoke as smoke
 
@@ -66,12 +66,18 @@ def test_derived_chat_ports_drop_retired_ports_and_pick_up_live_ones() -> None:
     # is now DERIVED: every registry server_mode row that owns a process (no
     # alias_of) and has a NUMA_CONFIG entry. (eval_batch_frontdoor is a NUMA
     # role with no server_mode row — an eval-tower lane, not the HOT stack.)
+    # STACKCHG-DFLASH2-20261003 (operator-signed): worker_vision (:8086) is now a
+    # COLD CPU role (launch tier warm) that a default `start` never launches, so the
+    # smoke must NOT probe it — probing it would report a deliberately-stopped
+    # server as down. Hosts therefore split by launch tier: every HOT host's
+    # instances are probed, and every non-HOT host's instances are not.
     server_mode = _registry_server_mode()
-    hosts = sorted(
-        role
-        for role, row in server_mode.items()
-        if isinstance(row, dict) and not row.get("alias_of") and role in NUMA_CONFIG
-    )
+    hosts_by_tier: dict[str, list[str]] = {}
+    for role, row in sorted(server_mode.items()):
+        if isinstance(row, dict) and not row.get("alias_of") and role in NUMA_CONFIG:
+            tier = ROLE_LAUNCH_META[role]["tier"]
+            hosts_by_tier.setdefault(tier, []).append(role)
+    hosts = hosts_by_tier.get("hot", [])
     assert "frontdoor" in hosts and len(hosts) >= 3, hosts  # non-vacuity
     probed = 0
     for role in hosts:
@@ -79,6 +85,12 @@ def test_derived_chat_ports_drop_retired_ports_and_pick_up_live_ones() -> None:
             assert port in derived, f"{role} instance on {port} is not probed"
             probed += 1
     assert probed > len(hosts), "expected at least one multi-instance host fleet"
+    cold_hosts = [role for tier, roles in hosts_by_tier.items() if tier != "hot"
+                  for role in roles]
+    assert "worker_vision" in cold_hosts, hosts_by_tier  # non-vacuity of the cold arm
+    for role in cold_hosts:
+        for _cpus, port, _threads in NUMA_CONFIG[role]["instances"]:
+            assert port not in derived, f"cold {role} instance on {port} is probed"
     # Aliases add no port: each resolves to its host's probed port.
     aliases = {r: row["alias_of"] for r, row in server_mode.items() if row.get("alias_of")}
     assert "ingest_long_context" in aliases, aliases
