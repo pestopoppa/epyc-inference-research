@@ -804,3 +804,44 @@ def test_history_credit_admits_a_follow_up_turn_without_the_lease(
     assert adm["prompt_tokens_est"] == rec2["passthrough"]["prompt_tokens_est"]
     # KVU-15b compares the credit with what the server reports it reused.
     assert rec2["passthrough"]["cached_prompt_tokens"] == TIMINGS["cache_n"]
+
+
+# ── UFH14-B1 F1: derived read timeout + serving_params record block ──────────
+
+
+class _FixedAllowance:
+    def __init__(self, allowance_s: int):
+        self.allowance_s = allowance_s
+
+    def prefill_allowance(self, urls, prompt_tokens):
+        return {"allowance_s": self.allowance_s, "url": urls, "prompt_tokens_est": prompt_tokens,
+                "prefill_tps": 10.0, "prefill_source": "measured", "per_request_n_ctx": 196608}
+
+
+@pytest.mark.parametrize("flag,expected_timeout", [(False, pt.DEFAULT_READ_TIMEOUT_S),
+                                                   (True, 5000.0)])
+def test_derived_read_timeout_is_flagged_recorded_and_body_verbatim(
+    client, server, wiring, monkeypatch, flag, expected_timeout
+):
+    from src.backends import serving_params as sp
+    from src.features import Features, reset_features, set_features
+
+    monkeypatch.delenv(pt.READ_TIMEOUT_ENV, raising=False)
+    set_features(Features(derived_prefill_timeout=flag))
+    sp.set_serving_params_resolver(_FixedAllowance(5000))
+    try:
+        raw = json.dumps({"messages": [{"role": "user", "content": "y" * 30_000}]}).encode()
+        r = client.post("/v1/passthrough/architect_critic/chat/completions", content=raw,
+                        headers={"Content-Type": "application/json"})
+        assert r.status_code == 200
+    finally:
+        sp.set_serving_params_resolver(None)
+        reset_features()
+    assert server.requests == [("/v1/chat/completions", raw)]   # never rewritten
+    (rec,) = _records(wiring)
+    assert rec["request"]["timeout_s"] == expected_timeout
+    block = rec["serving_params"]
+    assert block["allowance_s"] == 5000
+    assert block["timeout_s"] == int(expected_timeout)
+    assert block["timeout_raised"] is flag
+    assert block["at_risk"] is (not flag)

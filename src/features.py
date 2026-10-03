@@ -234,6 +234,25 @@ _FEATURE_REGISTRY: tuple[FeatureSpec, ...] = (
     # share a longer prompt prefix and llama-server KV cache reuse pays off.
     # Default-off: behavioral change to the prompt, needs A/B validation first.
     FeatureSpec("prefix_stable_order", False, False, "PREFIX_STABLE_ORDER", "RTE-Prefix: put fixed prompt sections before per-turn-mutating ones so REPL turns share a longer cache prefix"),
+    # UFH14-B1 F1 (D1): add the derived silent-prefill allowance (serving_params:
+    # measured prefill rate of THIS server x THIS prompt) to the HTTP timeout of
+    # long-prompt calls — primitives calls with no request deadline, and the
+    # passthrough read timeout (raised, never lowered). A deadlined call is
+    # clamped back to its deadline regardless. The serving_params record block
+    # (allowance, at_risk, doomed) is written whether this is on or off.
+    # Default-off in BOTH: it lengthens timeouts (weaker hang detection) and the
+    # rate has no live samples yet — flip after a doomed-count window.
+    FeatureSpec("derived_prefill_timeout", False, False, "DERIVED_PREFILL_TIMEOUT", "UFH14-B1 F1: add the measured silent-prefill allowance to long-prompt call timeouts (no-deadline primitives calls; passthrough read timeout raised, never lowered)"),
+    # UFH14-B1 F2 (D4): wall-time forced-answer turn in the REPL graph. Once the
+    # elapsed share of the request budget reaches ORCHESTRATOR_REPL_ANSWER_FORCE_FRAC
+    # (default 0.65, F12), the turn prompt demands FINAL(best answer) now and
+    # that turn skips session compaction. Default-off in BOTH: prompt change.
+    # UFH14-B1: session compaction rewrites TaskState.context, which no turn
+    # prompt renders; its worker_general index call therefore reached no model.
+    # Off = deterministic index, no LLM call (the bug fix). On = the old LLM
+    # index with its input capped to the worker's window, for a future renderer.
+    FeatureSpec("session_compaction_llm_index", False, False, "SESSION_COMPACTION_LLM_INDEX", "UFH14-B1: LLM-written compaction index (worker_general, input capped to its window); off = deterministic index, since TaskState.context is not rendered into turn prompts"),
+    FeatureSpec("repl_answer_force", False, False, "REPL_ANSWER_FORCE", "UFH14-B1 F2: wall-time forced-answer turn (FINAL now at a fraction of the request budget; no compaction on that turn)"),
     # intake-614/615 DAR-6 scaffolding (default-off in BOTH test and prod; no production routing until DAR-6.5 A/B clears)
     FeatureSpec("swarm_fanout", False, False, "SWARM_FANOUT", "DAR-6.1: fan high-injection-risk prompts to N>=2 concurrent serves + BT-aggregate (J14). Scaffolding only — default-off until the DAR-6.5 injection-suite A/B clears (handoffs/active/decision-aware-routing.md § DAR-6.5)."),
     # P21.A test-time compute: DeepConf offline confidence-filtered self-consistency (intake-603)
@@ -657,6 +676,13 @@ class Features:
     # share a longer llama-server KV-cache prefix. Default OFF — prompt
     # behavioral change, pending A/B validation.
     prefix_stable_order: bool = False
+
+    # UFH14-B1 F1: derived silent-prefill allowance on long-prompt call timeouts.
+    derived_prefill_timeout: bool = False
+    # UFH14-B1: LLM-written session-compaction index (off = deterministic).
+    session_compaction_llm_index: bool = False
+    # UFH14-B1 F2: wall-time forced-answer turn in the REPL graph.
+    repl_answer_force: bool = False
 
     # Debug/Development
     mock_mode: bool = True  # Default to mock mode for safety

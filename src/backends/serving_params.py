@@ -285,6 +285,9 @@ class ServingParamsResolver:
         self._lock = threading.Lock()
         self._samples: dict[int, deque[PrefillSample]] = {}
         self._seen: set[str] = set()
+        # Samples this process observed itself (``observe_record``), kept apart so a
+        # log re-read that does not (yet) contain them cannot drop them.
+        self._observed: dict[int, deque[PrefillSample]] = {}
         self._loaded_at: float | None = None
 
     # -- samples ----------------------------------------------------------
@@ -300,8 +303,13 @@ class ServingParamsResolver:
         try:
             hit = sample_from_record(record)
             if hit is not None:
+                port, sample = hit
                 with self._lock:
-                    self._add(*hit)
+                    if sample.record_id and sample.record_id in self._seen:
+                        return
+                    self._observed.setdefault(
+                        port, deque(maxlen=MAX_SAMPLES_PER_PORT)).append(sample)
+                    self._add(port, sample)
         except Exception:
             log.debug("serving params: observe failed", exc_info=True)
 
@@ -324,12 +332,18 @@ class ServingParamsResolver:
                 continue
             if hit is not None:
                 parsed.append(hit)
+        # The log tail is authoritative: REBUILD from it (oldest first, so each port's
+        # deque keeps its newest samples), then re-add what this process observed and
+        # the tail does not hold. Appending to the old deques instead would, once the
+        # seen-set is pruned, re-append evicted OLD records over the newest ones.
         with self._lock:
+            self._samples = {}
+            self._seen = set()
             for port, sample in parsed:
                 self._add(port, sample)
-            if len(self._seen) > 16 * MAX_SAMPLES_PER_PORT:
-                keep = {s.record_id for dq in self._samples.values() for s in dq if s.record_id}
-                self._seen = keep
+            for port, observed in self._observed.items():
+                for sample in observed:
+                    self._add(port, sample)
 
     def samples_for_port(self, port: int | None) -> list[PrefillSample]:
         """This port's samples from the CURRENT server launch when the stack sidecar
@@ -395,8 +409,13 @@ class ServingParamsResolver:
                 unmeasured.append(params.url)
                 continue
             if best is None or allowance > best["allowance_s"]:
+                tokens = int(prompt_tokens)
+                if params.per_request_n_ctx:
+                    tokens = min(tokens, int(params.per_request_n_ctx))
+                rate = rate_at(params.samples, tokens)
                 best = {"allowance_s": allowance, "url": params.url,
                         "prompt_tokens_est": int(prompt_tokens),
+                        "prefill_tps": round(rate, 1) if rate else None,
                         "prefill_samples": params.prefill_samples,
                         "per_request_n_ctx": params.per_request_n_ctx}
         if best is None:
@@ -406,6 +425,48 @@ class ServingParamsResolver:
         if unmeasured:
             best["unmeasured_urls"] = unmeasured
         return best
+
+
+def budget_block(allowance: dict[str, Any], timeout_s: Any, *,
+                 prefill_tokens_est: Any = None, raised: bool = False) -> dict[str, Any]:
+    """The ``serving_params`` record block for one call: the allowance, the timeout the
+    call actually ran with, and two distinct verdicts:
+
+    * ``at_risk`` — the timeout is below the padded allowance (QUEUE_FACTOR x MARGIN x a
+      cold prefill of the whole prompt). A sizing signal, NOT a failure prediction.
+    * ``doomed`` — the timeout cannot cover even ONE prefill of the tokens the server
+      actually has to process: the uncached estimate from the KV-pool admission
+      (KVU-15c credit) when there is one, else the whole prompt cold, at the measured
+      slow-tail rate. Such a call is abandoned mid-prefill while the server keeps
+      prefilling it (D1). This is the count STACKCHANGE Option A is to be signed on;
+      judging it against the padded allowance would overstate it ~2.5x.
+
+    ``timeout_s`` of None/0 means no timeout: never at risk, never doomed."""
+    try:
+        timeout = int(timeout_s or 0)
+    except (TypeError, ValueError):
+        timeout = 0
+    need = int(allowance.get("allowance_s") or 0)
+    window = _pos_int(allowance.get("per_request_n_ctx"))
+    credited = _pos_int(prefill_tokens_est)
+    tokens = credited if credited is not None else _pos_int(allowance.get("prompt_tokens_est"))
+    if tokens is not None and window:
+        tokens = min(tokens, window)
+    tps = allowance.get("prefill_tps")
+    expected = (int(math.ceil(tokens / float(tps)))
+                if tokens and isinstance(tps, (int, float)) and tps > 0 else None)
+    return dict(
+        allowance,
+        timeout_s=timeout or None,
+        timeout_raised=bool(raised),
+        expected_prefill_s=expected,
+        expected_prefill_tokens=tokens if expected is not None else None,
+        expected_prefill_basis=(
+            None if expected is None
+            else "kv_admission_uncached" if credited is not None else "whole_prompt_cold"),
+        at_risk=bool(timeout) and bool(need) and timeout < need,
+        doomed=bool(timeout) and expected is not None and timeout < expected,
+    )
 
 
 _resolver: ServingParamsResolver | None = None

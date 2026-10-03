@@ -52,6 +52,7 @@ flags:
   deepconf: baseline
   deferred_tool_results: baseline
   depth_model_overrides: baseline
+  derived_prefill_timeout: baseline
   escalation_compression: baseline
   eval_batch_serving: baseline
   final_schema_validation: baseline
@@ -89,6 +90,7 @@ flags:
   react_mode: baseline
   reasoning_length_alarm: baseline
   repl: baseline
+  repl_answer_force: baseline
   repl_embedding_pool: baseline
   restricted_python: baseline
   resume_tokens: baseline
@@ -104,6 +106,7 @@ flags:
   self_speculation: baseline
   semantic_classifiers: baseline
   session_compaction: baseline
+  session_compaction_llm_index: baseline
   session_log: baseline
   session_scratchpad: baseline
   session_token_budget: baseline

@@ -218,13 +218,16 @@ def test_staged_serving_params_become_a_record_block(log_file):
     from src.llm_primitives.inference import _note_prefill_budget
 
     sc.stage_caller(role="architect_critic")
+    # 150k tokens at 500 tok/s = 300 s of one cold prefill; a 250 s timeout cannot cover it
     _note_prefill_budget({"allowance_s": 900, "url": URL, "prompt_tokens_est": 150_000,
-                          "prefill_source": "measured"}, timeout_s=300)
+                          "prefill_tps": 500.0, "prefill_source": "measured"}, timeout_s=250)
     staged = sc._STAGED.get()
     record = sc.build_record(method="infer", role_config=None, request=None, base_url=URL,
                              ts_start=1.0, ts_end=2.0, staged=staged)
-    assert record["serving_params"]["doomed"] is True
-    assert record["serving_params"]["timeout_s"] == 300
+    block = record["serving_params"]
+    assert (block["doomed"], block["at_risk"]) == (True, True)
+    assert (block["timeout_s"], block["expected_prefill_s"]) == (250, 300)
+    assert block["expected_prefill_basis"] == "whole_prompt_cold"
     assert "serving_params" not in record["caller"]
 
 
@@ -236,6 +239,72 @@ def test_covered_prefill_is_not_doomed(log_file):
     assert sc._STAGED.get()["serving_params"]["doomed"] is False
 
 
+def test_doomed_is_judged_on_one_prefill_not_on_the_padded_allowance():
+    """The padded allowance (x2 queue x1.25 margin) is a sizing number; judging
+    doom against it overstated the doomed count ~2.5x (review finding)."""
+    allowance = {"allowance_s": 750, "prompt_tokens_est": 150_000, "prefill_tps": 500.0}
+    block = sp.budget_block(allowance, 400)
+    assert (block["at_risk"], block["doomed"]) == (True, False)   # 300 s prefill fits 400 s
+
+
+def test_doomed_uses_the_kv_admission_uncached_estimate():
+    allowance = {"allowance_s": 750, "prompt_tokens_est": 150_000, "prefill_tps": 500.0}
+    # whole prompt cold: 300 s > 120 s -> doomed; with 140k credited as cached
+    # (10k new tokens = 20 s) the same timeout covers it
+    assert sp.budget_block(allowance, 120)["doomed"] is True
+    block = sp.budget_block(allowance, 120, prefill_tokens_est=10_000)
+    assert block["doomed"] is False
+    assert (block["expected_prefill_s"], block["expected_prefill_basis"]) == (
+        20, "kv_admission_uncached")
+
+
+def test_no_timeout_is_never_doomed():
+    allowance = {"allowance_s": 750, "prompt_tokens_est": 150_000, "prefill_tps": 500.0}
+    for timeout in (None, 0):
+        block = sp.budget_block(allowance, timeout)
+        assert (block["timeout_s"], block["at_risk"], block["doomed"]) == (None, False, False)
+
+
+def test_unmeasured_allowance_has_no_doom_verdict():
+    block = sp.budget_block({"allowance_s": 0, "prefill_source": "unmeasured",
+                             "prompt_tokens_est": 60_000}, 60)
+    assert (block["expected_prefill_s"], block["doomed"], block["at_risk"]) == (None, False, False)
+
+
+def test_allowance_dict_carries_the_rate_it_used():
+    lines = [_record(record_id=f"a{i}") for i in range(3)]   # 400 tok/s at 100k
+    got = _resolver(lines).prefill_allowance(URL, 100_000)
+    assert got["prefill_tps"] == pytest.approx(400.0)
+
+
+def test_log_reread_keeps_the_newest_samples_not_evicted_old_ones():
+    """Regression: re-reading the log used to APPEND to the per-port deques after the
+    seen-set was pruned, so evicted OLD records were re-appended over the newest."""
+    n = 16 * sp.MAX_SAMPLES_PER_PORT + 100     # past the old seen-set pruning bound
+    old = [_record(record_id=f"old{i}", prompt_ms=10_000_000) for i in range(n)]  # 10 tok/s
+    new = [_record(record_id=f"new{i}") for i in range(sp.MAX_SAMPLES_PER_PORT)]   # 400 tok/s
+    lines = list(old)
+    clock = [0.0]
+    r = _resolver(lines, clock=lambda: clock[0], refresh_s=10)
+    assert r.for_url(URL).window_prefill_tps < 20
+    lines.extend(new)
+    for step in range(1, 5):         # the old code re-appended old records on read 3
+        clock[0] = 11 * step
+        p = r.for_url(URL)
+    assert p.prefill_samples == sp.MAX_SAMPLES_PER_PORT
+    assert p.window_prefill_tps == pytest.approx(400 * math.sqrt(0.5))
+    assert all(s.record_id.startswith("new") for s in r.samples_for_port(8083))
+
+
+def test_observed_sample_survives_a_reread_that_does_not_hold_it():
+    clock = [0.0]
+    r = _resolver([_record(record_id="x1"), _record(record_id="x2")],
+                  clock=lambda: clock[0], refresh_s=10)
+    r.observe_record(_record(record_id="x3"))
+    clock[0] = 11
+    assert r.for_url(URL).prefill_samples == 3
+
+
 # ── passthrough read timeout ───────────────────────────────────────────────────
 
 
@@ -243,7 +312,33 @@ def _call(tokens: int):
     return types.SimpleNamespace(base_url=URL, prompt_tokens_est=tokens, serving_params=None)
 
 
-def test_passthrough_read_timeout_raised_never_lowered(monkeypatch):
+@pytest.fixture
+def derived_timeout_on():
+    from src.features import Features, reset_features, set_features
+
+    set_features(Features(derived_prefill_timeout=True))
+    yield
+    reset_features()
+
+
+def test_passthrough_read_timeout_unchanged_while_flag_off(monkeypatch):
+    from src.api.routes import passthrough as pt
+    from src.features import Features, reset_features, set_features
+
+    monkeypatch.delenv(pt.READ_TIMEOUT_ENV, raising=False)
+    set_features(Features(derived_prefill_timeout=False))
+    slow = [_record(prompt_ms=2_500_000, record_id=f"s{i}") for i in range(3)]  # 40 tok/s
+    sp.set_serving_params_resolver(_resolver(slow))
+    try:
+        call = _call(100_000)
+        assert pt._read_timeout(call) == pt.DEFAULT_READ_TIMEOUT_S
+        assert call.serving_params["allowance_s"] == 6250       # still derived, for the record
+    finally:
+        sp.set_serving_params_resolver(None)
+        reset_features()
+
+
+def test_passthrough_read_timeout_raised_never_lowered(monkeypatch, derived_timeout_on):
     from src.api.routes import passthrough as pt
 
     monkeypatch.delenv(pt.READ_TIMEOUT_ENV, raising=False)
@@ -273,3 +368,105 @@ def test_thinking_budget_fields():
     assert sp.thinking_budget_fields(8000, message=None) == {"thinking_budget_tokens": 8000}
     with pytest.raises(ValueError):
         sp.thinking_budget_fields(-1)
+
+
+# ── primitives lane: _call_caching_backend (fake backend, no network) ──────────
+
+
+class _FixedAllowance:
+    """Stand-in resolver: every long prompt gets ``allowance_s`` on any URL."""
+
+    def __init__(self, allowance_s: int = 900, tps: float = 500.0):
+        self.allowance_s, self.tps = allowance_s, tps
+
+    def prefill_allowance(self, urls, prompt_tokens):
+        if int(prompt_tokens or 0) < sp.MIN_PREFILL_SAMPLE_TOKENS:
+            return None
+        return {"allowance_s": self.allowance_s, "url": "http://localhost:18081",
+                "prompt_tokens_est": int(prompt_tokens), "prefill_tps": self.tps,
+                "prefill_source": "measured", "per_request_n_ctx": 262_144}
+
+
+@pytest.fixture
+def lane(monkeypatch):
+    """LLMPrimitives over a recording fake backend; no live /props, fixed allowance."""
+    from unittest.mock import Mock
+
+    from src.backends.context_limits import ContextLimitResolver, set_context_limit_resolver
+    from src.features import Features, reset_features, set_features
+    from src.llm_primitives import LLMPrimitives
+    from src.llm_primitives import inference as inf
+    from src.model_server import InferenceResult
+
+    set_context_limit_resolver(
+        ContextLimitResolver(live=False, registry_facts=lambda: {}, role_urls=lambda: {}))
+    sp.set_serving_params_resolver(_FixedAllowance())
+    seen: dict[str, Any] = {}
+    notes: list[tuple] = []
+    monkeypatch.setattr(inf, "_note_prefill_budget",
+                        lambda allowance, timeout_s, **kw: notes.append((allowance, timeout_s, kw)))
+
+    def _infer(request):
+        seen["timeout"] = request.timeout
+        return InferenceResult(role="coder", output="ok", tokens_generated=1,
+                               generation_speed=1.0, elapsed_time=0.1, success=True)
+
+    backend = Mock(spec=[])
+    backend.infer = Mock(side_effect=_infer)
+    prims = LLMPrimitives(mock_mode=False, server_urls={"coder": "http://localhost:18081"})
+
+    def run(prompt: str, *, flag: bool, deadline_s: float | None = None):
+        set_features(Features(derived_prefill_timeout=flag))
+        seen.clear()
+        notes.clear()
+        if deadline_s is None:
+            assert prims._call_caching_backend(backend, prompt, "coder", n_tokens=8) == "ok"
+        else:
+            import time
+
+            with prims.request_context(deadline_s=time.perf_counter() + deadline_s):
+                assert prims._call_caching_backend(backend, prompt, "coder", n_tokens=8) == "ok"
+        return seen.get("timeout"), list(notes)
+
+    from src.config import get_config
+
+    role_timeout = get_config().timeouts.role_timeouts_dict().get("coder", prims.config.call_timeout)
+    yield run, int(role_timeout)
+    sp.set_serving_params_resolver(None)
+    set_context_limit_resolver(None)
+    reset_features()
+
+
+LONG = "x" * (3 * 60_000)   # ~60k tokens at the conservative 3 chars/token
+
+
+def test_lane_no_deadline_long_prompt_gets_role_plus_allowance(lane):
+    run, role_timeout = lane
+    timeout, notes = run(LONG, flag=True)
+    assert timeout == role_timeout + 900
+    (allowance, noted_timeout, kw), = notes
+    assert noted_timeout == role_timeout + 900 and kw["raised"] is True
+
+
+def test_lane_flag_off_keeps_todays_timeout_but_records(lane):
+    run, role_timeout = lane
+    timeout, notes = run(LONG, flag=False)
+    assert timeout == role_timeout
+    (allowance, noted_timeout, kw), = notes
+    assert allowance["allowance_s"] == 900 and kw["raised"] is False
+
+
+def test_lane_deadline_clamps_and_the_block_carries_the_post_clamp_timeout(lane):
+    run, _ = lane
+    timeout, notes = run(LONG, flag=True, deadline_s=30.0)
+    assert timeout <= 30            # the request deadline wins, flag or not
+    (allowance, noted_timeout, kw), = notes
+    assert noted_timeout == timeout and kw["raised"] is False
+    # 60k tokens at 500 tok/s = 120 s of prefill > ~30 s left: doomed
+    assert sp.budget_block(allowance, noted_timeout)["doomed"] is True
+
+
+def test_lane_short_prompt_is_byte_identical(lane):
+    run, role_timeout = lane
+    timeout, notes = run("short prompt", flag=True)
+    assert timeout == role_timeout and notes == []

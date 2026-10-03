@@ -623,29 +623,43 @@ def gate(call: _Call, state: AppState):
 # ── worker thread ────────────────────────────────────────────────────────────
 
 
+def _derived_prefill_timeout_enabled() -> bool:
+    try:
+        from src.features import features as _get_features
+
+        return bool(_get_features().derived_prefill_timeout)
+    except Exception:
+        return False
+
+
 def _read_timeout(call: _Call | None = None) -> float:
-    """Upstream read timeout for ``call``: the env pin when set (0 = none), else
-    ``max(DEFAULT_READ_TIMEOUT_S, derived silent prefill of this prompt)``."""
+    """Upstream read timeout for ``call`` (0 = none).
+
+    The env pin wins when set. Otherwise ``DEFAULT_READ_TIMEOUT_S``, RAISED (never
+    lowered) to the derived silent prefill of this prompt only when the
+    ``derived_prefill_timeout`` feature is on. The allowance is computed either way
+    and kept on ``call.serving_params`` for the record (UFH14-B1 F1). The request
+    body is never touched: the passthrough is the system under test."""
+    if call is not None:
+        try:
+            from src.backends.serving_params import get_serving_params_resolver
+
+            allowance = get_serving_params_resolver().prefill_allowance(
+                call.base_url, call.prompt_tokens_est
+            )
+        except Exception:
+            logger.debug("passthrough: serving params unavailable", exc_info=True)
+            allowance = None
+        call.serving_params = dict(allowance) if allowance else None
     raw = os.environ.get(READ_TIMEOUT_ENV)
     if raw is not None:
         try:
             return float(raw)
         except ValueError:
             return DEFAULT_READ_TIMEOUT_S
-    if call is None:
+    if call is None or not call.serving_params or not _derived_prefill_timeout_enabled():
         return DEFAULT_READ_TIMEOUT_S
-    try:
-        from src.backends.serving_params import get_serving_params_resolver
-
-        allowance = get_serving_params_resolver().prefill_allowance(
-            call.base_url, call.prompt_tokens_est
-        )
-    except Exception:
-        logger.debug("passthrough: serving params unavailable", exc_info=True)
-        allowance = None
-    if allowance:
-        call.serving_params = dict(allowance)
-    need = float((allowance or {}).get("allowance_s") or 0)
+    need = float(call.serving_params.get("allowance_s") or 0)
     return max(DEFAULT_READ_TIMEOUT_S, need)
 
 
@@ -660,10 +674,13 @@ def run_upstream(call: _Call, state: AppState, emit) -> None:
     error: BaseException | None = None
     started = False
     health = getattr(state, "health_tracker", None)
+    # Before the gate: the derivation may re-read the serving-call log, which must
+    # not run while this call holds a pool reservation or the long-prefill lease.
+    read_timeout_s = _read_timeout(call)
     try:
         with gate(call, state) as first_output:
             scanner = _SSEScanner(call, first_output)
-            call.read_timeout_s = _read_timeout(call)
+            call.read_timeout_s = read_timeout_s
             timeout = httpx.Timeout(CONNECT_TIMEOUT_S, read=call.read_timeout_s or None)
             call.t_dispatch = time.time()
             with httpx.Client(timeout=timeout) as client:
@@ -846,8 +863,19 @@ def write_serving_record(call: _Call, error: BaseException | None) -> None:
         }
         if call.kv_admission:
             record["kv_admission"] = dict(call.kv_admission)
-        if call.serving_params:
-            record["serving_params"] = dict(call.serving_params, timeout_s=call.read_timeout_s)
+        if call.serving_params and dispatched:
+            from src.backends.serving_params import budget_block
+
+            credit = call.kv_admission or {}
+            record["serving_params"] = budget_block(
+                call.serving_params,
+                call.read_timeout_s,
+                prefill_tokens_est=(
+                    credit.get("prefill_tokens_est") if credit.get("cache_credit_source") else None
+                ),
+                raised=bool(call.read_timeout_s) and call.read_timeout_s > DEFAULT_READ_TIMEOUT_S
+                and os.environ.get(READ_TIMEOUT_ENV) is None,
+            )
         record["queue"] = {
             "pre_dispatch_wait_ms": round(
                 max(0.0, ((call.t_dispatch if dispatched else now) - call.t_staged) * 1000.0), 3
