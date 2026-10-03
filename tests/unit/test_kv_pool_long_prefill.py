@@ -299,7 +299,11 @@ class TestObservedLongPrefill:
         for occ in (self._occ(decoded=5, processed=50_000),   # decoding now
                     self._occ(decoded=0, processed=1_000)):   # prefill still short
             pool = SharedKVPoolAdmission(occupancy=lambda u, o=occ: o)
-            assert pool.acquire(URL, 40_000, POOL, timeout_s=0) is not None
+            ticket = pool.acquire(URL, 40_000, POOL, timeout_s=0)
+            assert ticket is not None
+            # Each instance stands for a worker and the lease is host-wide
+            # (KVU-15a): let it go before the next "worker" asks.
+            pool.release(URL, ticket)
 
     def test_observation_can_be_disabled(self, monkeypatch):
         monkeypatch.setenv(kpa.KV_POOL_LONG_PREFILL_OBSERVE_ENV, "0")

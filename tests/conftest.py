@@ -227,6 +227,26 @@ def _reset_context_limit_resolver():
 
 
 @pytest.fixture(autouse=True)
+def _hermetic_long_prefill_lease(tmp_path_factory, monkeypatch):
+    """Keep tests off the HOST-WIDE long-prefill lease (KVU-15a).
+
+    The lease is an flock on ``{tmp_dir}/kv_prefill_lease.{host}_{port}.lock`` —
+    by default ``/mnt/raid0/llm/tmp``, where the LIVE API workers take it. A test
+    that admits a long request on ``localhost:8083`` would otherwise hold the
+    production lease (and stall real long prefills) for as long as the test
+    holds it. Each test gets its own directory, so a lease a test never releases
+    cannot leak into the next one either. Only this module's resolver is
+    patched, never ``ORCHESTRATOR_TMP_DIR`` (see tests/unit/conftest.py for why
+    a global tmp-dir override is the wrong seam).
+    """
+    from src.runtime import long_prefill_lease
+
+    lease_dir = tmp_path_factory.mktemp("hermetic_prefill_lease")
+    monkeypatch.setattr(long_prefill_lease, "lease_dir", lambda: lease_dir)
+    yield lease_dir
+
+
+@pytest.fixture(autouse=True)
 def _reset_config_between_tests():
     """Ensure config cache is clean between tests.
 
