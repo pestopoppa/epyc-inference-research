@@ -319,17 +319,26 @@ MEASUREMENT_SCHEDULE_FLAGS = frozenset({"--accumulate-bench-every-keeps",
                                         "--anchor-guard-aa-window-s"})
 
 
+#: Lane -> target binding (lane_targets.py, operator 2026-10-03: one lane explores DS41,
+#: the other Q38FN, on one champion lineage). It binds which instance runs which target
+#: and adds a cross-target non-regression veto to keeps; it changes neither a target's
+#: launch, requests, campaign, source/anchor lineage, COR nor floor, so turning it on at
+#: a batch boundary (the DS41 instance going from two lanes to one) must carry the
+#: lineage rather than orphan it.
+LANE_BINDING_FLAGS = frozenset({"--lane-targets", "--lane"})
+
+
 def resume_binding(argv) -> dict:
     """Prior-child binding before adding a newly selected runtime recipe.
 
     The runtime protocol's own options are excluded too, so a continuation can turn
     the strict runtime path on (or re-declare its arms) at a batch boundary without
     orphaning the source/anchor lineage it continues; so are the pool width and the
-    per-lane actor models (`POOL_ACTOR_FLAGS`) and the post-keep measurement schedule
-    (`MEASUREMENT_SCHEDULE_FLAGS`)."""
+    per-lane actor models (`POOL_ACTOR_FLAGS`), the post-keep measurement schedule
+    (`MEASUREMENT_SCHEDULE_FLAGS`) and the lane -> target binding (`LANE_BINDING_FLAGS`)."""
     stripped = _without(argv, {"--runtime-recipe-reference", "--runtime-recovery-reference",
                                *RUNTIME_PROTOCOL_FLAGS, *POOL_ACTOR_FLAGS,
-                               *MEASUREMENT_SCHEDULE_FLAGS})
+                               *MEASUREMENT_SCHEDULE_FLAGS, *LANE_BINDING_FLAGS})
     stripped = [item for item in stripped if item not in RUNTIME_PROTOCOL_SWITCHES]
     return input_binding(stripped)
 

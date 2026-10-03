@@ -2041,6 +2041,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cpu-window-path", type=Path, default=cpu_window.DEFAULT_PATH,
                         help="the well-known window file; a per-campaign copy is written to "
                              "<store>/cpu-window.json (default: %(default)s)")
+    parser.add_argument("--lane-targets", type=Path,
+                        help="lane -> target binding file (lane_targets.py, operator "
+                             "2026-10-03: one lane per model on one champion lineage). With "
+                             "--lane: refuses a target the file binds to another lane, needs "
+                             "--workers 1, holds the lane's lock, and cross-checks every keep "
+                             "touching a shared path against each peer target (no regression)")
+    parser.add_argument("--lane", help="this instance's lane name in --lane-targets (lane<N>)")
     parser.add_argument("--cpu-window-bus-agent", default=cpu_window.DEFAULT_BUS_AGENT,
                         help="session-bus roster id whose OWN outbox receives the window "
                              "events as `status` broadcasts; 'off' (or empty) disables the bus "
@@ -2081,6 +2088,20 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("select only one CPU or GPU serving launch")
     if args.gpu_serving_launch and not args.resolved_campaign:
         parser.error("--gpu-serving-launch requires an explicitly enrolled target")
+    lane_binding, lane_peer_serving = None, {}
+    if args.lane_targets is not None or args.lane is not None:
+        from . import lane_targets
+        try:
+            lane_binding = lane_targets.resolve(args.lane_targets, args.lane,
+                                                target_id=args.target_id, workers=args.workers,
+                                                lock=not args.dry_run)
+            lane_peer_serving = {peer.entry.name: lane_targets.peer_serving(peer)
+                                 for peer in lane_binding.peers}
+        except (OSError, ValueError, RuntimeError) as exc:
+            parser.error(f"lane binding: {exc}")
+        if (lane_binding.lane.cpu_window_path is not None
+                and args.cpu_window_path == cpu_window.DEFAULT_PATH):
+            args.cpu_window_path = lane_binding.lane.cpu_window_path
     from . import serial_run
     original_binding = serial_run.input_binding(original_argv) \
         if args.out or args.resume_run or args.source_anchor_continuation else None
@@ -4632,6 +4653,27 @@ def main(argv: list[str] | None = None) -> int:
                     comparison.effect - heldout_row.effect]
                 if not verdict["promoted"]:
                     raise loop.ConfirmVetoed(verdict["reason"])
+            if lane_binding is not None:
+                # LANE BINDING (lane_targets.py): a keep touching a path shared with
+                # another lane's target must not regress that target. Same two builds
+                # this keep was measured with; the peer's own launch, requests and bar.
+                def cross_compare(peer, bar):
+                    peer_launch, peer_requests = lane_peer_serving[peer.entry.name]
+                    return measured_serving_compare(
+                        peer_launch.template, anchor_build[0], worker.build_dir,
+                        pairs=args.serving_pairs, port=peer_launch.port,
+                        anchor_resolved_recipe=_cpu_arm(peer_launch, anchor_build[0]),
+                        candidate_resolved_recipe=_cpu_arm(peer_launch, worker.build_dir),
+                        frozen_requests=peer_requests, instrument=serving.MATCHED_INSTRUMENT,
+                        **lane_targets.compare_kwargs(bar, peer_launch.template, peer_requests))
+                cross = lane_targets.cross_check(
+                    lane_binding, store=args.store, mechanism_id=hypothesis.mechanism_id,
+                    changed=_git(worker.worktree, "diff-tree", "-r", "--name-only", "HEAD",
+                                 checked.tree).splitlines(),
+                    compare=cross_compare)
+                evidence["cross_target"] = cross
+                if not cross["passed"]:
+                    raise loop.ConfirmVetoed("KEEP_CANDIDATE-cross-target: " + cross["reason"])
             source_fold_candidate = experimental and cpu_launch \
                 and selected_identity is not None
             # The receipt describes the comparison that admitted this keep.  Promotion

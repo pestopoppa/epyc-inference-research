@@ -1125,6 +1125,14 @@ def _witness_reports(template: serving.Recipe, policy: EnvironmentPolicy,
     return tuple(reports)
 
 
+def _finite_probability(text: str) -> bool:
+    try:
+        value = float(text)
+    except ValueError:
+        return False
+    return math.isfinite(value) and 0 <= value <= 1
+
+
 def _capability(template: serving.Recipe, backend: str, drafter: ArtifactDigest | None,
                 witnesses: tuple[WitnessReport, ...]) -> CapabilityReport:
     reasons: list[CapabilityReason] = []
@@ -1146,6 +1154,12 @@ def _capability(template: serving.Recipe, backend: str, drafter: ArtifactDigest 
             # The model-loader reader team: an explicit non-negative integer that decides
             # load-time threading only (no workload, request or arithmetic change), carried
             # verbatim in the normalized command and so in the execution digest.
+            consumed.update({index, index + 1})
+        elif (flag == "--draft-p-min" and index + 1 < len(flags)
+              and _finite_probability(flags[index + 1])):
+            # The speculative acceptance threshold (Q38FN lane, 2026-10-03: the codified
+            # MTP recipe runs p_min 0.5). The canonical projection already carries it
+            # verbatim (`_template_from_command`), so it is in the execution digest.
             consumed.update({index, index + 1})
     if any(index not in consumed for index in range(len(flags))):
         reasons.append(CapabilityReason(

@@ -75,6 +75,10 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None, s
                   # anchor-guard A/A window): a measurement schedule over the SAME
                   # lineage, never an identity (serial_run.MEASUREMENT_SCHEDULE_FLAGS).
                   *sr.MEASUREMENT_SCHEDULE_FLAGS,
+                  # Lane -> target binding (lane_targets.py): which instance runs
+                  # which target, plus a cross-target keep veto; never an identity
+                  # (serial_run.LANE_BINDING_FLAGS).
+                  *sr.LANE_BINDING_FLAGS,
                   # Best-of-N author wall budgets (bestof.WallBudget): a time policy.
                   "--actor-authors-wall", "--actor-authors-panel-wall",
                   "--actor-authors-cancel-factor",
