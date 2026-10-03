@@ -175,6 +175,27 @@ def _disable_kb_rag_query_length_log():
 
 
 @pytest.fixture(scope="session", autouse=True)
+def _disable_serving_calls_log():
+    """Keep the suite out of the live per-call serving log (``logs/serving_calls``).
+
+    Every ``LlamaServerBackend`` call writes one record; a test run from the shared
+    clone would otherwise mix mocked calls into the production observation. Tests
+    that exercise the log monkeypatch the env var to their own tmp path.
+    """
+    from src.backends.serving_calls import LOG_ENV
+
+    previous = os.environ.get(LOG_ENV)
+    os.environ[LOG_ENV] = "off"
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop(LOG_ENV, None)
+        else:
+            os.environ[LOG_ENV] = previous
+
+
+@pytest.fixture(scope="session", autouse=True)
 def _disable_live_context_limit_reads():
     """Keep the suite off the live stack's ``GET /props`` (context limits).
 

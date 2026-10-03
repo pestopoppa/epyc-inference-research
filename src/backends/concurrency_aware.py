@@ -41,6 +41,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
 from src.backends import kv_slot_files as _kv_slot_files
+from src.backends import serving_calls
 from src.runtime.quiescence import suppress as _quiescence_suppress
 from src.scheduling import gate_observation
 
@@ -1899,7 +1900,13 @@ class ConcurrencyAwareBackend:
         sid = self._extract_session_id(request)
         mb = self._extract_migration_budget_ms(request)
         logical_role = getattr(request, "role", None)
+        _placement_t0 = time.perf_counter()
         with self._dispatch(session_id=sid, migration_budget_ms=mb, request=request) as (backend, _idx, _is_full):
+            serving_calls.annotate_staged(
+                instance_idx=_idx,
+                instance_full=_is_full,
+                placement_wait_ms=round((time.perf_counter() - _placement_t0) * 1000.0, 3),
+            )
             self._annotate_current_tap_dispatch(
                 _idx, backend, logical_role=logical_role, request=request
             )
@@ -1927,7 +1934,13 @@ class ConcurrencyAwareBackend:
         sid = self._extract_session_id(request)
         mb = self._extract_migration_budget_ms(request)
         logical_role = getattr(request, "role", None)
+        _placement_t0 = time.perf_counter()
         with self._dispatch(session_id=sid, migration_budget_ms=mb, request=request) as (backend, _idx, _is_full):
+            serving_calls.annotate_staged(
+                instance_idx=_idx,
+                instance_full=_is_full,
+                placement_wait_ms=round((time.perf_counter() - _placement_t0) * 1000.0, 3),
+            )
             self._annotate_current_tap_dispatch(
                 _idx, backend, logical_role=logical_role, request=request
             )

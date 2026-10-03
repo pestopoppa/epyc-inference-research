@@ -11,6 +11,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
+from src.backends import serving_calls
 from src.exceptions import ContextOverflowError
 from src.scheduling import gate_observation
 
@@ -399,6 +400,44 @@ def _request_trace_keys(owner: Any) -> dict[str, Any]:
 class InferenceMixin:
     """Mixin for real inference methods."""
 
+    def _stage_serving_caller(
+        self, role: str, request: Any, backend_url: str | None, port: int | None
+    ) -> None:
+        """Stage this call's caller identity for the per-call serving record.
+
+        Called BEFORE the inference / region lock is taken, so the recorded
+        ``queue.pre_dispatch_wait_ms`` is the time this call spent queued. Never
+        raises (``src/backends/serving_calls.py``).
+        """
+        try:
+            meta = _build_tap_metadata(
+                request,
+                role=role,
+                backend_url=backend_url or "",
+                port=port,
+                task_id=self.get_request_task_id(),
+                parent_request_id=(
+                    self.get_request_id() if hasattr(self, "get_request_id") else None
+                ),
+                context_trial_id=(
+                    self.get_request_trial_id() if hasattr(self, "get_request_trial_id") else None
+                ),
+                context_batch_id=(
+                    self.get_request_batch_id() if hasattr(self, "get_request_batch_id") else None
+                ),
+            )
+            getter = getattr(self, "get_request_session_id", None)
+            meta["session_id"] = getter() if callable(getter) else None
+            getter = getattr(self, "get_request_workload_class", None)
+            meta["workload_class"] = getter() if callable(getter) else None
+            getter = getattr(self, "get_request_priority", None)
+            meta["priority"] = getter() if callable(getter) else None
+            meta["trace_keys"] = _request_trace_keys(self) or None
+            meta["client"] = os.environ.get("ORCHESTRATOR_CLIENT_ID") or None
+            serving_calls.stage_caller(**meta)
+        except Exception:
+            pass
+
     def _set_last_inference_meta(self, meta: dict[str, Any]) -> None:
         """Record this call's metadata on BOTH channels (TD-21.21 coordinator fix).
 
@@ -776,6 +815,12 @@ class InferenceMixin:
         _ms_port = _extract_port(
             (self.server_urls or {}).get(role, "") if hasattr(self, "server_urls") else ""
         )
+        self._stage_serving_caller(
+            role,
+            request,
+            (self.server_urls or {}).get(role, "") if hasattr(self, "server_urls") else "",
+            _ms_port,
+        )
         try:
             with inference_lock(
                 role,
@@ -787,6 +832,7 @@ class InferenceMixin:
                 request.timeout = self._clamp_timeout_to_request_budget(request.timeout)
                 result = self.model_server.infer(role, request)
         except Exception as exc:
+            serving_calls.abandon_staged(exc)
             req_elapsed_ms = (time.perf_counter() - req_started) * 1000
             self._set_last_inference_meta({
                 "role": role,
@@ -804,6 +850,7 @@ class InferenceMixin:
                 )
             raise
 
+        serving_calls.clear_staged()
         req_elapsed_ms = (time.perf_counter() - req_started) * 1000
         _raise_if_context_overflow(result, role, (self.server_urls or {}).get(role, "") if hasattr(self, "server_urls") else "")
         self._set_last_inference_meta({
@@ -1137,6 +1184,7 @@ class InferenceMixin:
                     else contextlib.nullcontext()
                 )
 
+            self._stage_serving_caller(role, request, backend_url, _cb_port)
             try:
                 with lock_ctx:
                     request.timeout = self._clamp_timeout_to_request_budget(request.timeout)
@@ -1308,6 +1356,7 @@ class InferenceMixin:
                             result = backend.infer(role_config, request)
                         _emit_first_output(result.output)
             except Exception as exc:
+                serving_calls.abandon_staged(exc)
                 req_elapsed_ms = (time.perf_counter() - req_started) * 1000
                 transport = "stream" if can_stream else "batch"
                 self._set_last_inference_meta({
@@ -1327,6 +1376,7 @@ class InferenceMixin:
                     )
                 raise
 
+            serving_calls.clear_staged()
             req_elapsed_ms = (time.perf_counter() - req_started) * 1000
             transport = "stream" if can_stream else "batch"
             # Keep a LOCAL handle on this call's dict: the plain attribute is shared by

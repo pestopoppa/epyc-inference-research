@@ -28,6 +28,7 @@ from typing import Any, Iterator
 
 import httpx
 
+from src.backends import serving_calls
 from src.backends.context_overflow import (
     ContextOverflowInfo,
     classify_error_body,
@@ -411,6 +412,7 @@ class LlamaServerBackend(ModelBackend):
             self._healthy = False
             return False
 
+    @serving_calls.recorded_call("infer")
     def infer(
         self,
         role_config: RoleConfig,
@@ -508,6 +510,7 @@ class LlamaServerBackend(ModelBackend):
 
             # Extract clean timing data from llama.cpp timings object
             timings = result_data.get("timings", {})
+            serving_calls.note_timings(timings, endpoint="/completion", stream=False)
             prompt_eval_ms = timings.get("prompt_ms", 0.0)
             generation_ms = timings.get("predicted_ms", 0.0)
             predicted_per_second = timings.get("predicted_per_second", 0.0)
@@ -866,6 +869,8 @@ class LlamaServerBackend(ModelBackend):
 
             # llama-server's OpenAI shim doesn't always emit timings; estimate
             timings = data.get("timings", {}) or {}
+            serving_calls.note_timings(timings, endpoint="/v1/chat/completions", stream=False)
+            serving_calls.note_usage(usage)
             prompt_eval_ms = float(timings.get("prompt_ms", 0.0))
             generation_ms = float(timings.get("predicted_ms", 0.0))
             predicted_per_second = float(timings.get("predicted_per_second", 0.0))
@@ -1021,6 +1026,7 @@ class LlamaServerBackend(ModelBackend):
             logger.error(f"Stream error: {e}")
             return
 
+    @serving_calls.recorded_call("infer_stream_text")
     def infer_stream_text(
         self,
         role_config: RoleConfig,
@@ -1205,6 +1211,7 @@ class LlamaServerBackend(ModelBackend):
             http_elapsed_ms = (time.perf_counter() - http_start) * 1000
             elapsed = time.time() - start_time
 
+            serving_calls.note_timings(timings, endpoint="/completion", stream=True)
             prompt_eval_ms = timings.get("prompt_ms", 0.0)
             generation_ms = timings.get("predicted_ms", 0.0)
             predicted_per_second = timings.get("predicted_per_second", 0.0)
@@ -1688,6 +1695,12 @@ class LlamaServerBackend(ModelBackend):
         chunks: list[str] = []
         reasoning_chunks: list[str] = []
         completion_reason = "stop"
+        # llama-server attaches its `timings` object to the LAST chunk of a chat
+        # stream (server-task.cpp to_json_oaicompat_chat_stream: `if (timings.prompt_n
+        # >= 0) deltas.back().push_back({"timings", ...})`). This path used to ignore
+        # it and hard-code prompt_eval_ms=0.0, which is why every progress-log
+        # completion read prompt_eval_ms = 0.0 (workspace-89, 2026-10-03).
+        stream_timings: dict[str, Any] = {}
 
         try:
             _overall = request.timeout or self.config.timeout
@@ -1737,6 +1750,9 @@ class LlamaServerBackend(ModelBackend):
                                         failure_reason="server_error",
                                         completion_reason="server_error",
                                     )
+                                _evt_timings = evt.get("timings")
+                                if isinstance(_evt_timings, dict) and _evt_timings:
+                                    stream_timings = _evt_timings
                                 choices = evt.get("choices") or []
                                 if choices:
                                     delta = choices[0].get("delta") or {}
@@ -1781,7 +1797,37 @@ class LlamaServerBackend(ModelBackend):
                 # llama-server still enforces max_tokens, so keep telemetry from
                 # overstating capped generations on chunk-heavy text.
                 tokens_generated = min(tokens_generated, request.n_tokens)
-            speed = tokens_generated / elapsed if elapsed > 0 else 0.0
+            serving_calls.note_timings(
+                stream_timings, endpoint="/v1/chat/completions", stream=True
+            )
+            prompt_eval_ms, generation_ms, http_overhead_ms = 0.0, elapsed * 1000, 0.0
+            predicted_per_second = 0.0
+            prompt_tokens: int | None = None
+            cached_prompt_tokens: int | None = None
+            n_drafted = n_accepted = 0
+            if stream_timings:
+                # Server-measured figures replace the client-side estimates.
+                prompt_eval_ms = float(stream_timings.get("prompt_ms", 0.0) or 0.0)
+                if stream_timings.get("predicted_ms") is not None:
+                    generation_ms = float(stream_timings.get("predicted_ms") or 0.0)
+                predicted_per_second = float(
+                    stream_timings.get("predicted_per_second", 0.0) or 0.0
+                )
+                if isinstance(stream_timings.get("predicted_n"), int) and stream_timings["predicted_n"] > 0:
+                    tokens_generated = int(stream_timings["predicted_n"])
+                _prompt_n = stream_timings.get("prompt_n")
+                _cache_n = stream_timings.get("cache_n")
+                if isinstance(_cache_n, int) and _cache_n >= 0:
+                    cached_prompt_tokens = _cache_n
+                if isinstance(_prompt_n, int) and _prompt_n >= 0:
+                    prompt_tokens = _prompt_n + (cached_prompt_tokens or 0)
+                n_drafted = int(stream_timings.get("draft_n", 0) or 0)
+                n_accepted = int(stream_timings.get("draft_n_accepted", 0) or 0)
+                http_overhead_ms = max(0.0, elapsed * 1000 - (prompt_eval_ms + generation_ms))
+            speed = (
+                predicted_per_second if predicted_per_second > 0
+                else (tokens_generated / elapsed if elapsed > 0 else 0.0)
+            )
             empty_generation = (
                 completion_reason != "read_timeout"
                 and _is_empty_long_generation(output, elapsed)
@@ -1812,13 +1858,18 @@ class LlamaServerBackend(ModelBackend):
                 degraded=empty_generation,
                 failure_stage="generation" if empty_generation else "",
                 failure_reason="empty_generation" if empty_generation else "",
-                prompt_eval_ms=0.0,
-                generation_ms=elapsed * 1000,
+                prompt_eval_ms=prompt_eval_ms,
+                generation_ms=generation_ms,
                 predicted_per_second=speed,
-                http_overhead_ms=0.0,
+                http_overhead_ms=http_overhead_ms,
+                n_tokens_drafted=n_drafted,
+                n_tokens_accepted=n_accepted,
+                acceptance_rate=(n_accepted / n_drafted) if n_drafted > 0 else 0.0,
                 completion_reason=(
                     "empty_generation" if empty_generation else completion_reason
                 ),
+                prompt_tokens=prompt_tokens,
+                cached_prompt_tokens=cached_prompt_tokens,
                 reasoning_content="".join(reasoning_chunks) or None,
             )
         except Exception as e:
