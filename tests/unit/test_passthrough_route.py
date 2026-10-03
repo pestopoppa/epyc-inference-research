@@ -567,6 +567,61 @@ def test_cached_prefix_credit_admits_a_long_passthrough_without_the_lease(
     assert rec["passthrough"]["cache_credited"] is True
 
 
+# ── UFH14-B4: prefix-cache fields on passthrough serving records ───────────
+
+
+def test_passthrough_record_carries_the_b4_prefix_cache_fields(client, server, wiring):
+    from scripts.analysis import prefix_cache_report as rpt
+    from src.backends import serving_calls
+
+    messages = [{"role": "system", "content": "s" * 3000},
+                {"role": "user", "content": "what next?"}]
+    body = {"model": "m", "tools": [TOOL], "messages": messages, "id_slot": 1}
+    r = client.post("/v1/passthrough/architect_critic/chat/completions", json=body)
+    assert r.status_code == 200
+    # The client's id_slot is forwarded untouched (no rewriting).
+    assert json.loads(server.requests[0][1])["id_slot"] == 1
+    (rec,) = _records(wiring)
+    req = rec["request"]
+    # Same fingerprint the client-tool-mode chat lane computes for this payload.
+    expected = serving_calls.prefix_fingerprints(
+        SimpleNamespace(chat_payload={"tools": [TOOL], "messages": messages}))
+    assert req["prefix_fp"] == expected and "c2048" in req["prefix_fp"]
+    assert req["slot_id"] == 1 and req["slot_id_sent"] is True
+    assert req["chat_payload"] is True
+    assert rec["passthrough"]["cached_prompt_tokens"] == TIMINGS["cache_n"]
+    # v10's OAI bodies carry no id_slot, so no server_slot is invented.
+    assert "server_slot" not in rec.get("notes", {})
+    # The B4 report reads the passthrough record like any other call.
+    call = rpt.to_call(rec)
+    assert call is not None and call.fp == expected
+    assert call.cache_n == TIMINGS["cache_n"] and call.prompt_n == TIMINGS["prompt_n"]
+
+
+def test_passthrough_record_without_id_slot_or_timings(client, server, wiring):
+    r = client.post("/v1/passthrough/architect_critic/responses",
+                    json={"model": "m", "input": "short"})
+    assert r.status_code == 200
+    (rec,) = _records(wiring)
+    assert rec["request"]["slot_id"] is None
+    assert rec["request"]["slot_id_sent"] is False
+    assert rec["request"]["prefix_fp"] == {"chars": rec["request"]["prefix_fp"]["chars"]}
+
+
+def test_server_slot_and_cached_tokens_fallbacks():
+    call = pt._Call(role="r", base_url="http://x:1", endpoint="chat/completions", raw_body=b"",
+                    stream=False, prompt_tokens_est=1, prompt_tokens_rough=1, new_tokens=1,
+                    client_host="127.0.0.1", request_id="id", client_id=None)
+    pt.absorb_payload(call, {"id_slot": 3, "usage": {
+        "prompt_tokens": 50, "prompt_tokens_details": {"cached_tokens": 30}}})
+    assert call.server_slot == 3
+    assert pt.cached_prompt_tokens(call) == 30  # no timings: OAI usage fallback
+    pt.absorb_payload(call, {"timings": {"prompt_n": 20, "cache_n": 31}})
+    assert pt.cached_prompt_tokens(call) == 31  # server timings win
+    pt.absorb_payload(call, {"id_slot": True})  # bools are not slots
+    assert call.server_slot == 3
+
+
 def test_request_semaphore_full_is_503(client, server, monkeypatch):
     from src.api.admission import AdmissionController
     from src.api.state import get_state

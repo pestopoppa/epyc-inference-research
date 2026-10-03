@@ -49,7 +49,15 @@ What the passthrough DOES (the gate, nothing else):
   returns the pool reservation when the upstream response ends;
 * writes one ``serving_call.v1`` record per call
   (``src/backends/serving_calls.py``) with ``caller.source = "passthrough"``,
-  carrying the server's ``timings`` parsed off the wire.
+  carrying the server's ``timings`` parsed off the wire and the UFH14-B4
+  prefix-cache fields: ``request.prefix_fp`` (fingerprinted exactly as the
+  client-tool-mode chat lane fingerprints ``tools`` + ``messages``, so
+  ``scripts/analysis/prefix_cache_report.py`` sees passthrough calls' missed
+  reuse), ``request.slot_id`` / ``slot_id_sent`` (a client ``id_slot`` is
+  forwarded untouched), ``passthrough.cached_prompt_tokens`` (``timings.cache_n``,
+  else ``usage.prompt_tokens_details.cached_tokens``) and ``notes.server_slot``
+  when the server reports an ``id_slot`` (v10's OAI chat/responses bodies do
+  not; only ``/completion`` does).
 
 What it does NOT do: no routing, compaction, prompt rewriting, role-default
 sampling, ``max_tokens`` clamping or response rewriting. The request body is
@@ -258,6 +266,11 @@ class _Call:
     # The prompt-estimate text (``prompt_text(body)``), handed to the KV pool
     # gate for the KVU-15a cached-prefix credit. Never sent anywhere.
     prompt_text: str | None = field(default=None, repr=False)
+    # UFH14-B4 serving-record fields: wire-prompt fingerprints, the client's own
+    # ``id_slot`` (forwarded untouched) and the slot the server reports.
+    prefix_fp: dict[str, Any] | None = None
+    slot_id: int | None = None
+    server_slot: int | None = None
     cancel: threading.Event = field(default_factory=threading.Event)
     response: Any = None  # live httpx.Response, for a best-effort close on cancel
     # outcome
@@ -321,7 +334,8 @@ class _SSEScanner:
             self._on_first_output()
         if _POOL_EXHAUSTED_MARKER in data:
             self._call.pool_exhausted = True
-        if b'"timings"' in data or b'"usage"' in data or b'"error"' in data:
+        if (b'"timings"' in data or b'"usage"' in data or b'"error"' in data
+                or b'"id_slot"' in data):
             try:
                 obj = json.loads(data)
             except ValueError:
@@ -336,6 +350,9 @@ def absorb_payload(call: _Call, obj: Any) -> None:
     timings = obj.get("timings")
     if isinstance(timings, dict) and ("prompt_n" in timings or "predicted_n" in timings):
         call.timings = timings
+    id_slot = obj.get("id_slot")
+    if isinstance(id_slot, int) and not isinstance(id_slot, bool) and id_slot >= 0:
+        call.server_slot = id_slot
     usage = obj.get("usage")
     if not isinstance(usage, dict):
         resp = obj.get("response")  # /v1/responses response.completed event
@@ -676,6 +693,38 @@ def outcome(call: _Call, error: BaseException | None) -> str:
     return "ok"
 
 
+def cached_prompt_tokens(call: _Call) -> int | None:
+    """Prompt tokens the server reused for the call (UFH14-B4): ``timings.cache_n``
+    (what ``serving_calls`` falls back to on the primitives lanes), else the OAI
+    ``usage.prompt_tokens_details.cached_tokens``; None when neither was seen."""
+    cache_n = (call.timings or {}).get("cache_n")
+    if isinstance(cache_n, int) and not isinstance(cache_n, bool):
+        return cache_n
+    details = (call.usage or {}).get("prompt_tokens_details")
+    if isinstance(details, dict):
+        cached = details.get("cached_tokens")
+        if isinstance(cached, int) and not isinstance(cached, bool):
+            return cached
+    return None
+
+
+def wire_prefix_fingerprints(endpoint: str, body: dict[str, Any]) -> dict[str, Any] | None:
+    """UFH14-B4 ``prefix_fp`` for a passthrough body. Chat bodies are
+    fingerprinted through ``serving_calls.prefix_fingerprints`` as a client-tool
+    ``chat_payload`` (``tools`` then ``messages``), so a passthrough call and an
+    orchestrator client-tool call with the same payload agree. A /v1/responses
+    body puts ``instructions`` + ``input`` where the messages go."""
+    from types import SimpleNamespace
+
+    if endpoint == "responses":
+        messages: Any = {"instructions": body.get("instructions"), "input": body.get("input")}
+    else:
+        messages = body.get("messages")
+    return serving_calls.prefix_fingerprints(
+        SimpleNamespace(chat_payload={"tools": body.get("tools"), "messages": messages})
+    )
+
+
 def write_serving_record(call: _Call, error: BaseException | None) -> None:
     """One ``serving_call.v1`` record, ``caller.source = "passthrough"``. Never raises."""
     try:
@@ -690,6 +739,8 @@ def write_serving_record(call: _Call, error: BaseException | None) -> None:
             notes["usage"] = call.usage
         if call.t_first_chunk is not None and dispatched:
             notes["first_chunk_ms"] = round((call.t_first_chunk - call.t_dispatch) * 1000.0, 3)
+        if call.server_slot is not None:
+            notes["server_slot"] = call.server_slot  # same key as serving_calls.note_server_slot
         record = serving_calls.build_record(
             method="passthrough",
             role_config=call.role_config,
@@ -717,6 +768,17 @@ def write_serving_record(call: _Call, error: BaseException | None) -> None:
             )
         }
         record["outcome"] = outcome(call, error)
+        # UFH14-B4: the same ``request`` block shape the primitives lanes write,
+        # so prefix_cache_report.py can fingerprint-match passthrough calls.
+        record["request"] = {
+            "n_tokens": call.new_tokens,
+            "prompt_chars": len(call.prompt_text or ""),
+            "timeout_s": None,
+            "slot_id": call.slot_id,
+            "slot_id_sent": call.slot_id is not None,  # raw body forwarded verbatim
+            "chat_payload": True,
+            "prefix_fp": call.prefix_fp,
+        }
         record["passthrough"] = {
             "endpoint": call.endpoint,
             "stream": call.stream,
@@ -727,6 +789,7 @@ def write_serving_record(call: _Call, error: BaseException | None) -> None:
             "new_tokens_budget": call.new_tokens,
             "upstream_error": call.upstream_error,
             "client_disconnected": call.client_disconnected,
+            "cached_prompt_tokens": cached_prompt_tokens(call),
             **call.gate,
         }
         if isinstance(error, _Refused):
@@ -772,6 +835,12 @@ async def _passthrough(endpoint: str, role: str, http_request: Request, state: A
         client_id=http_request.headers.get("x-client-id"),
         role_config=_role_config_for_backend(getattr(state, "registry", None), role_name),
         prompt_text=text,
+        prefix_fp=wire_prefix_fingerprints(endpoint, body),
+        slot_id=(
+            body.get("id_slot")
+            if isinstance(body.get("id_slot"), int) and not isinstance(body.get("id_slot"), bool)
+            else None
+        ),
     )
 
     try:
