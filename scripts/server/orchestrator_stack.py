@@ -1755,6 +1755,24 @@ def build_server_command(
     return cmd
 
 
+def _apply_diag_env_override(env: dict[str, str], diag_env_override: dict[str, str] | None) -> None:
+    """Strip every allow-listed diagnostic key from a llama-server launch env, then apply
+    the (already validated) one-shot diagnostic override, if any.
+
+    The strip is what makes a plain launch the restore: an ambient LLAMA_SERVER_SLOTS_DEBUG
+    in the operator's shell can never ride into a launch nobody recorded.
+    """
+    from scripts.server.env_override import diagnostic_keys
+
+    for key in diagnostic_keys():
+        env.pop(key, None)
+    if diag_env_override:
+        # Recorded by the caller in logs/env_overrides/<component>.json; never read back
+        # by any later launch.
+        env.update(diag_env_override)
+        print(f"    [EXPERIMENT] diagnostic env override: {diag_env_override}")
+
+
 def start_server(
     port: int,
     roles: list[str],
@@ -1770,15 +1788,30 @@ def start_server(
     numa_instance: int = 0,
     bench_force: bool = False,
     env_override: dict[str, str] | None = None,
+    diag_env_override: dict[str, str] | None = None,
 ) -> ProcessInfo | None:
     """Start a llama-server for the given roles.
 
     ``env_override`` is the one-shot experiment env (UFH-12 arm A3,
     scripts/server/embedder_env_override.py). It is honoured ONLY for embedders
     and applied last, over the declared env; every other branch refuses it.
+
+    ``diag_env_override`` is the one-shot DIAGNOSTIC env for a single llama-server
+    model component (scripts/server/env_override.py, the ``llama_server`` allow-list,
+    e.g. LLAMA_SERVER_SLOTS_DEBUG=1). It is refused for embedders and re-validated
+    here; every non-embedder branch applies it last, over the declared env. Every
+    branch strips the allow-listed diagnostic keys from the inherited env first, so a
+    launch without an override always runs the declared env (the restore).
     """
     if env_override and not embedding_mode:
         raise ValueError("env_override is only honoured for embedders (embedding_mode=True)")
+    if diag_env_override:
+        if embedding_mode:
+            raise ValueError("diag_env_override is not honoured for embedders "
+                             "(they take the OpenMP env_override)")
+        from scripts.server.env_override import LLAMA_SERVER, validate_env
+
+        diag_env_override = validate_env(diag_env_override, LLAMA_SERVER)
     detached_stdio = {
         "stdin": subprocess.DEVNULL,
         "start_new_session": True,
@@ -1839,6 +1872,7 @@ def start_server(
             # No binary override on this branch either; strip ambient GGML_* like every
             # other branch (2026-09-26).
             _strip_ambient_ggml(env, _role_env_overrides(source_role), label="eval_batch")
+            _apply_diag_env_override(env, diag_env_override)
             _launch = _log_banner.write_launch_banner(
                 log, port=port, roles=roles, argv=spawn_prefix + cmd, env=env, binary=cmd[0]
             )
@@ -1911,6 +1945,7 @@ def start_server(
                 ld_paths=ld_paths,
                 preserve=_role_env_overrides(source_role),
             )
+            _apply_diag_env_override(env, diag_env_override)
             _launch = _log_banner.write_launch_banner(
                 log, port=port, roles=roles, argv=spawn_prefix + cmd, env=env, binary=cmd[0]
             )
@@ -1984,6 +2019,7 @@ def start_server(
                 ld_paths=ld_paths,
                 preserve=_role_env_overrides(roles[0]),
             )
+            _apply_diag_env_override(env, diag_env_override)
             _launch = _log_banner.write_launch_banner(
                 log, port=port, roles=roles, argv=spawn_prefix + cmd, env=env, binary=cmd[0]
             )
@@ -2043,6 +2079,7 @@ def start_server(
             # The embedding branch has no binary override, so it used to pass ambient GGML_*
             # straight through. Strip it like every other branch (2026-09-26).
             _strip_ambient_ggml(env, _role_env_overrides(roles[0]), label="embedding")
+            _apply_diag_env_override(env, None)  # strip only: embedders take no diagnostic override
             if env_override:
                 # One-shot experiment env (UFH-12 A3): applied last, recorded by the caller in
                 # logs/embedder_env_override.json, and never read back by any later launch.
@@ -2120,6 +2157,7 @@ def start_server(
                 ld_paths=ld_paths,
                 preserve=_role_env_overrides("worker"),
             )
+            _apply_diag_env_override(env, diag_env_override)
             # NOTE: Do NOT set OMP_NUM_THREADS=1 - it disables parallel tensor repack (2.2x slower loading)
             # Fleet marker: written BEFORE Popen so the watcher can resolve
             # role→port and detect operator-initiated reloads.
@@ -2227,6 +2265,7 @@ def start_server(
             ld_paths=ld_paths,
             preserve=_role_env_overrides(primary_role),
         )
+        _apply_diag_env_override(env, diag_env_override)
         # NOTE: Do NOT set OMP_NUM_THREADS=1 - it disables parallel tensor repack (2.2x slower loading)
         # Fleet marker: written BEFORE Popen so the watcher can resolve
         # role→port and detect operator-initiated reloads.
@@ -3311,9 +3350,24 @@ def main() -> int:
         ),
     )
     reload_parser.add_argument(
+        "--diag-env-override",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help=(
+            "EXPERIMENT ONLY: relaunch ONE llama-server model component (e.g. architect_critic) "
+            "with this DIAGNOSTIC env over the declared one. Only a single non-embedder "
+            "llama-server component, only the llama_server allow-list in "
+            "scripts/server/env_override.py (LLAMA_SERVER_SLOTS_DEBUG=0|1), and only with "
+            "--experiment-id. Recorded in logs/env_overrides/<component>.json; a plain "
+            "`reload <component>` restores and clears it."
+        ),
+    )
+    reload_parser.add_argument(
         "--experiment-id",
         default=None,
-        help="Experiment id recorded with --embedder-env-override (required with it)",
+        help="Experiment id recorded with --embedder-env-override / --diag-env-override "
+        "(required with either)",
     )
     reload_parser.add_argument(
         "--override-ttl-s",

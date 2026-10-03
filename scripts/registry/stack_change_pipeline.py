@@ -1344,7 +1344,8 @@ def _declared_env_attestation_step() -> PipelineStep:
         )
     details = [f"compared: {line}" for line in result.compared]
     details += [f"not attested (no declared env contract): {line}" for line in result.not_attested]
-    # UFH-12 A3: deviations covered by a live, unexpired embedder env override record are
+    # UFH-12 A3 / UFH-14: deviations covered by a live, unexpired env override record (the
+    # embedder OpenMP record, or a per-component diagnostic record in logs/env_overrides/) are
     # recorded as warnings naming the experiment -- visible, never an error, never silent.
     expected = [f"EXPECTED env deviation: {line}" for line in getattr(result, "expected", [])]
     if result.verdict == "failed":

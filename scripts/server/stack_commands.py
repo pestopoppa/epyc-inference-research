@@ -2055,6 +2055,35 @@ def _reload_server_port(component: str) -> int | None:
     return None
 
 
+def _diag_record_key(port: int, roles: list[str]) -> str:
+    """The one record key per managed llama-server port: its primary role when PORT_MAP
+    addresses that role at this port (``architect_critic`` for :8083), else ``server_<port>``
+    (sub-full instances such as frontdoor :8080 share the role name with :8070)."""
+    if roles and PORT_MAP.get(roles[0]) == port:
+        return roles[0]
+    return f"server_{port}"
+
+
+def _diag_override_target(component: str) -> tuple[int, list[str], str] | str:
+    """(port, roles, record key) for a component that may take ``--diag-env-override``,
+    or the reason it may not. Only a managed, non-embedder llama-server qualifies."""
+    if component in ("embedders", "orchestrator") or component in AUX_SERVICES or any(
+        component == svc["name"] for svc in DOCKER_SERVICES
+    ):
+        return f"{component!r} is not a llama-server model component"
+    port = _reload_server_port(component)
+    if port is None:
+        return f"{component!r} does not resolve to a managed llama-server port"
+    entry = next((s for s in HOT_SERVERS + WARM_SERVERS if s["port"] == port), None)
+    if entry is None:
+        return f"{component!r} (:{port}) is not a managed llama-server entry"
+    if entry.get("embedding", False):
+        return (f"{component!r} (:{port}) is an embedder; embedders take only "
+                "`reload embedders --embedder-env-override`")
+    roles = list(entry["roles"])
+    return port, roles, _diag_record_key(port, roles)
+
+
 def cmd_reload(args: argparse.Namespace) -> int:
     """Reload components."""
     # SS-BENCH-GATE-b: same force plumbing as cmd_start — the reload that
@@ -2072,14 +2101,45 @@ def cmd_reload(args: argparse.Namespace) -> int:
     # UFH-12 arm A3: a one-shot, recorded embedder env override (embedder_env_override.py).
     from scripts.server import embedder_env_override as _emb_override
 
+    from scripts.server import env_override as _env_override
+
     override_items = list(getattr(args, "embedder_env_override", None) or [])
+    diag_items = list(getattr(args, "diag_env_override", None) or [])
     experiment_id = getattr(args, "experiment_id", None)
+    if override_items and diag_items:
+        print("[REFUSED] --embedder-env-override and --diag-env-override are separate experiments; "
+              "give one")
+        return 2
     try:
         env_override = _emb_override.parse_overrides(override_items)
     except _emb_override.OverrideError as exc:
         print(f"[REFUSED] {exc}")
         return 2
-    if env_override:
+    # A one-shot, recorded DIAGNOSTIC env override for ONE llama-server model component
+    # (env_override.py; e.g. LLAMA_SERVER_SLOTS_DEBUG=1 on architect_critic :8083).
+    diag_env: dict[str, str] = {}
+    if diag_items:
+        if len(args.components) != 1:
+            print("[REFUSED] --diag-env-override applies to exactly one llama-server model component "
+                  f"(got components {list(args.components)})")
+            return 2
+        refusal = _diag_override_target(args.components[0])
+        if isinstance(refusal, str):
+            print(f"[REFUSED] --diag-env-override: {refusal}")
+            return 2
+        try:
+            diag_env = _env_override.parse_overrides(diag_items, _env_override.LLAMA_SERVER)
+        except _env_override.OverrideError as exc:
+            print(f"[REFUSED] {exc}")
+            return 2
+        if not (experiment_id and str(experiment_id).strip()):
+            print("[REFUSED] --diag-env-override needs --experiment-id")
+            return 2
+        ttl_s = float(getattr(args, "override_ttl_s", _env_override.DEFAULT_TTL_S))
+        if not 0 < ttl_s <= _env_override.MAX_TTL_S:
+            print(f"[REFUSED] --override-ttl-s must be in (0, {_env_override.MAX_TTL_S:.0f}]")
+            return 2
+    elif env_override:
         if list(args.components) != ["embedders"]:
             print("[REFUSED] --embedder-env-override applies only to `reload embedders` on its own "
                   f"(got components {list(args.components)})")
@@ -2092,7 +2152,8 @@ def cmd_reload(args: argparse.Namespace) -> int:
             print(f"[REFUSED] --override-ttl-s must be in (0, {_emb_override.MAX_TTL_S:.0f}]")
             return 2
     elif experiment_id:
-        print("[REFUSED] --experiment-id without --embedder-env-override records nothing")
+        print("[REFUSED] --experiment-id without --embedder-env-override or --diag-env-override "
+              "records nothing")
         return 2
 
     for component in args.components:
@@ -2285,7 +2346,33 @@ def cmd_reload(args: argparse.Namespace) -> int:
                 gpu_shadow_lane_mode=gpu_shadow_lane_mode,
                 numa_instance=numa_instance,
                 bench_force=bench_force,
+                **({"diag_env_override": diag_env} if diag_env else {}),
             )
+            # Every managed llama-server port has at most one diagnostic override record,
+            # keyed by the port's canonical component (see _diag_record_key).
+            record_key = _diag_record_key(port, roles)
+            if diag_env and info:
+                rec = _env_override.write_active(
+                    component=record_key, component_class=_env_override.LLAMA_SERVER,
+                    experiment_id=str(experiment_id), env=diag_env, pids={int(port): int(info.pid)},
+                    port=port, ttl_s=ttl_s, argv=list(sys.argv),
+                    restore=f"orchestrator_stack.py reload {component} (no override flags)")
+                print(f"  [EXPERIMENT {experiment_id}] diagnostic env override {diag_env} recorded in "
+                      f"{_env_override.record_path(record_key)} (expires_at {rec['expires_at']}; "
+                      f"restore = plain `reload {component}`)")
+            elif not diag_env and _env_override.record_path(record_key).exists():
+                # A plain reload IS the restore: archive the record with a readback of the
+                # relaunched process (or of nothing, when the relaunch failed -- the process the
+                # override reached is gone either way).
+                live_pid = int(info.pid) if info else None
+                cleared = _env_override.clear(
+                    record_key, reason=f"restored by plain `reload {component}`",
+                    readback_after=_env_override.readback(
+                        {int(port): live_pid}, sorted(_env_override.diagnostic_keys())))
+                if cleared is not None:
+                    print("  [EXPERIMENT] diagnostic override record cleared "
+                          f"({(cleared.get('record') or {}).get('experiment_id')}); "
+                          f"archived to {_env_override.history_path(record_key)}")
             if info:
                 state[key] = info
                 for role in roles:

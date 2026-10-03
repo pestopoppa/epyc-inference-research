@@ -25,6 +25,14 @@ with a recorded env override (scripts/server/embedder_env_override.py). A mismat
 listed in ``expected``, surfaced as a warning naming the experiment, never an error and never
 silent -- only when the record is unexpired, names that pid, and declares exactly the live value.
 Anything else (an expired record, another pid, another key or value) stays an error.
+
+DIAGNOSTIC OVERRIDES (UFH-14, 2026-10-03). ``reload <component> --diag-env-override`` relaunches ONE
+llama-server model component with an allow-listed diagnostic key (scripts/server/env_override.py,
+e.g. LLAMA_SERVER_SLOTS_DEBUG=1), recorded per component in ``logs/env_overrides/<component>.json``.
+Those keys are never declared, so they are checked separately on every llama-server process: a
+live diagnostic key is EXPECTED (a declared, time-bound deviation) only under an unexpired record
+that names the pid and the exact value; with no record, an expired one, or another pid/value it is
+an ERROR. Every launch strips these keys from its inherited env, so a plain launch carries none.
 """
 
 from __future__ import annotations
@@ -43,6 +51,7 @@ class EnvAttestation:
     errors: list[str] = field(default_factory=list)        # declared key missing/different, or unreadable
     expected: list[str] = field(default_factory=list)      # deviations covered by a live override record
     override_record: dict | None = None                    # the embedder env override record read, if any
+    diag_records: list[dict] = field(default_factory=list)  # per-component diagnostic override records
 
     @property
     def verdict(self) -> str:
@@ -88,13 +97,31 @@ def _read_override_record() -> dict | None:
     return read_record()
 
 
+def _read_diag_records() -> list[dict]:
+    from scripts.server.env_override import read_all_records
+
+    return read_all_records()
+
+
+def _diag_expiry_note(records: list[dict], *, pid: int, key: str, got: str | None) -> str:
+    """The EXPIRED hint for a deviation an expired diagnostic record would have covered."""
+    from scripts.server.env_override import is_expired, names_pid
+
+    for rec in records:
+        if is_expired(rec) and names_pid(rec, pid) and (rec.get("env") or {}).get(key) == got:
+            return (f" -- override record {rec.get('experiment_id')!r} ({rec.get('component')}) EXPIRED at "
+                    f"{rec.get('expires_at')}: restore with `{rec.get('restore')}`")
+    return ""
+
+
 def attest(state: dict, *, aux_services: dict | None = None, pids_on_port=None,
-           override_record=_READ_OVERRIDE) -> EnvAttestation:
+           override_record=_READ_OVERRIDE, diag_records=_READ_OVERRIDE) -> EnvAttestation:
     """Compare every live managed process's environ with the env the stack declares for it.
 
     `state` maps name -> ProcessInfo-like (role, pid, port). Several names share one process
     (aliases, server_<port> rows); each PID is attested once, under its primary role.
-    `override_record` defaults to the live embedder env override record (None = no record).
+    `override_record` defaults to the live embedder env override record (None = no record);
+    `diag_records` defaults to the live per-component diagnostic override records ([] = none).
     """
     if aux_services is None:
         from scripts.server.stack_manifest import AUX_SERVICES as aux_services  # noqa: N811
@@ -106,7 +133,19 @@ def attest(state: dict, *, aux_services: dict | None = None, pids_on_port=None,
             out.errors.append(f"embedder env override record unreadable ({exc}); no deviation is expected")
             override_record = None
     out.override_record = override_record
+    if diag_records is _READ_OVERRIDE:
+        try:
+            diag_records = _read_diag_records()
+        except Exception as exc:  # noqa: BLE001 — an unreadable record covers nothing, loudly
+            out.errors.append(f"diagnostic env override records unreadable ({exc}); no deviation is expected")
+            diag_records = []
+    diag_records = list(diag_records or [])
+    out.diag_records = diag_records
     from scripts.server.embedder_env_override import covers, is_expired
+    from scripts.server.env_override import diagnostic_keys
+
+    def _diag_cover(pid: int, key: str, got: str | None) -> dict | None:
+        return next((r for r in diag_records if covers(r, pid=pid, key=key, live_value=got)), None)
     by_pid: dict[int, tuple[str, object]] = {}
     for name, info in sorted(state.items()):
         pid = int(getattr(info, "pid", -1))
@@ -145,10 +184,18 @@ def attest(state: dict, *, aux_services: dict | None = None, pids_on_port=None,
                         f"{drift} -- EXPECTED under experiment "
                         f"{override_record.get('experiment_id')!r} (expires {override_record.get('expires_at')})")
                     continue
+                diag = _diag_cover(pid, key, got)
+                if diag is not None:
+                    out.expected.append(
+                        f"{drift} -- EXPECTED (declared, time-bound) under experiment "
+                        f"{diag.get('experiment_id')!r} on {diag.get('component')} (expires {diag.get('expires_at')})")
+                    continue
                 if override_record and is_expired(override_record) and \
                         (override_record.get("env") or {}).get(key) == got:
                     drift += (f" -- override record {override_record.get('experiment_id')!r} EXPIRED at "
                               f"{override_record.get('expires_at')}: restore with `reload embedders`")
+                else:
+                    drift += _diag_expiry_note(diag_records, pid=pid, key=key, got=got)
                 out.errors.append(drift)
         for key in sorted(set((override_record or {}).get("env") or {}) - set(declared)):
             # An override of a key the stack does not declare (e.g. KMP_LIBRARY) is still a deviation.
@@ -158,6 +205,23 @@ def attest(state: dict, *, aux_services: dict | None = None, pids_on_port=None,
             if covers(override_record, pid=pid, key=key, live_value=got):
                 out.expected.append(f"{tag} ({role}): undeclared {key}={got!r} -- EXPECTED under "
                                     f"experiment {override_record.get('experiment_id')!r}")
+        if is_llama:
+            # Diagnostic keys are never declared: any one live on a llama-server must be explained
+            # by an unexpired record naming this pid and value, or it is drift.
+            for key in sorted(diagnostic_keys() - set(declared)):
+                got = live.get(key)
+                if got is None:
+                    continue
+                diag = _diag_cover(pid, key, got)
+                if diag is not None:
+                    out.expected.append(
+                        f"{tag} ({role}): undeclared diagnostic {key}={got!r} -- EXPECTED (declared, "
+                        f"time-bound) under experiment {diag.get('experiment_id')!r} on "
+                        f"{diag.get('component')} (expires {diag.get('expires_at')})")
+                    continue
+                out.errors.append(
+                    f"{tag} ({role}): undeclared diagnostic {key}={got!r} is live with no covering "
+                    "override record" + _diag_expiry_note(diag_records, pid=pid, key=key, got=got))
         n = len(declared)
         if is_llama:
             n += 1
@@ -194,6 +258,9 @@ def main(argv: list[str] | None = None) -> int:
         rec = result.override_record
         print(f"  override-record experiment={rec.get('experiment_id')!r} env={rec.get('env')} "
               f"expires_at={rec.get('expires_at')}")
+    for rec in result.diag_records:
+        print(f"  diag-override-record component={rec.get('component')!r} experiment={rec.get('experiment_id')!r} "
+              f"env={rec.get('env')} expires_at={rec.get('expires_at')}")
     print(f"declared_env_attestation: {result.verdict} "
           f"({len(result.compared)} compared, {len(result.not_attested)} not attested, {len(result.errors)} errors, "
           f"{len(result.expected)} expected deviations)")
