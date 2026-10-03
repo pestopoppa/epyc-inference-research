@@ -116,6 +116,17 @@ def _write_logit_probe(prompt: str, first_token_probs: dict) -> None:
         logger.debug("logit_probe write failed", exc_info=True)
 
 
+def _cache_prompt(request: Any) -> bool:
+    """The request's ``cache_prompt`` override, else True (llama-server's own default).
+
+    UFH14-B4: the /completion lane always sent this; the chat lanes omitted it, so a
+    caller's ``cache_prompt=False`` was silently ignored there and a server launched
+    with ``--no-cache-prompt`` would have disabled reuse for every chat-lane call.
+    """
+    value = getattr(request, "cache_prompt", None)
+    return bool(value) if value is not None else True
+
+
 def _chat_payload(request: Any) -> dict[str, Any] | None:
     """HS-4 P0.1: the structured /v1 client-tool-mode payload, if any."""
     payload = getattr(request, "chat_payload", None)
@@ -511,6 +522,7 @@ class LlamaServerBackend(ModelBackend):
             # Extract clean timing data from llama.cpp timings object
             timings = result_data.get("timings", {})
             serving_calls.note_timings(timings, endpoint="/completion", stream=False)
+            serving_calls.note_server_slot(result_data.get("id_slot"))
             prompt_eval_ms = timings.get("prompt_ms", 0.0)
             generation_ms = timings.get("predicted_ms", 0.0)
             predicted_per_second = timings.get("predicted_per_second", 0.0)
@@ -731,6 +743,8 @@ class LlamaServerBackend(ModelBackend):
             "messages": messages,
             "max_tokens": request.n_tokens if request.n_tokens > 0 else 4096,
             "stream": False,
+            # UFH14-B4: explicit, and the per-request override honoured on this lane too.
+            "cache_prompt": _cache_prompt(request),
         }
         if chat_payload is not None:
             if chat_payload.get("tools") is not None:
@@ -1189,6 +1203,7 @@ class LlamaServerBackend(ModelBackend):
 
                     if data.get("stop", False):
                         timings = data.get("timings", {})
+                        serving_calls.note_server_slot(data.get("id_slot"))
                         tokens_generated = data.get("tokens_predicted", 0)
                         prompt_tokens = data.get("tokens_evaluated", 0)
                         # cache_n = true KV-reuse hit count (see non-streaming
@@ -1682,6 +1697,7 @@ class LlamaServerBackend(ModelBackend):
             "messages": [{"role": "user", "content": user_content}],
             "max_tokens": request.n_tokens if request.n_tokens > 0 else 4096,
             "stream": True,
+            "cache_prompt": _cache_prompt(request),
         }
         self._apply_deterministic_sampling(payload, role_config, request)
         if request.stop_sequences:

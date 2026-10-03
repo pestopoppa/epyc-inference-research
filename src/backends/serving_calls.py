@@ -277,6 +277,72 @@ def note_usage(usage: Any) -> None:
         note(usage={k: usage[k] for k in keep if k in usage})
 
 
+def note_server_slot(id_slot: Any) -> None:
+    """Record the slot the SERVER ran the call on (llama.cpp's response ``id_slot``).
+
+    UFH14-B4: ``request.slot_id`` is what the orchestrator *asked* for, which on the
+    chat lane is never even sent. Prefix-affinity analysis needs the slot that was
+    actually used, so it is recorded separately and only when the server reports it.
+    """
+    if isinstance(id_slot, int) and not isinstance(id_slot, bool) and id_slot >= 0:
+        note(server_slot=id_slot)
+
+
+# ---------------------------------------------------------------------------
+# Prefix fingerprints (UFH14-B4)
+# ---------------------------------------------------------------------------
+
+#: Character depths at which the wire prompt is fingerprinted. Characters, not tokens:
+#: the record must not need a tokenizer. At ~3 chars/token these are ~0.7k, ~2.7k,
+#: ~11k, ~44k and ~175k tokens — spanning the system/tools head through a long
+#: agentic context. A depth is fingerprinted only when the prompt reaches it.
+PREFIX_FP_DEPTHS_CHARS: tuple[int, ...] = (2048, 8192, 32768, 131072, 524288)
+_FP_HEX = 16
+
+
+def _prompt_text_for_fingerprint(request: Any) -> str | None:
+    """The text whose prefix the server will see, as closely as the client knows it.
+
+    Client-tool mode (``chat_payload``) sends ``tools`` + ``messages`` verbatim; the
+    server renders tools into the system block, so tools are fingerprinted first,
+    in caller order (a reordered tool list IS a prefix change). Every other lane
+    sends ``request.prompt`` (as one user message on the chat lane).
+    """
+    payload = getattr(request, "chat_payload", None)
+    if isinstance(payload, dict):
+        try:
+            head = json.dumps(payload.get("tools") or [], ensure_ascii=False, default=str)
+            body = json.dumps(payload.get("messages") or [], ensure_ascii=False, default=str)
+            return head + "\n" + body
+        except Exception:
+            return None
+    prompt = getattr(request, "prompt", None)
+    return prompt if isinstance(prompt, str) else None
+
+
+def prefix_fingerprints(request: Any) -> dict[str, Any] | None:
+    """Truncated sha256 of the prompt's first N characters for each depth it reaches.
+
+    Two calls to the same server whose fingerprints agree at depth N shared at least
+    N leading characters, so a cold prefill of the second one (low ``cache_n``) was a
+    MISSED reuse rather than new content. Pure function; never raises.
+    """
+    try:
+        text = _prompt_text_for_fingerprint(request)
+        if not text:
+            return None
+        out: dict[str, Any] = {"chars": len(text)}
+        for depth in PREFIX_FP_DEPTHS_CHARS:
+            if len(text) < depth:
+                break
+            out[f"c{depth}"] = hashlib.sha256(
+                text[:depth].encode("utf-8", "surrogatepass")
+            ).hexdigest()[:_FP_HEX]
+        return out
+    except Exception:
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Record construction and writing
 # ---------------------------------------------------------------------------
@@ -401,6 +467,21 @@ def classify_outcome(result: Any, exc: BaseException | None, early_stop: bool) -
     return "ok"
 
 
+def _cached_prompt_tokens(result: Any, timings: Any) -> Any:
+    """Cached prompt tokens for the call: the result's value, else llama's ``cache_n``.
+
+    The ``/completion`` lane never sets ``InferenceResult.cached_prompt_tokens``, so
+    without the fallback the field is null on that lane and the prefix-hit metric
+    silently loses those calls (UFH14-B4). ``cache_n`` is the server's own count.
+    """
+    value = getattr(result, "cached_prompt_tokens", None)
+    if value is None and isinstance(timings, dict):
+        cache_n = timings.get("cache_n")
+        if isinstance(cache_n, int) and not isinstance(cache_n, bool):
+            return cache_n
+    return value
+
+
 def _caller_block(staged: dict[str, Any] | None) -> dict[str, Any]:
     caller = {
         k: v for k, v in (staged or {}).items() if not k.startswith("_") and k not in _QUEUE_KEYS
@@ -466,7 +547,7 @@ def build_record(
             "error_message": (str(getattr(result, "error_message", "") or "")[:300] or None),
             "tokens_generated": getattr(result, "tokens_generated", None),
             "prompt_tokens": getattr(result, "prompt_tokens", None),
-            "cached_prompt_tokens": getattr(result, "cached_prompt_tokens", None),
+            "cached_prompt_tokens": _cached_prompt_tokens(result, timings),
             "prompt_eval_ms": getattr(result, "prompt_eval_ms", None),
             "generation_ms": getattr(result, "generation_ms", None),
             "first_token_ms": getattr(result, "first_token_ms", None) or None,
@@ -480,7 +561,14 @@ def build_record(
             "prompt_chars": len(getattr(request, "prompt", None) or ""),
             "timeout_s": getattr(request, "timeout", None),
             "slot_id": getattr(request, "slot_id", None),
+            # The chat lane never puts id_slot on the wire, so a router-assigned
+            # slot_id there was computed and dropped (UFH14-B4). Only /completion sends it.
+            "slot_id_sent": (
+                getattr(request, "slot_id", None) is not None
+                and str(notes.get("endpoint") or "").startswith("/completion")
+            ),
             "chat_payload": getattr(request, "chat_payload", None) is not None,
+            "prefix_fp": prefix_fingerprints(request),
         }
     if notes:
         record["notes"] = notes
