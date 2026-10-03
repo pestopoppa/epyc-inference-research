@@ -87,6 +87,12 @@ speculative_decoding_policy:
   canonical: true
   ratified_by: operator
   ratified_on: 2026-07-31
+  # AMENDED 2026-10-03 by STACKCHG-DFLASH2-20261003 (operator receipt
+  # RATIFY-STACKCHG-DFLASH2-20261003): production_recipe demoted to default_spec_type
+  # (n-gram composition scope only); drafter choice moved to roles.<model>.drafters +
+  # orchestrator stack_topology.yaml drafter_selection; exceptions.ingest_long_context closed.
+  amended_on: 2026-10-03
+  amended_by_receipt: RATIFY-STACKCHG-DFLASH2-20261003
   supersedes: >
     All prior per-role prose describing `draft-mtp` alone as the production
     recipe, and the `ngram_candidate_spec_type` field (RETIRED — see below).
@@ -94,11 +100,23 @@ speculative_decoding_policy:
   # ---------------------------------------------------------------------------
   # THE RECIPE
   # ---------------------------------------------------------------------------
-  production_recipe: draft-mtp
+  # DRAFT-SEL-1 (2026-10-01): DEMOTED from `production_recipe: draft-mtp`. This block
+  # rules on n-gram COMPOSITION (composed vs. MTP alone — the 2026-07-31 reversal, measured
+  # on the 35B-A3B and gemma). It never ruled on WHICH drafter a model runs, but its
+  # "applies to every role" wording was read that way, and the Qwen3.8-27B inherited
+  # draft-mtp across two swaps although the operator ruled DFlash2 (2026-08-27, 2026-10-01).
+  # Drafter choice now lives in ONE place per model and ONE place per server:
+  #   master  roles.<model_role>.drafters                    (every ACCEPTABLE drafter)
+  #   orch    stack_topology.yaml -> drafter_selection.<srv> (which one runs)
+  # `default_spec_type` is documentation of the legacy, hand-carried rows only. The
+  # compiler NEVER consults it for a model that declares `drafters`.
+  default_spec_type: draft-mtp
   statement: >
-    Production runs `--spec-type draft-mtp` — MTP self-draft ALONE. The n-gram
-    lane is NOT composed in. This applies to every role that has a working draft
-    path.
+    No n-gram composition: a role that speculates runs ONE drafter, never
+    `ngram-mod,<drafter>`. WHICH drafter is a per-model list here
+    (`roles.<model_role>.drafters`) and a per-server selection in the orchestrator's
+    stack_topology.yaml (`drafter_selection`). Legacy rows without `drafters` still
+    hand-carry `spec_type: draft-mtp` until migrated.
 
   superseded_recipe: >
     REVERSED 2026-07-31 (same day it was adopted). The composed recipe
@@ -155,6 +173,12 @@ speculative_decoding_policy:
   # ---------------------------------------------------------------------------
   exceptions:
     ingest_long_context:
+      # CLOSED 2026-10-03 (STACKCHG-DFLASH2-20261003). ingest_long_context has not served
+      # Qwen3-Next-80B since the 2026-09-22 lineup change: it is an ALIAS on the :8083
+      # Qwen3.8-27B and inherits that process's SELECTED drafter (DFlash2). Retained as the
+      # record of the Qwen3-Next OPTIMUM ruling and the category grammar it illustrates.
+      status: closed
+      closed_on: 2026-10-03
       model: Qwen3-Next-80B-A3B-Instruct
       spec_type: none
       category: OPTIMUM          # NOT a baseline. See category grammar below.
@@ -1256,15 +1280,28 @@ server_mode:
       architecture: qwen3vlmoe
       ctx_max: 262144
     previous_model: Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf  # swapped 2026-07-31
-    memory_gb: 0        # host RAM: weights are fully offloaded (-ngl 999)
+    # STACKCHG-DFLASH2-20261003: CPU placement (cold). Host RAM = weights + mmproj on disk,
+    # 17.28 + 1.01 GiB (18,556,687,200 + 1,083,499,584 B). Was 0 while -ngl 999 put them in VRAM.
+    memory_gb: 18.3
+    # (was, MI210) memory_gb: 0        # host RAM: weights are fully offloaded (-ngl 999)
     vram_mb: 21049      # measured, MI210, 2026-07-31, at n_ctx 16384, np=1, LOAD TIME.
                         # KV-INCLUSIVE at that context — do NOT feed it to the capacity
                         # check; `serving_shape.vram_non_kv_gib` is the KV-free figure.
     # n_ctx MOVED 2026-08-02 into `serving_shape` above (16384 -> 65536). It is one
     # third of the KV-feasibility group; a flat copy here could be edited without the
     # group's capacity check ever seeing it, which is the failure mode being closed.
-    tier: hot
+    # ── STACKCHG-DFLASH2-20261003: COLD. Operator 2026-10-03 "Vision down, canonical DFlash2", refined:
+    # CPU placement, registered but NOT started by a default `start` (WARM). It must not be
+    # hot-resident on CPU (DS41 runs continuous CPU A/Bs). Start on demand:
+    #   orchestrator_stack.py start --only worker_vision   (or --include-warm worker_vision)
+    # Returns to a GPU when the 2nd MI210 arrives; the operator reassesses topology then.
+    tier: warm
+    # (was) tier: hot
     # ── 2026-09-22: THIS ROLE STAYS ON THE MI210. ────────────────────────────────────
+    # ⚠ SUPERSEDED by STACKCHG-DFLASH2-20261003 (operator 2026-10-03): DFlash2 on the 27B needs ~43 GiB
+    # and does not fit beside this role (gate: 65.16 needed vs 62.00 budget). The GPU-only
+    # fields below (vram_mb, serving_shape.vram_non_kv_gib, the 112.20 t/s MI210 prior) are
+    # KEPT as the GPU-restore record; nothing reads them off the gpu_host_lane.
     # An earlier draft of the 2026-09-22 lineup change migrated worker_vision and
     # vision_escalation to `device: cpu`, deleted `vram_mb` and `serving_shape.vram_non_kv_gib`,
     # and nulled the throughput. THAT MOVE IS WITHDRAWN IN FULL and this row is the pristine
@@ -1275,10 +1312,12 @@ server_mode:
     # 2026-09-22 allocation (27B :8083 n_ctx 196608 q8_0/q8_0, this role :8086 n_ctx 65536
     # q8_0/q8_0). Nothing about this row changes: device, vram_mb, vram_non_kv_gib, no_mmap's
     # absence, `-ngl`, the 112.20 t/s MI210 prior and the MMMU-250 stamps all stand as measured.
-    device: ROCm0
+    device: none        # STACKCHG-DFLASH2-20261003: CPU (launcher emits --device none; CPU binary). Was ROCm0.
     acceleration:
       type: baseline    # VL + mmproj is not supported by the speculative binary
-    throughput: 112.20  # t/s decode, median over n=250 MMMU turns on MI210 (2026-07-31)
+    throughput: 112.20  # t/s decode, median over n=250 MMMU turns on MI210 (2026-07-31).
+                        # STACKCHG-DFLASH2-20261003: MI210 figure. CPU throughput at the declared NUMA_HALF_A
+                        # placement is UNMEASURED (only CPU runs: 2026-07-17 K35, -t 96).
     # GPU BUDGET NOTE — this row and server_mode.architect_critic share ONE MI210, and they
     # STILL DO after 2026-09-22. The full post-change arithmetic lives in ONE place:
     # server_mode.architect_critic.serving_shape. Summary: 63.98 usable - 4.68 (whisper.cpp +
@@ -1506,7 +1545,23 @@ server_mode:
       #   KFD 39,584.7 vs its load-only twin 39,018 MiB — inside the gate's 2.0 GiB.)
       # ⚠ A SCALAR VALID AT ONE SHAPE ONLY. Each slot adds 0.73 GiB of GDN state at draft_max 4
       # (1.315 at 8); each unit of draft depth adds 0.58 GiB at 4 slots.
-      vram_non_kv_gib: 32.80
+      # ── 2026-10-03 (STACKCHG-DFLASH2-20261003): 32.80 -> 37.92 for the DFlash2 drafter. ──
+      #    MEASURED on the first production-shape DFlash2 process: KFD pid 3737649 (started
+      #    2026-10-03T04:30:01Z, argv = this package's rendered :8083 argv, v10 ffc1bac82),
+      #    44.30 GiB at 04:32:13Z and 44.297 at 04:32:50Z (two samples, persistent), AFTER at
+      #    least one served request (log: draft acceptance 0.918 at 0:58). 44.30 - 6.38 KV
+      #    (stack_manifest kv rate, n_ctx 196608 q8_0) = 37.92. This is a RUNTIME reading, so it
+      #    is CONSERVATIVE against the gate's load-time convention (it already includes the
+      #    first-execution growth, +0.55 GiB on the MTP twin); the load-time peak was not sampled.
+      #    The derived estimate (dflash2-27b-20261001 PACKAGE §4) was 36.34 — 1.58 GiB LOW,
+      #    mostly the unmeasured drafter-graph term. The MTP figure 32.80 was CONFIRMED live the
+      #    same morning: KFD pid 29330 = 39.15 GiB vs declared 32.80 + 6.38 = 39.18.
+      # `vram_non_kv_drafter` names the drafter this figure was measured for. The compiler
+      # (src/registry/drafter_selection.py) REFUSES a topology drafter_selection that
+      # differs from it: flipping the drafter without re-measuring VRAM is a stale restatement.
+      vram_non_kv_gib: 37.92
+      vram_non_kv_drafter: dflash2
+      # (was, MTP d4, live-confirmed 2026-10-03) vram_non_kv_gib: 32.80
       # superseded provenance, kept for audit:
       # (was) vram_non_kv_gib: 27.33 # 29.36 GiB resident (/sys/class/kfd, pid 2019908, 2026-08-02)
                                      # minus the 2.03 GiB of q8_0 KV it was then holding at -c 16384.
@@ -1600,7 +1655,8 @@ server_mode:
       # (Phase 3, 2026-05-07: 117% baseline compliance, 110% procedure, recall 0.93) was measured
       # on the 122B and does NOT transfer. RE-PROBE via tests/compliance/agent_file/runner.py.
     model: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
-    draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf  # MTP self-draft = same file; launcher omits -md
+    # draft_model: REMOVED (DRAFT-SEL-1) — projected from roles.qwen38_27b_q8_local.drafters
+    # by the drafter stack_topology.yaml -> drafter_selection.architect_critic selects.
     memory_gb: 27   # Qwen3.6-27B Q8 weights (27.05 GiB) — VRAM, not host RAM
     vram_gib: 36.70 # measured total incl. q8_0 KV at 262144 ctx, n_slots=4, kv_unified=true (MI210, 2026-07-31)
     # ✓ 2026-09-22 — THE 2026-08-02 "INTERNALLY INCONSISTENT" FLAG ON THIS LINE IS
@@ -1653,9 +1709,9 @@ server_mode:
       # trajectories, -lv 3 server logs and VRAM telemetry are deliberately NOT carried and remain
       # only at the origin path. What was dropped and why:
       # artifacts/architect-bench-gpu-20260814/README.md.
-      spec_type: draft-mtp
-      draft_max: 4   # 2026-09-24: 8 -> 4 (production shape; see server_mode.architect_critic)
-      draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
+      # spec_type / draft_max / draft_model: REMOVED (DRAFT-SEL-1). The history above is the
+      # MTP drafter's; it now lives in roles.qwen38_27b_q8_local.drafters.mtp. Which drafter
+      # this process runs is stack_topology.yaml -> drafter_selection.architect_critic.
       lookup: false
     # 2026-07-31 GPU CUTOVER: no NUMA fanout. numa_instances/numa_ports are RETAINED as explicit
     # singletons pointing at the primary port — NOT deleted, because several dispatch paths fail
@@ -2039,9 +2095,8 @@ server_mode:
       # self-draft recipe (n-max 8, same file, launcher omits -md) at runtime.
       type: none
       inherits_spec_from: architect_critic   # ARCHSWAP-20260927: :8083 host renamed
-      spec_type: draft-mtp        # the INHERITED recipe, stated so a reader of this row alone
-                                  # does not conclude the role serves without speculation
-      draft_max: 4   # 2026-09-24: 8 -> 4 (production shape; see server_mode.architect_critic)
+      # spec_type / draft_max: REMOVED (DRAFT-SEL-1). The compiled lean writes the host's
+      # SELECTED drafter here, so a reader of this row still sees what the process runs.
       lookup: false
     # ⚠ THROUGHPUT IS UNMEASURED FOR THIS ROLE ON THIS MODEL AND ON THIS DEVICE. 14.4-20.8
     # was Qwen3-Next-80B on CPU at ~12K context and is gone with the model. The 27B's own
@@ -2990,8 +3045,7 @@ roles:
       # omits -md) at n-max 8.
       type: none
       inherits_spec_from: architect_critic   # ARCHSWAP-20260927: :8083 host renamed
-      spec_type: draft-mtp
-      draft_max: 4   # 2026-09-24: 8 -> 4 (production shape; see server_mode.architect_critic)
+      # spec_type / draft_max: REMOVED (DRAFT-SEL-1); projected from the host's selection.
     # ⚠ THE `constraints.forbid` BLOCK IS DELETED, AND THAT IS THE POINT OF THE SWAP.
     # It read `forbid: [speculative_decoding, eagle]`, reason "SSM incompatible with external
     # draft (state can't fork)". Every word was true of Qwen3-Next-80B and none of it is true
@@ -3250,17 +3304,9 @@ roles:
       # to the 122B NEXTN it replaces, and already validated on THIS EXACT artifact
       # (qwen36_27b_mtp_q8_local, L8829-8853: --spec-type draft-mtp --spec-draft-n-max 4 on ROCm0).
       type: speculative_decoding
-      # CANONICAL: see top-level `speculative_decoding_policy`. MTP self-draft ALONE.
-      spec_type: draft-mtp
-      draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf  # MTP self-draft = same file
-      draft_max: 4                                # 2026-09-24: 8 -> 4. 8 was the np=1 optimum (2026-08-20
-                                                  # sweep); at the np 2-4 production shape depth 4 is
-                                                  # equal-or-faster (np_context_kvu_study_20260924).
-                                                  # Was: MEASURED optimum for THIS artifact (Qwen3.8-27B,
-                                                  # 2026-08-20 sweep; see the policy block above),
-                                                  # not inherited — L8850 warns depth is per-model.
-                                                  # Qwen3.6-27B-MTP-Q8_0's optimum was 4.
-      k: 4                                         # alias for draft_max (RegistryLoader); 2026-09-24: 8 -> 4
+      # spec_type / draft_model / draft_max / k: REMOVED (DRAFT-SEL-1). Projected by the
+      # compiler from roles.qwen38_27b_q8_local.drafters.<selected>; the MTP depth history
+      # (8 -> 4 on 2026-09-24) moved with the recipe to drafters.mtp.
       p_split: 0                                  # linear only — tree harmful on hybrid (27B is also hybrid)
       lookup: false                               # DISABLED: segfaults on Qwen3.5/3.6 hybrids (2026-03-24)
       notes: >
@@ -6372,8 +6418,7 @@ roles:
     - vision
     - agentic_vision  # tool-call capable — the property the Qwen2.5-VL lane was kept for
     serving:
-      device: ROCm0
-      n_gpu_layers: 999
+      device: none             # STACKCHG-DFLASH2-20261003: CPU, cold (was ROCm0, n_gpu_layers: 999)
       n_ctx: 16384             # MEASURED SHAPE. Both the MMMU cutover and the GPU co-residency
                                # run used -c 16384. stack_manifest.LAUNCH_CONTEXT_TOKENS says
                                # 8192. Three values were in play; this is the one everything
@@ -6427,7 +6472,7 @@ roles:
         That asymmetry counts AGAINST the candidate in the score above, so +11.2 pp is a FLOOR.
         A further 23 candidate answers were truncated at the 2048-token rescue cap and scored wrong.
     memory:
-      residency: hot
+      residency: warm          # STACKCHG-DFLASH2-20261003: cold CPU, started on demand (was hot)
       pinned: false
     server:
       endpoint: "http://localhost:8086"
@@ -6469,7 +6514,7 @@ roles:
     candidate_roles:
     - vision
     serving:
-      device: ROCm0
+      device: none            # STACKCHG-DFLASH2-20261003: rides worker_vision, now CPU (was ROCm0)
       n_ctx: 16384            # the shape everything measured was taken at
     acceleration:
       type: baseline
@@ -6497,9 +6542,9 @@ roles:
       # sweep would have destroyed the only artifact behind a deployed decision. Copied
       # byte-for-byte into the research data tree with hashes and a README.
     memory:
-      residency: hot
+      residency: warm         # STACKCHG-DFLASH2-20261003: rides the cold worker_vision process (was hot)
       pinned: false
-      note: "No additional residency — shares worker_vision's single 21049 MB VRAM allocation. This role adds ZERO memory cost."
+      note: "No additional residency — shares worker_vision's single allocation (CPU since 2026-10-03; was 21049 MB VRAM). This role adds ZERO memory cost."
     server:
       endpoint: "http://localhost:8086"
       api_format: openai_multimodal
@@ -11388,10 +11433,13 @@ roles:
           --device ROCm0 -ngl all -fa on --reasoning off
           --spec-type draft-mtp --spec-draft-n-max 8
         decode_t_s: 55.46
-      # DECISION CONTEXT ONLY — the selection above is UNCHANGED and remains draft-mtp n-max 8.
+      # HISTORY ONLY since DRAFT-SEL-1 (2026-10-01): the selectable list is `drafters` below.
+      # The 2026-08-20 "cannot run on v9" note is superseded: DFlash2 is in the v10
+      # production kernel (champion merge 5c278648a, an ancestor of ffc1bac82;
+      # common/speculative.cpp:42 maps "draft-dflash"). The blocker list is the 08-20 state.
       challenger_under_evaluation:
         name: dflash2-block8
-        status: np1_only_NOT_SELECTABLE
+        status: SUPERSEDED_BY_drafters.dflash2
         measured_2026_08_20:
           np: 1
           dflash2_block8_decode_t_s: 70.0
@@ -11417,6 +11465,34 @@ roles:
           here; an unverified-parity config must not become a serving selection however fast it is)
         - block-verify dispatch proof (our gfx90a MMQ patch a6b4b5263 is MTP-verify-shaped, ne11<=1;
           a block verify is ne11~8 and may miss that path)
+    # DRAFTERS (DRAFT-SEL-1, 2026-10-01) — EVERY acceptable drafter for THIS MODEL, with the
+    # launch params the compiler projects. Which one a server runs is NOT decided here:
+    # epyc-orchestrator orchestration/stack_topology.yaml -> drafter_selection.<server>.
+    # Keys: spec_type, draft_model (required); draft_max, draft_min, draft_p_min,
+    # draft_p_split, ngld, threads_draft (optional launch params); everything else is
+    # metadata carried into the lean's drafter_selection stamp.
+    drafters:
+      mtp:
+        spec_type: draft-mtp
+        draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf   # NEXTN self-draft = same file; launcher omits -md
+        draft_max: 4        # np 2-4 production shape (np_context_kvu_study_20260924/q38_27b_q8_depth);
+                            # np=1 optimum was 8 (mtp_nmax_sweep_20260819)
+        evidence:
+        - artifacts/architect-bench-gpu-20260814/mtp_nmax_sweep_20260819/
+        - artifacts/np_context_kvu_study_20260924/q38_27b_q8_depth/
+      dflash2:
+        spec_type: draft-dflash
+        draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf
+        draft_max: 8
+        ngld: 99
+        recipe: artifacts/serving-recipes/qwen3.8-27b-q8-gpu-dflash2-np4.json
+        min_kernel: production-consolidated-v10   # 5c278648a "champion: admit DFlash2" is in ffc1bac82
+        operator_rulings:
+        - "2026-08-27 epyc-root handoffs/active/autokernel-champion-aggregate.md ruling 3: DFlash2 for Qwen3.8-27B, rest of stack on MTP; lean compiler selects per role"
+        - "2026-10-01 operator: ALWAYS use dflash2 (for the 27B)"
+        evidence:
+        - artifacts/architect-bench-gpu-20260814/dflash2_np1_20260820/campaign-summary.json
+        qualification_note: "v10 was qualified on candidate DFlash2 vs v9 MTP self-draft (epyc-root artifacts/operator/v10-qualification-20260921-ffc1bac82.json)"
     memory:
       residency: cold
       pinned: false
@@ -11777,8 +11853,8 @@ process_layout:
   #   :8074                = architect_general ALONE (Qwen3.8-Flash-Next) — ARCHSWAP-20260927, was architect_critic
   #   :8083                = architect_critic + coder_escalation + ingest_long_context — ARCHSWAP-20260927, host was architect_general
   #                          — ONE Qwen3.8-27B allocation on the MI210
-  #   :8086                = worker_vision + vision_escalation (one process; now CPU, so the
-  #                          21049 MB VRAM figure that used to be quoted here is gone)
+  #   :8086                = worker_vision + vision_escalation — STACKCHG-DFLASH2-20261003: MOVED to
+  #                          warm_mmap below (CPU, cold, started on demand).
   # BOTH/ALL alias names stay listed because stack_manifest.validate_against_registry() warns
   # in both directions on alias drift.
   # ⚠ :8072/:8082/:8182 (gemma4) and :8085/:8185/:8285 (Qwen3-Next-80B) are VACATED.
@@ -11795,9 +11871,9 @@ process_layout:
   - worker_math           # 2026-09-22: alias on frontdoor's :8070
   - toolrunner            # 2026-09-22: alias on frontdoor's :8070
   - ingest_long_context   # 2026-09-22: alias on the :8083 27B (host architect_critic since ARCHSWAP-20260927)
-  - worker_vision
-  - vision_escalation
-  warm_mmap: []
+  warm_mmap:
+  - worker_vision         # STACKCHG-DFLASH2-20261003: CPU, COLD — registered, not started by a default `start`
+  - vision_escalation     # alias on the same :8086 process
   # 2026-07-31: architect_general MOVED to hot_resident — GPU-resident on ROCm0, not a CPU warm
   # mmap. This also resolves a PRE-EXISTING contradiction: server_mode.architect_general has said
   # `tier: hot` since the 2026-05 promotion while this list and roles.architect_general.memory
