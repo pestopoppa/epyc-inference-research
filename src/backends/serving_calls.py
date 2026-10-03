@@ -343,6 +343,56 @@ def prefix_fingerprints(request: Any) -> dict[str, Any] | None:
         return None
 
 
+# KVU-15c: the admission gate credits a request with the prefix a previous call to
+# the same server left cached, matched by fingerprint (src/scheduling/prefix_history.py).
+# The record's five depths are too coarse for that (a 300k-char prompt extending a
+# 290k-char one matches only at 131072), so the history uses a denser LADDER of the
+# same fingerprint — same text, same truncated sha256 — at geometric depths (x1.25
+# from 2048 chars) plus the record depths. A matched depth is then within 20% of the
+# true common prefix, always BELOW it (an under-credit, never an over-credit), and
+# the ladder's values at the record depths equal ``prefix_fingerprints``'.
+PREFIX_LADDER_BASE_CHARS = 2048
+PREFIX_LADDER_RATIO = 1.25
+PREFIX_LADDER_MAX_CHARS = 1 << 23
+
+
+def _ladder_depths() -> tuple[int, ...]:
+    depths = set(PREFIX_FP_DEPTHS_CHARS)
+    depth = float(PREFIX_LADDER_BASE_CHARS)
+    while depth <= PREFIX_LADDER_MAX_CHARS:
+        depths.add(int(depth))
+        depth *= PREFIX_LADDER_RATIO
+    return tuple(sorted(d for d in depths if d <= PREFIX_LADDER_MAX_CHARS))
+
+
+PREFIX_LADDER_DEPTHS_CHARS: tuple[int, ...] = _ladder_depths()
+
+
+def prefix_ladder_for_text(text: str | None) -> dict[str, Any] | None:
+    """``{"chars": len(text), "fp": {depth: hex}}`` for every ladder depth ``text``
+    reaches (incremental sha256: one pass over the text). Pure; never raises."""
+    try:
+        if not text:
+            return None
+        fp: dict[int, str] = {}
+        digest = hashlib.sha256()
+        prev = 0
+        for depth in PREFIX_LADDER_DEPTHS_CHARS:
+            if len(text) < depth:
+                break
+            digest.update(text[prev:depth].encode("utf-8", "surrogatepass"))
+            prev = depth
+            fp[depth] = digest.copy().hexdigest()[:_FP_HEX]
+        return {"chars": len(text), "fp": fp}
+    except Exception:
+        return None
+
+
+def prefix_ladder(request: Any) -> dict[str, Any] | None:
+    """The KVU-15c history ladder of the text ``prefix_fingerprints`` fingerprints."""
+    return prefix_ladder_for_text(_prompt_text_for_fingerprint(request))
+
+
 # ---------------------------------------------------------------------------
 # Record construction and writing
 # ---------------------------------------------------------------------------
@@ -486,9 +536,17 @@ def _cached_prompt_tokens(result: Any, timings: Any) -> Any:
     return value
 
 
+#: Staged keys that become their own top-level record block, not caller fields.
+#: ``kv_admission`` (KVU-15c): the shared-KV-pool admission decision for the call —
+#: the long-prefill verdict, the cached-prefix credit and its source.
+_BLOCK_KEYS = ("kv_admission",)
+
+
 def _caller_block(staged: dict[str, Any] | None) -> dict[str, Any]:
     caller = {
-        k: v for k, v in (staged or {}).items() if not k.startswith("_") and k not in _QUEUE_KEYS
+        k: v
+        for k, v in (staged or {}).items()
+        if not k.startswith("_") and k not in _QUEUE_KEYS and k not in _BLOCK_KEYS
     }
     caller["source"] = "primitives" if staged and "_ts0" in staged else "unstaged"
     return caller
@@ -543,6 +601,9 @@ def build_record(
         "outcome": classify_outcome(result, exc, early_stop),
         "provenance": process_provenance(),
     }
+    for key in _BLOCK_KEYS:
+        if staged and isinstance(staged.get(key), dict):
+            record[key] = dict(staged[key])
     if result is not None:
         record["result"] = {
             "success": getattr(result, "success", None),
@@ -626,6 +687,20 @@ def record_refusal(
         pass
 
 
+def remember_served(record: dict[str, Any], ladder: dict[str, Any] | None) -> None:
+    """Feed a served call into the KVU-15c prefix history (the admission gate's
+    cached-prefix credit). Only a completed, dispatched call counts — its prompt is
+    then in a slot or in ``--cache-ram``. Never raises."""
+    try:
+        if not ladder:
+            return
+        from src.scheduling import prefix_history
+
+        prefix_history.remember_record(record, ladder)
+    except Exception:
+        pass
+
+
 def abandon_staged(exc: BaseException | None = None) -> None:
     """Record a staged call that never reached a backend, then clear the stage.
 
@@ -655,6 +730,9 @@ def abandon_staged(exc: BaseException | None = None) -> None:
         record["queue"] = {
             "pre_dispatch_wait_ms": round(max(0.0, (now - staged.get("_ts0", now)) * 1000.0), 3)
         }
+        for key in _BLOCK_KEYS:
+            if isinstance(staged.get(key), dict):
+                record[key] = dict(staged[key])
         write_record(record)
     except Exception:
         pass
@@ -726,6 +804,7 @@ def recorded_call(method: str) -> Callable:
                         notes=notes,
                     )
                     write_record(record)
+                    remember_served(record, prefix_ladder(request))
                 except Exception:
                     pass
 

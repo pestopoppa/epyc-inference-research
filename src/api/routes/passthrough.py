@@ -278,6 +278,9 @@ class _Call:
     # UFH14-B4 serving-record fields: wire-prompt fingerprints, the client's own
     # ``id_slot`` (forwarded untouched) and the slot the server reports.
     prefix_fp: dict[str, Any] | None = None
+    # KVU-15c: the same fingerprint at the history ladder — the admission gate's
+    # cached-prefix credit source, and what the served call leaves in the history.
+    prefix_ladder: dict[str, Any] | None = field(default=None, repr=False)
     slot_id: int | None = None
     server_slot: int | None = None
     cancel: threading.Event = field(default_factory=threading.Event)
@@ -295,6 +298,8 @@ class _Call:
     pool_exhausted: bool = False
     client_disconnected: bool = False
     gate: dict[str, Any] = field(default_factory=dict)
+    # KVU-15c: the shared-KV-pool admission decision (``admission_record``).
+    kv_admission: dict[str, Any] | None = None
 
     @property
     def upstream_url(self) -> str:
@@ -525,10 +530,13 @@ def gate(call: _Call, state: AppState):
                 # rendered text the server would have to prefill. No match (tools
                 # rendered first, a dated template head, no /slots) means
                 # whole-prompt sizing, exactly as before.
+                # KVU-15c: ``prefix_ladder`` is the primary credit source (the
+                # prefix a finished call on this server shares with this body);
+                # the /slots text above is the second one (debug windows only).
                 ticket = pool.acquire(
                     url, call.prompt_tokens_est, limit.pool_tokens,
                     max_new_tokens=call.new_tokens, cancel_check=call.cancel.is_set,
-                    prompt_text=call.prompt_text,
+                    prompt_text=call.prompt_text, prefix_ladder=call.prefix_ladder,
                 )
             except KVPoolQueueFull as queue_full:
                 raise ContextOverflowError(
@@ -553,6 +561,10 @@ def gate(call: _Call, state: AppState):
             # lease. With the KVU-15a cached-prefix credit a whole-prompt-long
             # request can be admitted as short; ``cache_credited`` marks that.
             took_lease = pool.long_prefill_holder(url) == ticket
+            admission_record = getattr(pool, "admission_record", None)
+            info = admission_record(ticket) if callable(admission_record) else None
+            if info:
+                call.kv_admission = info
             call.gate.update(
                 pool_ticket=True,
                 pool_tokens=limit.pool_tokens,
@@ -561,6 +573,8 @@ def gate(call: _Call, state: AppState):
                     not took_lease and pool.is_long_prefill(call.prompt_tokens_est)
                 ),
                 lease_cross_process=pool.cross_process_lease(),
+                cache_credit_source=(info or {}).get("cache_credit_source"),
+                cache_credited_tokens=(info or {}).get("cache_credited_tokens", 0),
             )
         try:
             lock_ctx = _region_lock(call)
@@ -739,21 +753,28 @@ def cached_prompt_tokens(call: _Call) -> int | None:
     return None
 
 
-def wire_prefix_fingerprints(endpoint: str, body: dict[str, Any]) -> dict[str, Any] | None:
-    """UFH14-B4 ``prefix_fp`` for a passthrough body. Chat bodies are
-    fingerprinted through ``serving_calls.prefix_fingerprints`` as a client-tool
-    ``chat_payload`` (``tools`` then ``messages``), so a passthrough call and an
-    orchestrator client-tool call with the same payload agree. A /v1/responses
-    body puts ``instructions`` + ``input`` where the messages go."""
+def _wire_payload(endpoint: str, body: dict[str, Any]) -> Any:
     from types import SimpleNamespace
 
     if endpoint == "responses":
         messages: Any = {"instructions": body.get("instructions"), "input": body.get("input")}
     else:
         messages = body.get("messages")
-    return serving_calls.prefix_fingerprints(
-        SimpleNamespace(chat_payload={"tools": body.get("tools"), "messages": messages})
-    )
+    return SimpleNamespace(chat_payload={"tools": body.get("tools"), "messages": messages})
+
+
+def wire_prefix_fingerprints(endpoint: str, body: dict[str, Any]) -> dict[str, Any] | None:
+    """UFH14-B4 ``prefix_fp`` for a passthrough body. Chat bodies are
+    fingerprinted through ``serving_calls.prefix_fingerprints`` as a client-tool
+    ``chat_payload`` (``tools`` then ``messages``), so a passthrough call and an
+    orchestrator client-tool call with the same payload agree. A /v1/responses
+    body puts ``instructions`` + ``input`` where the messages go."""
+    return serving_calls.prefix_fingerprints(_wire_payload(endpoint, body))
+
+
+def wire_prefix_ladder(endpoint: str, body: dict[str, Any]) -> dict[str, Any] | None:
+    """KVU-15c history ladder of the same text ``wire_prefix_fingerprints`` hashes."""
+    return serving_calls.prefix_ladder(_wire_payload(endpoint, body))
 
 
 def write_serving_record(call: _Call, error: BaseException | None) -> None:
@@ -796,6 +817,8 @@ def write_serving_record(call: _Call, error: BaseException | None) -> None:
             "backend_url": call.base_url,
             "port": _extract_port_of(call.base_url),
         }
+        if call.kv_admission:
+            record["kv_admission"] = dict(call.kv_admission)
         record["queue"] = {
             "pre_dispatch_wait_ms": round(
                 max(0.0, ((call.t_dispatch if dispatched else now) - call.t_staged) * 1000.0), 3
@@ -836,6 +859,7 @@ def write_serving_record(call: _Call, error: BaseException | None) -> None:
                     "gate": "context_overflow", "kind": error.kind, "source": error.source,
                 }
         serving_calls.write_record(record)
+        serving_calls.remember_served(record, call.prefix_ladder)
     except Exception:
         logger.debug("passthrough: serving record failed", exc_info=True)
 
@@ -875,6 +899,7 @@ async def _passthrough(endpoint: str, role: str, http_request: Request, state: A
         role_config=_role_config_for_backend(getattr(state, "registry", None), role_name),
         prompt_text=text,
         prefix_fp=wire_prefix_fingerprints(endpoint, body),
+        prefix_ladder=wire_prefix_ladder(endpoint, body),
         slot_id=(
             body.get("id_slot")
             if isinstance(body.get("id_slot"), int) and not isinstance(body.get("id_slot"), bool)

@@ -281,6 +281,13 @@ def registry_facts_by_port(priors_path: Path | None = None) -> dict[int, dict[st
             kv_unified = serving.get("kv_unified") if isinstance(serving.get("kv_unified"), bool) else None
         model = record.get("model") if isinstance(record.get("model"), dict) else {}
         ctx_max = _positive_int(model.get("ctx_max"))
+        # KVU-15c: ``--cache-ram`` (MiB; 0 = prompt cache off, None = server
+        # default) bounds how long a served prefix survives for the admission
+        # gate's cached-prefix credit (src/scheduling/prefix_history.py).
+        flags = runtime.get("flags") if isinstance(runtime, dict) else None
+        cache_ram = flags.get("cache_ram") if isinstance(flags, dict) else None
+        if isinstance(cache_ram, bool) or not isinstance(cache_ram, int) or cache_ram < 0:
+            cache_ram = None
         by_port = cache.get("slots_by_port") if isinstance(cache.get("slots_by_port"), dict) else {}
         ports = set(stack_prior_serving_ports(serving))
         for raw in by_port:
@@ -292,7 +299,7 @@ def registry_facts_by_port(priors_path: Path | None = None) -> dict[int, dict[st
             facts.setdefault(
                 port,
                 {"context_tokens": context_tokens, "slots": slots, "kv_unified": kv_unified,
-                 "ctx_max": ctx_max},
+                 "ctx_max": ctx_max, "cache_ram_mib": cache_ram},
             )
     return facts
 
@@ -592,6 +599,16 @@ class ContextLimitResolver:
         with self._lock:
             self._cache[url] = (now + ttl, limit)
         return limit
+
+    def cache_ram_mib(self, url: str) -> int | None:
+        """The registry's ``--cache-ram`` (MiB) for ``url``'s server: 0 = prompt
+        cache off, None = undeclared (the server default applies)."""
+        port = _port((split_urls(url) or [""])[0])
+        reg = self._registry_facts().get(port) if port is not None else None
+        value = (reg or {}).get("cache_ram_mib")
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            return None
+        return value
 
     def pool_occupancy(self, url: str) -> PoolOccupancy | None:
         """Live ``/slots`` occupancy for ``url``, cached ``occupancy_ttl_s``

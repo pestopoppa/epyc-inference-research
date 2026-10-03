@@ -276,6 +276,18 @@ def _hermetic_long_prefill_lease(tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
+def _reset_prefix_history():
+    """Fresh KVU-15c prefix history per test: a prefix one test served must not
+    credit another's request (its host-wide file already lives in the per-test
+    lease dir above)."""
+    from src.scheduling.prefix_history import set_prefix_history
+
+    set_prefix_history(None)
+    yield
+    set_prefix_history(None)
+
+
+@pytest.fixture(autouse=True)
 def _reset_config_between_tests():
     """Ensure config cache is clean between tests.
 

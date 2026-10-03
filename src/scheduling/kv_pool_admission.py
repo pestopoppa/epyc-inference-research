@@ -97,6 +97,31 @@ logger = logging.getLogger(__name__)
 # observation below then catches it for everyone else. The KV RESERVATION is
 # never credited: cached cells still occupy the pool.
 #
+# ── KVU-15c: the credit's sources — prefix HISTORY first, /slots text second ──
+#
+# The /slots text above exists only under LLAMA_SERVER_SLOTS_DEBUG (v10
+# server-context.cpp to_json :699-730, ``slot.to_json(slots_debug == 0)`` at
+# :2541), so in production that credit never applied. The primary source is now
+# the orchestrator's own history of what it served on the server
+# (src/scheduling/prefix_history.py): the caller passes ``prefix_ladder`` (the
+# UFH14-B4 ``prefix_fp`` fingerprint at a denser depth ladder,
+# ``serving_calls.prefix_ladder``) and the LONGEST depth at which it equals a
+# call that finished on the same server — within that server's ``--cache-ram``
+# survival, a time window and the same server launch — is credited:
+#     min(whole, ceil((ladder_chars - matched_chars) * rate) + margin)
+# ``rate`` is the larger of 1/3 token per char (the conservative estimator) and
+# the matched call's MEASURED prompt tokens per fingerprinted char, so the suffix
+# is never under-sized. The ladder of a chat payload fingerprints the JSON of
+# ``tools`` + ``messages`` (the same text on the passthrough and client-tool
+# lanes), not the rendered template, so its suffix is measured in JSON chars —
+# longer than the content, i.e. again conservative. The same margin env var
+# applies (< 0 disables both sources). When /slots does carry text (a debug
+# window) both sources are computed and the larger credit wins; the decision is
+# recorded per ticket (``admission_record``) with ``cache_credit_source``
+# (``fp_history`` | ``slots_text`` | None), the credited tokens, and — when no
+# credit applied — ``cache_credit_unavailable`` naming why for each source (e.g.
+# ``slots_no_prompt``), so an inert credit never looks like zero hits (KVU-15b).
+#
 # Clients that bypass the orchestrator hold no lease at all. So the rule also
 # reads the server: a slot that is still in prefill (``n_decoded == 0``) and has
 # already processed LONG_PREFILL_OBSERVE_TOKENS uncached tokens (``/slots``
@@ -205,6 +230,7 @@ class SharedKVPoolAdmission:
         *,
         clock: Callable[[], float] = time.perf_counter,
         cross_process: bool | None = None,
+        history: Any = None,
     ) -> None:
         self._cond = threading.Condition()
         self._inflight: dict[str, dict[int, int]] = {}
@@ -224,6 +250,10 @@ class SharedKVPoolAdmission:
         self._lease_timers: dict[str, threading.Timer] = {}
         # url -> queue-wait accounting (see get_status).
         self._stats: dict[str, dict[str, float]] = {}
+        # KVU-15c: the prefix-history source (None = the process-wide one) and
+        # each admitted ticket's admission decision, until release.
+        self._history = history
+        self._admission_info: dict[int, dict[str, Any]] = {}
 
     # -- long-prefill rule -----------------------------------------------------
     @staticmethod
@@ -337,6 +367,104 @@ class SharedKVPoolAdmission:
         suffix_tokens = int(math.ceil(suffix_chars / _SUFFIX_CHARS_PER_TOKEN))
         return max(0, min(prompt_tokens, suffix_tokens + margin))
 
+    def _history_source(self) -> Any:
+        if self._history is not None:
+            return self._history
+        from src.scheduling.prefix_history import get_prefix_history
+
+        return get_prefix_history()
+
+    def history_prefill_estimate(self, url: str, prompt_tokens: int,
+                                 prefix_ladder: dict[str, Any] | None
+                                 ) -> tuple[int, dict[str, Any]]:
+        """``(new-token estimate, facts)`` from the KVU-15c prefix history.
+        ``facts`` carries ``matched_chars`` / ``prefix_tokens_est`` on a match,
+        else ``reason``."""
+        prompt_tokens = int(prompt_tokens)
+        margin = self.cache_credit_margin()
+        if margin < 0:
+            return prompt_tokens, {"reason": "disabled"}
+        try:
+            match, reason = self._history_source().lookup(url, prefix_ladder)
+        except Exception:
+            logger.debug("KV pool admission: prefix history lookup failed", exc_info=True)
+            match, reason = None, "no_history"
+        if match is None or match.matched_chars <= 0:
+            return prompt_tokens, {"reason": reason or "no_match"}
+        measured = match.tokens_per_char()
+        rate = max(1.0 / _SUFFIX_CHARS_PER_TOKEN, measured or 0.0)
+        ladder_chars = int((prefix_ladder or {}).get("chars") or 0)
+        suffix_chars = max(0, ladder_chars - int(match.matched_chars))
+        suffix_tokens = int(math.ceil(suffix_chars * rate))
+        estimate = max(0, min(prompt_tokens, suffix_tokens + margin))
+        # Best estimate of the cached prefix in tokens (what the server's
+        # ``cache_n`` should reach): the measured ratio, else ~4 chars/token.
+        prefix_tokens = int(match.matched_chars * measured) if measured else (
+            int(match.matched_chars) // 4)
+        return estimate, {
+            "matched_chars": int(match.matched_chars),
+            "prefix_tokens_est": prefix_tokens,
+            "history_age_s": match.age_s,
+            "history_tokens_since": match.tokens_since,
+        }
+
+    def _credit(self, url: str, tokens: int, prompt_text: str | None,
+                prefix_ladder: dict[str, Any] | None, observed: tuple | None
+                ) -> tuple[int, dict[str, Any]]:
+        """The new-token estimate and the admission-record credit fields: the
+        better of the history and /slots-text sources (KVU-15c)."""
+        tokens = int(tokens)
+        hist_tokens, hist = self.history_prefill_estimate(url, tokens, prefix_ladder)
+        cached_chars = int(observed[3]) if observed is not None and len(observed) > 3 else 0
+        slots_tokens = self.prefill_tokens_estimate(tokens, prompt_text, cached_chars)
+        if self.cache_credit_margin() < 0:
+            slots_reason: str | None = "disabled"
+        elif observed is None:
+            slots_reason = "no_prompt_text" if not prompt_text else "slots_unavailable"
+        else:
+            slots_reason = observed[4] if len(observed) > 4 else None
+            if slots_reason is None and cached_chars <= 0:
+                slots_reason = "no_slot_match"
+        info: dict[str, Any] = {
+            "prompt_tokens_est": tokens,
+            "cache_credit_source": None,
+            "cache_credited_tokens": 0,
+            "cache_credit_prefix_tokens_est": None,
+            "cache_credit_matched_chars": None,
+            "cache_credit_unavailable": None,
+        }
+        best = tokens
+        if "matched_chars" in hist and hist_tokens <= slots_tokens:
+            best = hist_tokens
+            info.update(cache_credit_source="fp_history",
+                        cache_credit_prefix_tokens_est=hist["prefix_tokens_est"],
+                        cache_credit_matched_chars=hist["matched_chars"],
+                        cache_credit_history_age_s=hist["history_age_s"],
+                        cache_credit_history_tokens_since=hist["history_tokens_since"])
+        elif cached_chars > 0 and slots_tokens < tokens:
+            best = slots_tokens
+            info.update(cache_credit_source="slots_text",
+                        cache_credit_prefix_tokens_est=cached_chars // 4,
+                        cache_credit_matched_chars=cached_chars)
+        if info["cache_credit_source"] is None:
+            info["cache_credit_unavailable"] = {
+                "fp_history": hist.get("reason") or "no_credit",
+                "slots_text": slots_reason or "no_credit",
+            }
+        info["cache_credited_tokens"] = max(0, tokens - best)
+        info["prefill_tokens_est"] = best
+        return best, info
+
+    def admission_record(self, ticket: int | None) -> dict[str, Any] | None:
+        """The admission decision for an admitted ``ticket`` (KVU-15c): the
+        long-prefill verdict and the cached-prefix credit with its source, for
+        the serving record. None once released or for an unknown ticket."""
+        if ticket is None:
+            return None
+        with self._cond:
+            info = self._admission_info.get(ticket)
+            return dict(info) if info is not None else None
+
     def prefill_done(self, url: str, ticket: int | None) -> None:
         """The request holding ``ticket`` finished its prefill (first output seen):
         hand the long-prefill lease on. Harmless for any other ticket."""
@@ -354,6 +482,8 @@ class SharedKVPoolAdmission:
             "queue_wait_s_max": 0.0, "long_prefill_admitted": 0,
             "long_prefill_waits": 0, "long_prefill_wait_s_total": 0.0,
             "short_passed_long": 0, "abandoned": 0, "cache_credited": 0,
+            "cache_credit_fp_history": 0, "cache_credit_slots_text": 0,
+            "cache_credit_unavailable": 0,
         })
 
     # -- adaptive decode reservation -----------------------------------------
@@ -401,9 +531,10 @@ class SharedKVPoolAdmission:
         return min(observe, threshold)
 
     def _observed(self, url: str, prompt_text: str | None = None
-                  ) -> tuple[int, int, int, int] | None:
+                  ) -> tuple[int, int, int, int, str | None] | None:
         """(projected in-flight tokens, processing slots, long prefills in flight,
-        chars of ``prompt_text`` an idle slot has cached) from /slots, or None."""
+        chars of ``prompt_text`` an idle slot has cached, why that is 0 or None)
+        from /slots, or None."""
         try:
             occ = self._occupancy_fn(url)
         except Exception:
@@ -420,12 +551,26 @@ class SharedKVPoolAdmission:
             except Exception:
                 long_prefills = 0
         cached_chars = 0
-        if prompt_text and hasattr(occ, "best_cached_prefix_chars"):
+        slots_reason: str | None = None
+        if not prompt_text:
+            slots_reason = "no_prompt_text"
+        elif hasattr(occ, "best_cached_prefix_chars"):
             try:
                 cached_chars = int(occ.best_cached_prefix_chars(prompt_text))
             except Exception:
                 cached_chars = 0
-        return int(occ.projected_tokens(ratio)), int(occ.processing), long_prefills, cached_chars
+            if cached_chars <= 0:
+                # v10 reports slot text only under LLAMA_SERVER_SLOTS_DEBUG.
+                try:
+                    has_text = any(not s.is_processing and s.prompt_text
+                                   for s in getattr(occ, "slots", ()))
+                except Exception:
+                    has_text = False
+                slots_reason = "no_slot_match" if has_text else "slots_no_prompt"
+        else:
+            slots_reason = "slots_no_prompt"
+        return (int(occ.projected_tokens(ratio)), int(occ.processing), long_prefills,
+                cached_chars, slots_reason)
 
     def _fits(self, url: str, tokens: int, pool_tokens: int, observed: tuple | None) -> bool:
         reserved = self._inflight.get(url, {})
@@ -448,6 +593,7 @@ class SharedKVPoolAdmission:
         poll_s: float = 0.25,
         max_queued: int | None = None,
         prompt_text: str | None = None,
+        prefix_ladder: dict[str, Any] | None = None,
     ) -> int | None:
         """Queue for ``tokens`` (+ ratio-weighted ``max_new_tokens``) of ``url``'s
         pool; return a ticket, or None when the wait ends (deadline, timeout,
@@ -461,6 +607,11 @@ class SharedKVPoolAdmission:
         prefill and also waits for ``url``'s host-wide long-prefill lease (one
         long prefill in flight per server, across every worker process). Call
         ``prefill_done`` on the first output chunk.
+
+        ``prefix_ladder`` (``serving_calls.prefix_ladder``) is the KVU-15c
+        primary credit source: the longest prefix a call that finished on this
+        server shares with the request. ``admission_record(ticket)`` returns the
+        decision (verdict, credit, source) for the serving record.
 
         ``deadline_s`` is a ``time.perf_counter`` deadline (the primitives clock).
         ``timeout_s`` defaults to ``ORCHESTRATOR_KV_POOL_WAIT_S`` only when there
@@ -491,8 +642,8 @@ class SharedKVPoolAdmission:
             while True:
                 # Read the server outside the lock (an HTTP GET, cached ~1.5 s).
                 observed = self._observed(url, prompt_text)
-                cached_chars = int(observed[3]) if observed is not None and len(observed) > 3 else 0
-                prefill_tokens = self.prefill_tokens_estimate(tokens, prompt_text, cached_chars)
+                prefill_tokens, credit = self._credit(url, tokens, prompt_text,
+                                                      prefix_ladder, observed)
                 with self._cond:
                     is_long = self.is_long_prefill(prefill_tokens)
                     self._waiting[ticket] = (want, is_long)
@@ -518,8 +669,21 @@ class SharedKVPoolAdmission:
                             stat["long_prefill_wait_s_total"] += waited
                         if verdict == "pass":
                             stat["short_passed_long"] += 1
-                        if not is_long and self.is_long_prefill(tokens):
+                        cache_credited = not is_long and self.is_long_prefill(tokens)
+                        if cache_credited:
                             stat["cache_credited"] += 1
+                        source = credit.get("cache_credit_source")
+                        if source:
+                            stat[f"cache_credit_{source}"] += 1
+                        else:
+                            stat["cache_credit_unavailable"] += 1
+                        self._admission_info[ticket] = dict(
+                            credit,
+                            long_prefill=bool(is_long),
+                            cache_credited=bool(cache_credited),
+                            long_prefill_threshold=self.long_prefill_threshold(),
+                            queue_wait_ms=round(waited * 1000.0, 3),
+                        )
                         if logged:
                             logger.info(
                                 "KV pool admission: %s request of %d tokens admitted after %.1fs%s",
@@ -612,6 +776,7 @@ class SharedKVPoolAdmission:
         if ticket is None:
             return
         with self._cond:
+            self._admission_info.pop(ticket, None)
             reserved = self._inflight.get(url)
             if reserved is not None:
                 reserved.pop(ticket, None)

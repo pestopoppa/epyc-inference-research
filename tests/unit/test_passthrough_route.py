@@ -764,3 +764,43 @@ def test_refused_passthrough_record_also_carries_caller_port(client, server, wir
     assert rec["dispatched"] is False
     assert rec["caller"]["port"] == urlparse(server.url).port
 
+
+# ── KVU-15c: the credit comes from what this server already served ─────────
+
+
+def test_history_credit_admits_a_follow_up_turn_without_the_lease(
+    client, server, pool, wiring, monkeypatch
+):
+    from src.runtime import long_prefill_lease as lpl
+
+    monkeypatch.setenv(kpa.KV_POOL_LONG_PREFILL_ENV, "8000")
+    monkeypatch.setenv(kpa.KV_POOL_CACHE_CREDIT_MARGIN_ENV, "100")
+    doc = "".join(f"line {i}: shared context for every turn\n" for i in range(1000))
+    first = [{"role": "system", "content": doc}, {"role": "user", "content": "q1"}]
+    # Turn 1: a cold long prefill (takes the lease), served -> remembered.
+    r = client.post("/v1/passthrough/architect_critic/chat/completions",
+                    json={"messages": first})
+    assert r.status_code == 200
+    # Turn 2 extends turn 1 while somebody else holds the lease. /slots reports no
+    # text (production): only the history can credit it.
+    other = lpl.try_acquire(server.url)
+    try:
+        r = client.post("/v1/passthrough/architect_critic/chat/completions", json={
+            "messages": first + [{"role": "assistant", "content": "a1"},
+                                 {"role": "user", "content": "q2"}]})
+    finally:
+        other.release()
+    assert r.status_code == 200
+    rec1, rec2 = _records(wiring)
+    assert rec1["passthrough"]["long_prefill"] is True
+    assert rec1["kv_admission"]["cache_credit_source"] is None
+    assert rec1["kv_admission"]["cache_credit_unavailable"]["fp_history"] == "no_history"
+    assert rec2["passthrough"]["long_prefill"] is False
+    assert rec2["passthrough"]["cache_credited"] is True
+    assert rec2["passthrough"]["cache_credit_source"] == "fp_history"
+    adm = rec2["kv_admission"]
+    assert adm["cache_credit_source"] == "fp_history"
+    assert adm["cache_credited_tokens"] > 0 and adm["cache_credit_matched_chars"] > 30_000
+    assert adm["prompt_tokens_est"] == rec2["passthrough"]["prompt_tokens_est"]
+    # KVU-15b compares the credit with what the server reports it reused.
+    assert rec2["passthrough"]["cached_prompt_tokens"] == TIMINGS["cache_n"]

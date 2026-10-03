@@ -1138,6 +1138,11 @@ class InferenceMixin:
                         prompt_text=(
                             prompt if getattr(request, "chat_payload", None) is None else None
                         ),
+                        # KVU-15c: the primary credit source — the prefix this
+                        # server already served (orchestrator-side history),
+                        # fingerprinted exactly as the serving record does, so a
+                        # chat payload is covered too.
+                        prefix_ladder=serving_calls.prefix_ladder(request),
                     )
                 except KVPoolQueueFull as queue_full:
                     if admitted and admission:
@@ -1266,6 +1271,13 @@ class InferenceMixin:
                 )
 
             self._stage_serving_caller(role, request, backend_url, _cb_port)
+            if pool_admission is not None and pool_ticket is not None:
+                # KVU-15c: the admission decision (credit, its source) rides
+                # the serving record as ``kv_admission``, so KVU-15b can compare
+                # the credited prefix with the server's ``cache_n``.
+                serving_calls.annotate_staged(
+                    kv_admission=pool_admission.admission_record(pool_ticket)
+                )
             try:
                 with lock_ctx:
                     request.timeout = self._clamp_timeout_to_request_budget(request.timeout)
