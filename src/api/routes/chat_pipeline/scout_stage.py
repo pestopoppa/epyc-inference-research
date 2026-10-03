@@ -49,6 +49,17 @@ gives ``free = slots - processing``; at most ``free - reserve_slots`` scouts run
 ``reserve_slots >= 1`` always leaves a slot for the planner and for other traffic. Unknown
 occupancy runs no scouts. The scouts are visible to every other reader of ``/slots``.
 
+Slots are only the CONCURRENCY bound. On a shared (``--kv-unified``) pool the binding limit
+is tokens, so every scout model call also goes through the same token-aware
+``SharedKVPoolAdmission`` gate ``LLMPrimitives`` uses (2026-10-03, :8083 KV-pool decision
+step 1): the call reserves its estimated prompt plus ``max_tokens`` against the pool, waits
+FCFS (bounded by the scout's own per-call timeout and stop flag) when that does not fit
+beside the in-flight load, obeys the one-long-prefill-per-server rule, and returns its
+reservation when the call ends. Before this, three large scout prompts plus the planner
+could oversubscribe the pool even though each had a free slot. A gate wait that runs out is
+a scout ``timeout``; a full admission queue is a scout ``error``. Servers that are not a
+shared pool (or whose limit is unknown) are not gated, as in ``LLMPrimitives``.
+
 CPU region claim (ARCHSWAP 2026-09-27, item A-3): bypassing ``LLMPrimitives`` must not
 mean bypassing the CPU region lock. When the scouts' target server is CPU-resident, the
 stage takes the SAME exclusive ``cpu_region_lock`` claim the normal call path takes for
@@ -183,6 +194,10 @@ class CompletionResult:
 
 class ScoutCancelled(Exception):
     """The stage cancelled this scout (budget, request deadline or client disconnect)."""
+
+
+class ScoutAdmissionTimeout(Exception):
+    """The shared-KV-pool gate did not admit a scout call within its wait budget."""
 
 
 class ScoutTransport(Protocol):
@@ -643,6 +658,10 @@ def run_scout(index: int, target: ScoutTarget, *, reader: ScopedReader,
     except ScoutCancelled:
         result.status = "timeout" if clock() >= deadline else "cancelled"
         return result
+    except ScoutAdmissionTimeout as exc:
+        result.status = "timeout"
+        result.error = f"{type(exc).__name__}: {exc}"[:500]
+        return result
     except Exception as exc:  # noqa: BLE001 -- a scout failure is a missing summary, never a crash
         # httpx.ReadTimeout / ConnectTimeout / PoolTimeout: a slow server is a timeout.
         result.status = "timeout" if "Timeout" in type(exc).__name__ else "error"
@@ -718,6 +737,95 @@ class ChatCompletionsTransport:
         # Unknown stays None (tokens_exact=False upstream): stream chunks are not tokens.
         completion_tokens = usage.get("completion_tokens", timings.get("predicted_n"))
         return CompletionResult("".join(text), prompt_tokens, completion_tokens, finish)
+
+
+# ── admission: token reservations on a shared KV pool ────────────────────────────────────
+
+#: Per-message chat-template overhead added to the character estimate (role tags, etc.).
+MESSAGE_OVERHEAD_TOKENS = 8
+
+
+def estimate_messages_tokens(messages: list[dict[str, str]]) -> int:
+    """Conservative prompt-token estimate for a chat request (same estimator as the gate)."""
+    from src.backends.context_limits import estimate_tokens_conservative
+
+    return sum(estimate_tokens_conservative(str(m.get("content") or "")) + MESSAGE_OVERHEAD_TOKENS
+               for m in messages)
+
+
+class PoolGatedTransport:
+    """Wraps a scout transport so every call holds a token reservation on ``url``'s
+    shared KV pool (``SharedKVPoolAdmission``) for its duration. ``limit`` is the
+    server's ``ContextLimit``; the wrapper is only built when it is a shared pool."""
+
+    def __init__(self, inner: Any, *, url: str, limit: Any, pool: Any,
+                 deadline_s: float | None = None):
+        self.inner = inner
+        self.name = getattr(inner, "name", TRANSPORT_NAME)
+        self.url = url
+        self.limit = limit
+        self.pool = pool
+        self.deadline_s = deadline_s  # time.perf_counter deadline (the request's)
+        self.admitted_calls = 0
+        self.wait_s_total = 0.0
+
+    def complete(self, messages: list[dict[str, str]], *, max_tokens: int,
+                 should_stop: Callable[[], bool], timeout_s: float) -> CompletionResult:
+        from src.scheduling.kv_pool_admission import KVPoolQueueFull
+
+        prompt_tokens = estimate_messages_tokens(messages)
+        started = time.monotonic()
+        try:
+            ticket = self.pool.acquire(
+                self.url, prompt_tokens, self.limit.pool_tokens,
+                max_new_tokens=int(max_tokens), deadline_s=self.deadline_s,
+                timeout_s=max(0.0, float(timeout_s)), cancel_check=should_stop,
+            )
+        except KVPoolQueueFull as exc:
+            raise RuntimeError(f"KV pool admission queue full: {exc}") from exc
+        waited = time.monotonic() - started
+        self.wait_s_total += waited
+        if ticket is None:
+            if should_stop():
+                raise ScoutCancelled()
+            raise ScoutAdmissionTimeout(
+                f"shared KV pool on {self.url} did not admit {prompt_tokens} prompt tokens "
+                f"(+{max_tokens}) within {waited:.1f}s")
+        self.admitted_calls += 1
+        success = False
+        try:
+            result = self.inner.complete(messages, max_tokens=max_tokens,
+                                         should_stop=should_stop,
+                                         timeout_s=max(1.0, float(timeout_s) - waited))
+            success = True
+            return result
+        finally:
+            self.pool.release(self.url, ticket, success=success)
+
+
+def resolve_pool_gate(url: str, *, resolver: Any = None, pool: Any = None) -> tuple[Any, Any]:
+    """``(limit, pool)`` when ``url`` is a shared KV pool the gate must guard, else
+    ``(limit_or_None, None)``. Never raises: an unknown limit is not gated, exactly as in
+    ``LLMPrimitives``."""
+    if not url:
+        return None, None
+    try:
+        if resolver is None:
+            from src.backends.context_limits import get_context_limit_resolver
+
+            resolver = get_context_limit_resolver()
+        limit_for_url = getattr(resolver, "limit_for_url", None)
+        limit = limit_for_url(url) if callable(limit_for_url) else None
+    except Exception as exc:  # noqa: BLE001
+        log.debug("scouts: limit read failed for %s: %s", url, exc)
+        limit = None
+    if limit is None or not getattr(limit, "shared_pool", False):
+        return limit, None
+    if pool is None:
+        from src.scheduling.kv_pool_admission import get_shared_pool_admission
+
+        pool = get_shared_pool_admission()
+    return limit, pool
 
 
 # ── admission: the cap from live /slots ───────────────────────────────────────────────────
@@ -815,6 +923,7 @@ async def run_scouts(
     transport: ScoutTransport | None = None,
     resolver: Any = None,
     clock: Callable[[], float] = time.monotonic,
+    pool_admission: Any = None,
 ) -> ScoutStageResult:
     """Run the scouts for one request and return the planner block plus provenance.
 
@@ -831,7 +940,7 @@ async def run_scouts(
         "launched": 0, "completed": 0, "failed": 0, "skipped": 0,
         "max_concurrency": 0, "max_inflight_calls": 0, "wall_s": 0.0, "cap": None, "budget_s": None,
         "block_chars": 0, "block_sha256": None, "prompt_tokens": 0, "completion_tokens": 0,
-        "turns": 0, "scouts": [], "error": None, "region_claim": None,
+        "turns": 0, "scouts": [], "error": None, "region_claim": None, "pool_gate": None,
     }
     wanted = targets[:config.max_scouts]
     results = [ScoutResult(index=i, target=t) for i, t in enumerate(wanted)]
@@ -865,6 +974,16 @@ async def run_scouts(
         return _finish(report, results, t0, clock, "", role, cap["cap"])
 
     transport = transport or ChatCompletionsTransport(url or "", enable_thinking=config.enable_thinking)
+    # Token-aware admission on a shared KV pool: slots bound concurrency, tokens bound load.
+    pool_limit, pool = await asyncio.to_thread(resolve_pool_gate, url or "",
+                                               resolver=resolver, pool=pool_admission)
+    if pool is not None:
+        report["pool_gate"] = {"gated": True, "pool_tokens": int(pool_limit.pool_tokens),
+                               "admitted_calls": 0, "wait_s": 0.0}
+    else:
+        report["pool_gate"] = {"gated": False,
+                               "reason": "not a shared KV pool" if pool_limit is not None
+                               else "limit unknown"}
     stop = threading.Event()
     deadline = clock() + budget
 
@@ -941,6 +1060,13 @@ async def run_scouts(
                     inflight -= 1
 
     counted = _Counting()
+    # The gate sits OUTSIDE the counter: a call waiting for pool admission is not in flight.
+    call_transport: Any = counted
+    gated: PoolGatedTransport | None = None
+    if pool is not None:
+        gated = PoolGatedTransport(counted, url=url or "", limit=pool_limit, pool=pool,
+                                   deadline_s=request_deadline_s)
+        call_transport = gated
 
     def _one(i: int) -> ScoutResult:
         nonlocal active, peak
@@ -948,7 +1074,7 @@ async def run_scouts(
             active += 1
             peak = max(peak, active)
         try:
-            return run_scout(i, wanted[i], reader=reader, transport=counted, config=config,
+            return run_scout(i, wanted[i], reader=reader, transport=call_transport, config=config,
                              should_stop=should_stop, deadline=deadline, clock=clock, t0=t0)
         finally:
             with lock:
@@ -990,6 +1116,9 @@ async def run_scouts(
         except Exception as exc:  # noqa: BLE001
             results[i].status, results[i].error = "error", f"{type(exc).__name__}: {exc}"[:500]
     report["launched"] = n_run
+    if gated is not None:
+        report["pool_gate"].update(admitted_calls=gated.admitted_calls,
+                                   wait_s=round(gated.wait_s_total, 3))
     report["max_concurrency"] = peak
     report["max_inflight_calls"] = inflight_peak
     block = render_block(results, role=role, cap=cap["cap"])
@@ -1012,7 +1141,8 @@ def _finish(report: dict[str, Any], results: list[ScoutResult], t0: float,
 
 
 __all__ = [
-    "SCHEMA", "ChatCompletionsTransport", "CompletionResult", "ScopedReader", "ScoutConfig",
-    "ScoutResult", "ScoutStageResult", "ScoutTarget", "augment_prompt", "normalize_symbol",
-    "parse_reply", "render_block", "resolve_cap", "run_scout", "run_scouts",
+    "SCHEMA", "ChatCompletionsTransport", "CompletionResult", "PoolGatedTransport",
+    "ScopedReader", "ScoutAdmissionTimeout", "ScoutConfig", "ScoutResult", "ScoutStageResult",
+    "ScoutTarget", "augment_prompt", "estimate_messages_tokens", "normalize_symbol",
+    "parse_reply", "render_block", "resolve_cap", "resolve_pool_gate", "run_scout", "run_scouts",
 ]

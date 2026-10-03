@@ -17,6 +17,15 @@ admission counted slots only. The server's own answer is ``GET /props``:
 
 Fallback order per URL: live ``/props`` (cached, TTL) → registry/stack priors
 (``runtime.cache.context_tokens`` / ``slots_by_port`` / ``kv_unified``) → None.
+
+Per-request cap (2026-10-03, :8083 KV-pool decision step 1): under unified KV the
+server lets ONE request use the whole ``-c``. Once ``-c`` exceeds the model's
+trained context (``n_ctx_train``) the server only warns, so the orchestrator caps
+``per_request_n_ctx`` at the model's ``ctx_max`` from the compiled stack priors
+(``roles.<role>.model.ctx_max``, sourced from the research registry). Nothing is
+hardcoded: today ``min(196608, 262144) = 196608``; after a relaunch at a larger
+``-c`` the same rule yields 262144. ``server_n_ctx`` keeps the server's own slot
+n_ctx, which is what sizes the shared pool (``pool_tokens``).
 There is no invented default here: a caller that gets None decides (and logs)
 its own degraded behaviour.
 
@@ -74,6 +83,21 @@ class ContextLimit:
     kv_unified: bool | None
     source: str  # "live_props" | "registry" | "observed"
     registry_context_tokens: int | None = None
+    # The server's own per-slot n_ctx (n_ctx_seq) before the model cap; None
+    # means "same as per_request_n_ctx" (no cap applied / not known).
+    server_n_ctx: int | None = None
+    # The model's trained context (``model.ctx_max``) when config declares it.
+    request_cap: int | None = None
+
+    @property
+    def slot_n_ctx(self) -> int:
+        """The server's per-slot n_ctx (what sizes the KV pool)."""
+        return int(self.server_n_ctx or self.per_request_n_ctx)
+
+    @property
+    def cap_binding(self) -> bool:
+        """True when the model cap, not the server, sets the per-request limit."""
+        return self.per_request_n_ctx < self.slot_n_ctx
 
     @property
     def shared_pool(self) -> bool:
@@ -84,8 +108,8 @@ class ContextLimit:
     def pool_tokens(self) -> int:
         """Total KV cells requests on this server compete for."""
         if self.kv_unified:
-            return self.per_request_n_ctx
-        return self.per_request_n_ctx * max(1, self.total_slots or 1)
+            return self.slot_n_ctx
+        return self.slot_n_ctx * max(1, self.total_slots or 1)
 
     def fits(self, prompt_tokens: int, max_new_tokens: int = 0) -> bool:
         """True when the request fits one slot on its own.
@@ -103,8 +127,16 @@ class ContextLimit:
             "kv_unified": self.kv_unified,
             "shared_pool": self.shared_pool,
             "pool_tokens": self.pool_tokens,
+            "server_n_ctx": self.slot_n_ctx,
+            "request_cap": self.request_cap,
             "source": self.source,
         }
+
+
+def capped_n_ctx(n_ctx: int, request_cap: int | None) -> int:
+    """``min(server n_ctx, model ctx_max)``; the cap only ever lowers the limit."""
+    cap = _positive_int(request_cap)
+    return min(int(n_ctx), cap) if cap else int(n_ctx)
 
 
 def split_urls(url_value: str | None) -> list[str]:
@@ -166,18 +198,25 @@ def parse_props(
         kv_unified = registry["kv_unified"]
     else:
         kv_unified = None
+    request_cap = _positive_int(registry.get("ctx_max")) if registry else None
     return ContextLimit(
         url=url,
-        per_request_n_ctx=n_ctx,
+        per_request_n_ctx=capped_n_ctx(n_ctx, request_cap),
         total_slots=total_slots,
         kv_unified=kv_unified,
         source="live_props",
         registry_context_tokens=_positive_int(reg_ctx),
+        server_n_ctx=n_ctx,
+        request_cap=request_cap,
     )
 
 
 def registry_facts_by_port(priors_path: Path | None = None) -> dict[int, dict[str, Any]]:
-    """Per-port ``{context_tokens, slots, kv_unified}`` from the compiled stack priors."""
+    """Per-port ``{context_tokens, slots, kv_unified, ctx_max}`` from the compiled stack priors.
+
+    ``ctx_max`` is the served model's trained context (``model.ctx_max``), the
+    per-request cap; None when the record does not declare it.
+    """
     try:
         from src.registry.stack_priors import (
             DEFAULT_OUTPUT,
@@ -202,6 +241,8 @@ def registry_facts_by_port(priors_path: Path | None = None) -> dict[int, dict[st
         kv_unified = cache.get("kv_unified")
         if not isinstance(kv_unified, bool):
             kv_unified = serving.get("kv_unified") if isinstance(serving.get("kv_unified"), bool) else None
+        model = record.get("model") if isinstance(record.get("model"), dict) else {}
+        ctx_max = _positive_int(model.get("ctx_max"))
         by_port = cache.get("slots_by_port") if isinstance(cache.get("slots_by_port"), dict) else {}
         ports = set(stack_prior_serving_ports(serving))
         for raw in by_port:
@@ -212,7 +253,8 @@ def registry_facts_by_port(priors_path: Path | None = None) -> dict[int, dict[st
             slots = _positive_int(by_port.get(port)) or _positive_int(by_port.get(str(port))) or role_slots
             facts.setdefault(
                 port,
-                {"context_tokens": context_tokens, "slots": slots, "kv_unified": kv_unified},
+                {"context_tokens": context_tokens, "slots": slots, "kv_unified": kv_unified,
+                 "ctx_max": ctx_max},
             )
     return facts
 
@@ -240,14 +282,17 @@ def limit_from_registry(url: str, facts: dict[str, Any] | None) -> ContextLimit 
     # The launcher always passes -np explicitly, which makes the server's
     # default (split) stand unless kv_unified is declared (kvu PACKAGE §1).
     unified = bool(kv_unified) if isinstance(kv_unified, bool) else False
-    per_request = context_tokens if unified else max(1, context_tokens // slots)
+    per_slot = context_tokens if unified else max(1, context_tokens // slots)
+    request_cap = _positive_int(facts.get("ctx_max"))
     return ContextLimit(
         url=url,
-        per_request_n_ctx=per_request,
+        per_request_n_ctx=capped_n_ctx(per_slot, request_cap),
         total_slots=slots,
         kv_unified=unified if slots > 1 else None,
         source="registry",
         registry_context_tokens=context_tokens,
+        server_n_ctx=per_slot,
+        request_cap=request_cap,
     )
 
 
@@ -260,6 +305,16 @@ class SlotState:
     is_processing: bool
     n_prompt_tokens: int  # prompt.tokens.size(): prompt + tokens generated so far
     n_remain: int | None  # remaining decode budget; None/-1 = unbounded
+    # Prefill progress (server-context.cpp:714-722, updated per batch :3510/:3599):
+    # tokens decoded so far (0 while still in prefill) and uncached prompt tokens
+    # processed so far. None when the server did not report them.
+    n_decoded: int | None = None
+    n_prompt_tokens_processed: int | None = None
+
+    @property
+    def prefilling(self) -> bool:
+        """In flight and has not produced a token yet."""
+        return self.is_processing and self.n_decoded == 0
 
 
 @dataclass(frozen=True)
@@ -280,6 +335,18 @@ class PoolOccupancy:
         """Cells held by in-flight requests right now. Idle slots' cached
         prefixes are purgeable (and restorable from --cache-ram), so free."""
         return sum(s.n_prompt_tokens for s in self.slots if s.is_processing)
+
+    def long_prefills(self, min_processed_tokens: int) -> int:
+        """Slots still in prefill that have already processed at least
+        ``min_processed_tokens`` uncached prompt tokens — a long prefill in
+        flight, whoever sent it (another API worker, a client that bypasses the
+        orchestrator). 0 when the server does not report prefill progress."""
+        if min_processed_tokens <= 0:
+            return 0
+        return sum(
+            1 for s in self.slots
+            if s.prefilling and (s.n_prompt_tokens_processed or 0) >= min_processed_tokens
+        )
 
     def projected_tokens(self, new_token_ratio: float = 1.0) -> int:
         """In-flight cells plus the (ratio-weighted) decode they may still add."""
@@ -305,6 +372,11 @@ def parse_slots(url: str, body: Any) -> PoolOccupancy | None:
             nxt = nxt[0] if nxt and isinstance(nxt[0], dict) else {}
         n_remain = nxt.get("n_remain") if isinstance(nxt, dict) else None
         n_remain = n_remain if isinstance(n_remain, int) and not isinstance(n_remain, bool) else None
+        n_decoded = nxt.get("n_decoded") if isinstance(nxt, dict) else None
+        n_decoded = n_decoded if isinstance(n_decoded, int) and not isinstance(n_decoded, bool) else None
+        n_processed = raw.get("n_prompt_tokens_processed")
+        n_processed = (n_processed if isinstance(n_processed, int)
+                       and not isinstance(n_processed, bool) else None)
         n_prompt = raw.get("n_prompt_tokens")
         n_prompt = n_prompt if isinstance(n_prompt, int) and n_prompt > 0 else 0
         slots.append(SlotState(
@@ -313,6 +385,8 @@ def parse_slots(url: str, body: Any) -> PoolOccupancy | None:
             is_processing=bool(raw.get("is_processing")),
             n_prompt_tokens=n_prompt,
             n_remain=n_remain,
+            n_decoded=n_decoded,
+            n_prompt_tokens_processed=n_processed,
         ))
     return PoolOccupancy(url=url, slots=tuple(slots))
 
@@ -467,7 +541,9 @@ class ContextLimitResolver:
         return min(limits, key=lambda lim: lim.per_request_n_ctx)
 
     def observe(self, url: str, *, n_ctx: int | None) -> None:
-        """Record a server-reported per-request n_ctx (e.g. from a 400 body)."""
+        """Record a server-reported per-slot n_ctx (e.g. from a 400 body).
+
+        The model cap still applies on top of what the server reports."""
         url = (split_urls(url) or [""])[0]
         n_ctx = _positive_int(n_ctx)
         if not url or n_ctx is None:
@@ -475,10 +551,11 @@ class ContextLimitResolver:
         with self._lock:
             cached = self._cache.get(url)
             base = cached[1] if cached else None
-            if base is not None and base.per_request_n_ctx == n_ctx:
+            if base is not None and base.slot_n_ctx == n_ctx:
                 return
             if base is not None:
-                limit = replace(base, per_request_n_ctx=n_ctx, source="observed")
+                limit = replace(base, per_request_n_ctx=capped_n_ctx(n_ctx, base.request_cap),
+                                server_n_ctx=n_ctx, source="observed")
             else:
                 limit = ContextLimit(url=url, per_request_n_ctx=n_ctx, total_slots=None,
                                      kv_unified=None, source="observed")

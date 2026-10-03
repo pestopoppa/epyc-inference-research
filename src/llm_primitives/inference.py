@@ -146,6 +146,22 @@ def _clamp_max_tokens(prompt: str, n_tokens: int, limit: Any) -> tuple[int, dict
     }
 
 
+def _request_cap_refusal(prompt: str, limit: Any) -> int | None:
+    """Estimated prompt tokens when they reach a BINDING model cap, else None.
+
+    Only when the cap is below the server's own slot n_ctx (the server would
+    accept the request); otherwise the server decides as before. Uses the rough
+    4 chars/token estimate so an estimate error never refuses a request that
+    fits — the cap protects quality (n_ctx_train), it is not a hard VRAM bound.
+    """
+    if limit is None or not getattr(limit, "cap_binding", False):
+        return None
+    from src.backends.context_limits import estimate_tokens
+
+    prompt_est = estimate_tokens(prompt)
+    return prompt_est if prompt_est >= int(limit.per_request_n_ctx) else None
+
+
 def _sampling_cache_key(
     *,
     temperature: float | None = None,
@@ -985,7 +1001,25 @@ class InferenceMixin:
             )
             clamped, max_tokens_clamp = _clamp_max_tokens(prompt, n_tokens, _clamp_limit)
         except Exception:
+            _clamp_limit = None
             clamped, max_tokens_clamp = n_tokens, None
+        # Per-request cap: when the model's trained context (config ctx_max), not
+        # the server, sets the limit (unified -c above n_ctx_train), the server
+        # would accept the prompt, so refuse it here — never dispatched, typed
+        # like the server's own 400 so context recovery reroutes/compacts it.
+        _cap_refusal = _request_cap_refusal(prompt, _clamp_limit)
+        if _cap_refusal is not None:
+            raise ContextOverflowError(
+                f"context overflow (per-request cap) on role {role}: ~{_cap_refusal} prompt "
+                f"tokens exceed the model's per-request limit {_clamp_limit.per_request_n_ctx} "
+                f"(server slot n_ctx {_clamp_limit.slot_n_ctx}); never dispatched",
+                kind=ContextOverflowError.REQUEST_TOO_LARGE,
+                role=role,
+                backend_url=getattr(_clamp_limit, "url", "") or "",
+                n_prompt_tokens=_cap_refusal,
+                n_ctx=_clamp_limit.per_request_n_ctx,
+                source="request_cap",
+            )
         if max_tokens_clamp is not None:
             log.warning(
                 "max_tokens clamped for role=%s: %d -> %d (per-request n_ctx %d, ~%d prompt tokens, %s)",
@@ -1085,8 +1119,15 @@ class InferenceMixin:
                         f"context overflow (shared KV pool busy) on role {role} ({backend_url}): "
                         f"queued {pool_tokens_needed} tokens behind "
                         f"{pool_admission.in_flight_tokens(backend_url)} reserved "
-                        f"(pool {pool_limit.pool_tokens}) and the request's wait budget "
-                        f"ended before it fit; it was never dispatched",
+                        f"(pool {pool_limit.pool_tokens}"
+                        + (
+                            ", waiting for the in-flight long prefill"
+                            if pool_admission.is_long_prefill(pool_prompt_tokens)
+                            and pool_admission.long_prefill_holder(backend_url) is not None
+                            else ""
+                        )
+                        + ") and the request's wait budget ended before it fit; "
+                        "it was never dispatched",
                         kind=ContextOverflowError.POOL_EXHAUSTED,
                         role=role,
                         backend_url=backend_url,
@@ -1202,6 +1243,9 @@ class InferenceMixin:
                         if first_output_emitted:
                             return
                         first_output_emitted = True
+                        if pool_admission is not None:
+                            # Prefill is over: hand on the long-prefill lease.
+                            pool_admission.prefill_done(backend_url, pool_ticket)
                         emit_lifecycle_transition(
                             "first_output",
                             details={"content_chars": len(content)},

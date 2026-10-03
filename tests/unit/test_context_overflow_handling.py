@@ -542,9 +542,12 @@ class TestSharedPoolAdmission:
         t = a.acquire("u", 500_000, 196608, timeout_s=0)
         assert t is not None and a.in_flight_tokens("u") == 196608
 
-    def test_second_long_request_waits_then_times_out(self):
+    def test_second_long_request_waits_then_times_out(self, monkeypatch):
         from src.api.admission import SharedKVPoolAdmission
 
+        # The TOKEN rule in isolation (the one-long-prefill rule is covered in
+        # test_kv_pool_long_prefill.py).
+        monkeypatch.setenv("ORCHESTRATOR_KV_POOL_LONG_PREFILL_TOKENS", "0")
         a = SharedKVPoolAdmission()
         first = a.acquire("u", 120_000, 196608, timeout_s=0)
         assert a.acquire("u", 90_000, 196608, timeout_s=0.05, poll_s=0.01) is None
@@ -837,9 +840,13 @@ class TestSlotsOccupancy:
         assert r.pool_occupancy("http://h:8083") is None  # /slots unavailable → caller degrades
         assert ContextLimitResolver(live=False).pool_occupancy("http://h:8083") is None
 
-    def test_admission_counts_traffic_it_did_not_admit(self):
+    def test_admission_counts_traffic_it_did_not_admit(self, monkeypatch):
         from src.backends.context_limits import parse_slots
         from src.scheduling.kv_pool_admission import SharedKVPoolAdmission
+
+        # TOKEN rule in isolation: this slot is mid-prefill (n_decoded 0), which
+        # the one-long-prefill rule would also (correctly) wait on.
+        monkeypatch.setenv("ORCHESTRATOR_KV_POOL_LONG_PREFILL_TOKENS", "0")
 
         external = parse_slots("u", [_slot(0, processing=True, n_prompt=150_000)])  # opencode → :8083
         pool = SharedKVPoolAdmission(occupancy=lambda url: external)
@@ -883,6 +890,8 @@ class TestAdaptiveDecodeReservation:
         from src.scheduling.kv_pool_admission import SharedKVPoolAdmission
 
         # 120k prompt + max_tokens 32768 on a 196608 pool, then a 60k request.
+        # TOKEN rule in isolation (no one-long-prefill rule).
+        monkeypatch.setenv("ORCHESTRATOR_KV_POOL_LONG_PREFILL_TOKENS", "0")
         full = SharedKVPoolAdmission(occupancy=lambda url: None)
         full.acquire("u", 120_000, 196608, max_new_tokens=32768, timeout_s=0)
         assert full.acquire("u", 60_000, 196608, timeout_s=0.05, poll_s=0.01) is None
