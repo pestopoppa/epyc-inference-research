@@ -50,7 +50,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
-from typing import Sequence
+from typing import Mapping, Sequence
 
 #: role -> the agent name the caller passes as ``opencode run --agent``.
 AGENT_NAMES = {"planner": "autokernel-planner", "author": "autokernel-author"}
@@ -430,7 +430,8 @@ def build_actor_config(*, role: str, lane: Path, profiles: Sequence[Path] = (),
                        model: str | None = None, context_limit: int = 0,
                        output_limit: int = 0, thinking: str = "default",
                        author_sandbox: bool = False,
-                       reasoning_history: str = "keep") -> dict:
+                       reasoning_history: str = "keep",
+                       serving: Mapping | None = None) -> dict:
     """The opencode config (a dict ready for ``json.dump``) for one actor run.
 
     By default the seat's guidance is ADDED to opencode's own system prompt through
@@ -448,7 +449,9 @@ def build_actor_config(*, role: str, lane: Path, profiles: Sequence[Path] = (),
 
     `context_limit` / `output_limit` (OAB-23, 0 = off) add `model_limits(model, ...)`;
     `thinking` "off"/"medium" (OAB-24) adds `model_thinking(model, thinking)` on the same model entry;
-    `reasoning_history` "drop" adds `model_reasoning_history(model, "drop")` there too."""
+    `reasoning_history` "drop" adds `model_reasoning_history(model, "drop")` there too.
+    `serving` (UFH14-B1, `actor_serving`: provider timeouts, per-turn thinking budget,
+    compaction switch) is deep-merged over the result last; None/{} = unchanged."""
     if role not in AGENT_NAMES:
         raise ValueError(f"unknown actor role {role!r}; expected one of "
                          f"{sorted(AGENT_NAMES)}")
@@ -501,7 +504,7 @@ def build_actor_config(*, role: str, lane: Path, profiles: Sequence[Path] = (),
                           author_sandbox=author_sandbox)
     limits = model_block(model, context_limit=context_limit, output_limit=output_limit,
                          thinking=thinking, reasoning_history=reasoning_history)
-    return {
+    config = {
         "$schema": "https://opencode.ai/config.json",
         **SNAPSHOT_OFF,
         **limits,
@@ -525,6 +528,7 @@ def build_actor_config(*, role: str, lane: Path, profiles: Sequence[Path] = (),
         "agent": agents,
         **({} if replace_system_prompt else {"instructions": [str(instructions_path)]}),
     }
+    return _merge(config, dict(serving)) if serving else config
 
 
 def actor_instructions(role: str, fan_out: bool, *, scout_note: bool = True) -> str:
@@ -878,11 +882,13 @@ def seat_label(base: str, *, trim_instructions: bool = False, trim_tools: bool =
                lane_guard: bool = False, context_limit: int = 0, output_limit: int = 0,
                concise: bool = False, budget_s: int = 0, thinking_off: bool = False,
                thinking: str = "default", action_rule: bool = False,
-               reasoning_history: str = "") -> str:
+               reasoning_history: str = "", serving: str = "",
+               think_budget: int = 0) -> str:
     """`plain` / `bounded` plus one suffix per knob that is on (free text in VB-AK-SEAT).
     OAB-22/23 add `+ctx<C>+out<O>`, `+concise` and `+budget<B>s`; OAB-24 adds
     `+think-off` (or `+think-<thinking>`), the author action rule `+act-rule` and the
-    planner's reasoning-history drop `+reason-drop` (all off: unchanged)."""
+    planner's reasoning-history drop `+reason-drop`; UFH14-B1 adds `+f1` / `+f2` /
+    `+f1f2` (`serving`) and `+tb<N>` (per-turn thinking budget) (all off: unchanged)."""
     if thinking_off:
         thinking = "off"
     return (base + "".join(suffix for on, suffix in (
@@ -893,7 +899,10 @@ def seat_label(base: str, *, trim_instructions: bool = False, trim_tools: bool =
         + ("+concise" if concise else "") + ("+act-rule" if action_rule else "")
         + (f"+reason-{reasoning_history}" if reasoning_history
            and reasoning_history != "keep" else "")
-        + (f"+budget{budget_s}s" if budget_s else ""))
+        + (f"+budget{budget_s}s" if budget_s else "")
+        + (f"+{serving}" if serving else "")
+        + (f"+tb{think_budget // 1000}k" if think_budget and think_budget % 1000 == 0
+           else (f"+tb{think_budget}" if think_budget else "")))
 
 
 def build_plain_config(*, role: str, lane: Path, build_dir: str | Path | None = None,
@@ -902,7 +911,8 @@ def build_plain_config(*, role: str, lane: Path, build_dir: str | Path | None = 
                        author_note_path: Path | None = None,
                        model: str | None = None, context_limit: int = 0,
                        output_limit: int = 0, thinking: str = "default",
-                       read_roots: tuple = (), reasoning_history: str = "keep") -> dict:
+                       read_roots: tuple = (), reasoning_history: str = "keep",
+                       serving: Mapping | None = None) -> dict:
     """The per-call `OPENCODE_CONFIG` for the PLAIN seat: `snapshot: false`, a permission
     block (plus the author's style note as an `instructions` file) and nothing else -- no
     agent, no MCP, no tool_output cap, so the plain seat stays the plain seat. With every
@@ -911,7 +921,8 @@ def build_plain_config(*, role: str, lane: Path, build_dir: str | Path | None = 
     because snapshot tracking is on by default and bloats the store.
     `context_limit` / `output_limit` (OAB-23, 0 = off) add `model_limits(model, ...)`;
     `thinking` "off"/"medium" (OAB-24) adds `model_thinking(model, thinking)`;
-    `reasoning_history` "drop" adds `model_reasoning_history(model, "drop")`."""
+    `reasoning_history` "drop" adds `model_reasoning_history(model, "drop")`.
+    `serving` (UFH14-B1) is deep-merged over the result last; None/{} = unchanged."""
     permission = seat_permission(role, lane=lane, build_dir=build_dir,
                                  trim_instructions=trim_instructions,
                                  trim_tools=trim_tools, lane_guard=lane_guard,
@@ -925,7 +936,7 @@ def build_plain_config(*, role: str, lane: Path, build_dir: str | Path | None = 
         config["permission"] = permission
     if note:
         config["instructions"] = [str(author_note_path)]
-    return config
+    return _merge(config, dict(serving)) if serving else config
 
 
 def write_plain_config(path: Path, **kw) -> Path:

@@ -138,6 +138,26 @@ def record_salvage_turn(replies_dir: Path, record: Mapping[str, Any]) -> None:
         pass
 
 
+#: A sibling row, written once per PLANNER call the F2 answer protocol handled after its
+#: budget cut (`actors.AgentPlanner._answer_protocol`, UFH14-B1): each phase (main /
+#: forced / refine) with its outcome, and which phase's answer won. Its own schema, so
+#: every schema-filtered reader is unaffected; each turn's CALL also writes the usual
+#: metrics and v1 rows (seat arm suffixed `+forced` / `+refine`).
+ANSWER_PROTOCOL_SCHEMA = "epyc.autokernel.actor_answer_protocol.v1"
+
+
+def record_answer_protocol(replies_dir: Path, record: Mapping[str, Any]) -> None:
+    """Append one `ANSWER_PROTOCOL_SCHEMA` row. Never raises: evidence, not control."""
+    row = {"schema": ANSWER_PROTOCOL_SCHEMA, "role": "planner",
+           "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), **dict(record)}
+    try:
+        Path(replies_dir).mkdir(parents=True, exist_ok=True)
+        with open(Path(replies_dir) / CALL_LOG_NAME, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(row, sort_keys=True, default=str) + "\n")
+    except OSError:
+        pass
+
+
 def metric_rows_since(log: Path, offset: int = 0, *, role: str | None = None) -> list[dict]:
     """`METRICS_SCHEMA` rows appended to one `actor-calls.jsonl` past byte `offset`
     (optionally one role's), oldest first. Missing file: []."""

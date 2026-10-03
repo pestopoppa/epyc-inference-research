@@ -665,6 +665,14 @@ def _actor_config(args, resolved_campaign=None) -> dict[str, Any]:
     history = get("actor_planner_reasoning_history")
     if history and history != actor_opencode_config.DEFAULT_PLANNER_REASONING_HISTORY:
         config["planner_reasoning_history"] = history
+    # UFH14-B1: present only when on, so a run with them off records the historical keys.
+    if get("actor_serving_f1") == "on":
+        config["actor_serving_f1"] = "on"
+    if get("actor_answer_protocol") not in (None, "off"):
+        config["actor_answer_protocol"] = get("actor_answer_protocol")
+        config["actor_answer_force_frac"] = get("actor_answer_force_frac")
+    if get("actor_planner_think_budget"):
+        config["actor_planner_think_budget"] = get("actor_planner_think_budget")
     # Per-lane planner/author models (`lane_actors`): present only when a lane is
     # overridden, so a run without `--lane-actor-models` records the historical keys.
     lane_spec = get("lane_actor_models")
@@ -854,6 +862,18 @@ def _actor_budgets(args) -> dict[str, int | bool]:
             "author_budget_s": int(args.actor_author_budget_s)}
 
 
+def _actor_serving(args) -> dict[str, Any]:
+    """UFH14-B1 ActorSeat fields: F1 (serving parameters derived per local server, every
+    role) and F2 (the planner's answer protocol and per-turn thinking budget; the seat
+    applies them to planner calls only). A Namespace without the flags (an older
+    caller) is all off: the historical seat."""
+    get = lambda name, default: getattr(args, name, default)  # noqa: E731
+    return {"serving_f1": get("actor_serving_f1", "off") == "on",
+            "answer_protocol": get("actor_answer_protocol", "off"),
+            "answer_force_frac": float(get("actor_answer_force_frac", 0.65)),
+            "planner_think_budget": int(get("actor_planner_think_budget", 0) or 0)}
+
+
 def _actor_salvage(args) -> dict[str, int]:
     """The planner-only salvage-turn budget as an ActorSeat field (`planner_salvage_s`).
     Only the proposal planner's seat takes it: never an author panel member, never the
@@ -870,6 +890,11 @@ def _actor_budget_error(args) -> str | None:
             return f"--{flag.replace('_', '-')} must be >= 0"
     if int(getattr(args, "actor_planner_salvage_s", 0) or 0) < 0:
         return "--actor-planner-salvage-s must be >= 0"
+    if int(getattr(args, "actor_planner_think_budget", 0) or 0) < 0:
+        return "--actor-planner-think-budget must be >= 0"
+    frac = float(getattr(args, "actor_answer_force_frac", 0.65))
+    if not 0.0 < frac < 1.0:
+        return "--actor-answer-force-frac must be in (0, 1)"
     context = int(args.actor_context_limit)
     if not context:
         return None
@@ -1886,6 +1911,37 @@ def main(argv: list[str] | None = None) -> int:
                              "valid proposal proceeds (planner_report_source=salvage_turn); "
                              "anything else ends the iteration budget_exhausted as before. "
                              "0 = off (default: %(default)s)")
+    # UFH14-B1 (DS41-C95 F12, graded 2026-10-03): the two harness fixes proven on the 27B,
+    # model-agnostic. Both apply to opencode seats whose provider is a LOCAL llama-server
+    # only (hosted APIs and the codex/claude CLIs are untouched).
+    parser.add_argument("--actor-serving-f1", choices=("on", "off"), default="on",
+                        help="opencode, local llama-server providers, every role (UFH14-B1 "
+                             "F1): derive the client's serving parameters from the server "
+                             "(actor_serving): provider headerTimeout/chunkTimeout above the "
+                             "worst-case silent prefill (2 full-window prefills at the "
+                             "measured rate x 1.25, from the orchestrator's serving-call "
+                             "records; 4 h when unmeasured) -- opencode's 300 s defaults abort "
+                             "long prefills, which keep running server-side -- and "
+                             "limit.context clamped to the server's /props per-request window "
+                             "with compaction at <= 0.76 of it. Off = the historical config "
+                             "byte for byte (default: %(default)s)")
+    parser.add_argument("--actor-answer-protocol",
+                        choices=actors.ANSWER_PROTOCOL_CHOICES, default="f2",
+                        help="opencode PLANNER with a wall budget (UFH14-B1 F2): 'f2' adds a "
+                             "JSON-first rule, cuts the call at --actor-answer-force-frac of "
+                             "--actor-planner-budget-s, then (no complete answer printed yet) "
+                             "a forced-answer turn with compaction off, then a refine turn "
+                             "for the rest of the budget; the last COMPLETE answer wins; "
+                             "nothing complete falls back to the salvage turn. 'off' = the "
+                             "historical call (default: %(default)s)")
+    parser.add_argument("--actor-answer-force-frac", type=float, default=0.65,
+                        help="F2: fraction of the planner budget at which the answer is "
+                             "forced (F12: 0.65) (default: %(default)s)")
+    parser.add_argument("--actor-planner-think-budget", type=int, default=8000,
+                        help="opencode PLANNER, local llama-server providers (UFH14-B1 F2): "
+                             "per-turn thinking cap sent as thinking_budget_tokens (plus the "
+                             "F12 reasoning_budget_message) on every request of the call; "
+                             "0 = off (default: %(default)s)")
     parser.add_argument("--actor-author-budget-s", type=int, default=0,
                         help="opencode author (OAB-23): the same wall budget for authoring "
                              "calls; 0 = none (default: %(default)s)")
@@ -2725,7 +2781,10 @@ def main(argv: list[str] | None = None) -> int:
           f"planner-salvage={args.actor_planner_salvage_s}s "
           f"author-thinking={args.actor_author_thinking} "
           f"author-action-rule={args.actor_author_action_rule} "
-          f"planner-reasoning-history={args.actor_planner_reasoning_history}")
+          f"planner-reasoning-history={args.actor_planner_reasoning_history} "
+          f"serving-f1={args.actor_serving_f1} answer-protocol={args.actor_answer_protocol}"
+          f"@{args.actor_answer_force_frac} planner-think-budget="
+          f"{args.actor_planner_think_budget}")
     lane_backends = {index: actors.backend_for(lane.model, lane.effort_or(args.planner_effort))
                      for index, lane in lane_actor_models.items()}
     for index, backend in sorted(lane_backends.items()):
@@ -4719,7 +4778,8 @@ def main(argv: list[str] | None = None) -> int:
                                                **_actor_budgets(args),
                                                **_actor_thinking(args), **sandbox_seat,
                                                **_actor_salvage(args),
-                                               **_actor_reasoning_history(args))))
+                                               **_actor_reasoning_history(args),
+                                               **_actor_serving(args))))
             planner = (runtime_recovery.PendingPlanner(ordinary, pending_slot)
                        if pending_pair is not None else ordinary)
             if runtime_arm_declaration is not None and (runtime_enabled or runtime_keep_grade):
@@ -4786,7 +4846,9 @@ def main(argv: list[str] | None = None) -> int:
                            "context_limit": budget.for_member(spec).context_limit,
                            "author_output_limit": budget.for_member(spec).output_limit},
                         **_actor_budgets(args),
-                        **{**_actor_thinking(args), "author_thinking": spec.thinking}))
+                        **{**_actor_thinking(args), "author_thinking": spec.thinking},
+                        # F1 only: the answer protocol and think budget are planner-only.
+                        serving_f1=_actor_serving(args)["serving_f1"]))
 
             return bestof.AuthorPanel(
                 lane=worker.name, specs=author_plan.specs, make_author=make_author,
@@ -4817,7 +4879,8 @@ def main(argv: list[str] | None = None) -> int:
                     workspace=worker.worktree, backend=critic_backend,
                     timeout_s=args.actor_timeout_s, should_stop=should_stop,
                     seat=actors.ActorSeat(bounded=False, **_actor_knobs(args),
-                                          **_actor_limits(args), **sandbox_seat))),
+                                          **_actor_limits(args), **sandbox_seat,
+                                          serving_f1=_actor_serving(args)["serving_f1"]))),
             build_context=build_context, make_gate=gate_for,
             make_measure=measure_for, record=record_pooled,
             iterations=(args.iterations or None), should_stop=should_stop,

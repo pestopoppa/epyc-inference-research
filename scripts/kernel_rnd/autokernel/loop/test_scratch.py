@@ -691,6 +691,8 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     "actor_metrics.py:record_report_source:open-write": (1, "evidence: actor call log (append)"),
     "actor_metrics.py:record_salvage_turn:mkdir": (1, "evidence: actor call log (planner salvage-turn row)"),
     "actor_metrics.py:record_salvage_turn:open-write": (1, "evidence: actor call log (append)"),
+    "actor_metrics.py:record_answer_protocol:mkdir": (1, "evidence: actor call log (UFH14-B1 F2 answer-protocol row)"),
+    "actor_metrics.py:record_answer_protocol:open-write": (1, "evidence: actor call log (append)"),
     "actors.py:_persist_reply:mkdir": (1, "evidence: raw replies, bound by digest in the call record"),
     "actors.py:_persist_reply:write_bytes": (1, "evidence: raw replies, bound by digest in the call record"),
     "actors.py:_record_call:mkdir": (1, "evidence: VB-AK-SEAT call record log"),

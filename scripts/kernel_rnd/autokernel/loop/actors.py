@@ -292,6 +292,32 @@ class ActorSeat:
     #: `actor_opencode_config.model_reasoning_history`; llama-server providers only).
     #: Never the author or the critic. "keep" here and in run.py (byte-identical).
     planner_reasoning_history: str = "keep"
+    #: UFH14-B1 F1 (DS41-C95 / UFH14-A1): for an opencode call whose provider is a LOCAL
+    #: llama-server, derive the client's serving parameters from the server itself
+    #: (`actor_serving`): provider `headerTimeout`/`chunkTimeout` above the worst-case
+    #: silent prefill (opencode's 300 s defaults abort long prefills), and `limit.context`
+    #: clamped to the server's per-request window with compaction well below it. Every
+    #: role. Hosted providers are untouched. Off here (byte-identical); run.py defaults on.
+    serving_f1: bool = False
+    #: UFH14-B1 F2: the PLANNER's budgeted answer protocol (`ANSWER_PROTOCOL_CHOICES`):
+    #: "f2" = JSON-first rule in the prompt; the call's wall budget is cut at
+    #: `answer_force_frac` of `planner_budget_s`; past it a forced-answer turn (no tool
+    #: calls, compaction off) continues the session, then a refine turn gets the rest of
+    #: the budget; the LAST COMPLETE answer wins (`AgentPlanner._answer_protocol`).
+    #: opencode with a planner wall budget only. "off" here (byte-identical).
+    answer_protocol: str = "off"
+    answer_force_frac: float = 0.65
+    #: UFH14-B1 F2: per-turn thinking cap (`thinking_budget_tokens`) on every request of
+    #: a PLANNER call whose provider is a local llama-server; 0 = off (byte-identical).
+    planner_think_budget: int = 0
+
+    def serving_label(self, role: str) -> str:
+        """`f1` / `f2` / `f1f2` for one call of `role` (the arm suffix), else ''."""
+        f2 = self.answer_protocol != "off" and role == "planner"
+        return ("f1" if self.serving_f1 else "") + (self.answer_protocol if f2 else "")
+
+    def think_budget_for(self, role: str) -> int:
+        return int(self.planner_think_budget) if role == "planner" else 0
 
     def thinking_for(self, role: str) -> str:
         """The reasoning switch for one call of `role`: the author's knob, else default."""
@@ -356,7 +382,9 @@ class ActorSeat:
                              else self.thinking_for(role)),
                 "action_rule": self.author_action_rule and role == "author",
                 "reasoning_history": ("" if self.reasoning_history_for(role) == "keep"
-                                      else self.reasoning_history_for(role))}
+                                      else self.reasoning_history_for(role)),
+                "serving": self.serving_label(role),
+                "think_budget": self.think_budget_for(role)}
 
 
 def _profile_dirs(context: Mapping[str, Any]) -> tuple[Path, ...]:
@@ -418,11 +446,14 @@ class ActorBudgetExhausted(ProviderTransient):
     `session_id`: the call's ROOT opencode session when the export named it
     (`actor_metrics.root_session_id`), else None; `started_monotonic`: when the call was
     launched (`time.monotonic()`). Both are read only by the planner salvage turn
-    (`AgentPlanner._salvage_proposal`)."""
+    (`AgentPlanner._salvage_proposal`). `provisional_text`: under the F2 answer
+    protocol's main turn (`raise_provisional`), the complete reply the cut call had
+    already printed (UFH14-B1), else None."""
 
     failure_class = actor_metrics.BUDGET_EXHAUSTED
     session_id: str | None = None
     started_monotonic: float | None = None
+    provisional_text: str | None = None
 
 
 class AuthorReplyMissing(ProviderTransient, AuthorReportMissing):
@@ -468,6 +499,88 @@ PLANNER_SALVAGE_MESSAGE = (
 SALVAGE_ARM_SUFFIX = "+salvage"
 #: Below this much wall left under the hard `timeout_s`, no salvage turn is attempted.
 PLANNER_SALVAGE_MIN_S = 30
+
+# --------------------------------------------------------------------------------------
+# UFH14-B1 F2: the planner's budgeted answer protocol (`ActorSeat.answer_protocol`).
+# Proven on the 27B in DS41-C95 F12 (arm cxf12, /mnt/raid0/llm/tmp/ds41-c95/run2.py
+# `arm_codex_f`; graded report.md): 4/4 calls answered within their own turns (cxf1, F1
+# alone: 2 of 4 needed an answer rebuilt from the transcript), median wall -16%. The
+# defect it fixes (D4): the model explores past its budget with a candidate in hand and
+# never emits the answer. Integrated with, not beside, the salvage turn above:
+#
+#   main turn (prompt + ANSWER_JSON_FIRST_RULE) under answer_force_frac x planner_budget_s
+#     -> natural end: parsed exactly as today (no extra turn);
+#     -> cut by its budget: its complete printed reply, if any, is the provisional
+#        answer; else a FORCED turn (ANSWER_FORCED_MESSAGE, continuing the session,
+#        compaction OFF, at most ANSWER_PHASE_CAP_S);
+#   a REFINE turn (ANSWER_REFINE_MESSAGE) gets the rest of planner_budget_s when a
+#   complete answer exists and >= ANSWER_REFINE_MIN_S is left;
+#   the LAST COMPLETE answer (hypothesis or abstention) wins -- a later incomplete one
+#   never overrides an earlier complete one; nothing complete -> the salvage turn
+#   (compaction off) as before.
+#
+# Deviations from the F12 driver, on purpose: the refine turn follows only a budget cut
+# (F12 also refined a main turn that had finished early with its answer; here a natural
+# end is the agent's own verdict, as on every other seat), and a cut main turn that
+# already printed a complete answer goes straight to refine (the forced turn would only
+# repeat it).
+# --------------------------------------------------------------------------------------
+ANSWER_PROTOCOL_CHOICES = ("off", "f2")
+ANSWER_PHASE_CAP_S = 900
+ANSWER_REFINE_MIN_S = 120
+#: Appended to the planner prompt under F2 (F12 `F2_JSON_FIRST`).
+ANSWER_JSON_FIRST_RULE = (
+    "## Answer protocol for this run\n"
+    "As soon as you have ONE concrete candidate, write the complete proposal JSON object (all "
+    "five fields: mechanism_id, statement, falsifier, target_surface, target_symbol) in a "
+    "visible message BEFORE you verify it further; you may call tools in the same response "
+    "and keep investigating. If later evidence changes your choice, write an updated complete "
+    "JSON object. Your final message must end with the final JSON object.")
+#: The forced-answer turn (F12 `F2_FORCED_MESSAGE`; `{percent}` = the force fraction).
+ANSWER_FORCED_MESSAGE = (
+    "Checkpoint: {percent}% of your time budget is used. Stop investigating now and do not "
+    "call any tool. Using only what you have already found in this session, reply "
+    "immediately with the ONE proposal JSON object the task asked for -- mechanism_id "
+    "(starting with akm-), statement, falsifier, target_surface and target_symbol -- and "
+    "nothing else. If what you found supports no honest, feasible hypothesis, reply instead "
+    "with a JSON object whose only key is abstain, giving the specific reason. You will get "
+    "the remaining time afterwards to verify and refine it.")
+#: The refine turn (F12 `F2_REFINE_MESSAGE`).
+ANSWER_REFINE_MESSAGE = (
+    "Your provisional proposal above is recorded. You have about {minutes} minutes left. You "
+    "may now use tools to verify its premises and refine it, or switch to a better candidate "
+    "if the evidence demands it. End with the final complete JSON object (the same five "
+    "fields), or repeat the provisional one unchanged if it stands.")
+#: `planner_report_source` of a hypothesis from each protocol phase.
+REPORT_SOURCE_PROVISIONAL = "provisional_reply"
+REPORT_SOURCE_FORCED_TURN = "forced_turn"
+REPORT_SOURCE_REFINE_TURN = "refine_turn"
+_ANSWER_PHASE_SOURCES = {"main": REPORT_SOURCE_PROVISIONAL, "forced": REPORT_SOURCE_FORCED_TURN,
+                         "refine": REPORT_SOURCE_REFINE_TURN}
+#: Per-call config file suffix of a turn that must not compact on resume (F12 NO_COMPACT).
+NO_COMPACTION_SUFFIX = ".nocompact.json"
+
+
+def _no_compaction_env(env: Mapping[str, str] | None) -> dict[str, str] | None:
+    """`env` with its OPENCODE_CONFIG replaced by a sibling copy whose `compaction.auto`
+    is false. A continued session checks compaction BEFORE its first step, so a forced or
+    salvage turn resumed over the threshold would otherwise start with a cold re-prefill
+    and a summary that drops the evidence it must answer from (F12: forced/salvage
+    resumes ran with compaction off). No config, or unreadable: `env` unchanged."""
+    if not env or not env.get("OPENCODE_CONFIG"):
+        return dict(env) if env else env
+    source = Path(env["OPENCODE_CONFIG"])
+    try:
+        config = json.loads(source.read_text(encoding="utf-8"))
+        compaction = config.get("compaction") if isinstance(config.get("compaction"), dict) else {}
+        config["compaction"] = {**compaction, "auto": False}
+        target = source.with_name(source.stem + NO_COMPACTION_SUFFIX)
+        # Beside the call-scope seat config, released with it.
+        from . import actor_opencode_config as seat_config
+        seat_config._atomic_write(target, json.dumps(config, indent=2) + "\n")
+    except (OSError, ValueError):
+        return dict(env)
+    return {**env, "OPENCODE_CONFIG": str(target)}
 
 #: One line of the author prompt's output contract (DS41 run 10d: prose inside the path
 #: string, and the report written to `reply.json` with prose on stdout).
@@ -715,17 +828,21 @@ def _run_agent(prompt: str, *, workspace: Path, timeout_s: int = DEFAULT_TIMEOUT
                env: Mapping[str, str] | None = None,
                should_stop: Callable[[], bool] | None = None,
                budget_s: float | None = None,
-               session_id: str | None = None) -> str:
+               session_id: str | None = None,
+               raise_provisional: bool = False) -> str:
     """One actor process, inside its own `call` scope: the orchestrator's per-call
     sidecar inputs and the process's TMPDIR are registry-owned and released after.
 
     `session_id` (opencode only): continue that existing session (`opencode run
-    --session <id>`) instead of starting a new one -- the planner salvage turn."""
+    --session <id>`) instead of starting a new one -- the planner salvage turn.
+    `raise_provisional` (the F2 answer protocol's main turn): a budget-ended call whose
+    reply is complete still raises `ActorBudgetExhausted`, carrying that reply as
+    `provisional_text`, so the protocol knows the budget cut it."""
     with _scratch_scope(workspace).scope("call", "attempt") as attempt:
         return _run_agent_in(attempt, prompt, workspace=workspace, timeout_s=timeout_s,
                              backend=backend, read_only=read_only, schema=schema, env=env,
                              should_stop=should_stop, budget_s=budget_s,
-                             session_id=session_id)
+                             session_id=session_id, raise_provisional=raise_provisional)
 
 
 def _continue_session_argv(backend: Backend, argv: list[str], session_id: str | None
@@ -742,7 +859,7 @@ def _run_agent_in(attempt: "scratch.Scope", prompt: str, *, workspace: Path,
                   timeout_s: int, backend: Backend, read_only: bool,
                   schema: Mapping[str, Any] | None, env: Mapping[str, str] | None,
                   should_stop: Callable[[], bool] | None, budget_s: float | None,
-                  session_id: str | None = None) -> str:
+                  session_id: str | None = None, raise_provisional: bool = False) -> str:
     # The orchestrator kind sends the caller's schema to the server (`--schema`), so
     # its argv is the one that needs it (INF-78 OAB-2, `actor_orchestrator`).
     argv = (backend.argv(prompt, workspace, read_only=read_only, schema=schema)
@@ -806,7 +923,7 @@ def _run_agent_in(attempt: "scratch.Scope", prompt: str, *, workspace: Path,
                 stdout=_captured(None, out), stderr=_captured(None, err), started=started,
                 started_at=started_at, before_ids=before_session_ids, arm=arm, env=env,
                 collect_metrics=collect_metrics, schema=schema, budget_s=budget_s,
-                continued_session=continued)
+                continued_session=continued, raise_provisional=raise_provisional)
         except _StoppedChild as stop:
             reply = _persist_reply(workspace, backend, subprocess.CompletedProcess(
                 args=argv, returncode=stop.returncode,
@@ -939,7 +1056,8 @@ def _budget_exhausted(workspace: Path, backend: Backend, prompt: str, *, argv: l
                       started_at: float, before_ids: set[str], arm: str | None,
                       env: Mapping[str, str] | None, collect_metrics: bool,
                       schema: Mapping[str, Any] | None, budget_s: float | None,
-                      continued_session: str | None = None) -> str:
+                      continued_session: str | None = None,
+                      raise_provisional: bool = False) -> str:
     """OAB-23: the call's wall budget ran out and its process group was ended. Keep the
     raw streams, record `failure_class: budget_exhausted`, and return the reply when it
     is complete (`_budget_salvage`); otherwise raise `ActorBudgetExhausted`, which
@@ -963,15 +1081,19 @@ def _budget_exhausted(workspace: Path, backend: Backend, prompt: str, *, argv: l
                     stats_out=stats)
     _record_call(workspace, backend, prompt, returncode=returncode, wall_s=wall_s, env=env,
                  schema=schema, reply=reply)
-    if salvage_text is not None:
+    if salvage_text is not None and not raise_provisional:
         return salvage_text
     spent = ActorBudgetExhausted(
         f"{ActorBudgetExhausted.failure_class}: the {_safe_role(schema) or 'actor'} call "
-        f"spent its {budget_s:.0f}s budget without a complete reply and was ended "
-        f"(rc {returncode}) after {wall_s:.0f}s [{backend.describe()}] -- not retried")
+        f"spent its {budget_s:.0f}s budget "
+        + ("with a provisional complete reply" if salvage_text is not None
+           else "without a complete reply")
+        + f" and was ended (rc {returncode}) after {wall_s:.0f}s "
+        f"[{backend.describe()}] -- not retried")
     if collect_metrics:
         spent.session_id = continued_session or actor_metrics.root_session_id(stats)
     spent.started_monotonic = started
+    spent.provisional_text = salvage_text
     raise spent
 
 
@@ -1229,6 +1351,11 @@ def _seat_provenance(env: Mapping[str, str] | None) -> dict[str, Any]:
     switches = sorted(key for key in env if key.startswith("OPENCODE_DISABLE_"))
     if switches:
         out["seat_env"] = {key: env[key] for key in switches}
+    if env.get(SEAT_ENV_SERVING):
+        try:
+            out["serving"] = json.loads(env[SEAT_ENV_SERVING])
+        except ValueError as exc:
+            out["serving"] = {"error": f"{type(exc).__name__}: {exc}"[:200]}
     if env.get(BELIEF_ENV):
         # Which Vidya claims the planner prompt presented (and why none, when none): the
         # presented half of `belief_context`'s receipt. Only with --actor-belief-context on.
@@ -1253,6 +1380,9 @@ SEAT_ENV_ARM, SEAT_ENV_FAN_OUT, SEAT_ENV_STEPS = (
 SEAT_ENV_PLAIN_CONFIG = "AK_ACTOR_SEAT_PLAIN_CONFIG"
 #: OAB-22/23: the limits a call's per-call config applied, as JSON, for the metrics row.
 SEAT_ENV_BUDGETS = "AK_ACTOR_SEAT_BUDGETS"
+#: UFH14-B1: what `actor_serving` derived for the call (F1 params, thinking budget), as
+#: JSON, for the metrics row (`serving`). Harmless to the child.
+SEAT_ENV_SERVING = "AK_ACTOR_SEAT_SERVING"
 _V1_CACHE: dict[str, Any] = {}
 
 
@@ -2772,11 +2902,14 @@ def _lane_block(role: str, workspace: Path, context: Mapping[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _budget_env(seat: "ActorSeat | None", role: str) -> dict[str, str]:
-    """`SEAT_ENV_BUDGETS` for a call whose seat applies a limit or the concise rule."""
+def _budget_env(seat: "ActorSeat | None", role: str,
+                limits: Mapping[str, int] | None = None) -> dict[str, str]:
+    """`SEAT_ENV_BUDGETS` for a call whose seat applies a limit or the concise rule.
+    `limits`: the call's EFFECTIVE limits (after F1's clamp), default the seat's."""
     if seat is None:
         return {}
-    applied: dict[str, Any] = {**seat.limits_for(role),
+    applied: dict[str, Any] = {**(dict(limits) if limits is not None
+                                  else seat.limits_for(role)),
                                "concise": seat.concise and role in ("planner", "author")}
     if seat.thinking_for(role) != "default":
         applied["thinking"] = seat.thinking_for(role)
@@ -2784,9 +2917,54 @@ def _budget_env(seat: "ActorSeat | None", role: str) -> dict[str, str]:
         applied["action_rule"] = True
     if seat.reasoning_history_for(role) != "keep":
         applied["reasoning_history"] = seat.reasoning_history_for(role)
+    if seat.serving_label(role):
+        applied["serving"] = seat.serving_label(role)
+    if seat.think_budget_for(role):
+        applied["think_budget"] = seat.think_budget_for(role)
     if not any(applied.values()):
         return {}
     return {SEAT_ENV_BUDGETS: json.dumps(applied, sort_keys=True)}
+
+
+def _seat_serving(seat: "ActorSeat | None", backend: Backend, role: str,
+                  limits: Mapping[str, int]) -> tuple[dict[str, int], dict, dict[str, str]]:
+    """UFH14-B1: (effective limits, per-call config block, env) for one opencode call.
+
+    F1 (`seat.serving_f1`) and the planner's thinking budget apply only when the
+    call's provider is a LOCAL llama-server (`_provider_base_url` on loopback); a
+    hosted provider keeps its own client defaults. With neither knob on, or a
+    non-opencode backend: the limits unchanged, no block, no env (byte-identical)."""
+    limits = dict(limits)
+    think = seat.think_budget_for(role) if seat is not None else 0
+    if seat is None or backend.kind != "opencode" or not (seat.serving_f1 or think):
+        return limits, {}, {}
+    from . import actor_opencode_config as seat_config
+    from . import actor_serving
+    base_url = _provider_base_url(backend.model)
+    local = actor_serving.is_local(base_url)
+    block: dict = {}
+    record: dict[str, Any] = {"base_url": base_url, "local": local}
+    if seat.serving_f1 and local:
+        params = actor_serving.resolve(base_url)
+        if params is not None:
+            ctx, out = actor_serving.opencode_limits(
+                params, context_limit=int(limits.get("context_limit", 0)),
+                output_limit=int(limits.get("output_limit", 0)))
+            limits.update(context_limit=ctx, output_limit=out)
+            block = seat_config._merge(
+                block, actor_serving.opencode_provider_options(backend.model, params))
+            record["f1"] = params.to_dict()
+            record["effective_limits"] = dict(limits)
+    if think:
+        if local:
+            block = seat_config._merge(
+                block, actor_serving.opencode_think_budget(backend.model, think))
+            record["think_budget"] = think
+        else:
+            # Only llama-server honours `thinking_budget_tokens`; a hosted API may
+            # reject the unknown body key, so it is never sent there.
+            record["think_budget_skipped"] = "provider_not_local"
+    return limits, block, {SEAT_ENV_SERVING: json.dumps(record, sort_keys=True)}
 
 
 def _read_roots(context: Mapping[str, Any] | None) -> tuple[Path, ...]:
@@ -2825,10 +3003,15 @@ def _seat_call(seat: "ActorSeat | None", backend: Backend, role: str, workspace:
     thinking = seat.thinking_for(role) if seat is not None else "default"
     history = seat.reasoning_history_for(role) if seat is not None else "keep"
     label = seat.label_knobs(role) if seat is not None else {}
+    serving: dict = {}
     env: dict[str, str] = {}
+    if seat is not None:
+        limits, serving, serving_env = _seat_serving(seat, backend, role, limits)
+        label = {**label, **limits}
+        env.update(serving_env)
     if any(label.values()):
         env[SEAT_ENV_ARM] = seat_config.seat_label("plain", **label)
-    env.update(_budget_env(seat, role))
+    env.update(_budget_env(seat, role, limits if seat is not None else None))
     env.update(seat_config.output_ceiling_env(limits.get("output_limit", 0)))
     if knobs.get("trim_instructions"):
         env.update(seat_config.TRIM_ENV)
@@ -2838,11 +3021,12 @@ def _seat_call(seat: "ActorSeat | None", backend: Backend, role: str, workspace:
             target, role=role, lane=Path(workspace), build_dir=_anchor_build_dir(context),
             model=backend.model, thinking=thinking, **knobs, **limits,
             **({"reasoning_history": history} if history != "keep" else {}),
+            **({"serving": serving} if serving else {}),
             **({"read_roots": _read_roots(context)} if role == "critic"
                and _read_roots(context) else {}))
     except OSError as exc:
         if (any(knobs.values()) or any(limits.values()) or thinking != "default"
-                or history != "keep"):
+                or history != "keep" or serving):
             raise   # a knob's fence (or a context cap, or thinking off) must never silently drop
         # Knobs off: the config only turns snapshots off. Unwritable, the call runs as
         # it always did rather than failing an actor call over store hygiene.
@@ -2938,6 +3122,8 @@ class AgentPlanner:
             return self.backend, _seat_call(self.seat, self.backend, role,
                                             Path(self.workspace), context)
         from . import actor_opencode_config as seat_config
+        limits, serving, serving_env = _seat_serving(self.seat, self.backend, role,
+                                                     self.seat.limits_for(role))
         path = _seat_config_dir(Path(self.workspace), role) / f"actor-opencode-{role}.json"
         seat_config.write_actor_config(
             path, role=role, lane=Path(self.workspace), profiles=_profile_dirs(context),
@@ -2945,13 +3131,15 @@ class AgentPlanner:
             build_dir=_anchor_build_dir(context), model=self.backend.model,
             thinking=self.seat.thinking_for(role),
             reasoning_history=self.seat.reasoning_history_for(role),
-            **self.seat.knobs, **self.seat.limits_for(role))
+            **self.seat.knobs, **limits, **({"serving": serving} if serving else {}))
         trim = seat_config.TRIM_ENV if self.seat.trim_instructions else {}
         return (dataclasses.replace(self.backend, agent=seat_config.AGENT_NAMES[role]),
-                {**trim, "OPENCODE_CONFIG": str(path), **_budget_env(self.seat, role),
-                 **seat_config.output_ceiling_env(self.seat.output_limit_for(role)),
+                {**trim, "OPENCODE_CONFIG": str(path), **serving_env,
+                 **_budget_env(self.seat, role, limits),
+                 **seat_config.output_ceiling_env(limits.get("output_limit", 0)),
                  SEAT_ENV_ARM: seat_config.seat_label("bounded",
-                                                      **self.seat.label_knobs(role)),
+                                                      **{**self.seat.label_knobs(role),
+                                                         **limits}),
                  SEAT_ENV_FAN_OUT: "1" if self.seat.fan_out else "0",
                  SEAT_ENV_STEPS: str(self.seat.steps)})
 
@@ -3099,6 +3287,8 @@ class AgentPlanner:
         if evidence is not None and evidence.get("section"):
             prompt += "\n\n" + evidence["section"]
         prompt = self._concise(prompt)
+        if self._answer_protocol_on():
+            prompt = prompt + "\n\n" + ANSWER_JSON_FIRST_RULE
         prompt = self._guarded("planner", prompt, context)
         backend, env = self._seated("planner", context)
         env = self._sealed(prompt, bundle, env)
@@ -3129,7 +3319,10 @@ class AgentPlanner:
         """One planner call and its parsed reply, plus the reply's raw `relies_on_claims`
         declaration (validated against the presented claims by the caller). A call ended
         by its wall budget gets one salvage turn when the seat allows it
-        (`_salvage_proposal`)."""
+        (`_salvage_proposal`); under the F2 answer protocol the call runs
+        `_answer_protocol` instead."""
+        if self._answer_protocol_on() and backend.kind == "opencode":
+            return self._answer_protocol(prompt, backend, env, context)
         try:
             raw, streak = _with_backoff(
                 lambda: _run_agent(prompt, workspace=self.workspace,
@@ -3141,6 +3334,146 @@ class AgentPlanner:
             return self._salvage_proposal(spent, backend, env, context)
         self.transient_streak = streak
         return self._proposal_from_raw(raw, context)
+
+    def _answer_protocol_on(self) -> bool:
+        """F2 needs the opencode seat (session continuation) and a planner wall budget."""
+        return (self.seat is not None and self.seat.answer_protocol == "f2"
+                and self.backend.kind == "opencode" and int(self.seat.planner_budget_s) > 0)
+
+    def _answer_protocol(self, prompt: str, backend: Backend, env: dict[str, str] | None,
+                         context: Mapping[str, Any]) -> tuple[Hypothesis | Abstain, Any]:
+        """The F2 budgeted answer protocol for one planner call (see the
+        `ANSWER_PROTOCOL_CHOICES` block). Writes one `actor_metrics.ANSWER_PROTOCOL_SCHEMA`
+        row per call that the budget cut; a natural end writes none (as today)."""
+        seat = self.seat
+        total = float(seat.planner_budget_s)
+        frac = float(seat.answer_force_frac)
+        if not 0.0 < frac < 1.0:
+            raise ValueError(f"answer_force_frac must be in (0, 1), got {frac!r}")
+        main_budget = max(1.0, total * frac)
+        try:
+            raw, streak = _with_backoff(
+                lambda: _run_agent(prompt, workspace=self.workspace, timeout_s=self.timeout_s,
+                                   backend=backend, schema=HYPOTHESIS_SCHEMA, env=env,
+                                   **self._stop_kw(), budget_s=main_budget,
+                                   raise_provisional=True),
+                should_stop=self.should_stop)
+        except ActorBudgetExhausted as exc:
+            spent = exc
+        else:
+            self.transient_streak = streak
+            return self._proposal_from_raw(raw, context)
+        replies = Path(self.workspace).parent / ACTOR_REPLY_DIR
+        session_id = getattr(spent, "session_id", None)
+        started = getattr(spent, "started_monotonic", None)
+        record: dict[str, Any] = {"protocol": seat.answer_protocol, "budget_s": total,
+                                  "main_budget_s": round(main_budget, 1),
+                                  "session_id": session_id, "phases": []}
+        complete: list[tuple[str, tuple[Hypothesis | Abstain, Any]]] = []
+        provisional = getattr(spent, "provisional_text", None)
+        if provisional:
+            parsed = self._parse_complete(provisional, context, "main")
+            record["phases"].append({"phase": "main", "result": self._outcome_of(parsed)})
+            if parsed is not None:
+                complete.append(("main", parsed))
+        else:
+            record["phases"].append({"phase": "main", "result": "no_complete_answer"})
+        quiet_env = _no_compaction_env(env)
+        if session_id and started is not None:
+            if not complete:
+                parsed = self._answer_turn(
+                    "forced", ANSWER_FORCED_MESSAGE.format(percent=int(round(frac * 100))),
+                    min(float(ANSWER_PHASE_CAP_S), max(60.0, total - (time.monotonic() - started))),
+                    backend, quiet_env, session_id, started, context, record)
+                if parsed is not None:
+                    complete.append(("forced", parsed))
+            left = total - (time.monotonic() - started)
+            if complete and left >= ANSWER_REFINE_MIN_S:
+                parsed = self._answer_turn(
+                    "refine", ANSWER_REFINE_MESSAGE.format(minutes=int(left // 60)), left,
+                    backend, env, session_id, started, context, record)
+                if parsed is not None:
+                    complete.append(("refine", parsed))
+        else:
+            record["phases"].append({"phase": "forced", "result": "skipped",
+                                     "reason": ("session_unknown" if not session_id
+                                                else "call_start_unknown")})
+        if complete:
+            phase, chosen = complete[-1]
+            record.update(result="answer", answer_phase=phase,
+                          mechanism_id=(None if isinstance(chosen[0], Abstain)
+                                        else chosen[0].mechanism_id),
+                          abstained=isinstance(chosen[0], Abstain))
+            actor_metrics.record_answer_protocol(replies, record)
+            return chosen
+        record["result"] = "no_complete_answer"
+        actor_metrics.record_answer_protocol(replies, record)
+        # Last resort: the ordinary salvage turn, resumed with compaction off.
+        return self._salvage_proposal(spent, backend, quiet_env, context)
+
+    @staticmethod
+    def _outcome_of(parsed) -> str:
+        if parsed is None:
+            return "incomplete"
+        return "abstained" if isinstance(parsed[0], Abstain) else "proposal"
+
+    def _parse_complete(self, raw: str, context: Mapping[str, Any], phase: str
+                        ) -> tuple[Hypothesis | Abstain, Any] | None:
+        """A protocol phase's reply -> a COMPLETE answer (hypothesis or abstention, stamped
+        with the phase's report source), or None for anything incomplete."""
+        try:
+            return self._proposal_from_raw(raw, context,
+                                           report_source=_ANSWER_PHASE_SOURCES[phase])
+        except ActorStopped:
+            raise
+        except Exception:  # noqa: BLE001 -- an incomplete phase answer is not a failure
+            return None
+
+    def _answer_turn(self, phase: str, message: str, budget: float, backend: Backend,
+                     env: dict[str, str] | None, session_id: str, started: float,
+                     context: Mapping[str, Any], record: dict[str, Any]
+                     ) -> tuple[Hypothesis | Abstain, Any] | None:
+        """One forced/refine turn continuing the planner session, under min(`budget`,
+        what is left of the hard `timeout_s` minus the stop grace). Returns the parsed
+        COMPLETE answer or None; a stop is a stop (`ActorStopped`)."""
+        remaining = float(self.timeout_s) - (time.monotonic() - started) - STOP_GRACE_S
+        budget = min(float(budget), remaining)
+        row: dict[str, Any] = {"phase": phase}
+        record["phases"].append(row)
+        if budget < PLANNER_SALVAGE_MIN_S:
+            row.update(result="skipped", reason="no_time_left_under_actor_timeout")
+            return None
+        if self.should_stop is not None and self.should_stop():
+            row.update(result="skipped", reason="stop_asked")
+            return None
+        turn_env = {**(env or {}),
+                    SEAT_ENV_ARM: ((env or {}).get(SEAT_ENV_ARM) or "plain") + f"+{phase}"}
+        row["budget_s"] = round(budget, 1)
+        call_started = time.monotonic()
+        try:
+            raw = _run_agent(message, workspace=self.workspace, timeout_s=max(1, int(remaining)),
+                             backend=backend, schema=HYPOTHESIS_SCHEMA, env=turn_env,
+                             **self._stop_kw(), budget_s=budget, session_id=session_id)
+        except ActorStopped:
+            row.update(result="stopped", wall_s=round(time.monotonic() - call_started, 1))
+            actor_metrics.record_answer_protocol(
+                Path(self.workspace).parent / ACTOR_REPLY_DIR, {**record, "result": "stopped"})
+            raise
+        except ActorBudgetExhausted:
+            row.update(result="budget_exhausted")
+            raw = None
+        except ActorTimedOut:
+            row.update(result="timed_out")
+            raw = None
+        except Exception as exc:  # noqa: BLE001 -- a failed phase never fails the call
+            row.update(result="error", reason=f"{type(exc).__name__}: {exc}"[:300])
+            raw = None
+        row["wall_s"] = round(time.monotonic() - call_started, 1)
+        if raw is None:
+            return None
+        parsed = self._parse_complete(raw, context, phase)
+        row["result"] = self._outcome_of(parsed)
+        return parsed
 
     def _salvage_proposal(self, spent: ActorBudgetExhausted, backend: Backend,
                           env: dict[str, str] | None, context: Mapping[str, Any]
