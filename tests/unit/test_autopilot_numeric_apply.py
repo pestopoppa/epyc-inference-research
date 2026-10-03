@@ -59,9 +59,8 @@ def test_approved_chat_threshold_surfaces_have_operator_ranges() -> None:
     assert summarization.param_type == "int"
     assert (summarization.low, summarization.high) == (3000, 30000)
 
-    review_low = surfaces["chat_review_low"][0]
-    assert review_low.name == "chat.review_low_q_threshold"
-    assert (review_low.low, review_low.high) == (0.45, 0.80)
+    # RI-18c removed the answer review gate and its chat.review_low_q_threshold surface.
+    assert "chat_review_low" not in surfaces
 
     review_skip = surfaces["chat_review_skip"][0]
     assert review_skip.name == "chat.review_skip_q_threshold"

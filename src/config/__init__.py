@@ -263,7 +263,6 @@ if PYDANTIC_SETTINGS_AVAILABLE:
         repetition_unique_ratio: float = 0.5
         garbled_short_line_ratio: float = 0.6
         min_answer_length: int = 50
-        review_low_q_threshold: float = 0.6
         review_skip_q_threshold: float = 0.6
         plan_review_phase_a_min: int = 50
         plan_review_phase_b_mean_q: float = 0.7
@@ -585,7 +584,6 @@ def _load_from_env() -> OrchestratorConfigData:
             long_context_enabled=_env_bool(f"{P}CHAT_LONG_CONTEXT_ENABLED", True),
             long_context_threshold_chars=_env_int(f"{P}CHAT_LONG_CONTEXT_THRESHOLD_CHARS", 20000),
             long_context_max_turns=_env_int(f"{P}CHAT_LONG_CONTEXT_MAX_TURNS", 8),
-            review_low_q_threshold=_env_float(f"{P}CHAT_REVIEW_LOW_Q_THRESHOLD", 0.6),
             review_skip_q_threshold=_env_float(f"{P}CHAT_REVIEW_SKIP_Q_THRESHOLD", 0.6),
             session_compaction_keep_recent_ratio=_env_float(
                 f"{P}CHAT_SESSION_COMPACTION_KEEP_RECENT_RATIO", 0.20
@@ -851,7 +849,6 @@ def get_config() -> OrchestratorConfigData:
                 repetition_unique_ratio=settings.chat.repetition_unique_ratio,
                 garbled_short_line_ratio=settings.chat.garbled_short_line_ratio,
                 min_answer_length=settings.chat.min_answer_length,
-                review_low_q_threshold=settings.chat.review_low_q_threshold,
                 review_skip_q_threshold=settings.chat.review_skip_q_threshold,
                 plan_review_phase_a_min=settings.chat.plan_review_phase_a_min,
                 plan_review_phase_b_mean_q=settings.chat.plan_review_phase_b_mean_q,

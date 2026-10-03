@@ -15,8 +15,6 @@ from src.prompt_builders import (
     auto_wrap_final,
     build_escalation_prompt,
     build_long_context_exploration_prompt,
-    build_review_verdict_prompt,
-    build_revision_prompt,
     build_root_lm_prompt,
     build_routing_context,
     classify_error,
@@ -674,78 +672,6 @@ class TestBuildEscalationPrompt:
         assert "timeout" in result.lower() or "Timeout" in result
         # Structural: Should be well-formatted prompt (length and multiline)
         assert len(result) > 200
-
-
-# ── build_review_verdict_prompt ───────────────────────────────────────────
-
-
-class TestBuildReviewVerdictPrompt:
-    """Architect review verdict prompt."""
-
-    def test_includes_question_and_answer(self):
-        result = build_review_verdict_prompt(
-            question="What is 2+2?",
-            answer="The answer is 4.",
-        )
-        assert "What is 2+2?" in result
-        assert "4" in result
-        # Structural: Question should appear before answer
-        assert result.index("What is 2+2?") < result.index("4")
-        assert len(result) > 50
-
-    def test_truncates_long_question(self):
-        long_q = "x" * 500
-        result = build_review_verdict_prompt(question=long_q, answer="ok")
-        assert len(long_q) > 300  # original is long
-        # The prompt itself should be reasonable length
-        assert result is not None
-        # Structural: Should be truncated but substantial
-        assert len(result) > 50
-        assert len(result) < 1000
-
-    def test_truncates_long_answer(self):
-        long_a = "y" * 3000
-        result = build_review_verdict_prompt(question="q", answer=long_a)
-        assert result is not None
-        # Structural: Should be truncated to reasonable size
-        assert len(result) < 5000
-
-    def test_context_digest_included(self):
-        result = build_review_verdict_prompt(
-            question="q",
-            answer="a",
-            context_digest="Important context about the topic",
-        )
-        assert "Important context" in result
-        # Structural: Should be multiline with context section
-        assert result.count("\n") > 3
-        assert len(result) > 50
-
-
-# ── build_revision_prompt ─────────────────────────────────────────────────
-
-
-class TestBuildRevisionPrompt:
-    """Fast revision prompt."""
-
-    def test_includes_all_parts(self):
-        result = build_revision_prompt(
-            question="What is Python?",
-            original="Python is a language.",
-            corrections="Add mention of dynamic typing.",
-        )
-        assert "Python" in result
-        assert "dynamic typing" in result
-        # Structural: Should have clear sections
-        assert len(result) > 50
-        assert result.count("\n") > 2
-
-    def test_returns_string(self):
-        result = build_revision_prompt("q", "a", "fix it")
-        assert isinstance(result, str)
-        assert len(result) > 20
-        # Structural: Should be multiline
-        assert result.count("\n") > 1
 
 
 # ── detect_format_constraints ─────────────────────────────────────────────

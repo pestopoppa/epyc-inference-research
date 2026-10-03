@@ -525,8 +525,9 @@ class TestChatPipelineDefaults:
 
     def test_review_q_thresholds(self):
         cfg = ChatPipelineConfig()
-        assert cfg.review_low_q_threshold == 0.6
         assert cfg.review_skip_q_threshold == 0.6
+        # RI-18c removed the answer review gate and its threshold.
+        assert not hasattr(cfg, "review_low_q_threshold")
 
     def test_plan_review_phase_defaults(self):
         cfg = ChatPipelineConfig()
@@ -868,7 +869,6 @@ roles:
             {
                 "ORCHESTRATOR_CHAT_LONG_CONTEXT_THRESHOLD_CHARS": "64000",
                 "ORCHESTRATOR_CHAT_SUMMARIZATION_THRESHOLD_TOKENS": "24000",
-                "ORCHESTRATOR_CHAT_REVIEW_LOW_Q_THRESHOLD": "0.55",
                 "ORCHESTRATOR_CHAT_REVIEW_SKIP_Q_THRESHOLD": "0.72",
             },
         ):
@@ -876,7 +876,6 @@ roles:
             cfg = get_config()
             assert cfg.chat.long_context_threshold_chars == 64000
             assert cfg.chat.summarization_threshold_tokens == 24000
-            assert cfg.chat.review_low_q_threshold == 0.55
             assert cfg.chat.review_skip_q_threshold == 0.72
 
     def test_manual_env_loader_reads_review_thresholds(self):
@@ -885,12 +884,10 @@ roles:
         with patch.dict(
             os.environ,
             {
-                "ORCHESTRATOR_CHAT_REVIEW_LOW_Q_THRESHOLD": "0.52",
                 "ORCHESTRATOR_CHAT_REVIEW_SKIP_Q_THRESHOLD": "0.76",
             },
         ):
             cfg = _load_from_env()
-            assert cfg.chat.review_low_q_threshold == 0.52
             assert cfg.chat.review_skip_q_threshold == 0.76
 
     def test_escalation_max_retries_override(self):

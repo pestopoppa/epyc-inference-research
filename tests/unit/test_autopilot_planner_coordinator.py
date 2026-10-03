@@ -1651,34 +1651,7 @@ def test_planner_hard_block_rejects_numeric_param_type_and_range() -> None:
     )
 
 
-def test_planner_hard_block_rejects_incoherent_review_threshold(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        planner_coordinator,
-        "_current_chat_review_thresholds",
-        lambda: (0.6, 0.6),
-    )
-    action = {
-        "type": "numeric_trial",
-        "surface": "chat_review_low",
-        "params": {"chat.review_low_q_threshold": 0.7},
-    }
-
-    reason = planner_coordinator._planner_action_hard_block_reason(action)
-
-    assert reason is not None
-    assert "review_low_q_threshold <= chat.review_skip_q_threshold" in reason
-
-
-def test_planner_hard_block_allows_coherent_review_threshold(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        planner_coordinator,
-        "_current_chat_review_thresholds",
-        lambda: (0.6, 0.6),
-    )
+def test_planner_hard_block_allows_review_skip_threshold() -> None:
     action = {
         "type": "numeric_trial",
         "surface": "chat_review_skip",

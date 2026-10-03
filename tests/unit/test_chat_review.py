@@ -1,22 +1,18 @@
 """Tests for src/api/routes/chat_review.py.
 
-Covers: _detect_output_quality_issue, _should_review, _architect_verdict,
-_fast_revise, _needs_plan_review, _apply_plan_review, _compute_plan_review_phase.
+Covers: _detect_output_quality_issue, _needs_plan_review, _apply_plan_review,
+_compute_plan_review_phase. (The answer review gate tests went with the gate, RI-18c.)
 """
 
 from unittest.mock import MagicMock, patch
 
-
 from src.api.routes.chat_review import (
     _apply_plan_review,
-    _architect_verdict,
     _compute_plan_review_phase,
     _detect_output_quality_issue,
-    _fast_revise,
     _needs_plan_review,
     _plan_review_abort_message,
     _plan_review_should_abort,
-    _should_review,
 )
 from src.proactive_delegation.types import PlanReviewResult
 
@@ -62,88 +58,6 @@ class TestDetectOutputQualityIssue:
         # May or may not trigger depending on thresholds — no assertion on exact result
         # Just verify it doesn't crash
         assert result is None or isinstance(result, str)
-
-
-# ── _should_review ───────────────────────────────────────────────────────
-
-
-class TestShouldReview:
-    """Test MemRL-conditional review gate."""
-
-    def test_returns_false_without_hybrid_router(self):
-        state = MagicMock(hybrid_router=None)
-        assert _should_review(state, "task1", "frontdoor", "answer text here " * 5) is False
-
-    def test_returns_false_for_architects(self):
-        state = MagicMock(hybrid_router=MagicMock())
-        assert _should_review(state, "task1", "architect_general", "answer text here " * 5) is False
-
-    def test_returns_false_for_short_answers(self):
-        state = MagicMock(hybrid_router=MagicMock())
-        assert _should_review(state, "task1", "frontdoor", "short") is False
-
-    def test_returns_false_on_retriever_error(self):
-        router = MagicMock()
-        router.retriever.retrieve_for_routing.side_effect = RuntimeError("fail")
-        state = MagicMock(hybrid_router=router)
-        assert _should_review(state, "task1", "frontdoor", "answer text here " * 5) is False
-
-    def test_returns_false_when_no_results(self):
-        router = MagicMock()
-        router.retriever.retrieve_for_routing.return_value = []
-        state = MagicMock(hybrid_router=router)
-        assert _should_review(state, "task1", "frontdoor", "answer text here " * 5) is False
-
-
-# ── _architect_verdict ───────────────────────────────────────────────────
-
-
-class TestArchitectVerdict:
-    """Test architect verdict call."""
-
-    def test_returns_none_on_ok(self):
-        primitives = MagicMock()
-        primitives.llm_call.return_value = "OK"
-        result = _architect_verdict("What is 2+2?", "4", primitives)
-        assert result is None
-
-    def test_returns_corrections_on_wrong(self):
-        primitives = MagicMock()
-        primitives.llm_call.return_value = "WRONG: The answer should be 4, not 5"
-        result = _architect_verdict("What is 2+2?", "5", primitives)
-        assert result is not None
-        assert "WRONG" in result
-
-    def test_returns_none_on_error(self):
-        primitives = MagicMock()
-        primitives.llm_call.side_effect = RuntimeError("timeout")
-        result = _architect_verdict("Q", "A", primitives)
-        assert result is None
-
-
-# ── _fast_revise ─────────────────────────────────────────────────────────
-
-
-class TestFastRevise:
-    """Test fast revision with worker model."""
-
-    def test_returns_revised_answer(self):
-        primitives = MagicMock()
-        primitives.llm_call.return_value = "The correct answer is 4."
-        result = _fast_revise("What is 2+2?", "5", "Answer is 4 not 5", primitives)
-        assert result == "The correct answer is 4."
-
-    def test_returns_original_on_empty_revision(self):
-        primitives = MagicMock()
-        primitives.llm_call.return_value = "   "
-        result = _fast_revise("Q", "original", "corrections", primitives)
-        assert result == "original"
-
-    def test_returns_original_on_error(self):
-        primitives = MagicMock()
-        primitives.llm_call.side_effect = RuntimeError("fail")
-        result = _fast_revise("Q", "original", "corrections", primitives)
-        assert result == "original"
 
 
 # ── _needs_plan_review ───────────────────────────────────────────────────

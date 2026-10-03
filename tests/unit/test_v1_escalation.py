@@ -4,9 +4,9 @@
 Offline only: the route runs against a fake ``LLMPrimitives`` whose calls resolve
 their server from the ``server_urls`` the ROUTE passes in (the registry-derived
 ``get_config().server_urls``), with fixed llama-server-style timings per role.
-The review gate runs the real ``chat_review._should_review`` against a fake MemRL
-retriever; quality escalation runs the real ``stages._quality_escalate`` with the
-quality detector forced. The flag-off byte-identity pin is
+Quality escalation runs the real ``stages._quality_escalate`` with the quality
+detector forced. (The review gate, the other post-answer hook these tests drove, was
+removed with /chat's by RI-18c; its tests went with it.) The flag-off byte-identity pin is
 ``test_v1_escalation_off_golden.py`` (client mode) plus
 ``test_openai_compat_default_golden.py`` (REPL/direct modes).
 
@@ -34,7 +34,6 @@ MCQ = (
     "A) Oxygen\nB) Nitrogen\nC) Argon\nD) Carbon dioxide\nAnswer with the letter."
 )
 FRONTDOOR_ANSWER = "The answer is A) Oxygen, because it is what we breathe in every single breath."
-REVISED_ANSWER = "The answer is B) Nitrogen (about 78% of the atmosphere)."
 QUALITY_ANSWER = "B) Nitrogen."
 READ_TOOL = {
     "type": "function",
@@ -130,23 +129,9 @@ class FakePrimitives:
         return [c for c in self.calls if c["url"] == self.server_urls["architect_general"]]
 
 
-class _Result:
-    def __init__(self, action: str, q: float) -> None:
-        self.memory = SimpleNamespace(action=action)
-        self.q_value = q
-
-
-class FakeRetriever:
-    def __init__(self, q: float) -> None:
-        self.q = q
-
-    def retrieve_for_routing(self, task_ir):
-        return [_Result("frontdoor", self.q), _Result("coder_escalation", self.q)]
-
-
 @pytest.fixture
 def env(monkeypatch, tmp_path):
-    """Flag ON, tap on (events to tmp), MemRL retriever faked (low Q -> review)."""
+    """Flag ON, tap on (events to tmp)."""
     monkeypatch.setenv("ORCHESTRATOR_MOCK_MODE", "false")
     monkeypatch.setenv("ORCHESTRATOR_V1_ESCALATION", "1")
     monkeypatch.setenv("ORCHESTRATOR_V1_CLIENT_SESSION_GUARD", "0")
@@ -159,7 +144,6 @@ def env(monkeypatch, tmp_path):
         state = get_state()
         if state.registry is None:
             state.registry = MagicMock()
-        state.hybrid_router = SimpleNamespace(retriever=FakeRetriever(q=0.1))
         yield SimpleNamespace(client=client, state=state, tmp=tmp_path, monkeypatch=monkeypatch)
     reset_features()
 
@@ -167,10 +151,7 @@ def env(monkeypatch, tmp_path):
 def _install(env, *, client_result=None, answers=None) -> dict[str, Any]:
     holder: dict[str, Any] = {}
     default_answers = {
-        "architect_general": "WRONG: it is nitrogen, about 78% by volume",
-        # ARCHSWAP-20260927: under ``auto`` the verdict goes to the reviewer binding.
-        "architect_critic": "WRONG: it is nitrogen, about 78% by volume",
-        "worker_general": REVISED_ANSWER,
+        "architect_general": QUALITY_ANSWER,
         "coder_escalation": QUALITY_ANSWER,
         "frontdoor": '"the answer"',
     }
@@ -242,55 +223,52 @@ def test_bad_x_escalation_value_is_422(env):
     assert "x_escalation" in r.text
 
 
-# ── A2: flag on, consultant pinned, review gate fires ───────────────────────
+# ── A2: flag on, consultant pinned, quality escalation fires ────────────────
 
 
-def test_a2_review_gate_escalates_to_architect_general_with_exact_telemetry(env):
+def test_a2_quality_escalation_to_architect_general_with_exact_telemetry(env):
+    _force_quality_issue(env)
     holder = _install(env)
     r = env.client.post("/v1/chat/completions", json=_body(x_escalation="architect_general"))
     assert r.status_code == 200, r.text
     fake = holder["fake"]
     data = r.json()
 
-    # /chat's review chain: frontdoor answer -> architect verdict WRONG -> worker revision.
-    assert [c["role"] for c in fake.calls] == ["frontdoor", "architect_general", "worker_general"]
-    assert data["choices"][0]["message"]["content"] == REVISED_ANSWER
+    # /chat's direct-stage chain: frontdoor answer -> quality escalation to the pinned
+    # consultant (the review gate after it was removed by RI-18c).
+    assert [c["role"] for c in fake.calls] == ["frontdoor", "architect_general"]
+    assert data["choices"][0]["message"]["content"] == QUALITY_ANSWER
     assert data["choices"][0]["finish_reason"] == "stop"
 
     receipt = data["x_orchestrator_metadata"]["escalation"]
     assert receipt["enabled"] is True and receipt["fired"] is True
     assert receipt["target"] == "pinned" and receipt["target_role"] == "architect_general"
     assert receipt["from_role"] == "frontdoor"
-    assert receipt["final_answer_role"] == "worker_general"
-    review, revision = receipt["steps"]
-    assert (review["trigger"], review["from_role"], review["to_role"]) == (
-        "review_gate",
+    assert receipt["final_answer_role"] == "architect_general"
+    (step,) = receipt["steps"]
+    assert (step["trigger"], step["from_role"], step["to_role"]) == (
+        "quality_escalation",
         "frontdoor",
         "architect_general",
     )
-    assert review["consultant"] is True and review["outcome"] == "wrong"
-    assert (review["prompt_ms"], review["gen_ms"]) == (1250.0, 3750.5)
-    assert review["device_seconds"] == pytest.approx(5.0005)
-    assert (review["tokens"], review["prompt_tokens"], review["calls"]) == (12, 300, 1)
-    assert review["server_url"] == get_config().server_urls.as_dict()["architect_general"]
-    assert revision["trigger"] == "review_gate_revision"
-    assert revision["to_role"] == "worker_general" and revision["consultant"] is False
-    # Consultant device-seconds = the verdict call only (the revision is a worker call).
+    assert step["consultant"] is True and step["outcome"] == "adopted"
+    assert (step["prompt_ms"], step["gen_ms"]) == (1250.0, 3750.5)
+    assert step["device_seconds"] == pytest.approx(5.0005)
+    assert (step["tokens"], step["prompt_tokens"], step["calls"]) == (12, 300, 1)
+    assert step["server_url"] == get_config().server_urls.as_dict()["architect_general"]
     assert receipt["consultant_device_seconds"] == pytest.approx(5.0005)
-    assert receipt["request_device_seconds"] == pytest.approx(
-        (40 + 160 + 1250 + 3750.5 + 100 + 400) / 1000
-    )
+    assert receipt["request_device_seconds"] == pytest.approx((40 + 160 + 1250 + 3750.5) / 1000)
 
-    # The verdict call's own tap section is tagged; the request's keys come back after.
-    verdict_call = fake.calls[1]
-    assert verdict_call["trace"]["escalation_trigger"] == "review_gate"
-    assert verdict_call["trace"]["escalation_to_role"] == "architect_general"
-    assert verdict_call["trace"]["x_escalation"] == "architect_general"
+    # The escalation call's own tap section is tagged; the request's keys come back after.
+    escalation_call = fake.calls[1]
+    assert escalation_call["trace"]["escalation_trigger"] == "quality_escalation"
+    assert escalation_call["trace"]["escalation_to_role"] == "architect_general"
+    assert escalation_call["trace"]["x_escalation"] == "architect_general"
     assert "escalation_trigger" not in fake.get_request_trace_keys()
 
-    # usage: the frontdoor call plus the escalation calls' server counts.
-    assert data["usage"]["completion_tokens"] == 17 + 12 + 30
-    assert data["usage"]["prompt_tokens"] == 91 + 300 + 150
+    # usage: the frontdoor call plus the escalation call's server counts.
+    assert data["usage"]["completion_tokens"] == 17 + 12
+    assert data["usage"]["prompt_tokens"] == 91 + 300
 
     events = [e for e in _tap_events(env) if e["event"] == "v1_escalation"]
     assert len(events) == 1
@@ -300,11 +278,12 @@ def test_a2_review_gate_escalates_to_architect_general_with_exact_telemetry(env)
     assert event["request_keys"]["x_escalation"] == "architect_general"
     assert event["consultant_device_seconds"] == pytest.approx(5.0005)
     assert event["steps"][0]["to_role"] == "architect_general"
+    # RI-18c: no review_gate tap event any more.
+    assert not [e for e in _tap_events(env) if e.get("event") == "review_gate"]
 
 
 def test_a2_pinned_quality_escalation_targets_architect_general_not_coder(env):
     _force_quality_issue(env)
-    env.state.hybrid_router = SimpleNamespace(retriever=FakeRetriever(q=0.99))  # no review
     holder = _install(env, answers={"architect_general": QUALITY_ANSWER})
     r = env.client.post("/v1/chat/completions", json=_body(x_escalation="architect_general"))
     assert r.status_code == 200, r.text
@@ -326,7 +305,6 @@ def test_a2_pinned_quality_escalation_targets_architect_general_not_coder(env):
 
 def test_auto_keeps_chat_targets_quality_escalation_goes_to_coder_escalation(env):
     _force_quality_issue(env)
-    env.state.hybrid_router = SimpleNamespace(retriever=FakeRetriever(q=0.99))
     holder = _install(env)
     r = env.client.post("/v1/chat/completions", json=_body(x_escalation="auto"))
     assert r.status_code == 200, r.text
@@ -355,46 +333,19 @@ def test_flag_on_and_key_absent_is_off_opt_in(env):
     assert not [e for e in _tap_events(env) if e["event"] == "v1_escalation"]
 
 
-def test_explicit_auto_escalates_with_chat_default_targets(env):
+def test_explicit_auto_without_a_quality_issue_makes_no_escalation_call(env):
+    """RI-18c: with the review gate gone, a clean answer under ``auto`` is served as is."""
     holder = _install(env)
     r = env.client.post("/v1/chat/completions", json=_body(x_escalation="auto"))
     receipt = r.json()["x_orchestrator_metadata"]["escalation"]
     assert receipt["requested"] == "auto" and receipt["enabled"] is True
     assert receipt["target"] == "chat_default"
-    # ARCHSWAP-20260927: /chat's default verdict target is the reviewer binding
-    # (architect_critic, the 27B); only a pinned consultant sends it to architect_general.
-    assert [c["role"] for c in holder["fake"].calls] == [
-        "frontdoor",
-        "architect_critic",
-        "worker_general",
-    ]
-
-
-def test_review_gate_ok_verdict_keeps_the_frontdoor_answer(env):
-    holder = _install(env, answers={"architect_general": "OK"})
-    r = env.client.post("/v1/chat/completions", json=_body(x_escalation="architect_general"))
+    assert receipt["fired"] is False and receipt["steps"] == []
+    assert [c["role"] for c in holder["fake"].calls] == ["frontdoor"]
     assert r.json()["choices"][0]["message"]["content"] == FRONTDOOR_ANSWER
-    receipt = r.json()["x_orchestrator_metadata"]["escalation"]
-    assert receipt["fired"] is True and receipt["final_answer_role"] == "frontdoor"
-    assert [s["outcome"] for s in receipt["steps"]] == ["ok_or_unavailable"]
-    assert [s["verdict_status"] for s in receipt["steps"]] == ["ok"]
-    assert [c["role"] for c in holder["fake"].calls] == ["frontdoor", "architect_general"]
 
 
-def test_review_gate_unparseable_verdict_is_recorded_unavailable(env):
-    # RI-22: a verdict that is neither OK nor WRONG (here a thinking block cut at the
-    # 80-token cap) keeps the answer — but the receipt says unavailable, not OK.
-    holder = _install(env, answers={"architect_general": "<think>The user asks"})
-    r = env.client.post("/v1/chat/completions", json=_body(x_escalation="architect_general"))
-    assert r.json()["choices"][0]["message"]["content"] == FRONTDOOR_ANSWER
-    receipt = r.json()["x_orchestrator_metadata"]["escalation"]
-    assert [s["outcome"] for s in receipt["steps"]] == ["ok_or_unavailable"]
-    assert [s["verdict_status"] for s in receipt["steps"]] == ["unavailable"]
-    assert [c["role"] for c in holder["fake"].calls] == ["frontdoor", "architect_general"]
-
-
-def test_high_q_no_quality_issue_means_no_escalation_call(env):
-    env.state.hybrid_router = SimpleNamespace(retriever=FakeRetriever(q=0.99))
+def test_no_quality_issue_means_no_escalation_call(env):
     holder = _install(env)
     r = env.client.post("/v1/chat/completions", json=_body(x_escalation="architect_general"))
     receipt = r.json()["x_orchestrator_metadata"]["escalation"]
@@ -402,45 +353,6 @@ def test_high_q_no_quality_issue_means_no_escalation_call(env):
     assert receipt["steps"] == [] and receipt["consultant_device_seconds"] == 0
     assert [c["role"] for c in holder["fake"].calls] == ["frontdoor"]
     assert r.json()["choices"][0]["message"]["content"] == FRONTDOOR_ANSWER
-
-
-# ── RI-18 C1: the persistent review_gate event on the /v1 path ────────────────
-
-
-def _review_gate_events(env) -> list[dict[str, Any]]:
-    return [e for e in _tap_events(env) if e.get("event") == "review_gate"]
-
-
-def test_review_gate_event_records_wrong_and_the_revision(env):
-    _install(env)
-    r = env.client.post("/v1/chat/completions", json=_body(x_escalation="architect_general"))
-    assert r.json()["choices"][0]["message"]["content"] == REVISED_ANSWER
-    (event,) = _review_gate_events(env)
-    assert event["schema"] == "review_gate/v1" and event["path"] == "v1"
-    assert event["role"] == "frontdoor" and event["triggered"] is True
-    assert event["skip_reason"] == "scored" and event["avg_q"] == pytest.approx(0.1)
-    assert event["verdict_status"] == "wrong"
-    assert event["reviewer_role"] == "architect_general"  # the pinned consultant
-    assert event["revision_applied"] is True
-    assert event["verdict_ms"] is not None and event["revision_ms"] is not None
-
-
-def test_review_gate_event_records_unavailable_not_ok(env):
-    _install(env, answers={"architect_general": "<think>The user asks"})
-    env.client.post("/v1/chat/completions", json=_body(x_escalation="architect_general"))
-    (event,) = _review_gate_events(env)
-    assert event["verdict_status"] == "unavailable"
-    assert event["revision_applied"] is False
-
-
-def test_review_gate_event_records_a_no_trigger_evaluation(env):
-    env.state.hybrid_router = SimpleNamespace(retriever=FakeRetriever(q=0.99))
-    _install(env)
-    env.client.post("/v1/chat/completions", json=_body(x_escalation="architect_general"))
-    (event,) = _review_gate_events(env)
-    assert event["triggered"] is False and event["avg_q"] == pytest.approx(0.99)
-    assert event["threshold"] == pytest.approx(0.6)
-    assert event["verdict_status"] is None and event["revision_applied"] is None
 
 
 def test_tool_call_turn_is_never_escalated(env):
@@ -454,6 +366,7 @@ def test_tool_call_turn_is_never_escalated(env):
 
 
 def test_streaming_client_mode_streams_the_escalated_answer_and_usage(env):
+    _force_quality_issue(env)
     holder = _install(env)
     r = env.client.post(
         "/v1/chat/completions",
@@ -468,26 +381,25 @@ def test_streaming_client_mode_streams_the_escalated_answer_and_usage(env):
         if line.startswith("data: ") and line != "data: [DONE]"
     ]
     content = "".join(e["choices"][0]["delta"].get("content") or "" for e in events if e["choices"])
-    assert content == REVISED_ANSWER
+    assert content == QUALITY_ANSWER
     final = next(e for e in events if e["choices"] and e["choices"][0]["finish_reason"])
     assert final["choices"][0]["finish_reason"] == "stop"
     assert final["x_orchestrator_metadata"]["escalation"][
         "consultant_device_seconds"
     ] == pytest.approx(5.0005)
     usage = events[-1]["usage"]
-    assert usage["completion_tokens"] == 17 + 12 + 30
-    assert [c["role"] for c in holder["fake"].calls] == [
-        "frontdoor",
-        "architect_general",
-        "worker_general",
-    ]
+    assert usage["completion_tokens"] == 17 + 12
+    assert [c["role"] for c in holder["fake"].calls] == ["frontdoor", "architect_general"]
 
 
 # ── default REPL bridge and x_disable_repl ──────────────────────────────────
 
 
-def test_repl_mode_final_answer_gets_the_review_gate_only(env):
-    _force_quality_issue(env)  # /chat's REPL stage has no quality escalation
+def test_repl_mode_final_answer_gets_no_escalation_hook(env):
+    """/chat's REPL stage ran only the review gate; RI-18c removed it, so a FINAL answer
+    of the REPL bridge is served unescalated (and /chat's REPL stage has no quality
+    escalation, so a forced quality issue changes nothing)."""
+    _force_quality_issue(env)
     long_final = '"' + FRONTDOOR_ANSWER + '"'
     holder = _install(env, answers={"frontdoor": long_final})
     body = _body(x_escalation="architect_general")
@@ -495,14 +407,10 @@ def test_repl_mode_final_answer_gets_the_review_gate_only(env):
     body.pop("tools")
     r = env.client.post("/v1/chat/completions", json=body)
     assert r.status_code == 200, r.text
-    assert [c["role"] for c in holder["fake"].calls] == [
-        "frontdoor",
-        "architect_general",
-        "worker_general",
-    ]
-    steps = r.json()["x_orchestrator_metadata"]["escalation"]["steps"]
-    assert [s["trigger"] for s in steps] == ["review_gate", "review_gate_revision"]
-    assert r.json()["choices"][0]["message"]["content"] == REVISED_ANSWER
+    assert [c["role"] for c in holder["fake"].calls] == ["frontdoor"]
+    receipt = r.json()["x_orchestrator_metadata"]["escalation"]
+    assert receipt["fired"] is False and receipt["steps"] == []
+    assert r.json()["choices"][0]["message"]["content"] == FRONTDOOR_ANSWER
 
 
 def test_disable_repl_gets_the_direct_chain(env):
@@ -515,8 +423,8 @@ def test_disable_repl_gets_the_direct_chain(env):
     body.pop("tools")
     r = env.client.post("/v1/chat/completions", json=body)
     assert r.status_code == 200, r.text
-    # quality escalation adopts architect_general's answer; the review gate then
-    # skips it ("architects ARE the reviewer"), exactly as /chat's direct stage does.
+    # quality escalation adopts architect_general's answer, exactly as /chat's direct
+    # stage does (no review gate follows it since RI-18c).
     assert [c["role"] for c in holder["fake"].calls] == ["frontdoor", "architect_general"]
     assert r.json()["choices"][0]["message"]["content"] == QUALITY_ANSWER
 
@@ -600,21 +508,18 @@ def test_a1_off_serves_exactly_what_the_flag_off_route_serves(env):
 
 
 def test_hook_failure_is_recorded_and_serves_the_unescalated_answer(env):
-    import src.api.routes.chat_review as chat_review
+    import src.api.routes.chat_pipeline.stages as stages
 
     def _boom(*_a, **_k):
-        raise RuntimeError("retriever exploded")
+        raise RuntimeError("detector exploded")
 
-    # RI-18: the review sites score the gate through ``review_gate_score`` (the
-    # accessor ``_should_review``'s decision is pinned to); a raise there is the hook
-    # failure.
-    env.monkeypatch.setattr(chat_review, "review_gate_score", _boom)
+    env.monkeypatch.setattr(stages, "_quality_escalate", _boom)
     holder = _install(env)
     r = env.client.post("/v1/chat/completions", json=_body(x_escalation="architect_general"))
     assert r.status_code == 200
     assert r.json()["choices"][0]["message"]["content"] == FRONTDOOR_ANSWER
     receipt = r.json()["x_orchestrator_metadata"]["escalation"]
-    assert receipt["error"] == "RuntimeError: retriever exploded"
+    assert receipt["error"] == "RuntimeError: detector exploded"
     assert receipt["final_answer_role"] == "frontdoor"
     assert [c["role"] for c in holder["fake"].calls] == ["frontdoor"]
 
@@ -626,6 +531,7 @@ def test_te2_escalation_reaches_the_registry_resolved_architect_general_server(e
     """Zero inference. The route builds primitives from the registry-derived
     server_urls; A2's consultant calls land on whatever server architect_general
     resolves to, and on no other role's server unless it IS that server."""
+    _force_quality_issue(env)
     holder = _install(env)
     r = env.client.post("/v1/chat/completions", json=_body(x_escalation="architect_general"))
     assert r.status_code == 200
@@ -635,7 +541,7 @@ def test_te2_escalation_reaches_the_registry_resolved_architect_general_server(e
     escalated = [
         c
         for c in fake.calls
-        if c["trace"].get("escalation_trigger") in {"review_gate", "quality_escalation"}
+        if c["trace"].get("escalation_trigger") == "quality_escalation"
     ]
     assert escalated and all(c["role"] == "architect_general" for c in escalated)
     assert all(c["url"] == registry_urls["architect_general"] for c in escalated)

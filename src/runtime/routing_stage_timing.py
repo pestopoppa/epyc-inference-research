@@ -12,8 +12,8 @@ disk through the progress JSONL writes that already happen:
   ``routing_context``, ``review_gate``, ``review_verdict`` and the final ``total``.
 
 ``stage_ms`` always carries every key in :data:`STAGE_KEYS` (stable schema). A stage
-that did not run on this request is ``None`` — never ``0``. Stages that can run more
-than once per request (the review gate, the verdict) accumulate.
+that did not run on this request is ``None`` — never ``0``. A stage that runs more
+than once per request accumulates.
 
 Which embed+KNN lookup each stage contains:
 
@@ -23,12 +23,16 @@ Which embed+KNN lookup each stage contains:
                         or the rules classifier again when there is no learned router.
 * ``mode``            — ``_select_mode`` -> ``HybridRouter.route_with_mode`` (KNN).
 * ``routing_context`` — streaming turn 0 ``build_routing_context`` (KNN).
-* ``review_gate``     — ``chat_review.review_gate_score``, ``_should_review``'s decision
-                        with its inputs exposed (RI-18; KNN over the ANSWER text).
-* ``review_verdict``  — the architect verdict LLM call the gate triggers. Reported, but
-                        NOT part of ``total``: it is generation, not a routing decision.
+* ``review_gate``     — RETIRED by RI-18c (2026-10-03). It timed ``_should_review``'s
+                        KNN over the ANSWER text; the gate was removed under RI-18's
+                        pre-registered DROP verdict, so nothing records it and it is
+                        always ``None``. The key stays so the schema is stable.
+* ``review_verdict``  — RETIRED by RI-18c with the gate (the architect verdict LLM call
+                        it triggered; generation, never part of ``total``). Always
+                        ``None``.
 
-``total`` = ``route_total`` + ``mode`` + ``routing_context`` + ``review_gate``, so it is
+``total`` = ``route_total`` + ``mode`` + ``routing_context`` (+ ``review_gate``, which is
+``None`` and contributes 0 since RI-18c), so it is
 always >= the sum of the sequential stages it covers (``route_total`` is the wall time
 of the whole pre-execution routing function, which contains ``memrl_init``,
 ``priors``, ``route``, ``xmas``, ``factual_risk``, ``failure_veto``, ``difficulty`` and

@@ -1314,8 +1314,8 @@ class ChatPipelineConfig:
     garbled_short_line_ratio: float = 0.6
     min_answer_length: int = 50
 
-    # Review Q-value thresholds
-    review_low_q_threshold: float = 0.6
+    # Plan-review Q-value skip threshold (the answer-review gate's
+    # review_low_q_threshold was removed by RI-18c, the RI-18 DROP)
     review_skip_q_threshold: float = 0.6
 
     # Plan review phase transitions

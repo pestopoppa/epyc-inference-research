@@ -1,7 +1,8 @@
 """Pipeline stage 9: Direct LLM call mode.
 
 Handles direct LLM calls without REPL wrapper. Includes output
-formalizer, quality escalation, and MemRL-informed review gate.
+formalizer and quality escalation. (The MemRL-informed answer review gate was
+removed by RI-18c: its pre-registered DROP verdict.)
 """
 
 from __future__ import annotations
@@ -11,15 +12,6 @@ import re
 import time
 
 from src.api.models import ChatRequest, ChatResponse
-from src.api.routes.chat_review import (
-    REVIEW_PATH_DIRECT,
-    _architect_verdict_with_status,
-    _fast_revise,
-    review_ms_since,
-    evaluate_review_gate,
-    record_review_gate,
-    review_gate_skipped,
-)
 from src.api.routes.chat_utils import (
     QWEN_STOP,
     RoutingResult,
@@ -220,52 +212,6 @@ def _execute_direct(
         primitives,
         initial_role,
         allow_escalation=not bool(request.force_role),
-    )
-
-    # MemRL-informed quality review gate (skip when force_role is set —
-    # seeding/eval calls should not trigger expensive architect reviews)
-    if not answer:
-        review_gate = review_gate_skipped("no_answer", answer)
-    elif answer.startswith("[ERROR"):
-        review_gate = review_gate_skipped("error_answer", answer)
-    elif request.force_role:
-        review_gate = review_gate_skipped("force_role", answer)
-    else:
-        review_gate = evaluate_review_gate(state, initial_role, answer)
-    verdict_status = None
-    verdict_ms = None
-    revision_applied = None
-    revision_ms = None
-    if review_gate.triggered:
-        _t_review = time.perf_counter()
-        verdict, verdict_status = _architect_verdict_with_status(
-            question=request.prompt,
-            answer=answer,
-            primitives=primitives,
-        )
-        verdict_ms = review_ms_since(_t_review)
-        revision_applied = False
-        if verdict and verdict.upper().startswith("WRONG"):
-            corrections = verdict.split(":", 1)[1].strip() if ":" in verdict else verdict
-            _t_review = time.perf_counter()
-            revised = _fast_revise(
-                question=request.prompt,
-                original_answer=answer,
-                corrections=corrections,
-                primitives=primitives,
-            )
-            revision_ms = review_ms_since(_t_review)
-            revision_applied = revised != answer
-            answer = revised
-    record_review_gate(
-        routing.task_id,
-        initial_role,
-        gate=review_gate,
-        path=REVIEW_PATH_DIRECT,
-        verdict_status=verdict_status,
-        revision_applied=revision_applied,
-        verdict_ms=verdict_ms,
-        revision_ms=revision_ms,
     )
 
     elapsed = time.perf_counter() - start_time

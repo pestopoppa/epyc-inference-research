@@ -92,7 +92,6 @@ ENV_PARAMS = {
         "try_cheap_first_quality_threshold": "ORCHESTRATOR_CHAT_TRY_CHEAP_FIRST_Q_THRESHOLD",
         "long_context_threshold_chars": "ORCHESTRATOR_CHAT_LONG_CONTEXT_THRESHOLD_CHARS",
         "summarization_threshold_tokens": "ORCHESTRATOR_CHAT_SUMMARIZATION_THRESHOLD_TOKENS",
-        "review_low_q_threshold": "ORCHESTRATOR_CHAT_REVIEW_LOW_Q_THRESHOLD",
         "review_skip_q_threshold": "ORCHESTRATOR_CHAT_REVIEW_SKIP_Q_THRESHOLD",
     },
     "escalation": {
@@ -1246,13 +1245,6 @@ class EnvRestartApplicator:
         return env_changes
 
     def apply(self, params: dict[str, Any]) -> ApplyResult:
-        validation_error = _validate_chat_review_threshold_order(params)
-        if validation_error:
-            return ApplyResult(
-                status="error",
-                payload={"status": "error", "error": validation_error},
-                errors=[validation_error],
-            )
 
         env_changes = self.env_changes_for(params)
 
@@ -1296,38 +1288,6 @@ class EnvRestartApplicator:
             status="staged",
             payload={"status": "staged", "env_changes": env_changes},
         )
-
-
-def _current_chat_review_thresholds() -> tuple[float, float]:
-    try:
-        from src.config import get_config
-
-        cfg = get_config().chat
-        return float(cfg.review_low_q_threshold), float(cfg.review_skip_q_threshold)
-    except Exception:
-        return 0.6, 0.6
-
-
-def _validate_chat_review_threshold_order(params: dict[str, Any]) -> str | None:
-    low_key = "chat.review_low_q_threshold"
-    skip_key = "chat.review_skip_q_threshold"
-    if low_key not in params and skip_key not in params:
-        return None
-    try:
-        low, skip = _current_chat_review_thresholds()
-        if low_key in params:
-            low = float(params[low_key])
-        if skip_key in params:
-            skip = float(params[skip_key])
-    except (TypeError, ValueError) as exc:
-        return f"chat review thresholds must be numeric: {exc}"
-    if low > skip:
-        return (
-            "chat review thresholds require "
-            "chat.review_low_q_threshold <= chat.review_skip_q_threshold; "
-            f"got {low:.6g} > {skip:.6g}"
-        )
-    return None
 
 
 class KvCompactionApplicator:

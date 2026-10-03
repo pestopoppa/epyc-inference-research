@@ -8,11 +8,10 @@ Flag ``thinking_roles_chat_lane`` (default OFF):
 * ON — thinking-on roles (live stack priors: ``--jinja`` AND ``enable_thinking is True``)
   go to ``/v1/chat/completions`` per request with their registry ``chat_template_kwargs``;
   ``message.reasoning_content`` (or streamed ``delta.reasoning_content``) is captured on the
-  ``InferenceResult``, recorded in the primitives' inference meta and surfaced on /v1;
-  the review verdict runs thinking-off with ``skip_suffix=True``.
+  ``InferenceResult``, recorded in the primitives' inference meta and surfaced on /v1.
 
-RI-22 (flag-independent): an empty, failed or unparseable review verdict is recorded as
-``unavailable`` — never counted as a silent OK.
+(The answer review verdict's RI-23 call-shape and RI-22 status tests were removed with
+the verdict itself by RI-18c.)
 
 Everything is mocked; no network.
 """
@@ -374,82 +373,6 @@ def test_primitives_flag_on_carries_override_and_records_reasoning(flag_on):
     primitives.llm_call("q", role="architect_critic", n_tokens=8, skip_suffix=True)
     assert backend.requests[1].chat_template_kwargs is None  # unbound after the block
     assert primitives.get_last_inference_meta()["reasoning_content"] == "thought it through"
-
-
-# ── review verdict (RI-23 call shape, RI-22 status) ──────────────────────────
-
-
-class _VerdictPrimitives:
-    def __init__(self, answer: str | Exception):
-        self.answer = answer
-        self.kwargs: dict[str, Any] = {}
-        self.override: dict[str, Any] | None = None
-
-    def llm_call(self, prompt, **kwargs):
-        self.kwargs = kwargs
-        self.override = cc.current_chat_template_kwargs_override()
-        if isinstance(self.answer, Exception):
-            raise self.answer
-        return self.answer
-
-
-def test_verdict_flag_off_call_shape_unchanged():
-    from src.api.routes import chat_review
-
-    fake = _VerdictPrimitives("OK")
-    assert chat_review._architect_verdict("q", "a", fake, role="architect_critic") is None
-    assert fake.kwargs == {"role": "architect_critic", "n_tokens": 80}
-    assert fake.override is None
-
-
-def test_verdict_flag_on_is_thinking_off_and_skips_suffix(flag_on):
-    from src.api.routes import chat_review
-
-    fake = _VerdictPrimitives("WRONG: it is 5")
-    verdict, status = chat_review._architect_verdict_with_status(
-        "q", "a", fake, role="architect_critic"
-    )
-    assert verdict == "WRONG: it is 5" and status == "wrong"
-    assert fake.kwargs == {"role": "architect_critic", "n_tokens": 80, "skip_suffix": True}
-    assert fake.override == {"enable_thinking": False}
-
-
-@pytest.mark.parametrize(
-    ("answer", "expected_verdict", "expected_status"),
-    [
-        ("OK", None, "ok"),
-        ("ok - fine", None, "ok"),
-        ("WRONG: x", "WRONG: x", "wrong"),
-        ("", "", "unavailable"),
-        ("<think>The user asks whether", "<think>The user asks whether", "unavailable"),
-        (RuntimeError("backend down"), None, "unavailable"),
-    ],
-)
-def test_verdict_status_classification(answer, expected_verdict, expected_status, caplog):
-    from src.api.routes import chat_review
-
-    chat_review.reset_verdict_status_counts()
-    fake = _VerdictPrimitives(answer)
-    with caplog.at_level("WARNING", logger="src.api.routes.chat_review"):
-        verdict, status = chat_review._architect_verdict_with_status(
-            "q", "a", fake, role="architect_critic"
-        )
-    # Return value is exactly what _architect_verdict always returned.
-    assert verdict == expected_verdict
-    assert chat_review._architect_verdict("q", "a", _VerdictPrimitives(answer)) == expected_verdict
-    assert status == expected_status
-    assert chat_review.verdict_status_counts()[expected_status] == 2
-    unavailable_logged = any("UNAVAILABLE" in r.getMessage() for r in caplog.records)
-    assert unavailable_logged is (expected_status == "unavailable")
-
-
-def test_classify_verdict():
-    from src.api.routes.chat_review import classify_verdict
-
-    assert classify_verdict(None) == "unavailable"
-    assert classify_verdict("  OK.") == "ok"
-    assert classify_verdict("wrong: no") == "wrong"
-    assert classify_verdict("The answer looks right") == "unavailable"
 
 
 # ── other thinking-off callers ───────────────────────────────────────────────

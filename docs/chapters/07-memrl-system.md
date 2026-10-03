@@ -403,30 +403,17 @@ Phases 8.1 and 8.2 were wired 2026-05-21. Phase 8.1's classifier code shipped 20
 
 </details>
 
-## MemRL Quality Review Gate
+## MemRL Quality Review Gate (removed 2026-10-03, RI-18c)
 
-When the MemRL Q-value for a role+task combination drops below 0.6, a two-phase quality review kicks in. First, the architect model gives a quick verdict (OK or WRONG with corrections, ~6s). Only if the verdict is WRONG does a second phase run: the fast worker revises the answer using the architect's corrections (~11s). This triggers on about 20% of requests and adds only ~1.9s average latency — 3x more efficient than routing everything through the architect.
+The answer review gate is gone. When the answering role's mean MemRL Q-value for an answer fell below `chat.review_low_q_threshold` (0.6), the reviewer (`architect_critic`) gave an 80-token `OK` / `WRONG: <corrections>` verdict, and on `WRONG` the fast worker (`worker_general`) rewrote the answer. It ran at five call sites: the REPL and direct stages, both streaming paths, and the `/v1` escalation hooks.
 
-<details>
-<summary>Review gate details and performance impact</summary>
+RI-18 measured it with a forced-review counterfactual over 579 scored items (orch `08edc054`, scored 2026-10-01) and the pre-registered DROP clause fired:
 
-**Phase 1 — Architect Verdict** (6.75 t/s, ~40 tokens, ~6s):
-- Receives question + answer (TOON-encoded if worker digests available)
-- Outputs: `OK` (return unchanged) or `WRONG: <concise corrections>` (trigger Phase 2)
+- **The production gate never fired.** `avg_q` is about 1.0 on nearly every answer, so the 0.6 threshold triggered 0 times; no threshold below 0.95 reviews anything.
+- **Reviewing every answer is net-harmful.** −38.3 per 100 items, 95% CI [−42.7, −34.0]: 12 fixed, 234 broken, accuracy 72.2% → 33.9%. The reviewer says WRONG too often (specificity about 0.21–0.25), and the revision breaks most correct answers it rewrites.
+- **The gate also cost a KNN lookup per answer.** RI-16 timed the `review_gate` stage at 69 ms p50 / 105 ms p95; that stage is now always `null` in `routing_stage_ms`.
 
-**Phase 2 — Worker Revision** (44 t/s, ~500 tokens, ~11s, only on WRONG):
-- Receives: question + original answer + architect corrections
-- Outputs: revised answer incorporating corrections
-
-**Performance Impact**:
-- Trigger rate: ~20% of requests (Q < 0.6)
-- WRONG rate: ~30% of reviews
-- Net: ~1.9s average added latency (20% x (6s + 30% x 11s))
-- This is 3x more efficient than full architect review (~6s avg vs ~18s)
-
-**Implementation**: `src/api/routes/chat.py` (`_should_review`, `_architect_verdict`, `_fast_revise`)
-
-</details>
+RI-18c removed the gate, the verdict, the revision, `chat.review_low_q_threshold` (and its env var `ORCHESTRATOR_CHAT_REVIEW_LOW_Q_THRESHOLD` and autopilot surface `chat_review_low`), plus RI-18's own telemetry (the `review_gate` tap event, the `review_gate_score` accessor, the verdict prompt caps). The architect **plan** review gate (`_needs_plan_review`, which still uses `chat.review_skip_q_threshold`) is a different feature and stays. Full verdict: epyc-root `handoffs/active/routing-intelligence.md`, RI-18.
 
 ## Model Self-Routing (Phase 8)
 

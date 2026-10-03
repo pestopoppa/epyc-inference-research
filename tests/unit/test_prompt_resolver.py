@@ -274,8 +274,6 @@ class TestPromptFilesExist:
             "root_lm_system",
             "architect_investigate",
             "architect_synthesis",
-            "review_verdict",
-            "revision",
             "plan_review",
             "task_decomposition",
             "formalizer",

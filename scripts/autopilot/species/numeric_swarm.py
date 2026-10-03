@@ -53,9 +53,6 @@ SURFACES: dict[str, list[ParamSpec]] = {
     "chat_summarization": [
         ParamSpec("chat.summarization_threshold_tokens", 3000, 30000, "int"),
     ],
-    "chat_review_low": [
-        ParamSpec("chat.review_low_q_threshold", 0.45, 0.80),
-    ],
     "chat_review_skip": [
         ParamSpec("chat.review_skip_q_threshold", 0.45, 0.80),
     ],

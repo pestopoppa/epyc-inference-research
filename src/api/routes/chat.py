@@ -7,7 +7,7 @@ extracted into focused modules during Phase 1 decomposition:
 - chat_utils.py      — Constants + utility functions
 - chat_vision.py     — Vision pipeline (OCR, VL routing, ReAct VL)
 - chat_summarization.py — Two-stage/three-stage context processing
-- chat_review.py     — Architect review, quality gates, plan review
+- chat_review.py     — Output quality detection, plan review
 - chat_delegation.py — Architect delegation (TOON parsing, multi-loop)
 - chat_routing.py    — Intent classification, mode selection, routing
 """
@@ -83,14 +83,8 @@ from src.api.routes.chat_utils import (
     _resolve_answer,
 )
 from src.api.routes.chat_review import (
-    REVIEW_PATH_LEGACY_STREAM,
-    _architect_verdict_with_status,
-    _fast_revise,
     _plan_review_abort_message,
     _plan_review_should_abort,
-    review_ms_since,
-    evaluate_review_gate,
-    record_review_gate,
 )
 from src.api.routes.chat_routing import (
     _select_mode,
@@ -1325,7 +1319,7 @@ async def chat_stream(
         start_time = time.perf_counter()
         use_mock = request.mock_mode and not request.real_mode
         # RI-16: this path has no priors/route/mode stages; it times the turn-0
-        # routing context and the review gate.
+        # routing context (its review gate was removed by RI-18c).
         routing_stage_timing.begin(task_id, routing_stage_timing.PATH_LEGACY_STREAM)
 
         # Construct task_ir and log start (MemRL integration)
@@ -1619,46 +1613,6 @@ async def chat_stream(
             if result.is_final:
                 tool_outputs = repl.artifacts.get("_tool_outputs", [])
                 stream_answer = _resolve_answer(result, tool_outputs=tool_outputs)
-
-                # MemRL-informed quality review gate (blocking, streaming parity)
-                review_gate = evaluate_review_gate(state, current_role, stream_answer)
-                verdict_status = None
-                verdict_ms = None
-                revision_applied = None
-                revision_ms = None
-                if review_gate.triggered:
-                    _t_review = time.perf_counter()
-                    verdict, verdict_status = _architect_verdict_with_status(
-                        question=request.prompt,
-                        answer=stream_answer,
-                        primitives=primitives,
-                    )
-                    verdict_ms = review_ms_since(_t_review)
-                    revision_applied = False
-                    if verdict and verdict.upper().startswith("WRONG"):
-                        corrections = (
-                            verdict.split(":", 1)[1].strip() if ":" in verdict else verdict
-                        )
-                        _t_review = time.perf_counter()
-                        revised = _fast_revise(
-                            question=request.prompt,
-                            original_answer=stream_answer,
-                            corrections=corrections,
-                            primitives=primitives,
-                        )
-                        revision_ms = review_ms_since(_t_review)
-                        revision_applied = revised != stream_answer
-                        stream_answer = revised
-                record_review_gate(
-                    task_id,
-                    current_role,
-                    gate=review_gate,
-                    path=REVIEW_PATH_LEGACY_STREAM,
-                    verdict_status=verdict_status,
-                    revision_applied=revision_applied,
-                    verdict_ms=verdict_ms,
-                    revision_ms=revision_ms,
-                )
 
                 yield final_event(stream_answer)
                 break

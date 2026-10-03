@@ -897,8 +897,8 @@ _RATIONALE_REPAIR_INSTRUCTION = (
 def _get_orchestrator_config() -> Any:
     """Indirection point so tests can substitute a fake config without
     touching the real (`lru_cache`d) `src.config.get_config()`. Deferred
-    import: `planner_coordinator.py` already does the same
-    (`_current_chat_review_thresholds`) so this module's import does not pull
+    import (as `planner_coordinator.py` did for its chat review thresholds before
+    RI-18c) so this module's import does not pull
     in the full orchestrator config stack eagerly."""
     from src.config import get_config
 

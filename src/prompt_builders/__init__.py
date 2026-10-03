@@ -53,8 +53,6 @@ from src.prompt_builders.review import (
     build_architect_investigate_prompt,
     build_architect_synthesis_prompt,
     build_plan_review_prompt,
-    build_review_verdict_prompt,
-    build_revision_prompt,
 )
 
 # Prompt resolver (hot-swap)
@@ -103,8 +101,6 @@ __all__ = [
     "build_long_context_exploration_prompt",
     "build_task_decomposition_prompt",
     # Review
-    "build_review_verdict_prompt",
-    "build_revision_prompt",
     "build_plan_review_prompt",
     "build_architect_investigate_prompt",
     "build_architect_synthesis_prompt",
