@@ -227,7 +227,7 @@ def _reset_context_limit_resolver():
 
 
 @pytest.fixture(autouse=True)
-def _hermetic_long_prefill_lease(tmp_path_factory, monkeypatch):
+def _hermetic_long_prefill_lease(tmp_path_factory):
     """Keep tests off the HOST-WIDE long-prefill lease (KVU-15a).
 
     The lease is an flock on ``{tmp_dir}/kv_prefill_lease.{host}_{port}.lock`` —
@@ -238,12 +238,20 @@ def _hermetic_long_prefill_lease(tmp_path_factory, monkeypatch):
     cannot leak into the next one either. Only this module's resolver is
     patched, never ``ORCHESTRATOR_TMP_DIR`` (see tests/unit/conftest.py for why
     a global tmp-dir override is the wrong seam).
+
+    Uses a PRIVATE ``MonkeyPatch``, not the ``monkeypatch`` fixture: requesting
+    that fixture from an autouse fixture declared before
+    ``_reset_config_between_tests`` sets it up earlier and so tears it down
+    LATER, i.e. a test's ``monkeypatch.setattr("src.config.get_config", ...)``
+    would still be in place when ``reset_config()`` calls
+    ``get_config.cache_clear()`` (AttributeError at teardown).
     """
     from src.runtime import long_prefill_lease
 
     lease_dir = tmp_path_factory.mktemp("hermetic_prefill_lease")
-    monkeypatch.setattr(long_prefill_lease, "lease_dir", lambda: lease_dir)
-    yield lease_dir
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(long_prefill_lease, "lease_dir", lambda: lease_dir)
+        yield lease_dir
 
 
 @pytest.fixture(autouse=True)
