@@ -48,47 +48,47 @@ contract:
   - quality_overall
   - memory_cost
   fallback_policy: Consumers may use local fallback values only as explicit degraded mode when this generated contract is missing or invalid.
-compiled_at: '2026-09-29T15:01:54Z'
+compiled_at: '2026-10-03T04:41:52Z'
 status: compiled
 coverage_scope: descriptor_role_bindings
 precedence_spec: docs/reference/stack-truth-precedence.md
 source_artifacts:
   registry:
     path: orchestration/model_registry.yaml
-    sha256: 7ff34c2d7555a4ce191986526919351fa3cde7ba5e75f9a4519d2bbdeea0728f
-    repo_commit: 8991000d
+    sha256: 71e7917ec7cb282ea0746698524b638cd994f367908f8cd87df8659066c27e9d
+    repo_commit: d3233170
   descriptors:
     path: orchestration/model_descriptors.yaml
-    sha256: de0946f4f457c6e606716a8c66493585fd5ef8e981a809b97eb734adea293754
-    repo_commit: 8991000d
+    sha256: fe70193dec6d38f049b05ee0b2da5900b36b78498b0e15f5927129bf8585d166
+    repo_commit: d3233170
   stack_manifest:
     path: scripts/server/stack_manifest.py
     sha256: 5f7acb6d067e4420edfc2bcc662148cd8fc7aff6c90682c51ece207666171610
-    repo_commit: 8991000d
+    repo_commit: d3233170
   stack_numa:
     path: scripts/server/stack_numa.py
     sha256: edfdb41035ec638d3eab60631024ebece56a5e2d9b577851bf02e05a446e0c32
-    repo_commit: 8991000d
+    repo_commit: d3233170
   launch_manifest:
     path: orchestration/launch_manifest.yaml
-    sha256: 66fe456dc9c3fe323239571d4f32794c93391741986bffb875a925729b54b8c1
-    repo_commit: 8991000d
+    sha256: 54757eaef051ff39ee9d826bf011f642391b6e49acd0ca38265feb624a7b2df6
+    repo_commit: d3233170
   stack_topology:
     path: orchestration/stack_topology.yaml
-    sha256: 33f3f36a285659bdd63477dfbe1bd86f734a04137257674001a83e79f76a0bac
-    repo_commit: 8991000d
+    sha256: 15d7cfa5a2ca4abc373f44d41313b1abb9468b35f1d85c87ac244d9dad1b8de1
+    repo_commit: d3233170
   orchestrator_stack:
     path: scripts/server/orchestrator_stack.py
-    sha256: 595f664afb2265719de15fb1604ab21f2a73d66a0027c16d08974b7252857824
-    repo_commit: 8991000d
+    sha256: d8ca18053d3055b74c22e16912f0dc99de176f562d3520045c594f6db623bd79
+    repo_commit: d3233170
   stack_paths:
     path: scripts/server/stack_paths.py
     sha256: 4a7ca842a87b6ffec022f4f6433d755751cac32b9102747d88f3f4f2e4cb24de
-    repo_commit: 8991000d
+    repo_commit: d3233170
   stack_runtime:
     path: scripts/server/stack_runtime.py
     sha256: 984d27262e1f1d5a5332d0b4a3e6fb96fb8095fc890ddaa93da07bff52eb1c99
-    repo_commit: 8991000d
+    repo_commit: d3233170
 roles:
   architect_critic:
     role: architect_critic
@@ -123,7 +123,7 @@ roles:
         - default
         requirements:
           model_path: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
-          draft_model_path: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
+          draft_model_path: /mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf
         runtime:
           binary_family: llama.cpp
           binary_path: /mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/llama-server
@@ -161,10 +161,10 @@ roles:
             override_kv: []
             spec:
               enabled: true
-              type: draft-mtp
+              type: draft-dflash
               disabled_by: null
-              draft_model_path: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
-              draft_max: 4
+              draft_model_path: /mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf
+              draft_max: 8
               draft_min: null
               draft_p_min: null
               draft_p_split: null
@@ -172,6 +172,7 @@ roles:
               ngram_mod_n_min: null
               ngram_mod_n_max: null
               ngram_mod_n_match: null
+              n_gpu_layers_draft: 99
     policy:
       lock_class: exclusive
       contention_class: heavy
@@ -198,9 +199,9 @@ roles:
         a scalar.
       memory_cost: 1.0
     acceleration:
-      spec_type: draft-mtp
+      spec_type: draft-dflash
       draft_compat:
-      - qwen3.8-27b-q8_0
+      - qwen3.8-27b-dflash2-q8_0
       enable_thinking: true
       thinking_control:
         mode: toggle_on
@@ -208,8 +209,8 @@ roles:
       kv:
         k: null
         v: null
-      draft_max: 4
-      k: 4
+      draft_max: 8
+      k: 8
       p_split: 0
       lookup: false
     model:
@@ -396,6 +397,7 @@ roles:
               ngram_mod_n_min: null
               ngram_mod_n_max: null
               ngram_mod_n_match: null
+              n_gpu_layers_draft: null
     policy:
       lock_class: exclusive
       contention_class: heavy
@@ -531,7 +533,7 @@ roles:
         - default
         requirements:
           model_path: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
-          draft_model_path: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
+          draft_model_path: /mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf
         runtime:
           binary_family: llama.cpp
           binary_path: /mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/llama-server
@@ -580,6 +582,7 @@ roles:
               ngram_mod_n_min: null
               ngram_mod_n_max: null
               ngram_mod_n_match: null
+              n_gpu_layers_draft: null
     policy:
       lock_class: exclusive
       contention_class: heavy
@@ -606,9 +609,9 @@ roles:
         a scalar.
       memory_cost: 1.0
     acceleration:
-      spec_type: draft-mtp
+      spec_type: draft-dflash
       draft_compat:
-      - qwen3.8-27b-q8_0
+      - qwen3.8-27b-dflash2-q8_0
       enable_thinking: true
       thinking_control:
         mode: toggle_on
@@ -616,8 +619,8 @@ roles:
       kv:
         k: null
         v: null
-      draft_max: 4
-      k: 4
+      draft_max: 8
+      k: 8
       p_split: 0
       lookup: false
     model:
@@ -823,6 +826,7 @@ roles:
               ngram_mod_n_min: null
               ngram_mod_n_max: null
               ngram_mod_n_match: null
+              n_gpu_layers_draft: null
     policy:
       lock_class: exclusive
       contention_class: heavy
@@ -973,7 +977,7 @@ roles:
         - default
         requirements:
           model_path: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
-          draft_model_path: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
+          draft_model_path: /mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf
         runtime:
           binary_family: llama.cpp
           binary_path: /mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/llama-server
@@ -1022,6 +1026,7 @@ roles:
               ngram_mod_n_min: null
               ngram_mod_n_max: null
               ngram_mod_n_match: null
+              n_gpu_layers_draft: null
     policy:
       lock_class: exclusive
       contention_class: heavy
@@ -1048,9 +1053,9 @@ roles:
         a scalar.
       memory_cost: 1.0
     acceleration:
-      spec_type: draft-mtp
+      spec_type: draft-dflash
       draft_compat:
-      - qwen3.8-27b-q8_0
+      - qwen3.8-27b-dflash2-q8_0
       enable_thinking: true
       thinking_control:
         mode: toggle_on
@@ -1058,8 +1063,8 @@ roles:
       kv:
         k: null
         v: null
-      draft_max: 4
-      k: 4
+      draft_max: 8
+      k: 8
       p_split: 0
       lookup: false
     model:
@@ -1361,9 +1366,9 @@ roles:
         a scalar.
       memory_cost: 1.0
     acceleration:
-      spec_type: draft-mtp
+      spec_type: draft-dflash
       draft_compat:
-      - qwen3.8-27b-q8_0
+      - qwen3.8-27b-dflash2-q8_0
       enable_thinking: true
       thinking_control:
         mode: toggle_on
@@ -1371,8 +1376,8 @@ roles:
       kv:
         k: null
         v: null
-      draft_max: 4
-      k: 4
+      draft_max: 8
+      k: 8
       p_split: 0
       lookup: false
     model:
@@ -1691,6 +1696,7 @@ roles:
               ngram_mod_n_min: null
               ngram_mod_n_max: null
               ngram_mod_n_match: null
+              n_gpu_layers_draft: null
     policy:
       lock_class: exclusive
       contention_class: heavy
@@ -1821,7 +1827,7 @@ roles:
       ports:
       - 8086
       slots: 1
-      tier: hot
+      tier: warm
       effective_context_tokens: 65536
       binary: llama.cpp
       binary_dir: null
@@ -1833,7 +1839,7 @@ roles:
           primary_role: worker_vision
           mode: vision
           alias: true
-          cpu_shape_class: gpu_host_lane
+          cpu_shape_class: half
           vision_type: worker
           slots: 1
         primary_roles:
@@ -1845,11 +1851,9 @@ roles:
           model_path: /mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf
         runtime:
           binary_family: llama.cpp
-          binary_path: /mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/llama-server
-          binary_dir: /mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin
-          ld_library_path:
-          - /mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin
-          - /opt/rocm/lib
+          binary_path: /mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82/bin/llama-server
+          binary_dir: /mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82/bin
+          ld_library_path: []
           env_policy: canonical
           kmp_blocktime: null
           cache:
@@ -1870,7 +1874,7 @@ roles:
           flags:
             flash_attn: true
             jinja: false
-            device: ROCm0
+            device: none
             device_draft: null
             n_gpu_layers: null
             image_min_tokens: null
@@ -1891,6 +1895,7 @@ roles:
               ngram_mod_n_min: null
               ngram_mod_n_max: null
               ngram_mod_n_match: null
+              n_gpu_layers_draft: null
     policy:
       lock_class: shared
       contention_class: light
@@ -1931,7 +1936,7 @@ roles:
         basis: role-relevant axis vision_language via mmmu
       quality_advisories:
       - No whole-suite quality prior; domain evidence only (mmmu, tool_compliance_local, vision_language). quality_overall is null BY DESIGN — read the per-axis evidence instead of expecting a scalar.
-      memory_cost: 1.0
+      memory_cost: 2.0
     acceleration:
       spec_type: baseline
       draft_compat: []
@@ -2094,6 +2099,7 @@ roles:
               ngram_mod_n_min: null
               ngram_mod_n_max: null
               ngram_mod_n_match: null
+              n_gpu_layers_draft: null
     policy:
       lock_class: exclusive
       contention_class: heavy
@@ -2296,6 +2302,7 @@ roles:
               ngram_mod_n_min: null
               ngram_mod_n_max: null
               ngram_mod_n_match: null
+              n_gpu_layers_draft: null
     policy:
       lock_class: exclusive
       contention_class: heavy
@@ -2498,6 +2505,7 @@ roles:
               ngram_mod_n_min: null
               ngram_mod_n_max: null
               ngram_mod_n_match: null
+              n_gpu_layers_draft: null
     policy:
       lock_class: exclusive
       contention_class: heavy
@@ -2700,6 +2708,7 @@ roles:
               ngram_mod_n_min: null
               ngram_mod_n_max: null
               ngram_mod_n_match: null
+              n_gpu_layers_draft: null
     policy:
       lock_class: exclusive
       contention_class: heavy
@@ -2902,6 +2911,7 @@ roles:
               ngram_mod_n_min: null
               ngram_mod_n_max: null
               ngram_mod_n_match: null
+              n_gpu_layers_draft: null
     policy:
       lock_class: exclusive
       contention_class: heavy
@@ -3032,7 +3042,7 @@ roles:
       ports:
       - 8086
       slots: 1
-      tier: hot
+      tier: warm
       effective_context_tokens: 65536
       binary: llama.cpp
       binary_dir: null
@@ -3044,7 +3054,7 @@ roles:
           primary_role: worker_vision
           mode: vision
           alias: false
-          cpu_shape_class: gpu_host_lane
+          cpu_shape_class: half
           vision_type: worker
           slots: 1
         primary_roles:
@@ -3056,11 +3066,9 @@ roles:
           model_path: /mnt/raid0/llm/models/lmstudio-community/Qwen3-VL-30B-A3B-Instruct-GGUF/Qwen3-VL-30B-A3B-Instruct-Q4_K_M.gguf
         runtime:
           binary_family: llama.cpp
-          binary_path: /mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin/llama-server
-          binary_dir: /mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin
-          ld_library_path:
-          - /mnt/raid0/llm/kernels/builds/gpu-20260921-ffc1bac82/bin
-          - /opt/rocm/lib
+          binary_path: /mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82/bin/llama-server
+          binary_dir: /mnt/raid0/llm/kernels/builds/cpu-20260921-ffc1bac82/bin
+          ld_library_path: []
           env_policy: canonical
           kmp_blocktime: null
           cache:
@@ -3081,9 +3089,9 @@ roles:
           flags:
             flash_attn: true
             jinja: false
-            device: ROCm0
+            device: none
             device_draft: null
-            n_gpu_layers: 999
+            n_gpu_layers: null
             image_min_tokens: 1024
             cache_ram: 0
             chat_template_file: null
@@ -3102,6 +3110,7 @@ roles:
               ngram_mod_n_min: null
               ngram_mod_n_max: null
               ngram_mod_n_match: null
+              n_gpu_layers_draft: null
     policy:
       lock_class: shared
       contention_class: light
@@ -3142,7 +3151,7 @@ roles:
         basis: role-relevant axis vision_language via mmmu
       quality_advisories:
       - No whole-suite quality prior; domain evidence only (mmmu, tool_compliance_local, vision_language). quality_overall is null BY DESIGN — read the per-axis evidence instead of expecting a scalar.
-      memory_cost: 1.0
+      memory_cost: 2.0
     acceleration:
       spec_type: baseline
       draft_compat: []

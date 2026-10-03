@@ -2,7 +2,8 @@
 # AUTO-GENERATED — MASTER-COMPILED RUNTIME VIEW.
 #
 # This file is compiled at every `orchestrator_stack.py start` from the master
-# registry at /mnt/raid0/llm/tmp/ri23a-20260929/research/orchestration/model_registry.yaml
+# registry at /mnt/raid0/llm/epyc-inference-research/orchestration/model_registry.yaml
+# with drafter selection from /mnt/raid0/llm/epyc-orchestrator/orchestration/stack_topology.yaml
 # by src/registry/registry_compiler.py.
 #
 # Runtime stack truth lives in the MASTER registry. The next start detects master
@@ -10,8 +11,8 @@
 # temporarily skip the compile (e.g. during a master schema change), set
 # ORCHESTRATOR_REGISTRY_NO_COMPILE=1.
 #
-# Compiled at: 2026-09-29T10:29:10+00:00
-# Cache key:   0f7451edfead1a61...
+# Compiled at: 2026-10-03T04:41:50+00:00
+# Cache key:   2032d17cd94d06e8...
 # Active roles: architect_critic, architect_general, coder_escalation, embedder, embedder_1, embedder_2, embedder_3, embedder_4, embedder_5, embedder_bge_m3, embedder_granite_97m_r2, embedder_multilingual_e5_base, frontdoor, ingest_long_context, toolrunner, vision_escalation, worker, worker_explore, worker_fast, worker_general, worker_math, worker_summarize, worker_vision
 # =============================================================================
 
@@ -372,9 +373,9 @@ process_layout:
   - worker_math
   - toolrunner
   - ingest_long_context
+  warm_mmap:
   - worker_vision
   - vision_escalation
-  warm_mmap: []
 escalation_chains:
   coder:
     description: 'Code generation escalation path. 2026-07-31: this became a REAL escalation — frontdoor (:8070, CPU, Qwen3.6-35B-A3B MoE Q8) now hands off to coder_escalation (:8083, MI210 ROCm0, Qwen3.6-27B
@@ -1555,11 +1556,14 @@ speculative_decoding_policy:
   canonical: true
   ratified_by: operator
   ratified_on: 2026-07-31
+  amended_on: 2026-10-03
+  amended_by_receipt: RATIFY-STACKCHG-DFLASH2-20261003
   supersedes: 'All prior per-role prose describing `draft-mtp` alone as the production recipe, and the `ngram_candidate_spec_type` field (RETIRED — see below).
 
     '
-  production_recipe: draft-mtp
-  statement: 'Production runs `--spec-type draft-mtp` — MTP self-draft ALONE. The n-gram lane is NOT composed in. This applies to every role that has a working draft path.
+  default_spec_type: draft-mtp
+  statement: 'No n-gram composition: a role that speculates runs ONE drafter, never `ngram-mod,<drafter>`. WHICH drafter is a per-model list here (`roles.<model_role>.drafters`) and a per-server selection
+    in the orchestrator''s stack_topology.yaml (`drafter_selection`). Legacy rows without `drafters` still hand-carry `spec_type: draft-mtp` until migrated.
 
     '
   superseded_recipe: 'REVERSED 2026-07-31 (same day it was adopted). The composed recipe `ngram-mod,draft-mtp` was adopted on the expectation of a large upside on repetitive / token-reuse context, with
@@ -1598,6 +1602,8 @@ speculative_decoding_policy:
     '
   exceptions:
     ingest_long_context:
+      status: closed
+      closed_on: 2026-10-03
       model: Qwen3-Next-80B-A3B-Instruct
       spec_type: none
       category: OPTIMUM
@@ -1752,6 +1758,18 @@ server_mode:
       inherits_spec_from: architect_critic
       lookup: false
       corpus_retrieval: true
+      spec_type: draft-dflash
+      draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf
+      draft_max: 8
+      n_gpu_layers_draft: 99
+      k: 8
+      drafter_selection:
+        server: architect_critic
+        model_role: qwen38_27b_q8_local
+        drafter: dflash2
+        source: stack_topology.drafter_selection
+        recipe: artifacts/serving-recipes/qwen3.8-27b-q8-gpu-dflash2-np4.json
+        inherited_by: coder_escalation
     throughput: 47.79
     previous_model: Qwen3.6-35B-A3B-MTP-Q8_0.gguf
   worker:
@@ -1804,10 +1822,10 @@ server_mode:
       architecture: qwen3vlmoe
       ctx_max: 262144
     previous_model: Qwen2.5-VL-7B-Instruct-Q4_K_M.gguf
-    memory_gb: 0
+    memory_gb: 18.3
     vram_mb: 21049
-    tier: hot
-    device: ROCm0
+    tier: warm
+    device: none
     acceleration:
       type: baseline
     throughput: 112.2
@@ -1824,7 +1842,8 @@ server_mode:
         k: q8_0
         v: q8_0
       kv_kib_per_token_f16: 64.0
-      vram_non_kv_gib: 32.8
+      vram_non_kv_gib: 37.92
+      vram_non_kv_drafter: dflash2
     chat_template_kwargs:
       enable_thinking: true
       reasoning_effort: medium
@@ -1845,16 +1864,23 @@ server_mode:
     - ingest_long_context
     agent_file_compression_operating_point: none
     model: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
-    draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
     memory_gb: 27
     vram_gib: 36.7
     tier: hot
     acceleration:
       type: speculative_decoding
-      spec_type: draft-mtp
-      draft_max: 4
-      draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
       lookup: false
+      spec_type: draft-dflash
+      draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf
+      draft_max: 8
+      n_gpu_layers_draft: 99
+      k: 8
+      drafter_selection: &id001
+        server: architect_critic
+        model_role: qwen38_27b_q8_local
+        drafter: dflash2
+        source: stack_topology.drafter_selection
+        recipe: artifacts/serving-recipes/qwen3.8-27b-q8-gpu-dflash2-np4.json
     device: ROCm0
     ngl: all
     numa_instances: 1
@@ -1862,6 +1888,7 @@ server_mode:
     - 8083
     throughput: 47.79
     previous_model: Qwen3-235B-A22B-Q4_K_M.gguf
+    draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf
   architect_general:
     no_mmap: true
     url: http://localhost:8074
@@ -1945,9 +1972,19 @@ server_mode:
     acceleration:
       type: none
       inherits_spec_from: architect_critic
-      spec_type: draft-mtp
-      draft_max: 4
       lookup: false
+      spec_type: draft-dflash
+      draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf
+      draft_max: 8
+      n_gpu_layers_draft: 99
+      k: 8
+      drafter_selection:
+        server: architect_critic
+        model_role: qwen38_27b_q8_local
+        drafter: dflash2
+        source: stack_topology.drafter_selection
+        recipe: artifacts/serving-recipes/qwen3.8-27b-q8-gpu-dflash2-np4.json
+        inherited_by: ingest_long_context
     throughput: null
     throughput_previous_model: 14.4-20.8
     benchmark_score: null
@@ -2043,6 +2080,18 @@ roles:
       inherits_spec_from: architect_critic
       lookup: false
       corpus_retrieval: true
+      spec_type: draft-dflash
+      draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf
+      draft_max: 8
+      n_gpu_layers_draft: 99
+      k: 8
+      drafter_selection:
+        server: architect_critic
+        model_role: qwen38_27b_q8_local
+        drafter: dflash2
+        source: stack_topology.drafter_selection
+        recipe: artifacts/serving-recipes/qwen3.8-27b-q8-gpu-dflash2-np4.json
+        inherited_by: coder_escalation
     performance:
       inherits_from: architect_critic
       baseline_tps: 30.87
@@ -2111,8 +2160,18 @@ roles:
     acceleration:
       type: none
       inherits_spec_from: architect_critic
-      spec_type: draft-mtp
-      draft_max: 4
+      spec_type: draft-dflash
+      draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf
+      draft_max: 8
+      n_gpu_layers_draft: 99
+      k: 8
+      drafter_selection:
+        server: architect_critic
+        model_role: qwen38_27b_q8_local
+        drafter: dflash2
+        source: stack_topology.drafter_selection
+        recipe: artifacts/serving-recipes/qwen3.8-27b-q8-gpu-dflash2-np4.json
+        inherited_by: ingest_long_context
     performance:
       baseline_tps: null
       optimized_tps: null
@@ -2258,10 +2317,6 @@ roles:
     - coder
     acceleration:
       type: speculative_decoding
-      spec_type: draft-mtp
-      draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
-      draft_max: 4
-      k: 4
       p_split: 0
       lookup: false
       notes: '2026-07-31: architect MTP via the MTP-embedded Qwen3.6-27B variant (draft = same GGUF as model; launcher omits -md for same-realpath drafts). Served on MI210 (ROCm0) with -ngl all -fa on.
@@ -2269,6 +2324,12 @@ roles:
 
         '
       benchmarked: 2026-07-31
+      spec_type: draft-dflash
+      draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf
+      draft_max: 8
+      n_gpu_layers_draft: 99
+      k: 8
+      drafter_selection: *id001
     performance:
       superseded_model_history:
         model: Qwen3-235B-A22B-Q4_K_M
@@ -2464,8 +2525,7 @@ roles:
     - vision
     - agentic_vision
     serving:
-      device: ROCm0
-      n_gpu_layers: 999
+      device: none
       n_ctx: 16384
       image_min_tokens: 1024
       cache_ram: 0
@@ -2501,7 +2561,7 @@ roles:
 
         '
     memory:
-      residency: hot
+      residency: warm
       pinned: false
     server:
       endpoint: http://localhost:8086
@@ -2546,7 +2606,7 @@ roles:
     candidate_roles:
     - vision
     serving:
-      device: ROCm0
+      device: none
       n_ctx: 16384
     acceleration:
       type: baseline
@@ -2565,9 +2625,9 @@ roles:
       benchmark_date: 2026-07-31
       evidence: data/vision_mmmu_cutover_20260731/results.json
     memory:
-      residency: hot
+      residency: warm
       pinned: false
-      note: No additional residency — shares worker_vision's single 21049 MB VRAM allocation. This role adds ZERO memory cost.
+      note: No additional residency — shares worker_vision's single allocation (CPU since 2026-10-03; was 21049 MB VRAM). This role adds ZERO memory cost.
     server:
       endpoint: http://localhost:8086
       api_format: openai_multimodal
@@ -2871,7 +2931,7 @@ roles:
         decode_t_s: 55.46
       challenger_under_evaluation:
         name: dflash2-block8
-        status: np1_only_NOT_SELECTABLE
+        status: SUPERSEDED_BY_drafters.dflash2
         measured_2026_08_20:
           np: 1
           dflash2_block8_decode_t_s: 70.0
@@ -2888,6 +2948,27 @@ roles:
         - np2/4/8 scaling (this role serves np up to 8; the np1 win does not transfer by assumption, and the upstream PR's own reviewers report scaling problems at concurrency >1)
         - exact greedy parity vs --spec-type none at temp 0 (losslessness is CLAIMED, not yet verified here; an unverified-parity config must not become a serving selection however fast it is)
         - block-verify dispatch proof (our gfx90a MMQ patch a6b4b5263 is MTP-verify-shaped, ne11<=1; a block verify is ne11~8 and may miss that path)
+    drafters:
+      mtp:
+        spec_type: draft-mtp
+        draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
+        draft_max: 4
+        evidence:
+        - artifacts/architect-bench-gpu-20260814/mtp_nmax_sweep_20260819/
+        - artifacts/np_context_kvu_study_20260924/q38_27b_q8_depth/
+      dflash2:
+        spec_type: draft-dflash
+        draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf
+        draft_max: 8
+        ngld: 99
+        recipe: artifacts/serving-recipes/qwen3.8-27b-q8-gpu-dflash2-np4.json
+        min_kernel: production-consolidated-v10
+        operator_rulings:
+        - '2026-08-27 epyc-root handoffs/active/autokernel-champion-aggregate.md ruling 3: DFlash2 for Qwen3.8-27B, rest of stack on MTP; lean compiler selects per role'
+        - '2026-10-01 operator: ALWAYS use dflash2 (for the 27B)'
+        evidence:
+        - artifacts/architect-bench-gpu-20260814/dflash2_np1_20260820/campaign-summary.json
+        qualification_note: v10 was qualified on candidate DFlash2 vs v9 MTP self-draft (epyc-root artifacts/operator/v10-qualification-20260921-ffc1bac82.json)
     memory:
       residency: cold
       pinned: false

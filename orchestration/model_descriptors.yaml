@@ -1,16 +1,16 @@
 descriptor_version: 3
-compiled_at: '2026-09-29T15:01:53Z'
+compiled_at: '2026-10-03T04:41:51Z'
 status: compiled
 coverage_scope: active_roles_from_stack_manifest
 source_registries:
   lean:
     path: orchestration/model_registry.yaml
-    repo_commit: 8991000d
-    sha256: 7ff34c2d7555a4ce191986526919351fa3cde7ba5e75f9a4519d2bbdeea0728f
+    repo_commit: d3233170
+    sha256: 71e7917ec7cb282ea0746698524b638cd994f367908f8cd87df8659066c27e9d
   research:
     path: /mnt/raid0/llm/epyc-inference-research/orchestration/model_registry.yaml
-    repo_commit: 7b9bc565
-    sha256: aa1229cd39fa6eca8efe15a3e964a8162c314d45cfcabad4fecaff03adcdfae1
+    repo_commit: be2cc414
+    sha256: fb350778f65a750aab9011ad8ba3412b10f5610bf999443154fc1b88ab81abe5
 model_id_policy:
   canonical_shape: family-params-active-quant
   invariant: model records are keyed by physical model identity, never by role name
@@ -469,9 +469,9 @@ models:
       protocol: server_mode throughput
       value_tps: 47.79
   acceleration:
-    spec_type: draft-mtp
+    spec_type: draft-dflash
     draft_compat:
-    - qwen3.8-27b-q8_0
+    - qwen3.8-27b-dflash2-q8_0
     enable_thinking: true
     thinking_control:
       mode: toggle_on
@@ -479,8 +479,8 @@ models:
     kv:
       k: null
       v: null
-    draft_max: 4
-    k: 4
+    draft_max: 8
+    k: 8
     p_split: 0
     lookup: false
   serving:
