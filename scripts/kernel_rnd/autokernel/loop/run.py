@@ -32,6 +32,18 @@ from ..controller import (anchor_integrity, build_recipe, experiments, inbox, ru
 from .. import codegen_summary
 HEARTBEAT_S = 30  # status heartbeat period; envelope = 6x this
 HEARTBEAT_STOP_TIMEOUT_S = 10
+#: `--cpu-measurement-gpu-quiet`: whether a CPU measurement window also takes the
+#: MI210 device flock (`claim.DEVICE_LOCK`). "off" (default): a CPU-backend run never
+#: touches a GPU claim -- nothing it executes needs the device, the scheduler already
+#: accounts it `gpu_devices=()`, and the flock only ever excluded claim-HONOURING GPU
+#: work (AutoKernel GPU lanes, operator GPU windows) while production :8083 traffic,
+#: whose host threads sit on the same q3 SMT siblings, ignores it. "q3": the
+#: 2026-09-17 measurement-hygiene window (0702e327), held only around a measurement
+#: whose CPU list touches q3 and released between measurements.
+CPU_MEASUREMENT_GPU_QUIET_OFF = "off"
+CPU_MEASUREMENT_GPU_QUIET_Q3 = "q3"
+CPU_MEASUREMENT_GPU_QUIET_POLICIES = (CPU_MEASUREMENT_GPU_QUIET_OFF,
+                                      CPU_MEASUREMENT_GPU_QUIET_Q3)
 
 from . import (accumulate, actors, anchor, archive, bench, champion, claim, gates,
                dispatch_guard, heartbeat, hotspots, loop, serving, serving_beliefs,
@@ -122,9 +134,27 @@ def anchor_build_jobs(recipe, build_jobs: int) -> int:
 
 
 @contextmanager
-def _q3_cpu_gpu_quiet_window(launch, *, on_wait, should_stop):
-    """Exclude a GPU item only while a q3 CPU measurement is active."""
-    if launch is None or launch.backend != "cpu":
+def _q3_cpu_gpu_quiet_window(launch, *, on_wait, should_stop,
+                             policy=CPU_MEASUREMENT_GPU_QUIET_OFF):
+    """Exclude a GPU item only while a q3 CPU measurement is active -- when asked.
+
+    `policy` is `--cpu-measurement-gpu-quiet`. Under the default "off" a CPU run
+    takes no GPU claim at all: the window is a no-op and the MI210 flock is never
+    opened. Under "q3" (explicit opt-in) the flock is held for the body of one
+    measurement whose CPU list touches q3, and released when it ends.
+
+    Why opt-in (2026-10-03): the window was intentional hygiene -- a pinned GPU
+    bench chain on the q3 SMT siblings 184-191 degraded a CPU A/A floor 0.80% ->
+    7.22% (INF-70, 2026-09-08) -- but a CPU campaign that measures most of its wall
+    then holds `mi210_0` most of its wall, which blocked the INF-80 X0 GPU window,
+    and the scheduler accounted none of it (`gpu_devices=()`). The operator's
+    standing policy is to run GPU work concurrently with the loop and absorb the
+    noise in the alternating matched instrument (memory 2026-09-25).
+    """
+    if policy not in CPU_MEASUREMENT_GPU_QUIET_POLICIES:
+        raise ValueError(f"unknown CPU-measurement GPU quiet policy {policy!r}")
+    if (policy == CPU_MEASUREMENT_GPU_QUIET_OFF or launch is None
+            or launch.backend != "cpu"):
         yield
         return
     from ..execution.cpu_region_claim import cpu_list_to_regions
@@ -1914,6 +1944,15 @@ def main(argv: list[str] | None = None) -> int:
                              "on a peer, never pre-empting it) before every build, measurement "
                              "and at teardown; see cpu_window.py. Off = the claim is held for "
                              "the whole batch, byte for byte (default: %(default)s)")
+    parser.add_argument("--cpu-measurement-gpu-quiet",
+                        choices=CPU_MEASUREMENT_GPU_QUIET_POLICIES,
+                        default=CPU_MEASUREMENT_GPU_QUIET_OFF,
+                        help="whether a CPU measurement window also takes the MI210 device "
+                             "claim (mi210_0). off = a CPU-backend run never acquires a GPU "
+                             "claim; q3 = hold it around each measurement whose CPU list "
+                             "touches q3 (the GPU host threads' SMT siblings), released "
+                             "between measurements -- excludes claim-honouring GPU work "
+                             "only, never production :8083 traffic (default: %(default)s)")
     parser.add_argument("--cpu-window-wait-bound-s", type=float,
                         default=cpu_window.DEFAULT_WAIT_BOUND_S,
                         help="how long a re-acquire waits on a peer before it is logged as "
@@ -3461,7 +3500,7 @@ def main(argv: list[str] | None = None) -> int:
 
     def cpu_measurement_window():
         quiet = _q3_cpu_gpu_quiet_window(
-            cpu_launch, should_stop=should_stop,
+            cpu_launch, should_stop=should_stop, policy=args.cpu_measurement_gpu_quiet,
             on_wait=lambda: publish("running", latest,
                 step="q3 CPU measurement waiting for MI210 GPU item to release"))
         if cpu_window_ref[0] is None:
@@ -4999,7 +5038,13 @@ def main(argv: list[str] | None = None) -> int:
                 # Same original invocation bound used by serial scheduling. This
                 # stops NEW runtime launches, never claims to kill an in-flight arm.
                 runtime_deadline = time.monotonic() + resolved_campaign.resources.build_timeout_s + 4 * resolved_campaign.resources.stage_timeout_s
-            print(f"claim     held on {receipt['device_id']}\n")
+            print(f"claim     held on {receipt['device_id']}")
+            if cpu_launch:
+                print(f"gpu quiet {args.cpu_measurement_gpu_quiet} "
+                      + ("(CPU measurements take no GPU claim)"
+                         if args.cpu_measurement_gpu_quiet == CPU_MEASUREMENT_GPU_QUIET_OFF
+                         else f"({claim.DEVICE_ID} held during q3 CPU measurements only)"))
+            print()
             # R23-44: snapshot the starting champion into the protected champion-of-record slot
             # BEFORE the accumulator can advance and prune. The serving gate reads cor_build as
             # its A-arm; without this snapshot the first accumulator prune could delete it.
