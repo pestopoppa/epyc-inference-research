@@ -1151,6 +1151,17 @@ async def openai_chat_completions(
         else:
             role = normalize_ingress_role(request.model)
 
+    # Parked role (GPU lent to AutoKernel, src/runtime/gpu_window.py): an explicit
+    # 503 role_parked (app-level handler) before any work, and a preempt request
+    # so this real request starts the drain. Not parked = one cached stat.
+    from src.runtime import gpu_window
+
+    gpu_window.refuse_if_parked(
+        _role_name(role),
+        request_id=http_request.headers.get("x-request-id"),
+        caller={"source": "v1_chat_completions", "role": _role_name(role)},
+    )
+
     # Escalation cap and REPL disable flags — pass through to metadata
     max_escalation = request.x_max_escalation
     disable_repl = request.x_disable_repl

@@ -423,6 +423,24 @@ class LlamaServerBackend(ModelBackend):
             self._healthy = False
             return False
 
+    def _refuse_if_parked(self, role_config: Any) -> None:
+        """Backstop for callers that bypass the primitives layer: a server whose
+        port is parked (GPU lent to AutoKernel, ``src/runtime/gpu_window.py``)
+        raises ``RoleParkedError`` before any HTTP call. The ``recorded_call``
+        wrapper records it as ``outcome="refused"`` with the ``refusal`` block."""
+        from src.runtime import gpu_window
+
+        port = None
+        try:
+            from urllib.parse import urlparse
+
+            port = urlparse(self.config.base_url).port
+        except (TypeError, ValueError, AttributeError):
+            port = None
+        gpu_window.refuse_if_parked(
+            getattr(role_config, "name", None), port, base_url=self.config.base_url, record=False,
+        )
+
     @serving_calls.recorded_call("infer")
     def infer(
         self,
@@ -438,6 +456,7 @@ class LlamaServerBackend(ModelBackend):
         Returns:
             InferenceResult with output and metrics.
         """
+        self._refuse_if_parked(role_config)
         start_time = time.time()
         self.cache_stats.total_requests += 1
 
@@ -1063,6 +1082,8 @@ class LlamaServerBackend(ModelBackend):
             InferenceResult with output and metrics (same shape as batch).
         """
         import json as _json
+
+        self._refuse_if_parked(role_config)
 
         # HS-4 P0.1: tool calls only arrive whole on the batch response, so a
         # structured chat payload is never streamed (the primitives layer

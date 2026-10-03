@@ -244,6 +244,15 @@ def resolve_role_url(role: str) -> tuple[str, str]:
     return role_name, url.rstrip("/")
 
 
+def _extract_port_of(url: str) -> int | None:
+    from urllib.parse import urlparse
+
+    try:
+        return urlparse(url).port
+    except ValueError:
+        return None
+
+
 # ── per-call context ─────────────────────────────────────────────────────────
 
 
@@ -372,24 +381,46 @@ def absorb_payload(call: _Call, obj: Any) -> None:
 class _Refused(Exception):
     """The gate refused the call before dispatch: an HTTP response to return."""
 
-    def __init__(self, status: int, error: str, detail: str, retry_after: int | None = None):
+    def __init__(
+        self,
+        status: int,
+        error: str,
+        detail: str,
+        retry_after: int | None = None,
+        refusal: dict[str, Any] | None = None,
+    ):
         super().__init__(detail)
         self.status = status
         self.error = error
         self.detail = detail
         self.retry_after = retry_after
+        # UFH14-B6a: the structured reason. ``gate`` is the refusing gate's name
+        # (== ``error``), so readers of the serving record never parse ``detail``.
+        self.refusal: dict[str, Any] = {"gate": error, "http_status": status}
+        if retry_after:
+            self.refusal["retry_after_s"] = retry_after
+        self.refusal.update(refusal or {})
 
     def response(self) -> JSONResponse:
         return JSONResponse(
             status_code=self.status,
             content={
                 "error": self.error,
+                "type": self.error,
                 "detail": self.detail,
                 "error_code": self.status,
                 "error_detail": self.detail,
+                "retry_after_s": self.retry_after,
+                "refusal": dict(self.refusal),
             },
             headers={"Retry-After": str(self.retry_after)} if self.retry_after else None,
         )
+
+    @classmethod
+    def from_parked(cls, exc: Any) -> "_Refused":
+        """A ``RoleParkedError`` as a passthrough refusal (same 503 body)."""
+        return cls(503, "role_parked", str(exc), retry_after=exc.retry_after_s,
+                   refusal=exc.refusal)
 
 
 def _context_limit(call: _Call):
@@ -794,8 +825,13 @@ def write_serving_record(call: _Call, error: BaseException | None) -> None:
         }
         if isinstance(error, _Refused):
             record["error"] = {"type": error.error, "message": error.detail[:300]}
+            record["refusal"] = dict(error.refusal)
         elif isinstance(error, ContextOverflowError):
             record.setdefault("error", {})["kind"] = error.kind
+            if not dispatched:
+                record["refusal"] = {
+                    "gate": "context_overflow", "kind": error.kind, "source": error.source,
+                }
         serving_calls.write_record(record)
     except Exception:
         logger.debug("passthrough: serving record failed", exc_info=True)
@@ -842,6 +878,21 @@ async def _passthrough(endpoint: str, role: str, http_request: Request, state: A
             else None
         ),
     )
+
+    # Parked role (GPU lent to AutoKernel, src/runtime/gpu_window.py): an explicit
+    # 503 role_parked before any gate, plus a preempt request so this real
+    # request starts the drain. Recorded below with refusal.gate = role_parked.
+    from src.exceptions import RoleParkedError
+    from src.runtime import gpu_window
+
+    try:
+        gpu_window.refuse_if_parked(
+            role_name, _extract_port_of(base_url), request_id=call.request_id, record=False,
+        )
+    except RoleParkedError as parked:
+        refused = _Refused.from_parked(parked)
+        write_serving_record(call, refused)
+        return refused.response()
 
     try:
         check_request_cap(call, _context_limit(call))
@@ -928,7 +979,16 @@ async def passthrough_models(role: str, http_request: Request):
     if not _enabled():
         raise HTTPException(status_code=404, detail="passthrough is disabled")
     _require_local(http_request)
-    _role_name, base_url = resolve_role_url(role)
+    role_name, base_url = resolve_role_url(role)
+    # A parked server is stopped: say so (no preempt — a listing is not a request).
+    from src.exceptions import RoleParkedError
+    from src.runtime import gpu_window
+
+    try:
+        gpu_window.refuse_if_parked(role_name, _extract_port_of(base_url),
+                                    preempt=False, record=False)
+    except RoleParkedError as parked:
+        return _Refused.from_parked(parked).response()
     try:
         async with httpx.AsyncClient(timeout=CONNECT_TIMEOUT_S) as client:
             resp = await client.get(base_url + "/v1/models")

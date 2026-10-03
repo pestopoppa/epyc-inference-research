@@ -441,9 +441,13 @@ def classify_outcome(result: Any, exc: BaseException | None, early_stop: bool) -
 
     ``ok`` · ``early_stop`` (the caller's on_chunk stopped the stream: FINAL marker,
     repetition guard or client cancel) · ``timeout`` · ``cancelled`` ·
-    ``context_overflow`` · ``failed`` · ``exception``.
+    ``context_overflow`` · ``failed`` · ``exception`` · ``refused`` (a gate refused
+    the call before dispatch; the exception carries a structured ``refusal`` dict
+    whose ``gate`` names it, e.g. ``role_parked``).
     """
     if exc is not None:
+        if isinstance(getattr(exc, "refusal", None), dict):
+            return "refused"
         text = f"{type(exc).__name__} {exc}".lower()
         if "timeout" in text:
             return "timeout"
@@ -555,6 +559,12 @@ def build_record(
         }
     if exc is not None:
         record["error"] = {"type": type(exc).__name__, "message": str(exc)[:300]}
+        refusal = getattr(exc, "refusal", None)
+        if isinstance(refusal, dict):
+            # A refusal is structural: ``refusal.gate`` names the gate, so readers
+            # never classify the message text (UFH14-B6a). Never dispatched.
+            record["refusal"] = dict(refusal)
+            record["dispatched"] = False
     if request is not None:
         record["request"] = {
             "n_tokens": getattr(request, "n_tokens", None),
@@ -573,6 +583,47 @@ def build_record(
     if notes:
         record["notes"] = notes
     return record
+
+
+def record_refusal(
+    *,
+    role: str | None,
+    base_url: str | None,
+    refusal: dict[str, Any],
+    caller: dict[str, Any] | None = None,
+    method: str = "refused",
+    exc: BaseException | None = None,
+) -> None:
+    """Record a call a gate refused before any backend saw it. Never raises.
+
+    ``outcome = "refused"``, ``dispatched = False`` and the structured
+    ``refusal`` block (``refusal.gate`` is the gate's name). Clears any staged
+    caller so a later call does not inherit it.
+    """
+    try:
+        staged = _STAGED.get()
+        _STAGED.set(None)
+        now = time.time()
+        record = build_record(
+            method=method,
+            role_config=None,
+            request=None,
+            base_url=base_url,
+            ts_start=(staged or {}).get("_ts0", now),
+            ts_end=now,
+            exc=exc,
+            dispatched=False,
+        )
+        record["role"] = role
+        record["request_role"] = role
+        block = _caller_block(staged)
+        block.update({k: v for k, v in (caller or {}).items() if v is not None})
+        record["caller"] = block
+        record["outcome"] = "refused"
+        record["refusal"] = dict(refusal)
+        write_record(record)
+    except Exception:
+        pass
 
 
 def abandon_staged(exc: BaseException | None = None) -> None:

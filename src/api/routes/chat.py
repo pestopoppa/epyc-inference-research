@@ -317,6 +317,11 @@ async def chat(
             headers = {}
             if response.error_code == 503:
                 headers["Retry-After"] = "30"
+                from src.runtime.gpu_window import parse_parked_sentinel
+
+                parked = parse_parked_sentinel(response.error_detail)
+                if parked is not None:
+                    headers["Retry-After"] = str(parked["retry_after_s"])
             return JSONResponse(
                 status_code=response.error_code,
                 content=response.model_dump(),

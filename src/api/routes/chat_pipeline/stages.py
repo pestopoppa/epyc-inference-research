@@ -360,6 +360,13 @@ def _annotate_error(response: ChatResponse) -> ChatResponse:
 
     answer = response.answer
 
+    # Parked role (GPU lent to AutoKernel): explicit 503, checked first so the
+    # generic text patterns below can never reclassify it.
+    if answer.startswith("[ERROR:") and "role_parked" in answer:
+        response.error_code = 503
+        response.error_detail = answer
+        return response
+
     # Timeout / backend failure patterns
     if answer.startswith("[ERROR:") and (
         "timed out" in answer.lower() or "timeout" in answer.lower()

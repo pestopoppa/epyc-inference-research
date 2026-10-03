@@ -454,6 +454,31 @@ class InferenceMixin:
         except Exception:
             pass
 
+    def _refuse_if_role_parked(self, role: str) -> None:
+        """Raise ``RoleParkedError`` (and request a preempt) for a parked role."""
+        from src.runtime import gpu_window
+
+        backend_url = (
+            _primary_url(self.server_urls.get(role, "")) if getattr(self, "server_urls", None) else ""
+        )
+        request_id = None
+        for getter_name in ("get_request_id", "get_request_task_id"):
+            getter = getattr(self, getter_name, None)
+            if callable(getter):
+                try:
+                    request_id = getter() or None
+                except Exception:
+                    request_id = None
+                if request_id:
+                    break
+        gpu_window.refuse_if_parked(
+            role,
+            _extract_port(backend_url) if backend_url else None,
+            request_id=request_id,
+            base_url=backend_url or None,
+            caller={"source": "primitives", "role": role, "request_id": request_id},
+        )
+
     def _set_last_inference_meta(self, meta: dict[str, Any]) -> None:
         """Record this call's metadata on BOTH channels (TD-21.21 coordinator fix).
 
@@ -509,6 +534,14 @@ class InferenceMixin:
         Raises:
             RuntimeError: If no backend configured for this role.
         """
+        # Parked role (GPU lent to AutoKernel, src/runtime/gpu_window.py): refuse
+        # FIRST — before the contention gate, role semaphore and region locks — so
+        # the caller gets an explicit role_parked error in microseconds, not a
+        # queue wait followed by connection-refused. llm_call turns the raise into
+        # the in-band ``[ERROR: role_parked: ...]`` sentinel (a /chat infra failure,
+        # 503 via _annotate_error). Not parked = one cached stat.
+        self._refuse_if_role_parked(role)
+
         # Cross-role contention gate (Phase B of cross-role-bw-aware-routing).
         # MUST run BEFORE _acquire_role — the per-role semaphore would hide
         # an admitted request from the active-decode snapshot during its wait.

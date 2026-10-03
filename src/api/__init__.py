@@ -406,6 +406,19 @@ def create_app() -> FastAPI:
             headers={"Retry-After": "5"},
         )
 
+    from src.exceptions import RoleParkedError
+
+    @app.exception_handler(RoleParkedError)
+    async def _role_parked_handler(request: Request, exc: RoleParkedError):
+        # The role's GPU server is lent to AutoKernel (src/runtime/gpu_window.py):
+        # an explicit, immediate 503 instead of connection-refused or a timeout.
+        logger.warning("Role parked for %s %s: %s", request.method, request.url.path, exc)
+        return JSONResponse(
+            status_code=503,
+            content=exc.to_dict(),
+            headers={"Retry-After": str(exc.retry_after_s)},
+        )
+
     from src.exceptions import ContextOverflowError
 
     @app.exception_handler(ContextOverflowError)
