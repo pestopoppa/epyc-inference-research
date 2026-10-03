@@ -677,6 +677,11 @@ async def _execute_repl_body(
         tool_hint=routing.tool_hint,
         difficulty_band=routing.difficulty_band,
     )
+    # UFH14-B1 F2: wall-time forced-answer point (None unless repl_answer_force
+    # is on and the request has a deadline).
+    from src.graph.helpers import answer_force_at as _answer_force_at
+
+    task_state.answer_force_at_s = _answer_force_at(primitives)
 
     task_deps = TaskDeps(
         primitives=primitives,

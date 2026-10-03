@@ -713,6 +713,59 @@ async def _call_llm_capturing_meta(
     return await asyncio.to_thread(_run)
 
 
+#: UFH14-B1 F2 (D4): share of the request's time budget after which a REPL turn
+#: demands FINAL now (F12: 0.65 of the planner budget). Env-overridable.
+ANSWER_FORCE_FRAC_ENV = "ORCHESTRATOR_REPL_ANSWER_FORCE_FRAC"
+DEFAULT_ANSWER_FORCE_FRAC = 0.65
+ANSWER_FORCE_MESSAGE = (
+    "\n\n** TIME BUDGET: most of this request's time budget is spent. "
+    "Do NOT explore further, do NOT delegate (no CALL), do NOT start over. "
+    "Your code this turn MUST be FINAL(your best current answer). Submit what you have."
+)
+
+
+def _answer_force_frac() -> float:
+    try:
+        frac = float(os.environ.get(ANSWER_FORCE_FRAC_ENV, DEFAULT_ANSWER_FORCE_FRAC))
+    except ValueError:
+        frac = DEFAULT_ANSWER_FORCE_FRAC
+    return frac if 0.0 < frac < 1.0 else DEFAULT_ANSWER_FORCE_FRAC
+
+
+def answer_force_at(primitives: Any, now: float | None = None) -> float | None:
+    """The perf_counter time after which REPL turns demand FINAL (F2), or None.
+
+    None unless the ``repl_answer_force`` feature is on AND the request has a
+    deadline (``primitives.get_request_deadline_s()``, an absolute perf_counter
+    time): ``now + frac x (deadline - now)``. Stamped once on TaskState when the
+    graph starts, so the fraction is of the budget left to the graph."""
+    import time
+
+    try:
+        from src.features import features as _get_features
+
+        if not _get_features().repl_answer_force:
+            return None
+        deadline = primitives.get_request_deadline_s() if primitives is not None else None
+    except Exception:
+        return None
+    if not isinstance(deadline, (int, float)) or isinstance(deadline, bool):
+        return None
+    start = time.perf_counter() if now is None else float(now)
+    if deadline <= start:
+        return None
+    return start + _answer_force_frac() * (deadline - start)
+
+
+def _answer_force_due(state: Any) -> bool:
+    import time
+
+    at = getattr(state, "answer_force_at_s", None)
+    if not isinstance(at, (int, float)) or isinstance(at, bool):
+        return False
+    return time.perf_counter() >= at
+
+
 async def _execute_turn(ctx: Ctx, role: Role | str) -> tuple[str, str | None, bool, dict]:
     """Execute one LLM → REPL turn.
 
@@ -753,8 +806,19 @@ async def _execute_turn(ctx: Ctx, role: Role | str) -> tuple[str, str | None, bo
     if tool_tokens_freed > 0:
         log.info("Cleared stale tool outputs: ~%d tokens freed", tool_tokens_freed)
 
+    # UFH14-B1 F2: past the wall-time answer point, this turn demands FINAL now
+    # and runs no session compaction (no compaction on the answer turn).
+    force_answer = _answer_force_due(state)
+    if force_answer:
+        state.answer_forced_turns += 1
+        log.info(
+            "answer force: turn %d past %.0f%% of the request budget; demanding FINAL",
+            state.turns, _answer_force_frac() * 100,
+        )
+
     # Session compaction before execution
-    await _maybe_compact_context(ctx)
+    if not force_answer:
+        await _maybe_compact_context(ctx)
 
     if deps.primitives is None or deps.repl is None:
         _record_session_turn(state, role=str(role), error="No LLM primitives or REPL configured")
@@ -919,7 +983,11 @@ async def _execute_turn(ctx: Ctx, role: Role | str) -> tuple[str, str | None, bo
 
     # Graduated FINAL() nudge: midpoint soft reminder, then hard deadline.
     remaining = state.max_turns - state.turns
-    if remaining <= 3:
+    if force_answer:
+        # UFH14-B1 F2: the wall-time forced-answer turn (supersedes the
+        # turn-count nudges below for this turn).
+        prompt += ANSWER_FORCE_MESSAGE
+    elif remaining <= 3:
         prompt += (
             f"\n\n** DEADLINE: {remaining} turn(s) remaining. "
             "You MUST call FINAL(your_computed_value) NOW with your best answer. "

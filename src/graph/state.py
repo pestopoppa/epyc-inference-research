@@ -113,6 +113,10 @@ class TaskState:
     context_file_paths: list[str] = field(default_factory=list)
     last_compaction_turn: int = 0
 
+    # UFH14-B1 F2: wall-time forced-answer turn (perf_counter time; None = off)
+    answer_force_at_s: float | None = None
+    answer_forced_turns: int = 0
+
     # Session log tracking (append-only processing journal)
     session_log_path: str = ""
     session_log_records: list[Any] = field(default_factory=list)

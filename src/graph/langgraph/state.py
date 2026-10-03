@@ -161,6 +161,9 @@ class OrchestratorState(TypedDict, total=False):
     compaction_count: int
     compaction_tokens_saved: int
     last_compaction_turn: int
+    # UFH14-B1 F2: wall-time forced-answer turn
+    answer_force_at_s: float | None
+    answer_forced_turns: int
     session_log_path: str
     session_summary_cache: str
     session_summary_turn: int
