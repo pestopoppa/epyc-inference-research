@@ -11,6 +11,8 @@ import time
 from collections.abc import Iterable
 from pathlib import Path
 
+from scripts.server import stack_log_banner as _log_banner
+
 
 def is_port_in_use(port: int, host: str = "localhost") -> bool:
     """Return True when a TCP connection to host:port succeeds."""
@@ -123,6 +125,11 @@ def kill_process_tree(pid: int, timeout: int = 5) -> bool:
     if not targets:
         return True
 
+    # Wall-clock stop banner in the server's own log (its lines carry only
+    # process-relative time). Resolved from /proc/<pid>/fd/1, so every kill path —
+    # stop, reload, failed-health cleanup — gets one. Best-effort.
+    stop_logs = _stop_logs(targets)
+    _log_banner.write_stop_banner(stop_logs)
     try:
         for target in reversed(targets):
             try:
@@ -134,6 +141,7 @@ def kill_process_tree(pid: int, timeout: int = 5) -> bool:
         for _ in range(timeout):
             time.sleep(1)
             if not any(pid_alive(target) for target in targets):
+                _log_banner.write_stopped_banner(stop_logs, result="exited_on_sigterm")
                 return True
         for target in reversed(targets):
             if not pid_alive(target):
@@ -145,10 +153,22 @@ def kill_process_tree(pid: int, timeout: int = 5) -> bool:
             except PermissionError:
                 print(f"  [!] Permission denied force-killing PID {target}")
         time.sleep(1)
-        return not any(pid_alive(target) for target in targets)
+        dead = not any(pid_alive(target) for target in targets)
+        _log_banner.write_stopped_banner(
+            stop_logs, result="killed_sigkill" if dead else "still_alive"
+        )
+        return dead
     except Exception as exc:
         print(f"  [!] Failed to kill PID {pid}: {exc}")
+        _log_banner.write_stopped_banner(stop_logs, result="error")
         return False
+
+
+def _stop_logs(targets: list[int]) -> dict[Path, list[int]]:
+    try:
+        return _log_banner.stop_logs_for(targets)
+    except Exception:
+        return {}
 
 
 def scan_known_ports(ports: Iterable[int]) -> dict[int, list[int]]:

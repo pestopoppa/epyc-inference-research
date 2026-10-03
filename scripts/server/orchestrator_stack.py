@@ -78,6 +78,7 @@ if __name__ == "__main__":
     _reexec_under_project_venv()
 
 from scripts.server import stack_processes as _stack_processes
+from scripts.server import stack_log_banner as _log_banner
 from scripts.server.stack_env import (
     _role_env_overrides,
     build_launch_env,
@@ -1838,6 +1839,9 @@ def start_server(
             # No binary override on this branch either; strip ambient GGML_* like every
             # other branch (2026-09-26).
             _strip_ambient_ggml(env, _role_env_overrides(source_role), label="eval_batch")
+            _launch = _log_banner.write_launch_banner(
+                log, port=port, roles=roles, argv=spawn_prefix + cmd, env=env, binary=cmd[0]
+            )
             proc = subprocess.Popen(
                 spawn_prefix + cmd,
                 stdout=log,
@@ -1845,6 +1849,7 @@ def start_server(
                 env=env,
                 **detached_stdio,
             )
+            _log_banner.write_launch_pid(log, _launch, proc.pid)
 
         print(f"    PID: {proc.pid}")
         print("    Waiting for health...")
@@ -1906,6 +1911,9 @@ def start_server(
                 ld_paths=ld_paths,
                 preserve=_role_env_overrides(source_role),
             )
+            _launch = _log_banner.write_launch_banner(
+                log, port=port, roles=roles, argv=spawn_prefix + cmd, env=env, binary=cmd[0]
+            )
             proc = subprocess.Popen(
                 spawn_prefix + cmd,
                 stdout=log,
@@ -1913,6 +1921,7 @@ def start_server(
                 env=env,
                 **detached_stdio,
             )
+            _log_banner.write_launch_pid(log, _launch, proc.pid)
 
         print(f"    PID: {proc.pid}")
         print("    Waiting for health...")
@@ -1975,6 +1984,9 @@ def start_server(
                 ld_paths=ld_paths,
                 preserve=_role_env_overrides(roles[0]),
             )
+            _launch = _log_banner.write_launch_banner(
+                log, port=port, roles=roles, argv=spawn_prefix + cmd, env=env, binary=cmd[0]
+            )
             proc = subprocess.Popen(
                 spawn_prefix + cmd,
                 stdout=log,
@@ -1982,6 +1994,7 @@ def start_server(
                 env=env,
                 **detached_stdio,
             )
+            _log_banner.write_launch_pid(log, _launch, proc.pid)
 
         print(f"    PID: {proc.pid}")
         print("    Waiting for health...")
@@ -2036,6 +2049,9 @@ def start_server(
                 env.update(env_override)
                 print(f"    [EXPERIMENT] env override: {env_override}")
             # NOTE: Do NOT set OMP_NUM_THREADS=1 - it disables parallel tensor repack (2.2x slower loading)
+            _launch = _log_banner.write_launch_banner(
+                log, port=port, roles=roles, argv=spawn_prefix + cmd, env=env, binary=cmd[0]
+            )
             proc = subprocess.Popen(
                 spawn_prefix + cmd,
                 stdout=log,
@@ -2043,6 +2059,7 @@ def start_server(
                 env=env,
                 **detached_stdio,
             )
+            _log_banner.write_launch_pid(log, _launch, proc.pid)
 
         print(f"    PID: {proc.pid}")
         print("    Waiting for health...")
@@ -2110,6 +2127,9 @@ def start_server(
                 _write_llama_marker(port, roles, source=_FLEET_SRC_STACK, tmp_dir=_PATHS["tmp_dir"])
             except Exception as exc:
                 print(f"    [WARN] Failed to write llama fleet marker for port {port}: {exc}")
+            _launch = _log_banner.write_launch_banner(
+                log, port=port, roles=roles, argv=spawn_prefix + cmd, env=env, binary=cmd[0]
+            )
             proc = subprocess.Popen(
                 spawn_prefix + cmd,
                 stdout=log,
@@ -2117,6 +2137,7 @@ def start_server(
                 env=env,
                 **detached_stdio,
             )
+            _log_banner.write_launch_pid(log, _launch, proc.pid)
 
         print(f"    PID: {proc.pid}")
         print("    Waiting for health...")
@@ -2213,6 +2234,9 @@ def start_server(
             _write_llama_marker(port, roles, source=_FLEET_SRC_STACK, tmp_dir=_PATHS["tmp_dir"])
         except Exception as exc:
             print(f"    [WARN] Failed to write llama fleet marker for port {port}: {exc}")
+        _launch = _log_banner.write_launch_banner(
+            log, port=port, roles=roles, argv=spawn_prefix + cmd, env=env, binary=cmd[0]
+        )
         proc = subprocess.Popen(
             spawn_prefix + cmd,
             stdout=log,
@@ -2220,6 +2244,7 @@ def start_server(
             env=env,
             **detached_stdio,
         )
+        _log_banner.write_launch_pid(log, _launch, proc.pid)
 
     print(f"    PID: {proc.pid}")
 
