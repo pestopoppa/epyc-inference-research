@@ -209,3 +209,47 @@ def test_a_real_start_is_still_refused_while_a_bench_is_running(stack_mod, monke
     )
 
     assert stack_mod.main() == 2, "a real start must still be refused while a bench runs"
+
+
+def test_dry_run_without_migrate_to_never_calls_cmd_start(stack_mod, monkeypatch):
+    """`start --dry-run` alone LAUNCHED the production stack (2026-10-03, post-reboot).
+
+    --dry-run is only read by the --migrate-to path; without it, dispatch fell through
+    to cmd_start, the same inert-flag shape as --validate-only above. It must refuse
+    (rc 2) and never reach cmd_start.
+    """
+    import scripts.server.stack_commands as sc
+
+    monkeypatch.setattr(
+        sc, "cmd_start",
+        lambda _a: (_ for _ in ()).throw(AssertionError("cmd_start reached under --dry-run")),
+        raising=True,
+    )
+    monkeypatch.setattr(
+        stack_mod, "guard_against_running_bench", lambda *_a, **_k: True, raising=True
+    )
+    monkeypatch.setattr(sys, "argv", ["orchestrator_stack.py", "start", "--dry-run"])
+
+    assert stack_mod.main() == 2
+
+
+def test_dry_run_with_migrate_to_still_dispatches(stack_mod, monkeypatch):
+    """Negative control: the migration plan path (--migrate-to NAME --dry-run) is untouched."""
+    import scripts.server.stack_commands as sc
+
+    reached = {"v": False}
+
+    def _mark(_args):
+        reached["v"] = True
+        return 0
+
+    monkeypatch.setattr(sc, "cmd_start", _mark, raising=True)
+    monkeypatch.setattr(
+        stack_mod, "guard_against_running_bench", lambda *_a, **_k: True, raising=True
+    )
+    monkeypatch.setattr(
+        sys, "argv", ["orchestrator_stack.py", "start", "--migrate-to", "default", "--dry-run"]
+    )
+
+    stack_mod.main()
+    assert reached["v"] is True, "the --migrate-to --dry-run plan path no longer reaches cmd_start"

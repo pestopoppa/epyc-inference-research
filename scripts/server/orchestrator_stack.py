@@ -3205,7 +3205,8 @@ def main() -> int:
     start_parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="With --migrate-to, plan the migration without stopping any servers.",
+        help="With --migrate-to, plan the migration without stopping any servers. "
+        "Refused without --migrate-to (it is not a general dry run; use --validate-only).",
     )
     start_parser.add_argument(
         "--compile-registry",
@@ -3315,6 +3316,22 @@ def main() -> int:
     # and `cmd_start` may start a server.
     if args.command == "start" and getattr(args, "validate_only", False):
         return _cmd_validate_only(args)
+
+    # Same defect, second flag (workspace-ec, 2026-10-03): `--dry-run` is only read by
+    # the --migrate-to path. Alone, argparse accepted it and cmd_start LAUNCHED THE
+    # PRODUCTION STACK on a cold host that had just rebooted. Refuse it rather than
+    # guess an intent; --validate-only is the no-launch check.
+    if (
+        args.command == "start"
+        and getattr(args, "dry_run", False)
+        and not getattr(args, "migrate_to", None)
+    ):
+        print(
+            "[REFUSED] start --dry-run only plans a --migrate-to migration; without "
+            "--migrate-to it would launch the stack. Use --validate-only to check "
+            "config without launching."
+        )
+        return 2
 
     if args.command in ("start", "stop", "reload"):
         if not guard_against_running_bench(
