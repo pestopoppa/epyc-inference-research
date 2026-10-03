@@ -102,6 +102,84 @@ class ContextOverflowError(InferenceError, RuntimeError):
         }
 
 
+class RoleParkedError(BackendUnavailableError):
+    """The role's server is parked: its GPU is lent to AutoKernel work.
+
+    Raised BEFORE any lock, admission or HTTP call (``src/runtime/gpu_window.py``),
+    so a parked role fails in microseconds with an explicit reason instead of a
+    connection refusal or a slow timeout. Deliberately NOT a ``RuntimeError``:
+    the primitives' same-tier model fallback must not silently answer with a
+    different model. Surfaces as HTTP 503 ``role_parked`` + ``Retry-After``
+    (``src/api/__init__.py``) or, swallowed by ``llm_call`` into the in-band
+    ``[ERROR: role_parked: ...]`` sentinel, as a /chat infra failure that
+    ``_annotate_error`` maps to the same 503.
+
+    The message format is parsed back by ``gpu_window.parse_parked_sentinel``;
+    change both together.
+    """
+
+    error_type = "role_parked"
+
+    def __init__(
+        self,
+        *,
+        role: str | None,
+        port: int | None,
+        holder: str,
+        retry_after_s: int,
+        expected_end: str | None = None,
+        request_id: str | None = None,
+        refusal: dict | None = None,
+        preempt: dict | None = None,
+    ) -> None:
+        self.role = role
+        self.port = port
+        self.holder = holder
+        self.retry_after_s = int(retry_after_s)
+        self.expected_end = expected_end
+        self.request_id = request_id
+        self.preempt = preempt
+        self.refusal = dict(refusal or {"gate": self.error_type, "holder": holder})
+        if preempt is not None:
+            self.refusal["preempt"] = preempt.get("status")
+        super().__init__(
+            f"role_parked: role={role or ''} port={port or ''} holder={holder} "
+            f"retry_after_s={self.retry_after_s} — the GPU serving this role is lent to "
+            f"{holder} work until {expected_end or 'unknown'}; preempt "
+            f"{(preempt or {}).get('status', 'not requested')}; service unavailable"
+        )
+
+    @classmethod
+    def from_info(cls, info, *, request_id=None, preempt=None) -> "RoleParkedError":
+        return cls(
+            role=info.role,
+            port=info.port,
+            holder=info.holder,
+            retry_after_s=info.retry_after_s,
+            expected_end=info.expected_end,
+            request_id=request_id,
+            refusal=info.refusal(request_id=request_id),
+            preempt=preempt,
+        )
+
+    def to_dict(self) -> dict:
+        """HTTP body (shared by every route that refuses a parked role)."""
+        detail = str(self)
+        return {
+            "error": self.error_type,
+            "type": self.error_type,
+            "detail": detail,
+            "error_code": 503,
+            "error_detail": detail,
+            "retry_after_s": self.retry_after_s,
+            "holder": self.holder,
+            "role": self.role,
+            "port": self.port,
+            "expected_end": self.expected_end,
+            "refusal": dict(self.refusal),
+        }
+
+
 # -- Delegation / Routing ---------------------------------------------------
 
 class DelegationError(OrchestratorError):

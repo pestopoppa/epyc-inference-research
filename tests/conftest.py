@@ -196,6 +196,27 @@ def _disable_serving_calls_log():
 
 
 @pytest.fixture(scope="session", autouse=True)
+def _disable_live_gpu_window():
+    """Keep the suite off the live MI210 window file (parked roles).
+
+    A real ``holder=autokernel`` window on this host would otherwise refuse every
+    test call to a parked role. Tests that exercise parking point the env var at
+    their own tmp file.
+    """
+    from src.runtime.gpu_window import PATH_ENV
+
+    previous = os.environ.get(PATH_ENV)
+    os.environ[PATH_ENV] = "off"
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop(PATH_ENV, None)
+        else:
+            os.environ[PATH_ENV] = previous
+
+
+@pytest.fixture(scope="session", autouse=True)
 def _disable_live_context_limit_reads():
     """Keep the suite off the live stack's ``GET /props`` (context limits).
 
