@@ -9,10 +9,13 @@ Log format is JSONL (one JSON object per line) for efficient streaming reads.
 
 from __future__ import annotations
 
+import atexit
 import hashlib
 import json
 import logging
 import threading
+import time
+import weakref
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -34,6 +37,23 @@ logger = logging.getLogger(__name__)
 # appended between the write loop and ``clear()``. ``log`` stays lock-free: flush
 # removes exactly the prefix it wrote, so a concurrent append is never lost.
 _FLUSH_LOCK = threading.Lock()
+
+# A buffered entry older than this is flushed by the next ``log`` call. The API runs
+# several uvicorn workers, each with its own buffer; at 20-40 tasks a day a 10-entry
+# buffer could hold a worker's rows for days, and lost them outright when the process
+# ended without the lifespan flush (run 1767532, 2026-10-01: six workers started, none
+# shut down cleanly; two c95 tasks have task_started and no terminal row).
+DEFAULT_MAX_BUFFER_AGE_S = 30.0
+
+
+def _flush_at_exit(ref: "weakref.ReferenceType[ProgressLogger]") -> None:
+    logger_obj = ref()
+    if logger_obj is None:
+        return
+    try:
+        logger_obj.flush()
+    except Exception:
+        pass
 
 # Default log path (on RAID array, or fallback to workspace for devcontainer)
 _RAID_LOG_PATH = _REPO_ROOT / "logs/progress"
@@ -192,11 +212,17 @@ class ProgressLogger:
         self,
         log_dir: Path = DEFAULT_LOG_PATH,
         buffer_size: int = 10,  # Flush after N entries
+        max_buffer_age_s: float = DEFAULT_MAX_BUFFER_AGE_S,
     ):
         self.log_dir = log_dir
         self.buffer_size = buffer_size
+        self.max_buffer_age_s = max_buffer_age_s
         self._buffer: List[ProgressEntry] = []
+        self._buffer_since: float | None = None  # monotonic time of oldest unflushed entry
         self._disabled = False
+        # Interpreter exit without the API lifespan flush (scripts, a crashed
+        # worker that still unwinds) must not drop the tail of the buffer.
+        atexit.register(_flush_at_exit, weakref.ref(self))
 
         # Ensure log directory exists (fall back to temp dir if not writable)
         try:
@@ -331,9 +357,15 @@ class ProgressLogger:
         if self._disabled:
             return
 
+        now = time.monotonic()
+        if not self._buffer or self._buffer_since is None:
+            self._buffer_since = now
         self._buffer.append(entry)
 
-        if len(self._buffer) >= self.buffer_size:
+        if len(self._buffer) >= self.buffer_size or (
+            self.max_buffer_age_s is not None
+            and now - self._buffer_since >= self.max_buffer_age_s
+        ):
             self.flush()
 
     def log_durable(self, entry: ProgressEntry) -> None:
@@ -380,6 +412,7 @@ class ProgressLogger:
                         f.write(entry.to_json() + "\n")
 
             del self._buffer[: len(pending)]
+            self._buffer_since = time.monotonic() if self._buffer else None
 
     def log_task_started(
         self,
@@ -596,7 +629,9 @@ class ProgressLogger:
         )
         if task_record:
             completion_data["task_record_v1"] = task_record
-        self.log(
+        # Durable: the terminal row is what the Q-scorer and every offline analysis
+        # key on, and it is the row a buffered-then-killed worker used to lose.
+        self.log_durable(
             ProgressEntry(
                 event_type=EventType.TASK_COMPLETED if success else EventType.TASK_FAILED,
                 task_id=task_id,
