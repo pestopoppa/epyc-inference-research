@@ -188,17 +188,20 @@ def test_worker_vision_stays_single_instance() -> None:
     registry = yaml.safe_load(
         (ROOT / "orchestration" / "model_registry.yaml").read_text()
     )["server_mode"]
-    assert registry["worker_vision"]["device"] == "ROCm0"
+    # STACKCHG-DFLASH2-20261003: COLD CPU role while the MI210 carries DFlash2 (was ROCm0).
+    assert registry["worker_vision"]["device"] == "none"
 
     instances = _instances("worker_vision")
     assert len(instances) == 1, "worker_vision should be single-instance (one GPU server)"
     cpus, port, threads = instances[0]
 
     assert port == registry["worker_vision"]["port"]
-    assert stack_numa.NUMA_INSTANCE_SHAPE_CLASSES["worker_vision"] == ("gpu_host_lane",)
-    assert (cpus, threads) == stack_numa.GPU_HOST_LANE
-    assert stack_numa.NUMA_CONFIG["worker_vision"]["gpu_host_lane"] is True
-    assert _nodes_spanned(cpus) == {3}, "the GPU host lane is node-aligned on node 3"
+    # STACKCHG-DFLASH2-20261003: one CPU half (NPS4 nodes 0,1), GPU-disjoint from the 27B's lane on node 3.
+    assert stack_numa.NUMA_INSTANCE_SHAPE_CLASSES["worker_vision"] == ("half",)
+    assert (cpus, threads) == stack_numa.NUMA_HALF_A
+    assert "gpu_host_lane" not in stack_numa.NUMA_CONFIG["worker_vision"]
+    assert _nodes_spanned(cpus) == {0, 1}, "NUMA_HALF_A spans exactly NPS4 nodes 0 and 1"
+    assert stack_numa.NUMA_CONFIG["worker_vision"]["numactl_policy"] == "interleave=0,1"
 
 
 # Live NPS4 topology, verified 2026-07-30 via `numactl --hardware`.

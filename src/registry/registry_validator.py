@@ -15,6 +15,10 @@ Catches the failure modes that cost ~2 hours of debugging on 2026-05-09:
 3. **YAML duplicate keys at the same path**: PyYAML silently keeps the LAST
    declaration. Detect and reject.
 
+5. **Drafter selection** (DRAFT-SEL-1, 2026-10-01): the drafter a server runs must
+   be one its model's master `drafters` list declares, chosen by
+   `stack_topology.yaml -> drafter_selection`; see `_check_drafter_selection`.
+
 4. **`numa_ports` / `numa_instances` disagreeing with the declared NUMA
    topology** (added 2026-08-12, handoff P1-5). `server_mode.<role>.numa_ports`
    is the registry's copy of a fleet that `orchestration/stack_topology.yaml`
@@ -383,6 +387,32 @@ def _check_numa_ports_vs_topology(
     return errors
 
 
+def _check_drafter_selection(
+    registry: dict[str, Any], topology_path: Path | None = None
+) -> list[str]:
+    """DRAFT-SEL-1 over the COMPILED lean registry (the file cmd_start validates).
+
+    * topology selects a drafter the model's `drafters` list does not contain -> error
+    * a launching server whose model lists >1 drafter and has no selection -> error
+    * the lean's projected drafter differs from what topology selects, or its spec
+      fields differ from the master recipe (stale or hand-edited lean) -> error
+
+    Hand-carried drafter fields are caught one hop earlier, in compile_lean, because
+    after projection they are indistinguishable from the projection's own output.
+    """
+    from src.registry.drafter_selection import (
+        DrafterSelectionError,
+        check_lean,
+        load_drafter_selection,
+    )
+
+    try:
+        selection = load_drafter_selection(topology_path)
+    except DrafterSelectionError as exc:
+        return [f"drafter_selection: {exc}"]
+    return check_lean(registry, selection)
+
+
 def validate_all(registry_path: str | Path) -> list[str]:
     """Run all checks. Returns list of error strings. Empty list = OK.
 
@@ -398,6 +428,7 @@ def validate_all(registry_path: str | Path) -> list[str]:
     errors += _check_cross_section_conflicts(registry)
     errors += _check_gguf_port_consistency(registry)
     errors += _check_numa_ports_vs_topology(registry)
+    errors += _check_drafter_selection(registry)
     return errors
 
 

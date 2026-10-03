@@ -611,6 +611,14 @@ _RUNTIME_FIELD_CHECKS: dict[str, tuple[str, tuple[str, ...], str]] = {
     "runtime.flags.spec.draft_p_min": ("dedicated", (), ""),
     "runtime.flags.spec.threads_draft": ("dedicated", (), ""),
     "runtime.flags.spec.draft_min": ("int_flag", ("--spec-draft-n-min",), ""),
+    # DRAFT-SEL-1: draft-model offload depth for an EXTERNAL drafter (DFlash2 on the
+    # :8083 27B: `-ngld all`). The launcher emits it only beside `-md`; it is None on
+    # every self-draft / non-speculating role, where the generic check expects no flag.
+    "runtime.flags.spec.n_gpu_layers_draft": (
+        "int_or_token_flag",
+        ("-ngld", "--gpu-layers-draft", "--n-gpu-layers-draft", "--spec-draft-ngl"),
+        "",
+    ),
     "runtime.flags.spec.draft_p_split": ("float_flag", ("--draft-p-split",), ""),
     "runtime.flags.spec.ngram_mod_n_min": ("positive_int_flag", ("--spec-ngram-mod-n-min",), ""),
     "runtime.flags.spec.ngram_mod_n_max": ("positive_int_flag", ("--spec-ngram-mod-n-max",), ""),

@@ -49,6 +49,32 @@ realized_shape:
     cost frontdoor and ingest_long_context roughly 2x for months.
 
 # =============================================================================
+# DRAFTER SELECTION — "which speculative drafter each launching server runs"
+# =============================================================================
+# DRAFT-SEL-1 (2026-10-01). The MASTER registry lists every ACCEPTABLE drafter for
+# a MODEL (`roles.<model_role>.drafters`, with launch params). THIS section picks
+# ONE per launching server; registry_compiler.compile_lean projects it into the
+# lean registry, stack_priors and the launcher argv. Nothing else may restate a
+# drafter: the compiler FAILS on a hand-carried spec_type/draft_model/draft_max for
+# a model that declares `drafters`, and FAILS when such a model lists >1 drafter
+# and this section names none for its server. There is deliberately NO default —
+# a default is how :8083 re-inherited draft-mtp across two model swaps
+# (orch 7483d7fb, ARCHSWAP-20260927) while the operator had ruled DFlash2.
+#
+# Keys are LAUNCHING servers (server_mode keys), never aliases: a drafter is a
+# property of the process, and every alias in its shared_with inherits it.
+# Values are drafter ids from the master list, or the reserved `none`
+# (deliberately no speculation).
+#
+# Servers whose model has not been migrated to `drafters:` are absent here and
+# keep their legacy hand-carried master fields (compile warning) until migrated.
+drafter_selection:
+  # Qwen3.8-27B-Q8_0 on MI210. Operator: 2026-08-27 ("the superior spec decode path
+  # for running qwen3.8-27b") and 2026-10-01 ("ALWAYS use dflash2"). Recipe:
+  # epyc-inference-research/artifacts/serving-recipes/qwen3.8-27b-q8-gpu-dflash2-np4.json
+  architect_critic: dflash2
+
+# =============================================================================
 # PER-ROLE NUMA WIRING — "which CPUs and how many threads each role gets"
 # =============================================================================
 # Loaded by scripts/server/stack_numa.py as NUMA_CONFIG. Until 2026-08-01 this
@@ -291,9 +317,20 @@ numa_config:
     # MMMU-250 cutover measured (taskset -c 184-191, -t 8). The 24-thread
     # node-1 quarter was sized for a ~4 GB host-resident 7B; the 30B is
     # VRAM-resident and needs host threads, not host cores.
+    # ── STACKCHG-DFLASH2-20261003: OFF THE MI210, onto CPU, COLD (tier warm). ──────────────────────
+    # Operator 2026-10-03: the 27B on :8083 runs DFlash2 (~43 GiB), which does not fit
+    # beside this 22.3 GiB VL on one MI210. The topology forces a cpuset for any launched
+    # role, so it is DECLARED: NUMA_HALF_A = cores 0-47 + SMT siblings 96-143 (NPS4 nodes
+    # 0,1), -t 48, interleave=0,1. GPU-disjoint (the 27B's host lane 184-191 is in half B).
+    # It overlaps frontdoor :8070 (0-95) and :8080 (half A) WHEN STARTED; it is never
+    # started by a default `start`. No mlock (cold: would pin 18.3 GiB while up).
+    # The operator reassesses this placement when the 2nd MI210 arrives.
     instances:
-      - {cpu_shape: GPU_HOST_LANE, port: 8086}
-    gpu_host_lane: true
+      - {cpu_shape: NUMA_HALF_A, port: 8086}
+    numa_pre_evict_gib: 40   # INF-70/C7 CPU role: force even interleave (see header)
+    numactl_policy: interleave=0,1
+    # (was, MI210) instances: [{cpu_shape: GPU_HOST_LANE, port: 8086}], gpu_host_lane: true,
+    # numactl_policy: membind=3 — restore these with device ROCm0 on the 2nd MI210.
     # 2026-08-01 W1 CUTOVER: Qwen2.5-VL-7B CPU -> Qwen3-VL-30B-A3B Q4_K_M on
     # MI210 (ROCm0), and vision_escalation is now an ALIAS on this same process
     # rather than a second server on :8087.
@@ -303,7 +340,6 @@ numa_config:
     # This was membind=1 while the role sat on the node-1 quarter; leaving it
     # would have bound host allocations to a node the threads no longer touch,
     # which is the exact cross-node defect the 2026-07-30 placement audit found.
-    numactl_policy: membind=3
 
   # vision_escalation ENTRY REMOVED 2026-08-01 (W1 cutover). It is no longer a
   # process: worker_vision and vision_escalation are ONE MI210 server on :8086

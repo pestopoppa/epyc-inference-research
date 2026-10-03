@@ -461,9 +461,14 @@ def _append_spec_decode_args(
     ngram_mod_n_min: str | None = None,
     ngram_mod_n_max: str | None = None,
     ngram_mod_n_match: str | None = None,
+    n_gpu_layers_draft: str | None = None,
 ) -> None:
     if draft_model_path and not _same_real_model_path(model_path, draft_model_path):
         cmd.extend(["-md", draft_model_path])
+        # -ngld only means something for a SEPARATE draft model (DFlash2: 99). A
+        # same-file NEXTN self-draft has no draft model to place.
+        if n_gpu_layers_draft:
+            cmd.extend(["-ngld", n_gpu_layers_draft])
     if spec_type:
         cmd.extend(["--spec-type", spec_type])
     if draft_max:
@@ -577,6 +582,7 @@ def _append_runtime_spec_args(cmd: list[str], runtime: dict[str, Any], model_pat
     draft_p_min = spec.get("draft_p_min")
     draft_p_split = spec.get("draft_p_split")
     threads_draft = spec.get("threads_draft")
+    ngld = spec.get("n_gpu_layers_draft")
     _append_spec_decode_args(
         cmd,
         model_path=model_path,
@@ -619,6 +625,12 @@ def _append_runtime_spec_args(cmd: list[str], runtime: dict[str, Any], model_pat
         ngram_mod_n_match=_runtime_positive_int(spec, "ngram_mod_n_match", "")
         if "ngram_mod_n_match" in spec
         else None,
+        n_gpu_layers_draft=(
+            str(ngld)
+            if (isinstance(ngld, int) and not isinstance(ngld, bool) and ngld >= 0)
+            or (isinstance(ngld, str) and ngld in ("all", "auto"))
+            else None
+        ),
     )
 
 
@@ -2475,6 +2487,22 @@ def start_orchestrator(
     # already carries AUTOPILOT_TOOL_SENTINELS=1, but the orchestrator API was
     # previously restarted without it and quietly lost tool-use activation.
     env["AUTOPILOT_TOOL_SENTINELS"] = "1"
+    # STACKCHG-DFLASH2-20261003: the VL backend FOLLOWS the vision role's tier. With
+    # `auto`, a vision request that finds :8086 down falls back to spawning
+    # llama-mtmd-cli per request (src/vision/analyzers/vl_describe.py): a full 30B +
+    # mmproj load on UNPINNED CPU cores, -t 8, 120 s timeout — an ad-hoc CPU tenant the
+    # topology never declared, landing on whatever cores the scheduler picks (the DS41
+    # CPU A/B windows included). While worker_vision is not a HOT role, vision must
+    # REFUSE ("All vision paths failed") rather than degrade that way; start the cold
+    # server (`start --only worker_vision`) to serve images. An explicitly exported
+    # value wins, so the operator can still opt into `auto`/`cli`.
+    if "ORCHESTRATOR_VISION_VL_BACKEND" not in env:
+        from scripts.server.stack_manifest import ROLE_LAUNCH_META as _LAUNCH_META
+
+        _vision_tier = str((_LAUNCH_META.get("worker_vision") or {}).get("tier", "hot"))
+        env["ORCHESTRATOR_VISION_VL_BACKEND"] = (
+            "auto" if _vision_tier.lower() == "hot" else "server"
+        )
     # LangGraph Phase 3: per-node migration for live roles only.
     # The retired architect_coding role is intentionally not enabled here.
     for key in LANGGRAPH_PHASE3_LIVE_ENV_VARS:

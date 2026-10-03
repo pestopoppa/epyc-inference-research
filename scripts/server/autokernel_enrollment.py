@@ -508,7 +508,9 @@ def export_production_enrollment(context: ExportContext | Mapping[str, Any], *,
         raise EnrollmentExportError(
             "loaded launcher configuration differs from pinned source inputs")
     active_roles = active_roles_from_launch_meta(ROLE_LAUNCH_META)
-    compiled = compile_lean(Path(source_by_name["master_registry"].path), active_roles)
+    # DRAFT-SEL-1: the drafter selection is a compile input; use the PINNED topology.
+    compiled = compile_lean(Path(source_by_name["master_registry"].path), active_roles,
+                            Path(source_by_name["topology"].path))
     loaded_lean = yaml.safe_load(Path(source_by_name["lean_registry"].path).read_text())
     if compiled != loaded_lean:
         raise EnrollmentExportError("compiled lean registry is stale for pinned master/launch roles")

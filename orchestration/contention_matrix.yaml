@@ -46,34 +46,44 @@ binary:
 # threads) of every relabeled instance was asserted equal to the post-swap NUMA_CONFIG, and no
 # measured value, date or provenance changed. topology_hash restamped 4893e37e5d603c80 -> 5d772b2c4698b2ae.
 # A relabel is not a re-measurement: re-run contention_matrix.py when placement next changes.
-topology_hash: "5d772b2c4698b2ae"
+# STACKCHG-DFLASH2-20261003 DECLARED WITHDRAWAL (tools/withdraw_contention_role.py, epyc-root
+# artifacts/operator/stack-change-dflash2-20261003). worker_vision moved GPU_HOST_LANE
+# 184-191/-t8 -> NUMA_HALF_A 0-47,96-143/-t48 as a COLD (warm-tier) CPU role, so its
+# 3 measured pair(s) no longer describe any placement: WITHDRAWN from `pairs` (kept verbatim
+# below, commented) and re-declared under `unknown_pairs`. The other stamped roles ['architect_critic', 'architect_general', 'frontdoor']
+# were asserted to have IDENTICAL numa_config in base and candidate; no measured value,
+# date or provenance changed. The stamp now covers worker_vision's DECLARED new placement.
+# topology_hash restamped 5d772b2c4698b2ae -> 560d489bb6df16b9. worker_vision pairs gate as UNKNOWN
+# (background QUEUE / foreground ALLOW). Re-bench with contention_matrix.py if it goes hot.
+# Withdrawn entries:
+#     - roles: ['architect_general', 'worker_vision']
+#       instance_a: {"cpu_list": "0-95", "instance_idx": 0, "label": "full", "port": 8074, "regions": ["q0", "q1", "q2", "q3"], "role": "architect_general", "threads": 96}
+#       instance_b: {"cpu_list": "184-191", "instance_idx": 0, "label": "inst0", "port": 8086, "regions": [], "role": "worker_vision", "threads": 8}
+#       seq_aggregate_tps: 55.82
+#       parallel_aggregate_tps: 4.36
+#       ratio: 0.08
+#       samples: 1
+#       verdict: "block"
+#     - roles: ['architect_critic', 'worker_vision']
+#       instance_a: {"cpu_list": "184-191", "instance_idx": 0, "label": "inst0", "port": 8083, "regions": [], "role": "architect_critic", "threads": 8}
+#       instance_b: {"cpu_list": "184-191", "instance_idx": 0, "label": "inst0", "port": 8086, "regions": [], "role": "worker_vision", "threads": 8}
+#       seq_aggregate_tps: 45.2
+#       parallel_aggregate_tps: 47.1
+#       ratio: 1.04
+#       samples: 1
+#       verdict: "allow"
+#     - roles: ['frontdoor', 'worker_vision']
+#       instance_a: {"cpu_list": "0-47,96-143", "instance_idx": 1, "label": "half0", "port": 8080, "regions": ["q0", "q1"], "role": "frontdoor", "threads": 48}
+#       instance_b: {"cpu_list": "184-191", "instance_idx": 0, "label": "inst0", "port": 8086, "regions": [], "role": "worker_vision", "threads": 8}
+#       seq_aggregate_tps: 58.64
+#       parallel_aggregate_tps: 82.5
+#       ratio: 1.41
+#       samples: 1
+#       verdict: "allow"
+topology_hash: "560d489bb6df16b9"
 default_floor: 0.85
 
 pairs:
-  - roles: ['architect_general', 'worker_vision']
-    instance_a: {"cpu_list": "0-95", "instance_idx": 0, "label": "full", "port": 8074, "regions": ["q0", "q1", "q2", "q3"], "role": "architect_general", "threads": 96}
-    instance_b: {"cpu_list": "184-191", "instance_idx": 0, "label": "inst0", "port": 8086, "regions": [], "role": "worker_vision", "threads": 8}
-    seq_aggregate_tps: 55.82
-    parallel_aggregate_tps: 4.36
-    ratio: 0.08
-    samples: 1
-    verdict: "block"
-  - roles: ['architect_critic', 'worker_vision']
-    instance_a: {"cpu_list": "184-191", "instance_idx": 0, "label": "inst0", "port": 8083, "regions": [], "role": "architect_critic", "threads": 8}
-    instance_b: {"cpu_list": "184-191", "instance_idx": 0, "label": "inst0", "port": 8086, "regions": [], "role": "worker_vision", "threads": 8}
-    seq_aggregate_tps: 45.2
-    parallel_aggregate_tps: 47.1
-    ratio: 1.04
-    samples: 1
-    verdict: "allow"
-  - roles: ['frontdoor', 'worker_vision']
-    instance_a: {"cpu_list": "0-47,96-143", "instance_idx": 1, "label": "half0", "port": 8080, "regions": ["q0", "q1"], "role": "frontdoor", "threads": 48}
-    instance_b: {"cpu_list": "184-191", "instance_idx": 0, "label": "inst0", "port": 8086, "regions": [], "role": "worker_vision", "threads": 8}
-    seq_aggregate_tps: 58.64
-    parallel_aggregate_tps: 82.5
-    ratio: 1.41
-    samples: 1
-    verdict: "allow"
   - roles: ['architect_critic', 'frontdoor']
     instance_a: {"cpu_list": "184-191", "instance_idx": 0, "label": "inst0", "port": 8083, "regions": [], "role": "architect_critic", "threads": 8}
     instance_b: {"cpu_list": "0-47,96-143", "instance_idx": 1, "label": "half0", "port": 8080, "regions": ["q0", "q1"], "role": "frontdoor", "threads": 48}
@@ -94,6 +104,12 @@ pairs:
 unknown_pairs:
   - roles: ['architect_general', 'frontdoor']
     reason: "overlap_substituted (overlap_measured): no disjoint live placement exists for this role pair; an overlapping-geometry number must not enter the role-keyed gate as the pair's verdict — re-bench the geometry you want with `bench-nway` from a manifest"
+  - roles: ['architect_general', 'worker_vision']
+    reason: "placement_withdrawn (STACKCHG-DFLASH2-20261003): worker_vision moved GPU_HOST_LANE 184-191/-t8 -> NUMA_HALF_A 0-47,96-143/-t48 as a COLD (warm-tier) CPU role; the measured pair described the old placement and was withdrawn. Re-bench with contention_matrix.py before worker_vision becomes a hot role"
+  - roles: ['architect_critic', 'worker_vision']
+    reason: "placement_withdrawn (STACKCHG-DFLASH2-20261003): worker_vision moved GPU_HOST_LANE 184-191/-t8 -> NUMA_HALF_A 0-47,96-143/-t48 as a COLD (warm-tier) CPU role; the measured pair described the old placement and was withdrawn. Re-bench with contention_matrix.py before worker_vision becomes a hot role"
+  - roles: ['frontdoor', 'worker_vision']
+    reason: "placement_withdrawn (STACKCHG-DFLASH2-20261003): worker_vision moved GPU_HOST_LANE 184-191/-t8 -> NUMA_HALF_A 0-47,96-143/-t48 as a COLD (warm-tier) CPU role; the measured pair described the old placement and was withdrawn. Re-bench with contention_matrix.py before worker_vision becomes a hot role"
 
 
 # ─────────────────────────────────────────────────────────────────────

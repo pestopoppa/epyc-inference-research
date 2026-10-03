@@ -1447,6 +1447,25 @@ def _spec_type_has_mtp(spec_type: str | None) -> bool:
     return "draft-mtp" in {token.strip() for token in spec_type.split(",")}
 
 
+# DRAFT-SEL-1: drafter spec types that launch with a DRAFT MODEL (`-md`), as
+# opposed to the NEXTN self-draft above. Before this, any spec_type without the
+# `draft-mtp` token fell through to the DISABLED spec, so selecting DFlash2 in the
+# registry would have launched :8083 with no speculation at all — the same
+# fall-through class the 2026-07-31 composed-recipe fix closed for `ngram-mod,draft-mtp`.
+_EXTERNAL_DRAFTER_SPEC_TYPES = frozenset({"draft-dflash", "draft-simple", "draft-eagle3"})
+
+
+def _spec_type_launches_drafter(spec_type: str | None) -> bool:
+    """True when ``spec_type`` needs a resolved drafter path and an enabled spec."""
+    if _spec_type_has_mtp(spec_type):
+        return True
+    if not isinstance(spec_type, str) or not spec_type:
+        return False
+    return bool(
+        {token.strip() for token in spec_type.split(",")} & _EXTERNAL_DRAFTER_SPEC_TYPES
+    )
+
+
 def _positive_int_prior(
     *containers: dict[str, Any] | None,
     key: str,
@@ -2137,6 +2156,7 @@ def _launch_runtime_record(
         "ngram_mod_n_min": None,
         "ngram_mod_n_max": None,
         "ngram_mod_n_match": None,
+        "n_gpu_layers_draft": None,
     }
     # 2026-06-26 v6 cutover: spec_type carries the v6 MTP token 'draft-mtp' (bare
     # 'mtp' is invalid in v6). It is preserved verbatim from the registry
@@ -2210,7 +2230,7 @@ def _launch_runtime_record(
                 else None,
             }
         )
-    elif _spec_type_has_mtp(spec_type_prior) and role == primary_role:
+    elif _spec_type_launches_drafter(spec_type_prior) and role == primary_role:
         # 2026-06-26 v6 cutover: emit a NON-NULL draft-mtp spec ONLY for the PRIMARY
         # role that launches the server (role == primary_role). ALIAS roles
         # (shared_with_first_n, e.g. coder_escalation / worker_summarize sharing
@@ -2231,11 +2251,34 @@ def _launch_runtime_record(
             server_cfg,
             models_dir=_PATHS.get("models_dir"),
         )
+        if not _spec_type_has_mtp(spec_type_prior):
+            # An EXTERNAL drafter must be a DIFFERENT file. The resolver falls back to the
+            # model path (NEXTN self-draft) and the launcher suppresses -md for a
+            # same-realpath draft, so a draft-dflash role with no resolvable drafter would
+            # launch `--spec-type draft-dflash` with no -md and die at load. Refuse here,
+            # at compile, instead of at HIP load time in production.
+            model_for_role = requirements.get("model_path")
+            if not nextn_draft_path or (
+                isinstance(model_for_role, str)
+                and os.path.realpath(str(nextn_draft_path)) == os.path.realpath(model_for_role)
+            ):
+                raise ValueError(
+                    f"role {role!r}: spec_type {spec_type_prior!r} needs an external drafter "
+                    f"GGUF distinct from the model; resolved draft {nextn_draft_path!r}. "
+                    "Declare it in the master roles.<model_role>.drafters recipe."
+                )
         draft_max_prior = acceleration.get("draft_max")
+        # `-ngld` for an EXTERNAL drafter (DFlash2 recipe: ngld 99). Declared only by
+        # the projected drafter recipe; absent -> not emitted (llama-server default).
+        ngld_prior = acceleration.get("n_gpu_layers_draft")
         spec.update(
             {
                 "enabled": True,
                 "type": spec_type_prior,
+                "n_gpu_layers_draft": ngld_prior
+                if (isinstance(ngld_prior, int) and not isinstance(ngld_prior, bool))
+                or (isinstance(ngld_prior, str) and ngld_prior in ("all", "auto"))
+                else None,
                 "draft_model_path": str(nextn_draft_path) if nextn_draft_path else None,
                 "draft_max": draft_max_prior
                 if isinstance(draft_max_prior, int) and not isinstance(draft_max_prior, bool)

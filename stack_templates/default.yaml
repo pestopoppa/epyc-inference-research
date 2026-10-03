@@ -12,8 +12,9 @@
 #     1×96t FULL instance + 2×48t HALF instances. The four-quarter lineup
 #     (8280/8380, 8282/8382, 8385/8485, 8187..8487) was RETIRED and its ports
 #     freed — they must not be revived here.
-#   * architect_critic and worker_vision are MI210 roles: the model is on the
-#     GPU and only 8 HOST threads are pinned, on GPU_HOST_LANE (184-191).
+#   * architect_critic is the MI210 role: the model is on the GPU and only 8
+#     HOST threads are pinned, on GPU_HOST_LANE (184-191). worker_vision is a
+#     COLD CPU role on NUMA_HALF_A since STACKCHG-DFLASH2-20261003 (WARM: not started by default).
 #   * architect_general (:8074) is the whole-machine CPU process (the 122B that
 #     vacated architect_general on 2026-08-01, Qwen3.8-Flash-Next since
 #     2026-09-22); coder_escalation and ingest_long_context alias architect_critic,
@@ -174,12 +175,12 @@ roles:
     # 63.6%). Was Qwen2.5-VL-7B / 4.4 GB.
     model: Qwen3-VL-30B-A3B-Instruct
     quant: Q4_K_M
-    tier: HOT
+    tier: WARM   # STACKCHG-DFLASH2-20261003: CPU, cold — not launched by a default start (was HOT, MI210)
     ram_gb: 17.3
     full:
       port: 8086
-      numa: GPU_HOST_LANE
-      threads: 8
+      numa: HALF_A
+      threads: 48
 
   vision_escalation:
     # 2026-08-01 W1 vision unification: the standalone :8087 instance was

@@ -40,8 +40,10 @@ GIB_MB = 1024
 # 2026-09-27 ARCHITECT SWAP (operator-decided): the full-CPU Flash-Next process
 # (:8074, pre-evicts 40 GiB) is architect_general; the MI210 27B GPU host lane
 # (:8083, never evicts) is architect_critic.
-CPU_LLAMA_SERVER_ROLES = {"frontdoor", "eval_batch_frontdoor", "architect_general"}
-GPU_HOST_LANE_ROLES = {"architect_critic", "worker_vision"}
+# STACKCHG-DFLASH2-20261003: worker_vision moved GPU host lane -> cold CPU (NUMA_HALF_A): it is now a CPU
+# llama-server role and pre-evicts like every other one.
+CPU_LLAMA_SERVER_ROLES = {"frontdoor", "eval_batch_frontdoor", "architect_general", "worker_vision"}
+GPU_HOST_LANE_ROLES = {"architect_critic"}
 
 
 def _registry_alias_rows() -> dict[str, str]:

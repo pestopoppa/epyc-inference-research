@@ -129,8 +129,9 @@ hot_roles:
   - architect_general  # 2026-09-27 swap: now the :8074 Flash-Next process, which D1 keeps hot
   - architect_critic   # 2026-08-01 W1: tier hot per OPERATOR DECISION D1 ("keep it hot"); the :8083 27B since the 2026-09-27 swap
   - ingest_long_context
-  - worker_vision
-  - vision_escalation
+  # worker_vision / vision_escalation REMOVED STACKCHG-DFLASH2-20261003: :8086 is a COLD (warm-tier) CPU
+  # role while the MI210 carries DFlash2. Keeping them here would make the /health fallback
+  # probes report a deliberately-stopped server as down.
 
 # Roles that must never run concurrently (large/latency-sensitive paths).
 #
@@ -263,7 +264,7 @@ role_launch_meta:
   # 2026-08-01 W1 CUTOVER: one MI210 vision process serving BOTH role names.
   # vision_escalation lost its own entry — it no longer launches anything.
   worker_vision:
-    tier: hot
+    tier: warm   # STACKCHG-DFLASH2-20261003: CPU, cold — `start` skips it; start --only/--include-warm worker_vision
     mode: vision
     vision_type: worker
     # aliases DERIVED: server_mode.worker_vision.shared_with -> [vision_escalation]

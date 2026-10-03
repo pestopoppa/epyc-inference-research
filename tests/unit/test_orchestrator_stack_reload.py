@@ -2268,3 +2268,44 @@ def test_stack_change_launch_gate_threads_numa_mode_as_flag_not_env(monkeypatch,
         "quarter",
     ]
     assert captured["env"] is None
+
+
+# --- STACKCHG-DFLASH2-20261003: the VL backend follows the vision role's tier ---------
+
+def _start_api_capturing_env(monkeypatch, tmp_path: Path) -> dict:
+    captured: dict[str, object] = {}
+
+    class FakeProc:
+        pid = 4321
+
+        def poll(self):
+            return None
+
+    def fake_popen(cmd, **kwargs):
+        captured["env"] = kwargs["env"]
+        return FakeProc()
+
+    monkeypatch.setattr(stack, "LOG_DIR", tmp_path)
+    monkeypatch.setattr(stack, "_pids_on_port", lambda _port: [])
+    monkeypatch.setattr(stack, "_write_orchestrator_marker", lambda **_kwargs: tmp_path / "marker")
+    monkeypatch.setattr(stack, "wait_for_health", lambda *args, **kwargs: True)
+    monkeypatch.setattr(stack, "_set_oom_protection", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(stack.subprocess, "Popen", fake_popen)
+    assert stack.start_orchestrator() is not None
+    return captured["env"]  # type: ignore[return-value]
+
+
+@pytest.mark.parametrize("tier,expected", [("warm", "server"), ("hot", "auto")])
+def test_vl_backend_follows_vision_tier(monkeypatch, tmp_path: Path, tier, expected) -> None:
+    from scripts.server import stack_manifest
+
+    monkeypatch.delenv("ORCHESTRATOR_VISION_VL_BACKEND", raising=False)
+    meta = {**stack_manifest.ROLE_LAUNCH_META,
+            "worker_vision": {**stack_manifest.ROLE_LAUNCH_META["worker_vision"], "tier": tier}}
+    monkeypatch.setattr(stack_manifest, "ROLE_LAUNCH_META", meta)
+    assert _start_api_capturing_env(monkeypatch, tmp_path)["ORCHESTRATOR_VISION_VL_BACKEND"] == expected
+
+
+def test_explicit_vl_backend_wins(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("ORCHESTRATOR_VISION_VL_BACKEND", "cli")
+    assert _start_api_capturing_env(monkeypatch, tmp_path)["ORCHESTRATOR_VISION_VL_BACKEND"] == "cli"

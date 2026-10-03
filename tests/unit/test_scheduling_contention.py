@@ -119,7 +119,12 @@ def test_load_real_matrix(real_matrix_path: Path) -> None:
         "missing": sorted(expected - measured - unknown),
         "stale": sorted((measured | unknown) - expected),
     }
-    assert m.get_pair("architect_general", "worker_vision") is not None
+    # STACKCHG-DFLASH2-20261003: worker_vision moved GPU_HOST_LANE -> a COLD CPU half
+    # (NUMA_HALF_A). Its measured pairs described the old placement and were
+    # WITHDRAWN into `unknown_pairs` (declared, never silently missing): no stale
+    # number may gate the new placement until it is re-benched.
+    assert m.get_pair("architect_general", "worker_vision") is None
+    assert ("architect_general", "worker_vision") in unknown
     # ingest_long_context serves on its registry host's process; that host's
     # pair with worker_vision is the row that now carries its contention.
     import yaml
@@ -128,7 +133,8 @@ def test_load_real_matrix(real_matrix_path: Path) -> None:
         (ROOT / "orchestration" / "model_registry.yaml").read_text(encoding="utf-8")
     )["server_mode"]
     ingest_host = mode["ingest_long_context"].get("alias_of") or "ingest_long_context"
-    assert m.get_pair(ingest_host, "worker_vision") is not None
+    assert m.get_pair(ingest_host, "worker_vision") is None
+    assert tuple(sorted((ingest_host, "worker_vision"))) in unknown
 
 
 def test_real_matrix_declares_current_nway_role_classes(real_matrix_path: Path) -> None:

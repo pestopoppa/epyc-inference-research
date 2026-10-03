@@ -1431,7 +1431,8 @@ def test_compile_uses_stack_manifest_when_server_mode_is_absent(tmp_path: Path) 
             "primary_role": "worker_vision",
             "mode": "vision",
             "alias": False,
-            "cpu_shape_class": "gpu_host_lane",
+            # STACKCHG-DFLASH2-20261003: cold CPU on NUMA_HALF_A (was gpu_host_lane).
+            "cpu_shape_class": "half",
             "vision_type": "worker",
             "slots": 1,
         }
@@ -1462,7 +1463,10 @@ def test_compile_uses_stack_manifest_when_server_mode_is_absent(tmp_path: Path) 
     assert runtime["flags"]["flash_attn"] is True
     assert runtime["flags"]["jinja"] is False
     assert runtime["flags"]["spec"]["enabled"] is False
-    assert role["priors"]["memory_cost"] == 1.0
+    # STACKCHG-DFLASH2-20261003: the stack manifest now declares worker_vision
+    # tier WARM (cold CPU, not started by default), so its residency cost is the
+    # warm cost (was 1.0 = hot while it was MI210-resident).
+    assert role["priors"]["memory_cost"] == 2.0
 
 
 def test_compile_refuses_missing_descriptor_without_allow_incomplete(tmp_path: Path) -> None:

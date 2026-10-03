@@ -635,8 +635,8 @@ def _lean_registry_step(
             status="ok",
             details=["skipped: no research (master) registry configured"],
         )
+    bootstrap_warnings: list[str] = []
     try:
-        from scripts.server.stack_manifest import ROLE_LAUNCH_META
         from src.registry.registry_compiler import (
             active_roles_from_launch_meta,
             compile_lean,
@@ -650,13 +650,35 @@ def _lean_registry_step(
         # does not project. Mixing the two makes the cache key never match, so the
         # step would report "stale" on every run — a guard that always fires is as
         # useless as one that never does.
-        active = (
-            set(config.roles)
-            if config.roles is not None
-            else active_roles_from_launch_meta(ROLE_LAUNCH_META)
-        )
+        if config.roles is not None:
+            active = set(config.roles)
+        else:
+            try:
+                from scripts.server.stack_manifest import ROLE_LAUNCH_META
+            except ValueError as import_exc:
+                if check:
+                    raise
+                # BOOTSTRAP (STACKCHG-DFLASH2-20261003). stack_manifest validates the
+                # launcher against the LEAN at import — the very file this step is about
+                # to regenerate. A change that flips a field both sides declare (here
+                # worker_vision tier hot -> warm) is refused against the STALE lean, so
+                # the lean could never be recompiled and the pipeline could never apply
+                # it. During `update` only, derive the same active set from the same
+                # inputs _build_role_launch_meta uses — launch_manifest role_launch_meta
+                # plus MASTER server_mode.<role>.shared_with — compile, and let the later
+                # steps re-import stack_manifest against the fresh lean (a failed import
+                # is not cached), where every import-time gate runs for real.
+                ROLE_LAUNCH_META = _launch_meta_from_sources(config)
+                bootstrap_warnings.append(
+                    "BOOTSTRAP: stack_manifest refused to import against the stale lean "
+                    f"({str(import_exc).splitlines()[-1].strip()[:240]}); active set derived "
+                    "from launch_manifest.yaml + master shared_with. Later steps re-import "
+                    "against the regenerated lean."
+                )
+            active = active_roles_from_launch_meta(ROLE_LAUNCH_META)
         cache_path = config.lean_registry.parent / ".lean_cache_key"
-        expected_key = cache_key(config.research_registry, active)
+        topology = _topology_path(config)
+        expected_key = cache_key(config.research_registry, active, topology)
         current_key = cache_path.read_text().strip() if cache_path.exists() else ""
 
         if check:
@@ -669,7 +691,7 @@ def _lean_registry_step(
             # projection exactly), and a matching key over a hand-edited lean
             # would be a false "fresh". NIB2-69: the projection is the fact; the
             # key is reported only as cache state.
-            compiled = compile_lean(config.research_registry, active)
+            compiled = compile_lean(config.research_registry, active, topology)
             committed = (
                 _load_yaml(config.lean_registry) if config.lean_registry.exists() else None
             )
@@ -702,7 +724,7 @@ def _lean_registry_step(
         if cache_path.exists():
             cache_path.unlink()  # force, as the CLI's --force does
         out = load_or_compile(
-            config.research_registry, active, config.lean_registry, cache_path
+            config.research_registry, active, config.lean_registry, cache_path, topology
         )
     except Exception as exc:  # noqa: BLE001
         return PipelineStep(
@@ -711,17 +733,43 @@ def _lean_registry_step(
             errors=[
                 f"lean registry compile from master failed: {exc}",
                 f"master: {config.research_registry}",
+                f"drafter selection: {_topology_path(config)} (drafter_selection)",
             ],
         )
     return PipelineStep(
         name="lean_registry",
         status="ok",
+        warnings=bootstrap_warnings,
         details=[
             f"recompiled from master: {config.research_registry}"
             f" -> {config.lean_registry}",
             f"{len(out.get('roles', {}))} roles projected through the active manifest",
         ],
     )
+
+
+def _launch_meta_from_sources(config: StackChangePipelineConfig) -> dict[str, dict]:
+    """ROLE_LAUNCH_META's role/alias skeleton, read from its SOURCES without importing
+    stack_manifest (whose import-time gates read the lean being regenerated).
+
+    Mirrors stack_manifest._build_role_launch_meta/_derived_aliases: role keys and their
+    meta from launch_manifest.yaml `role_launch_meta`; aliases = `launcher_only_aliases`
+    then MASTER `server_mode.<role>.shared_with`. Only the keys
+    active_roles_from_launch_meta reads are produced.
+    """
+    manifest = _load_yaml(config.repo_root / "orchestration" / "launch_manifest.yaml") or {}
+    master = _load_yaml(config.research_registry) or {}
+    server_mode = master.get("server_mode") or {}
+    out: dict[str, dict] = {}
+    for role, declared in (manifest.get("role_launch_meta") or {}).items():
+        meta = dict(declared) if isinstance(declared, dict) else {}
+        extras = [str(a) for a in meta.pop("launcher_only_aliases", None) or []]
+        shared = (server_mode.get(role) or {}).get("shared_with") or []
+        aliases = extras + [str(a) for a in shared if isinstance(a, str) and a not in extras]
+        if aliases:
+            meta["shared_with_first_n"] = aliases
+        out[str(role)] = meta
+    return out
 
 
 def _check_descriptors(config: StackChangePipelineConfig) -> PipelineStep:
@@ -1121,6 +1169,65 @@ def _stack_manifest_registry_warnings(config: StackChangePipelineConfig) -> list
     return validate_against_registry(str(config.lean_registry), roles=config.roles)
 
 
+def _fresh_capacity_import(repo_root: Path) -> subprocess.CompletedProcess:
+    """Seam for tests: import stack_manifest in a NEW interpreter, as every
+    `orchestrator_stack.py` command does, so its import-time capacity gate reads the
+    lean registry as it is on disk NOW."""
+    return subprocess.run(
+        [sys.executable, "-c",
+         "import sys; sys.path.insert(0, sys.argv[1]); import scripts.server.stack_manifest",
+         str(repo_root)],
+        cwd=repo_root,
+        text=True,
+        capture_output=True,
+        check=False,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"},
+    )
+
+
+def _serving_shape_capacity_step(config: StackChangePipelineConfig) -> PipelineStep:
+    """The import-time VRAM/host capacity gate, re-run on the lean this run produced.
+
+    STACKCHG-DFLASH2-20261003: `stack_manifest.validate_serving_shape_capacity()` runs
+    at MODULE IMPORT. This pipeline imports stack_manifest before `update` rewrites the
+    lean, so an `update` that compiles an over-capacity lineup reported every step
+    green while every later `orchestrator_stack.py` command (status, reload, start)
+    died at import. Measured on the DFlash2 candidate with Qwen3-VL still on the card:
+    `update` green, fresh import "ROCm0 OVERSUBSCRIBED by 3.16 GiB".
+    """
+    default_lean = config.repo_root / "orchestration" / "model_registry.yaml"
+    manifest = config.repo_root / "scripts" / "server" / "stack_manifest.py"
+    if config.lean_registry.resolve() != default_lean.resolve() or not manifest.exists():
+        return PipelineStep(
+            name="serving_shape_capacity",
+            status="skipped",
+            # A detail, not a warning: only fixture/lane configs point the lean
+            # elsewhere; every production run uses the default lean and runs the gate.
+            details=["COULD-NOT-CHECK: stack_manifest reads <repo_root>/orchestration/"
+                     "model_registry.yaml only; this config's lean is elsewhere"],
+        )
+    try:
+        result = _fresh_capacity_import(config.repo_root)
+    except OSError as exc:
+        return PipelineStep(name="serving_shape_capacity", status="failed",
+                            errors=[f"capacity import failed to launch: {exc}"])
+    if result.returncode == 0:
+        return PipelineStep(
+            name="serving_shape_capacity",
+            status="ok",
+            details=["fresh-process stack_manifest import: capacity gate passed on "
+                     f"{default_lean}"],
+        )
+    tail = (result.stderr or result.stdout or "").strip().splitlines()
+    reason = next((line for line in reversed(tail) if line.strip()), "no output")
+    return PipelineStep(
+        name="serving_shape_capacity",
+        status="failed",
+        errors=[f"stack_manifest import fails on the compiled lean (every "
+                f"orchestrator_stack.py command would die at import): {_clip_output(reason)}"],
+    )
+
+
 def _q_scorer_prior_sources_step(
     config: StackChangePipelineConfig,
     *,
@@ -1387,6 +1494,7 @@ def run_stack_change_pipeline(config: StackChangePipelineConfig) -> PipelineRepo
         )
     )
     report.steps.append(_reasoning_effort_certifications_step(config))
+    report.steps.append(_serving_shape_capacity_step(config))
     report.steps.append(_stack_manifest_registry_step(config, prior_ok=report.ok))
     report.steps.append(_q_scorer_prior_sources_step(config, prior_ok=report.ok))
     report.steps.append(_runtime_attestation_step(prior_ok=report.ok))

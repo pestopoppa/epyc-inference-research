@@ -230,8 +230,9 @@ def test_build_vision_command_escalation_uses_worker_vision_model() -> None:
     assert oss.VISION_ESCALATION_MODEL in cmd
     assert oss.VISION_ESCALATION_MMPROJ in cmd
     assert "--mmproj" in cmd
-    # Was "none" (CPU-only 7B lane); the unified VL process is MI210-resident.
-    assert _flag_value(cmd, "--device") == "ROCm0"
+    # Was "none" (CPU-only 7B lane), then ROCm0 (MI210, 2026-08-01). STACKCHG-DFLASH2-20261003: the VL
+    # process is a COLD CPU role while the MI210 carries DFlash2 -> "none" again.
+    assert _flag_value(cmd, "--device") == "none"
     assert _flag_value(cmd, "--reasoning") == "off"
     # Still no expert-count override: the registry corrected int:4 to "use the
     # GGUF default of 8" on 2026-07-31.
@@ -275,16 +276,19 @@ def test_build_vision_command_worker_uses_stack_prior_shape() -> None:
     #   * the compiled stack prior — launch entry cpu_shape_class gpu_host_lane.
     # If anyone re-rosters the VL role onto a CPU quarter, all three must move
     # together or this fails.
-    from scripts.server.stack_numa import GPU_HOST_LANE
+    # STACKCHG-DFLASH2-20261003: re-rostered, as this test demands, all together: the VL role is a COLD
+    # CPU role on NUMA_HALF_A (0-47,96-143, -t 48) while the MI210 carries DFlash2.
+    from scripts.server.stack_numa import NUMA_HALF_A
 
-    lane_cpus, lane_threads = GPU_HOST_LANE
-    assert oss.NUMA_CONFIG["worker_vision"]["gpu_host_lane"] is True
-    assert oss.NUMA_CONFIG["worker_vision"]["instances"][0][0] == lane_cpus
+    half_cpus, half_threads = NUMA_HALF_A
+    assert "gpu_host_lane" not in oss.NUMA_CONFIG["worker_vision"]
+    assert oss.NUMA_CONFIG["worker_vision"]["instances"][0][0] == half_cpus
     assert {
         entry["cpu_shape_class"]
         for entry in _stack_prior_role("worker_vision")["serving"]["launch"]["entries"]
-    } == {"gpu_host_lane"}
-    assert cmd[cmd.index("-t") + 1] == str(lane_threads)
+    } == {"half"}
+    assert cmd[cmd.index("-t") + 1] == str(half_threads)
+    assert _flag_value(cmd, "--device") == "none"
 
 
 @pytest.mark.parametrize(
@@ -378,8 +382,9 @@ def test_dispatcher_resolves_vision_escalation_to_worker_vision_gpu_process() ->
 
     cmd = oss.build_server_command(None, 8086, vision_mode=True, vision_type="worker")
 
-    assert _flag_value(cmd, "--device") == "ROCm0"
-    assert "none" not in _all_flag_values(cmd, "--device")
+    # STACKCHG-DFLASH2-20261003: the shared :8086 process is a COLD CPU role -> exactly one `--device none`,
+    # never a GPU device (the dispatcher must not re-add ROCm0 behind the builder).
+    assert _all_flag_values(cmd, "--device") == ["none"]
 
 
 def test_build_embedding_command_enables_embeddings_and_cls_pool() -> None:
@@ -1304,7 +1309,9 @@ def test_dispatcher_routes_vision_mode() -> None:
     # reads the role's compiled declaration, and vision_escalation declares ROCm0.
     # Asserting "none" here was pinning the defect that launched GPU-declared roles
     # with every device disabled. Polarity flipped, strength unchanged.
-    assert out == ["VISION", "--device", "ROCm0"]
+    # STACKCHG-DFLASH2-20261003: vision_escalation rides the COLD CPU :8086 process -> "none" (declared, not
+    # assumed: the tail still reads the role's compiled declaration).
+    assert out == ["VISION", "--device", "none"]
     # numa_instance defaults to 0 (full) and is forwarded post-da1aed6 so quarters
     # get NUMA_CONFIG -t (was always -t 96).
     m.assert_called_once_with(8087, "escalation", 0)

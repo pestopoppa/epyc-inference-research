@@ -398,6 +398,9 @@ def test_update_then_check_succeeds_with_known_gaps_allowed(tmp_path: Path) -> N
         "guard_all_surfaces",
         "guard_strict",
         "reasoning_effort_certifications",
+        # 2026-10-03 STACKCHG-DFLASH2: the import-time capacity gate re-run in a fresh
+        # process on the lean THIS run wrote (update was green over an over-capacity lean).
+        "serving_shape_capacity",
         "stack_manifest_registry",
         "q_scorer_priors",
         "runtime_attestation",
@@ -1008,7 +1011,11 @@ def test_lean_check_judges_committed_content_not_the_gitignored_cache_key(tmp_pa
     assert no_key.status == "ok", no_key.errors
     assert any("local cache key (gitignored): <none> !=" in d for d in no_key.details)
 
-    (lean.parent / ".lean_cache_key").write_text(cache_key(master, roles))
+    # DRAFT-SEL-1: the drafter selection is a compile input, so the key is taken over
+    # THIS config's topology (as the step does), not the repo default.
+    (lean.parent / ".lean_cache_key").write_text(
+        cache_key(master, roles, pipeline._topology_path(config))
+    )
     _registry(lean, throughput=99.0)  # hand-edited lean, key still matches master
     edited = pipeline._lean_registry_step(config, check=True)
     assert edited.status == "stale"
@@ -1031,3 +1038,56 @@ def test_declared_env_attestation_step_maps_verdicts(monkeypatch) -> None:
         raise RuntimeError("proc unreadable")
     monkeypatch.setattr(pipeline, "_declared_env_attestation_result", boom)
     assert pipeline._declared_env_attestation_step().status == "failed"
+
+
+# --- STACKCHG-DFLASH2-20261003: capacity gate re-run on the lean this run wrote ---------
+
+def _default_lean_config(tmp_path: Path) -> StackChangePipelineConfig:
+    (tmp_path / "orchestration").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "scripts" / "server").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "scripts" / "server" / "stack_manifest.py").write_text("")
+    return StackChangePipelineConfig(
+        mode="check", repo_root=tmp_path,
+        lean_registry=tmp_path / "orchestration" / "model_registry.yaml",
+    )
+
+
+def test_serving_shape_capacity_fails_when_fresh_import_refuses(monkeypatch, tmp_path) -> None:
+    refusal = "ValueError: device ROCm0 (GPU) OVERSUBSCRIBED by 3.16 GiB"
+    monkeypatch.setattr(
+        pipeline, "_fresh_capacity_import",
+        lambda root: subprocess.CompletedProcess([], 1, "", f"Traceback\n{refusal}\n"),
+    )
+    step = pipeline._serving_shape_capacity_step(_default_lean_config(tmp_path))
+    assert step.status == "failed"
+    assert any("OVERSUBSCRIBED by 3.16 GiB" in e for e in step.errors)
+
+
+def test_serving_shape_capacity_passes_on_clean_import(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(pipeline, "_fresh_capacity_import",
+                        lambda root: subprocess.CompletedProcess([], 0, "", ""))
+    assert pipeline._serving_shape_capacity_step(_default_lean_config(tmp_path)).status == "ok"
+
+
+def test_serving_shape_capacity_is_not_a_pass_for_a_non_default_lean(tmp_path) -> None:
+    cfg = StackChangePipelineConfig(mode="check", repo_root=tmp_path,
+                                    lean_registry=tmp_path / "elsewhere.yaml")
+    step = pipeline._serving_shape_capacity_step(cfg)
+    assert step.status == "skipped"
+    assert step.ok is True and step.errors == []
+    assert any("COULD-NOT-CHECK" in d for d in step.details)
+
+
+def test_lean_bootstrap_roles_from_sources_match_role_launch_meta() -> None:
+    """The bootstrap path (stack_manifest refused against a stale lean) must derive the
+    SAME active set the compiler gets from ROLE_LAUNCH_META on a consistent tree."""
+    from scripts.server.stack_manifest import ROLE_LAUNCH_META
+    from src.registry.registry_compiler import active_roles_from_launch_meta
+
+    root = pipeline.REPO_ROOT
+    cfg = StackChangePipelineConfig(
+        mode="update", repo_root=root,
+        research_registry=root / "orchestration" / "model_registry_full.yaml",
+    )
+    assert active_roles_from_launch_meta(pipeline._launch_meta_from_sources(cfg)) == \
+        active_roles_from_launch_meta(ROLE_LAUNCH_META)

@@ -37,6 +37,15 @@ from typing import Any
 
 import yaml
 
+from src.registry.drafter_selection import (
+    DEFAULT_TOPOLOGY_PATH,
+    DrafterSelectionError,
+    load_drafter_selection,
+    project as project_drafters,
+    resolve as resolve_drafters,
+    selection_cache_bytes,
+)
+
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
 log = logging.getLogger("registry.compiler")
@@ -150,11 +159,17 @@ def _normalize_runtime_defaults(runtime_defaults: Any) -> Any:
     return normalized
 
 
-def cache_key(master_path: Path, active_roles: set[str]) -> str:
-    """SHA-256 of master file bytes + sorted active role names.
+def cache_key(
+    master_path: Path,
+    active_roles: set[str],
+    topology_path: Path | None = None,
+) -> str:
+    """SHA-256 of master bytes + sorted active role names + drafter selection.
 
-    Recompiles when EITHER side changes. Stable across runs when neither
-    changes — repeated `cmd_start` calls hit the cache.
+    Recompiles when ANY input changes. The drafter selection (stack_topology.yaml
+    `drafter_selection`) is a compile INPUT since DRAFT-SEL-1: without it in the key,
+    a topology-only drafter change would hit the cache and never reach the lean view.
+    Only that section is hashed, so NUMA-only topology edits do not churn the lean.
     """
     h = hashlib.sha256()
     h.update(master_path.read_bytes())
@@ -162,6 +177,8 @@ def cache_key(master_path: Path, active_roles: set[str]) -> str:
     for r in sorted(active_roles):
         h.update(r.encode("utf-8"))
         h.update(b"\x00")
+    h.update(b"drafter_selection\x00")
+    h.update(selection_cache_bytes(load_drafter_selection(topology_path)))
     return h.hexdigest()
 
 
@@ -259,10 +276,18 @@ def active_roles_from_launch_meta(launch_meta: dict[str, Any]) -> set[str]:
     return active
 
 
-def compile_lean(master_path: Path, active_roles: set[str]) -> dict:
-    """Project master registry through the active stack manifest.
+def compile_lean(
+    master_path: Path,
+    active_roles: set[str],
+    topology_path: Path | None = None,
+) -> dict:
+    """Project master registry through the active stack manifest AND the topology's
+    drafter selection.
 
-    Returns a dict in the same shape RegistryLoader expects.
+    Returns a dict in the same shape RegistryLoader expects. Raises
+    DrafterSelectionError when the master/topology pair does not determine exactly
+    one drafter for every launching server whose model declares `drafters`
+    (src/registry/drafter_selection.py has the rules).
     """
     with master_path.open("r", encoding="utf-8") as f:
         master = yaml.safe_load(f)
@@ -296,11 +321,26 @@ def compile_lean(master_path: Path, active_roles: set[str]) -> dict:
         else:
             out[section] = {k: v for k, v in src.items() if k in needed}
 
+    # DRAFT-SEL-1: the drafter is SELECTED by topology from the master's list, never
+    # hand-carried per role. Resolution runs over the launching servers only.
+    selection = load_drafter_selection(topology_path)
+    resolution = resolve_drafters(master, active_roles, selection)
+    for warning in resolution.warnings:
+        log.warning("%s", warning)
+    if resolution.errors:
+        raise DrafterSelectionError(
+            "drafter selection does not resolve:\n  - " + "\n  - ".join(resolution.errors)
+        )
+    project_drafters(out, master, resolution)
+
     return out
 
 
 def _format_header_banner(
-    master_path: Path, active_roles: set[str], cache_key_value: str
+    master_path: Path,
+    active_roles: set[str],
+    cache_key_value: str,
+    topology_path: Path | None = None,
 ) -> str:
     """Top-of-file comment block for the compiled output."""
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -311,6 +351,7 @@ def _format_header_banner(
         "#\n"
         "# This file is compiled at every `orchestrator_stack.py start` from the master\n"
         f"# registry at {master_path}\n"
+        f"# with drafter selection from {topology_path or DEFAULT_TOPOLOGY_PATH}\n"
         "# by src/registry/registry_compiler.py.\n"
         "#\n"
         "# Runtime stack truth lives in the MASTER registry. The next start detects master\n"
@@ -331,6 +372,7 @@ def load_or_compile(
     active_roles: set[str],
     output_path: Path,
     cache_key_path: Path,
+    topology_path: Path | None = None,
 ) -> dict:
     """Cache-aware compile.
 
@@ -349,7 +391,7 @@ def load_or_compile(
     if not master_path.exists():
         raise FileNotFoundError(f"master registry not found: {master_path}")
 
-    current_key = cache_key(master_path, active_roles)
+    current_key = cache_key(master_path, active_roles, topology_path)
     cached_key = (
         cache_key_path.read_text().strip()
         if cache_key_path.exists()
@@ -366,7 +408,7 @@ def load_or_compile(
     # Compile, then avoid rewriting an already-current generated file when only
     # the external cache-key file is missing or stale. This keeps default-on
     # startup from dirtying the tracked registry via timestamp-only banner churn.
-    compiled = compile_lean(master_path, active_roles)
+    compiled = compile_lean(master_path, active_roles, topology_path)
     if output_path.exists():
         with output_path.open("r", encoding="utf-8") as f:
             existing = yaml.safe_load(f)
@@ -375,7 +417,7 @@ def load_or_compile(
             cache_key_path.write_text(current_key)
             return compiled
 
-    banner = _format_header_banner(master_path, active_roles, current_key)
+    banner = _format_header_banner(master_path, active_roles, current_key, topology_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with output_path.open("w", encoding="utf-8") as f:
         f.write(banner)
@@ -411,6 +453,12 @@ def _main() -> int:
         default=_REPO_ROOT / "orchestration/model_registry.yaml",
     )
     p.add_argument(
+        "--topology",
+        type=Path,
+        default=DEFAULT_TOPOLOGY_PATH,
+        help="stack_topology.yaml whose `drafter_selection` picks each server's drafter",
+    )
+    p.add_argument(
         "--cache-key",
         type=Path,
         default=_REPO_ROOT / "orchestration/.lean_cache_key",
@@ -434,17 +482,18 @@ def _main() -> int:
         active = active_roles_from_launch_meta(ROLE_LAUNCH_META)
 
     if args.dry_run:
-        compiled = compile_lean(args.master, active)
+        compiled = compile_lean(args.master, active, args.topology)
         yaml.safe_dump(compiled, sys.stdout, sort_keys=False, default_flow_style=False)
         return 0
 
     if args.force and args.cache_key.exists():
         args.cache_key.unlink()
 
-    out = load_or_compile(args.master, active, args.output, args.cache_key)
+    out = load_or_compile(args.master, active, args.output, args.cache_key, args.topology)
     print(f"OK: {len(out.get('roles', {}))} roles in compiled output")
     print(f"  master:    {args.master}")
     print(f"  output:    {args.output}")
+    print(f"  topology:  {args.topology}")
     print(f"  cache key: {args.cache_key}")
     print(f"  active:    {sorted(active)}")
     return 0
