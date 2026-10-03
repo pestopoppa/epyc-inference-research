@@ -11,8 +11,8 @@
 # temporarily skip the compile (e.g. during a master schema change), set
 # ORCHESTRATOR_REGISTRY_NO_COMPILE=1.
 #
-# Compiled at: 2026-10-03T04:41:50+00:00
-# Cache key:   2032d17cd94d06e8...
+# Compiled at: 2026-10-03T11:51:53+00:00
+# Cache key:   9048120c210f531a...
 # Active roles: architect_critic, architect_general, coder_escalation, embedder, embedder_1, embedder_2, embedder_3, embedder_4, embedder_5, embedder_bge_m3, embedder_granite_97m_r2, embedder_multilingual_e5_base, frontdoor, ingest_long_context, toolrunner, vision_escalation, worker, worker_explore, worker_fast, worker_general, worker_math, worker_summarize, worker_vision
 # =============================================================================
 
@@ -1760,9 +1760,9 @@ server_mode:
       corpus_retrieval: true
       spec_type: draft-dflash
       draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf
-      draft_max: 8
+      draft_max: 7
       n_gpu_layers_draft: 99
-      k: 8
+      k: 7
       drafter_selection:
         server: architect_critic
         model_role: qwen38_27b_q8_local
@@ -1836,13 +1836,13 @@ server_mode:
     slots: 4
     cache_ram: 65536
     serving_shape:
-      n_ctx: 196608
+      n_ctx: 393216
       kv_unified: true
       kv_quant:
         k: q8_0
         v: q8_0
       kv_kib_per_token_f16: 64.0
-      vram_non_kv_gib: 37.92
+      vram_non_kv_gib: 39.15
       vram_non_kv_drafter: dflash2
     chat_template_kwargs:
       enable_thinking: true
@@ -1872,9 +1872,9 @@ server_mode:
       lookup: false
       spec_type: draft-dflash
       draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf
-      draft_max: 8
+      draft_max: 7
       n_gpu_layers_draft: 99
-      k: 8
+      k: 7
       drafter_selection: &id001
         server: architect_critic
         model_role: qwen38_27b_q8_local
@@ -1959,10 +1959,10 @@ server_mode:
       reasoning_effort: medium
     description: 'Long-context ingest alias — resolves to the :8083 process (architect_general until 2026-09-27, architect_critic since the ARCHSWAP) (Qwen3.8-27B dense Q8, MI210 ROCm0, :8083). Not a distinct
       model and not a distinct server. 2026-09-22: replaces Qwen3-Next-80B-A3B-Instruct-Q4_K_M (RETIRED), which ran three dedicated CPU instances on :8085/:8185/:8285.'
-    alias_note: '⚠ THE ROLE''S DEFINING PROPERTY DOES NOT FULLY SURVIVE THE SWAP. The 27B''s ctx_max is 262144, so the model can carry the role''s declared context in principle, but the DEPLOYED context
-      on :8083 is a UNIFIED 196608-token pool (2026-09-24 -kvu): a lone request may use all of it, two concurrent requests share it. Raising it is an OPERATOR call, not an arithmetic impossibility: on the
-      2026-09-22 corrected KV rate -c 262144 would fit with ~1.0 GiB of margin instead of 3.15 — see server_mode.architect_critic.serving_shape. 196608 is the allocation the operator took. Any caller that
-      relies on 262144 must be re-pointed or must accept truncation.'
+    alias_note: '2026-10-03 (STACKCHG-KVPOOL-20261003): the role''s declared 262144 PER REQUEST is restored. :8083 now runs a UNIFIED 393216-token pool, and every request is capped at the model''s training
+      context 262144 (by the v10 server itself and by the orchestrator''s context limits). The pool is SHARED: one full 262144 request leaves 131072 for the other three slots, and two concurrent full-262144
+      requests do not fit — through the orchestrator the second one queues. History: 2026-09-24..10-03 the deployed context was a UNIFIED 196608-token pool, the 2026-09-22 operator allocation (VL-30B then
+      shared the card). See server_mode.architect_critic.serving_shape.'
     previous_model: Qwen3-Next-80B-A3B-Instruct-Q4_K_M.gguf
     agent_file_compression_operating_point: medium
     model: /mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf
@@ -1975,9 +1975,9 @@ server_mode:
       lookup: false
       spec_type: draft-dflash
       draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf
-      draft_max: 8
+      draft_max: 7
       n_gpu_layers_draft: 99
-      k: 8
+      k: 7
       drafter_selection:
         server: architect_critic
         model_role: qwen38_27b_q8_local
@@ -2082,9 +2082,9 @@ roles:
       corpus_retrieval: true
       spec_type: draft-dflash
       draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf
-      draft_max: 8
+      draft_max: 7
       n_gpu_layers_draft: 99
-      k: 8
+      k: 7
       drafter_selection:
         server: architect_critic
         model_role: qwen38_27b_q8_local
@@ -2162,9 +2162,9 @@ roles:
       inherits_spec_from: architect_critic
       spec_type: draft-dflash
       draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf
-      draft_max: 8
+      draft_max: 7
       n_gpu_layers_draft: 99
-      k: 8
+      k: 7
       drafter_selection:
         server: architect_critic
         model_role: qwen38_27b_q8_local
@@ -2326,9 +2326,9 @@ roles:
       benchmarked: 2026-07-31
       spec_type: draft-dflash
       draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf
-      draft_max: 8
+      draft_max: 7
       n_gpu_layers_draft: 99
-      k: 8
+      k: 7
       drafter_selection: *id001
     performance:
       superseded_model_history:
@@ -2959,7 +2959,7 @@ roles:
       dflash2:
         spec_type: draft-dflash
         draft_model: /mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf
-        draft_max: 8
+        draft_max: 7
         ngld: 99
         recipe: artifacts/serving-recipes/qwen3.8-27b-q8-gpu-dflash2-np4.json
         min_kernel: production-consolidated-v10

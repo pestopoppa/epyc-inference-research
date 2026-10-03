@@ -1,16 +1,16 @@
 descriptor_version: 3
-compiled_at: '2026-10-03T04:41:51Z'
+compiled_at: '2026-10-03T11:51:54Z'
 status: compiled
 coverage_scope: active_roles_from_stack_manifest
 source_registries:
   lean:
     path: orchestration/model_registry.yaml
-    repo_commit: d3233170
-    sha256: 71e7917ec7cb282ea0746698524b638cd994f367908f8cd87df8659066c27e9d
+    repo_commit: 09e91e1e
+    sha256: a098d2afab16489277b55ff51de1a82d0d6045d136bc2745b7f0da2be5db3c0e
   research:
     path: /mnt/raid0/llm/epyc-inference-research/orchestration/model_registry.yaml
-    repo_commit: be2cc414
-    sha256: fb350778f65a750aab9011ad8ba3412b10f5610bf999443154fc1b88ab81abe5
+    repo_commit: 412e8fc1
+    sha256: 7eca34b5c21b22505e851f5ba7674ab39e25cf9ca58ef59a38afc3a4175e8a0d
 model_id_policy:
   canonical_shape: family-params-active-quant
   invariant: model records are keyed by physical model identity, never by role name
@@ -479,8 +479,8 @@ models:
     kv:
       k: null
       v: null
-    draft_max: 8
-    k: 8
+    draft_max: 7
+    k: 7
     p_split: 0
     lookup: false
   serving:

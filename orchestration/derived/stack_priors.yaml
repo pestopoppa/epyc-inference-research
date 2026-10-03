@@ -48,47 +48,47 @@ contract:
   - quality_overall
   - memory_cost
   fallback_policy: Consumers may use local fallback values only as explicit degraded mode when this generated contract is missing or invalid.
-compiled_at: '2026-10-03T04:41:52Z'
+compiled_at: '2026-10-03T11:51:54Z'
 status: compiled
 coverage_scope: descriptor_role_bindings
 precedence_spec: docs/reference/stack-truth-precedence.md
 source_artifacts:
   registry:
     path: orchestration/model_registry.yaml
-    sha256: 71e7917ec7cb282ea0746698524b638cd994f367908f8cd87df8659066c27e9d
-    repo_commit: d3233170
+    sha256: a098d2afab16489277b55ff51de1a82d0d6045d136bc2745b7f0da2be5db3c0e
+    repo_commit: 09e91e1e
   descriptors:
     path: orchestration/model_descriptors.yaml
-    sha256: fe70193dec6d38f049b05ee0b2da5900b36b78498b0e15f5927129bf8585d166
-    repo_commit: d3233170
+    sha256: 420b70b4d9ca6ec46dee7a3b3dec0d0f835170977970221403d7bc07c2e0fd3b
+    repo_commit: 09e91e1e
   stack_manifest:
     path: scripts/server/stack_manifest.py
     sha256: 5f7acb6d067e4420edfc2bcc662148cd8fc7aff6c90682c51ece207666171610
-    repo_commit: d3233170
+    repo_commit: 09e91e1e
   stack_numa:
     path: scripts/server/stack_numa.py
     sha256: edfdb41035ec638d3eab60631024ebece56a5e2d9b577851bf02e05a446e0c32
-    repo_commit: d3233170
+    repo_commit: 09e91e1e
   launch_manifest:
     path: orchestration/launch_manifest.yaml
     sha256: 54757eaef051ff39ee9d826bf011f642391b6e49acd0ca38265feb624a7b2df6
-    repo_commit: d3233170
+    repo_commit: 09e91e1e
   stack_topology:
     path: orchestration/stack_topology.yaml
     sha256: 15d7cfa5a2ca4abc373f44d41313b1abb9468b35f1d85c87ac244d9dad1b8de1
-    repo_commit: d3233170
+    repo_commit: 09e91e1e
   orchestrator_stack:
     path: scripts/server/orchestrator_stack.py
-    sha256: d8ca18053d3055b74c22e16912f0dc99de176f562d3520045c594f6db623bd79
-    repo_commit: d3233170
+    sha256: 54e3c0b096226647769ed34a7bd9dfc7ddaa9d740c6daef84db8ed81ed4229a1
+    repo_commit: 09e91e1e
   stack_paths:
     path: scripts/server/stack_paths.py
     sha256: 4a7ca842a87b6ffec022f4f6433d755751cac32b9102747d88f3f4f2e4cb24de
-    repo_commit: d3233170
+    repo_commit: 09e91e1e
   stack_runtime:
     path: scripts/server/stack_runtime.py
     sha256: 984d27262e1f1d5a5332d0b4a3e6fb96fb8095fc890ddaa93da07bff52eb1c99
-    repo_commit: d3233170
+    repo_commit: 09e91e1e
 roles:
   architect_critic:
     role: architect_critic
@@ -104,7 +104,7 @@ roles:
       - 8083
       slots: 4
       tier: hot
-      effective_context_tokens: 196608
+      effective_context_tokens: 393216
       binary: llama.cpp
       binary_dir: null
       numa_policy: single_96t
@@ -134,7 +134,7 @@ roles:
           env_policy: canonical
           kmp_blocktime: null
           cache:
-            context_tokens: 196608
+            context_tokens: 393216
             slots: 4
             slots_by_port:
               8083: 4
@@ -164,7 +164,7 @@ roles:
               type: draft-dflash
               disabled_by: null
               draft_model_path: /mnt/raid0/llm/models/Qwen3.8-27B-DFlash2-Q8_0.gguf
-              draft_max: 8
+              draft_max: 7
               draft_min: null
               draft_p_min: null
               draft_p_split: null
@@ -209,8 +209,8 @@ roles:
       kv:
         k: null
         v: null
-      draft_max: 8
-      k: 8
+      draft_max: 7
+      k: 7
       p_split: 0
       lookup: false
     model:
@@ -514,7 +514,7 @@ roles:
       - 8083
       slots: 4
       tier: hot
-      effective_context_tokens: 196608
+      effective_context_tokens: 393216
       binary: llama.cpp
       binary_dir: null
       numa_policy: single_96t
@@ -544,7 +544,7 @@ roles:
           env_policy: canonical
           kmp_blocktime: null
           cache:
-            context_tokens: 196608
+            context_tokens: 393216
             slots: 4
             slots_by_port:
               8083: 4
@@ -619,8 +619,8 @@ roles:
       kv:
         k: null
         v: null
-      draft_max: 8
-      k: 8
+      draft_max: 7
+      k: 7
       p_split: 0
       lookup: false
     model:
@@ -958,7 +958,7 @@ roles:
       - 8083
       slots: 4
       tier: hot
-      effective_context_tokens: 196608
+      effective_context_tokens: 393216
       binary: llama.cpp
       binary_dir: null
       numa_policy: single_96t
@@ -988,7 +988,7 @@ roles:
           env_policy: canonical
           kmp_blocktime: null
           cache:
-            context_tokens: 196608
+            context_tokens: 393216
             slots: 4
             slots_by_port:
               8083: 4
@@ -1063,8 +1063,8 @@ roles:
       kv:
         k: null
         v: null
-      draft_max: 8
-      k: 8
+      draft_max: 7
+      k: 7
       p_split: 0
       lookup: false
     model:
@@ -1376,8 +1376,8 @@ roles:
       kv:
         k: null
         v: null
-      draft_max: 8
-      k: 8
+      draft_max: 7
+      k: 7
       p_split: 0
       lookup: false
     model:
