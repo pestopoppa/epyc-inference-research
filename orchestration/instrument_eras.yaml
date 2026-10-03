@@ -556,6 +556,18 @@ eras:
       the deterministic heuristic pre-boundary) — treat pre-boundary rubric_source_counts
       as a prior under the same condition, or re-score from stored judge replies.
 
+  - id: ST1
+    from: "2026-10-03T04:59:00Z"   # API reload PID 3851680 deployed orch 9a0d38e0
+    scope: serving_timing
+    note: >
+      Per-call serving records (epyc.orchestrator.serving_call.v1, logs/serving_calls/serving_calls.jsonl;
+      src/backends/serving_calls.py) begin. Before this boundary there is NO per-request record of role, caller,
+      queue wait or llama.cpp timings: windows before it are era-labelled by ABSENCE and are never backfilled.
+      Same deploy fixed the chat-stream prompt timing, so logs/progress/*.jsonl prompt_eval_ms read 0.0 before
+      this boundary as an instrument artifact, not a measurement. Launch identity (server.identity_source)
+      stays "absent" per server until that server's next stack launch writes logs/server_launches/<port>.json.
+      Belief-kernel read side: VB-SERVE-TIMING-1.
+
 known_dead_instrument_items:
   # Discovered 2026-06-12 (fable5-findings-01-impl-plan §2.0). Until repaired, ALL T1 quality
   # numbers have effective n ~= 35 of 43 and ceiling ~= 2.44/3.0.
