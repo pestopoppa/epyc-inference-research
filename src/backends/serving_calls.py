@@ -481,9 +481,22 @@ def write_record(record: dict[str, Any]) -> bool:
             finally:
                 if fcntl is not None:
                     fcntl.flock(lock_fh.fileno(), fcntl.LOCK_UN)
+        _feed_serving_params(record)
         return True
     except Exception:
         return False
+
+
+def _feed_serving_params(record: dict[str, Any]) -> None:
+    """UFH14-B1 F1: a written record with a long prefill is a prefill-rate sample for
+    ``src/backends/serving_params.py`` in this process at once (other workers' records
+    arrive through its periodic log re-read). Never raises."""
+    try:
+        from src.backends import serving_params
+
+        serving_params.observe_record(record)
+    except Exception:
+        pass
 
 
 def classify_outcome(result: Any, exc: BaseException | None, early_stop: bool) -> str:
@@ -539,7 +552,11 @@ def _cached_prompt_tokens(result: Any, timings: Any) -> Any:
 #: Staged keys that become their own top-level record block, not caller fields.
 #: ``kv_admission`` (KVU-15c): the shared-KV-pool admission decision for the call —
 #: the long-prefill verdict, the cached-prefix credit and its source.
-_BLOCK_KEYS = ("kv_admission",)
+#: ``serving_params`` (UFH14-B1 F1): the derived prefill allowance added to the call's
+#: timeout, the timeout after the deadline clamp, and ``doomed`` when the remaining
+#: request budget cannot cover the prefill (the server would keep prefilling an
+#: abandoned request).
+_BLOCK_KEYS = ("kv_admission", "serving_params")
 
 
 def _caller_block(staged: dict[str, Any] | None) -> dict[str, Any]:

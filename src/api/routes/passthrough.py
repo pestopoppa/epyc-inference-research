@@ -111,6 +111,10 @@ PASSTHROUGH_ROLES_ENV = "ORCHESTRATOR_PASSTHROUGH_ROLES"
 # Longest silence tolerated between two upstream chunks. A streamed call is
 # silent for its whole prefill (two concurrent 46k cold prefills on :8083 took
 # 395 s and 665 s), so this is generous; it matches the pool wait default.
+# UFH14-B1 F1: a prompt whose derived silent prefill (serving_params: measured
+# prefill rate of this server x this prompt, x2 queue, x1.25) exceeds it RAISES
+# the read timeout for that call; it is never lowered (a non-streamed call is
+# silent for its whole generation too). Setting the env var pins the value.
 READ_TIMEOUT_ENV = "ORCHESTRATOR_PASSTHROUGH_READ_TIMEOUT_S"
 DEFAULT_READ_TIMEOUT_S = 1800.0
 CONNECT_TIMEOUT_S = 10.0
@@ -298,6 +302,9 @@ class _Call:
     pool_exhausted: bool = False
     client_disconnected: bool = False
     gate: dict[str, Any] = field(default_factory=dict)
+    # UFH14-B1 F1: the read timeout this call ran with and, when derived, why.
+    read_timeout_s: float | None = None
+    serving_params: dict[str, Any] | None = None
     # KVU-15c: the shared-KV-pool admission decision (``admission_record``).
     kv_admission: dict[str, Any] | None = None
 
@@ -616,11 +623,30 @@ def gate(call: _Call, state: AppState):
 # ── worker thread ────────────────────────────────────────────────────────────
 
 
-def _read_timeout() -> float:
-    try:
-        return float(os.environ.get(READ_TIMEOUT_ENV, DEFAULT_READ_TIMEOUT_S))
-    except ValueError:
+def _read_timeout(call: _Call | None = None) -> float:
+    """Upstream read timeout for ``call``: the env pin when set (0 = none), else
+    ``max(DEFAULT_READ_TIMEOUT_S, derived silent prefill of this prompt)``."""
+    raw = os.environ.get(READ_TIMEOUT_ENV)
+    if raw is not None:
+        try:
+            return float(raw)
+        except ValueError:
+            return DEFAULT_READ_TIMEOUT_S
+    if call is None:
         return DEFAULT_READ_TIMEOUT_S
+    try:
+        from src.backends.serving_params import get_serving_params_resolver
+
+        allowance = get_serving_params_resolver().prefill_allowance(
+            call.base_url, call.prompt_tokens_est
+        )
+    except Exception:
+        logger.debug("passthrough: serving params unavailable", exc_info=True)
+        allowance = None
+    if allowance:
+        call.serving_params = dict(allowance)
+    need = float((allowance or {}).get("allowance_s") or 0)
+    return max(DEFAULT_READ_TIMEOUT_S, need)
 
 
 def run_upstream(call: _Call, state: AppState, emit) -> None:
@@ -637,7 +663,8 @@ def run_upstream(call: _Call, state: AppState, emit) -> None:
     try:
         with gate(call, state) as first_output:
             scanner = _SSEScanner(call, first_output)
-            timeout = httpx.Timeout(CONNECT_TIMEOUT_S, read=_read_timeout() or None)
+            call.read_timeout_s = _read_timeout(call)
+            timeout = httpx.Timeout(CONNECT_TIMEOUT_S, read=call.read_timeout_s or None)
             call.t_dispatch = time.time()
             with httpx.Client(timeout=timeout) as client:
                 headers = {
@@ -819,6 +846,8 @@ def write_serving_record(call: _Call, error: BaseException | None) -> None:
         }
         if call.kv_admission:
             record["kv_admission"] = dict(call.kv_admission)
+        if call.serving_params:
+            record["serving_params"] = dict(call.serving_params, timeout_s=call.read_timeout_s)
         record["queue"] = {
             "pre_dispatch_wait_ms": round(
                 max(0.0, ((call.t_dispatch if dispatched else now) - call.t_staged) * 1000.0), 3
@@ -830,7 +859,7 @@ def write_serving_record(call: _Call, error: BaseException | None) -> None:
         record["request"] = {
             "n_tokens": call.new_tokens,
             "prompt_chars": len(call.prompt_text or ""),
-            "timeout_s": None,
+            "timeout_s": call.read_timeout_s,
             "slot_id": call.slot_id,
             "slot_id_sent": call.slot_id is not None,  # raw body forwarded verbatim
             "chat_payload": True,

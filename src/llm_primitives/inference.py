@@ -162,6 +162,45 @@ def _request_cap_refusal(prompt: str, limit: Any) -> int | None:
     return prompt_est if prompt_est >= int(limit.per_request_n_ctx) else None
 
 
+def _prefill_allowance(server_urls: str | None, prompt: str) -> dict[str, Any] | None:
+    """UFH14-B1 F1: the seconds a long prompt's SILENT prefill needs on top of the
+    role timeout (``src/backends/serving_params.py``: the server's measured prefill
+    rate from serving-call records, per-request context from ContextLimitResolver).
+    None for a short prompt or when nothing can be derived — the timeout is then
+    exactly today's. Never raises."""
+    if not server_urls:
+        return None
+    try:
+        from src.backends.context_limits import estimate_tokens_conservative
+        from src.backends.serving_params import get_serving_params_resolver
+
+        return get_serving_params_resolver().prefill_allowance(
+            server_urls, estimate_tokens_conservative(prompt)
+        )
+    except Exception:
+        log.debug("prefill allowance unavailable", exc_info=True)
+        return None
+
+
+def _note_prefill_budget(allowance: dict[str, Any], timeout_s: Any) -> None:
+    """Stamp the allowance and the post-clamp timeout on the serving record; a call
+    whose remaining request budget cannot even cover its prefill is ``doomed``: it
+    will be abandoned mid-prefill while the server keeps prefilling it (D1)."""
+    try:
+        need = int(allowance.get("allowance_s") or 0)
+        block = dict(allowance, timeout_s=int(timeout_s or 0),
+                     doomed=bool(need) and int(timeout_s or 0) < need)
+        serving_calls.annotate_staged(serving_params=block)
+        if block["doomed"]:
+            log.warning(
+                "doomed prefill: ~%s prompt tokens need ~%ss of silent prefill on %s but the "
+                "request budget leaves %ss; the server will keep prefilling after the timeout",
+                allowance.get("prompt_tokens_est"), need, allowance.get("url"), block["timeout_s"],
+            )
+    except Exception:
+        pass
+
+
 def _sampling_cache_key(
     *,
     temperature: float | None = None,
@@ -1077,6 +1116,19 @@ class InferenceMixin:
         cancel_check = self.get_request_cancel_check()
         deadline_s = self.get_request_deadline_s()
         request_priority = self.get_request_priority()
+
+        # UFH14-B1 F1 (D1): the role timeout is a DECODE budget; a long prompt's silent
+        # prefill is added on top, derived per server (never a constant). The request
+        # deadline still bounds it at dispatch (_clamp_timeout_to_request_budget), so
+        # interactive SLAs are unchanged; a call the deadline cannot cover is recorded
+        # as doomed there. Covers every fleet instance the call may land on.
+        prefill_allowance = _prefill_allowance(
+            self.server_urls.get(role, "") if self.server_urls else "", prompt
+        )
+        if prefill_allowance and prefill_allowance.get("allowance_s"):
+            request.timeout = int(request.timeout or self.config.call_timeout) + int(
+                prefill_allowance["allowance_s"]
+            )
         if backend_url and admission:
             # Bounded wait at admission gate to smooth burst contention while
             # honoring request cancellation/deadlines.
@@ -1281,6 +1333,8 @@ class InferenceMixin:
             try:
                 with lock_ctx:
                     request.timeout = self._clamp_timeout_to_request_budget(request.timeout)
+                    if prefill_allowance:
+                        _note_prefill_budget(prefill_allowance, request.timeout)
                     from src.inference_tap import (
                         is_active as _tap_active,
                         should_stream_role as _tap_should_stream_role,
