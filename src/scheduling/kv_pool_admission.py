@@ -61,18 +61,47 @@ logger = logging.getLogger(__name__)
 # may pass them if it fits with their reservations counted as already taken —
 # so passing can never starve the long requests of pool tokens.
 #
-# The estimate is of the whole prompt, not of the uncached suffix (the
-# orchestrator cannot see the server's prompt cache), so a long prompt that is
-# mostly a cache hit also waits; the rate-floor expiry bounds what that costs.
+# ── KVU-15a: the lease is HOST-WIDE, and sized on NEW tokens (2026-10-03) ──────
 #
-# The lease is per PROCESS, and the API runs several uvicorn workers; clients
-# that bypass the orchestrator hold no lease at all. So the rule also reads the
-# server: a slot that is still in prefill (``n_decoded == 0``) and has already
-# processed LONG_PREFILL_OBSERVE_TOKENS uncached tokens (``/slots``
+# Cross-process. The API runs six uvicorn workers; a per-process lease let two
+# of them start long prefills on one server seconds apart. The lease is now an
+# exclusive flock on ``{tmp_dir}/kv_prefill_lease.{host}_{port}.lock``
+# (src/runtime/long_prefill_lease.py — the same primitive and tmp dir as the
+# per-region inference locks). The in-process record (``_prefill_lease``) still
+# maps the lease to its ticket and expiry; the open file description held next
+# to it is what other workers see. It is released on prefill_done (first chunk),
+# release (completion, error, cancel, timeout — the caller's ``finally``), at the
+# rate-floor expiry (a timer in the holding process, so an idle holder still
+# lets go on time), and by the kernel when the holding worker dies. Lease
+# acquisition is non-blocking and sits between the request semaphore and the
+# inference/region locks in the lock order (see long_prefill_lease.py), so it
+# cannot deadlock with them. ORCHESTRATOR_KV_POOL_CROSS_PROCESS_LEASE=0 returns
+# to the per-process lease.
+#
+# New tokens, not the whole prompt. A long prompt that is mostly a cache hit
+# prefills only its suffix, so holding it behind the lease cost a wait for
+# nothing. When the caller passes the prompt text, ``/slots`` (which already
+# returns each slot's detokenized ``prompt``) gives the longest prefix an IDLE
+# slot still holds; the request is sized at
+#     min(whole, ceil(uncached_chars / 3) + ORCHESTRATOR_KV_POOL_CACHE_CREDIT_MARGIN_TOKENS)
+# The margin (default 4096 tokens, two -ub 2048 batches) covers what the server
+# may re-process anyway: a hybrid/recurrent model can only resume from a context
+# checkpoint at or before the divergence point, and tokenizer boundaries move a
+# little. The credit is a heuristic and stays conservative: no prompt text (the
+# chat-payload path — the server's chat template renders a text the orchestrator
+# never sees), no /slots, no prompt in /slots, or no matching idle slot all fall
+# back to the whole-prompt estimate; only an idle slot counts (a busy one cannot
+# take the request); a negative margin disables the credit. Residual risk: the
+# matched slot is purged or taken by another request between admission and
+# dispatch, and a long cold prefill runs without the lease — the /slots
+# observation below then catches it for everyone else. The KV RESERVATION is
+# never credited: cached cells still occupy the pool.
+#
+# Clients that bypass the orchestrator hold no lease at all. So the rule also
+# reads the server: a slot that is still in prefill (``n_decoded == 0``) and has
+# already processed LONG_PREFILL_OBSERVE_TOKENS uncached tokens (``/slots``
 # ``n_prompt_tokens_processed``) counts as a long prefill in flight, whoever sent
-# it. The observation lags the start of a prefill by those tokens plus the
-# ~1.5 s /slots cache, so two workers can still start long prefills a few
-# seconds apart; within one worker the lease closes that window.
+# it.
 
 KV_POOL_WAIT_ENV = "ORCHESTRATOR_KV_POOL_WAIT_S"
 # Used only when the request carries no deadline of its own. Long on purpose:
@@ -118,6 +147,15 @@ DEFAULT_PREFILL_FLOOR_TPS = 250.0
 # 4096 = two -ub 2048 batches, ~6 s of :8083 prefill.
 KV_POOL_LONG_PREFILL_OBSERVE_ENV = "ORCHESTRATOR_KV_POOL_LONG_PREFILL_OBSERVE_TOKENS"
 DEFAULT_LONG_PREFILL_OBSERVE_TOKENS = 4096
+# KVU-15a: host-wide lease (flock per server). "0"/"false"/"off" = per-process.
+KV_POOL_CROSS_PROCESS_LEASE_ENV = "ORCHESTRATOR_KV_POOL_CROSS_PROCESS_LEASE"
+# KVU-15a: tokens added back to the uncached-suffix estimate when a cached
+# prefix is credited (< 0 disables the credit: whole-prompt sizing).
+KV_POOL_CACHE_CREDIT_MARGIN_ENV = "ORCHESTRATOR_KV_POOL_CACHE_CREDIT_MARGIN_TOKENS"
+DEFAULT_CACHE_CREDIT_MARGIN_TOKENS = 4096
+# Same ratio as context_limits.CONSERVATIVE_CHARS_PER_TOKEN (the estimator the
+# caller sizes the whole prompt with), so whole and suffix estimates agree.
+_SUFFIX_CHARS_PER_TOKEN = 3.0
 
 
 def _env_float(name: str, default: float) -> float:
@@ -166,6 +204,7 @@ class SharedKVPoolAdmission:
         occupancy: Callable[[str], Any] | None = None,
         *,
         clock: Callable[[], float] = time.perf_counter,
+        cross_process: bool | None = None,
     ) -> None:
         self._cond = threading.Condition()
         self._inflight: dict[str, dict[int, int]] = {}
@@ -178,6 +217,11 @@ class SharedKVPoolAdmission:
         self._waiting: dict[int, tuple[int, bool]] = {}
         # url -> (holder ticket, lease expiry on self._clock or None = no expiry).
         self._prefill_lease: dict[str, tuple[int, float | None]] = {}
+        # KVU-15a: url -> the host-wide flock behind that lease, and the timer
+        # that drops it at its expiry. None = decided per call from the env.
+        self._cross_process = cross_process
+        self._lease_handles: dict[str, Any] = {}
+        self._lease_timers: dict[str, threading.Timer] = {}
         # url -> queue-wait accounting (see get_status).
         self._stats: dict[str, dict[str, float]] = {}
 
@@ -191,20 +235,107 @@ class SharedKVPoolAdmission:
         threshold = self.long_prefill_threshold()
         return threshold > 0 and int(prompt_tokens) >= threshold
 
+    def cross_process_lease(self) -> bool:
+        if self._cross_process is not None:
+            return bool(self._cross_process)
+        return os.environ.get(KV_POOL_CROSS_PROCESS_LEASE_ENV, "1").strip().lower() not in {
+            "0", "false", "no", "off"}
+
+    def _drop_lease(self, url: str) -> None:
+        """End ``url``'s lease here: forget the ticket, release the host-wide
+        flock, stop the expiry timer. Caller holds the lock."""
+        self._prefill_lease.pop(url, None)
+        handle = self._lease_handles.pop(url, None)
+        if handle is not None:
+            handle.release()
+        timer = self._lease_timers.pop(url, None)
+        if timer is not None:
+            timer.cancel()
+
+    def _expire_lease(self, url: str, ticket: int) -> None:
+        """Timer callback: the rate-floor expiry, in real time, so a holder whose
+        process has no other admission traffic still lets the lease go."""
+        with self._cond:
+            lease = self._prefill_lease.get(url)
+            if lease is not None and lease[0] == ticket:
+                self._drop_lease(url)
+                self._cond.notify_all()
+
+    def _take_lease(self, url: str, ticket: int, expires: float | None) -> bool:
+        """Take ``url``'s lease for ``ticket`` (host-wide flock first when
+        enabled). False = another holder has it. Caller holds the lock."""
+        handle = None
+        if self.cross_process_lease():
+            from src.runtime import long_prefill_lease
+
+            handle = long_prefill_lease.try_acquire(url, payload={
+                "ticket": ticket,
+                "expires_in_s": None if expires is None else round(expires - self._clock(), 3),
+            })
+            if handle is None:
+                return False
+        self._drop_lease(url)  # defensive: never two records for one url
+        self._prefill_lease[url] = (ticket, expires)
+        if handle is not None:
+            self._lease_handles[url] = handle
+        if expires is not None:
+            timer = threading.Timer(max(0.0, expires - self._clock()), self._expire_lease,
+                                    args=(url, ticket))
+            timer.daemon = True
+            self._lease_timers[url] = timer
+            timer.start()
+        return True
+
     def _lease_holder(self, url: str) -> int | None:
-        """The ticket holding ``url``'s long-prefill lease, dropping an expired one."""
+        """The ticket holding ``url``'s long-prefill lease IN THIS PROCESS,
+        dropping an expired one."""
         lease = self._prefill_lease.get(url)
         if lease is None:
             return None
         holder, expires = lease
         if expires is not None and self._clock() >= expires:
-            self._prefill_lease.pop(url, None)
+            self._drop_lease(url)
             return None
         return holder
 
+    def _lease_busy(self, url: str) -> bool:
+        """Is ``url``'s lease held by anyone — this process or another worker?
+        Caller holds the lock."""
+        if self._lease_holder(url) is not None:
+            return True
+        if self.cross_process_lease():
+            from src.runtime import long_prefill_lease
+
+            return long_prefill_lease.is_held(url)
+        return False
+
     def long_prefill_holder(self, url: str) -> int | None:
+        """This process's ticket holding ``url``'s lease, or None."""
         with self._cond:
             return self._lease_holder(url)
+
+    def long_prefill_lease_busy(self, url: str) -> bool:
+        """Whether any process holds ``url``'s long-prefill lease."""
+        with self._cond:
+            return self._lease_busy(url)
+
+    # -- new-token estimate (KVU-15a) -------------------------------------------
+    @staticmethod
+    def cache_credit_margin() -> int:
+        return _env_int(KV_POOL_CACHE_CREDIT_MARGIN_ENV, DEFAULT_CACHE_CREDIT_MARGIN_TOKENS)
+
+    def prefill_tokens_estimate(self, prompt_tokens: int, prompt_text: str | None,
+                                cached_chars: int) -> int:
+        """Tokens the server will actually prefill: the whole-prompt estimate,
+        lowered to the uncached suffix + margin when an idle slot's cached prompt
+        covers a prefix of ``prompt_text`` (see the KVU-15a block comment)."""
+        prompt_tokens = int(prompt_tokens)
+        margin = self.cache_credit_margin()
+        if margin < 0 or not prompt_text or cached_chars <= 0:
+            return prompt_tokens
+        suffix_chars = max(0, len(prompt_text) - int(cached_chars))
+        suffix_tokens = int(math.ceil(suffix_chars / _SUFFIX_CHARS_PER_TOKEN))
+        return max(0, min(prompt_tokens, suffix_tokens + margin))
 
     def prefill_done(self, url: str, ticket: int | None) -> None:
         """The request holding ``ticket`` finished its prefill (first output seen):
@@ -214,7 +345,7 @@ class SharedKVPoolAdmission:
         with self._cond:
             lease = self._prefill_lease.get(url)
             if lease is not None and lease[0] == ticket:
-                self._prefill_lease.pop(url, None)
+                self._drop_lease(url)
                 self._cond.notify_all()
 
     def _stat(self, url: str) -> dict[str, float]:
@@ -222,7 +353,7 @@ class SharedKVPoolAdmission:
             "admitted": 0, "queued_admissions": 0, "queue_wait_s_total": 0.0,
             "queue_wait_s_max": 0.0, "long_prefill_admitted": 0,
             "long_prefill_waits": 0, "long_prefill_wait_s_total": 0.0,
-            "short_passed_long": 0, "abandoned": 0,
+            "short_passed_long": 0, "abandoned": 0, "cache_credited": 0,
         })
 
     # -- adaptive decode reservation -----------------------------------------
@@ -269,9 +400,10 @@ class SharedKVPoolAdmission:
             return 0
         return min(observe, threshold)
 
-    def _observed(self, url: str) -> tuple[int, int, int] | None:
-        """(projected in-flight tokens, processing slots, long prefills in flight)
-        from /slots, or None."""
+    def _observed(self, url: str, prompt_text: str | None = None
+                  ) -> tuple[int, int, int, int] | None:
+        """(projected in-flight tokens, processing slots, long prefills in flight,
+        chars of ``prompt_text`` an idle slot has cached) from /slots, or None."""
         try:
             occ = self._occupancy_fn(url)
         except Exception:
@@ -287,7 +419,13 @@ class SharedKVPoolAdmission:
                 long_prefills = int(occ.long_prefills(min_tokens))
             except Exception:
                 long_prefills = 0
-        return int(occ.projected_tokens(ratio)), int(occ.processing), long_prefills
+        cached_chars = 0
+        if prompt_text and hasattr(occ, "best_cached_prefix_chars"):
+            try:
+                cached_chars = int(occ.best_cached_prefix_chars(prompt_text))
+            except Exception:
+                cached_chars = 0
+        return int(occ.projected_tokens(ratio)), int(occ.processing), long_prefills, cached_chars
 
     def _fits(self, url: str, tokens: int, pool_tokens: int, observed: tuple | None) -> bool:
         reserved = self._inflight.get(url, {})
@@ -309,16 +447,20 @@ class SharedKVPoolAdmission:
         cancel_check=None,
         poll_s: float = 0.25,
         max_queued: int | None = None,
+        prompt_text: str | None = None,
     ) -> int | None:
         """Queue for ``tokens`` (+ ratio-weighted ``max_new_tokens``) of ``url``'s
         pool; return a ticket, or None when the wait ends (deadline, timeout,
         cancellation) before it fits. Raises KVPoolQueueFull when ``max_queued``
         (default ``ORCHESTRATOR_KV_POOL_MAX_QUEUED``) requests already wait.
 
-        ``tokens`` is the estimated prompt; at or above
+        ``tokens`` is the estimated prompt; when the request's NEW tokens (the
+        whole prompt, less a prefix an idle slot has cached when ``prompt_text``
+        is given — KVU-15a) are at or above
         ``ORCHESTRATOR_KV_POOL_LONG_PREFILL_TOKENS`` the request is a long
-        prefill and also waits for ``url``'s long-prefill lease (one long prefill
-        in flight per server). Call ``prefill_done`` on the first output chunk.
+        prefill and also waits for ``url``'s host-wide long-prefill lease (one
+        long prefill in flight per server, across every worker process). Call
+        ``prefill_done`` on the first output chunk.
 
         ``deadline_s`` is a ``time.perf_counter`` deadline (the primitives clock).
         ``timeout_s`` defaults to ``ORCHESTRATOR_KV_POOL_WAIT_S`` only when there
@@ -328,6 +470,7 @@ class SharedKVPoolAdmission:
         want = self.reservation_tokens(url, tokens, max_new_tokens)
         want = max(1, min(want, pool_tokens))
         is_long = self.is_long_prefill(tokens)
+        prefill_tokens = int(tokens)
         if timeout_s is None and deadline_s is None:
             timeout_s = _env_float(KV_POOL_WAIT_ENV, DEFAULT_KV_POOL_WAIT_S)
         if max_queued is None:
@@ -347,14 +490,19 @@ class SharedKVPoolAdmission:
         try:
             while True:
                 # Read the server outside the lock (an HTTP GET, cached ~1.5 s).
-                observed = self._observed(url)
+                observed = self._observed(url, prompt_text)
+                cached_chars = int(observed[3]) if observed is not None and len(observed) > 3 else 0
+                prefill_tokens = self.prefill_tokens_estimate(tokens, prompt_text, cached_chars)
                 with self._cond:
+                    is_long = self.is_long_prefill(prefill_tokens)
+                    self._waiting[ticket] = (want, is_long)
                     verdict = self._admissible(url, ticket, queue, want, is_long,
                                                pool_tokens, observed)
+                    if verdict == "head" and is_long and not self._take_lease(
+                            url, ticket, self._lease_expiry(prefill_tokens)):
+                        verdict = "lease"  # another worker took it first
                     if verdict in ("head", "pass"):
                         self._inflight.setdefault(url, {})[ticket] = want
-                        if is_long:
-                            self._prefill_lease[url] = (ticket, self._lease_expiry(tokens))
                         admitted = True
                         waited = time.perf_counter() - start
                         stat = self._stat(url)
@@ -370,6 +518,8 @@ class SharedKVPoolAdmission:
                             stat["long_prefill_wait_s_total"] += waited
                         if verdict == "pass":
                             stat["short_passed_long"] += 1
+                        if not is_long and self.is_long_prefill(tokens):
+                            stat["cache_credited"] += 1
                         if logged:
                             logger.info(
                                 "KV pool admission: %s request of %d tokens admitted after %.1fs%s",
@@ -436,7 +586,7 @@ class SharedKVPoolAdmission:
         """``head``/``pass`` = admit now; ``lease`` = blocked only by the
         long-prefill rule; ``wait`` = anything else. Caller holds the lock."""
         observed_long = int(observed[2]) if observed is not None and len(observed) > 2 else 0
-        lease_held = self._lease_holder(url) is not None or observed_long > 0
+        lease_held = observed_long > 0 or self._lease_busy(url)
         position = queue.index(ticket)
         if position == 0:
             if not self._fits(url, want, pool_tokens, observed):
@@ -469,7 +619,7 @@ class SharedKVPoolAdmission:
                     self._inflight.pop(url, None)
             lease = self._prefill_lease.get(url)
             if lease is not None and lease[0] == ticket:
-                self._prefill_lease.pop(url, None)
+                self._drop_lease(url)
             if success:
                 self._decay(url)
             self._cond.notify_all()
@@ -490,7 +640,10 @@ class SharedKVPoolAdmission:
                     "queued": len(self._queue.get(url, [])),
                     "new_token_ratio": round(self._ratio.get(url, self._ratio_init()), 4),
                     "long_prefill_threshold": self.long_prefill_threshold(),
-                    "long_prefill_lease_held": self._lease_holder(url) is not None,
+                    # Held by any worker process (host-wide flock) / by this one.
+                    "long_prefill_lease_held": self._lease_busy(url),
+                    "long_prefill_lease_held_here": self._lease_holder(url) is not None,
+                    "long_prefill_lease_cross_process": self.cross_process_lease(),
                     "queued_long_prefills": sum(
                         1 for t in self._queue.get(url, []) if self._waiting.get(t, (0, False))[1]
                     ),

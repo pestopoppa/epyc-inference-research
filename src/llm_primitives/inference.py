@@ -1098,6 +1098,13 @@ class InferenceMixin:
                         max_new_tokens=pool_new_tokens,
                         deadline_s=deadline_s,
                         cancel_check=cancel_check,
+                        # KVU-15a: lets admission size the long-prefill rule on
+                        # NEW tokens (an idle slot's cached prefix is credited).
+                        # A chat payload is templated server-side, so its text
+                        # is not what the slot caches: whole-prompt sizing.
+                        prompt_text=(
+                            prompt if getattr(request, "chat_payload", None) is None else None
+                        ),
                     )
                 except KVPoolQueueFull as queue_full:
                     if admitted and admission:
@@ -1123,7 +1130,7 @@ class InferenceMixin:
                         + (
                             ", waiting for the in-flight long prefill"
                             if pool_admission.is_long_prefill(pool_prompt_tokens)
-                            and pool_admission.long_prefill_holder(backend_url) is not None
+                            and pool_admission.long_prefill_lease_busy(backend_url)
                             else ""
                         )
                         + ") and the request's wait budget ended before it fit; "

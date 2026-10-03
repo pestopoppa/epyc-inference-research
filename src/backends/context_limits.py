@@ -57,7 +57,7 @@ import math
 import os
 import threading
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlparse
@@ -348,6 +348,11 @@ class SlotState:
     # processed so far. None when the server did not report them.
     n_decoded: int | None = None
     n_prompt_tokens_processed: int | None = None
+    # The detokenized prompt of the slot's current/last task (``/slots``
+    # ``prompt``, server-context.cpp:726-728; absent with only_metrics). For an
+    # IDLE slot this is the prefix its KV cells still hold, which the next
+    # request that extends it reuses (KVU-15a new-token estimate).
+    prompt_text: str | None = field(default=None, repr=False, compare=False)
 
     @property
     def prefilling(self) -> bool:
@@ -386,6 +391,20 @@ class PoolOccupancy:
             if s.prefilling and (s.n_prompt_tokens_processed or 0) >= min_processed_tokens
         )
 
+    def best_cached_prefix_chars(self, prompt_text: str | None) -> int:
+        """Characters of ``prompt_text`` that the best IDLE slot's cached prompt
+        already covers (longest common prefix, see ``common_prefix_chars``). A
+        processing slot cannot take the request, so it never counts. 0 when the
+        server reports no prompt text."""
+        if not prompt_text:
+            return 0
+        best = 0
+        for s in self.slots:
+            if s.is_processing or not s.prompt_text:
+                continue
+            best = max(best, common_prefix_chars(prompt_text, s.prompt_text))
+        return best
+
     def projected_tokens(self, new_token_ratio: float = 1.0) -> int:
         """In-flight cells plus the (ratio-weighted) decode they may still add."""
         total = 0
@@ -395,6 +414,37 @@ class PoolOccupancy:
             remain = s.n_remain if isinstance(s.n_remain, int) and s.n_remain > 0 else 0
             total += s.n_prompt_tokens + int(math.ceil(remain * max(0.0, new_token_ratio)))
         return total
+
+
+# A server may render the cached prompt with a leading BOS / special token the
+# client never sent; the request's head is looked for within this many leading
+# characters of the slot text.
+_PREFIX_ALIGN_WINDOW_CHARS = 64
+_PREFIX_ALIGN_PROBE_CHARS = 64
+
+
+def common_prefix_chars(prompt_text: str, cached_text: str) -> int:
+    """Length of the common prefix of ``prompt_text`` and ``cached_text``,
+    tolerating a short rendering-only head on the cached side (a BOS token): the
+    first ``_PREFIX_ALIGN_PROBE_CHARS`` of the request must occur within the
+    first ``_PREFIX_ALIGN_WINDOW_CHARS`` of the cached text, and the match is
+    counted from there. Binary search over slice equality (C-speed compares), so
+    a 400 kB prompt costs microseconds, not a Python character loop."""
+    if not prompt_text or not cached_text:
+        return 0
+    probe = prompt_text[:_PREFIX_ALIGN_PROBE_CHARS]
+    offset = cached_text.find(probe, 0, _PREFIX_ALIGN_WINDOW_CHARS + len(probe))
+    if offset < 0:
+        return 0
+    cached = cached_text[offset:]
+    lo, hi = 0, min(len(prompt_text), len(cached))
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        if prompt_text[:mid] == cached[:mid]:
+            lo = mid
+        else:
+            hi = mid - 1
+    return lo
 
 
 def parse_slots(url: str, body: Any) -> PoolOccupancy | None:
@@ -425,6 +475,7 @@ def parse_slots(url: str, body: Any) -> PoolOccupancy | None:
             n_remain=n_remain,
             n_decoded=n_decoded,
             n_prompt_tokens_processed=n_processed,
+            prompt_text=raw.get("prompt") if isinstance(raw.get("prompt"), str) else None,
         ))
     return PoolOccupancy(url=url, slots=tuple(slots))
 
