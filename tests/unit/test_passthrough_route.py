@@ -730,3 +730,37 @@ def test_prompt_text_counts_rendered_strings_not_structure_or_images():
     ]}) == "sys\nq\nout"
     assert pt.requested_new_tokens({"max_output_tokens": 77}) == 77
     assert pt.requested_new_tokens({}) > 0
+
+
+# ── UFH14-B6b: caller.port on passthrough records ──────────────────────────
+
+
+def test_passthrough_record_carries_caller_port_and_backend_url(client, server, wiring):
+    from urllib.parse import urlparse
+
+    r = client.post("/v1/passthrough/architect_critic/chat/completions",
+                    json={"messages": [{"role": "user", "content": "hi"}]})
+    assert r.status_code == 200
+    (rec,) = _records(wiring)
+    assert rec["caller"]["backend_url"] == server.url
+    assert rec["caller"]["port"] == urlparse(server.url).port
+    assert isinstance(rec["caller"]["port"], int)
+    assert rec["caller"]["port"] == rec["server"]["port"]
+
+
+def test_refused_passthrough_record_also_carries_caller_port(client, server, wiring,
+                                                              limit_holder):
+    from urllib.parse import urlparse
+
+    limit_holder["limit"] = ContextLimit(
+        url=server.url, per_request_n_ctx=32768, total_slots=4, kv_unified=True,
+        source="registry", server_n_ctx=196608, request_cap=32768,
+    )
+    r = client.post("/v1/passthrough/architect_critic/responses",
+                    json={"input": "y" * (4 * 33000), "stream": True})
+    assert r.status_code == 413
+    assert server.requests == []
+    (rec,) = _records(wiring)
+    assert rec["dispatched"] is False
+    assert rec["caller"]["port"] == urlparse(server.url).port
+

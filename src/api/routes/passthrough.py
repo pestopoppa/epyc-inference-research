@@ -785,6 +785,8 @@ def write_serving_record(call: _Call, error: BaseException | None) -> None:
         )
         record["role"] = call.role
         record["request_role"] = call.role
+        # UFH14-B6b: the same ``port`` / ``backend_url`` the primitives lanes
+        # stage, so per-port analyses do not drop passthrough calls.
         record["caller"] = {
             "source": "passthrough",
             "role": call.role,
@@ -792,6 +794,7 @@ def write_serving_record(call: _Call, error: BaseException | None) -> None:
             "client": call.client_id,
             "client_host": call.client_host,
             "backend_url": call.base_url,
+            "port": _extract_port_of(call.base_url),
         }
         record["queue"] = {
             "pre_dispatch_wait_ms": round(
