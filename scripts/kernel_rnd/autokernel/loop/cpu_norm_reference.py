@@ -57,6 +57,12 @@ VIEW_PAD = 13      # must equal the probe's VIEW_PAD
 VIEW_OFFSET = 5    # must equal the probe's VIEW_OFFSET (floats)
 U = 2.0 ** -24
 REL_BOUND = 16 * U
+#: Tolerance mode (`cpu_norm_numerics`, 2026-10-03): the arithmetic may change, so bit
+#: identity with HEAD is not required. 2^-16 relative (256 u) admits any double or
+#: multi-lane float accumulation of the squares at these lengths (typical error a few
+#: tens of u) while a wrong scale, a missing/duplicated segment, a float sum that lost
+#: a lane, or a race (repetitions must still be bit-identical to EACH OTHER) fails.
+REL_BOUND_TOLERANCE = 2.0 ** -16
 MODES = ("plain", "inplace", "view", "fused", "fused_bcast")
 _MASK = (1 << 64) - 1
 
@@ -178,8 +184,13 @@ def float64_reference(row: list[float], eps: float,
     return [x * inv * w for x, w in zip(row, weight)]
 
 
-def compare(case: NormCase, output: str, seed: int = SEED) -> NormResult:
-    """Verdict for one probe run; malformed output raises ValueError (-> unavailable)."""
+def compare(case: NormCase, output: str, seed: int = SEED, *,
+            bit_exact: bool = True) -> NormResult:
+    """Verdict for one probe run; malformed output raises ValueError (-> unavailable).
+
+    `bit_exact=False` is the tolerance mode: no bit identity with HEAD, the float64
+    bound widens to `REL_BOUND_TOLERANCE`, and repetitions must reproduce the first
+    repetition's bits exactly (a deterministic kernel is still required)."""
     lines = output.splitlines()
     headers = [i for i, line in enumerate(lines) if line.startswith(MARKER + " ")]
     if len(headers) != 1:
@@ -215,13 +226,16 @@ def compare(case: NormCase, output: str, seed: int = SEED) -> NormResult:
         raise ValueError("incomplete probe payload")
     expected_bytes = b""
     max_rel = 0.0
+    bound = REL_BOUND if bit_exact else REL_BOUND_TOLERANCE
+    identical = True
     for row in range(case.rows):
         weight = weights[row] if weights is not None else None
         expected = head_semantics(rows[row], case.eps, weight)
         expected_bytes += expected.tobytes()
         actual = array("f")
         actual.frombytes(observed[row])
-        if actual.tobytes() != expected.tobytes():
+        identical = identical and actual.tobytes() == expected.tobytes()
+        if bit_exact and actual.tobytes() != expected.tobytes():
             column = next(i for i, (a, e) in enumerate(zip(actual, expected))
                           if _f32_bits(a) != _f32_bits(e))
             differing = sum(_f32_bits(a) != _f32_bits(e) for a, e in zip(actual, expected))
@@ -231,23 +245,29 @@ def compare(case: NormCase, output: str, seed: int = SEED) -> NormResult:
                               f"actual={actual[column]!r}, head={expected[column]!r}")
         reference = float64_reference(rows[row], case.eps, weight)
         for column, (value, ref) in enumerate(zip(actual, reference)):
-            if not math.isfinite(value) or abs(value - ref) > REL_BOUND * abs(ref):
+            if not math.isfinite(value) or abs(value - ref) > bound * abs(ref):
                 return NormResult("wrong", f"{case.name}: float64 reference exceeded "
                                   f"(row={row} column={column})",
-                                  f"actual={value!r}, float64={ref!r}, rel_bound={REL_BOUND}")
+                                  f"actual={value!r}, float64={ref!r}, rel_bound={bound}")
             if ref:
                 max_rel = max(max_rel, abs(value - ref) / abs(ref))
-    want = _fnv1a(expected_bytes)
+    want = (_fnv1a(expected_bytes) if bit_exact else
+            _fnv1a(b"".join(observed[row] for row in range(case.rows))))
     bad = sorted(rep for rep, digest in digests.items() if digest != want)
     if bad:
         return NormResult("wrong", f"{case.name}: repetitions {bad} of {case.reps} differ from "
-                          "HEAD's bits (first repetition matched: nondeterministic, e.g. an "
-                          "in-place race)")
+                          + ("HEAD's bits (first repetition matched: nondeterministic, e.g. "
+                             "an in-place race)" if bit_exact else
+                             "the first repetition's bits (nondeterministic, e.g. a race)"))
     metric = {"schema": "epyc.autokernel.cpu_norm_metric.v1", "case": case.name,
               "mode": case.mode, "ne": list(case.ne), "threads": THREADS,
-              "reps": case.reps, "outputs": case.rows * case.ne[0], "bit_identical": True,
-              "max_rel_error_vs_float64": max_rel, "rel_bound": REL_BOUND}
-    return NormResult("pass", f"{case.name}: bit-identical to HEAD arithmetic",
+              "reps": case.reps, "outputs": case.rows * case.ne[0],
+              "bit_identical": identical, "tolerance_mode": not bit_exact,
+              "max_rel_error_vs_float64": max_rel, "rel_bound": bound}
+    return NormResult("pass", f"{case.name}: " + (
+                          "bit-identical to HEAD arithmetic" if bit_exact else
+                          f"within {bound:.3g} of float64, deterministic"
+                          + (" (bit-identical to HEAD)" if identical else "")),
                       METRIC_MARKER + " " + json.dumps(metric, sort_keys=True))
 
 
@@ -259,7 +279,8 @@ def probe_argv(binary: Path, case: NormCase, seed: int = SEED) -> list[str]:
 def check_rms_norm_suite(build_dir: Path, source_root: Path, *,
                          launch_env: Mapping[str, str] | None = None,
                          topology_prefix: tuple[str, ...] = (),
-                         cases: tuple[NormCase, ...] = CASES) -> NormResult:
+                         cases: tuple[NormCase, ...] = CASES,
+                         bit_exact: bool = True) -> NormResult:
     """Compile the probe once against the candidate and run every case.
 
     Infrastructure and malformed output are `unavailable`, never numerical `wrong`.
@@ -300,7 +321,7 @@ def check_rms_norm_suite(build_dir: Path, source_root: Path, *,
                     return NormResult("unavailable", f"{case.name} probe did not complete",
                                       f"exit={run.returncode}; {run.stderr[-1800:]}")
                 try:
-                    result = compare(case, run.stdout)
+                    result = compare(case, run.stdout, bit_exact=bit_exact)
                 except (ValueError, KeyError, OverflowError, StopIteration) as exc:
                     return NormResult("unavailable", f"{case.name} probe output invalid",
                                       str(exc))
@@ -309,6 +330,10 @@ def check_rms_norm_suite(build_dir: Path, source_root: Path, *,
                 metrics.append(result.detail)
     except (OSError, subprocess.TimeoutExpired) as exc:
         return NormResult("unavailable", "CPU RMS_NORM probe infrastructure fault", str(exc))
+    if not bit_exact:
+        return NormResult("pass", f"{len(cases)} RMS_NORM cases within "
+                          f"{REL_BOUND_TOLERANCE:.3g} of float64 and deterministic on "
+                          f"{THREADS} threads (tolerance mode)", "\n".join(metrics))
     return NormResult("pass", f"{len(cases)} RMS_NORM cases bit-identical to HEAD arithmetic "
                       f"on {THREADS} threads and within {REL_BOUND:.3g} of float64",
                       "\n".join(metrics))

@@ -818,13 +818,26 @@ class AffectedOpAndIndependentReference(unittest.TestCase):
             "const float r = rsqrtf(q);", "acc = fmaf(v, v, acc);",
             "auto s = std::accumulate(x, x + ne00, 0.0);",
             "/* sum */ acc = 1;", "q += x[i] * x[i];")
+        rowsplit = gates.cpu_route_named("cpu_norm_rowsplit")
         for line in refused:
-            verdict = gates.affected_op_scope(
-                (path,), target_surface=path, target_symbol="ggml_compute_forward_rms_norm_f32",
-                source_text=src, pre_source_text=src,
-                patch_text=self._hunk(src, inner, "+            " + line + "\n"))
-            self.assertFalse(verdict.passed, line)
-            self.assertIn("forbidden pattern", verdict.reason)
+            patch = self._hunk(src, inner, "+            " + line + "\n")
+            self.assertIn("forbidden pattern",
+                          gates._cpu_route_scope_refusal(rowsplit, src, src, patch), line)
+            # 2026-10-03: the bit-exact route still refuses every one of these; the
+            # arithmetic-changing ones now fall through to cpu_norm_numerics (tolerance
+            # gate). An in-op barrier or an OpenMP pragma is refused by both routes.
+            route, refusal = gates.admit_cpu_route(
+                path, "ggml_compute_forward_rms_norm_f32", src, src, patch)
+            if "ggml_barrier" in line or "#pragma omp" in line:
+                self.assertIsNotNone(refusal, line)
+                verdict = gates.affected_op_scope(
+                    (path,), target_surface=path,
+                    target_symbol="ggml_compute_forward_rms_norm_f32",
+                    source_text=src, pre_source_text=src, patch_text=patch)
+                self.assertFalse(verdict.passed, line)
+                self.assertIn("forbidden pattern", verdict.reason)
+            else:
+                self.assertEqual((route.route, refusal), ("cpu_norm_numerics", None), line)
 
     def test_ops_cpp_route_leaves_the_gated_delta_net_rule_alone(self):
         path = "ggml/src/ggml-cpu/ops.cpp"
@@ -889,12 +902,28 @@ class AffectedOpAndIndependentReference(unittest.TestCase):
 
         good = head[:start] + split + head[start:]
         self.assertEqual(verdict(good), ("RMS_NORM", "RMS_NORM_MUL_ADD"))
+
+        def admitted(candidate):
+            patch = "".join(difflib.unified_diff(head.splitlines(True),
+                                                 candidate.splitlines(True), n=0))
+            return gates.admit_cpu_route(path, "ggml_compute_forward_rms_norm_f32",
+                                         candidate, head, patch)
+
+        self.assertEqual(admitted(good)[0].route, "cpu_norm_rowsplit")
         for old, new in (("            ggml_float sum = 0.0;\n", "            float sum = 0.0f;\n"),
                          ("y[i00] = x[i00] * scale * w[i00];",
                           "y[i00] = x[i00] * (scale * w[i00]);")):
-            bad = verdict(head[:start] + split.replace(old, new) + head[start:])
-            self.assertFalse(bad.passed, new)
-            self.assertIn("forbidden pattern", bad.reason)
+            candidate = head[:start] + split.replace(old, new) + head[start:]
+            rowsplit = gates._cpu_route_scope_refusal(
+                gates.cpu_route_named("cpu_norm_rowsplit"), candidate, head,
+                "".join(difflib.unified_diff(head.splitlines(True),
+                                             candidate.splitlines(True), n=0)))
+            self.assertIn("forbidden pattern", rowsplit, new)
+            # 2026-10-03: an arithmetic change is no longer refused outright; it falls
+            # through to cpu_norm_numerics and its tolerance gate.
+            self.assertEqual(admitted(candidate), (gates.cpu_route_named("cpu_norm_numerics"),
+                                                   None), new)
+            self.assertEqual(verdict(candidate), ("RMS_NORM", "RMS_NORM_MUL_ADD"))
         # the same split placed in NORM's body is outside the route
         norm = head.index("static void ggml_compute_forward_norm_f32(")
         norm_body = head.index("    for (int64_t i03 = 0; i03 < ne03; i03++) {", norm)

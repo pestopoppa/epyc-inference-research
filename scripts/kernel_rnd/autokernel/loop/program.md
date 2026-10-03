@@ -125,7 +125,8 @@ comparison requires its own validated reference and threshold.
 
 ### Widened CPU source routes (operator decision 2026-09-26)
 
-Six more single-file CPU routes are admitted (`gates.CPU_SOURCE_ROUTES`). Each needs the
+Nine more single-file CPU routes are admitted (`gates.CPU_SOURCE_ROUTES`; six below,
+three more after them). Each needs the
 named `target_symbol`, hunks inside the named bodies in both HEAD and the candidate, and
 byte-identical headers (marker line through opening brace). A marker that recurs
 elsewhere in the file never widens the boundary: markers are resolved inside the named
@@ -236,7 +237,66 @@ class, or before the disabled-build stub.
     candidate's barrier. The native suites are not independent of the graph walk
     (`use_ref` only disables fusion), so they catch races and per-op numerics, not a
     deterministic walk defect that both arms share.
-  - These edits must be bit-exact by construction. Name the ordering argument.
+  - These edits must be bit-exact by construction. Name the ordering argument — EXCEPT a
+    new in-backend fusion (below), which is judged in tolerance.
+  - **New helpers (2026-10-03):** pure insertions at file scope that add NEW `static`
+    functions/constants/tables, or `#include <...>` lines, are admitted alongside the
+    body hunks (so a fused kernel can be a helper called from `ggml_cpu_try_fuse_ops`).
+    No `#define`/`#if`/`#pragma` at file scope, no non-static globals, no edits to any
+    existing function outside the named bodies.
+  - **Fusion reference (2026-10-03):** the gate also runs `cpu_fusion_reference`: the
+    exact DS41 `build_hc_mixes` graph (reshape → `ggml_rms_norm` without weight →
+    `ggml_mul_mat` with F16 [20480, 24], nt = 1–3, plus odd teams/shapes) through the
+    candidate's CPU backend, judged against float64 at 2^-10 × Σ|w·x|/rms (HEAD's unfused F16 path sits at <1% of that) (all-positive
+    cases make that relative to |y|, so a dropped split-K slice fails), repetitions
+    bit-identical to each other. A `rms_norm → hc_mixes` split-K fusion is TOL: say so.
+
+### More routes (operator 2026-10-03: the loop must be able to author the seeds)
+
+All three admit NEW file-scope `static` helpers and `#include <...>` lines (rules as
+above) besides hunks in the named bodies.
+
+- **`cpu_norm_numerics`**: `ggml/src/ggml-cpu/ops.cpp`, target
+  `ggml_compute_forward_rms_norm_f32` (same body and targets as `cpu_norm_rowsplit`).
+  - The rms_norm body is tried against `cpu_norm_rowsplit` FIRST: a bit-exact split
+    still gets the bit-exact gate. A patch that changes the arithmetic (vector /
+    multi-accumulator sum of squares, Fable seed 4) lands here.
+  - **Refused:** `ggml_barrier` (solo nodes run on one thread) and `#pragma omp`.
+  - **Ops:** `RMS_NORM`, `RMS_NORM_MUL_ADD`.
+  - **Reference:** `cpu_norm_reference` in tolerance mode: the same 16 cases against
+    float64 at 2^-16 relative (HEAD is within 5.5 u = 2^-21.5), repetitions bit-identical
+    to each other, bit identity with HEAD NOT required (it is reported). Plus the GDB
+    entry hits. This is TOL: say so and keep double (or ≥8-lane) accumulation — a single
+    float chain over 20480 elements does not reliably meet 2^-16.
+- **`cpu_mul_mat_body`**: `ggml/src/ggml-cpu/ggml-cpu.c`, target
+  `ggml_compute_forward_mul_mat` or `ggml_compute_forward_mul_mat_one_chunk`.
+  - **Scope:** those two bodies: src1 conversion/quantisation, `mm_batch1`, the
+    `current_chunk` init and its barrier, the llamafile/iqk dispatch call sites and the
+    chunk loop (Fable seed 6: per-thread redundant quantisation for small ne11; seed 9's
+    prefetch may also live here). A per-eval cache of quantised src1 must not be keyed
+    by a data pointer (`reward_hack_scan` refuses pointer-keyed caches) and must be
+    invalidated every graph evaluation.
+  - **Op:** `MUL_MAT`.
+  - **Reference:** the scalar Q8_0/Q4_K/Q5_K/F16 `MUL_MAT` fixture at widths 1–8 (decodes
+    stored bytes without ggml; `use_ref` runs this same body, so the native suite alone is
+    not independent) plus a GDB hit on `ggml_compute_forward_mul_mat` in the candidate DSO.
+- **`cpu_weight_placement`**: `src/llama-model-loader.cpp`, target `load_all_data` (or
+  `load_all_data_parallel`, `llama_model_loader`).
+  - **Scope:** those two bodies: PLACE the bytes being loaded (Fable seed 1: `mbind` of
+    weight-tensor row quarters to NUMA node q via `syscall(SYS_mbind, ...)` /
+    `get_mempolicy`, `madvise`, first touch). Values must not change. Reading
+    `/sys/devices/system/node` is fine; `getenv`, `/sys/devices/system/cpu` and
+    `sched_getcpu` are refused by `reward_hack_scan` — derive the node count from the
+    kernel (`get_mempolicy`/`/sys/devices/system/node`), not the environment.
+  - **Ops:** none — no op suite runs the loader.
+  - **Gate:** `model_identity`: the anchor and the candidate llama-server, under the
+    campaign launch (same argv/env/numactl prefix/port, only the build differs), each
+    serve the first two frozen requests one at a time; the greedy completions must be
+    byte-identical. An anchor that disagrees with itself makes the gate unavailable, not
+    the patch wrong. Then the ordinary serving A/B measures the speed. This is PLACE:
+    bit-identical by construction — say so.
+  - The node-affine MoE slab half of seed 1 is an `iqk_mmid_dispatch` edit: propose it
+    as a separate candidate after the placement keep.
 
 These routes retire nothing measured. They correct one premise: the "220 GB/s read
 ceiling" is contradicted by the same-boot C0 measurement under the identical launch prefix

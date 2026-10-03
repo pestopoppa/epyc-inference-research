@@ -3004,22 +3004,37 @@ def main(argv: list[str] | None = None) -> int:
                             worker.worktree / changed[0]
                             if len(changed) == 1 and changed[0] in iqk_paths | route_paths
                             else None)
+            scope_texts = dict(
+                source_text=(scope_source.read_text(encoding="utf-8")
+                             if scope_source is not None else None),
+                pre_source_text=(archive._git(
+                    worker.worktree, "show",
+                    "HEAD:" + str(scope_source.relative_to(worker.worktree)))
+                    if scope_source is not None else None),
+                patch_text=(archive._git(worker.worktree, "diff", "-U0", "HEAD", "--",
+                                         str(scope_source.relative_to(worker.worktree)))
+                            if scope_source is not None else None))
             scope = gates.affected_op_scope(changed + untracked,
                                              target_surface=hypothesis.target_surface,
                                              target_symbol=hypothesis.target_symbol,
-                                             source_text=(scope_source.read_text(encoding="utf-8")
-                                                          if scope_source is not None
-                                                          else None),
-                                             pre_source_text=(archive._git(
-                                                 worker.worktree, "show",
-                                                 "HEAD:" + str(scope_source.relative_to(worker.worktree)))
-                                                 if scope_source is not None else None),
-                                             patch_text=(archive._git(worker.worktree, "diff", "-U0",
-                                                                      "HEAD", "--", str(scope_source.relative_to(worker.worktree)))
-                                                         if scope_source is not None
-                                                         else None))
+                                             **scope_texts)
             if isinstance(scope, gates.Verdict):
                 return False, [scope]
+            # Several routes may name one body (2026-10-03): the gate below must be the
+            # one of the route that ADMITTED this patch, never merely the first named.
+            admitted_route = (gates.admit_cpu_route(changed[0], hypothesis.target_symbol,
+                                                    **scope_texts)[0]
+                              if route_edit else None)
+            route_reference = (
+                (lambda arm: gates.check_model_output_identity(
+                    anchor_recipe=_cpu_arm(direct_launch, anchor_build[0]),
+                    candidate_recipe=arm, requests=frozen_requests,
+                    window=cpu_measurement_window))
+                if admitted_route is not None and admitted_route.model_identity else
+                (lambda arm: gates.check_cpu_route_reference(
+                    worker.build_dir, worker.worktree, resolved_recipe=arm,
+                    path=changed[0], target_symbol=hypothesis.target_symbol,
+                    route_name=admitted_route.route if admitted_route is not None else None)))
             if screen_confirmation is not None:
                 cpu_screen.verify_restored(screen_confirmation, worker, screen_prepared["launch"],
                                            args.store, hypothesis)
@@ -3037,9 +3052,7 @@ def main(argv: list[str] | None = None) -> int:
                         worker.build_dir, worker.worktree, resolved_recipe=arm,
                         target_symbol=hypothesis.target_symbol))
                 if cpu_launch and route_edit:
-                    checks.append(lambda: gates.check_cpu_route_reference(
-                        worker.build_dir, worker.worktree, resolved_recipe=arm,
-                        path=changed[0], target_symbol=hypothesis.target_symbol))
+                    checks.append(lambda: route_reference(arm))
                 return gates.run_all(*checks)
             # Callables, so a failed build actually short-circuits: an eagerly
             # evaluated op_correctness ran the suite against a stale binary and blamed
@@ -3071,10 +3084,7 @@ def main(argv: list[str] | None = None) -> int:
                     resolved_recipe=_cpu_arm(direct_launch, worker.build_dir),
                     target_symbol=hypothesis.target_symbol))
             if cpu_launch and route_edit:
-                checks.append(lambda: gates.check_cpu_route_reference(
-                    worker.build_dir, worker.worktree,
-                    resolved_recipe=_cpu_arm(direct_launch, worker.build_dir),
-                    path=changed[0], target_symbol=hypothesis.target_symbol))
+                checks.append(lambda: route_reference(_cpu_arm(direct_launch, worker.build_dir)))
             if not direct_launch:
                 checks.extend((
                     lambda: gates.deterministic(worker.build_dir, args.model),

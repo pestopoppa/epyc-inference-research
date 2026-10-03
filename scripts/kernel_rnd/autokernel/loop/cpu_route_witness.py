@@ -51,8 +51,14 @@ class RouteWitness:
     # Further engagement cases that must ALSO hit (e.g. a fused entry of the same body).
     also: tuple["RouteWitness", ...] = ()
     # Numerical reference: "quant" = cpu_quant_reference (MUL_MAT/MUL_MAT_ID fixture),
-    # "rms_norm" = cpu_norm_reference (bit identity with HEAD plus a float64 bound).
+    # "rms_norm" = cpu_norm_reference (bit identity with HEAD plus a float64 bound),
+    # "rms_norm_tol" = cpu_norm_reference in tolerance mode (float64 bound 2^-16,
+    # deterministic repetitions, no bit identity with HEAD), "model_identity" = gated
+    # by `model_identity` in the loop, never by this witness.
     reference: str = "quant"
+    # Also run cpu_fusion_reference (the DS41 hc_mixes RMS_NORM -> MUL_MAT(F16) graph):
+    # the route can change in-backend fusion, and no native case builds that pair.
+    norm_mulmat: bool = False
 
 
 # Case strings are the reviewed backend-ops fixture's vars(): test_mul_mat(type, f32,
@@ -108,10 +114,34 @@ WITNESSES = {
         reference="rms_norm"),
     # Every node passes the barrier, so entry proves nothing; the numerical suite over
     # every quant, op and width is the witness that publish-before-consume still holds.
+    # 2026-10-03: plus the hc_mixes norm->mul_mat graph, so a fusion added to
+    # ggml_cpu_try_fuse_ops (seed 3) is run and judged, not merely compiled.
     "cpu_graph_sync": RouteWitness(
         op=None, case=None, breakpoint=None, symbol_pattern=None, active=None,
         quants=("Q4_K", "Q5_K", "Q8_0"), ops=("MUL_MAT", "MUL_MAT_ID"),
-        expert_modes=("alternating", "single")),
+        expert_modes=("alternating", "single"), norm_mulmat=True),
+    # Same entries as cpu_norm_rowsplit; the numbers are judged in tolerance mode.
+    "cpu_norm_numerics": RouteWitness(
+        op="RMS_NORM", case=_RMS_NORM_CASE,
+        breakpoint=("break", "ggml_compute_forward_rms_norm"),
+        symbol_pattern=r"^ggml_compute_forward_rms_norm$",
+        active=None, quants=("F32",), ops=("RMS_NORM", "RMS_NORM_MUL_ADD"),
+        also=(RouteWitness(
+            op="RMS_NORM_MUL_ADD", case=_RMS_NORM_MUL_ADD_CASE,
+            breakpoint=("break", "ggml_compute_forward_rms_norm_mul_fused"),
+            symbol_pattern=r"^ggml_compute_forward_rms_norm_mul_fused$",
+            active=None, quants=("F32",), ops=("RMS_NORM_MUL_ADD",)),),
+        reference="rms_norm_tol"),
+    # The exported MUL_MAT entry (the iqk dispatch is called from inside it, so every
+    # MUL_MAT case enters it); the scalar fixture decodes stored bytes without ggml.
+    "cpu_mul_mat_body": RouteWitness(
+        op="MUL_MAT", case=f"type_a=q8_0,type_b=f32,m=16,n=16,k=256,{_DENSE}",
+        breakpoint=("break", "ggml_compute_forward_mul_mat"),
+        symbol_pattern=r"^ggml_compute_forward_mul_mat$",
+        active=None, quants=("Q8_0", "Q4_K", "Q5_K", "F16"), ops=("MUL_MAT",)),
+    "cpu_weight_placement": RouteWitness(
+        op=None, case=None, breakpoint=None, symbol_pattern=None, active=None,
+        quants=(), ops=(), reference="model_identity"),
 }
 
 
@@ -227,11 +257,15 @@ def check(build_dir: Path, *, resolved_recipe, source_root: Path, route: str,
         if hit.status != "pass":
             return hit
         details.append(hit.detail)
-    if witness.reference == "rms_norm":
+    if witness.reference == "model_identity":
+        return Result("unavailable", f"route {route!r} is gated by the whole-model "
+                      "identity check, not by a route witness")
+    if witness.reference in ("rms_norm", "rms_norm_tol"):
         from . import cpu_norm_reference
         norm = cpu_norm_reference.check_rms_norm_suite(
             build_dir, source_root, launch_env=resolved_recipe.launch_env,
-            topology_prefix=tuple(resolved_recipe.topology_prefix))
+            topology_prefix=tuple(resolved_recipe.topology_prefix),
+            bit_exact=witness.reference == "rms_norm")
         if norm.status != "pass":
             return Result(norm.status, norm.reason, norm.detail)
         details.append(norm.detail)
@@ -250,8 +284,18 @@ def check(build_dir: Path, *, resolved_recipe, source_root: Path, route: str,
         if scalar.status != "pass":
             return Result(scalar.status, scalar.reason, scalar.detail)
         details.append(scalar.detail)
+    fusion_note = ""
+    if witness.norm_mulmat:
+        from . import cpu_fusion_reference
+        fused = cpu_fusion_reference.check_norm_mulmat_suite(
+            build_dir, source_root, launch_env=resolved_recipe.launch_env,
+            topology_prefix=tuple(resolved_recipe.topology_prefix))
+        if fused.status != "pass":
+            return Result(fused.status, fused.reason, fused.detail)
+        details.append(fused.detail)
+        fusion_note = f" and {fused.reason}"
     return Result("pass", f"{route}: " + ("route-entry witness and " if witness.breakpoint
                                           else "") +
                   f"independent scalar {'/'.join(witness.quants)} "
-                  f"{'/'.join(witness.ops)} widths 1-8 passed; branch coverage not claimed",
-                  "\n".join(details))
+                  f"{'/'.join(witness.ops)} widths 1-8 passed{fusion_note}; branch "
+                  "coverage not claimed", "\n".join(details))

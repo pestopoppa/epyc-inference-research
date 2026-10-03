@@ -350,6 +350,15 @@ class CpuSourceRoute:
     fence: str | None = None
     forbidden_added: str | None = None
     admitted_text: str = ""
+    #: 2026-10-03 (operator: "the loop must be able to author the kernel mutations the
+    #: seeds need"): also admit pure-insertion hunks at file scope that add NEW `static`
+    #: helpers (functions, constants) or `#include <system>` lines -- see
+    #: `_new_helper_refusal`. Bodies stay the only place existing code may change, and
+    #: `forbidden_added` still applies to every added line.
+    new_helpers: bool = False
+    #: The route's correctness gate is the whole-model output identity check
+    #: (`model_identity`): a placement/loader edit that no op suite exercises.
+    model_identity: bool = False
 
 
 CPU_SOURCE_ROUTES = (
@@ -421,8 +430,11 @@ CPU_SOURCE_ROUTES = (
                 ("ggml_graph_compute_thread",
                  "static thread_ret_t ggml_graph_compute_thread(void * data) {")),
         ops=_DS41_SYNC_OPS,
+        new_helpers=True,
         admitted_text=("hunks inside the ggml_barrier, ggml_cpu_node_is_solo, "
-                       "ggml_cpu_try_fuse_ops or ggml_graph_compute_thread bodies; headers, "
+                       "ggml_cpu_try_fuse_ops or ggml_graph_compute_thread bodies, plus NEW "
+                       "file-scope static helpers (e.g. a fused kernel called from "
+                       "ggml_cpu_try_fuse_ops) and #include <...> lines; existing headers, "
                        "globals, op kernels and every other function unchanged")),
     # Float (F32/F16/BF16) GEMM tile PLAN: the type-generic `tinyBLAS::matmul` picks
     # RM*BM = 8- or 16-row y-tiles, so a narrow-M matrix gets fewer jobs than threads.
@@ -471,6 +483,73 @@ CPU_SOURCE_ROUTES = (
                        "sqrt/fma, x[i]*x[j], _mm*/GGML_F*/ggml_vec_* other than "
                        "ggml_vec_scale_f32/ggml_vec_cpy_f32, #pragma or ggml_barrier. The "
                        "header, the dispatchers, NORM/GROUP_NORM/RMS_NORM_BACK unchanged")),
+    # 2026-10-03 widening (Fable CPU seeds 1, 3, 4, 6, 9; operator: "unacceptable" that
+    # the loop could not author them). Each new route keeps a reviewed, independent gate.
+    #
+    # RMS_NORM NUMERICS (seed 4, vector sum of squares): the same body as
+    # cpu_norm_rowsplit, tried AFTER it, so a bit-exact split still gets the bit-exact
+    # gate and only a patch that changes the arithmetic lands here. Reference:
+    # `cpu_norm_reference` in tolerance mode -- the 16 fixed cases against a float64
+    # reference at 2^-16 relative (vs HEAD's own 5.5 u), repetitions bit-identical to
+    # each other (races), no bit identity with HEAD. An in-op barrier still deadlocks a
+    # solo node, so ggml_barrier stays forbidden.
+    CpuSourceRoute(
+        route="cpu_norm_numerics",
+        path="ggml/src/ggml-cpu/ops.cpp",
+        symbols=("ggml_compute_forward_rms_norm_f32", "ggml_compute_forward_rms_norm",
+                 "ggml_compute_forward_rms_norm_mul_fused"),
+        bodies=(("ggml_compute_forward_rms_norm_f32",
+                 "static void ggml_compute_forward_rms_norm_f32("),),
+        ops=("RMS_NORM", "RMS_NORM_MUL_ADD"),
+        forbidden_added=r"\bggml_barrier\b|#\s*pragma\s+omp",
+        new_helpers=True,
+        admitted_text=("hunks inside the ggml_compute_forward_rms_norm_f32 template body "
+                       "plus NEW file-scope static helpers; the arithmetic may change "
+                       "(vector/multi-accumulator sum of squares), judged against float64 "
+                       "at 2^-16 relative with repetitions bit-identical; no ggml_barrier "
+                       "(solo nodes run on one thread); header, dispatchers and every "
+                       "other function unchanged")),
+    # MUL_MAT BODY (seed 6 small-node prelude / src1 quantisation; seed 9's prefetch may
+    # also live here): `ggml_compute_forward_mul_mat` (src1 conversion, mm_batch1, the
+    # current_chunk barrier, the llamafile/iqk dispatch, the chunk loop) and its
+    # `_one_chunk` worker. Reference: the full scalar Q8_0/Q4_K/Q5_K/F16 MUL_MAT
+    # fixture at widths 1-8 (it decodes stored bytes without ggml, so it is independent
+    # of this body, which use_ref also runs) plus a GDB entry hit in the candidate DSO.
+    CpuSourceRoute(
+        route="cpu_mul_mat_body",
+        path="ggml/src/ggml-cpu/ggml-cpu.c",
+        symbols=("ggml_compute_forward_mul_mat", "ggml_compute_forward_mul_mat_one_chunk"),
+        bodies=(("ggml_compute_forward_mul_mat_one_chunk",
+                 "static void ggml_compute_forward_mul_mat_one_chunk("),
+                ("ggml_compute_forward_mul_mat", "void ggml_compute_forward_mul_mat(")),
+        ops=("MUL_MAT",),
+        new_helpers=True,
+        admitted_text=("hunks inside the ggml_compute_forward_mul_mat or "
+                       "ggml_compute_forward_mul_mat_one_chunk bodies plus NEW file-scope "
+                       "static helpers and #include <...> lines; headers, MUL_MAT_ID, the "
+                       "graph walk and every other function unchanged")),
+    # WEIGHT PLACEMENT AT LOAD (seed 1, NUMA-quartered weights): the loader's data-load
+    # bodies may place (mbind/madvise) the bytes they read. Placement does not change a
+    # single value, and no op suite runs the loader, so the gate is the whole model:
+    # `model_identity` serves the frozen requests greedily from the anchor and the
+    # candidate under the campaign launch and requires identical completions (an anchor
+    # that disagrees with itself makes the gate unavailable, never a verdict).
+    CpuSourceRoute(
+        route="cpu_weight_placement",
+        path="src/llama-model-loader.cpp",
+        symbols=("load_all_data", "load_all_data_parallel", "llama_model_loader"),
+        bodies=(("load_all_data_parallel",
+                 "bool llama_model_loader::load_all_data_parallel("),
+                ("load_all_data", "bool llama_model_loader::load_all_data(")),
+        ops=(),
+        new_helpers=True,
+        model_identity=True,
+        admitted_text=("hunks inside the llama_model_loader::load_all_data or "
+                       "load_all_data_parallel bodies plus NEW file-scope static helpers "
+                       "and #include <...> lines (placement only: mbind/madvise/first "
+                       "touch of the bytes being loaded); headers and every other "
+                       "function unchanged. Gate: identical greedy completions vs the "
+                       "anchor on the frozen requests")),
 )
 CPU_SOURCE_ROUTE_PATHS = tuple(sorted({route.path for route in CPU_SOURCE_ROUTES}))
 
@@ -494,26 +573,62 @@ def _route_symbol_names(target_symbol: str) -> list[str]:
     return list(dict.fromkeys(reversed([part for part in parts if part])))
 
 
-def cpu_source_route(path: str, target_symbol: str) -> CpuSourceRoute | None:
-    """The widened route a (single path, target symbol) pair names, if any."""
+def cpu_source_routes(path: str, target_symbol: str) -> tuple[CpuSourceRoute, ...]:
+    """Every widened route a (single path, target symbol) pair names, most specific first.
+
+    Several routes may name one body (cpu_norm_rowsplit, then cpu_norm_numerics): they
+    are tried in this order and the FIRST that admits the patch governs it, so the
+    stricter gate always wins when the patch fits it."""
     candidates = [route for route in CPU_SOURCE_ROUTES if route.path == path]
-    exact = next((route for route in candidates if target_symbol in route.symbols), None)
-    if exact is not None:
+    exact = tuple(route for route in candidates if target_symbol in route.symbols)
+    if exact:
         return exact
     names = _route_symbol_names(target_symbol)
     # A class-qualified symbol picks the route that admits the member AND its class:
     # sgemm.cpp has two tinyBLAS routes, and bare-name order must not hand
     # `tinyBLAS<...>::matmul` or a Q0 member to the other class's route.
     if len(names) > 1:
-        qualified = next((route for route in candidates
-                          if names[0] in route.symbols and names[1] in route.symbols), None)
-        if qualified is not None:
+        qualified = tuple(route for route in candidates
+                          if names[0] in route.symbols and names[1] in route.symbols)
+        if qualified:
             return qualified
     for name in names:
-        route = next((route for route in candidates if name in route.symbols), None)
-        if route is not None:
-            return route
-    return None
+        routes = tuple(route for route in candidates if name in route.symbols)
+        if routes:
+            return routes
+    return ()
+
+
+def cpu_source_route(path: str, target_symbol: str) -> CpuSourceRoute | None:
+    """The first widened route a (single path, target symbol) pair names, if any."""
+    routes = cpu_source_routes(path, target_symbol)
+    return routes[0] if routes else None
+
+
+def cpu_route_named(name: str) -> CpuSourceRoute | None:
+    return next((route for route in CPU_SOURCE_ROUTES if route.route == name), None)
+
+
+def admit_cpu_route(path: str, target_symbol: str, source_text: str | None,
+                    pre_source_text: str | None, patch_text: str | None
+                    ) -> tuple[CpuSourceRoute | None, str | None]:
+    """(route that admits the patch, None) or (first named route, every refusal).
+
+    (None, None) when no route names the pair at all."""
+    routes = cpu_source_routes(path, target_symbol)
+    refusals = []
+    for route in routes:
+        refusal = _cpu_route_scope_refusal(route, source_text, pre_source_text, patch_text)
+        if refusal is None:
+            return route, None
+        refusals.append((route, refusal))
+    if not refusals:
+        return None, None
+    if len(refusals) == 1:
+        return refusals[0][0], refusals[0][1]
+    return refusals[0][0], " | ".join(
+        f"{route.route}: {refusal}. Admitted: {route.admitted_text}"
+        for route, refusal in refusals)
 
 
 def _strip_code_line(line: str, in_block: bool) -> tuple[str, bool]:
@@ -621,11 +736,22 @@ def _cpu_route_scope_refusal(route: CpuSourceRoute, source_text: str | None,
 
     def within(line: str, count: str, region) -> bool:
         first, size = int(line), int(count) if count else 1
+        if count == "0":
+            # -U0 pure insertion AFTER line `first`: inside the body when it follows the
+            # opening-brace line (region[1] - 1) up to the last body line.
+            return region[1] - 1 <= first <= region[2]
         return region[1] <= first and first + max(size, 1) - 1 <= region[2]
 
     for old_line, old_count, new_line, new_count in hunks:
         if not any(within(old_line, old_count, old[0][i]) and
                    within(new_line, new_count, new[0][i]) for i in range(len(old[0]))):
+            if route.new_helpers and old_count == "0":
+                helper = _new_helper_refusal(pre_source_text, source_text, int(old_line),
+                                             int(new_line), int(new_count or 1))
+                if helper is None:
+                    continue
+                return (f"hunk @@ -{old_line},0 +{new_line},{new_count or 1} @@ lies outside "
+                        f"every admitted body and is not a new file-scope helper: {helper}")
             admitted = ", ".join(f"{label} {first}-{last}" for label, first, last in old[0])
             return (f"hunk @@ -{old_line},{old_count or 1} +{new_line},{new_count or 1} @@ "
                     f"lies outside every admitted body (HEAD lines: {admitted})")
@@ -635,6 +761,94 @@ def _cpu_route_scope_refusal(route: CpuSourceRoute, source_text: str | None,
             if line.startswith("+") and not line.startswith("+++") and pattern.search(line):
                 return (f"an added line matches the forbidden pattern `{route.forbidden_added}` "
                         f"({line[1:].strip()[:120]!r})")
+    return None
+
+
+_HELPER_START = re.compile(
+    r"^(?:static\b|inline\s+static\b|template\s*<[^>]*>\s*static\b|"
+    r"\[\[[\w:, ]+\]\]\s*static\b)")
+_HELPER_INCLUDE = re.compile(r"^#\s*include\s*<[\w./+-]+>\s*$")
+_HELPER_CONDITIONAL = re.compile(r"^#\s*(if|ifdef|ifndef|elif|else|endif)\b")
+
+
+def _new_helper_refusal(pre_text: str, post_text: str, old_line: int, new_line: int,
+                        count: int) -> str | None:
+    """None when a pure-insertion hunk adds only NEW file-scope static helpers.
+
+    The insertion point must be at file scope in HEAD (brace depth 0 after HEAD line
+    `old_line`, outside any comment). Every top-level statement of the inserted text
+    must be an `#include <...>` line or start with `static` (functions, constants,
+    tables), the text must be brace-balanced at file scope, and nothing else may
+    appear: no `#define`/`#undef`/`#if`/`#pragma` (a macro placed above existing code
+    would change that code without touching it), no non-static global or definition of
+    an existing symbol (those would change ABI or shadow HEAD code).
+
+    A diff may anchor the same insertion a few lines up or down where the inserted text
+    and its neighbours repeat (a helper ending in `}` placed after a function that also
+    ends in `}`), so every equivalent placement is tried and any valid one admits."""
+    pre_lines, post_lines = pre_text.splitlines(), post_text.splitlines()
+    block = post_lines[new_line - 1:new_line - 1 + count]
+    if len(block) != count:
+        return "inserted lines are not in the candidate"
+    placements = [(old_line, block)]
+    at, moved = old_line, list(block)
+    while at > 0 and moved and pre_lines[at - 1] == moved[-1] and len(placements) < 64:
+        at, moved = at - 1, [pre_lines[at - 1]] + moved[:-1]
+        placements.append((at, moved))
+    at, moved = old_line, list(block)
+    while at < len(pre_lines) and moved and pre_lines[at] == moved[0] and len(placements) < 128:
+        at, moved = at + 1, moved[1:] + [pre_lines[at]]
+        placements.append((at, moved))
+    first_refusal = None
+    for at, lines in placements:
+        refusal = _helper_block_refusal(pre_lines, at, lines)
+        if refusal is None:
+            return None
+        first_refusal = first_refusal or refusal
+    return first_refusal
+
+
+def _helper_block_refusal(pre_lines: list[str], after: int, added: list[str]) -> str | None:
+    depth, in_block = 0, False
+    for line in pre_lines[:after]:
+        code, in_block = _strip_code_line(line, in_block)
+        depth += code.count("{") - code.count("}")
+    if depth != 0 or in_block:
+        return f"HEAD line {after} is not at file scope (depth {depth})"
+    depth, in_block, in_statement, conditional = 0, False, False, 0
+    for line in added:
+        code, in_block = _strip_code_line(line, in_block)
+        text = code.strip()
+        directive = _HELPER_CONDITIONAL.match(text)
+        if directive:
+            # #if/#ifdef/#else/#endif (e.g. an __AVX512F__ variant) must balance inside
+            # the inserted text, so it can never swallow or reshape HEAD code after it.
+            conditional += {"if": 1, "ifdef": 1, "ifndef": 1, "endif": -1}.get(
+                directive.group(1), 0)
+            if conditional < 0:
+                return "inserted #endif closes a conditional it did not open"
+            continue
+        if depth == 0 and not in_statement and text:
+            if text.startswith("#"):
+                if not _HELPER_INCLUDE.match(text):
+                    return (f"only `#include <...>` and balanced #if/#endif lines may be "
+                            f"added at file scope ({text[:80]!r})")
+                continue
+            if not _HELPER_START.match(text):
+                return ("a file-scope statement must start with `static` (a new helper, "
+                        f"constant or table) ({text[:80]!r})")
+            in_statement = True
+        elif text.startswith("#"):
+            return f"preprocessor line inside a new helper ({text[:80]!r})"
+        depth += code.count("{") - code.count("}")
+        if depth < 0:
+            return "inserted text closes a scope it did not open"
+        if depth == 0 and in_statement and (text.endswith(";") or text.endswith("}")):
+            in_statement = False
+    if depth != 0 or in_statement or in_block:
+        return "inserted text is not a complete, brace-balanced file-scope declaration"
+    if conditional:
+        return "inserted #if/#ifdef is not closed inside the inserted text"
     return None
 
 
@@ -694,11 +908,15 @@ def affected_op_scope(paths: tuple[str, ...], *, target_surface: str,
                        "bodies, the unpack_q4_scales helpers where HEAD has them, or the "
                        "mul_mat_qX_K_q8_2_X4_T body; signatures, Q4Bits_AVX2 and Q6_K unchanged")
     if len(changed) == 1:
-        route = cpu_source_route(next(iter(changed)), target_symbol)
+        route, refusal = admit_cpu_route(next(iter(changed)), target_symbol, source_text,
+                                         pre_source_text, patch_text)
         if route is not None:
-            refusal = _cpu_route_scope_refusal(route, source_text, pre_source_text, patch_text)
             if refusal is None:
                 return route.ops
+            if len(cpu_source_routes(next(iter(changed)), target_symbol)) > 1:
+                return Verdict("op_scope", False,
+                               f"CPU {route.route} route refused before build (and every "
+                               f"other route on this body): {refusal}")
             return Verdict("op_scope", False,
                            f"CPU {route.route} route refused before build: {refusal}. "
                            f"Admitted: {route.admitted_text}")
@@ -754,11 +972,18 @@ def check_cpu_iqk_reference(build_dir: Path, source_root: Path, *,
 
 
 def check_cpu_route_reference(build_dir: Path, source_root: Path, *, resolved_recipe,
-                              path: str, target_symbol: str) -> Verdict:
-    """Independent reference for a widened CPU route (see `CPU_SOURCE_ROUTES`)."""
+                              path: str, target_symbol: str,
+                              route_name: str | None = None) -> Verdict:
+    """Independent reference for a widened CPU route (see `CPU_SOURCE_ROUTES`).
+
+    `route_name` is the route `admit_cpu_route` admitted the patch under; it must be
+    one the (path, target symbol) pair names. Without it the first named route is used
+    (single-route bodies)."""
     from . import cpu_route_witness
 
-    route = cpu_source_route(path, target_symbol)
+    routes = cpu_source_routes(path, target_symbol)
+    route = (next((r for r in routes if r.route == route_name), None)
+             if route_name is not None else (routes[0] if routes else None))
     if route is None:
         return Verdict("oracle_unavailable", False,
                        "CPU source route has no reviewed independent reference")
@@ -768,6 +993,19 @@ def check_cpu_route_reference(build_dir: Path, source_root: Path, *, resolved_re
     return Verdict("reference_comparison" if result.status == "wrong" else
                    "oracle_unavailable" if result.status == "unavailable" else
                    "reference_comparison", result.status == "pass",
+                   result.reason, result.detail)
+
+
+def check_model_output_identity(*, anchor_recipe, candidate_recipe, requests,
+                                window=None) -> Verdict:
+    """Whole-model gate for a `model_identity` route (`cpu_weight_placement`)."""
+    from . import model_identity
+
+    result = model_identity.check(anchor_recipe=anchor_recipe,
+                                  candidate_recipe=candidate_recipe,
+                                  requests=tuple(requests or ()), window=window)
+    return Verdict("reference_comparison" if result.status != "unavailable" else
+                   "oracle_unavailable", result.status == "pass",
                    result.reason, result.detail)
 
 
