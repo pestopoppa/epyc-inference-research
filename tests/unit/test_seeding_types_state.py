@@ -105,11 +105,20 @@ roles:
     # The fixture declares no model.mem_gb, so heaviness resolves through the
     # port fallback. Declare the heavy topology this assertion is about instead
     # of inheriting whatever the live machine happens to be running.
-    with patch.object(_MOD, "HEAVY_PORTS", {8087}):
+    # Likewise the cost tiers: with no mem_gb and memory_cost 1.0 they resolve
+    # through ROLE_COST_TIER, which seeding_types overlays at import time with
+    # tiers derived from the repo's lean registry. Pin the tiers this ordering
+    # assertion is about instead of inheriting the current lineup's (the lean's
+    # worker_vision memory_gb went 0 -> 18.3 when STACKCHG-DFLASH2-20261003 moved
+    # the VL-30B to CPU, which re-tiers it 1 -> 2 and silently reorders the result).
+    fixture_tiers = {"worker_vision": 1, "frontdoor": 2, "vision_escalation": 3}
+    with patch.object(_MOD, "HEAVY_PORTS", {8087}), \
+         patch.dict(_MOD.ROLE_COST_TIER, fixture_tiers, clear=True):
         roles = _MOD._read_stack_prior_active_roles(stack_priors)
 
     by_name = {role["name"]: role for role in roles}
     assert list(by_name) == ["worker_vision", "frontdoor", "vision_escalation"]
+    assert {name: role["cost_tier"] for name, role in by_name.items()} == fixture_tiers
     assert by_name["worker_vision"]["port"] == 8086
     assert by_name["vision_escalation"]["is_heavy"] is True
     assert by_name["vision_escalation"]["cost_tier"] == 3

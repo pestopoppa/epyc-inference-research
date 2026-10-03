@@ -50,11 +50,49 @@ def test_split_gguf_requires_every_declared_shard(use, flag):
     assert shards[-1] not in {row["path"] for row in rows}
 
 
+def _master_view_of_lean(lean: Path, out_dir: Path) -> Path:
+    """Write the lean back into MASTER shape: the compile input that reproduces it.
+
+    Until DRAFT-SEL-1 (orch d3233170) the lean was itself a fixed point of the
+    compiler, so the fixture pinned it as both master and lean. The compiler now
+    PROJECTS the topology-selected drafter into the lean and refuses any input that
+    hand-carries drafter fields for a model that declares `drafters` — i.e. it
+    refuses its own output. Strip exactly what `drafter_selection.project` writes
+    (DRAFTER_FIELDS, the selection stamp, the alias inheritance marker, and the
+    launching server's `draft_model`) from the rows the lean stamps. The model's
+    `drafters` list and every other field stay, so compiling this view must
+    reproduce the lean exactly and the master->lean drift guard keeps its teeth
+    without reaching another repo.
+    """
+    from src.registry.drafter_selection import DRAFTER_FIELDS
+
+    master = yaml.safe_load(lean.read_text(encoding="utf-8"))
+    stamped = []
+    for section in ("server_mode", "roles"):
+        for name, row in (master.get(section) or {}).items():
+            accel = row.get("acceleration") if isinstance(row, dict) else None
+            if not isinstance(accel, dict) or "drafter_selection" not in accel:
+                continue
+            stamped.append((section, name))
+            launching = "inherited_by" not in accel["drafter_selection"]
+            for key in (*DRAFTER_FIELDS, "drafter_selection", "inherits_spec_from"):
+                accel.pop(key, None)
+            if section == "server_mode" and launching:
+                row.pop("draft_model", None)
+    assert stamped, "lean carries no drafter projection; the master view is vacuous"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = out_dir / "master_view_of_lean.yaml"
+    out.write_text(yaml.safe_dump(master, sort_keys=False), encoding="utf-8")
+    return out
+
+
 def _context(tmp_path: Path, monkeypatch=None, *, roles=("frontdoor",), mode="full",
              artifacts=(), backend_scope="all"):
-    # A lean registry is itself a fixed point of the compiler.  Keeping two pinned
-    # byte copies exercises the master->lean drift guard without reaching another repo.
+    # The master is the lean with the compiler's drafter projection removed (see
+    # _master_view_of_lean); export_production_enrollment recompiles it and refuses
+    # unless it reproduces the pinned lean, so the drift guard is exercised.
     lean = ROOT / "orchestration/model_registry.yaml"
+    master_view = _master_view_of_lean(lean, tmp_path)
     source_paths = {
         "lean_registry": lean,
         "descriptors": ROOT / "orchestration/model_descriptors.yaml",
@@ -77,7 +115,7 @@ def _context(tmp_path: Path, monkeypatch=None, *, roles=("frontdoor",), mode="fu
         prior_path.write_text(yaml.safe_dump(prior, sort_keys=False))
         monkeypatch.setattr(launcher, "STACK_PRIORS_PATH", prior_path)
     paths = {
-        "master_registry": lean,
+        "master_registry": master_view,
         "lean_registry": lean,
         "launcher": ROOT / "scripts/server/orchestrator_stack.py",
         "launch_manifest": ROOT / "orchestration/launch_manifest.yaml",
@@ -150,6 +188,26 @@ def test_source_drift_refuses_before_builder(tmp_path: Path):
     popen.assert_not_called()
 
 
+def test_master_drafter_drift_makes_the_pinned_lean_stale(tmp_path: Path, monkeypatch):
+    """The master view must not defang the master->lean guard: a master whose selected
+    drafter recipe differs from what the pinned lean projects is refused."""
+    context = _context(tmp_path, monkeypatch)
+    master_path = Path(next(pin.path for pin in context.sources if pin.name == "master_registry"))
+    master = yaml.safe_load(master_path.read_text(encoding="utf-8"))
+    selection = yaml.safe_load((ROOT / "orchestration/stack_topology.yaml").read_text(
+        encoding="utf-8"))["drafter_selection"]
+    server, drafter = next(iter(selection.items()))
+    model_role = master["server_mode"][server].get("model_role", server)
+    master["roles"][model_role]["drafters"][drafter]["draft_max"] += 1
+    master_path.write_text(yaml.safe_dump(master, sort_keys=False), encoding="utf-8")
+    sources = tuple(replace(item, sha256=hashlib.sha256(master_path.read_bytes()).hexdigest())
+                    if item.name == "master_registry" else item for item in context.sources)
+    with patch.object(launcher.subprocess, "Popen") as popen:
+        with pytest.raises(EnrollmentExportError, match="compiled lean registry is stale"):
+            export_production_enrollment(replace(context, sources=sources))
+    popen.assert_not_called()
+
+
 def test_instance_mode_changes_frozen_target_set(tmp_path: Path, monkeypatch):
     full = export_production_enrollment(
         _context(tmp_path / "a", monkeypatch, mode="full"))
@@ -218,8 +276,10 @@ def test_launcher_only_seed_remains_optional_but_production_alias_does_not(
 
 def test_factory_captures_loaded_sources_without_artifact_hashing(tmp_path: Path, monkeypatch):
     expected = _context(tmp_path, monkeypatch)
+    master_view = Path(next(pin.path for pin in expected.sources
+                            if pin.name == "master_registry"))
     captured = capture_current_context(
-        master_registry=ROOT / "orchestration/model_registry.yaml",
+        master_registry=master_view,
         revision="fixture-revision", instance_mode="full", requested_roles=("frontdoor",))
     assert {pin.name for pin in captured.sources} == {pin.name for pin in expected.sources}
     assert captured.artifacts == ()

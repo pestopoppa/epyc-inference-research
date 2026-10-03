@@ -169,6 +169,13 @@ class TestParsers:
         iterates NUMA_CONFIG instances cannot report it and no live vision
         process is missed — worker_vision[8086] IS reported. Asserting the whole
         derived mapping is stricter than the two spot-checks it replaces.
+
+        STACKCHG-DFLASH2-20261003 (operator-signed): worker_vision left the MI210
+        host lane (GPU_HOST_LANE 184-191) for NUMA_HALF_A (0-47,96-143), which is
+        disjoint from the lane even after the SMT fold (184-191 folds onto 88-95),
+        so the vision arm is now correctly ABSENT. The spot-checks pin the lane's
+        real co-tenants instead: its own GPU host role and the half-B frontdoor
+        instance.
         """
         expected = _expected_lane_overlaps("184-191")
         assert expected, "no instance overlaps the lane — check the topology"
@@ -177,8 +184,10 @@ class TestParsers:
         assert {role: sorted(ports) for role, ports in overlaps.items()} == {
             role: sorted(ports) for role, ports in expected.items()
         }
-        # The vision arm is still covered, under the role/port that exists today.
-        assert "worker_vision" in overlaps
+        assert 8083 in overlaps["architect_critic"]  # the lane's own MI210 27B
+        assert 8180 in overlaps["frontdoor"]  # half-B (48-95,144-191) instance
+        # Vision is off the lane: neither the host role nor its alias is reported.
+        assert "worker_vision" not in overlaps
         assert "vision_escalation" not in overlaps
 
     def test_static_smt_overlap_folds_in_full_instances(self):
