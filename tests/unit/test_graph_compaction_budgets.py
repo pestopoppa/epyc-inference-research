@@ -394,6 +394,7 @@ class TestMaybeCompactContext:
         ctx.deps.primitives = None
         with patch("src.features.features") as mock_feat:
             mock_feat.return_value.session_compaction = True
+            mock_feat.return_value.session_compaction_llm_index = True
             await _maybe_compact_context(ctx)
 
     @pytest.mark.asyncio
@@ -406,6 +407,7 @@ class TestMaybeCompactContext:
         ctx.state.context = "short"
         with patch("src.features.features") as mock_feat:
             mock_feat.return_value.session_compaction = True
+            mock_feat.return_value.session_compaction_llm_index = True
             with patch("src.config.get_config", side_effect=ImportError):
                 await _maybe_compact_context(ctx)
 
@@ -431,6 +433,7 @@ class TestMaybeCompactContext:
 
         with patch("src.features.features") as mock_feat:
             mock_feat.return_value.session_compaction = True
+            mock_feat.return_value.session_compaction_llm_index = True
             mock_feat.return_value.session_token_budget = False
             with patch("src.config.get_config") as mock_cfg:
                 mock_cfg.return_value.chat.session_compaction_keep_recent_ratio = 0.20
@@ -469,6 +472,7 @@ class TestMaybeCompactContext:
 
         with patch("src.features.features") as mock_feat:
             mock_feat.return_value.session_compaction = True
+            mock_feat.return_value.session_compaction_llm_index = True
             mock_feat.return_value.session_token_budget = False
             cfg = MagicMock()
             cfg.chat.session_compaction_keep_recent_ratio = 0.2
@@ -511,6 +515,7 @@ class TestMaybeCompactContext:
 
         with patch("src.features.features") as mock_feat:
             mock_feat.return_value.session_compaction = True
+            mock_feat.return_value.session_compaction_llm_index = True
             mock_feat.return_value.session_token_budget = True
             cfg = MagicMock()
             cfg.chat.session_compaction_keep_recent_ratio = 0.2
@@ -547,6 +552,7 @@ class TestMaybeCompactContext:
 
         with patch("src.features.features") as mock_feat:
             mock_feat.return_value.session_compaction = True
+            mock_feat.return_value.session_compaction_llm_index = True
             mock_feat.return_value.session_token_budget = False
             cfg = MagicMock()
             cfg.chat.session_compaction_keep_recent_ratio = 1.0
@@ -583,6 +589,7 @@ class TestMaybeCompactContext:
 
         with patch("src.features.features") as mock_feat:
             mock_feat.return_value.session_compaction = True
+            mock_feat.return_value.session_compaction_llm_index = True
             mock_feat.return_value.session_token_budget = False
             with patch("src.config.get_config", side_effect=ImportError):
                 await _maybe_compact_context(ctx)
@@ -611,6 +618,7 @@ class TestMaybeCompactContext:
 
         with patch("src.features.features") as mock_feat:
             mock_feat.return_value.session_compaction = True
+            mock_feat.return_value.session_compaction_llm_index = True
             mock_feat.return_value.session_token_budget = True
             cfg = MagicMock()
             cfg.chat.session_compaction_keep_recent_ratio = 0.2
@@ -648,6 +656,7 @@ class TestMaybeCompactContext:
 
         with patch("src.features.features") as mock_feat:
             mock_feat.return_value.session_compaction = True
+            mock_feat.return_value.session_compaction_llm_index = True
             mock_feat.return_value.session_token_budget = False
             cfg = MagicMock()
             cfg.chat.session_compaction_keep_recent_ratio = 0.2
@@ -686,6 +695,7 @@ class TestMaybeCompactContext:
 
         with patch("src.features.features") as mock_feat:
             mock_feat.return_value.session_compaction = True
+            mock_feat.return_value.session_compaction_llm_index = True
             mock_feat.return_value.session_token_budget = False
             cfg = MagicMock()
             cfg.chat.session_compaction_keep_recent_ratio = 0.2
@@ -720,6 +730,7 @@ class TestMaybeCompactContext:
 
         with patch("src.features.features") as mock_feat:
             mock_feat.return_value.session_compaction = True
+            mock_feat.return_value.session_compaction_llm_index = True
             mock_feat.return_value.session_token_budget = False
             cfg = MagicMock()
             cfg.chat.session_compaction_keep_recent_ratio = 0.2

@@ -1012,27 +1012,20 @@ async def _execute_turn(ctx: Ctx, role: Role | str) -> tuple[str, str | None, bo
         )
     except ContextOverflowError as e:
         # The inference layer already did what it can without the graph
-        # (bounded pool backoff, reroute to a larger-context role). What only
-        # the graph can do is shrink the conversation it owns: force a
-        # compaction now so the next turn's prompt is rebuilt from the
-        # externalised context. Never retried here and never swallowed — the
-        # turn fails with an explicit context-overflow error.
-        before_chars = len(state.context or "")
-        compacted = False
-        if e.kind == ContextOverflowError.REQUEST_TOO_LARGE or e.source == "server":
-            try:
-                await _maybe_compact_context(ctx, force=True)
-                compacted = len(state.context or "") < before_chars
-            except Exception as compact_exc:  # pragma: no cover - defensive
-                log.warning("Forced compaction after context overflow failed: %s", compact_exc)
+        # (bounded pool backoff, reroute to a larger-context role). Never retried
+        # here and never swallowed — the turn fails with an explicit
+        # context-overflow error. UFH14-B1: no forced session compaction here.
+        # It compacted TaskState.context, which is never rendered into the turn
+        # prompt, so it shrank nothing that overflowed while reporting "context
+        # compacted; retry the turn" (and, with the LLM index, sent one more call
+        # to the frontdoor server that had just overflowed). The next turn's
+        # prompt drops the last output for this error; escalation to a
+        # larger-context role is the error classifier's decision.
         log.warning(
-            "Context overflow on turn %d (role=%s kind=%s n_prompt=%s n_ctx=%s): %s",
+            "Context overflow on turn %d (role=%s kind=%s n_prompt=%s n_ctx=%s)",
             state.turns, role, e.kind, e.n_prompt_tokens, e.n_ctx,
-            "context compacted for the next turn" if compacted else "no context left to compact",
         )
-        msg = f"LLM call failed: {e}" + (
-            " [context compacted; retry the turn]" if compacted else ""
-        )
+        msg = f"LLM call failed: {e}"
         _record_session_turn(state, role=str(role), error=msg)
         return "", msg, False, {}
     except (InferenceError, ConnectionError, TimeoutError, OSError) as e:

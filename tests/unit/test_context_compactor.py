@@ -248,7 +248,7 @@ class TestMaybeCompactContext:
         """Does not trigger when turns <= 5."""
         from src.features import Features, set_features, reset_features
 
-        set_features(Features(session_compaction=True))
+        set_features(Features(session_compaction=True, session_compaction_llm_index=True))
         try:
             state = _make_state(
                 turns=3,
@@ -268,7 +268,7 @@ class TestMaybeCompactContext:
         from src.features import Features, set_features, reset_features
         from src.config import ChatPipelineConfig
 
-        set_features(Features(session_compaction=True))
+        set_features(Features(session_compaction=True, session_compaction_llm_index=True))
         try:
             state = _make_state(
                 turns=3,  # below default guard (5)
@@ -297,7 +297,7 @@ class TestMaybeCompactContext:
         """Does not trigger when context is small."""
         from src.features import Features, set_features, reset_features
 
-        set_features(Features(session_compaction=True))
+        set_features(Features(session_compaction=True, session_compaction_llm_index=True))
         try:
             state = _make_state(
                 turns=10,
@@ -316,7 +316,7 @@ class TestMaybeCompactContext:
         """Full compaction: writes file, generates index, replaces context."""
         from src.features import Features, set_features, reset_features
 
-        set_features(Features(session_compaction=True))
+        set_features(Features(session_compaction=True, session_compaction_llm_index=True))
         try:
             original_context = "Important discussion about architecture\n" * 1000
             state = _make_state(
@@ -362,7 +362,7 @@ class TestMaybeCompactContext:
         """Recent ~20% of context is preserved verbatim."""
         from src.features import Features, set_features, reset_features
 
-        set_features(Features(session_compaction=True))
+        set_features(Features(session_compaction=True, session_compaction_llm_index=True))
         try:
             # Create context with identifiable recent content
             old_part = "OLD_CONTENT\n" * 500
@@ -392,7 +392,7 @@ class TestMaybeCompactContext:
         """Compaction still proceeds with fallback index if LLM index call fails."""
         from src.features import Features, set_features, reset_features
 
-        set_features(Features(session_compaction=True))
+        set_features(Features(session_compaction=True, session_compaction_llm_index=True))
         try:
             state = _make_state(
                 turns=10,
@@ -421,7 +421,7 @@ class TestMaybeCompactContext:
         from src.features import Features, set_features, reset_features
         from src.config import ChatPipelineConfig
 
-        set_features(Features(session_compaction=True))
+        set_features(Features(session_compaction=True, session_compaction_llm_index=True))
         try:
             original_context = "A" * 10000 + "B" * 40000  # 50K total
             state = _make_state(
@@ -458,7 +458,7 @@ class TestMaybeCompactContext:
         from src.features import Features, set_features, reset_features
         from src.config import ChatPipelineConfig
 
-        set_features(Features(session_compaction=True))
+        set_features(Features(session_compaction=True, session_compaction_llm_index=True))
         try:
             # Context is small (below normal threshold) but recompaction should trigger
             state = _make_state(
@@ -495,7 +495,7 @@ class TestMaybeCompactContext:
         from src.features import Features, set_features, reset_features
         from src.config import ChatPipelineConfig
 
-        set_features(Features(session_compaction=True))
+        set_features(Features(session_compaction=True, session_compaction_llm_index=True))
         try:
             state = _make_state(
                 turns=12,
@@ -524,7 +524,7 @@ class TestMaybeCompactContext:
         from src.features import Features, set_features, reset_features
         from src.config import ChatPipelineConfig
 
-        set_features(Features(session_compaction=True))
+        set_features(Features(session_compaction=True, session_compaction_llm_index=True))
         try:
             state = _make_state(
                 turns=100,
@@ -553,7 +553,7 @@ class TestMaybeCompactContext:
         """last_compaction_turn is set to current turn after compaction."""
         from src.features import Features, set_features, reset_features
 
-        set_features(Features(session_compaction=True))
+        set_features(Features(session_compaction=True, session_compaction_llm_index=True))
         try:
             state = _make_state(
                 turns=15,

@@ -133,6 +133,31 @@ def _context_externalization_path(state: TaskState) -> Path:
     return Path(tempfile.gettempdir()) / f"session_{task_id}_ctx_{state.compaction_count}.md"
 
 
+#: Share of the index worker's per-request window the index INPUT may use (the
+#: rest is the index prompt and the generated index), and a chars/token bound
+#: that over-counts tokens (context_limits' conservative estimate).
+INDEX_INPUT_WINDOW_SHARE = 0.5
+INDEX_CHARS_PER_TOKEN = 3
+
+
+def _cap_index_input(ctx: Any, text: str, prompt_chars: int = 0) -> str:
+    """The NEWEST part of ``text`` that fits the index worker's window share
+    (unknown window: the 32768-token fallback)."""
+    window = UNKNOWN_CONTEXT_FALLBACK_TOKENS
+    try:
+        from src.backends.context_limits import get_context_limit_resolver
+
+        server_urls = getattr(ctx.deps.primitives, "server_urls", None)
+        urls = server_urls.get(Role.WORKER_GENERAL.value) if isinstance(server_urls, dict) else None
+        limit = get_context_limit_resolver().limit_for_role(Role.WORKER_GENERAL.value, urls)
+        if limit is not None and int(limit.per_request_n_ctx) > 0:
+            window = int(limit.per_request_n_ctx)
+    except Exception:
+        log.debug("compaction: index worker window unknown", exc_info=True)
+    cap = max(0, int(window * INDEX_INPUT_WINDOW_SHARE) * INDEX_CHARS_PER_TOKEN - int(prompt_chars))
+    return text[-cap:] if cap and len(text) > cap else text
+
+
 async def _maybe_compact_context(ctx: Any, *, force: bool = False) -> None:
     """Compact old context via context externalization.
 
@@ -219,22 +244,36 @@ async def _maybe_compact_context(ctx: Any, *, force: bool = False) -> None:
 
         state.context_file_paths.append(str(ctx_file_path))
 
-        index_prompt = _resolve_compaction_prompt()
-        full_index_prompt = f"{index_prompt}\n\n---\n\n{to_externalize}"
-        try:
-            if _use_inline_calls_in_tests():
-                index = ctx.deps.primitives.llm_call(
-                    full_index_prompt,
-                    role=Role.WORKER_GENERAL.value,
-                )
-            else:
-                index = await asyncio.to_thread(
-                    ctx.deps.primitives.llm_call,
-                    full_index_prompt,
-                    role=Role.WORKER_GENERAL.value,
-                )
-        except Exception as exc:
-            log.warning("Compaction index generation failed, using fallback index: %s", exc)
+        # UFH14-B1: TaskState.context is NEVER rendered into a turn prompt (the
+        # prompt is rebuilt from TaskState.prompt + REPL state + last output, see
+        # graph/helpers._execute_turn and repl_executor's TaskState construction),
+        # so an LLM-written index of it reaches no model. It used to cost one
+        # worker_general call per compaction, with the whole unbounded
+        # ``to_externalize`` as input (overflowing / rerouting / timing out on
+        # long inputs). The index is now deterministic unless
+        # ``session_compaction_llm_index`` is on (for a future renderer), and then
+        # its input is capped to the worker's per-request window.
+        index = None
+        if _get_features().session_compaction_llm_index is True:
+            index_prompt = _resolve_compaction_prompt()
+            index_input = _cap_index_input(ctx, to_externalize, len(index_prompt))
+            full_index_prompt = f"{index_prompt}\n\n---\n\n{index_input}"
+            try:
+                if _use_inline_calls_in_tests():
+                    index = ctx.deps.primitives.llm_call(
+                        full_index_prompt,
+                        role=Role.WORKER_GENERAL.value,
+                    )
+                else:
+                    index = await asyncio.to_thread(
+                        ctx.deps.primitives.llm_call,
+                        full_index_prompt,
+                        role=Role.WORKER_GENERAL.value,
+                    )
+            except Exception as exc:
+                log.warning("Compaction index generation failed, using fallback index: %s", exc)
+                index = None
+        if not index:
             index = (
                 "- [Fallback Index]\n"
                 "- Context externalized due pressure; use read_file() for full details.\n"
