@@ -309,15 +309,27 @@ POOL_ACTOR_FLAGS = frozenset({"--workers", "--lane-actor-models",
                               "--critic-model", "--critic-effort"})
 
 
+#: Post-keep measurement scheduling (2026-10-03, DS41 duty cycle): how often the
+#: accumulator re-measures champion-of-record vs tip, and how long an identical-digest
+#: anchor guard may skip its A/A health sample. They schedule measurements of the same
+#: lineage on the same tail; they change neither the source/anchor lineage, the COR,
+#: the runtime recipe nor the floor, so changing them at a batch boundary must carry
+#: the lineage rather than orphan it.
+MEASUREMENT_SCHEDULE_FLAGS = frozenset({"--accumulate-bench-every-keeps",
+                                        "--anchor-guard-aa-window-s"})
+
+
 def resume_binding(argv) -> dict:
     """Prior-child binding before adding a newly selected runtime recipe.
 
     The runtime protocol's own options are excluded too, so a continuation can turn
     the strict runtime path on (or re-declare its arms) at a batch boundary without
     orphaning the source/anchor lineage it continues; so are the pool width and the
-    per-lane actor models (`POOL_ACTOR_FLAGS`)."""
+    per-lane actor models (`POOL_ACTOR_FLAGS`) and the post-keep measurement schedule
+    (`MEASUREMENT_SCHEDULE_FLAGS`)."""
     stripped = _without(argv, {"--runtime-recipe-reference", "--runtime-recovery-reference",
-                               *RUNTIME_PROTOCOL_FLAGS, *POOL_ACTOR_FLAGS})
+                               *RUNTIME_PROTOCOL_FLAGS, *POOL_ACTOR_FLAGS,
+                               *MEASUREMENT_SCHEDULE_FLAGS})
     stripped = [item for item in stripped if item not in RUNTIME_PROTOCOL_SWITCHES]
     return input_binding(stripped)
 

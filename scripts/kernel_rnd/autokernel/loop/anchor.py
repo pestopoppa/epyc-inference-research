@@ -26,6 +26,9 @@ The scratch directory is REMOVED before the build: an incremental rebuild is exa
 mechanism capable of producing a binary that does not match its source, and a guard must
 not be exposed to the fault class it exists to detect. Cost is one build plus one A/A
 per keep; run 18 kept 1 in 159. No flag: a guard that can be turned off is not a guard.
+(2026-10-03: `aa_skip` may drop the A/A SESSION-HEALTH sample on the identical-digest
+path only -- there the digests are the proof and the A/A cannot change the verdict.
+The digest check itself still has no off switch.)
 """
 from __future__ import annotations
 
@@ -57,7 +60,8 @@ class AnchorVerdict:
     passed: bool
     champion_commit: str
     anchor: str
-    effect_pct: float
+    #: None only when the A/A was skipped (`aa_skip`): no measurement, no number.
+    effect_pct: float | None
     noise_floor_pct: float
     surface: str
     pairs: int
@@ -76,7 +80,8 @@ class AnchorVerdict:
         return {"status": ("anchor_guard_excursion" if self.excursion else
                            "anchor_verified" if self.passed else "anchor_mismatch"),
                 "mechanism_id": MECHANISM_ID, "target_surface": self.surface,
-                "effect_fraction": self.effect_pct / 100.0, "reason": self.detail,
+                "effect_fraction": (None if self.effect_pct is None
+                                    else self.effect_pct / 100.0), "reason": self.detail,
                 "anchor_guard": self.to_dict()}
 
 
@@ -86,7 +91,8 @@ def verify(*, champion_commit: str, anchor_build: Path,
            digest: Callable[[Path], str | None] | None = None,
            clean: Callable[[Path], None] = lambda p: shutil.rmtree(p, True),
            on_verdict: Callable[[AnchorVerdict], Any] | None = None,
-           on_step: Callable[[str], Any] = lambda _label: None) -> AnchorVerdict:
+           on_step: Callable[[str], Any] = lambda _label: None,
+           aa_skip: Callable[[], str | None] | None = None) -> AnchorVerdict:
     """A/A the promoted anchor against a fresh champion build; abort the run if they differ.
 
     `build(scratch) -> gates.Verdict` and `compare(anchor, fresh) -> Comparison` are
@@ -108,6 +114,12 @@ def verify(*, champion_commit: str, anchor_build: Path,
     reading is an instrument EXCURSION (run 21 aborted a healthy run on a 4.2σ one:
     +1.765% against a pooled A/A σ of 0.417%) -- recorded, never an abort. None from
     `digest`, or no digest wired, falls back to the A/A-only behaviour above.
+    `aa_skip` (2026-10-03) is consulted ONLY on that identical-digest path, where the
+    A/A cannot change the verdict: it returns a reason to skip the session-health
+    sample this time, or None to take it. A skip records a passed verdict with no
+    effect and no comparison (`effect_pct=None`, zero pairs) naming both digests and
+    the reason. The digest comparison, its heal and its abort are never skipped, and
+    a missing digest always measures -- there the A/A IS the proof.
     """
     # 2026-09-06: INCREMENTAL, not clean. A keep touches one file; CMake recompiles only
     # that object and reuses the rest, so the guard's comparison build takes minutes,
@@ -156,6 +168,19 @@ def verify(*, champion_commit: str, anchor_build: Path,
                           "object_diff": odiff})
             if on_verdict is not None: on_verdict(verdict)  # noqa: E701 — loop budget
             raise loop_mod.RunAborted(verdict.detail)
+    skip_reason = (aa_skip() if aa_skip is not None and a_dig and a_dig == f_dig
+                   else None)
+    if skip_reason:
+        verdict = AnchorVerdict(
+            passed=True, champion_commit=champion_commit, anchor=str(anchor_build),
+            effect_pct=None, noise_floor_pct=noise_floor_pct, surface="none", pairs=0,
+            evidence={"anchor_digest": a_dig, "fresh_digest": f_dig,
+                      "aa_skipped": skip_reason},
+            detail=(f"anchor guard: object digests IDENTICAL — promoted anchor "
+                    f"{Path(anchor_build).name} IS champion {champion_commit[:12]} "
+                    f"({a_dig}); A/A session-health sample skipped: {skip_reason}"))
+        if on_verdict is not None: on_verdict(verdict)  # noqa: E701 — loop budget
+        return verdict
     on_step("anchor guard: A/A against the promoted anchor")
     comparison = compare(anchor_build, scratch_build)
     effect_pct = comparison.effect * 100.0

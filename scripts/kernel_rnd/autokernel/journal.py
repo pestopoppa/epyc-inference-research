@@ -322,7 +322,7 @@ LOOP_BUNDLE_PROVENANCES = frozenset({
 })
 LOOP_BUNDLE_MEASUREMENT_VALIDITIES = frozenset({
     "current_snapshot", "unknown_legacy", "stale_external_tip_advance",
-    "stale_runtime_recipe_epoch",
+    "stale_runtime_recipe_epoch", "stale_deferred_accumulate_bench",
 })
 
 # §19.4 bootstrap-knowledge event types. Their payloads are campaign-specific

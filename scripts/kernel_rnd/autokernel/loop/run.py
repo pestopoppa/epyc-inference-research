@@ -44,6 +44,15 @@ CPU_MEASUREMENT_GPU_QUIET_OFF = "off"
 CPU_MEASUREMENT_GPU_QUIET_Q3 = "q3"
 CPU_MEASUREMENT_GPU_QUIET_POLICIES = (CPU_MEASUREMENT_GPU_QUIET_OFF,
                                       CPU_MEASUREMENT_GPU_QUIET_Q3)
+#: `--anchor-guard-aa-window-s` default (2026-10-03, DS41 duty cycle: the post-keep
+#: anchor A/A held the bottleneck measurement slot for ~13% of loop wall). When the
+#: object digests are identical the anchor provably IS the champion and an above-floor
+#: A/A is recorded as an instrument excursion, never an abort (R22-3) -- the A/A
+#: cannot change the guard's verdict, it is a session-health sample (and the DS41-C69
+#: floor-carry contradiction evidence). Sampling it at most once per window keeps that
+#: health signal while dropping the per-keep cost. 6 h ~ two-to-three keeps at the
+#: DS41 rate; a run restart always samples on its first keep.
+ANCHOR_GUARD_AA_WINDOW_S = 6 * 3600.0
 
 from . import (accumulate, actors, anchor, archive, bench, champion, claim, gates,
                dispatch_guard, heartbeat, hotspots, loop, serving, serving_beliefs,
@@ -1639,6 +1648,22 @@ def main(argv: list[str] | None = None) -> int:
                         help="R23-44: run the serving gate once the accumulator's compounded "
                              "bench gain over the champion of record reaches this multiple of "
                              "the serving floor (operator: 2-3x; default 2.5)")
+    parser.add_argument("--accumulate-bench-every-keeps", type=int,
+                        default=accumulate.ACCUMULATE_BENCH_EVERY_KEEPS,
+                        help="re-measure champion-of-record vs accumulator tip on every Nth "
+                             "keep since the serving gate last ran, and always on the keep "
+                             "that fires the cadence gate; other keeps land with the "
+                             "compounded magnitude marked stale (deferred). 1 = after every "
+                             "keep, the pre-2026-10-03 behaviour (default: %(default)s)")
+    parser.add_argument("--anchor-guard-aa-window-s", type=float,
+                        default=ANCHOR_GUARD_AA_WINDOW_S,
+                        help="when the anchor guard's object digests prove the promoted "
+                             "anchor IS the champion, skip its A/A session-health sample if "
+                             "this run's previous A/A passed inside the floor less than this "
+                             "many seconds ago. The digest check, its heal and its abort are "
+                             "never skipped; a missing digest, a prior excursion or an "
+                             "expired window always samples. 0 = always sample, the "
+                             "pre-2026-10-03 behaviour (default: %(default)s)")
     parser.add_argument("--out", type=Path)
     parser.add_argument("--scheduler-selection", type=Path,
                         help="original serial scheduler selection for held-resource accounting only")
@@ -1969,6 +1994,10 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--cpu-window-wait-bound-s must be > 0")
     if args.hypothesis_author_attempts < 1:
         parser.error("--hypothesis-author-attempts must be >= 1")
+    if args.accumulate_bench_every_keeps < 1:
+        parser.error("--accumulate-bench-every-keeps must be >= 1")
+    if not (args.anchor_guard_aa_window_s >= 0):
+        parser.error("--anchor-guard-aa-window-s must be >= 0")
     budget_error = _actor_budget_error(args) or _reasoning_history_error(args)
     if budget_error:
         parser.error(budget_error)
@@ -3086,6 +3115,7 @@ def main(argv: list[str] | None = None) -> int:
     # broke every accumulate step once prune deleted it, 2026-09-06) and that gen is passed
     # to prune_anchor_generations as `protect` so it outlives the generations built on it.
     accum_policy = accumulate.AccumulatorPolicy(fire_multiple=args.fire_multiple)
+    accum_bench_forced = [False]  # set when a whole-bundle check could not be resolved
     # The bundle is DURABLE (2026-09-07). Constructing it fresh here reset the keeps on every
     # restart AND advanced the champion of record to the accumulated tip, laundering
     # bench-only keeps into the serving-demonstrated slot; five keeps and +6.13% were absorbed
@@ -3517,6 +3547,10 @@ def main(argv: list[str] | None = None) -> int:
             return serving.calibrate_floor(*args_, **kwargs_)
 
     anchor_guard_seen: list = []
+    #: (monotonic time, inside-floor) of this run's last MEASURED anchor-guard A/A;
+    #: `--anchor-guard-aa-window-s` reads it. Process-local on purpose: a restart
+    #: always takes a fresh session-health sample on its first keep.
+    last_anchor_aa: list = [None]
 
     def build_champion(dest: Path, targets: tuple = gates.DEFAULT_TARGETS):
         """The loop's recipe, compiled AT the path used. Shared by promotion and guard —
@@ -3605,8 +3639,22 @@ def main(argv: list[str] | None = None) -> int:
                            recorded_at=loop._now(), campaign_id="ak-loop",
                            on_serving_export=feedback.exported)
             anchor_guard_seen.append(verdict.to_dict())
+            if verdict.pairs and verdict.effect_pct is not None:
+                last_anchor_aa[0] = (time.monotonic(), verdict.passed and not verdict.excursion)
             publish("running", latest, hotspot_rows=hotspot_rows)
             print(f"anchor    {verdict.detail}")
+
+        def aa_skip() -> str | None:
+            """Skip the identical-digest A/A only inside the window after a clean one."""
+            window = args.anchor_guard_aa_window_s
+            last = last_anchor_aa[0]
+            if window <= 0 or last is None or not last[1]:
+                return None
+            age = time.monotonic() - last[0]
+            if age >= window:
+                return None
+            return (f"this run's previous anchor-guard A/A passed inside the floor "
+                    f"{age / 60.0:.0f} min ago (--anchor-guard-aa-window-s {window:g})")
 
         anchor.verify(
             champion_commit=_git(args.worktree, "rev-parse", "HEAD"),
@@ -3616,7 +3664,7 @@ def main(argv: list[str] | None = None) -> int:
             # (0/379 objects ever differed); the linker is not (four distinct .so digests
             # for one commit aborted every keep on link noise). Objects prove identity.
             digest=anchor_integrity.object_digest,
-            on_verdict=keep_verdict, build=build_champion,
+            on_verdict=keep_verdict, build=build_champion, aa_skip=aa_skip,
             compare=lambda promoted, fresh: (
                 cpu_anchor_guard_compare(promoted, fresh)
                 if direct_launch and source_instrument and source_floor_refresh[0]
@@ -3791,8 +3839,27 @@ def main(argv: list[str] | None = None) -> int:
             return {"path": str(target.resolve()),
                     "sha256": hashlib.sha256(target.read_bytes()).hexdigest()}
 
+        # 2026-10-03: the COR-vs-tip bench runs on a keep cadence, not after every keep
+        # (`--accumulate-bench-every-keeps`). A deferred keep advances membership, tip and
+        # the R23-54 cadence counter; its retained magnitude is marked stale, so the
+        # threshold trigger cannot fire on it, and the keep that reaches the cadence gate
+        # is always measured first (`accumulate.bench_due`).
+        due = accumulate.bench_due(bundle[0], accum_policy, args.accumulate_bench_every_keeps,
+                                   force=accum_bench_forced[0],
+                                   gate_armed=serving_floor_pct is not None)
+        if due is None:
+            bundle[0].add_unmeasured_keep(mechanism_id, head)
+            bundle[0].save(args.store)
+            landed = bundle[0].keeps_since_serving_gate
+            every = args.accumulate_bench_every_keeps
+            print(f"accum     bundle {len(bundle[0].keeps)} keep(s); COR-vs-tip bench deferred "
+                  f"(keep {landed} since the serving gate; bench every {every} keeps and "
+                  f"before the cadence gate at {accum_policy.every_keeps}); retained "
+                  f"{bundle[0].compounded_bench_pct:+.2f}% is stale until then")
+            return
+        accum_bench_forced[0] = False
         publish("running", latest, hotspot_rows=hotspot_rows,
-                step=f"keep: accumulate — champion-of-record vs tip bench ({mechanism_id})")
+                step=f"keep: accumulate — champion-of-record vs tip bench ({mechanism_id}, {due})")
         # compounded bench: champion-of-record build (A) vs the just-advanced accumulator (B),
         # re-measured (never a product of marginal effects -- keeps interact) because this is
         # the number the fire threshold reads and the serving gate will be asked to confirm.
@@ -3830,6 +3897,11 @@ def main(argv: list[str] | None = None) -> int:
                     bundle[0].comparison_evidence = restored_ref
                     bundle[0].measurement_validity = accumulate.MEASUREMENT_CURRENT
                     bundle[0].save(args.store)
+                else:
+                    # The restored tip still reads negative: with deferred benches the
+                    # regression may predate the reverted keep, so the next keep must
+                    # re-measure the whole bundle rather than wait for its cadence.
+                    accum_bench_forced[0] = True
                 raise loop.InteractionRegression(
                     f"whole bundle regressed beyond floor twice; restored prior tip "
                     f"{previous_tip[:12]}; evidence {resolution_ref['path']}")

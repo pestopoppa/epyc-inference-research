@@ -71,6 +71,10 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None, s
                   # Whether CPU measurement windows also take the MI210 claim
                   # (run.py --cpu-measurement-gpu-quiet): host hygiene, not an identity.
                   "--cpu-measurement-gpu-quiet",
+                  # Post-keep measurement cadence (accumulate bench every N keeps,
+                  # anchor-guard A/A window): a measurement schedule over the SAME
+                  # lineage, never an identity (serial_run.MEASUREMENT_SCHEDULE_FLAGS).
+                  *sr.MEASUREMENT_SCHEDULE_FLAGS,
                   # Best-of-N author wall budgets (bestof.WallBudget): a time policy.
                   "--actor-authors-wall", "--actor-authors-panel-wall",
                   "--actor-authors-cancel-factor",

@@ -91,6 +91,21 @@ MEASUREMENT_STALE_TIP_ADVANCE = "stale_external_tip_advance"
 #: epoch. It never fires the threshold trigger; the next keep re-measures both arms
 #: under the adopted recipe (`add_keep` restores MEASUREMENT_CURRENT).
 MEASUREMENT_STALE_RUNTIME_RECIPE = "stale_runtime_recipe_epoch"
+#: The keep landed on the tip WITHOUT a champion-of-record-vs-tip re-measurement
+#: (`--accumulate-bench-every-keeps` > 1). The retained magnitude belongs to an
+#: earlier tip; like the other stale states it never fires the threshold trigger,
+#: and the next scheduled accumulate bench restores MEASUREMENT_CURRENT.
+MEASUREMENT_DEFERRED_BENCH = "stale_deferred_accumulate_bench"
+#: DS41 duty cycle (2026-10-03): after EVERY keep the champion-of-record-vs-tip
+#: bench held the measurement slot for ~13% of loop wall (and the slot was the
+#: bottleneck: 80.6% busy, lanes waited on it 82% of the time). The number it
+#: produces feeds only (a) the threshold trigger -- a proxy R23-54 already demoted
+#: below the cadence -- and (b) the whole-bundle interaction-regression check.
+#: Neither needs it after every keep, so by default it runs on every third keep
+#: since the serving gate last ran AND always on the keep that will fire the
+#: cadence gate, so the gate never runs on an unmeasured bundle. 1 = every keep
+#: (the pre-2026-10-03 behaviour).
+ACCUMULATE_BENCH_EVERY_KEEPS = 3
 BUNDLE_SCHEMA_V1 = journal.LOOP_BUNDLE_SNAPSHOT_SCHEMA_V1
 BUNDLE_SCHEMA_V2 = journal.LOOP_BUNDLE_SNAPSHOT_SCHEMA_V2
 
@@ -194,6 +209,18 @@ class Bundle:
         self.measurement_validity = MEASUREMENT_CURRENT
         self.comparison_evidence = (dict(comparison_evidence)
                                     if comparison_evidence is not None else None)
+
+    def add_unmeasured_keep(self, mechanism_id: str, tip: str) -> None:
+        """Land a keep whose COR-vs-tip bench was deferred (`bench_due` said None).
+
+        Membership, tip and the R23-54 cadence counter advance exactly as in
+        `add_keep`; the compounded magnitude and its evidence are RETAINED but marked
+        `MEASUREMENT_DEFERRED_BENCH`, so they read as historical and cannot fire the
+        threshold trigger. Never invents a compounded number for the new tip."""
+        self.keeps.append(mechanism_id)
+        self.tip = tip
+        self.keeps_since_serving_gate += 1
+        self.measurement_validity = MEASUREMENT_DEFERRED_BENCH
 
     def mark_serving_gate_fired(self) -> None:
         """The serving gate RAN -- reset the cadence counter. Called on every outcome
@@ -560,6 +587,38 @@ def gate_trigger(bundle: Bundle, serving_floor_pct: float | None,
     return None
 
 
+def bench_due(bundle: Bundle, policy: AccumulatorPolicy,
+              every_keeps: int = ACCUMULATE_BENCH_EVERY_KEEPS, *,
+              force: bool = False, gate_armed: bool = True) -> str | None:
+    """Whether the keep about to land must re-measure champion-of-record vs tip.
+
+    Returns WHY (a short reason) or None to defer the bench for this keep. Derived
+    only from durable bundle state, so a restart cannot shift the schedule:
+      * "every_keep"          -- `every_keeps` <= 1 (pre-2026-10-03 behaviour);
+      * "forced"              -- the caller asks (e.g. a just-failed whole-bundle check);
+      * "stale_measurement"   -- the retained magnitude is stale for a reason other than
+                                 a deferral (external tip advance, runtime-recipe epoch,
+                                 legacy): re-measure under the current epoch at once;
+      * "before_serving_gate" -- this keep reaches the R23-54 cadence, so the gate is
+                                 about to fire and must read a measured bundle
+                                 (`gate_armed` False -- no calibrated serving floor, so
+                                 `gate_trigger` cannot fire -- skips this clause);
+      * "cadence"             -- the `every_keeps`-th keep since the gate last ran.
+    """
+    if every_keeps <= 1:
+        return "every_keep"
+    if force:
+        return "forced"
+    if bundle.measurement_validity not in (MEASUREMENT_CURRENT, MEASUREMENT_DEFERRED_BENCH):
+        return "stale_measurement"
+    landed = bundle.keeps_since_serving_gate + 1
+    if gate_armed and policy.every_keeps > 0 and landed >= policy.every_keeps:
+        return "before_serving_gate"
+    if landed % every_keeps == 0:
+        return "cadence"
+    return None
+
+
 def decide_after_keep(bundle: Bundle, serving_floor_pct: float,
                       policy: AccumulatorPolicy) -> Decision:
     """After a keep lands: fire the serving gate, or keep batching? Fires when EITHER
@@ -619,6 +678,7 @@ def resolve(bundle: Bundle, serving_row: dict, policy: AccumulatorPolicy) -> dic
                      "gap rather than the bench surface")}}
 
 
-__all__ = ["SERVING_GATE_EVERY_KEEPS", "Decision", "Outcome", "DivergenceAction",
-           "AccumulatorPolicy", "Bundle", "gate_trigger", "decide_after_keep",
+__all__ = ["SERVING_GATE_EVERY_KEEPS", "ACCUMULATE_BENCH_EVERY_KEEPS",
+           "MEASUREMENT_DEFERRED_BENCH", "Decision", "Outcome", "DivergenceAction",
+           "AccumulatorPolicy", "Bundle", "gate_trigger", "bench_due", "decide_after_keep",
            "classify_serving", "resolve"]
