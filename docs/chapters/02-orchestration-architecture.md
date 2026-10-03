@@ -345,7 +345,7 @@ Routing is deterministic and minimal. Short prompts that need no tools bypass th
 
 Short, simple prompts bypass the REPL Python-code wrapper entirely. The REPL forces the model to generate Python code + call `FINAL(answer)`, adding ~900 tokens of overhead. This destroys quality on instruction-precision tasks (same model: 11/11 without REPL, 2/11 through REPL).
 
-Direct mode activates when the prompt has no file/tool operation keywords and context < 20K characters. The user prompt is sent directly to the model via `primitives.llm_call()` with no REPL wrapper. MemRL quality review gate still applies.
+Direct mode activates when the prompt has no file/tool operation keywords and context < 20K characters. The user prompt is sent directly to the model via `primitives.llm_call()` with no REPL wrapper. (The MemRL answer review gate that used to follow was removed by RI-18c.)
 
 Implementation: `_should_use_direct_mode()` in `src/api/routes/chat.py`.
 

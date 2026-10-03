@@ -197,8 +197,7 @@ Short, simple prompts bypass the REPL Python-code wrapper entirely. The REPL add
 **What happens in direct mode:**
 1. User prompt (+ optional context) sent directly to model via `primitives.llm_call()`
 2. No REPL wrapper, no tool environment, no FINAL() requirement
-3. MemRL quality review gate still applies (architect verdict if Q < 0.6)
-4. Response returned as `ChatResponse` with `turns=1`
+3. Response returned as `ChatResponse` with `turns=1` (the MemRL answer review gate was removed by RI-18c)
 
 **Implementation**: `_should_use_direct_mode()` in `src/api/routes/chat.py`
 
@@ -289,20 +288,12 @@ worker_general (7B, 44 t/s)               frontdoor (30B, 18 t/s)
 └───────────────────────────┘            └─────────────────────────────┘
 ```
 
-### MemRL Quality Review Gate (2026-01-29)
+### MemRL Quality Review Gate (2026-01-29, removed 2026-10-03)
 
-Two-phase review triggered when MemRL Q-value < 0.6 for role+task:
-
-```
-Phase 1: Architect Verdict (6.75 t/s, ~40 tokens → ~6s)
-  → "OK" (return answer unchanged)
-  → "WRONG: <concise corrections>" (trigger Phase 2)
-
-Phase 2: Worker Revision (44 t/s, ~500 tokens → ~11s, only on WRONG)
-  → Expand corrections into full revised answer
-```
-
-Net impact: ~1.9s average added latency (20% trigger rate × 30% revision rate).
+Removed by RI-18c. RI-18's forced-review counterfactual (579 items) fired its
+pre-registered DROP: the production gate (Q < 0.6) never fired, and reviewing every
+answer netted −38.3 per 100 (12 fixed, 234 broken). See
+`docs/chapters/07-memrl-system.md` → *MemRL Quality Review Gate*.
 
 ### Split Pipeline (Exploration → Summarization)
 
