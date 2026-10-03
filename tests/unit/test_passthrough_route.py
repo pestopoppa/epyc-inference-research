@@ -408,6 +408,165 @@ def test_admission_wait_budget_ends_as_typed_pool_exhausted(
     assert rec["caller"]["source"] == "passthrough"
 
 
+# ── KVU-15a: the host-wide long-prefill lease ───────────────────────────────
+
+
+def _probe_lease_from_child(url: str) -> bool:
+    """Ask a separate Python process whether ``url``'s lease is held (the
+    cross-worker view): it resolves the same (hermetic) lease file and flocks it."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    from src.runtime import long_prefill_lease as lpl
+
+    code = (
+        "import fcntl, sys\n"
+        "fh = open(sys.argv[1], 'rb')\n"
+        "try:\n"
+        "    fcntl.flock(fh.fileno(), fcntl.LOCK_SH | fcntl.LOCK_NB)\n"
+        "    print('free')\n"
+        "except BlockingIOError:\n"
+        "    print('held')\n"
+    )
+    path = lpl.lease_path(url)
+    if not Path(path).exists():
+        return False
+    out = subprocess.run([sys.executable, "-c", code, str(path)], capture_output=True,
+                         text=True, timeout=30, check=True)
+    return out.stdout.strip() == "held"
+
+
+async def test_passthrough_takes_the_host_wide_lease_and_releases_it_at_first_chunk(
+    server, pool, wiring, monkeypatch
+):
+    from src.runtime import long_prefill_lease as lpl
+
+    monkeypatch.setenv(kpa.KV_POOL_LONG_PREFILL_ENV, "10")  # this prompt is "long"
+    monkeypatch.setenv(kpa.KV_POOL_PREFILL_FLOOR_TPS_ENV, "0")  # lease never expires
+    seen: dict = {}
+    real_acquire = pool.acquire
+
+    def spy(*a, **kw):
+        seen["prompt_text"] = kw.get("prompt_text")
+        ticket = real_acquire(*a, **kw)
+        seen["held_after_acquire"] = lpl.is_held(server.url)
+        seen["held_from_child"] = _probe_lease_from_child(server.url)
+        seen["holder"] = lpl.holder_info(server.url)
+        seen["ticket"] = ticket
+        return ticket
+
+    monkeypatch.setattr(pool, "acquire", spy)
+    server.hold.clear()
+    content = "x" * 400
+    raw = json.dumps({"stream": True,
+                      "messages": [{"role": "user", "content": content}]}).encode()
+    resp = await pt._passthrough(
+        "chat/completions", "architect_critic",
+        _request("/v1/passthrough/architect_critic/chat/completions", raw), _state(),
+    )
+    it = resp.body_iterator
+    await asyncio.wait_for(it.__anext__(), timeout=5)
+    # Taken host-wide before dispatch: another process sees the flock.
+    assert seen["held_after_acquire"] is True
+    assert seen["held_from_child"] is True
+    assert seen["holder"]["ticket"] == seen["ticket"]
+    assert seen["holder"]["pid"] == __import__("os").getpid()
+    # The request's text estimate reaches admission (new-token sizing).
+    assert seen["prompt_text"] == content
+    await asyncio.sleep(0.1)
+    # Handed on at the first upstream chunk: free for every worker.
+    assert not lpl.is_held(server.url)
+    assert _probe_lease_from_child(server.url) is False
+    server.hold.set()
+    async for _ in it:
+        pass
+    assert not lpl.is_held(server.url)
+    (rec,) = _records(wiring)
+    assert rec["passthrough"]["long_prefill"] is True
+    assert rec["passthrough"]["cache_credited"] is False
+    assert rec["passthrough"]["lease_cross_process"] is True
+
+
+def test_passthrough_waits_for_a_lease_held_by_another_worker(
+    client, server, pool, monkeypatch
+):
+    from src.runtime import long_prefill_lease as lpl
+
+    monkeypatch.setenv(kpa.KV_POOL_LONG_PREFILL_ENV, "10")
+    # Another worker's lease: a separate open file description of the same
+    # lock file, which flock treats exactly like another process.
+    other = lpl.try_acquire(server.url, payload={"ticket": 999})
+    assert other is not None
+    result = {}
+
+    def call():
+        result["r"] = client.post(
+            "/v1/passthrough/architect_critic/chat/completions",
+            json={"messages": [{"role": "user", "content": "y" * 400}]},
+        )
+
+    t = threading.Thread(target=call)
+    t.start()
+    try:
+        deadline = time.time() + 5
+        while pool.queued(server.url) != 1 and time.time() < deadline:
+            time.sleep(0.02)
+        time.sleep(0.4)
+        assert pool.queued(server.url) == 1
+        assert server.requests == []  # held behind the other worker's long prefill
+    finally:
+        other.release()
+    t.join(timeout=10)
+    assert result["r"].status_code == 200
+    assert len(server.requests) == 1
+    assert not lpl.is_held(server.url)
+
+
+def test_passthrough_releases_the_lease_when_upstream_fails(
+    client, server, pool, monkeypatch
+):
+    from src.runtime import long_prefill_lease as lpl
+
+    monkeypatch.setenv(kpa.KV_POOL_LONG_PREFILL_ENV, "10")
+    monkeypatch.setenv(kpa.KV_POOL_PREFILL_FLOOR_TPS_ENV, "0")
+    server.error_status = 400  # non-streamed error body: no SSE "first output"
+    r = client.post("/v1/passthrough/architect_critic/chat/completions",
+                    json={"messages": [{"role": "user", "content": "z" * 400}]})
+    assert r.status_code == 400
+    assert not lpl.is_held(server.url)
+    assert pool.long_prefill_holder(server.url) is None
+
+
+def test_cached_prefix_credit_admits_a_long_passthrough_without_the_lease(
+    client, server, monkeypatch, wiring
+):
+    from src.backends.context_limits import PoolOccupancy, SlotState
+    from src.runtime import long_prefill_lease as lpl
+
+    monkeypatch.setenv(kpa.KV_POOL_LONG_PREFILL_ENV, "8000")
+    monkeypatch.setenv(kpa.KV_POOL_CACHE_CREDIT_MARGIN_ENV, "100")
+    doc = "".join(f"line {i}: shared context for every turn\n" for i in range(1000))
+    cached = "<|im_start|>system\n" + doc + "<|im_end|>\n<|im_start|>user\nold<|im_end|>\n"
+    occ = PoolOccupancy(url=server.url, slots=(SlotState(
+        slot_id=0, n_ctx=196608, is_processing=False, n_prompt_tokens=len(cached) // 3,
+        n_remain=None, prompt_text=cached),))
+    credited = SharedKVPoolAdmission(occupancy=lambda url: occ)
+    monkeypatch.setattr(kpa, "_shared_pool_admission", credited)
+    # Somebody else holds the lease: a NON-credited long request would queue.
+    other = lpl.try_acquire(server.url)
+    try:
+        r = client.post("/v1/passthrough/architect_critic/chat/completions", json={
+            "messages": [{"role": "system", "content": doc},
+                         {"role": "user", "content": "new question"}]})
+    finally:
+        other.release()
+    assert r.status_code == 200
+    (rec,) = _records(wiring)
+    assert rec["passthrough"]["long_prefill"] is False
+    assert rec["passthrough"]["cache_credited"] is True
+
+
 def test_request_semaphore_full_is_503(client, server, monkeypatch):
     from src.api.admission import AdmissionController
     from src.api.state import get_state

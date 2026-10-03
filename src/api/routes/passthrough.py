@@ -35,7 +35,12 @@ What the passthrough DOES (the gate, nothing else):
 * takes the same per-backend request semaphore, the same token-aware shared KV
   pool reservation (``SharedKVPoolAdmission``: FCFS, queue bound, one long
   prefill per server) and the same CPU region / inference lock as
-  ``_call_caching_backend`` (``src/llm_primitives/inference.py``);
+  ``_call_caching_backend`` (``src/llm_primitives/inference.py``). The
+  long-prefill lease is the HOST-WIDE one (KVU-15a,
+  ``src/runtime/long_prefill_lease.py``: an flock per server), so a
+  passthrough call and an orchestrator call in another uvicorn worker exclude
+  each other; the request's text estimate is passed as ``prompt_text`` so the
+  long-prefill rule is sized on NEW tokens (see ``gate``);
 * refuses a prompt at or above a BINDING per-request cap before dispatch
   (``context_limits``: the model's trained context below the server's slot
   n_ctx) with the typed ``request_too_large`` error (413);
@@ -250,6 +255,9 @@ class _Call:
     request_id: str
     client_id: str | None
     role_config: Any = None
+    # The prompt-estimate text (``prompt_text(body)``), handed to the KV pool
+    # gate for the KVU-15a cached-prefix credit. Never sent anywhere.
+    prompt_text: str | None = field(default=None, repr=False)
     cancel: threading.Event = field(default_factory=threading.Event)
     response: Any = None  # live httpx.Response, for a best-effort close on cancel
     # outcome
@@ -459,9 +467,20 @@ def gate(call: _Call, state: AppState):
         if limit is not None and limit.shared_pool:
             pool = get_shared_pool_admission()
             try:
+                # KVU-15a: ``prompt_text`` lets admission size the long-prefill
+                # rule on NEW tokens. The passthrough body is a chat/responses
+                # payload the server templates itself, so this text is not the
+                # slot's cached text; the credit (``common_prefix_chars``) only
+                # counts characters that match an idle slot's prompt right after
+                # its template head, i.e. at most the first message's content —
+                # an UNDER-estimate of the cached prefix, never an over-credit of
+                # rendered text the server would have to prefill. No match (tools
+                # rendered first, a dated template head, no /slots) means
+                # whole-prompt sizing, exactly as before.
                 ticket = pool.acquire(
                     url, call.prompt_tokens_est, limit.pool_tokens,
                     max_new_tokens=call.new_tokens, cancel_check=call.cancel.is_set,
+                    prompt_text=call.prompt_text,
                 )
             except KVPoolQueueFull as queue_full:
                 raise ContextOverflowError(
@@ -482,10 +501,18 @@ def gate(call: _Call, state: AppState):
                     kind=ContextOverflowError.POOL_EXHAUSTED, role=call.role,
                     backend_url=url, n_ctx=limit.per_request_n_ctx, source="admission",
                 )
+            # ``long_prefill`` = this call took the (host-wide) long-prefill
+            # lease. With the KVU-15a cached-prefix credit a whole-prompt-long
+            # request can be admitted as short; ``cache_credited`` marks that.
+            took_lease = pool.long_prefill_holder(url) == ticket
             call.gate.update(
                 pool_ticket=True,
                 pool_tokens=limit.pool_tokens,
-                long_prefill=pool.is_long_prefill(call.prompt_tokens_est),
+                long_prefill=took_lease,
+                cache_credited=(
+                    not took_lease and pool.is_long_prefill(call.prompt_tokens_est)
+                ),
+                lease_cross_process=pool.cross_process_lease(),
             )
         try:
             lock_ctx = _region_lock(call)
@@ -744,6 +771,7 @@ async def _passthrough(endpoint: str, role: str, http_request: Request, state: A
         request_id=http_request.headers.get("x-request-id") or uuid.uuid4().hex,
         client_id=http_request.headers.get("x-client-id"),
         role_config=_role_config_for_backend(getattr(state, "registry", None), role_name),
+        prompt_text=text,
     )
 
     try:
