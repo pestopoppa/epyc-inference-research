@@ -16,7 +16,16 @@ releases the `flock` even on SIGKILL, because release is fd-close).
 Usage:
     region-lock run --cpu-list 0-95 -- llama-bench -m model.gguf ...
     region-lock run --regions q0,q1 --role bench-cpu -- ./bench_canonical.sh
+    region-lock run --gpu-quiet exclusive --role bench-gpu -- ./gpu_bench.sh
+    region-lock run --cpu-list 0-47 --gpu-quiet shared -- ./cpu_measure.sh
     region-lock status
+
+gpu-quiet (2026-10-04, `src/runtime/gpu_quiet_lock.py`): a separate host-wide
+flock beside the region locks. GPU benches take it EXCLUSIVE and NO region
+claim (pinned GPU host threads degrade the CPU A/A floor ~9x, but a region
+claim also 503s every serving role placed there); CPU measurements take it
+SHARED alongside their regions. Orchestrator per-call serving claims never
+look at it. Order: gpu-quiet first, then regions (with back-off, see module).
 
 Exit codes:
     0..255  the child's exit status (or 128+N when it died on signal N)
@@ -55,6 +64,11 @@ from src.runtime.cpu_region_lock import (  # noqa: E402
     read_region_lock_payload,
     region_lock_path,
 )
+from src.runtime.gpu_quiet_lock import (  # noqa: E402
+    GPU_QUIET_MODES,
+    gpu_quiet_then_regions,
+)
+from src.runtime.gpu_quiet_lock import holders as gpu_quiet_holders  # noqa: E402
 from src.runtime.instance_topology import ATOMIC_REGIONS, cpu_list_to_regions  # noqa: E402
 
 EX_TEMPFAIL = 75
@@ -154,6 +168,8 @@ def _resolve_regions(args: argparse.Namespace) -> frozenset[str]:
         if not regions:
             raise SystemExit(f"[region-lock] --cpu-list {args.cpu_list!r} maps to no regions")
         return regions
+    if not args.regions:
+        return frozenset()  # --gpu-quiet alone (validated in _run)
     names = [r.strip() for r in args.regions.split(",") if r.strip()]
     unknown = sorted(set(names) - set(ATOMIC_REGIONS))
     if unknown:
@@ -166,38 +182,69 @@ def _resolve_regions(args: argparse.Namespace) -> frozenset[str]:
 def _run(args: argparse.Namespace) -> int:
     if not args.command:
         raise SystemExit("[region-lock] no command given after `--`")
-
-    err = _preflight(strict=not args.no_preflight)
-    if err:
-        print(f"[region-lock] REFUSING: {err}", file=sys.stderr)
-        print("[region-lock] re-run with --no-preflight to override deliberately.", file=sys.stderr)
+    if not (args.regions or args.cpu_list or args.gpu_quiet):
+        print(
+            "[region-lock] run needs --regions, --cpu-list and/or --gpu-quiet",
+            file=sys.stderr,
+        )
         return EX_USAGE
 
     regions = _resolve_regions(args)
+    if regions:
+        # The cross-role preflight is about the region GLOBAL layer; a gpu-quiet-only
+        # hold takes no region lock and has nothing to be one-sided against.
+        err = _preflight(strict=not args.no_preflight)
+        if err:
+            print(f"[region-lock] REFUSING: {err}", file=sys.stderr)
+            print(
+                "[region-lock] re-run with --no-preflight to override deliberately.",
+                file=sys.stderr,
+            )
+            return EX_USAGE
+
     tag = args.tag or f"region-lock:{Path(args.command[0]).name}"
     waited_from = time.time()
+    what = f"regions {sorted(regions)}"
+    if args.gpu_quiet:
+        what = f"gpu-quiet {args.gpu_quiet}" + (f" + {what}" if regions else "")
 
     print(
-        f"[region-lock] acquiring regions {sorted(regions)} as role={args.role!r} "
-        f"(timeout_s={args.timeout_s}) …",
+        f"[region-lock] acquiring {what} as role={args.role!r} (timeout_s={args.timeout_s}) …",
         file=sys.stderr,
     )
     try:
-        with cpu_region_lock(
+        if args.gpu_quiet is None:
+            # Byte-for-byte the pre-gpu-quiet path.
+            with cpu_region_lock(
+                args.role,
+                regions,
+                timeout_s=args.timeout_s,
+                request_tag=tag,
+            ) as held:
+                waited = time.time() - waited_from
+                print(
+                    f"[region-lock] held {sorted(held)} after {waited:.1f}s wait; "
+                    f"running: {' '.join(args.command)}",
+                    file=sys.stderr,
+                )
+                return _spawn(args.command)
+        with gpu_quiet_then_regions(
             args.role,
             regions,
+            gpu_quiet=args.gpu_quiet,
             timeout_s=args.timeout_s,
             request_tag=tag,
-        ) as held:
+        ) as grant:
             waited = time.time() - waited_from
             print(
-                f"[region-lock] held {sorted(held)} after {waited:.1f}s wait; "
+                f"[region-lock] held gpu-quiet {args.gpu_quiet} + regions "
+                f"{sorted(grant['regions'])} after {waited:.1f}s wait; "
                 f"running: {' '.join(args.command)}",
                 file=sys.stderr,
             )
             return _spawn(args.command)
     except CpuRegionLockTimeout as e:
-        print(f"[region-lock] TIMEOUT acquiring {sorted(regions)}: {e}", file=sys.stderr)
+        print(f"[region-lock] TIMEOUT acquiring {what}: {e}", file=sys.stderr)
         return EX_TEMPFAIL
 
 
@@ -265,8 +312,14 @@ def _status(args: argparse.Namespace) -> int:
                 holders.append(payload)
         rows.append({"region": region, "global_held": held, "holders": holders})
 
+    quiet = gpu_quiet_holders()
     if args.json:
-        print(json.dumps(rows, indent=2, default=str))
+        # The bare list stays the default shape: consumers validate it as exactly
+        # q0..q3 (e.g. the research reanchor runner). gpu-quiet is opt-in.
+        if args.gpu_quiet:
+            print(json.dumps({"regions": rows, "gpu_quiet": quiet}, indent=2, default=str))
+        else:
+            print(json.dumps(rows, indent=2, default=str))
         return 0
     for row in rows:
         state = "HELD" if row["global_held"] else "free"
@@ -275,6 +328,15 @@ def _status(args: argparse.Namespace) -> int:
             for h in row["holders"]
         )
         print(f"{row['region']:>4}  {state:<5}  {who}")
+    if quiet["held"]:
+        state = "EXCL" if quiet["mode"] == "exclusive" else "SHRD" if quiet["mode"] else "HELD"
+    else:
+        state = "free"
+    who = ", ".join(
+        f"{h.get('role', '?')}[pid {h.get('pid', '-')}] {h.get('request_tag') or ''}".strip()
+        for h in quiet["holders"]
+    )
+    print(f"gpu-quiet  {state:<5}  {who}")
     return 0
 
 
@@ -286,9 +348,16 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     run = sub.add_parser("run", help="acquire regions, run a command, release on exit")
-    target = run.add_mutually_exclusive_group(required=True)
+    target = run.add_mutually_exclusive_group()
     target.add_argument("--regions", help="comma-separated region ids, e.g. q0,q1,q2,q3")
     target.add_argument("--cpu-list", help="taskset-style cpu list, e.g. 0-95 (regions derived)")
+    run.add_argument(
+        "--gpu-quiet",
+        choices=GPU_QUIET_MODES,
+        help="also hold the host-wide gpu-quiet lock: 'exclusive' for a GPU bench (valid "
+        "with no regions — GPU benches should take NO region claim), 'shared' for a CPU "
+        "measurement (waits for any exclusive holder). Taken BEFORE the regions.",
+    )
     run.add_argument(
         "--role",
         default="bench",
@@ -299,7 +368,8 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=0.0,
         help="per-region acquire timeout; 0 = block indefinitely (default), with periodic "
-        "waiting logs from the lock module.",
+        "waiting logs from the lock module. With --gpu-quiet it bounds the whole "
+        "gpu-quiet+regions acquisition. Exit 75 on expiry.",
     )
     run.add_argument("--tag", help="opaque tag recorded in the lock payload for diagnostics")
     run.add_argument(
@@ -312,6 +382,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     st = sub.add_parser("status", help="show which regions are currently held")
     st.add_argument("--json", action="store_true", help="emit JSON instead of a table")
+    st.add_argument(
+        "--gpu-quiet",
+        action="store_true",
+        help="with --json: emit {regions: [...], gpu_quiet: {...}} instead of the bare "
+        "region list (the table always shows the gpu-quiet row)",
+    )
     st.set_defaults(func=_status)
     return p
 

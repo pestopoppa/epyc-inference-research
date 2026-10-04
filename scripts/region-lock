@@ -8,6 +8,8 @@
 #
 #   region-lock run --cpu-list 0-95 -- llama-bench -m model.gguf ...
 #   region-lock run --regions q0,q1 --role bench-cpu -- ./some_bench.sh
+#   region-lock run --gpu-quiet exclusive --role bench-gpu -- ./gpu_bench.sh
+#   region-lock run --cpu-list 0-47 --gpu-quiet shared -- ./cpu_measure.sh
 #   region-lock status
 #
 # Exit codes: child's status · 75 could not acquire · 64 usage/preflight refusal.
