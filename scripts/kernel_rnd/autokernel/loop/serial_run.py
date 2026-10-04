@@ -1319,6 +1319,17 @@ def _publish_current_run(pointer: Path, root: Path, run_id: str, phase: str) -> 
         return True
 
 
+def gpu_batch_window_refusal(path: Path | None = None) -> str | None:
+    """None while the executor-owned MI210 window grants AutoKernel the device, else the
+    refusal reason (G1). Read-only: AutoKernel never writes the window file."""
+    from . import gpu_window
+    try:
+        gpu_window.assert_window_active(gpu_window.WINDOW_FILE if path is None else path)
+    except gpu_window.GpuWindowPreempted as exc:
+        return str(exc)
+    return None
+
+
 def _main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     source = parser.add_mutually_exclusive_group()
@@ -1366,6 +1377,14 @@ def _main(argv=None) -> int:
     parser.add_argument("--control-listen", help="optional authenticated IPv4 loopback HOST:PORT")
     parser.add_argument("--control-origin", default=os.environ.get("AUTOKERNEL_TRUSTED_HUB_ORIGIN"),
                         help="exact trusted hub origin; token comes from AUTOKERNEL_CONTROL_TOKEN")
+    parser.add_argument("--gpu-window", choices=("off", "required"), default="off",
+                        help="G1 MI210 window: required = a GPU batch starts only while the "
+                             "stack-owned executor's window file grants AutoKernel the device "
+                             "(gpu_window.py); pass the same flag in the GPU target argv so "
+                             "every GPU measurement re-checks it (default: %(default)s)")
+    parser.add_argument("--gpu-window-path", type=Path, default=None,
+                        help="the executor-owned MI210 window file, read-only "
+                             "(default: gpu_window.WINDOW_FILE)")
     args = parser.parse_args(argv)
     if ((not args.retention_plan_only
          and (args.batch_iterations is None or args.batch_iterations <= 0
@@ -1532,7 +1551,8 @@ def _main(argv=None) -> int:
                             scheduler_manifest=scheduler_manifest,
                             source_validation_priority_dir=args.source_validation_priority_dir,
                             control_listen=args.control_listen, control_origin=args.control_origin,
-                            initial_continuation=initial_continuation)
+                            initial_continuation=initial_continuation,
+                            gpu_window=args.gpu_window, gpu_window_path=args.gpu_window_path)
             terminal_phase = "complete" if result == 0 else "failed"
             return result
         finally:
@@ -2324,7 +2344,8 @@ def _scheduled_failure_account(state, manifest, active, batch_dir, original):
 
 def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
            scheduler_manifest=None, source_validation_priority_dir=None,
-           control_listen=None, control_origin=None, initial_continuation=None):
+           control_listen=None, control_origin=None, initial_continuation=None,
+           gpu_window="off", gpu_window_path=None):
     # Preserve the existing scheduler contract unless the operator/campaign
     # explicitly enrolls the AKX priority producer.  Making an absent optional
     # producer a new default launch dependency would stop every existing
@@ -2611,6 +2632,15 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                 save()
                 continue
             original = targets[index]
+            if (gpu_window == "required"
+                    and option(original, "--cpu-serving-launch") is None):
+                # G1 GPU batch boundary: never start a GPU batch outside an executor-
+                # granted window. Nothing is consumed: this selection is NOT saved, so
+                # the batch stays pending for the next invocation.
+                window_refusal = gpu_batch_window_refusal(gpu_window_path)
+                if window_refusal is not None:
+                    publish("failed", reason=window_refusal)
+                    return 1
             directory = root / "batches" / f"batch-{number:06d}"
             directory.mkdir(parents=True, exist_ok=False)
             prior = state["last_results"].get(key)

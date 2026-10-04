@@ -100,11 +100,31 @@ def pid_peak_rss(pid: int, proc_root: Path = Path("/proc")) -> int | None:
 
 
 
+class VramCeilingExceeded(RuntimeError):
+    """In-run abort (G1 constraint e): the sampled VRAM passed the capacity ceiling."""
+
+    def __init__(self, breach: dict) -> None:
+        super().__init__(
+            f"VRAM {breach['bytes'] / (1 << 30):.2f} GiB ({breach['source']}) exceeded the "
+            f"{breach['ceiling_bytes'] / (1 << 30):.2f} GiB ceiling; run aborted")
+        self.breach = dict(breach)
+
+
 class Sampler:
-    """Peak VRAM and KFD process count over one process lifetime."""
+    """Peak VRAM and KFD process count over one process lifetime.
+
+    In-run abort hook (G1, constraint e): `abort_above(ceiling_bytes, terminate)` makes
+    the sampling thread call `terminate()` -- the caller's own launched process, never
+    anything else -- the first time a sample exceeds the ceiling, and record the breach.
+    The watched PID's own KFD VRAM is compared when a PID is watched, the device total
+    otherwise. The caller raises `VramCeilingExceeded` via `raise_if_ceiling_breached`.
+    """
 
     def __init__(self, interval: float = 0.25) -> None:
         self.interval = interval
+        self._ceiling_bytes: int | None = None
+        self._terminate = None
+        self.ceiling_breach: dict | None = None
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self.peak_vram = 0
@@ -129,6 +149,34 @@ class Sampler:
         self._cpu_observer_error = None
         self._entered = False
 
+    def abort_above(self, ceiling_bytes: int, terminate) -> None:
+        """Arm the in-run ceiling abort; `terminate` stops what the caller launched."""
+        self._ceiling_bytes = int(ceiling_bytes)
+        self._terminate = terminate
+
+    def _check_ceiling(self, device_vram: int, own_vram: int | None) -> None:
+        if self._ceiling_bytes is None or self.ceiling_breach is not None:
+            return
+        if self._watched_pid is not None:
+            value, source = own_vram, "own_pid_kfd_vram"
+        else:
+            value, source = device_vram, "device_vram"
+        if value is None or value < 0 or value <= self._ceiling_bytes:
+            return
+        self.ceiling_breach = {"bytes": int(value), "source": source,
+                               "ceiling_bytes": self._ceiling_bytes, "at": time.time(),
+                               "terminated": False}
+        if self._terminate is not None:
+            try:
+                self._terminate()
+                self.ceiling_breach["terminated"] = True
+            except Exception as exc:  # noqa: BLE001 -- recorded; the caller still raises
+                self.ceiling_breach["terminate_error"] = f"{type(exc).__name__}: {exc}"[:256]
+
+    def raise_if_ceiling_breached(self) -> None:
+        if self.ceiling_breach is not None:
+            raise VramCeilingExceeded(self.ceiling_breach)
+
     def watch_pid(self, pid: int) -> None:
         """Also sample this PID's own device memory and peak RSS. Additive: the proof
         gains `own_pid_*` keys only once a PID is watched."""
@@ -144,10 +192,10 @@ class Sampler:
         except Exception as exc:
             self._cpu_observer_error = f"{type(exc).__name__}: {exc}"[:256]
 
-    def _watch_once(self) -> None:
+    def _watch_once(self) -> int | None:
         pid = self._watched_pid
         if pid is None:
-            return
+            return None
         own = kfd_pid_vram(pid)
         if own is not None:
             self.own_pid_kfd_reads += 1
@@ -156,6 +204,7 @@ class Sampler:
         if rss is not None:
             self.own_pid_rss_reads += 1
             self.own_pid_peak_rss = max(self.own_pid_peak_rss, rss)
+        return own
 
     def _loop(self) -> None:
         while not self._stop.is_set():
@@ -164,7 +213,7 @@ class Sampler:
                 self.vram_readings.append(vram)
                 self.peak_vram = max(self.peak_vram, vram)
             self.peak_kfd = max(self.peak_kfd, kfd_processes())
-            self._watch_once()
+            self._check_ceiling(vram, self._watch_once())
             clock = sclk_mhz()
             if clock:
                 self.max_sclk = max(self.max_sclk, clock)
@@ -211,7 +260,9 @@ class Sampler:
                 self._cpu_observer_error = f"{type(exc).__name__}: {exc}"[:256]
         if self._cpu_observer_error is not None:
             watched["cpu_affinity_observation_error"] = self._cpu_observer_error
-        return {**watched,
+        breach = {} if self.ceiling_breach is None else {
+            "vram_ceiling_breach": dict(self.ceiling_breach)}
+        return {**watched, **breach,
             "peak_vram_bytes": self.peak_vram,
             # The peak answers "did it ever get there"; the median answers "did it STAY
             # there". A window whose peak clears the floor on one sample out of forty is
@@ -670,6 +721,6 @@ def loader_env(binary: Path) -> dict[str, str]:
     return env
 
 
-__all__ = ["KFD_PROC", "RESIDENT_FLOOR_BYTES", "Sampler", "VRAM_SYSFS",
+__all__ = ["KFD_PROC", "RESIDENT_FLOOR_BYTES", "Sampler", "VRAM_SYSFS", "VramCeilingExceeded",
            "kfd_pid_vram", "kfd_processes", "loader_env", "pid_peak_rss", "sclk_mhz",
            "vram_bytes"]

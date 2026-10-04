@@ -61,6 +61,13 @@ CPU_MEASUREMENT_GPU_QUIET_DEFAULT = CPU_MEASUREMENT_GPU_QUIET_LOCK
 CPU_MEASUREMENT_GPU_QUIET_POLICIES = (CPU_MEASUREMENT_GPU_QUIET_OFF,
                                       CPU_MEASUREMENT_GPU_QUIET_LOCK)
 CPU_MEASUREMENT_GPU_QUIET_DEPRECATED = {"q3": CPU_MEASUREMENT_GPU_QUIET_LOCK}
+#: `--gpu-window`: G1 MI210 window enforcement (gpu_window.py). "required" = every GPU
+#: measurement first re-reads the executor-owned window file and stops the run unless
+#: it grants AutoKernel the device (`gpu_window.assert_window_active`). Default "off"
+#: until the stack-owned executor ships: no executor-written window exists yet, and
+#: "required" would refuse every GPU run.
+GPU_WINDOW_OFF = "off"
+GPU_WINDOW_REQUIRED = "required"
 
 
 def _gpu_quiet_policy(value: str) -> str:
@@ -102,6 +109,7 @@ from . import ak_check
 from . import noop_build
 from . import cpu_window
 from . import cpu_repack_cases
+from . import gpu_window
 from . import resume as resume_mod
 from . import bestof
 from . import gpu_serving_profile as gpu_serving_profile_mod
@@ -220,6 +228,22 @@ def _gpu_quiet_measurement_window(gpu_run: bool, *, on_wait, should_stop,
                     next_report = time.monotonic() + HEARTBEAT_S
                 time.sleep(0.5)
         yield
+
+
+@contextmanager
+def _gpu_window_boundary(required: bool, path, *, on_preempt):
+    """G1 GPU batch boundary: re-read the executor-owned window before a GPU measurement.
+
+    Under `--gpu-window required` a window that no longer grants AutoKernel the device
+    (preempt requested, not `granted`, expired, foreign writer) calls `on_preempt` (the
+    run winds down) and refuses the measurement. AK never writes the window file."""
+    if required:
+        try:
+            gpu_window.assert_window_active(path)
+        except gpu_window.GpuWindowPreempted as exc:
+            on_preempt()
+            raise loop.TailRefused(str(exc)) from exc
+    yield
 
 
 @contextmanager
@@ -2982,6 +3006,15 @@ def _main(argv: list[str] | None = None) -> int:
                              "lock policy records actual local phases; off requires the "
                              "legacy launcher-held continuous quiet hold; no CPU window "
                              "(default: %(default)s)")
+    parser.add_argument("--gpu-window", choices=(GPU_WINDOW_OFF, GPU_WINDOW_REQUIRED),
+                        default=GPU_WINDOW_OFF,
+                        help="G1 MI210 window: required = every GPU measurement re-reads the "
+                             "stack-owned executor's window file and the run stops unless it "
+                             "grants AutoKernel the device (gpu_window.py) "
+                             "(default: %(default)s)")
+    parser.add_argument("--gpu-window-path", type=Path, default=gpu_window.WINDOW_FILE,
+                        help="the executor-owned MI210 window file, read-only "
+                             "(default: %(default)s)")
     parser.add_argument("--cpu-window-wait-bound-s", type=float,
                         default=cpu_window.DEFAULT_WAIT_BOUND_S,
                         help="how long a re-acquire waits on a peer before it is logged as "
@@ -5453,6 +5486,12 @@ def _main(argv: list[str] | None = None) -> int:
             not cpu_launch, should_stop=should_stop, policy=args.cpu_measurement_gpu_quiet,
             on_wait=lambda: publish("running", latest,
                 step="GPU measurement waiting for gpu-quiet (a CPU measurement holds it shared)"))
+        if not cpu_launch:
+            # G1 GPU measurement boundary: the window check comes first -- a preempted
+            # window never waits on a lock.
+            quiet = _stacked(_gpu_window_boundary(
+                args.gpu_window == GPU_WINDOW_REQUIRED, args.gpu_window_path,
+                on_preempt=lambda: stopping.__setitem__("asked", True)), quiet)
         quiet = _reentrant(quiet_depth, quiet)
         if cpu_window_ref[0] is None:
             return quiet
@@ -7867,6 +7906,7 @@ def _main(argv: list[str] | None = None) -> int:
                          if args.cpu_measurement_gpu_quiet == CPU_MEASUREMENT_GPU_QUIET_OFF
                          else "(gpu-quiet held EXCLUSIVE during GPU measurements only; "
                               "no CPU region claim)"))
+                print(f"gpu window {args.gpu_window} ({args.gpu_window_path})")
             print()
             if bundle[0].measurement_validity == accumulate.MEASUREMENT_STALE_BASELINE:
                 harness = (direct_launch.snapshot_digest if direct_launch else

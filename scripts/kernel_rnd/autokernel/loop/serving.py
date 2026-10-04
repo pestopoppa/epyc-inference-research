@@ -1129,6 +1129,12 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
             # residency record is unchanged.
             if backend == "gpu" and callable(getattr(sampler, "watch_pid", None)):
                 sampler.watch_pid(srv.pid)
+            # G1 constraint (e): in-run abort at the 62 GiB capacity ceiling -- the
+            # sampler terminates THIS launch (srv) the first time its own KFD VRAM
+            # passes the ceiling; the breach is raised below as VramCeilingExceeded.
+            if backend == "gpu" and callable(getattr(sampler, "abort_above", None)):
+                from .surface_validation import GPU_CAPACITY_CEILING_BYTES
+                sampler.abort_above(GPU_CAPACITY_CEILING_BYTES, srv.terminate)
             observe("attach_target", srv.pid)
             # Placement is an overlapping launcher marker inside the load window;
             # load itself remains open until the health marker below.
@@ -1364,6 +1370,12 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
         failure = f"ServerDied: {serving_exception}"
         raise serving_exception from exc
     except Exception as exc:
+        breach = getattr(sampler, "ceiling_breach", None)
+        if isinstance(breach, dict):
+            # The server died because the ceiling hook terminated it: that is the cause.
+            serving_exception = residency.VramCeilingExceeded(breach)
+            failure = f"{type(serving_exception).__name__}: {serving_exception}"
+            raise serving_exception from exc
         serving_exception = exc
         failure = f"{type(exc).__name__}: {exc}"
         raise
@@ -1433,6 +1445,8 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
     # Success path only. An exception already in flight carries its own reason, and
     # replacing it with a residency refusal would hide the real fault -- while the
     # record above is appended either way, so a failed launch still leaves its window.
+    if callable(getattr(sampler, "raise_if_ceiling_breached", None)):
+        sampler.raise_if_ceiling_breached()
     _refuse_if_not_resident(recipe, record, backend=backend)
     if observation_session is not None and (
             not observer_finish_ok or not observation_session.shutdown_resolved):
