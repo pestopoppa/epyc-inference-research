@@ -624,13 +624,16 @@ def chain_validators(*validators: Callable[..., Validation]) -> Callable[..., Va
 
 
 def ak_check_validator(script: Path | str, *, python: str | None = None,
-                       timeout_s: int = 1800) -> Callable[..., Validation]:
+                       timeout_s: int = 3600) -> Callable[..., Validation]:
     """`ak-check --op-test` (lane/ak-sandbox-20260926) on a member's scratch tree: the
     compile check with the anchor build's own commands, a relink of the touched libraries
     and test-backend-ops against the CPU reference, built in the member's marked check
     dir. Exit 0 passes, 1 fails (a failure that reached the op test outranks a compile
     failure), 2 is inconclusive (refused / sandbox fault: never evidence about the
-    patch), so the integrity screen in front of it decides."""
+    patch), so the integrity screen in front of it decides. The default timeout sits
+    past ak-check's own peer wait (`DEFAULT_PEER_WAIT_S`, 2700 s) plus its compile,
+    link and op-test budget, so a peer wait ends as a refusal (2), never as a timeout
+    scored as a failure."""
     import sys as _sys
 
     def reached_op_test(stdout: str) -> int:

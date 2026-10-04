@@ -405,7 +405,9 @@ class CpuWindow:
                 f"{self.reserved.get('compile')}) or op-test (cores "
                 f"{self.reserved.get('op_test')}) at nice 19, source "
                 f"{self.reserved.get('source')}; a peer measuring on those cores shares "
-                "them. ak-check refuses while this loop's tail holds its fence.")
+                "them. ak-check refuses while this loop's tail holds its fence, and "
+                "waits on (then refuses past its bound) any live CPU-region claim on "
+                "those cores, another AutoKernel loop's autokernel-cpu claim included.")
 
     @staticmethod
     def _owner() -> dict:

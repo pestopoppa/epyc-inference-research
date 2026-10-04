@@ -33,16 +33,26 @@ MODES
   its whole run, so a tail waits for running checks and a check started during a
   tail refuses -- for every lane of the pool, since all lanes share the worker root.
   As a second line (and the only one for a loop running older code), it also refuses
-  when the process tree of the loop that launched it holds a measuring binary.
+  when the process tree of the loop that launched it holds a measuring binary. Both
+  are scoped to THIS campaign: another AutoKernel loop's measurement (a second
+  campaign, its own worker root and `cpu_window_path`) is invisible to them, and is
+  covered by PEER CPU REGIONS below.
 * PEER CPU REGIONS. The loop yields its own CPU-region claim during actor phases
   (`cpu_window.py`), so another session may hold the SAME physical cores ak-check
   compiles/op-tests on via `region-lock run --cpu-list ... --role bench ...` (or a live
-  orchestrator role) to take a real measurement -- a compile there would add noise to
-  it. Before compiling, ak-check reads the orchestrator's own region-lock occupancy
-  (read-only, never a lock of its own; see `default_peer_status`) and, if a peer OTHER
-  than the loop's own region role covers its chosen cores, waits (polling every ~15 s)
-  up to `AK_CHECK_PEER_WAIT_S` (default 600 s) for it to clear, then proceeds. Past the
-  bound it refuses (EXIT_REFUSED): not evidence about the patch, an author may retry.
+  orchestrator role, or ANOTHER AutoKernel loop's `autokernel-cpu` claim) to take a
+  real measurement -- a compile there would add noise to it (sustained load on the SMT
+  siblings of a measurement region took the CPU A/A floor from 0.80% to 7.22% p95,
+  2026-09-08). Before compiling, ak-check reads the orchestrator's own region-lock
+  occupancy (read-only, never a lock of its own; see `default_peer_status`) and, if ANY
+  live claim other than the `GLOBAL` pseudo-role covers its chosen cores, waits
+  (polling every ~15 s) up to `AK_CHECK_PEER_WAIT_S` (default 2700 s) for it to clear,
+  then proceeds. Past the bound it refuses (EXIT_REFUSED): not evidence about the
+  patch, an author may retry. `autokernel-cpu` is a peer too (2026-10-04, two loops
+  at once: DS41 and Q38FN): the loop that launched ak-check has already released its
+  own claim for the actor phase (`cpu_window.py`) and its own tail is excluded by the
+  fence and the process-tree check, so a live `autokernel-cpu` flock on these cores
+  belongs to another loop.
 
 LIFETIME (DS41-C84). Nothing ak-check starts outlives it: each child carries
 PR_SET_PDEATHSIG=SIGKILL (`setpriv`), a TERM/HUP/INT of ak-check (opencode's shell-tool
@@ -124,14 +134,19 @@ LINK_TIMEOUT_S = 120
 TAIL_WAIT_S = 900
 LANE_WAIT_S = 60
 #: How long ak-check waits for a PEER's CPU-region claim (another session's
-#: `region-lock run`, or a live orchestrator role) to clear its chosen cores before
-#: refusing. `AK_CHECK_PEER_WAIT_S` overrides; polled every PEER_POLL_S.
-DEFAULT_PEER_WAIT_S = 600.0
+#: `region-lock run`, a live orchestrator role, or another AutoKernel loop's
+#: measurement) to clear its chosen cores before refusing. A peer AK measurement tail
+#: lasts 30-60 min, an author waiting costs only hosted wall-time, and the actor
+#: timeout is 7200 s. `AK_CHECK_PEER_WAIT_S` overrides; polled every PEER_POLL_S.
+DEFAULT_PEER_WAIT_S = 2700.0
 PEER_POLL_S = 15.0
-#: `claim.hold_cpu`'s own region-lock role (`autokernel-cpu`, `claim.py`): the loop's
-#: own claim, never a peer -- it has already released it during actor phases anyway
-#: (`cpu_window.py`). Duplicated as a literal (not imported) so this stays correct even
-#: if ak-check runs standalone, outside the loop's package.
+#: `claim.hold_cpu`'s region-lock role (`autokernel-cpu`, `claim.py`), shared by EVERY
+#: AutoKernel loop. It is NOT excluded from the peer check (2026-10-04): with two loops
+#: running, a live `autokernel-cpu` flock seen during an ak-check is the OTHER loop's
+#: measurement -- the launching loop released its own claim for the actor phase
+#: (`cpu_window.py`). Kept as a named constant for callers and tests that pass it as
+#: `exclude_role` explicitly. Duplicated as a literal (not imported) so this stays
+#: correct even if ak-check runs standalone, outside the loop's package.
 LOOP_REGION_ROLE = "autokernel-cpu"
 MAX_HEADER_TUS_COMPILE = 3
 MAX_OP_TEST_TUS = 24
@@ -399,9 +414,12 @@ def _flock_currently_held(path: Path) -> bool:
 
 
 def default_peer_status(cpus: Sequence[int], *,
-                        exclude_role: str = LOOP_REGION_ROLE) -> dict[str, list[str]] | None:
+                        exclude_role: str | None = None) -> dict[str, list[str]] | None:
     """Read-only: {region: [role, ...]} of atomic CPU regions overlapping `cpus` that
-    some role OTHER than `exclude_role` currently holds a live region-lock flock on.
+    some role currently holds a live region-lock flock on. Only the `GLOBAL` pseudo-role
+    is skipped by default -- `autokernel-cpu` included, since during an ak-check that
+    claim is another loop's (see the module's PEER CPU REGIONS). `exclude_role` skips
+    one more role; it exists for tests, not as a production carve-out.
 
     Mirrors `region-lock status` (`src/runtime/region_lock_cli.py`) without shelling out
     or acquiring anything of its own. Returns None -- UNKNOWN, not "clear" -- when the
@@ -443,7 +461,7 @@ def peer_wait_bound_s() -> float:
 
 
 def wait_for_peer_region(cpus: Sequence[int], *, wait_s: float, poll_s: float = PEER_POLL_S,
-                         status_provider=None, exclude_role: str = LOOP_REGION_ROLE,
+                         status_provider=None, exclude_role: str | None = None,
                          clock=time.monotonic, sleep=time.sleep,
                          log=lambda text: print(text)) -> dict:
     """Bounded wait for a peer's CPU-region claim covering `cpus` to clear.
@@ -451,9 +469,10 @@ def wait_for_peer_region(cpus: Sequence[int], *, wait_s: float, poll_s: float = 
     Never raises: returns {"waited_s", "refused", "peer"} and lets the caller (`main`)
     decide what a bound-exceeded wait means. `status_provider(cpus, exclude_role=...)`
     -- default `default_peer_status`, injectable for tests -- returns the peer's held
-    regions on `cpus`, or a false-y value when there is none (or none knowable). The
-    loop's OWN claim (`exclude_role`) is never a peer -- it has already released its own
-    claim during actor phases anyway (`cpu_window.py`)."""
+    regions on `cpus`, or a false-y value when there is none (or none knowable).
+    `exclude_role` defaults to None: every live claim but `GLOBAL` is a peer, including
+    `autokernel-cpu` -- the launching loop released its own claim for the actor phase
+    (`cpu_window.py`), so that flock is another loop's measurement."""
     provider = status_provider or default_peer_status
     started = clock()
     peer = provider(cpus, exclude_role=exclude_role)

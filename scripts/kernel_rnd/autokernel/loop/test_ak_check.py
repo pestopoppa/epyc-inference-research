@@ -478,7 +478,7 @@ class ScratchContract(unittest.TestCase):
         env = {ak_check.ENV_SCRATCH: str(scratch), ak_check.ENV_LOG: str(log),
                ak_check.ENV_CALL_ID: "c-nopeer"}
         with mock.patch.object(ak_check, "default_peer_status",
-                              lambda cpus, exclude_role=ak_check.LOOP_REGION_ROLE: None):
+                              lambda cpus, exclude_role=None: None):
             code, _text = self._main(env=env)
         self.assertEqual(code, ak_check.EXIT_PASS)
         row = json.loads(log.read_text().splitlines()[-1])
@@ -495,7 +495,7 @@ class ScratchContract(unittest.TestCase):
                ak_check.ENV_CALL_ID: "c-peer", ak_check.ENV_PEER_WAIT_S: "0"}
         with mock.patch.object(
                 ak_check, "default_peer_status",
-                lambda cpus, exclude_role=ak_check.LOOP_REGION_ROLE: {"q3": ["bench"]}):
+                lambda cpus, exclude_role=None: {"q3": ["bench"]}):
             code, text = self._main(env=env)
         self.assertEqual(code, ak_check.EXIT_REFUSED)
         self.assertIn("a peer measurement holds the CPU region covering ak-check's cores", text)
@@ -711,9 +711,36 @@ class PeerCpuRegionStatus(unittest.TestCase):
         self._hold("bench", "q1")
         self.assertIsNone(ak_check.default_peer_status([0, 1, 2, 3]))
 
-    def test_the_loops_own_claim_is_ignored(self):
+    def test_an_autokernel_cpu_claim_is_a_peer(self):
+        # Two AutoKernel loops share the `autokernel-cpu` role. During an ak-check the
+        # launching loop has released its own claim (actor phase), so a live one on
+        # these cores is ANOTHER loop's measurement -- it must not be ignored.
         self._hold(ak_check.LOOP_REGION_ROLE, "q0")
-        self.assertIsNone(ak_check.default_peer_status([0, 1]))
+        self.assertEqual(ak_check.default_peer_status([0, 1]),
+                         {"q0": [ak_check.LOOP_REGION_ROLE]})
+
+    def test_a_held_autokernel_cpu_claim_makes_ak_check_wait_then_refuse(self):
+        # The default provider, a real flock: the wait loop is entered and, past the
+        # bound, refuses -- it neither proceeds nor ignores the other loop.
+        self._hold(ak_check.LOOP_REGION_ROLE, "q0")
+        t = {"now": 0.0}
+        sleeps = []
+
+        def sleep(seconds):
+            sleeps.append(seconds)
+            t["now"] += seconds
+
+        result = ak_check.wait_for_peer_region(
+            [0, 1], wait_s=30, poll_s=15, clock=lambda: t["now"], sleep=sleep,
+            log=lambda text: None)
+        self.assertTrue(result["refused"])
+        self.assertEqual(result["peer"], {"q0": [ak_check.LOOP_REGION_ROLE]})
+        self.assertEqual(sleeps, [15, 15])
+
+    def test_an_explicit_exclude_role_can_still_skip_autokernel_cpu(self):
+        self._hold(ak_check.LOOP_REGION_ROLE, "q0")
+        self.assertIsNone(ak_check.default_peer_status(
+            [0, 1], exclude_role=ak_check.LOOP_REGION_ROLE))
 
     def test_the_global_pseudo_role_is_ignored(self):
         self._hold("GLOBAL", "q0")
@@ -785,7 +812,8 @@ class WaitForPeerRegion(unittest.TestCase):
         self.assertFalse(result["refused"])
         self.assertEqual(sleeps, [])
 
-    def test_the_loops_own_role_is_excluded_by_default(self):
+    def test_no_role_but_global_is_excluded_by_default(self):
+        # autokernel-cpu is NOT excluded by default (two loops at once, 2026-10-04).
         seen = {}
 
         def provider(cpus, exclude_role):
@@ -793,7 +821,24 @@ class WaitForPeerRegion(unittest.TestCase):
             return None
 
         ak_check.wait_for_peer_region([0], wait_s=1, status_provider=provider)
+        self.assertIsNone(seen["exclude_role"])
+
+    def test_an_explicit_exclude_role_is_passed_through(self):
+        seen = {}
+
+        def provider(cpus, exclude_role):
+            seen["exclude_role"] = exclude_role
+            return None
+
+        ak_check.wait_for_peer_region([0], wait_s=1, status_provider=provider,
+                                      exclude_role=ak_check.LOOP_REGION_ROLE)
         self.assertEqual(seen["exclude_role"], ak_check.LOOP_REGION_ROLE)
+
+    def test_the_default_peer_wait_outlasts_a_peer_measurement_tail(self):
+        self.assertEqual(ak_check.DEFAULT_PEER_WAIT_S, 2700.0)
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop(ak_check.ENV_PEER_WAIT_S, None)
+            self.assertEqual(ak_check.peer_wait_bound_s(), 2700.0)
 
 
 if __name__ == "__main__":

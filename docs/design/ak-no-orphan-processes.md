@@ -42,7 +42,7 @@ Four facts together allow a process to escape:
    default timeout is `bashDefaultTimeoutMs ?? 120000`, overridable only by
    `OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS`, which the loop never sets. An
    `ak-check --op-test` can legitimately take 600 s of peer wait
-   (`DEFAULT_PEER_WAIT_S`, `:121`), plus 120 s per compiled TU, 120 s of link and 300 s
+   (`DEFAULT_PEER_WAIT_S`, `:121`; raised to 2700 s on 2026-10-04), plus 120 s per compiled TU, 120 s of link and 300 s
    of op test (`:112-113`). So at 120 s opencode TERMs the shim/ak-check group
    (bash execs python, so it is one group). ak-check dies from rule 1, and
    test-backend-ops, which sits in yet another session, is untouched. The same thing
