@@ -63,3 +63,31 @@ def test_floor_producers_name_the_same_headline_contract():
             serving.Recipe(name="floor-contract", model="/m.gguf"),
             Path("/build"), samples=24)
     assert row["headline_admissibility"] == H.contract()
+
+
+def test_the_unpaired_interval_resamples_each_arm_on_its_own():
+    """Carry-over: the baseline arm was recorded in another session, so there are no
+    A/B blocks. BROKEN READS: the paired method's name on an unpaired interval, or an
+    interval that refuses arms of unequal length (the record and the champion need
+    not have the same n)."""
+    measured = _comparison()
+    baseline = list(measured.anchor_samples)
+    champion = list(measured.candidate_samples)[:16]
+    ci = H.unpaired_confidence_interval(baseline, champion)
+    assert ci["method"] == H.UNPAIRED_CI_METHOD != H.CI_METHOD
+    assert ci["unit"] == "process"
+    assert "drift" in ci["excludes"]
+    import statistics
+    effect = statistics.median(champion) / statistics.median(baseline) - 1.0
+    assert ci["lower_effect_fraction"] <= effect <= ci["upper_effect_fraction"]
+    assert H.unpaired_confidence_interval(baseline, champion) == ci
+
+
+def test_the_unpaired_interval_keeps_the_per_arm_minimum():
+    measured = _comparison()
+    try:
+        H.unpaired_confidence_interval(measured.anchor_samples,
+                                       measured.candidate_samples[:13])
+    except H.HeadlineInadmissible:
+        return
+    raise AssertionError("13 champion launches must not support a headline")

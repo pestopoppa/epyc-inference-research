@@ -1,0 +1,113 @@
+{
+  "host": {
+    "facts": null,
+    "note": "not captured at measurement (2026-09-08). The host's BIOS settings changed on 2026-09-21 (production.HOST_CHANGES), so today's facts would misdescribe the host these samples ran on."
+  },
+  "launches": 20,
+  "lineage": {
+    "commits_between": [
+      {
+        "commit": "ffc1bac82eeca6f9099e1ccd9ba49703c460a115",
+        "files": [
+          "src/llama-graph.cpp"
+        ],
+        "subject": "graph: emit the fused MoE top-k op only on CPU-only graphs (fixes -30% on every MoE model on GPU)"
+      },
+      {
+        "commit": "d0d70c5fec77e0c2c61fb26665e1e1b8e9446f30",
+        "files": [
+          "src/llama-model.cpp",
+          "src/models/gemma4-assistant.cpp"
+        ],
+        "subject": "model: restore v9's NextN read ordering for gemma4-assistant (fixes a promotion-blocking load failure)"
+      }
+    ],
+    "note": "v10 ffc1bac82 = ef81196d5 + 2 commits, verified 2026-10-04 with git log --stat ef81196d5..ffc1bac82 in a read-only shared clone of the frozen tree. d0d70c5fe touches src/llama-model.cpp (load-time hparams: skips the early NextN read for gemma4-assistant only; for every other arch it only relaxes an assert from < to <=) and src/models/gemma4-assistant.cpp. ffc1bac82 touches src/llama-graph.cpp build_moe_ffn only (MoE routing fusion gated to CPU-only graphs); src/models/qwen35.cpp, the dense Qwen3.8-27B graph, never calls build_moe_ffn. No ggml/ or GPU kernel source changes. Neither commit touches dense 27B GPU code.",
+    "tree": "/mnt/raid0/llm/tmp/prod-baseline-20261004/llama-ro",
+    "verified_by": "git log --name-only ef81196d5bdd..ffc1bac82eec"
+  },
+  "measured_at": "2026-09-08T11:16:25.618383Z",
+  "measured_commit": "ef81196d5bdd4190b46dff4ae7eecc333a46c8ce",
+  "median": 31.300804499999998,
+  "production": {
+    "commit": "ffc1bac82eeca6f9099e1ccd9ba49703c460a115",
+    "label": "production-consolidated-v10"
+  },
+  "protocol": {
+    "argv": [
+      "taskset",
+      "-c",
+      "184-191",
+      "numactl",
+      "--interleave=all",
+      "<llama-bench>",
+      "-m",
+      "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+      "-p",
+      "0",
+      "-n",
+      "128",
+      "-r",
+      "9",
+      "-ngl",
+      "99",
+      "-fa",
+      "1",
+      "-o",
+      "json"
+    ],
+    "argv_provenance": "RECONSTRUCTED: bench.run_once argv as of research 4ede0e03 (the last bench.py change before the 2026-09-08 FOLD-2 G5 run; fold2_gates.py called bench.compare(..., pairs=20, surface=tg128, calibrated=True)). No --autokernel-harden: bench.py began passing it at 13f8e63a on 2026-09-15. Samples are the candidate arm of a paired A/B vs anchor-gen-021; residency below is that comparison's (both arms, 40 invocations).",
+    "estimator": "median",
+    "hardened": false,
+    "harness": "llama-bench",
+    "model": "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf",
+    "pp": 0,
+    "reps": 9,
+    "sample_unit": "process",
+    "surface": "tg128",
+    "tg": 128,
+    "ubatch": null,
+    "warmup_launches": 1
+  },
+  "residency": {
+    "clock_stable": false,
+    "invocations": 40,
+    "peak_kfd_processes": 1,
+    "peak_vram_bytes": 28089843712,
+    "resident": 40,
+    "sclk_max_mhz": 1700,
+    "sclk_min_mhz": 1690
+  },
+  "sample_unit": "process",
+  "samples": [
+    31.299693,
+    31.163587,
+    31.322372,
+    31.354365,
+    31.33657,
+    31.381171,
+    31.192869,
+    31.206383,
+    31.210464,
+    31.184069,
+    31.493379,
+    31.085206,
+    31.503266,
+    31.301916,
+    31.233528,
+    31.355437,
+    31.257966,
+    31.425262,
+    31.099433,
+    31.415604
+  ],
+  "schema": "epyc.autokernel.production_baseline.v1",
+  "source": {
+    "measured_at_source": "source mtime",
+    "path": "/mnt/raid0/llm/tmp/fold-window-20260908/fold2-result.json",
+    "samples_path": "g5_full.candidate_samples",
+    "sha256": "71344d345080388fd181b6bbbe99bac4ba791e9b0e95c634e7b2c2fb48f434b0"
+  },
+  "writer": "autokernel.loop.production.write_baseline",
+  "written_at": "2026-10-04T07:51:37.391091Z"
+}

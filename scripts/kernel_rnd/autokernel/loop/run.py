@@ -3834,12 +3834,22 @@ def main(argv: list[str] | None = None) -> int:
                 headline_model, pp=pp, tg=tg, pairs=args.pairs,
                 noise_floor_pct=headline_floor, surface=bench_surface, ubatch=ubatch,
                 calibrated=headline_floor is not None),
+            # Carry-over (2026-10-04): with a matching recorded production baseline
+            # the champion is measured ALONE, under exactly this protocol -- the same
+            # model, surface and llama-bench argv `bench.compare` would run.
+            measure=lambda champ: bench.measure(
+                bench.Arm("champion", champ / "bin" / "llama-bench"),
+                headline_model, pp=pp, tg=tg, launches=args.pairs,
+                surface=bench_surface, ubatch=ubatch),
+            protocol=production.protocol(model=headline_model, surface=bench_surface),
             on_step=lambda label: publish("running", latest,
                                           hotspot_rows=hotspot_rows, step=label))
         archive.record(args.store, outcome.to_attempt(), epoch=epoch,
                        recorded_at=loop._now(), campaign_id="ak-loop",
                        on_serving_export=feedback.exported)
         print(f"headline  {outcome.reason}")
+        if outcome.carryover:
+            print(f"headline  carry-over: {outcome.carryover}")
 
     def verify_anchor(*, guard_floor=None) -> None:
         """Prove the promoted binary IS the champion; `RunAborted` if not. Runs in the

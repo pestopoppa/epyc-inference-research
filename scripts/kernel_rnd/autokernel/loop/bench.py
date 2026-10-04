@@ -264,6 +264,24 @@ def hardened_row(stdout: str, *, pp: int, tg: int, reps: int):
     raise BenchFailed(f"llama-bench produced no {key} row")
 
 
+def llama_bench_argv(binary: Path | str, model: Path | str, *, pp: int, tg: int,
+                     reps: int = 9, ubatch: int | None = None,
+                     hardening_seed: int | str = "<seed>") -> list[str]:
+    """The ONE argv every measured llama-bench invocation in this module runs.
+
+    Factored out of `run_once` so a recorded protocol (`production.protocol`) is the
+    argv the instrument really executes, not a description typed next to it: a
+    baseline recorded under one argv and compared under another would be an
+    unpaired comparison across two instruments. `hardening_seed` defaults to a
+    placeholder for exactly that use; `run_once` always passes a real seed.
+    """
+    return (["taskset", "-c", CPU_LIST, "numactl", "--interleave=all",
+             str(binary), "-m", str(model), "-p", str(pp), "-n", str(tg),
+             "-r", str(reps), "-ngl", "99", "-fa", "1", "-o", "json",
+             "--autokernel-harden", str(hardening_seed)]
+            + (["-b", str(ubatch), "-ub", str(ubatch)] if ubatch else []))
+
+
 def run_once(binary: Path, model: Path, *, pp: int, tg: int, ubatch: int | None = None,
              reps: int = 9, timeout_s: int = 3600, sleep=time.sleep,
              capture=None, hardening_seed: int | None = None) -> tuple[float, dict]:
@@ -278,11 +296,8 @@ def run_once(binary: Path, model: Path, *, pp: int, tg: int, ubatch: int | None 
     is still keyed pp{pp}/tg{tg} by llama-bench regardless of batch flags.
     """
     seed = _candidate_seed() if hardening_seed is None else hardening_seed
-    argv = ["taskset", "-c", CPU_LIST, "numactl", "--interleave=all",
-            str(binary), "-m", str(model), "-p", str(pp), "-n", str(tg),
-            "-r", str(reps), "-ngl", "99", "-fa", "1", "-o", "json",
-            "--autokernel-harden", str(seed)
-            ] + (["-b", str(ubatch), "-ub", str(ubatch)] if ubatch else [])
+    argv = llama_bench_argv(binary, model, pp=pp, tg=tg, reps=reps, ubatch=ubatch,
+                            hardening_seed=seed)
     for attempt in range(KILL_RETRIES + 1):
         env = residency.loader_env(binary)
         with (nullcontext() if capture is None else capture.invocation(argv, env, attempt)):
@@ -418,6 +433,72 @@ def compare(anchor: Arm, candidate: Arm, model: Path, *, pp: int, tg: int,
         candidate_drift_pct=drift_pct(candidate_samples),
         fresh_correctness=tuple(fresh_summaries),
     )
+
+
+@dataclass(frozen=True)
+class Measurement:
+    """ONE arm measured alone: `launches` llama-bench processes, no partner arm.
+
+    Exists for exactly one consumer, `production.refresh`'s carry-over path, which
+    compares this against production samples RECORDED at a promotion. That is an
+    UNPAIRED comparison across sessions -- the caller must say so; nothing here
+    pretends a second arm ran.
+    """
+    surface: str
+    samples: list[float]
+    model: str
+    launches: int
+    residency: dict
+    device_seconds: float = 0.0
+    drift_pct: float = 0.0
+
+    def to_dict(self) -> dict:
+        return {"surface": self.surface, "model": self.model, "launches": self.launches,
+                "samples": self.samples, "sample_unit": FLOOR_UNIT,
+                "estimator": "median", "median": st.median(self.samples),
+                "drift_pct": self.drift_pct, "trend_rho": trend_rho(self.samples),
+                "device_seconds": self.device_seconds, "residency": self.residency}
+
+
+def measure(arm: Arm, model: Path, *, pp: int, tg: int, launches: int = MIN_PAIRS,
+            reps: int = 9, warmup: int = WARMUP_PAIRS, surface: str | None = None,
+            ubatch: int | None = None) -> Measurement:
+    """Single-arm measurement under the SAME argv and warmup discipline as `compare`.
+
+    Each launch is its own process (the floor unit), `warmup` launches are run and
+    discarded first, and every measured launch must be proven GPU-resident -- the
+    same refusals `compare` makes, minus the partner arm.
+    """
+    if launches < 1:
+        raise ValueError("measure needs at least one launch")
+    hardening_seed = _candidate_seed()
+    for _ in range(max(0, warmup)):
+        run_once(arm.binary, model, pp=pp, tg=tg, ubatch=ubatch, reps=reps,
+                 hardening_seed=hardening_seed)
+    samples: list[float] = []
+    proofs: list[dict] = []
+    started = time.monotonic()
+    for _ in range(launches):
+        value, proof = run_once(arm.binary, model, pp=pp, tg=tg, ubatch=ubatch,
+                                reps=reps, hardening_seed=hardening_seed)
+        samples.append(value)
+        proofs.append(proof)
+    resident = [proof for proof in proofs if proof["resident"]]
+    if len(resident) != len(proofs):
+        raise BenchFailed(
+            f"only {len(resident)}/{len(proofs)} invocations were sampled resident "
+            f"(>= {residency.RESIDENT_FLOOR_BYTES >> 30} GiB VRAM during the run); "
+            f"this may not have executed on the GPU")
+    return Measurement(
+        surface=surface or (f"pp{pp}" if pp else f"tg{tg}"), samples=samples,
+        model=str(model), launches=launches,
+        residency={"invocations": len(proofs), "resident": len(resident),
+                   "peak_vram_bytes": max(p["peak_vram_bytes"] for p in proofs),
+                   "peak_kfd_processes": max(p["peak_kfd_processes"] for p in proofs),
+                   "sclk_min_mhz": min((p.get("sclk_min_mhz") or 0) for p in proofs),
+                   "sclk_max_mhz": max((p.get("sclk_max_mhz") or 0) for p in proofs),
+                   "clock_stable": all(p.get("clock_stable") for p in proofs)},
+        device_seconds=time.monotonic() - started, drift_pct=drift_pct(samples))
 
 
 #: |rho| for a two-tailed Spearman test at alpha=0.05, by sample count. Distribution-
@@ -615,6 +696,7 @@ def bootstrap_floor(anchor: Sequence[float], candidate: Sequence[float],
 
 __all__ = ["Arm", "BenchFailed", "CALIBRATION_SCHEMA", "CPU_LIST", "Comparison",
            "FLOOR_UNIT", "MEASURED_FLOOR_MODEL_STEM", "MEASURED_FLOOR_N",
-           "MEASURED_FLOOR_PCT", "MIN_PAIRS",
+           "MEASURED_FLOOR_PCT", "MIN_PAIRS", "Measurement",
            "SURFACES", "WARMUP_PAIRS", "bootstrap_floor", "compare", "drift_pct",
-           "floor_rows", "record_n", "record_unit", "run_once", "spread_is_suspect"]
+           "floor_rows", "llama_bench_argv", "measure", "record_n", "record_unit",
+           "run_once", "spread_is_suspect"]

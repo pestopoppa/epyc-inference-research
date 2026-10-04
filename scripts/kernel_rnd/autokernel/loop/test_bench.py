@@ -422,6 +422,43 @@ class TheSurfaceTableDrivesTheBatchWidth(unittest.TestCase):
             self.assertIn(name, bench.SURFACES)
 
 
+class OneArmMeasuredAlone(unittest.TestCase):
+    """`bench.measure`: the carry-over's champion arm. Same argv, same warmup, same
+    residency refusal as `compare` -- minus the partner arm."""
+
+    def _run(self, proofs):
+        calls = []
+
+        def fake_run_once(binary, model, *, pp, tg, ubatch=None, reps=9,
+                          hardening_seed=None):
+            calls.append((binary, pp, tg, ubatch, hardening_seed))
+            return 30.0 + len(calls), proofs[min(len(calls), len(proofs)) - 1]
+
+        with mock.patch.object(bench, "run_once", side_effect=fake_run_once):
+            result = bench.measure(bench.Arm("champion", Path("/c")), Path("/m.gguf"),
+                                   pp=0, tg=128, launches=3, surface="tg128")
+        return result, calls
+
+    def test_warmup_is_discarded_and_every_launch_is_its_own_process(self):
+        proof = {"resident": True, "peak_vram_bytes": 1 << 34, "peak_kfd_processes": 1,
+                 "sclk_min_mhz": 1690, "sclk_max_mhz": 1700, "clock_stable": True}
+        result, calls = self._run([proof])
+        # BROKEN READS: 3 calls (no warmup -- first-use cost lands in the samples) or
+        # the warmup value 31.0 kept as a sample.
+        self.assertEqual(len(calls), 1 + 3)
+        self.assertEqual(result.samples, [32.0, 33.0, 34.0])
+        self.assertEqual(result.launches, 3)
+        self.assertEqual(result.model, "/m.gguf")
+        self.assertEqual(result.surface, "tg128")
+        self.assertEqual(len({call[4] for call in calls}), 1, "one seed for the arm")
+        self.assertEqual(result.to_dict()["median"], 33.0)
+
+    def test_a_launch_not_proven_resident_is_refused(self):
+        ok = {"resident": True, "peak_vram_bytes": 1 << 34, "peak_kfd_processes": 1}
+        with self.assertRaises(bench.BenchFailed):
+            self._run([ok, ok, {**ok, "resident": False}, ok])
+
+
 class TheFloorComesFromCalibrationOnly(unittest.TestCase):
     """`floor_rows` may answer from the measured built-in table or a store-written
     A/A record -- NEVER from a default, a neighbouring surface, or (since §5.2)

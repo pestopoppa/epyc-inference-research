@@ -49,8 +49,8 @@ import subprocess
 import tempfile
 import unittest
 
-from autokernel.loop import (anchor, archive, bench, gates, loop, production,
-                             pool, status)
+from autokernel.loop import (anchor, archive, bench, gates, headline_admissibility,
+                             loop, production, pool, status)
 from autokernel.loop.test_loop import drive_single_lane
 
 SEEDS = Path(__file__).resolve().parent / "seeds"
@@ -761,6 +761,503 @@ class TheExcursionNoteRidesTheBundle(unittest.TestCase):
         # BROKEN READS: an `anchor_guard_excursion: null` key on every clean
         # promotion -- a permanent warning slot that reads as noise within a week.
         self.assertNotIn("anchor_guard_excursion", _bundle(self.store))
+
+
+# ------------------------------- the recorded production baseline (carry-over)
+#
+# Operator, 2026-10-04: "v10 was once a champion. We have those measurements. The
+# production promotion should have transferred those results." The promotion writes
+# the champion's samples as production's record; `refresh` then measures the
+# champion ALONE against it, and falls back to the paired A/B -- saying why -- when
+# the record does not describe today's protocol or host.
+
+from datetime import datetime, timedelta, timezone  # noqa: E402
+import re  # noqa: E402
+import statistics  # noqa: E402
+from unittest import mock  # noqa: E402
+
+#: The live v10 backfill, copied byte-for-byte out of the loop-memory store.
+V10_BACKFILL = json.loads(
+    (SEEDS / "production-baseline.v10-backfill.json").read_text(encoding="utf-8"))
+MODEL = "/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf"
+FACTS = {"bios_vendor": "AMI", "bios_version": "4.0", "bios_date": "03/23/2026",
+         "bios_release": "5.35", "board_name": "H13SSL-NT", "product_name": "Super Server",
+         "kernel_release": "6.14.0-37-generic", "cpu_model": "AMD EPYC 9655",
+         "numa_nodes": 4, "gpu_vbios": ["113-D67301V-X73"]}
+NOW = datetime(2026, 10, 4, 12, 0, tzinfo=timezone.utc)
+#: The production-refresh reason grammar `dashboard/loop_status.py` joins trajectory
+#: rows on (copied from `_PRODUCTION_REFRESH_REASON`). An UNPAIRED number must NOT
+#: parse as a direct A/B there.
+DASHBOARD_PAIRED_REASON = re.compile(
+    r"^champion (?P<champion>[0-9a-f]{12}) measures "
+    r"(?P<effect>[+-][0-9]+(?:\.[0-9]+)?)% against frozen production "
+    r"(?P<baseline>[0-9a-f]{12}) \((?P<label>production-consolidated-[^)]+)\) "
+    r"over (?P<pairs>[1-9][0-9]*) (?P<surface>[A-Za-z0-9_-]+) pairs, "
+    r"floor (?P<floor>[0-9]+(?:\.[0-9]+)?)%$")
+
+
+def _protocol(**overrides):
+    return production.protocol(**{"model": MODEL, "surface": "tg128", **overrides})
+
+
+def _record(store: Path, *, samples=None, protocol=None, measured_at=None,
+            facts=FACTS, commit=V9, overwrite=False) -> Path:
+    row = MEASURED["surfaces"]["tg128"]
+    return production.write_baseline(
+        store, production_commit=commit, production_label=V9_LABEL,
+        measured_commit=CHAMPION, samples=samples or row["candidate_samples"],
+        protocol=protocol or _protocol(),
+        measured_at=measured_at or (NOW - timedelta(days=2)).isoformat(),
+        source={"path": "/x/fold2-result.json", "sha256": "0" * 64,
+                "samples_path": "g5_full.candidate_samples"},
+        host_facts=facts, host_facts_note="test", overwrite=overwrite)
+
+
+def _champion_alone(samples=None, surface="tg128", model=MODEL):
+    row = MEASURED["surfaces"]["tg128"]
+    values = list(samples or [x * 1.02 for x in row["candidate_samples"]])
+    return bench.Measurement(surface=surface, samples=values, model=model,
+                             launches=len(values), residency={"resident": len(values)})
+
+
+class _Arms:
+    """Counts what a refresh actually measured, and what it built."""
+
+    def __init__(self, measurement=None):
+        self.compared, self.measured, self.built = [], [], []
+        self.measurement = measurement or _champion_alone()
+
+    def compare(self, base, champ):
+        self.compared.append((base, champ))
+        return _comparison()
+
+    def measure(self, champ):
+        self.measured.append(champ)
+        return self.measurement
+
+    def build(self, dest, commit=None):
+        self.built.append(dest)
+        return _built(dest)
+
+
+def _carry(store: Path, arms: _Arms, *, protocol=None, facts=FACTS, clock=NOW,
+           host_changes=(), max_age=production.BASELINE_MAX_AGE_DAYS, base=None,
+           wired=True):
+    extra = ({"measure": arms.measure, "protocol": protocol or _protocol()}
+             if wired else {})
+    return production.refresh(
+        store=store, champion_commit=CHAMPION, champion_build=store / "anchor-gen-009",
+        baseline_build=base or (store / "cold-baseline"), build_baseline=arms.build,
+        resolve=_resolve, compare=arms.compare, host_facts=lambda: dict(facts),
+        host_changes=host_changes, clock=lambda: clock, baseline_max_age_days=max_age,
+        **extra)
+
+
+class ThePromotionWritesProductionsBaseline(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = Path(self.tmp.name)
+
+    def test_the_record_lands_under_the_frozen_commit_with_its_provenance(self):
+        path = _record(self.store)
+        self.assertEqual(path.name, f"production-baseline.{V9[:12]}.json")
+        body = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(body["schema"], production.BASELINE_SCHEMA)
+        self.assertEqual(body["production"], {"commit": V9, "label": V9_LABEL})
+        self.assertEqual(body["samples"], MEASURED["surfaces"]["tg128"]["candidate_samples"])
+        self.assertEqual(body["median"], statistics.median(body["samples"]))
+        self.assertEqual(body["protocol"]["argv"], _protocol()["argv"])
+        self.assertEqual(body["source"]["sha256"], "0" * 64)
+        self.assertEqual(body["host"]["facts"], FACTS)
+
+    def test_the_protocol_is_the_argv_the_instrument_runs(self):
+        """BROKEN READS: a protocol typed beside the instrument -- the record would
+        claim an argv no measurement ran, and every match against it is vacuous."""
+        recorded = _protocol()
+        argv = bench.llama_bench_argv("<llama-bench>", MODEL, pp=0, tg=128)
+        self.assertEqual(recorded["argv"], argv)
+        self.assertTrue(recorded["hardened"])
+        captured = {}
+
+        def fake_run(argv, **kwargs):
+            captured["argv"] = argv
+            return mock.Mock(returncode=0, stdout="[]", stderr="")
+
+        class Sampler:
+            proof = {"resident": True}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+        with mock.patch.object(bench.subprocess, "run", side_effect=fake_run), \
+                mock.patch.object(bench.residency, "Sampler", Sampler), \
+                mock.patch.object(bench.residency, "loader_env", lambda _b: {}), \
+                mock.patch.object(bench, "hardened_row",
+                                  return_value=mock.Mock(avg_ts=1.0)):
+            bench.run_once(Path("/b/llama-bench"), Path(MODEL), pp=0, tg=128,
+                           hardening_seed=7)
+        self.assertEqual(captured["argv"],
+                         [("/b/llama-bench" if a == "<llama-bench>" else
+                           "7" if a == "<seed>" else a) for a in argv])
+
+    def test_an_undersized_vector_is_refused(self):
+        with self.assertRaises(ValueError):
+            _record(self.store, samples=[31.0] * 13)
+        with self.assertRaises(ValueError):
+            _record(self.store, samples=[31.0] * 19 + [float("nan")])
+        self.assertEqual(list(self.store.glob("production-baseline.*")), [])
+
+    def test_a_short_sha_is_refused(self):
+        with self.assertRaises(ValueError):
+            _record(self.store, commit=V9[:12])
+
+    def test_an_existing_record_is_never_silently_replaced(self):
+        first = _record(self.store)
+        with self.assertRaises(FileExistsError):
+            _record(self.store, samples=[30.0] * 20)
+        _record(self.store, samples=[30.0] * 20, overwrite=True)
+        self.assertEqual(json.loads(first.read_text())["samples"], [30.0] * 20)
+        superseded = list(self.store.glob(f"{first.name}.superseded-*"))
+        self.assertEqual(len(superseded), 1)
+        self.assertEqual(json.loads(superseded[0].read_text())["samples"],
+                         MEASURED["surfaces"]["tg128"]["candidate_samples"])
+
+
+def _git(repo: Path, *args: str) -> str:
+    return subprocess.run(["git", "-C", str(repo), *args], check=True,
+                          capture_output=True, text=True).stdout.strip()
+
+
+class TheCliIsThePromotionStep(unittest.TestCase):
+    """`python3 -m autokernel.loop.production write-baseline` over a fold-shaped
+    source and a real (temporary) git lineage."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        root = Path(self.tmp.name)
+        self.store, self.repo = root / "store", root / "repo"
+        self.repo.mkdir()
+        _git(self.repo, "init", "-q")
+        _git(self.repo, "config", "user.email", "t@t")
+        _git(self.repo, "config", "user.name", "t")
+        (self.repo / "a.cpp").write_text("a")
+        _git(self.repo, "add", "a.cpp")
+        _git(self.repo, "commit", "-qm", "measured")
+        self.measured = _git(self.repo, "rev-parse", "HEAD")
+        (self.repo / "moe.cpp").write_text("b")
+        _git(self.repo, "add", "moe.cpp")
+        _git(self.repo, "commit", "-qm", "moe only")
+        self.frozen = _git(self.repo, "rev-parse", "HEAD")
+        row = MEASURED["surfaces"]["tg128"]
+        self.source = root / "fold2-result.json"
+        self.source.write_text(json.dumps({"g5_full": {
+            "surface": "tg128", "model": MODEL,
+            "candidate_samples": row["candidate_samples"],
+            "residency": {"invocations": 40}}}))
+
+    def _main(self, *extra):
+        return production.main([
+            "write-baseline", "--source", str(self.source),
+            "--samples-path", "g5_full.candidate_samples",
+            "--measured-commit", self.measured[:9],
+            "--production-commit", self.frozen,
+            "--production-label", "production-consolidated-v10",
+            "--lineage-tree", str(self.repo), "--lineage-note", "moe only",
+            "--host-facts", "none", "--store", str(self.store), *extra])
+
+    def test_a_fold_result_becomes_productions_record(self):
+        self.assertEqual(self._main("--measured-at", "2026-09-08T11:16:25Z"), 0)
+        body = json.loads((self.store / production.baseline_filename(self.frozen))
+                          .read_text())
+        self.assertEqual(body["measured_commit"], self.measured)
+        self.assertEqual(body["protocol"]["model"], MODEL)
+        self.assertEqual(body["protocol"]["surface"], "tg128")
+        self.assertEqual(body["source"]["samples_path"], "g5_full.candidate_samples")
+        import hashlib
+        self.assertEqual(body["source"]["sha256"],
+                         hashlib.sha256(self.source.read_bytes()).hexdigest())
+        self.assertEqual(body["lineage"]["commits_between"],
+                         [{"commit": self.frozen, "subject": "moe only",
+                           "files": ["moe.cpp"]}])
+        self.assertIsNone(body["host"]["facts"])
+        self.assertEqual(body["residency"], {"invocations": 40})
+
+    def test_a_historical_argv_is_recorded_as_given(self):
+        legacy = bench.llama_bench_argv("<llama-bench>", MODEL, pp=0, tg=128)[:-2]
+        self.assertEqual(self._main("--argv-json", json.dumps(legacy),
+                                    "--argv-provenance", "bench.py @4ede0e03"), 0)
+        body = json.loads((self.store / production.baseline_filename(self.frozen))
+                          .read_text())
+        self.assertEqual(body["protocol"]["argv"], legacy)
+        self.assertFalse(body["protocol"]["hardened"])
+
+    def test_a_flag_contradicting_the_source_is_refused(self):
+        self.assertEqual(self._main("--model", "/other.gguf"), 2)
+        self.assertFalse(self.store.exists())
+
+    def test_a_non_ancestor_is_not_productions_numbers(self):
+        _git(self.repo, "checkout", "-qb", "side", self.measured)
+        (self.repo / "c.cpp").write_text("c")
+        _git(self.repo, "add", "c.cpp")
+        _git(self.repo, "commit", "-qm", "sibling")
+        sibling = _git(self.repo, "rev-parse", "HEAD")
+        with self.assertRaises(ValueError):
+            production.commits_between(self.repo, sibling, self.frozen)
+
+
+class TheChampionIsMeasuredAloneAgainstAMatchingRecord(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = Path(self.tmp.name)
+        self.record = _record(self.store)
+        self.arms = _Arms()
+        self.result = _carry(self.store, self.arms)
+        self.body = _bundle(self.store)
+
+    def test_no_production_arm_and_no_baseline_build(self):
+        """BROKEN READS: compared/built non-empty -- ~15 min of GPU and a full build
+        spent re-measuring numbers the promotion already recorded."""
+        self.assertTrue(self.result.published, self.result.reason)
+        self.assertEqual(self.arms.compared, [])
+        self.assertEqual(self.arms.built, [])
+        self.assertEqual(self.arms.measured, [self.store / "anchor-gen-009"])
+
+    def test_the_effect_is_champion_over_the_record(self):
+        expected = (statistics.median(self.arms.measurement.samples)
+                    / statistics.median(json.loads(self.record.read_text())["samples"])
+                    - 1.0)
+        self.assertAlmostEqual(self.body["effect_fraction"], expected)
+        self.assertAlmostEqual(self.result.effect_fraction, expected)
+
+    def test_the_bundle_says_unpaired_and_carries_the_drift_caveat(self):
+        self.assertEqual(self.body["comparison"], "unpaired_recorded_baseline")
+        self.assertIsNone(self.body["pairs"])
+        self.assertIsNone(self.body["noise_floor_pct"])
+        self.assertEqual(self.body["host_drift_caveat_pct"], 3.0)
+        self.assertIn("UNPAIRED", self.body["caveat"])
+        self.assertIn("~3%", self.body["caveat"])
+        self.assertEqual(self.body["confidence_interval"]["method"],
+                         headline_admissibility.UNPAIRED_CI_METHOD)
+        self.assertEqual(self.body["headline_admissibility"]["ci_method"],
+                         headline_admissibility.UNPAIRED_CI_METHOD)
+        self.assertEqual(self.body["baseline"]["commit"], V9)
+        self.assertEqual(self.body["baseline"]["recorded"], str(self.record))
+        self.assertTrue(self.body["baseline_carryover"]["used"])
+
+    def test_the_receipt_reason_is_not_a_direct_ab(self):
+        """BROKEN READS: the reason parses under the dashboard's paired grammar and an
+        unpaired number enters the production-relative trajectory as an A/B."""
+        self.assertIn("UNPAIRED", self.result.reason)
+        self.assertIn("host-drift caveat", self.result.reason)
+        self.assertIsNone(DASHBOARD_PAIRED_REASON.match(self.result.reason))
+
+    def test_the_evidence_pins_the_record_by_digest(self):
+        import hashlib
+        evidence = json.loads(Path(self.body["evidence"]).read_text())
+        self.assertEqual(evidence["baseline_record_sha256"],
+                         hashlib.sha256(self.record.read_bytes()).hexdigest())
+        self.assertEqual(evidence["champion"]["samples"], self.arms.measurement.samples)
+
+    def test_a_champion_measured_on_another_rung_is_refused(self):
+        arms = _Arms(_champion_alone(model="/other.gguf"))
+        result = _carry(self.store, arms)
+        self.assertFalse(result.published)
+        self.assertIn("/other.gguf", result.reason)
+
+
+class AStaleOrMismatchedRecordFallsBackToThePairedAB(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = Path(self.tmp.name)
+
+    def _fell_back(self, result, arms, needle):
+        self.assertTrue(result.published, result.reason)
+        self.assertEqual(len(arms.compared), 1, "the paired A/B must run")
+        self.assertEqual(arms.measured, [])
+        body = _bundle(self.store)
+        self.assertEqual(body["comparison"], "paired_ab")
+        self.assertFalse(body["baseline_carryover"]["used"])
+        self.assertIn(needle, body["baseline_carryover"]["reason"])
+        self.assertIn(needle, result.carryover)
+        # The paired path's reason grammar is untouched: the dashboard still joins it.
+        self.assertIsNotNone(DASHBOARD_PAIRED_REASON.match(result.reason))
+
+    def test_another_argv_is_another_instrument(self):
+        unhardened = _protocol(argv=_protocol()["argv"][:-2])
+        _record(self.store, protocol=unhardened)
+        arms = _Arms()
+        self._fell_back(_carry(self.store, arms), arms, "hardened")
+
+    def test_another_model_is_another_rung(self):
+        _record(self.store, protocol=_protocol(model="/other.gguf"))
+        arms = _Arms()
+        self._fell_back(_carry(self.store, arms), arms, "model")
+
+    def test_past_the_age_limit_the_record_is_stale(self):
+        _record(self.store, measured_at=(NOW - timedelta(days=31)).isoformat())
+        arms = _Arms()
+        self._fell_back(_carry(self.store, arms), arms, "stale")
+
+    def test_the_age_limit_is_configurable(self):
+        _record(self.store, measured_at=(NOW - timedelta(days=10)).isoformat())
+        self.assertTrue(production.baseline_decision(
+            self.store, V9, protocol=_protocol(), host_facts=FACTS, host_changes=(),
+            clock=lambda: NOW).usable)
+        arms = _Arms()
+        self._fell_back(_carry(self.store, arms, max_age=5), arms, "5-day limit")
+
+    def test_a_record_from_before_a_recorded_host_change_is_stale(self):
+        _record(self.store, measured_at=(NOW - timedelta(days=5)).isoformat())
+        change = {"applied": (NOW - timedelta(days=3)).date().isoformat(),
+                  "what": "BIOS memory speed", "source": "test"}
+        arms = _Arms()
+        self._fell_back(_carry(self.store, arms, host_changes=(change,)), arms,
+                        "recorded host change")
+
+    def test_a_record_from_after_the_change_stands(self):
+        _record(self.store, measured_at=(NOW - timedelta(days=2)).isoformat())
+        change = {"applied": (NOW - timedelta(days=3)).date().isoformat(),
+                  "what": "BIOS memory speed", "source": "test"}
+        arms = _Arms()
+        self.assertTrue(_carry(self.store, arms, host_changes=(change,)).published)
+        self.assertEqual(arms.compared, [])
+
+    def test_moved_host_facts_make_the_record_stale(self):
+        _record(self.store)
+        arms = _Arms()
+        self._fell_back(_carry(self.store, arms, facts={**FACTS, "bios_version": "4.1"}),
+                        arms, "bios_version")
+
+    def test_an_unreadable_fact_is_not_a_change(self):
+        _record(self.store)
+        arms = _Arms()
+        self.assertTrue(_carry(self.store, arms,
+                               facts={**FACTS, "bios_version": None}).published)
+        self.assertEqual(arms.compared, [])
+
+    def test_a_record_naming_another_freeze_is_refused(self):
+        path = _record(self.store)
+        body = json.loads(path.read_text())
+        body["production"]["commit"] = "1" * 40
+        path.write_text(json.dumps(body))
+        arms = _Arms()
+        self._fell_back(_carry(self.store, arms), arms, "1111111111")
+
+    def test_absent_falls_back_and_the_paired_production_arm_is_recorded(self):
+        """The paired fallback's production arm IS production's numbers today, so
+        the NEXT refresh is single-arm. BROKEN READS: every refresh re-measures
+        production forever after one refusal."""
+        arms = _Arms()
+        result = _carry(self.store, arms)
+        self._fell_back(result, arms, "no recorded production baseline")
+        self.assertIn("re-recorded production's arm", result.carryover)
+        record = json.loads((self.store / production.baseline_filename(V9)).read_text())
+        self.assertEqual(record["samples"],
+                         MEASURED["surfaces"]["tg128"]["anchor_samples"])
+        self.assertEqual(record["measured_commit"], V9)
+        self.assertEqual(record["host"]["facts"], FACTS)
+        again = _Arms()
+        self.assertTrue(_carry(self.store, again, clock=datetime.now(timezone.utc)
+                               ).published)
+        self.assertEqual(again.compared, [])
+        self.assertEqual(len(again.measured), 1)
+
+    def test_a_refused_record_is_preserved_when_re_recorded(self):
+        _record(self.store, protocol=_protocol(argv=_protocol()["argv"][:-2]))
+        _carry(self.store, _Arms())
+        self.assertEqual(len(list(self.store.glob(
+            f"production-baseline.{V9[:12]}.json.superseded-*"))), 1)
+
+    def test_an_unwired_caller_keeps_todays_behaviour(self):
+        _record(self.store)
+        arms = _Arms()
+        result = _carry(self.store, arms, wired=False)
+        self.assertTrue(result.published)
+        self.assertEqual(len(arms.compared), 1)
+        self.assertIn("NOT consulted", _bundle(self.store)["baseline_carryover"]["reason"])
+        self.assertEqual(list(self.store.glob("*.superseded-*")), [])
+
+
+class TheV10BackfillIsRecordedHonestly(unittest.TestCase):
+    """The live record written 2026-10-04 from the 2026-09-08 FOLD-2 G5 run. Its
+    numbers are real; whether they may stand in for production TODAY is decided by
+    the same rules as any record, and the answer is no, for two named reasons."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = Path(self.tmp.name)
+        self.commit = V10_BACKFILL["production"]["commit"]
+        (self.store / production.baseline_filename(self.commit)).write_text(
+            json.dumps(V10_BACKFILL))
+
+    def test_it_is_the_fold_g5_candidate_arm(self):
+        self.assertEqual(self.commit, "ffc1bac82eeca6f9099e1ccd9ba49703c460a115")
+        self.assertEqual(V10_BACKFILL["measured_commit"][:9], "ef81196d5")
+        self.assertTrue(V10_BACKFILL["source"]["sha256"].startswith("71344d34"))
+        self.assertEqual(V10_BACKFILL["source"]["samples_path"],
+                         "g5_full.candidate_samples")
+        self.assertEqual(V10_BACKFILL["launches"], 20)
+        self.assertAlmostEqual(V10_BACKFILL["median"], 31.30, places=2)
+        self.assertEqual([c["commit"][:9] for c in
+                          V10_BACKFILL["lineage"]["commits_between"]],
+                         ["ffc1bac82", "d0d70c5fe"])
+
+    def test_it_is_well_formed_under_its_own_protocol(self):
+        decision = production.baseline_decision(
+            self.store, self.commit, protocol=V10_BACKFILL["protocol"], host_facts=FACTS,
+            host_changes=(), clock=lambda: datetime(2026, 9, 10, tzinfo=timezone.utc))
+        self.assertTrue(decision.usable, decision.reason)
+
+    def test_todays_hardened_protocol_does_not_match_it(self):
+        decision = production.baseline_decision(
+            self.store, self.commit,
+            protocol=_protocol(model=V10_BACKFILL["protocol"]["model"]),
+            host_facts=FACTS, host_changes=(), clock=lambda: NOW)
+        self.assertFalse(decision.usable)
+        self.assertIn("hardened (recorded False, now True)", decision.reason)
+
+    def test_it_predates_the_recorded_bios_change(self):
+        decision = production.baseline_decision(
+            self.store, self.commit, protocol=V10_BACKFILL["protocol"], host_facts=FACTS,
+            clock=lambda: NOW)
+        self.assertFalse(decision.usable)
+        self.assertIn("2026-09-21", decision.reason)
+
+
+class HostFactsAreReadWithoutRoot(unittest.TestCase):
+
+    def test_a_synthesised_host_reads_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "dmi").mkdir()
+            (root / "dmi" / "bios_version").write_text("4.0\n")
+            (root / "proc" / "sys" / "kernel").mkdir(parents=True)
+            (root / "proc" / "sys" / "kernel" / "osrelease").write_text("6.14\n")
+            (root / "proc" / "cpuinfo").write_text("processor\t: 0\nmodel name\t: EPYC\n")
+            for n in range(4):
+                (root / "node" / f"node{n}").mkdir(parents=True)
+            (root / "drm" / "card1" / "device").mkdir(parents=True)
+            (root / "drm" / "card1" / "device" / "vbios_version").write_text("113-X\n")
+            facts = production.read_host_facts(
+                dmi_root=root / "dmi", proc_root=root / "proc",
+                node_root=root / "node", drm_root=root / "drm")
+        self.assertEqual(facts["bios_version"], "4.0")
+        self.assertIsNone(facts["bios_date"])
+        self.assertEqual(facts["kernel_release"], "6.14")
+        self.assertEqual(facts["cpu_model"], "EPYC")
+        self.assertEqual(facts["numa_nodes"], 4)
+        self.assertEqual(facts["gpu_vbios"], ["113-X"])
 
 
 if __name__ == "__main__":
