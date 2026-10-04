@@ -210,3 +210,34 @@ class FactoryUsesTheRecipe(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestGfx90aRocm62V10Recipe(unittest.TestCase):
+    """G6: the recipe for selected GPU serving targets, read back from v10."""
+
+    def test_matches_production_v10_and_names_rocwmma(self):
+        recipe = br.GFX90A_ROCM62_V10_RECIPE
+        defines = dict(recipe.cmake_defines())
+        self.assertEqual(recipe.divergences(), ())
+        self.assertEqual(defines["GGML_HIP_ROCWMMA_FATTN"], "ON")
+        self.assertEqual(defines["AMDGPU_TARGETS"], "gfx90a")
+        self.assertEqual(defines["CMAKE_BUILD_RPATH_USE_ORIGIN"], "ON")
+        self.assertEqual(defines["CMAKE_HIP_COMPILER"], "/opt/rocm/lib/llvm/bin/clang++")
+        self.assertIs(br.recipe_for("gfx90a-rocm62-v10"), recipe)
+        self.assertIn("rocWMMA in-binary arm", recipe.notes)
+
+    def test_rocm_pin_is_checked_not_trusted(self):
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as tmp:
+            good, bad = os.path.join(tmp, "good"), os.path.join(tmp, "bad")
+            with open(good, "w") as fh:
+                fh.write("6.2.0-66\n")
+            with open(bad, "w") as fh:
+                fh.write("6.4.1-120\n")
+            self.assertEqual(br.check_rocm_version(good), (True, "6.2.0-66"))
+            self.assertFalse(br.check_rocm_version(bad)[0])
+            self.assertFalse(br.check_rocm_version(os.path.join(tmp, "nope"))[0])
+
+    def test_the_house_recipe_is_untouched(self):
+        self.assertNotEqual(br.HOUSE_GPU_RECIPE.sha256(),
+                            br.GFX90A_ROCM62_V10_RECIPE.sha256())

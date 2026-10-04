@@ -13,7 +13,7 @@ import json
 import math
 from pathlib import Path
 import subprocess
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from . import accumulate
 
@@ -357,6 +357,127 @@ def reopen_reference(value: Any) -> dict[str, Any]:
     return validate_debt(body) if body.get("schema") == DEBT_SCHEMA else validate(body)
 
 
-__all__ = ["DEBT_SCHEMA", "MAX_BYTES", "REFERENCE_SCHEMA", "SCHEMA",
-           "SurfaceValidationRefused", "classify", "debt", "original_anchor_commit",
-           "reopen_reference", "retain", "row", "validate", "validate_debt"]
+# ------------------------------------------------------------------ keep dimensions (G5)
+#
+# AK long-context audit 2026-10-04 §4.2 G5, operator ruling: AutoKernel works across
+# EVERY tracked dimension. This EXTENDS the cross-workload gate above rather than adding
+# a second one: each declared throughput dimension other than the primary is judged by
+# the same interim non-inferiority rule (`classify(..., intended_target=False)`), and the
+# primary keeps the existing serving verdict that already admitted the keep. Capacity
+# is a fit test: the candidate's peak VRAM (GPU, own-PID KFD when sampled) or peak RSS
+# (CPU), sampled by the residency sampler on the launch that carried the recipe's own
+# context and slots over a MIXED request sequence (capacity_probe), must fit the declared
+# ceiling and must not keep growing. A dimension the target does not
+# declare is SKIPPED and recorded so; a declared dimension with no measurement is
+# PENDING, which refuses the keep (fail closed, like a missing floor).
+
+KEEP_DIMENSIONS = ("short_decode", "long_decode", "prefill_at_depth",
+                   "concurrent_aggregate", "capacity")
+THROUGHPUT_DIMENSIONS = KEEP_DIMENSIONS[:-1]
+DIMENSIONS_SCHEMA = "epyc.autokernel.keep_dimensions.v1"
+DIMENSIONS_DIR = "keep-dimensions"
+#: Stack owner (workspace-ec, 2026-10-04, G1 constraint e): AutoKernel GPU runs stay at
+#: or under 62 GiB peak on the 64 GiB MI210.
+GPU_CAPACITY_CEILING_BYTES = 62 << 30
+
+
+def parse_dimensions(text: str | None) -> tuple[str, ...]:
+    names = tuple(dict.fromkeys(item.strip() for item in (text or "").split(",") if item.strip()))
+    unknown = [name for name in names if name not in KEEP_DIMENSIONS]
+    if unknown:
+        raise SurfaceValidationRefused(
+            f"unknown keep dimension(s) {unknown}; known: {list(KEEP_DIMENSIONS)}")
+    return names
+
+
+def primary_dimension(np: int) -> str:
+    """The dimension the existing serving gate already measures: aggregate tok/s over
+    `np` concurrent frozen requests (np > 1) or single-request decode (np == 1)."""
+    return "concurrent_aggregate" if int(np) > 1 else "short_decode"
+
+
+def _capacity_row(capacity: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Fit AND no growth, over the MIXED sequence (`capacity_probe`); else not passed.
+
+    A steady single-shape footprint is not admissible: v10's mmvq_q8_1_graph_cache
+    (GPU-POOL-1) passed every steady A/B while growing ~0.29 GiB per n_max:0
+    alternation, so only a record taken over the mixed sequence can pass.
+    """
+    from . import capacity_probe
+    cap = dict(capacity or {})
+    if cap.get("error"):
+        return {"disposition": "pending", **cap, "reason": f"capacity probe failed: {cap['error']}"[:512]}
+    if cap.get("sequence") != capacity_probe.SEQUENCE:
+        return {"disposition": "pending", **cap,
+                "reason": "capacity needs the mixed n_max:0-alternation/varying-batch sequence"}
+    peak, limit, growth = cap.get("peak_bytes"), cap.get("limit_bytes"), cap.get("growth_bytes")
+    if not peak or not limit or growth is None:
+        return {"disposition": "pending", **cap,
+                "reason": "peak footprint, growth or ceiling unknown"}
+    tolerance = int(cap.get("growth_tolerance_bytes") or capacity_probe.GROWTH_TOLERANCE_BYTES)
+    fits, steady = int(peak) <= int(limit), int(growth) <= tolerance
+    return {"disposition": "passed" if fits and steady else "failed", **cap,
+            "reason": (f"peak {int(peak) / 2**30:.2f} GiB {'<=' if fits else '>'} ceiling "
+                       f"{int(limit) / 2**30:.2f} GiB; growth after warm-up "
+                       f"{int(growth) / 2**20:.0f} MiB {'<=' if steady else '>'} "
+                       f"{tolerance / 2**20:.0f} MiB, at ctx={cap.get('ctx')} np={cap.get('np')}")}
+
+
+def keep_dimensions(*, declared: Sequence[str], primary: str,
+                    comparisons: Mapping[str, Any], capacity: Mapping[str, Any] | None
+                    ) -> dict[str, Any]:
+    """Per-dimension dispositions for one keep (pure). `passed` iff none failed/pending."""
+    declared = tuple(declared)
+    rows: dict[str, dict[str, Any]] = {}
+    for name in KEEP_DIMENSIONS:
+        if name not in declared:
+            rows[name] = {"disposition": "skipped", "reason": "not declared by the target"}
+        elif name == "capacity":
+            rows[name] = _capacity_row(capacity)
+        elif name == primary:
+            rows[name] = {"disposition": "passed",
+                          "reason": "primary serving gate already promoted this keep"}
+        else:
+            comparison = comparisons.get(name)
+            if comparison is None:
+                rows[name] = {"disposition": "pending",
+                              "reason": "declared but no instrument measured it"}
+                continue
+            if isinstance(comparison, Mapping) and comparison.get("error"):
+                rows[name] = {"disposition": "pending",
+                              "reason": f"measurement failed: {comparison['error']}"[:512]}
+                continue
+            try:
+                disposition = classify(comparison, intended_target=False)
+            except SurfaceValidationRefused as exc:
+                rows[name] = {"disposition": "pending", "reason": str(exc)[:512]}
+                continue
+            rows[name] = {"disposition": disposition,
+                          "effect_pct": comparison.get("effect_pct"),
+                          "noise_floor_pct": comparison.get("noise_floor_pct"),
+                          "reason": "cross-workload interim non-inferiority rule"}
+    blocking = {n: r for n, r in rows.items() if r["disposition"] in ("failed", "pending")}
+    return {"schema": DIMENSIONS_SCHEMA, "declared": list(declared), "primary": primary,
+            "dimensions": rows, "passed": not blocking,
+            "reason": ("; ".join(f"{n}: {r['disposition']} ({r['reason']})"
+                                 for n, r in blocking.items())
+                       or "no declared dimension regressed")}
+
+
+def retain_dimensions(store: Path, mechanism_id: str, record: Mapping[str, Any], *,
+                      now: float | None = None) -> Path:
+    import time as _time
+    directory = Path(store) / DIMENSIONS_DIR
+    directory.mkdir(parents=True, exist_ok=True)
+    stamp = int((_time.time() if now is None else now) * 1000)
+    path = directory / f"{stamp}-{str(mechanism_id)[:80].replace('/', '_')}.json"
+    path.write_text(json.dumps(record, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    return path
+
+
+__all__ = ["DEBT_SCHEMA", "DIMENSIONS_SCHEMA", "GPU_CAPACITY_CEILING_BYTES",
+           "KEEP_DIMENSIONS", "MAX_BYTES", "REFERENCE_SCHEMA", "SCHEMA",
+           "SurfaceValidationRefused", "classify", "debt",
+           "keep_dimensions", "original_anchor_commit", "parse_dimensions",
+           "primary_dimension", "reopen_reference", "retain", "retain_dimensions", "row",
+           "validate", "validate_debt"]

@@ -25,6 +25,7 @@ from pathlib import Path
 import signal
 import subprocess
 import sys
+import threading
 import time
 
 from ..controller import (anchor_integrity, build_recipe, experiments, inbox, rung_confirm,
@@ -32,16 +33,22 @@ from ..controller import (anchor_integrity, build_recipe, experiments, inbox, ru
 from .. import codegen_summary
 HEARTBEAT_S = 30  # status heartbeat period; envelope = 6x this
 HEARTBEAT_STOP_TIMEOUT_S = 10
-#: `--cpu-measurement-gpu-quiet`: whether a CPU measurement window also takes the
-#: MI210 device flock (`claim.DEVICE_LOCK`). "off" (default): a CPU-backend run never
-#: touches a GPU claim -- nothing it executes needs the device, the scheduler already
-#: accounts it `gpu_devices=()`, and the flock only ever excluded claim-HONOURING GPU
-#: work (AutoKernel GPU lanes, operator GPU windows) while production :8083 traffic,
-#: whose host threads sit on the same q3 SMT siblings, ignores it. "q3": the
-#: 2026-09-17 measurement-hygiene window (0702e327), held only around a measurement
-#: whose CPU list touches q3 and released between measurements.
+#: `--cpu-measurement-gpu-quiet`: the CPU/GPU measurement quiet window. DEFAULT "q3"
+#: (operator ruling, 2026-10-04 backlog schedule: GPU benches and CPU measurements
+#: NEVER overlap; AK long-context audit §4.3). GPU host threads run on 184-191, the SMT
+#: siblings of physical cores 88-95 (region q3), and a correctly pinned GPU bench chain
+#: raised a CPU A/A floor 0.80% -> 7.22%, 9x (INF-70, 2026-09-08): pinning controls
+#: placement, not contention. Under "q3" both sides exclude each other per measurement:
+#:   * a CPU measurement whose CPU list touches q3 takes the MI210 device flock
+#:     (`claim.DEVICE_LOCK`) for its body only (the 2026-09-17 window, 0702e327);
+#:   * a GPU measurement takes the q3 CPU region claim for its body only
+#:     (`claim.hold_q3_measurement`, `_gpu_q3_measurement_window`).
+#: Both are released between measurements. Production :8083 traffic takes neither.
+#: "off" restores the superseded 2026-09-25 "run GPU work concurrently" policy, which
+#: contradicts the ruling as the operator stated it; it stays as an explicit opt-out.
 CPU_MEASUREMENT_GPU_QUIET_OFF = "off"
 CPU_MEASUREMENT_GPU_QUIET_Q3 = "q3"
+CPU_MEASUREMENT_GPU_QUIET_DEFAULT = CPU_MEASUREMENT_GPU_QUIET_Q3
 CPU_MEASUREMENT_GPU_QUIET_POLICIES = (CPU_MEASUREMENT_GPU_QUIET_OFF,
                                       CPU_MEASUREMENT_GPU_QUIET_Q3)
 #: `--anchor-guard-aa-window-s` default (2026-10-03, DS41 duty cycle: the post-keep
@@ -146,21 +153,23 @@ def anchor_build_jobs(recipe, build_jobs: int) -> int:
 
 @contextmanager
 def _q3_cpu_gpu_quiet_window(launch, *, on_wait, should_stop,
-                             policy=CPU_MEASUREMENT_GPU_QUIET_OFF):
-    """Exclude a GPU item only while a q3 CPU measurement is active -- when asked.
+                             policy=CPU_MEASUREMENT_GPU_QUIET_DEFAULT):
+    """Exclude a GPU item while a q3 CPU measurement is active.
 
-    `policy` is `--cpu-measurement-gpu-quiet`. Under the default "off" a CPU run
-    takes no GPU claim at all: the window is a no-op and the MI210 flock is never
-    opened. Under "q3" (explicit opt-in) the flock is held for the body of one
-    measurement whose CPU list touches q3, and released when it ends.
+    `policy` is `--cpu-measurement-gpu-quiet`. Under the default "q3" the MI210 flock
+    is held for the body of one measurement whose CPU list touches q3, and released
+    when it ends; under "off" (explicit opt-out) the window is a no-op and the flock
+    is never opened.
 
-    Why opt-in (2026-10-03): the window was intentional hygiene -- a pinned GPU
-    bench chain on the q3 SMT siblings 184-191 degraded a CPU A/A floor 0.80% ->
-    7.22% (INF-70, 2026-09-08) -- but a CPU campaign that measures most of its wall
-    then holds `mi210_0` most of its wall, which blocked the INF-80 X0 GPU window,
-    and the scheduler accounted none of it (`gpu_devices=()`). The operator's
-    standing policy is to run GPU work concurrently with the loop and absorb the
-    noise in the alternating matched instrument (memory 2026-09-25).
+    Default flipped 2026-10-04 (operator ruling: GPU benches and CPU measurements
+    never overlap -- the INF-70 9x floor degradation). The 2026-10-03 opt-in default
+    followed the superseded 2026-09-25 "run concurrently" policy. The concern it
+    answered -- a CPU campaign holding `mi210_0` most of its wall and blocking a GPU
+    window -- is bounded here: the flock is held per measurement only, and a holder
+    that advertises it takes q3 for its OWN measurements (`claim.q3_honouring_marker`,
+    an AutoKernel GPU run) is not waited on, because this run's q3 region claim already
+    excludes that holder's measurements. Waiting on it would deadlock: it holds the
+    flock for its whole life and waits on q3 for each measurement.
     """
     if policy not in CPU_MEASUREMENT_GPU_QUIET_POLICIES:
         raise ValueError(f"unknown CPU-measurement GPU quiet policy {policy!r}")
@@ -177,13 +186,17 @@ def _q3_cpu_gpu_quiet_window(launch, *, on_wait, should_stop,
     lock.parent.mkdir(parents=True, exist_ok=True)
     with lock.open("a") as handle:
         next_report = 0.0
+        locked = False
         while True:
             if should_stop():
                 raise loop.TailRefused("stopped before q3 CPU measurement acquired GPU quiet window")
             try:
                 fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                locked = True
                 break
             except BlockingIOError:
+                if claim.device_holder_honours_q3(lock):
+                    break  # its measurements need the q3 claim this run already holds
                 if time.monotonic() >= next_report:
                     on_wait()
                     next_report = time.monotonic() + HEARTBEAT_S
@@ -191,7 +204,60 @@ def _q3_cpu_gpu_quiet_window(launch, *, on_wait, should_stop,
         try:
             yield
         finally:
-            fcntl.flock(handle, fcntl.LOCK_UN)
+            if locked:
+                fcntl.flock(handle, fcntl.LOCK_UN)
+
+
+@contextmanager
+def _gpu_q3_measurement_window(gpu_run: bool, *, on_wait, should_stop,
+                               policy=CPU_MEASUREMENT_GPU_QUIET_DEFAULT,
+                               already_held: bool = False, hold=None):
+    """A GPU measurement takes the q3 CPU region claim for its body only.
+
+    The other half of the quiet window (operator 2026-10-04: GPU benches and CPU
+    measurements never overlap). `hold` defaults to `claim.hold_q3_measurement`
+    (claims `88-95`; see REGION-SIBLING-1 there). A busy q3 is waited on -- never
+    pre-empted -- with `on_wait` reported once per heartbeat; a stop request before
+    acquisition refuses the measurement. No-op under "off", for a CPU run, or when
+    this run already holds a CPU claim covering q3.
+    """
+    if policy not in CPU_MEASUREMENT_GPU_QUIET_POLICIES:
+        raise ValueError(f"unknown CPU-measurement GPU quiet policy {policy!r}")
+    if policy == CPU_MEASUREMENT_GPU_QUIET_OFF or not gpu_run or already_held:
+        yield
+        return
+    hold = claim.hold_q3_measurement if hold is None else hold
+    next_report = 0.0
+    with ExitStack() as stack:
+        while True:
+            if should_stop():
+                raise loop.TailRefused("stopped before GPU measurement acquired the q3 CPU claim")
+            try:
+                stack.enter_context(hold())
+                break
+            except Exception as exc:  # noqa: BLE001 -- only a busy owner is retried
+                if not claim.region_lock_busy(exc):
+                    raise
+                if time.monotonic() >= next_report:
+                    on_wait()
+                    next_report = time.monotonic() + HEARTBEAT_S
+                time.sleep(0.5)
+        yield
+
+
+@contextmanager
+def _reentrant(depth: "threading.local", window):
+    """Enter `window` only at the outermost level of this thread's nesting."""
+    level = getattr(depth, "level", 0)
+    depth.level = level + 1
+    try:
+        if level:
+            yield
+        else:
+            with window:
+                yield
+    finally:
+        depth.level = level
 
 
 def _candidate_quant_tokens(dominant_quant: str | None) -> list[str]:
@@ -1619,6 +1685,17 @@ def main(argv: list[str] | None = None) -> int:
                              "throughput under it (llama-server), not just the bench screen")
     parser.add_argument("--serving-pairs", type=int, default=5,
                         help="paired serving A/B runs per bundle at the serving gate")
+    parser.add_argument("--keep-dimensions", default="",
+                        help="G5 (2026-10-04): comma-separated dimensions a keep must not "
+                             "regress, extending the cross-workload keep gate: "
+                             + ",".join(surface_validation.KEEP_DIMENSIONS) + ". Undeclared "
+                             "dimensions are skipped and recorded; a declared dimension with "
+                             "no measurement refuses the keep (default: none declared)")
+    parser.add_argument("--keep-capacity-limit-gib", type=float, default=None,
+                        help="capacity ceiling for the 'capacity' keep dimension: peak VRAM "
+                             "(GPU; default 62 GiB, stack-owner ceiling) or peak RSS (CPU; "
+                             "no default) of the candidate launch at the recipe's context "
+                             "and slots")
     parser.add_argument("--serving-instrument", default=serving.LEGACY_INSTRUMENT,
                         choices=(serving.LEGACY_INSTRUMENT, serving.MATCHED_INSTRUMENT),
                         help="matched_process_v2 uses counterbalanced process pairs and a matching floor; "
@@ -2063,13 +2140,14 @@ def main(argv: list[str] | None = None) -> int:
                              "the whole batch, byte for byte (default: %(default)s)")
     parser.add_argument("--cpu-measurement-gpu-quiet",
                         choices=CPU_MEASUREMENT_GPU_QUIET_POLICIES,
-                        default=CPU_MEASUREMENT_GPU_QUIET_OFF,
-                        help="whether a CPU measurement window also takes the MI210 device "
-                             "claim (mi210_0). off = a CPU-backend run never acquires a GPU "
-                             "claim; q3 = hold it around each measurement whose CPU list "
-                             "touches q3 (the GPU host threads' SMT siblings), released "
-                             "between measurements -- excludes claim-honouring GPU work "
-                             "only, never production :8083 traffic (default: %(default)s)")
+                        default=CPU_MEASUREMENT_GPU_QUIET_DEFAULT,
+                        help="CPU/GPU measurement quiet window (operator 2026-10-04: GPU "
+                             "benches and CPU measurements never overlap). q3 = a CPU "
+                             "measurement whose CPU list touches q3 (the GPU host threads' "
+                             "SMT siblings) holds the MI210 device claim (mi210_0), and a "
+                             "GPU measurement holds the q3 CPU region claim, each for the "
+                             "measurement only -- never production :8083 traffic; off = "
+                             "neither (explicit opt-out) (default: %(default)s)")
     parser.add_argument("--cpu-window-wait-bound-s", type=float,
                         default=cpu_window.DEFAULT_WAIT_BOUND_S,
                         help="how long a re-acquire waits on a peer before it is logged as "
@@ -2391,6 +2469,17 @@ def main(argv: list[str] | None = None) -> int:
     if args.heldout_calibration_only and args.cpu_calibrate_heldout is None:
         parser.error("--heldout-calibration-only requires --cpu-calibrate-heldout")
     cpu_launch = direct_launch if args.cpu_serving_launch else None
+    try:
+        keep_dims = surface_validation.parse_dimensions(args.keep_dimensions)
+    except surface_validation.SurfaceValidationRefused as exc:
+        parser.error(str(exc))
+    if keep_dims and not direct_launch:
+        parser.error("--keep-dimensions requires a selected serving launch")
+    #: Measurement hooks for declared non-primary throughput dimensions (long_decode,
+    #: prefill_at_depth, ...): name -> callable(worker) returning a serving A/B row.
+    #: The long-context surface registers here; an unregistered declared dimension is
+    #: PENDING and refuses the keep.
+    keep_dimension_measures: dict = {}
     # The selected canonical serving route, not the spelling of its campaign ID,
     # carries runtime capability. Enrolled targets were checked for ready status,
     # backend and exact serving-workload compatibility above; legacy CPU serving
@@ -2579,7 +2668,17 @@ def main(argv: list[str] | None = None) -> int:
     # The workload must dispatch the kernels production dispatches. Refuse loudly.
     census = (workload_contract.read_census(args.model) if direct_launch
               else workload_contract.verify_workload(args.model))
-    recipe = (build_recipe.NATIVE_CPU_RECIPE if cpu_launch else build_recipe.HOUSE_GPU_RECIPE)
+    # G6 (2026-10-04): a SELECTED GPU serving target builds with the recipe read back
+    # from production v10 (ROCm 6.2, rocWMMA FA on); the legacy bench screen keeps the
+    # house recipe so its epoch identity does not move.
+    recipe = (build_recipe.NATIVE_CPU_RECIPE if cpu_launch
+              else build_recipe.GFX90A_ROCM62_V10_RECIPE if direct_launch
+              else build_recipe.HOUSE_GPU_RECIPE)
+    if recipe is build_recipe.GFX90A_ROCM62_V10_RECIPE:
+        rocm_ok, rocm_seen = build_recipe.check_rocm_version()
+        if not rocm_ok:
+            parser.error(f"{recipe.name} requires ROCm {build_recipe.ROCM_VERSION_REQUIRED}; "
+                         f"host reports {rocm_seen}")
     print(f"workload  {args.model.name}: n_embd={census.n_embd}, "
           f"dominant {census.dominant_quant}")
     print(f"recipe    {recipe.name} {recipe.sha256()[:12]}  "
@@ -3020,6 +3119,8 @@ def main(argv: list[str] | None = None) -> int:
             "kernel_hotspots": [row.to_dict() for row in hotspot_rows],
             **({"cpu_profile": dict(cpu_profile_observation)} if cpu_launch else {}),
             **({"node_profile": dict(node_profile_observation)} if cpu_launch else {}),
+            **({"gpu_serving_profile": dict(gpu_profile_observation)}
+               if direct_launch and not cpu_launch else {}),
             "prior_experiments": prior_experiments(args, epoch, measurement_epoch),
             **({"pending_accepted_hypotheses": list(pending_view[0])}
                if pending_view[0] else {}),
@@ -3063,7 +3164,7 @@ def main(argv: list[str] | None = None) -> int:
                                              "recipe": feedback_anchor[0].to_dict(),
                                              "requests": str(args.frozen_prompts),
                                              "build_recipe": recipe.to_dict(),
-                                             "hotspot_status": "selected GPU serving profile unavailable",
+                                             "hotspot_status": gpu_profile_observation["status"],
                                              "enrollment": selected_identity}}
                if direct_launch else {"target": {"scope": "legacy GPU screen, NOT enrolled serving recipe",
                                              "enrollment": selected_identity}}
@@ -3174,6 +3275,14 @@ def main(argv: list[str] | None = None) -> int:
                     return (full.read_text(encoding="utf-8") if full.is_file() else None, head,
                             archive._git(worker.worktree, "diff", "-U0", "HEAD", "--", path))
                 file_texts = {path: _texts(path) for path in changed}
+            gpu_paths = [path for path in changed if path.startswith("ggml/src/ggml-cuda/")]
+            if gpu_paths:
+                # GPU-POOL-1 (2026-10-04): device memory kept across HIP-graph captures
+                # must not come from ctx.pool() (gates.gpu_graph_pool_hold_refusal).
+                pool_refusal = gates.gpu_graph_pool_hold_refusal(archive._git(
+                    worker.worktree, "diff", "-U0", "HEAD", "--", *gpu_paths))
+                if pool_refusal is not None:
+                    return False, [gates.Verdict("op_scope", False, pool_refusal)]
             scope = gates.affected_op_scope(changed + untracked,
                                              target_surface=hypothesis.target_surface,
                                              target_symbol=hypothesis.target_symbol,
@@ -3442,7 +3551,7 @@ def main(argv: list[str] | None = None) -> int:
             # The anchor build is SHARED across lanes and only ever read, so it needs
             # no per-lane copy; the candidate binary is per lane because each lane
             # built it from its own patch.
-            return bench.compare(
+            return measured_bench_compare(
                 bench.Arm("anchor", anchor_build[0] / "bin" / "llama-bench"),
                 bench.Arm("candidate", worker.build_dir / "bin" / "llama-bench"),
                 args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor,
@@ -3570,7 +3679,7 @@ def main(argv: list[str] | None = None) -> int:
         production-shaped model, the confirm surface's own keyed floor."""
         def measure(surface, floor_pct):
             cpp, ctg, cub = bench.SURFACES[surface]
-            return bench.compare(
+            return measured_bench_compare(
                 bench.Arm("anchor", anchor_build[0] / "bin" / "llama-bench"),
                 bench.Arm("candidate", worker.build_dir / "bin" / "llama-bench"),
                 args.confirm_model, pp=cpp, tg=ctg, pairs=args.confirm_pairs,
@@ -3581,6 +3690,11 @@ def main(argv: list[str] | None = None) -> int:
     hotspot_rows: list = []
     cpu_profile_observation = {"status": "not_collected"}
     node_profile_observation = {"status": "not_collected"}
+    #: G2 (2026-10-04): the selected GPU serving target's own rocprofv3 profile.
+    gpu_profile_observation = {"status": "not_collected"}
+    #: Seam for the long-context surface (`gpu_serving_profile.LongContextHook`); None
+    #: records long_decode / prefill_at_depth as skipped with that reason.
+    gpu_long_context_hook: list = [None]
 
     def node_reprofile(profile_arm) -> None:
         """The SECOND, out-of-band capture of the same anchor and the same requests.
@@ -3703,7 +3817,29 @@ def main(argv: list[str] | None = None) -> int:
             node_reprofile(profile_arm)
             return
         if direct_launch:
-            print("profile   selected GPU serving profile unavailable; legacy bench profile not substituted")
+            # G2: the target's OWN server under rocprofv3 (whole life, windows cut by
+            # timestamp marks), one anchor launch per anchor change, cached by anchor +
+            # execution digest + request digest. mi210_0 is held for this run's life;
+            # the q3 measurement claim is taken around the launch (quiet window).
+            gpu_profile_observation.clear()
+            gpu_profile_observation["status"] = "unavailable"
+            publish("running", latest, step="GPU serving profile (rocprofv3, one anchor launch)")
+            try:
+                with cpu_measurement_window():
+                    view, rows = hotspots.serving_profile(
+                        _cpu_arm(direct_launch, anchor_build[0]), frozen_requests,
+                        store=args.store, anchor_commit=current_anchor_commit[0],
+                        long_context=gpu_long_context_hook[0])
+            except (hotspots.ProfileFailed, OSError, ValueError,
+                    subprocess.SubprocessError) as exc:
+                gpu_profile_observation["reason"] = f"{type(exc).__name__}: {exc}"[:1024]
+                print(f"profile   GPU SERVING UNAVAILABLE ({exc}); the planner is told so; "
+                      f"legacy bench profile not substituted")
+                return
+            gpu_profile_observation.update(view)
+            hotspot_rows[:] = rows
+            print(f"profile   GPU serving {'reused' if view.get('cached') else 'captured'}; "
+                  f"primary {view['primary_window']}; {len(rows)} kernels; record {view['record']}")
             return
         try:
             rows = hotspots.profile(anchor_build[0] / "bin" / "llama-bench",
@@ -3740,11 +3876,27 @@ def main(argv: list[str] | None = None) -> int:
     def should_stop() -> bool:
         return stopping["asked"] or pool.stop_requested(args.store)
 
+    #: Per-thread nesting depth of the quiet window: a measurement called from inside
+    #: another's window must not re-acquire a flock this process already holds (flock
+    #: conflicts between open file descriptions of ONE process: a self-deadlock).
+    quiet_depth = threading.local()
+
     def cpu_measurement_window():
-        quiet = _q3_cpu_gpu_quiet_window(
-            cpu_launch, should_stop=should_stop, policy=args.cpu_measurement_gpu_quiet,
-            on_wait=lambda: publish("running", latest,
-                step="q3 CPU measurement waiting for MI210 GPU item to release"))
+        """The measurement window of THIS run, CPU or GPU (quiet-window ruling above)."""
+        if cpu_launch:
+            quiet = _q3_cpu_gpu_quiet_window(
+                cpu_launch, should_stop=should_stop, policy=args.cpu_measurement_gpu_quiet,
+                on_wait=lambda: publish("running", latest,
+                    step="q3 CPU measurement waiting for MI210 GPU item to release"))
+        else:
+            quiet = _gpu_q3_measurement_window(
+                True, should_stop=should_stop, policy=args.cpu_measurement_gpu_quiet,
+                already_held=any(isinstance(row, dict) and row.get("device_id") == "cpu"
+                                 and "q3" in (row.get("regions") or ())
+                                 for row in original_claims),
+                on_wait=lambda: publish("running", latest,
+                    step="GPU measurement waiting for the q3 CPU region (a CPU measurement holds it)"))
+        quiet = _reentrant(quiet_depth, quiet)
         if cpu_window_ref[0] is None:
             return quiet
         # A CPU measurement never runs on a yielded claim, wherever it is called from.
@@ -3757,6 +3909,11 @@ def main(argv: list[str] | None = None) -> int:
     def measured_serving_calibrate(*args_, **kwargs_):
         with cpu_measurement_window():
             return serving.calibrate_floor(*args_, **kwargs_)
+
+    def measured_bench_compare(*args_, **kwargs_):
+        # Legacy GPU bench A/Bs are GPU measurements too: same q3 window.
+        with cpu_measurement_window():
+            return bench.compare(*args_, **kwargs_)
 
     anchor_guard_seen: list = []
     #: (monotonic time, inside-floor) of this run's last MEASURED anchor-guard A/A;
@@ -3828,7 +3985,7 @@ def main(argv: list[str] | None = None) -> int:
             # hash-proven), but the bundle must carry the session-health note.
             note=next((g["detail"] for g in anchor_guard_seen[-1:]
                        if g.get("excursion")), None),
-            compare=lambda base, champ: bench.compare(
+            compare=lambda base, champ: measured_bench_compare(
                 bench.Arm("production_v9", base / "bin" / "llama-bench"),
                 bench.Arm("champion", champ / "bin" / "llama-bench"),
                 headline_model, pp=pp, tg=tg, pairs=args.pairs,
@@ -3880,7 +4037,7 @@ def main(argv: list[str] | None = None) -> int:
             compare=lambda promoted, fresh: (
                 cpu_anchor_guard_compare(promoted, fresh)
                 if direct_launch and source_instrument and source_floor_refresh[0]
-                else cpu_compare(promoted, fresh)) if direct_launch else bench.compare(
+                else cpu_compare(promoted, fresh)) if direct_launch else measured_bench_compare(
                 bench.Arm("promoted_anchor", promoted / "bin" / "llama-bench"),
                 bench.Arm("fresh_champion", fresh / "bin" / "llama-bench"),
                 args.model, pp=pp, tg=tg, pairs=args.pairs, noise_floor_pct=floor,
@@ -4077,7 +4234,7 @@ def main(argv: list[str] | None = None) -> int:
         # the number the fire threshold reads and the serving gate will be asked to confirm.
         def compare_bundle() -> dict:
             return (cpu_compare(cor_build[0], anchor_build[0], rebind_feedback=False).to_dict()
-                    if direct_launch else bench.compare(
+                    if direct_launch else measured_bench_compare(
                         bench.Arm("champion_of_record", cor_build[0] / "bin" / "llama-bench"),
                         bench.Arm("accumulator", anchor_build[0] / "bin" / "llama-bench"),
                         args.model, pp=pp, tg=tg, pairs=args.pairs,
@@ -4775,6 +4932,52 @@ def main(argv: list[str] | None = None) -> int:
                     comparison.effect - heldout_row.effect]
                 if not verdict["promoted"]:
                     raise loop.ConfirmVetoed(verdict["reason"])
+            if direct_launch:
+                # G5: extend the cross-workload keep gate across every tracked
+                # dimension (surface_validation.keep_dimensions). Always recorded in the
+                # store; it enters the keep evidence and can refuse only when the
+                # target declares dimensions.
+                primary_dim = surface_validation.primary_dimension(serving_recipe.np)
+                measured_dims = {}
+                for name, measure in keep_dimension_measures.items():
+                    if name in keep_dims and name != primary_dim:
+                        try:
+                            with cpu_measurement_window():
+                                measured_dims[name] = measure(worker)
+                        except Exception as exc:  # noqa: BLE001 -- recorded, fail closed
+                            measured_dims[name] = {"error": f"{type(exc).__name__}: {exc}"}
+                capacity_record = None
+                if "capacity" in keep_dims:
+                    # Peak footprint over the MIXED sequence (n_max:0 alternation, varying
+                    # batch), never one steady shape (GPU-POOL-1, capacity_probe.py).
+                    from . import capacity_probe
+                    backend = "cpu" if cpu_launch else "gpu"
+                    limit = (int(args.keep_capacity_limit_gib * 2**30)
+                             if args.keep_capacity_limit_gib is not None
+                             else surface_validation.GPU_CAPACITY_CEILING_BYTES
+                             if backend == "gpu" else None)
+                    probe_launch = _cpu_arm(direct_launch, worker.build_dir)
+                    try:
+                        with cpu_measurement_window():
+                            peaks = capacity_probe.run(
+                                argv=probe_launch.argv, env=dict(probe_launch.launch_env),
+                                port=probe_launch.port, backend=backend,
+                                sequence=capacity_probe.mixed_sequence(frozen_requests))
+                        capacity_record = capacity_probe.evaluate(
+                            peaks, limit_bytes=limit, backend=backend,
+                            ctx=getattr(serving_recipe, "ctx", None), np=serving_recipe.np)
+                    except Exception as exc:  # noqa: BLE001 -- recorded, fail closed
+                        capacity_record = {"error": f"{type(exc).__name__}: {exc}"}
+                dims_record = surface_validation.keep_dimensions(
+                    declared=keep_dims, primary=primary_dim, comparisons=measured_dims,
+                    capacity=capacity_record)
+                surface_validation.retain_dimensions(args.store, hypothesis.mechanism_id,
+                                                     dims_record)
+                if keep_dims:
+                    evidence["keep_dimensions"] = dims_record
+                    if not dims_record["passed"]:
+                        raise loop.ConfirmVetoed("KEEP_CANDIDATE-dimensions: "
+                                                 + dims_record["reason"])
             cross = None
             if lane_binding is not None:
                 # LANE BINDING (lane_targets.py): a keep touching a path shared with
@@ -5476,6 +5679,10 @@ def main(argv: list[str] | None = None) -> int:
                 if not cpu_launch:
                     receipt = ownership.enter_context(claim.hold())
                     original_claims.append(receipt)
+                    if args.cpu_measurement_gpu_quiet == CPU_MEASUREMENT_GPU_QUIET_Q3:
+                        # Removed BEFORE the device flock on unwind (LIFO). A CPU run
+                        # holding q3 need not wait on this holder (claim.py).
+                        ownership.enter_context(claim.q3_honouring_marker())
                 if cpu_win is not None:
                     # Runs FIRST on unwind: the claim's close observation needs it held.
                     ownership.callback(cpu_win.teardown)
@@ -5498,6 +5705,12 @@ def main(argv: list[str] | None = None) -> int:
                       + ("(CPU measurements take no GPU claim)"
                          if args.cpu_measurement_gpu_quiet == CPU_MEASUREMENT_GPU_QUIET_OFF
                          else f"({claim.DEVICE_ID} held during q3 CPU measurements only)"))
+            else:
+                print(f"gpu quiet {args.cpu_measurement_gpu_quiet} "
+                      + ("(GPU measurements take no CPU region claim)"
+                         if args.cpu_measurement_gpu_quiet == CPU_MEASUREMENT_GPU_QUIET_OFF
+                         else f"(q3 CPU region claimed as {claim.GPU_Q3_MEASUREMENT_CPU_LIST} "
+                              f"during GPU measurements only)"))
             print()
             # R23-44: snapshot the starting champion into the protected champion-of-record slot
             # BEFORE the accumulator can advance and prune. The serving gate reads cor_build as

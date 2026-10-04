@@ -177,6 +177,59 @@ def profile(binary: Path, model: Path, *, pp: int, tg: int,
         return parse_kernel_trace(traces[0].read_text(encoding="utf-8"), limit=limit)
 
 
+def _free_port() -> int:
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        return int(probe.getsockname()[1])
+
+
+def serving_profile(launch, frozen_requests, *, store: Path, anchor_commit: str,
+                    long_context=None, port: int | None = None, runner=None,
+                    resources=None) -> tuple[dict, list[Hotspot]]:
+    """The SELECTED GPU serving target's own profile (G2): `gpu_serving_profile`.
+
+    The `llama-bench` path above stays for the legacy screen. A serving target is
+    profiled by launching its own server argv under rocprofv3 for its whole life and
+    cutting short/long/concurrent decode and prefill windows out of that one trace;
+    ONE launch per anchor change, cached by anchor commit + launch execution digest +
+    request digest. The caller holds the mi210_0 device claim and the q3 measurement
+    claim around this call. Returns (planner view, Hotspot rows of the primary window).
+    """
+    from . import gpu_serving_profile as gsp
+    plans, skipped = gsp.plan_windows(frozen_requests, np=int(launch.template.np),
+                                      hook=long_context, launch=launch)
+    key = gsp.cache_key(anchor_commit=anchor_commit,
+                        execution_digest=launch.execution_digest,
+                        request_digest_=gsp.request_digest(plans),
+                        hook_identity=getattr(long_context, "identity", None))
+    body = gsp.cached(store, key)
+    reused = body is not None
+    if body is None:
+        rocprof = _resolve_rocprof()
+        if rocprof is None:
+            raise gsp.ProfileFailed("no rocprofv3 found; tried " + ", ".join(ROCPROF_CANDIDATES))
+        library = Path(launch.build_dir) / "bin" / "libggml-hip.so"
+        resource_note = "code_object"
+        if resources is None:
+            try:
+                resources = gsp.kernel_resources(library)
+            except (OSError, ValueError, gsp.ProfileFailed, subprocess.SubprocessError) as exc:
+                resources, resource_note = {}, f"unavailable: {type(exc).__name__}: {exc}"[:256]
+        port = port if port is not None else _free_port()
+        body = (runner or gsp.run)(
+            command_argv=list(launch.command_argv), launch_env=dict(launch.launch_env),
+            port=port, plans=plans, out_dir=gsp.store_dir(store, key) / "run",
+            rocprof=rocprof, profiler_env=_profiler_env, resources=resources)
+        body = {**body, "anchor_commit": anchor_commit, "skipped": dict(skipped),
+                "execution_digest": launch.execution_digest, "resources": resource_note}
+        gsp.retain(store, key, body)
+    view = gsp.observation({**body, "key": key}, record=gsp.store_dir(store, key) / "profile.json",
+                           np=int(launch.template.np), skipped=skipped)
+    view.update(anchor_commit=anchor_commit, cached=reused)
+    return view, gsp.hotspot_rows(view)
+
+
 __all__ = ["Hotspot", "ProfileFailed", "ROCPROF", "ROCPROF_CANDIDATES",
            "ROCPROF_SUPPORT_LIBS",
-           "parse_kernel_trace", "profile"]
+           "parse_kernel_trace", "profile", "serving_profile"]

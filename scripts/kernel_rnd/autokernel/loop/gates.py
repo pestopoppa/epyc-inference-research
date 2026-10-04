@@ -1394,6 +1394,83 @@ def admit_cpu_multi_route(paths, target_symbol: str, file_texts
         for route, refusal in refusals)
 
 
+# ------------------------------------------------------------------ static GPU keep rules
+#
+# GPU-POOL-1 (stack owner, 2026-10-04). v10's AutoKernel keep `mmvq_q8_1_graph_cache`
+# (dd161d519, c0d42d81c, 8a3049beb) held `ggml_cuda_pool_alloc` buffers from the SHARED
+# legacy pool (`ctx.pool()`, GGML_HIP_NO_VMM: best-fit, whole-buffer, 256 slots, never
+# shrinks) from one HIP-graph capture until the next. Capacity cost ~+0.29 GiB per
+# n_max:0 alternation (:8083 51.69 -> 59.77 GiB, KVU-16h), and a latent correctness
+# hazard: capturing graph B returned graph A's baked-in buffers to the pool, which could
+# then cudaFree memory a live graph instance still references. Reference fix: a private
+# per-context arena rewound at capture, freed at context destruction
+# (experimental/mmvq-graph-cache-pool-20261004, 656c9a66b). A stack-local
+# `ggml_cuda_pool_alloc<T> x(ctx.pool(), n)` released at the end of the op stays legal.
+_GPU_GRAPH_LIFETIME = re.compile(
+    r"\b(?:capture\w*|\w*graph\w*|hipStreamGetCaptureInfo\w*|cudaStreamGetCaptureInfo\w*)\b",
+    re.IGNORECASE)
+_GPU_PERSISTENT_POOL_HOLD = (
+    (re.compile(r"\b(?:unique_ptr|shared_ptr|optional)\s*<\s*ggml_cuda_pool_alloc\b"),
+     "an owning holder of a ggml_cuda_pool_alloc"),
+    (re.compile(r"\bnew\s+ggml_cuda_pool_alloc\b"), "a heap ggml_cuda_pool_alloc"),
+    (re.compile(r"\bstatic\b[^;]*\bggml_cuda_pool_alloc\b"), "a static ggml_cuda_pool_alloc"),
+    (re.compile(r"\bggml_cuda_pool\s*\*\s*\w+\s*(?:=|;)"), "a stored ggml_cuda_pool pointer"),
+    (re.compile(r"=\s*&\s*\w+(?:->|\.)pool\s*\("), "a stored &ctx.pool() address"),
+)
+
+
+def _added_code_lines(patch_text: str) -> list[str]:
+    """Added lines of a unified diff with // and /* */ comments removed."""
+    out, in_block = [], False
+    for raw in patch_text.splitlines():
+        if not raw.startswith("+") or raw.startswith("+++"):
+            continue
+        line, in_block = _strip_code_line(raw[1:], in_block)
+        if line.strip():
+            out.append(line)
+    return out
+
+
+_GPU_STATIC_OBJECT = re.compile(
+    r"\bstatic\s+(?:thread_local\s+)?[A-Za-z_][\w:<>,\s]*?\s+([A-Za-z_]\w*)\s*(?:;|=|\{)")
+
+
+def _gpu_persistent_holds(lines: list[str]):
+    """(line, what) for every persistent hold of pool memory in the added lines."""
+    for line in lines:
+        for pattern, what in _GPU_PERSISTENT_POOL_HOLD:
+            if pattern.search(line):
+                yield line, what
+    # A pool allocation's ADDRESS retained in static storage (dd161d519 shape:
+    # `cache.q8_1 = src1_q8_1.get();` into a `static thread_local` cache) outlives the
+    # RAII scope that returns the buffer to the pool.
+    statics = {m.group(1) for line in lines for m in [_GPU_STATIC_OBJECT.search(line)] if m}
+    for name in statics:
+        retained = re.compile(rf"\b{re.escape(name)}\s*(?:\.|->)\s*\w+\s*=(?!=)[^;]*\.get\s*\(\s*\)")
+        for line in lines:
+            if retained.search(line):
+                yield line, "a pool-allocation address (.get()) retained in static storage"
+
+
+def gpu_graph_pool_hold_refusal(patch_text: str | None) -> str | None:
+    """GPU-POOL-1: refuse device memory kept alive across graph captures from ctx.pool()."""
+    if not patch_text:
+        return None
+    lines = _added_code_lines(patch_text)
+    if not any(_GPU_GRAPH_LIFETIME.search(line) for line in lines):
+        return None
+    for line, what in _gpu_persistent_holds(lines):
+        return ("GPU-POOL-1: the patch keeps device memory alive across HIP-graph "
+                f"captures with {what} (`{line.strip()[:120]}`). Memory a captured "
+                "graph keeps must not come from ctx.pool()/ggml_cuda_pool_alloc (the "
+                "shared NO_VMM legacy pool: +0.29 GiB per n_max:0 alternation in "
+                "v10's mmvq_q8_1_graph_cache, and a released buffer a live graph still "
+                "references can be freed). Use a private per-context arena or an "
+                "explicit owned allocation freed at context destruction (reference: "
+                "656c9a66b on experimental/mmvq-graph-cache-pool-20261004)")
+    return None
+
+
 def affected_op_scope(paths: tuple[str, ...], *, target_surface: str,
                       target_symbol: str, source_text: str | None = None,
                       patch_text: str | None = None,
@@ -1411,6 +1488,12 @@ def affected_op_scope(paths: tuple[str, ...], *, target_surface: str,
     if not changed or len(changed) != len(paths) or target_surface not in changed:
         return Verdict("op_scope", False,
                        "actual changed paths are empty, repeated or omit the target surface")
+    if any(path.startswith("ggml/src/ggml-cuda/") for path in changed):
+        patches = [patch_text, *((texts[2] if texts and len(texts) > 2 else None)
+                                 for texts in (file_texts or {}).values())]
+        pool_refusal = gpu_graph_pool_hold_refusal("\n".join(p for p in patches if p))
+        if pool_refusal is not None:
+            return Verdict("op_scope", False, pool_refusal)
     if changed <= {"ggml/src/ggml-cuda/gated_delta_net.cu",
                    "ggml/src/ggml-cuda/gated_delta_net.cuh"} and \
             "gated_delta_net" in target_symbol.lower():
@@ -1851,5 +1934,5 @@ __all__ = ["BACKEND_OPS_SELECTORS", "BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S",
            "backend_ops_selector", "compiles",
            "cpu_source_route", "deterministic",
            "affected_op_scope", "check_cpu_gdn_reference", "check_cpu_iqk_reference",
-           "check_cpu_route_reference", "no_fallback_dispatch",
-           "op_correctness", "run_all"]
+           "check_cpu_route_reference", "gpu_graph_pool_hold_refusal",
+           "no_fallback_dispatch", "op_correctness", "run_all"]

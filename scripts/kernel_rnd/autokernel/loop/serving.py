@@ -44,8 +44,8 @@ from typing import TYPE_CHECKING
 import urllib.request
 import urllib.error
 
-from . import (headline_admissibility, kernel_coverage, lifecycle_observation, procguard,
-               residency, status)
+from . import (headline_admissibility, hip_launch_proof, kernel_coverage,
+               lifecycle_observation, procguard, residency, status)
 from . import native_server_response as server_response
 from .loop import MeasurementFailed, MeasurementInvalid
 
@@ -776,6 +776,14 @@ def verify_process_environ(recipe: Recipe, pid: int, *,
 # No second threshold is defined here.
 # ---------------------------------------------------------------------------
 
+def argv_binary(argv: Sequence[str]) -> str:
+    """The server executable inside a (possibly topology-prefixed) launch argv."""
+    for token in argv:
+        if Path(str(token)).name == "llama-server":
+            return str(token)
+    return str(argv[0])
+
+
 def covers_request_phase(record: Mapping) -> bool:
     """Did the sampling window actually ENCLOSE the phase it claims to be evidence about?
 
@@ -835,6 +843,13 @@ def _refuse_if_not_resident(recipe: Recipe, record: Mapping, *, backend: str = "
     it carries `unproven` and travels with the number, so a reader can refuse it later
     with the whole record in hand.
     """
+    proof = record.get("hip_proof") or {}
+    if backend == "gpu" and proof.get("status") == hip_launch_proof.REFUTED:
+        raise ServingNotResident(
+            f"{recipe.describe()}: HIP LAUNCH REFUTED -- legs {proof.get('legs')}; "
+            f"linkage {str((proof.get('linkage') or {}).get('tail', ''))[-160:]!r}; "
+            f"foreign ggml {(proof.get('maps') or {}).get('foreign')}. This launch did not "
+            f"run this build on the device -- refusing to file its number as a GPU result.")
     if record.get("status") == RESIDENCY_PROVEN:
         return
     if (record.get("status") == RESIDENCY_NOT_APPLICABLE and backend == "cpu"
@@ -1014,6 +1029,7 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
     window_start = time.time()
     request_start: float | None = None
     request_end: float | None = None
+    hip_maps = None
     try:
         if cpu_profile_capture is None:
             sampler = residency.Sampler()
@@ -1028,6 +1044,10 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                                            else coverage_sink.handle),
                                    env=launch_env)
             process_pid = srv.pid
+            # G6: own-PID KFD VRAM (a HIP-proof leg) on GPU launches only; a CPU
+            # residency record is unchanged.
+            if backend == "gpu" and callable(getattr(sampler, "watch_pid", None)):
+                sampler.watch_pid(srv.pid)
             observe("attach_target", srv.pid)
             # Placement is an overlapping launcher marker inside the load window;
             # load itself remains open until the health marker below.
@@ -1058,6 +1078,8 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                     verify_env_readback(
                         recipe, srv.pid,
                         expectations=resolved_recipe.readback_expectations)
+                if backend == "gpu":
+                    hip_maps = hip_launch_proof.mapped_ggml(srv.pid, Path(build_dir) / "bin")
 
                 def one(i: int, phase: str) -> tuple:
                     if frozen_requests is None:
@@ -1220,6 +1242,12 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                                                window_end=window_end,
                                                request_start=request_start,
                                                request_end=request_end, backend=backend)
+                    if backend == "gpu":
+                        binary = Path(argv_binary(argv))
+                        record["hip_proof"] = hip_launch_proof.fold(
+                            record, maps=hip_maps,
+                            link=hip_launch_proof.linkage(
+                                binary, dict(launch_env).get("LD_LIBRARY_PATH")))
                     if cpu_observer is not None:
                         try:
                             record["cpu_lifecycle"] = cpu_observer.observation
