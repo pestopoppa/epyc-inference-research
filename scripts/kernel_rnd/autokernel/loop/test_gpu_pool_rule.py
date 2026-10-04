@@ -102,3 +102,36 @@ def test_scope_gate_refuses_the_cuda_patch_before_build():
                                        target_surface="ggml/src/ggml-cuda/mmvq.cu",
                                        target_symbol="mul_mat_vec_q", patch_text=PRIVATE_ARENA)
     assert admitted == ("MUL_MAT", "MUL_MAT_ID")
+
+
+# ---- multi-row verify routes (27B GPU verify campaign, 2026-10-04) ----------------------
+
+@pytest.mark.parametrize("path,symbol", [
+    ("ggml/src/ggml-cuda/mmvq.cu", "ggml_cuda_should_use_mmvq"),
+    ("ggml/src/ggml-cuda/mmvq.cu", "calc_rows_per_block"),
+    ("ggml/src/ggml-cuda/mmvq.cuh", "MMVQ_MAX_BATCH_SIZE"),
+    ("ggml/src/ggml-cuda/mmq.cuh", "launch_mul_mat_q"),
+    ("ggml/src/ggml-cuda/mmq.cuh", "mul_mat_q_stream_k_fixup"),
+    ("ggml/src/ggml-cuda/mmq-config-cdna.cuh", "mmq_get_nwarps_device"),
+    ("ggml/src/ggml-cuda/mmq-load-tiles.cuh", "load_tiles_q8_0"),
+])
+def test_verify_path_matmul_routes_admit_the_mul_mat_suites(path, symbol):
+    assert gates.affected_op_scope((path,), target_surface=path, target_symbol=symbol) \
+        == ("MUL_MAT", "MUL_MAT_ID")
+
+
+@pytest.mark.parametrize("path,symbol", [
+    ("ggml/src/ggml-cuda/mmq.cuh", "unrelated_helper"),
+    ("ggml/src/ggml-cuda/ggml-cuda.cu", "ggml_cuda_mul_mat"),
+    ("ggml/src/ggml-cuda/mmq-config-ampere.cuh", "mmq_get_nwarps_device"),
+])
+def test_verify_path_routes_stay_closed_elsewhere(path, symbol):
+    verdict = gates.affected_op_scope((path,), target_surface=path, target_symbol=symbol)
+    assert isinstance(verdict, gates.Verdict) and not verdict.passed
+
+
+def test_verify_path_header_route_still_applies_gpu_pool_rule():
+    path = "ggml/src/ggml-cuda/mmq.cuh"
+    verdict = gates.affected_op_scope((path,), target_surface=path, target_symbol="launch_mul_mat_q",
+                                      patch_text=OWNED_POOL_HOLDER)
+    assert isinstance(verdict, gates.Verdict) and "GPU-POOL-1" in verdict.reason

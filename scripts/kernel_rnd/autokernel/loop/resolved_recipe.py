@@ -513,6 +513,9 @@ _CANONICAL_VALUE_FLAGS = frozenset({
     "--spec-draft-n-max", "--spec-draft-p-min", "--reasoning", "--slot-save-path", "--device", "-lv",
     "--device-draft", "-ngl", "-md", "-ngld",
     "--draft-p-min", "--threads-draft", "--log-colors", "--load-threads",
+    # Host-RAM prompt cache size (MiB), as production :8083 launches it. Server-side
+    # memory policy only; carried verbatim in the command and so in the execution digest.
+    "--cache-ram",
 })
 _CANONICAL_SWITCH_FLAGS = frozenset({
     "--jinja", "--mlock", "--no-mmap", "--kv-unified", "--no-kv-unified",
@@ -563,6 +566,8 @@ def _canonical_command(command: tuple[str, ...]) -> tuple[str, dict[str, str | b
         _canonical_int(parsed, "-lv")
     if "--threads-draft" in parsed:
         _canonical_int(parsed, "--threads-draft")
+    if "--cache-ram" in parsed:
+        _canonical_int(parsed, "--cache-ram")
     if "--load-threads" in parsed and _canonical_int(parsed, "--load-threads") < 0:
         raise ResolutionError("canonical --load-threads must be a non-negative integer")
     if "--log-colors" in parsed and parsed["--log-colors"] not in {"on", "off", "auto"}:

@@ -1598,6 +1598,25 @@ def gpu_graph_pool_hold_refusal(patch_text: str | None) -> str | None:
     return None
 
 
+#: Symbol markers admitted on `mmvq.cu` beyond `vec_dot_*` / `*mul_mat_vec*`: the
+#: MMVQ/MMQ crossover (`ggml_cuda_should_use_mmvq`) and the per-cell geometry
+#: (`calc_nwarps`, `calc_rows_per_block`) a multi-row GEMV changes.
+GPU_MMVQ_SYMBOL_MARKERS = ("mmvq", "calc_nwarps", "calc_rows_per_block")
+_GPU_MMQ_MARKERS = ("mul_mat_q", "mmq", "stream_k", "load_tiles", "vec_dot_")
+GPU_MATMUL_HEADER_ROUTES = {
+    "ggml/src/ggml-cuda/mmvq.cuh": ("mmvq", "mul_mat_vec"),
+    "ggml/src/ggml-cuda/mmq.cuh": _GPU_MMQ_MARKERS,
+    "ggml/src/ggml-cuda/mmq-config-cdna.cuh": _GPU_MMQ_MARKERS + ("config", "nwarps", "occupancy"),
+    "ggml/src/ggml-cuda/mmq-load-tiles.cuh": _GPU_MMQ_MARKERS,
+    "ggml/src/ggml-cuda/mmq-vec-dot.cuh": _GPU_MMQ_MARKERS,
+}
+
+
+def _gpu_matmul_symbol(symbol: str, markers: tuple[str, ...]) -> bool:
+    lowered = (symbol or "").lower()
+    return any(marker in lowered for marker in markers)
+
+
 def affected_op_scope(paths: tuple[str, ...], *, target_surface: str,
                       target_symbol: str, source_text: str | None = None,
                       patch_text: str | None = None,
@@ -1633,10 +1652,19 @@ def affected_op_scope(paths: tuple[str, ...], *, target_surface: str,
             target_symbol.startswith("vec_dot_"):
         return ("MUL_MAT", "MUL_MAT_ID")
     if changed == {"ggml/src/ggml-cuda/mmvq.cu"} and \
-            (target_symbol.startswith("vec_dot_") or "mul_mat_vec" in target_symbol):
+            (target_symbol.startswith("vec_dot_") or "mul_mat_vec" in target_symbol
+             or _gpu_matmul_symbol(target_symbol, GPU_MMVQ_SYMBOL_MARKERS)):
         return ("MUL_MAT", "MUL_MAT_ID")
     if changed == {"ggml/src/ggml-cuda/mmq.cu"} and \
             ("mul_mat_q" in target_symbol or "should_use_mmq" in target_symbol):
+        return ("MUL_MAT", "MUL_MAT_ID")
+    # Multi-row dequant-GEMV / verify-GEMM headers (27B GPU verify campaign, 2026-10-04):
+    # the MMVQ cell table, the MMQ kernel/stream-k launch, the CDNA tile config and the
+    # MMQ tile loaders/dot products. One header per patch; MUL_MAT + MUL_MAT_ID suites
+    # against the CPU reference, exactly as the .cu routes above.
+    if len(changed) == 1 and next(iter(changed)) in GPU_MATMUL_HEADER_ROUTES and \
+            _gpu_matmul_symbol(target_symbol,
+                               GPU_MATMUL_HEADER_ROUTES[next(iter(changed))]):
         return ("MUL_MAT", "MUL_MAT_ID")
     if changed == {"ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp"} and \
             target_symbol == "iqk_mul_mat_moe_rows" and \

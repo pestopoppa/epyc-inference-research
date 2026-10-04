@@ -2168,6 +2168,13 @@ def main(argv: list[str] | None = None) -> int:
                              "measurement only and takes no CPU region -- never production "
                              ":8083 traffic; off = neither (explicit opt-out); q3 = "
                              "deprecated spelling of lock (default: %(default)s)")
+    parser.add_argument("--gpu-cpu-region-claim", choices=("on", "off"), default="on",
+                        help="selected GPU serving target only: off = take NO orchestrator CPU "
+                             "region claim for the batch (the mi210_0 device claim is still "
+                             "held; builds stay confined to resources.cpu_logical by affinity). "
+                             "For a GPU window agreed with the stack owner as 'no region "
+                             "claims' (27B GPU slot 6b, 2026-10-04); implies no CPU window "
+                             "(default: %(default)s)")
     parser.add_argument("--cpu-window-wait-bound-s", type=float,
                         default=cpu_window.DEFAULT_WAIT_BOUND_S,
                         help="how long a re-acquire waits on a peer before it is logged as "
@@ -2572,6 +2579,11 @@ def main(argv: list[str] | None = None) -> int:
             and args.runtime_statistics is None:
         parser.error("strict runtime arm evidence requires explicit prospective --runtime-statistics")
     experimental = direct_launch is not None and args.experimental_branch is not None
+    if args.gpu_cpu_region_claim == "off" and (cpu_launch is not None
+                                               or not args.gpu_serving_launch):
+        parser.error("--gpu-cpu-region-claim off applies to a selected GPU serving target only")
+    #: GPU window without a CPU region claim (device claim only, like the legacy GPU route).
+    gpu_skip_cpu_claim = args.gpu_cpu_region_claim == "off"
     owned_cpu_list = None
     build_cpu_list = cpu_launch.template.cpu_list if cpu_launch else "96-183"
     build_jobs = min(64, cpu_launch.template.threads) if cpu_launch else 64
@@ -5906,7 +5918,8 @@ def main(argv: list[str] | None = None) -> int:
                   f"{exc}", file=sys.stderr)
 
     cpu_win = None
-    if args.cpu_window_yield == "on" and (owned_cpu_list is not None or cpu_launch):
+    if args.cpu_window_yield == "on" and not gpu_skip_cpu_claim \
+            and (owned_cpu_list is not None or cpu_launch):
         cpu_win = cpu_window.CpuWindow(
             campaign=(resolved_campaign.campaign_id if selected_target is not None
                       else "ak-loop"),
@@ -5931,7 +5944,8 @@ def main(argv: list[str] | None = None) -> int:
                           for index in range(int(args.workers))}
                          if lane_backends else None))
     cpu_window_ref[0] = cpu_win
-    if actor_routes and cpu_win is None and (owned_cpu_list is not None or cpu_launch):
+    if actor_routes and cpu_win is None and not gpu_skip_cpu_claim \
+            and (owned_cpu_list is not None or cpu_launch):
         # The loop holds its CPU claim for the whole batch: a routed planner on a CPU
         # role would wait on the loop's own regions (ORCHESTRATOR lock timeout, 503).
         conflicts = actor_passthrough.cpu_conflict(
@@ -6004,8 +6018,12 @@ def main(argv: list[str] | None = None) -> int:
                     from ..execution.cpu_region_claim import parse_cpu_list
                     os.sched_setaffinity(0, set(parse_cpu_list(owned_cpu_list)))
                     ownership.callback(os.sched_setaffinity, 0, previous_affinity)
-                    receipt = hold_cpu_claim(owned_cpu_list)
-                    original_claims.append(receipt)
+                    if not gpu_skip_cpu_claim:
+                        receipt = hold_cpu_claim(owned_cpu_list)
+                        original_claims.append(receipt)
+                    else:
+                        print(f"cpu claim none (--gpu-cpu-region-claim off; affinity "
+                              f"{owned_cpu_list} only)")
                 elif cpu_launch:
                     receipt = hold_cpu_claim(cpu_launch.template.cpu_list)
                     original_claims.append(receipt)

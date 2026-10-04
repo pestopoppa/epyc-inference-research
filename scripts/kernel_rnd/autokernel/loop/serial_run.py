@@ -335,6 +335,14 @@ LANE_BINDING_FLAGS = frozenset({"--lane-targets", "--lane"})
 LONGCTX_SURFACE_FLAGS = frozenset({"--longctx-surface"})
 
 
+#: The all-dimension keep gate (G5, `surface_validation.keep_dimensions`) and the GPU
+#: window's claim posture (27B GPU slot 6b, 2026-10-04): keep POLICY and host hygiene,
+#: never a target/workload identity, so like the long-context surface they are shared
+#: argv that a batch boundary may turn on without orphaning the lineage.
+KEEP_POLICY_FLAGS = frozenset({"--keep-dimensions", "--keep-capacity-limit-gib",
+                               "--gpu-cpu-region-claim"})
+
+
 def resume_binding(argv) -> dict:
     """Prior-child binding before adding a newly selected runtime recipe.
 
@@ -343,11 +351,12 @@ def resume_binding(argv) -> dict:
     orphaning the source/anchor lineage it continues; so are the pool width and the
     per-lane actor models (`POOL_ACTOR_FLAGS`), the post-keep measurement schedule
     (`MEASUREMENT_SCHEDULE_FLAGS`), the lane -> target binding (`LANE_BINDING_FLAGS`) and
-    the long-context surface (`LONGCTX_SURFACE_FLAGS`)."""
+    the long-context surface (`LONGCTX_SURFACE_FLAGS`) and the keep-dimension / GPU
+    claim policy (`KEEP_POLICY_FLAGS`)."""
     stripped = _without(argv, {"--runtime-recipe-reference", "--runtime-recovery-reference",
                                *RUNTIME_PROTOCOL_FLAGS, *POOL_ACTOR_FLAGS,
                                *MEASUREMENT_SCHEDULE_FLAGS, *LANE_BINDING_FLAGS,
-                               *LONGCTX_SURFACE_FLAGS})
+                               *LONGCTX_SURFACE_FLAGS, *KEEP_POLICY_FLAGS})
     stripped = [item for item in stripped if item not in RUNTIME_PROTOCOL_SWITCHES]
     return input_binding(stripped)
 

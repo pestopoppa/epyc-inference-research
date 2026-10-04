@@ -375,3 +375,12 @@ def test_common_args_admit_the_longctx_surface_and_lane_binding(tmp_path):
         target_root=Path(sr.option(argv, "--state-dir")) / "targets", common_path=common)
     assert sr.option(targets[0], "--longctx-surface") == "/x/spec.json"
     assert sr.option(targets[0], "--lane") == "lane0"
+
+
+def test_keep_policy_flags_are_shared_policy_not_resume_identity():
+    """27B GPU slot 6b: keep dimensions and the GPU claim posture ride the common argv and
+    never orphan a continuation (serial_run.KEEP_POLICY_FLAGS)."""
+    base = ["--target-id", "gpu-0", "--model", "/m.gguf"]
+    extra = ["--keep-dimensions", "short_decode,capacity", "--keep-capacity-limit-gib", "62",
+             "--gpu-cpu-region-claim", "off", "--longctx-surface", "/s.json"]
+    assert sr.resume_binding(base + extra) == sr.resume_binding(base)
