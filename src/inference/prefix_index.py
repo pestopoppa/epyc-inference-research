@@ -58,6 +58,11 @@ truncated / purged idle slot), the slot missing, or a different server launch.
 v10 exposes no content hash, so "same id_task, same token count" is the
 strongest content-identity test available (see the RTG-58 P2 server questions).
 
+Bounds: ``slot`` entries are one per server slot; ``pending`` is capped at
+``MAX_PENDING_ENTRIES`` (LRU) and expires after ``VERIFY_TIMEOUT_S``; ``served``
+is capped at ``MAX_SERVED_ENTRIES``; ``inflight`` ends at release. Expiry runs on
+every observation, so the index is bounded even when nothing polls ``/slots``.
+
 Concurrency: one ``threading.Lock`` per index, a leaf lock (nothing is called
 out while it is held). Host-wide (6 uvicorn workers): verified slot entries are
 shared through ``{tmp_dir}/kv_prefix_index.{host}_{port}.json``, rewritten
@@ -103,6 +108,9 @@ DEFAULT_TRUNK_HOLD_S = 120.0
 VERIFY_TIMEOUT_S = 30.0
 SLOT_TOKEN_TOLERANCE = 4
 MAX_SERVED_ENTRIES = 32
+#: Cap on unbound ``pending`` entries (LRU). Every served call adds one; without
+#: this the index grows without bound when nothing reconciles (pin policy off).
+MAX_PENDING_ENTRIES = 64
 FILE_PREFIX = "kv_prefix_index."
 SCHEMA = "epyc.orchestrator.kv_prefix_index.v1"
 _HASH_HEX = 16
@@ -487,13 +495,36 @@ class PrefixIndex:
         for e in served[:max(0, len(served) - MAX_SERVED_ENTRIES)]:
             self._drop(e.id)
 
-    def _check_launch(self) -> list[int]:
-        """Drop everything after a server relaunch. Returns slot ids dropped."""
+    def _expire_pending(self, now: float) -> None:
+        """Bound the unbound: a pending entry past ``VERIFY_TIMEOUT_S`` (or beyond
+        the ``MAX_PENDING_ENTRIES`` LRU cap) leaves; a chat-lane one (no slot)
+        becomes ``served`` (ordering only). Runs on every observation, not only
+        at reconcile, so the index stays bounded when nothing polls ``/slots``."""
+        pending = sorted(self._of_kind("pending"), key=lambda e: e.ts)
+        excess = max(0, len(pending) - MAX_PENDING_ENTRIES)
+        for i, e in enumerate(pending):
+            timed_out = now - e.ts > VERIFY_TIMEOUT_S
+            if not timed_out and i >= excess:
+                break  # sorted oldest first: the rest are younger and within the cap
+            self._drop(e.id)
+            if timed_out:
+                self.stats["verify_timeouts"] += 1
+            if e.slot_id is None:
+                self._put(Entry(id=f"served:{e.id.split(':', 1)[1]}", kind="served",
+                                hashes=e.hashes, chars=e.chars, key_kind=e.key_kind,
+                                prompt_tokens=e.prompt_tokens, ts=e.ts, wall_ts=e.wall_ts))
+        self._trim_served()
+
+    def _read_launch(self) -> str | None:
+        """The server's launch id (a sidecar ``stat``: call it OUTSIDE the lock)."""
         try:
             launch = self._launch_id_fn(self.url)
         except Exception:
             launch = None
-        launch = str(launch) if launch else None
+        return str(launch) if launch else None
+
+    def _check_launch(self, launch: str | None) -> list[int]:
+        """Drop everything after a server relaunch. Returns slot ids dropped."""
         dropped: list[int] = []
         if launch != self._launch:
             if self._launch is not None or launch is None:
@@ -516,8 +547,9 @@ class PrefixIndex:
         now, wall = self._clock(), self._wall()
         expected = (prompt_tokens + max(0, int(generated_tokens or 0))
                     if prompt_tokens else None)
+        launch = self._read_launch()
         with self._lock:
-            self._check_launch()
+            self._check_launch(launch)
             self.stats["observed"] += 1
             if slot_id is not None:
                 # The server named the slot: its old content is gone.
@@ -533,6 +565,7 @@ class PrefixIndex:
                 slot_id=slot_id, origin="exact" if slot_id is not None else None,
                 ts=now, wall_ts=wall,
             ))
+            self._expire_pending(now)  # after the put: the index is bounded on exit
 
     def record_prediction(self, predicted_cache_tokens: int | None, actual_cache_n: int | None,
                           predicted_slot: int | None, actual_slot: int | None) -> None:
@@ -558,14 +591,15 @@ class PrefixIndex:
         Never raises. A None occupancy (no /slots) changes nothing except the
         verify timeout of pending entries."""
         try:
+            launch = self._read_launch()
             with self._lock:
-                relaunched = self._check_launch()
+                relaunched = self._check_launch(launch)
             self._merge_ledger()
             slots = list(getattr(occupancy, "slots", ()) or ()) if occupancy is not None else None
             now = self._clock()
             changed: dict[int, Entry | None] = {}
             with self._lock:
-                for sid in relaunched + self._check_launch():
+                for sid in relaunched:
                     changed[sid] = None
                 self.stats["reconciles"] += 1
                 if slots is not None:
@@ -603,16 +637,7 @@ class PrefixIndex:
                         changed[sid] = bound
                         self.stats["bound_exact" if bound.origin == "exact"
                                    else "bound_inferred"] += 1
-                for e in self._of_kind("pending"):
-                    if now - e.ts > VERIFY_TIMEOUT_S:
-                        self._drop(e.id)
-                        self.stats["verify_timeouts"] += 1
-                        if e.slot_id is None:
-                            self._put(Entry(id=f"served:{e.id.split(':', 1)[1]}", kind="served",
-                                            hashes=e.hashes, chars=e.chars, key_kind=e.key_kind,
-                                            prompt_tokens=e.prompt_tokens, ts=e.ts,
-                                            wall_ts=e.wall_ts))
-                self._trim_served()
+                self._expire_pending(now)
             if changed:
                 self._write_ledger(changed)
         except Exception:

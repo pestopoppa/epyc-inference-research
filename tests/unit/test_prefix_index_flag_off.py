@@ -54,13 +54,20 @@ def flag_off(monkeypatch, tmp_path):
     monkeypatch.setenv(pi.PIN_ENV, "idle")
     monkeypatch.setattr(long_prefill_lease, "lease_dir", lambda: tmp_path)
 
+    # The hooks swallow every exception by contract (they must never fail a
+    # request), so raising alone would prove nothing: record the attempt too
+    # and assert on it after the test.
+    attempts: list[tuple] = []
+
     def _boom(*_a, **_k):
+        attempts.append(_a[1:])
         raise AssertionError("a PrefixIndex was constructed with the flag off")
 
     monkeypatch.setattr(pi.PrefixIndex, "__init__", _boom)
     pi.reset_indexes()
     yield tmp_path
     pi.reset_indexes()
+    assert not attempts, f"PrefixIndex constructed with the flag off: {attempts}"
     assert not list(tmp_path.glob(f"{pi.FILE_PREFIX}*")), "ledger written with the flag off"
 
 

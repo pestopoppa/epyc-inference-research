@@ -180,6 +180,24 @@ def test_unverified_entry_times_out_to_served_or_away(idx):
     assert kinds == {"served": 1} and idx.stats["verify_timeouts"] == 2
 
 
+def test_index_stays_bounded_without_any_reconcile(idx):
+    """Pin policy off (the shadow-window default) means nothing calls reconcile;
+    observation alone must still expire pending entries and honour the caps."""
+    for i in range(3 * pi.MAX_PENDING_ENTRIES):
+        idx.observe_served(_text(f"c{i}", 6), slot_id=None, prompt_tokens=50, generated_tokens=0)
+        idx.clock.t += 0.01
+    kinds = idx.status()["entries"]
+    assert kinds["pending"] == pi.MAX_PENDING_ENTRIES
+    assert kinds["served"] == pi.MAX_SERVED_ENTRIES
+    assert kinds["pending"] + kinds["served"] == len(idx._entries)
+    # time, not count: everything pending is past the verify timeout
+    idx.clock.t += pi.VERIFY_TIMEOUT_S + 1
+    idx.observe_served(_text("last", 6), slot_id=None, prompt_tokens=50, generated_tokens=0)
+    kinds = idx.status()["entries"]
+    assert kinds == {"pending": 1, "served": pi.MAX_SERVED_ENTRIES}
+    assert idx.status()["nodes"] <= (pi.MAX_SERVED_ENTRIES + 1) * 6
+
+
 # ── in-flight: fork lookups, trunk owner, pinning, unique cells ────────────────
 
 
