@@ -153,6 +153,54 @@ UNPAIRED_CAVEAT = (
     f"Absolute throughput on this host drifts ~{HOST_DRIFT_CAVEAT_PCT:g}% over hours, "
     "so an effect inside that band is not resolved by this comparison, and the "
     "confidence interval covers launch scatter only, not the cross-session drift.")
+#: ---- Unpaired verdicts (see `_unpaired_verdict`) ----
+#: The effect is inside the metric's own paired noise floor: a same-session A/B of
+#: this exact protocol has already shown excursions this size with NO real change, so
+#: this number is NOT distinguishable from noise and must not headline as a gain.
+VERDICT_WITHIN_FLOOR = "within_floor"
+#: The effect exceeds the metric's paired noise floor, but this comparison is
+#: UNPAIRED -- champion alone against production samples recorded in another
+#: session -- so it cannot tell a real gain apart from host drift (see
+#: `HOST_DRIFT_CAVEAT_PCT`). Never published as a headline gain.
+VERDICT_UNPAIRED_UNVERIFIED = "unpaired_unverified"
+#: No paired floor is on record for this metric (no paired run has ever measured it
+#: under this protocol), so there is nothing to check the unpaired effect against.
+VERDICT_NO_FLOOR = "no_floor"
+#: A same-session paired A/B: the floor does not apply to it -- it IS the instrument
+#: that measures the floor.
+VERDICT_PAIRED_VERIFIED = "paired_verified"
+
+
+def _unpaired_verdict(effect_pct: float, floor_pct: float | None) -> tuple[str, str | None]:
+    """Whether an UNPAIRED effect can be told apart from its metric's paired floor.
+
+    `floor_pct` is the per-metric noise floor measured by the last PAIRED comparison
+    run under this protocol (carried on the recorded production baseline -- see
+    `write_baseline`'s `noise_floor_pct` and `_paired_floor_pct`). An unpaired effect
+    bigger than that floor may be a real gain or may be exactly the host drift /
+    launch-to-launch scatter a true-null paired run already produces; this single-arm
+    comparison has no way to tell the two apart, so it is marked, never headlined as
+    a confirmed gain. Returns `(verdict, note)`; `note` is `None` unless the verdict
+    is `unpaired_unverified`.
+    """
+    if floor_pct is None:
+        return VERDICT_NO_FLOOR, None
+    if abs(effect_pct) <= floor_pct:
+        return VERDICT_WITHIN_FLOOR, None
+    return (VERDICT_UNPAIRED_UNVERIFIED,
+            f"effect exceeds paired floor {floor_pct:g}%; unpaired comparison cannot "
+            f"distinguish a gain from host drift; confirm with a paired run")
+
+
+def _paired_floor_pct(ci: Mapping[str, Any]) -> float:
+    """The per-metric paired noise floor, from a PAIRED comparison's own CI: the wider
+    of its two bounds, as a percent. A same-session paired A/B of a true null still
+    shows excursions this size from launch-to-launch scatter alone, so an UNPAIRED
+    effect under this bound is not distinguishable from that noise either."""
+    return max(abs(float(ci["lower_effect_fraction"])),
+               abs(float(ci["upper_effect_fraction"]))) * 100.0
+
+
 #: Recorded host changes. A baseline measured on or before a change's `applied` date
 #: is stale: the host it describes no longer exists. Settings-only BIOS changes leave
 #: the DMI BIOS version untouched, so `read_host_facts` alone cannot see them -- this
@@ -640,7 +688,8 @@ def write_baseline(store: Path | str, *, production_commit: str, production_labe
                    host_facts_note: str, lineage: Mapping[str, Any] | None = None,
                    residency: Mapping[str, Any] | None = None, overwrite: bool = False,
                    now: Callable[[], str] = status._now,
-                   protocol_kind: str | None = None) -> Path:
+                   protocol_kind: str | None = None,
+                   noise_floor_pct: float | None = None) -> Path:
     """Write `production-baseline.<sha12>.json`: production's numbers, carried over.
 
     The promotion's entry point (CLI: `write-baseline`). Refuses an under-sized or
@@ -651,6 +700,13 @@ def write_baseline(store: Path | str, *, production_commit: str, production_labe
     `protocol_kind` (`llama_bench` | `serving_probe`) is read off `protocol`; passing
     it explicitly asserts it, and a disagreement is refused. A serving-probe record is
     built with `serving_protocol` and lands under its own per-metric filename.
+
+    `noise_floor_pct`, when given, is the metric's PAIRED noise floor measured by the
+    same session's comparison (the only thing that produced this baseline): a future
+    single-arm (UNPAIRED) champion run against this record reads it back to decide
+    whether its effect can be told apart from noise (`_unpaired_verdict`). `None` when
+    no paired floor is known for this metric yet -- the record still stands, it just
+    cannot gate an unpaired verdict.
     """
     if len(production_commit) != 40 or any(c not in "0123456789abcdef"
                                             for c in production_commit):
@@ -693,6 +749,8 @@ def write_baseline(store: Path | str, *, production_commit: str, production_labe
         "residency": None if residency is None else dict(residency),
         "written_at": now(),
         "writer": "autokernel.loop.production.write_baseline",
+        "noise_floor_pct": (None if noise_floor_pct is None
+                            else float(noise_floor_pct)),
     }
     return status.write_json(store, target.name, body, prefix=".pbl-")
 
@@ -788,7 +846,8 @@ def _record_paired_baseline(store: Path, frozen_commit: str, frozen_label: str,
             source={"kind": "paired champion-vs-production refresh, production arm",
                     "arm": "anchor_samples", "replaced_because": refused},
             host_facts=host_facts(), host_facts_note="captured at the measurement",
-            residency=comparison.residency, overwrite=True, now=now)
+            residency=comparison.residency, overwrite=True, now=now,
+            noise_floor_pct=getattr(comparison, "noise_floor_pct", None))
         return f"re-recorded production's arm as {path.name}"
     except Exception as exc:  # noqa: BLE001 -- reporting only
         return f"not re-recorded ({type(exc).__name__}: {exc})"
@@ -813,6 +872,12 @@ def _publish_unpaired(store: Path, decision: BaselineDecision, *, champion_commi
     champion = list(measured.samples)
     ci = headline_admissibility.unpaired_confidence_interval(baseline, champion)
     effect = statistics.median(champion) / statistics.median(baseline) - 1.0
+    # The paired floor does not apply to an unpaired number's CI -- the drift caveat
+    # does -- but it DOES gate whether this effect may read as a headline gain: it is
+    # whatever `noise_floor_pct` the last PAIRED comparison recorded for this metric
+    # (None if no paired run has ever measured it under this protocol).
+    floor_pct = body.get("noise_floor_pct")
+    verdict, verdict_note = _unpaired_verdict(effect * 100.0, floor_pct)
     record_sha = _sha256(decision.path)
     evidence = status.write_json(Path(store),
                                  f"champion-vs-production.{champion_commit[:12]}.json", {
@@ -822,7 +887,9 @@ def _publish_unpaired(store: Path, decision: BaselineDecision, *, champion_commi
         "baseline_record": str(decision.path), "baseline_record_sha256": record_sha,
         "baseline_measured_at": body["measured_at"], "baseline_samples": baseline,
         "champion": measured.to_dict(), "caveat": UNPAIRED_CAVEAT,
-        "host_drift_caveat_pct": HOST_DRIFT_CAVEAT_PCT}, prefix=".cvp-")
+        "host_drift_caveat_pct": HOST_DRIFT_CAVEAT_PCT,
+        "noise_floor_pct": floor_pct, "verdict": verdict,
+        **({"verdict_note": verdict_note} if verdict_note else {})}, prefix=".cvp-")
     surface = measured.surface
     target = status.write_json(Path(store), FILENAME, {
         "schema": SCHEMA, "generated_at": now(), "stale_after_s": STALE_AFTER_S,
@@ -842,21 +909,26 @@ def _publish_unpaired(store: Path, decision: BaselineDecision, *, champion_commi
         "headline_admissibility": {**headline_admissibility.contract(),
                                    "ci_method": headline_admissibility.UNPAIRED_CI_METHOD},
         "confidence_interval": ci,
-        # The paired floor does not apply to an unpaired number; the drift caveat does.
-        "noise_floor_pct": None,
+        # The RECORDED paired floor for this metric, if any PAIRED run has ever
+        # measured it -- None keeps the field's old meaning ("no floor known").
+        "noise_floor_pct": floor_pct,
+        "verdict": verdict,
+        **({"verdict_note": verdict_note} if verdict_note else {}),
         "host_drift_caveat_pct": HOST_DRIFT_CAVEAT_PCT, "caveat": UNPAIRED_CAVEAT,
         "baseline_carryover": {"used": True, "reason": decision.reason},
         "evidence": str(evidence), "mechanism_id": MECHANISM_ID,
         **({"anchor_guard_excursion": note} if note else {}),
     }, prefix=".cvp-")
-    return Refresh(
-        True,
-        f"champion {champion_commit[:12]} measures {effect * 100.0:+.3f}% against the "
-        f"RECORDED frozen production {frozen_commit[:12]} ({frozen_label}) baseline of "
-        f"{body['measured_at'][:10]}, UNPAIRED: {len(champion)} champion launches vs "
-        f"{len(baseline)} recorded {surface} launches, host-drift caveat "
-        f"~{HOST_DRIFT_CAVEAT_PCT:g}%",
-        target, float(effect), carryover=decision.reason)
+    reason = (f"champion {champion_commit[:12]} measures {effect * 100.0:+.3f}% against "
+             f"the RECORDED frozen production {frozen_commit[:12]} ({frozen_label}) "
+             f"baseline of {body['measured_at'][:10]}, UNPAIRED: {len(champion)} "
+             f"champion launches vs {len(baseline)} recorded {surface} launches, "
+             f"host-drift caveat ~{HOST_DRIFT_CAVEAT_PCT:g}%")
+    if verdict == VERDICT_UNPAIRED_UNVERIFIED:
+        # Never published as a headline gain: the number stands in the bundle for
+        # audit, but the sentence a reader actually parses says UNVERIFIED first.
+        reason = f"{reason} -- UNVERIFIED: {verdict_note}"
+    return Refresh(True, reason, target, float(effect), carryover=decision.reason)
 
 
 def refresh(*, store: Path, champion_commit: str, champion_build: Path,
@@ -1262,6 +1334,18 @@ def _serving_leg(metric: str, protocol: Mapping[str, Any], baseline: Sequence[fl
            "baseline_measured_at": None}
     if paired:
         leg["pair_ratios"] = [c / b for b, c in zip(base, champ)]
+        # A same-session paired A/B IS the instrument that measures the floor: it
+        # needs no verdict against one. Its own CI becomes the floor this metric's
+        # NEXT unpaired (single-arm) champion run is checked against.
+        leg["noise_floor_pct"] = _paired_floor_pct(ci)
+        leg["verdict"] = VERDICT_PAIRED_VERIFIED
+    else:
+        floor_pct = (decision.body or {}).get("noise_floor_pct") if decision else None
+        verdict, note = _unpaired_verdict(leg["effect_pct"], floor_pct)
+        leg["noise_floor_pct"] = floor_pct
+        leg["verdict"] = verdict
+        if note:
+            leg["verdict_note"] = note
     if decision is not None and decision.path is not None:
         leg.update(baseline_record=str(decision.path),
                    baseline_record_sha256=_sha256(decision.path),
@@ -1317,7 +1401,13 @@ def _write_serving_receipt(store: Path, *, legs: Mapping[str, dict],
                                    **({} if paired else {
                                        "ci_method": headline_admissibility.UNPAIRED_CI_METHOD})},
         "confidence_interval": head["confidence_interval"],
-        "noise_floor_pct": None,
+        "noise_floor_pct": head.get("noise_floor_pct"),
+        "verdict": head.get("verdict"),
+        **({"verdict_note": head["verdict_note"]} if head.get("verdict_note") else {}),
+        # Prefers metrics that can be told apart from noise; never states an
+        # UNPAIRED excursion over its floor as a confirmed gain (see `_unpaired_verdict`
+        # and `_leg_headline_fragment`).
+        "headline": _serving_headline(legs, order),
         "metrics": summary, "protocol": dict(protocols[primary]),
         "baseline_carryover": dict(carryover),
         "evidence": str(evidence), "mechanism_id": MECHANISM_ID,
@@ -1326,8 +1416,7 @@ def _write_serving_receipt(store: Path, *, legs: Mapping[str, dict],
         **({"anchor_guard_excursion": note} if note else {}),
     }
     target = status.write_json(store, bundle_name, bundle, prefix=".cvp-")
-    effects = " / ".join(f"{legs[m]['effect_pct']:+.3f}% {legs[m]['surface']}"
-                         for m in order)
+    effects = " / ".join(_leg_headline_fragment(m, legs[m]) for m in order)
     if paired:
         reason = (f"champion {champion_commit[:12]} measures {effects} against frozen "
                   f"production {frozen_commit[:12]} ({frozen_label}) over "
@@ -1339,7 +1428,41 @@ def _write_serving_receipt(store: Path, *, legs: Mapping[str, dict],
                   f"UNPAIRED: {head['champion_launches']} champion launches vs "
                   f"{head['baseline_launches']} recorded launches, host-drift caveat "
                   f"~{HOST_DRIFT_CAVEAT_PCT:g}%")
+        if any(legs[m].get("verdict") == VERDICT_UNPAIRED_UNVERIFIED for m in order):
+            # Never published as a headline gain: say so in the sentence itself, not
+            # only in a field a reader skimming `reason` would not see.
+            reason = f"{reason} -- {bundle['headline']}"
     return target, evidence, reason
+
+
+def _leg_headline_fragment(metric: str, leg: Mapping[str, Any]) -> str:
+    """One metric's effect, tagged if it cannot be read as a confirmed gain."""
+    tag = ""
+    if leg.get("verdict") == VERDICT_UNPAIRED_UNVERIFIED:
+        tag = f" [UNVERIFIED, exceeds paired floor {leg.get('noise_floor_pct'):g}%]"
+    elif leg.get("verdict") == VERDICT_NO_FLOOR:
+        tag = " [no paired floor on record]"
+    return f"{leg['effect_pct']:+.3f}% {leg['surface']}{tag}"
+
+
+def _serving_headline(legs: Mapping[str, dict], order: Sequence[str]) -> str:
+    """The ONE sentence fragment a dashboard may read as a confirmed effect.
+
+    Prefers metrics whose verdict is `within_floor` or `paired_verified`: those ARE
+    distinguishable from noise. An `unpaired_unverified` metric is named, with its
+    floor, but never as a plain percentage a reader could mistake for a headline gain.
+    """
+    confirmed = [m for m in order
+                if legs[m].get("verdict") in (VERDICT_WITHIN_FLOOR, VERDICT_PAIRED_VERIFIED)]
+    if confirmed:
+        return " / ".join(f"{legs[m]['effect_pct']:+.3f}% {m} (within floor)"
+                          for m in confirmed)
+    unverified = [m for m in order if legs[m].get("verdict") == VERDICT_UNPAIRED_UNVERIFIED]
+    if unverified:
+        return "unverified: " + "; ".join(
+            f"{m} {legs[m]['effect_pct']:+.3f}% exceeds paired floor "
+            f"{legs[m].get('noise_floor_pct'):g}%" for m in unverified)
+    return "unverified: no paired floor on record for any metric"
 
 
 @dataclass(frozen=True)
@@ -1433,9 +1556,16 @@ def ingest_serving_result(source: Path | str | Mapping[str, Any], *, store: Path
         if "P" in run.arms:
             mode = "paired"
             for metric in metrics:
-                plan["legs"][metric] = _serving_leg(
+                leg = _serving_leg(
                     metric, run.protocols[metric], run.samples["P"][metric],
                     run.samples["C"][metric], paired=True)
+                plan["legs"][metric] = leg
+                # This paired comparison's own CI becomes the floor the NEXT
+                # single-arm champion run against this exact baseline is checked
+                # against (`_unpaired_verdict`): carry it onto the record being
+                # written for this metric, not just onto today's receipt.
+                if metric in plan["baselines"]:
+                    plan["baselines"][metric]["noise_floor_pct"] = leg["noise_floor_pct"]
             carryover = {"used": False, "reason": "paired serving-probe runner: the "
                          "production arm was measured in the same session"}
         else:

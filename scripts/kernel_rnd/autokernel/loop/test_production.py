@@ -801,7 +801,7 @@ def _protocol(**overrides):
 
 
 def _record(store: Path, *, samples=None, protocol=None, measured_at=None,
-            facts=FACTS, commit=V9, overwrite=False) -> Path:
+            facts=FACTS, commit=V9, overwrite=False, noise_floor_pct=None) -> Path:
     row = MEASURED["surfaces"]["tg128"]
     return production.write_baseline(
         store, production_commit=commit, production_label=V9_LABEL,
@@ -810,7 +810,8 @@ def _record(store: Path, *, samples=None, protocol=None, measured_at=None,
         measured_at=measured_at or (NOW - timedelta(days=2)).isoformat(),
         source={"path": "/x/fold2-result.json", "sha256": "0" * 64,
                 "samples_path": "g5_full.candidate_samples"},
-        host_facts=facts, host_facts_note="test", overwrite=overwrite)
+        host_facts=facts, host_facts_note="test", overwrite=overwrite,
+        noise_floor_pct=noise_floor_pct)
 
 
 def _champion_alone(samples=None, surface="tg128", model=MODEL):
@@ -1050,6 +1051,66 @@ class TheCliIsThePromotionStep(unittest.TestCase):
             production.commits_between(self.repo, sibling, self.frozen)
 
 
+class TheUnpairedVerdictHelperItself(unittest.TestCase):
+    """`_unpaired_verdict`: the gate every unpaired receipt (llama-bench single-metric
+    and serving-probe per-leg) runs its effect through before it can headline."""
+
+    def test_no_floor_known_is_no_floor(self):
+        verdict, note = production._unpaired_verdict(18.2, None)
+        self.assertEqual(verdict, production.VERDICT_NO_FLOOR)
+        self.assertIsNone(note)
+
+    def test_inside_the_floor_is_within_floor(self):
+        verdict, note = production._unpaired_verdict(0.5, 1.544)
+        self.assertEqual(verdict, production.VERDICT_WITHIN_FLOOR)
+        self.assertIsNone(note)
+
+    def test_exactly_at_the_floor_is_within_floor(self):
+        """The boundary itself is not yet unverified -- '>' the floor, not '>='."""
+        verdict, note = production._unpaired_verdict(1.544, 1.544)
+        self.assertEqual(verdict, production.VERDICT_WITHIN_FLOOR)
+
+    def test_over_the_floor_is_unpaired_unverified_with_a_confirm_note(self):
+        verdict, note = production._unpaired_verdict(18.2, 1.544)
+        self.assertEqual(verdict, production.VERDICT_UNPAIRED_UNVERIFIED)
+        self.assertIn("exceeds paired floor 1.544%", note)
+        self.assertIn("confirm with a paired run", note)
+        self.assertIn("host drift", note)
+
+    def test_a_negative_effect_is_judged_by_magnitude(self):
+        verdict, _note = production._unpaired_verdict(-18.2, 1.544)
+        self.assertEqual(verdict, production.VERDICT_UNPAIRED_UNVERIFIED)
+
+
+class TheRecordedBaselineCarriesThePairedFloorForward(unittest.TestCase):
+    """`write_baseline`'s `noise_floor_pct`, and `_record_paired_baseline` passing
+    `comparison.noise_floor_pct` through it after a paired fallback: the mechanism
+    that makes a floor available to a LATER champion-only (unpaired) run at all."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = Path(self.tmp.name)
+
+    def test_write_baseline_records_and_defaults_the_floor(self):
+        path = _record(self.store, noise_floor_pct=1.544)
+        self.assertEqual(json.loads(path.read_text())["noise_floor_pct"], 1.544)
+        other = self.store / "other"
+        other.mkdir()
+        default_path = _record(other, commit="1" * 40)
+        self.assertIsNone(json.loads(default_path.read_text())["noise_floor_pct"])
+
+    def test_a_paired_fallback_carries_its_floor_into_the_re_recorded_arm(self):
+        """After `AStaleOrMismatchedRecordFallsBackToThePairedAB`'s fallback, the
+        FRESH record it writes must carry the comparison's own floor forward, or every
+        unpaired run after it falls back to `no_floor` forever."""
+        arms = _Arms()
+        _carry(self.store, arms)
+        record = json.loads((self.store / production.baseline_filename(V9)).read_text())
+        self.assertEqual(record["noise_floor_pct"],
+                         MEASURED["surfaces"]["tg128"]["noise_floor_pct"])
+
+
 class TheChampionIsMeasuredAloneAgainstAMatchingRecord(unittest.TestCase):
 
     def setUp(self):
@@ -1060,6 +1121,34 @@ class TheChampionIsMeasuredAloneAgainstAMatchingRecord(unittest.TestCase):
         self.arms = _Arms()
         self.result = _carry(self.store, self.arms)
         self.body = _bundle(self.store)
+
+    def test_the_bundle_carries_a_no_floor_verdict_when_none_is_recorded(self):
+        """`_record` here (the class default) writes no floor: BROKEN READS otherwise
+        silently invent one, or crash reading `None` as a number."""
+        self.assertEqual(self.body["verdict"], production.VERDICT_NO_FLOOR)
+        self.assertNotIn("verdict_note", self.body)
+
+    def test_an_effect_over_a_recorded_floor_is_unpaired_unverified(self):
+        store = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(store, ignore_errors=True))
+        _record(store, noise_floor_pct=1.0)  # the champion below measures ~+2%
+        result = _carry(store, _Arms())
+        self.assertTrue(result.published, result.reason)
+        body = _bundle(store)
+        self.assertEqual(body["verdict"], production.VERDICT_UNPAIRED_UNVERIFIED)
+        self.assertIn("exceeds paired floor 1%", body["verdict_note"])
+        self.assertIn("UNVERIFIED", result.reason)
+        self.assertIn("UNPAIRED", result.reason)  # the old grammar still rides along
+
+    def test_an_effect_inside_a_recorded_floor_is_within_floor(self):
+        store = Path(tempfile.mkdtemp())
+        self.addCleanup(lambda: __import__("shutil").rmtree(store, ignore_errors=True))
+        _record(store, noise_floor_pct=5.0)  # the champion below measures ~+2%
+        result = _carry(store, _Arms())
+        body = _bundle(store)
+        self.assertEqual(body["verdict"], production.VERDICT_WITHIN_FLOOR)
+        self.assertNotIn("verdict_note", body)
+        self.assertNotIn("UNVERIFIED", result.reason)
 
     def test_no_production_arm_and_no_baseline_build(self):
         """BROKEN READS: compared/built non-empty -- ~15 min of GPU and a full build
@@ -1688,6 +1777,111 @@ class FutureChampionsRunSingleArmAgainstTheRecord(unittest.TestCase):
         for path in self.store.glob("production-baseline.*"):
             path.unlink()
         self._refused(_single_arm(), "no recorded production baseline")
+
+
+def _single_arm_pp(*, commit="2" * 40, pp) -> dict:
+    """Like `_single_arm`, but drives the PP metric's champion samples -- `_single_arm`
+    has no pp hook, and the real-world case this gates (Y's receipt) is a pp effect
+    that an unpaired run cannot verify while tg, the same run, is unremarkable."""
+    body = copy.deepcopy(WRITER)
+    for key in ("p_arm", "p_arm_pp", "comparison"):
+        body.pop(key)
+    body["c_arm"]["commit"] = commit
+    body["c_arm_pp"]["commit"] = commit
+    body["c_arm_pp"]["samples"] = pp
+    return body
+
+
+class UnpairedEffectsAreGatedByThePairedFloor(unittest.TestCase):
+    """The paired run that seeds the record (`WRITER`) ALSO measures a per-metric
+    noise floor (`_paired_floor_pct`, off that run's own CI) which rides onto the
+    recorded baseline. A LATER champion-only (unpaired) run against that record must
+    label any metric whose effect exceeds ITS floor `unpaired_unverified`, never a
+    plain headline gain -- the real case this reproduces: Y's receipt read pp +18.2%
+    UNPAIRED while the same code's PAIRED run gave -0.12%."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = Path(self.tmp.name)
+        self.paired = _ingest(self.store, WRITER)
+        (self.store / production.SERVING_FILENAME).unlink()
+        tg_body = json.loads((self.store / production.baseline_filename(
+            V10, production.read_serving_result(WRITER, probe_version=PROBE_VERSION)
+            .protocols["tg"])).read_text())
+        pp_body = json.loads((self.store / production.baseline_filename(
+            V10, production.read_serving_result(WRITER, probe_version=PROBE_VERSION)
+            .protocols["pp"])).read_text())
+        self.tg_floor_pct = tg_body["noise_floor_pct"]
+        self.pp_floor_pct = pp_body["noise_floor_pct"]
+
+    def test_the_paired_run_records_a_floor_for_each_metric(self):
+        """BROKEN READS: if the paired baseline never carries a floor, every later
+        unpaired run falls back to `no_floor` and nothing is ever gated."""
+        self.assertIsNotNone(self.tg_floor_pct)
+        self.assertIsNotNone(self.pp_floor_pct)
+        self.assertGreater(self.pp_floor_pct, 0.0)
+
+    def test_an_effect_far_over_the_floor_is_unpaired_unverified_not_a_headline(self):
+        """Reproduces Y's receipt: pp +18.2% unpaired against a paired floor under
+        2%. BROKEN READS: a verdict-blind reader would publish +18% as a gain."""
+        inflated = [x * 1.182 for x in WRITER["c_arm_pp"]["samples"]]
+        outcome = _ingest(self.store, _single_arm_pp(pp=inflated))
+        self.assertEqual(outcome.mode, "single_arm")
+        bundle = json.loads(outcome.bundle.read_text())
+        pp_leg = bundle["metrics"]["pp"]
+        self.assertEqual(pp_leg["verdict"], production.VERDICT_UNPAIRED_UNVERIFIED)
+        self.assertAlmostEqual(pp_leg["noise_floor_pct"], self.pp_floor_pct)
+        self.assertIn("confirm with a paired run", pp_leg["verdict_note"])
+        self.assertIn("exceeds paired floor", pp_leg["verdict_note"])
+        # tg rode along unchanged -- its own effect must stay inside its own floor.
+        self.assertEqual(bundle["metrics"]["tg"]["verdict"], production.VERDICT_WITHIN_FLOOR)
+        # The bundle's headline PREFERS the within-floor metric (tg) and never states
+        # the unverified pp excursion as a plain number there.
+        self.assertNotIn("+18", bundle["headline"])
+        self.assertIn("tg", bundle["headline"])
+        # ... but the sentence a reader actually parses (`reason`) still names pp and
+        # is explicit that it is UNVERIFIED, never silently dropped.
+        self.assertIn("UNVERIFIED", outcome.reason)
+        self.assertIn("exceeds paired floor", outcome.reason)
+        self.assertIn("pp", outcome.reason)
+
+    def test_when_every_metric_exceeds_its_floor_the_headline_says_unverified(self):
+        inflated_pp = [x * 1.182 for x in WRITER["c_arm_pp"]["samples"]]
+        body = _single_arm_pp(pp=inflated_pp)
+        body["c_arm"]["samples"] = [x * 1.20 for x in WRITER["c_arm"]["samples"]]
+        outcome = _ingest(self.store, body)
+        bundle = json.loads(outcome.bundle.read_text())
+        self.assertEqual(bundle["metrics"]["tg"]["verdict"],
+                         production.VERDICT_UNPAIRED_UNVERIFIED)
+        self.assertEqual(bundle["metrics"]["pp"]["verdict"],
+                         production.VERDICT_UNPAIRED_UNVERIFIED)
+        self.assertIn("unverified", bundle["headline"])
+        self.assertNotIn("within floor", bundle["headline"])
+
+    def test_an_effect_inside_the_floor_is_within_floor(self):
+        tiny = [x * 1.001 for x in WRITER["c_arm_pp"]["samples"]]
+        outcome = _ingest(self.store, _single_arm_pp(pp=tiny))
+        bundle = json.loads(outcome.bundle.read_text())
+        self.assertEqual(bundle["metrics"]["pp"]["verdict"], production.VERDICT_WITHIN_FLOOR)
+        self.assertNotIn("verdict_note", bundle["metrics"]["pp"])
+        self.assertNotIn("UNVERIFIED", outcome.reason)
+
+    def test_no_recorded_floor_is_no_floor_not_a_crash(self):
+        """A baseline written before this feature (or by a caller that never passed
+        one) has no `noise_floor_pct`: the metric is `no_floor`, not gated, not a
+        crash -- `write_baseline` still refuses nothing and the receipt still writes."""
+        path = self.store / production.baseline_filename(
+            V10, production.read_serving_result(WRITER, probe_version=PROBE_VERSION)
+            .protocols["pp"])
+        body = json.loads(path.read_text())
+        body["noise_floor_pct"] = None
+        path.write_text(json.dumps(body))
+        inflated = [x * 1.182 for x in WRITER["c_arm_pp"]["samples"]]
+        outcome = _ingest(self.store, _single_arm_pp(pp=inflated))
+        bundle = json.loads(outcome.bundle.read_text())
+        self.assertEqual(bundle["metrics"]["pp"]["verdict"], production.VERDICT_NO_FLOOR)
+        self.assertIsNone(bundle["metrics"]["pp"]["noise_floor_pct"])
 
 
 class RefreshTakesTheServingPathForAServingTarget(unittest.TestCase):
