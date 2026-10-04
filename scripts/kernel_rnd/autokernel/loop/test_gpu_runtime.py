@@ -112,6 +112,12 @@ def test_gpu_calibration_actual_http_keeps_both_original_claims_and_device_trace
         sampler_init(self, interval_s=.02, runner=numeric, source="synthetic numeric GPU fixture")
     monkeypatch.setattr(ds.RocmSmiSampler, "__init__", fixture_sampler)
     monkeypatch.setattr(serving.residency, "Sampler", _sampler_class(_proof()))
+    # The fixture server is a script, not a dynamic executable: the real linkage verifier
+    # exits 2 ("proved nothing"), which refutes a GPU launch since 2026-10-04. Prove the
+    # linkage leg here; the refusal itself is tested in test_hip_launch_proof.
+    from . import hip_launch_proof
+    monkeypatch.setattr(hip_launch_proof, "linkage",
+                        lambda *_a, **_k: {"status": hip_launch_proof.PROVEN, "rc": 0})
     monkeypatch.setattr(rw, "snapshot", lambda *a, **k:
         {"complete": False, "errors": ["synthetic host, not health evidence"]})
     monkeypatch.setattr(rw, "launch_health", lambda *a, **k:
