@@ -101,7 +101,13 @@ def _text(tag: str, blocks: int) -> str:
     return "".join(f"{tag}{i:05d}".ljust(BLOCK, ".") for i in range(blocks))
 
 
+#: A P1 server's ``/props.slot_fork`` with the fork on (``kv`` mode, no floor).
+KV_CAPS = {"min_tokens": 0, "mode": "kv", "checkpoint_at": False}
+
+
 def _fork_pool(slots: Slots, **kw) -> SharedKVPoolAdmission:
+    # Fork features need the server to report its fork (FORK=auto, or 1).
+    kw.setdefault("fork_caps", lambda url: KV_CAPS)
     return SharedKVPoolAdmission(occupancy=slots, cross_process=False, **kw)
 
 
@@ -109,7 +115,7 @@ def _fork_pool(slots: Slots, **kw) -> SharedKVPoolAdmission:
 
 
 def test_d1_hold_ends_by_slots_once_the_owner_was_seen_prefilling(monkeypatch):
-    monkeypatch.setenv(pi.FORK_ENV, "1")
+    monkeypatch.setenv(pi.FORK_ENV, "auto")
     monkeypatch.setenv(pi.TRUNK_MIN_TOKENS_ENV, "1000")
     monkeypatch.setenv(pi.TRUNK_GRACE_S_ENV, "0.2")  # one "TTL" = 0.1 s here
     slots = Slots()
@@ -211,7 +217,7 @@ def test_d2_scout_checkpoint_at_only_for_a_checkpoint_mode_fork_server(monkeypat
     caps = {"min_tokens": 1024, "mode": "checkpoint", "checkpoint_at": True}
     pool = SimpleNamespace(fork_caps=lambda url: caps)
     assert _scout_checkpoint_at(pool, URL, long_sys) is None  # FORK not requested
-    monkeypatch.setenv(pi.FORK_ENV, "1")
+    monkeypatch.setenv(pi.FORK_ENV, "auto")
     assert _scout_checkpoint_at(pool, URL, long_sys) == [{"message": 0, "at": "end"}]
     short = [{"role": "system", "content": "tiny"}, {"role": "user", "content": "t"}]
     assert _scout_checkpoint_at(pool, URL, short) is None  # below the fork floor
@@ -226,7 +232,7 @@ def test_d2_scout_checkpoint_at_only_for_a_checkpoint_mode_fork_server(monkeypat
 
 
 def test_d3_two_dependents_share_with_the_heir_after_the_source_leaves(monkeypatch):
-    monkeypatch.setenv(pi.FORK_ENV, "1")
+    monkeypatch.setenv(pi.FORK_ENV, "auto")
     monkeypatch.setenv(pi.TRUNK_MIN_TOKENS_ENV, "1000")
     pool = _fork_pool(Slots())
     trunk = _doc("H", 1200)
@@ -252,7 +258,7 @@ def test_d3_two_dependents_share_with_the_heir_after_the_source_leaves(monkeypat
 
 
 def test_d3_a_dependent_released_first_leaves_no_bookkeeping(monkeypatch):
-    monkeypatch.setenv(pi.FORK_ENV, "1")
+    monkeypatch.setenv(pi.FORK_ENV, "auto")
     monkeypatch.setenv(pi.TRUNK_MIN_TOKENS_ENV, "1000")
     pool = _fork_pool(Slots())
     trunk = _doc("I", 1200)
@@ -266,7 +272,7 @@ def test_d3_a_dependent_released_first_leaves_no_bookkeeping(monkeypatch):
 
 
 def test_d3_busy_slot_fork_credit_needs_slots_up(monkeypatch):
-    monkeypatch.setenv(pi.FORK_ENV, "1")
+    monkeypatch.setenv(pi.FORK_ENV, "auto")
     slots = Slots()
     pool = _fork_pool(slots)
     trunk = _doc("J", 600)
@@ -294,7 +300,7 @@ def test_d3_unmeasured_prefix_estimate_is_3_6_chars_per_token():
 
 
 def test_d4_the_key_is_hashed_once_per_ticket_however_long_it_waits(monkeypatch):
-    monkeypatch.setenv(pi.FORK_ENV, "1")
+    monkeypatch.setenv(pi.FORK_ENV, "auto")
     monkeypatch.setenv(pi.TRUNK_MIN_TOKENS_ENV, "1000")
     pool = _fork_pool(Slots())
     trunk = _doc("K", 1200)
@@ -373,7 +379,7 @@ def test_d6_ledger_adopted_entry_is_credited_only_after_this_worker_verifies_it(
 
 
 def test_kpf26_trunk_held_siblings_do_not_count_toward_the_queue_cap(monkeypatch):
-    monkeypatch.setenv(pi.FORK_ENV, "1")
+    monkeypatch.setenv(pi.FORK_ENV, "auto")
     monkeypatch.setenv(pi.TRUNK_MIN_TOKENS_ENV, "1000")
     monkeypatch.setenv(kpa.KV_POOL_MAX_QUEUED_ENV, "2")
     pool = _fork_pool(Slots())
@@ -530,7 +536,9 @@ def test_fork_caps_and_the_fork_switch(monkeypatch):
     none_mode = pi.fork_caps_from_props({"slot_fork": {"min_tokens": 2048, "mode": "none"}})
     assert pi.fork_enabled(caps) is False  # FORK unset
     monkeypatch.setenv(pi.FORK_ENV, "1")
-    assert pi.fork_enabled(None) and pi.fork_enabled(caps) and not pi.fork_enabled(none_mode)
+    # Fable re-review: FORK=1 with no server fork (caps None: every v10 server)
+    # refuses rather than over-admitting by the trunk size.
+    assert not pi.fork_enabled(None) and pi.fork_enabled(caps) and not pi.fork_enabled(none_mode)
     monkeypatch.setenv(pi.FORK_ENV, "auto")
     assert pi.fork_enabled(caps) and not pi.fork_enabled(None) and not pi.fork_enabled(none_mode)
     monkeypatch.setenv(pi.FLAG_ENV, "0")
@@ -603,3 +611,226 @@ def test_serving_record_keeps_the_fork_timings():
 
     for k in ("n_fork_tokens", "fork_src_slot", "fork_src_kind", "id_slot", "id_task"):
         assert k in serving_calls.TIMING_KEYS
+
+
+# ── Fable re-review notes (084921bb): FORK=auto, busy-source re-inflation,
+#    per-owner prefill, prompt_progress ───────────────────────────────────────
+
+
+def test_rr1_fork_1_without_server_caps_warns_once_and_stays_off(monkeypatch, caplog):
+    monkeypatch.setenv(pi.FORK_ENV, "1")
+    with caplog.at_level("WARNING", logger="src.inference.prefix_index"):
+        assert pi.fork_enabled(None) is False
+        assert pi.fork_enabled(None) is False
+    warned = [r for r in caplog.records if "slot_fork" in r.getMessage()]
+    assert len(warned) == 1  # once per process, not once per gate poll
+    assert pi.fork_enabled(KV_CAPS) is True  # a server that reports its fork
+
+
+def test_rr1_fork_auto_follows_the_server_and_never_warns(monkeypatch, caplog):
+    monkeypatch.setenv(pi.FORK_ENV, "auto")
+    with caplog.at_level("WARNING", logger="src.inference.prefix_index"):
+        assert pi.fork_enabled(None) is False
+        assert pi.fork_enabled({**KV_CAPS, "mode": "none"}) is False
+        assert pi.fork_enabled(KV_CAPS) is True
+        assert pi.fork_enabled({**KV_CAPS, "mode": "checkpoint"}) is True
+    assert not [r for r in caplog.records if "slot_fork" in r.getMessage()]
+    assert pi.fork_requested()
+
+
+@pytest.mark.parametrize("mode", ["1", "auto"])
+def test_rr1_v10_server_gets_no_trunk_hold_and_no_fork_credit(monkeypatch, mode):
+    """Every v10 server: no ``/props.slot_fork``. The sibling of a prefilled
+    trunk reserves its FULL size and is never held (no real sharing there)."""
+    monkeypatch.setenv(pi.FORK_ENV, mode)
+    monkeypatch.setenv(pi.TRUNK_MIN_TOKENS_ENV, "1000")
+    slots = Slots()
+    slots.set(0, busy=True, n=12000, task=1, decoded=0)  # something is prefilling
+    pool = _fork_pool(slots, fork_caps=lambda url: None)
+    trunk = _doc("V", 1200)
+    a = pool.acquire(URL, 13000, 393216, prefix_key=trunk + "A", timeout_s=0)
+    b = pool.acquire(URL, 13000, 393216, prefix_key=trunk + "B", timeout_s=0)
+    assert a is not None and b is not None  # not held behind A's trunk
+    info = pool.admission_record(b)["prefix_index"]
+    assert info["fork"] is False and info["fork_credit_tokens"] == 0
+    assert "fork_plan" not in info
+    full = pool.reservation_tokens(URL, 13000, 0)
+    assert pool.in_flight_tokens(URL) == 2 * full
+    assert pi.get_index(URL).stats["trunk_holds"] == 0
+    pool.release(URL, b)
+    pool.release(URL, a)
+
+
+def _busy_source(monkeypatch):
+    """A fork credit taken against slot 1, busy with task 5 (a foreign request
+    the gate holds no ticket for)."""
+    monkeypatch.setenv(pi.FORK_ENV, "auto")
+    slots = Slots()
+    pool = _fork_pool(slots)
+    trunk = _doc("R", 600)
+    idx = pi.get_index(URL)
+    idx.observe_served(trunk, slot_id=1, prompt_tokens=7000, generated_tokens=0)
+    slots.set(1, n=7000, task=5)
+    idx.reconcile(slots(URL))
+    slots.set(1, busy=True, n=7100, task=5, decoded=4)  # same task, decoding on: busy source
+    t = pool.acquire(URL, 9000, 393216, prefix_key=trunk + "q", timeout_s=0)
+    info = pool.admission_record(t)["prefix_index"]
+    assert info["match"]["source"] == "slot_busy" and info["fork_credit_tokens"] > 0
+    full = pool.reservation_tokens(URL, 9000, 0)
+    assert pool._inflight[URL][t] == full - info["fork_credit_tokens"]
+    return slots, pool, idx, t, full, info["fork_credit_tokens"]
+
+
+def _poll(pool):
+    """Any other admission poll reads /slots first (``_observed``)."""
+    other = pool.acquire(URL, 10, 393216, timeout_s=0)
+    pool.release(URL, other)
+
+
+def test_rr2_busy_source_still_busy_keeps_the_credit(monkeypatch):
+    slots, pool, idx, t, full, credit = _busy_source(monkeypatch)
+    slots.set(1, busy=True, n=7200, task=5, decoded=9)
+    _poll(pool)
+    assert pool._inflight[URL][t] == full - credit
+    assert idx.stats["fork_credit_reinflated"] == 0
+    pool.release(URL, t)
+    assert not pool._busy_fork
+
+
+@pytest.mark.parametrize("change", ["idle", "other_task", "missing", "slots_down"])
+def test_rr2_busy_source_that_stops_being_counted_reinflates_the_dependant(monkeypatch, change):
+    """``projected_tokens`` skips idle slots: once the busy source goes idle (its
+    cells live on, shared with the dependant), runs another task, vanishes, or
+    /slots is unreadable, nothing counts the shared cells unless the dependant
+    reserves them again."""
+    slots, pool, idx, t, full, credit = _busy_source(monkeypatch)
+    if change == "idle":
+        slots.set(1, busy=False, n=7300, task=5, decoded=1)
+    elif change == "other_task":
+        slots.set(1, busy=True, n=400, task=6, decoded=0)
+    elif change == "missing":
+        del slots.rows[1]
+    else:
+        slots.up = False
+    _poll(pool)
+    assert pool._inflight[URL][t] == full
+    assert idx.stats["fork_credit_reinflated"] == credit
+    assert pool.admission_record(t)["prefix_index"]["fork_credit_reinflated"] == credit
+    assert not pool._busy_fork
+    _poll(pool)  # one-way: never re-inflated twice
+    assert pool._inflight[URL][t] == full
+    pool.release(URL, t)
+    assert pool.in_flight_tokens(URL) == 0
+
+
+def test_rr2_flag_off_never_tracks_busy_fork(monkeypatch):
+    monkeypatch.delenv(pi.FLAG_ENV, raising=False)
+    pool = _fork_pool(Slots())
+    t = pool.acquire(URL, 9000, 393216, timeout_s=0)
+    assert not pool._busy_fork
+    pool.release(URL, t)
+
+
+def _inflight_entry(idx, ticket, *, pre_tasks, age):
+    idx.begin(ticket, _text(f"T{ticket}", 4))
+    e = idx._entries[f"inflight:{ticket}"]
+    e.pre_tasks = pre_tasks
+    e.ts = idx._clock() - age
+    return e
+
+
+def _occ(*rows):
+    return PoolOccupancy(url=URL, slots=tuple(
+        SlotState(slot_id=sid, n_ctx=8192, is_processing=busy, n_prompt_tokens=100,
+                  n_remain=None, n_decoded=dec, n_prompt_tokens_processed=0, id_task=task)
+        for sid, busy, task, dec in rows))
+
+
+def test_rr3_inflight_binds_to_the_one_slot_that_started_a_task_since_admission(idx):
+    pre = {0: None, 1: None, 2: 9}
+    e = _inflight_entry(idx, 1, pre_tasks=pre, age=5.0)
+    # slot 2 was already busy with task 9 before admission: not a candidate
+    idx.reconcile(_occ((0, True, 11, 0), (1, False, None, 1), (2, True, 9, 0)))
+    assert e.slot_id == 0 and idx.stats["inflight_bound"] == 1
+
+
+def test_rr3_ambiguous_or_too_fresh_never_binds(idx):
+    pre = {0: None, 1: None}
+    a = _inflight_entry(idx, 1, pre_tasks=pre, age=5.0)
+    b = _inflight_entry(idx, 2, pre_tasks=pre, age=5.0)
+    idx.reconcile(_occ((0, True, 11, 0), (1, True, 12, 0)))
+    assert a.slot_id is None and b.slot_id is None  # two entries, two new slots
+    idx.end(1)
+    idx.end(2)
+    c = _inflight_entry(idx, 3, pre_tasks=pre, age=0.0)  # read may predate the dispatch
+    idx.reconcile(_occ((0, True, 11, 0), (1, False, None, 1)))
+    assert c.slot_id is None
+
+
+def test_rr3_bound_owner_is_seen_and_finished_by_its_own_slot_only(idx):
+    owner = _inflight_entry(idx, 1, pre_tasks={}, age=5.0)
+    owner.slot_id = 0
+    idx._note_prefilling(idx._clock(), 1, {2})  # a FOREIGN slot is prefilling
+    assert owner.seen_prefilling is False
+    idx._note_prefilling(idx._clock(), 2, {0, 2})
+    assert owner.seen_prefilling is True
+    now = idx._clock()
+    assert not idx._prefill_over(owner, now, 2, {0, 2})
+    # its own slot is decoding; the foreign slot still prefills: the trunk is done
+    assert idx._prefill_over(owner, now, 1, {2})
+    # an unbound sibling ignores the prefilling slot that is bound to the owner
+    other = _inflight_entry(idx, 2, pre_tasks=None, age=5.0)
+    idx._note_prefilling(now, 1, {0})
+    assert other.seen_prefilling is False
+
+
+def test_rr3_trunk_hold_ends_when_the_owners_slot_decodes_despite_foreign_prefill(monkeypatch):
+    monkeypatch.setenv(pi.FORK_ENV, "auto")
+    monkeypatch.setenv(pi.TRUNK_MIN_TOKENS_ENV, "1000")
+    monkeypatch.setenv(pi.TRUNK_GRACE_S_ENV, "0.2")  # one "TTL" = 0.1 s here
+    slots = Slots()
+    slots.set(2, busy=True, n=30000, task=9, decoded=0)  # a long foreign prefill
+    pool = _fork_pool(slots)
+    trunk = _doc("U", 1200)
+    owner = pool.acquire(URL, 13000, 393216, prefix_key=trunk + "A", timeout_s=0)
+    got: dict[str, int | None] = {}
+    t = threading.Thread(target=lambda: got.setdefault("b", pool.acquire(
+        URL, 13000, 393216, prefix_key=trunk + "B", timeout_s=10, poll_s=0.01)))
+    slots.set(0, busy=True, n=12000, task=1, decoded=0)  # the owner reaches slot 0
+    t.start()
+    time.sleep(0.25)
+    assert "b" not in got
+    idx = pi.get_index(URL)
+    assert idx._entries[f"inflight:{owner}"].slot_id == 0
+    slots.set(0, busy=True, n=12000, task=1, decoded=3)  # owner decodes; slot 2 still prefills
+    t.join(timeout=5)
+    assert got["b"] is not None  # server-wide "prefilling == 0" would have held it
+    pool.release(URL, got["b"])
+    pool.release(URL, owner)
+
+
+def test_rr4_prompt_progress_chunks_do_not_fire_the_first_chunk_hook():
+    from src.api.routes.chat_pipeline import scout_stage as S
+
+    lines_read: list[int] = []
+    hook_at: list[int] = []
+
+    def handler(request):
+        return httpx.Response(200, content=_sse(
+            {"choices": [{"delta": {}}], "prompt_progress": {"processed": 512, "total": 4096}},
+            {"choices": [{"delta": {}}], "prompt_progress": {"processed": 4096, "total": 4096}},
+            {"choices": [{"delta": {"content": "a"}}]},
+            {"choices": [{"delta": {"content": "b"}, "finish_reason": "stop"}]}))
+
+    t = S.ChatCompletionsTransport("http://x", client=httpx.Client(transport=httpx.MockTransport(handler)))
+
+    def should_stop():
+        lines_read.append(1)  # called once per streamed line, before it is parsed
+        return False
+
+    out = t.complete([{"role": "user", "content": "q"}], max_tokens=8,
+                     should_stop=should_stop, timeout_s=5,
+                     on_first_chunk=lambda: hook_at.append(len(lines_read)))
+    # SSE lines: data, blank, data, blank, data(content "a") -> the 5th line,
+    # not the first prompt_progress chunk (line 1) still inside the prefill.
+    assert hook_at == [5] and out.text == "ab"

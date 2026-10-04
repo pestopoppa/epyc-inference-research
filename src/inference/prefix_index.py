@@ -22,9 +22,10 @@ It records which prompt prefixes are where, as far as the orchestrator can know:
 What it drives (each behind the flag; see ``kv_pool_admission``)
 ================================================================
 (a) trunk-first: a request whose trunk an in-flight sibling is still
-    prefilling waits for that prefill (``ORCHESTRATOR_PREFIX_INDEX_FORK=1`` only:
-    without the server-side fork, RTG-58 P1, a busy slot's cells cannot be
-    shared, so holding would only add latency);
+    prefilling waits for that prefill (``ORCHESTRATOR_PREFIX_INDEX_FORK=auto``
+    and a server whose ``/props.slot_fork`` reports the fork on: without the
+    server-side fork, RTG-58 P1, a busy slot's cells cannot be shared, so
+    holding would only add latency and a fork credit would over-admit);
 (b) LPM ordering: a bounded longest-prefix-match bypass in the admission queue;
 (c) slot pinning: ``ORCHESTRATOR_PREFIX_INDEX_PIN=idle`` pins ``id_slot`` only to
     a VERIFIED IDLE slot holding the longest prefix (default ``off``; UFH14-B4);
@@ -76,9 +77,10 @@ absent (the server emits them only with ``--slot-fork-min-tokens > 0``):
   shows the server's unique-cell pool.
 * ``timings.id_slot`` / ``timings.id_task`` -> exact binding on every endpoint,
   the chat lane included (bound when ``/slots[slot].id_task`` equals the task).
-* ``/props.slot_fork`` -> ``fork_enabled(caps)``: ``FORK=1`` stays on unless the
-  server says ``mode: none``; ``FORK=auto`` follows the server; ``min_tokens``
-  raises the trunk-hold and fork-credit floors.
+* ``/props.slot_fork`` -> ``fork_enabled(caps)``: ``FORK=auto`` (documented)
+  follows the server; ``FORK=1`` is the same but warns when the server reports
+  no fork (and stays off: never fork credit without real sharing);
+  ``min_tokens`` raises the trunk-hold and fork-credit floors.
 * ``checkpoint_at: [{"message": k, "at": ...}]`` -> sent by the scout fan-out
   (the one fan-out site that builds its own payload) at the end of the shared
   system message; the generic lanes do not rewrite client payloads.
@@ -210,22 +212,39 @@ def fork_caps_from_props(props: Any) -> dict[str, Any] | None:
     }
 
 
+_fork_without_caps_warned = False
+
+
 def fork_enabled(caps: dict[str, Any] | None = None) -> bool:
     """The server shares a busy slot's cells with a new task (RTG-58 P1 live).
 
-    ``ORCHESTRATOR_PREFIX_INDEX_FORK``: ``1`` = on unless the server's
-    ``/props.slot_fork`` (``caps``, KPF-27e) says ``mode: none`` (configured but
-    unsupported there); ``auto`` = on exactly when ``caps`` reports ``kv`` or
-    ``checkpoint``; anything else = off. Without ``caps`` (absent field or no
-    /props read) ``1`` falls back to the env alone, as before."""
+    ``ORCHESTRATOR_PREFIX_INDEX_FORK``:
+
+    * ``auto`` (the documented value for the shadow and P1 windows) = on exactly
+      when the server's ``/props.slot_fork`` (``caps``, KPF-27e) reports its fork
+      enabled (``mode`` ``kv`` or ``checkpoint``). A v10 server emits no
+      ``slot_fork``, so ``auto`` is off there: no trunk hold, no fork credit.
+    * ``1`` = the same, but asserting the fork: with ``caps`` None (a v10 server,
+      a P1 server run with ``--slot-fork-min-tokens 0``, or an unreadable
+      ``/props``) it logs a warning and stays OFF. Fork credit and trunk holds
+      without real sharing would over-admit the pool by the trunk size, so the
+      gate refuses rather than trusting the env (Fable re-review, MEDIUM).
+    * anything else = off."""
+    global _fork_without_caps_warned
     if not enabled():
         return False
     raw = os.environ.get(FORK_ENV, "0").strip().lower()
-    if raw == "auto":
-        return caps is not None and caps.get("mode") in ("kv", "checkpoint")
-    if raw not in _ON:
+    if raw != "auto" and raw not in _ON:
         return False
-    return caps is None or caps.get("mode") != "none"
+    if caps is None:
+        if raw != "auto" and not _fork_without_caps_warned:
+            _fork_without_caps_warned = True
+            logger.warning(
+                "prefix index: %s=%s but the server reports no /props.slot_fork "
+                "(v10, fork configured off, or /props unreadable): fork features "
+                "stay OFF (use %s=auto to follow the server)", FORK_ENV, raw, FORK_ENV)
+        return False
+    return caps.get("mode") in ("kv", "checkpoint")
 
 
 def fork_requested() -> bool:
@@ -466,8 +485,13 @@ class Entry:
     prefill_deadline: float | None = None
     prefilled: bool = False
     # In-flight only: ``/slots`` showed a prefilling slot in a read that
-    # postdates this entry's admission (review D1). Sticky.
+    # postdates this entry's admission (review D1). Sticky. Once the entry is
+    # bound to its own slot (``slot_id``, see ``_bind_inflight``) only THAT slot
+    # prefilling counts (Fable re-review, LOW).
     seen_prefilling: bool = False
+    # In-flight only: ``slot -> id_task`` from the last ``/slots`` read before
+    # admission; a slot whose task changed since is a candidate for this entry.
+    pre_tasks: dict[int, int | None] | None = field(default=None, repr=False)
     # KPF-27e (server fork on; None/() otherwise): the slot's ``content_epoch``,
     # ``n_prompt_tokens`` and ``prefix_hash`` when bound, and its checkpoints
     # ``(n_tokens, prefix_hash)`` as last verified.
@@ -520,7 +544,7 @@ def _new_stats() -> dict[str, Any]:
         "prediction_under": 0, "slot_predictions": 0, "slot_prediction_hits": 0,
         "trunk_holds": 0, "trunk_hold_s_total": 0.0, "trunk_hold_timeouts": 0,
         "lpm_passes": 0, "pins": 0, "fork_credit_tokens": 0, "fork_credit_reattributed": 0,
-        "bound_by_task": 0,
+        "bound_by_task": 0, "inflight_bound": 0, "fork_credit_reinflated": 0,
         "ledger_reads": 0, "ledger_writes": 0, "ledger_errors": 0,
     }
 
@@ -580,6 +604,8 @@ class PrefixIndex:
         self._last_reconcile: float | None = None
         # KPF-27e: the server's last ``kv_pool`` {size, used, shared} (None on v10).
         self._server_pool: dict[str, int] | None = None
+        # slot -> id_task in the last ``/slots`` read (in-flight slot binding).
+        self._slot_tasks: dict[int, int | None] | None = None
         self.stats = _new_stats()
 
     # -- helpers (caller holds the lock) -----------------------------------------
@@ -758,11 +784,54 @@ class PrefixIndex:
                                    else "bound_inferred"] += 1
                         if e.id_task is not None:
                             self.stats["bound_by_task"] += 1
+                    self._bind_inflight(now, slots)
+                    self._slot_tasks = {
+                        int(getattr(s, "slot_id")): _int(getattr(s, "id_task", None))
+                        for s in slots if _int(getattr(s, "slot_id", None)) is not None}
                 self._expire_pending(now)
             if changed:
                 self._write_ledger(changed)
         except Exception:
             logger.debug("prefix index: reconcile failed for %s", self.url, exc_info=True)
+
+    def _bind_inflight(self, now: float, slots: list) -> None:
+        """Bind an in-flight entry to the slot serving it, so trunk-first reads
+        the OWNER's slot instead of "some slot is prefilling" (Fable re-review,
+        LOW). ``timings.id_slot`` arrives only with the final chunk, after the
+        prefill, so the binding comes from ``/slots``: a processing slot whose
+        ``id_task`` changed since the read before the entry's admission is a
+        candidate. Bound only when that is unambiguous both ways (one candidate
+        slot for the entry, one unbound entry for the slot) and the read
+        postdates the dispatch (entry age >= one ``/slots`` TTL), so the owner
+        is already among the candidates; otherwise the entry keeps the
+        server-wide rule. Caller holds the lock."""
+        unbound = [e for e in self._entries.values()
+                   if e.kind == "inflight" and e.slot_id is None and e.pre_tasks is not None
+                   and not e.prefilled and now - e.ts >= self.trunk_grace_s() / 2.0]
+        if not unbound:
+            return
+        claimed = {e.slot_id for e in self._entries.values()
+                   if e.kind == "inflight" and e.slot_id is not None}
+        cands: dict[str, list[int]] = {}
+        for e in unbound:
+            pre = e.pre_tasks or {}
+            cands[e.id] = [
+                int(getattr(s, "slot_id")) for s in slots
+                if getattr(s, "is_processing", False)
+                and _int(getattr(s, "slot_id", None)) is not None
+                and int(getattr(s, "slot_id")) not in claimed
+                and _int(getattr(s, "id_task", None)) is not None
+                and _int(getattr(s, "id_task", None)) != pre.get(int(getattr(s, "slot_id")))]
+        for e in unbound:
+            mine = cands[e.id]
+            if len(mine) != 1:
+                continue
+            sid = mine[0]
+            if sum(1 for c in cands.values() if sid in c) != 1:
+                continue  # another unbound entry could be on that slot too
+            e.slot_id = sid
+            e.origin = "inferred"
+            self.stats["inflight_bound"] += 1
 
     @staticmethod
     def _stale_reason(e: Entry, s: Any) -> str | None:
@@ -849,6 +918,7 @@ class PrefixIndex:
                 chars=len(text or ""), expected_tokens=prompt_tokens, ts=now,
                 wall_ts=self._wall(), text=text,
                 prefill_deadline=None if prefill_s is None else now + max(0.0, prefill_s),
+                pre_tasks=dict(self._slot_tasks) if self._slot_tasks is not None else None,
             ))
 
     def prefilled(self, ticket: int) -> None:
@@ -865,29 +935,51 @@ class PrefixIndex:
     def trunk_grace_s() -> float:
         return max(0.0, _env_float(TRUNK_GRACE_S_ENV, DEFAULT_TRUNK_GRACE_S))
 
-    def _note_prefilling(self, now: float, server_prefilling: int | None) -> None:
+    def _unbound_prefilling(self, server_prefilling: int | None,
+                            prefilling_slots: set[int] | None) -> int | None:
+        """Prefilling slots an UNBOUND in-flight entry may be on: the server-wide
+        count, less slots bound to other in-flight entries. Caller holds the lock."""
+        if prefilling_slots is None:
+            return server_prefilling
+        bound = {e.slot_id for e in self._entries.values()
+                 if e.kind == "inflight" and e.slot_id is not None}
+        return len(prefilling_slots - bound)
+
+    def _note_prefilling(self, now: float, server_prefilling: int | None,
+                         prefilling_slots: set[int] | None = None) -> None:
         """Mark in-flight entries SEEN prefilling. Only a read that postdates the
         entry's admission counts: the ``/slots`` read is up to one TTL (half the
-        grace) old, so the entry must be at least that old. Caller holds the lock."""
-        if not server_prefilling:
-            return
+        grace) old, so the entry must be at least that old. An entry bound to
+        its slot (``_bind_inflight``) is seen only when THAT slot is prefilling
+        in ``prefilling_slots``. Caller holds the lock."""
         min_age = self.trunk_grace_s() / 2.0
+        loose = self._unbound_prefilling(server_prefilling, prefilling_slots)
         for e in self._entries.values():
-            if e.kind == "inflight" and not e.seen_prefilling and now - e.ts >= min_age:
+            if e.kind != "inflight" or e.seen_prefilling or now - e.ts < min_age:
+                continue
+            if e.slot_id is not None and prefilling_slots is not None:
+                e.seen_prefilling = e.slot_id in prefilling_slots
+            elif loose:
                 e.seen_prefilling = True
 
-    def _prefill_over(self, e: Entry, now: float, server_prefilling: int | None) -> bool:
+    def _prefill_over(self, e: Entry, now: float, server_prefilling: int | None,
+                      prefilling_slots: set[int] | None = None) -> bool:
         """Is ``e``'s trunk prefill over? ``prefill_done`` (first output), the
-        floor-rate deadline, or ``/slots`` showing no prefilling slot — the last
-        only once the entry was seen prefilling or is past the dispatch grace,
-        so a cached read from before the owner reached the server cannot end the
-        hold (review D1)."""
+        floor-rate deadline, or ``/slots`` showing the owner no longer
+        prefilling — the last only once the entry was seen prefilling or is
+        past the dispatch grace, so a cached read from before the owner reached
+        the server cannot end the hold (review D1). A bound entry reads its own
+        slot; an unbound one needs no prefilling slot that is not bound to
+        another entry."""
         if e.prefilled:
             return True
         if e.prefill_deadline is not None and now >= e.prefill_deadline:
             return True
-        return server_prefilling == 0 and (
-            e.seen_prefilling or now - e.ts >= self.trunk_grace_s())
+        if e.slot_id is not None and prefilling_slots is not None:
+            idle = e.slot_id not in prefilling_slots
+        else:
+            idle = self._unbound_prefilling(server_prefilling, prefilling_slots) == 0
+        return idle and (e.seen_prefilling or now - e.ts >= self.trunk_grace_s())
 
     # -- lookups -------------------------------------------------------------------
     def lookup(self, text: str | None, *, exclude_ticket: int | None = None,
@@ -958,10 +1050,12 @@ class PrefixIndex:
 
     def trunk_owner(self, ticket: int, text: str | None, *, min_tokens: int,
                     server_prefilling: int | None = None,
-                    hashes: tuple[str, ...] | None = None) -> Match | None:
+                    hashes: tuple[str, ...] | None = None,
+                    prefilling_slots: set[int] | None = None) -> Match | None:
         """An EARLIER in-flight request still prefilling a trunk of at least
         ``min_tokens`` that ``text`` shares (trunk-first, KPF-21).
-        ``server_prefilling`` = prefilling slots in the gate's ``/slots`` read."""
+        ``server_prefilling`` = prefilling slots in the gate's ``/slots`` read;
+        ``prefilling_slots`` = their ids (per-owner reads for bound entries)."""
         hashes = block_hashes(text, self.block) if hashes is None else hashes
         if not hashes:
             return None
@@ -969,7 +1063,7 @@ class PrefixIndex:
         me = f"inflight:{ticket}"
         with self._lock:
             entries = self._entries
-            self._note_prefilling(now, server_prefilling)
+            self._note_prefilling(now, server_prefilling, prefilling_slots)
 
             def owner(eid: str) -> bool:
                 e = entries.get(eid)
@@ -980,7 +1074,7 @@ class PrefixIndex:
                         return False  # only an earlier sibling can be the trunk
                 except ValueError:
                     return False
-                return not self._prefill_over(e, now, server_prefilling)
+                return not self._prefill_over(e, now, server_prefilling, prefilling_slots)
 
             depth, held = self._tree.match(hashes, owner)
             if depth <= 0:
@@ -1197,8 +1291,10 @@ def peek_index(url: str) -> PrefixIndex | None:
 
 def reset_indexes() -> None:
     """Drop every index (tests)."""
+    global _fork_without_caps_warned
     with _registry_lock:
         _indexes.clear()
+    _fork_without_caps_warned = False
 
 
 def all_status() -> dict[str, Any]:

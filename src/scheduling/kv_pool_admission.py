@@ -276,6 +276,13 @@ class SharedKVPoolAdmission:
         # Review D3: admitted ticket -> (url, fork source ticket, credited
         # tokens), so a source's release hands its shared cells to a survivor.
         self._fork_source: dict[int, tuple[str, int, int]] = {}
+        # Fable re-review (MEDIUM, P1): admitted ticket -> (url, source slot,
+        # its id_task, credited tokens) for a fork credit taken against a BUSY
+        # slot. That source has no ticket, so its cells are counted only by
+        # /slots while it is processing; once it is not (idle, gone, another
+        # task) or /slots is unreadable, ``_reinflate_busy_fork`` puts the
+        # credit back on the dependant's reservation. Empty with the flag off.
+        self._busy_fork: dict[int, tuple[str, int, int | None, int]] = {}
         # KPF-27e: url -> the server's ``/props.slot_fork`` (or None). Read only
         # with the flag on. An injected occupancy (tests) without an injected
         # reader never reads /props.
@@ -571,7 +578,9 @@ class SharedKVPoolAdmission:
             occ = self._occupancy_fn(url)
         except Exception:
             logger.debug("KV pool admission: occupancy read failed for %s", url, exc_info=True)
-            return None
+            occ = None
+        if self._busy_fork:  # RTG-58 P2 fork credit against a busy slot only
+            self._reinflate_busy_fork(url, occ)
         if occ is None:
             return None
         ratio = self.new_token_ratio(url)
@@ -760,6 +769,10 @@ class SharedKVPoolAdmission:
                             # cells live on in this ticket: release re-attributes.
                             self._fork_source[ticket] = (
                                 url, int(fork_src), int(pview["fork_credit_tokens"]))
+                        busy_src = pview.get("fork_busy_slot") if pview is not None else None
+                        if busy_src is not None and int(pview["fork_credit_tokens"] or 0) > 0:
+                            self._busy_fork[ticket] = (
+                                url, busy_src[0], busy_src[1], int(pview["fork_credit_tokens"]))
                         admitted = True
                         waited = time.perf_counter() - start
                         stat = self._stat(url)
@@ -915,15 +928,17 @@ class SharedKVPoolAdmission:
         lock; never raises (a failure leaves the legacy decision untouched).
 
         ``hashes`` = the key's block hashes, computed once per ticket (D4).
-        ``caps`` = the server's ``/props.slot_fork`` (KPF-27e): it can switch the
-        fork off (``mode: none``) or on (``FORK=auto``), raises the trunk and
+        ``caps`` = the server's ``/props.slot_fork`` (KPF-27e): the fork is on
+        only when it reports ``kv`` / ``checkpoint`` (None = off, for ``FORK=1``
+        too: never a fork credit without real sharing), raises the trunk and
         credit floors to the server's ``min_tokens`` (no fork happens below it)
         and, in ``checkpoint`` mode, cuts a busy source to its checkpoints."""
         from src.inference import prefix_index as pi
 
         view: dict[str, Any] = {"want": want, "trunk_hold": False, "lpm_score": 0,
                                 "match": None, "fork": False, "fork_credit_tokens": 0,
-                                "trunk_owner": None, "fork_source_ticket": None}
+                                "trunk_owner": None, "fork_source_ticket": None,
+                                "fork_busy_slot": None}
         try:
             try:
                 occ = self._occupancy_fn(url)
@@ -974,20 +989,37 @@ class SharedKVPoolAdmission:
                     src_ticket = int(str(m.entry_id).split(":", 1)[1])
                 except (IndexError, ValueError):
                     src_ticket = None
-            if forkable and (src_ticket is not None or (m.source == "slot_busy" and slots_up)):
+            busy_slot = None
+            if forkable and m.source == "slot_busy" and slots_up and m.slot_id is not None:
+                # Credited only while /slots shows that slot processing the task
+                # it runs now; _reinflate_busy_fork undoes it when that ends.
+                s = next((x for x in getattr(occ, "slots", ()) or ()
+                          if getattr(x, "slot_id", None) == m.slot_id
+                          and getattr(x, "is_processing", False)), None)
+                if s is not None:
+                    task = getattr(s, "id_task", None)
+                    busy_slot = (int(m.slot_id), task if isinstance(task, int) else None)
+            if forkable and (src_ticket is not None or busy_slot is not None):
                 view["fork_credit_tokens"] = min(int(m.tokens_est), max(0, want - 1))
                 view["want"] = max(1, want - view["fork_credit_tokens"])
                 view["fork_source_ticket"] = src_ticket
+                view["fork_busy_slot"] = busy_slot
             if pi.lpm_enabled() and reusable:
                 view["lpm_score"] = int(m.tokens_est)
             if fork:
                 min_tokens = max(1, server_min, pi._env_int(pi.TRUNK_MIN_TOKENS_ENV,
                                                             pi.DEFAULT_TRUNK_MIN_TOKENS))
                 prefilling = None
+                prefilling_slots: set[int] | None = None
                 if occ is not None and getattr(occ, "slots", None) is not None:
-                    prefilling = sum(1 for s in occ.slots if getattr(s, "prefilling", False))
+                    pre = [s for s in occ.slots if getattr(s, "prefilling", False)]
+                    prefilling = len(pre)
+                    ids = [getattr(s, "slot_id", None) for s in pre]
+                    if all(isinstance(i, int) for i in ids):
+                        prefilling_slots = set(ids)
                 owner = pidx.trunk_owner(ticket, key, min_tokens=min_tokens,
-                                         server_prefilling=prefilling, hashes=hashes)
+                                         server_prefilling=prefilling, hashes=hashes,
+                                         prefilling_slots=prefilling_slots)
                 if owner is not None and reusable and m.matched_chars >= owner.matched_chars:
                     # The trunk is already shareable elsewhere (a prefilled
                     # sibling or a slot): the "owner" itself forked from it and
@@ -1135,6 +1167,7 @@ class SharedKVPoolAdmission:
                     self._inflight.pop(url, None)
             else:
                 self._fork_source.pop(ticket, None)
+            self._busy_fork.pop(ticket, None)
             lease = self._prefill_lease.get(url)
             if lease is not None and lease[0] == ticket:
                 self._drop_lease(url)
@@ -1151,6 +1184,49 @@ class SharedKVPoolAdmission:
                         idx.stats["fork_credit_reattributed"] += reattributed
             except Exception:
                 logger.debug("KV pool admission: fork credit stat failed", exc_info=True)
+
+    def _reinflate_busy_fork(self, url: str, occ: Any) -> int:
+        """Fable re-review (MEDIUM, P1). A fork credit taken against a BUSY slot
+        relied on /slots counting that slot's cells. ``projected_tokens`` counts
+        only processing slots, so once the source is idle (its cells live on,
+        shared with the dependant), gone, running another task, or /slots is
+        unreadable, nothing counts them: put the credit back on the dependant's
+        reservation. One-way (conservative). Returns the tokens re-inflated."""
+        by_id: dict[Any, Any] | None = None
+        if occ is not None:
+            by_id = {getattr(s, "slot_id", None): s for s in getattr(occ, "slots", ()) or ()}
+        total = 0
+        with self._cond:
+            reserved = self._inflight.get(url, {})
+            for t, (u, sid, task, credit) in list(self._busy_fork.items()):
+                if u != url:
+                    continue
+                if t not in reserved:
+                    self._busy_fork.pop(t, None)  # defensive: already released
+                    continue
+                s = by_id.get(sid) if by_id is not None else None
+                cur = getattr(s, "id_task", None) if s is not None else None
+                still_busy = (s is not None and getattr(s, "is_processing", False)
+                              and (task is None or not isinstance(cur, int) or cur == task))
+                if still_busy:
+                    continue
+                reserved[t] = reserved[t] + credit
+                self._busy_fork.pop(t, None)
+                total += credit
+                info = (self._admission_info.get(t) or {}).get("prefix_index")
+                if isinstance(info, dict):
+                    info["fork_credit_reinflated"] = credit
+        if total:
+            try:
+                from src.inference import prefix_index as pi
+
+                idx = pi.peek_index(url)
+                if idx is not None:
+                    with idx._lock:
+                        idx.stats["fork_credit_reinflated"] += total
+            except Exception:
+                logger.debug("KV pool admission: fork credit stat failed", exc_info=True)
+        return total
 
     def _reattribute_fork_credit(self, url: str, ticket: int, reserved: dict[int, int]) -> int:
         """Review D3. ``ticket`` left; tickets that forked from it share cells it

@@ -154,12 +154,17 @@ def test_lpm_pass_happens_and_each_waiter_is_passed_at_most_once(monkeypatch):
     assert pool._admissible(URL, 102, [100, 102], 50, False, 1000, None) == "wait"  # budget spent
 
 
+#: A P1 server's ``/props.slot_fork`` with the fork on: fork features follow it.
+KV_CAPS = {"min_tokens": 0, "mode": "kv", "checkpoint_at": False}
+
+
 def test_trunk_hold_waits_for_the_siblings_prefill_with_fork_on(monkeypatch):
-    monkeypatch.setenv(pi.FORK_ENV, "1")
+    monkeypatch.setenv(pi.FORK_ENV, "auto")
     monkeypatch.setenv(pi.TRUNK_MIN_TOKENS_ENV, "1000")
     slots = Slots()
     slots.set(0, busy=True, n=12000, task=1, decoded=0)  # the owner is in prefill
-    pool = SharedKVPoolAdmission(occupancy=slots, cross_process=False)
+    pool = SharedKVPoolAdmission(occupancy=slots, cross_process=False,
+                                 fork_caps=lambda url: KV_CAPS)
     trunk = _doc("F", 1200)
     owner = pool.acquire(URL, 13000, 393216, prefix_key=trunk + "child A", timeout_s=0)
     assert owner is not None
@@ -197,12 +202,13 @@ def test_no_trunk_hold_without_fork(monkeypatch):
 
 
 def test_trunk_hold_times_out(monkeypatch):
-    monkeypatch.setenv(pi.FORK_ENV, "1")
+    monkeypatch.setenv(pi.FORK_ENV, "auto")
     monkeypatch.setenv(pi.TRUNK_MIN_TOKENS_ENV, "1000")
     monkeypatch.setenv(pi.TRUNK_HOLD_S_ENV, "0.2")
     slots = Slots()
     slots.set(0, busy=True, n=12000, task=1, decoded=0)
-    pool = SharedKVPoolAdmission(occupancy=slots, cross_process=False)
+    pool = SharedKVPoolAdmission(occupancy=slots, cross_process=False,
+                                 fork_caps=lambda url: KV_CAPS)
     trunk = _doc("O", 1200)
     owner = pool.acquire(URL, 13000, 393216, prefix_key=trunk + "A", timeout_s=0)
     t0 = time.perf_counter()

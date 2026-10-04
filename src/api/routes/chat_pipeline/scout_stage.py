@@ -739,7 +739,10 @@ class ChatCompletionsTransport:
                         usage = obj["usage"]
                     if isinstance(obj.get("timings"), dict):
                         timings = obj["timings"]
-                    if on_first_chunk is not None and obj.get("choices"):
+                    # A ``prompt_progress`` chunk (``return_progress``) is
+                    # sent DURING the prefill: it must not hand the prefill on.
+                    if (on_first_chunk is not None and obj.get("choices")
+                            and "prompt_progress" not in obj):
                         first, on_first_chunk = on_first_chunk, None
                         try:
                             first()
