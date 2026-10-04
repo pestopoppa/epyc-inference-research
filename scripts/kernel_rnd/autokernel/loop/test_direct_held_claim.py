@@ -147,3 +147,46 @@ def test_gpu_close_observer_failure_is_unavailable_and_releases(tmp_path, monkey
     assert original.retained_interval()["close"]["status"] == "unavailable"
     with claim.hold(path, device_id="fixture-device") as recovered:
         assert recovered.observe()["status"] == "held"
+
+
+def test_gpu_only_device_claim_retains_real_gpu_quiet_exclusive_hold(tmp_path):
+    # A real temporary flock stands in for the launcher's gpu-quiet EXCLUSIVE hold
+    # (held here by this process: relation "self"); no orchestrator lock is touched.
+    quiet = tmp_path / "gpu_quiet.lock"
+    with quiet.open("a") as handle:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with claim.hold(tmp_path / "fixture-device.lock", device_id="fixture-device",
+                        gpu_quiet_path=quiet) as gpu:
+            opened = gpu.gpu_quiet_open()
+            holder = claim.gpu_quiet_exclusive_holder(opened)
+            assert holder is not None and holder["pid"] == os.getpid()
+            assert holder["relation"] == "self" and holder["mode"] == "exclusive"
+        interval = gpu.retained_interval()
+    assert set(interval["gpu_quiet"]) == {"open", "close"}
+    assert claim.gpu_quiet_exclusive_holder(interval["gpu_quiet"]["close"]) is not None
+    assert interval["physical_region_fraction"] == 0.0
+    assert interval["gpu_device_ids"] == ["fixture-device"]
+
+
+def test_gpu_quiet_observation_rejects_shared_foreign_and_missing_holders(tmp_path):
+    quiet = tmp_path / "gpu_quiet.lock"
+    quiet.touch()
+    inode = quiet.stat().st_ino
+    locks = tmp_path / "locks"
+
+    def observed(*rows):
+        locks.write_text("".join(f"{index}: FLOCK  ADVISORY  {mode} {pid} 00:00:{inode} 0 EOF\n"
+                                 for index, (mode, pid) in enumerate(rows, 1)))
+        return claim.observe_gpu_quiet(quiet, proc_locks=locks)
+
+    parent = os.getppid()
+    assert claim.gpu_quiet_exclusive_holder(observed(("WRITE", parent)))["relation"] == "ancestor"
+    assert claim.gpu_quiet_exclusive_holder(observed(("READ", parent))) is None
+    assert claim.gpu_quiet_exclusive_holder(observed()) is None
+    assert claim.gpu_quiet_exclusive_holder(observed(("READ", parent), ("READ", os.getpid()))) is None
+    # A pid that is neither us nor an ancestor (pid 2 is kthreadd, never our ancestor).
+    assert claim.gpu_quiet_exclusive_holder(observed(("WRITE", 2))) is None
+    # A device claim without gpu_quiet_path carries no gpu-quiet key (CPU+GPU route unchanged).
+    with claim.hold(tmp_path / "fixture-device.lock", device_id="fixture-device") as gpu:
+        assert gpu.gpu_quiet_open() is None
+    assert "gpu_quiet" not in gpu.retained_interval()

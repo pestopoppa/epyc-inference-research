@@ -59,13 +59,19 @@ def _verify(body):
         intervals = _plain(store.read(reference["locator"], reference["sha256"]))
     finally:
         store.close()
-    cpu = next(row for row in intervals["components"] if row["device_id"] == "cpu")
+    cpu = next((row for row in intervals["components"] if row["device_id"] == "cpu"), None)
     gpu = None
     if target["scope"] == "gpu_serving_selected_workload":
         from .claim import DEVICE_ID
         gpu = next((row for row in intervals["components"] if row["device_id"] == DEVICE_ID), None)
+        if gpu is not None and cpu is None:
+            # GPU-only run (--gpu-cpu-region-claim off): the device context is also the
+            # held owner (reopen_held_receipts already proved its gpu-quiet receipt).
+            cpu = gpu
         if gpu is None or gpu["domain"] != cpu["domain"]:
             raise sr.SerialRefused("GPU runtime recovery lacks both original component contexts")
+    if cpu is None:
+        raise sr.SerialRefused("runtime recovery lacks its original CPU context")
     identity = {"pid": cpu["domain"]["pid"],
         "start_ticks": cpu["domain"]["process_start_ticks"], "boot_id": cpu["domain"]["boot_id"]}
     if active.get("process_identity") != identity:

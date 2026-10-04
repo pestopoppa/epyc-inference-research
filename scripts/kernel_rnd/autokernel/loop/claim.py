@@ -66,6 +66,91 @@ def _ensure_orchestrator_importable() -> None:
         f"EPYC_ROOT_REPO={configured} does not resolve the orchestrator CPU-lock owner")
 
 
+def _process_start_ticks(pid: int) -> int | None:
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+        return int(stat[stat.rfind(")") + 2:].split()[19])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def _ancestor_pids(pid: int) -> list[int]:
+    """This process's ancestors, nearest first (bounded; read-only /proc walk)."""
+    chain = []
+    current = pid
+    for _ in range(64):
+        try:
+            stat = Path(f"/proc/{current}/stat").read_text()
+            parent = int(stat[stat.rfind(")") + 2:].split()[1])
+        except (OSError, ValueError, IndexError):
+            break
+        if parent <= 0 or parent in chain:
+            break
+        chain.append(parent)
+        current = parent
+    return chain
+
+
+def observe_gpu_quiet(lock_path: Path, *, proc_locks: Path = Path("/proc/locks")) -> dict:
+    """Read-only observation of who owns the host-wide gpu-quiet flock right now.
+
+    A GPU run with no CPU region claim (`--gpu-cpu-region-claim off`) runs under a
+    gpu-quiet EXCLUSIVE hold taken by its launcher (`region-lock run --gpu-quiet
+    exclusive -- serial_run ...`), so the owner is an ANCESTOR of this process, not
+    this process. Every CPU-lane measurement takes gpu-quiet SHARED with its regions,
+    so an exclusive hold spanning the device interval is the GPU-only run's host
+    resource receipt. This never acquires anything: it records the kernel's lock
+    rows (waiters excluded), each owner's mode, start ticks and relation to us.
+    """
+    pid = os.getpid()
+    result = {"path": str(lock_path), "device": None, "inode": None,
+              "path_unchanged": False, "owners": [], "error": None}
+    try:
+        before = Path(lock_path).stat()
+        with Path(proc_locks).open("r", encoding="utf-8") as stream:
+            raw = stream.read((1 << 20) + 1)
+        if len(raw) > 1 << 20:
+            raise ClaimRefused("kernel lock observation exceeded byte bound")
+        ancestors = _ancestor_pids(pid)
+        for line in raw.splitlines():
+            fields = line.split()
+            if "->" in fields or len(fields) < 6 or fields[1] != "FLOCK":
+                continue
+            try:
+                same = int(fields[5].rsplit(":", 1)[-1]) == before.st_ino
+                owner = int(fields[4])
+            except ValueError:
+                continue
+            if not same:
+                continue
+            result["owners"].append({
+                "pid": owner, "start_ticks": _process_start_ticks(owner),
+                "mode": "exclusive" if fields[3] == "WRITE" else "shared",
+                "relation": ("self" if owner == pid else
+                             "ancestor" if owner in ancestors else "other"),
+                "kernel_row": " ".join(fields)})
+        after = Path(lock_path).stat()
+        result.update(device=before.st_dev, inode=before.st_ino,
+                      path_unchanged=(after.st_dev, after.st_ino)
+                      == (before.st_dev, before.st_ino))
+    except (OSError, ValueError, ClaimRefused) as exc:
+        result["error"] = f"{type(exc).__name__}: {exc}"
+    return result
+
+
+def gpu_quiet_exclusive_holder(observation: dict) -> dict | None:
+    """The single exclusive owner (self or ancestor) of one observation, else None."""
+    owners = observation.get("owners")
+    if observation.get("error") is not None or observation.get("path_unchanged") is not True \
+            or not isinstance(owners, list) or len(owners) != 1:
+        return None
+    owner = owners[0]
+    if owner.get("mode") != "exclusive" or owner.get("relation") not in {"self", "ancestor"} \
+            or type(owner.get("start_ticks")) is not int:
+        return None
+    return owner
+
+
 class HeldCpuClaim(dict):
     """The existing acquired context, with read-only open/close observations.
 
@@ -75,7 +160,8 @@ class HeldCpuClaim(dict):
     (`CpuClaimLease`, `yield_lease`) is owned by `hold_cpu`, not by this receipt.
     """
 
-    def __init__(self, receipt, lock_paths, *, region_fraction=0.0, affinity=()):
+    def __init__(self, receipt, lock_paths, *, region_fraction=0.0, affinity=(),
+                 gpu_quiet_path=None):
         super().__init__(receipt)
         self._receipt = dict(receipt)
         self._owner_pid = os.getpid()
@@ -99,6 +185,11 @@ class HeldCpuClaim(dict):
         except (OSError, ValueError, IndexError) as exc:
             self._domain["error"] = f"{type(exc).__name__}: {exc}"
         self._opened = self.observe()
+        # GPU-only run (no CPU region): the launcher's gpu-quiet EXCLUSIVE hold is
+        # observed beside the device flock at open and close (`observe_gpu_quiet`).
+        self._gpu_quiet_path = None if gpu_quiet_path is None else Path(gpu_quiet_path)
+        self._gpu_quiet = ({"open": observe_gpu_quiet(self._gpu_quiet_path), "close": None}
+                           if self._gpu_quiet_path is not None else None)
         self._context_id = hashlib.sha256(json.dumps(
             {"domain": self._domain, "started_at": self._started_at,
              "locks": self._opened["locks"]}, sort_keys=True,
@@ -141,14 +232,24 @@ class HeldCpuClaim(dict):
         result["ended_monotonic_s"] = time.monotonic()
         return result
 
+    def gpu_quiet_open(self):
+        """The open gpu-quiet observation, or None when this context does not carry one."""
+        return None if self._gpu_quiet is None else self._gpu_quiet["open"]
+
     def _closing(self):
         self._closed = self.observe()
+        if self._gpu_quiet is not None:
+            self._gpu_quiet["close"] = observe_gpu_quiet(self._gpu_quiet_path)
         self._active = False
 
     def _close_observation_failed(self, error):
         self._active = False
         self._closed = {"status": "unavailable", "locks": [], "owner_pid": self._owner_pid,
                         "error": f"{type(error).__name__}: {error}"}
+        if self._gpu_quiet is not None and self._gpu_quiet["close"] is None:
+            self._gpu_quiet["close"] = {"path": str(self._gpu_quiet_path), "device": None,
+                "inode": None, "path_unchanged": False, "owners": [],
+                "error": f"{type(error).__name__}: {error}"}
 
     def _released_now(self):
         self._ended_at = time.monotonic()
@@ -159,7 +260,10 @@ class HeldCpuClaim(dict):
         if not self._released or self._ended_at is None or self._closed is None:
             raise ClaimRefused("original claim has not completed its owning release")
         locks = self._opened["locks"]
-        return {"context_id": self._context_id, "domain": dict(self._domain),
+        quiet = ({} if self._gpu_quiet is None
+                 else {"gpu_quiet": {"open": self._gpu_quiet["open"],
+                                     "close": self._gpu_quiet["close"]}})
+        return {**quiet, "context_id": self._context_id, "domain": dict(self._domain),
                 "ownership_generation": 1, "allocation_generation": 1,
                 "started_at": self._started_at, "ended_at": self._ended_at,
                 "device_id": self._receipt["device_id"],
@@ -195,12 +299,17 @@ def publish_intervals(store, selection, contexts, *, target):
 
 
 @contextmanager
-def hold(lock_path: Path | None = None, *, device_id: str = DEVICE_ID) -> Iterator[dict]:
+def hold(lock_path: Path | None = None, *, device_id: str = DEVICE_ID,
+         gpu_quiet_path: Path | None = None) -> Iterator[dict]:
     """Hold an exclusive claim for the whole window, or refuse.
 
     Non-blocking on purpose: a loop that waits on a lock behind an unknown holder is
     a loop that looks alive while doing nothing. Refusing tells the operator the
     device is busy, which is a fact worth surfacing.
+
+    `gpu_quiet_path` (GPU-only runs, `--gpu-cpu-region-claim off`): also observe the
+    launcher's gpu-quiet EXCLUSIVE hold at open and close; it is retained as the
+    host-side resource receipt of a run that holds no CPU region.
     """
     lock_path = DEVICE_LOCK if lock_path is None else lock_path
     lock_path.parent.mkdir(parents=True, exist_ok=True)
@@ -216,7 +325,8 @@ def hold(lock_path: Path | None = None, *, device_id: str = DEVICE_ID) -> Iterat
     receipt = None
     try:
         receipt = HeldCpuClaim({"device_id": device_id, "lock_path": str(lock_path),
-                               "pid": os.getpid()}, [lock_path])
+                               "pid": os.getpid()}, [lock_path],
+                               gpu_quiet_path=gpu_quiet_path)
         yield receipt
     finally:
         try:

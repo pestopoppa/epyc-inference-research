@@ -326,12 +326,46 @@ def _number(value: Any, label: str) -> float:
     return float(value)
 
 
+_COMPONENT_FIELDS = frozenset({"context_id", "domain", "ownership_generation",
+    "allocation_generation", "started_at", "ended_at", "device_id",
+    "physical_claim_ids", "physical_region_fraction", "gpu_device_ids",
+    "memory_reservation_bytes", "affinity_cores", "open", "close", "released"})
+
+
+def _gpu_quiet_claim(value: Any, domain: Mapping[str, Any]) -> str:
+    """The physical claim ID of a launcher-held gpu-quiet EXCLUSIVE hold spanning a
+    GPU-only device interval (`claim.observe_gpu_quiet` at device open and close).
+
+    Same lock file, same single owner (pid and start ticks), exclusive, and this
+    process or its ancestor at both ends; otherwise the interval has no host receipt.
+    """
+    quiet = _closed(value, {"open", "close"}, "held gpu-quiet")
+    rows = []
+    for name in ("open", "close"):
+        row = _closed(quiet[name], {"path", "device", "inode", "path_unchanged", "owners",
+                                    "error"}, f"held gpu-quiet {name}")
+        owners = row["owners"]
+        owner = (_closed(owners[0], {"pid", "start_ticks", "mode", "relation", "kernel_row"},
+                         f"held gpu-quiet {name} owner")
+                 if isinstance(owners, list) and len(owners) == 1 else None)
+        if row["error"] is not None or row["path_unchanged"] is not True or owner is None \
+                or owner["mode"] != "exclusive" or owner["relation"] not in {"self", "ancestor"} \
+                or type(owner["pid"]) is not int or type(owner["start_ticks"]) is not int \
+                or type(row["device"]) is not int or type(row["inode"]) is not int \
+                or not isinstance(row["path"], str) or not row["path"]:
+            raise SerialSchedulingRefused(
+                "GPU-only held interval lacks a continuous gpu-quiet EXCLUSIVE hold")
+        rows.append((row["path"], row["device"], row["inode"], owner["pid"],
+                     owner["start_ticks"]))
+    if rows[0] != rows[1]:
+        raise SerialSchedulingRefused("held gpu-quiet owner or lock identity changed")
+    return f"{domain['boot_id']}:flock:{rows[0][1]}:{rows[0][2]}"
+
+
 def _component(value: Any) -> dict[str, Any]:
-    row = _closed(value, {"context_id", "domain", "ownership_generation",
-        "allocation_generation", "started_at", "ended_at", "device_id",
-        "physical_claim_ids", "physical_region_fraction", "gpu_device_ids",
-        "memory_reservation_bytes", "affinity_cores", "open", "close", "released"},
-        "held component")
+    fields = set(_COMPONENT_FIELDS) | ({"gpu_quiet"} if isinstance(value, Mapping)
+                                       and "gpu_quiet" in value else set())
+    row = _closed(value, fields, "held component")
     domain = _closed(row["domain"], {"kind", "clock", "pid", "boot_id",
         "process_start_ticks", "error"}, "held component domain")
     if domain["kind"] != "direct_loop" or domain["clock"] != "monotonic" \
@@ -383,6 +417,10 @@ def _component(value: Any) -> dict[str, Any]:
     if not 0 <= fraction <= 1 or type(row["memory_reservation_bytes"]) is not int \
             or row["memory_reservation_bytes"] < 0:
         raise SerialSchedulingRefused("held component resource vector is invalid")
+    if "gpu_quiet" in row:
+        if row["device_id"] == "cpu":
+            raise SerialSchedulingRefused("a CPU held component carries no gpu-quiet receipt")
+        row = dict(row, gpu_quiet_claim_id=_gpu_quiet_claim(row["gpu_quiet"], domain))
     return dict(row, started_at=start, ended_at=end, physical_region_fraction=fraction)
 
 
@@ -415,11 +453,16 @@ def reopen_held_receipts(batch_dir: Path, reference: Mapping[str, Any], *,
     components = tuple(_component(item) for item in body["components"])
     cpu = [item for item in components if item["device_id"] == "cpu"]
     gpu = [item for item in components if item["device_id"] != "cpu"]
-    if len(cpu) != 1 or len(gpu) > 1:
-        raise SerialSchedulingRefused("held intervals lack one original CPU context")
     proposal = selection.proposal
     if proposal is None:
         raise SerialSchedulingRefused("held interval selection has no proposal")
+    if not cpu and len(gpu) == 1:
+        return _gpu_only_receipts(gpu[0], proposal, selection)
+    if len(cpu) != 1 or len(gpu) > 1:
+        raise SerialSchedulingRefused("held intervals lack one original CPU context")
+    if any("gpu_quiet_claim_id" in item for item in components):
+        raise SerialSchedulingRefused(
+            "a gpu-quiet receipt belongs only to a GPU-only held interval")
     host = cpu[0]
     segments: list[tuple[float, float, tuple[str, ...], tuple[str, ...], float,
                         tuple[str, ...], int]] = []
@@ -466,6 +509,44 @@ def reopen_held_receipts(batch_dir: Path, reference: Mapping[str, Any], *,
         affinity_cores=affinity, beneficiary_shares={proposal.proposal_id: 1.0})
         for index, (start, end, physical, devices, fraction, affinity, memory)
         in enumerate(segments))
+
+
+def _gpu_only_receipts(device: Mapping[str, Any], proposal: Any,
+                       selection: scheduling.Selection
+                       ) -> tuple[scheduling.HeldClaimReceipt, ...]:
+    """One receipt for a GPU run that held NO CPU region (`--gpu-cpu-region-claim off`).
+
+    Its resources are the mi210_0 device flock plus the launcher's gpu-quiet EXCLUSIVE
+    hold across the whole device interval. Every CPU-lane measurement takes gpu-quiet
+    SHARED with its regions, so that hold excludes all CPU measurement host-wide; the
+    host share is therefore the selected proposal's own estimate, never a smaller
+    invented fraction. Without the gpu-quiet evidence the interval is refused.
+    """
+    if proposal.backend != "gpu" or tuple(device["gpu_device_ids"]) \
+            != proposal.estimated_claims.gpu_devices:
+        raise SerialSchedulingRefused("held GPU identity differs from selected resources")
+    if "gpu_quiet_claim_id" not in device:
+        raise SerialSchedulingRefused(
+            "GPU-only held interval lacks a continuous gpu-quiet EXCLUSIVE hold")
+    if device["physical_region_fraction"] != 0.0:
+        raise SerialSchedulingRefused("GPU-only held interval claims a CPU region it never held")
+    if device["memory_reservation_bytes"] != proposal.estimated_claims.memory_reservation_bytes:
+        raise SerialSchedulingRefused("held resources differ from selected resource vector")
+    fraction = proposal.estimated_claims.physical_region_fraction
+    if fraction <= 0:
+        raise SerialSchedulingRefused("selected GPU proposal carries no host share")
+    return (scheduling.HeldClaimReceipt(
+        receipt_id=_digest({"selection_digest": selection.digest,
+                            "context_ids": [device["context_id"]], "segment": 0}),
+        proposal_id=proposal.proposal_id, backend=proposal.backend,
+        stage_class=proposal.stage_class, started_at=device["started_at"],
+        ended_at=device["ended_at"], ownership_generation=1, allocation_generation=1,
+        physical_claim_ids=tuple(device["physical_claim_ids"]
+                                 + [device["gpu_quiet_claim_id"]]),
+        physical_region_fraction=fraction, gpu_device_ids=tuple(device["gpu_device_ids"]),
+        memory_reservation_bytes=device["memory_reservation_bytes"],
+        affinity_cores=tuple(device["affinity_cores"]),
+        beneficiary_shares={proposal.proposal_id: 1.0}),)
 
 
 __all__ = [

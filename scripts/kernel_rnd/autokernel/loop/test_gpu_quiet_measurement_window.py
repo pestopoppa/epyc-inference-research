@@ -333,3 +333,37 @@ def test_real_exclusive_measurement_waits_for_a_shared_cpu_holder(real_gpu_quiet
         assert state["mode"] == "exclusive"
         assert [h["role"] for h in state["holders"]] == [claim.GPU_QUIET_ROLE]
     assert quiet.holders()["held"] is False
+
+
+# ------------------------------------------------------------------ GPU-only runs (no region)
+
+def test_gpu_only_run_wires_launcher_gpu_quiet_into_its_device_claim():
+    """`--gpu-cpu-region-claim off`: the device claim observes the launcher's run-wide
+    gpu-quiet EXCLUSIVE hold (its host resource receipt for serial settlement); the
+    per-measurement policy is refused at startup, and a missing hold refuses before a build."""
+    body = (Path(__file__).parent / "run.py").read_text(encoding="utf-8")
+    assert re.search(r"if gpu_skip_cpu_claim:\n\s+if args\.cpu_measurement_gpu_quiet != "
+                     r"CPU_MEASUREMENT_GPU_QUIET_OFF:\n\s+parser\.error\(", body)
+    assert "gpu_only_quiet_path = claim.gpu_quiet_preflight()" in body
+    assert re.search(r"claim\.hold\(\n\s+gpu_quiet_path=gpu_only_quiet_path if gpu_skip_cpu_claim "
+                     r"else None\)\)", body)
+    assert re.search(r"if gpu_skip_cpu_claim and claim\.gpu_quiet_exclusive_holder\(\n\s+"
+                     r"receipt\.gpu_quiet_open\(\)\) is None:\n\s+raise claim\.ClaimRefused", body)
+
+
+def test_real_owner_exclusive_hold_is_a_gpu_only_device_receipt(real_gpu_quiet, tmp_path):
+    """Against the orchestrator's own module, on the conftest's temp lock dir: an
+    EXCLUSIVE gpu-quiet hold taken through the owner is observed by the device claim at
+    open and close; a SHARED (CPU-lane) hold is not a receipt."""
+    from . import serial_scheduling as ss
+    quiet = _real_owner()
+    lock = quiet.gpu_quiet_lock_path()
+    with quiet.gpu_quiet_lock("exclusive", role="ak-gpu-test", request_tag="t"):
+        with claim.hold(tmp_path / "fixture-device.lock", device_id="fixture-device",
+                        gpu_quiet_path=lock) as gpu:
+            assert claim.gpu_quiet_exclusive_holder(gpu.gpu_quiet_open()) is not None
+        interval = gpu.retained_interval()
+    assert ss._gpu_quiet_claim(interval["gpu_quiet"], interval["domain"]).endswith(
+        f":{lock.stat().st_ino}")
+    with quiet.gpu_quiet_lock("shared", role="autokernel-cpu", request_tag="t"):
+        assert claim.gpu_quiet_exclusive_holder(claim.observe_gpu_quiet(lock)) is None

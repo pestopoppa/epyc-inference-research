@@ -235,3 +235,133 @@ def test_reopen_refuses_foreign_target_and_lost_original_claim(tmp_path):
         ss.reopen_held_receipts(tmp_path / "other", {
             "schema": ss.REFERENCE_SCHEMA, "selection_digest": selected.digest,
             "evidence": other_ref}, selection=selected, target={"selected_id": "foreign"})
+
+
+def _quiet_observation(*, mode="exclusive", relation="ancestor", pid=77, ticks=5, inode=4242):
+    return {"path": "/locks/gpu_quiet.lock", "device": 1, "inode": inode,
+            "path_unchanged": True, "error": None,
+            "owners": [{"pid": pid, "start_ticks": ticks, "mode": mode,
+                        "relation": relation, "kernel_row": "original"}]}
+
+
+def _gpu_only_bundle(tmp_path, quiet, *, fraction=0, name="gpu-only"):
+    source = manifest()
+    state = scheduling.initial_state(source.config, source.scheduler_id)
+    _state, selected, _index = ss.select_target(
+        source, state, ("gpu",), now=1, stage_number=0)
+    target = {"selected_id": "gpu", "original": "fixture"}
+    component = _component("mi210_0", 3, 7, fraction=fraction, claim="gpu-flock")
+    component["affinity_cores"] = []
+    if quiet is not None:
+        component["gpu_quiet"] = quiet
+    body = {"schema": ss.INTERVAL_SCHEMA, "selection": selected.to_dict(),
+            "selection_digest": selected.digest, "target": target, "components": [component]}
+    directory = tmp_path / name
+    directory.mkdir()
+    store = ArtifactStore(directory / "held-claim-artifacts")
+    try:
+        artifact = store.write("direct-held-intervals", body).to_dict()
+    finally:
+        store.close()
+    reference = {"schema": ss.REFERENCE_SCHEMA, "selection_digest": selected.digest,
+                 "evidence": artifact}
+    return directory, reference, selected, target
+
+
+def test_reopen_accepts_gpu_only_interval_with_device_claim_and_gpu_quiet(tmp_path):
+    directory, reference, selected, target = _gpu_only_bundle(
+        tmp_path, {"open": _quiet_observation(), "close": _quiet_observation()})
+    (receipt,) = ss.reopen_held_receipts(directory, reference, selection=selected,
+                                         target=target)
+    assert (receipt.started_at, receipt.ended_at) == (3, 7)
+    assert receipt.gpu_device_ids == ("mi210_0",)
+    # The device flock plus the gpu-quiet flock are the physical resource receipt.
+    assert receipt.physical_claim_ids == ("boot:flock:1:904", "boot:flock:1:4242")
+    # Host share: the selected proposal's own estimate (gpu-quiet EXCLUSIVE excludes
+    # every CPU-lane measurement), never a smaller invented fraction.
+    assert receipt.physical_region_fraction == 0.5 == \
+        selected.proposal.estimated_claims.physical_region_fraction
+    assert receipt.affinity_cores == ()
+    # The scheduler settles it like any other held stage.
+    source = manifest()
+    state = scheduling.initial_state(source.config, source.scheduler_id)
+    state, issued, _index = ss.select_target(source, state, ("gpu",), now=1, stage_number=0)
+    assert issued.digest == selected.digest
+    scheduling.account_stage_components(source.config, state, selected, (receipt,),
+                                        outcome="failed")
+
+
+@pytest.mark.parametrize("quiet, match", [
+    (None, "gpu-quiet EXCLUSIVE"),
+    ({"open": _quiet_observation(mode="shared"), "close": _quiet_observation()},
+     "gpu-quiet EXCLUSIVE"),
+    ({"open": _quiet_observation(relation="other"), "close": _quiet_observation()},
+     "gpu-quiet EXCLUSIVE"),
+    ({"open": _quiet_observation(), "close": _quiet_observation(pid=78)}, "changed"),
+    ({"open": _quiet_observation(), "close": _quiet_observation(ticks=6)}, "changed"),
+    ({"open": _quiet_observation(), "close": dict(_quiet_observation(), error="lost")},
+     "gpu-quiet EXCLUSIVE"),
+])
+def test_reopen_refuses_gpu_only_interval_without_continuous_gpu_quiet(tmp_path, quiet, match):
+    directory, reference, selected, target = _gpu_only_bundle(tmp_path, quiet)
+    with pytest.raises(ss.SerialSchedulingRefused, match=match):
+        ss.reopen_held_receipts(directory, reference, selection=selected, target=target)
+
+
+def test_reopen_refuses_gpu_only_interval_claiming_a_region_or_on_cpu_target(tmp_path):
+    quiet = {"open": _quiet_observation(), "close": _quiet_observation()}
+    directory, reference, selected, target = _gpu_only_bundle(tmp_path, quiet, fraction=0.5)
+    with pytest.raises(ss.SerialSchedulingRefused, match="never held"):
+        ss.reopen_held_receipts(directory, reference, selection=selected, target=target)
+
+
+def test_cpu_targets_still_require_their_cpu_context_and_carry_no_gpu_quiet(tmp_path):
+    source = manifest()
+    state = scheduling.initial_state(source.config, source.scheduler_id)
+    _state, selected, _index = ss.select_target(
+        source, state, ("cpu",), now=1, stage_number=0)
+    target = {"selected_id": "cpu"}
+    quiet = {"open": _quiet_observation(), "close": _quiet_observation()}
+    cases = {
+        "lone-gpu": ([dict(_component("mi210_0", 1, 2, fraction=0, claim="gpu-flock"),
+                           gpu_quiet=quiet)], "GPU identity differs"),
+        "cpu-quiet": ([dict(_component("cpu", 1, 2, fraction=0.5, claim="cpu-flock"),
+                            gpu_quiet=quiet)], "CPU held component carries no gpu-quiet"),
+    }
+    for name, (components, match) in cases.items():
+        body = {"schema": ss.INTERVAL_SCHEMA, "selection": selected.to_dict(),
+                "selection_digest": selected.digest, "target": target,
+                "components": components}
+        (tmp_path / name).mkdir()
+        store = ArtifactStore(tmp_path / name / "held-claim-artifacts")
+        try:
+            artifact = store.write("direct-held-intervals", body).to_dict()
+        finally:
+            store.close()
+        with pytest.raises(ss.SerialSchedulingRefused, match=match):
+            ss.reopen_held_receipts(tmp_path / name, {
+                "schema": ss.REFERENCE_SCHEMA, "selection_digest": selected.digest,
+                "evidence": artifact}, selection=selected, target=target)
+
+
+def test_cpu_gpu_bundle_refuses_a_stray_gpu_quiet_receipt(tmp_path):
+    source = manifest()
+    state = scheduling.initial_state(source.config, source.scheduler_id)
+    _state, selected, _index = ss.select_target(
+        source, state, ("gpu",), now=1, stage_number=0)
+    target = {"selected_id": "gpu"}
+    quiet = {"open": _quiet_observation(), "close": _quiet_observation()}
+    body = {"schema": ss.INTERVAL_SCHEMA, "selection": selected.to_dict(),
+            "selection_digest": selected.digest, "target": target,
+            "components": [_component("cpu", 1, 9, fraction=0.5, claim="cpu-flock"),
+                           dict(_component("mi210_0", 3, 7, fraction=0, claim="gpu-flock"),
+                                gpu_quiet=quiet)]}
+    store = ArtifactStore(tmp_path / "held-claim-artifacts")
+    try:
+        artifact = store.write("direct-held-intervals", body).to_dict()
+    finally:
+        store.close()
+    with pytest.raises(ss.SerialSchedulingRefused, match="only to a GPU-only"):
+        ss.reopen_held_receipts(tmp_path, {
+            "schema": ss.REFERENCE_SCHEMA, "selection_digest": selected.digest,
+            "evidence": artifact}, selection=selected, target=target)

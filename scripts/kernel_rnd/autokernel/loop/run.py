@@ -2584,6 +2584,30 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--gpu-cpu-region-claim off applies to a selected GPU serving target only")
     #: GPU window without a CPU region claim (device claim only, like the legacy GPU route).
     gpu_skip_cpu_claim = args.gpu_cpu_region_claim == "off"
+    #: A GPU-only run's host-side resource receipt is its launcher's run-wide gpu-quiet
+    #: EXCLUSIVE hold (`region-lock run --gpu-quiet exclusive -- serial_run ...`), observed
+    #: beside the mi210_0 device flock at open and close. Serial settlement refuses a GPU
+    #: interval with neither a CPU region nor that hold, so refuse here, before a build.
+    gpu_only_quiet_path = None
+    if gpu_skip_cpu_claim:
+        if args.cpu_measurement_gpu_quiet != CPU_MEASUREMENT_GPU_QUIET_OFF:
+            parser.error("--gpu-cpu-region-claim off requires --cpu-measurement-gpu-quiet off "
+                         "under a launcher-held run-wide gpu-quiet EXCLUSIVE hold (region-lock "
+                         "run --gpu-quiet exclusive); per-measurement holds leave the host "
+                         "unaccounted between measurements and serial settlement refuses them")
+        try:
+            gpu_only_quiet_path = claim.gpu_quiet_preflight()
+        except (claim.ClaimRefused, ImportError, OSError) as exc:
+            parser.error(f"--gpu-cpu-region-claim off cannot locate the gpu-quiet lock: {exc}")
+        if claim.gpu_quiet_exclusive_holder(claim.observe_gpu_quiet(gpu_only_quiet_path)) is None:
+            if args.dry_run:
+                print("gpu quiet WARNING (dry run, fatal live): gpu-quiet is not held EXCLUSIVE "
+                      "by this process or its launcher; a GPU-only run needs `region-lock run "
+                      "--gpu-quiet exclusive -- ...`")
+            else:
+                parser.error("--gpu-cpu-region-claim off requires gpu-quiet held EXCLUSIVE by "
+                             f"this process or its launcher ({gpu_only_quiet_path}); run under "
+                             "`region-lock run --gpu-quiet exclusive -- ...`")
     owned_cpu_list = None
     build_cpu_list = cpu_launch.template.cpu_list if cpu_launch else "96-183"
     build_jobs = min(64, cpu_launch.template.threads) if cpu_launch else 64
@@ -6031,8 +6055,14 @@ def main(argv: list[str] | None = None) -> int:
                     cpu_win.set_reserved(cpu_window.ak_check_cpus())
                     cpu_win.bind(original_claims[0])
                 if not cpu_launch:
-                    receipt = ownership.enter_context(claim.hold())
+                    receipt = ownership.enter_context(claim.hold(
+                        gpu_quiet_path=gpu_only_quiet_path if gpu_skip_cpu_claim else None))
                     original_claims.append(receipt)
+                    if gpu_skip_cpu_claim and claim.gpu_quiet_exclusive_holder(
+                            receipt.gpu_quiet_open()) is None:
+                        raise claim.ClaimRefused(
+                            "GPU-only run: gpu-quiet is not held EXCLUSIVE by this process "
+                            "or its launcher at device-claim open; no host resource receipt")
                 if cpu_win is not None:
                     # Runs FIRST on unwind: the claim's close observation needs it held.
                     ownership.callback(cpu_win.teardown)
