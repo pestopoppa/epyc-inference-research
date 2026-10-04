@@ -55,8 +55,37 @@ the slot is idle and holds ~the tokens our call left there (prompt + generated,
 ± ``SLOT_TOKEN_TOLERANCE``). It is dropped the moment ``/slots`` shows a different
 ``id_task`` (someone else's task ran there), fewer tokens than we left (cleared /
 truncated / purged idle slot), the slot missing, or a different server launch.
-v10 exposes no content hash, so "same id_task, same token count" is the
-strongest content-identity test available (see the RTG-58 P2 server questions).
+On v10 (no content hash) "same id_task, same token count" is the strongest
+content-identity test available.
+
+KPF-27e — the RTG-58 P1 server interface (``kpf-p1-20261004/INTERFACE.md``).
+Each field is used when present and falls back to the v10 inference above when
+absent (the server emits them only with ``--slot-fork-min-tokens > 0``):
+
+* ``/slots`` ``content_epoch`` -> staleness: an entry bound at (slot, epoch E,
+  N tokens) stays valid while the epoch is E and ``n_prompt_tokens >= N``; an
+  appending foreign task (new ``id_task``, same epoch) no longer drops it.
+* ``/slots`` ``prefix_hash`` (slot and per checkpoint) -> verification without a
+  tokenizer: a hash change at a known length drops the entry
+  (``prefix_hash_changed``); ``fnv1a64_tokens`` reproduces the hash for a
+  ``/tokenize``-based check.
+* ``/slots`` ``checkpoints`` -> a ``checkpoint``-mode fork from a BUSY slot is
+  predicted at its largest checkpoint <= the match, not the full LCP.
+* ``/slots`` ``kv_cells`` / ``kv_pool`` -> the gate's occupancy counts forked
+  cells once (``PoolOccupancy.projected_unique_tokens``); the index status
+  shows the server's unique-cell pool.
+* ``timings.id_slot`` / ``timings.id_task`` -> exact binding on every endpoint,
+  the chat lane included (bound when ``/slots[slot].id_task`` equals the task).
+* ``/props.slot_fork`` -> ``fork_enabled(caps)``: ``FORK=1`` stays on unless the
+  server says ``mode: none``; ``FORK=auto`` follows the server; ``min_tokens``
+  raises the trunk-hold and fork-credit floors.
+* ``checkpoint_at: [{"message": k, "at": ...}]`` -> sent by the scout fan-out
+  (the one fan-out site that builds its own payload) at the end of the shared
+  system message; the generic lanes do not rewrite client payloads.
+
+Scouts write no ``serving_call`` record (they stream straight to the server),
+so their gate feeds this index directly with the same projection as
+``observe_record`` (``scout_stage._scout_observe``).
 
 Bounds: ``slot`` entries are one per server slot; ``pending`` is capped at
 ``MAX_PENDING_ENTRIES`` (LRU) and expires after ``VERIFY_TIMEOUT_S``; ``served``
@@ -84,6 +113,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
+from src.backends.context_limits import DEFAULT_OCCUPANCY_TTL_S
+
 logger = logging.getLogger(__name__)
 
 FLAG_ENV = "ORCHESTRATOR_PREFIX_INDEX"
@@ -105,6 +136,24 @@ TRUNK_MIN_TOKENS_ENV = "ORCHESTRATOR_PREFIX_INDEX_TRUNK_MIN_TOKENS"
 DEFAULT_TRUNK_MIN_TOKENS = 4096
 TRUNK_HOLD_S_ENV = "ORCHESTRATOR_PREFIX_INDEX_TRUNK_HOLD_S"
 DEFAULT_TRUNK_HOLD_S = 120.0
+TRUNK_GRACE_S_ENV = "ORCHESTRATOR_PREFIX_INDEX_TRUNK_GRACE_S"
+#: An in-flight trunk owner counts as "prefill over" by ``/slots`` (zero slots
+#: prefilling) only once it was SEEN prefilling, or after this grace since its
+#: admission. ``/slots`` is a cached read (``DEFAULT_OCCUPANCY_TTL_S``, 1.5 s), so
+#: a read taken before the owner reached the server shows zero prefilling slots;
+#: two TTLs guarantee the read postdates the dispatch (review D1).
+DEFAULT_TRUNK_GRACE_S = 2.0 * DEFAULT_OCCUPANCY_TTL_S
+CREDIT_FRESH_S_ENV = "ORCHESTRATOR_PREFIX_INDEX_CREDIT_FRESH_S"
+#: A slot entry is a credit / LPM / fork source only while ``/slots`` verified it
+#: this recently (review D6: a ledger-adopted or long-unverified entry must not be
+#: credited when ``/slots`` is unavailable). Every gate poll reconciles first, so
+#: with ``/slots`` up this never bites.
+DEFAULT_CREDIT_FRESH_S = 5.0
+#: Chars per token for a prefix whose server-measured ratio is unknown (in-flight
+#: siblings, unmeasured slot entries). Measured prose runs ~3.6 (the old 4 sized
+#: prose ~10% low, review D3); still above the gate's conservative 3.0, so a fork
+#: credit subtracted from a 3.0-sized reservation never over-credits.
+PREFIX_CHARS_PER_TOKEN = 3.6
 VERIFY_TIMEOUT_S = 30.0
 SLOT_TOKEN_TOLERANCE = 4
 MAX_SERVED_ENTRIES = 32
@@ -146,9 +195,54 @@ def enabled() -> bool:
     return os.environ.get(FLAG_ENV, "0").strip().lower() in _ON
 
 
-def fork_enabled() -> bool:
-    """The server shares a busy slot's cells with a new task (RTG-58 P1 live)."""
-    return enabled() and os.environ.get(FORK_ENV, "0").strip().lower() in _ON
+def fork_caps_from_props(props: Any) -> dict[str, Any] | None:
+    """KPF-27e: the server's ``/props.slot_fork`` = ``{min_tokens, mode,
+    checkpoint_at}``, normalized; None when absent (a v10 server, or a P1 server
+    run with ``--slot-fork-min-tokens 0``, which emits nothing)."""
+    raw = props.get("slot_fork") if isinstance(props, dict) else None
+    if not isinstance(raw, dict):
+        return None
+    mode = raw.get("mode")
+    return {
+        "min_tokens": max(0, _int(raw.get("min_tokens")) or 0),
+        "mode": mode if mode in ("none", "kv", "checkpoint") else "none",
+        "checkpoint_at": raw.get("checkpoint_at") is True,
+    }
+
+
+def fork_enabled(caps: dict[str, Any] | None = None) -> bool:
+    """The server shares a busy slot's cells with a new task (RTG-58 P1 live).
+
+    ``ORCHESTRATOR_PREFIX_INDEX_FORK``: ``1`` = on unless the server's
+    ``/props.slot_fork`` (``caps``, KPF-27e) says ``mode: none`` (configured but
+    unsupported there); ``auto`` = on exactly when ``caps`` reports ``kv`` or
+    ``checkpoint``; anything else = off. Without ``caps`` (absent field or no
+    /props read) ``1`` falls back to the env alone, as before."""
+    if not enabled():
+        return False
+    raw = os.environ.get(FORK_ENV, "0").strip().lower()
+    if raw == "auto":
+        return caps is not None and caps.get("mode") in ("kv", "checkpoint")
+    if raw not in _ON:
+        return False
+    return caps is None or caps.get("mode") != "none"
+
+
+def fork_requested() -> bool:
+    """``ORCHESTRATOR_PREFIX_INDEX_FORK`` asks for the fork at all (``1`` or
+    ``auto``): only then is the server's ``/props.slot_fork`` worth reading."""
+    return enabled() and os.environ.get(FORK_ENV, "0").strip().lower() in (_ON | {"auto"})
+
+
+def fnv1a64_tokens(token_ids: Iterable[int]) -> str:
+    """The server's ``prefix_hash`` (KPF-27e): FNV-1a 64 over the token ids as
+    int32 little-endian, lower-case hex, 16 chars. To VERIFY a text prefix,
+    tokenize it through the same server (``/tokenize``) and compare."""
+    h = 0xCBF29CE484222325
+    for tid in token_ids:
+        for b in int(tid).to_bytes(4, "little", signed=True):
+            h = ((h ^ b) * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+    return f"{h:016x}"
 
 
 def lpm_enabled() -> bool:
@@ -371,13 +465,23 @@ class Entry:
     text: str | None = field(default=None, repr=False)  # in-flight only
     prefill_deadline: float | None = None
     prefilled: bool = False
+    # In-flight only: ``/slots`` showed a prefilling slot in a read that
+    # postdates this entry's admission (review D1). Sticky.
+    seen_prefilling: bool = False
+    # KPF-27e (server fork on; None/() otherwise): the slot's ``content_epoch``,
+    # ``n_prompt_tokens`` and ``prefix_hash`` when bound, and its checkpoints
+    # ``(n_tokens, prefix_hash)`` as last verified.
+    content_epoch: int | None = None
+    bound_tokens: int | None = None
+    slot_hash: str | None = None
+    checkpoints: tuple[tuple[int, str | None], ...] = ()
 
     def tokens_for_chars(self, chars: int) -> int:
         """Token estimate for a prefix of ``chars`` of this entry's key: the
-        measured ratio, else ~4 chars/token (as the admission credit)."""
+        measured ratio, else ``PREFIX_CHARS_PER_TOKEN``."""
         if self.prompt_tokens and self.chars > 0:
             return int(chars * self.prompt_tokens / self.chars)
-        return int(chars) // 4
+        return int(int(chars) / PREFIX_CHARS_PER_TOKEN)
 
     def tokens_per_char(self) -> float | None:
         if self.prompt_tokens and self.chars > 0:
@@ -415,7 +519,8 @@ def _new_stats() -> dict[str, Any]:
         "predictions": 0, "prediction_abs_err_tokens": 0, "prediction_over": 0,
         "prediction_under": 0, "slot_predictions": 0, "slot_prediction_hits": 0,
         "trunk_holds": 0, "trunk_hold_s_total": 0.0, "trunk_hold_timeouts": 0,
-        "lpm_passes": 0, "pins": 0, "fork_credit_tokens": 0,
+        "lpm_passes": 0, "pins": 0, "fork_credit_tokens": 0, "fork_credit_reattributed": 0,
+        "bound_by_task": 0,
         "ledger_reads": 0, "ledger_writes": 0, "ledger_errors": 0,
     }
 
@@ -473,6 +578,8 @@ class PrefixIndex:
         self._launch: str | None = None
         self._ledger_sig: tuple[int, int] | None = None
         self._last_reconcile: float | None = None
+        # KPF-27e: the server's last ``kv_pool`` {size, used, shared} (None on v10).
+        self._server_pool: dict[str, int] | None = None
         self.stats = _new_stats()
 
     # -- helpers (caller holds the lock) -----------------------------------------
@@ -539,8 +646,12 @@ class PrefixIndex:
     # -- observation ---------------------------------------------------------------
     def observe_served(self, text: str | None, *, slot_id: int | None,
                        prompt_tokens: int | None, generated_tokens: int | None,
-                       key_kind: str = "exact") -> None:
-        """A call finished on this server: remember where its prompt went."""
+                       key_kind: str = "exact", id_task: int | None = None) -> None:
+        """A call finished on this server: remember where its prompt went.
+
+        ``id_task`` (KPF-27e ``timings.id_task``, server fork on) binds the entry
+        to the exact task: ``/slots[slot].id_task`` equals it once the task is
+        done, so binding needs no token-count inference."""
         hashes = block_hashes(text, self.block)
         if not hashes:
             return
@@ -563,6 +674,7 @@ class PrefixIndex:
                 id=eid, kind="pending", hashes=hashes, chars=len(text or ""),
                 key_kind=key_kind, prompt_tokens=prompt_tokens, expected_tokens=expected,
                 slot_id=slot_id, origin="exact" if slot_id is not None else None,
+                id_task=id_task if slot_id is not None else None,
                 ts=now, wall_ts=wall,
             ))
             self._expire_pending(now)  # after the put: the index is bounded on exit
@@ -604,6 +716,8 @@ class PrefixIndex:
                 self.stats["reconciles"] += 1
                 if slots is not None:
                     self._last_reconcile = now
+                    pool = getattr(occupancy, "kv_pool", None)
+                    self._server_pool = dict(pool) if isinstance(pool, dict) else None
                     by_id = {getattr(s, "slot_id", None): s for s in slots}
                     for e in self._of_kind("slot"):
                         s = by_id.get(e.slot_id)
@@ -614,6 +728,7 @@ class PrefixIndex:
                         else:
                             e.busy = bool(getattr(s, "is_processing", False))
                             e.verified_at = now
+                            _refresh_server_facts(e, s)
                     claimed = {e.slot_id for e in self._of_kind("slot")}
                     for e in sorted(self._of_kind("pending"), key=lambda x: -x.ts):
                         s = self._bind_target(e, by_id, slots, claimed)
@@ -631,12 +746,18 @@ class PrefixIndex:
                             id_task=_int(getattr(s, "id_task", None)), busy=False,
                             origin=e.origin or "inferred", ts=e.ts, wall_ts=self._wall(),
                             verified_at=now,
+                            content_epoch=_int(getattr(s, "content_epoch", None)),
+                            bound_tokens=_int(getattr(s, "n_prompt_tokens", None)),
+                            slot_hash=getattr(s, "prefix_hash", None) or None,
                         )
+                        _refresh_server_facts(bound, s)
                         self._put(bound)
                         claimed.add(sid)
                         changed[sid] = bound
                         self.stats["bound_exact" if bound.origin == "exact"
                                    else "bound_inferred"] += 1
+                        if e.id_task is not None:
+                            self.stats["bound_by_task"] += 1
                 self._expire_pending(now)
             if changed:
                 self._write_ledger(changed)
@@ -650,6 +771,19 @@ class PrefixIndex:
         n = _int(getattr(s, "n_prompt_tokens", None)) or 0
         if n <= 0:
             return "cleared"
+        epoch = _int(getattr(s, "content_epoch", None))
+        if e.content_epoch is not None and epoch is not None:
+            # KPF-27e binding rule (INTERFACE §6 q1): valid while content_epoch is
+            # unchanged and n_prompt_tokens has not dropped below what we bound.
+            # A different id_task alone is NOT staleness here: a task that only
+            # extends our prefix leaves the epoch alone.
+            if epoch != e.content_epoch:
+                return "epoch_changed"
+            if e.expected_tokens is not None and n < e.expected_tokens - SLOT_TOKEN_TOLERANCE:
+                return "tokens_shrunk"
+            if PrefixIndex._hash_mismatch(e, s, n):
+                return "prefix_hash_changed"
+            return None
         task = _int(getattr(s, "id_task", None))
         if e.id_task is not None and task is not None and task != e.id_task:
             return "id_task_changed"
@@ -658,10 +792,33 @@ class PrefixIndex:
         return None
 
     @staticmethod
+    def _hash_mismatch(e: Entry, s: Any, n: int) -> bool:
+        """KPF-27e verification without a tokenizer: the slot's content hash at
+        the bound length, and every checkpoint hash we saw at a position, must
+        not change while the epoch says the prefix is intact."""
+        h = getattr(s, "prefix_hash", None)
+        if (e.slot_hash and h and e.bound_tokens is not None and n == e.bound_tokens
+                and not getattr(s, "is_processing", False) and h != e.slot_hash):
+            return True
+        known = dict(e.checkpoints)
+        for cp in getattr(s, "checkpoints", ()) or ():
+            old = known.get(getattr(cp, "n_tokens", None))
+            new = getattr(cp, "prefix_hash", None)
+            if old and new and old != new:
+                return True
+        return False
+
+    @staticmethod
     def _holds(s: Any, e: Entry) -> bool:
         if getattr(s, "is_processing", False):
             return False
         n = _int(getattr(s, "n_prompt_tokens", None)) or 0
+        task = _int(getattr(s, "id_task", None))
+        if e.id_task is not None and task is not None:
+            # KPF-27e: the server named the task (``timings.id_task``) — the slot
+            # holds our call exactly when it still reports that task.
+            return task == e.id_task and n > 0 and (
+                e.expected_tokens is None or n >= e.expected_tokens - SLOT_TOKEN_TOLERANCE)
         if e.expected_tokens is None:
             return n > 0
         return abs(n - e.expected_tokens) <= SLOT_TOKEN_TOLERANCE
@@ -678,8 +835,11 @@ class PrefixIndex:
 
     # -- in-flight locks -----------------------------------------------------------
     def begin(self, ticket: int, text: str | None, *, prompt_tokens: int | None = None,
-              prefill_s: float | None = None) -> None:
-        hashes = block_hashes(text, self.block)
+              prefill_s: float | None = None, hashes: tuple[str, ...] | None = None) -> None:
+        """Register an admitted request's trunk. Pass ``hashes`` (this index's
+        ``block_hashes(text)``) to skip re-hashing: the gate hashes once per
+        ticket, outside its lock (review D4)."""
+        hashes = block_hashes(text, self.block) if hashes is None else hashes
         if not hashes:
             return
         now = self._clock()
@@ -701,23 +861,55 @@ class PrefixIndex:
         with self._lock:
             self._drop(f"inflight:{ticket}")
 
+    @staticmethod
+    def trunk_grace_s() -> float:
+        return max(0.0, _env_float(TRUNK_GRACE_S_ENV, DEFAULT_TRUNK_GRACE_S))
+
+    def _note_prefilling(self, now: float, server_prefilling: int | None) -> None:
+        """Mark in-flight entries SEEN prefilling. Only a read that postdates the
+        entry's admission counts: the ``/slots`` read is up to one TTL (half the
+        grace) old, so the entry must be at least that old. Caller holds the lock."""
+        if not server_prefilling:
+            return
+        min_age = self.trunk_grace_s() / 2.0
+        for e in self._entries.values():
+            if e.kind == "inflight" and not e.seen_prefilling and now - e.ts >= min_age:
+                e.seen_prefilling = True
+
     def _prefill_over(self, e: Entry, now: float, server_prefilling: int | None) -> bool:
-        if e.prefilled or server_prefilling == 0:
+        """Is ``e``'s trunk prefill over? ``prefill_done`` (first output), the
+        floor-rate deadline, or ``/slots`` showing no prefilling slot — the last
+        only once the entry was seen prefilling or is past the dispatch grace,
+        so a cached read from before the owner reached the server cannot end the
+        hold (review D1)."""
+        if e.prefilled:
             return True
-        return e.prefill_deadline is not None and now >= e.prefill_deadline
+        if e.prefill_deadline is not None and now >= e.prefill_deadline:
+            return True
+        return server_prefilling == 0 and (
+            e.seen_prefilling or now - e.ts >= self.trunk_grace_s())
 
     # -- lookups -------------------------------------------------------------------
     def lookup(self, text: str | None, *, exclude_ticket: int | None = None,
-               fork: bool = False, count: bool = True) -> Match:
+               fork: bool = False, count: bool = True,
+               hashes: tuple[str, ...] | None = None, fork_mode: str | None = None,
+               fresh_s: float | None = None) -> Match:
         """The best prefix of ``text`` the server can reuse.
 
         Without fork: an IDLE verified slot (the server's LCP pick, or the
         ``--cache-ram`` restore of it). With fork (RTG-58 P1): also a busy slot
-        or an in-flight sibling whose prefill is over."""
-        hashes = block_hashes(text, self.block)
+        or an in-flight sibling whose prefill is over. A slot entry counts only
+        while ``/slots`` verified it within ``fresh_s`` (default
+        ``ORCHESTRATOR_PREFIX_INDEX_CREDIT_FRESH_S``; review D6). With
+        ``fork_mode == "checkpoint"`` (``/props.slot_fork``, KPF-27e) a busy
+        slot's match is cut to its largest reported checkpoint. ``hashes``
+        skips re-hashing ``text`` (review D4)."""
+        hashes = block_hashes(text, self.block) if hashes is None else hashes
         if not hashes:
             return Match()
         now = self._clock()
+        if fresh_s is None:
+            fresh_s = _env_float(CREDIT_FRESH_S_ENV, DEFAULT_CREDIT_FRESH_S)
         excl = None if exclude_ticket is None else f"inflight:{exclude_ticket}"
         with self._lock:
             if count:
@@ -729,6 +921,8 @@ class PrefixIndex:
                 if e is None or eid == excl:
                     return False
                 if e.kind == "slot":
+                    if e.verified_at is None or now - e.verified_at > fresh_s:
+                        return False  # unverified (ledger-adopted / stale): no credit
                     return fork or not e.busy
                 if e.kind == "inflight":
                     return fork and self._prefill_over(e, now, None)
@@ -752,7 +946,10 @@ class PrefixIndex:
                 source = ("slot_busy" if e.busy else "slot_idle") if e.kind == "slot" else "inflight"
                 junction = (common_prefix_len(text, e.text)
                             if e.kind == "inflight" and e.text and text else None)
-                m = Match(matched_chars=chars, tokens_est=e.tokens_for_chars(chars),
+                tokens = e.tokens_for_chars(chars)
+                if source == "slot_busy" and fork_mode == "checkpoint":
+                    tokens = _fork_position(e, tokens)
+                m = Match(matched_chars=chars, tokens_est=tokens,
                           source=source, entry_id=e.id, slot_id=e.slot_id,
                           tokens_per_char=e.tokens_per_char(), junction_chars=junction)
             if count:
@@ -760,16 +957,19 @@ class PrefixIndex:
             return m
 
     def trunk_owner(self, ticket: int, text: str | None, *, min_tokens: int,
-                    server_prefilling: int | None = None) -> Match | None:
+                    server_prefilling: int | None = None,
+                    hashes: tuple[str, ...] | None = None) -> Match | None:
         """An EARLIER in-flight request still prefilling a trunk of at least
-        ``min_tokens`` that ``text`` shares (trunk-first, KPF-21)."""
-        hashes = block_hashes(text, self.block)
+        ``min_tokens`` that ``text`` shares (trunk-first, KPF-21).
+        ``server_prefilling`` = prefilling slots in the gate's ``/slots`` read."""
+        hashes = block_hashes(text, self.block) if hashes is None else hashes
         if not hashes:
             return None
         now = self._clock()
         me = f"inflight:{ticket}"
         with self._lock:
             entries = self._entries
+            self._note_prefilling(now, server_prefilling)
 
             def owner(eid: str) -> bool:
                 e = entries.get(eid)
@@ -817,13 +1017,18 @@ class PrefixIndex:
             sum_blocks = sum(len(self._entries[i].hashes) for i in live)
             ratios = [self._entries[i].tokens_per_char() for i in live]
             ratios = [r for r in ratios if r]
-            tpc = (sum(ratios) / len(ratios)) if ratios else 0.25
-        return {
+            tpc = (sum(ratios) / len(ratios)) if ratios else 1.0 / PREFIX_CHARS_PER_TOKEN
+            server_pool = dict(self._server_pool) if self._server_pool else None
+        out: dict[str, Any] = {
             "entries": len(live),
             "union_tokens_est": int(union_blocks * self.block * tpc),
             "sum_tokens_est": int(sum_blocks * self.block * tpc),
             "shareable_tokens_est": int((sum_blocks - union_blocks) * self.block * tpc),
         }
+        if server_pool:
+            # KPF-27e: the server's own unique-cell count (``/slots`` kv_pool).
+            out["server_kv_pool"] = server_pool
+        return out
 
     def status(self) -> dict[str, Any]:
         with self._lock:
@@ -878,6 +1083,7 @@ class PrefixIndex:
                                 "key_kind": e.key_kind, "prompt_tokens": e.prompt_tokens,
                                 "expected_tokens": e.expected_tokens, "id_task": e.id_task,
                                 "origin": e.origin, "wall_ts": e.wall_ts or wall,
+                                "content_epoch": e.content_epoch,
                             }
                     state.update(schema=SCHEMA, launch_id=self._launch, block_chars=self.block)
                     tmp = path.with_name(f"{path.name}.{os.getpid()}.{uuid.uuid4().hex[:8]}.tmp")
@@ -943,7 +1149,28 @@ class PrefixIndex:
                     expected_tokens=_int(rec.get("expected_tokens")), slot_id=sid,
                     id_task=_int(rec.get("id_task")), origin=rec.get("origin"),
                     ts=self._clock(), wall_ts=wall,
+                    content_epoch=_int(rec.get("content_epoch")),
+                    # verified_at stays None: adopted, not verified HERE, so it is
+                    # no credit source until this worker's /slots read confirms it.
                 ))
+
+
+def _refresh_server_facts(e: Entry, s: Any) -> None:
+    """Copy a verified slot's KPF-27e facts onto its entry (no-op on v10)."""
+    cps = getattr(s, "checkpoints", ()) or ()
+    e.checkpoints = tuple((int(cp.n_tokens), getattr(cp, "prefix_hash", None)) for cp in cps)
+    if e.content_epoch is None:
+        # Verified by the legacy rule just now, so the current epoch is ours.
+        e.content_epoch = _int(getattr(s, "content_epoch", None))
+
+
+def _fork_position(e: Entry, tokens: int) -> int:
+    """KPF-27e: where a ``checkpoint``-mode fork from a BUSY slot can land — the
+    largest checkpoint at or below ``tokens`` (0 = none, so no fork). Without
+    reported checkpoints, ``tokens`` (the v10-era assumption)."""
+    if not e.checkpoints:
+        return tokens
+    return max((n for n, _ in e.checkpoints if n <= tokens), default=0)
 
 
 # -- registry: one index per physical server ------------------------------------------
@@ -1001,12 +1228,18 @@ def observe_record(record: dict[str, Any], key_text: str | None, *,
         prompt_tokens = prompt_n + (cache_n or 0) if prompt_n is not None else None
         generated = _int(timings.get("predicted_n")) or 0
         slot = _int(notes.get("server_slot"))
+        if slot is None:
+            # KPF-27e: ``timings.id_slot`` on every endpoint (server fork on), so
+            # the chat lane binds exactly too.
+            slot = _int(timings.get("id_slot"))
+            slot = slot if slot is not None and slot >= 0 else None
+        task = _int(timings.get("id_task"))
         idx = get_index(url)
         pred = ((record.get("kv_admission") or {}).get("prefix_index") or {})
         idx.record_prediction(_int(pred.get("predicted_cache_tokens")), cache_n,
                               _int(pred.get("predicted_slot")), slot)
         idx.observe_served(key_text, slot_id=slot, prompt_tokens=prompt_tokens,
-                           generated_tokens=generated, key_kind=key_kind)
+                           generated_tokens=generated, key_kind=key_kind, id_task=task)
     except Exception:
         logger.debug("prefix index: observe_record failed", exc_info=True)
 
@@ -1019,6 +1252,8 @@ __all__ = [
     "all_status",
     "block_hashes",
     "enabled",
+    "fnv1a64_tokens",
+    "fork_caps_from_props",
     "fork_enabled",
     "get_index",
     "key_text_for_request",

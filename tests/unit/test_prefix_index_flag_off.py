@@ -121,6 +121,48 @@ def test_admission_record_and_status_are_the_legacy_shape():
     pool.release(URL, a)
     pool.release(URL, b)
     assert pi.peek_index(URL) is None
+    assert pool._fork_source == {}
+
+
+def test_review_fix_surfaces_are_inert_with_the_flag_off(monkeypatch):
+    """KPF-27e / review fixes: the server-fork fields change nothing with the
+    flag off — no /props read, no unique-cell projection, no checkpoint_at."""
+    import json
+
+    import httpx
+
+    from src.api.routes.chat_pipeline import scout_stage as S
+
+    reads: list[str] = []
+    occ = PoolOccupancy(url=URL, kv_pool={"size": 393216, "used": 61000, "shared": 60000}, slots=(
+        SlotState(slot_id=0, n_ctx=1, is_processing=True, n_prompt_tokens=60000, n_remain=None,
+                  kv_private=0, kv_shared=60000),
+        SlotState(slot_id=1, n_ctx=1, is_processing=True, n_prompt_tokens=61000, n_remain=None,
+                  kv_private=1000, kv_shared=60000)))
+    pool = SharedKVPoolAdmission(occupancy=lambda url: occ, cross_process=False,
+                                 fork_caps=lambda url: reads.append(url) or None)
+    assert pool._observed(URL)[0] == 121000  # legacy sum, not the unique count
+    t = pool.acquire(URL, 1000, 393216, prefix_key="k" * 9000, timeout_s=0)
+    assert t is not None and reads == []
+    pool.release(URL, t)
+    caps_pool = SimpleNamespace(fork_caps=lambda url: {"min_tokens": 1, "mode": "checkpoint",
+                                                      "checkpoint_at": True})
+    msgs = [{"role": "system", "content": "s" * 90000}, {"role": "user", "content": "t"}]
+    assert S._scout_checkpoint_at(caps_pool, URL, msgs) is None
+    seen: dict = {}
+
+    def handler(request):
+        seen["body"] = json.loads(request.content)
+        return httpx.Response(200, content=b"data: [DONE]\n\n")
+
+    inner = S.ChatCompletionsTransport("http://x", client=httpx.Client(
+        transport=httpx.MockTransport(handler)))
+    gate = S.PoolGatedTransport(inner, url=URL, limit=SimpleNamespace(pool_tokens=393216),
+                                pool=SharedKVPoolAdmission(occupancy=lambda url: None,
+                                                           cross_process=False))
+    gate.complete(msgs, max_tokens=8, should_stop=lambda: False, timeout_s=5)
+    assert set(seen["body"]) == {"messages", "max_tokens", "stream", "temperature",
+                                 "cache_prompt", "stream_options", "chat_template_kwargs"}
 
 
 def test_primitives_lane_payload_is_unchanged(monkeypatch, tmp_path):

@@ -80,6 +80,16 @@ TIMING_KEYS = (
     "predicted_per_second",
     "draft_n",
     "draft_n_accepted",
+    # KPF-27e / KPF-24: the RTG-58 P1 server-fork fields. A champion (or
+    # fork-off) server never sends them, so its records are unchanged; with the
+    # fork on they carry the fork credit (``n_fork_tokens``, included in
+    # ``cache_n``) and the slot/task that served the call on EVERY endpoint
+    # (the chat lane had neither before), which the prefix index binds to.
+    "n_fork_tokens",
+    "fork_src_slot",
+    "fork_src_kind",
+    "id_slot",
+    "id_task",
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]

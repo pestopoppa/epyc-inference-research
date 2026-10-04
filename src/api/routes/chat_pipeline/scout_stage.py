@@ -190,6 +190,8 @@ class CompletionResult:
     completion_tokens: int | None = None
     finish_reason: str | None = None
     cancelled: bool = False
+    # The server's ``timings`` (last streamed object carrying them), or None.
+    timings: dict[str, Any] | None = None
 
 
 class ScoutCancelled(Exception):
@@ -680,6 +682,10 @@ class ChatCompletionsTransport:
     the server instead of running on past the reply."""
 
     name = TRANSPORT_NAME
+    #: Accepts the pool gate's keyword extensions (``on_first_chunk``,
+    #: ``checkpoint_at``); ``PoolGatedTransport`` passes them only to such a
+    #: transport (``is True``: a test double's auto-attribute does not qualify).
+    gate_kwargs = True
 
     def __init__(self, url: str, *, enable_thinking: bool = False, client: Any = None):
         self.url = url.rstrip("/")
@@ -687,7 +693,13 @@ class ChatCompletionsTransport:
         self._client = client
 
     def complete(self, messages: list[dict[str, str]], *, max_tokens: int,
-                 should_stop: Callable[[], bool], timeout_s: float) -> CompletionResult:
+                 should_stop: Callable[[], bool], timeout_s: float,
+                 on_first_chunk: Callable[[], None] | None = None,
+                 checkpoint_at: list[Any] | None = None) -> CompletionResult:
+        """``on_first_chunk`` runs once, at the first streamed choice (the
+        prefill is over: the pool gate hands the long-prefill lease and the
+        trunk on). ``checkpoint_at`` (KPF-27e, RTG-58 P1 server only) is sent
+        only when given."""
         import httpx
 
         payload = {
@@ -696,6 +708,8 @@ class ChatCompletionsTransport:
             "stream_options": {"include_usage": True},
             "chat_template_kwargs": {"enable_thinking": bool(self.enable_thinking)},
         }
+        if checkpoint_at:
+            payload["checkpoint_at"] = checkpoint_at
         timeout = httpx.Timeout(max(1.0, timeout_s), connect=CONNECT_TIMEOUT_S)
         client = self._client or httpx.Client(timeout=timeout)
         text: list[str] = []
@@ -711,7 +725,7 @@ class ChatCompletionsTransport:
                     if should_stop() or time.monotonic() - started > timeout_s:
                         return CompletionResult("".join(text), usage.get("prompt_tokens"),
                                                 usage.get("completion_tokens"), "cancelled",
-                                                cancelled=True)
+                                                cancelled=True, timings=timings or None)
                     if not line or not line.startswith("data:"):
                         continue
                     data = line[5:].strip()
@@ -725,6 +739,12 @@ class ChatCompletionsTransport:
                         usage = obj["usage"]
                     if isinstance(obj.get("timings"), dict):
                         timings = obj["timings"]
+                    if on_first_chunk is not None and obj.get("choices"):
+                        first, on_first_chunk = on_first_chunk, None
+                        try:
+                            first()
+                        except Exception:  # noqa: BLE001 -- a gate hook never fails the call
+                            log.debug("scouts: first-chunk hook failed", exc_info=True)
                     for choice in obj.get("choices") or ():
                         delta = choice.get("delta") or {}
                         if delta.get("content"):
@@ -736,7 +756,8 @@ class ChatCompletionsTransport:
         prompt_tokens = usage.get("prompt_tokens", timings.get("prompt_n"))
         # Unknown stays None (tokens_exact=False upstream): stream chunks are not tokens.
         completion_tokens = usage.get("completion_tokens", timings.get("predicted_n"))
-        return CompletionResult("".join(text), prompt_tokens, completion_tokens, finish)
+        return CompletionResult("".join(text), prompt_tokens, completion_tokens, finish,
+                                timings=timings or None)
 
 
 # ── admission: token reservations on a shared KV pool ────────────────────────────────────
@@ -775,12 +796,13 @@ class PoolGatedTransport:
 
         prompt_tokens = estimate_messages_tokens(messages)
         started = time.monotonic()
+        key_kwargs = _scout_prefix_key(messages)
         try:
             ticket = self.pool.acquire(
                 self.url, prompt_tokens, self.limit.pool_tokens,
                 max_new_tokens=int(max_tokens), deadline_s=self.deadline_s,
                 timeout_s=max(0.0, float(timeout_s)), cancel_check=should_stop,
-                **_scout_prefix_key(messages),
+                **key_kwargs,
             )
         except KVPoolQueueFull as exc:
             raise RuntimeError(f"KV pool admission queue full: {exc}") from exc
@@ -793,14 +815,43 @@ class PoolGatedTransport:
                 f"shared KV pool on {self.url} did not admit {prompt_tokens} prompt tokens "
                 f"(+{max_tokens}) within {waited:.1f}s")
         self.admitted_calls += 1
+        handed_on = False
+
+        def prefill_over() -> None:
+            # Review D2: the gate's contract is "call prefill_done on the first
+            # output chunk" — it hands the long-prefill lease on (instead of
+            # holding it through the scout's decode) and ends a trunk hold on the
+            # siblings (instead of waiting for TRUNK_HOLD_S / the floor rate).
+            nonlocal handed_on
+            if handed_on:
+                return
+            handed_on = True
+            try:
+                self.pool.prefill_done(self.url, ticket)
+            except Exception:  # noqa: BLE001 -- bookkeeping never fails the call
+                log.debug("scouts: prefill_done failed", exc_info=True)
+
+        extra: dict[str, Any] = {}
+        if getattr(self.inner, "gate_kwargs", False) is True:
+            extra["on_first_chunk"] = prefill_over
+            checkpoint_at = _scout_checkpoint_at(self.pool, self.url, messages) if key_kwargs else None
+            if checkpoint_at:
+                extra["checkpoint_at"] = checkpoint_at
         success = False
+        result: CompletionResult | None = None
         try:
             result = self.inner.complete(messages, max_tokens=max_tokens,
                                          should_stop=should_stop,
-                                         timeout_s=max(1.0, float(timeout_s) - waited))
+                                         timeout_s=max(1.0, float(timeout_s) - waited),
+                                         **extra)
             success = True
+            # A transport that cannot report its first chunk: the prefill is
+            # certainly over once the call returned.
+            prefill_over()
             return result
         finally:
+            if key_kwargs and success and result is not None:
+                _scout_observe(self.pool, self.url, ticket, key_kwargs["prefix_key"], result)
             self.pool.release(self.url, ticket, success=success)
 
 
@@ -822,6 +873,56 @@ def _scout_prefix_key(messages: list[dict[str, str]]) -> dict[str, Any]:
         return {"prefix_key": key} if key else {}
     except Exception:
         return {}
+
+
+def _scout_checkpoint_at(pool: Any, url: str,
+                         messages: list[dict[str, str]]) -> list[dict[str, Any]] | None:
+    """KPF-27e trunk-first junction for a scout fan-out: a pinned checkpoint at
+    the END of message 0 (the system prompt every sibling scout shares; the user
+    message carries the target), so a sibling can fork from a BUSY scout's slot
+    at the junction (a hybrid model forks only at checkpoints). Sent only with
+    the flag and the fork on, a ``checkpoint``-mode server that advertises
+    ``checkpoint_at`` in ``/props.slot_fork``, and a trunk long enough to fork
+    (the server's ``min_tokens``). None otherwise (the payload is unchanged)."""
+    try:
+        from src.inference import prefix_index
+
+        if not prefix_index.fork_requested() or len(messages) < 2:
+            return None
+        caps = pool.fork_caps(url) if callable(getattr(pool, "fork_caps", None)) else None
+        if not isinstance(caps, dict) or not prefix_index.fork_enabled(caps):
+            return None
+        if caps.get("mode") != "checkpoint" or caps.get("checkpoint_at") is not True:
+            return None
+        trunk_tokens = len(str(messages[0].get("content") or "")) / prefix_index.PREFIX_CHARS_PER_TOKEN
+        if trunk_tokens < max(1, int(caps.get("min_tokens") or 0)):
+            return None
+        return [{"message": 0, "at": "end"}]
+    except Exception:
+        return None
+
+
+def _scout_observe(pool: Any, url: str, ticket: Any, key: str, result: CompletionResult) -> None:
+    """Review D2: scouts write no ``serving_call`` record (their calls go
+    straight to the server, not through the backends), so with the flag on the
+    gate feeds the prefix index directly — the same projection
+    ``prefix_index.observe_record`` makes of a serving record, including the
+    prediction grade against ``timings.cache_n``. Never raises."""
+    try:
+        from src.inference import prefix_index
+
+        if not prefix_index.enabled() or result.cancelled:
+            return
+        admission = pool.admission_record(ticket) if hasattr(pool, "admission_record") else None
+        prefix_index.observe_record({
+            "dispatched": True,
+            "outcome": "ok",
+            "server": {"base_url": url},
+            "notes": {"timings": dict(result.timings or {})},
+            "kv_admission": admission if isinstance(admission, dict) else {},
+        }, key, key_kind="approx")
+    except Exception:
+        log.debug("scouts: prefix index observation failed", exc_info=True)
 
 
 def resolve_pool_gate(url: str, *, resolver: Any = None, pool: Any = None) -> tuple[Any, Any]:
@@ -1068,6 +1169,7 @@ async def run_scouts(
         """Counts model calls in flight at once (OAB-4's ">= 2 concurrent scout calls")."""
 
         name = getattr(inner, "name", TRANSPORT_NAME)
+        gate_kwargs = getattr(inner, "gate_kwargs", False) is True
 
         def complete(self, messages, **kwargs):
             nonlocal inflight, inflight_peak

@@ -181,6 +181,10 @@ DEFAULT_CACHE_CREDIT_MARGIN_TOKENS = 4096
 # Same ratio as context_limits.CONSERVATIVE_CHARS_PER_TOKEN (the estimator the
 # caller sizes the whole prompt with), so whole and suffix estimates agree.
 _SUFFIX_CHARS_PER_TOKEN = 3.0
+# KPF-26: with the prefix index on, trunk-held waiters do not count toward
+# ORCHESTRATOR_KV_POOL_MAX_QUEUED; the whole queue is still capped at this
+# multiple of it.
+TRUNK_QUEUE_FACTOR = 4
 
 
 def _env_float(name: str, default: float) -> float:
@@ -215,6 +219,12 @@ def _default_occupancy(url: str) -> Any:
     return get_context_limit_resolver().pool_occupancy(url)
 
 
+def _default_fork_caps(url: str) -> Any:
+    from src.backends.context_limits import get_context_limit_resolver
+
+    return get_context_limit_resolver().fork_caps(url)
+
+
 class SharedKVPoolAdmission:
     """FCFS token reservations against each server's shared KV pool.
 
@@ -231,6 +241,7 @@ class SharedKVPoolAdmission:
         clock: Callable[[], float] = time.perf_counter,
         cross_process: bool | None = None,
         history: Any = None,
+        fork_caps: Callable[[str], Any] | None = None,
     ) -> None:
         self._cond = threading.Condition()
         self._inflight: dict[str, dict[int, int]] = {}
@@ -262,6 +273,18 @@ class SharedKVPoolAdmission:
         self._lpm_skips: dict[int, int] = {}
         self._trunk_held: dict[int, bool] = {}
         self._trunk_since: dict[int, float] = {}
+        # Review D3: admitted ticket -> (url, fork source ticket, credited
+        # tokens), so a source's release hands its shared cells to a survivor.
+        self._fork_source: dict[int, tuple[str, int, int]] = {}
+        # KPF-27e: url -> the server's ``/props.slot_fork`` (or None). Read only
+        # with the flag on. An injected occupancy (tests) without an injected
+        # reader never reads /props.
+        if fork_caps is not None:
+            self._fork_caps_fn: Callable[[str], Any] = fork_caps
+        elif occupancy is not None:
+            self._fork_caps_fn = lambda _url: None
+        else:
+            self._fork_caps_fn = _default_fork_caps
 
     # -- long-prefill rule -----------------------------------------------------
     @staticmethod
@@ -578,8 +601,38 @@ class SharedKVPoolAdmission:
                 slots_reason = "no_slot_match" if has_text else "slots_no_prompt"
         else:
             slots_reason = "slots_no_prompt"
-        return (int(occ.projected_tokens(ratio)), int(occ.processing), long_prefills,
-                cached_chars, slots_reason)
+        projected = int(occ.projected_tokens(ratio))
+        if getattr(occ, "kv_pool", None):
+            # KPF-27e: the server reports its unique cells (fork on); count
+            # forked cells once. Only with the prefix index flag on.
+            from src.inference import prefix_index as pi
+
+            if pi.enabled():
+                try:
+                    projected = int(occ.projected_unique_tokens(ratio))
+                except Exception:
+                    pass
+        return (projected, int(occ.processing), long_prefills, cached_chars, slots_reason)
+
+    def _queue_full(self, queue: list[int], max_queued: int) -> bool:
+        """The queue bound. Trunk-held waiters (RTG-58 P2, flag on) do not count
+        toward it, so a fan-out wave of up to ``TRUNK_QUEUE_FACTOR x max_queued``
+        siblings held behind one trunk is not refused (KPF-26); the total stays
+        bounded by that factor. Flag off: ``_trunk_held`` is empty, so this is
+        ``len(queue) >= max_queued``. Caller holds the lock."""
+        if not self._trunk_held:
+            return len(queue) >= max_queued
+        active = sum(1 for t in queue if t not in self._trunk_held)
+        return active >= max_queued or len(queue) >= max_queued * TRUNK_QUEUE_FACTOR
+
+    def fork_caps(self, url: str) -> dict[str, Any] | None:
+        """The server's ``/props.slot_fork`` (KPF-27e), or None. Never raises."""
+        try:
+            caps = self._fork_caps_fn(url)
+        except Exception:
+            logger.debug("KV pool admission: fork capability read failed", exc_info=True)
+            return None
+        return caps if isinstance(caps, dict) else None
 
     def _fits(self, url: str, tokens: int, pool_tokens: int, observed: tuple | None) -> bool:
         reserved = self._inflight.get(url, {})
@@ -642,15 +695,20 @@ class SharedKVPoolAdmission:
             max_queued = _env_int(KV_POOL_MAX_QUEUED_ENV, DEFAULT_KV_POOL_MAX_QUEUED)
         start = time.perf_counter()
         pidx = None
+        phashes: tuple[str, ...] = ()
+        caps: dict[str, Any] | None = None
         if prefix_key:
             from src.inference import prefix_index as _prefix_index
 
             if _prefix_index.enabled():
                 pidx = _prefix_index.get_index(url)
+                # Hash the key ONCE per ticket, outside the lock (review D4).
+                phashes = _prefix_index.block_hashes(prefix_key, pidx.block)
+                caps = self.fork_caps(url) if _prefix_index.fork_requested() else None
         pview: dict[str, Any] | None = None
         with self._cond:
             queue = self._queue.setdefault(url, [])
-            if max_queued > 0 and len(queue) >= max_queued:
+            if max_queued > 0 and self._queue_full(queue, max_queued):
                 raise KVPoolQueueFull(url, len(queue), max_queued)
             self._next_ticket += 1
             ticket = self._next_ticket
@@ -668,10 +726,16 @@ class SharedKVPoolAdmission:
                 if pidx is not None:
                     prefill_tokens, credit, pview = self._prefix_index_view(
                         url, ticket, pidx, prefix_key, tokens, want, prefill_tokens, credit,
-                        first=pview is None)
+                        first=pview is None, hashes=phashes, caps=caps,
+                        slots_up=observed is not None)
                 with self._cond:
                     is_long = self.is_long_prefill(prefill_tokens)
                     want_eff = pview["want"] if pview is not None else want
+                    fork_src = pview.get("fork_source_ticket") if pview is not None else None
+                    if fork_src is not None and fork_src not in self._inflight.get(url, {}):
+                        # The source released since the view: nothing left to share.
+                        want_eff, fork_src = want, None
+                        pview["want"], pview["fork_credit_tokens"] = want, 0
                     self._waiting[ticket] = (want_eff, is_long)
                     if pview is not None:
                         self._lpm_score[ticket] = int(pview["lpm_score"])
@@ -691,6 +755,11 @@ class SharedKVPoolAdmission:
                     if verdict in ("head", "pass", "pass_trunk", "lpm"):
                         want = want_eff
                         self._inflight.setdefault(url, {})[ticket] = want
+                        if fork_src is not None and pview is not None:
+                            # Review D3: when the source releases first, its shared
+                            # cells live on in this ticket: release re-attributes.
+                            self._fork_source[ticket] = (
+                                url, int(fork_src), int(pview["fork_credit_tokens"]))
                         admitted = True
                         waited = time.perf_counter() - start
                         stat = self._stat(url)
@@ -725,14 +794,15 @@ class SharedKVPoolAdmission:
                         )
                         if pidx is not None and pview is not None:
                             self._admission_info[ticket]["prefix_index"] = self._prefix_index_admit(
-                                pidx, ticket, prefix_key, prefill_tokens, pview, verdict)
+                                pidx, ticket, prefix_key, prefill_tokens, pview, verdict,
+                                hashes=phashes)
                         if logged:
                             logger.info(
                                 "KV pool admission: %s request of %d tokens admitted after %.1fs%s",
                                 url, want, waited,
                                 " (waited for the long-prefill lease)" if waited_on_lease else "",
                             )
-                        return ticket
+                        break
                     if verdict == "lease":
                         waited_on_lease = True
                     now = time.perf_counter()
@@ -758,6 +828,15 @@ class SharedKVPoolAdmission:
                         )
                         logged = True
                     self._cond.wait(timeout=poll_s)
+            if pidx is not None and pview is not None:
+                # The tree walk runs once, after admission and outside the gate's
+                # lock (review D4); the record is completed under a brief lock.
+                cells = self._prefix_index_unique_cells(pidx)
+                with self._cond:
+                    block = (self._admission_info.get(ticket) or {}).get("prefix_index")
+                    if isinstance(block, dict) and cells is not None:
+                        block["unique_cells"] = cells
+            return ticket
         finally:
             # Leave the queue whether admitted or abandoned, and wake the next
             # waiter (the head may have changed).
@@ -827,33 +906,50 @@ class SharedKVPoolAdmission:
     # -- RTG-58 P2: the prefix index (ORCHESTRATOR_PREFIX_INDEX, default OFF) ---------
     def _prefix_index_view(self, url: str, ticket: int, pidx: Any, key: str, tokens: int,
                            want: int, prefill_tokens: int, credit: dict[str, Any], *,
-                           first: bool) -> tuple[int, dict[str, Any], dict[str, Any]]:
+                           first: bool, hashes: tuple[str, ...] | None = None,
+                           caps: dict[str, Any] | None = None,
+                           slots_up: bool = True) -> tuple[int, dict[str, Any], dict[str, Any]]:
         """Reconcile the index with ``/slots``, then derive this waiter's prefix
         facts: a ``prefix_index`` credit when it beats the others, the fork credit
         on the reservation, the trunk hold and the LPM score. Called outside the
-        lock; never raises (a failure leaves the legacy decision untouched)."""
+        lock; never raises (a failure leaves the legacy decision untouched).
+
+        ``hashes`` = the key's block hashes, computed once per ticket (D4).
+        ``caps`` = the server's ``/props.slot_fork`` (KPF-27e): it can switch the
+        fork off (``mode: none``) or on (``FORK=auto``), raises the trunk and
+        credit floors to the server's ``min_tokens`` (no fork happens below it)
+        and, in ``checkpoint`` mode, cuts a busy source to its checkpoints."""
         from src.inference import prefix_index as pi
 
         view: dict[str, Any] = {"want": want, "trunk_hold": False, "lpm_score": 0,
                                 "match": None, "fork": False, "fork_credit_tokens": 0,
-                                "trunk_owner": None}
+                                "trunk_owner": None, "fork_source_ticket": None}
         try:
             try:
                 occ = self._occupancy_fn(url)
             except Exception:
                 occ = None
             pidx.reconcile(occ)
-            fork = pi.fork_enabled()
+            fork = pi.fork_enabled(caps)
+            fork_mode = caps.get("mode") if caps else None
+            server_min = int(caps.get("min_tokens") or 0) if caps else 0
             view["fork"] = fork
-            m = pidx.lookup(key, exclude_ticket=ticket, fork=fork, count=first)
+            if caps:
+                view["server_fork"] = dict(caps)
+            m = pidx.lookup(key, exclude_ticket=ticket, fork=fork, count=first,
+                            hashes=hashes, fork_mode=fork_mode)
             view["match"] = m
-            reusable = m.source == "slot_idle" or (fork and m.source in ("slot_busy", "inflight"))
+            forkable = fork and m.source in ("slot_busy", "inflight") and m.tokens_est >= max(
+                1, server_min)
+            reusable = m.source == "slot_idle" or forkable
             margin = self.cache_credit_margin()
             if reusable and m.matched_chars > 0 and margin >= 0:
                 rate = max(1.0 / _SUFFIX_CHARS_PER_TOKEN, m.tokens_per_char or 0.0)
                 suffix = int(math.ceil(max(0, len(key) - m.matched_chars) * rate))
                 est = max(0, min(int(tokens), suffix + margin))
                 if est < prefill_tokens:
+                    prior_source = credit.get("cache_credit_source")
+                    prior_reason = credit.get("cache_credit_unavailable")
                     prefill_tokens = est
                     credit = dict(credit, cache_credit_source="prefix_index",
                                   cache_credited_tokens=max(0, int(tokens) - est),
@@ -861,21 +957,42 @@ class SharedKVPoolAdmission:
                                   cache_credit_prefix_tokens_est=m.tokens_est,
                                   cache_credit_matched_chars=m.matched_chars,
                                   cache_credit_unavailable=None)
-            if fork and m.source in ("slot_busy", "inflight") and m.tokens_est > 0:
-                # Cells a busy source holds are already counted (its reservation /
-                # /slots); a fork shares them instead of allocating them again.
+                    # Review D5: keep why the legacy sources gave nothing (or
+                    # which one this credit beat) instead of erasing it.
+                    if prior_reason is not None:
+                        credit["cache_credit_history_reason"] = prior_reason
+                    if prior_source:
+                        credit["cache_credit_superseded_source"] = prior_source
+            # Cells a busy source holds are already counted (its reservation /
+            # /slots); a fork shares them instead of allocating them again. An
+            # in-flight source is one of OUR tickets, so its release can hand
+            # the shared cells on (D3); a busy slot has no ticket here, so it is
+            # credited only while /slots (which counts its cells) is readable.
+            src_ticket = None
+            if forkable and m.source == "inflight" and m.entry_id:
+                try:
+                    src_ticket = int(str(m.entry_id).split(":", 1)[1])
+                except (IndexError, ValueError):
+                    src_ticket = None
+            if forkable and (src_ticket is not None or (m.source == "slot_busy" and slots_up)):
                 view["fork_credit_tokens"] = min(int(m.tokens_est), max(0, want - 1))
                 view["want"] = max(1, want - view["fork_credit_tokens"])
+                view["fork_source_ticket"] = src_ticket
             if pi.lpm_enabled() and reusable:
                 view["lpm_score"] = int(m.tokens_est)
             if fork:
-                min_tokens = max(1, pi._env_int(pi.TRUNK_MIN_TOKENS_ENV,
-                                                pi.DEFAULT_TRUNK_MIN_TOKENS))
+                min_tokens = max(1, server_min, pi._env_int(pi.TRUNK_MIN_TOKENS_ENV,
+                                                            pi.DEFAULT_TRUNK_MIN_TOKENS))
                 prefilling = None
                 if occ is not None and getattr(occ, "slots", None) is not None:
                     prefilling = sum(1 for s in occ.slots if getattr(s, "prefilling", False))
                 owner = pidx.trunk_owner(ticket, key, min_tokens=min_tokens,
-                                         server_prefilling=prefilling)
+                                         server_prefilling=prefilling, hashes=hashes)
+                if owner is not None and reusable and m.matched_chars >= owner.matched_chars:
+                    # The trunk is already shareable elsewhere (a prefilled
+                    # sibling or a slot): the "owner" itself forked from it and
+                    # prefills only its suffix, so waiting for it buys nothing.
+                    owner = None
                 if owner is not None:
                     hold_s = pi._env_float(pi.TRUNK_HOLD_S_ENV, pi.DEFAULT_TRUNK_HOLD_S)
                     with self._cond:
@@ -893,17 +1010,20 @@ class SharedKVPoolAdmission:
         return prefill_tokens, credit, view
 
     def _prefix_index_admit(self, pidx: Any, ticket: int, key: str, prefill_tokens: int,
-                            view: dict[str, Any], verdict: str) -> dict[str, Any]:
+                            view: dict[str, Any], verdict: str, *,
+                            hashes: tuple[str, ...] | None = None) -> dict[str, Any]:
         """Register the admitted request as an in-flight trunk and return the
         admission record's ``prefix_index`` block (the prediction the serving
         record is checked against). Caller holds the lock; the index lock is a
-        leaf, so this nests safely."""
+        leaf, so this nests safely. Cheap by construction (D4): the key is
+        already hashed, and ``unique_cells`` is filled in after the lock."""
         m = view.get("match")
         info: dict[str, Any] = {"verdict": verdict, "fork": bool(view.get("fork"))}
         try:
             floor = _env_float(KV_POOL_PREFILL_FLOOR_TPS_ENV, DEFAULT_PREFILL_FLOOR_TPS)
             pidx.begin(ticket, key, prompt_tokens=int(prefill_tokens),
-                       prefill_s=(max(1, int(prefill_tokens)) / floor) if floor > 0 else None)
+                       prefill_s=(max(1, int(prefill_tokens)) / floor) if floor > 0 else None,
+                       hashes=hashes)
             reusable = m is not None and (m.source == "slot_idle" or (
                 view.get("fork") and m.source in ("slot_busy", "inflight")))
             info.update(
@@ -913,13 +1033,17 @@ class SharedKVPoolAdmission:
                 fork_credit_tokens=int(view.get("fork_credit_tokens") or 0),
                 lpm_score=int(view.get("lpm_score") or 0),
                 trunk_hold_timeout=bool(view.get("trunk_timeout")),
-                unique_cells=pidx.unique_cells(),
+                unique_cells=None,
             )
+            if view.get("server_fork"):
+                info["server_fork"] = view["server_fork"]
             if view.get("fork") and m is not None and m.source in ("slot_busy", "inflight",
                                                                    "slot_idle"):
                 # RTG-58 (e): where the server's fork should come from.
                 info["fork_plan"] = {"source": m.source, "slot_id": m.slot_id,
                                      "junction_chars": m.junction_chars or m.matched_chars}
+                if view.get("fork_source_ticket") is not None:
+                    info["fork_plan"]["source_ticket"] = view["fork_source_ticket"]
             with pidx._lock:
                 pidx.stats["fork_credit_tokens"] += info["fork_credit_tokens"]
                 if verdict == "lpm":
@@ -929,6 +1053,14 @@ class SharedKVPoolAdmission:
         except Exception:
             logger.debug("KV pool admission: prefix index admit failed", exc_info=True)
         return info
+
+    @staticmethod
+    def _prefix_index_unique_cells(pidx: Any) -> dict[str, Any] | None:
+        try:
+            return pidx.unique_cells()
+        except Exception:
+            logger.debug("KV pool admission: prefix index unique cells failed", exc_info=True)
+            return None
 
     def _prefix_index_admissible(self, url: str, ticket: int, queue: list[int], position: int,
                                  want: int, is_long: bool, lease_held: bool, pool_tokens: int,
@@ -991,19 +1123,59 @@ class SharedKVPoolAdmission:
         if ticket is None:
             return
         self._prefix_index_note(url, "end", ticket)
+        reattributed = 0
         with self._cond:
             self._admission_info.pop(ticket, None)
             reserved = self._inflight.get(url)
             if reserved is not None:
                 reserved.pop(ticket, None)
+                if self._fork_source:  # RTG-58 P2 fork credit (flag + FORK on) only
+                    reattributed = self._reattribute_fork_credit(url, ticket, reserved)
                 if not reserved:
                     self._inflight.pop(url, None)
+            else:
+                self._fork_source.pop(ticket, None)
             lease = self._prefill_lease.get(url)
             if lease is not None and lease[0] == ticket:
                 self._drop_lease(url)
             if success:
                 self._decay(url)
             self._cond.notify_all()
+        if reattributed:
+            try:
+                from src.inference import prefix_index as pi
+
+                idx = pi.peek_index(url)
+                if idx is not None:
+                    with idx._lock:
+                        idx.stats["fork_credit_reattributed"] += reattributed
+            except Exception:
+                logger.debug("KV pool admission: fork credit stat failed", exc_info=True)
+
+    def _reattribute_fork_credit(self, url: str, ticket: int, reserved: dict[int, int]) -> int:
+        """Review D3. ``ticket`` left; tickets that forked from it share cells it
+        no longer reserves. The dependent with the largest credit (it references
+        the most of the source) takes its credit back onto its reservation, and
+        the others now share with IT, so every live cell is reserved exactly
+        once. Returns the tokens re-attributed. Caller holds the lock."""
+        self._fork_source.pop(ticket, None)
+        deps = [(t, c) for t, (u, src, c) in self._fork_source.items()
+                if u == url and src == ticket]
+        if not deps:
+            return 0
+        live = [(t, c) for t, c in deps if t in reserved]
+        for t, _c in deps:
+            if t not in reserved:
+                self._fork_source.pop(t, None)  # defensive: already released
+        if not live:
+            return 0
+        heir, credit = max(live, key=lambda tc: (tc[1], -tc[0]))
+        reserved[heir] = reserved[heir] + credit
+        self._fork_source.pop(heir, None)
+        for t, c in live:
+            if t != heir:
+                self._fork_source[t] = (url, heir, c)
+        return credit
 
     def get_status(self) -> dict[str, dict[str, Any]]:
         with self._cond:

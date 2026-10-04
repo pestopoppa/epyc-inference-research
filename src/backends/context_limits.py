@@ -342,6 +342,15 @@ def limit_from_registry(url: str, facts: dict[str, Any] | None) -> ContextLimit 
 
 
 @dataclass(frozen=True)
+class SlotCheckpoint:
+    """One ``/slots[i].checkpoints[j]`` entry (KPF-27e; RTG-58 P1 server only)."""
+
+    n_tokens: int
+    pinned: bool = False
+    prefix_hash: str | None = None  # FNV-1a-64 of the first n_tokens token ids
+
+
+@dataclass(frozen=True)
 class SlotState:
     """One slot as ``GET /slots`` reports it (server-context.cpp:699-722)."""
 
@@ -364,6 +373,20 @@ class SlotState:
     # prefix index binds a slot's content to it: a different id_task means the
     # slot's cells changed under us.
     id_task: int | None = field(default=None, compare=False)
+    # KPF-27e: the RTG-58 P1 server-fork fields (``/slots``, present ONLY when the
+    # server runs with ``--slot-fork-min-tokens > 0``; None / () otherwise, and
+    # every reader falls back to the v10 inference). ``content_epoch`` only
+    # increases and is bumped whenever the slot's held tokens may stop being a
+    # prefix of its content (clear, purge, truncation, fork-into, restore, ...);
+    # ``prefix_hash`` is FNV-1a-64 over the slot's token ids (16 hex chars);
+    # ``kv_private`` / ``kv_shared`` count this slot's attention cells that only it
+    # / it and another slot reference; ``checkpoints`` are the positions a fork
+    # from this slot can land on (hybrid / SWA ``checkpoint`` mode).
+    content_epoch: int | None = field(default=None, compare=False)
+    prefix_hash: str | None = field(default=None, compare=False)
+    kv_private: int | None = field(default=None, compare=False)
+    kv_shared: int | None = field(default=None, compare=False)
+    checkpoints: tuple["SlotCheckpoint", ...] = field(default=(), compare=False, repr=False)
 
     @property
     def prefilling(self) -> bool:
@@ -379,6 +402,9 @@ class PoolOccupancy:
     url: str
     slots: tuple[SlotState, ...]
     source: str = "live_slots"
+    # KPF-27e: ``/slots[*].kv_pool`` = ``{size, used, shared}`` (the same snapshot
+    # in every entry; ``used`` counts UNIQUE cells). None on a v10 / fork-off server.
+    kv_pool: dict[str, int] | None = field(default=None, compare=False)
 
     @property
     def processing(self) -> int:
@@ -426,6 +452,23 @@ class PoolOccupancy:
             total += s.n_prompt_tokens + int(math.ceil(remain * max(0.0, new_token_ratio)))
         return total
 
+    def projected_unique_tokens(self, new_token_ratio: float = 1.0) -> int:
+        """``projected_tokens`` with forked cells counted ONCE (KPF-27e). With the
+        server's per-slot ``kv_cells`` and pool ``shared`` total, the cells the
+        processing slots hold are at most ``sum(private) + pool.shared`` (every
+        shared cell counted once even if no processing slot references it: an
+        upper bound, so still conservative) and at most ``sum(n_prompt_tokens)``.
+        Without those fields it IS ``projected_tokens``."""
+        total = self.projected_tokens(new_token_ratio)
+        pool = self.kv_pool or {}
+        shared = pool.get("shared")
+        busy = [s for s in self.slots if s.is_processing]
+        if not isinstance(shared, int) or any(s.kv_private is None for s in busy):
+            return total
+        held = sum(s.n_prompt_tokens for s in busy)
+        unique = min(held, sum(int(s.kv_private or 0) for s in busy) + max(0, shared))
+        return total - held + unique
+
 
 # A server may render the cached prompt with a leading BOS / special token the
 # client never sent; the request's head is looked for within this many leading
@@ -463,6 +506,7 @@ def parse_slots(url: str, body: Any) -> PoolOccupancy | None:
     if not isinstance(body, list):
         return None
     slots: list[SlotState] = []
+    kv_pool: dict[str, int] | None = None
     for i, raw in enumerate(body):
         if not isinstance(raw, dict):
             continue
@@ -478,6 +522,11 @@ def parse_slots(url: str, body: Any) -> PoolOccupancy | None:
                        and not isinstance(n_processed, bool) else None)
         n_prompt = raw.get("n_prompt_tokens")
         n_prompt = n_prompt if isinstance(n_prompt, int) and n_prompt > 0 else 0
+        cells = raw.get("kv_cells") if isinstance(raw.get("kv_cells"), dict) else {}
+        if kv_pool is None and isinstance(raw.get("kv_pool"), dict):
+            kv_pool = {k: v for k, v in raw["kv_pool"].items()
+                       if k in ("size", "used", "shared") and _nonneg_int(v) is not None}
+        prefix_hash = raw.get("prefix_hash")
         slots.append(SlotState(
             slot_id=raw.get("id") if isinstance(raw.get("id"), int) else i,
             n_ctx=_positive_int(raw.get("n_ctx")),
@@ -489,8 +538,31 @@ def parse_slots(url: str, body: Any) -> PoolOccupancy | None:
             prompt_text=raw.get("prompt") if isinstance(raw.get("prompt"), str) else None,
             id_task=(raw.get("id_task") if isinstance(raw.get("id_task"), int)
                      and not isinstance(raw.get("id_task"), bool) else None),
+            content_epoch=_nonneg_int(raw.get("content_epoch")),
+            prefix_hash=prefix_hash if isinstance(prefix_hash, str) and prefix_hash else None,
+            kv_private=_nonneg_int(cells.get("private")),
+            kv_shared=_nonneg_int(cells.get("shared")),
+            checkpoints=_parse_checkpoints(raw.get("checkpoints")),
         ))
-    return PoolOccupancy(url=url, slots=tuple(slots))
+    return PoolOccupancy(url=url, slots=tuple(slots), kv_pool=kv_pool or None)
+
+
+def _nonneg_int(value: Any) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value >= 0 else None
+
+
+def _parse_checkpoints(raw: Any) -> tuple[SlotCheckpoint, ...]:
+    """``/slots[i].checkpoints`` (KPF-27e); () when absent or malformed."""
+    if not isinstance(raw, list):
+        return ()
+    out: list[SlotCheckpoint] = []
+    for cp in raw:
+        if not isinstance(cp, dict) or _nonneg_int(cp.get("n_tokens")) is None:
+            continue
+        h = cp.get("prefix_hash")
+        out.append(SlotCheckpoint(n_tokens=int(cp["n_tokens"]), pinned=bool(cp.get("pinned")),
+                                  prefix_hash=h if isinstance(h, str) and h else None))
+    return tuple(out)
 
 
 def _default_fetch_slots(url: str, timeout_s: float) -> Any:
@@ -537,6 +609,7 @@ class ContextLimitResolver:
         self._fetch_slots = fetch_slots or _default_fetch_slots
         self._occupancy_ttl_s = max(0.0, occupancy_ttl_s)
         self._occupancy_cache: dict[str, tuple[float, PoolOccupancy | None]] = {}
+        self._fork_caps_cache: dict[str, tuple[float, dict[str, Any] | None]] = {}
         self._registry_facts_fn = registry_facts or registry_facts_by_port
         self._role_urls_fn = role_urls or registry_role_urls
         self._live = live
@@ -638,6 +711,33 @@ class ContextLimitResolver:
             self._occupancy_cache[url] = (now + self._occupancy_ttl_s, occ)
         return occ
 
+    def fork_caps(self, url: str) -> dict[str, Any] | None:
+        """KPF-27e: the server's ``/props.slot_fork`` (``{min_tokens, mode,
+        checkpoint_at}``), cached like the limits (``ttl_s``; failures
+        ``FAILURE_TTL_S``). None when live reads are off, /props is unavailable,
+        or the server does not advertise a fork (v10, or fork configured off).
+        Read only by the RTG-58 P2 gate with the prefix-index flag on; separate
+        from ``limit_for_url`` so the limits path is untouched."""
+        url = (split_urls(url) or [""])[0]
+        if not url or not self.live_enabled():
+            return None
+        now = self._clock()
+        with self._lock:
+            cached = self._fork_caps_cache.get(url)
+        if cached is not None and cached[0] > now:
+            return cached[1]
+        ttl = self._ttl_s
+        try:
+            from src.inference.prefix_index import fork_caps_from_props
+
+            caps = fork_caps_from_props(self._fetch(url, self._props_timeout_s))
+        except Exception as exc:
+            log.debug("context limits: GET %s/props (slot_fork) failed: %s", url, exc)
+            caps, ttl = None, min(ttl, FAILURE_TTL_S)
+        with self._lock:
+            self._fork_caps_cache[url] = (now + ttl, caps)
+        return caps
+
     def limit_for_role(self, role: str, urls: list[str] | str | None = None) -> ContextLimit | None:
         """The binding (smallest) per-request limit across the role's instances.
 
@@ -682,6 +782,7 @@ class ContextLimitResolver:
             if url is None:
                 self._cache.clear()
                 self._occupancy_cache.clear()
+                self._fork_caps_cache.clear()
                 self._registry_cache = None
                 self._role_url_cache = None
             else:

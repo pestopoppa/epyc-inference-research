@@ -219,10 +219,31 @@ def test_inflight_trunk_owner_and_exact_junction(idx):
 
 
 def test_trunk_owner_released_when_server_shows_no_prefill(idx):
+    """Review D1: ``/slots`` showing no prefill ends the hold only once the owner
+    was SEEN prefilling in a read that postdates its admission (one /slots TTL
+    = half the grace), or after the dispatch grace (two TTLs)."""
+    grace = pi.PrefixIndex.trunk_grace_s()
     trunk = _text("Q", 40)
     idx.begin(1, trunk, prefill_s=600)
+    # A cached read from before the owner reached the server: zero prefilling.
+    assert idx.trunk_owner(2, trunk, min_tokens=1, server_prefilling=0) is not None
+    # A prefilling slot in a read that may predate the dispatch does not count.
     assert idx.trunk_owner(2, trunk, min_tokens=1, server_prefilling=1) is not None
+    assert idx.trunk_owner(2, trunk, min_tokens=1, server_prefilling=0) is not None
+    idx.clock.t += grace / 2.0
+    assert idx.trunk_owner(2, trunk, min_tokens=1, server_prefilling=1) is not None  # seen
+    assert idx.trunk_owner(2, trunk, min_tokens=1, server_prefilling=0) is None  # now over
+
+
+def test_trunk_owner_never_seen_prefilling_ends_after_the_grace(idx):
+    grace = pi.PrefixIndex.trunk_grace_s()
+    trunk = _text("R", 40)
+    idx.begin(1, trunk, prefill_s=600)
+    idx.clock.t += grace - 0.01
+    assert idx.trunk_owner(2, trunk, min_tokens=1, server_prefilling=0) is not None
+    idx.clock.t += 0.02
     assert idx.trunk_owner(2, trunk, min_tokens=1, server_prefilling=0) is None
+    assert idx.trunk_owner(2, trunk, min_tokens=1, server_prefilling=None) is not None
 
 
 def test_pin_candidate_only_fresh_idle_long_enough(idx):
