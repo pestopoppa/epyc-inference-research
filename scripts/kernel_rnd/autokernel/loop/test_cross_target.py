@@ -160,6 +160,9 @@ def test_gate_declarations_and_attestation_visible_mechanism():
     ok, why = ct.gate_mechanism(env)
     assert not ok and "runtime_attestation" in why
     assert not ct.gate_mechanism("+ static bool fast = std::getenv(\"X\") != nullptr;\n")[0]
+    assert not ct.gate_mechanism("+ auto rd = &::getenv; if (rd(\"X\") && hparams.n_embd) {}\n")[0]
+    assert not ct.gate_mechanism("+ for (char **e = environ; *e; ++e) { (void) model.arch; }\n")[0]
+    assert not ct.gate_mechanism("+ if (src0->type == dst->type) { go(); }\n")[0]   # no model key
     ok, why = ct.gate_mechanism("+ if (fast) { go(); }\n")
     assert not ok and "GGUF" in why
 
@@ -231,6 +234,32 @@ def test_dirty_champion_checkout_defers_the_fold_then_the_retry_folds(world):
                            fold_check=g0_pass)
     assert [r["fold"]["result"] for r in out if r["event"] == "fold_retry"] == ["folded"]
     assert ct.held(repo, CHAMPION, DS41_WB) == []
+
+
+def test_fold_stands_when_the_checkout_refresh_is_refused(world):
+    """The ref moves first; a checkout the fast-forward cannot refresh (an untracked
+    file in the way of `read-tree -u`) is reported stale, never as a failed fold."""
+    repo, ds41 = world["repo"], world["ds41"]
+    (world["champ_tree"] / "ggml" / "new.cpp").write_text("untracked\n")   # not in index
+    tree = world["trees"]["ds41"]
+    (tree / "ggml" / "new.cpp").write_text("kept\n")
+    _git(tree, "add", "ggml/new.cpp")
+    _git(tree, "commit", "-q", "-m", "adds a file")
+    keep = _git(tree, "rev-parse", "HEAD")
+    row = ct.record_keep(ds41, repo=repo, keep_commit=keep,
+                         decision=ct.decide(_cross(), UNCHANGED), cross=_cross(),
+                         coverage=UNCHANGED, mechanism_id="m", fold_check=g0_pass)
+    assert row["fold"]["result"] == "folded"
+    assert row["fold"]["checkouts_stale"][0]["checkout"] == str(world["champ_tree"])
+    assert _git(repo, "show", f"{CHAMPION}:ggml/new.cpp") == "kept"
+    assert ct.held(repo, CHAMPION, DS41_WB) == []
+    assert (world["champ_tree"] / "ggml" / "new.cpp").read_text() == "untracked\n"
+    # The stale checkout now defers every later fold until a human reconciles it.
+    keep2 = _keep(tree, "ggml/ops.cpp", "A\nb\nc\nd\ne\nf\ng\nh\n", "k2")
+    row2 = ct.record_keep(ds41, repo=repo, keep_commit=keep2,
+                          decision=ct.decide(_cross(), UNCHANGED), cross=_cross(),
+                          coverage=UNCHANGED, mechanism_id="m2", fold_check=g0_pass)
+    assert row2["fold"]["result"] == "checkout_dirty"
 
 
 def test_conflicting_fold_is_held_not_forced(world):

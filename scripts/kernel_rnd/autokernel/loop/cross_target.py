@@ -81,12 +81,14 @@ GATE_COMMIT, GATE_REFUSED = "gate_commit", "gate_refused"
 MAX_GATE_ATTEMPTS = 3
 INBOX_PREFIX = "00-gate-"
 _GATES = re.compile(r"GATES-KEEP:\s*([0-9a-f]{12,40})")
-_ENV_GATE = re.compile(r"\b(?:std::)?(?:secure_)?getenv\s*\(")
+#: Any added reference to the process environment, called or not (a function
+#: pointer, `getenv_s`, `environ`): all of it is outside the declared env contract.
+_ENV_GATE = re.compile(r"\b(?:secure_)?getenv(?:_s)?\b|\benviron\b")
 #: Keys runtime_attestation can see: GGUF metadata (architecture, hparams, tensor
 #: shapes and types) or llama-server argv (cparams).
 _MODEL_KEY = re.compile(
     r"LLM_ARCH_\w+|general\.architecture|\bhparams\b|\bcparams\b|\barch\s*[!=]=|"
-    r"->ne\[\d\]|\.ne\[\d\]|->type\b|\.type\b|GGML_TYPE_\w+|gguf_get_\w+|n_expert\w*|"
+    r"->ne\[\d\]|\.ne\[\d\]|GGML_TYPE_\w+|gguf_get_\w+|n_expert\w*|"
     r"n_embd\w*|n_head\w*|n_ff\w*")
 
 
@@ -280,11 +282,23 @@ def fold_onto_champion(repo: Path, champion_branch: str, commits: Sequence[str],
             return {"result": "checkout_dirty", "commit": None, "picked": picked,
                     "checkout": str(tree)}
     _out(repo, "update-ref", ref, tip, old)
+    # The ref has moved: the fold IS done. What follows only refreshes checkouts. A
+    # refusal there (an untracked file in the way of `-u`, a vanished tree) is not a
+    # failed fold: reporting it as one would show the keep held while the champion
+    # carries it, and the retry would find it "already present". The checkout is left
+    # with HEAD at the new tip and index/worktree at the old one, which `status` shows
+    # as dirty, so the next fold defers until a human reconciles that tree.
+    stale = []
     for tree in trees:
         # Two-tree fast-forward of the clean checkout from the old tip to the new one.
-        _out(tree, "read-tree", "-m", "-u", old, tip)
-    return {"result": "folded", "commit": tip, "picked": picked, "g0": g0.get("reason"),
-            "checkouts": [str(t) for t in trees]}
+        done = _git(tree, "read-tree", "-m", "-u", old, tip)
+        if done.returncode != 0:
+            stale.append({"checkout": str(tree), "error": done.stderr.strip()[:300]})
+    out = {"result": "folded", "commit": tip, "picked": picked, "g0": g0.get("reason"),
+           "checkouts": [str(t) for t in trees]}
+    if stale:
+        out["checkouts_stale"] = stale
+    return out
 
 
 def apply_in_worktree(worktree: Path, commit: str) -> str | None:
