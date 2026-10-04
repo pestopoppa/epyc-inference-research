@@ -1299,5 +1299,506 @@ class HostFactsAreReadWithoutRoot(unittest.TestCase):
         self.assertEqual(facts["gpu_vbios"], ["113-X"])
 
 
+# ------------------------------------------- the serving-probe protocol kind
+
+import copy  # noqa: E402
+import hashlib  # noqa: E402
+
+#: The stack owner's paired runner output, byte-for-byte the shape
+#: `/mnt/raid0/llm/tmp/champion-fold-kvu19-20261004/paired_receipt.py` writes as
+#: `receipt-ab/paired-<ts>/writer-samples.json`: produced by RUNNING that summarizer
+#: over 30 synthetic `arm-<n><P|C>.probe.json` files (warm-up pair + 14 x P C) with the
+#: real `ab_probe.py args` server argv for the :8083 DFlash2 launch. Only the run-dir
+#: prefix was rewritten to the runner's own `receipt-ab/` path.
+WRITER = json.loads((SEEDS / "serving-probe.writer-samples.json").read_text(encoding="utf-8"))
+V10 = WRITER["p_arm"]["commit"]
+V10_LABEL = "production-consolidated-v10"
+CHAMP_1BC = WRITER["c_arm"]["commit"]
+PROBE_VERSION = "sha256:ab_probe.py-test"
+WRITER_AT = datetime.fromisoformat(WRITER["p_arm"]["measured_at"].replace("Z", "+00:00"))
+
+
+def _writer(**changes) -> dict:
+    body = copy.deepcopy(WRITER)
+    for dotted, value in changes.items():
+        parts = dotted.split("__")
+        node = body
+        for part in parts[:-1]:
+            node = node[part]
+        if value is _DROP:
+            node.pop(parts[-1], None)
+        else:
+            node[parts[-1]] = value
+    return body
+
+
+_DROP = object()
+
+
+def _single_arm(*, commit="2" * 40, argv=None, protocol_changes=None, tg=None,
+                host_facts=None) -> dict:
+    """A future champion's single-arm run: the same runner, C arm only, a fresh run dir."""
+    body = copy.deepcopy(WRITER)
+    for key in ("p_arm", "p_arm_pp", "comparison"):
+        body.pop(key)
+    c = body["c_arm"]
+    c["commit"] = commit
+    proto = c["protocol"]
+    proto["argv"] = [("/mnt/raid0/llm/tmp/x/receipt-ab/paired-20261104T000000Z/slots"
+                      if a.endswith("/slots") else a) for a in (argv or proto["argv"])]
+    proto.update(protocol_changes or {})
+    if tg is not None:
+        c["samples"] = tg
+    if host_facts is not None:
+        c["host_facts"] = host_facts
+    return body
+
+
+def _ingest(store, source, **kw):
+    kw.setdefault("probe_version", PROBE_VERSION)
+    kw.setdefault("production_commit", V10)
+    kw.setdefault("production_label", V10_LABEL)
+    kw.setdefault("host_changes", ())
+    kw.setdefault("clock", lambda: WRITER_AT + timedelta(days=3))
+    return production.ingest_serving_result(source, store=store, **kw)
+
+
+def _tg_protocol(**runner_changes):
+    runner = {**WRITER["p_arm"]["protocol"], "probe_version": PROBE_VERSION,
+              **runner_changes}
+    return production.serving_protocol_from_runner(
+        runner, metric="tg", surface=WRITER["p_arm"]["surface"])
+
+
+class TheServingProbeIsItsOwnProtocolKind(unittest.TestCase):
+
+    def test_identity_is_argv_probe_requests_metric_unit(self):
+        proto = _tg_protocol()
+        self.assertEqual(proto["kind"], production.PROTOCOL_KIND_SERVING_PROBE)
+        self.assertEqual(proto["surface"], "serving_ab_probe_tg256")
+        self.assertEqual(proto["metric"], "tg")
+        self.assertEqual(proto["timing_field"], "predicted_per_second")
+        self.assertEqual(proto["sample_unit"], production.SERVING_SAMPLE_UNIT)
+        self.assertEqual(proto["probe_tool"], "ab_probe.py")
+        self.assertEqual(proto["probe_version"], PROBE_VERSION)
+        self.assertEqual(proto["model"], MODEL)
+        self.assertEqual(proto["server_argv"][0], production.SERVING_BINARY_PLACEHOLDER)
+        self.assertIn("draft-dflash", proto["server_argv"])
+        self.assertEqual(proto["request_digest"],
+                         production.canonical_digest(proto["request_manifest"]))
+        self.assertIn("derived", proto["request_manifest_source"])
+        pp = production.serving_protocol_from_runner(
+            {**WRITER["p_arm"]["protocol"], "probe_version": PROBE_VERSION},
+            metric="pp", surface=WRITER["p_arm_pp"]["surface"])
+        self.assertEqual(pp["timing_field"], "prompt_per_second")
+        self.assertEqual(pp["request_digest"], proto["request_digest"])
+
+    def test_only_the_binary_and_the_slot_path_are_normalised(self):
+        argv = WRITER["p_arm"]["protocol"]["argv"]
+        real = ["/k/gpu-20261004-1bceceb05/bin/llama-server"] + argv[1:]
+        moved = [a if not a.endswith("/slots") else "/elsewhere/slots" for a in real]
+        self.assertEqual(production.normalize_server_argv(moved)[0],
+                         production.normalize_server_argv(argv)[0])
+        other_port = [("8198" if a == "8197" else a) for a in argv]
+        self.assertNotEqual(production.normalize_server_argv(other_port)[0],
+                            production.normalize_server_argv(argv)[0])
+        prefixed = ["numactl", "--membind=3", "--", *real]
+        self.assertEqual(production.normalize_server_argv(prefixed)[0][:4],
+                         ["numactl", "--membind=3", "--",
+                          production.SERVING_BINARY_PLACEHOLDER])
+        with self.assertRaises(ValueError):
+            production.normalize_server_argv(["-m", MODEL])
+
+    def test_a_runner_surface_is_accepted_under_the_serving_kind(self):
+        self.assertEqual(_tg_protocol()["surface"], "serving_ab_probe_tg256")
+        with self.assertRaises(ValueError):
+            production.serving_protocol_from_runner(
+                {**WRITER["p_arm"]["protocol"], "probe_version": PROBE_VERSION},
+                metric="tg", surface="tg128")
+        with self.assertRaises(ValueError):  # still not a llama-bench surface
+            production.protocol(model=MODEL, surface="serving_ab_probe_tg256")
+
+    def test_request_identity_by_manifest_or_digest(self):
+        argv = WRITER["p_arm"]["protocol"]["argv"]
+        manifest = {"prompts": ["a", "b"], "n_predict": {"tg": 256, "pp": 1},
+                    "sampling": {"temperature": 0.0, "top_k": 1, "seed": 42}}
+        by_manifest = production.serving_protocol(
+            server_argv=argv, metric="tg", probe_tool="p", probe_version="1",
+            request_manifest=manifest)
+        expected = hashlib.sha256(json.dumps(manifest, sort_keys=True, separators=(",", ":"))
+                                  .encode()).hexdigest()
+        self.assertEqual(by_manifest["request_digest"], expected)
+        self.assertEqual(by_manifest["n_predict"], {"tg": 256, "pp": 1})
+        self.assertEqual(by_manifest["prompt_set_digest"],
+                         production.canonical_digest(["a", "b"]))
+        by_digest = production.serving_protocol(
+            server_argv=argv, metric="tg", probe_tool="p", probe_version="1",
+            request_digest=expected)
+        self.assertEqual(production.protocol_mismatch(by_manifest, by_digest), [])
+        with self.assertRaises(ValueError):
+            production.serving_protocol(server_argv=argv, metric="tg", probe_tool="p",
+                                        probe_version="1", request_manifest=manifest,
+                                        request_digest="0" * 64)
+        with self.assertRaises(ValueError):
+            production.serving_protocol(server_argv=argv, metric="tg", probe_tool="p",
+                                        probe_version="1", request_digest="xyz")
+        with self.assertRaises(ValueError):
+            production.serving_protocol(server_argv=argv, metric="e2e", probe_tool="p",
+                                        probe_version="1", request_digest=expected)
+
+    def test_probe_version_is_recorded_not_matched_and_placement_is_matched(self):
+        base = _tg_protocol()
+        self.assertEqual(production.protocol_mismatch(
+            base, _tg_protocol(probe_version="sha256:newer")), [])
+        moved = production.protocol_mismatch(base, _tg_protocol(placement="taskset -c 0-7"))
+        self.assertEqual(len(moved), 1)
+        self.assertIn("placement", moved[0])
+        self.assertIn("request_digest", production.protocol_mismatch(
+            base, _tg_protocol(probe=base["request_manifest"]["probe"].replace(
+                "--tg-n 256", "--tg-n 128")))[0])
+
+    def test_a_kind_never_matches_the_other_kind(self):
+        bench_proto = _protocol()
+        self.assertEqual(bench_proto["kind"], production.PROTOCOL_KIND_LLAMA_BENCH)
+        self.assertEqual(production.protocol_mismatch(bench_proto, _tg_protocol()),
+                         ["kind (recorded 'llama_bench', now 'serving_probe')"])
+        legacy = {k: v for k, v in bench_proto.items() if k != "kind"}
+        self.assertEqual(production.protocol_mismatch(legacy, bench_proto), [])
+
+    def test_serving_records_never_collide_with_the_llama_bench_record(self):
+        names = {production.baseline_filename(V10),
+                 production.baseline_filename(V10, _protocol()),
+                 production.baseline_filename(V10, _tg_protocol()),
+                 production.baseline_filename(V10, production.serving_protocol_from_runner(
+                     {**WRITER["p_arm"]["protocol"], "probe_version": "x"}, metric="pp",
+                     surface="serving_ab_probe_pp6465"))}
+        self.assertEqual(names, {f"production-baseline.{V10[:12]}.json",
+                                 f"production-baseline.{V10[:12]}.serving_probe-tg.json",
+                                 f"production-baseline.{V10[:12]}.serving_probe-pp.json"})
+
+    def test_write_baseline_refuses_a_contradicting_kind(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with self.assertRaises(ValueError):
+                production.write_baseline(
+                    tmp, production_commit=V10, production_label=V10_LABEL,
+                    measured_commit=V10, samples=WRITER["p_arm"]["samples"],
+                    protocol=_tg_protocol(), measured_at=WRITER["p_arm"]["measured_at"],
+                    source={}, host_facts=None, host_facts_note="",
+                    protocol_kind=production.PROTOCOL_KIND_LLAMA_BENCH)
+            self.assertEqual(list(Path(tmp).iterdir()), [])
+
+
+class TheRunnersWriterSamplesAreIngestedAsIs(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        root = Path(self.tmp.name)
+        self.store = root / "store"
+        self.source = root / "writer-samples.json"
+        self.source.write_text(json.dumps(WRITER))
+
+    def test_the_fixture_reads_as_a_paired_14_launch_run(self):
+        run = production.read_serving_result(self.source, probe_version=PROBE_VERSION)
+        self.assertEqual(sorted(run.arms), ["C", "P"])
+        self.assertEqual(run.surfaces, {"tg": "serving_ab_probe_tg256",
+                                        "pp": "serving_ab_probe_pp6465"})
+        for arm in ("P", "C"):
+            self.assertEqual(len(run.samples[arm]["tg"]), 14)
+            self.assertEqual(len(run.samples[arm]["pp"]), 14)
+        self.assertEqual(run.samples["P"]["tg"], WRITER["comparison"]["anchor_samples"])
+        self.assertEqual(run.sha256, hashlib.sha256(self.source.read_bytes()).hexdigest())
+
+    def test_a_missing_probe_version_is_named_not_guessed(self):
+        with self.assertRaises(ValueError) as ctx:
+            production.read_serving_result(self.source)
+        self.assertIn("protocol.probe_version", str(ctx.exception))
+        self.assertIn("--probe-version", str(ctx.exception))
+        with_field = _writer()
+        for arm in ("p_arm", "c_arm"):
+            with_field[arm]["protocol"]["probe_version"] = PROBE_VERSION
+        self.assertEqual(production.read_serving_result(with_field)
+                         .protocols["tg"]["probe_version"], PROBE_VERSION)
+
+    def test_paired_ingest_records_production_and_the_paired_receipt(self):
+        outcome = _ingest(self.store, self.source)
+        self.assertEqual(outcome.mode, "paired")
+        tg = json.loads(outcome.baselines["tg"].read_text())
+        pp = json.loads(outcome.baselines["pp"].read_text())
+        self.assertEqual(outcome.baselines["tg"].name,
+                         f"production-baseline.{V10[:12]}.serving_probe-tg.json")
+        self.assertEqual(tg["protocol_kind"], "serving_probe")
+        self.assertEqual(tg["samples"], WRITER["p_arm"]["samples"])
+        self.assertEqual(pp["samples"], WRITER["p_arm_pp"]["samples"])
+        self.assertEqual(tg["measured_commit"], V10)
+        self.assertEqual(tg["measured_at"], WRITER["p_arm"]["measured_at"])
+        self.assertEqual(tg["host"]["facts"], WRITER["p_arm"]["host_facts"])
+        self.assertEqual(tg["source"]["sha256"],
+                         hashlib.sha256(self.source.read_bytes()).hexdigest())
+        self.assertEqual(tg["source"]["runner_protocol"], WRITER["p_arm"]["protocol"])
+        bundle = json.loads(outcome.bundle.read_text())
+        self.assertEqual(outcome.bundle.name, production.SERVING_FILENAME)
+        self.assertFalse((self.store / production.FILENAME).exists(),
+                         "a serving receipt must not replace the llama-bench headline")
+        self.assertEqual(bundle["schema"], production.SCHEMA)
+        self.assertEqual(bundle["comparison"], "paired_ab")
+        self.assertEqual(bundle["pairs"], 14)
+        self.assertEqual(bundle["surface"], "serving_ab_probe_tg256")
+        self.assertEqual(bundle["champion"]["commit"], CHAMP_1BC)
+        self.assertEqual(bundle["baseline"]["commit"], V10)
+        expected = (statistics.median(WRITER["c_arm"]["samples"])
+                    / statistics.median(WRITER["p_arm"]["samples"]) - 1.0)
+        self.assertAlmostEqual(bundle["effect_fraction"], expected)
+        self.assertEqual(bundle["confidence_interval"],
+                         headline_admissibility.confidence_interval(
+                             WRITER["p_arm"]["samples"], WRITER["c_arm"]["samples"]))
+        self.assertAlmostEqual(bundle["metrics"]["pp"]["effect_fraction"],
+                               statistics.median(WRITER["c_arm_pp"]["samples"])
+                               / statistics.median(WRITER["p_arm_pp"]["samples"]) - 1.0)
+        evidence = json.loads(outcome.evidence.read_text())
+        self.assertEqual(len(evidence["legs"]["tg"]["pair_ratios"]), 14)
+        self.assertIsNone(DASHBOARD_PAIRED_REASON.match(outcome.reason))
+        self.assertIn("PAIRED", outcome.reason)
+
+    def test_a_p_arm_that_is_not_the_freeze_is_refused_and_nothing_is_written(self):
+        with self.assertRaises(ValueError):
+            _ingest(self.store, self.source, production_commit="1" * 40)
+        self.assertFalse(self.store.exists())
+
+    def test_an_existing_record_refuses_the_whole_ingest(self):
+        _ingest(self.store, self.source)
+        before = sorted(p.name for p in self.store.iterdir())
+        (self.store / production.SERVING_FILENAME).unlink()
+        with self.assertRaises(FileExistsError):
+            _ingest(self.store, self.source)
+        self.assertFalse((self.store / production.SERVING_FILENAME).exists())
+        _ingest(self.store, self.source, overwrite=True)
+        self.assertEqual(len(list(self.store.glob("*.superseded-*"))), 2)
+        self.assertTrue(set(before) <= {p.name for p in self.store.iterdir()})
+
+    def test_a_comparison_that_disagrees_with_the_arms_is_refused(self):
+        tampered = _writer(comparison__anchor_samples=WRITER["c_arm"]["samples"])
+        with self.assertRaises(ValueError):
+            _ingest(self.store, tampered)
+        self.assertFalse(self.store.exists())
+
+    def test_arms_under_different_protocols_are_refused(self):
+        body = _writer()
+        body["c_arm"]["protocol"]["placement"] = "taskset -c 0-7"
+        with self.assertRaises(ValueError):
+            _ingest(self.store, body)
+
+    def test_under_fourteen_launches_is_refused(self):
+        short = _writer(p_arm__samples=WRITER["p_arm"]["samples"][:13],
+                        c_arm__samples=WRITER["c_arm"]["samples"][:13])
+        with self.assertRaises(ValueError):
+            _ingest(self.store, short)
+        self.assertFalse(self.store.exists())
+
+    def test_unequal_arms_are_not_pairs(self):
+        uneven = _writer(c_arm__samples=WRITER["c_arm"]["samples"] + [53.0])
+        with self.assertRaises(ValueError):
+            _ingest(self.store, uneven)
+
+    def test_a_dry_run_writes_nothing(self):
+        outcome = _ingest(self.store, self.source, dry_run=True)
+        self.assertEqual(outcome.mode, "paired")
+        self.assertIn("tg", outcome.effects)
+        self.assertFalse(self.store.exists())
+
+    def test_the_cli_ingests_and_refuses(self):
+        args = ["ingest-serving", "--result", str(self.source), "--store", str(self.store),
+                "--production-commit", V10, "--production-label", V10_LABEL]
+        self.assertEqual(production.main(args), 2)  # no probe version anywhere
+        self.assertFalse(self.store.exists())
+        self.assertEqual(production.main(args + ["--probe-version", PROBE_VERSION]), 0)
+        self.assertTrue((self.store / production.SERVING_FILENAME).exists())
+        self.assertEqual(production.main(args + ["--probe-version", PROBE_VERSION]), 2)
+
+
+class FutureChampionsRunSingleArmAgainstTheRecord(unittest.TestCase):
+    """After the one paired v10 measurement, a champion's C-only run is compared
+    against the recorded P arm -- under exactly the same protocol, or not at all."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = Path(self.tmp.name)
+        _ingest(self.store, WRITER)
+        (self.store / production.SERVING_FILENAME).unlink()
+
+    def _refused(self, body, needle, **kw):
+        with self.assertRaises(production.Unavailable) as ctx:
+            _ingest(self.store, body, **kw)
+        self.assertIn(needle, str(ctx.exception))
+        self.assertFalse((self.store / production.SERVING_FILENAME).exists())
+
+    def test_a_matching_run_publishes_unpaired_against_the_recorded_p_arm(self):
+        later = [x * 1.03 for x in WRITER["p_arm"]["samples"]]
+        outcome = _ingest(self.store, _single_arm(tg=later))
+        self.assertEqual(outcome.mode, "single_arm")
+        self.assertEqual(outcome.baselines, {})
+        bundle = json.loads(outcome.bundle.read_text())
+        self.assertEqual(bundle["comparison"], "unpaired_recorded_baseline")
+        self.assertIsNone(bundle["pairs"])
+        self.assertIn("UNPAIRED", bundle["caveat"])
+        self.assertEqual(bundle["confidence_interval"]["method"],
+                         headline_admissibility.UNPAIRED_CI_METHOD)
+        self.assertAlmostEqual(bundle["effect_fraction"], 0.03)
+        self.assertEqual(bundle["baseline"]["recorded"], str(
+            self.store / f"production-baseline.{V10[:12]}.serving_probe-tg.json"))
+        self.assertTrue(bundle["baseline_carryover"]["used"])
+        self.assertIn("UNPAIRED", outcome.reason)
+
+    def test_another_binary_path_and_run_dir_still_match(self):
+        argv = ["/mnt/raid0/llm/kernels/builds/gpu-20261104-2222/bin/llama-server",
+                *WRITER["c_arm"]["protocol"]["argv"][1:]]
+        self.assertEqual(_ingest(self.store, _single_arm(argv=argv)).mode, "single_arm")
+
+    def test_another_server_argv_is_another_protocol(self):
+        argv = [("8" if a == "7" else a) for a in WRITER["c_arm"]["protocol"]["argv"]]
+        self._refused(_single_arm(argv=argv), "server_argv")
+
+    def test_another_request_set_is_another_protocol(self):
+        probe = WRITER["c_arm"]["protocol"]["probe"].replace("--tg-n 256", "--tg-n 128")
+        self._refused(_single_arm(protocol_changes={"probe": probe}), "request_digest")
+
+    def test_another_placement_is_another_protocol(self):
+        self._refused(_single_arm(protocol_changes={"placement": "taskset -c 0-7"}),
+                      "placement")
+
+    def test_a_newer_probe_version_still_matches(self):
+        body = _single_arm(protocol_changes={"probe_version": "sha256:newer"})
+        self.assertEqual(_ingest(self.store, body, probe_version=None).mode, "single_arm")
+
+    def test_past_thirty_days_the_record_is_stale(self):
+        self._refused(_single_arm(), "30-day limit",
+                      clock=lambda: WRITER_AT + timedelta(days=31))
+
+    def test_a_recorded_host_change_makes_it_stale(self):
+        change = {"applied": (WRITER_AT + timedelta(days=1)).date().isoformat(),
+                  "what": "BIOS memory speed", "source": "test"}
+        self._refused(_single_arm(), "recorded host change", host_changes=(change,))
+
+    def test_moved_host_facts_make_it_stale(self):
+        facts = {**WRITER["c_arm"]["host_facts"], "gpu_vbios": ["113-NEW"]}
+        self._refused(_single_arm(host_facts=facts), "gpu_vbios")
+
+    def test_no_record_at_all_is_refused(self):
+        for path in self.store.glob("production-baseline.*"):
+            path.unlink()
+        self._refused(_single_arm(), "no recorded production baseline")
+
+
+class RefreshTakesTheServingPathForAServingTarget(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.store = Path(self.tmp.name)
+        self.champion = _single_arm(commit=CHAMPION,
+                                    tg=[x * 1.02 for x in WRITER["p_arm"]["samples"]])
+        self.protocol = production.read_serving_result(
+            self.champion, probe_version=PROBE_VERSION).protocols["tg"]
+        self.arms = _Arms()
+
+    def _refresh(self, measure="default"):
+        return production.refresh(
+            store=self.store, champion_commit=CHAMPION,
+            champion_build=self.store / "anchor-gen-011", compare=self.arms.compare,
+            baseline_build=self.store / "cold", build_baseline=self.arms.build,
+            resolve=lambda: (V10, V10_LABEL), protocol=self.protocol,
+            measure=(lambda _b: production.serving_measurement(
+                self.champion, probe_version=PROBE_VERSION)) if measure == "default"
+            else measure,
+            host_facts=lambda: dict(WRITER["p_arm"]["host_facts"]), host_changes=(),
+            clock=lambda: WRITER_AT + timedelta(days=2))
+
+    def test_a_recorded_serving_baseline_is_used_single_arm(self):
+        _ingest(self.store, WRITER)
+        result = self._refresh()
+        self.assertTrue(result.published, result.reason)
+        self.assertEqual(self.arms.compared, [])
+        self.assertEqual(self.arms.built, [])
+        self.assertAlmostEqual(result.effect_fraction, 0.02)
+        self.assertEqual(result.path.name, production.SERVING_FILENAME)
+        self.assertFalse((self.store / production.FILENAME).exists())
+        self.assertIsNone(DASHBOARD_PAIRED_REASON.match(result.reason))
+
+    def test_without_a_record_there_is_no_llama_bench_fallback(self):
+        result = self._refresh()
+        self.assertFalse(result.published)
+        self.assertEqual(self.arms.compared, [])
+        self.assertEqual(self.arms.built, [])
+        self.assertIn("ingest-serving", result.reason)
+        self.assertFalse((self.store / production.SERVING_FILENAME).exists())
+
+    def test_an_unwired_measurer_is_refused(self):
+        _ingest(self.store, WRITER)
+        result = self._refresh(measure=None)
+        self.assertFalse(result.published)
+        self.assertEqual(self.arms.compared, [])
+
+
+class WriteBaselineTakesTheServingKind(unittest.TestCase):
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        root = Path(self.tmp.name)
+        self.store, self.repo = root / "store", root / "repo"
+        self.repo.mkdir()
+        _git(self.repo, "init", "-q")
+        _git(self.repo, "config", "user.email", "t@t")
+        _git(self.repo, "config", "user.name", "t")
+        (self.repo / "a.cpp").write_text("a")
+        _git(self.repo, "add", "a.cpp")
+        _git(self.repo, "commit", "-qm", "frozen")
+        self.frozen = _git(self.repo, "rev-parse", "HEAD")
+        self.source = root / "writer-samples.json"
+        self.source.write_text(json.dumps(WRITER))
+        self.argv = json.dumps(WRITER["p_arm"]["protocol"]["argv"])
+
+    def _main(self, *extra):
+        return production.main([
+            "write-baseline", "--source", str(self.source), "--samples-path",
+            "p_arm.samples", "--measured-commit", self.frozen, "--production-commit",
+            self.frozen, "--production-label", V10_LABEL, "--lineage-tree", str(self.repo),
+            "--host-facts", "none", "--store", str(self.store),
+            "--protocol-kind", "serving_probe", *extra])
+
+    def test_a_serving_record_from_the_runner_source(self):
+        digest = _tg_protocol()["request_digest"]
+        self.assertEqual(self._main("--argv-json", self.argv, "--metric", "tg",
+                                    "--probe-tool", "ab_probe.py", "--probe-version",
+                                    PROBE_VERSION, "--request-digest", digest), 0)
+        body = json.loads((self.store / f"production-baseline.{self.frozen[:12]}."
+                                        f"serving_probe-tg.json").read_text())
+        self.assertEqual(body["protocol_kind"], "serving_probe")
+        self.assertEqual(body["protocol"]["surface"], "serving_ab_probe_tg256")
+        self.assertEqual(body["protocol"]["request_digest"], digest)
+        self.assertEqual(body["samples"], WRITER["p_arm"]["samples"])
+        self.assertEqual(body["sample_unit"], production.SERVING_SAMPLE_UNIT)
+        self.assertEqual(body["measured_at"], WRITER["p_arm"]["measured_at"])
+        self.assertEqual(body["protocol"]["placement"], WRITER["p_arm"]["protocol"]["placement"])
+        # The CLI-written record matches what `ingest-serving` derives from the runner.
+        self.assertEqual(production.protocol_mismatch(body["protocol"], _tg_protocol()), [])
+
+    def test_a_request_manifest_file(self):
+        manifest = Path(self.tmp.name) / "requests.json"
+        manifest.write_text(json.dumps({"prompts": ["x"], "n_predict": 256,
+                                        "sampling": {"temperature": 0.0}}))
+        self.assertEqual(self._main("--argv-json", self.argv, "--metric", "tg",
+                                    "--probe-tool", "t", "--probe-version", "1",
+                                    "--request-manifest", str(manifest)), 0)
+
+    def test_missing_serving_identity_is_refused(self):
+        self.assertEqual(self._main("--metric", "tg", "--probe-tool", "t",
+                                    "--probe-version", "1", "--request-digest", "0" * 64), 2)
+        self.assertEqual(self._main("--argv-json", self.argv, "--metric", "tg",
+                                    "--probe-tool", "t", "--probe-version", "1"), 2)
+        self.assertFalse(self.store.exists())
+
+
 if __name__ == "__main__":
     unittest.main()

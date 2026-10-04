@@ -61,6 +61,24 @@ back to the paired A/B above, with the refusal recorded in the bundle; and a pai
 fallback re-records the production arm it just measured, so the NEXT refresh is
 single-arm. A carry-over number is UNPAIRED -- two sessions, and this host drifts ~3%
 over hours -- and the bundle and the attempt reason both say so.
+
+THE SERVING-PROBE PROTOCOL KIND (2026-10-04). Operator: measure v10 ONCE on the current
+DFlash2 serving protocol with >= 14 paired launches (champion vs production); future
+champions then run single-arm against that baseline. `llama-bench` cannot drive DFlash2
+speculative decoding, so a second protocol kind exists beside the llama-bench one:
+`serving_probe` (`serving_protocol`). Its identity is the server argv (the :8083
+production argv, binary swapped for `<llama-server>`), the probe tool and version, the
+request set (canonical-JSON digest of the request manifest: prompts, n_predict,
+sampling), the metric (`pp` = timings.prompt_per_second, `tg` =
+timings.predicted_per_second) and the unit (one server launch = one sample). A record
+stands in for production only on the same normalised argv, request digest and metric
+(`SERVING_PROBE_MATCH_KEYS`), under the same >= 14-launch floor and the same staleness
+rules (age, `HOST_CHANGES`, host facts). This module never launches a server: the stack
+owner's runner produces the samples, and `ingest_serving_result` (CLI `ingest-serving`)
+turns its result JSON (`SERVING_RESULT_SCHEMA`, documented at that function) into the
+production baselines and the champion's standing receipt. `refresh` takes the serving
+path when handed a serving protocol, and has NO llama-bench fallback there -- a paired
+llama-bench A/B would measure a different protocol under the serving headline's name.
 """
 from __future__ import annotations
 
@@ -151,6 +169,45 @@ HOST_CHANGES: tuple[dict, ...] = (
 #: production arm. `argv` subsumes the rest, but each is named so a refusal says WHICH.
 PROTOCOL_MATCH_KEYS = ("harness", "model", "surface", "pp", "tg", "ubatch", "reps",
                        "warmup_launches", "sample_unit", "hardened", "argv")
+
+#: ---- Protocol kinds (see the module docstring's SERVING-PROBE section) ----
+PROTOCOL_KIND_LLAMA_BENCH = "llama_bench"
+PROTOCOL_KIND_SERVING_PROBE = "serving_probe"
+PROTOCOL_KINDS = (PROTOCOL_KIND_LLAMA_BENCH, PROTOCOL_KIND_SERVING_PROBE)
+#: One server launch is one sample: the probe's per-launch median over its reps.
+SERVING_SAMPLE_UNIT = "server_launch"
+#: metric -> the llama-server `timings` field it is read from.
+SERVING_METRICS = {"pp": "prompt_per_second", "tg": "predicted_per_second"}
+#: metric -> the per-launch key in a runner result's `speed` block (ab_probe.py's names).
+SERVING_LAUNCH_FIELDS = {"pp": "pp_tps_median", "tg": "tg_tps_median"}
+#: The binary is the one argv element that may differ between arms and runs ...
+SERVING_BINARY_PLACEHOLDER = "<llama-server>"
+#: ... except `--slot-save-path`, which the runner (`ab_probe.py args --slot-dir
+#: <run>/slots`) points into each run's own directory. Slot files are written only on
+#: an explicit slot save, which the probe never issues (cache_prompt=false), so the
+#: value cannot move a timing -- and left in, it would make every run a new protocol.
+SERVING_SLOT_PLACEHOLDER = "<slot-save-path>"
+#: A serving surface is a free-form label the runner names (`serving_ab_probe_tg256`,
+#: `serving_ab_probe_pp6465`, ...) under this shape; it is matched like any key.
+SERVING_SURFACE_PREFIX = "serving_"
+#: The runner result schemas `ingest_serving_result` reads (one shape, two names: the
+#: first is what the stack owner's `paired_receipt.py` emits today).
+SERVING_RESULT_SCHEMAS = ("epyc.fold.serving_ab_samples_for_production_writer.v1",
+                          "epyc.autokernel.serving_probe_result.v1")
+#: Per-launch sample units a runner may declare. One server launch IS one process
+#: launch -- the floor unit `bench.FLOOR_UNIT` names -- so "process" is the same unit.
+SERVING_ACCEPTED_UNITS = (SERVING_SAMPLE_UNIT, bench.FLOOR_UNIT)
+#: The serving standing receipt. NOT `FILENAME`: the llama-bench headline bundle keeps
+#: its own file, and a serving number never silently replaces it.
+SERVING_FILENAME = "champion-vs-production.serving_probe.json"
+#: What must be IDENTICAL for a serving record to stand in for production. The argv is
+#: compared with the binary normalised away; `request_digest` covers prompts, n_predict
+#: and sampling; probe tool/version are recorded identity but NOT matched (operator
+#: rule: same argv-but-binary, same request digest, same metric). `placement` (the
+#: numactl/taskset/env the runner wraps the server in, absent from argv) IS matched:
+#: a different CPU placement is a different measurement of the same binary.
+SERVING_PROBE_MATCH_KEYS = ("kind", "harness", "model", "surface", "metric", "timing_field",
+                            "sample_unit", "server_argv", "placement", "request_digest")
 
 
 class Unavailable(RuntimeError):
@@ -270,8 +327,14 @@ def _ensure_baseline(baseline_build: Path, commit: str, label: str,
 # --------------------------------------------------------------------------- #
 
 
-def baseline_filename(commit: str) -> str:
-    """`production-baseline.<sha12>.json` -- keyed by the FROZEN commit it describes."""
+def baseline_filename(commit: str, protocol: Mapping[str, Any] | None = None) -> str:
+    """`production-baseline.<sha12>.json` -- keyed by the FROZEN commit it describes.
+
+    A serving-probe record is keyed by commit AND metric
+    (`production-baseline.<sha12>.serving_probe-<pp|tg>.json`), so it never collides
+    with the llama-bench record of the same freeze, nor pp with tg."""
+    if protocol is not None and protocol_kind(protocol) == PROTOCOL_KIND_SERVING_PROBE:
+        return f"production-baseline.{commit[:12]}.serving_probe-{protocol['metric']}.json"
     return f"production-baseline.{commit[:12]}.json"
 
 
@@ -301,17 +364,165 @@ def protocol(*, model: Path | str, surface: str, reps: int = 9,
     argv = (list(argv) if argv is not None else
             bench.llama_bench_argv("<llama-bench>", model, pp=pp, tg=tg, reps=reps,
                                    ubatch=ubatch))
-    return {"harness": "llama-bench", "model": str(model), "surface": surface,
+    return {"kind": PROTOCOL_KIND_LLAMA_BENCH,
+            "harness": "llama-bench", "model": str(model), "surface": surface,
             "pp": pp, "tg": tg, "ubatch": ubatch, "reps": reps,
             "warmup_launches": warmup_launches, "sample_unit": bench.FLOOR_UNIT,
             "estimator": "median", "hardened": "--autokernel-harden" in argv,
             "argv": [str(item) for item in argv], "argv_provenance": argv_provenance}
 
 
+def protocol_kind(protocol: Mapping[str, Any]) -> str:
+    """A protocol's kind. A record that names none predates the field: llama-bench."""
+    return protocol.get("kind") or PROTOCOL_KIND_LLAMA_BENCH
+
+
+#: `write_baseline` takes a `protocol_kind` PARAMETER (the CLI's `--protocol-kind`),
+#: which shadows the function inside it.
+_kind_of = protocol_kind
+
+
+def match_keys(protocol: Mapping[str, Any]) -> tuple[str, ...]:
+    """The keys that must be identical for a record under this protocol to stand in."""
+    kind = protocol_kind(protocol)
+    if kind == PROTOCOL_KIND_SERVING_PROBE:
+        return SERVING_PROBE_MATCH_KEYS
+    if kind == PROTOCOL_KIND_LLAMA_BENCH:
+        return PROTOCOL_MATCH_KEYS
+    raise ValueError(f"unknown protocol kind {kind!r}; known: {list(PROTOCOL_KINDS)}")
+
+
 def protocol_mismatch(recorded: Mapping[str, Any], current: Mapping[str, Any]) -> list[str]:
-    """The `PROTOCOL_MATCH_KEYS` on which two protocols differ, each with both values."""
+    """The match keys on which two protocols differ, each with both values.
+
+    A different KIND is reported alone: two instruments share no comparable field."""
+    if protocol_kind(recorded) != protocol_kind(current):
+        return [f"kind (recorded {protocol_kind(recorded)!r}, "
+                f"now {protocol_kind(current)!r})"]
     return [f"{key} (recorded {recorded.get(key)!r}, now {current.get(key)!r})"
-            for key in PROTOCOL_MATCH_KEYS if recorded.get(key) != current.get(key)]
+            for key in match_keys(current) if recorded.get(key) != current.get(key)]
+
+
+def canonical_digest(value: Any) -> str:
+    """sha256 of `value` as canonical JSON (sorted keys, no whitespace, UTF-8).
+
+    THE request-digest definition: a runner that computes it itself must use exactly
+    `json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`."""
+    text = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _is_hex(text: Any, length: int | None = None) -> bool:
+    return (isinstance(text, str) and bool(text)
+            and (length is None or len(text) == length)
+            and all(c in "0123456789abcdef" for c in text))
+
+
+def normalize_server_argv(argv: Sequence[Any]) -> tuple[list[str], str]:
+    """`(argv with the binary and the slot-save path normalised, the binary)`.
+
+    The binary is the FIRST element whose basename is `llama-server` (or the
+    placeholder itself); anything before it (a numactl/taskset spawn prefix) stays and
+    is therefore matched -- placement is part of the protocol. An argv naming no
+    `llama-server` is refused rather than guessing which element is the binary. The
+    value after `--slot-save-path` becomes `SERVING_SLOT_PLACEHOLDER` (see there).
+    Every other element, the port included, is compared verbatim."""
+    items = [str(item) for item in argv]
+    for index, item in enumerate(items):
+        if item == SERVING_BINARY_PLACEHOLDER or Path(item).name == "llama-server":
+            out = items[:index] + [SERVING_BINARY_PLACEHOLDER] + items[index + 1:]
+            for at in range(index + 1, len(out) - 1):
+                if out[at] == "--slot-save-path":
+                    out[at + 1] = SERVING_SLOT_PLACEHOLDER
+            return out, item
+    raise ValueError(f"server argv names no llama-server binary: {items!r:.200}")
+
+
+def _argv_model(argv: Sequence[str]) -> str | None:
+    for flag in ("-m", "--model"):
+        if flag in argv[:-1]:
+            return argv[list(argv).index(flag) + 1]
+    return None
+
+
+def request_manifest_digest(manifest: Mapping[str, Any]) -> str:
+    """Validate a request manifest and return its canonical digest (`request_digest`).
+
+    A manifest is any non-empty JSON object; EVERY key in it is pinned by the digest.
+    Recommended keys: `prompts` (or `prompt_set_digest`, 64 hex), `n_predict`,
+    `sampling` -- read off into the protocol when present. A runner whose prompts and
+    sampling live in its own source (ab_probe.py) pins them through the probe command
+    plus `probe_version` instead; see `serving_protocol_from_runner`."""
+    if not isinstance(manifest, Mapping) or not manifest:
+        raise ValueError("a request manifest must be a non-empty JSON object")
+    if "sampling" in manifest and not isinstance(manifest["sampling"], Mapping):
+        raise ValueError("request manifest `sampling` must be an object")
+    if "prompt_set_digest" in manifest and not _is_hex(manifest["prompt_set_digest"], 64):
+        raise ValueError("request manifest `prompt_set_digest` must be 64 lowercase hex")
+    return canonical_digest(dict(manifest))
+
+
+def serving_protocol(*, server_argv: Sequence[Any], metric: str, probe_tool: str,
+                     probe_version: str,
+                     request_manifest: Mapping[str, Any] | None = None,
+                     request_digest: str | None = None,
+                     n_predict: Any = None, sampling: Mapping[str, Any] | None = None,
+                     surface: str | None = None, placement: str | None = None,
+                     model: str | None = None,
+                     argv_provenance: str = "runner result server_argv",
+                     request_manifest_source: str = "runner manifest") -> dict:
+    """The `serving_probe` protocol one metric of a serving probe is taken under.
+
+    Pass the request manifest (preferred: its digest is computed here, and n_predict /
+    sampling are read off it) or, for a run whose manifest is not at hand, its
+    `request_digest` with the n_predict / sampling it pinned. Both may be given only
+    when they agree. `surface` defaults to `serving_probe_<metric>`; a runner's own
+    label (`serving_ab_probe_tg256`) is accepted when it starts `serving_`. `model`
+    defaults to the argv's `-m` and, when given, must agree with it."""
+    if metric not in SERVING_METRICS:
+        raise ValueError(f"unknown serving metric {metric!r}; known: "
+                         f"{sorted(SERVING_METRICS)}")
+    for name, value in (("probe_tool", probe_tool), ("probe_version", probe_version)):
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{name} must be a non-empty string")
+    argv, _binary = normalize_server_argv(server_argv)
+    surface = surface or f"{SERVING_SURFACE_PREFIX}probe_{metric}"
+    if (not isinstance(surface, str) or not surface.startswith(SERVING_SURFACE_PREFIX)
+            or not surface.replace("_", "").replace("-", "").isalnum()):
+        raise ValueError(f"serving surface {surface!r} must be '{SERVING_SURFACE_PREFIX}*' "
+                         f"in [A-Za-z0-9_-]")
+    argv_model = _argv_model(argv)
+    if model is not None and argv_model is not None and str(model) != argv_model:
+        raise ValueError(f"model {model!r} contradicts the server argv's -m {argv_model!r}")
+    prompt_set_digest = None
+    if request_manifest is not None:
+        digest = request_manifest_digest(request_manifest)
+        if request_digest is not None and request_digest != digest:
+            raise ValueError(f"request_digest {request_digest!r} is not the manifest's "
+                             f"digest {digest}")
+        request_digest = digest
+        n_predict = request_manifest.get("n_predict", n_predict)
+        sampling = request_manifest.get("sampling", sampling)
+        prompt_set_digest = request_manifest.get("prompt_set_digest") or (
+            canonical_digest(request_manifest["prompts"])
+            if "prompts" in request_manifest else None)
+    elif not _is_hex(request_digest, 64):
+        raise ValueError("a serving protocol needs a request manifest or a 64-hex "
+                         f"request_digest, got {request_digest!r}")
+    return {"kind": PROTOCOL_KIND_SERVING_PROBE, "harness": "serving_probe",
+            "probe_tool": probe_tool, "probe_version": probe_version,
+            "model": argv_model or (None if model is None else str(model)),
+            "surface": surface, "placement": placement,
+            "metric": metric, "timing_field": SERVING_METRICS[metric],
+            "unit": "tok/s (server timings)", "sample_unit": SERVING_SAMPLE_UNIT,
+            "estimator": "median", "server_argv": argv,
+            "server_argv_sha256": canonical_digest(argv),
+            "request_digest": request_digest, "prompt_set_digest": prompt_set_digest,
+            "n_predict": n_predict, "sampling": None if sampling is None else dict(sampling),
+            "request_manifest": None if request_manifest is None else dict(request_manifest),
+            "request_manifest_source": (request_manifest_source if request_manifest
+                                        is not None else "digest only"),
+            "argv_provenance": argv_provenance}
 
 
 def _read_text(path: Path) -> str | None:
@@ -428,25 +639,36 @@ def write_baseline(store: Path | str, *, production_commit: str, production_labe
                    source: Mapping[str, Any], host_facts: Mapping[str, Any] | None,
                    host_facts_note: str, lineage: Mapping[str, Any] | None = None,
                    residency: Mapping[str, Any] | None = None, overwrite: bool = False,
-                   now: Callable[[], str] = status._now) -> Path:
+                   now: Callable[[], str] = status._now,
+                   protocol_kind: str | None = None) -> Path:
     """Write `production-baseline.<sha12>.json`: production's numbers, carried over.
 
     The promotion's entry point (CLI: `write-baseline`). Refuses an under-sized or
     non-finite sample vector, a non-40-hex commit, an unparseable date, and -- unless
     `overwrite` -- an existing record for the same freeze (an overwritten record is
     first preserved beside it as `.superseded-<ts>`, never discarded).
+
+    `protocol_kind` (`llama_bench` | `serving_probe`) is read off `protocol`; passing
+    it explicitly asserts it, and a disagreement is refused. A serving-probe record is
+    built with `serving_protocol` and lands under its own per-metric filename.
     """
     if len(production_commit) != 40 or any(c not in "0123456789abcdef"
                                             for c in production_commit):
         raise ValueError(f"production_commit must be a full 40-hex sha, got "
                          f"{production_commit!r}")
+    kind = _kind_of(protocol)
+    if protocol_kind is not None and protocol_kind != kind:
+        raise ValueError(f"protocol_kind {protocol_kind!r} contradicts the protocol's "
+                         f"kind {kind!r}")
     values = _admissible_samples(list(samples))
     _parse_when(measured_at)
-    missing = [key for key in PROTOCOL_MATCH_KEYS if key not in protocol]
+    missing = [key for key in match_keys(protocol) if key not in protocol]
     if missing:
-        raise ValueError(f"protocol lacks {missing}; build it with production.protocol")
+        builder = ("production.serving_protocol" if kind == PROTOCOL_KIND_SERVING_PROBE
+                   else "production.protocol")
+        raise ValueError(f"protocol lacks {missing}; build it with {builder}")
     store = Path(store)
-    target = store / baseline_filename(production_commit)
+    target = store / baseline_filename(production_commit, protocol)
     if target.exists():
         if not overwrite:
             raise FileExistsError(f"{target} already records this freeze; pass "
@@ -455,6 +677,7 @@ def write_baseline(store: Path | str, *, production_commit: str, production_labe
         target.rename(target.with_name(f"{target.name}.superseded-{stamp}"))
     body = {
         "schema": BASELINE_SCHEMA,
+        "protocol_kind": kind,
         "production": {"commit": production_commit, "label": production_label},
         "measured_commit": measured_commit,
         "lineage": dict(lineage or {}),
@@ -490,8 +713,15 @@ def baseline_decision(store: Path | str, frozen_commit: str, *,
                       host_changes: Sequence[Mapping[str, Any]] = HOST_CHANGES,
                       clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
                       ) -> BaselineDecision:
-    """Match, staleness and integrity checks, in that order. Never raises."""
-    path = Path(store) / baseline_filename(frozen_commit)
+    """Match, staleness and integrity checks, in that order. Never raises.
+
+    Kind-aware: a serving protocol reads the per-metric serving record and matches on
+    `SERVING_PROBE_MATCH_KEYS`; the age, host-change and host-fact rules are shared."""
+    try:
+        path = Path(store) / baseline_filename(frozen_commit, protocol)
+    except Exception as exc:  # noqa: BLE001 -- a malformed protocol is a refusal
+        return BaselineDecision(False, f"cannot name the record for this protocol "
+                                       f"({type(exc).__name__}: {exc})")
     try:
         body = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -664,12 +894,28 @@ def refresh(*, store: Path, champion_commit: str, champion_build: Path,
     the benchmark returned, never from a caller's parameters: a surface or pair count
     passed in alongside the comparison is a second source of truth for one fact, and
     the one that gets published is the one nobody measured.
+
+    SERVING TARGETS. A `protocol` of kind `serving_probe` (`serving_protocol`,
+    `read_serving_result(...).protocols[metric]`) takes the serving path: `measure`
+    returns the champion's serving samples (`serving_measurement`), the matching
+    `production-baseline.<sha12>.serving_probe-<metric>.json` must be admitted, and the
+    UNPAIRED receipt lands in `SERVING_FILENAME`. There is NO paired fallback -- a
+    refusal is a non-published `Refresh` telling the operator to run the paired runner
+    and `ingest-serving` it; `compare` and `build_baseline` are never called.
     """
     try:
         # Resolved LIVE, inside the containment: a promotion moves the frozen tree, so
         # a resolver failure (or a tree off the production branch contract) refuses
         # THIS refresh and never ends the run.
         frozen_commit, frozen_label = resolve()
+        if protocol is not None and _kind_of(protocol) == PROTOCOL_KIND_SERVING_PROBE:
+            return _refresh_serving(
+                store=Path(store), protocol=protocol, frozen_commit=frozen_commit,
+                frozen_label=frozen_label, champion_commit=champion_commit,
+                champion_build=Path(champion_build), measure=measure,
+                max_age_days=baseline_max_age_days, host_facts=host_facts,
+                host_changes=host_changes, clock=clock, now=now, note=note,
+                on_step=on_step)
         if measure is not None and protocol is not None:
             decision = baseline_decision(
                 store, frozen_commit, protocol=protocol,
@@ -761,6 +1007,522 @@ def refresh(*, store: Path, champion_commit: str, champion_build: Path,
     return published
 
 
+# --------------------------------------------------------------------------- #
+# The serving-probe protocol kind: runner results in, baselines and receipts out
+# --------------------------------------------------------------------------- #
+
+
+def serving_protocol_from_runner(runner: Mapping[str, Any], *, metric: str, surface: str,
+                                 probe_version: str | None = None) -> dict:
+    """The `serving_probe` protocol for one metric of a runner's `protocol` block.
+
+    Read off the runner's block AS IT IS (the stack owner's `paired_receipt.py` shape):
+      * `argv`            -> server_argv (binary / slot-save path normalised)
+      * `placement`       -> placement (matched; optional)
+      * `model`           -> model (must agree with argv `-m`)
+      * `sample_unit`     -> must be "process" or "server_launch" (the same unit)
+      * `probe`           -> the probe command; its first token's basename is the probe
+                             tool unless `probe_tool` is given
+      * `probe_version`   -> REQUIRED here or as the `probe_version` argument (CLI
+                             `--probe-version`); recommended: sha256 of the probe source
+      * `requests` / `request_digest` -> the request manifest / its digest, when the
+                             runner has one. Absent both, the manifest is DERIVED from
+                             the block's own `probe`, `pp`, `tg`, `reps`,
+                             `warmup_launches` -- ab_probe.py's prompts and sampling are
+                             constants in its source, pinned by the command plus
+                             `probe_version` -- and the protocol says so in
+                             `request_manifest_source`.
+    """
+    if not isinstance(runner, Mapping):
+        raise ValueError("the runner's `protocol` must be a JSON object")
+    argv = runner.get("argv")
+    if not isinstance(argv, list) or not argv:
+        raise ValueError("the runner's protocol carries no `argv` list")
+    unit = runner.get("sample_unit", SERVING_SAMPLE_UNIT)
+    if unit not in SERVING_ACCEPTED_UNITS:
+        raise ValueError(f"runner sample_unit {unit!r} is not one server launch per "
+                         f"sample ({list(SERVING_ACCEPTED_UNITS)})")
+    command = runner.get("probe")
+    tool = runner.get("probe_tool") or (Path(str(command).split()[0]).name
+                                        if isinstance(command, str) and command.strip()
+                                        else None)
+    recorded_version = runner.get("probe_version")
+    if recorded_version and probe_version and recorded_version != probe_version:
+        raise ValueError(f"--probe-version {probe_version!r} contradicts the runner's "
+                         f"protocol.probe_version {recorded_version!r}")
+    version = recorded_version or probe_version
+    if not tool:
+        raise ValueError("the runner's protocol names no probe: add `protocol.probe` "
+                         "(the probe command) or `protocol.probe_tool`")
+    if not version:
+        raise ValueError("the runner's protocol carries no `probe_version`: add "
+                         "`protocol.probe_version` (e.g. the sha256 of the probe "
+                         "source) or pass --probe-version")
+    manifest, digest = runner.get("requests"), runner.get("request_digest")
+    source = "runner protocol.requests"
+    if manifest is None and digest is None:
+        missing = [key for key in ("probe", "pp", "tg", "reps") if key not in runner]
+        if missing:
+            raise ValueError(f"the runner's protocol has no `requests` manifest and lacks "
+                             f"{missing} to derive one from")
+        manifest = {key: runner[key] for key in
+                    ("probe", "pp", "tg", "reps", "warmup_launches") if key in runner}
+        source = ("derived from the runner protocol's probe/pp/tg/reps/warmup_launches; "
+                  "the probe's prompts and sampling are pinned by its command and "
+                  "probe_version")
+    return serving_protocol(
+        server_argv=argv, metric=metric, probe_tool=str(tool), probe_version=str(version),
+        request_manifest=manifest, request_digest=digest, surface=surface,
+        placement=runner.get("placement"), model=runner.get("model"),
+        argv_provenance=str(runner.get("argv_provenance") or "runner protocol.argv"),
+        request_manifest_source=source)
+
+
+@dataclass(frozen=True)
+class ServingMeasurement:
+    """ONE arm's serving-probe samples for one metric: one sample per server launch."""
+    surface: str
+    metric: str
+    samples: list[float]
+    model: str | None
+    launches: int
+    residency: Any = None
+
+    def to_dict(self) -> dict:
+        return {"surface": self.surface, "metric": self.metric, "model": self.model,
+                "launches": self.launches, "samples": self.samples,
+                "sample_unit": SERVING_SAMPLE_UNIT, "estimator": "median",
+                "median": statistics.median(self.samples), "residency": self.residency}
+
+
+@dataclass(frozen=True)
+class ServingRun:
+    """A runner result, validated. `arms` maps "P"/"C" to the arm's record."""
+    path: Path | None
+    sha256: str | None
+    arms: dict
+    samples: dict
+    surfaces: dict
+    runner_protocol: dict
+    protocols: dict
+
+    def measurement(self, metric: str = "tg", arm: str = "C") -> ServingMeasurement:
+        if arm not in self.samples:
+            raise ValueError(f"the runner result has no {arm} arm")
+        values = list(self.samples[arm][metric])
+        return ServingMeasurement(
+            surface=self.surfaces[metric], metric=metric, samples=values,
+            model=self.protocols[metric]["model"], launches=len(values),
+            residency=self.arms[arm].get("residency"))
+
+
+def _samples(value: Any, where: str) -> list[float]:
+    try:
+        return _admissible_samples(value)
+    except ValueError as exc:
+        raise ValueError(f"{where}: {exc}") from None
+
+
+def read_serving_result(source: Path | str | Mapping[str, Any], *,
+                        probe_version: str | None = None) -> ServingRun:
+    """Parse and validate a runner result (`SERVING_RESULT_SCHEMAS`). Raises ValueError.
+
+    THE SCHEMA a runner emits (the stack owner's `paired_receipt.py` writer-samples.json,
+    accepted as-is; `SERVING_RESULT_SCHEMAS[1]` names the same shape for new runners)::
+
+      {"schema": "epyc.fold.serving_ab_samples_for_production_writer.v1",
+       "p_arm": {"commit": "<40-hex production>", "build": "<dir>",
+                 "surface": "serving_<...>_tg<N>",
+                 "samples": [<tg tok/s, one per server launch, timings.predicted_per_second
+                             median over the launch's reps>, ... >= 14],
+                 "model": "<gguf>", "measured_at": "<ISO-8601>",
+                 "protocol": {"argv": ["<llama-server>"|<path>, ...], "model": ...,
+                              "probe": "<probe command>", "pp": <int>, "tg": <int>,
+                              "reps": <int>, "warmup_launches": <int>,
+                              "sample_unit": "process"|"server_launch",
+                              "placement": "<env/numactl/taskset>" (optional, matched),
+                              "probe_version": "<str>" (or --probe-version),
+                              "requests": {...} | "request_digest": "<64-hex>" (optional),
+                              ...any other keys, recorded not matched},
+                 "host_facts": {<production.read_host_facts()>} | null,
+                 "source": {...}, "residency": {...}},
+       "c_arm":    {same keys, "commit": "<champion sha, >= 12 hex>"},
+       "p_arm_pp": {"surface": "serving_<...>_pp<N>", "model": ..., "samples": [pp tok/s
+                    (timings.prompt_per_second), one per launch, index-aligned]},
+       "c_arm_pp": {same},
+       "comparison": {"anchor_samples": == p_arm.samples,
+                      "candidate_samples": == c_arm.samples, ...} (optional)}
+
+    `p_arm.samples[i]` and `c_arm.samples[i]` are the i-th alternating pair (warm-up
+    pair already discarded). Either arm may be absent: P alone records production's
+    baseline, C alone is a single-arm champion run against the recorded baseline. Both
+    arms' `protocol` blocks must be identical.
+    """
+    path = sha = None
+    if isinstance(source, Mapping):
+        body = dict(source)
+    else:
+        path = Path(source).resolve()
+        body = json.loads(path.read_text(encoding="utf-8"))
+        sha = _sha256(path)
+    if not isinstance(body, dict) or body.get("schema") not in SERVING_RESULT_SCHEMAS:
+        raise ValueError(f"not a serving-probe runner result: schema "
+                         f"{(body or {}).get('schema') if isinstance(body, dict) else None!r}"
+                         f", expected one of {list(SERVING_RESULT_SCHEMAS)}")
+    arms, samples, protocols_seen = {}, {}, []
+    surfaces: dict[str, set] = {"tg": set(), "pp": set()}
+    for arm, key in (("P", "p_arm"), ("C", "c_arm")):
+        record = body.get(key)
+        if record is None:
+            continue
+        if not isinstance(record, dict):
+            raise ValueError(f"`{key}` must be an object")
+        missing = [field for field in ("commit", "samples", "surface", "protocol")
+                   if field not in record]
+        prefill = body.get(f"{key}_pp")
+        if not isinstance(prefill, dict) or "samples" not in prefill:
+            missing.append(f"{key}_pp.samples")
+        if missing:
+            raise ValueError(f"`{key}` lacks {missing}")
+        if not _is_hex(str(record["commit"])) or len(str(record["commit"])) < 12:
+            raise ValueError(f"`{key}.commit` must be a sha (>= 12 hex), got "
+                             f"{record['commit']!r}")
+        for model in (record.get("model"), prefill.get("model")):
+            declared = record["protocol"].get("model") if isinstance(
+                record["protocol"], dict) else None
+            if model is not None and declared is not None and model != declared:
+                raise ValueError(f"`{key}` model {model!r} contradicts its protocol's "
+                                 f"{declared!r}")
+        arms[arm] = record
+        samples[arm] = {"tg": _samples(record["samples"], f"{key}.samples"),
+                        "pp": _samples(prefill["samples"], f"{key}_pp.samples")}
+        surfaces["tg"].add(record["surface"])
+        surfaces["pp"].add(prefill.get("surface") or f"{SERVING_SURFACE_PREFIX}probe_pp")
+        protocols_seen.append(record["protocol"])
+    if not arms:
+        raise ValueError("the runner result has neither a `p_arm` nor a `c_arm`")
+    if len({canonical_digest(item) for item in protocols_seen}) != 1:
+        raise ValueError("`p_arm.protocol` and `c_arm.protocol` differ: the two arms "
+                         "were not measured under one protocol")
+    runner = protocols_seen[0]
+    for metric, seen in surfaces.items():
+        if len(seen) != 1:
+            raise ValueError(f"the arms name different {metric} surfaces: {sorted(seen)}")
+    surface = {metric: next(iter(seen)) for metric, seen in surfaces.items()}
+    if isinstance(runner, dict) and runner.get("surface") not in (None, surface["tg"]):
+        raise ValueError(f"the arms' surface {surface['tg']!r} contradicts the protocol's "
+                         f"{runner.get('surface')!r}")
+    if len(arms) == 2:
+        for metric in ("tg", "pp"):
+            if len(samples["P"][metric]) != len(samples["C"][metric]):
+                raise ValueError(
+                    f"{metric}: {len(samples['P'][metric])} P vs "
+                    f"{len(samples['C'][metric])} C launches -- a paired run pairs "
+                    f"launch i of P with launch i of C")
+    comparison = body.get("comparison")
+    if comparison is not None:
+        for arm, key in (("P", "anchor_samples"), ("C", "candidate_samples")):
+            if arm in samples and key in comparison and \
+                    [float(x) for x in comparison[key]] != samples[arm]["tg"]:
+                raise ValueError(f"`comparison.{key}` is not the {arm} arm's tg samples")
+        if comparison.get("surface") not in (None, surface["tg"]):
+            raise ValueError(f"`comparison.surface` {comparison.get('surface')!r} is not "
+                             f"{surface['tg']!r}")
+    protocols = {metric: serving_protocol_from_runner(
+        runner, metric=metric, surface=surface[metric], probe_version=probe_version)
+        for metric in ("tg", "pp")}
+    return ServingRun(path, sha, arms, samples, surface, dict(runner), protocols)
+
+
+def serving_measurement(source: Path | str | Mapping[str, Any], metric: str = "tg",
+                        arm: str = "C", *, probe_version: str | None = None
+                        ) -> ServingMeasurement:
+    """One arm of a runner result as a measurement -- `refresh`'s `measure` for a
+    serving target: `measure=lambda _build: serving_measurement(result_json)`."""
+    return read_serving_result(source, probe_version=probe_version).measurement(metric, arm)
+
+
+def _serving_leg(metric: str, protocol: Mapping[str, Any], baseline: Sequence[float],
+                 champion: Sequence[float], *, paired: bool,
+                 decision: BaselineDecision | None = None) -> dict:
+    """Effect and CI for one metric. Raises `HeadlineInadmissible` under the floor."""
+    base, champ = [float(x) for x in baseline], [float(x) for x in champion]
+    ci = (headline_admissibility.confidence_interval(base, champ) if paired else
+          headline_admissibility.unpaired_confidence_interval(base, champ))
+    effect = statistics.median(champ) / statistics.median(base) - 1.0
+    leg = {"metric": metric, "surface": protocol["surface"],
+           "timing_field": protocol["timing_field"], "unit": protocol.get("unit"),
+           "effect_fraction": effect, "effect_pct": effect * 100.0,
+           "estimator": "median_over_median",
+           "baseline_median": statistics.median(base),
+           "champion_median": statistics.median(champ),
+           "baseline_launches": len(base), "champion_launches": len(champ),
+           "confidence_interval": ci, "baseline_samples": base, "champion_samples": champ,
+           "baseline_record": None, "baseline_record_sha256": None,
+           "baseline_measured_at": None}
+    if paired:
+        leg["pair_ratios"] = [c / b for b, c in zip(base, champ)]
+    if decision is not None and decision.path is not None:
+        leg.update(baseline_record=str(decision.path),
+                   baseline_record_sha256=_sha256(decision.path),
+                   baseline_measured_at=(decision.body or {}).get("measured_at"))
+    return leg
+
+
+def _write_serving_receipt(store: Path, *, legs: Mapping[str, dict],
+                           protocols: Mapping[str, Mapping[str, Any]], paired: bool,
+                           primary: str, champion_commit: str, champion_build: Any,
+                           frozen_commit: str, frozen_label: str, production_build: Any,
+                           carryover: Mapping[str, Any], source: Mapping[str, Any] | None,
+                           bundle_name: str, now: Callable[[], str],
+                           note: str | None = None) -> tuple[Path, Path, str]:
+    """The champion's serving standing receipt: per-champion evidence + the bundle."""
+    if primary not in legs:
+        raise ValueError(f"primary metric {primary!r} was not measured ({sorted(legs)})")
+    order = [primary] + sorted(m for m in legs if m != primary)
+    comparison = "paired_ab" if paired else "unpaired_recorded_baseline"
+    head = legs[primary]
+    evidence = status.write_json(
+        store, f"champion-vs-production.{champion_commit[:12]}.serving_probe.json", {
+            "comparison": comparison, "protocol_kind": PROTOCOL_KIND_SERVING_PROBE,
+            "champion_commit": champion_commit, "production_commit": frozen_commit,
+            "legs": {m: legs[m] for m in order},
+            "protocols": {m: dict(protocols[m]) for m in order},
+            "source": None if source is None else dict(source),
+            **({} if paired else {"caveat": UNPAIRED_CAVEAT,
+                                  "host_drift_caveat_pct": HOST_DRIFT_CAVEAT_PCT})},
+        prefix=".cvp-")
+    summary = {m: {k: v for k, v in legs[m].items()
+                   if k not in ("baseline_samples", "champion_samples", "pair_ratios")}
+               for m in order}
+    bundle = {
+        "schema": SCHEMA, "generated_at": now(), "stale_after_s": STALE_AFTER_S,
+        "protocol_kind": PROTOCOL_KIND_SERVING_PROBE,
+        "baseline": {"commit": frozen_commit, "label": frozen_label,
+                     "build": None if production_build is None else str(production_build),
+                     "recorded": head["baseline_record"],
+                     "recorded_sha256": head["baseline_record_sha256"],
+                     "recorded_measured_at": head["baseline_measured_at"]},
+        "champion": {"commit": champion_commit,
+                     "build": None if champion_build is None else str(champion_build)},
+        "effect_fraction": float(head["effect_fraction"]),
+        "metric": f"{head['surface']}_tok_s", "metric_direction": "higher_better",
+        "model": protocols[primary]["model"], "surface": head["surface"],
+        "pairs": head["baseline_launches"] if paired else None,
+        "comparison": comparison,
+        "launches": head["baseline_launches"] + head["champion_launches"],
+        "champion_launches": head["champion_launches"],
+        "baseline_launches": head["baseline_launches"],
+        "headline_admissibility": {**headline_admissibility.contract(),
+                                   **({} if paired else {
+                                       "ci_method": headline_admissibility.UNPAIRED_CI_METHOD})},
+        "confidence_interval": head["confidence_interval"],
+        "noise_floor_pct": None,
+        "metrics": summary, "protocol": dict(protocols[primary]),
+        "baseline_carryover": dict(carryover),
+        "evidence": str(evidence), "mechanism_id": MECHANISM_ID,
+        **({} if paired else {"host_drift_caveat_pct": HOST_DRIFT_CAVEAT_PCT,
+                              "caveat": UNPAIRED_CAVEAT}),
+        **({"anchor_guard_excursion": note} if note else {}),
+    }
+    target = status.write_json(store, bundle_name, bundle, prefix=".cvp-")
+    effects = " / ".join(f"{legs[m]['effect_pct']:+.3f}% {legs[m]['surface']}"
+                         for m in order)
+    if paired:
+        reason = (f"champion {champion_commit[:12]} measures {effects} against frozen "
+                  f"production {frozen_commit[:12]} ({frozen_label}) over "
+                  f"{head['baseline_launches']} PAIRED serving-probe launches")
+    else:
+        reason = (f"champion {champion_commit[:12]} measures {effects} against the "
+                  f"RECORDED frozen production {frozen_commit[:12]} ({frozen_label}) "
+                  f"serving-probe baseline of {str(head['baseline_measured_at'])[:10]}, "
+                  f"UNPAIRED: {head['champion_launches']} champion launches vs "
+                  f"{head['baseline_launches']} recorded launches, host-drift caveat "
+                  f"~{HOST_DRIFT_CAVEAT_PCT:g}%")
+    return target, evidence, reason
+
+
+@dataclass(frozen=True)
+class ServingIngest:
+    """What `ingest_serving_result` wrote (or, on a dry run, would write)."""
+    mode: str
+    reason: str
+    baselines: dict
+    bundle: Path | None = None
+    evidence: Path | None = None
+    effects: dict | None = None
+
+
+def ingest_serving_result(source: Path | str | Mapping[str, Any], *, store: Path | str,
+                          production_commit: str | None = None,
+                          production_label: str | None = None,
+                          resolve: Callable[[], tuple[str, str]] = resolve_frozen,
+                          probe_version: str | None = None, primary_metric: str = "tg",
+                          bundle_name: str = SERVING_FILENAME, overwrite: bool = False,
+                          host_facts: Callable[[], dict | None] = read_host_facts,
+                          host_changes: Sequence[Mapping[str, Any]] = HOST_CHANGES,
+                          max_age_days: float = BASELINE_MAX_AGE_DAYS,
+                          clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+                          now: Callable[[], str] = status._now,
+                          dry_run: bool = False) -> ServingIngest:
+    """A serving runner's result -> production baselines and/or the champion receipt.
+
+    CLI: `ingest-serving --result <writer-samples.json>`. Raises ValueError / OSError /
+    `Unavailable` and writes NOTHING on any refusal (everything is validated, and every
+    CI computed, before the first write).
+
+      * P and C (the paired runner): writes `production-baseline.<sha12>.serving_probe-
+        {tg,pp}.json` from the P arm, then the PAIRED receipt (`bundle_name` + per-
+        champion `champion-vs-production.<c12>.serving_probe.json`).
+      * P only: the two baselines.
+      * C only (a future champion, single-arm): `baseline_decision` must admit the
+        recorded baseline for EVERY metric (same normalised argv, request digest,
+        metric; age, host changes, host facts -- the C arm's `host_facts`, else this
+        host's now); then the UNPAIRED receipt, with the host-drift caveat.
+
+    The P arm's commit must be the frozen production kernel: `production_commit` /
+    `production_label` when given, else resolved live from the frozen tree.
+    """
+    run = read_serving_result(source, probe_version=probe_version)
+    if production_commit:
+        commit, label = production_commit, production_label or ""
+    else:
+        commit, label = resolve()
+        label = production_label or label
+    if not _is_hex(commit, 40):
+        raise ValueError(f"production commit must be a full 40-hex sha, got {commit!r}")
+    if not label.startswith(FROZEN_BRANCH_PREFIX):
+        raise ValueError(f"production label {label!r} is not a "
+                         f"'{FROZEN_BRANCH_PREFIX}*' freeze")
+    if "P" in run.arms and str(run.arms["P"]["commit"]) != commit:
+        raise ValueError(f"the P arm measured {run.arms['P']['commit']!r}, not the frozen "
+                         f"production kernel {commit}; its samples are not production's")
+    metrics = list(run.protocols)
+    store = Path(store)
+    source_ref = {"path": None if run.path is None else str(run.path), "sha256": run.sha256}
+    plan: dict[str, Any] = {"baselines": {}, "legs": {}}
+    if "P" in run.arms:
+        p = run.arms["P"]
+        measured_at = p.get("measured_at")
+        if not measured_at:
+            raise ValueError("`p_arm.measured_at` is required to record a baseline")
+        _parse_when(measured_at)
+        for metric in metrics:
+            target = store / baseline_filename(commit, run.protocols[metric])
+            if target.exists() and not overwrite:
+                raise FileExistsError(f"{target} already records this freeze; pass "
+                                      f"overwrite to supersede it")
+            plan["baselines"][metric] = dict(
+                production_commit=commit, production_label=label, measured_commit=commit,
+                samples=run.samples["P"][metric], protocol=run.protocols[metric],
+                measured_at=measured_at,
+                source={**source_ref, "kind": "serving-probe runner, production (P) arm",
+                        "samples_path": ("p_arm.samples" if metric == "tg"
+                                         else "p_arm_pp.samples"),
+                        "runner_protocol": run.runner_protocol,
+                        "runner_source": p.get("source")},
+                host_facts=p.get("host_facts"),
+                host_facts_note=("captured by the runner at the measurement"
+                                 if p.get("host_facts") else "not captured by the runner"),
+                lineage={"commits_between": [],
+                         "note": "the frozen production binary itself, measured by the "
+                                 "serving probe"},
+                residency=p.get("residency"))
+    mode = "baseline_only"
+    if "C" in run.arms:
+        if "P" in run.arms:
+            mode = "paired"
+            for metric in metrics:
+                plan["legs"][metric] = _serving_leg(
+                    metric, run.protocols[metric], run.samples["P"][metric],
+                    run.samples["C"][metric], paired=True)
+            carryover = {"used": False, "reason": "paired serving-probe runner: the "
+                         "production arm was measured in the same session"}
+        else:
+            mode = "single_arm"
+            facts = run.arms["C"].get("host_facts") or host_facts() or {}
+            refused = []
+            for metric in metrics:
+                decision = baseline_decision(
+                    store, commit, protocol=run.protocols[metric], max_age_days=max_age_days,
+                    host_facts=facts, host_changes=host_changes, clock=clock)
+                if not decision.usable:
+                    refused.append(f"{metric}: {decision.reason}")
+                    continue
+                plan["legs"][metric] = _serving_leg(
+                    metric, run.protocols[metric], (decision.body or {})["samples"],
+                    run.samples["C"][metric], paired=False, decision=decision)
+            if refused:
+                raise Unavailable(
+                    "single-arm champion run REFUSED: no usable recorded serving-probe "
+                    f"baseline ({'; '.join(refused)}). Run the paired runner (P and C) "
+                    "and ingest that instead")
+            carryover = {"used": True, "reason": "; ".join(
+                f"{m}: recorded {Path(plan['legs'][m]['baseline_record']).name}"
+                for m in metrics)}
+    effects = {m: leg["effect_fraction"] for m, leg in plan["legs"].items()}
+    if dry_run:
+        return ServingIngest(mode, f"DRY RUN ({mode}): nothing written",
+                             {m: str(store / baseline_filename(commit, run.protocols[m]))
+                              for m in plan["baselines"]}, effects=effects or None)
+    baselines = {m: write_baseline(store, overwrite=overwrite, now=now, **record)
+                 for m, record in plan["baselines"].items()}
+    if not plan["legs"]:
+        return ServingIngest(mode, f"recorded production {commit[:12]} ({label}) serving-"
+                                   f"probe baselines for {sorted(baselines)}", baselines)
+    champion = run.arms["C"]
+    bundle, evidence, reason = _write_serving_receipt(
+        store, legs=plan["legs"], protocols=run.protocols, paired=(mode == "paired"),
+        primary=primary_metric, champion_commit=str(champion["commit"]),
+        champion_build=champion.get("build"), frozen_commit=commit, frozen_label=label,
+        production_build=(run.arms.get("P") or {}).get("build"), carryover=carryover,
+        source=source_ref, bundle_name=bundle_name, now=now)
+    return ServingIngest(mode, reason, baselines, bundle, evidence, effects)
+
+
+def _refresh_serving(*, store: Path, protocol: Mapping[str, Any], frozen_commit: str,
+                     frozen_label: str, champion_commit: str, champion_build: Path,
+                     measure: Callable[[Path], Any] | None, max_age_days: float,
+                     host_facts: Callable[[], dict], host_changes: Sequence[Mapping],
+                     clock: Callable[[], datetime], now: Callable[[], str],
+                     note: str | None, on_step: Callable[[str], Any]) -> Refresh:
+    """`refresh` for a SERVING target: the champion alone vs the recorded serving
+    baseline, or a refusal. Never a paired llama-bench fallback (wrong protocol)."""
+    if measure is None:
+        raise Unavailable("a serving target needs a single-arm measurer (`measure`, e.g. "
+                          "`serving_measurement(<runner result>)`); this module never "
+                          "launches a server")
+    decision = baseline_decision(store, frozen_commit, protocol=protocol,
+                                 max_age_days=max_age_days, host_facts=host_facts(),
+                                 host_changes=host_changes, clock=clock)
+    if not decision.usable:
+        raise Unavailable(
+            f"serving target: the recorded serving-probe baseline is not usable "
+            f"({decision.reason}). llama-bench cannot drive this protocol, so there is no "
+            f"paired fallback here: run the stack owner's paired runner and ingest its "
+            f"result (`ingest-serving`)")
+    on_step("champion-vs-production: champion alone vs the RECORDED serving-probe baseline")
+    measured = measure(Path(champion_build))
+    model = getattr(measured, "model", None)
+    if model is not None and model != protocol.get("model"):
+        raise Unavailable(f"the champion was measured on {model}, the protocol names "
+                          f"{protocol.get('model')}")
+    if measured.surface != protocol["surface"]:
+        raise Unavailable(f"the champion was measured on {measured.surface}, the protocol "
+                          f"on {protocol['surface']}")
+    metric = protocol["metric"]
+    leg = _serving_leg(metric, protocol, (decision.body or {})["samples"],
+                       list(measured.samples), paired=False, decision=decision)
+    bundle, _evidence, reason = _write_serving_receipt(
+        Path(store), legs={metric: leg}, protocols={metric: protocol}, paired=False,
+        primary=metric, champion_commit=champion_commit, champion_build=champion_build,
+        frozen_commit=frozen_commit, frozen_label=frozen_label, production_build=None,
+        carryover={"used": True, "reason": decision.reason}, source=None,
+        bundle_name=SERVING_FILENAME, now=now, note=note)
+    return Refresh(True, reason, bundle, float(leg["effect_fraction"]),
+                   carryover=decision.reason)
+
+
 def _dig(body: Any, dotted: str) -> tuple[Any, Any]:
     """`(value, parent)` at a dotted path such as `g5_full.candidate_samples`."""
     parent, value = None, body
@@ -771,19 +1533,66 @@ def _dig(body: Any, dotted: str) -> tuple[Any, Any]:
     return value, parent
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    """`python3 -m autokernel.loop.production write-baseline ...` (cwd scripts/kernel_rnd).
+def _ingest_main(args: argparse.Namespace) -> int:
+    try:
+        commit = args.production_commit
+        if commit and len(commit) != 40:
+            commit = _read(args.frozen_tree, "rev-parse", commit)
+        outcome = ingest_serving_result(
+            args.result, store=args.store, production_commit=commit,
+            production_label=args.production_label, probe_version=args.probe_version,
+            primary_metric=args.primary_metric, bundle_name=args.bundle_name,
+            overwrite=args.overwrite, dry_run=args.dry_run,
+            host_facts=(read_host_facts if args.host_facts == "capture" else lambda: None))
+    except (ValueError, OSError, Unavailable) as exc:
+        print(f"ingest-serving REFUSED: {exc}", file=sys.stderr)
+        return 2
+    print(outcome.reason)
+    for metric, path in sorted(outcome.baselines.items()):
+        print(f"  baseline {metric}: {path}")
+    if outcome.bundle is not None:
+        print(f"  receipt: {outcome.bundle}  evidence: {outcome.evidence}")
+    return 0
 
-    The kernel-promotion step: record the promoted champion's last standing or fold
-    samples as the new freeze's production baseline. Prints the written record's path
-    and a one-line summary; exit 0 written, 2 refused.
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """`python3 -m autokernel.loop.production {write-baseline,ingest-serving} ...`
+    (cwd scripts/kernel_rnd).
+
+    `write-baseline` is the kernel-promotion step: record the promoted champion's last
+    standing or fold samples as the new freeze's production baseline (llama-bench by
+    default; `--protocol-kind serving_probe` with `--argv-json`, `--metric`,
+    `--probe-tool`, `--probe-version` and `--request-manifest` | `--request-digest` for
+    a serving probe). `ingest-serving --result <writer-samples.json>` takes a serving
+    runner's result (schema at `read_serving_result`) and writes the production
+    baselines and/or the champion's receipt (`ingest_serving_result`). Each prints what
+    it wrote; exit 0 written, 2 refused.
     """
     parser = argparse.ArgumentParser(prog="autokernel.loop.production")
     sub = parser.add_subparsers(dest="command", required=True)
     write = sub.add_parser("write-baseline", help="record production-baseline.<sha12>.json")
-    write.add_argument("--source", required=True, type=Path,
+    write.add_argument("--source", type=Path,
                        help="JSON holding the samples (a fold result, a standing "
-                            "champion-vs-production.<sha12>.json evidence file, ...)")
+                            "champion-vs-production.<sha12>.json evidence file, a "
+                            "serving runner's writer-samples.json, ...)")
+    write.add_argument("--samples-json", help="the sample list inline, as JSON, in "
+                                              "place of --source (needs --measured-at)")
+    write.add_argument("--protocol-kind", choices=PROTOCOL_KINDS,
+                       default=PROTOCOL_KIND_LLAMA_BENCH)
+    write.add_argument("--metric", choices=sorted(SERVING_METRICS),
+                       help="serving_probe: pp (prompt_per_second) or tg "
+                            "(predicted_per_second)")
+    write.add_argument("--probe-tool", help="serving_probe: the probe tool (ab_probe.py)")
+    write.add_argument("--probe-version", help="serving_probe: its version (sha256 of "
+                                               "its source recommended)")
+    write.add_argument("--request-manifest", type=Path,
+                       help="serving_probe: request manifest JSON (digest computed)")
+    write.add_argument("--request-digest", help="serving_probe: the manifest's 64-hex "
+                                                "canonical digest, when no manifest")
+    write.add_argument("--n-predict", help="serving_probe, digest only: n_predict as JSON")
+    write.add_argument("--sampling-json", help="serving_probe, digest only: sampling params")
+    write.add_argument("--placement", help="serving_probe: the env/numactl/taskset the "
+                                           "server ran under (matched)")
     write.add_argument("--samples-path", default="candidate_samples",
                        help="dotted path to the champion's sample list in --source "
                             "(e.g. g5_full.candidate_samples); its parent supplies "
@@ -801,7 +1610,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     write.add_argument("--surface", help="default: the samples' parent `surface`")
     write.add_argument("--reps", type=int, default=9)
     write.add_argument("--argv-json", help="the exact argv list, as JSON, when the "
-                                           "measurement predates the live instrument")
+                                           "measurement predates the live instrument; "
+                                           "serving_probe: the server argv (required)")
     write.add_argument("--argv-provenance", default="bench.llama_bench_argv (live)")
     write.add_argument("--measured-at", help="ISO-8601 (default: --source mtime, UTC)")
     write.add_argument("--host-facts", choices=("capture", "none"), default="capture",
@@ -811,20 +1621,75 @@ def main(argv: Sequence[str] | None = None) -> int:
     write.add_argument("--store", type=Path, default=DEFAULT_STORE)
     write.add_argument("--overwrite", action="store_true")
     write.add_argument("--dry-run", action="store_true")
+    ingest = sub.add_parser("ingest-serving", help="a serving runner's result -> "
+                                                   "production baselines + champion receipt")
+    ingest.add_argument("--result", required=True, type=Path,
+                        help="the runner's result JSON (writer-samples.json)")
+    ingest.add_argument("--production-commit",
+                        help="the frozen commit (default: resolved live from the frozen tree)")
+    ingest.add_argument("--production-label", help="e.g. production-consolidated-v10")
+    ingest.add_argument("--frozen-tree", type=Path, default=FROZEN_TREE,
+                        help="git repo resolving a short --production-commit (read-only)")
+    ingest.add_argument("--probe-version", help="when the result's protocol carries none")
+    ingest.add_argument("--primary-metric", choices=sorted(SERVING_METRICS), default="tg")
+    ingest.add_argument("--bundle-name", default=SERVING_FILENAME)
+    ingest.add_argument("--host-facts", choices=("capture", "none"), default="capture",
+                        help="single-arm only, when the C arm carries no host_facts")
+    ingest.add_argument("--store", type=Path, default=DEFAULT_STORE)
+    ingest.add_argument("--overwrite", action="store_true")
+    ingest.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
+    if args.command == "ingest-serving":
+        return _ingest_main(args)
+    serving = args.protocol_kind == PROTOCOL_KIND_SERVING_PROBE
     try:
-        source_path = args.source.resolve()
-        body = json.loads(source_path.read_text(encoding="utf-8"))
-        samples, parent = _dig(body, args.samples_path)
-        parent = parent if isinstance(parent, dict) else {}
+        if args.source is not None:
+            source_path = args.source.resolve()
+            body = json.loads(source_path.read_text(encoding="utf-8"))
+            samples, parent = _dig(body, args.samples_path)
+            parent = parent if isinstance(parent, dict) else {}
+        elif args.samples_json:
+            if not args.measured_at:
+                raise ValueError("--samples-json needs --measured-at")
+            source_path, samples, parent = None, json.loads(args.samples_json), {}
+        else:
+            raise ValueError("give --source (with --samples-path) or --samples-json")
         model = args.model or parent.get("model")
         surface = args.surface or parent.get("surface")
-        if not model or not surface:
+        if not serving and (not model or not surface):
             raise ValueError("model and surface must come from the source or the flags")
         for key, given in (("model", model), ("surface", surface)):
-            if parent.get(key) not in (None, given):
+            if given is not None and parent.get(key) not in (None, given):
                 raise ValueError(f"--{key} {given!r} contradicts the source's "
                                  f"{parent.get(key)!r}")
+        if serving:
+            # A runner arm (writer-samples.json `p_arm`) carries its own placement and
+            # measurement time; the flags override, never the other way round.
+            runner = parent.get("protocol") if isinstance(parent.get("protocol"),
+                                                          dict) else {}
+            args.placement = args.placement or runner.get("placement")
+            args.measured_at = args.measured_at or parent.get("measured_at")
+            if not args.argv_json or not args.metric:
+                raise ValueError("--protocol-kind serving_probe needs --argv-json (the "
+                                 "server argv) and --metric")
+            measured_protocol = serving_protocol(
+                server_argv=json.loads(args.argv_json), metric=args.metric,
+                probe_tool=args.probe_tool or "", probe_version=args.probe_version or "",
+                request_manifest=(json.loads(args.request_manifest.read_text(
+                    encoding="utf-8")) if args.request_manifest else None),
+                request_digest=args.request_digest,
+                n_predict=json.loads(args.n_predict) if args.n_predict else None,
+                sampling=json.loads(args.sampling_json) if args.sampling_json else None,
+                surface=surface, placement=args.placement, model=model,
+                argv_provenance=(args.argv_provenance if args.argv_provenance
+                                 != "bench.llama_bench_argv (live)" else "--argv-json"),
+                request_manifest_source=(str(args.request_manifest)
+                                         if args.request_manifest else "digest only"))
+        else:
+            measured_protocol = protocol(
+                model=model, surface=surface, reps=args.reps,
+                argv=json.loads(args.argv_json) if args.argv_json else None,
+                argv_provenance=args.argv_provenance)
         if args.production_commit:
             commit = _read(args.lineage_tree, "rev-parse", args.production_commit) \
                 if len(args.production_commit) != 40 else args.production_commit
@@ -842,16 +1707,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             source_path.stat().st_mtime, timezone.utc).isoformat().replace("+00:00", "Z")
         record = dict(
             production_commit=commit, production_label=label, measured_commit=measured,
-            samples=samples,
-            protocol=protocol(model=model, surface=surface, reps=args.reps,
-                              argv=(json.loads(args.argv_json) if args.argv_json
-                                    else None),
-                              argv_provenance=args.argv_provenance),
-            measured_at=measured_at,
-            source={"path": str(source_path), "sha256": _sha256(source_path),
-                    "samples_path": args.samples_path,
-                    "measured_at_source": ("--measured-at" if args.measured_at
-                                           else "source mtime")},
+            samples=samples, protocol=measured_protocol, measured_at=measured_at,
+            source=({"path": str(source_path), "sha256": _sha256(source_path),
+                     "samples_path": args.samples_path} if source_path is not None
+                    else {"path": None, "inline": "--samples-json"})
+            | {"measured_at_source": ("--measured-at" if args.measured_at
+                                      else "source mtime")},
             host_facts=read_host_facts() if args.host_facts == "capture" else None,
             host_facts_note=args.host_facts_note or (
                 "captured at baseline write" if args.host_facts == "capture"
@@ -864,7 +1725,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             _admissible_samples(list(samples))
             print(json.dumps(record, indent=2, sort_keys=True, default=str))
             return 0
-        path = write_baseline(args.store, overwrite=args.overwrite, **record)
+        path = write_baseline(args.store, overwrite=args.overwrite,
+                              protocol_kind=args.protocol_kind, **record)
     except (ValueError, OSError, Unavailable) as exc:
         print(f"write-baseline REFUSED: {exc}", file=sys.stderr)
         return 2
@@ -877,12 +1739,18 @@ def main(argv: Sequence[str] | None = None) -> int:
 __all__ = ["BASELINE_MAX_AGE_DAYS", "BASELINE_ROOT", "BASELINE_SCHEMA", "BASELINE_TREE",
            "BaselineDecision", "DEFAULT_STORE", "FILENAME", "FROZEN_BRANCH_PREFIX",
            "FROZEN_TREE", "HOST_CHANGES", "HOST_DRIFT_CAVEAT_PCT", "LEGACY_BUILD",
-           "LEGACY_COMMIT", "MECHANISM_ID", "PROTOCOL_MATCH_KEYS", "PROVENANCE",
-           "SCHEMA", "STALE_AFTER_S", "UNPAIRED_CAVEAT", "Refresh", "Unavailable",
-           "baseline_decision", "baseline_filename", "baseline_slot", "commits_between",
-           "declared_commit", "host_fact_changes", "is_built", "main", "protocol",
-           "protocol_mismatch", "read_host_facts", "refresh", "resolve_frozen",
-           "write_baseline"]
+           "LEGACY_COMMIT", "MECHANISM_ID", "PROTOCOL_KIND_LLAMA_BENCH",
+           "PROTOCOL_KIND_SERVING_PROBE", "PROTOCOL_KINDS", "PROTOCOL_MATCH_KEYS",
+           "PROVENANCE", "SCHEMA", "SERVING_FILENAME", "SERVING_METRICS",
+           "SERVING_PROBE_MATCH_KEYS", "SERVING_RESULT_SCHEMAS", "SERVING_SAMPLE_UNIT",
+           "STALE_AFTER_S", "UNPAIRED_CAVEAT", "Refresh", "ServingIngest",
+           "ServingMeasurement", "ServingRun", "Unavailable", "baseline_decision",
+           "baseline_filename", "baseline_slot", "canonical_digest", "commits_between",
+           "declared_commit", "host_fact_changes", "ingest_serving_result", "is_built",
+           "main", "match_keys", "normalize_server_argv", "protocol", "protocol_kind",
+           "protocol_mismatch", "read_host_facts", "read_serving_result", "refresh",
+           "request_manifest_digest", "resolve_frozen", "serving_measurement",
+           "serving_protocol", "serving_protocol_from_runner", "write_baseline"]
 
 
 if __name__ == "__main__":
