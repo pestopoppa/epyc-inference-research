@@ -2374,6 +2374,57 @@ def _render_node_profile(observation: Mapping[str, Any], *, limit: int = 12) -> 
     return lines
 
 
+LONG_CONTEXT_HEADER = "## Long-context regime — the target is ALSO judged at depth"
+
+
+def _render_long_context(section: Mapping[str, Any], *, limit: int = 12) -> list[str]:
+    """`longctx.planner_context` as the planner reads it (audit C4): the target depth, how
+    keeps are judged there, the production context histogram as the workload weighting,
+    and the perf/node profiles taken AT DEPTH with the slot restored."""
+    lines = ["", LONG_CONTEXT_HEADER,
+             f"Target depth: {section.get('target_depth_tokens')} tokens of KV (ctx "
+             f"{section.get('ctx')}; prefill at depth adds a {section.get('tail_tokens')}-token "
+             f"tail). {section.get('how_judged', '')}. The short-prompt profile above "
+             "UNDERSTATES everything that grows with context (attention, KV traffic).",
+             "", "### Production workload weighting (decode wall by context at completion)"]
+    servers = ((section.get("workload_weighting") or {}).get("servers") or {})
+    if not servers:
+        lines.append("No production context histogram for this target "
+                     f"({(section.get('workload_weighting') or {}).get('status', 'absent')}).")
+    for server, body in sorted(servers.items()):
+        lines.append(f"Server {server}: {body.get('requests')} requests, context p50 "
+                     f"{body.get('ctx_p50')}, p90 {body.get('ctx_p90')}, max {body.get('ctx_max')}.")
+        lines.append("| context bucket | requests | decode wall share | decode tok/s | "
+                     "prefill wall share |")
+        lines.append("|---|---|---|---|---|")
+        for row in body.get("buckets") or []:
+            lines.append(f"| {row.get('bucket')} | {row.get('requests')} | "
+                         f"{_pct(row.get('decode_wall_share'))} | {_num(row.get('decode_tok_s'))} | "
+                         f"{_pct(row.get('prefill_wall_share'))} |")
+    cpu = section.get("cpu_profile_at_depth") or {}
+    lines.extend(["", "### Sampled CPU profile at depth (slot restored; decode at depth)"])
+    if cpu.get("status") == "observed":
+        lines.append("| rank | sampled-period fraction | mechanism family |")
+        lines.append("|---|---|---|")
+        for rank, row in enumerate((cpu.get("ranked_levers") or [])[:limit], 1):
+            lines.append(f"| {rank} | {_pct(row.get('sampled_period_fraction'))} | "
+                         f"`{row.get('family')}` |")
+    else:
+        lines.append(f"CPU profile at depth {cpu.get('status', 'absent')}: "
+                     f"{cpu.get('reason') or 'not collected'}")
+    node = section.get("node_profile_at_depth") or {}
+    lines.extend(["", "### Node profile at depth (instrumented sibling; prefill + decode at depth)"])
+    if node.get("status") == "observed":
+        lines.append("| rank | wall share | op |")
+        lines.append("|---|---|---|")
+        for rank, row in enumerate((node.get("ranked_op_shares") or [])[:limit], 1):
+            lines.append(f"| {rank} | {_pct(row.get('wall_fraction'))} | `{row.get('op')}` |")
+    else:
+        lines.append(f"Node profile at depth {node.get('status', 'absent')}: "
+                     f"{node.get('reason') or 'not collected'}")
+    return lines
+
+
 def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
     """The bundle, as the actor sees it. Everything here was previously discarded."""
     lines: list[str] = []
@@ -2518,6 +2569,8 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
         lines.extend(_render_node_profile(context["node_profile"], limit=limit))
     if not cpu and context.get("gpu_serving_profile"):
         lines.extend(_render_gpu_serving_profile(context["gpu_serving_profile"], limit=limit))
+    if cpu and context.get("long_context"):
+        lines.extend(_render_long_context(context["long_context"], limit=limit))
 
     prior = context.get("prior_experiments") or []
 

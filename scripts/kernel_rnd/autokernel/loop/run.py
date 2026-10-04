@@ -68,6 +68,7 @@ from . import (accumulate, actors, anchor, archive, bench, champion, claim, gate
 from . import actor_opencode_config
 from . import actor_passthrough
 from . import cross_target, kernel_coverage
+from . import longctx
 from . import epoch_aliases
 from . import scratch
 from . import procguard
@@ -1712,6 +1713,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="original FrozenPromptManifest for explicitly selected serving measurement")
     parser.add_argument("--heldout-frozen-prompts", type=Path,
                         help="separate frozen serving prompts for integrity-flagged keep candidates")
+    parser.add_argument("--longctx-surface", type=Path,
+                        help="opt-in long-context serving surface spec (longctx.py): decode/"
+                             "prefill at depth as the primary metric of attention routes and "
+                             "a no-regression gate on every keep; planner inputs at depth")
     parser.add_argument("--cpu-calibrate-heldout", type=int,
                         help="explicit startup A/A pair count for the held-out request-bound floor")
     parser.add_argument("--heldout-calibration-only", action="store_true",
@@ -2480,6 +2485,18 @@ def main(argv: list[str] | None = None) -> int:
     #: The long-context surface registers here; an unregistered declared dimension is
     #: PENDING and refuses the keep.
     keep_dimension_measures: dict = {}
+    longctx_surface = None
+    if args.longctx_surface is not None:
+        if cpu_launch is None or args.cpu_screen_scope or args.cpu_confirm_from:
+            parser.error("--longctx-surface requires the full CPU serving target")
+        try:
+            longctx_surface = longctx.Surface.load(args.longctx_surface, store=args.store,
+                                                   target_id=args.target_id)
+            longctx_surface.spec.requests(longctx_surface.launch_for(direct_launch).template)
+        except (longctx.LongCtxRefused, ValueError, OSError) as exc:
+            parser.error(f"long-context surface refused: {exc}")
+        print(f"longctx   opted in: depth {longctx_surface.spec.depth} tokens, spec "
+              f"{longctx_surface.spec.digest[:12]}")
     # The selected canonical serving route, not the spelling of its campaign ID,
     # carries runtime capability. Enrolled targets were checked for ready status,
     # backend and exact serving-workload compatibility above; legacy CPU serving
@@ -3121,6 +3138,11 @@ def main(argv: list[str] | None = None) -> int:
             **({"node_profile": dict(node_profile_observation)} if cpu_launch else {}),
             **({"gpu_serving_profile": dict(gpu_profile_observation)}
                if direct_launch and not cpu_launch else {}),
+            **({"long_context": longctx.planner_context(
+                longctx_surface.spec, histogram=longctx_observation["histogram"],
+                cpu_profile=longctx_observation["cpu_profile"],
+                node_profile=longctx_observation["node_profile"])}
+               if longctx_surface is not None else {}),
             "prior_experiments": prior_experiments(args, epoch, measurement_epoch),
             **({"pending_accepted_hypotheses": list(pending_view[0])}
                if pending_view[0] else {}),
@@ -3155,6 +3177,8 @@ def main(argv: list[str] | None = None) -> int:
                             "requests": str(args.frozen_prompts),
                             "build_recipe": recipe.to_dict(),
                             "hotspot_status": cpu_profile_observation["status"],
+                            **({"long_context": longctx.target_card(longctx_surface.spec)}
+                               if longctx_surface is not None else {}),
                             **({"common_cpu_scope": {**screen_state,
                                 "original_selection_hint": screen_hint,
                                 "full_transfer_target": full_cpu_target.to_dict()}}
@@ -3546,6 +3570,10 @@ def main(argv: list[str] | None = None) -> int:
                     frozen_requests=frozen_requests, runtime_pair=pair),
                     "experimental_runtime_treatment_not_source_champion",
                     measurement_window=cpu_measurement_window)
+            if longctx_surface is not None and longctx.attention_route(hypothesis):
+                # Audit C1: an attention route is judged AT DEPTH first; the short
+                # surface becomes its no-regression gate at keep (commit_pooled).
+                return longctx_compare(worker.build_dir)
             if direct_launch:
                 return cpu_compare(anchor_build[0], worker.build_dir)
             # The anchor build is SHARED across lanes and only ever read, so it needs
@@ -3652,6 +3680,47 @@ def main(argv: list[str] | None = None) -> int:
             "experimental_candidate_not_champion" if experimental
             else "canonical_candidate_vs_current_anchor",
             measurement_window=cpu_measurement_window)
+
+    def longctx_compare(c_build):
+        """The current anchor vs `c_build` on the opt-in long-context surface (longctx.py):
+        slot restored, decode at depth as the scalar, prefill at depth in `row['longctx']`."""
+        long_launch = longctx_surface.launch_for(direct_launch)
+        return _serving_comparison(lambda: longctx_surface.compare(
+            _cpu_arm(long_launch, anchor_build[0]), _cpu_arm(long_launch, c_build),
+            pairs=args.serving_pairs),
+            "experimental_candidate_not_champion" if experimental
+            else "canonical_candidate_vs_current_anchor",
+            measurement_window=cpu_measurement_window)
+
+    def longctx_keep_gate(worker, hypothesis, comparison) -> dict:
+        """Every keep of an opted-in target must not regress either surface: a long-primary
+        (attention-route) keep is checked on the short surface and on its own prefill at
+        depth; any other keep is A/B'd at depth (decode and prefill). Fails closed."""
+        if longctx.attention_route(hypothesis):
+            try:
+                short = cpu_compare(anchor_build[0], worker.build_dir, rebind_feedback=False)
+            except loop.MeasurementFailed as exc:
+                return {"primary": "longctx", "passed": False,
+                        "reason": f"short-surface gate failed: {exc}"}
+            long_verdict = comparison.row.get("longctx") or {}
+            regressed = short.decisive is True and short.effect < 0
+            passed = long_verdict.get("passed") is True and not regressed
+            return {"primary": "longctx", "passed": passed, "longctx": long_verdict,
+                    "short": {"effect": short.effect, "decisive": short.decisive,
+                              "floor_pct": short.noise_floor_pct},
+                    "reason": (long_verdict.get("reason", "no long-context verdict")
+                               + (f"; short surface regressed {short.effect * 100:+.3f}%"
+                                  if regressed else ""))}
+        try:
+            row = longctx_compare(worker.build_dir).row
+        except loop.MeasurementFailed as exc:
+            return {"primary": "short", "passed": False,
+                    "reason": f"long-context gate failed: {exc}"}
+        return {"primary": "short", **row["longctx"],
+                "comparison": {key: row.get(key) for key in (
+                    "recipe", "recipe_hash", "anchor_tok_s", "candidate_tok_s", "effect",
+                    "decisive", "noise_floor_pct", "pairs", "anchor_samples",
+                    "candidate_samples", "floor_sha256")}}
 
     def cpu_anchor_guard_compare(a_build, c_build):
         """Measure the promoted-anchor integrity A/A without consuming a source floor.
@@ -3766,6 +3835,84 @@ def main(argv: list[str] | None = None) -> int:
         print(f"profile   node/host/engram {observed['status']}; "
               f"{len(observed.get('mechanism_shares', []))} grouped op mechanisms")
 
+    #: Audit C4: planner inputs AT DEPTH for an opted-in target (`--longctx-surface`).
+    longctx_observation: dict = {"cpu_profile": None, "node_profile": None, "histogram": None}
+
+    def longctx_reprofile() -> None:
+        """The perf capture and the node profile repeated on the long-context manifest with
+        the anchor's slot restored, and the production context histogram regenerated from
+        the spec's server logs. Observation-only: a failure is recorded, never raised."""
+        if longctx_surface is None:
+            return
+        from . import cpu_profile, node_profile
+        spec = longctx_surface.spec
+        try:
+            longctx_observation["histogram"] = (
+                longctx.parse_server_logs(spec.body["production_logs"])
+                if spec.body["production_logs"] else None)
+        except OSError as exc:
+            longctx_observation["histogram"] = {"status": "unavailable", "reason": str(exc)}
+        long_launch = longctx_surface.launch_for(direct_launch)
+        arm = _cpu_arm(long_launch, anchor_build[0])
+        unavailable = (cpu_profile.CpuProfileRefused, node_profile.NodeProfileRefused,
+                       loop.MeasurementFailed, loop.MeasurementInvalid, OSError, ValueError,
+                       subprocess.SubprocessError)
+        publish("running", latest, step="long-context perf capture at depth (slot restored)")
+        try:
+            with cpu_measurement_window():
+                surface_launch = longctx_surface.ensure_slot(arm)
+                longctx_observation["cpu_profile"] = cpu_profile.profile_loop(
+                    arm, longctx_surface.manifest, store_root=args.store,
+                    perf_path=args.cpu_profiler, timeout_s=1800,
+                    longctx=surface_launch.with_mode("profile"))
+        except cpu_profile.CpuProfileCleanupUncertain:
+            raise  # An unproven terminal child must not overlap the next A/B.
+        except unavailable as exc:
+            longctx_observation["cpu_profile"] = {
+                "status": "unavailable", "reason": f"{type(exc).__name__}: {exc}"[:1024]}
+            longctx_observation["node_profile"] = {"status": "not_collected",
+                                                   "reason": "slot or perf capture failed"}
+            print(f"longctx   profile at depth UNAVAILABLE ({exc})")
+            return
+        if not args.node_profile:
+            longctx_observation["node_profile"] = node_profile.absent(
+                "instrumented sibling profiling disabled")
+            return
+        key = {"anchor_commit": current_anchor_commit[0], "execution_digest": arm.execution_digest,
+               "prompt_manifest_digest": longctx_surface.manifest.digest, "scope": "longctx",
+               "level": args.node_profile_level}
+        retained = node_profile.cached_observation(store_root=args.store, **key)
+        if retained is not None:
+            longctx_observation["node_profile"] = retained
+            return
+        build_dir = node_profile.profiling_build_dir(anchor_build[0])
+        publish("running", latest, step="long-context node profile at depth (slot restored)")
+        try:
+            verdict = gates.compiles(
+                args.worktree, build_dir,
+                cmake_defines=build_recipe.NATIVE_CPU_NODE_PROFILE_RECIPE.cmake_defines(),
+                jobs=build_jobs, cpu_list=build_cpu_list, targets=("llama-server",))
+            if not verdict.passed:
+                raise ValueError(f"instrumented sibling build refused at {verdict.gate}: "
+                                 f"{verdict.reason}")
+            build = {"dir": str(build_dir),
+                     "recipe": build_recipe.NATIVE_CPU_NODE_PROFILE_RECIPE.name,
+                     "recipe_sha256": build_recipe.NATIVE_CPU_NODE_PROFILE_RECIPE.sha256(),
+                     "anchor_commit": current_anchor_commit[0],
+                     "measured_build_dir": str(anchor_build[0]), "longctx_spec": spec.digest}
+            with cpu_measurement_window():
+                observed = node_profile.profile_loop(
+                    lambda env: _cpu_arm(long_launch, build_dir, extra_env=env),
+                    longctx_surface.manifest, store_root=args.store, build=build,
+                    level=args.node_profile_level, timeout_s=1800,
+                    launch=lambda *a, **k: serving._measure_once(*a, longctx=surface_launch, **k))
+        except unavailable as exc:
+            longctx_observation["node_profile"] = node_profile.absent(f"{type(exc).__name__}: {exc}")
+            print(f"longctx   node profile at depth UNAVAILABLE ({exc})")
+            return
+        longctx_observation["node_profile"] = observed
+        node_profile.retain_observation(observed, store_root=args.store, **key)
+
     def reprofile() -> None:
         """Re-derive the hotspots from the CURRENT champion.
 
@@ -3795,6 +3942,7 @@ def main(argv: list[str] | None = None) -> int:
                         cpu_profile_observation["anchor_commit"] = current_anchor_commit[0]
                         print(f"profile   reused original CPU observation; record {observed['record']}")
                         node_reprofile(profile_arm)
+                        longctx_reprofile()
                         return
             publish("running", latest, step="CPU original-request observational profiling")
             try:
@@ -3815,6 +3963,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"profile   CPU {len(observed['hotspots'])} sampled symbols; "
                       f"record {observed['record']}")
             node_reprofile(profile_arm)
+            longctx_reprofile()
             return
         if direct_launch:
             # G2: the target's OWN server under rocprofv3 (whole life, windows cut by
@@ -5011,6 +5160,13 @@ def main(argv: list[str] | None = None) -> int:
                                  checked.tree).splitlines(),
                     compare=cross_compare)
                 evidence["cross_target"] = cross
+            if longctx_surface is not None:
+                # Audit C1 (operator 2026-10-04): no keep may regress the long-context
+                # surface (decode or prefill at depth), alongside the peer floor above.
+                evidence["longctx"] = longctx_keep_gate(worker, hypothesis, comparison)
+                if not evidence["longctx"]["passed"]:
+                    raise loop.ConfirmVetoed("KEEP_CANDIDATE-longctx: "
+                                             + evidence["longctx"]["reason"])
             # KERNEL FEATURE PRESERVATION (kernel_coverage.py), EVERY keep: no kernel
             # path may disappear -- static (DSO symbol families), source (git feature
             # inventory) and this target's executed path (launch stderr markers) --
