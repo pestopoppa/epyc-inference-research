@@ -204,6 +204,58 @@ class AnOracleThatCannotRunIsNotAFailedPatch(unittest.TestCase):
         self.assertEqual(verdict.gate, "correctness")
         self.assertIn("MUL_MAT failed", verdict.reason)
 
+    def test_a_failure_detail_keeps_tally_and_stderr_property_failures(self):
+        """`--autokernel-properties` reports on stderr; Verdict.to_dict cuts at 2000
+        characters, so the tally and stderr FAIL lines must lead the detail."""
+        cases = "".join(f"  MUL_MAT(type_a=q4_K,case={index}): FAIL\n" for index in range(80))
+        ran = ("Backend 1/2: ROCm0\n" + cases + "  1059/1139 tests passed\n"
+               "  Backend ROCm0: FAIL\n1/2 backends passed\nFAIL\n")
+        stderr = "[MUL_MAT] FP64 RATIO FAIL: fp64_error_ratio 1.7 > 1.5\n" + "noise\n" * 400
+        with mock.patch.object(Path, "is_file", return_value=True), \
+                mock.patch.object(gates.subprocess, "run", return_value=mock.Mock(
+                    stdout=ran, stderr=stderr, returncode=1)):
+            verdict = gates.op_correctness(Path("/nonexistent"))
+        self.assertEqual(verdict.gate, "correctness")
+        detail = verdict.to_dict()["detail"]
+        self.assertLessEqual(len(detail), 2000)
+        self.assertTrue(detail.startswith("ROCm0 tally 1059/1139 tests passed"))
+        self.assertIn("FP64 RATIO FAIL: fp64_error_ratio 1.7 > 1.5", detail)
+        self.assertIn("Backend ROCm0: FAIL", detail)
+
+    def test_gpu_correctness_refusal_is_anchor_relative(self):
+        """ak-27b-gpu-verify-20261004: a refusal the anchor shares is the gate's fault."""
+        failed = gates.Verdict("correctness", False, "MUL_MAT failed on ROCm0", "cand")
+        calls = []
+
+        def anchor(verdict):
+            def check():
+                calls.append(verdict)
+                return verdict
+            return check
+
+        shared = gates.anchor_relative_correctness(
+            failed, anchor(gates.Verdict("correctness", False, "MUL_MAT failed on ROCm0", "anc")))
+        self.assertEqual(shared.gate, "oracle_unavailable")
+        self.assertIn("anchor fails the same seeded gate", shared.reason)
+        self.assertIn("anchor: anc", shared.detail)
+        self.assertIn("candidate: cand", shared.detail)
+        clean = gates.anchor_relative_correctness(failed, anchor(gates.Verdict("op", True)))
+        self.assertIs(clean, failed)
+        unknown = gates.anchor_relative_correctness(
+            failed, anchor(gates.Verdict("oracle_unavailable", False, "no binary")))
+        self.assertIs(unknown, failed)
+        # A passing or non-correctness candidate never runs the anchor.
+        calls.clear()
+        for verdict in (gates.Verdict("op", True), gates.Verdict("oracle_unavailable", False)):
+            self.assertIs(gates.anchor_relative_correctness(
+                verdict, anchor(gates.Verdict("op", True))), verdict)
+        self.assertEqual(calls, [])
+        body = (Path(gates.__file__).parent / "run.py").read_text(encoding="utf-8")
+        self.assertIn("gates.anchor_relative_correctness(\n"
+                      "                    gates.op_correctness(worker.build_dir, op=op, "
+                      "require_reference=True),\n"
+                      "                    lambda: _anchor_gate(op)) for op in scope)", body)
+
     def test_a_pass_requires_proof_the_suite_executed(self):
         ran = ("Backend 1/2: ROCm0\n  1139/1139 tests passed\n"
                "  Backend ROCm0: \033[1;32mOK\033[0m\n2/2 backends passed\nOK\n")

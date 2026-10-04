@@ -44,6 +44,51 @@ DEFAULT_TARGETS = ("llama-bench", "test-backend-ops")
 PROMOTION_TARGETS = (*DEFAULT_TARGETS, "llama-cli", "llama-server")
 
 
+def _correctness_detail(backend: str, counts, stdout: str, stderr: str,
+                        limit: int = 2000) -> str:
+    """A failed-suite detail that survives `Verdict.to_dict`'s 2000-character cut.
+
+    The tally and the stderr FAIL lines come FIRST: `--autokernel-properties` prints
+    its HOST PROPERTY / FP64 RATIO / CHECKER ISOLATION failures on stderr, and the
+    old `stdout[-2000:] + stderr[-1000:]` detail lost every one of them to the cut
+    (ak-27b-gpu-verify-20261004 batch 1: only q4_K case names survived, no reason).
+    """
+    passed = sum(int(item) for item, _total in counts)
+    total = sum(int(item) for _passed, item in counts)
+    head = [f"{backend} tally {passed}/{total} tests passed"]
+    flagged = [line.strip()[:240] for line in stderr.splitlines() if "FAIL" in line]
+    if flagged:
+        head.append(f"stderr FAIL lines ({len(flagged)}, last 8):")
+        head.extend(flagged[-8:])
+    text = "\n".join(head)[:limit // 2]
+    remaining = limit - len(text) - 2
+    tail = stdout[-max(0, remaining):] if remaining > 0 else ""
+    return (text + "\n" + "\n" + tail)[:limit]
+
+
+def anchor_relative_correctness(candidate: "Verdict", anchor_check) -> "Verdict":
+    """A seeded-reference `correctness` refusal counts against the patch only when the
+    ANCHOR passes the same gate.
+
+    `anchor_check` runs the identical `op_correctness` invocation on the anchor build
+    (callers cache it per anchor/op). If the anchor fails it too, the gate or one of its
+    `--autokernel-properties` checks is broken for this build, and the refusal is the
+    harness's `oracle_unavailable` (no authoring attempt spent; resumable once the gate
+    changes), never wrong-kernel evidence. ak-27b-gpu-verify-20261004 batch 1: both
+    Q8_0-guarded stream-k candidates were refused on q4_K MUL_MAT cases their diff
+    cannot reach, and nothing had ever run the seeded gate on the anchor.
+    """
+    if candidate.passed or candidate.gate != "correctness":
+        return candidate
+    anchor = anchor_check()
+    if anchor.passed or anchor.gate != "correctness":
+        return candidate
+    return Verdict("oracle_unavailable", False,
+                   f"the anchor fails the same seeded gate ({candidate.reason}); a gate or "
+                   "property-check fault for this build, NOT evidence about the patch",
+                   ("anchor: " + anchor.detail)[:990] + "\ncandidate: " + candidate.detail[:990])
+
+
 @dataclass(frozen=True)
 class Verdict:
     """Passed, or refused with the reason the actor needs to fix it."""
@@ -2008,7 +2053,7 @@ def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
                        "harness fault, NOT evidence about the patch", output[-2000:])
     if block.group(2) == "FAIL":
         return Verdict("correctness", False, f"{op} failed on {backend}",
-                       done.stdout[-2000:] + done.stderr[-1000:])
+                       _correctness_detail(backend, counts, done.stdout, done.stderr))
     if done.returncode != 0 or any(int(passed) != int(total) for passed, total in counts):
         return Verdict("oracle_unavailable", False,
                        f"test-backend-ops gave contradictory {backend} status and exit/tally; "

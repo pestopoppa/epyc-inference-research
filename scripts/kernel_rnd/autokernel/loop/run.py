@@ -3515,11 +3515,18 @@ def main(argv: list[str] | None = None) -> int:
                                        jobs=build_jobs, cpu_list=build_cpu_list,
                                        **({"targets": gates.PROMOTION_TARGETS} if direct_launch else {})),
             ]
-            checks.extend(lambda op=op: gates.op_correctness(worker.build_dir, op=op,
-                          require_reference=not cpu_launch,
-                          **({"backend": "CPU",
-                              "resolved_recipe": _cpu_arm(direct_launch, worker.build_dir)}
-                             if cpu_launch else {})) for op in scope)
+            if cpu_launch:
+                checks.extend(lambda op=op: gates.op_correctness(worker.build_dir, op=op,
+                              require_reference=False, backend="CPU",
+                              resolved_recipe=_cpu_arm(direct_launch, worker.build_dir))
+                              for op in scope)
+            else:
+                # GPU: a seeded-reference refusal is anchor-relative -- the anchor runs
+                # the identical gate once per (anchor, op) and, if it fails too, the
+                # refusal is the harness's oracle_unavailable, not a wrong patch.
+                checks.extend(lambda op=op: gates.anchor_relative_correctness(
+                    gates.op_correctness(worker.build_dir, op=op, require_reference=True),
+                    lambda: _anchor_gate(op)) for op in scope)
             if cpu_launch and "GATED_DELTA_NET" in scope:
                 checks.append(lambda: gates.check_cpu_gdn_reference(
                     worker.build_dir, worker.worktree,
@@ -3553,6 +3560,18 @@ def main(argv: list[str] | None = None) -> int:
     #: start. A static anchor asks "does the accumulated tree beat v9"; the question
     #: that decides a keep is "does THIS patch improve on the best we have".
     anchor_build = [args.anchor_build]
+    #: The anchor's own seeded GPU op_correctness verdict, per (anchor build, op): run at
+    #: most once per anchor, and only when a candidate is refused for `correctness`.
+    anchor_gate_cache: dict = {}
+
+    def _anchor_gate(op):
+        key = (str(anchor_build[0]), op)
+        if key not in anchor_gate_cache:
+            anchor_gate_cache[key] = gates.op_correctness(anchor_build[0], op=op,
+                                                          require_reference=True)
+            print(f"gate      anchor {Path(anchor_build[0]).name} seeded {op}: "
+                  f"{anchor_gate_cache[key].gate} passed={anchor_gate_cache[key].passed}")
+        return anchor_gate_cache[key]
     #: Long-context identity hook (audit 2026-10-04 C1/C2), read by every route with
     #: `long_identity` (cpu_fa_schedule). The long-context surface installs a callable
     #: (anchor_build, candidate_build) -> [(label, anchor recipe, candidate recipe,
