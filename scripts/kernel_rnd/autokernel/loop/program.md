@@ -377,6 +377,54 @@ that calls it unavailable.
   consumes the annotation may change in `ggml-cpu.c` under every `cpu_graph_sched` rule.
   The `use_ref` requirement and the gate are those of `cpu_graph_sched`.
 
+### Attention route (2026-10-04: long-context audit C2/C3)
+
+The frozen requests run at a KV depth of about 300 tokens, where `FLASH_ATTN_EXT` is
+1–5% of graph wall, so the ranked families will never put it first. Production is
+different: on Q38FN `:8074`, 67% of decode wall is at contexts above 32k, and 55–68% of
+per-token decode time scales with context. Decode/verify steps have N ≤ 5 query rows,
+below the tiled path's 64, so each row is one serial `_one_chunk` walk over the whole
+KV, threads split rows only, and the 12 query heads that share a Q38FN KV head each
+re-read that KV. The problem is scheduling and GQA traversal, not bytes.
+
+- **`cpu_fa_schedule`**: `ggml/src/ggml-cpu/ops.cpp`, target
+  `ggml_compute_forward_flash_attn_ext_f16` (or `..._f16_one_chunk`,
+  `ggml_flash_attn_ext_reduce_partials`, `ggml_compute_forward_flash_attn_ext`).
+  - **Scope:** those four bodies (the FA dispatch, the per-row walk, the split-KV merge,
+    the PREC switch), plus NEW file-scope `static` helpers and `#include <...>` lines.
+    The tiled body, the K/V conversion, headers and `ggml-cpu.c` stay out. Per-thread
+    scratch is sized in `ggml_graph_plan` (not admitted): use the existing per-thread
+    `wdata` budget, `MAX(prefill, decode) / n_tasks` bytes (about 290 KB per thread at
+    D=256 and 550 KB at D=512), which holds G accumulators of DV floats.
+  - **Admitted change:** work split and traversal ONLY. Every output row's reduction
+    order stays exactly the anchor's: the same KV cells, in the same order, through the
+    same `kq_vec_dot`/`expf`/`ggml_vec_mad_f16` sequence. Examples: walk the KV once per
+    (KV head, row range) and update the G query heads that share it in that pass; deal
+    (KV head, row) work instead of rows. A KV split with a merge is admissible only where
+    it reproduces the anchor's order (the existing split-KV path's chunk boundaries
+    under `GGML_FA_SPLIT_KV=1`); under the AK recipes' `GGML_FA_SPLIT_KV=0` the anchor's
+    order is one serial walk, so a new split is not bit-exact. `use_ref` keeps the
+    vec-only reference walk. No `#pragma omp`.
+  - **Op:** `FLASH_ATTN_EXT` (the generic native suite).
+  - **Gate, in order:**
+    - the `cpu_fa_longctx_v1` `test-backend-ops` case set (selected by
+      `AUTOKERNEL_CORRECTNESS_CASE_SET`; Q38FN D=256, 2 KV heads × GQA 12, kv 8k/64k/128k,
+      nb 1/5; DS41 D=512, 1 KV head × 64, sinks, kv 4k/8k/32k/64k, nb 1/3), when the
+      build carries it;
+    - `cpu_fa_reference`: the candidate's output must be BIT-IDENTICAL to the anchor
+      build's on those shapes plus layout and prefill guards, on a 7-thread and the
+      recipe's team, under both `GGML_FA_SPLIT_KV` settings, each graph repeated 3x
+      (races);
+    - the paired FA perf screen: `test-backend-ops perf` on the case set, anchor and
+      candidate alternated ABAB on the recipe team; the geometric mean must drop at least
+      2.5% (the decode floor 1.544% over attention's ≤68% share), or the serving A/B is
+      not paid for;
+    - `model_identity` on the frozen requests, each served 3x by the candidate, on this
+      lane's target and every peer target, and on the long manifest once the long
+      surface provides it.
+  - **Bit-exactness:** BE by construction. Say so, and name the ordering argument: which
+    loop order changed and why each row still sees the same sequence.
+
 ---
 
 ## What the instrument can actually resolve

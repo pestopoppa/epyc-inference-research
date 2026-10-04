@@ -398,6 +398,10 @@ class CpuSourceRoute:
     #: At least one identity target must serve a model of one of these GGUF
     #: architectures (a model-specific builder is only judged by its own model).
     identity_arch: tuple[str, ...] = ()
+    #: Also judge greedy identity on the lane's LONG-context manifest when the long
+    #: surface provides one (run.py `long_identity_targets`; audit 2026-10-04 C1/C2). An
+    #: attention change whose defect only shows at depth is invisible at ~300 tokens.
+    long_identity: bool = False
 
 
 CPU_SOURCE_ROUTES = (
@@ -646,6 +650,53 @@ CPU_SOURCE_ROUTES = (
                        "touch of the bytes being loaded); headers and every other "
                        "function unchanged. Gate: identical greedy completions vs the "
                        "anchor on the frozen requests")),
+    # FLASH-ATTENTION SCHEDULING (2026-10-04, ak-longctx audit C2). Decode/verify steps
+    # have N <= 5 query rows, below the tiled path's 64, so each row is one serial
+    # `_one_chunk` walk over the whole KV, threads split rows only, and the G query heads
+    # that share a KV head (Q38FN: 12) each re-read that KV. Admitted: work split and
+    # traversal ONLY, every output row's reduction order unchanged -- e.g. the G heads of
+    # one KV head in a single KV pass, or a KV split whose merge reproduces the anchor's
+    # order. The tiled body, K/V conversion and wdata sizing (ggml_graph_plan, ggml-cpu.c)
+    # stay outside. Bit-exact by construction, so the anchor is the reference: the
+    # generic FLASH_ATTN_EXT native suite, the `cpu_fa_longctx_v1` test-backend-ops case
+    # set (when the binary carries it), `cpu_fa_reference` bit identity with the anchor
+    # (both GGML_FA_SPLIT_KV settings, odd and recipe teams, 3 repetitions each), the
+    # paired FA perf screen, then greedy identity on the frozen requests served 3x on
+    # this lane's target and every peer (and on the long manifest once provided).
+    CpuSourceRoute(
+        route="cpu_fa_schedule",
+        path="ggml/src/ggml-cpu/ops.cpp",
+        symbols=("ggml_compute_forward_flash_attn_ext_f16",
+                 "ggml_compute_forward_flash_attn_ext_f16_one_chunk",
+                 "ggml_flash_attn_ext_reduce_partials",
+                 "ggml_compute_forward_flash_attn_ext"),
+        bodies=(("ggml_compute_forward_flash_attn_ext_f16_one_chunk",
+                 "static void ggml_compute_forward_flash_attn_ext_f16_one_chunk("),
+                ("ggml_flash_attn_ext_reduce_partials",
+                 "static void ggml_flash_attn_ext_reduce_partials("),
+                ("ggml_compute_forward_flash_attn_ext_f16",
+                 "static void ggml_compute_forward_flash_attn_ext_f16("),
+                ("ggml_compute_forward_flash_attn_ext",
+                 "void ggml_compute_forward_flash_attn_ext(")),
+        ops=("FLASH_ATTN_EXT",),
+        new_helpers=True,
+        model_identity=True,
+        identity_targets="peers",
+        identity_repeats=3,
+        long_identity=True,
+        forbidden_added=r"#\s*pragma\s+omp",
+        admitted_text=("hunks inside the ggml_compute_forward_flash_attn_ext_f16 (dispatch), "
+                       "ggml_compute_forward_flash_attn_ext_f16_one_chunk, "
+                       "ggml_flash_attn_ext_reduce_partials or "
+                       "ggml_compute_forward_flash_attn_ext bodies plus NEW file-scope "
+                       "static helpers and #include <...> lines; work split and traversal "
+                       "only, every output row's reduction order unchanged (bit-identical "
+                       "to the anchor); no `#pragma omp`; the tiled body, headers, "
+                       "ggml-cpu.c (wdata sizing) and every other function unchanged. "
+                       "Gate: FLASH_ATTN_EXT native suite, the cpu_fa_longctx_v1 case set, "
+                       "bit identity with the anchor on the FA probe cases (both "
+                       "GGML_FA_SPLIT_KV settings, 3 repetitions), the paired FA perf "
+                       "screen, and greedy identity on the frozen requests served 3x")),
 )
 CPU_SOURCE_ROUTE_PATHS = tuple(sorted({route.path for route in CPU_SOURCE_ROUTES}))
 
@@ -1562,6 +1613,56 @@ def check_cpu_route_reference(build_dir: Path, source_root: Path, *, resolved_re
                    result.reason, result.detail)
 
 
+def check_cpu_fa_case_set(build_dir: Path, *, resolved_recipe) -> Verdict:
+    """`cpu_fa_schedule`: the FLASH_ATTN_EXT long-context case set as a correctness corpus.
+
+    Runs only when the build's test-backend-ops carries the `cpu_fa_longctx_v1`
+    selector (the llama-tree patch); otherwise a recorded SKIP, because a 0/0 suite is
+    not evidence and the anchor-identity probe covers the same shapes."""
+    from . import cpu_fa_reference as fa
+
+    if not fa.binary_has_case_set(build_dir):
+        return Verdict("correctness", True,
+                       f"SKIPPED: test-backend-ops does not carry the {fa.CASE_SET_ID} case "
+                       "set (llama-tree patch not applied); the anchor-identity probe runs "
+                       "the same shapes")
+    return op_correctness(build_dir, op="FLASH_ATTN_EXT", backend="CPU",
+                          resolved_recipe=resolved_recipe, params_filter=fa.CASE_SET_REGEX,
+                          environment_overrides=((fa.CASE_SET_ENV, fa.CASE_SET_ID),),
+                          expected_cases=len(fa.CASE_SET))
+
+
+def check_cpu_fa_reference(anchor_build: Path, candidate_build: Path, source_root: Path, *,
+                           anchor_recipe, candidate_recipe, window=None) -> Verdict:
+    """`cpu_fa_schedule`: bit identity with the ANCHOR on the FA probe cases."""
+    from . import cpu_fa_reference
+
+    result = cpu_fa_reference.check_anchor_identity(
+        anchor_build, candidate_build, source_root, anchor_recipe=anchor_recipe,
+        candidate_recipe=candidate_recipe, window=window)
+    return Verdict("reference_comparison" if result.status != "unavailable" else
+                   "oracle_unavailable", result.status == "pass", result.reason, result.detail)
+
+
+def check_cpu_fa_perf_screen(anchor_build: Path, candidate_build: Path, *, anchor_recipe,
+                             candidate_recipe, window=None) -> Verdict:
+    """`cpu_fa_schedule`: paired anchor/candidate `test-backend-ops perf` screen on the
+    case set, before the serving A/B is paid for. A binary without the case set is a
+    recorded SKIP; a harness fault is `oracle_unavailable`; too little speedup refuses."""
+    from . import cpu_fa_reference as fa
+
+    if not (fa.binary_has_case_set(anchor_build) and fa.binary_has_case_set(candidate_build)):
+        return Verdict("cpu_fa_perf_screen", True,
+                       f"SKIPPED: the anchor or candidate test-backend-ops does not carry the "
+                       f"{fa.CASE_SET_ID} case set (llama-tree patch not applied)")
+    result = fa.perf_screen(anchor_build, candidate_build, anchor_recipe=anchor_recipe,
+                            candidate_recipe=candidate_recipe, window=window)
+    if result.status == "unavailable":
+        return Verdict("oracle_unavailable", False, result.reason, result.detail)
+    return Verdict("cpu_fa_perf_screen", result.status == "pass", result.reason,
+                   result.detail)
+
+
 def check_model_output_identity(*, anchor_recipe, candidate_recipe, requests,
                                 window=None, repeats: int = 1) -> Verdict:
     """Whole-model gate for a `model_identity` route (`cpu_weight_placement`)."""
@@ -1626,7 +1727,10 @@ def check_model_identity_targets(targets, *, window=None, repeats: int = 1,
 
 def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
                    backend: str = "ROCm0", resolved_recipe=None,
-                   require_reference: bool = False) -> Verdict:
+                   require_reference: bool = False,
+                   params_filter: str | None = None,
+                   environment_overrides: tuple[tuple[str, str], ...] = (),
+                   expected_cases: int | None = None) -> Verdict:
     """`test-backend-ops` on the op the patch touches. The real correctness gate.
 
     THE DEFECT THIS SHAPE EXISTS TO PREVENT. An older binary did not accept
@@ -1640,6 +1744,11 @@ def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
     consistent with the tool refusing to run at all. So the pass/fail decision is made
     on POSITIVE evidence that the suite executed, and an oracle that could not run
     returns a distinct verdict that must never be read as "the patch is wrong".
+
+    `params_filter` / `environment_overrides` / `expected_cases` select a reviewed case
+    set (`-p <regex>` plus its `AUTOKERNEL_CORRECTNESS_CASE_SET` selector, e.g.
+    `cpu_fa_reference.CASE_SET_ID`); a run that selects any other number of cases is a
+    harness fault, not a verdict.
     """
     binary = build_dir / "bin" / "test-backend-ops"
     if not binary.is_file():
@@ -1650,6 +1759,8 @@ def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
                        "candidate-local CPU reference is not independent for a CPU source edit")
     # `-o` takes op_desc names: UNARY/GLU expand to their sub-ops (DS41-C96).
     argv = [str(binary), "test", "-o", backend_ops_selector(op), "-b", backend, "-j", "1"]
+    if params_filter is not None:
+        argv.extend(("-p", params_filter))
     environment = residency.loader_env(binary)
     if resolved_recipe is not None:
         resolved_recipe.validate_launch(resolved_recipe.template, build_dir, resolved_recipe.port)
@@ -1660,6 +1771,8 @@ def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
         # Run it under the actual treatment's loader/env and CPU/NUMA prefix.
         argv = [*resolved_recipe.topology_prefix, *argv]
         environment = dict(resolved_recipe.launch_env)
+    if environment_overrides:
+        environment = {**environment, **dict(environment_overrides)}
     if require_reference:
         # An older test-backend-ops rejected --suite-seed and printed usage. The
         # selected binary, not the source tree or an anchor, must prove support.
@@ -1698,6 +1811,12 @@ def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",
                        f"test-backend-ops did not prove a nonempty {backend} op suite "
                        f"for {op}; this is a harness fault, NOT evidence about the patch",
                        output[-2000:])
+    if expected_cases is not None and \
+            sum(int(total) for _, total in counts) != expected_cases:
+        return Verdict("oracle_unavailable", False,
+                       f"test-backend-ops selected {sum(int(t) for _, t in counts)} {op} "
+                       f"case(s) on {backend}, not the case set's {expected_cases}; this is a "
+                       "harness fault, NOT evidence about the patch", output[-2000:])
     if block.group(2) == "FAIL":
         return Verdict("correctness", False, f"{op} failed on {backend}",
                        done.stdout[-2000:] + done.stderr[-1000:])
@@ -1850,6 +1969,7 @@ __all__ = ["BACKEND_OPS_SELECTORS", "BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S",
            "PROMOTION_TARGETS", "UNSELECTABLE_ON_ANCHOR", "Verdict",
            "backend_ops_selector", "compiles",
            "cpu_source_route", "deterministic",
-           "affected_op_scope", "check_cpu_gdn_reference", "check_cpu_iqk_reference",
+           "affected_op_scope", "check_cpu_fa_case_set", "check_cpu_fa_perf_screen",
+           "check_cpu_fa_reference", "check_cpu_gdn_reference", "check_cpu_iqk_reference",
            "check_cpu_route_reference", "no_fallback_dispatch",
            "op_correctness", "run_all"]
