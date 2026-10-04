@@ -44,7 +44,8 @@ from typing import TYPE_CHECKING
 import urllib.request
 import urllib.error
 
-from . import headline_admissibility, lifecycle_observation, procguard, residency, status
+from . import (headline_admissibility, kernel_coverage, lifecycle_observation, procguard,
+               residency, status)
 from . import native_server_response as server_response
 from .loop import MeasurementFailed, MeasurementInvalid
 
@@ -1006,6 +1007,10 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
         except Exception:
             guard_watch = None
     sampler = None
+    # Kernel-coverage capture (kernel_coverage.py): when the loop enabled it, this
+    # launch's stderr goes to a file that is compacted to kernel-path markers at
+    # teardown. Off (None -> /dev/null, as before) for every other caller.
+    coverage_sink = None
     window_start = time.time()
     request_start: float | None = None
     request_end: float | None = None
@@ -1017,8 +1022,10 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
             sampler = CpuOnlySampler()
         with sampler:
             observe("phase", "load")
+            coverage_sink = kernel_coverage.open_launch_sink(recipe, build_dir)
             srv = subprocess.Popen(argv, stdout=subprocess.DEVNULL,
-                                   stderr=subprocess.DEVNULL,
+                                   stderr=(subprocess.DEVNULL if coverage_sink is None
+                                           else coverage_sink.handle),
                                    env=launch_env)
             process_pid = srv.pid
             observe("attach_target", srv.pid)
@@ -1246,6 +1253,7 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
             observer_finish_ok = observe("finish")
             if cpu_profile_capture is not None:
                 cpu_profile_capture.finish()
+            kernel_coverage.close_launch_sink(coverage_sink)
     # Success path only. An exception already in flight carries its own reason, and
     # replacing it with a residency refusal would hide the real fault -- while the
     # record above is appended either way, so a failed launch still leaves its window.

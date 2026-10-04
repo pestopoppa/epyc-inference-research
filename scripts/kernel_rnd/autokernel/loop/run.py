@@ -59,6 +59,7 @@ from . import (accumulate, actors, anchor, archive, bench, champion, claim, gate
                integrity, heldout_serving, lineage_beliefs, pipeline, pool, production, status, surface_fold,
                surface_validation)
 from . import actor_opencode_config
+from . import cross_target, kernel_coverage
 from . import epoch_aliases
 from . import scratch
 from . import procguard
@@ -2092,16 +2093,35 @@ def main(argv: list[str] | None = None) -> int:
     if args.lane_targets is not None or args.lane is not None:
         from . import lane_targets
         try:
-            lane_binding = lane_targets.resolve(args.lane_targets, args.lane,
-                                                target_id=args.target_id, workers=args.workers,
-                                                lock=not args.dry_run)
+            lane_binding = lane_targets.resolve(
+                args.lane_targets, args.lane, target_id=args.target_id, workers=args.workers,
+                lock=not args.dry_run,
+                champion_branch=args.experimental_branch or args.champion_branch)
             lane_peer_serving = {peer.entry.name: lane_targets.peer_serving(peer)
                                  for peer in lane_binding.peers}
-        except (OSError, ValueError, RuntimeError) as exc:
+            if lane_binding.trunk_branch is not None and subprocess.run(
+                    ["git", "-C", str(args.worktree), "rev-parse", "--verify", "--quiet",
+                     f"refs/heads/{lane_binding.trunk_branch}"],
+                    capture_output=True, check=False).returncode != 0:
+                raise LookupError(f"trunk branch {lane_binding.trunk_branch} does not exist "
+                                  f"in {args.worktree} (create it at the common champion)")
+            if lane_binding.trunk_branch is not None and (
+                    f"branch refs/heads/{lane_binding.trunk_branch}\n" in subprocess.run(
+                        ["git", "-C", str(args.worktree), "worktree", "list", "--porcelain"],
+                        capture_output=True, text=True, check=False).stdout):
+                # The trunk moves by compare-and-swap ref updates only; a checkout of it
+                # would go stale under every shared keep.
+                raise LookupError(f"trunk branch {lane_binding.trunk_branch} is checked out "
+                                  "in a worktree; it must stay a bare ref")
+        except (OSError, ValueError, RuntimeError, LookupError) as exc:
             parser.error(f"lane binding: {exc}")
         if (lane_binding.lane.cpu_window_path is not None
                 and args.cpu_window_path == cpu_window.DEFAULT_PATH):
             args.cpu_window_path = lane_binding.lane.cpu_window_path
+    if not args.dry_run:
+        # Launch-stderr kernel markers for the keep gate's runtime layer
+        # (kernel_coverage.py). Auxiliary: compacted per launch, capped per shape.
+        kernel_coverage.enable_capture(args.store / kernel_coverage.CAPTURE_DIR)
     from . import serial_run
     original_binding = serial_run.input_binding(original_argv) \
         if args.out or args.resume_run or args.source_anchor_continuation else None
@@ -4712,10 +4732,13 @@ def main(argv: list[str] | None = None) -> int:
                     comparison.effect - heldout_row.effect]
                 if not verdict["promoted"]:
                     raise loop.ConfirmVetoed(verdict["reason"])
+            cross = None
             if lane_binding is not None:
                 # LANE BINDING (lane_targets.py): a keep touching a path shared with
-                # another lane's target must not regress that target. Same two builds
-                # this keep was measured with; the peer's own launch, requests and bar.
+                # another lane's target is A/B'd on that target. Same two builds this
+                # keep was measured with; the peer's own launch, requests and bar. A
+                # peer regression makes the keep TARGET-ONLY (cross_target.py), never
+                # a veto: it is kept on this target's champion branch only.
                 def cross_compare(peer, bar):
                     peer_launch, peer_requests = lane_peer_serving[peer.entry.name]
                     return measured_serving_compare(
@@ -4731,8 +4754,33 @@ def main(argv: list[str] | None = None) -> int:
                                  checked.tree).splitlines(),
                     compare=cross_compare)
                 evidence["cross_target"] = cross
-                if not cross["passed"]:
-                    raise loop.ConfirmVetoed("KEEP_CANDIDATE-cross-target: " + cross["reason"])
+            # KERNEL FEATURE PRESERVATION (kernel_coverage.py), EVERY keep: no kernel
+            # path may disappear -- static (DSO symbol families), source (git feature
+            # inventory) and this target's executed path (launch stderr markers) --
+            # unless the patch declares and measures its replacement.
+            preservation = kernel_coverage.keep_gate(
+                store=args.store, repo=worker.worktree, base_ref="HEAD",
+                candidate_ref=checked.tree, anchor_build=anchor_build[0],
+                candidate_build=worker.build_dir,
+                own_target=args.target_id or args.surface,
+                peer_shapes=({row["target_id"]: kernel_coverage.shape_names(
+                                  lane_peer_serving[row["lane"]][0].template)
+                              for row in cross["peers"]} if cross else {}),
+                measured_peers=[row["target_id"] for row in (cross or {}).get("peers", ())
+                                if isinstance(row.get("effect"), (int, float))],
+                declaration_texts=(hypothesis.statement, hypothesis.falsifier,
+                                   hypothesis.mechanism_id),
+                mechanism_id=hypothesis.mechanism_id)
+            evidence["kernel_preservation"] = {
+                key: preservation[key] for key in ("passed", "reason", "failures", "losses",
+                                                   "notes", "record", "layers")}
+            if not preservation["passed"]:
+                raise loop.ConfirmVetoed("KEEP_CANDIDATE-kernel-coverage: "
+                                         + preservation["reason"])
+            cross_decision = (cross_target.decide(cross, preservation["peers"])
+                              if cross is not None else None)
+            if cross_decision is not None:
+                evidence["cross_target"] = {**cross, **cross_decision}
             source_fold_candidate = experimental and cpu_launch \
                 and selected_identity is not None
             # The receipt describes the comparison that admitted this keep.  Promotion
@@ -4748,6 +4796,21 @@ def main(argv: list[str] | None = None) -> int:
                                          champion_tree=args.worktree,
                                          branch=args.champion_branch,
                                          expected_tree=checked.tree)
+            if cross_decision is not None:
+                # Per-target lineage (cross_target.py): ledger the decision, put a
+                # shared keep on the trunk, and bring the trunk's missing commits onto
+                # this target's branch BEFORE the anchor is rebuilt from it.
+                try:
+                    cross_target.record_keep(
+                        lane_binding, repo=args.worktree, keep_commit=head,
+                        decision=cross_decision, cross=cross,
+                        coverage=preservation["peers"], mechanism_id=hypothesis.mechanism_id)
+                    cross_target.sync_from_trunk(lane_binding, repo=args.worktree,
+                                                 champion_tree=args.worktree,
+                                                 branch=args.champion_branch)
+                except Exception as exc:  # a missed propagation; the keep stands
+                    print(f"warning: cross-target lineage step failed after keep: "
+                          f"{type(exc).__name__}: {exc}", file=sys.stderr)
             # The lane build is the exact candidate whose patch was just committed.
             # Write this immediately: anchor promotion can take 30+ minutes or abort,
             # but the champion commit already exists. Missing toolchain evidence is
@@ -4783,7 +4846,74 @@ def main(argv: list[str] | None = None) -> int:
             # The accumulator advanced; batch this keep and, if the bundle now clears the
             # serving floor, spend the one serving gate that can advance the champion of record.
             accumulate_after_keep(hypothesis.mechanism_id)
+            if lane_binding is not None and cpu_launch is not None:
+                recheck_target_only(worker)
             return head
+
+        def recheck_target_only(worker):
+            """Cross-target propagation check (cross_target.recheck_one): ONE pending
+            target-only keep of another lane, applied onto this target's champion,
+            built, gated and A/B'd against this target's floor; propagated onto this
+            branch (and the trunk once every target carries it) if it helps, or is
+            neutral and simplifies. Never raises: a failure is a missed propagation."""
+            own = lane_targets.PeerTarget(entry=lane_binding.lane, launch_path=Path("/"),
+                                          frozen_prompts=Path("/"), store=None)
+
+            def measure(entry):
+                pool.reset_to_champion(worker, champion_tree=args.worktree,
+                                       branch=args.champion_branch)
+                commit = cross_target.apply_in_worktree(worker.worktree, entry["keep_commit"])
+                if commit is None:
+                    return {"error": "does not apply onto this target's champion"}
+                built = gates.compiles(worker.worktree, worker.build_dir,
+                                       cmake_defines=recipe.cmake_defines(), jobs=build_jobs,
+                                       cpu_list=build_cpu_list,
+                                       targets=gates.PROMOTION_TARGETS)
+                if not built.passed:
+                    return {"error": f"build failed: {built.reason}"}
+                arm = _cpu_arm(direct_launch, worker.build_dir)
+                oracle = gates.op_correctness(worker.build_dir, op="MUL_MAT", backend="CPU",
+                                              resolved_recipe=arm)
+                if not oracle.passed:
+                    return {"error": f"MUL_MAT oracle: {oracle.reason}"}
+                bar = lane_targets.peer_bar(own)
+                if bar["mode"] == "absent":
+                    return {"error": "this lane declares no floor file or point bar"}
+                row = measured_serving_compare(
+                    serving_recipe, anchor_build[0], worker.build_dir,
+                    pairs=args.serving_pairs, port=direct_launch.port,
+                    anchor_resolved_recipe=_cpu_arm(direct_launch, anchor_build[0]),
+                    candidate_resolved_recipe=arm, frozen_requests=frozen_requests,
+                    instrument=serving.MATCHED_INSTRUMENT,
+                    **lane_targets.compare_kwargs(bar, serving_recipe, frozen_requests))
+                kept = kernel_coverage.keep_gate(
+                    store=args.store, repo=worker.worktree, base_ref="HEAD^",
+                    candidate_ref="HEAD", anchor_build=anchor_build[0],
+                    candidate_build=worker.build_dir,
+                    own_target=args.target_id or args.surface,
+                    declaration_texts=(), mechanism_id=f"recheck-{entry['keep_commit'][:12]}")
+                if not kept["passed"]:
+                    return {"error": f"kernel coverage: {kept['reason']}"}
+                return {"row": dict(row), "candidate_commit": commit}
+
+            try:
+                event = cross_target.recheck_one(
+                    lane_binding, repo=args.worktree, champion_tree=args.worktree,
+                    branch=args.champion_branch, measure=measure,
+                    advance=lambda _commit: promote_anchor())
+                if event is not None:
+                    print(f"crosstgt  recheck {event['keep_commit'][:12]} from "
+                          f"{event.get('origin_target')}: {event.get('result')} "
+                          f"({event.get('why')}: {event.get('reason')})")
+            except Exception as exc:  # noqa: BLE001
+                print(f"warning: cross-target recheck failed: {type(exc).__name__}: {exc}",
+                      file=sys.stderr)
+            finally:
+                try:
+                    pool.reset_to_champion(worker, champion_tree=args.worktree,
+                                           branch=args.champion_branch)
+                except Exception as exc:  # noqa: BLE001
+                    print(f"warning: lane reset after recheck failed: {exc}", file=sys.stderr)
 
         def reset_retained(worker):
             # STOP before the gate, or a hard interruption during authoring, leaves

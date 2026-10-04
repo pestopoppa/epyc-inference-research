@@ -309,6 +309,29 @@ class Cli(unittest.TestCase):
         self.assertEqual(body["overall_correctness"], "FAIL")
         self.assertEqual(rc, 1)
 
+    def test_g0_refuses_a_fold_that_drops_a_kernel_path(self):
+        """INC-20260925: a fold losing the parallel repack's OpenMP region fails at G0,
+        before any suite runs."""
+        from . import kernel_coverage
+        for build in (self.anchor, self.cand):
+            (build / "bin").mkdir(parents=True, exist_ok=True)
+            (build / "bin" / "libggml-cpu.so").write_bytes(b"x")
+        symbols = {self.anchor / "bin" / "libggml-cpu.so":
+                       ["ggml_repack_rows._omp_fn.0", "ggml_gemm_q4_K_8x8_q8_K"],
+                   self.cand / "bin" / "libggml-cpu.so": ["ggml_gemm_q4_K_8x8_q8_K"]}
+
+        def explode(*_a, **_k):
+            raise AssertionError("G1-G4 must not run after a G0 failure")
+
+        with mock.patch.object(kernel_coverage, "_nm", lambda path: symbols[path]), \
+             mock.patch.object(fold2_gates, "run_process", explode), \
+             mock.patch("builtins.print"):
+            rc = fold2_gates.main(self._argv("--only-correctness", "--execute"))
+        body = json.loads(self.out.read_text())
+        self.assertEqual(rc, 1)
+        self.assertEqual(body["gates"]["G0_preservation"]["verdict"], "FAIL")
+        self.assertIn("omp_region:ggml_repack_rows", body["gates"]["G0_preservation"]["reason"])
+
     def test_g5_without_an_anchor_build_is_refused_not_skipped(self):
         with mock.patch("builtins.print"):
             rc = fold2_gates.main(

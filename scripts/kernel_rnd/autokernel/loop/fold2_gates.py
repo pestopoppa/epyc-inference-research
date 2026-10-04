@@ -8,6 +8,15 @@
 
 Gates, in order (any FAIL stops the fold; nothing is fast-forwarded by this module):
 
+  G0  kernel feature preservation (`kernel_coverage.fold_check`, 2026-10-04): no kernel
+      path of the champion may disappear in the candidate -- DSO symbol families
+      (repack traits, gemm/gemv bodies, OpenMP regions, tinyBLAS, iqk, op bodies) with
+      --anchor-build, plus the git feature inventory (omp pragmas, GGML_IQK refs, repack
+      trait defs, env knobs, CMake options, tests/) with --source-repo/--champion-ref/
+      --candidate-ref. A replacement must be declared (`KERNEL-REPLACES: old => new` in
+      a commit message or --declarations). INC-20260925 lost the parallel repack in a
+      bundled revert; G0 is the check that would have refused it.
+
   G1  `test-backend-ops -b ROCm0 -o SSM_SCAN` -- includes the upstream K=4 / K=3 rollback
       cases. A case the CUDA guard DECLINES (K>1 -> supports_op false) is reported by the
       harness as NOT SUPPORTED, which is the port's intended behaviour and NOT a failure;
@@ -205,6 +214,43 @@ def run_dispatch_probe(candidate_build: Path, model: Path, *, timeout: int = 900
     return row
 
 
+def run_preservation(args) -> dict:
+    """G0. FAIL on any undeclared lost kernel path; SKIPPED when given nothing to diff."""
+    from . import kernel_coverage
+    refs = (args.source_repo, args.champion_ref, args.candidate_ref)
+    if any(refs) and not all(refs):
+        return {"verdict": "FAIL", "reason": "G0 needs --source-repo, --champion-ref and "
+                                             "--candidate-ref together"}
+    if (not all(refs) and args.anchor_build is not None
+            and not kernel_coverage.library_paths(args.anchor_build)
+            and not kernel_coverage.library_paths(args.candidate_build)):
+        print("  G0 SKIPPED: neither build holds a ggml/llama library", file=sys.stderr)
+        return {"verdict": "SKIPPED", "reason": "no libraries in either build"}
+    if not all(refs) and args.anchor_build is None:
+        print("  G0 SKIPPED: pass --anchor-build and/or --source-repo/--champion-ref/"
+              "--candidate-ref", file=sys.stderr)
+        return {"verdict": "SKIPPED", "reason": "nothing to diff"}
+    try:
+        if all(refs):
+            body = kernel_coverage.fold_check(
+                repo=args.source_repo, base=args.champion_ref, candidate=args.candidate_ref,
+                base_build=args.anchor_build,
+                candidate_build=args.candidate_build if args.anchor_build else None,
+                declaration_file=args.declarations)
+        else:
+            declared = kernel_coverage.declarations(
+                args.declarations.read_text(encoding="utf-8")) if args.declarations else []
+            body = kernel_coverage.verdict(
+                static=(kernel_coverage.static_manifest(args.anchor_build),
+                        kernel_coverage.static_manifest(args.candidate_build)),
+                declared=declared, measured_targets={"fold"}, all_targets={"fold"})
+    except Exception as exc:  # noqa: BLE001 -- cannot prove preservation: fail closed
+        return {"verdict": "FAIL", "reason": f"{type(exc).__name__}: {exc}"}
+    print(f"  {'PASS' if body['passed'] else 'FAIL'}: {body['reason']}")
+    return {"verdict": "PASS" if body["passed"] else "FAIL", "reason": body["reason"],
+            "failures": body["failures"], "losses": body["losses"]}
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="autokernel.loop.fold2_gates", description=__doc__,
@@ -229,6 +275,12 @@ def build_parser() -> argparse.ArgumentParser:
                              "llama-bench invocations), so any other unit REFUSES: a "
                              "within-session floor is ~13x tighter and sized one "
                              "experiment 1200-fold wrong (R23-55)")
+    parser.add_argument("--source-repo", type=Path, default=None,
+                        help="G0: llama.cpp repository holding both refs")
+    parser.add_argument("--champion-ref", default=None, help="G0: the champion ref")
+    parser.add_argument("--candidate-ref", default=None, help="G0: the fold candidate ref")
+    parser.add_argument("--declarations", type=Path, default=None,
+                        help="G0: file of KERNEL-REPLACES: <old> => <new> lines")
     parser.add_argument("--only-correctness", action="store_true",
                         help="G1-G4 only; G5 (comparative) after the keep decision")
     instruments.add_posture_args(parser)
@@ -262,6 +314,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"posture   {posture.describe()}")
     if posture.dry_run:
         print("\nDRY RUN -- nothing launched. The gates that would run:")
+        print("  G0 kernel_coverage fold-check (nm + git grep, read-only)")
         binary = Path(args.candidate_build) / "bin" / "test-backend-ops"
         for op in ("SSM_SCAN", "MUL_MAT", "GATED_DELTA_NET"):
             print("  " + " ".join(backend_op_argv(binary, op)))
@@ -271,6 +324,19 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     result = {"candidate": candidate_id, "gates": {}}
+    print("=== G0 kernel feature preservation (champion -> candidate)")
+    g0 = run_preservation(args)
+    result["gates"]["G0_preservation"] = g0
+    if g0["verdict"] == "FAIL":
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        result["overall"] = "FAIL"
+        args.out.write_text(json.dumps(result, indent=2))
+        print(f"FOLD-2 OVERALL: FAIL at G0 -> {args.out}")
+        return 1
+    if g0["verdict"] == "SKIPPED":
+        # Not counted (older invocations pass no refs), but never silent.
+        del result["gates"]["G0_preservation"]
+        result["g0_skipped"] = g0
     print("=== G1 SSM_SCAN (port correctness incl. K>1 rollback cases)")
     result["gates"]["G1_ssm_scan"] = run_backend_op(args.candidate_build, "SSM_SCAN")
     print("=== G2 MUL_MAT (standing oracle)")

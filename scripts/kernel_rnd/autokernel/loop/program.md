@@ -560,6 +560,54 @@ So: a patch that changes an activation quant type, a type-traits row, or a dispa
 table entry is in a known-dangerous class whose failure mode the gate cannot see. Say
 so in the hypothesis, and prefer a mechanism that leaves type selection alone.
 
+## No keep or fold may drop a kernel path (kernel_coverage.py, 2026-10-04)
+
+`INC-20260925-parallel-repack-lost-in-bundled-revert`: the OpenMP repack
+parallelisation (`52ddd3200`) rode in bundle `814e81782` beside two failing changes.
+Reverting the bundle (`358f0c748`) silently removed it. v7-v10 then loaded every model
+single-threaded until 2026-09-25, and no serving A/B could see it. The class
+before that was `INC-20260706-iqk-missing-subsystem`. Every keep now runs a
+preservation gate after its A/B and before the champion moves (~1 s, artefacts the
+loop already has). A loss is a HARD veto (`KEEP_CANDIDATE-kernel-coverage`):
+
+- **static**: `nm` families of the anchor vs candidate DSOs. These are repack
+  `tensor_traits<block,INTER,COLS>`, `ggml_gemm_*`/`ggml_gemv_*`, OpenMP outlined
+  regions (`[clone ._omp_fn.N]`, how the lost repack shows), tinyBLAS gemm
+  instantiations, `iqk_*` and `ggml_compute_forward_*`. Counted.
+- **source**: a `git grep` inventory. This covers `#pragma omp` and `GGML_IQK` per
+  file, repack trait definitions, gemm/gemv definitions, `getenv` knobs, CMake
+  `option()`s and `tests/` files.
+- **runtime**: what EXECUTED for this target's serving shape, from the A/B launches'
+  stderr. These are `[iqk] ACTIVE:` per quant type (dense and MoE), extra-buffer
+  sizes (`CPU_REPACK` shrinking means tensors lost their repack) and per-tensor
+  repack lines. Markers the anchor's own launches disagree on are never failed on.
+
+If a patch deliberately replaces a path, say so in the hypothesis statement or as a
+comment on an added line: `KERNEL-REPLACES: <old key glob> => <new key glob>`, for
+example `KERNEL-REPLACES: omp_region:ggml_repack_row_groups* => omp_region:my_pool`.
+The new key must exist in the candidate. The replacement must also be measured: a
+runtime loss on model T needs an A/B on T, and a static or source loss needs an A/B on
+every bound target. Folds and forward-ports run the same check without a loop:
+`python3 -m scripts.kernel_rnd.autokernel.loop.kernel_coverage fold-check --repo <tree>
+--base <champion> --candidate <ref> [--base-build B --candidate-build C]`, which
+`fold2_gates.py` runs as G0. Declarations there come from commit messages.
+
+## One champion branch per target, one shared trunk (cross_target.py, 2026-10-04)
+
+A shared change can help one model and hurt another: DS41's held keeps `b3e0b0902`
+cost Qwen3.8-Flash-Next 29-41% of prefill. With a lane binding (`lane_targets.py`),
+each target keeps on its OWN `champion_branch`, so its anchor and accumulator stay as
+they are. A keep that clears its own target's gates is kept there even if a peer
+regresses, and the patch does not have to be model-gated. The **trunk** takes only
+keeps that regress no target: every peer's A/B within its floor or bar, and every
+peer's executed-kernel manifest unchanged (a change is allowed only with a decisive
+peer gain). The trunk reaches the other targets at their next keep. A target-only keep
+is re-checked on each other target at that target's champion advancements, one per
+advancement. It propagates if it helps, or if it is neutral and removes more lines
+than it adds. Otherwise it stays target-only. Every decision is a line in
+`<binding dir>/cross-target-ledger.jsonl` and rides in the keep's experiments-DB row.
+So a peer regression is no reason to abandon a mechanism that wins on your target.
+
 ## Not this loop's surface — do not propose these
 
 The backlog is full of measured levers that are NOT kernel-source patches. They are
