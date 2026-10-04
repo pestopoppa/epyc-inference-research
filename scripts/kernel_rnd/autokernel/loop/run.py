@@ -3084,6 +3084,10 @@ def main(argv: list[str] | None = None) -> int:
                 "baseline nor comparable to any measured number. An absent section is a "
                 "missing instrument, never a zero. Do not invent "
                 "hotspots or reuse GPU timing evidence as CPU evidence. "
+                "Bit-exact FLASH_ATTN_EXT scheduling is an admitted source route "
+                "(cpu_fa_schedule in program.md): the frozen requests run at a KV depth of "
+                "~300 tokens, so the measured attention share understates production, "
+                "where most Q38FN decode wall is above 32k context. "
                 "Author/review source only for source hypotheses; runtime treatments "
                 "have no source edit and are observation-only unless separately admitted. "
                 "The existing loop owns compilation, the CPU "
@@ -3330,17 +3334,24 @@ def main(argv: list[str] | None = None) -> int:
                 targets = [(str(args.target_id or "own"), _cpu_arm(direct_launch, anchor_build[0]),
                             arm, frozen_requests)]
                 if lane_binding is None or route.identity_targets == "own":
-                    return targets
+                    return targets + long_targets(route)
                 if route.identity_targets == "shared_peers":
                     from . import lane_targets
                     if not lane_targets.needs_cross_check(changed + untracked,
                                                           lane_binding.lane.exclusive_paths):
-                        return targets
+                        return targets + long_targets(route)
                 for peer in lane_binding.peers:
                     peer_launch, peer_requests = lane_peer_serving[peer.entry.name]
                     targets.append((peer.entry.target_id, _cpu_arm(peer_launch, anchor_build[0]),
                                     _cpu_arm(peer_launch, worker.build_dir), peer_requests))
-                return targets
+                return targets + long_targets(route)
+
+            def long_targets(route):
+                """The long-context manifest's identity targets, once the long surface
+                installs `long_identity_targets[0]` (audit 2026-10-04 C1/C2)."""
+                if not getattr(route, "long_identity", False) or long_identity_targets[0] is None:
+                    return []
+                return list(long_identity_targets[0](anchor_build[0], worker.build_dir))
 
             def identity_reference(route, arm):
                 targets = identity_targets(route, arm)
@@ -3360,12 +3371,28 @@ def main(argv: list[str] | None = None) -> int:
                 from . import cpu_route_witness
                 witness = (cpu_route_witness.WITNESSES.get(admitted_route.route)
                            if admitted_route is not None else None)
-                if witness is None or witness.reference != "model_identity":
+                if witness is None or witness.reference not in ("model_identity",
+                                                                 "fa_anchor_bits"):
                     route_references.append(lambda arm: gates.check_cpu_route_reference(
                         worker.build_dir, worker.worktree, resolved_recipe=arm,
                         path=changed[0] if route_edit else hypothesis.target_surface,
                         target_symbol=hypothesis.target_symbol,
                         route_name=admitted_route.route if admitted_route is not None else None))
+                if witness is not None and witness.reference == "fa_anchor_bits":
+                    # cpu_fa_schedule (audit 2026-10-04 C2/C3): the case-set corpus, bit
+                    # identity with the ANCHOR build, then the paired FA perf screen
+                    # before the serving A/B; model identity follows below.
+                    route_references.extend((
+                        lambda arm: gates.check_cpu_fa_case_set(worker.build_dir,
+                                                                resolved_recipe=arm),
+                        lambda arm: gates.check_cpu_fa_reference(
+                            anchor_build[0], worker.build_dir, worker.worktree,
+                            anchor_recipe=_cpu_arm(direct_launch, anchor_build[0]),
+                            candidate_recipe=arm, window=cpu_measurement_window),
+                        lambda arm: gates.check_cpu_fa_perf_screen(
+                            anchor_build[0], worker.build_dir,
+                            anchor_recipe=_cpu_arm(direct_launch, anchor_build[0]),
+                            candidate_recipe=arm, window=cpu_measurement_window)))
                 if admitted_route is not None and admitted_route.model_identity:
                     route_references.append(
                         lambda arm: identity_reference(admitted_route, arm))
@@ -3441,6 +3468,12 @@ def main(argv: list[str] | None = None) -> int:
     #: start. A static anchor asks "does the accumulated tree beat v9"; the question
     #: that decides a keep is "does THIS patch improve on the best we have".
     anchor_build = [args.anchor_build]
+    #: Long-context identity hook (audit 2026-10-04 C1/C2), read by every route with
+    #: `long_identity` (cpu_fa_schedule). The long-context surface installs a callable
+    #: (anchor_build, candidate_build) -> [(label, anchor recipe, candidate recipe,
+    #: frozen long requests)]; None = the long manifest is not available and identity
+    #: runs on the short manifest only.
+    long_identity_targets: list = [None]
     # Run 19 advanced twice while the status published the run's STARTING commit, so a
     # working anchor read as stuck. `epoch` still pins the start for comparability.
     current_anchor_commit = [anchor_commit]

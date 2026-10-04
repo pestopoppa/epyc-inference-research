@@ -54,7 +54,8 @@ class RouteWitness:
     # "rms_norm" = cpu_norm_reference (bit identity with HEAD plus a float64 bound),
     # "rms_norm_tol" = cpu_norm_reference in tolerance mode (float64 bound 2^-16,
     # deterministic repetitions, no bit identity with HEAD), "model_identity" = gated
-    # by `model_identity` in the loop, never by this witness.
+    # by `model_identity` in the loop, never by this witness, "fa_anchor_bits" = gated by
+    # `cpu_fa_reference` (anchor vs candidate output bits) in the loop.
     reference: str = "quant"
     # Also run cpu_fusion_reference (the DS41 hc_mixes RMS_NORM -> MUL_MAT(F16) graph):
     # the route can change in-backend fusion, and no native case builds that pair.
@@ -153,6 +154,13 @@ WITNESSES["cpu_graph_optimize"] = WITNESSES["cpu_graph_sync"]
 WITNESSES["cpu_model_fused_op"] = RouteWitness(
     op=None, case=None, breakpoint=None, symbol_pattern=None, active=None,
     quants=(), ops=(), reference="model_identity")
+# 2026-10-04 cpu_fa_schedule (ak-longctx audit C2): a bit-exact FA scheduling change is
+# judged against the ANCHOR's output bits (`cpu_fa_reference`, which needs both builds),
+# plus the case set, the paired FA perf screen and whole-model identity -- all wired in
+# the loop, never by this witness.
+WITNESSES["cpu_fa_schedule"] = RouteWitness(
+    op=None, case=None, breakpoint=None, symbol_pattern=None, active=None,
+    quants=(), ops=("FLASH_ATTN_EXT",), reference="fa_anchor_bits")
 
 
 def assess_case(witness: RouteWitness, records: list[dict], output: str,
@@ -270,6 +278,9 @@ def check(build_dir: Path, *, resolved_recipe, source_root: Path, route: str,
     if witness.reference == "model_identity":
         return Result("unavailable", f"route {route!r} is gated by the whole-model "
                       "identity check, not by a route witness")
+    if witness.reference == "fa_anchor_bits":
+        return Result("unavailable", f"route {route!r} is gated by cpu_fa_reference "
+                      "(bit identity with the anchor build), not by a route witness")
     if witness.reference in ("rms_norm", "rms_norm_tol"):
         from . import cpu_norm_reference
         norm = cpu_norm_reference.check_rms_norm_suite(
