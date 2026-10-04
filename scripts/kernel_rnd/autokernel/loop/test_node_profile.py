@@ -272,4 +272,7 @@ def test_cpu_arm_extra_env_never_reaches_the_measured_arm():
 
     source = Path(run.__file__).read_text(encoding="utf-8")
     assert "def _cpu_arm(original, build: Path, *, extra_env: dict | None = None)" in source
-    assert source.count("extra_env=env") == 1  # only the node-profile sibling passes it
+    # Only the node-profile sibling passes it: the short capture and, for a target with
+    # `--longctx-surface`, the same sibling replayed at depth (longctx_reprofile).
+    assert source.count("extra_env=env") == 2
+    assert source.count("_cpu_arm(long_launch, build_dir, extra_env=env)") == 1

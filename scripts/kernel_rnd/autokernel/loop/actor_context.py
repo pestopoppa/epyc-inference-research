@@ -105,6 +105,7 @@ SECTION_HEADERS: tuple[tuple[str, tuple[str, ...]], ...] = (
                  "## Where the device time actually goes (rocprofv3, current champion)")),
     ("node_profile", ("## Node profile — per-op wall SHARES on an instrumented sibling "
                       "of the same anchor",)),
+    ("long_context", ("## Long-context regime — the target is ALSO judged at depth",)),
     ("exhausted_families", ("## DIMINISHING-RETURNS ESCAPE — mandatory for this turn",)),
     ("stagnant_families", ("## Family-level diminishing returns — abstraction escape required",)),
     ("characterised", ("## Characterised — do NOT re-measure these",)),
@@ -118,7 +119,7 @@ SECTION_HEADERS: tuple[tuple[str, tuple[str, ...]], ...] = (
 #: Sections whose body carries one ```json block the inline prompt shows.
 JSON_SECTIONS = frozenset({"target", "shared_history", "serving_observations"})
 #: Kept verbatim in the prompt (see the module docstring for the evidence).
-INLINE_SECTIONS = frozenset({"preamble", "program", "superseded", "profile",
+INLINE_SECTIONS = frozenset({"preamble", "program", "superseded", "profile", "long_context",
                              "exhausted_families", "stagnant_families", "characterised",
                              "already_tried", "hypothesis_rejections", "patch_rejections"})
 #: File sections whose HEAD (everything before its second `### ` sub-heading) is also
@@ -353,6 +354,7 @@ CARD_FIELDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("build recipe", ("build_recipe", "name")),
     ("frozen requests", ("requests",)),
     ("hotspot status", ("hotspot_status",)),
+    ("long-context target depth (tokens)", ("long_context", "depth_tokens")),
 )
 
 

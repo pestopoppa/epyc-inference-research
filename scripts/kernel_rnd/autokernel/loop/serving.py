@@ -901,7 +901,7 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                   observation: list | None = None,
                   observation_session: lifecycle_observation.ObservationSession | None = None,
                   response_capture: server_response.ServerResponseCapture | None = None,
-                  cpu_profile_capture=None
+                  cpu_profile_capture=None, longctx=None
                   ) -> float:
     """Launch the server under `recipe`, fire `np` concurrent requests, return aggregate
     tok/s. The server is always stopped, even on error.
@@ -918,6 +918,11 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
     vanishing. Passing a sink is OPTIONAL and the residency REFUSAL is not: a launch
     measured non-resident raises `ServingNotResident` whether or not anyone asked for
     the record.
+
+    `longctx` (`longctx.SurfaceLaunch`, opt-in targets only) replaces the per-slot
+    request with the long-context protocol: restore the saved slot, then request A
+    (prefill at depth) in the warmup round and request B (decode at depth) in the
+    measured round. Launch, readback, residency and teardown are unchanged.
     """
     request_rows: list[dict] = []
     process_pid: int | None = None
@@ -941,6 +946,8 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
         raise RecipeError("server response capture requires the frozen resolved launch")
     if response_capture is not None:
         response_capture.validate_launch(resolved_recipe, frozen_requests)
+    if longctx is not None and (resolved_recipe is None or frozen_requests is None):
+        raise RecipeError("long-context launch requires the frozen resolved launch")
 
     def observe(method: str, *args) -> bool:
         if cpu_observer is not None:
@@ -1060,6 +1067,9 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                         expectations=resolved_recipe.readback_expectations)
 
                 def one(i: int, phase: str) -> tuple:
+                    if longctx is not None:
+                        return longctx.serve(port, i, phase, frozen_requests[i], capture=(
+                            response_capture is not None or cpu_profile_capture is not None))
                     if frozen_requests is None:
                         prompt_id = f"legacy-slot-{i}"
                         body = json.dumps({"prompt": _PROMPTS[i % len(_PROMPTS)],
@@ -1232,6 +1242,8 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                             cpu_observer_error = f"{type(exc).__name__}: {exc}"[:256]
                     if cpu_observer_error is not None:
                         record["cpu_lifecycle_error"] = cpu_observer_error
+                    if longctx is not None and request_rows:
+                        record["longctx"] = longctx.launch_record(request_rows)
                     if evidence is not None:
                         evidence.append(record)
                     exported = {
@@ -1406,7 +1418,8 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
             anchor_resolved_recipe=None, candidate_resolved_recipe=None,
             frozen_requests=None, floor_request_digest: str | None = None,
             runtime_pair=None, instrument=LEGACY_INSTRUMENT, floor_record=None,
-            floor_unit: str | None = None, runtime_evidence: str | None = None) -> dict:
+            floor_unit: str | None = None, runtime_evidence: str | None = None,
+            longctx=None) -> dict:
     """Paired, alternating serving A/B: anchor vs candidate, `pairs` times, each pair a
     fresh server per side (drift control). Effect = median(candidate)/median(anchor) - 1.
     `decisive` is None when uncalibrated (no floor), so the keep gate fails closed.
@@ -1495,6 +1508,8 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
             raise ServingFloorMismatch("uncalibrated matched comparison cannot carry an unused floor")
     if frozen_requests is not None:
         a_options["frozen_requests"] = c_options["frozen_requests"] = frozen_requests
+    if longctx is not None:
+        a_options["longctx"] = c_options["longctx"] = longctx
     belief_inputs = None
     belief_error = None
     try:
@@ -1643,7 +1658,7 @@ def compare(recipe: Recipe, anchor_build: Path, candidate_build: Path, *, pairs:
 
 def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int = 18311,
                     resolved_recipe=None, frozen_requests=None,
-                    instrument=LEGACY_INSTRUMENT, pairs=None) -> dict:
+                    instrument=LEGACY_INSTRUMENT, pairs=None, longctx=None) -> dict:
     """A/A the serving metric `samples` times on ONE build: the run-to-run spread IS the
     noise floor a keep must clear. floor = p95 of |pairwise effect| against the median,
     reported at a few sample counts so a keep at N pairs is judged against the N-pair bar."""
@@ -1651,6 +1666,8 @@ def calibrate_floor(recipe: Recipe, build_dir: Path, *, samples: int, port: int 
     options = _resolved_launch_options(recipe, build_dir, port, resolved_recipe)
     if frozen_requests is not None:
         options["frozen_requests"] = frozen_requests
+    if longctx is not None:
+        options["longctx"] = longctx
     if _instrument(instrument, pairs):
         if type(samples) is not int or not MATCHED_CALIBRATION_PAIRS <= samples <= 256:
             raise RecipeError("matched calibration requires 24–256 independent A/A pairs (two launches each)")

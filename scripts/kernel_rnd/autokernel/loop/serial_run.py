@@ -328,6 +328,13 @@ MEASUREMENT_SCHEDULE_FLAGS = frozenset({"--accumulate-bench-every-keeps",
 LANE_BINDING_FLAGS = frozenset({"--lane-targets", "--lane"})
 
 
+#: The opt-in long-context surface (longctx.py, audit C1/C4, operator 2026-10-04): a keep
+#: gate, an attention-route metric and planner inputs at depth, on its own floor and slot
+#: cache under `<store>/longctx`. Like the lane binding it is keep POLICY, so turning it
+#: on at a batch boundary carries the lineage rather than orphaning it.
+LONGCTX_SURFACE_FLAGS = frozenset({"--longctx-surface"})
+
+
 def resume_binding(argv) -> dict:
     """Prior-child binding before adding a newly selected runtime recipe.
 
@@ -335,10 +342,12 @@ def resume_binding(argv) -> dict:
     the strict runtime path on (or re-declare its arms) at a batch boundary without
     orphaning the source/anchor lineage it continues; so are the pool width and the
     per-lane actor models (`POOL_ACTOR_FLAGS`), the post-keep measurement schedule
-    (`MEASUREMENT_SCHEDULE_FLAGS`) and the lane -> target binding (`LANE_BINDING_FLAGS`)."""
+    (`MEASUREMENT_SCHEDULE_FLAGS`), the lane -> target binding (`LANE_BINDING_FLAGS`) and
+    the long-context surface (`LONGCTX_SURFACE_FLAGS`)."""
     stripped = _without(argv, {"--runtime-recipe-reference", "--runtime-recovery-reference",
                                *RUNTIME_PROTOCOL_FLAGS, *POOL_ACTOR_FLAGS,
-                               *MEASUREMENT_SCHEDULE_FLAGS, *LANE_BINDING_FLAGS})
+                               *MEASUREMENT_SCHEDULE_FLAGS, *LANE_BINDING_FLAGS,
+                               *LONGCTX_SURFACE_FLAGS})
     stripped = [item for item in stripped if item not in RUNTIME_PROTOCOL_SWITCHES]
     return input_binding(stripped)
 

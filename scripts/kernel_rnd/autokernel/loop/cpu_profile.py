@@ -1315,8 +1315,11 @@ def _maybe_prewarm_perf_cache(measurement_record_path):
 
 
 def profile_loop(recipe, prompts, *, store_root, perf_path="/usr/bin/perf",
-                 timeout_s=1800, server_interpreter=None):
-    """Separate observational launch using the loop's actual current binary and requests."""
+                 timeout_s=1800, server_interpreter=None, longctx=None):
+    """Separate observational launch using the loop's actual current binary and requests.
+
+    `longctx` (a `longctx.SurfaceLaunch` in "profile" mode) captures the long-context
+    manifest with its saved slot restored before each round: decode at depth."""
     from . import serving
     capture = None
     with closing(mc.ArtifactStore(Path(store_root) / "cpu-profiles")) as store:
@@ -1327,7 +1330,8 @@ def profile_loop(recipe, prompts, *, store_root, perf_path="/usr/bin/perf",
             frozen = prompts.requests(tuple(x.prompt_id for x in prompts.prompts), recipe.template)
             serving._measure_once(recipe.template, recipe.build_dir, recipe.port,
                 boot_timeout_s=math.ceil(capture._remaining(timeout_s)),
-                resolved_recipe=recipe, frozen_requests=frozen, cpu_profile_capture=capture)
+                resolved_recipe=recipe, frozen_requests=frozen, cpu_profile_capture=capture,
+                **({"longctx": longctx} if longctx is not None else {}))
             phases = _reduce_phases(capture, recipe, frozen, capture.budgets)
             _same(source_identity(), capture.config["source_closure"], "original direct source")
             body = {"schema": LOOP_CAPTURE_SCHEMA, "request": capture.request,
