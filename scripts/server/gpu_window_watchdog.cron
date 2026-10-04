@@ -2,7 +2,12 @@
 # Durable restore path that needs neither AutoKernel nor the session bus:
 # restores at expected_end + 10 min, after AK releases its device flock, after a
 # preempt, and reconciles a stale window after a reboot. Every pass writes
-# /mnt/raid0/llm/tmp/gpu-window/mi210.json.executor-status.json (hub probe).
-# Install (stack owner, after review):  crontab -l | cat - scripts/server/gpu_window_watchdog.cron | crontab -
-* * * * * cd /mnt/raid0/llm/epyc-orchestrator && nice -n 10 python3 -m src.runtime.gpu_window_executor tick >> logs/gpu_window_watchdog.log 2>&1
-@reboot sleep 90 && cd /mnt/raid0/llm/epyc-orchestrator && nice -n 10 python3 -m src.runtime.gpu_window_executor tick >> logs/gpu_window_watchdog.log 2>&1
+# /mnt/raid0/llm/tmp/gpu-window/mi210.json.executor-status.json (hub probe
+# /dashboard/api/gpu_window/health goes green on the first tick).
+#
+# HOST crontab (operator-managed; the epyc-root container has no cron). Lines run the
+# tick INSIDE the container as `node`, the same way the fleet-watch row does. Install
+# on the host, from the orchestrator checkout:
+#   ( crontab -l; grep -v '^#' /mnt/raid0/llm/epyc-orchestrator/scripts/server/gpu_window_watchdog.cron ) | crontab -
+* * * * * docker exec -u node epyc-root bash -c 'cd /mnt/raid0/llm/epyc-orchestrator && nice -n 10 python3 -m src.runtime.gpu_window_executor tick >> logs/gpu_window_watchdog.log 2>&1' # epyc-g1-gpu-window-watchdog
+@reboot sleep 90 && docker exec -u node epyc-root bash -c 'cd /mnt/raid0/llm/epyc-orchestrator && nice -n 10 python3 -m src.runtime.gpu_window_executor tick >> logs/gpu_window_watchdog.log 2>&1' # epyc-g1-gpu-window-watchdog-boot

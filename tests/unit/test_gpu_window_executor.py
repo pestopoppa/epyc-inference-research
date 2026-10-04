@@ -111,7 +111,7 @@ def env(tmp_path, monkeypatch):
 
 
 def _open(env, minutes: int = 45, **kw):
-    args = dict(roles=ROLES, ports=[PORT], components=["architect_critic"],
+    args = dict(roles=ROLES, ports=[PORT], components=["server_8083"],
                 expected_end=_iso(env.clock[0] + minutes * 60), authority=env.auth,
                 schedule_ref="s1", campaign_id="ak")
     args.update(kw)
@@ -132,7 +132,7 @@ def test_open_drains_stops_and_grants(env):
     assert w["holder"] == "autokernel" and w["grant_state"] == "granted"
     assert w["written_by"] == gwe.WRITER and w["window_id"] == lease["window_id"]
     assert w["device_id"] == "mi210_0" and w["parked_ports"] == [PORT]
-    assert lease["state"] == "open" and ("stop", "architect_critic") in env.fake.calls
+    assert lease["state"] == "open" and ("stop", "server_8083") in env.fake.calls
     assert gw.is_parked("architect_critic")
 
 
@@ -220,8 +220,110 @@ def test_authority_needs_owner_with_grant_or_operator_token(env, monkeypatch):
     import hashlib
 
     (env.tmp / "tokens").write_text(hashlib.sha256(b"s3cret").hexdigest() + "\n")
+    (env.tmp / "tokens").chmod(0o600)
+    env.tmp.chmod(0o700)
     assert gwe.authorize(stack_owner_session=None, operator_token="s3cret",
                          compute_grant=None).kind == "operator_token"
+
+
+def _token_dir(env, mode_dir=0o700, mode_file=0o600):
+    import hashlib
+
+    d = env.tmp / "private" / "gpu-window"
+    d.mkdir(parents=True, exist_ok=True)
+    f = d / "operator_tokens.sha256"
+    f.write_text(hashlib.sha256(b"s3cret").hexdigest() + "\n")
+    f.chmod(mode_file)
+    d.chmod(mode_dir)
+    return f
+
+
+def test_default_token_file_is_not_under_world_writable_tmp():
+    assert not gwe.DEFAULT_TOKENS.startswith("/mnt/raid0/llm/tmp/")
+    assert "/private/" in gwe.DEFAULT_TOKENS
+
+
+@pytest.mark.parametrize("mode_dir,mode_file", [(0o700, 0o644), (0o700, 0o660),
+                                                (0o777, 0o600), (0o770, 0o600)])
+def test_operator_token_file_with_loose_permissions_is_refused(env, monkeypatch,
+                                                                mode_dir, mode_file):
+    f = _token_dir(env, mode_dir, mode_file)
+    monkeypatch.setenv(gwe.TOKENS_ENV, str(f))
+    with pytest.raises(gwe.WindowRefused) as exc:
+        gwe.authorize(stack_owner_session=None, operator_token="s3cret", compute_grant=None)
+    assert exc.value.reason == "unsafe_token_file"
+    f.parent.chmod(0o700)
+
+
+def test_operator_token_file_symlink_is_refused(env, monkeypatch):
+    f = _token_dir(env)
+    link = f.with_name("link.sha256")
+    link.symlink_to(f)
+    monkeypatch.setenv(gwe.TOKENS_ENV, str(link))
+    with pytest.raises(gwe.WindowRefused) as exc:
+        gwe.authorize(stack_owner_session=None, operator_token="s3cret", compute_grant=None)
+    assert exc.value.reason == "unsafe_token_file"
+
+
+def test_private_operator_token_file_authorizes(env, monkeypatch):
+    monkeypatch.setenv(gwe.TOKENS_ENV, str(_token_dir(env)))
+    assert gwe.authorize(stack_owner_session=None, operator_token="s3cret",
+                         compute_grant=None).kind == "operator_token"
+    with pytest.raises(gwe.WindowRefused) as exc:
+        gwe.authorize(stack_owner_session=None, operator_token="wrong", compute_grant=None)
+    assert exc.value.reason == "unauthorized"
+
+
+# ── F1: components pair 1:1 with ports, default server_<port> ────────────────
+
+
+def test_open_refuses_components_ports_mismatch(env):
+    with pytest.raises(gwe.WindowRefused) as exc:
+        _open(env, components=ROLES)  # two role names for one port
+    assert exc.value.reason == "bad_request"
+    assert not env.fake.calls and not env.window.exists()
+    with pytest.raises(gwe.WindowRefused):
+        _open(env, ports=[8083, 8083], components=["server_8083", "server_8083"])
+
+
+def test_cli_open_defaults_components_to_server_port(env, monkeypatch, capsys):
+    seen = {}
+
+    def fake_open(self, **kw):
+        seen.update(kw)
+        return {"state": "open"}
+
+    monkeypatch.setattr(gwe.Executor, "open", fake_open)
+    monkeypatch.setattr(gwe, "authorize", lambda **kw: env.auth)
+    rc = gwe.main(["--file", str(env.window), "open", "--roles", ",".join(ROLES),
+                   "--ports", "8083,8085", "--expected-end", "+30m",
+                   "--schedule-ref", "s1", "--campaign-id", "ak"])
+    assert rc == 0
+    assert seen["components"] == ["server_8083", "server_8085"]
+    assert seen["ports"] == [8083, 8085]
+
+
+def test_cli_open_mismatch_exits_refused(env, monkeypatch, capsys):
+    monkeypatch.setattr(gwe, "live_ops", env.fake.ops)
+    monkeypatch.setattr(gwe, "authorize", lambda **kw: env.auth)
+    rc = gwe.main(["--file", str(env.window), "open", "--roles", ",".join(ROLES),
+                   "--ports", "8083", "--components", "architect_critic,coder_escalation",
+                   "--expected-end", "+30m", "--schedule-ref", "s1", "--campaign-id", "ak"])
+    assert rc == 3 and not env.fake.calls
+    assert "bad_request" in capsys.readouterr().err
+
+
+def test_close_reloads_only_the_failing_ports_server(env):
+    _open(env, ports=[8085, 8083], components=["server_8085", "server_8083"])
+    lease = env.ex._lease()
+    assert lease["ports"] == [8083, 8085]
+    assert lease["components"] == ["server_8083", "server_8085"]  # pairs kept after sort
+    failing = {8085: "down"}
+    assert gwe.Executor._components_for(failing, lease["ports"], lease["components"]) \
+        == ["server_8085"]
+    # An unpaired legacy lease reloads only the failing port's own server.
+    assert gwe.Executor._components_for(failing, [8083, 8085], ROLES + ["x"]) \
+        == ["server_8085"]
 
 
 # ── close / serving proof ────────────────────────────────────────────────────
@@ -233,7 +335,7 @@ def test_close_reloads_proves_then_writes_production(env):
     assert out["outcome"] == "restored"
     w = _window(env)
     assert w["holder"] == "production" and w["written_by"] == gwe.WRITER
-    assert ("reload", "architect_critic") in env.fake.calls
+    assert ("reload", "server_8083") in env.fake.calls
     assert not gw.is_parked("architect_critic")
 
 
@@ -338,7 +440,9 @@ def test_watchdog_restores_a_manual_park_too(env):
     env.fake.up = False
     env.clock[0] += 600 + gwe.RESTORE_GRACE_S
     assert env.ex.tick()["holder"] == "production"
-    assert ("reload", "architect_critic") in env.fake.calls
+    # F1: a manual park reloads the port's own server, never the role names.
+    reloads = [c for c in env.fake.calls if c[0] == "reload"]
+    assert reloads == [("reload", "server_8083")]
 
 
 def test_tick_on_production_is_a_noop(env):

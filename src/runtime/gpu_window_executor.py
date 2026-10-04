@@ -39,7 +39,8 @@ manual ``gpu_window restore`` is ``close`` (serving proof included).
 
 Env: ``ORCHESTRATOR_GPU_WINDOW_FILE`` (window), ``ORCHESTRATOR_GPU_WINDOW_SCHEDULE``
 (schedule), ``ORCHESTRATOR_STACK_CHANGE_PENDING_FILE`` (marker),
-``ORCHESTRATOR_GPU_WINDOW_OPERATOR_TOKENS`` (sha256 per line, operator-written),
+``ORCHESTRATOR_GPU_WINDOW_OPERATOR_TOKENS`` (sha256 per line, operator-written; the
+file must be 0600 in a 0700 dir, both owned by the executor's uid, or it is refused),
 ``ORCHESTRATOR_STACK_OWNER_SESSION`` (default ``workspace-ec``),
 ``ORCHESTRATOR_TMP_DIR`` (device flock root).
 """
@@ -52,6 +53,7 @@ import hashlib
 import json
 import logging
 import os
+import stat
 import subprocess
 import sys
 import time
@@ -84,9 +86,16 @@ PENDING_ENV = "ORCHESTRATOR_STACK_CHANGE_PENDING_FILE"
 TOKENS_ENV = "ORCHESTRATOR_GPU_WINDOW_OPERATOR_TOKENS"
 OWNER_ENV = "ORCHESTRATOR_STACK_OWNER_SESSION"
 DEFAULT_STACK_OWNER = "workspace-ec"
-DEFAULT_TOKENS = "/mnt/raid0/llm/tmp/gpu-window/operator_tokens.sha256"
+# F3: never under the world-writable /mnt/raid0/llm/tmp — a private 0700 dir, file 0600,
+# both owned by the executor's uid (checked on every read, see _read_private_tokens).
+DEFAULT_TOKENS = "/mnt/raid0/llm/private/gpu-window/operator_tokens.sha256"
 ORCH_ROOT = Path(__file__).resolve().parents[2]
 PROOF_PROMPT = "The capital of France is"
+
+
+def default_components(ports: Iterable[int]) -> list[str]:
+    """The stack component that owns each port: ``server_<port>`` (stack state key)."""
+    return [f"server_{int(p)}" for p in ports]
 
 
 class WindowRefused(RuntimeError):
@@ -320,16 +329,42 @@ class Authority:
                 "compute_grant": self.compute_grant}
 
 
+def _read_private_tokens(path: Path) -> set[str]:
+    """Read the operator token digests, refusing any file another user could have written.
+
+    Fail-closed: a missing, symlinked, foreign-owned, group/other-accessible file, or one
+    whose directory is group/other-writable, yields no tokens (F3).
+    """
+    try:
+        dir_info = os.stat(path.parent)
+        if dir_info.st_uid != os.getuid() or dir_info.st_mode & 0o022:
+            raise WindowRefused("unsafe_token_file",
+                                f"{path.parent} must be owned by uid {os.getuid()} and 0700")
+        fd = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except FileNotFoundError:
+        return set()
+    except OSError as exc:
+        raise WindowRefused("unsafe_token_file", f"{path}: {exc}") from exc
+    try:
+        info = os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid()
+                or stat.S_IMODE(info.st_mode) & 0o077):
+            raise WindowRefused("unsafe_token_file",
+                                f"{path} must be a regular 0600 file owned by uid {os.getuid()}")
+        with os.fdopen(fd, "r", closefd=False) as fh:
+            text = fh.read()
+    finally:
+        os.close(fd)
+    return {ln.strip().lower() for ln in text.splitlines()
+            if ln.strip() and not ln.startswith("#")}
+
+
 def authorize(*, stack_owner_session: str | None, operator_token: str | None,
               compute_grant: str | None) -> Authority:
     if operator_token:
         digest = hashlib.sha256(operator_token.strip().encode()).hexdigest()
         tokens_file = Path(os.environ.get(TOKENS_ENV) or DEFAULT_TOKENS)
-        try:
-            allowed = {ln.strip().lower() for ln in tokens_file.read_text().splitlines()
-                       if ln.strip() and not ln.startswith("#")}
-        except OSError:
-            allowed = set()
+        allowed = _read_private_tokens(tokens_file)
         if digest not in allowed:
             raise WindowRefused("unauthorized", "operator token not in the operator token file")
         return Authority("operator_token", f"sha256:{digest[:12]}", compute_grant)
@@ -571,6 +606,17 @@ class Executor:
                                 f"{end - now:.0f}s > {MAX_WINDOW_S}s; longer needs the operator")
         if not ports or not components:
             raise WindowRefused("bad_request", "open needs --ports and --components")
+        if len(set(ports)) != len(ports):
+            raise WindowRefused("bad_request", f"duplicate port in {ports}")
+        if len(components) != len(ports):
+            # F1: components pair 1:1 with ports (stop/reload a port's own server); a
+            # mismatch would make close reload every component, not the failing one.
+            raise WindowRefused("bad_request",
+                                f"{len(components)} components for {len(ports)} ports; "
+                                "pass one stack component per port (default server_<port>)")
+        pairs = sorted(zip(ports, components))
+        ports = [p for p, _ in pairs]
+        components = [c for _, c in pairs]
         with LeaseLock(self.window):
             pending = pending_stack_change()
             if pending is not None:
@@ -590,7 +636,7 @@ class Executor:
                 "schema": LEASE_SCHEMA, "window_id": window_id, "state": "draining",
                 "boot_id": boot_id(), "opened_at": _iso(now), "expected_end": _iso(end),
                 "restore_by": _iso(end + RESTORE_GRACE_S), "roles": sorted(set(roles)),
-                "ports": sorted(set(ports)), "components": list(components),
+                "ports": list(ports), "components": list(components),
                 "authority": authority.record(), "schedule_ref": schedule_ref,
                 "schedule_entry": entry, "campaign_id": campaign_id,
                 "ak_seen_holding": False, "reload_attempts": 0, "history": [],
@@ -647,7 +693,7 @@ class Executor:
                          window_id=current.get("window_id")
                          or f"manual-{current.get('since') or _iso(self.ops.now())}",
                          ports=list(current.get("parked_ports") or []),
-                         components=list(current.get("parked_roles") or []),
+                         components=default_components(current.get("parked_ports") or []),
                          reload_attempts=0, history=[])
         history = lease.setdefault("history", [])
         if self.ops.device_held(DEVICE_ID):
@@ -697,7 +743,9 @@ class Executor:
                         components: list[str]) -> list[str]:
         if len(components) == len(ports):
             return [c for c, p in zip(components, ports) if p in failing]
-        return list(components)
+        # Unpaired (legacy lease): reload only the failing ports' own servers, never
+        # every component — that was up to two needless 27B restarts (F1).
+        return default_components([p for p in ports if p in failing])
 
     # -- watchdog -----------------------------------------------------------
 
@@ -815,7 +863,9 @@ def main(argv: list[str] | None = None) -> int:
     p_open = sub.add_parser("open", help="drain, stop, grant (stack owner / operator token)")
     p_open.add_argument("--roles", required=True, help="comma-separated parked roles")
     p_open.add_argument("--ports", required=True, help="comma-separated parked ports")
-    p_open.add_argument("--components", help="stack components to stop/reload (default roles)")
+    p_open.add_argument("--components",
+                        help="stack components to stop/reload, one per port in --ports "
+                             "order (default server_<port>)")
     p_open.add_argument("--expected-end", required=True, help="+45m / ISO; at most +60m")
     p_open.add_argument("--schedule-ref", required=True)
     p_open.add_argument("--campaign-id", required=True)
@@ -863,7 +913,8 @@ def main(argv: list[str] | None = None) -> int:
             ports = [int(p) for p in gw._split_csv([args.ports])]
             out = executor.open(
                 roles=roles, ports=ports,
-                components=gw._split_csv([args.components]) if args.components else roles,
+                components=(gw._split_csv([args.components]) if args.components
+                            else default_components(ports)),
                 expected_end=gw.parse_expected_end(args.expected_end), authority=authority,
                 schedule_ref=args.schedule_ref, campaign_id=args.campaign_id)
         elif args.cmd == "close":
