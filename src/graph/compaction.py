@@ -255,9 +255,10 @@ async def _maybe_compact_context(ctx: Any, *, force: bool = False) -> None:
         # its input is capped to the worker's per-request window.
         index = None
         if _get_features().session_compaction_llm_index is True:
-            index_prompt = _resolve_compaction_prompt()
-            index_input = _cap_index_input(ctx, to_externalize, len(index_prompt))
-            full_index_prompt = f"{index_prompt}\n\n---\n\n{index_input}"
+            index_head = f"{_resolve_compaction_prompt()}\n\n---\n\n"
+            # The cap bounds the WHOLE call input: prompt + separator + context.
+            index_input = _cap_index_input(ctx, to_externalize, len(index_head))
+            full_index_prompt = f"{index_head}{index_input}"
             try:
                 if _use_inline_calls_in_tests():
                     index = ctx.deps.primitives.llm_call(

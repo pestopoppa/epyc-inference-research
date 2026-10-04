@@ -406,7 +406,7 @@ def lane(monkeypatch):
     monkeypatch.setattr(inf, "_note_prefill_budget",
                         lambda allowance, timeout_s, **kw: notes.append((allowance, timeout_s, kw)))
 
-    def _infer(request):
+    def _infer(role_config, request):   # backend.infer(role_config, request)
         seen["timeout"] = request.timeout
         return InferenceResult(role="coder", output="ok", tokens_generated=1,
                                generation_speed=1.0, elapsed_time=0.1, success=True)
