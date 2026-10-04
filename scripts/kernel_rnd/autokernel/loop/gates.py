@@ -13,6 +13,7 @@ returned nothing and the planner re-derived rejected work blind.
 """
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 import hashlib
@@ -356,9 +357,47 @@ class CpuSourceRoute:
     #: `_new_helper_refusal`. Bodies stay the only place existing code may change, and
     #: `forbidden_added` still applies to every added line.
     new_helpers: bool = False
-    #: The route's correctness gate is the whole-model output identity check
-    #: (`model_identity`): a placement/loader edit that no op suite exercises.
+    #: The route's correctness gate includes the whole-model output identity check
+    #: (`model_identity`): a placement/loader edit that no op suite exercises, or (with
+    #: a witness as well) a scheduler/model-op edit whose failure only a whole graph shows.
     model_identity: bool = False
+    # ---- 2026-10-04 structural routes (cpu_graph_sched / cpu_model_fused_op /
+    # cpu_graph_optimize; spec: tmp/cpu-structural-seeds-20261004 §R1-R3) ----
+    #: Bodies (by label) whose ONLY admitted change is a pure-insertion APPEND at the
+    #: tail: (label, tail regex | None, entry regex). Every HEAD line between the
+    #: insertion point and the first line matching the tail regex (else the body's last
+    #: line) must be blank/comment, and every added code line must match the entry regex
+    #: -- so existing fields/enumerators/table rows are never removed, reordered or edited.
+    append_bodies: tuple[tuple[str, str | None, str], ...] = ()
+    #: Switch-bearing bodies (by label) whose ONLY admitted change is a NEW `case` block
+    #: inserted at a case boundary, labelled only with enumerators this same patch
+    #: appends (`append_bodies` of `enum ggml_op`), ending in `break;`/`return`, so no
+    #: existing case gains or loses code or a fallthrough.
+    case_bodies: tuple[str, ...] = ()
+    #: Regex for the first line of a NON-static NEW file-scope definition/declaration
+    #: (an exported `ggml_<op>()` constructor, a `ggml_compute_forward_<op>` kernel, a
+    #: `GGML_API` prototype). The defined name must not occur anywhere in HEAD's file.
+    new_definitions: str | None = None
+    #: `new_definitions` are prototypes (headers): no braces in the inserted statement.
+    declarations_only: bool = False
+    #: Whole-line rewrites admitted outside the bodies: (old regex, new regex), each
+    #: removed line and its replacement fully matching one pair (GGML_OP_COUNT asserts,
+    #: the `graph_optimize = NULL` slot).
+    line_rewrites: tuple[tuple[str, str], ...] = ()
+    #: `forbidden_added` does not apply to hunks inside these bodies.
+    forbidden_exempt_bodies: tuple[str, ...] = ()
+    #: (regex, refusal) -- some added line of the patch must match the regex.
+    required_added: tuple[str, str] | None = None
+    #: Whose model the identity gate serves: "own" (this lane's target), "peers" (also
+    #: every peer target of the lane binding, when one is configured) or "shared_peers"
+    #: (peers only when a changed path is outside this lane's exclusive paths).
+    identity_targets: str = "own"
+    #: Serve each frozen request this many times from the candidate (cache_prompt off):
+    #: all repetitions must be byte-identical -- the race detector a scheduler needs.
+    identity_repeats: int = 1
+    #: At least one identity target must serve a model of one of these GGUF
+    #: architectures (a model-specific builder is only judged by its own model).
+    identity_arch: tuple[str, ...] = ()
 
 
 CPU_SOURCE_ROUTES = (
@@ -436,6 +475,63 @@ CPU_SOURCE_ROUTES = (
                        "file-scope static helpers (e.g. a fused kernel called from "
                        "ggml_cpu_try_fuse_ops) and #include <...> lines; existing headers, "
                        "globals, op kernels and every other function unchanged")),
+    # GRAPH SCHEDULING (2026-10-04, structural seeds 3 "co-group independent nodes" and
+    # 4(B) "expert groups"): the cpu_graph_sync bodies PLUS ggml_graph_plan (wdata sizing
+    # for concurrent nodes) and ggml_graph_compute (the one `#pragma omp parallel`), and
+    # field APPENDS to struct ggml_threadpool / struct ggml_compute_state (per-group
+    # chunk counters, group barriers). Tried AFTER cpu_graph_sync on the shared bodies,
+    # so a patch that fits the narrower route keeps its gate. SCHED: per-element
+    # arithmetic is unchanged, but the thread->work mapping moves, so the gate is the
+    # sync oracle + scalar quant suite + fusion reference (witness `cpu_graph_sched`),
+    # PLUS whole-model greedy identity on this lane's target AND every peer target, each
+    # frozen request served 3x from the candidate (a race between two concurrent nodes
+    # is invisible to a per-op suite). `use_ref` must force group size 1 (the reference
+    # arm of every native suite then walks sequentially): an added line must name it.
+    # `#pragma omp` stays forbidden outside ggml_barrier (OpenMP build: a group that
+    # reaches a team-wide barrier another group does not deadlocks).
+    CpuSourceRoute(
+        route="cpu_graph_sched",
+        path="ggml/src/ggml-cpu/ggml-cpu.c",
+        symbols=("ggml_barrier", "ggml_cpu_node_is_solo", "ggml_cpu_try_fuse_ops",
+                 "ggml_graph_compute_thread", "ggml_graph_plan", "ggml_graph_compute",
+                 "ggml_threadpool", "ggml_compute_state"),
+        bodies=(("ggml_threadpool", "struct ggml_threadpool {"),
+                ("ggml_compute_state", "struct ggml_compute_state {"),
+                ("ggml_barrier", "void ggml_barrier(struct ggml_threadpool * tp) {"),
+                ("ggml_cpu_node_is_solo",
+                 "static bool ggml_cpu_node_is_solo(const struct ggml_tensor * node) {"),
+                ("ggml_graph_plan", "struct ggml_cplan ggml_graph_plan("),
+                ("ggml_cpu_try_fuse_ops", "static int ggml_cpu_try_fuse_ops("),
+                ("ggml_graph_compute_thread",
+                 "static thread_ret_t ggml_graph_compute_thread(void * data) {"),
+                ("ggml_graph_compute",
+                 "enum ggml_status ggml_graph_compute(struct ggml_cgraph * cgraph, "
+                 "struct ggml_cplan * cplan) {")),
+        ops=_DS41_SYNC_OPS,
+        new_helpers=True,
+        model_identity=True,
+        identity_targets="peers",
+        identity_repeats=3,
+        append_bodies=(
+            ("ggml_threadpool", None, r"^[^{}#=]*;\s*(//.*)?$"),
+            ("ggml_compute_state", None, r"^[^{}#=]*;\s*(//.*)?$")),
+        forbidden_added=r"#\s*pragma\s+omp",
+        forbidden_exempt_bodies=("ggml_barrier",),
+        required_added=(r"\buse_ref\b",
+                        "a scheduling change must fall back to group size 1 (HEAD's "
+                        "sequential walk) when cplan->use_ref / params->use_ref is set, so "
+                        "the native suites' reference arm is the sequential schedule; no "
+                        "added line names use_ref"),
+        admitted_text=("hunks inside the ggml_barrier / ggml_cpu_node_is_solo / "
+                       "ggml_cpu_try_fuse_ops / ggml_graph_compute_thread / ggml_graph_plan "
+                       "/ ggml_graph_compute bodies, field APPENDS at the tail of struct "
+                       "ggml_threadpool and struct ggml_compute_state (no removal, reorder "
+                       "or edit of an existing field), plus NEW file-scope static helpers "
+                       "and #include <...> lines; the change must honour use_ref (group size "
+                       "1); no `#pragma omp` outside ggml_barrier; op kernels, headers and "
+                       "every other function unchanged. Gate: sync oracle + scalar quant "
+                       "suite + fusion reference, and greedy identity on this lane's target "
+                       "and every peer target with each request served 3x byte-identical")),
     # Float (F32/F16/BF16) GEMM tile PLAN: the type-generic `tinyBLAS::matmul` picks
     # RM*BM = 8- or 16-row y-tiles, so a narrow-M matrix gets fewer jobs than threads.
     # DS41 hc_mixes (F16 [20480, 24], 80 nodes per verify at N=3) yields 24/8 = 3 jobs
@@ -605,8 +701,10 @@ def cpu_source_route(path: str, target_symbol: str) -> CpuSourceRoute | None:
     return routes[0] if routes else None
 
 
-def cpu_route_named(name: str) -> CpuSourceRoute | None:
-    return next((route for route in CPU_SOURCE_ROUTES if route.route == name), None)
+def cpu_route_named(name: str):
+    """The single-file or multi-file route called `name`, if any."""
+    return next((route for route in (*CPU_SOURCE_ROUTES, *CPU_MULTI_FILE_ROUTES)
+                 if route.route == name), None)
 
 
 def admit_cpu_route(path: str, target_symbol: str, source_text: str | None,
@@ -716,10 +814,166 @@ def _cpu_route_bounds(text: str, side: str, route: CpuSourceRoute):
     return tuple(regions), tuple(headers)
 
 
+_HUNK_HEADER = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+
+
+def _parse_hunks(patch_text: str) -> list[tuple[str, str, str, str, list[str], list[str]]]:
+    """[(old_line, old_count, new_line, new_count, removed, added)] of a -U0 patch.
+
+    Counts are the header's text ("" when omitted, i.e. 1); removed/added lines carry no
+    leading -/+."""
+    hunks: list = []
+    current = None
+    for line in patch_text.splitlines():
+        header = _HUNK_HEADER.match(line)
+        if header:
+            current = (*header.groups(""), [], [])
+            hunks.append(current)
+            continue
+        if line.startswith("diff --git "):
+            current = None
+            continue
+        if current is None or line.startswith("\\"):
+            continue
+        if line.startswith("+"):
+            current[5].append(line[1:])
+        elif line.startswith("-"):
+            current[4].append(line[1:])
+    return hunks
+
+
+def _code_lines(lines: list[str]) -> list[str]:
+    """Each line's code text (comments and literals stripped), carrying /* */ state."""
+    out, in_block = [], False
+    for line in lines:
+        code, in_block = _strip_code_line(line, in_block)
+        out.append(code)
+    return out
+
+
+def _placements(pre_lines: list[str], old_line: int, block: list[str]):
+    """Every equivalent anchoring of a pure insertion of `block` after HEAD `old_line`.
+
+    A diff may anchor the same insertion a few lines up or down where the inserted text
+    and its neighbours repeat (a case block ending in `} break;` placed after a case that
+    also ends in `} break;`); a rule admits when ANY equivalent placement satisfies it."""
+    placements = [(old_line, list(block))]
+    at, moved = old_line, list(block)
+    while at > 0 and moved and pre_lines[at - 1] == moved[-1] and len(placements) < 64:
+        at, moved = at - 1, [pre_lines[at - 1]] + moved[:-1]
+        placements.append((at, moved))
+    at, moved = old_line, list(block)
+    while at < len(pre_lines) and moved and pre_lines[at] == moved[0] and len(placements) < 128:
+        at, moved = at + 1, moved[1:] + [pre_lines[at]]
+        placements.append((at, moved))
+    return placements
+
+
+def _first_admitting(rule, pre_lines: list[str], old_line: str, added: list[str], region):
+    """None if `rule(after, lines)` admits some equivalent placement inside `region`."""
+    first_refusal = None
+    for after, lines in _placements(pre_lines, int(old_line), added):
+        if not region[1] - 1 <= after <= region[2]:
+            continue
+        refusal = rule(after, lines)
+        if refusal is None:
+            return None
+        first_refusal = first_refusal or refusal
+    return first_refusal or "no placement of the insertion lies inside the body"
+
+
+def _append_refusal(rule: tuple[str | None, str], region, pre_lines: list[str],
+                    old_line: str, old_count: str, added: list[str]) -> str | None:
+    """None when a hunk is a pure-insertion APPEND at the tail of an append-only body."""
+    if old_count != "0":
+        return ("only a pure-insertion append is admitted here (an existing line is "
+                "changed or removed)")
+    return _first_admitting(lambda after, lines: _append_placement_refusal(
+        rule, region, pre_lines, after, lines), pre_lines, old_line, added, region)
+
+
+def _append_placement_refusal(rule, region, pre_lines: list[str], after: int,
+                              added: list[str]) -> str | None:
+    tail, entry = rule
+    _label, first, last = region
+    stop = last + 1
+    if tail is not None:
+        stop = next((n for n in range(first, last + 1) if re.search(tail, pre_lines[n - 1])),
+                    None)
+        if stop is None:
+            return f"tail marker `{tail}` is not in the body"
+    if after >= stop:
+        return "the insertion is past the body's tail marker"
+    if any(code.strip() for code in _code_lines(pre_lines[after:stop - 1])):
+        return ("not an append at the tail: existing entries follow the insertion point "
+                "(existing entries may not be removed, reordered or edited)")
+    for line, code in zip(added, _code_lines(added)):
+        if code.strip() and not re.match(entry, line):
+            return f"appended line is not an admitted entry ({line.strip()[:80]!r})"
+    return None
+
+
+_CASE_LABEL = re.compile(r"^\s*(?:case\b[^:]*:|default\s*:)")
+
+
+def _case_insert_refusal(region, pre_lines: list[str], old_line: str, old_count: str,
+                         added: list[str], case_labels: frozenset[str]) -> str | None:
+    """None when a hunk inserts only NEW case blocks, at a case boundary, labelled with
+    enumerators this patch appends: no existing case gains code, loses code or falls
+    through differently."""
+    if old_count != "0":
+        return "only a NEW case block may be inserted here (an existing line is changed or removed)"
+    head_codes = _code_lines(pre_lines)
+    return _first_admitting(lambda after, lines: _case_placement_refusal(
+        region, head_codes, after, lines, case_labels), pre_lines, old_line, added, region)
+
+
+def _case_placement_refusal(region, head_codes: list[str], after: int, added: list[str],
+                            case_labels: frozenset[str]) -> str | None:
+    _label, first, last = region
+    following = next((head_codes[n - 1] for n in range(after + 1, last + 2)
+                      if head_codes[n - 1].strip()), "")
+    preceding = next((head_codes[n - 1] for n in range(after, first - 2, -1)
+                      if n >= 1 and head_codes[n - 1].strip()), "")
+    if not _CASE_LABEL.match(following):
+        return "a new case block must be inserted directly before an existing case/default label"
+    if not re.search(r"\bbreak\s*;|\breturn\b[^;]*;|\{\s*$", preceding):
+        return ("the line before the insertion neither ends a case (`break;`/`return`) nor "
+                "opens the switch")
+    codes = [code for code in _code_lines(added) if code.strip()]
+    if not codes or not re.match(r"^\s*case\s+\w+\s*:", codes[0]):
+        return "the inserted text must start with a `case` label"
+    joined = "\n".join(codes)
+    if re.search(r"\bdefault\s*:", joined):
+        return "no `default` label may be added"
+    labels = re.findall(r"\bcase\s+(\w+)\s*:", joined)
+    unknown = sorted(set(labels) - set(case_labels))
+    if unknown:
+        return (f"case label(s) {unknown} are not enumerators this patch appends to enum "
+                "ggml_op (an existing op's dispatch must not change)")
+    if joined.count("{") != joined.count("}"):
+        return "the inserted case block is not brace-balanced"
+    if not re.search(r"\bbreak\s*;|\breturn\b", codes[-1]):
+        return ("the inserted case block must end in `break;` or `return` (no fallthrough "
+                "into the next case)")
+    return None
+
+
+def _line_rewrite_ok(route: CpuSourceRoute, removed: list[str], added: list[str]) -> bool:
+    """A hunk that only rewrites whole lines `route.line_rewrites` admits, one for one."""
+    if not removed or len(removed) != len(added):
+        return False
+    return all(any(re.fullmatch(old, gone.strip()) and re.fullmatch(new, came.strip())
+                   for old, new in route.line_rewrites)
+               for gone, came in zip(removed, added))
+
+
 def _cpu_route_scope_refusal(route: CpuSourceRoute, source_text: str | None,
                              pre_source_text: str | None,
-                             patch_text: str | None) -> str | None:
-    """None when every -U0 hunk lies inside one admitted body on both sides."""
+                             patch_text: str | None, *,
+                             case_labels: frozenset[str] = frozenset()) -> str | None:
+    """None when every -U0 hunk lies inside one admitted body on both sides (or is an
+    admitted new helper/definition or line rewrite), obeying the body's own rule."""
     if not source_text or not pre_source_text or not patch_text:
         return "HEAD source, candidate source or the -U0 patch is empty"
     old = _cpu_route_bounds(pre_source_text, "HEAD", route)
@@ -730,9 +984,11 @@ def _cpu_route_scope_refusal(route: CpuSourceRoute, source_text: str | None,
         return new
     if old[1] != new[1]:
         return "an admitted header (marker through opening brace) differs; only bodies may change"
-    hunks = re.findall(r"(?m)^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@", patch_text)
+    hunks = _parse_hunks(patch_text)
     if not hunks:
         return "the -U0 patch has no hunks"
+    pre_lines = pre_source_text.splitlines()
+    appends = {label: (tail, entry) for label, tail, entry in route.append_bodies}
 
     def within(line: str, count: str, region) -> bool:
         first, size = int(line), int(count) if count else 1
@@ -742,25 +998,53 @@ def _cpu_route_scope_refusal(route: CpuSourceRoute, source_text: str | None,
             return region[1] - 1 <= first <= region[2]
         return region[1] <= first and first + max(size, 1) - 1 <= region[2]
 
-    for old_line, old_count, new_line, new_count in hunks:
-        if not any(within(old_line, old_count, old[0][i]) and
-                   within(new_line, new_count, new[0][i]) for i in range(len(old[0]))):
-            if route.new_helpers and old_count == "0":
-                helper = _new_helper_refusal(pre_source_text, source_text, int(old_line),
-                                             int(new_line), int(new_count or 1))
-                if helper is None:
-                    continue
-                return (f"hunk @@ -{old_line},0 +{new_line},{new_count or 1} @@ lies outside "
-                        f"every admitted body and is not a new file-scope helper: {helper}")
-            admitted = ", ".join(f"{label} {first}-{last}" for label, first, last in old[0])
-            return (f"hunk @@ -{old_line},{old_count or 1} +{new_line},{new_count or 1} @@ "
-                    f"lies outside every admitted body (HEAD lines: {admitted})")
+    labels: list[str | None] = []
+    for old_line, old_count, new_line, new_count, removed, added in hunks:
+        where = f"@@ -{old_line},{old_count or 1} +{new_line},{new_count or 1} @@"
+        index = next((i for i in range(len(old[0]))
+                      if within(old_line, old_count, old[0][i]) and
+                      within(new_line, new_count, new[0][i])), None)
+        if index is not None:
+            region = old[0][index]
+            label = region[0]
+            refusal = (_append_refusal(appends[label], region, pre_lines, old_line,
+                                       old_count, added) if label in appends else
+                       _case_insert_refusal(region, pre_lines, old_line, old_count, added,
+                                            case_labels) if label in route.case_bodies else
+                       None)
+            if refusal is not None:
+                return f"hunk {where} in {label}: {refusal}"
+            labels.append(label)
+            continue
+        if (route.new_helpers or route.new_definitions) and old_count == "0":
+            helper = _new_helper_refusal(pre_source_text, source_text, int(old_line),
+                                         int(new_line), int(new_count or 1), route)
+            if helper is None:
+                labels.append(None)
+                continue
+            what = ("a new file-scope helper" if route.new_helpers and not route.new_definitions
+                    else "an admitted new file-scope helper/definition")
+            return (f"hunk @@ -{old_line},0 +{new_line},{new_count or 1} @@ lies outside "
+                    f"every admitted body and is not {what}: {helper}")
+        if route.line_rewrites and _line_rewrite_ok(route, removed, added):
+            labels.append(None)
+            continue
+        admitted = ", ".join(f"{label} {first}-{last}" for label, first, last in old[0])
+        return (f"hunk {where} lies outside every admitted body (HEAD lines: "
+                f"{admitted or 'none'})")
     if route.forbidden_added is not None:
         pattern = re.compile(route.forbidden_added)
-        for line in patch_text.splitlines():
-            if line.startswith("+") and not line.startswith("+++") and pattern.search(line):
-                return (f"an added line matches the forbidden pattern `{route.forbidden_added}` "
-                        f"({line[1:].strip()[:120]!r})")
+        for hunk, label in zip(hunks, labels):
+            if label is not None and label in route.forbidden_exempt_bodies:
+                continue
+            for line in hunk[5]:
+                if pattern.search("+" + line):
+                    return (f"an added line matches the forbidden pattern "
+                            f"`{route.forbidden_added}` ({line.strip()[:120]!r})")
+    if route.required_added is not None:
+        regex, why = route.required_added
+        if not any(re.search(regex, code) for hunk in hunks for code in _code_lines(hunk[5])):
+            return why
     return None
 
 
@@ -769,19 +1053,22 @@ _HELPER_START = re.compile(
     r"\[\[[\w:, ]+\]\]\s*static\b)")
 _HELPER_INCLUDE = re.compile(r"^#\s*include\s*<[\w./+-]+>\s*$")
 _HELPER_CONDITIONAL = re.compile(r"^#\s*(if|ifdef|ifndef|elif|else|endif)\b")
+_EXTERN_C_OPEN = re.compile(r'^\s*extern\s+"C"\s*\{')
 
 
 def _new_helper_refusal(pre_text: str, post_text: str, old_line: int, new_line: int,
-                        count: int) -> str | None:
+                        count: int, route: CpuSourceRoute | None = None) -> str | None:
     """None when a pure-insertion hunk adds only NEW file-scope static helpers.
 
     The insertion point must be at file scope in HEAD (brace depth 0 after HEAD line
-    `old_line`, outside any comment). Every top-level statement of the inserted text
-    must be an `#include <...>` line or start with `static` (functions, constants,
-    tables), the text must be brace-balanced at file scope, and nothing else may
-    appear: no `#define`/`#undef`/`#if`/`#pragma` (a macro placed above existing code
-    would change that code without touching it), no non-static global or definition of
-    an existing symbol (those would change ABI or shadow HEAD code).
+    `old_line`, outside any comment; an enclosing `extern "C" {` counts as file scope).
+    Every top-level statement of the inserted text must be an `#include <...>` line or
+    start with `static` (functions, constants, tables) -- or, where the route names
+    `new_definitions`, be a NON-static definition/prototype of a name HEAD's file never
+    mentions --, the text must be brace-balanced at file scope, and nothing else may
+    appear: no `#define`/`#undef`/`#pragma` (a macro placed above existing code would
+    change that code without touching it), no non-static global or definition of an
+    existing symbol (those would change ABI or shadow HEAD code).
 
     A diff may anchor the same insertion a few lines up or down where the inserted text
     and its neighbours repeat (a helper ending in `}` placed after a function that also
@@ -790,32 +1077,34 @@ def _new_helper_refusal(pre_text: str, post_text: str, old_line: int, new_line: 
     block = post_lines[new_line - 1:new_line - 1 + count]
     if len(block) != count:
         return "inserted lines are not in the candidate"
-    placements = [(old_line, block)]
-    at, moved = old_line, list(block)
-    while at > 0 and moved and pre_lines[at - 1] == moved[-1] and len(placements) < 64:
-        at, moved = at - 1, [pre_lines[at - 1]] + moved[:-1]
-        placements.append((at, moved))
-    at, moved = old_line, list(block)
-    while at < len(pre_lines) and moved and pre_lines[at] == moved[0] and len(placements) < 128:
-        at, moved = at + 1, moved[1:] + [pre_lines[at]]
-        placements.append((at, moved))
     first_refusal = None
-    for at, lines in placements:
-        refusal = _helper_block_refusal(pre_lines, at, lines)
+    for at, lines in _placements(pre_lines, old_line, block):
+        refusal = _helper_block_refusal(pre_lines, at, lines, route, pre_text)
         if refusal is None:
             return None
         first_refusal = first_refusal or refusal
     return first_refusal
 
 
-def _helper_block_refusal(pre_lines: list[str], after: int, added: list[str]) -> str | None:
-    depth, in_block = 0, False
+def _helper_block_refusal(pre_lines: list[str], after: int, added: list[str],
+                          route: CpuSourceRoute | None = None,
+                          pre_text: str = "") -> str | None:
+    static_ok = route is None or route.new_helpers
+    definitions = re.compile(route.new_definitions) if route and route.new_definitions else None
+    stack, in_block = [], False
     for line in pre_lines[:after]:
         code, in_block = _strip_code_line(line, in_block)
-        depth += code.count("{") - code.count("}")
-    if depth != 0 or in_block:
-        return f"HEAD line {after} is not at file scope (depth {depth})"
+        extern_c = bool(_EXTERN_C_OPEN.match(line))
+        for ch in code:
+            if ch == "{":
+                stack.append(extern_c)
+                extern_c = False
+            elif ch == "}" and stack:
+                stack.pop()
+    if in_block or not all(stack):
+        return f"HEAD line {after} is not at file scope (depth {len(stack)})"
     depth, in_block, in_statement, conditional = 0, False, False, 0
+    prototype = False
     for line in added:
         code, in_block = _strip_code_line(line, in_block)
         text = code.strip()
@@ -830,16 +1119,31 @@ def _helper_block_refusal(pre_lines: list[str], after: int, added: list[str]) ->
             continue
         if depth == 0 and not in_statement and text:
             if text.startswith("#"):
-                if not _HELPER_INCLUDE.match(text):
+                if not (static_ok and _HELPER_INCLUDE.match(text)):
                     return (f"only `#include <...>` and balanced #if/#endif lines may be "
                             f"added at file scope ({text[:80]!r})")
                 continue
-            if not _HELPER_START.match(text):
+            if static_ok and _HELPER_START.match(text):
+                prototype = False
+            elif definitions is not None and definitions.match(text):
+                name = re.search(r"\b([A-Za-z_]\w*)\s*\(", text)
+                if name is None:
+                    return f"cannot name the new definition ({text[:80]!r})"
+                if re.search(rf"\b{re.escape(name.group(1))}\b", pre_text):
+                    return (f"`{name.group(1)}` already occurs in HEAD's file; only NEW "
+                            "names may be defined or declared")
+                prototype = bool(route.declarations_only)
+            elif definitions is not None and not static_ok:
+                return (f"a file-scope statement here must match `{route.new_definitions}` "
+                        f"({text[:80]!r})")
+            else:
                 return ("a file-scope statement must start with `static` (a new helper, "
                         f"constant or table) ({text[:80]!r})")
             in_statement = True
         elif text.startswith("#"):
             return f"preprocessor line inside a new helper ({text[:80]!r})"
+        if prototype and ("{" in code or "}" in code):
+            return f"only prototypes may be added to this header ({text[:80]!r})"
         depth += code.count("{") - code.count("}")
         if depth < 0:
             return "inserted text closes a scope it did not open"
@@ -852,14 +1156,256 @@ def _helper_block_refusal(pre_lines: list[str], after: int, added: list[str]) ->
     return None
 
 
+# ---------------------------------------------------------------- multi-file routes
+#
+# 2026-10-04 (structural seeds 1 and 6: model-specific fused ops and load-time weight
+# packing; R3: the plan-time graph_optimize hook). A model-level mutation spans files
+# no single-file route can name: the op enum, its constructor and name tables, the CPU
+# kernel and its dispatch, the model's builders. Each file keeps a body-scoped
+# `CpuSourceRoute` component; the route admits a patch only when every changed path is
+# one of its components and every component admits its own hunks.
+
+@dataclass(frozen=True)
+class CpuMultiFileRoute:
+    route: str
+    symbols: tuple[str, ...]
+    files: tuple[CpuSourceRoute, ...]
+    ops: tuple[str, ...]
+    admitted_text: str = ""
+    #: Paths the patch must change (the model-specific file a model route exists for).
+    required_paths: tuple[str, ...] = ()
+    #: Paths named with the reason they are refused (a shared builder).
+    refused_paths: tuple[tuple[str, str], ...] = ()
+    #: The header whose appended `GGML_OP_*` enumerators may label new dispatch cases.
+    enum_source: str | None = None
+    #: (regex, refusal) over the added code of every file.
+    required_added: tuple[str, str] | None = None
+    model_identity: bool = True
+    identity_targets: str = "own"
+    identity_repeats: int = 1
+    identity_arch: tuple[str, ...] = ()
+
+    @property
+    def path(self) -> str:
+        """The route's primary file (the witness checks it exists in the candidate)."""
+        return self.files[0].path
+
+    @property
+    def paths(self) -> tuple[str, ...]:
+        return tuple(component.path for component in self.files)
+
+
+_GRAPH_SCHED = next(route for route in CPU_SOURCE_ROUTES if route.route == "cpu_graph_sched")
+_FIELD_ENTRY = r"^[^{}#]*;\s*(//.*)?$"
+_OP_NAME_ENTRY = r'^\s*"[^"\\]*",\s*(//.*)?$'
+_OP_COUNT_ASSERT = (r'static_assert\(GGML_OP_COUNT == \d+, "GGML_OP_COUNT != \d+"\);',
+                    r'static_assert\(GGML_OP_COUNT == (\d+), "GGML_OP_COUNT != \1"\);')
+
+CPU_MULTI_FILE_ROUTES = (
+    # MODEL-SPECIFIC FUSED OPS (R2; structural seed 1 "port DS41's HC_PRE/COMB/POST
+    # fused-op pattern to qwen4exp", seed 6 "pack same-input projections at load").
+    # Operator 2026-10-04: model-specific kernels are acceptable. Template: the DSV4_HC
+    # ops (enum append, ggml_dsv4_hc_*() constructors + name tables, ops.cpp forward,
+    # ggml-cpu.c dispatch/n_tasks cases). Every existing op, field and enumerator is
+    # untouched by construction (appends, new names and new-op cases only), so the gate
+    # is the whole model: greedy identity vs the anchor on a target that serves a
+    # qwen4exp GGUF, plus every peer target when a shared path (ggml/, llama-model.h) is
+    # touched -- the lane binding's cross-target serving A/B then also runs at keep time.
+    CpuMultiFileRoute(
+        route="cpu_model_fused_op",
+        symbols=("load_arch_tensors", "build_hc_mix", "build_hc_combine", "graph",
+                 "build_qkvz", "build_layer_attn_linear", "build_layer_ffn",
+                 "llama_model_qwen4exp", "qwen4exp"),
+        files=(
+            CpuSourceRoute(
+                route="cpu_model_fused_op", path="src/models/qwen4exp.cpp", symbols=(),
+                bodies=(("load_arch_tensors",
+                         "void llama_model_qwen4exp::load_arch_tensors(llama_model_loader & ml) {"),
+                        ("build_hc_mix", "ggml_tensor * llama_model_qwen4exp::graph::build_hc_mix("),
+                        ("build_hc_combine",
+                         "ggml_tensor * llama_model_qwen4exp::graph::build_hc_combine("),
+                        ("graph", "llama_model_qwen4exp::graph::graph("),
+                        ("build_qkvz", "std::pair<ggml_tensor *, ggml_tensor *> "
+                                       "llama_model_qwen4exp::graph::build_qkvz("),
+                        ("build_layer_attn_linear",
+                         "ggml_tensor * llama_model_qwen4exp::graph::build_layer_attn_linear("),
+                        ("build_layer_ffn",
+                         "ggml_tensor * llama_model_qwen4exp::graph::build_layer_ffn(")),
+                ops=(), new_helpers=True),
+            CpuSourceRoute(
+                route="cpu_model_fused_op", path="src/llama-model.h", symbols=(),
+                bodies=(("llama_layer", "struct llama_layer {"),), ops=(),
+                append_bodies=(("llama_layer", None, _FIELD_ENTRY),)),
+            CpuSourceRoute(
+                route="cpu_model_fused_op", path="ggml/include/ggml.h", symbols=(),
+                bodies=(("ggml_op", "    enum ggml_op {"),), ops=(),
+                append_bodies=(("ggml_op", r"^\s*GGML_OP_COUNT\s*,",
+                                r"^\s*GGML_OP_[A-Z0-9_]+\s*,\s*(//.*)?$"),),
+                new_definitions=r"^GGML_API\s+struct\s+ggml_tensor\s*\*\s*ggml_\w+\s*\(",
+                declarations_only=True),
+            CpuSourceRoute(
+                route="cpu_model_fused_op", path="ggml/src/ggml.c", symbols=(),
+                bodies=(("GGML_OP_NAME", "static const char * GGML_OP_NAME[GGML_OP_COUNT] = {"),
+                        ("GGML_OP_SYMBOL",
+                         "static const char * GGML_OP_SYMBOL[GGML_OP_COUNT] = {")),
+                ops=(), new_helpers=True,
+                append_bodies=(("GGML_OP_NAME", None, _OP_NAME_ENTRY),
+                               ("GGML_OP_SYMBOL", None, _OP_NAME_ENTRY)),
+                new_definitions=r"^struct\s+ggml_tensor\s*\*\s*ggml_\w+\s*\(",
+                line_rewrites=(_OP_COUNT_ASSERT,)),
+            CpuSourceRoute(
+                route="cpu_model_fused_op", path="ggml/src/ggml-cpu/ops.h", symbols=(),
+                bodies=(), ops=(),
+                new_definitions=r"^void\s+ggml_compute_forward_\w+\s*\(",
+                declarations_only=True),
+            CpuSourceRoute(
+                route="cpu_model_fused_op", path="ggml/src/ggml-cpu/ops.cpp", symbols=(),
+                bodies=(), ops=(), new_helpers=True,
+                new_definitions=r"^void\s+ggml_compute_forward_\w+\s*\("),
+            CpuSourceRoute(
+                route="cpu_model_fused_op", path="ggml/src/ggml-cpu/ggml-cpu.c", symbols=(),
+                bodies=(("ggml_compute_forward",
+                         "static void ggml_compute_forward(struct ggml_compute_params * params, "
+                         "struct ggml_tensor * tensor) {"),
+                        ("ggml_get_n_tasks",
+                         "static int ggml_get_n_tasks(struct ggml_tensor * node, int n_threads) {"),
+                        ("ggml_graph_plan", "struct ggml_cplan ggml_graph_plan(")),
+                ops=(),
+                case_bodies=("ggml_compute_forward", "ggml_get_n_tasks", "ggml_graph_plan"))),
+        ops=(),
+        required_paths=("src/models/qwen4exp.cpp",),
+        refused_paths=(("src/llama-graph.cpp",
+                        "llama-graph.cpp (build_moe_ffn and every shared builder) serves "
+                        "every model; a model-specific fused op is built in "
+                        "src/models/qwen4exp.cpp"),),
+        enum_source="ggml/include/ggml.h",
+        model_identity=True,
+        identity_targets="shared_peers",
+        identity_arch=("qwen4exp",),
+        admitted_text=(
+            "src/models/qwen4exp.cpp hunks inside load_arch_tensors / build_hc_mix / "
+            "build_hc_combine / graph::graph / build_qkvz / build_layer_attn_linear / "
+            "build_layer_ffn plus NEW static helpers (this file must change); field appends "
+            "at the tail of struct llama_layer (src/llama-model.h); GGML_OP_* appends "
+            "directly before GGML_OP_COUNT and NEW `GGML_API struct ggml_tensor * "
+            "ggml_<op>(...);` prototypes (ggml.h); NEW `struct ggml_tensor * ggml_<op>(` "
+            "constructors, static helpers, GGML_OP_NAME/GGML_OP_SYMBOL tail appends and "
+            "the two GGML_OP_COUNT static_assert lines (ggml.c); NEW "
+            "`ggml_compute_forward_<op>` prototypes (ops.h) and definitions plus static "
+            "helpers (ops.cpp); NEW `case GGML_OP_<appended>:` blocks ending in break; at a "
+            "case boundary of ggml_compute_forward / ggml_get_n_tasks / ggml_graph_plan "
+            "(ggml-cpu.c). Nothing else: no existing op, field, enumerator or function "
+            "changes, and src/llama-graph.cpp (build_moe_ffn) is refused. Gate: greedy "
+            "identity vs the anchor on a qwen4exp target, plus every peer target when a "
+            "shared path is touched")),
+    # PLAN-TIME GRAPH REWRITE HOME (R3, optional alternative for seeds 3/4B): replace the
+    # CPU backend's NULL `graph_optimize` slot with a NEW static hook that annotates
+    # co-group runs once per graph shape (a side table or op_params tail); the walk that
+    # consumes the annotation is the cpu_graph_sched component. Same gate as R1.
+    CpuMultiFileRoute(
+        route="cpu_graph_optimize",
+        symbols=("graph_optimize", "ggml_backend_cpu_graph_optimize"),
+        files=(
+            CpuSourceRoute(
+                route="cpu_graph_optimize", path="ggml/src/ggml-cpu/ggml-cpu.cpp", symbols=(),
+                bodies=(), ops=(), new_helpers=True,
+                line_rewrites=((r"/\* \.graph_optimize\s+= \*/ NULL,",
+                                r"/\* \.graph_optimize\s+= \*/ [A-Za-z_]\w*,"),)),
+            dataclasses.replace(_GRAPH_SCHED, route="cpu_graph_optimize", required_added=None)),
+        ops=_GRAPH_SCHED.ops,
+        required_paths=("ggml/src/ggml-cpu/ggml-cpu.cpp",),
+        required_added=_GRAPH_SCHED.required_added,
+        model_identity=True,
+        identity_targets=_GRAPH_SCHED.identity_targets,
+        identity_repeats=_GRAPH_SCHED.identity_repeats,
+        admitted_text=(
+            "ggml/src/ggml-cpu/ggml-cpu.cpp: NEW static helpers (the hook) and the one "
+            "`/* .graph_optimize = */ NULL,` slot rewritten to name one (this file must "
+            "change); ggml/src/ggml-cpu/ggml-cpu.c: everything cpu_graph_sched admits. "
+            "The change must honour use_ref. Gate: as cpu_graph_sched")),
+)
+CPU_ROUTE_PATHS_ALL = tuple(sorted({*CPU_SOURCE_ROUTE_PATHS,
+                                    *(path for route in CPU_MULTI_FILE_ROUTES
+                                      for path in route.paths),
+                                    *(path for route in CPU_MULTI_FILE_ROUTES
+                                      for path, _why in route.refused_paths)}))
+
+
+def cpu_multi_file_routes(target_symbol: str) -> tuple[CpuMultiFileRoute, ...]:
+    """Every multi-file route the target symbol names, in table order."""
+    names = [target_symbol, *_route_symbol_names(target_symbol)]
+    return tuple(route for route in CPU_MULTI_FILE_ROUTES
+                 if any(name in route.symbols for name in names))
+
+
+def _multi_route_refusal(route: CpuMultiFileRoute, paths, file_texts) -> str | None:
+    components = {component.path: component for component in route.files}
+    refused = dict(route.refused_paths)
+    for path in paths:
+        if path in refused:
+            return f"{path} is refused: {refused[path]}"
+        if path not in components:
+            return f"{path} is not one of this route's files ({', '.join(components)})"
+    missing = [path for path in route.required_paths if path not in paths]
+    if missing:
+        return f"the patch must change {', '.join(missing)}"
+    texts = file_texts or {}
+    labels: set[str] = set()
+    # Files without case bodies first: the enum header's appended enumerators are the
+    # only labels a new dispatch case may carry.
+    for path in sorted(paths, key=lambda p: (bool(components[p].case_bodies), p)):
+        source, pre, patch = texts.get(path, (None, None, None))
+        refusal = _cpu_route_scope_refusal(components[path], source, pre, patch,
+                                           case_labels=frozenset(labels))
+        if refusal is not None:
+            return f"{path}: {refusal}"
+        if path == route.enum_source:
+            labels |= {match for hunk in _parse_hunks(patch)
+                       for line in hunk[5]
+                       for match in re.findall(r"^\s*(GGML_OP_[A-Z0-9_]+)\s*,", line)}
+    if route.required_added is not None:
+        regex, why = route.required_added
+        if not any(re.search(regex, code)
+                   for path in paths
+                   for hunk in _parse_hunks(texts.get(path, (None, None, ""))[2] or "")
+                   for code in _code_lines(hunk[5])):
+            return why
+    return None
+
+
+def admit_cpu_multi_route(paths, target_symbol: str, file_texts
+                          ) -> tuple[CpuMultiFileRoute | None, str | None]:
+    """(multi-file route that admits the patch, None) or (first named route, refusals).
+
+    (None, None) when no multi-file route names the target symbol."""
+    routes = cpu_multi_file_routes(target_symbol)
+    refusals = []
+    for route in routes:
+        refusal = _multi_route_refusal(route, tuple(paths), file_texts)
+        if refusal is None:
+            return route, None
+        refusals.append((route, refusal))
+    if not refusals:
+        return None, None
+    if len(refusals) == 1:
+        return refusals[0][0], refusals[0][1]
+    return refusals[0][0], " | ".join(
+        f"{route.route}: {refusal}. Admitted: {route.admitted_text}"
+        for route, refusal in refusals)
+
+
 def affected_op_scope(paths: tuple[str, ...], *, target_surface: str,
                       target_symbol: str, source_text: str | None = None,
                       patch_text: str | None = None,
-                      pre_source_text: str | None = None) -> tuple[str, ...] | Verdict:
+                      pre_source_text: str | None = None,
+                      file_texts: dict | None = None) -> tuple[str, ...] | Verdict:
     """Resolve known changed-source routes; never inherit MUL_MAT by default.
 
     Paths are read from Git by the owner, not taken from the actor's response.
     Unknown/shared edits must acquire a native op map and reference before timing.
+    `file_texts` maps each changed path to (candidate text, HEAD text, -U0 patch) for
+    the multi-file routes (`CPU_MULTI_FILE_ROUTES`); a single changed file falls back
+    to `source_text`/`pre_source_text`/`patch_text`.
     """
     changed = set(paths)
     if not changed or len(changed) != len(paths) or target_surface not in changed:
@@ -917,6 +1463,22 @@ def affected_op_scope(paths: tuple[str, ...], *, target_surface: str,
                 return Verdict("op_scope", False,
                                f"CPU {route.route} route refused before build (and every "
                                f"other route on this body): {refusal}")
+            return Verdict("op_scope", False,
+                           f"CPU {route.route} route refused before build: {refusal}. "
+                           f"Admitted: {route.admitted_text}")
+    # Multi-file routes (2026-10-04): a model-level mutation (new op + kernel + dispatch +
+    # builder) or the plan-time hook. Named by the target symbol; the target surface must
+    # be one of the route's files.
+    multi = [route for route in cpu_multi_file_routes(target_symbol)
+             if target_surface in route.paths]
+    if multi:
+        if file_texts is None and len(changed) == 1:
+            file_texts = {next(iter(changed)): (source_text, pre_source_text, patch_text)}
+        route, refusal = admit_cpu_multi_route(tuple(sorted(changed)), target_symbol,
+                                               file_texts)
+        if route is not None:
+            if refusal is None:
+                return route.ops
             return Verdict("op_scope", False,
                            f"CPU {route.route} route refused before build: {refusal}. "
                            f"Admitted: {route.admitted_text}")
@@ -984,6 +1546,10 @@ def check_cpu_route_reference(build_dir: Path, source_root: Path, *, resolved_re
     routes = cpu_source_routes(path, target_symbol)
     route = (next((r for r in routes if r.route == route_name), None)
              if route_name is not None else (routes[0] if routes else None))
+    if route is None and route_name is not None:
+        # A multi-file route (2026-10-04) is named by the target symbol, not the path.
+        route = next((r for r in cpu_multi_file_routes(target_symbol)
+                      if r.route == route_name), None)
     if route is None:
         return Verdict("oracle_unavailable", False,
                        "CPU source route has no reviewed independent reference")
@@ -997,16 +1563,65 @@ def check_cpu_route_reference(build_dir: Path, source_root: Path, *, resolved_re
 
 
 def check_model_output_identity(*, anchor_recipe, candidate_recipe, requests,
-                                window=None) -> Verdict:
+                                window=None, repeats: int = 1) -> Verdict:
     """Whole-model gate for a `model_identity` route (`cpu_weight_placement`)."""
     from . import model_identity
 
     result = model_identity.check(anchor_recipe=anchor_recipe,
                                   candidate_recipe=candidate_recipe,
-                                  requests=tuple(requests or ()), window=window)
+                                  requests=tuple(requests or ()), window=window,
+                                  repeats=repeats)
     return Verdict("reference_comparison" if result.status != "unavailable" else
                    "oracle_unavailable", result.status == "pass",
                    result.reason, result.detail)
+
+
+def check_model_identity_targets(targets, *, window=None, repeats: int = 1,
+                                 required_arch: tuple[str, ...] = (),
+                                 architecture=None) -> Verdict:
+    """Whole-model identity on every target of a route (2026-10-04 structural routes).
+
+    `targets` is [(label, anchor recipe, candidate recipe, frozen requests)]: this lane's
+    own target first, then the lane binding's peer targets when the route asks for them
+    (`CpuSourceRoute.identity_targets`). Every target must pass; any `wrong` is a
+    verdict, otherwise any `unavailable` makes the gate unavailable. `required_arch`: at
+    least one target must serve a GGUF of one of these architectures, or the edited
+    model-specific code would never run under the gate (unavailable, not a pass)."""
+    from . import model_identity
+
+    targets = tuple(targets)
+    if not targets:
+        return Verdict("oracle_unavailable", False, "model identity gate has no target")
+    if required_arch:
+        read = architecture or model_identity.model_architecture
+        archs = {label: read(anchor) for label, anchor, _candidate, _requests in targets}
+        if not any(arch in required_arch for arch in archs.values()):
+            return Verdict("oracle_unavailable", False,
+                           f"no identity target serves a {'/'.join(required_arch)} model "
+                           f"(targets: {archs}); the edited model code would never run "
+                           "under the gate -- run this route on a lane bound to that model "
+                           "or with it as a peer")
+    rows, wrong, unavailable = [], [], []
+    for label, anchor, candidate, requests in targets:
+        result = model_identity.check(anchor_recipe=anchor, candidate_recipe=candidate,
+                                      requests=tuple(requests or ()), window=window,
+                                      repeats=repeats)
+        rows.append({"target": label, "status": result.status, "reason": result.reason,
+                     "detail": result.detail[:600]})
+        if result.status == "wrong":
+            wrong.append(f"{label}: {result.reason}")
+        elif result.status != "pass":
+            unavailable.append(f"{label}: {result.reason}")
+    detail = json.dumps(rows)
+    if wrong:
+        return Verdict("reference_comparison", False, "; ".join(wrong), detail)
+    if unavailable:
+        return Verdict("oracle_unavailable", False, "; ".join(unavailable), detail)
+    return Verdict("reference_comparison", True,
+                   f"greedy identity on {len(targets)} target(s) "
+                   f"({', '.join(label for label, *_ in targets)})"
+                   + (f", each request served {repeats}x byte-identical" if repeats > 1
+                      else ""), detail)
 
 
 def op_correctness(build_dir: Path, *, op: str = "MUL_MAT",

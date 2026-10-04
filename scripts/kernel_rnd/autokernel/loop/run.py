@@ -3074,10 +3074,16 @@ def main(argv: list[str] | None = None) -> int:
             # by a widened route only when its target symbol resolves to one.
             route_edit = len(changed) == 1 and changed[0] in route_paths and \
                 gates.cpu_source_route(changed[0], hypothesis.target_symbol) is not None
+            # Multi-file routes (gates.CPU_MULTI_FILE_ROUTES, 2026-10-04): a model-specific
+            # fused op or the plan-time hook, named by the target symbol, whose target
+            # surface is one of the route's files.
+            multi_edit = not route_edit and any(
+                hypothesis.target_surface in r.paths
+                for r in gates.cpu_multi_file_routes(hypothesis.target_symbol))
             if len(changed) == 1 and changed[0] in iqk_paths and not cpu_launch:
                 return False, [gates.Verdict(
                     "op_scope", False, "CPU IQK source route requires a CPU target recipe")]
-            if route_edit and not cpu_launch:
+            if (route_edit or multi_edit) and not cpu_launch:
                 return False, [gates.Verdict(
                     "op_scope", False, "CPU source route requires a CPU target recipe")]
             scope_source = (cpu_ops if changed == ("ggml/src/ggml-cpu/ops.cpp",) else
@@ -3094,10 +3100,21 @@ def main(argv: list[str] | None = None) -> int:
                 patch_text=(archive._git(worker.worktree, "diff", "-U0", "HEAD", "--",
                                          str(scope_source.relative_to(worker.worktree)))
                             if scope_source is not None else None))
+            file_texts = None
+            if multi_edit:
+                def _texts(path):
+                    full = worker.worktree / path
+                    try:
+                        head = archive._git(worker.worktree, "show", "HEAD:" + path)
+                    except Exception:  # noqa: BLE001 -- a path new to HEAD: refused as empty
+                        head = None
+                    return (full.read_text(encoding="utf-8") if full.is_file() else None, head,
+                            archive._git(worker.worktree, "diff", "-U0", "HEAD", "--", path))
+                file_texts = {path: _texts(path) for path in changed}
             scope = gates.affected_op_scope(changed + untracked,
                                              target_surface=hypothesis.target_surface,
                                              target_symbol=hypothesis.target_symbol,
-                                             **scope_texts)
+                                             file_texts=file_texts, **scope_texts)
             if isinstance(scope, gates.Verdict):
                 return False, [scope]
             # Several routes may name one body (2026-10-03): the gate below must be the
@@ -3105,16 +3122,57 @@ def main(argv: list[str] | None = None) -> int:
             admitted_route = (gates.admit_cpu_route(changed[0], hypothesis.target_symbol,
                                                     **scope_texts)[0]
                               if route_edit else None)
-            route_reference = (
-                (lambda arm: gates.check_model_output_identity(
-                    anchor_recipe=_cpu_arm(direct_launch, anchor_build[0]),
-                    candidate_recipe=arm, requests=frozen_requests,
-                    window=cpu_measurement_window))
-                if admitted_route is not None and admitted_route.model_identity else
-                (lambda arm: gates.check_cpu_route_reference(
-                    worker.build_dir, worker.worktree, resolved_recipe=arm,
-                    path=changed[0], target_symbol=hypothesis.target_symbol,
-                    route_name=admitted_route.route if admitted_route is not None else None)))
+            if multi_edit:
+                admitted_route, multi_refusal = gates.admit_cpu_multi_route(
+                    tuple(sorted(changed + untracked)), hypothesis.target_symbol, file_texts)
+                if admitted_route is None or multi_refusal is not None:
+                    # The scope passed under another rule (e.g. ops.cpp GATED_DELTA_NET).
+                    admitted_route, multi_edit = None, False
+
+            def identity_targets(route, arm):
+                """This lane's target, then the lane binding's peers when the route asks."""
+                targets = [(str(args.target_id or "own"), _cpu_arm(direct_launch, anchor_build[0]),
+                            arm, frozen_requests)]
+                if lane_binding is None or route.identity_targets == "own":
+                    return targets
+                if route.identity_targets == "shared_peers":
+                    from . import lane_targets
+                    if not lane_targets.needs_cross_check(changed + untracked,
+                                                          lane_binding.lane.exclusive_paths):
+                        return targets
+                for peer in lane_binding.peers:
+                    peer_launch, peer_requests = lane_peer_serving[peer.entry.name]
+                    targets.append((peer.entry.target_id, _cpu_arm(peer_launch, anchor_build[0]),
+                                    _cpu_arm(peer_launch, worker.build_dir), peer_requests))
+                return targets
+
+            def identity_reference(route, arm):
+                targets = identity_targets(route, arm)
+                if len(targets) == 1 and not route.identity_arch:
+                    return gates.check_model_output_identity(
+                        anchor_recipe=targets[0][1], candidate_recipe=arm,
+                        requests=frozen_requests, window=cpu_measurement_window,
+                        repeats=route.identity_repeats)
+                return gates.check_model_identity_targets(
+                    targets, window=cpu_measurement_window, repeats=route.identity_repeats,
+                    required_arch=route.identity_arch)
+
+            # The admitting route's gate: its witness (unless the whole model is its only
+            # reference) and, for a model_identity route, greedy identity on its targets.
+            route_references = []
+            if route_edit or multi_edit:
+                from . import cpu_route_witness
+                witness = (cpu_route_witness.WITNESSES.get(admitted_route.route)
+                           if admitted_route is not None else None)
+                if witness is None or witness.reference != "model_identity":
+                    route_references.append(lambda arm: gates.check_cpu_route_reference(
+                        worker.build_dir, worker.worktree, resolved_recipe=arm,
+                        path=changed[0] if route_edit else hypothesis.target_surface,
+                        target_symbol=hypothesis.target_symbol,
+                        route_name=admitted_route.route if admitted_route is not None else None))
+                if admitted_route is not None and admitted_route.model_identity:
+                    route_references.append(
+                        lambda arm: identity_reference(admitted_route, arm))
             if screen_confirmation is not None:
                 cpu_screen.verify_restored(screen_confirmation, worker, screen_prepared["launch"],
                                            args.store, hypothesis)
@@ -3131,8 +3189,8 @@ def main(argv: list[str] | None = None) -> int:
                     checks.append(lambda: gates.check_cpu_iqk_reference(
                         worker.build_dir, worker.worktree, resolved_recipe=arm,
                         target_symbol=hypothesis.target_symbol))
-                if cpu_launch and route_edit:
-                    checks.append(lambda: route_reference(arm))
+                if cpu_launch and (route_edit or multi_edit):
+                    checks.extend(lambda ref=ref: ref(arm) for ref in route_references)
                 return gates.run_all(*checks)
             # Callables, so a failed build actually short-circuits: an eagerly
             # evaluated op_correctness ran the suite against a stale binary and blamed
@@ -3163,8 +3221,9 @@ def main(argv: list[str] | None = None) -> int:
                     worker.build_dir, worker.worktree,
                     resolved_recipe=_cpu_arm(direct_launch, worker.build_dir),
                     target_symbol=hypothesis.target_symbol))
-            if cpu_launch and route_edit:
-                checks.append(lambda: route_reference(_cpu_arm(direct_launch, worker.build_dir)))
+            if cpu_launch and (route_edit or multi_edit):
+                checks.extend(lambda ref=ref: ref(_cpu_arm(direct_launch, worker.build_dir))
+                              for ref in route_references)
             if not direct_launch:
                 checks.extend((
                     lambda: gates.deterministic(worker.build_dir, args.model),

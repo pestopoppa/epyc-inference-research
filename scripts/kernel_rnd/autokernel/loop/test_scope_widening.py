@@ -10,6 +10,7 @@ from __future__ import annotations
 import difflib
 import json
 import math
+import re
 import struct
 from array import array
 from pathlib import Path
@@ -147,14 +148,16 @@ def test_seed4_vector_sumsq_lands_on_the_numerics_route_and_barrier_does_not():
     path = "ggml/src/ggml-cpu/ops.cpp"
     head = (ANCHOR / path).read_text(encoding="utf-8")
     start = head.index("static void ggml_compute_forward_rms_norm_f32(")
-    line = head.index("ggml_float sum = 0.0;", start)
-    vector = head[:line] + "ggml_float sum = 0.0; ggml_float acc[8] = {0};" + \
-        head[line + len("ggml_float sum = 0.0;"):]
+    # The anchor is the live accumulator: its sum-of-squares line moved from HEAD's
+    # `ggml_float sum = 0.0;` to an eight-double-chain declaration (2026-10 keeps).
+    found = re.compile(r"ggml_float sum = 0\.0;|double sum0 = 0\.0[^;\n]*;").search(head, start)
+    line, decl = found.start(), found.group(0)
+    vector = head[:line] + decl + " ggml_float acc[8] = {0};" + head[line + len(decl):]
     ops, (route, refusal) = _scope(path, "ggml_compute_forward_rms_norm_f32", head, vector)
     assert (route.route, refusal, ops) == ("cpu_norm_numerics", None,
                                            ("RMS_NORM", "RMS_NORM_MUL_ADD"))
-    barrier = head[:line] + "ggml_float sum = 0.0; ggml_barrier(params->threadpool);" + \
-        head[line + len("ggml_float sum = 0.0;"):]
+    barrier = head[:line] + decl + " ggml_barrier(params->threadpool);" + \
+        head[line + len(decl):]
     verdict, (_r, refusal) = _scope(path, "ggml_compute_forward_rms_norm_f32", head, barrier)
     assert not verdict.passed and "cpu_norm_rowsplit" in verdict.reason \
         and "cpu_norm_numerics" in verdict.reason

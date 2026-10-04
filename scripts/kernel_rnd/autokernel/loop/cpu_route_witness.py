@@ -143,6 +143,16 @@ WITNESSES = {
         op=None, case=None, breakpoint=None, symbol_pattern=None, active=None,
         quants=(), ops=(), reference="model_identity"),
 }
+# 2026-10-04 structural routes. Scheduling (R1) and its plan-time home (R3) keep the
+# cpu_graph_sync witness -- the scalar quant suite runs through the candidate's walk and
+# the hc_mixes fusion graph -- and ADD the whole-model identity gate in the loop (both
+# targets, repetitions byte-identical). A model-specific fused op (R2) is new, so no
+# reviewed native case exists for it: the whole model is its reference.
+WITNESSES["cpu_graph_sched"] = WITNESSES["cpu_graph_sync"]
+WITNESSES["cpu_graph_optimize"] = WITNESSES["cpu_graph_sync"]
+WITNESSES["cpu_model_fused_op"] = RouteWitness(
+    op=None, case=None, breakpoint=None, symbol_pattern=None, active=None,
+    quants=(), ops=(), reference="model_identity")
 
 
 def assess_case(witness: RouteWitness, records: list[dict], output: str,

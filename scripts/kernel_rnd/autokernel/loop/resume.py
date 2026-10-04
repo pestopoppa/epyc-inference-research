@@ -791,26 +791,37 @@ def preview_op_scope(repo: Path, anchor_commit: str, patch: bytes, hypothesis: M
     touched, _pre = patch_paths(patch)
     iqk = {"ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp", "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp",
            *gates.CPU_SOURCE_ROUTE_PATHS}
-    if not (len(touched) == 1 and (touched[0] in iqk or touched[0] == "ggml/src/ggml-cpu/ops.cpp")):
+    # Multi-file routes (2026-10-04) need every touched file's texts.
+    multi = len(touched) > 1 and set(touched) <= set(gates.CPU_ROUTE_PATHS_ALL)
+    if not multi and not (len(touched) == 1 and (
+            touched[0] in iqk or touched[0] in gates.CPU_ROUTE_PATHS_ALL
+            or touched[0] == "ggml/src/ggml-cpu/ops.cpp")):
         scope = gates.affected_op_scope(touched, target_surface=hypothesis["target_surface"],
                                         target_symbol=hypothesis["target_symbol"])
     else:
         holder, root = _scratch_tree(Path(repo), anchor_commit, patch, scratch)
         try:
-            name = touched[0]
-            before = (root / name).read_text(encoding="utf-8")
+            befores = {name: ((root / name).read_text(encoding="utf-8")
+                              if (root / name).is_file() else None) for name in touched}
             done = _apply_outside_repo(root, patch)
             if done.returncode != 0:
                 return {"passed": False, "reason": "patch does not apply at the anchor"}
-            after = (root / name).read_text(encoding="utf-8")
-            (root / "pre.cpp").write_text(before, encoding="utf-8")
-            diff = subprocess.run(["git", "diff", "--no-index", "-U0", "pre.cpp", name],
-                                  cwd=root, capture_output=True, timeout=600,
-                                  env=_git_env({"GIT_CEILING_DIRECTORIES": str(root.parent)}))
+            file_texts = {}
+            for index, name in enumerate(touched):
+                before = befores[name]
+                after = ((root / name).read_text(encoding="utf-8")
+                         if (root / name).is_file() else None)
+                pre_name = f"pre-{index}.cpp"
+                (root / pre_name).write_text(before or "", encoding="utf-8")
+                diff = subprocess.run(["git", "diff", "--no-index", "-U0", pre_name, name],
+                                      cwd=root, capture_output=True, timeout=600,
+                                      env=_git_env({"GIT_CEILING_DIRECTORIES": str(root.parent)}))
+                file_texts[name] = (after, before, diff.stdout.decode("utf-8", "replace"))
+            single = file_texts[touched[0]] if len(touched) == 1 else (None, None, None)
             scope = gates.affected_op_scope(
                 touched, target_surface=hypothesis["target_surface"],
-                target_symbol=hypothesis["target_symbol"], source_text=after,
-                pre_source_text=before, patch_text=diff.stdout.decode("utf-8", "replace"))
+                target_symbol=hypothesis["target_symbol"], source_text=single[0],
+                pre_source_text=single[1], patch_text=single[2], file_texts=file_texts)
         finally:
             holder.cleanup()
     if isinstance(scope, gates.Verdict):

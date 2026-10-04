@@ -302,6 +302,81 @@ These routes retire nothing measured. They correct one premise: the "220 GB/s re
 ceiling" is contradicted by the same-boot C0 measurement under the identical launch prefix
 (405–410 GB/s at 48 threads). The inbox brief carries the numbers.
 
+### Structural routes (2026-10-04: CPU structural seeds)
+
+The structural seeds remove O(100–1,000) graph nodes or recover idle threads; removing
+O(10) barriers measured as noise. Three routes admit them. `cpu_graph_sync` is live again
+(the C96 GLU/UNARY selector fault was repaired in `e29dca63`), so ignore any older note
+that calls it unavailable.
+
+- **`cpu_graph_sched`** (seeds 3 and 4B: co-group independent sibling nodes, expert
+  groups): `ggml/src/ggml-cpu/ggml-cpu.c`, target `ggml_graph_plan`, `ggml_graph_compute`,
+  `ggml_threadpool` or `ggml_compute_state`. The `cpu_graph_sync` targets resolve here too:
+  that route is tried first, so a patch that fits it keeps its gate.
+  - **Scope:** the four `cpu_graph_sync` bodies, plus the `ggml_graph_plan` body (size
+    `wdata` for the concurrent pair) and the `ggml_graph_compute` body. Fields may be
+    APPENDED at the tail of `struct ggml_threadpool` and `struct ggml_compute_state`
+    (per-group chunk counters, group barriers). Existing fields may not be removed,
+    reordered or edited. NEW file-scope `static` helpers (a group barrier, a group
+    census) and `#include <...>` lines are admitted.
+  - **Required:** fall back to group size 1, i.e. HEAD's sequential walk, when
+    `cplan->use_ref` (or `params->use_ref`) is set. The reference arm of every native
+    suite then runs the sequential schedule. A patch with no added line naming `use_ref`
+    is refused.
+  - **Refused:** `#pragma omp` anywhere but the `ggml_barrier` body. This is an OpenMP
+    build: one `#pragma omp parallel` team per graph, and `ggml_barrier` is a team-wide
+    `#pragma omp barrier`. A group that reaches a team-wide barrier another group never
+    reaches deadlocks, so a sub-group needs its OWN group-local barrier (the dormant
+    atomic path, parametrised per group) inside the existing team.
+  - **Gate:** the `cpu_graph_sync` oracle (29 native suites, the scalar quant suite, the
+    hc_mixes fusion reference). Then `model_identity` on this lane's target AND on every
+    peer target the lane binding names (both models, when the binding is present). Each
+    frozen request is served 3x by the candidate, prompt cache off, and the repetitions
+    must be byte-identical. That is the race detector: a per-op suite cannot see a race
+    that only two concurrent nodes produce. SCHED keeps every output element's
+    arithmetic and changes only which thread computes it, so the result is BE-order by
+    construction for per-row dot kernels. Name that argument.
+- **`cpu_model_fused_op`** (seeds 1 and 6: Q38FN hyper-connection fused ops, packing
+  same-input projections at load): target a qwen4exp builder, e.g.
+  `llama_model_qwen4exp::graph::build_hc_mix` (also `build_hc_combine`, `graph`,
+  `build_qkvz`, `build_layer_attn_linear`, `build_layer_ffn`, `load_arch_tensors`), with
+  target surface `src/models/qwen4exp.cpp`. This file must change. The operator accepted
+  model-specific kernels (2026-10-04). The template is DS41's
+  `GGML_OP_DSV4_HC_PRE/COMB/POST`. The admitted files:
+  - `src/models/qwen4exp.cpp`: hunks in those builder/loader bodies, plus NEW `static`
+    helpers.
+  - `src/llama-model.h`: field appends at the tail of `struct llama_layer` (a packed
+    tensor).
+  - `ggml/include/ggml.h`: `GGML_OP_*` enumerators appended directly before
+    `GGML_OP_COUNT`, and NEW `GGML_API struct ggml_tensor * ggml_<op>(...);`
+    prototypes.
+  - `ggml/src/ggml.c`: NEW `struct ggml_tensor * ggml_<op>(` constructors, `static`
+    helpers, tail appends to `GGML_OP_NAME`/`GGML_OP_SYMBOL`, and the two
+    `static_assert(GGML_OP_COUNT == N, ...)` lines.
+  - `ggml/src/ggml-cpu/ops.h` / `ops.cpp`: a NEW `ggml_compute_forward_<op>` prototype
+    and definition, plus `static` helpers.
+  - `ggml/src/ggml-cpu/ggml-cpu.c`: NEW `case GGML_OP_<appended>:` blocks in
+    `ggml_compute_forward`, `ggml_get_n_tasks` and `ggml_graph_plan`. Each block is
+    inserted at a case boundary, labelled only with the enumerators this patch appends,
+    and ends in `break;`.
+  - Nothing else changes: no existing op, field, enumerator or function.
+    `src/llama-graph.cpp` (`build_moe_ffn`, every shared builder) is refused. A new
+    name must not already occur in its file.
+  - **Gate:** `model_identity`. Greedy completions must be byte-identical to the anchor
+    on a target that serves a `qwen4exp` GGUF (this lane's own target or a peer). With
+    no such target the gate is unavailable. When a changed path is outside the lane's
+    exclusive paths (anything under `ggml/`, or `src/llama-model.h`), every peer target
+    is also checked, and at keep time the lane binding's cross-target serving A/B runs as
+    usual. A fused op that mirrors each sub-op bit-exactly (the fused decoder's design
+    constraint) is what makes identity achievable. A TOL fusion fails this gate: say
+    which you are proposing.
+- **`cpu_graph_optimize`** (an alternative home for seeds 3/4B): target `graph_optimize`
+  with surface `ggml/src/ggml-cpu/ggml-cpu.cpp`, which must change. Replace the CPU
+  backend's `/* .graph_optimize = */ NULL,` slot with a NEW `static` hook that annotates
+  co-group runs once per graph shape (a side table, or an `op_params` tail). The walk that
+  consumes the annotation may change in `ggml-cpu.c` under every `cpu_graph_sched` rule.
+  The `use_ref` requirement and the gate are those of `cpu_graph_sched`.
+
 ---
 
 ## What the instrument can actually resolve

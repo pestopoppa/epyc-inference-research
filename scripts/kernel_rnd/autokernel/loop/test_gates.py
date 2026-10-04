@@ -848,7 +848,10 @@ class AffectedOpAndIndependentReference(unittest.TestCase):
         self.assertIn("route_edit = len(changed) == 1 and changed[0] in route_paths and \\\n"
                       "                gates.cpu_source_route(changed[0], "
                       "hypothesis.target_symbol) is not None", source)
-        self.assertEqual(source.count("if cpu_launch and route_edit:"), 2)
+        self.assertEqual(source.count("if cpu_launch and (route_edit or multi_edit):"), 2)
+        # A multi-file route (2026-10-04) is named by the target symbol; GDN names none.
+        self.assertEqual(gates.cpu_multi_file_routes("ggml_compute_forward_gated_delta_net_f32"),
+                         ())
         self.assertNotIn("changed[0] in route_paths and not cpu_launch", source)
         self.assertNotIn("and len(changed) == 1 and changed[0] in route_paths:", source)
 
@@ -1004,7 +1007,7 @@ class AffectedOpAndIndependentReference(unittest.TestCase):
         for route in gates.CPU_SOURCE_ROUTES:
             witness = cpu_route_witness.WITNESSES[route.route]
             self.assertTrue(set(witness.ops) >= set(route.ops) or
-                            route.route == "cpu_graph_sync", route.route)
+                            route.route in ("cpu_graph_sync", "cpu_graph_sched"), route.route)
             self.assertTrue(set(witness.quants) <= set(cpu_quant_reference.QUANTS) |
                             set(cpu_quant_reference.FLOAT_TYPES), route.route)
         float_route = cpu_route_witness.WITNESSES["float_tinyblas_plan"]
@@ -1276,7 +1279,7 @@ class ThePooledPathMustAdvanceTheAnchorToo(unittest.TestCase):
     def test_the_pooled_commit_is_actually_wired_in(self):
         """A commit_pooled that nothing calls is the defect it was written to fix."""
         source = (Path(__file__).resolve().parent / "run.py").read_text()
-        drive = source.split("return pool.drive(", 1)[1][:400]
+        drive = source.split("return pool.drive(", 1)[1][:800]
         self.assertIn("commit=commit_pooled", drive)
 
 

@@ -14,6 +14,13 @@ means this instrument cannot judge (`oracle_unavailable`), never that the patch 
 wrong. Only an anchor that reproduces itself while the candidate differs is `wrong`.
 
 This is a gate, not a measurement: nothing here is timed or compared for speed.
+
+REPETITIONS (2026-10-04, `cpu_graph_sched` / `cpu_graph_optimize`): a scheduler that runs
+two graph nodes concurrently can race, and a race that only two concurrent nodes produce
+is invisible to a per-op suite. With `repeats > 1` the candidate serves every selected
+request that many times (prompt cache off in BOTH arms, so every repetition recomputes
+the whole prompt) and all repetitions must be byte-identical. A candidate that disagrees
+with itself is `wrong` only when the anchor, served the same way, agrees with itself.
 """
 from __future__ import annotations
 
@@ -118,14 +125,43 @@ def serve(recipe, requests: Sequence[tuple[str, bytes]], *,
                 server.wait(10)
 
 
+def model_architecture(recipe) -> str | None:
+    """`general.architecture` of the GGUF a recipe serves (None when unreadable)."""
+    model = getattr(getattr(recipe, "model", None), "path", None) or \
+        getattr(getattr(recipe, "template", None), "model", None)
+    if not model:
+        return None
+    try:
+        from ..controller.workload_contract import read_census
+        return read_census(model).architecture
+    except Exception:  # an unreadable model never satisfies an architecture requirement
+        return None
+
+
+def _uncached(requests: Sequence[tuple[str, bytes]]) -> tuple[tuple[str, bytes], ...]:
+    """The requests with the prompt cache off, so a repetition recomputes the prompt."""
+    out = []
+    for prompt_id, body in requests:
+        sampler = json.loads(body)
+        sampler["cache_prompt"] = False
+        out.append((prompt_id, json.dumps(sampler, sort_keys=True).encode()))
+    return tuple(out)
+
+
+def _inconsistent(rows: list, n: int) -> list[int]:
+    """Indices of requests whose repeated completions (rows = n-strided) differ."""
+    return [i for i in range(n) if len({rows[r * n + i][1] for r in range(len(rows) // n)}) > 1]
+
+
 def check(*, anchor_recipe, candidate_recipe, requests: Sequence[tuple[str, bytes]],
           n_requests: int = DEFAULT_REQUESTS,
           window: Callable[[], object] | None = None,
-          serve_fn: Callable[..., list] = serve) -> IdentityResult:
+          serve_fn: Callable[..., list] = serve, repeats: int = 1) -> IdentityResult:
     """Anchor vs candidate greedy completions on the first `n_requests` frozen requests.
 
     `window` is the caller's CPU measurement window (a context-manager factory), so the
-    two model loads never overlap another CPU measurement on this host."""
+    two model loads never overlap another CPU measurement on this host. `repeats > 1`
+    adds the repetition-identity race detector (module docstring)."""
     if not requests:
         return IdentityResult("unavailable", "no frozen requests to serve")
     if anchor_recipe.backend != "cpu" or candidate_recipe.backend != "cpu":
@@ -143,17 +179,41 @@ def check(*, anchor_recipe, candidate_recipe, requests: Sequence[tuple[str, byte
             return IdentityResult("unavailable", "frozen request is not greedy "
                                   "(temperature 0 or top_k 1); identity cannot be required")
     guard = window if window is not None else nullcontext
+    repeats = max(1, int(repeats))
+    if repeats > 1:
+        selected = _uncached(selected)
+    n = len(selected)
     try:
         with guard():
             anchor = serve_fn(anchor_recipe, selected)
-            candidate = serve_fn(candidate_recipe, selected)
+            candidate_all = serve_fn(candidate_recipe, selected * repeats)
     except Exception as exc:  # a launch/request failure is never a correctness verdict
         return IdentityResult("unavailable", f"model identity serving failed: "
                               f"{type(exc).__name__}: {exc}")
+    candidate = candidate_all[:n]
+    racy = _inconsistent(candidate_all, n) if repeats > 1 else []
+    if racy:
+        try:
+            with guard():
+                anchor_all = serve_fn(anchor_recipe, selected * repeats)
+        except Exception as exc:
+            return IdentityResult("unavailable", f"anchor repetition serve failed: "
+                                  f"{type(exc).__name__}: {exc}")
+        if _inconsistent(anchor_all, n) or [row[1] for row in anchor_all[:n]] != \
+                [row[1] for row in anchor]:
+            return IdentityResult("unavailable", "the anchor's own repeated greedy "
+                                  "completions differ; this instrument cannot judge a race",
+                                  json.dumps({"anchor": anchor_all}))
+        return IdentityResult("wrong", f"{len(racy)} of {n} request(s) gave different greedy "
+                              f"completions across {repeats} candidate repetitions while the "
+                              "anchor reproduces itself (a scheduling race)",
+                              json.dumps({"candidate": candidate_all}))
     differing = [(a, c) for a, c in zip(anchor, candidate) if a[1] != c[1]]
     if not differing:
         return IdentityResult("pass", f"{len(selected)} greedy completion(s) byte-identical "
-                              "to the anchor under the campaign launch",
+                              "to the anchor under the campaign launch"
+                              + (f", each reproduced {repeats}x by the candidate"
+                                 if repeats > 1 else ""),
                               json.dumps([row[:2] for row in candidate]))
     try:
         with guard():
@@ -170,4 +230,4 @@ def check(*, anchor_recipe, candidate_recipe, requests: Sequence[tuple[str, byte
                           json.dumps({"anchor": a, "candidate": c}))
 
 
-__all__ = ["IdentityResult", "check", "serve", "DEFAULT_REQUESTS"]
+__all__ = ["IdentityResult", "check", "serve", "model_architecture", "DEFAULT_REQUESTS"]
