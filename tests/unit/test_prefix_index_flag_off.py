@@ -4,8 +4,8 @@ The proof is structural and end to end:
 
 * constructing a ``PrefixIndex`` raises in every test here, so any flag-off path
   that reached the index would fail loudly;
-* the callers do not even compute a prefix key (``None``);
-* the admission record carries exactly the pre-RTG-58 keys;
+* the callers do not even compute a prefix key (``{}`` / ``None``);
+* the admission record and the gate status carry exactly the pre-RTG-58 keys;
 * the wire payload equals what ``LlamaServerBackend._build_payload`` builds for
   the same request (no ``id_slot``, nothing added), the passthrough forwards the
   client's raw bytes, and the serving records mention no prefix index;
@@ -15,6 +15,7 @@ The proof is structural and end to end:
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import httpx
@@ -42,6 +43,17 @@ LEGACY_RECORD_KEYS = {
 }
 # Present when the KVU-15c history credited the call (legacy behaviour).
 LEGACY_HISTORY_KEYS = {"cache_credit_history_age_s", "cache_credit_history_tokens_since"}
+LEGACY_STATUS_KEYS = {
+    "reserved_tokens", "in_flight", "queued", "new_token_ratio", "long_prefill_threshold",
+    "long_prefill_lease_held", "long_prefill_lease_held_here",
+    "long_prefill_lease_cross_process", "queued_long_prefills", "admission_stats",
+}
+LEGACY_STAT_KEYS = {
+    "admitted", "queued_admissions", "queue_wait_s_total", "queue_wait_s_max",
+    "long_prefill_admitted", "long_prefill_waits", "long_prefill_wait_s_total",
+    "short_passed_long", "abandoned", "cache_credited", "cache_credit_fp_history",
+    "cache_credit_slots_text", "cache_credit_unavailable",
+}
 
 
 @pytest.fixture(autouse=True)
@@ -82,10 +94,33 @@ def _occ(url: str) -> PoolOccupancy:
 
 def test_flags_and_callers_compute_nothing():
     from src.api.routes import passthrough as pt
+    from src.api.routes.chat_pipeline import scout_stage
+    from src.llm_primitives.inference import _prefix_index_kwargs
 
     assert not pi.enabled() and not pi.fork_enabled() and not pi.lpm_enabled()
     assert pi.pin_policy() == "off"
+    req = SimpleNamespace(prompt="x" * 5000, chat_payload=None)
+    assert _prefix_index_kwargs(req) == {}
     assert pt.wire_prefix_key("chat/completions", {"messages": [{"role": "user"}]}) is None
+    assert scout_stage._scout_prefix_key([{"role": "user", "content": "hi"}]) == {}
+
+
+def test_admission_record_and_status_are_the_legacy_shape():
+    pool = SharedKVPoolAdmission(occupancy=_occ, cross_process=False, history=SimpleNamespace(
+        lookup=lambda url, ladder: (None, "no_history")))
+    # Even a caller that passes a key cannot switch the index on.
+    a = pool.acquire(URL, 1000, 393216, prefix_key="k" * 9000, timeout_s=0)
+    b = pool.acquire(URL, 1000, 393216, timeout_s=0)
+    assert set(pool.admission_record(a)) == LEGACY_RECORD_KEYS
+    assert set(pool.admission_record(b)) == LEGACY_RECORD_KEYS
+    pool.prefill_done(URL, a)
+    status = pool.get_status()[URL]
+    assert set(status) == LEGACY_STATUS_KEYS
+    assert set(status["admission_stats"]) == LEGACY_STAT_KEYS
+    assert pool._lpm_score == {} and pool._trunk_held == {} and pool._trunk_since == {}
+    pool.release(URL, a)
+    pool.release(URL, b)
+    assert pi.peek_index(URL) is None
 
 
 def test_primitives_lane_payload_is_unchanged(monkeypatch, tmp_path):

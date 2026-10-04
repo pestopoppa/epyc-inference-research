@@ -547,6 +547,7 @@ def gate(call: _Call, state: AppState):
                     url, call.prompt_tokens_est, limit.pool_tokens,
                     max_new_tokens=call.new_tokens, cancel_check=call.cancel.is_set,
                     prompt_text=call.prompt_text, prefix_ladder=call.prefix_ladder,
+                    **({"prefix_key": call.prefix_key} if call.prefix_key else {}),
                 )
             except KVPoolQueueFull as queue_full:
                 raise ContextOverflowError(

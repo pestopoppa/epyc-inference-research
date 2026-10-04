@@ -780,6 +780,7 @@ class PoolGatedTransport:
                 self.url, prompt_tokens, self.limit.pool_tokens,
                 max_new_tokens=int(max_tokens), deadline_s=self.deadline_s,
                 timeout_s=max(0.0, float(timeout_s)), cancel_check=should_stop,
+                **_scout_prefix_key(messages),
             )
         except KVPoolQueueFull as exc:
             raise RuntimeError(f"KV pool admission queue full: {exc}") from exc
@@ -801,6 +802,26 @@ class PoolGatedTransport:
             return result
         finally:
             self.pool.release(self.url, ticket, success=success)
+
+
+def _scout_prefix_key(messages: list[dict[str, str]]) -> dict[str, Any]:
+    """RTG-58 P2: ``{"prefix_key": ...}`` for the pool gate with
+    ORCHESTRATOR_PREFIX_INDEX on, so sibling scouts sharing a trunk are seen as
+    one (trunk-first, LPM); ``{}`` otherwise. Never raises."""
+    try:
+        from src.inference import prefix_index
+
+        if not prefix_index.enabled():
+            return {}
+        from types import SimpleNamespace
+
+        from src.backends import serving_calls
+
+        key = serving_calls._prompt_text_for_fingerprint(
+            SimpleNamespace(chat_payload={"tools": None, "messages": messages}))
+        return {"prefix_key": key} if key else {}
+    except Exception:
+        return {}
 
 
 def resolve_pool_gate(url: str, *, resolver: Any = None, pool: Any = None) -> tuple[Any, Any]:

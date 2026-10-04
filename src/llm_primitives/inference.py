@@ -20,6 +20,19 @@ from .types import LLMResult
 log = logging.getLogger(__name__)
 
 
+def _prefix_index_kwargs(request: Any) -> dict[str, Any]:
+    """``{"prefix_key": ...}`` for the KV pool gate when ORCHESTRATOR_PREFIX_INDEX
+    is on (RTG-58 P2), else ``{}`` so the gate call is unchanged. Never raises."""
+    try:
+        from src.inference import prefix_index
+
+        if prefix_index.enabled():
+            return {"prefix_key": prefix_index.key_text_for_request(request)}
+    except Exception:
+        log.debug("prefix index: key failed", exc_info=True)
+    return {}
+
+
 def _frontdoor_trace_enabled() -> bool:
     raw = os.environ.get("ORCHESTRATOR_FRONTDOOR_TRACE", "").strip().lower()
     return raw in {"1", "true", "yes", "on"}
@@ -1222,6 +1235,8 @@ class InferenceMixin:
                         # fingerprinted exactly as the serving record does, so a
                         # chat payload is covered too.
                         prefix_ladder=serving_calls.prefix_ladder(request),
+                        # RTG-58 P2: the prefix-index key, only with the flag on.
+                        **_prefix_index_kwargs(request),
                     )
                 except KVPoolQueueFull as queue_full:
                     if admitted and admission:

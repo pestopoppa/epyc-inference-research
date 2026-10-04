@@ -254,6 +254,14 @@ class SharedKVPoolAdmission:
         # each admitted ticket's admission decision, until release.
         self._history = history
         self._admission_info: dict[int, dict[str, Any]] = {}
+        # RTG-58 P2 prefix index (ORCHESTRATOR_PREFIX_INDEX, default OFF). These
+        # stay EMPTY with the flag off, which keeps ``_admissible`` on its legacy
+        # path: ticket -> LPM score (reusable prefix tokens), -> passes suffered,
+        # -> held behind an in-flight sibling's trunk prefill (since when).
+        self._lpm_score: dict[int, int] = {}
+        self._lpm_skips: dict[int, int] = {}
+        self._trunk_held: dict[int, bool] = {}
+        self._trunk_since: dict[int, float] = {}
 
     # -- long-prefill rule -----------------------------------------------------
     @staticmethod
@@ -470,6 +478,7 @@ class SharedKVPoolAdmission:
         hand the long-prefill lease on. Harmless for any other ticket."""
         if ticket is None:
             return
+        self._prefix_index_note(url, "prefilled", ticket)
         with self._cond:
             lease = self._prefill_lease.get(url)
             if lease is not None and lease[0] == ticket:
@@ -594,6 +603,7 @@ class SharedKVPoolAdmission:
         max_queued: int | None = None,
         prompt_text: str | None = None,
         prefix_ladder: dict[str, Any] | None = None,
+        prefix_key: str | None = None,
     ) -> int | None:
         """Queue for ``tokens`` (+ ratio-weighted ``max_new_tokens``) of ``url``'s
         pool; return a ticket, or None when the wait ends (deadline, timeout,
@@ -613,6 +623,10 @@ class SharedKVPoolAdmission:
         server shares with the request. ``admission_record(ticket)`` returns the
         decision (verdict, credit, source) for the serving record.
 
+        ``prefix_key`` (RTG-58 P2) is the request's prefix-index key
+        (``prefix_index.key_text_for_request``). It is read only with
+        ``ORCHESTRATOR_PREFIX_INDEX`` on, and callers pass it only then.
+
         ``deadline_s`` is a ``time.perf_counter`` deadline (the primitives clock).
         ``timeout_s`` defaults to ``ORCHESTRATOR_KV_POOL_WAIT_S`` only when there
         is no deadline; with a deadline the deadline alone bounds the wait.
@@ -627,6 +641,13 @@ class SharedKVPoolAdmission:
         if max_queued is None:
             max_queued = _env_int(KV_POOL_MAX_QUEUED_ENV, DEFAULT_KV_POOL_MAX_QUEUED)
         start = time.perf_counter()
+        pidx = None
+        if prefix_key:
+            from src.inference import prefix_index as _prefix_index
+
+            if _prefix_index.enabled():
+                pidx = _prefix_index.get_index(url)
+        pview: dict[str, Any] | None = None
         with self._cond:
             queue = self._queue.setdefault(url, [])
             if max_queued > 0 and len(queue) >= max_queued:
@@ -644,15 +665,31 @@ class SharedKVPoolAdmission:
                 observed = self._observed(url, prompt_text)
                 prefill_tokens, credit = self._credit(url, tokens, prompt_text,
                                                       prefix_ladder, observed)
+                if pidx is not None:
+                    prefill_tokens, credit, pview = self._prefix_index_view(
+                        url, ticket, pidx, prefix_key, tokens, want, prefill_tokens, credit,
+                        first=pview is None)
                 with self._cond:
                     is_long = self.is_long_prefill(prefill_tokens)
-                    self._waiting[ticket] = (want, is_long)
-                    verdict = self._admissible(url, ticket, queue, want, is_long,
-                                               pool_tokens, observed)
+                    want_eff = pview["want"] if pview is not None else want
+                    self._waiting[ticket] = (want_eff, is_long)
+                    if pview is not None:
+                        self._lpm_score[ticket] = int(pview["lpm_score"])
+                        if pview["trunk_hold"]:
+                            self._trunk_held[ticket] = True
+                            self._trunk_since.setdefault(ticket, time.perf_counter())
+                        else:
+                            self._trunk_held.pop(ticket, None)
+                    if pview is not None and pview["trunk_hold"]:
+                        verdict = "trunk"  # an earlier sibling is prefilling our trunk
+                    else:
+                        verdict = self._admissible(url, ticket, queue, want_eff, is_long,
+                                                   pool_tokens, observed)
                     if verdict == "head" and is_long and not self._take_lease(
                             url, ticket, self._lease_expiry(prefill_tokens)):
                         verdict = "lease"  # another worker took it first
-                    if verdict in ("head", "pass"):
+                    if verdict in ("head", "pass", "pass_trunk", "lpm"):
+                        want = want_eff
                         self._inflight.setdefault(url, {})[ticket] = want
                         admitted = True
                         waited = time.perf_counter() - start
@@ -674,7 +711,9 @@ class SharedKVPoolAdmission:
                             stat["cache_credited"] += 1
                         source = credit.get("cache_credit_source")
                         if source:
-                            stat[f"cache_credit_{source}"] += 1
+                            # .get: ``prefix_index`` (RTG-58 P2, flag on) is not a
+                            # pre-seeded counter; the legacy sources are.
+                            stat[f"cache_credit_{source}"] = stat.get(f"cache_credit_{source}", 0) + 1
                         else:
                             stat["cache_credit_unavailable"] += 1
                         self._admission_info[ticket] = dict(
@@ -684,6 +723,9 @@ class SharedKVPoolAdmission:
                             long_prefill_threshold=self.long_prefill_threshold(),
                             queue_wait_ms=round(waited * 1000.0, 3),
                         )
+                        if pidx is not None and pview is not None:
+                            self._admission_info[ticket]["prefix_index"] = self._prefix_index_admit(
+                                pidx, ticket, prefix_key, prefill_tokens, pview, verdict)
                         if logged:
                             logger.info(
                                 "KV pool admission: %s request of %d tokens admitted after %.1fs%s",
@@ -725,6 +767,13 @@ class SharedKVPoolAdmission:
                 except ValueError:
                     pass
                 self._waiting.pop(ticket, None)
+                self._lpm_score.pop(ticket, None)
+                self._lpm_skips.pop(ticket, None)
+                self._trunk_held.pop(ticket, None)
+                held_since = self._trunk_since.pop(ticket, None)
+                if pidx is not None and held_since is not None:
+                    with pidx._lock:
+                        pidx.stats["trunk_hold_s_total"] += time.perf_counter() - held_since
                 if not admitted:
                     self._stat(url)["abandoned"] += 1
                 if not queue and self._queue.get(url) is queue:
@@ -758,6 +807,11 @@ class SharedKVPoolAdmission:
             if is_long and lease_held:
                 return "lease"
             return "head"
+        if self._lpm_score or self._trunk_held:  # RTG-58 P2 (flag on) only
+            verdict = self._prefix_index_admissible(url, ticket, queue, position, want,
+                                                    is_long, lease_held, pool_tokens, observed)
+            if verdict is not None:
+                return verdict
         if is_long or not lease_held:
             return "wait"
         # A short request behind long ones that only the lease holds back may
@@ -770,11 +824,173 @@ class SharedKVPoolAdmission:
             return "pass"
         return "wait"
 
+    # -- RTG-58 P2: the prefix index (ORCHESTRATOR_PREFIX_INDEX, default OFF) ---------
+    def _prefix_index_view(self, url: str, ticket: int, pidx: Any, key: str, tokens: int,
+                           want: int, prefill_tokens: int, credit: dict[str, Any], *,
+                           first: bool) -> tuple[int, dict[str, Any], dict[str, Any]]:
+        """Reconcile the index with ``/slots``, then derive this waiter's prefix
+        facts: a ``prefix_index`` credit when it beats the others, the fork credit
+        on the reservation, the trunk hold and the LPM score. Called outside the
+        lock; never raises (a failure leaves the legacy decision untouched)."""
+        from src.inference import prefix_index as pi
+
+        view: dict[str, Any] = {"want": want, "trunk_hold": False, "lpm_score": 0,
+                                "match": None, "fork": False, "fork_credit_tokens": 0,
+                                "trunk_owner": None}
+        try:
+            try:
+                occ = self._occupancy_fn(url)
+            except Exception:
+                occ = None
+            pidx.reconcile(occ)
+            fork = pi.fork_enabled()
+            view["fork"] = fork
+            m = pidx.lookup(key, exclude_ticket=ticket, fork=fork, count=first)
+            view["match"] = m
+            reusable = m.source == "slot_idle" or (fork and m.source in ("slot_busy", "inflight"))
+            margin = self.cache_credit_margin()
+            if reusable and m.matched_chars > 0 and margin >= 0:
+                rate = max(1.0 / _SUFFIX_CHARS_PER_TOKEN, m.tokens_per_char or 0.0)
+                suffix = int(math.ceil(max(0, len(key) - m.matched_chars) * rate))
+                est = max(0, min(int(tokens), suffix + margin))
+                if est < prefill_tokens:
+                    prefill_tokens = est
+                    credit = dict(credit, cache_credit_source="prefix_index",
+                                  cache_credited_tokens=max(0, int(tokens) - est),
+                                  prefill_tokens_est=est,
+                                  cache_credit_prefix_tokens_est=m.tokens_est,
+                                  cache_credit_matched_chars=m.matched_chars,
+                                  cache_credit_unavailable=None)
+            if fork and m.source in ("slot_busy", "inflight") and m.tokens_est > 0:
+                # Cells a busy source holds are already counted (its reservation /
+                # /slots); a fork shares them instead of allocating them again.
+                view["fork_credit_tokens"] = min(int(m.tokens_est), max(0, want - 1))
+                view["want"] = max(1, want - view["fork_credit_tokens"])
+            if pi.lpm_enabled() and reusable:
+                view["lpm_score"] = int(m.tokens_est)
+            if fork:
+                min_tokens = max(1, pi._env_int(pi.TRUNK_MIN_TOKENS_ENV,
+                                                pi.DEFAULT_TRUNK_MIN_TOKENS))
+                prefilling = None
+                if occ is not None and getattr(occ, "slots", None) is not None:
+                    prefilling = sum(1 for s in occ.slots if getattr(s, "prefilling", False))
+                owner = pidx.trunk_owner(ticket, key, min_tokens=min_tokens,
+                                         server_prefilling=prefilling)
+                if owner is not None:
+                    hold_s = pi._env_float(pi.TRUNK_HOLD_S_ENV, pi.DEFAULT_TRUNK_HOLD_S)
+                    with self._cond:
+                        since = self._trunk_since.get(ticket)
+                    if since is not None and time.perf_counter() - since >= hold_s:
+                        view["trunk_timeout"] = True  # stop holding; counted at admit
+                    else:
+                        if since is None:
+                            with pidx._lock:
+                                pidx.stats["trunk_holds"] += 1
+                        view["trunk_hold"] = True
+                        view["trunk_owner"] = owner
+        except Exception:
+            logger.debug("KV pool admission: prefix index view failed", exc_info=True)
+        return prefill_tokens, credit, view
+
+    def _prefix_index_admit(self, pidx: Any, ticket: int, key: str, prefill_tokens: int,
+                            view: dict[str, Any], verdict: str) -> dict[str, Any]:
+        """Register the admitted request as an in-flight trunk and return the
+        admission record's ``prefix_index`` block (the prediction the serving
+        record is checked against). Caller holds the lock; the index lock is a
+        leaf, so this nests safely."""
+        m = view.get("match")
+        info: dict[str, Any] = {"verdict": verdict, "fork": bool(view.get("fork"))}
+        try:
+            floor = _env_float(KV_POOL_PREFILL_FLOOR_TPS_ENV, DEFAULT_PREFILL_FLOOR_TPS)
+            pidx.begin(ticket, key, prompt_tokens=int(prefill_tokens),
+                       prefill_s=(max(1, int(prefill_tokens)) / floor) if floor > 0 else None)
+            reusable = m is not None and (m.source == "slot_idle" or (
+                view.get("fork") and m.source in ("slot_busy", "inflight")))
+            info.update(
+                match=m.as_dict() if m is not None else None,
+                predicted_cache_tokens=int(m.tokens_est) if reusable else 0,
+                predicted_slot=m.slot_id if m is not None and m.source == "slot_idle" else None,
+                fork_credit_tokens=int(view.get("fork_credit_tokens") or 0),
+                lpm_score=int(view.get("lpm_score") or 0),
+                trunk_hold_timeout=bool(view.get("trunk_timeout")),
+                unique_cells=pidx.unique_cells(),
+            )
+            if view.get("fork") and m is not None and m.source in ("slot_busy", "inflight",
+                                                                   "slot_idle"):
+                # RTG-58 (e): where the server's fork should come from.
+                info["fork_plan"] = {"source": m.source, "slot_id": m.slot_id,
+                                     "junction_chars": m.junction_chars or m.matched_chars}
+            with pidx._lock:
+                pidx.stats["fork_credit_tokens"] += info["fork_credit_tokens"]
+                if verdict == "lpm":
+                    pidx.stats["lpm_passes"] += 1
+                if info["trunk_hold_timeout"]:
+                    pidx.stats["trunk_hold_timeouts"] += 1
+        except Exception:
+            logger.debug("KV pool admission: prefix index admit failed", exc_info=True)
+        return info
+
+    def _prefix_index_admissible(self, url: str, ticket: int, queue: list[int], position: int,
+                                 want: int, is_long: bool, lease_held: bool, pool_tokens: int,
+                                 observed: tuple | None) -> str | None:
+        """The two flag-on queue rules; None = fall through to the legacy rules.
+        Caller holds the lock.
+
+        * Trunk-held waiters ahead (and long ones the lease holds back) do not
+          block a request that could run: it passes them with their reservations
+          counted as taken, exactly like the short-passes-long rule.
+        * LPM bypass: a request with a reusable prefix of at least
+          ``ORCHESTRATOR_PREFIX_INDEX_LPM_MIN_TOKENS`` that fits NOW is admitted
+          ahead of waiters with a lower score that do not fit, but each waiter can
+          be passed at most ``ORCHESTRATOR_PREFIX_INDEX_LPM_MAX_SKIPS`` times, so
+          FCFS stays starvation free (a bounded reorder, SGLang's LPM). With the
+          queue bound at 8, LPM is SGLang's DFS-weight order in all but name, so
+          DFS-weight is not separately implemented."""
+        if position == 0 or is_long:
+            return None
+        from src.inference import prefix_index as pi
+
+        ahead = queue[:position]
+        held_for_ahead = sum(self._waiting.get(t, (0, False))[0] for t in ahead)
+        if any(t in self._trunk_held for t in ahead) and all(
+                t in self._trunk_held or (self._waiting.get(t, (0, False))[1] and lease_held)
+                for t in ahead):
+            if self._fits(url, want + held_for_ahead, pool_tokens, observed):
+                return "pass_trunk"
+        score = self._lpm_score.get(ticket, 0)
+        min_tokens = pi._env_int(pi.LPM_MIN_TOKENS_ENV, pi.DEFAULT_LPM_MIN_TOKENS)
+        max_skips = pi._env_int(pi.LPM_MAX_SKIPS_ENV, pi.DEFAULT_LPM_MAX_SKIPS)
+        if score <= 0 or score < min_tokens or max_skips <= 0:
+            return None
+        if all(self._lpm_score.get(t, 0) < score and self._lpm_skips.get(t, 0) < max_skips
+               for t in ahead):
+            if self._fits(url, want, pool_tokens, observed):
+                for t in ahead:
+                    self._lpm_skips[t] = self._lpm_skips.get(t, 0) + 1
+                return "lpm"
+        return None
+
+    @staticmethod
+    def _prefix_index_note(url: str, method: str, ticket: int) -> None:
+        """Forward a ticket boundary to ``url``'s index, if the flag is on and an
+        index exists. Never raises."""
+        try:
+            from src.inference import prefix_index as pi
+
+            if not pi.enabled():
+                return
+            idx = pi.peek_index(url)
+            if idx is not None:
+                getattr(idx, method)(ticket)
+        except Exception:
+            logger.debug("KV pool admission: prefix index %s failed", method, exc_info=True)
+
     def release(self, url: str, ticket: int | None, *, success: bool = True) -> None:
         """Return a reservation. ``success`` = the request finished without pool
         trouble, which decays the decode ratio toward its floor."""
         if ticket is None:
             return
+        self._prefix_index_note(url, "end", ticket)
         with self._cond:
             self._admission_info.pop(ticket, None)
             reserved = self._inflight.get(url)
@@ -814,7 +1030,14 @@ class SharedKVPoolAdmission:
                     ),
                     "admission_stats": stat,
                 }
-            return out
+        from src.inference import prefix_index as pi
+
+        if pi.enabled():  # RTG-58 P2; absent with the flag off
+            for url, entry in out.items():
+                idx = pi.peek_index(url)
+                if idx is not None:
+                    entry["prefix_index"] = idx.status()
+        return out
 
 
 _shared_pool_admission = SharedKVPoolAdmission()

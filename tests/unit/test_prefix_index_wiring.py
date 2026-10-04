@@ -119,7 +119,8 @@ def test_passthrough_route_feeds_the_index_and_binds_from_slots(monkeypatch, tmp
 
         m = idx.lookup(serving_calls._prompt_text_for_fingerprint(follow_up))
         assert (m.source, m.slot_id) == ("slot_idle", 2) and m.matched_chars > 30_000
-        assert "prefix_index" not in json.dumps(_records(log))  # no admission wiring here
+        # the gate wiring (this branch) records its prediction; the first call had none
+        assert _records(log)[0]["kv_admission"]["prefix_index"]["match"]["source"] is None
     finally:
         srv.close()
 
