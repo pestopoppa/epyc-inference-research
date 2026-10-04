@@ -18,7 +18,7 @@ releases by dropping that flock. This module runs the sequence, nothing else:
        ``grant_state=granted``. AK may now take the device flock.
 
 ``close`` (stack owner, operator, or the watchdog)
-    refuse while the AK device flock is held; mark ``grant_state=restoring``; for
+    refuse while the device is BUSY (see below); mark ``grant_state=restoring``; for
     every parked port run the serving proof (``/health`` 200, ``/v1/models``
     non-empty, a real ``/v1/completions`` with non-empty text, and the live pid's
     ggml libraries all mapped from its own binary dir with ``libggml-hip`` resident);
@@ -37,12 +37,29 @@ releases by dropping that flock. This module runs the sequence, nothing else:
 Manual ``gpu_window park`` takes the same lease lock and refuses a second window;
 manual ``gpu_window restore`` is ``close`` (serving proof included).
 
+DEVICE BUSY (``Executor.device_busy``) — open, close and every watchdog close refuse
+while ANY of these holds; the watchdog logs, records the refusal in the lease, raises
+the hub alarm once overdue, and retries on the next tick — it never reloads onto it:
+    (a) any KFD process (``/sys/class/kfd/kfd/proc/<pid>``, the list
+        ``rocm-smi --showpids`` prints) other than the listener of a parked port
+        (that is the server being restored); an unreadable list counts as busy;
+    (b) gpu-quiet held EXCLUSIVE (``gpu_quiet_lock.holders``; held with an unknown
+        mode, or unreadable, counts as busy);
+    (c) the AK device flock ``gpu_device.mi210_0.lock``.
+
+LEGACY / NO-LEASE PARKS (a park this executor did not open: written by the
+``gpu_window park`` CLI or by hand, no lease tracking it) are never auto-closed by
+the watchdog before ``expected_end + RESTORE_GRACE_S`` (never, without an
+expected_end), and then only through ``close`` — device-free plus the same serving
+proof. Holding one is logged at WARNING every tick; closing one at ERROR.
+
 Env: ``ORCHESTRATOR_GPU_WINDOW_FILE`` (window), ``ORCHESTRATOR_GPU_WINDOW_SCHEDULE``
 (schedule), ``ORCHESTRATOR_STACK_CHANGE_PENDING_FILE`` (marker),
 ``ORCHESTRATOR_GPU_WINDOW_OPERATOR_TOKENS`` (sha256 per line, operator-written; the
 file must be 0600 in a 0700 dir, both owned by the executor's uid, or it is refused),
 ``ORCHESTRATOR_STACK_OWNER_SESSION`` (default ``workspace-ec``),
-``ORCHESTRATOR_TMP_DIR`` (device flock root).
+``ORCHESTRATOR_TMP_DIR`` (device flock + gpu-quiet root),
+``ORCHESTRATOR_KFD_PROC_DIR`` (KFD process list, default ``/sys/class/kfd/kfd/proc``).
 """
 
 from __future__ import annotations
@@ -80,6 +97,10 @@ STATUS_SCHEMA = "epyc.orchestrator.gpu_window_executor_status.v1"
 LEASE_SCHEMA = "epyc.orchestrator.gpu_window_lease.v1"
 SCHEDULE_SCHEMA = "epyc.gpu_window_schedule.v1"
 PENDING_SCHEMA = "epyc.orchestrator.stack_change_pending.v1"
+LEGACY_ORIGIN = "legacy_park"
+KFD_PROC_ENV = "ORCHESTRATOR_KFD_PROC_DIR"
+DEFAULT_KFD_PROC = "/sys/class/kfd/kfd/proc"
+MAX_HISTORY = 200
 
 SCHEDULE_ENV = "ORCHESTRATOR_GPU_WINDOW_SCHEDULE"
 PENDING_ENV = "ORCHESTRATOR_STACK_CHANGE_PENDING_FILE"
@@ -379,6 +400,55 @@ def authorize(*, stack_owner_session: str | None, operator_token: str | None,
 
 
 # ---------------------------------------------------------------------------
+# Device-busy readers: KFD process list + gpu-quiet exclusive holder
+# ---------------------------------------------------------------------------
+
+
+def kfd_proc_dir() -> Path:
+    return Path(os.environ.get(KFD_PROC_ENV) or DEFAULT_KFD_PROC)
+
+
+def kfd_pids() -> list[int] | None:
+    """PIDs with an open KFD context — the list ``rocm-smi --showpids`` reads.
+
+    sysfs is not pid-namespaced, so this works from the container the watchdog runs
+    in. None when the list cannot be read (callers treat that as busy).
+    """
+    try:
+        entries = list(kfd_proc_dir().iterdir())
+    except OSError:
+        return None
+    return sorted(int(e.name) for e in entries if e.name.isdigit())
+
+
+def gpu_quiet_exclusive() -> list[str] | None:
+    """Who holds gpu-quiet EXCLUSIVE ([] when free or only shared); None if unreadable.
+
+    Uses the region-lock module's realized-first holder reader
+    (``gpu_quiet_lock.holders``). Held with an unknown mode (``/proc/locks``
+    unreadable) is reported as a holder: cannot prove it is shared.
+    """
+    try:
+        from src.runtime.gpu_quiet_lock import GPU_QUIET_EXCLUSIVE, holders
+
+        info = holders()
+    except Exception:  # noqa: BLE001 - fail closed
+        logger.warning("gpu_window_executor: gpu-quiet holders unreadable", exc_info=True)
+        return None
+    if not info.get("held"):
+        return []
+    mode = info.get("mode")
+    if mode not in (None, GPU_QUIET_EXCLUSIVE):
+        return []
+    who = [f"{r.get('role') or '?'}(pid {r.get('pid')})"
+           for r in info.get("holders") or []
+           if isinstance(r, dict) and r.get("mode") in (None, GPU_QUIET_EXCLUSIVE)]
+    if mode is None:
+        return [f"mode_unknown:{','.join(who) or '?'}"]
+    return who or ["unrecorded_holder"]
+
+
+# ---------------------------------------------------------------------------
 # Stack operations (injectable for tests)
 # ---------------------------------------------------------------------------
 
@@ -395,6 +465,8 @@ class StackOps:
     device_held: Callable[[str], bool]
     now: Callable[[], float] = time.time
     sleep: Callable[[float], None] = time.sleep
+    kfd_pids: Callable[[], list[int] | None] = kfd_pids
+    gpu_quiet_exclusive: Callable[[], list[str] | None] = gpu_quiet_exclusive
 
 
 def _stack_cmd(action: str, component: str) -> bool:
@@ -579,6 +651,71 @@ class Executor:
             gw._atomic_write(self.window, data)
         return data
 
+    # -- device busy --------------------------------------------------------
+
+    def device_busy(self, ports: Iterable[int] = ()) -> list[str]:
+        """Why the MI210 is busy right now ([] = free). See DEVICE BUSY in the module doc.
+
+        ``ports`` are the window's parked ports: their own listeners are the servers
+        being restored, so their KFD contexts do not make the device busy.
+        """
+        reasons: list[str] = []
+        if self.ops.device_held(DEVICE_ID):
+            reasons.append(f"ak_device_flock:{DEVICE_ID}")
+        quiet = self.ops.gpu_quiet_exclusive()
+        if quiet is None:
+            reasons.append("gpu_quiet_unreadable")
+        elif quiet:
+            reasons.append("gpu_quiet_exclusive:" + ",".join(quiet))
+        pids = self.ops.kfd_pids()
+        if pids is None:
+            reasons.append(f"kfd_unreadable:{kfd_proc_dir()}")
+        elif pids:
+            own: set[int] = set()
+            for port in ports:
+                own.update(self.ops.pids_on_port(int(port)))
+            foreign = [pid for pid in pids if pid not in own]
+            if foreign:
+                reasons.append(f"kfd_processes:{foreign[:8]}")
+        return reasons
+
+    @staticmethod
+    def _busy_reason(reasons: list[str]) -> str:
+        # ``device_held`` keeps its meaning (AK still holds the device); anything
+        # else that occupies the GPU is ``device_busy``.
+        return "device_held" if any(r.startswith("ak_device_flock") for r in reasons) \
+            else "device_busy"
+
+    @staticmethod
+    def _note(lease: dict[str, Any], at: str, event: str, **fields: Any) -> None:
+        """Append to the lease history; a repeat of the last event bumps its count."""
+        history = lease.setdefault("history", [])
+        last = history[-1] if history else None
+        if isinstance(last, dict) and last.get("event") == event and all(
+                last.get(k) == v for k, v in fields.items()):
+            last["count"] = int(last.get("count") or 1) + 1
+            last["last_at"] = at
+        else:
+            history.append({"at": at, "event": event, **fields})
+            del history[:-MAX_HISTORY]
+
+    @staticmethod
+    def _tracks(lease: dict[str, Any], current: dict[str, Any]) -> bool:
+        """True when ``lease`` is the live record of the window in ``current``."""
+        if not lease.get("window_id") or lease.get("state") in (None, "closed"):
+            return False
+        if lease.get("origin") == LEGACY_ORIGIN:
+            return lease.get("window_since") == current.get("since")
+        return current.get("window_id") == lease.get("window_id")
+
+    def _is_legacy(self, lease: dict[str, Any], current: dict[str, Any]) -> bool:
+        """A non-production window this executor did not open (CLI/hand park, no lease)."""
+        if current.get("holder") in (None, "production"):
+            return False
+        if not self._tracks(lease, current):
+            return True
+        return lease.get("origin") == LEGACY_ORIGIN
+
     def _write_production(self, previous: dict[str, Any] | None) -> dict[str, Any]:
         with gw._Locked(self.window):
             data = {
@@ -629,8 +766,10 @@ class Executor:
                 raise WindowRefused("lease_open", f"window {lease.get('window_id')} "
                                     f"state={lease.get('state')}")
             entry = resolve_schedule_entry(schedule_path(self.window), schedule_ref, now, end)
-            if self.ops.device_held(DEVICE_ID):
-                raise WindowRefused("device_busy", f"{DEVICE_ID} flock held before the grant")
+            busy = self.device_busy(ports)
+            if busy:
+                raise WindowRefused("device_busy",
+                                    f"{DEVICE_ID} busy before the grant: {'; '.join(busy)}")
             window_id = f"gw-{uuid.uuid4().hex[:12]}"
             lease = {
                 "schema": LEASE_SCHEMA, "window_id": window_id, "state": "draining",
@@ -688,21 +827,36 @@ class Executor:
                 lease.get("state") in (None, "closed"):
             return {"outcome": "noop", "holder": "production"}
         current = current or {}
-        if not lease.get("window_id"):  # manual / legacy park: track it under a lease too
-            lease.update(schema=LEASE_SCHEMA, boot_id=current.get("boot_id") or boot_id(),
+        if current.get("holder") not in (None, "production") and \
+                not self._tracks(lease, current):
+            # Manual / legacy park (or a stale lease from an earlier window): track it
+            # under a fresh lease of its own, marked legacy so the watchdog's
+            # legacy rule keeps applying to it on every later tick.
+            previous_id = lease.get("window_id")
+            lease.clear()
+            lease.update(schema=LEASE_SCHEMA, origin=LEGACY_ORIGIN,
+                         boot_id=current.get("boot_id") or boot_id(),
                          window_id=current.get("window_id")
                          or f"manual-{current.get('since') or _iso(self.ops.now())}",
+                         window_since=current.get("since"),
+                         expected_end=current.get("expected_end"),
                          ports=list(current.get("parked_ports") or []),
                          components=default_components(current.get("parked_ports") or []),
-                         reload_attempts=0, history=[])
+                         state="adopted", reload_attempts=0, history=[],
+                         previous_lease_window_id=previous_id)
         history = lease.setdefault("history", [])
-        if self.ops.device_held(DEVICE_ID):
-            history.append({"at": _iso(self.ops.now()), "event": "close_refused_device_held",
-                            "reason": reason})
-            self._write_lease(lease)
-            raise WindowRefused("device_held", f"{DEVICE_ID} flock still held by AK")
         ports = list(lease.get("ports") or [])
         components = list(lease.get("components") or [])
+        busy = self.device_busy(ports)
+        if busy:
+            why = self._busy_reason(busy)
+            self._note(lease, _iso(self.ops.now()), f"close_refused_{why}", reason=reason,
+                       busy=busy)
+            self._write_lease(lease)
+            logger.error("gpu_window_executor: REFUSING close (%s) of window %s: %s busy: %s "
+                         "-- no reload; retry next tick", reason, lease.get("window_id"),
+                         DEVICE_ID, "; ".join(busy))
+            raise WindowRefused(why, f"{DEVICE_ID} busy: {'; '.join(busy)}")
         if current.get("reboot_reconciled"):
             allow_reload = False  # after a reboot, bring-up belongs to the stack owner
         if current.get("holder") not in (None, "production"):
@@ -781,6 +935,8 @@ class Executor:
         now = self.ops.now()
         lease = self._lease() or {}
         current = gw._read_raw(self.window) or {}
+        if self._is_legacy(lease, current):
+            return self._tick_legacy(lease, current, now)
         recorded_boot = lease.get("boot_id") or current.get("boot_id")
         if current.get("holder") not in (None, "production") and recorded_boot \
                 and recorded_boot != boot_id():
@@ -813,6 +969,24 @@ class Executor:
             return f"close_{why}", result["outcome"]
         return "none", f"window open until {current.get('expected_end')}"
 
+    def _tick_legacy(self, lease: dict[str, Any], current: dict[str, Any],
+                     now: float) -> tuple[str, str]:
+        """A park this executor did not open: close only when device-free AND past
+        ``expected_end + RESTORE_GRACE_S``, and then through ``_close_locked``
+        (busy check + serving proof). Never on reboot, release or preempt alone."""
+        end = gw._parse_ts(current.get("expected_end"))
+        desc = (f"legacy/no-lease park holder={current.get('holder')} "
+                f"ports={current.get('parked_ports')} expected_end={current.get('expected_end')}")
+        if end is None or now < end + RESTORE_GRACE_S:
+            logger.warning("gpu_window_executor: NOT auto-closing %s: this executor did not "
+                           "open it; it closes only once device-free and past expected_end "
+                           "+ %ss (never without an expected_end)", desc, RESTORE_GRACE_S)
+            return "hold_legacy", f"{desc}; not before expected_end + {RESTORE_GRACE_S}s"
+        logger.error("gpu_window_executor: AUTO-CLOSING %s (past expected_end + %ss); "
+                     "device-busy check and serving proof first", desc, RESTORE_GRACE_S)
+        result = self._close_locked(lease, reason="watchdog_legacy_expiry")
+        return "close_legacy_expiry", result["outcome"]
+
     # -- status (hub freshness envelope) ------------------------------------
 
     def snapshot(self) -> dict[str, Any]:
@@ -828,7 +1002,10 @@ class Executor:
             verdict = "alarm"
         else:
             verdict = "window_open"
+        busy = (self.device_busy(current.get("parked_ports") or lease.get("ports") or [])
+                if holder != "production" else [])
         return {
+            "device_busy": busy, "legacy_park": self._is_legacy(lease, current),
             "holder": holder, "grant_state": current.get("grant_state"),
             "window_id": current.get("window_id"), "expected_end": current.get("expected_end"),
             "parked_ports": current.get("parked_ports") or [],

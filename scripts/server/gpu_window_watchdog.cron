@@ -1,7 +1,9 @@
 # G1 MI210 window watchdog (src/runtime/gpu_window_executor.py `tick`).
 # Durable restore path that needs neither AutoKernel nor the session bus:
 # restores at expected_end + 10 min, after AK releases its device flock, after a
-# preempt, and reconciles a stale window after a reboot. Every pass writes
+# preempt, and reconciles a stale window after a reboot -- never while the MI210 is
+# busy (any foreign KFD process, gpu-quiet held EXCLUSIVE, or the AK device flock),
+# and a legacy/no-lease park only once device-free past expected_end + 10 min. Every pass writes
 # /mnt/raid0/llm/tmp/gpu-window/mi210.json.executor-status.json (hub probe
 # /dashboard/api/gpu_window/health goes green on the first tick).
 #

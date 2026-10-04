@@ -94,6 +94,8 @@ def env(tmp_path, monkeypatch):
     window.parent.mkdir()
     monkeypatch.setenv(gw.PATH_ENV, str(window))
     monkeypatch.setenv("ORCHESTRATOR_TMP_DIR", str(tmp_path / "locks"))
+    (tmp_path / "kfd_proc").mkdir()  # fake KFD process list: empty = no GPU processes
+    monkeypatch.setenv(gwe.KFD_PROC_ENV, str(tmp_path / "kfd_proc"))
     monkeypatch.setenv(gwe.PENDING_ENV, str(tmp_path / "stack_change_pending.json"))
     monkeypatch.setenv(gwe.TOKENS_ENV, str(tmp_path / "tokens"))
     clock = [1_900_000_000.0]
@@ -557,3 +559,175 @@ def test_watchdog_closes_an_interrupted_open_at_once(env, monkeypatch):
     status = env.ex.tick()
     assert status["last_action"] == "interrupted_open" and status["holder"] == "production"
     assert not any(c[0] in ("stop", "reload") for c in env.fake.calls)
+
+
+# ── device busy: KFD processes, gpu-quiet EXCLUSIVE, AK flock ────────────────
+
+
+def _kfd(env, *pids: int) -> None:
+    """Fake KFD process list: one directory per pid, as /sys/class/kfd/kfd/proc."""
+    d = env.tmp / "kfd_proc"
+    for child in d.iterdir():
+        child.rmdir()
+    for pid in pids:
+        (d / str(pid)).mkdir()
+
+
+def _no_reload(env) -> bool:
+    return not any(c[0] == "reload" for c in env.fake.calls)
+
+
+def test_device_busy_predicate_covers_kfd_gpu_quiet_and_ak_flock(env):
+    ex = env.ex
+    assert ex.device_busy([PORT]) == []
+    _kfd(env, 999)
+    assert ex.device_busy([PORT]) == ["kfd_processes:[999]"]
+    _kfd(env, 4242)  # the parked port's own listener is the server being restored
+    assert ex.device_busy([PORT]) == []
+    assert ex.device_busy([]) == ["kfd_processes:[4242]"]
+    _kfd(env)
+    env.fake.device_held = True
+    assert ex.device_busy([PORT]) == ["ak_device_flock:mi210_0"]
+    env.fake.device_held = False
+
+    from src.runtime.gpu_quiet_lock import gpu_quiet_lock
+
+    with gpu_quiet_lock("shared", role="cpu-measure"):
+        assert ex.device_busy([PORT]) == []
+    with gpu_quiet_lock("exclusive", role="yarn-e1"):
+        busy = ex.device_busy([PORT])
+    assert len(busy) == 1 and busy[0].startswith("gpu_quiet_exclusive:yarn-e1(pid ")
+    assert ex.device_busy([PORT]) == []
+
+
+def test_unreadable_kfd_list_counts_as_busy(env, monkeypatch):
+    monkeypatch.setenv(gwe.KFD_PROC_ENV, str(env.tmp / "no-such-kfd"))
+    assert gwe.kfd_pids() is None
+    assert env.ex.device_busy([PORT])[0].startswith("kfd_unreadable:")
+
+
+def test_open_refuses_on_a_foreign_kfd_process_but_not_on_its_own_server(env):
+    _kfd(env, 999)
+    with pytest.raises(gwe.WindowRefused) as exc:
+        _open(env)
+    assert exc.value.reason == "device_busy" and "kfd_processes:[999]" in exc.value.detail
+    assert env.fake.calls == []
+    _kfd(env, 4242)  # :8083's own llama-server, about to be stopped
+    assert _open(env)["state"] == "open"
+
+
+def test_expiry_close_refuses_while_a_non_ak_job_is_on_the_gpu(env):
+    _open(env, minutes=10)
+    env.clock[0] += 10 * 60 + gwe.RESTORE_GRACE_S + 5
+    _kfd(env, 31337)  # YaRN E1 / v11fa rerun: KFD context, no AK flock
+    for _ in range(3):
+        status = env.ex.tick()
+        assert status["last_action"] == "refused:device_busy"
+        assert status["verdict"] == "alarm" and status["device_busy"] == ["kfd_processes:[31337]"]
+    assert _window(env)["holder"] == "autokernel" and _no_reload(env)
+    assert not any(c[0] == "completion" for c in env.fake.calls)
+    history = json.loads(gwe.lease_path(env.window).read_text())["history"]
+    refusals = [h for h in history if h["event"] == "close_refused_device_busy"]
+    assert len(refusals) == 1 and refusals[0]["count"] == 3  # one entry, not one per tick
+    _kfd(env)  # the job finished
+    assert env.ex.tick()["last_action"] == "close_expiry"
+    assert _window(env)["holder"] == "production"
+
+
+def test_close_refuses_while_gpu_quiet_is_held_exclusive(env):
+    from src.runtime.gpu_quiet_lock import gpu_quiet_lock
+
+    _open(env)
+    with gpu_quiet_lock("exclusive", role="gpu-bench"):
+        with pytest.raises(gwe.WindowRefused) as exc:
+            env.ex.close(reason="manual")
+        assert exc.value.reason == "device_busy" and "gpu_quiet_exclusive" in exc.value.detail
+        env.clock[0] += 3 * 3600
+        assert env.ex.tick()["last_action"] == "refused:device_busy"
+    assert _window(env)["holder"] == "autokernel" and _no_reload(env)
+    assert env.ex.tick()["last_action"] == "close_expiry"
+
+
+def test_ak_release_does_not_close_onto_a_foreign_kfd_process(env):
+    _open(env)
+    env.fake.device_held = True
+    env.ex.tick()
+    env.fake.device_held = False
+    _kfd(env, 555)
+    assert env.ex.tick()["last_action"] == "refused:device_busy"
+    assert _window(env)["holder"] == "autokernel" and _no_reload(env)
+
+
+# ── legacy / no-lease parks ──────────────────────────────────────────────────
+
+
+def test_legacy_park_is_held_until_expected_end_plus_grace(env):
+    gw.park(roles=ROLES, ports=[PORT], expected_end=_iso(env.clock[0] + 600),
+            path=env.window)
+    env.fake.up = False
+    for advance in (0, 600, gwe.RESTORE_GRACE_S - 5):
+        env.clock[0] += advance
+        status = env.ex.tick()
+        assert status["last_action"] == "hold_legacy" and status["legacy_park"] is True
+    assert env.fake.calls == [] and _window(env)["holder"] == "autokernel"
+    env.clock[0] += 10
+    assert env.ex.tick()["last_action"] == "close_legacy_expiry"
+    assert _window(env)["holder"] == "production"
+    assert ("reload", "server_8083") in env.fake.calls  # same serving-proof path
+
+
+def test_legacy_park_past_expiry_still_refuses_while_device_busy(env):
+    """The 2026-10-04 backlog park: holder=autokernel, no lease, a non-AK GPU job."""
+    env.window.write_text(json.dumps({
+        "holder": "autokernel", "expected_end": _iso(env.clock[0] + 600),
+        "parked_ports": [PORT], "parked_roles": ROLES, "since": _iso(env.clock[0]),
+        "preempt_requested_at": None, "preempt_reason": None, "written_by": "stack_owner"}))
+    env.fake.up = False
+    _kfd(env, 777)
+    env.clock[0] += 600 + gwe.RESTORE_GRACE_S + 60
+    for _ in range(2):
+        status = env.ex.tick()
+        assert status["last_action"] == "refused:device_busy" and status["verdict"] == "alarm"
+    assert _window(env)["holder"] == "autokernel" and env.fake.calls == []
+    lease = json.loads(gwe.lease_path(env.window).read_text())
+    assert lease["origin"] == gwe.LEGACY_ORIGIN and lease["ports"] == [PORT]
+    _kfd(env)
+    assert env.ex.tick()["last_action"] == "close_legacy_expiry"
+    assert _window(env)["holder"] == "production"
+
+
+def test_legacy_park_without_expected_end_is_never_auto_closed(env):
+    env.window.write_text(json.dumps({"holder": "autokernel", "parked_ports": [PORT],
+                                      "parked_roles": ROLES, "since": _iso(env.clock[0])}))
+    env.clock[0] += 30 * 24 * 3600
+    status = env.ex.tick()
+    assert status["last_action"] == "hold_legacy" and status["verdict"] == "alarm"
+    assert env.fake.calls == []
+
+
+def test_legacy_park_after_a_closed_executor_window_is_not_mistaken_for_it(env):
+    _open(env)
+    env.ex.close(reason="manual")
+    env.fake.calls.clear()
+    gw.park(roles=ROLES, ports=[8084], expected_end=_iso(env.clock[0] + 600),
+            path=env.window)
+    assert env.ex.tick()["last_action"] == "hold_legacy"
+    assert env.fake.calls == []
+
+
+def test_legacy_park_is_not_reboot_reconciled_before_its_expiry(env, monkeypatch):
+    gw.park(roles=ROLES, ports=[PORT], expected_end=_iso(env.clock[0] + 600),
+            path=env.window)
+    monkeypatch.setattr(gwe, "boot_id", lambda: "new-boot")
+    assert env.ex.tick()["last_action"] == "hold_legacy"
+    assert _window(env)["holder"] == "autokernel" and env.fake.calls == []
+
+
+def test_manual_restore_of_a_legacy_park_refuses_while_device_busy(env):
+    gw.park(roles=ROLES, ports=[PORT], expected_end=_iso(env.clock[0] + 600),
+            path=env.window)
+    _kfd(env, 888)
+    with pytest.raises(gwe.WindowRefused) as exc:
+        env.ex.close(reason="manual_cli")
+    assert exc.value.reason == "device_busy"
+    assert _window(env)["holder"] == "autokernel" and env.fake.calls == []
