@@ -16,7 +16,13 @@ releases the `flock` even on SIGKILL, because release is fd-close).
 Usage:
     region-lock run --cpu-list 0-95 -- llama-bench -m model.gguf ...
     region-lock run --regions q0,q1 --role bench-cpu -- ./bench_canonical.sh
+    region-lock run --cpu-list 160-183 -- ./gpu_slot.sh   # SMT siblings of 64-87 -> q2,q3
     region-lock status
+
+`--cpu-list` folds SMT sibling CPUs onto their physical cores' regions by
+default (`--fold-siblings`, REGION-SIBLING-1); `--no-fold-siblings` restores the
+legacy mapping that ignores CPUs 96-191. The library default in
+`instance_topology` is unchanged ("drop"); only this CLI opts in.
 
 Exit codes:
     0..255  the child's exit status (or 128+N when it died on signal N)
@@ -150,9 +156,32 @@ def _preflight(strict: bool) -> str | None:
 
 def _resolve_regions(args: argparse.Namespace) -> frozenset[str]:
     if args.cpu_list:
-        regions = cpu_list_to_regions(args.cpu_list)
+        # REGION-SIBLING-1: with --fold-siblings (the CLI default) SMT siblings
+        # claim their physical core's region, so `--cpu-list 160-183` takes the
+        # same regions as 64-87. The LIBRARY default stays "drop" for every
+        # other caller; only this path opts in. --no-fold-siblings restores the
+        # legacy CLI meaning exactly.
+        fold = getattr(args, "fold_siblings", True)
+        mode = "fold" if fold else "drop"
+        try:
+            regions = cpu_list_to_regions(args.cpu_list, smt_siblings=mode)
+        except ValueError as e:  # incl. instance_topology.CpuTopologyUnavailable
+            raise SystemExit(
+                f"[region-lock] --cpu-list {args.cpu_list!r}: cannot resolve the physical "
+                f"cores it occupies ({e}); refusing rather than under-claiming "
+                f"(--no-fold-siblings restores the legacy primary-only mapping)"
+            ) from e
         if not regions:
             raise SystemExit(f"[region-lock] --cpu-list {args.cpu_list!r} maps to no regions")
+        if fold:
+            legacy = cpu_list_to_regions(args.cpu_list, smt_siblings="drop")
+            if legacy != regions:
+                print(
+                    f"[region-lock] --cpu-list {args.cpu_list!r} includes SMT siblings: "
+                    f"claiming {sorted(regions)} (their physical cores) instead of the "
+                    f"primary-only {sorted(legacy)}; --no-fold-siblings for the legacy mapping",
+                    file=sys.stderr,
+                )
         return regions
     names = [r.strip() for r in args.regions.split(",") if r.strip()]
     unknown = sorted(set(names) - set(ATOMIC_REGIONS))
@@ -288,7 +317,20 @@ def build_parser() -> argparse.ArgumentParser:
     run = sub.add_parser("run", help="acquire regions, run a command, release on exit")
     target = run.add_mutually_exclusive_group(required=True)
     target.add_argument("--regions", help="comma-separated region ids, e.g. q0,q1,q2,q3")
-    target.add_argument("--cpu-list", help="taskset-style cpu list, e.g. 0-95 (regions derived)")
+    target.add_argument(
+        "--cpu-list",
+        help="taskset-style cpu list, e.g. 0-95 (regions derived; SMT siblings such as "
+        "160-183 claim the regions of their physical cores, here 64-87; see --fold-siblings)",
+    )
+    run.add_argument(
+        "--fold-siblings",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="with --cpu-list, map SMT sibling CPUs (96-191 on this host) onto their "
+        "physical cores' regions, read from the kernel's thread-sibling topology "
+        "(default: on). --no-fold-siblings restores the legacy mapping, which ignores "
+        "sibling CPUs entirely. No effect with --regions.",
+    )
     run.add_argument(
         "--role",
         default="bench",

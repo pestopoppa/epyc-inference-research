@@ -16,9 +16,20 @@ The "full" instance for frontdoor (NUMA_NODE0 = 0-47) covers {q0, q1};
 the "full" instance for worker_general (0-95) covers {q0, q1, q2, q3}.
 Quarter instances cover exactly one region.
 
-This module is import-safe — it does not perform any I/O and has no side
+This module is import-safe — it performs no I/O at import and has no side
 effects. It can be imported from anywhere in the orchestrator process
-tree, and from tests, without coupling to running infrastructure.
+tree, and from tests, without coupling to running infrastructure. The one
+lazy read is the host SMT thread-sibling map (sysfs, lscpu fallback), taken
+only when `parse_cpu_list(..., smt_siblings="fold")` meets a CPU above the
+primary range 0-95, and cached.
+
+2026-10-04 (REGION-SIBLING-1) — `parse_cpu_list` used to DISCARD logical
+CPUs 96-191 (the SMT siblings of 0-95), so `region-lock run --cpu-list
+160-183` mapped to no region although it runs on cores 64-87. It now folds
+siblings onto their physical core when asked (`smt_siblings="fold"`), and
+the `region-lock run` CLI asks by default (`--fold-siblings`). The library
+default stays "drop", so the in-process placement model and every other
+caller keep their exact prior meaning.
 
 2026-05-22 — added to support cross-process per-region locking
 (`src/runtime/cpu_region_lock.py`). See progress entry for design notes.
@@ -26,7 +37,10 @@ tree, and from tests, without coupling to running infrastructure.
 
 from __future__ import annotations
 
-from typing import Iterable
+import functools
+import subprocess
+from pathlib import Path
+from typing import Iterable, Literal, Mapping
 
 
 # The four atomic quarters of the EPYC 9655's 96 physical cores.
@@ -41,17 +55,153 @@ REGION_CORE_RANGE: dict[str, tuple[int, int]] = {
 }
 
 
-def parse_cpu_list(cpu_list: str) -> set[int]:
-    """Parse a taskset-style cpu_list (e.g. '0-23,96-119') into a set of
-    physical core IDs. Hyper-thread siblings (96+) are stripped — overlap
-    is determined by physical core, not logical CPU.
+# Highest primary-thread CPU id covered by REGION_CORE_RANGE (95 on this host).
+MAX_PRIMARY_CPU = max(hi for _lo, hi in REGION_CORE_RANGE.values())
 
-    Edge cases: empty string returns empty set; single ints work; whitespace
-    is tolerated.
+SYSFS_CPU_ROOT = Path("/sys/devices/system/cpu")
+
+#: How `parse_cpu_list` treats logical CPUs above MAX_PRIMARY_CPU.
+#:   "drop" — DEFAULT, unchanged legacy behaviour: discard CPUs above
+#:            MAX_PRIMARY_CPU entirely. Every library caller relies on it: the
+#:            in-process placement model (`build_instance_regions` and all its
+#:            derivatives — per-call region claims, dispatch, contention,
+#:            fleet, eval_tower, contention_matrix) deliberately treats
+#:            HT-only instances (the GPU host lane on 184-191) as region-free,
+#:            and AutoKernel's `loop/claim.py` (research repo) calls
+#:            `cpu_list_to_regions(cpu_list)` positionally.
+#:   "fold" — OPT-IN: map each logical CPU onto its physical core's primary
+#:            thread (the lowest CPU id in its thread-sibling group), so cpu
+#:            160 claims the same core as cpu 64. Used by the `region-lock run`
+#:            CLI (`--fold-siblings`, on by default there only).
+SmtSiblingMode = Literal["fold", "drop"]
+_SMT_MODES = ("fold", "drop")
+
+
+class CpuTopologyUnavailable(ValueError):
+    """A logical CPU above the primary range could not be mapped to its core.
+
+    Never degraded into "assume it maps to itself" or "drop it": either would
+    make a region claim cover LESS than the CPUs the caller actually pins —
+    under-exclusion, the direction that corrupts measurements.
     """
-    result: set[int] = set()
+
+
+def _expand_cpu_ranges(text: str, *, source: str) -> set[int]:
+    """Strict range expansion for kernel-provided lists (sysfs)."""
+    out: set[int] = set()
+    for part in text.strip().split(","):
+        part = part.strip()
+        if not part:
+            continue
+        lo_s, _, hi_s = part.partition("-")
+        if not lo_s.isdigit() or (hi_s and not hi_s.isdigit()):
+            raise CpuTopologyUnavailable(f"{source}: {part!r} is not a cpu id or range")
+        lo, hi = int(lo_s), int(hi_s or lo_s)
+        out.update(range(lo, hi + 1))
+    return out
+
+
+def _sibling_map_from_sysfs(root: Path) -> dict[int, int]:
+    """`{logical_cpu: primary_cpu}` from sysfs.
+
+    Preferred source: `topology/thread_siblings_list` (primary = lowest id in
+    the group). Fallback for CPUs lacking it: group by
+    (`physical_package_id`, `core_id`). NB the raw `core_id` is a hardware id
+    (on this Zen5 host cpu64 and cpu160 both read core_id 88), so it is only
+    ever used as a GROUPING key, never as the core index the regions use.
+    """
+    try:
+        entries = sorted(root.glob("cpu[0-9]*"))
+    except OSError as exc:
+        raise CpuTopologyUnavailable(f"cannot list {root}: {exc}") from exc
+    mapping: dict[int, int] = {}
+    by_core: dict[tuple[str, str], set[int]] = {}
+    for entry in entries:
+        suffix = entry.name[3:]
+        if not suffix.isdigit():
+            continue
+        cpu = int(suffix)
+        topo = entry / "topology"
+        try:
+            siblings = _expand_cpu_ranges(
+                (topo / "thread_siblings_list").read_text(encoding="ascii"),
+                source=str(topo / "thread_siblings_list"),
+            )
+        except OSError:
+            siblings = set()
+        if siblings:
+            mapping[cpu] = min(siblings)
+            continue
+        try:
+            key = (
+                (topo / "physical_package_id").read_text(encoding="ascii").strip(),
+                (topo / "core_id").read_text(encoding="ascii").strip(),
+            )
+        except OSError:
+            # Offline CPU: no topology dir. Only an error if someone asks for it.
+            continue
+        by_core.setdefault(key, set()).add(cpu)
+    for group in by_core.values():
+        primary = min(group)
+        for cpu in group:
+            mapping.setdefault(cpu, primary)
+    if not mapping:
+        raise CpuTopologyUnavailable(f"{root}: no cpu exposed thread-sibling topology")
+    return mapping
+
+
+def _sibling_map_from_lscpu() -> dict[int, int]:
+    """`{logical_cpu: primary_cpu}` derived from `lscpu -p=CPU,CORE,SOCKET`."""
+    try:
+        proc = subprocess.run(
+            ["lscpu", "-p=CPU,CORE,SOCKET"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=True,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise CpuTopologyUnavailable(f"lscpu unavailable: {exc}") from exc
+    by_core: dict[tuple[str, str], set[int]] = {}
+    for line in proc.stdout.splitlines():
+        if not line or line.startswith("#"):
+            continue
+        fields = line.split(",")
+        if len(fields) < 3 or not fields[0].isdigit() or not fields[1]:
+            continue
+        by_core.setdefault((fields[2], fields[1]), set()).add(int(fields[0]))
+    mapping = {cpu: min(group) for group in by_core.values() for cpu in group}
+    if not mapping:
+        raise CpuTopologyUnavailable("lscpu reported no CPU/CORE rows")
+    return mapping
+
+
+def read_sibling_map(sysfs_root: Path | None = None) -> dict[int, int]:
+    """`{logical_cpu: primary_cpu}` for THIS host — sysfs first, lscpu second.
+
+    Raises `CpuTopologyUnavailable` when neither source resolves. Nothing here
+    hardcodes the +96 sibling offset; it is read from the kernel.
+    """
+    root = SYSFS_CPU_ROOT if sysfs_root is None else Path(sysfs_root)
+    try:
+        return _sibling_map_from_sysfs(root)
+    except CpuTopologyUnavailable as sysfs_exc:
+        try:
+            return _sibling_map_from_lscpu()
+        except CpuTopologyUnavailable as lscpu_exc:
+            raise CpuTopologyUnavailable(f"{sysfs_exc}; fallback: {lscpu_exc}") from lscpu_exc
+
+
+@functools.lru_cache(maxsize=1)
+def _host_sibling_map() -> Mapping[int, int]:
+    # lru_cache does not cache exceptions, so a transient failure is retried.
+    return read_sibling_map()
+
+
+def _iter_cpu_ids(cpu_list: str) -> Iterable[int]:
+    """Lenient taskset-style expansion: malformed segments are skipped (legacy)."""
     if not cpu_list or not cpu_list.strip():
-        return result
+        return
     for segment in cpu_list.split(","):
         segment = segment.strip()
         if not segment:
@@ -62,17 +212,61 @@ def parse_cpu_list(cpu_list: str) -> set[int]:
                 lo, hi = int(lo_s), int(hi_s)
             except ValueError:
                 continue
-            for c in range(lo, hi + 1):
-                # Physical cores only — drop HT siblings (96-191)
-                if 0 <= c <= 95:
-                    result.add(c)
+            yield from range(lo, hi + 1)
         else:
             try:
-                c = int(segment)
+                yield int(segment)
             except ValueError:
                 continue
-            if 0 <= c <= 95:
-                result.add(c)
+
+
+def parse_cpu_list(
+    cpu_list: str,
+    *,
+    smt_siblings: SmtSiblingMode = "drop",
+    sibling_map: Mapping[int, int] | None = None,
+) -> set[int]:
+    """Parse a taskset-style cpu_list (e.g. '0-23,96-119') into the set of
+    physical cores it occupies, named by their primary-thread CPU id (0-95).
+
+    `smt_siblings="drop"` (DEFAULT, legacy): CPUs above MAX_PRIMARY_CPU are
+    discarded, so '184-191' -> {}. Every in-process consumer relies on this.
+
+    `smt_siblings="fold"` (opt-in): a CPU above MAX_PRIMARY_CPU is mapped to
+    its core's primary thread via the host's thread-sibling topology (read
+    lazily, only when such a CPU is present; `sibling_map` injects one for
+    tests). '160-183' -> {64..87}. Raises `CpuTopologyUnavailable` if such a
+    CPU cannot be resolved.
+
+    Edge cases: empty string returns empty set; single ints work; whitespace
+    is tolerated; malformed segments are skipped.
+    """
+    if smt_siblings not in _SMT_MODES:
+        raise ValueError(f"smt_siblings must be one of {_SMT_MODES}, got {smt_siblings!r}")
+    result: set[int] = set()
+    for c in _iter_cpu_ids(cpu_list):
+        if c < 0:
+            continue
+        if c <= MAX_PRIMARY_CPU:
+            result.add(c)
+            continue
+        if smt_siblings == "drop":
+            continue
+        if sibling_map is None:
+            sibling_map = _host_sibling_map()
+        primary = sibling_map.get(c)
+        if primary is None:
+            raise CpuTopologyUnavailable(
+                f"logical cpu {c} is above the primary range 0-{MAX_PRIMARY_CPU} and the "
+                f"host thread-sibling topology does not name it; refusing to guess which "
+                f"physical core it occupies"
+            )
+        if not 0 <= primary <= MAX_PRIMARY_CPU:
+            raise CpuTopologyUnavailable(
+                f"logical cpu {c} folds to primary cpu {primary}, outside 0-{MAX_PRIMARY_CPU}; "
+                f"REGION_CORE_RANGE and this host's topology disagree"
+            )
+        result.add(primary)
     return result
 
 
@@ -90,10 +284,21 @@ def cores_to_regions(cores: Iterable[int]) -> frozenset[str]:
     return frozenset(touched)
 
 
-def cpu_list_to_regions(cpu_list: str) -> frozenset[str]:
+def cpu_list_to_regions(
+    cpu_list: str,
+    *,
+    smt_siblings: SmtSiblingMode = "drop",
+    sibling_map: Mapping[int, int] | None = None,
+) -> frozenset[str]:
     """Combine `parse_cpu_list` + `cores_to_regions` — convenience for
-    consumers that have a taskset-style cpu_list string in hand."""
-    return cores_to_regions(parse_cpu_list(cpu_list))
+    consumers that have a taskset-style cpu_list string in hand.
+
+    Default `smt_siblings="drop"` is the unchanged legacy meaning; the
+    `region-lock run` CLI opts into "fold" so a sibling list claims the same
+    regions as its physical cores — see `parse_cpu_list`."""
+    return cores_to_regions(
+        parse_cpu_list(cpu_list, smt_siblings=smt_siblings, sibling_map=sibling_map)
+    )
 
 
 def build_instance_regions(numa_config: dict) -> dict[tuple[str, int], frozenset[str]]:
@@ -107,6 +312,13 @@ def build_instance_regions(numa_config: dict) -> dict[tuple[str, int], frozenset
     region overlap with the 0-95 physical cores (e.g. embedders pinned
     to HT-only ranges) get an empty frozenset — treat as non-conflicting
     in the lock layer.
+
+    Primary-only BY CHOICE (library default `smt_siblings="drop"`): the live GPU
+    host lane (architect_critic on 184-191, the siblings of 88-95) is
+    region-free here, so GPU dispatch never takes a q3 lock. Folding it
+    would make every GPU request contend q3 — a placement change, not a
+    lock-CLI fix. Lane-vs-q3 co-tenancy is handled by
+    `scripts/server/gpu_shadow_lane_lease.py`.
     """
     out: dict[tuple[str, int], frozenset[str]] = {}
     for role, cfg in (numa_config or {}).items():
