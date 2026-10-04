@@ -136,9 +136,17 @@ def test_request_preempt_never_writes_when_not_held(window):
 # ── CLI ──────────────────────────────────────────────────────────────────────
 
 
-def test_cli_park_status_restore(window, capsys):
+def test_cli_park_status_restore(window, capsys, monkeypatch):
+    from src.runtime import gpu_window_executor as gwe
+
+    # restore = executor close; prove serving against a stub, never a live port/lock.
+    monkeypatch.setattr(gwe, "live_ops", lambda: gwe.StackOps(
+        stop=lambda c: True, reload=lambda c: True, get_json=lambda u, t: (0, None),
+        post_json=lambda u, b, t: (0, None), pids_on_port=lambda p: [],
+        proc_maps=lambda pid: [], proc_exe=lambda pid: "", device_held=lambda d: False))
+    monkeypatch.setattr(gwe, "serving_proof", lambda ops, port: (True, "ok"))
     rc = gw.main(["park", "--roles", ",".join(PARKED_ROLES), "--ports", "8083",
-                  "--holder", "autokernel", "--expected-end", "+2h"])
+                  "--holder", "autokernel", "--expected-end", "+45m"])
     assert rc == 0
     data = json.loads(window.path.read_text())
     assert data["holder"] == "autokernel"

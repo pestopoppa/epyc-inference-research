@@ -2413,14 +2413,60 @@ def _attach_restart_boundary_event(
         result["restart_boundary_error"] = str(exc)
 
 
+def _ap3_restart_block() -> dict[str, Any] | None:
+    """Why an AP3 role restart must not run now (G1), or None.
+
+    Refuses while the MI210 window is not ``production`` (fail closed on an
+    unreadable window file: the executor owns those servers until it restores)
+    and while a GPU bench holds gpu-quiet EXCLUSIVE (a server restart lands in
+    the bench's measurement).
+    """
+    try:
+        import json as _json
+
+        from src.runtime import gpu_window
+
+        path = gpu_window.window_path()
+        if path is not None and path.exists():
+            data = _json.loads(path.read_text())
+            holder = str((data or {}).get("holder") or "").lower()
+            if holder != "production":
+                return {"gate": "gpu_window", "reason": f"MI210 window held (holder={holder})",
+                        "window_file": str(path), "expected_end": data.get("expected_end")}
+    except Exception as exc:  # noqa: BLE001 - fail closed
+        return {"gate": "gpu_window", "reason": f"window check failed: {exc}"}
+    try:
+        from src.runtime.gpu_quiet_lock import GPU_QUIET_EXCLUSIVE, holders
+
+        quiet = holders()
+    except Exception as exc:  # noqa: BLE001 - fail closed
+        return {"gate": "gpu_quiet", "reason": f"gpu-quiet check failed: {exc}"}
+    if quiet.get("held") and quiet.get("mode") in (GPU_QUIET_EXCLUSIVE, None):
+        return {"gate": "gpu_quiet", "reason": "a GPU bench holds gpu-quiet exclusive",
+                "holders": quiet.get("holders")}
+    return None
+
+
 def _reload_role_via_stack(
     *,
     role: str,
     env_overrides: dict[str, str] | None,
     env_unset: list[str],
 ) -> dict[str, Any]:
-    """Run orchestrator_stack.py reload for a role with an explicit environment."""
+    """Run orchestrator_stack.py reload for a role with an explicit environment.
+
+    Refused (``status=refused``, never executed) during an MI210 window or while
+    gpu-quiet is held exclusive — see ``_ap3_restart_block``.
+    """
     import os
+
+    block = _ap3_restart_block()
+    if block is not None:
+        log.warning("AP3 role restart for %s refused: %s", role, block["reason"])
+        return {"status": "refused", "method": "stack_reload", "refusal": block,
+                "error": f"refused: {block['reason']}",
+                "env_keys": sorted((env_overrides or {}).keys()),
+                "env_unset": sorted(env_unset)}
 
     stack_script = ORCH_ROOT / "scripts" / "server" / "orchestrator_stack.py"
     if not stack_script.exists():

@@ -14,11 +14,14 @@ AutoKernel owner workspace-89, operator-directed). One JSON file,
       "parked_ports": [8083, ...]
     }
 
-* The STACK OWNER stops the server (``orchestrator_stack.py stop ...``) and writes
-  ``holder=autokernel`` with the parked roles/ports (``park`` below); on restore
-  it writes ``holder=production`` (``restore``).
-* The AUTOKERNEL campaign checks ``preempt_requested_at`` at each measurement
-  boundary, drains, and writes ``holder=released``.
+* The STACK-OWNED EXECUTOR (``src/runtime/gpu_window_executor.py``, G1) drains,
+  stops the server and writes ``holder=autokernel`` with the parked roles/ports and
+  ``grant_state`` (draining -> granted -> restoring); on close it proves serving and
+  only then writes ``holder=production``. Its cron watchdog restores at
+  ``expected_end`` + 10 min even with AutoKernel and the bus dead.
+* The AUTOKERNEL campaign NEVER writes this file. It checks
+  ``preempt_requested_at`` at each batch boundary, drains, and releases by dropping
+  its ``gpu_device.mi210_0`` flock; the executor's watchdog sees that and restores.
 * The ORCHESTRATOR (this module) refuses requests that resolve to a parked role
   or port with a fast, explicit ``role_parked`` error, and a real request calls
   :func:`request_preempt` so the drain starts on demand.
@@ -38,8 +41,14 @@ take a serving role down. The read is a ``stat`` plus a JSON parse keyed on
 CLI (stack owner)::
 
     python -m src.runtime.gpu_window park --roles architect_critic,coder_escalation,\
-ingest_long_context --ports 8083 --holder autokernel --expected-end +4h
-    python -m src.runtime.gpu_window restore
+ingest_long_context --ports 8083 --holder autokernel --expected-end +45m
+    python -m src.runtime.gpu_window restore     # = gpu_window_executor close
+
+Windows for AutoKernel are opened by the G1 executor
+(``python -m src.runtime.gpu_window_executor open ...``), the only writer of this
+file besides the orchestrator's ``request_preempt``. ``park`` refuses while the
+holder is not ``production``; ``--expected-end`` is capped at +60 min; ``restore``
+runs the executor's serving proof before writing ``holder=production``.
     python -m src.runtime.gpu_window status
 """
 
@@ -479,6 +488,17 @@ def request_preempt(
         return {"requested": False, "status": "error", "error": str(exc)[:200]}
 
 
+class WindowHeld(ValueError):
+    """A second park while the window is not ``production`` (one window at a time)."""
+
+
+def _boot_id() -> str | None:
+    try:
+        return Path("/proc/sys/kernel/random/boot_id").read_text().strip() or None
+    except OSError:
+        return None
+
+
 def park(
     *,
     roles: Iterable[str],
@@ -486,8 +506,15 @@ def park(
     holder: str = "autokernel",
     expected_end: str | None = None,
     path: Path | None = None,
+    extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Stack owner: write a fresh window (clears any previous preempt)."""
+    """Stack owner: write a fresh window (clears any previous preempt).
+
+    One window at a time: refuses (``WindowHeld``) unless the file is missing or
+    reads ``holder=production``. The G1 executor
+    (``src/runtime/gpu_window_executor.py``) is the normal caller; the CLI
+    ``park`` takes the executor's lease lock first.
+    """
     if holder not in ("autokernel", "released"):
         raise ValueError("park --holder must be autokernel or released")
     path = window_path() if path is None else path
@@ -502,10 +529,18 @@ def park(
         "parked_roles": sorted({_norm_role(r) for r in roles if _norm_role(r)}),
         "parked_ports": sorted(set(_norm_ports(ports))),
         "written_by": "stack_owner",
+        "boot_id": _boot_id(),
     }
+    data.update(extra or {})
     if not data["parked_roles"] and not data["parked_ports"]:
         raise ValueError("park needs at least one --roles or --ports entry")
     with _Locked(path):
+        current = _read_raw(path)
+        if current is not None and str(current.get("holder") or "").lower() != "production":
+            raise WindowHeld(
+                f"window already held (holder={current.get('holder')}); "
+                "one window at a time — close it first"
+            )
         _atomic_write(path, data)
     return data
 
@@ -658,28 +693,35 @@ def main(argv: list[str] | None = None) -> int:
     p_park.add_argument("--ports", action="append", default=[], help="comma-separated ports")
     p_park.add_argument("--holder", default="autokernel", choices=("autokernel", "released"))
     p_park.add_argument("--expected-end", required=True,
-                        help="ISO 8601, epoch seconds or relative (+4h, +90m)")
-    sub.add_parser("restore", help="write holder=production (nothing parked)")
+                        help="ISO 8601, epoch seconds or relative (+45m); at most +60m")
+    sub.add_parser("restore", help="executor close: serving proof, then holder=production")
     sub.add_parser("status", help="print the window and the parsed verdict")
     args = parser.parse_args(argv)
     path = Path(args.file) if args.file else None
 
     try:
-        if args.cmd == "park":
-            ports = []
-            for value in _split_csv(args.ports):
-                if not value.isdigit():
-                    parser.error(f"--ports: {value!r} is not a port number")
-                ports.append(int(value))
-            out = park(
-                roles=_split_csv(args.roles),
-                ports=ports,
-                holder=args.holder,
-                expected_end=parse_expected_end(args.expected_end),
-                path=path,
-            )
-        elif args.cmd == "restore":
-            out = restore(path=path)
+        if args.cmd in ("park", "restore"):
+            # Manual park/restore go through the executor's lease (one window at a
+            # time; restore = close with the serving proof).
+            from src.runtime import gpu_window_executor as gwe
+
+            window = gwe._window_path(path)
+            if args.cmd == "restore":
+                out = gwe.Executor(window, gwe.live_ops()).close(reason="manual_cli")
+            else:
+                ports = []
+                for value in _split_csv(args.ports):
+                    if not value.isdigit():
+                        parser.error(f"--ports: {value!r} is not a port number")
+                    ports.append(int(value))
+                end = parse_expected_end(args.expected_end)
+                end_ts = _parse_ts(end) or 0.0
+                if end_ts - time.time() > gwe.MAX_WINDOW_S + 5:
+                    raise ValueError(f"--expected-end beyond +{gwe.MAX_WINDOW_S // 60} min "
+                                     "needs the operator")
+                with gwe.LeaseLock(window):
+                    out = park(roles=_split_csv(args.roles), ports=ports, holder=args.holder,
+                               expected_end=end, path=window)
         else:
             out = status(path=path)
     except (ValueError, RuntimeError, OSError) as exc:

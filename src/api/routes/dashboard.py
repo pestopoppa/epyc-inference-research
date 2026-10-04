@@ -3052,6 +3052,73 @@ async def decision_cockpit_health() -> JSONResponse:
 
 
 # ---------------------------------------------------------------------------
+# MI210 window (G1 executor) — data plane for the hub's window panel
+# ---------------------------------------------------------------------------
+
+
+def _gpu_window_payload(now: float | None = None) -> dict[str, Any]:
+    """Executor status + the live window file, folded to ok / window_open / alarm."""
+    from src.api.routes.dashboard_panels import GPU_WINDOW_STATUS_PATH
+    from src.runtime import gpu_window
+
+    now = time.time() if now is None else now
+    window_file = gpu_window.window_path()
+    status_path = (window_file.with_name(window_file.name + ".executor-status.json")
+                   if window_file is not None else GPU_WINDOW_STATUS_PATH)
+    reasons: list[str] = []
+    try:
+        status = json.loads(status_path.read_text())
+    except FileNotFoundError:
+        status = None
+        reasons.append("watchdog not running (no executor status file)")
+    except (OSError, ValueError) as exc:
+        status = None
+        reasons.append(f"executor status unreadable: {exc}"[:200])
+    window = gpu_window.status()
+    age = None
+    if isinstance(status, dict):
+        age = now - float(status.get("generated_at_epoch") or 0)
+        if age > float(status.get("fresh_for_s") or 180):
+            reasons.append(f"watchdog stale ({age:.0f}s since last tick)")
+        if status.get("verdict") == "alarm":
+            reasons.append(f"window alarm: {status.get('last_action')} {status.get('detail')}"[:300])
+    if reasons:
+        health = "absent" if status is None else "degraded"
+    else:
+        health = "ok"
+    return {
+        "schema": "epyc.orchestrator.gpu_window_panel.v1",
+        "generated_at": now,
+        "executor": status,
+        "window": window,
+        "watchdog_age_s": age,
+        "health": {"status": health, "reasons": reasons},
+    }
+
+
+@router.get("/dashboard/api/gpu_window")
+async def gpu_window_panel() -> JSONResponse:
+    """MI210 window state: holder, grant_state, lease, watchdog freshness."""
+    try:
+        payload = _gpu_window_payload()
+    except Exception as exc:  # noqa: BLE001 — render the failure, not a 500
+        payload = {"error": str(exc)[:300],
+                   "health": {"status": "degraded", "reasons": [f"builder failed: {exc}"[:300]]}}
+    return JSONResponse(_stamp(payload, "gpu_window"), headers=_NO_STORE_HEADERS)
+
+
+@router.get("/dashboard/api/gpu_window/health")
+async def gpu_window_health() -> JSONResponse:
+    """Data probe: 200 only when the watchdog is fresh and no window is in alarm."""
+    try:
+        health = dict(_gpu_window_payload()["health"])
+    except Exception as exc:  # noqa: BLE001
+        health = {"status": "degraded", "reasons": [f"builder failed: {exc}"[:300]]}
+    return JSONResponse(health, status_code=200 if health.get("status") == "ok" else 503,
+                        headers=_NO_STORE_HEADERS)
+
+
+# ---------------------------------------------------------------------------
 # Per-node detail (for topology click)
 # ---------------------------------------------------------------------------
 

@@ -55,6 +55,8 @@ ORCHESTRATOR_STATE_PATH = _LOG_DIR / "orchestrator_state.json"
 AUTOPILOT_STATE_PATH = _REPO_ROOT / "orchestration" / "autopilot_state.json"
 AUTOPILOT_JOURNAL_PATH = _REPO_ROOT / "orchestration" / "autopilot_journal.jsonl"
 CONTENTION_MATRIX_PATH = _REPO_ROOT / "orchestration" / "contention_matrix.yaml"
+# G1 executor watchdog status (src/runtime/gpu_window_executor.py, cron every minute).
+GPU_WINDOW_STATUS_PATH = _TMP_DIR / "gpu-window" / "mi210.json.executor-status.json"
 
 
 @dataclass(frozen=True)
@@ -333,6 +335,20 @@ PANELS: tuple[PanelSpec, ...] = (
                        mtime_fn=_latest_journal_mtime),
             SourceSpec("autopilot_state", AUTOPILOT_STATE_PATH, 3600, 86400,
                        optional=True, gating=False),
+        ),
+    ),
+    PanelSpec(
+        key="gpu_window",
+        title="MI210 window (G1 executor)",
+        endpoint="/dashboard/api/gpu_window",
+        mechanism="api",
+        sources=(
+            # Rewritten by the watchdog tick every minute. Optional so a branch
+            # without the cron installed does not redden the global fold; the
+            # panel's own probe (/dashboard/api/gpu_window/health) reports absence
+            # as 503 "watchdog not running".
+            SourceSpec("gpu_window_executor_status", GPU_WINDOW_STATUS_PATH, 120, 300,
+                       optional=True),
         ),
     ),
     PanelSpec(
