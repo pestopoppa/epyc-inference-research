@@ -347,7 +347,7 @@ PANELS: tuple[PanelSpec, ...] = (
             # without the cron installed does not redden the global fold; the
             # panel's own probe (/dashboard/api/gpu_window/health) reports absence
             # as 503 "watchdog not running".
-            SourceSpec("gpu_window_executor_status", GPU_WINDOW_STATUS_PATH, 120, 300,
+            SourceSpec("gpu_window_executor_status", GPU_WINDOW_STATUS_PATH, 180, 300,
                        optional=True),
         ),
     ),
