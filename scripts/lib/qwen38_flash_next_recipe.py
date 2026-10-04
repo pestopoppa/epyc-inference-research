@@ -783,7 +783,25 @@ HEADLINES = {
         "ratio_vs_pristine_plain": 1.7151,
         "alpha": 0.8209,
         "drafted_per_token": 0.8961,
-        "coherence": "20 COHERENT + 4 SHORT in all 48 arms; no round or arm excluded",
+        # CLS-RECT 2026-10-04: the former value "20 COHERENT + 4 SHORT in all 48 arms" was an INF-70
+        # classify.py label computed on synthetic token ids (tokens=list(range(n)): uniq/top/run
+        # vacuous, only the words/ascii rules could fire). It is history, not output evidence.
+        # What champion-3's evidence supports is EQUIVALENCE to pristine c51e4dabf, per serving
+        # mode, never absolute coherence:
+        #   - identity gate (tmp/inf70/agents/champion3/REPORT.md section 3): greedy, max 256 tokens,
+        #     5 prompts at 59/96/175/318/329 prompt tokens, sha256 of the full completion text;
+        #     16 arm-pairs, 0 differing; pristine -> champion-3 5/5 plain and 5/5 MTP.
+        #   - recomputed 2026-10-04 from champion3/runs/*.rows.jsonl (stored text, no inference):
+        #     each of the 24 production rows is text-sha256-identical across all 30 MTP arms and
+        #     across all 18 plain arms of the 48 (pristine, champion-1/-2/-3, leave-one-out, shim).
+        #     Plain and MTP differ from EACH OTHER on 13/24 rows; equivalence is within a mode.
+        # Whether those outputs are coherent or correct is UNVERIFIED pending coherence_gate.
+        "coherence": ("output byte-identical to pristine c51e4dabf within each serving mode: 5/5 "
+                      "greedy 256-token streams sha256-identical plain and MTP (16 arm-pairs, 0 "
+                      "differing; champion3 REPORT.md s3) and all 24 production rows text-identical "
+                      "across every MTP arm and every plain arm of the 48; absolute coherence "
+                      "UNVERIFIED pending coherence_gate (the former '20 COHERENT + 4 SHORT' is a "
+                      "synthetic-id classify.py label, CLS-RECT 2026-10-04); no round or arm excluded"),
         "note": "the ~36.9 t/s anchor-referred figure is a PROJECTION, not a measurement",
     },
     "speed_claim_aba": {
