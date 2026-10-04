@@ -1,0 +1,341 @@
+{
+"source": "/mnt/raid0/llm/tmp/gpu-block-27b-20261003/results/q38_t7/20261004T025247Z/calls.jsonl",
+"rows": [
+{
+"phase": "A",
+"id": "gsm8k_00739",
+"arm": "dflash2",
+"coherence": {
+"cls": "SALAD",
+"review": false,
+"n": 200,
+"finish": "length",
+"uniq": 0.28,
+"top": 0.065,
+"run": 1,
+"words": 106,
+"ascii_ok": 0.914,
+"salad_reasons": [
+"uniq"
+]
+}
+},
+{
+"phase": "A",
+"id": "gsm8k_00739",
+"arm": "nodraft",
+"coherence": {
+"cls": "SALAD",
+"review": false,
+"n": 200,
+"finish": "length",
+"uniq": 0.27,
+"top": 0.06,
+"run": 1,
+"words": 111,
+"ascii_ok": 0.936,
+"salad_reasons": [
+"uniq"
+]
+}
+},
+{
+"phase": "A",
+"id": "gsm8k_00115",
+"arm": "dflash2",
+"coherence": {
+"cls": "SALAD",
+"review": false,
+"n": 200,
+"finish": "length",
+"uniq": 0.335,
+"top": 0.065,
+"run": 2,
+"words": 109,
+"ascii_ok": 0.906,
+"salad_reasons": [
+"uniq"
+]
+}
+},
+{
+"phase": "A",
+"id": "gsm8k_00115",
+"arm": "nodraft",
+"coherence": {
+"cls": "SALAD",
+"review": false,
+"n": 200,
+"finish": "length",
+"uniq": 0.335,
+"top": 0.065,
+"run": 2,
+"words": 109,
+"ascii_ok": 0.906,
+"salad_reasons": [
+"uniq"
+]
+}
+},
+{
+"phase": "A",
+"id": "gsm8k_00041",
+"arm": "dflash2",
+"coherence": {
+"cls": "COHERENT",
+"review": false,
+"n": 200,
+"finish": "length",
+"uniq": 0.395,
+"top": 0.06,
+"run": 3,
+"words": 116,
+"ascii_ok": 0.956,
+"salad_reasons": []
+}
+},
+{
+"phase": "A",
+"id": "gsm8k_00041",
+"arm": "nodraft",
+"coherence": {
+"cls": "COHERENT",
+"review": false,
+"n": 200,
+"finish": "length",
+"uniq": 0.395,
+"top": 0.06,
+"run": 3,
+"words": 116,
+"ascii_ok": 0.956,
+"salad_reasons": []
+}
+},
+{
+"phase": "B",
+"id": null,
+"arm": null,
+"coherence": {
+"cls": "SALAD",
+"review": false,
+"n": 1501,
+"finish": "length",
+"uniq": 0.3,
+"top": 0.031,
+"run": 1,
+"words": 829,
+"ascii_ok": 0.964,
+"salad_reasons": [
+"uniq"
+]
+}
+},
+{
+"phase": "B",
+"id": null,
+"arm": null,
+"coherence": {
+"cls": "SALAD",
+"review": false,
+"n": 1501,
+"finish": "length",
+"uniq": 0.313,
+"top": 0.035,
+"run": 2,
+"words": 846,
+"ascii_ok": 0.97,
+"salad_reasons": [
+"uniq"
+]
+}
+},
+{
+"phase": "B",
+"id": null,
+"arm": null,
+"coherence": {
+"cls": "SALAD",
+"review": false,
+"n": 1501,
+"finish": "length",
+"uniq": 0.273,
+"top": 0.027,
+"run": 1,
+"words": 755,
+"ascii_ok": 0.959,
+"salad_reasons": [
+"uniq"
+]
+}
+},
+{
+"phase": "B",
+"id": null,
+"arm": null,
+"coherence": {
+"cls": "SALAD",
+"review": false,
+"n": 1501,
+"finish": "length",
+"uniq": 0.247,
+"top": 0.031,
+"run": 1,
+"words": 848,
+"ascii_ok": 0.964,
+"salad_reasons": [
+"uniq"
+]
+}
+},
+{
+"phase": "B",
+"id": null,
+"arm": null,
+"coherence": {
+"cls": "SALAD",
+"review": false,
+"n": 1500,
+"finish": "length",
+"uniq": 0.307,
+"top": 0.044,
+"run": 2,
+"words": 744,
+"ascii_ok": 0.971,
+"salad_reasons": [
+"uniq"
+]
+}
+},
+{
+"phase": "B",
+"id": null,
+"arm": null,
+"coherence": {
+"cls": "SALAD",
+"review": false,
+"n": 1501,
+"finish": "length",
+"uniq": 0.32,
+"top": 0.032,
+"run": 2,
+"words": 689,
+"ascii_ok": 0.98,
+"salad_reasons": [
+"uniq"
+]
+}
+},
+{
+"phase": "B",
+"id": null,
+"arm": null,
+"coherence": {
+"cls": "SALAD",
+"review": false,
+"n": 1501,
+"finish": "length",
+"uniq": 0.308,
+"top": 0.034,
+"run": 2,
+"words": 777,
+"ascii_ok": 0.977,
+"salad_reasons": [
+"uniq"
+]
+}
+},
+{
+"phase": "B",
+"id": null,
+"arm": null,
+"coherence": {
+"cls": "SALAD",
+"review": false,
+"n": 1501,
+"finish": "length",
+"uniq": 0.28,
+"top": 0.031,
+"run": 2,
+"words": 800,
+"ascii_ok": 0.985,
+"salad_reasons": [
+"uniq"
+]
+}
+},
+{
+"phase": "C",
+"id": null,
+"arm": null,
+"coherence": {
+"cls": "COHERENT",
+"review": false,
+"n": 1001,
+"finish": "length",
+"uniq": 0.376,
+"top": 0.034,
+"run": 1,
+"words": 511,
+"ascii_ok": 0.956,
+"salad_reasons": []
+}
+},
+{
+"phase": "C",
+"id": null,
+"arm": null,
+"coherence": {
+"cls": "SALAD",
+"review": false,
+"n": 1001,
+"finish": "length",
+"uniq": 0.311,
+"top": 0.028,
+"run": 1,
+"words": 450,
+"ascii_ok": 0.941,
+"salad_reasons": [
+"uniq"
+]
+}
+},
+{
+"phase": "C",
+"id": null,
+"arm": null,
+"coherence": {
+"cls": "SALAD",
+"review": false,
+"n": 1001,
+"finish": "length",
+"uniq": 0.334,
+"top": 0.042,
+"run": 1,
+"words": 565,
+"ascii_ok": 0.963,
+"salad_reasons": [
+"uniq"
+]
+}
+},
+{
+"phase": "C",
+"id": null,
+"arm": null,
+"coherence": {
+"cls": "SALAD",
+"review": false,
+"n": 1001,
+"finish": "length",
+"uniq": 0.329,
+"top": 0.024,
+"run": 1,
+"words": 501,
+"ascii_ok": 0.955,
+"salad_reasons": [
+"uniq"
+]
+}
+}
+]
+}

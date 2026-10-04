@@ -1,0 +1,107 @@
+{
+ "source": "/mnt/raid0/llm/tmp/gpu-block-27b-20261003/lib_gpublock.py",
+ "golden": {
+  "prose1500": {
+   "stop": {
+    "cls": "COHERENT",
+    "review": false,
+    "n": 1500,
+    "finish": "stop",
+    "uniq": 0.413,
+    "top": 0.048,
+    "run": 2,
+    "words": 705,
+    "ascii_ok": 0.984,
+    "salad_reasons": []
+   },
+   "length": {
+    "cls": "COHERENT",
+    "review": false,
+    "n": 1500,
+    "finish": "length",
+    "uniq": 0.413,
+    "top": 0.048,
+    "run": 2,
+    "words": 705,
+    "ascii_ok": 0.984,
+    "salad_reasons": []
+   }
+  },
+  "trace1000": {
+   "stop": {
+    "cls": "SALAD",
+    "review": false,
+    "n": 1000,
+    "finish": "stop",
+    "uniq": 0.314,
+    "top": 0.063,
+    "run": 2,
+    "words": 469,
+    "ascii_ok": 0.95,
+    "salad_reasons": [
+     "uniq"
+    ]
+   },
+   "length": {
+    "cls": "SALAD",
+    "review": false,
+    "n": 1000,
+    "finish": "length",
+    "uniq": 0.314,
+    "top": 0.063,
+    "run": 2,
+    "words": 469,
+    "ascii_ok": 0.95,
+    "salad_reasons": [
+     "uniq"
+    ]
+   }
+  },
+  "ok30": {
+   "stop": {
+    "cls": "SALAD",
+    "review": false,
+    "n": 30,
+    "finish": "stop",
+    "uniq": 0.067,
+    "top": 0.967,
+    "run": 29,
+    "words": 30,
+    "ascii_ok": 1.0,
+    "salad_reasons": [
+     "uniq",
+     "top",
+     "run"
+    ]
+   },
+   "length": {
+    "cls": "SALAD",
+    "review": false,
+    "n": 30,
+    "finish": "length",
+    "uniq": 0.067,
+    "top": 0.967,
+    "run": 29,
+    "words": 30,
+    "ascii_ok": 1.0,
+    "salad_reasons": [
+     "uniq",
+     "top",
+     "run"
+    ]
+   }
+  },
+  "E": {
+   "stop": {
+    "cls": "EARLY-EOS",
+    "n": 1,
+    "finish": "stop"
+   },
+   "length": {
+    "cls": "SHORT",
+    "n": 1,
+    "finish": "length"
+   }
+  }
+ }
+}
