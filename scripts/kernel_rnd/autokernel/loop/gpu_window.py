@@ -67,7 +67,7 @@ STACK_OWNER_SESSION = "workspace-ec"
 MAX_WINDOW_S = 3600            # (b) longer needs the operator
 RESTORE_GRACE_S = 600          # (b) auto-restore at expected_end + 10 min
 DRAIN_TIMEOUT_S = 600          # (b) then refuse, never kill
-GPU_PEAK_CEILING_BYTES = 62 << 30  # (e)
+from .surface_validation import GPU_CAPACITY_CEILING_BYTES as GPU_PEAK_CEILING_BYTES  # (e)
 PARKED_ROLES = ("architect_critic",)
 PARKED_PORTS = (8083,)
 REQUEST_KIND = "gpu-window-request"

@@ -39,8 +39,11 @@ def linkage(binary: Path | str, ld_library_path: str | None, *,
             script: Path = LINKAGE_SCRIPT, timeout_s: float = 120.0) -> dict:
     """Run the linkage verifier once per (binary identity, loader path); cached.
 
-    Exit 0 = PASS, 1 = a ggml library resolves outside the tree (REFUTED), 2 = the run
-    proved nothing (missing binary, no ggml rows): UNPROVEN, never a pass.
+    Exit 0 = PASS. Any other exit of a verifier that RAN is REFUTED: 1 = a ggml library
+    resolves outside the tree, 2 = the script could prove nothing about this binary --
+    both are "DO NOT TRUST THE MEASUREMENT" in the script's own words, and a GPU launch
+    whose linkage cannot be proven is not a GPU measurement. Only a verifier that could
+    not run (missing script, unreadable binary, spawn failure) is UNPROVEN.
     """
     binary = Path(binary)
     try:
@@ -62,8 +65,7 @@ def linkage(binary: Path | str, ld_library_path: str | None, *,
     except (OSError, subprocess.SubprocessError) as exc:
         return {"status": UNPROVEN, "reason": f"linkage verifier failed to run: {exc}"[:256]}
     text = (done.stdout or "") + (done.stderr or "")
-    status = (PROVEN if done.returncode == 0 and "PASS" in text
-              else REFUTED if done.returncode == 1 else UNPROVEN)
+    status = PROVEN if done.returncode == 0 and "PASS" in text else REFUTED
     result = {"status": status, "rc": done.returncode,
               "script_sha256": hashlib.sha256(Path(script).read_bytes()).hexdigest(),
               "ld_library_path": ld_library_path, "tail": text[-512:]}

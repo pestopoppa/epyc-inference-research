@@ -107,9 +107,12 @@ class _FakeServer:
         self.peak = max(self.peak, self.vram)
 
     def poll(self):
-        return None
+        return 0 if getattr(self, "terminated", False) else None
 
     def send_signal(self, _sig):
+        self.terminated = True
+
+    def kill(self):
         self.terminated = True
 
     def wait(self, _t=None):

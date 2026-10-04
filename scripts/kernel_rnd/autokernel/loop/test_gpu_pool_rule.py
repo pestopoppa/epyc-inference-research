@@ -1,5 +1,7 @@
 """GPU-POOL-1: device memory kept alive across HIP-graph captures must not come from the
 shared ctx.pool() / ggml_cuda_pool_alloc (v10 mmvq_q8_1_graph_cache, 2026-10-04)."""
+import pytest
+
 from . import gates
 
 OWNED_POOL_HOLDER = """\
@@ -60,9 +62,34 @@ def test_private_arena_and_scoped_pool_allocations_are_admitted():
     assert gates.gpu_graph_pool_hold_refusal(None) is None
 
 
-def test_pool_holder_without_graph_lifetime_is_not_this_rule():
+def test_pool_holder_without_a_graph_token_is_still_refused():
+    """GGML_HIP_GRAPHS=ON captures every op: the rule does not wait for a `graph` or
+    `capture` token in the patch (integration audit 2026-10-04)."""
     no_graph = OWNED_POOL_HOLDER.replace("capture_id", "count").replace("graph_", "")
-    assert gates.gpu_graph_pool_hold_refusal(no_graph) is None
+    assert gates.gpu_graph_pool_hold_refusal(no_graph).startswith("GPU-POOL-1")
+
+
+@pytest.mark.parametrize("snippet", [
+    "+thread_local mmvq_cache q8_1_cache;\n+    q8_1_cache.q8_1 = src1_q8_1.get();",
+    "+static\n+thread_local mmvq_cache q8_1_cache;\n+    q8_1_cache.q8_1 = src1_q8_1.ptr;",
+    "+    cache[0] = src1_q8_1.get();",
+    "+    ctx.q8_1_keep = src1_q8_1.get();",
+    "+    char * keep = src1_q8_1.get();\n+    cache.q8_1 = keep;",
+    "+    static auto & pool_ref = ctx.pool();",
+    "+    static char * q8_1_keep = src1_q8_1.get();",
+])
+def test_retention_variants_are_refused(snippet):
+    patch = "+++ b/ggml/src/ggml-cuda/mmvq.cu\n@@ -10,0 +11,2 @@\n" + snippet + "\n"
+    reason = gates.gpu_graph_pool_hold_refusal(patch)
+    assert reason is not None and reason.startswith("GPU-POOL-1"), snippet
+
+
+def test_scoped_pool_use_without_retention_is_admitted():
+    patch = ("+++ b/ggml/src/ggml-cuda/mmvq.cu\n@@ -10,0 +11,3 @@\n"
+             "+    ggml_cuda_pool_alloc<char> src1_q8_1(ctx.pool(), nbytes);\n"
+             "+    char * q8 = src1_q8_1.get();\n"
+             "+    launch(q8, ne00, stream);\n")
+    assert gates.gpu_graph_pool_hold_refusal(patch) is None
 
 
 def test_scope_gate_refuses_the_cuda_patch_before_build():

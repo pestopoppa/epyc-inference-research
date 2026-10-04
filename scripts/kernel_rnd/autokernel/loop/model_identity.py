@@ -78,9 +78,12 @@ def _launch_shape(recipe) -> tuple:
 
 def serve(recipe, requests: Sequence[tuple[str, bytes]], *,
           boot_timeout_s: int = BOOT_TIMEOUT_S,
-          request_timeout_s: int = REQUEST_TIMEOUT_S) -> list[tuple[str, str, str]]:
+          request_timeout_s: int = REQUEST_TIMEOUT_S,
+          prepare: Callable[[int], object] | None = None) -> list[tuple[str, str, str]]:
     """Launch `recipe`'s llama-server, serve `requests` sequentially, always tear down.
 
+    `prepare(port)`, when given, runs before EVERY request (the long-context surface
+    restores its saved slot there, so each completion extends the same prefix).
     Returns [(prompt_id, digest, preview)]. Raises on any launch/request failure."""
     recipe.validate_launch(recipe.template, recipe.build_dir, recipe.port)
     server = subprocess.Popen(list(recipe.argv), env=dict(recipe.launch_env),
@@ -101,6 +104,8 @@ def serve(recipe, requests: Sequence[tuple[str, bytes]], *,
                 time.sleep(2)
         out = []
         for prompt_id, body in requests:
+            if prepare is not None:
+                prepare(recipe.port)
             request = urllib.request.Request(
                 f"http://127.0.0.1:{recipe.port}/completion", data=body,
                 headers={"Content-Type": "application/json"})
@@ -156,12 +161,15 @@ def _inconsistent(rows: list, n: int) -> list[int]:
 def check(*, anchor_recipe, candidate_recipe, requests: Sequence[tuple[str, bytes]],
           n_requests: int = DEFAULT_REQUESTS,
           window: Callable[[], object] | None = None,
-          serve_fn: Callable[..., list] = serve, repeats: int = 1) -> IdentityResult:
+          serve_fn: Callable[..., list] = serve, repeats: int = 1,
+          prepare: Callable[[int], object] | None = None) -> IdentityResult:
     """Anchor vs candidate greedy completions on the first `n_requests` frozen requests.
 
     `window` is the caller's CPU measurement window (a context-manager factory), so the
     two model loads never overlap another CPU measurement on this host. `repeats > 1`
-    adds the repetition-identity race detector (module docstring)."""
+    adds the repetition-identity race detector (module docstring). `prepare(port)` runs
+    before every request on both arms; it resets the server state itself (a slot
+    restore), so repetitions keep the prompt cache instead of `_uncached`."""
     if not requests:
         return IdentityResult("unavailable", "no frozen requests to serve")
     if anchor_recipe.backend != "cpu" or candidate_recipe.backend != "cpu":
@@ -180,9 +188,14 @@ def check(*, anchor_recipe, candidate_recipe, requests: Sequence[tuple[str, byte
                                   "(temperature 0 or top_k 1); identity cannot be required")
     guard = window if window is not None else nullcontext
     repeats = max(1, int(repeats))
-    if repeats > 1:
+    if repeats > 1 and prepare is None:
         selected = _uncached(selected)
     n = len(selected)
+    if prepare is not None:
+        base_serve = serve_fn
+
+        def serve_fn(recipe, requests):  # noqa: E306
+            return base_serve(recipe, requests, prepare=prepare)
     try:
         with guard():
             anchor = serve_fn(anchor_recipe, selected)

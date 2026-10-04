@@ -2497,6 +2497,23 @@ def main(argv: list[str] | None = None) -> int:
             parser.error(f"long-context surface refused: {exc}")
         print(f"longctx   opted in: depth {longctx_surface.spec.depth} tokens, spec "
               f"{longctx_surface.spec.digest[:12]}")
+    if keep_dims:
+        # Every declared dimension must have an instrument on THIS run, or the keep gate
+        # would veto only after the full build, A/B and confirm (integration audit).
+        primary_dim = surface_validation.primary_dimension(direct_launch.template.np)
+        long_dims = {"long_decode", "prefill_at_depth"}
+        if long_dims & set(keep_dims) and longctx_surface is None:
+            parser.error(f"--keep-dimensions {','.join(sorted(long_dims & set(keep_dims)))} "
+                         "requires --longctx-surface (the instrument that measures depth)")
+        unmeasurable = [d for d in keep_dims if d in surface_validation.THROUGHPUT_DIMENSIONS
+                        and d != primary_dim and d not in long_dims]
+        if unmeasurable:
+            parser.error(f"--keep-dimensions {','.join(unmeasurable)}: no instrument on this "
+                         f"run measures it (primary dimension is {primary_dim})")
+        if "capacity" in keep_dims and cpu_launch is not None \
+                and args.keep_capacity_limit_gib is None:
+            parser.error("--keep-dimensions capacity on a CPU target requires "
+                         "--keep-capacity-limit-gib (there is no default RSS ceiling)")
     # The selected canonical serving route, not the spelling of its campaign ID,
     # carries runtime capability. Enrolled targets were checked for ready status,
     # backend and exact serving-workload compatibility above; legacy CPU serving
@@ -3725,35 +3742,88 @@ def main(argv: list[str] | None = None) -> int:
             else "canonical_candidate_vs_current_anchor",
             measurement_window=cpu_measurement_window)
 
-    def longctx_keep_gate(worker, hypothesis, comparison) -> dict:
+    def longctx_keep_gate(worker, hypothesis, comparison, *, measured_row=None) -> dict:
         """Every keep of an opted-in target must not regress either surface: a long-primary
         (attention-route) keep is checked on the short surface and on its own prefill at
-        depth; any other keep is A/B'd at depth (decode and prefill). Fails closed."""
+        depth; any other keep is A/B'd at depth (decode and prefill). Fails closed.
+        `measured_row`: this keep's long-context A/B already taken by the G5 dimension
+        pass, reused instead of measured twice."""
         if longctx.attention_route(hypothesis):
             try:
                 short = cpu_compare(anchor_build[0], worker.build_dir, rebind_feedback=False)
-            except loop.MeasurementFailed as exc:
+            except loop.MeasurementInvalid:
+                raise
+            except (loop.MeasurementFailed, RuntimeError, ValueError, OSError) as exc:
                 return {"primary": "longctx", "passed": False,
-                        "reason": f"short-surface gate failed: {exc}"}
+                        "reason": f"short-surface gate failed: {type(exc).__name__}: {exc}"}
             long_verdict = comparison.row.get("longctx") or {}
             regressed = short.decisive is True and short.effect < 0
-            passed = long_verdict.get("passed") is True and not regressed
+            undecided = short.decisive is None or bool(getattr(short, "drifting", False))
+            passed = long_verdict.get("passed") is True and not regressed and not undecided
             return {"primary": "longctx", "passed": passed, "longctx": long_verdict,
                     "short": {"effect": short.effect, "decisive": short.decisive,
-                              "floor_pct": short.noise_floor_pct},
+                              "floor_pct": short.noise_floor_pct,
+                              "drifting": bool(getattr(short, "drifting", False))},
                     "reason": (long_verdict.get("reason", "no long-context verdict")
                                + (f"; short surface regressed {short.effect * 100:+.3f}%"
-                                  if regressed else ""))}
+                                  if regressed else "")
+                               + ("; short surface uncalibrated or drifting (no verdict)"
+                                  if undecided else ""))}
+        row = (measured_row if isinstance(measured_row, Mapping)
+               and isinstance(measured_row.get("longctx"), Mapping) else None)
         try:
-            row = longctx_compare(worker.build_dir).row
-        except loop.MeasurementFailed as exc:
+            if row is None:
+                row = longctx_compare(worker.build_dir).row
+        except loop.MeasurementInvalid:
+            raise
+        except (loop.MeasurementFailed, RuntimeError, ValueError, OSError) as exc:
             return {"primary": "short", "passed": False,
-                    "reason": f"long-context gate failed: {exc}"}
+                    "reason": f"long-context gate failed: {type(exc).__name__}: {exc}"}
         return {"primary": "short", **row["longctx"],
                 "comparison": {key: row.get(key) for key in (
                     "recipe", "recipe_hash", "anchor_tok_s", "candidate_tok_s", "effect",
                     "decisive", "noise_floor_pct", "pairs", "anchor_samples",
                     "candidate_samples", "floor_sha256")}}
+
+    # Integration seams (2026-10-04): the long surface is the instrument behind the
+    # G5 `long_decode` / `prefill_at_depth` keep dimensions and the `long_identity`
+    # target of cpu_fa_schedule. Without --longctx-surface all three stay unset:
+    # declared long dimensions are pending (refuse) and identity runs short-only.
+    if longctx_surface is not None:
+        def _longctx_dimension_row(worker):
+            return longctx_compare(worker.build_dir).row
+
+        def _longctx_prefill_row(worker):
+            return longctx.prefill_dimension_row(_longctx_dimension_row(worker))
+
+        keep_dimension_measures["long_decode"] = _longctx_dimension_row
+        keep_dimension_measures["prefill_at_depth"] = _longctx_prefill_row
+
+        def _long_identity_targets(a_build, c_build):
+            long_launch = longctx_surface.launch_for(direct_launch)
+            with cpu_measurement_window():
+                return longctx_surface.identity_targets(_cpu_arm(long_launch, a_build),
+                                                        _cpu_arm(long_launch, c_build))
+
+        long_identity_targets[0] = _long_identity_targets
+
+    def longctx_runtime_gate(pair) -> dict:
+        """A runtime-recipe keep (threads, batch, KV type...) is judged at depth like any
+        other keep: the pair's two recipes on the same anchor build, slot restored. A
+        recipe whose slot cannot restore (a KV-layout change) is refused, not assumed."""
+        try:
+            row = _serving_comparison(lambda: longctx_surface.compare(
+                _cpu_arm(longctx_surface.launch_for(pair.anchor), anchor_build[0]),
+                _cpu_arm(longctx_surface.launch_for(pair.candidate), anchor_build[0]),
+                pairs=args.serving_pairs),
+                "runtime_recipe_pair_at_depth",
+                measurement_window=cpu_measurement_window).row
+        except loop.MeasurementInvalid:
+            raise
+        except (loop.MeasurementFailed, RuntimeError, ValueError, OSError) as exc:
+            return {"primary": "runtime", "passed": False,
+                    "reason": f"long-context gate failed: {type(exc).__name__}: {exc}"}
+        return {"primary": "runtime", **row["longctx"]}
 
     def cpu_anchor_guard_compare(a_build, c_build):
         """Measure the promoted-anchor integrity A/A without consuming a source floor.
@@ -4012,7 +4082,9 @@ def main(argv: list[str] | None = None) -> int:
                         _cpu_arm(direct_launch, anchor_build[0]), frozen_requests,
                         store=args.store, anchor_commit=current_anchor_commit[0],
                         long_context=gpu_long_context_hook[0])
-            except (hotspots.ProfileFailed, OSError, ValueError,
+            except loop.MeasurementInvalid:
+                raise
+            except (hotspots.ProfileFailed, OSError, ValueError, RuntimeError, ImportError,
                     subprocess.SubprocessError) as exc:
                 gpu_profile_observation["reason"] = f"{type(exc).__name__}: {exc}"[:1024]
                 print(f"profile   GPU SERVING UNAVAILABLE ({exc}); the planner is told so; "
@@ -4993,6 +5065,13 @@ def main(argv: list[str] | None = None) -> int:
             """
             if hypothesis.runtime_pair is not None:
                 nonlocal direct_launch, cpu_launch, serving_recipe
+                if longctx_surface is not None:
+                    # Audit C1 (integration 2026-10-04): the long surface gates EVERY keep,
+                    # runtime-recipe keeps included -- those move depth the most.
+                    long_gate = longctx_runtime_gate(hypothesis.runtime_pair)
+                    runtime_preparation["longctx"] = long_gate
+                    if not long_gate["passed"]:
+                        raise loop.ConfirmVetoed("KEEP_CANDIDATE-longctx: " + long_gate["reason"])
                 previous_recipe = feedback_anchor[0]
                 previous_floor = runtime_preparation.get("source_comparison_floor")
                 if runtime_keep_grade:
@@ -5124,16 +5203,23 @@ def main(argv: list[str] | None = None) -> int:
                     comparison.effect - heldout_row.effect]
                 if not verdict["promoted"]:
                     raise loop.ConfirmVetoed(verdict["reason"])
+            measured_dims: dict = {}
             if direct_launch:
                 # G5: extend the cross-workload keep gate across every tracked
-                # dimension (surface_validation.keep_dimensions). Always recorded in the
-                # store; it enters the keep evidence and can refuse only when the
-                # target declares dimensions.
+                # dimension (surface_validation.keep_dimensions). Measured, recorded and
+                # able to refuse ONLY when the target declares dimensions; an undeclared
+                # target takes exactly the pre-existing keep path.
                 primary_dim = surface_validation.primary_dimension(serving_recipe.np)
-                measured_dims = {}
                 for name, measure in keep_dimension_measures.items():
                     if name in keep_dims and name != primary_dim:
                         try:
+                            if (name == "prefill_at_depth" and longctx_surface is not None
+                                    and isinstance(measured_dims.get("long_decode"), Mapping)
+                                    and "longctx" in measured_dims["long_decode"]):
+                                # One long-context A/B carries both dimensions.
+                                measured_dims[name] = longctx.prefill_dimension_row(
+                                    measured_dims["long_decode"])
+                                continue
                             with cpu_measurement_window():
                                 measured_dims[name] = measure(worker)
                         except Exception as exc:  # noqa: BLE001 -- recorded, fail closed
@@ -5160,12 +5246,12 @@ def main(argv: list[str] | None = None) -> int:
                             ctx=getattr(serving_recipe, "ctx", None), np=serving_recipe.np)
                     except Exception as exc:  # noqa: BLE001 -- recorded, fail closed
                         capacity_record = {"error": f"{type(exc).__name__}: {exc}"}
-                dims_record = surface_validation.keep_dimensions(
-                    declared=keep_dims, primary=primary_dim, comparisons=measured_dims,
-                    capacity=capacity_record)
-                surface_validation.retain_dimensions(args.store, hypothesis.mechanism_id,
-                                                     dims_record)
                 if keep_dims:
+                    dims_record = surface_validation.keep_dimensions(
+                        declared=keep_dims, primary=primary_dim, comparisons=measured_dims,
+                        capacity=capacity_record)
+                    surface_validation.retain_dimensions(args.store, hypothesis.mechanism_id,
+                                                         dims_record)
                     evidence["keep_dimensions"] = dims_record
                     if not dims_record["passed"]:
                         raise loop.ConfirmVetoed("KEEP_CANDIDATE-dimensions: "
@@ -5196,7 +5282,10 @@ def main(argv: list[str] | None = None) -> int:
             if longctx_surface is not None:
                 # Audit C1 (operator 2026-10-04): no keep may regress the long-context
                 # surface (decode or prefill at depth), alongside the peer floor above.
-                evidence["longctx"] = longctx_keep_gate(worker, hypothesis, comparison)
+                evidence["longctx"] = longctx_keep_gate(
+                    worker, hypothesis, comparison,
+                    measured_row=(measured_dims.get("long_decode")
+                                  if direct_launch and "long_decode" in keep_dims else None))
                 if not evidence["longctx"]["passed"]:
                     raise loop.ConfirmVetoed("KEEP_CANDIDATE-longctx: "
                                              + evidence["longctx"]["reason"])

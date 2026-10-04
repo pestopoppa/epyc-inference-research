@@ -402,6 +402,10 @@ class CpuSourceRoute:
     #: surface provides one (run.py `long_identity_targets`; audit 2026-10-04 C1/C2). An
     #: attention change whose defect only shows at depth is invisible at ~300 tokens.
     long_identity: bool = False
+    #: New file-scope `static` OBJECTS (not functions) must be `const`/`constexpr` with a
+    #: call-free initializer: a static whose initializer calls anything runs at library
+    #: load, outside every gate (audit 2026-10-04: `static int x = (setenv(..), 0);`).
+    helper_objects_const: bool = False
 
 
 CPU_SOURCE_ROUTES = (
@@ -684,19 +688,31 @@ CPU_SOURCE_ROUTES = (
         identity_targets="peers",
         identity_repeats=3,
         long_identity=True,
-        forbidden_added=r"#\s*pragma\s+omp",
+        helper_objects_const=True,
+        # No OpenMP in any spelling, and no preprocessor line that could reach past the
+        # hunk: a `#define`/`#undef` inside an FA body stays in force to the end of
+        # ops.cpp (the tiled body, ssm_conv and gated_delta_net follow it); `#include
+        # "..."` pulls in-tree code. `#include <...>` (system headers) and balanced
+        # `#if`/`#endif` remain admitted (audit 2026-10-04 integration).
+        forbidden_added=(r"#\s*pragma\s+omp|\b_Pragma\s*\(|\bomp_\w+\s*\(|"
+                         r'^\+\s*#\s*(define|undef|pragma|line|error|warning)\b|^\+\s*#\s*include\s*"'),
         admitted_text=("hunks inside the ggml_compute_forward_flash_attn_ext_f16 (dispatch), "
                        "ggml_compute_forward_flash_attn_ext_f16_one_chunk, "
                        "ggml_flash_attn_ext_reduce_partials or "
                        "ggml_compute_forward_flash_attn_ext bodies plus NEW file-scope "
-                       "static helpers and #include <...> lines; work split and traversal "
+                       "static helpers (functions, or const objects with call-free "
+                       "initializers) and #include <...> lines; work split and traversal "
                        "only, every output row's reduction order unchanged (bit-identical "
-                       "to the anchor); no `#pragma omp`; the tiled body, headers, "
-                       "ggml-cpu.c (wdata sizing) and every other function unchanged. "
-                       "Gate: FLASH_ATTN_EXT native suite, the cpu_fa_longctx_v1 case set, "
-                       "bit identity with the anchor on the FA probe cases (both "
-                       "GGML_FA_SPLIT_KV settings, 3 repetitions), the paired FA perf "
-                       "screen, and greedy identity on the frozen requests served 3x")),
+                       "to the anchor); no `#pragma omp`/`_Pragma`/omp_* calls, no "
+                       "`#define`/`#undef`/`#include \"...\"` anywhere in the patch; the "
+                       "tiled body, headers, ggml-cpu.c (wdata sizing) and every other "
+                       "function unchanged. Gate: FLASH_ATTN_EXT native suite, bit identity "
+                       "with the anchor on the FA probe cases (both GGML_FA_SPLIT_KV "
+                       "settings, 3 repetitions), greedy identity on the frozen requests "
+                       "served 3x (and on the long-context manifest when the lane opts in). "
+                       "The cpu_fa_longctx_v1 case set and the paired FA perf screen run "
+                       "only once test-backend-ops carries the case set; until then both "
+                       "record SKIP and are not gates")),
 )
 CPU_SOURCE_ROUTE_PATHS = tuple(sorted({route.path for route in CPU_SOURCE_ROUTES}))
 
@@ -1102,6 +1118,23 @@ def _cpu_route_scope_refusal(route: CpuSourceRoute, source_text: str | None,
 _HELPER_START = re.compile(
     r"^(?:static\b|inline\s+static\b|template\s*<[^>]*>\s*static\b|"
     r"\[\[[\w:, ]+\]\]\s*static\b)")
+_STATIC_FUNCTION = re.compile(r"^(?:template\s*<[^>]*>\s*)?(?:\[\[[\w:, ]+\]\]\s*)?"
+                              r"(?:inline\s+)?static\b[^=;{]*\(")
+
+
+def _static_object_refusal(statement: str) -> str | None:
+    """`CpuSourceRoute.helper_objects_const`: a new file-scope `static` that is not a
+    function must be `const`/`constexpr` and its initializer must not call anything."""
+    if not _HELPER_START.match(statement) or _STATIC_FUNCTION.match(statement):
+        return None
+    head, _eq, init = statement.partition("=")
+    if not re.search(r"\b(const|constexpr)\b", head):
+        return ("a new file-scope static object must be const/constexpr "
+                f"({statement[:80]!r})")
+    if "(" in init or "(" in head:
+        return ("a new file-scope static object's initializer must not call anything "
+                f"({statement[:80]!r})")
+    return None
 _HELPER_INCLUDE = re.compile(r"^#\s*include\s*<[\w./+-]+>\s*$")
 _HELPER_CONDITIONAL = re.compile(r"^#\s*(if|ifdef|ifndef|elif|else|endif)\b")
 _EXTERN_C_OPEN = re.compile(r'^\s*extern\s+"C"\s*\{')
@@ -1156,9 +1189,13 @@ def _helper_block_refusal(pre_lines: list[str], after: int, added: list[str],
         return f"HEAD line {after} is not at file scope (depth {len(stack)})"
     depth, in_block, in_statement, conditional = 0, False, False, 0
     prototype = False
+    statement: list[str] = []
+    const_objects = bool(route and route.helper_objects_const)
     for line in added:
         code, in_block = _strip_code_line(line, in_block)
         text = code.strip()
+        if in_statement or (depth == 0 and text):
+            statement.append(text)
         directive = _HELPER_CONDITIONAL.match(text)
         if directive:
             # #if/#ifdef/#else/#endif (e.g. an __AVX512F__ variant) must balance inside
@@ -1200,6 +1237,11 @@ def _helper_block_refusal(pre_lines: list[str], after: int, added: list[str],
             return "inserted text closes a scope it did not open"
         if depth == 0 and in_statement and (text.endswith(";") or text.endswith("}")):
             in_statement = False
+            if const_objects:
+                refusal = _static_object_refusal(" ".join(statement))
+                if refusal is not None:
+                    return refusal
+            statement = []
     if depth != 0 or in_statement or in_block:
         return "inserted text is not a complete, brace-balanced file-scope declaration"
     if conditional:
@@ -1457,9 +1499,6 @@ def admit_cpu_multi_route(paths, target_symbol: str, file_texts
 # per-context arena rewound at capture, freed at context destruction
 # (experimental/mmvq-graph-cache-pool-20261004, 656c9a66b). A stack-local
 # `ggml_cuda_pool_alloc<T> x(ctx.pool(), n)` released at the end of the op stays legal.
-_GPU_GRAPH_LIFETIME = re.compile(
-    r"\b(?:capture\w*|\w*graph\w*|hipStreamGetCaptureInfo\w*|cudaStreamGetCaptureInfo\w*)\b",
-    re.IGNORECASE)
 _GPU_PERSISTENT_POOL_HOLD = (
     (re.compile(r"\b(?:unique_ptr|shared_ptr|optional)\s*<\s*ggml_cuda_pool_alloc\b"),
      "an owning holder of a ggml_cuda_pool_alloc"),
@@ -1483,24 +1522,63 @@ def _added_code_lines(patch_text: str) -> list[str]:
 
 
 _GPU_STATIC_OBJECT = re.compile(
-    r"\bstatic\s+(?:thread_local\s+)?[A-Za-z_][\w:<>,\s]*?\s+([A-Za-z_]\w*)\s*(?:;|=|\{)")
+    r"\b(?:static\s+(?:thread_local\s+)?|thread_local\s+(?:static\s+)?)"
+    r"[A-Za-z_][\w:<>,\s*&]*?\s+([A-Za-z_]\w*)\s*(?:;|=|\{|\[|$)")
+_GPU_POOL_ADDRESS = re.compile(r"\b\w+\s*(?:\.|->)\s*(?:get\s*\(\s*\)|ptr\b)")
+_GPU_LOCAL_FROM_POOL = re.compile(
+    r"(?:^|[;{(\s])(?:[\w:<>*&\s]+\s)?\*?\s*([A-Za-z_]\w*)\s*=(?!=)\s*\w+\s*(?:\.|->)\s*"
+    r"(?:get\s*\(\s*\)|ptr\b)")
+_GPU_MEMBER_STORE = re.compile(
+    r"\b(\w+)\s*(?:(?:\.|->)\s*\w+|\[[^\]]*\])\s*(?:\[[^\]]*\]\s*)?=(?!=)\s*([^;]*)")
+_GPU_POOL_REFERENCE = re.compile(r"&\s*\w+\s*=(?!=)\s*\w+\s*(?:->|\.)\s*pool\s*\(")
+
+
+def _gpu_statements(lines: list[str]) -> list[str]:
+    """Added code joined and split on `;`/`{`/`}` so a declaration split across lines
+    (`static\n thread_local\n T x;`) is one statement."""
+    text = " ".join(line.strip() for line in lines)
+    return [part.strip() for part in re.split(r"[;{}]", text) if part.strip()]
 
 
 def _gpu_persistent_holds(lines: list[str]):
-    """(line, what) for every persistent hold of pool memory in the added lines."""
-    for line in lines:
+    """(statement, what) for every persistent hold of pool memory in the added lines.
+
+    2026-10-04 (integration audit): the rule is syntactic and judged on the whole added
+    text, not line by line, and it no longer waits for a `graph`/`capture` token --
+    with GGML_HIP_GRAPHS=ON every op is captured, so every CUDA/HIP patch is in scope.
+    """
+    statements = _gpu_statements(lines)
+    for statement in statements:
         for pattern, what in _GPU_PERSISTENT_POOL_HOLD:
-            if pattern.search(line):
-                yield line, what
-    # A pool allocation's ADDRESS retained in static storage (dd161d519 shape:
-    # `cache.q8_1 = src1_q8_1.get();` into a `static thread_local` cache) outlives the
-    # RAII scope that returns the buffer to the pool.
-    statics = {m.group(1) for line in lines for m in [_GPU_STATIC_OBJECT.search(line)] if m}
-    for name in statics:
-        retained = re.compile(rf"\b{re.escape(name)}\s*(?:\.|->)\s*\w+\s*=(?!=)[^;]*\.get\s*\(\s*\)")
-        for line in lines:
-            if retained.search(line):
-                yield line, "a pool-allocation address (.get()) retained in static storage"
+            if pattern.search(statement):
+                yield statement, what
+        if _GPU_POOL_REFERENCE.search(statement):
+            yield statement, "a stored reference to ctx.pool()"
+    # A pool allocation's ADDRESS (`.get()` / public `.ptr`) retained anywhere that is not
+    # an automatic local -- a member, an element, a static/thread_local object, or a local
+    # that then flows into one -- outlives the RAII scope that returns the buffer to the
+    # pool (dd161d519 shape: `cache.q8_1 = src1_q8_1.get();` into a thread_local cache).
+    statics = {m.group(1) for st in statements for m in [_GPU_STATIC_OBJECT.search(st)] if m}
+    carriers = set()
+    for statement in statements:
+        for m in _GPU_LOCAL_FROM_POOL.finditer(statement):
+            carriers.add(m.group(1))
+    for statement in statements:
+        store = _GPU_MEMBER_STORE.search(statement)
+        if store is None:
+            continue
+        target, value = store.group(1), store.group(2)
+        if _GPU_POOL_ADDRESS.search(value) or any(
+                re.search(rf"\b{re.escape(name)}\b", value) for name in carriers):
+            yield statement, ("a pool-allocation address (.get()/.ptr) retained in "
+                              + ("static storage" if target in statics
+                                 else "a member or element that outlives the op"))
+    for statement in statements:
+        m = re.match(r"(?:static\s+)?(?:thread_local\s+)?[\w:<>*&\s]*?\b(\w+)\s*=(?!=)\s*(.*)$",
+                     statement)
+        if m and m.group(1) in statics and (_GPU_POOL_ADDRESS.search(m.group(2)) or any(
+                re.search(rf"\b{re.escape(name)}\b", m.group(2)) for name in carriers)):
+            yield statement, "a pool-allocation address (.get()/.ptr) retained in static storage"
 
 
 def gpu_graph_pool_hold_refusal(patch_text: str | None) -> str | None:
@@ -1508,8 +1586,6 @@ def gpu_graph_pool_hold_refusal(patch_text: str | None) -> str | None:
     if not patch_text:
         return None
     lines = _added_code_lines(patch_text)
-    if not any(_GPU_GRAPH_LIFETIME.search(line) for line in lines):
-        return None
     for line, what in _gpu_persistent_holds(lines):
         return ("GPU-POOL-1: the patch keeps device memory alive across HIP-graph "
                 f"captures with {what} (`{line.strip()[:120]}`). Memory a captured "
@@ -1765,9 +1841,10 @@ def check_model_identity_targets(targets, *, window=None, repeats: int = 1,
                                  architecture=None) -> Verdict:
     """Whole-model identity on every target of a route (2026-10-04 structural routes).
 
-    `targets` is [(label, anchor recipe, candidate recipe, frozen requests)]: this lane's
-    own target first, then the lane binding's peer targets when the route asks for them
-    (`CpuSourceRoute.identity_targets`). Every target must pass; any `wrong` is a
+    `targets` is [(label, anchor recipe, candidate recipe, frozen requests[, prepare])]:
+    this lane's own target first, then the lane binding's peer targets when the route
+    asks for them (`CpuSourceRoute.identity_targets`); the optional fifth element is a
+    per-request `prepare(port)` hook (the long-context surface's slot restore). Every target must pass; any `wrong` is a
     verdict, otherwise any `unavailable` makes the gate unavailable. `required_arch`: at
     least one target must serve a GGUF of one of these architectures, or the edited
     model-specific code would never run under the gate (unavailable, not a pass)."""
@@ -1778,7 +1855,7 @@ def check_model_identity_targets(targets, *, window=None, repeats: int = 1,
         return Verdict("oracle_unavailable", False, "model identity gate has no target")
     if required_arch:
         read = architecture or model_identity.model_architecture
-        archs = {label: read(anchor) for label, anchor, _candidate, _requests in targets}
+        archs = {label: read(anchor) for label, anchor, *_rest in targets}
         if not any(arch in required_arch for arch in archs.values()):
             return Verdict("oracle_unavailable", False,
                            f"no identity target serves a {'/'.join(required_arch)} model "
@@ -1786,10 +1863,11 @@ def check_model_identity_targets(targets, *, window=None, repeats: int = 1,
                            "under the gate -- run this route on a lane bound to that model "
                            "or with it as a peer")
     rows, wrong, unavailable = [], [], []
-    for label, anchor, candidate, requests in targets:
+    for label, anchor, candidate, requests, *extra in targets:
         result = model_identity.check(anchor_recipe=anchor, candidate_recipe=candidate,
                                       requests=tuple(requests or ()), window=window,
-                                      repeats=repeats)
+                                      repeats=repeats,
+                                      **({"prepare": extra[0]} if extra and extra[0] else {}))
         rows.append({"target": label, "status": result.status, "reason": result.reason,
                      "detail": result.detail[:600]})
         if result.status == "wrong":

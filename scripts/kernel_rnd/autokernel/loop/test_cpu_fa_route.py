@@ -413,3 +413,35 @@ def test_case_set_corpus_selects_exactly_the_set(tmp_path, monkeypatch):
     gates.op_correctness(builds["candidate"], op="FLASH_ATTN_EXT", backend="CPU",
                          resolved_recipe=recipe)
     assert "-p" not in seen["argv"] and fa.CASE_SET_ENV not in seen["env"]
+
+
+# ------------------------------------------------------------ scope hardening (2026-10-04)
+
+@needs_anchor
+@pytest.mark.parametrize("inserted, match", [
+    ("    _Pragma(\"omp barrier\")\n", "forbidden pattern"),
+    ("    #define ggml_vec_dot_f16 fa_evil_dot\n", "forbidden pattern"),
+    ("    #undef MIN\n", "forbidden pattern"),
+    ("    #include \"fa-evil.h\"\n", "forbidden pattern"),
+    ("    omp_set_num_threads(1);\n", "forbidden pattern"),
+])
+def test_fa_route_refuses_preprocessor_and_openmp_spellings_inside_a_body(inserted, match):
+    """A macro defined inside an FA body stays in force to the end of ops.cpp (the tiled
+    body, ssm_conv and gated_delta_net follow it); `_Pragma` and omp_* calls are OpenMP
+    in another spelling."""
+    text = _after_line(_head(), "    const bool write_partials = (partials != nullptr);",
+                       inserted)
+    scope = _scope(text)
+    assert not scope.passed and match in scope.reason, scope.reason
+
+
+@needs_anchor
+def test_fa_route_new_static_objects_must_be_const_and_call_free():
+    marker = "static void ggml_compute_forward_flash_attn_ext_f16_one_chunk("
+    table = _before(_head(), marker, "static const int fa_kv_groups[4] = {1, 2, 3, 4};\n\n")
+    assert _scope(table) == ("FLASH_ATTN_EXT",)
+    for bad, match in (("static int fa_env = (setenv(\"GGML_FA\", \"1\", 1), 0);\n\n", "const"),
+                       ("static struct fa_init { fa_init() {} } fa_init_once;\n\n", "const"),
+                       ("static const float fa_scale = fa_compute_scale();\n\n", "call")):
+        scope = _scope(_before(_head(), marker, bad))
+        assert not scope.passed and match in scope.reason, scope.reason

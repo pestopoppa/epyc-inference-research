@@ -136,6 +136,8 @@ def run(*, argv: Sequence[str], env: Mapping[str, str], port: int,
                 except subprocess.TimeoutExpired:
                     proc.kill()
                     proc.wait(30)
+                if proc.poll() is None:
+                    raise RuntimeError(f"capacity probe server pid {proc.pid} survived SIGKILL")
     return peaks
 
 

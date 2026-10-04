@@ -43,7 +43,6 @@ ROCPROF_SUPPORT_LIBS = (
 ROCPROF_CANDIDATES = (
     "/mnt/raid0/llm/tools/rocprofiler-sdk-6.2.0-66/opt/rocm-6.2.0/bin/rocprofv3",
     "/opt/rocm/bin/rocprofv3",
-    "/opt/rocm/bin/rocprofv2",
 )
 
 

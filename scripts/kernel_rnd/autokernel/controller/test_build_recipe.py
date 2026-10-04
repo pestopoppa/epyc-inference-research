@@ -239,5 +239,9 @@ class TestGfx90aRocm62V10Recipe(unittest.TestCase):
             self.assertFalse(br.check_rocm_version(os.path.join(tmp, "nope"))[0])
 
     def test_the_house_recipe_is_untouched(self):
+        # Pinned identity (2026-10-04): the legacy screen's recipe hash is what every
+        # existing GPU screen floor/epoch is keyed on; it must not move with G6.
+        self.assertEqual(br.HOUSE_GPU_RECIPE.sha256(),
+                         "27a65ce389e7e053ab44cc64f5bae30579c81f7d6344b3595e927a72728e8404")
         self.assertNotEqual(br.HOUSE_GPU_RECIPE.sha256(),
                             br.GFX90A_ROCM62_V10_RECIPE.sha256())

@@ -234,7 +234,9 @@ def test_surface_compare_calibrates_the_target_floor_once_then_gates(tmp_path, m
         if longctx.mode == "generate":
             (surface.slot_dir / longctx.slot_filename).write_bytes(b"slot")
             Path(longctx.identity_receipt).write_text(json.dumps(
-                {"schema": "epyc.autokernel.longctx_identity.v1", "passed": True}))
+                {"schema": "epyc.autokernel.longctx_identity.v1", "passed": True,
+                 "slot": longctx.slot_filename, "prefix_digest": spec.prefix_digest,
+                 "spec_digest": spec.digest, "identity_tokens": spec.body["identity_tokens"]}))
             return 0.0
         n = len(launches)
         rate = 100.0 + (n % 5) * 0.1 if Path(build).name == "anchor" else prefill["candidate"]
@@ -257,19 +259,18 @@ def test_surface_compare_calibrates_the_target_floor_once_then_gates(tmp_path, m
     assert row["longctx"]["passed"] is False and row["longctx"]["prefill_regressed"] is True
 
 
-def test_attention_routes_are_selected_by_route_name(monkeypatch):
+def test_attention_routes_are_selected_by_route_name():
+    """The real `cpu_fa_schedule` route (gates.py, audit C2) is the ONLY attention route;
+    an sgemm hypothesis selects none."""
     sgemm = SimpleNamespace(target_surface="ggml/src/ggml-cpu/llamafile/sgemm.cpp",
                             target_symbol="gemm4xN")
     assert longctx.attention_route(sgemm) is None
-    fa = replace(gates.CPU_SOURCE_ROUTES[0], route="cpu_fa_schedule",
-                 path="ggml/src/ggml-cpu/ops.cpp",
-                 symbols=("ggml_compute_forward_flash_attn_ext_f16",))
-    monkeypatch.setattr(gates, "CPU_SOURCE_ROUTES", (*gates.CPU_SOURCE_ROUTES, fa))
-    hypothesis = SimpleNamespace(target_surface="ggml/src/ggml-cpu/ops.cpp",
-                                 target_symbol="ggml_compute_forward_flash_attn_ext_f16")
+    fa = [route for route in gates.CPU_SOURCE_ROUTES if route.route == "cpu_fa_schedule"]
+    assert len(fa) == 1 and fa[0].long_identity is True
+    hypothesis = SimpleNamespace(target_surface=fa[0].path, target_symbol=fa[0].symbols[0])
     assert longctx.attention_route(hypothesis) == "cpu_fa_schedule"
-    assert not any(longctx.ATTENTION_ROUTE.search(route.route)
-                   for route in (*gates.CPU_SOURCE_ROUTES[:-1], *gates.CPU_MULTI_FILE_ROUTES))
+    assert [route.route for route in (*gates.CPU_SOURCE_ROUTES, *gates.CPU_MULTI_FILE_ROUTES)
+            if longctx.ATTENTION_ROUTE.search(route.route)] == ["cpu_fa_schedule"]
 
 
 # ------------------------------------------------------------------ real _measure_once hook
@@ -439,3 +440,171 @@ def test_production_histogram_buckets_decode_wall_by_context(tmp_path):
     assert server["requests"] == 3 and server["ctx_max"] == 150000
     shares = {row["bucket"]: row["decode_wall_share"] for row in server["buckets"]}
     assert shares == {"0k-8k": 0.1, "32k-64k": 0.3, ">=128k": 0.6}
+
+
+# ------------------------------------------------------------ integration seams (2026-10-04)
+
+def test_spec_requires_a_greedy_full_length_decode(tmp_path):
+    """D5: a hand-written spec that is not greedy, or lets EOS cut the decode short,
+    is refused at load; the long rate must be over exactly n_predict tokens."""
+    spec = _spec(tmp_path)
+    request = json.loads(spec.request_b[1])
+    assert request["ignore_eos"] is True and (request["temperature"] == 0 or request["top_k"] == 1)
+    prompt = spec.manifest.prompts[0]
+    options = dict(prompt.request_options)
+    for change, match in (({"request_options": tuple({**options, "ignore_eos": False}.items())},
+                           "ignore_eos"),
+                          ({"temperature": 0.7, "top_k": 40}, "greedy")):
+        bad = longctx.Spec(spec.path, spec.body, replace(spec.manifest, prompts=(
+            replace(prompt, **change),)))
+        with pytest.raises(longctx.LongCtxRefused, match=match):
+            bad._validate()
+
+
+def test_identity_receipt_is_keyed_on_the_slot_and_verified(tmp_path):
+    """D2: a receipt written for one anchor (slot) never admits another anchor, another
+    spec or a tampered file -- each must re-prove restore-vs-fresh."""
+    spec = _spec(tmp_path)
+    surface = longctx.Surface(spec, store=tmp_path / "store")
+    anchor = surface.launch_for(_launch(tmp_path / "anchor"))
+    from .test_resolved_recipe import _artifact
+    other = surface.launch_for(_launch(tmp_path / "other", artifacts={
+        **_artifacts(_template(), build=tmp_path / "other"),
+        "executable": _artifact("executable", str(tmp_path / "other" / "bin" / "llama-server"), "e")}))
+    assert other.execution_digest != anchor.execution_digest
+    assert surface.root == tmp_path / "store" / "longctx" / "lc-target"
+    path = surface._identity_path(anchor)
+    assert path.name == f"identity-{surface.slot_name(anchor)[:-4]}.json"
+    assert surface._identity_path(other) != path
+    surface.slot_dir.mkdir(parents=True)
+    good = {"schema": longctx.IDENTITY_SCHEMA, "passed": True, "slot": surface.slot_name(anchor),
+            "prefix_digest": spec.prefix_digest, "spec_digest": spec.digest,
+            "identity_tokens": spec.body["identity_tokens"]}
+    path.write_text(json.dumps(good))
+    assert surface._identity(anchor)["passed"] is True
+    assert surface._identity(other) is None                      # its own receipt is absent
+    path.write_text(json.dumps({**good, "spec_digest": "f" * 64}))
+    with pytest.raises(longctx.LongCtxRefused, match="another slot/spec"):
+        surface._identity(anchor)
+    path.write_text(json.dumps({**good, "passed": False}))
+    with pytest.raises(longctx.LongCtxRefused, match="FAILED earlier"):
+        surface._identity(anchor)
+    path.write_text("{not json")
+    with pytest.raises(longctx.LongCtxRefused, match="readable"):
+        surface._identity(anchor)
+
+
+def test_identity_gate_refuses_a_vacuous_reprefill_and_a_short_decode(tmp_path):
+    """D3/D5: the identity completions must EXTEND the cached state (prompt_n bounded);
+    a decode that stops short of n_predict is refused, not timed."""
+    spec = _spec(tmp_path)
+    server = FakeServer(spec)
+
+    def reprefill(port, path, body, timeout):
+        reply = json.loads(server(port, path, body, timeout))
+        if path == "/completion" and json.loads(body).get("return_tokens"):
+            reply["timings"]["prompt_n"] = len(json.loads(body)["prompt"])
+        return json.dumps(reply).encode()
+
+    launch = longctx.SurfaceLaunch(spec, "g.bin", mode="generate",
+                                   identity_receipt=str(tmp_path / "r.json"), post=reprefill)
+    row = launch.serve(1, 0, "warmup", spec.request_b)[3]
+    assert "LONGCTX_REFUSED request B evaluated prompt_n" in row["error"]
+    assert not (tmp_path / "r.json").exists()
+
+    def eos_early(port, path, body, timeout):
+        reply = json.loads(server(port, path, body, timeout))
+        if path == "/completion":
+            reply["timings"]["predicted_n"] = 3
+        return json.dumps(reply).encode()
+
+    server.saved["s.bin"] = DEPTH
+    row = longctx.SurfaceLaunch(spec, "s.bin", post=eos_early).serve(
+        1, 0, "measurement", spec.request_b)[3]
+    assert "predicted 3 tokens, not 8" in row["error"]
+
+
+def test_prefill_dimension_row_projects_the_long_verdict_or_fails_closed():
+    from . import surface_validation
+    row = {"schema": "epyc.autokernel.serving_ab.v2", "effect_unit": serving.COMPARE_EFFECT_UNIT,
+           "floor_unit": serving.CALIBRATION_UNIT, "recipe_hash": "r", "pairs": 5,
+           "longctx": {"prefill_effect": -0.031, "prefill_floor_pct": 1.2,
+                       "prefill_decisive": True, "anchor_prefill_tok_s": 100.0,
+                       "candidate_prefill_tok_s": 96.9}}
+    projected = longctx.prefill_dimension_row(row)
+    assert projected["dimension"] == "prefill_at_depth" and projected["decisive"] is True
+    assert projected["effect_pct"] == pytest.approx(-3.1)
+    assert surface_validation.classify(projected, intended_target=False) == "failed"
+    gain = longctx.prefill_dimension_row({**row, "longctx": {**row["longctx"],
+                                                             "prefill_effect": 0.02}})
+    assert surface_validation.classify(gain, intended_target=False) == "passed"
+    assert "error" in longctx.prefill_dimension_row({**row, "longctx": {
+        "prefill_effect": None, "prefill_floor_pct": None, "prefill_decisive": None,
+        "reason": "uncalibrated"}})
+    assert "error" in longctx.prefill_dimension_row({"schema": "x"})
+    dims = surface_validation.keep_dimensions(
+        declared=("short_decode", "prefill_at_depth"), primary="short_decode",
+        comparisons={"prefill_at_depth": projected}, capacity=None)
+    assert dims["passed"] is False and "prefill_at_depth: failed" in dims["reason"]
+
+
+def test_identity_targets_restore_the_anchor_slot_before_every_request(tmp_path, monkeypatch):
+    """The cpu_fa_schedule long identity target: a 5-tuple whose `prepare` restores the
+    ANCHOR's slot, threaded through model_identity.check on both arms, repetitions kept
+    cached (the restore resets the state, `_uncached` is not applied)."""
+    from . import model_identity
+    spec = _spec(tmp_path)
+    surface = longctx.Surface(spec, store=tmp_path / "store")
+    anchor = surface.launch_for(_launch(tmp_path / "anchor"))
+    candidate = surface.launch_for(_launch(tmp_path / "candidate"))
+    surface.slot_dir.mkdir(parents=True)
+    (surface.slot_dir / surface.slot_name(anchor)).write_bytes(b"slot")
+    surface._identity_path(anchor).write_text(json.dumps(
+        {"schema": longctx.IDENTITY_SCHEMA, "passed": True, "slot": surface.slot_name(anchor),
+         "prefix_digest": spec.prefix_digest, "spec_digest": spec.digest,
+         "identity_tokens": spec.body["identity_tokens"]}))
+    targets = surface.identity_targets(anchor, candidate)
+    assert len(targets) == 1
+    label, a_arm, c_arm, requests, prepare = targets[0]
+    assert label == "longctx" and a_arm is anchor and c_arm is candidate
+    assert requests == spec.requests(anchor.template) and callable(prepare)
+
+    served = []
+
+    def serve_fn(recipe, reqs, *, prepare=None):
+        for prompt_id, body in reqs:
+            prepare(recipe.port)
+            served.append((Path(recipe.build_dir).name, json.loads(body)["cache_prompt"]))
+        return [(prompt_id, "d", "p") for prompt_id, _ in reqs]
+
+    restores = []
+    result = model_identity.check(anchor_recipe=anchor, candidate_recipe=candidate,
+                                  requests=requests, serve_fn=serve_fn, repeats=3,
+                                  prepare=lambda port: restores.append(port))
+    assert result.status == "pass"
+    assert len(restores) == 4 and all(cached for _b, cached in served)   # 1 anchor + 3 candidate
+    assert [b for b, _c in served] == ["anchor"] + ["candidate"] * 3
+    # Without `prepare`, repetitions recompute the prompt (the pre-existing contract).
+    served.clear()
+    plain = model_identity.check(anchor_recipe=anchor, candidate_recipe=candidate,
+                                 requests=requests, repeats=2,
+                                 serve_fn=lambda recipe, reqs: serve_fn(recipe, reqs,
+                                                                        prepare=lambda p: None))
+    assert plain.status == "pass" and not any(cached for _b, cached in served)
+
+
+def test_run_registers_the_long_surface_into_the_keep_dimensions_and_long_identity():
+    """Integration: with --longctx-surface the long surface is the instrument behind the
+    G5 long_decode / prefill_at_depth dimensions, the cpu_fa_schedule long identity, and
+    the runtime-recipe keep gate; without it every hook stays unset (refuses/pending)."""
+    body = (Path(__file__).parent / "run.py").read_text(encoding="utf-8")
+    block = body[body.index("    if longctx_surface is not None:\n        def _longctx_dimension_row"):]
+    block = block[:block.index("    def cpu_anchor_guard_compare")]
+    assert 'keep_dimension_measures["long_decode"] = _longctx_dimension_row' in block
+    assert 'keep_dimension_measures["prefill_at_depth"] = _longctx_prefill_row' in block
+    assert "long_identity_targets[0] = _long_identity_targets" in block
+    assert "with cpu_measurement_window():" in block
+    assert re.search(r"if hypothesis\.runtime_pair is not None:\n(?:.*\n){1,2}?\s+if longctx_surface "
+                     r"is not None:\n(?:.*\n){1,5}?\s+long_gate = longctx_runtime_gate\(", body)
+    assert re.search(r'long_dims & set\(keep_dims\) and longctx_surface is None:\n\s+parser\.error',
+                     body)

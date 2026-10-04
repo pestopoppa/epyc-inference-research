@@ -707,12 +707,14 @@ def run(*, command_argv: Sequence[str], launch_env: Mapping[str, str], port: int
         analysed["windows"][name] = {"status": "failed", "reason": reason}
     proof = dict(sampler.proof)
     residency_record = {**proof, "covers_request_phase": bool(spans)}
+    hip_proof = hip_launch_proof.fold(
+        residency_record, maps=maps,
+        link=hip_launch_proof.linkage(Path(command_argv[0]), env.get("LD_LIBRARY_PATH")))
+    if hip_proof["status"] == hip_launch_proof.REFUTED:
+        raise ProfileFailed(f"HIP launch refuted for the profiled server (legs "
+                            f"{hip_proof['legs']}); the trace is not a GPU profile of this build")
     analysed.update(teardown=teardown, marks=marks, spans=spans, trace_files=[str(p) for p in traces],
-                    command=command, residency=proof,
-                    hip_proof=hip_launch_proof.fold(
-                        residency_record, maps=maps,
-                        link=hip_launch_proof.linkage(Path(command_argv[0]),
-                                                      env.get("LD_LIBRARY_PATH"))))
+                    command=command, residency=proof, hip_proof=hip_proof)
     return analysed
 
 

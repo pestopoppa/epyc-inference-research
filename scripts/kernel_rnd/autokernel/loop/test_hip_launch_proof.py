@@ -61,7 +61,8 @@ def test_linkage_maps_exit_codes_and_caches(tmp_path, monkeypatch):
     monkeypatch.setattr(hp, "_LINKAGE_CACHE", {})
     assert hp.linkage(binary, "/b", script=_script(tmp_path, 1))["status"] == hp.REFUTED
     monkeypatch.setattr(hp, "_LINKAGE_CACHE", {})
-    assert hp.linkage(binary, "/b", script=_script(tmp_path, 2))["status"] == hp.UNPROVEN
+    # exit 2 ("proved nothing") is DO NOT TRUST in the script's own words: refuted
+    assert hp.linkage(binary, "/b", script=_script(tmp_path, 2))["status"] == hp.REFUTED
     assert hp.linkage(tmp_path / "missing", "/b")["status"] == hp.UNPROVEN
 
 

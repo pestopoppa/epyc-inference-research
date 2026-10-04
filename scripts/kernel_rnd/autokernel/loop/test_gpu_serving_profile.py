@@ -234,6 +234,11 @@ def test_code_object_metadata_gives_registers_spills_and_lds(tmp_path):
 
 def test_run_profiles_one_launch_and_cuts_windows(tmp_path, monkeypatch):
     monkeypatch.setattr(gsp, "FIDUCIAL_S", 1.2)
+    # The fake binary cannot pass the real linkage verifier (a refuted proof is a failed
+    # profile, tested below); here the linkage leg is proven and the rest unproven.
+    from . import hip_launch_proof
+    monkeypatch.setattr(hip_launch_proof, "linkage",
+                        lambda *_a, **_k: {"status": hip_launch_proof.PROVEN, "rc": 0})
     build = tmp_path / "bin"
     build.mkdir()
     (build / "llama-server").write_bytes(b"\x7fELF fake")

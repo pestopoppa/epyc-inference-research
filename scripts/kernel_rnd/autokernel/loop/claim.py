@@ -195,13 +195,14 @@ def publish_intervals(store, selection, contexts, *, target):
 
 
 @contextmanager
-def hold(lock_path: Path = DEVICE_LOCK, *, device_id: str = DEVICE_ID) -> Iterator[dict]:
+def hold(lock_path: Path | None = None, *, device_id: str = DEVICE_ID) -> Iterator[dict]:
     """Hold an exclusive claim for the whole window, or refuse.
 
     Non-blocking on purpose: a loop that waits on a lock behind an unknown holder is
     a loop that looks alive while doing nothing. Refusing tells the operator the
     device is busy, which is a fact worth surfacing.
     """
+    lock_path = DEVICE_LOCK if lock_path is None else lock_path
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     handle = lock_path.open("a")
     try:

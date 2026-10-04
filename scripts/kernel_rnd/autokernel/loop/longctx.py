@@ -54,6 +54,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 import hashlib
 import json
+import os
 import math
 from pathlib import Path
 import re
@@ -156,6 +157,13 @@ class Spec:
         if request.get("cache_prompt") is not True:
             raise LongCtxRefused("request B must set cache_prompt=true: it reuses the "
                                  "restored prefix")
+        if not (request.get("temperature") == 0 or request.get("top_k") == 1):
+            raise LongCtxRefused("request B must be greedy (temperature 0 or top_k 1): the "
+                                 "restore-vs-fresh and long identity gates require it")
+        if request.get("ignore_eos") is not True:
+            raise LongCtxRefused("request B must set ignore_eos=true: decode at depth is "
+                                 "timed over exactly n_predict tokens")
+        _positive(request.get("n_predict"), "n_predict")
         prefix = _positive(self.body["prefix_tokens"], "prefix_tokens")
         if not prefix < len(prompt):
             raise LongCtxRefused("request B must extend the prefix with a probe")
@@ -375,9 +383,14 @@ class SurfaceLaunch:
                  "n_saved": saved.get("n_saved"), "n_written": saved.get("n_written")}
         if self.identity_receipt is not None:
             fresh, _ = self._completion(port, self.spec.request_identity, REQUEST_TIMEOUT_S)
+            # Both completions must EXTEND the cached/restored prefix: a server that
+            # silently re-prefilled would reproduce the same greedy tokens and pass
+            # vacuously, proving nothing about the restored state.
+            self._bounded(fresh, "b")
             self._restore(port)
             restored, _ = self._completion(port, self.spec.request_identity,
                                            REQUEST_TIMEOUT_S)
+            self._bounded(restored, "b")
             want = self.spec.body["identity_tokens"]
             a, b = fresh.get("tokens"), restored.get("tokens")
             passed = (isinstance(a, list) and a == b and len(a) == want)
@@ -388,8 +401,10 @@ class SurfaceLaunch:
                        "method": "in-process prefix vs restored slot file, same probe "
                                  "batch, greedy; must be token-identical",
                        "at": time.time()}
-            Path(self.identity_receipt).write_text(json.dumps(receipt, indent=1) + "\n",
-                                                   encoding="utf-8")
+            target = Path(self.identity_receipt)
+            partial = target.with_name(target.name + f".{os.getpid()}.part")
+            partial.write_text(json.dumps(receipt, indent=1) + "\n", encoding="utf-8")
+            os.replace(partial, target)
             facts["identity"] = {"passed": passed, "receipt": self.identity_receipt}
             if not passed:
                 raise LongCtxRefused("LONGCTX_REFUSED restore-vs-fresh greedy identity "
@@ -430,6 +445,11 @@ class SurfaceLaunch:
                 facts["prompt_n"] = self._bounded(response, request_kind.lower())
                 facts["prompt_per_second"] = _timing(response, "prompt_per_second")
                 tokens = _timing(response, "predicted_n", int)
+                want = self.spec._b["n_predict"] if request_kind == "B" else 1
+                if tokens != want:
+                    raise LongCtxRefused(f"LONGCTX_REFUSED request {request_kind} predicted "
+                                         f"{tokens} tokens, not {want}: the rate is not over "
+                                         "the frozen decode length")
                 rate = _timing(response, "predicted_per_second")
                 facts["predicted_per_second"] = rate
                 record.update(predicted_n=tokens, predicted_per_second=rate, terminal=True)
@@ -529,7 +549,8 @@ class Surface:
 
     def __init__(self, spec: Spec, *, store: Path | str):
         self.spec = spec
-        self.root = Path(store) / "longctx"
+        # Per TARGET: two lanes on one model+prefix must never prune each other's slots.
+        self.root = Path(store) / "longctx" / spec.target_id
         self.slot_dir = self.root / "slots"
         self.floor_store = self.root / "floors"
 
@@ -552,16 +573,29 @@ class Surface:
                 f"{self.spec.prefix_digest[:16]}.bin")
 
     def _identity_path(self, anchor_arm) -> Path:
-        return self.slot_dir / (f"identity-{anchor_arm.model.sha256[:16]}-"
-                                f"{self.spec.prefix_digest[:16]}.json")
+        # Keyed like the slot itself: model, ANCHOR EXECUTION DIGEST and prefix. A new
+        # anchor (or the same model under another launch) re-proves restore-vs-fresh;
+        # DS41-B14 is a kernel/KV-layout defect, exactly what a new anchor can introduce.
+        return self.slot_dir / f"identity-{self.slot_name(anchor_arm)[:-4]}.json"
 
     def _identity(self, anchor_arm) -> dict | None:
         path = self._identity_path(anchor_arm)
         if not path.is_file():
             return None
-        receipt = json.loads(path.read_text(encoding="utf-8"))
-        if receipt.get("schema") != IDENTITY_SCHEMA:
+        try:
+            receipt = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError as exc:
+            raise LongCtxRefused(f"{path} is not a readable identity receipt: {exc}") from exc
+        if not isinstance(receipt, Mapping) or receipt.get("schema") != IDENTITY_SCHEMA:
             raise LongCtxRefused(f"{path} is not an identity receipt")
+        expected = {"slot": self.slot_name(anchor_arm), "prefix_digest": self.spec.prefix_digest,
+                    "spec_digest": self.spec.digest,
+                    "identity_tokens": self.spec.body["identity_tokens"]}
+        mismatch = {key: receipt.get(key) for key, want in expected.items()
+                    if receipt.get(key) != want}
+        if mismatch:
+            raise LongCtxRefused(f"identity receipt {path} is for another slot/spec "
+                                 f"({mismatch}); remove it to re-prove")
         if receipt.get("passed") is not True:
             raise LongCtxRefused(f"restore-vs-fresh identity FAILED earlier ({path}); the "
                                  "surface stays refused until the cause is fixed and the "
@@ -646,6 +680,40 @@ class Surface:
             longctx=launch))
         row["longctx"] = verdict(row, reading.row, pairs)
         return row
+
+    def identity_targets(self, anchor_arm, candidate_arm) -> list[tuple]:
+        """The `long_identity` route target (gates.check_model_identity_targets 5-tuple):
+        both arms restore the ANCHOR's saved slot before every greedy request B, so the
+        identity gate judges the attention path at depth and across repetitions."""
+        launch = self.ensure_slot(anchor_arm)
+        return [("longctx", anchor_arm, candidate_arm,
+                 self.spec.requests(anchor_arm.template), launch._restore)]
+
+
+def prefill_dimension_row(row: Mapping) -> dict:
+    """Project a long-context A/B row's prefill-at-depth verdict into the serving A/B
+    shape `surface_validation.classify` reads (G5 `prefill_at_depth`). An incomplete or
+    uncalibrated prefill reading is an `error` row, which the keep-dimensions gate
+    records as pending (fail closed)."""
+    long_verdict = row.get("longctx") if isinstance(row, Mapping) else None
+    if not isinstance(long_verdict, Mapping):
+        return {"error": "long-context row carries no verdict"}
+    effect, floor, decisive = (long_verdict.get("prefill_effect"),
+                               long_verdict.get("prefill_floor_pct"),
+                               long_verdict.get("prefill_decisive"))
+    if (not isinstance(effect, (int, float)) or isinstance(effect, bool)
+            or not isinstance(floor, (int, float)) or isinstance(floor, bool)
+            or type(decisive) is not bool):
+        return {"error": "prefill at depth uncalibrated or incomplete: "
+                         + str(long_verdict.get("reason"))}
+    return {"schema": "epyc.autokernel.serving_ab.v1", "dimension": "prefill_at_depth",
+            "effect": float(effect), "effect_pct": float(effect) * 100.0,
+            "noise_floor_pct": float(floor), "decisive": decisive,
+            "effect_unit": row.get("effect_unit"), "floor_unit": row.get("floor_unit"),
+            "anchor_tok_s": long_verdict.get("anchor_prefill_tok_s"),
+            "candidate_tok_s": long_verdict.get("candidate_prefill_tok_s"),
+            "derived_from": {key: row.get(key) for key in ("recipe_hash", "floor_sha256",
+                                                             "pairs")}}
 
 
 # --------------------------------------------------------------------------- C4

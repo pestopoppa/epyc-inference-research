@@ -391,8 +391,12 @@ re-read that KV. The problem is scheduling and GQA traversal, not bytes.
   `ggml_compute_forward_flash_attn_ext_f16` (or `..._f16_one_chunk`,
   `ggml_flash_attn_ext_reduce_partials`, `ggml_compute_forward_flash_attn_ext`).
   - **Scope:** those four bodies (the FA dispatch, the per-row walk, the split-KV merge,
-    the PREC switch), plus NEW file-scope `static` helpers and `#include <...>` lines.
-    The tiled body, the K/V conversion, headers and `ggml-cpu.c` stay out. Per-thread
+    the PREC switch), plus NEW file-scope `static` helpers (functions, or `const` objects
+    with call-free initializers) and `#include <...>` lines. No `#define`/`#undef`/
+    `#include "..."`/`#pragma` anywhere in the patch, no OpenMP in any spelling
+    (`#pragma omp`, `_Pragma`, `omp_*`). The tiled body, the K/V conversion helpers,
+    headers and `ggml-cpu.c` stay out (the per-row walk is admitted; keep its K/V reads
+    as they are). Per-thread
     scratch is sized in `ggml_graph_plan` (not admitted): use the existing per-thread
     `wdata` budget, `MAX(prefill, decode) / n_tasks` bytes (about 290 KB per thread at
     D=256 and 550 KB at D=512), which holds G accumulators of DV floats.
@@ -403,25 +407,28 @@ re-read that KV. The problem is scheduling and GQA traversal, not bytes.
     (KV head, row) work instead of rows. A KV split with a merge is admissible only where
     it reproduces the anchor's order (the existing split-KV path's chunk boundaries
     under `GGML_FA_SPLIT_KV=1`); under the AK recipes' `GGML_FA_SPLIT_KV=0` the anchor's
-    order is one serial walk, so a new split is not bit-exact. `use_ref` keeps the
-    vec-only reference walk. No `#pragma omp`.
+    order is one serial walk, so a new split is not bit-exact. Leave the `use_ref`
+    vec-only reference walk unchanged (the anchor-bit probe compares against the anchor
+    build, so an edit there would move the reference with the candidate).
   - **Op:** `FLASH_ATTN_EXT` (the generic native suite).
   - **Gate, in order:**
-    - the `cpu_fa_longctx_v1` `test-backend-ops` case set (selected by
-      `AUTOKERNEL_CORRECTNESS_CASE_SET`; Q38FN D=256, 2 KV heads × GQA 12, kv 8k/64k/128k,
-      nb 1/5; DS41 D=512, 1 KV head × 64, sinks, kv 4k/8k/32k/64k, nb 1/3), when the
-      build carries it;
     - `cpu_fa_reference`: the candidate's output must be BIT-IDENTICAL to the anchor
-      build's on those shapes plus layout and prefill guards, on a 7-thread and the
-      recipe's team, under both `GGML_FA_SPLIT_KV` settings, each graph repeated 3x
-      (races);
-    - the paired FA perf screen: `test-backend-ops perf` on the case set, anchor and
-      candidate alternated ABAB on the recipe team; the geometric mean must drop at least
-      2.5% (the decode floor 1.544% over attention's ≤68% share), or the serving A/B is
-      not paid for;
+      build's on the `cpu_fa_longctx_v1` shapes (Q38FN D=256, 2 KV heads × GQA 12, kv
+      8k/64k/128k, nb 1/5; DS41 D=512, 1 KV head × 64, sinks, kv 4k/8k/32k/64k, nb 1/3)
+      plus layout and prefill guards, on a 7-thread and the recipe's team, under both
+      `GGML_FA_SPLIT_KV` settings, each graph repeated 3x (races). This probe is compiled
+      against each arm's own `libggml-cpu` and is the correctness gate today;
     - `model_identity` on the frozen requests, each served 3x by the candidate, on this
-      lane's target and every peer target, and on the long manifest once the long
-      surface provides it.
+      lane's target and every peer target, and -- when the lane runs with
+      `--longctx-surface` -- on the long-context manifest with the anchor's slot restored
+      before every request;
+    - the serving A/B (and, with `--longctx-surface`, decode at depth as the primary
+      metric with the short surface as the no-regression gate).
+    - NOT gates yet: the `cpu_fa_longctx_v1` `test-backend-ops` case set (selected by
+      `AUTOKERNEL_CORRECTNESS_CASE_SET`) and the paired ABAB FA perf screen (geomean must
+      drop ≥ 2.5%) run only once `test-backend-ops` carries the case set
+      (`tmp/ak-cpu-fa-route-20261004/test-backend-ops-cpu-fa-longctx-v1.patch`, not yet
+      applied to any tree). Until then both record a SKIP in the gate evidence.
   - **Bit-exactness:** BE by construction. Say so, and name the ordering argument: which
     loop order changed and why each row still sees the same sequence.
 
