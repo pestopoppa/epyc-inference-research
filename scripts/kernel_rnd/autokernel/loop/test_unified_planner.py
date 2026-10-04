@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 import hashlib
 import json
-import tempfile
 
 import pytest
 
@@ -199,9 +198,10 @@ def campaign_for_recipe(recipe, **kwargs):
                              recipe_sha=hashlib.sha256(raw.encode()).hexdigest(), **kwargs)
 
 
-def runtime_anchor(target, recipe):
+def runtime_anchor(target, recipe, tmp_path):
     raw = recipe_artifact_json(recipe)
-    root = Path(tempfile.mkdtemp(prefix="autokernel-planner-anchor-"))
+    root = tmp_path / f"anchor-{target.target_ids[0]}"
+    root.mkdir(parents=True, exist_ok=True)
     sidecar = root / "recipe.json"
     sidecar.write_text(raw)
     artifact = json.loads(raw)
@@ -256,14 +256,14 @@ def experiment(pair, target_digest, campaign_id="unified-test"):
     return raw
 
 
-def run(*, backend="cpu", include_missing=False, source_actor=None, build_actor=None,
+def run(tmp_path, *, backend="cpu", include_missing=False, source_actor=None, build_actor=None,
         stop=lambda: False, stage_handler=None):
     anchor = canonical_recipe(backend=backend)
     enrolled = campaign_for_recipe(anchor, include_missing=include_missing)
     ready = next(row for row in enrolled.targets if row.status == "ready")
     digest = planner._target_digest(ready)
     _, engine = scheduler(backend)
-    anchors = prepared(enrolled, {digest: runtime_anchor(ready, anchor)})
+    anchors = prepared(enrolled, {digest: runtime_anchor(ready, anchor, tmp_path)})
     pair = planner.enumerate_runtime_dimensions(anchors.recipes[digest], [dimension()])[0]
     return planner.plan_iteration(
         resolved_campaign=enrolled, profiles={digest: profile(ready, backend=backend, pair=pair)},
@@ -279,9 +279,9 @@ def run(*, backend="cpu", include_missing=False, source_actor=None, build_actor=
 
 
 @pytest.mark.parametrize("backend", ["cpu", "gpu"])
-def test_runtime_sweep_revalidates_canonical_recipe_skips_actors_and_dispatches_advice(backend):
+def test_runtime_sweep_revalidates_canonical_recipe_skips_actors_and_dispatches_advice(backend, tmp_path):
     recorded = []
-    result = run(backend=backend, stage_handler=recorded.append)
+    result = run(tmp_path, backend=backend, stage_handler=recorded.append)
     assert len(result.proposals) == 1
     assert result.proposals[0].kind == "runtime_recipe"
     assert result.selection.status == "selected"
@@ -295,12 +295,12 @@ def test_runtime_sweep_revalidates_canonical_recipe_skips_actors_and_dispatches_
     assert result.dispatch.experiment_intent["arm_scalars_are_gain_evidence"] is False
 
 
-def test_legacy_digest_only_serving_plan_is_not_execution_ready():
+def test_legacy_digest_only_serving_plan_is_not_execution_ready(tmp_path):
     anchor = canonical_recipe()
     enrolled = campaign_for_recipe(anchor)
     target = enrolled.targets[0]
     target_digest = planner._target_digest(target)
-    anchors = prepared(enrolled, {target_digest: runtime_anchor(target, anchor)})
+    anchors = prepared(enrolled, {target_digest: runtime_anchor(target, anchor, tmp_path)})
     pair = planner.enumerate_runtime_dimensions(anchors.recipes[target_digest], [dimension()])[0]
     raw_plan = experiment(pair, target_digest)
     raw_plan["anchor_identity"] = {"execution_digest": pair.anchor.execution_digest}
@@ -370,8 +370,8 @@ def test_noop_multifactor_and_tampered_arm_are_refused():
         planner.RuntimeArmPair.from_dict(bad)
 
 
-def test_missing_optional_target_and_missing_profile_do_not_block_ready_peer():
-    result = run(include_missing=True)
+def test_missing_optional_target_and_missing_profile_do_not_block_ready_peer(tmp_path):
+    result = run(tmp_path, include_missing=True)
     assert result.selection.status == "selected"
     assert any(row["status"] == "prerequisite" for row in result.dispositions)
 
@@ -396,13 +396,13 @@ def test_quant_scope_is_exact_and_not_transferred():
     assert result.dispositions[0]["status"] == "claim_scope_mismatch"
 
 
-def test_stop_before_next_target_or_stage_handler_preserves_no_execution():
+def test_stop_before_next_target_or_stage_handler_preserves_no_execution(tmp_path):
     calls = 0
     def stop():
         nonlocal calls
         calls += 1
         return True
-    result = run(stop=stop, stage_handler=lambda _: pytest.fail("must not dispatch"))
+    result = run(tmp_path, stop=stop, stage_handler=lambda _: pytest.fail("must not dispatch"))
     assert not result.proposals
     assert result.selection is None
     assert result.scheduler_state is None
@@ -482,12 +482,12 @@ def test_source_and_build_route_only_their_actor_as_pending_plan_prerequisite(ki
                 native_artifact_sink_ref="native:capture")
 
 
-def test_missing_final_plan_is_retained_as_pending_and_never_dispatched():
+def test_missing_final_plan_is_retained_as_pending_and_never_dispatched(tmp_path):
     anchor = canonical_recipe()
     enrolled = campaign_for_recipe(anchor)
     target = enrolled.targets[0]
     digest = planner._target_digest(target)
-    anchors = prepared(enrolled, {digest: runtime_anchor(target, anchor)})
+    anchors = prepared(enrolled, {digest: runtime_anchor(target, anchor, tmp_path)})
     pair = planner.enumerate_runtime_dimensions(anchors.recipes[digest], [dimension()])[0]
     _, engine = scheduler()
     result = planner.plan_iteration(
@@ -502,12 +502,12 @@ def test_missing_final_plan_is_retained_as_pending_and_never_dispatched():
     assert result.dispositions[0]["status"] == "pending_experiment_plan"
 
 
-def test_projection_outage_blocks_reuse_support_not_fresh_runtime_hypothesis():
+def test_projection_outage_blocks_reuse_support_not_fresh_runtime_hypothesis(tmp_path):
     anchor = canonical_recipe()
     enrolled = campaign_for_recipe(anchor)
     target = enrolled.targets[0]
     digest = planner._target_digest(target)
-    anchors = prepared(enrolled, {digest: runtime_anchor(target, anchor)})
+    anchors = prepared(enrolled, {digest: runtime_anchor(target, anchor, tmp_path)})
     pair = planner.enumerate_runtime_dimensions(anchors.recipes[digest], [dimension()])[0]
     _, engine = scheduler()
     result = planner.plan_iteration(
@@ -535,12 +535,12 @@ def test_runtime_dimension_nested_values_are_immutable():
         loaded.candidate["value"] = "3"
 
 
-def test_validated_quarter_export_provenance_is_preserved_not_relabelled_full():
+def test_validated_quarter_export_provenance_is_preserved_not_relabelled_full(tmp_path):
     recipe = canonical_recipe(instance_mode="quarter")
     enrolled = campaign_for_recipe(recipe)
     target = enrolled.targets[0]
     digest = planner._target_digest(target)
-    rebound = prepared(enrolled, {digest: runtime_anchor(target, recipe)}).recipes[digest]
+    rebound = prepared(enrolled, {digest: runtime_anchor(target, recipe, tmp_path)}).recipes[digest]
     assert dict(rebound.provenance)["instance_mode"] == "quarter"
 
 
@@ -550,13 +550,13 @@ def test_validated_quarter_export_provenance_is_preserved_not_relabelled_full():
     ({"target_env": {"KNOB": "1"}}, False),
 ])
 def test_runtime_anchor_must_match_every_enrolled_execution_binding(
-        campaign_kwargs, wrong_recipe_pin):
+        campaign_kwargs, wrong_recipe_pin, tmp_path):
     canonical = canonical_recipe()
     enrolled = campaign_for_recipe(canonical, **campaign_kwargs)
     target = enrolled.targets[0]
     digest = planner._target_digest(target)
     # The validated export still differs in one enrolled identity and must be refused.
-    anchor_binding = runtime_anchor(target, canonical)
+    anchor_binding = runtime_anchor(target, canonical, tmp_path)
     if wrong_recipe_pin:
         anchor_binding["production_export"]["targets"][0]["artifacts"][-1]["sha256"] = "4" * 64
         anchor_binding["production_export"]["export_sha256"] = hashlib.sha256(json.dumps(
@@ -566,12 +566,12 @@ def test_runtime_anchor_must_match_every_enrolled_execution_binding(
         prepared(enrolled, {digest: anchor_binding})
 
 
-def test_prepared_anchors_cannot_be_reused_for_changed_campaign():
+def test_prepared_anchors_cannot_be_reused_for_changed_campaign(tmp_path):
     canonical = canonical_recipe()
     first = campaign_for_recipe(canonical)
     target = first.targets[0]
     digest = planner._target_digest(target)
-    cached = prepared(first, {digest: runtime_anchor(target, canonical)})
+    cached = prepared(first, {digest: runtime_anchor(target, canonical, tmp_path)})
     changed = resolved_campaign(
         campaign_id="unified-test", request_id="request-2",
         recipe_sha=target.execution.recipe.sha256)
@@ -700,7 +700,7 @@ def test_deferred_actor_enumeration_calls_no_actor_before_scheduler_selection():
 
 
 @pytest.mark.parametrize("field", ["target", "model", "workload", "mechanism"])
-def test_unrelated_claim_scope_or_mechanism_never_reaches_runtime_adapter(field):
+def test_unrelated_claim_scope_or_mechanism_never_reaches_runtime_adapter(field, tmp_path):
     canonical = canonical_recipe()
     enrolled = campaign_for_recipe(canonical)
     target = enrolled.targets[0]
@@ -718,7 +718,7 @@ def test_unrelated_claim_scope_or_mechanism_never_reaches_runtime_adapter(field)
     result = planner.plan_iteration(
         resolved_campaign=enrolled, profiles={digest: prof},
         evidence_index=evidence.EvidenceIndex((), current_epoch="epoch-1"),
-        runtime_anchors=prepared(enrolled, {digest: runtime_anchor(target, canonical)}),
+        runtime_anchors=prepared(enrolled, {digest: runtime_anchor(target, canonical, tmp_path)}),
         runtime_dimensions={digest: [dimension()]},
         source_actor=lambda *_: pytest.fail("must not author"),
         build_actor=lambda *_: pytest.fail("must not build"), scheduler_engine=engine,

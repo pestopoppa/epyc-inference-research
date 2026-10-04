@@ -16,6 +16,7 @@ import io
 import json
 import math
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -175,7 +176,9 @@ class TestInputPolicy(unittest.TestCase):
 
 class TestCorpusParsing(unittest.TestCase):
     def _write(self, rows) -> Path:
-        tmp = Path(tempfile.mkdtemp()) / "corpus.jsonl"
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        tmp = Path(d) / "corpus.jsonl"
         tmp.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
         return tmp
 
@@ -370,7 +373,9 @@ class TestCli(unittest.TestCase):
             {"type": "document", "doc_id": "b", "text": "beta text"},
             {"type": "query", "query_id": "q1", "query": "find alpha", "relevant_doc_ids": ["a"]},
         ]
-        tmp = Path(tempfile.mkdtemp()) / "corpus.jsonl"
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
+        tmp = Path(d) / "corpus.jsonl"
         tmp.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
         return tmp
 

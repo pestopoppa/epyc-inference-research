@@ -6,6 +6,7 @@ mislabel that called contended windows clean for a whole campaign, and it is wri
 that reverting the sibling expansion fails it.
 """
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -32,6 +33,7 @@ class TestSiblingExpansion(unittest.TestCase):
 
     def setUp(self):
         self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, ignore_errors=True)
         for c in range(8):
             d = os.path.join(self.dir, f"cpu{c}", "topology")
             os.makedirs(d)
@@ -62,6 +64,7 @@ class TestSampleOnce(unittest.TestCase):
 
     def _proc(self, pids):
         d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, ignore_errors=True)
         for pid, (ticks, comm, last_cpu, allowed) in pids.items():
             os.makedirs(os.path.join(d, str(pid)))
             fields = ["0"] * 40

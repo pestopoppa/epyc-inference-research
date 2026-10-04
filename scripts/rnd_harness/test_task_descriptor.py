@@ -11,13 +11,20 @@ Proves the two contract-critical properties:
 Runs under pytest OR as a plain script (`python test_task_descriptor.py`) so it
 works in the research venv, which has no pytest installed.
 """
+import atexit
 import json
 import os
+import shutil
 import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import task_descriptor as td  # noqa: E402
+
+# Dirs created by _mk_tmpdir() in plain-script mode (no pytest tmp_path to clean
+# them up). Removed at interpreter exit so a plain-script run never leaks.
+_PLAIN_SCRIPT_TMPDIRS = []
+atexit.register(lambda: [shutil.rmtree(d, ignore_errors=True) for d in _PLAIN_SCRIPT_TMPDIRS])
 
 
 def _well_formed(**overrides):
@@ -111,7 +118,9 @@ def test_emit_schema_is_wellformed():
 
 
 def _mk_tmpdir():
-    return tempfile.mkdtemp(prefix="rnd_harness_test_")
+    d = tempfile.mkdtemp(prefix="rnd_harness_test_")
+    _PLAIN_SCRIPT_TMPDIRS.append(d)
+    return d
 
 
 def _run_all():

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import atexit
 import copy
 import contextlib
 import hashlib
 import io
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -18,6 +20,25 @@ from . import journal as J
 from .controller import hypotheses as H
 from .test_journal import _candidate, _event
 from .test_schemas import _proposal
+
+# Temp dirs/files this module creates outside any pytest fixture (plain helper
+# functions shared by several unittest.TestCase methods, not fixtures
+# themselves). Removed at interpreter exit so a test run never leaks them.
+_LEAKED_DIRS: list[Path] = []
+_LEAKED_FILES: list[Path] = []
+
+
+def _cleanup_leaked_paths() -> None:
+    for path in _LEAKED_FILES:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+    for path in _LEAKED_DIRS:
+        shutil.rmtree(path, ignore_errors=True)
+
+
+atexit.register(_cleanup_leaked_paths)
 
 
 def proposal() -> dict:
@@ -75,6 +96,7 @@ def _frame_factors(value: dict) -> dict:
     calibration = _TEST_FRAME_CALIBRATIONS.get(calibration_key)
     if calibration is None:
         calibration = Path(tempfile.mkdtemp(prefix="ak-heldout-calibration-"))
+        _LEAKED_DIRS.append(calibration)
         _TEST_FRAME_CALIBRATIONS[calibration_key] = calibration
     linkage = calibration / "linkage.instrument.txt"
     linkage.write_text(
@@ -146,6 +168,7 @@ def _bind_test_frame_calibration(value: dict, factors: dict) -> None:
 def _heldout_receipt(value: dict, *, factors: dict, effect: float) -> dict:
     ordinal = value["proposal_id"].split("-")[-1]
     root = Path(tempfile.mkdtemp(prefix="ak-heldout-journal-"))
+    _LEAKED_DIRS.append(root)
     campaign_id = f"ak-heldout-decode-{ordinal}"
     proposal_id = f"akp-heldout-{ordinal}"
     candidate_id = f"akc-heldout-{ordinal}"
@@ -243,6 +266,7 @@ def plan(value: dict, *, role: str = "intervention",
         effect=0.02 if role == "intervention" else 0.0)
     candidate_frame_id = heldout["candidate_frame_id"]
     handle = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
+    _LEAKED_FILES.append(Path(handle.name))
     with handle:
         json.dump(diagnostic_source(
             value, candidate_frame_id=candidate_frame_id), handle)
@@ -253,6 +277,7 @@ def plan(value: dict, *, role: str = "intervention",
     receipts = {name: dict(binding) for name in C.DIAGNOSTICS}
     heldout_handle = tempfile.NamedTemporaryFile(
         mode="w", suffix=".json", delete=False)
+    _LEAKED_FILES.append(Path(heldout_handle.name))
     with heldout_handle:
         json.dump(heldout, heldout_handle)
     raw = {

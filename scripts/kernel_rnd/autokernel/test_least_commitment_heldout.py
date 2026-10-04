@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -32,8 +33,9 @@ def _parameter_proposal(provider: dict) -> dict:
     return value
 
 
-def _bundle(provider: dict, linkage_text: str) -> tuple[dict, Path]:
+def _bundle(provider: dict, linkage_text: str, case: unittest.TestCase) -> tuple[dict, Path]:
     root = Path(tempfile.mkdtemp(prefix="ak-provider-frame-bundle-"))
+    case.addCleanup(shutil.rmtree, root, ignore_errors=True)
     linkage = root / "linkage.instrument.txt"
     linkage.write_text(linkage_text, encoding="utf-8")
     bound = copy.deepcopy(provider)
@@ -75,6 +77,7 @@ def _factors(provider: dict, calibration: Path) -> dict:
 class StableProviderFrameTest(unittest.TestCase):
     def setUp(self) -> None:
         self.library_root = Path(tempfile.mkdtemp(prefix="ak-provider-dso-"))
+        self.addCleanup(shutil.rmtree, self.library_root, ignore_errors=True)
         self.library = self.library_root / "libcandidate.so"
         self.library.write_bytes(b"same-provider-library\n")
         self.provider = _proposal()["provider_reference"]
@@ -88,10 +91,10 @@ class StableProviderFrameTest(unittest.TestCase):
     def test_same_dso_receipt_with_different_aslr_addresses_is_same_frame(self):
         first, first_root = _bundle(
             self.provider,
-            f"libcandidate.so => {self.library} (0x00007f0011111000)\n")
+            f"libcandidate.so => {self.library} (0x00007f0011111000)\n", self)
         second, second_root = _bundle(
             self.provider,
-            f"libcandidate.so => {self.library} (0x0000745a82222000)\n")
+            f"libcandidate.so => {self.library} (0x0000745a82222000)\n", self)
         first_frame = self._frame(first, first_root)
         second_frame = self._frame(second, second_root)
         self.assertNotEqual(
@@ -108,10 +111,10 @@ class StableProviderFrameTest(unittest.TestCase):
         alternate.write_bytes(self.library.read_bytes())
         first, first_root = _bundle(
             self.provider,
-            f"libcandidate.so => {self.library} (0x00007f0011111000)\n")
+            f"libcandidate.so => {self.library} (0x00007f0011111000)\n", self)
         second, second_root = _bundle(
             self.provider,
-            f"libcandidate.so => {alternate} (0x0000745a82222000)\n")
+            f"libcandidate.so => {alternate} (0x0000745a82222000)\n", self)
         self.assertNotEqual(
             H.candidate_frame_id(self._frame(first, first_root)),
             H.candidate_frame_id(self._frame(second, second_root)))
@@ -119,12 +122,12 @@ class StableProviderFrameTest(unittest.TestCase):
     def test_different_dso_content_is_refused_by_frame_identity(self):
         first, first_root = _bundle(
             self.provider,
-            f"libcandidate.so => {self.library} (0x00007f0011111000)\n")
+            f"libcandidate.so => {self.library} (0x00007f0011111000)\n", self)
         first_frame = self._frame(first, first_root)
         self.library.write_bytes(b"different-provider-library\n")
         second, second_root = _bundle(
             self.provider,
-            f"libcandidate.so => {self.library} (0x0000745a82222000)\n")
+            f"libcandidate.so => {self.library} (0x0000745a82222000)\n", self)
         self.assertNotEqual(
             H.candidate_frame_id(first_frame),
             H.candidate_frame_id(self._frame(second, second_root)))
@@ -132,7 +135,7 @@ class StableProviderFrameTest(unittest.TestCase):
     def test_raw_linkage_receipt_mismatch_is_refused_before_normalization(self):
         provider, root = _bundle(
             self.provider,
-            f"libcandidate.so => {self.library} (0x00007f0011111000)\n")
+            f"libcandidate.so => {self.library} (0x00007f0011111000)\n", self)
         provider["linkage_manifest_sha256"] = "0" * 64
         with self.assertRaisesRegex(
                 H.HeldoutProjectionError,

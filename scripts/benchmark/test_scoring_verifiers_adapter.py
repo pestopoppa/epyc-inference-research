@@ -16,7 +16,6 @@ Run with:
 import json
 import sys
 from pathlib import Path
-import tempfile
 
 # Ensure the benchmark directory is importable
 sys.path.insert(0, str(Path(__file__).parent))
@@ -189,44 +188,41 @@ class TestRowToPrompt:
 # ── Local JSONL loading ───────────────────────────────────────────────────────
 
 class TestLocalJSONLLoading:
-    def _make_temp_jsonl(self, rows):
-        tmp = tempfile.mkdtemp()
-        path = Path(tmp) / "test.jsonl"
+    def _make_temp_jsonl(self, rows, tmp_path):
+        path = tmp_path / "test.jsonl"
         with open(path, "w") as f:
             for row in rows:
                 f.write(json.dumps(row) + "\n")
-        return Path(tmp)
+        return tmp_path
 
-    def test_loads_rows(self):
+    def test_loads_rows(self, tmp_path):
         rows = [
             {"id": 1, "problem": "Q1", "solution": "A1", "label": 1},
             {"id": 2, "problem": "Q2", "solution": "A2", "label": 0},
         ]
-        tmp_dir = self._make_temp_jsonl(rows)
+        tmp_dir = self._make_temp_jsonl(rows, tmp_path)
         loaded = ScoringVerifiersAdapter._load_from_local(tmp_dir)
         assert len(loaded) == 2
 
-    def test_row_content(self):
+    def test_row_content(self, tmp_path):
         rows = [{"problem": "test", "solution": "sol", "label": "pass"}]
-        tmp_dir = self._make_temp_jsonl(rows)
+        tmp_dir = self._make_temp_jsonl(rows, tmp_path)
         loaded = ScoringVerifiersAdapter._load_from_local(tmp_dir)
         assert loaded[0]["problem"] == "test"
 
-    def test_empty_dir_returns_empty(self):
-        tmp = Path(tempfile.mkdtemp())
-        loaded = ScoringVerifiersAdapter._load_from_local(tmp)
+    def test_empty_dir_returns_empty(self, tmp_path):
+        loaded = ScoringVerifiersAdapter._load_from_local(tmp_path)
         assert loaded == []
 
-    def test_skips_invalid_json_lines(self):
-        tmp = tempfile.mkdtemp()
-        path = Path(tmp) / "mixed.jsonl"
+    def test_skips_invalid_json_lines(self, tmp_path):
+        path = tmp_path / "mixed.jsonl"
         path.write_text('{"id": 1}\n{broken json\n{"id": 2}\n')
-        loaded = ScoringVerifiersAdapter._load_from_local(Path(tmp))
+        loaded = ScoringVerifiersAdapter._load_from_local(tmp_path)
         assert len(loaded) == 2
 
-    def test_records_subset_from_jsonl_filename(self):
+    def test_records_subset_from_jsonl_filename(self, tmp_path):
         rows = [{"problem": "Q1", "all_solutions": []}]
-        tmp_dir = self._make_temp_jsonl(rows)
+        tmp_dir = self._make_temp_jsonl(rows, tmp_path)
         (tmp_dir / "test.jsonl").rename(tmp_dir / "HE-R+.jsonl")
         loaded = ScoringVerifiersAdapter._load_from_local(tmp_dir)
         assert loaded[0]["subset"] == "HE-R+"
