@@ -718,6 +718,22 @@ def remember_served(record: dict[str, Any], ladder: dict[str, Any] | None) -> No
         pass
 
 
+def observe_prefix_index(record: dict[str, Any], request: Any) -> None:
+    """Feed a served call into its server's RTG-58 P2 prefix index. A no-op unless
+    ``ORCHESTRATOR_PREFIX_INDEX`` is on. Never raises."""
+    try:
+        from src.inference import prefix_index
+
+        if not prefix_index.enabled():
+            return
+        prefix_index.observe_record(
+            record, prefix_index.key_text_for_request(request),
+            key_kind=prefix_index.key_kind_for_request(request),
+        )
+    except Exception:
+        pass
+
+
 def abandon_staged(exc: BaseException | None = None) -> None:
     """Record a staged call that never reached a backend, then clear the stage.
 
@@ -822,6 +838,7 @@ def recorded_call(method: str) -> Callable:
                     )
                     write_record(record)
                     remember_served(record, prefix_ladder(request))
+                    observe_prefix_index(record, request)
                 except Exception:
                     pass
 

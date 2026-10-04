@@ -360,6 +360,10 @@ class SlotState:
     # IDLE slot this is the prefix its KV cells still hold, which the next
     # request that extends it reuses (KVU-15a new-token estimate).
     prompt_text: str | None = field(default=None, repr=False, compare=False)
+    # The slot's current/last task id (``/slots`` ``id_task``). The RTG-58 P2
+    # prefix index binds a slot's content to it: a different id_task means the
+    # slot's cells changed under us.
+    id_task: int | None = field(default=None, compare=False)
 
     @property
     def prefilling(self) -> bool:
@@ -483,6 +487,8 @@ def parse_slots(url: str, body: Any) -> PoolOccupancy | None:
             n_decoded=n_decoded,
             n_prompt_tokens_processed=n_processed,
             prompt_text=raw.get("prompt") if isinstance(raw.get("prompt"), str) else None,
+            id_task=(raw.get("id_task") if isinstance(raw.get("id_task"), int)
+                     and not isinstance(raw.get("id_task"), bool) else None),
         ))
     return PoolOccupancy(url=url, slots=tuple(slots))
 

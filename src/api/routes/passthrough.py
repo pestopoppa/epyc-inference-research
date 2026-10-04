@@ -285,6 +285,9 @@ class _Call:
     # KVU-15c: the same fingerprint at the history ladder — the admission gate's
     # cached-prefix credit source, and what the served call leaves in the history.
     prefix_ladder: dict[str, Any] | None = field(default=None, repr=False)
+    # RTG-58 P2: the prefix-index key (the same text the ladder hashes); set only
+    # with ORCHESTRATOR_PREFIX_INDEX on.
+    prefix_key: str | None = field(default=None, repr=False)
     slot_id: int | None = None
     server_slot: int | None = None
     cancel: threading.Event = field(default_factory=threading.Event)
@@ -821,6 +824,19 @@ def wire_prefix_ladder(endpoint: str, body: dict[str, Any]) -> dict[str, Any] | 
     return serving_calls.prefix_ladder(_wire_payload(endpoint, body))
 
 
+def wire_prefix_key(endpoint: str, body: dict[str, Any]) -> str | None:
+    """RTG-58 P2 prefix-index key for a passthrough body (the text the ladder
+    hashes), or None with ORCHESTRATOR_PREFIX_INDEX off. Never raises."""
+    try:
+        from src.inference import prefix_index
+
+        if not prefix_index.enabled():
+            return None
+        return serving_calls._prompt_text_for_fingerprint(_wire_payload(endpoint, body))
+    except Exception:
+        return None
+
+
 def write_serving_record(call: _Call, error: BaseException | None) -> None:
     """One ``serving_call.v1`` record, ``caller.source = "passthrough"``. Never raises."""
     try:
@@ -917,6 +933,10 @@ def write_serving_record(call: _Call, error: BaseException | None) -> None:
                 }
         serving_calls.write_record(record)
         serving_calls.remember_served(record, call.prefix_ladder)
+        if call.prefix_key:
+            from src.inference import prefix_index
+
+            prefix_index.observe_record(record, call.prefix_key, key_kind="approx")
     except Exception:
         logger.debug("passthrough: serving record failed", exc_info=True)
 
@@ -957,6 +977,7 @@ async def _passthrough(endpoint: str, role: str, http_request: Request, state: A
         prompt_text=text,
         prefix_fp=wire_prefix_fingerprints(endpoint, body),
         prefix_ladder=wire_prefix_ladder(endpoint, body),
+        prefix_key=wire_prefix_key(endpoint, body),
         slot_id=(
             body.get("id_slot")
             if isinstance(body.get("id_slot"), int) and not isinstance(body.get("id_slot"), bool)

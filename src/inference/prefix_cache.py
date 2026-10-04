@@ -21,6 +21,18 @@ Usage:
     normalized = canonicalize_prompt(prompt)
 
 See research/radix_attention_handoff.md for implementation plan.
+
+RTG-58 P2 / KPF-23 decision (2026-10-04). ``PrefixRouter`` is kept as is, as
+the legacy opt-in pin path (``ORCHESTRATOR_PREFIX_ROUTER_PIN_SLOTS=1``, UFH14-B4).
+It is neither replaced nor wrapped by the prefix index
+(``src/inference/prefix_index.py``, flag ``ORCHESTRATOR_PREFIX_INDEX``): the index
+is a separate per-physical-server structure that the KV pool gate and the
+serving record drive. With the index on and ``ORCHESTRATOR_PREFIX_INDEX_PIN=idle``,
+``CachingBackend`` asks the index first and pins only a VERIFIED IDLE slot that
+holds the request's longest prefix; otherwise this module behaves exactly as
+before. Retiring the 256-char hash routing on ``--kv-unified`` servers waits on
+the index's shadow metric (``slot_prediction_hits`` against the server's own
+``id_slot``) and on INF-05 KV-6's measurement of ``canonicalize_prompt``.
 """
 
 from __future__ import annotations
@@ -401,6 +413,50 @@ class CachingBackend:
         raw = os.environ.get("ORCHESTRATOR_PREFIX_ROUTER_PIN_SLOTS", "0")
         return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
+    def _prefix_index_pin(self, request: "InferenceRequest") -> int | None:  # noqa: F821
+        """RTG-58 P2 (c): the slot to pin from the prefix index, or None.
+
+        Only with ``ORCHESTRATOR_PREFIX_INDEX=1`` and
+        ``ORCHESTRATOR_PREFIX_INDEX_PIN=idle`` (default ``off``). Reconciled with
+        UFH14-B4, which made the 256-char-hash pin opt-in because it sent every
+        call of a role to ONE slot and v10 deferred it while other slots were
+        free. This pin is never that: it names a slot only when the index has
+        VERIFIED (via ``/slots``, within ``ORCHESTRATOR_PREFIX_INDEX_PIN_FRESH_S``)
+        that the slot is IDLE and holds this request's longest prefix of at least
+        ``ORCHESTRATOR_PREFIX_INDEX_PIN_MIN_TOKENS``. A caller's explicit slot_id
+        wins; the chat lane never sends ``id_slot``, so it is never pinned.
+        Never raises."""
+        try:
+            from src.inference import prefix_index
+
+            if prefix_index.pin_policy() != "idle":
+                return None
+            if getattr(request, "slot_id", None) is not None:
+                return None
+            if getattr(request, "chat_payload", None) is not None:
+                return None
+            config = getattr(self.backend, "config", None)
+            if config is None or getattr(config, "use_chat_completions", False):
+                return None
+            url = getattr(config, "base_url", "") or ""
+            idx = prefix_index.peek_index(url)
+            if idx is None:
+                return None
+            # Server truth first: the resolver's cached /slots (no extra HTTP
+            # inside its TTL); None (live reads off) only ages the view.
+            from src.backends.context_limits import get_context_limit_resolver
+
+            idx.reconcile(get_context_limit_resolver().pool_occupancy(url))
+            return idx.pin_candidate(
+                prefix_index.key_text_for_request(request),
+                min_tokens=prefix_index._env_int(prefix_index.PIN_MIN_TOKENS_ENV,
+                                                 prefix_index.DEFAULT_PIN_MIN_TOKENS),
+                fresh_s=prefix_index._env_float(prefix_index.PIN_FRESH_S_ENV,
+                                                prefix_index.DEFAULT_PIN_FRESH_S),
+            )
+        except Exception:
+            return None
+
     def _should_bypass_slot_routing(self, request: "InferenceRequest") -> bool:  # noqa: F821
         """Return True when slot routing should be skipped for this request."""
         if not self._frontdoor_repl_bypass_enabled():
@@ -451,6 +507,10 @@ class CachingBackend:
             self.frontdoor_repl_bypass_count += 1
             return self.backend.infer(role_config, self._request_with_slot(request, None))
 
+        pinned = self._prefix_index_pin(request)
+        if pinned is not None:
+            return self.backend.infer(role_config, self._request_with_slot(request, pinned))
+
         if not self._pin_slots_enabled():
             # Server-side affinity (LCP + --cache-ram); an explicit caller slot_id is kept.
             return self.backend.infer(role_config, request)
@@ -486,6 +546,11 @@ class CachingBackend:
                 self._request_with_slot(request, None),
                 on_chunk=on_chunk,
             )
+
+        pinned = self._prefix_index_pin(request)
+        if pinned is not None:
+            return self.backend.infer_stream_text(
+                role_config, self._request_with_slot(request, pinned), on_chunk=on_chunk)
 
         if not self._pin_slots_enabled():
             return self.backend.infer_stream_text(role_config, request, on_chunk=on_chunk)
