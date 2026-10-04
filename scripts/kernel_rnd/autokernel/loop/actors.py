@@ -1726,6 +1726,18 @@ def _schema_repair(raw: str, *, schema: Mapping[str, Any], backend: Backend,
     base = _provider_base_url(backend.model)
     if base is None:
         return None
+    # A repair turn is inference on the same local server: routed like the call itself.
+    from . import actor_passthrough
+    headers = {"Content-Type": "application/json"}
+    try:
+        wire = actor_passthrough.wire_url(actor_passthrough.provider_of(backend.model), base)
+        if wire:
+            base = wire
+            headers["X-Client-Id"] = actor_passthrough.CLIENT_ID
+    except actor_passthrough.UnroutedLocalProvider as exc:
+        _persist_reply(workspace, backend, subprocess.CompletedProcess(
+            args=["schema-repair"], returncode=-2, stdout="", stderr=str(exc)))
+        return None
     import urllib.request
     import urllib.error
     wire_schema = _relax_required_for_wire(schema) if relax_required else schema
@@ -1749,7 +1761,7 @@ def _schema_repair(raw: str, *, schema: Mapping[str, Any], backend: Backend,
         body["model"] = model_name
     request = urllib.request.Request(
         base + "/chat/completions", data=json.dumps(body).encode("utf-8"),
-        headers={"Content-Type": "application/json"}, method="POST")
+        headers=headers, method="POST")
     try:
         with urllib.request.urlopen(request, timeout=timeout_s) as response:
             payload = json.loads(response.read().decode("utf-8", "replace"))
@@ -2932,19 +2944,30 @@ def _seat_serving(seat: "ActorSeat | None", backend: Backend, role: str,
 
     F1 (`seat.serving_f1`) and the planner's thinking budget apply only when the
     call's provider is a LOCAL llama-server (`_provider_base_url` on loopback); a
-    hosted provider keeps its own client defaults. With neither knob on, or a
-    non-opencode backend: the limits unchanged, no block, no env (byte-identical)."""
+    hosted provider keeps its own client defaults. With routing on
+    (`actor_passthrough`, `AK_ACTOR_LOCAL_VIA_ORCHESTRATOR`) a LOCAL provider's
+    baseURL is pointed at the orchestrator passthrough for its role, with or without a
+    seat. With no knob on, or a non-opencode backend: the limits unchanged, no block,
+    no env (byte-identical)."""
     limits = dict(limits)
     think = seat.think_budget_for(role) if seat is not None else 0
-    if seat is None or backend.kind != "opencode" or not (seat.serving_f1 or think):
+    f1 = seat is not None and seat.serving_f1
+    if backend.kind != "opencode":
+        return limits, {}, {}
+    from . import actor_passthrough
+    routing = actor_passthrough.enabled()
+    if not (f1 or think or routing):
         return limits, {}, {}
     from . import actor_opencode_config as seat_config
     from . import actor_serving
+    # The BACKING server (global opencode.jsonc): F1's /props and prefill samples come
+    # from it even when the call itself goes through the orchestrator passthrough.
     base_url = _provider_base_url(backend.model)
     local = actor_serving.is_local(base_url)
     block: dict = {}
     record: dict[str, Any] = {"base_url": base_url, "local": local}
-    if seat.serving_f1 and local:
+    params = None
+    if f1 and local:
         params = actor_serving.resolve(base_url)
         if params is not None:
             ctx, out = actor_serving.opencode_limits(
@@ -2964,6 +2987,17 @@ def _seat_serving(seat: "ActorSeat | None", backend: Backend, role: str,
             # Only llama-server honours `thinking_budget_tokens`; a hosted API may
             # reject the unknown body key, so it is never sent there.
             record["think_budget_skipped"] = "provider_not_local"
+    # Operator 2026-10-04 (`actor_passthrough`): a LOCAL provider's requests go through
+    # the orchestrator passthrough, which takes the server's CPU region lock / GPU park
+    # check per request. Hosted providers: wire_url is None, nothing changes.
+    wire = actor_passthrough.wire_url(actor_passthrough.provider_of(backend.model), base_url)
+    if wire:
+        block = seat_config._merge(
+            block, actor_passthrough.opencode_block(backend.model, wire, params))
+        record["route"] = actor_passthrough.route_record(
+            actor_passthrough.provider_of(backend.model), base_url, wire)
+    if not block and not (f1 or think):
+        return limits, {}, {}   # routing on, hosted provider: byte-identical
     return limits, block, {SEAT_ENV_SERVING: json.dumps(record, sort_keys=True)}
 
 
@@ -3005,9 +3039,11 @@ def _seat_call(seat: "ActorSeat | None", backend: Backend, role: str, workspace:
     label = seat.label_knobs(role) if seat is not None else {}
     serving: dict = {}
     env: dict[str, str] = {}
-    if seat is not None:
+    from . import actor_passthrough
+    if seat is not None or actor_passthrough.enabled():
         limits, serving, serving_env = _seat_serving(seat, backend, role, limits)
-        label = {**label, **limits}
+        if seat is not None:
+            label = {**label, **limits}
         env.update(serving_env)
     if any(label.values()):
         env[SEAT_ENV_ARM] = seat_config.seat_label("plain", **label)

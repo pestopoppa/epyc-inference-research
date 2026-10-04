@@ -59,6 +59,7 @@ from . import (accumulate, actors, anchor, archive, bench, champion, claim, gate
                integrity, heldout_serving, lineage_beliefs, pipeline, pool, production, status, surface_fold,
                surface_validation)
 from . import actor_opencode_config
+from . import actor_passthrough
 from . import epoch_aliases
 from . import scratch
 from . import procguard
@@ -673,6 +674,8 @@ def _actor_config(args, resolved_campaign=None) -> dict[str, Any]:
         config["actor_answer_force_frac"] = get("actor_answer_force_frac")
     if get("actor_planner_think_budget"):
         config["actor_planner_think_budget"] = get("actor_planner_think_budget")
+    if get("actor_local_via_orchestrator") == "on":
+        config["actor_local_via_orchestrator"] = get("actor_local_orchestrator_roles")
     # Per-lane planner/author models (`lane_actors`): present only when a lane is
     # overridden, so a run without `--lane-actor-models` records the historical keys.
     lane_spec = get("lane_actor_models")
@@ -872,6 +875,24 @@ def _actor_serving(args) -> dict[str, Any]:
             "answer_protocol": get("actor_answer_protocol", "off"),
             "answer_force_frac": float(get("actor_answer_force_frac", 0.65)),
             "planner_think_budget": int(get("actor_planner_think_budget", 0) or 0)}
+
+
+def _apply_actor_routing(args, backends, environ=None) -> dict[str, str]:
+    """`--actor-local-via-orchestrator`: set (on) or clear (off) the process-level
+    routing knob (`actor_passthrough.ENV`) and return {opencode model: passthrough URL}
+    for the run's routed actors. Raises ValueError for a bad role map or a LOCAL
+    provider without a role. Off (or a Namespace without the flag): {} and the knob
+    cleared -- raw ports, byte-identical."""
+    env = os.environ if environ is None else environ
+    if getattr(args, "actor_local_via_orchestrator", "off") != "on":
+        env.pop(actor_passthrough.ENV, None)
+        return {}
+    spec = getattr(args, "actor_local_orchestrator_roles", actor_passthrough.DEFAULT_ROLES_SPEC)
+    if not actor_passthrough.parse_roles(spec):
+        raise ValueError("--actor-local-orchestrator-roles maps no provider")
+    env[actor_passthrough.ENV] = spec
+    models = [b.model for b in backends if getattr(b, "kind", None) == "opencode"]
+    return actor_passthrough.check_models(models, actors._provider_base_url, env)
 
 
 def _actor_salvage(args) -> dict[str, int]:
@@ -1942,6 +1963,20 @@ def main(argv: list[str] | None = None) -> int:
                              "per-turn thinking cap sent as thinking_budget_tokens (plus the "
                              "F12 reasoning_budget_message) on every request of the call; "
                              "0 = off (default: %(default)s)")
+    parser.add_argument("--actor-local-via-orchestrator", choices=("on", "off"), default="off",
+                        help="opencode seats whose provider is a LOCAL llama-server (operator "
+                             "2026-10-04, actor_passthrough): send their requests through the "
+                             "orchestrator passthrough (AK_ORCHESTRATOR_URL/v1/passthrough/"
+                             "<role>), which takes that server's CPU region lock (the lock a "
+                             "CPU measurement claim takes) or refuses a parked GPU role, per "
+                             "request. Hosted providers (codex, claude, hosted opencode) are "
+                             "untouched; F1 still reads the backing server. 'off' = raw ports "
+                             "(default: %(default)s)")
+    parser.add_argument("--actor-local-orchestrator-roles",
+                        default=actor_passthrough.DEFAULT_ROLES_SPEC,
+                        help="with --actor-local-via-orchestrator on: opencode provider -> "
+                             "orchestrator role, provider=role[,...]; a local provider not "
+                             "listed is refused at startup (default: %(default)s)")
     parser.add_argument("--actor-author-budget-s", type=int, default=0,
                         help="opencode author (OAB-23): the same wall budget for authoring "
                              "calls; 0 = none (default: %(default)s)")
@@ -2811,6 +2846,17 @@ def main(argv: list[str] | None = None) -> int:
     for index, backend in sorted(lane_backends.items()):
         print(f"actors    lane{index} planner+author={backend.describe()} (single author, "
               "author reasoning kwargs off; critic global) -- --lane-actor-models")
+    # Operator 2026-10-04: local-model actor calls through the orchestrator passthrough.
+    # One process-level knob (env), so every seat site and the schema-repair turn see it;
+    # an unrouted LOCAL provider is refused here, never sent to its raw port.
+    try:
+        actor_routes = _apply_actor_routing(
+            args, [planner_backend, critic_backend, *lane_backends.values()])
+    except ValueError as exc:
+        parser.error(str(exc))
+    for model, wire in sorted(actor_routes.items()):
+        print(f"actors    {model} -> {wire} (orchestrator passthrough: region lock / "
+              "parked-role check per request)")
     for moot in _moot_budgets(args):
         print(f"actors    WARNING {moot} is not below --actor-timeout-s={args.actor_timeout_s}: "
               "the hard timeout ends those calls first, so the budget never fires")
@@ -5199,6 +5245,16 @@ def main(argv: list[str] | None = None) -> int:
                           for index in range(int(args.workers))}
                          if lane_backends else None))
     cpu_window_ref[0] = cpu_win
+    if actor_routes and cpu_win is None and (owned_cpu_list is not None or cpu_launch):
+        # The loop holds its CPU claim for the whole batch: a routed planner on a CPU
+        # role would wait on the loop's own regions (ORCHESTRATOR lock timeout, 503).
+        conflicts = actor_passthrough.cpu_conflict(
+            actor_routes, actors._provider_base_url, actor_passthrough.orchestrator_cpu_regions)
+        if conflicts:
+            parser.error(f"--actor-local-via-orchestrator on routes {conflicts} to a CPU-"
+                         "resident server while this batch holds its CPU claim throughout "
+                         "(--cpu-window-yield off): every call would wait on the loop's own "
+                         "regions. Use --cpu-window-yield on or a GPU/hosted actor.")
 
     if direct_launch:
         report_runtime_progress()
