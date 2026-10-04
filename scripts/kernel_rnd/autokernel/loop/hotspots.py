@@ -192,8 +192,8 @@ def serving_profile(launch, frozen_requests, *, store: Path, anchor_commit: str,
     profiled by launching its own server argv under rocprofv3 for its whole life and
     cutting short/long/concurrent decode and prefill windows out of that one trace;
     ONE launch per anchor change, cached by anchor commit + launch execution digest +
-    request digest. The caller holds the mi210_0 device claim and the q3 measurement
-    claim around this call. Returns (planner view, Hotspot rows of the primary window).
+    request digest. The caller holds the mi210_0 device claim and gpu-quiet EXCLUSIVE
+    (the measurement window) around this call. Returns (planner view, Hotspot rows of the primary window).
     """
     from . import gpu_serving_profile as gsp
     plans, skipped = gsp.plan_windows(frozen_requests, np=int(launch.template.np),

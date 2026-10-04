@@ -1115,7 +1115,7 @@ def test_actual_cpu_keep_cross_target_then_older_history_uses_latest_source(
                                   (cell.cell_contents for cell in observer.__closure__)))
         held_rows = observer_state["held"]
         @cpu_fixture.contextmanager
-        def validation_hold(cpu_list):
+        def validation_hold(cpu_list, **_quiet):
             assert cpu_list == "0-95"
             assert held_rows[-1] is False
             held_rows[-1] = True

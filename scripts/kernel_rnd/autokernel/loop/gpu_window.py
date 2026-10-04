@@ -23,9 +23,9 @@ Sequence
    drain waits for in-flight completions), then `orchestrator_stack.py stop
    architect_critic`.
 3. **AK claims, runs, releases**: it takes `mi210_0` (`resource/device_claim.py`), runs
-   its GPU batches -- each GPU measurement also takes the q3 measurement claim
-   (`claim.hold_q3_measurement`, claimed as `88-95` because `184-191` maps to no region
-   until REGION-SIBLING-1 lands; serving `:8083` never needs it) -- checks
+   its GPU batches -- each GPU measurement also holds the orchestrator's host-wide
+   gpu-quiet lock EXCLUSIVE (`claim.hold_gpu_quiet_measurement`; no CPU region claim,
+   so CPU serving roles keep their regions; serving `:8083` never needs it) -- checks
    `preempt_requested_at` at every measurement boundary, releases the claim and writes
    `holder=released`.
 4. **The owner reloads**: `orchestrator_stack.py reload architect_critic`, a serving

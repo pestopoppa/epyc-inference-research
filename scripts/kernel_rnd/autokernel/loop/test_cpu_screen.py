@@ -180,7 +180,7 @@ def test_actual_owner_reduced_positive_automatically_confirms_same_source_build(
                 research_scope={"model": {"path": full.model.path}, "backend": "cpu"})
 
         @contextmanager
-        def hold(cpus):
+        def hold(cpus, **_quiet):
             claims.append(cpus)
             yield {"device_id": "synthetic-cpu-region-owner"}
 

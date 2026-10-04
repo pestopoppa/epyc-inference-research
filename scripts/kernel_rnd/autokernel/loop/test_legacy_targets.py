@@ -309,7 +309,7 @@ def test_selected_identity_survives_existing_pool_context_status_output_and_epoc
                                   "--out", str(fixture.root / "result")])
 
         with mock.patch.object(run, "main", selected_main), \
-                mock.patch.object(run.claim, "hold_cpu", lambda _cpus: nullcontext(
+                mock.patch.object(run.claim, "hold_cpu", lambda _cpus, **_quiet: nullcontext(
                     {"device_id": "synthetic-host-claim"})), \
                 mock.patch.object(run.os, "sched_getaffinity", return_value={0, 1}), \
                 mock.patch.object(run.os, "sched_setaffinity"), \

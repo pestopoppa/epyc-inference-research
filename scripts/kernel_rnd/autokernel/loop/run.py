@@ -18,7 +18,6 @@ import argparse
 from contextlib import ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass, replace
 import hashlib
-import fcntl
 import json
 import os
 from pathlib import Path
@@ -33,24 +32,44 @@ from ..controller import (anchor_integrity, build_recipe, experiments, inbox, ru
 from .. import codegen_summary
 HEARTBEAT_S = 30  # status heartbeat period; envelope = 6x this
 HEARTBEAT_STOP_TIMEOUT_S = 10
-#: `--cpu-measurement-gpu-quiet`: the CPU/GPU measurement quiet window. DEFAULT "q3"
+#: `--cpu-measurement-gpu-quiet`: the CPU/GPU measurement quiet window. DEFAULT "lock"
 #: (operator ruling, 2026-10-04 backlog schedule: GPU benches and CPU measurements
-#: NEVER overlap; AK long-context audit §4.3). GPU host threads run on 184-191, the SMT
-#: siblings of physical cores 88-95 (region q3), and a correctly pinned GPU bench chain
-#: raised a CPU A/A floor 0.80% -> 7.22%, 9x (INF-70, 2026-09-08): pinning controls
-#: placement, not contention. Under "q3" both sides exclude each other per measurement:
-#:   * a CPU measurement whose CPU list touches q3 takes the MI210 device flock
-#:     (`claim.DEVICE_LOCK`) for its body only (the 2026-09-17 window, 0702e327);
-#:   * a GPU measurement takes the q3 CPU region claim for its body only
-#:     (`claim.hold_q3_measurement`, `_gpu_q3_measurement_window`).
-#: Both are released between measurements. Production :8083 traffic takes neither.
-#: "off" restores the superseded 2026-09-25 "run GPU work concurrently" policy, which
+#: NEVER overlap; AK long-context audit §4.3). GPU host threads run on 184-191, and a
+#: correctly pinned GPU bench chain raised a CPU A/A floor 0.80% -> 7.22%, 9x (INF-70,
+#: 2026-09-08): pinning controls placement, not contention. Under "lock" both sides
+#: meet on the orchestrator's host-wide gpu-quiet flock (`src/runtime/gpu_quiet_lock.py`,
+#: design agreed with the stack owner workspace-ec, 2026-10-04):
+#:   * a CPU run holds it SHARED together with its region claim (`claim.hold_cpu(...,
+#:     gpu_quiet=True)`): taken before the regions, yielded and re-acquired with them by
+#:     the CPU window, so it covers every tail and measurement and no actor phase;
+#:   * a GPU measurement holds it EXCLUSIVE for its body only
+#:     (`claim.hold_gpu_quiet_measurement`, `_gpu_quiet_measurement_window`) and takes NO
+#:     CPU region -- the q3 region claim it used to take also 503'd every serving role
+#:     placed on q3.
+#: Production :8083 traffic and orchestrator per-call claims take neither. "off"
+#: restores the superseded 2026-09-25 "run GPU work concurrently" policy, which
 #: contradicts the ruling as the operator stated it; it stays as an explicit opt-out.
+#: "q3" (the 2026-10-04 region/device-flock window this replaces) is accepted as a
+#: deprecated spelling of "lock".
 CPU_MEASUREMENT_GPU_QUIET_OFF = "off"
-CPU_MEASUREMENT_GPU_QUIET_Q3 = "q3"
-CPU_MEASUREMENT_GPU_QUIET_DEFAULT = CPU_MEASUREMENT_GPU_QUIET_Q3
+CPU_MEASUREMENT_GPU_QUIET_LOCK = "lock"
+CPU_MEASUREMENT_GPU_QUIET_DEFAULT = CPU_MEASUREMENT_GPU_QUIET_LOCK
 CPU_MEASUREMENT_GPU_QUIET_POLICIES = (CPU_MEASUREMENT_GPU_QUIET_OFF,
-                                      CPU_MEASUREMENT_GPU_QUIET_Q3)
+                                      CPU_MEASUREMENT_GPU_QUIET_LOCK)
+CPU_MEASUREMENT_GPU_QUIET_DEPRECATED = {"q3": CPU_MEASUREMENT_GPU_QUIET_LOCK}
+
+
+def _gpu_quiet_policy(value: str) -> str:
+    """argparse `type` for `--cpu-measurement-gpu-quiet`: maps deprecated spellings."""
+    replacement = CPU_MEASUREMENT_GPU_QUIET_DEPRECATED.get(value)
+    if replacement is not None:
+        print(f"warning: --cpu-measurement-gpu-quiet {value} is deprecated; it now means "
+              f"{replacement!r} (the orchestrator's gpu-quiet lock, not a q3 region claim)",
+              file=sys.stderr)
+        return replacement
+    return value
+
+
 #: `--anchor-guard-aa-window-s` default (2026-10-03, DS41 duty cycle: the post-keep
 #: anchor A/A held the bottleneck measurement slot for ~13% of loop wall). When the
 #: object digests are identical the anchor provably IS the champion and an above-floor
@@ -153,86 +172,32 @@ def anchor_build_jobs(recipe, build_jobs: int) -> int:
 
 
 @contextmanager
-def _q3_cpu_gpu_quiet_window(launch, *, on_wait, should_stop,
-                             policy=CPU_MEASUREMENT_GPU_QUIET_DEFAULT):
-    """Exclude a GPU item while a q3 CPU measurement is active.
+def _gpu_quiet_measurement_window(gpu_run: bool, *, on_wait, should_stop,
+                                  policy=CPU_MEASUREMENT_GPU_QUIET_DEFAULT, hold=None):
+    """A GPU measurement holds gpu-quiet EXCLUSIVE for its body only.
 
-    `policy` is `--cpu-measurement-gpu-quiet`. Under the default "q3" the MI210 flock
-    is held for the body of one measurement whose CPU list touches q3, and released
-    when it ends; under "off" (explicit opt-out) the window is a no-op and the flock
-    is never opened.
+    The GPU half of the quiet window (operator 2026-10-04: GPU benches and CPU
+    measurements never overlap); the CPU half is the SHARED hold `claim.hold_cpu` takes
+    with a CPU run's regions. `hold` defaults to `claim.hold_gpu_quiet_measurement`. A
+    busy lock (a CPU run holds it shared) is waited on -- never pre-empted -- with
+    `on_wait` reported once per heartbeat; a stop request before acquisition refuses
+    the measurement. No-op under "off" or for a CPU run.
 
-    Default flipped 2026-10-04 (operator ruling: GPU benches and CPU measurements
-    never overlap -- the INF-70 9x floor degradation). The 2026-10-03 opt-in default
-    followed the superseded 2026-09-25 "run concurrently" policy. The concern it
-    answered -- a CPU campaign holding `mi210_0` most of its wall and blocking a GPU
-    window -- is bounded here: the flock is held per measurement only, and a holder
-    that advertises it takes q3 for its OWN measurements (`claim.q3_honouring_marker`,
-    an AutoKernel GPU run) is not waited on, because this run's q3 region claim already
-    excludes that holder's measurements. Waiting on it would deadlock: it holds the
-    flock for its whole life and waits on q3 for each measurement.
+    No device-flock marker is needed any more: a CPU run never waits on `mi210_0`, so
+    a GPU run holding `mi210_0` for its life while it waits on gpu-quiet per
+    measurement cannot close a cycle with it.
     """
     if policy not in CPU_MEASUREMENT_GPU_QUIET_POLICIES:
         raise ValueError(f"unknown CPU-measurement GPU quiet policy {policy!r}")
-    if (policy == CPU_MEASUREMENT_GPU_QUIET_OFF or launch is None
-            or launch.backend != "cpu"):
+    if policy == CPU_MEASUREMENT_GPU_QUIET_OFF or not gpu_run:
         yield
         return
-    from ..execution.cpu_region_claim import cpu_list_to_regions
-    cpu_list = launch.template.cpu_list
-    if cpu_list is not None and "q3" not in cpu_list_to_regions(cpu_list):
-        yield
-        return
-    lock = claim.DEVICE_LOCK
-    lock.parent.mkdir(parents=True, exist_ok=True)
-    with lock.open("a") as handle:
-        next_report = 0.0
-        locked = False
-        while True:
-            if should_stop():
-                raise loop.TailRefused("stopped before q3 CPU measurement acquired GPU quiet window")
-            try:
-                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                locked = True
-                break
-            except BlockingIOError:
-                if claim.device_holder_honours_q3(lock):
-                    break  # its measurements need the q3 claim this run already holds
-                if time.monotonic() >= next_report:
-                    on_wait()
-                    next_report = time.monotonic() + HEARTBEAT_S
-                time.sleep(0.5)
-        try:
-            yield
-        finally:
-            if locked:
-                fcntl.flock(handle, fcntl.LOCK_UN)
-
-
-@contextmanager
-def _gpu_q3_measurement_window(gpu_run: bool, *, on_wait, should_stop,
-                               policy=CPU_MEASUREMENT_GPU_QUIET_DEFAULT,
-                               already_held: bool = False, hold=None):
-    """A GPU measurement takes the q3 CPU region claim for its body only.
-
-    The other half of the quiet window (operator 2026-10-04: GPU benches and CPU
-    measurements never overlap). `hold` defaults to `claim.hold_q3_measurement`
-    (claims `88-95`; see REGION-SIBLING-1 there). A busy q3 is waited on -- never
-    pre-empted -- with `on_wait` reported once per heartbeat; a stop request before
-    acquisition refuses the measurement. No-op under "off", for a CPU run, or when
-    this run already holds a CPU claim covering q3.
-    """
-    if policy not in CPU_MEASUREMENT_GPU_QUIET_POLICIES:
-        raise ValueError(f"unknown CPU-measurement GPU quiet policy {policy!r}")
-    if policy == CPU_MEASUREMENT_GPU_QUIET_OFF or not gpu_run or already_held:
-        yield
-        return
-    hold = claim.hold_q3_measurement if hold is None else hold
+    hold = claim.hold_gpu_quiet_measurement if hold is None else hold
     next_report = 0.0
     with ExitStack() as stack:
         while True:
             if should_stop():
-                raise loop.TailRefused("stopped before GPU measurement acquired the q3 CPU claim")
+                raise loop.TailRefused("stopped before GPU measurement acquired the gpu-quiet lock")
             try:
                 stack.enter_context(hold())
                 break
@@ -2144,15 +2109,17 @@ def main(argv: list[str] | None = None) -> int:
                              "and at teardown; see cpu_window.py. Off = the claim is held for "
                              "the whole batch, byte for byte (default: %(default)s)")
     parser.add_argument("--cpu-measurement-gpu-quiet",
+                        type=_gpu_quiet_policy,
                         choices=CPU_MEASUREMENT_GPU_QUIET_POLICIES,
                         default=CPU_MEASUREMENT_GPU_QUIET_DEFAULT,
                         help="CPU/GPU measurement quiet window (operator 2026-10-04: GPU "
-                             "benches and CPU measurements never overlap). q3 = a CPU "
-                             "measurement whose CPU list touches q3 (the GPU host threads' "
-                             "SMT siblings) holds the MI210 device claim (mi210_0), and a "
-                             "GPU measurement holds the q3 CPU region claim, each for the "
-                             "measurement only -- never production :8083 traffic; off = "
-                             "neither (explicit opt-out) (default: %(default)s)")
+                             "benches and CPU measurements never overlap). lock = the "
+                             "orchestrator's host-wide gpu-quiet flock: a CPU run holds it "
+                             "SHARED with its region claim (yielded with it in actor "
+                             "phases), a GPU measurement holds it EXCLUSIVE for the "
+                             "measurement only and takes no CPU region -- never production "
+                             ":8083 traffic; off = neither (explicit opt-out); q3 = "
+                             "deprecated spelling of lock (default: %(default)s)")
     parser.add_argument("--cpu-window-wait-bound-s", type=float,
                         default=cpu_window.DEFAULT_WAIT_BOUND_S,
                         help="how long a re-acquire waits on a peer before it is logged as "
@@ -2715,14 +2682,15 @@ def main(argv: list[str] | None = None) -> int:
                          f"host reports {rocm_seen}")
     if (direct_launch and not cpu_launch
             and args.cpu_measurement_gpu_quiet != CPU_MEASUREMENT_GPU_QUIET_OFF):
-        # Quiet window, GPU half: every GPU measurement takes the q3 region claim through
+        # Quiet window, GPU half: every GPU measurement takes gpu-quiet EXCLUSIVE through
         # the orchestrator. Prove that path at startup; a run that discovers it is
-        # unimportable at its first measurement has already paid for a build.
+        # unimportable at its first measurement has already paid for a build. (The CPU
+        # half is taken with the region claim, so a CPU run refuses at its claim.)
         try:
-            claim.q3_measurement_preflight()
+            claim.gpu_quiet_preflight()
         except (claim.ClaimRefused, ImportError, OSError) as exc:
             parser.error(f"GPU quiet window ({args.cpu_measurement_gpu_quiet}) cannot take "
-                         f"the q3 region claim on this host: {exc}; pass "
+                         f"the gpu-quiet lock on this host: {exc}; pass "
                          "--cpu-measurement-gpu-quiet off only with the operator's leave")
     print(f"workload  {args.model.name}: n_embd={census.n_embd}, "
           f"dominant {census.dominant_quant}")
@@ -4083,7 +4051,7 @@ def main(argv: list[str] | None = None) -> int:
             # G2: the target's OWN server under rocprofv3 (whole life, windows cut by
             # timestamp marks), one anchor launch per anchor change, cached by anchor +
             # execution digest + request digest. mi210_0 is held for this run's life;
-            # the q3 measurement claim is taken around the launch (quiet window).
+            # gpu-quiet EXCLUSIVE is taken around the launch (quiet window).
             gpu_profile_observation.clear()
             gpu_profile_observation["status"] = "unavailable"
             publish("running", latest, step="GPU serving profile (rocprofv3, one anchor launch)")
@@ -4147,20 +4115,15 @@ def main(argv: list[str] | None = None) -> int:
     quiet_depth = threading.local()
 
     def cpu_measurement_window():
-        """The measurement window of THIS run, CPU or GPU (quiet-window ruling above)."""
-        if cpu_launch:
-            quiet = _q3_cpu_gpu_quiet_window(
-                cpu_launch, should_stop=should_stop, policy=args.cpu_measurement_gpu_quiet,
-                on_wait=lambda: publish("running", latest,
-                    step="q3 CPU measurement waiting for MI210 GPU item to release"))
-        else:
-            quiet = _gpu_q3_measurement_window(
-                True, should_stop=should_stop, policy=args.cpu_measurement_gpu_quiet,
-                already_held=any(isinstance(row, dict) and row.get("device_id") == "cpu"
-                                 and "q3" in (row.get("regions") or ())
-                                 for row in original_claims),
-                on_wait=lambda: publish("running", latest,
-                    step="GPU measurement waiting for the q3 CPU region (a CPU measurement holds it)"))
+        """The measurement window of THIS run, CPU or GPU (quiet-window ruling above).
+
+        A CPU run's half of the quiet window is the SHARED gpu-quiet hold that rides
+        with its region claim (`hold_cpu_claim`), so its window is the CPU step alone.
+        """
+        quiet = _gpu_quiet_measurement_window(
+            not cpu_launch, should_stop=should_stop, policy=args.cpu_measurement_gpu_quiet,
+            on_wait=lambda: publish("running", latest,
+                step="GPU measurement waiting for gpu-quiet (a CPU measurement holds it shared)"))
         quiet = _reentrant(quiet_depth, quiet)
         if cpu_window_ref[0] is None:
             return quiet
@@ -5953,11 +5916,16 @@ def main(argv: list[str] | None = None) -> int:
                 # the last word is `closed`, no claim, an expired heartbeat.
                 ownership.callback(cpu_win.finalize)
 
+            # A CPU run's region claim carries gpu-quiet SHARED under the quiet window;
+            # a GPU run's host-CPU claim never does (its measurements take it EXCLUSIVE).
+            gpu_quiet_kw = ({"gpu_quiet": True} if cpu_launch and args.cpu_measurement_gpu_quiet
+                            != CPU_MEASUREMENT_GPU_QUIET_OFF else {})
+
             def hold_cpu_claim(cpu_list):
                 if cpu_win is None:
-                    return ownership.enter_context(claim.hold_cpu(cpu_list))
+                    return ownership.enter_context(claim.hold_cpu(cpu_list, **gpu_quiet_kw))
                 return cpu_win.acquire_initial(
-                    lambda: ownership.enter_context(claim.hold_cpu(cpu_list)))
+                    lambda: ownership.enter_context(claim.hold_cpu(cpu_list, **gpu_quiet_kw)))
 
             try:
                 if owned_cpu_list is not None:
@@ -5978,10 +5946,6 @@ def main(argv: list[str] | None = None) -> int:
                 if not cpu_launch:
                     receipt = ownership.enter_context(claim.hold())
                     original_claims.append(receipt)
-                    if args.cpu_measurement_gpu_quiet == CPU_MEASUREMENT_GPU_QUIET_Q3:
-                        # Removed BEFORE the device flock on unwind (LIFO). A CPU run
-                        # holding q3 need not wait on this holder (claim.py).
-                        ownership.enter_context(claim.q3_honouring_marker())
                 if cpu_win is not None:
                     # Runs FIRST on unwind: the claim's close observation needs it held.
                     ownership.callback(cpu_win.teardown)
@@ -6001,15 +5965,15 @@ def main(argv: list[str] | None = None) -> int:
             print(f"claim     held on {receipt['device_id']}")
             if cpu_launch:
                 print(f"gpu quiet {args.cpu_measurement_gpu_quiet} "
-                      + ("(CPU measurements take no GPU claim)"
+                      + ("(CPU measurements take no gpu-quiet lock)"
                          if args.cpu_measurement_gpu_quiet == CPU_MEASUREMENT_GPU_QUIET_OFF
-                         else f"({claim.DEVICE_ID} held during q3 CPU measurements only)"))
+                         else "(gpu-quiet held SHARED with the CPU region claim)"))
             else:
                 print(f"gpu quiet {args.cpu_measurement_gpu_quiet} "
-                      + ("(GPU measurements take no CPU region claim)"
+                      + ("(GPU measurements take no gpu-quiet lock)"
                          if args.cpu_measurement_gpu_quiet == CPU_MEASUREMENT_GPU_QUIET_OFF
-                         else f"(q3 CPU region claimed as {claim.GPU_Q3_MEASUREMENT_CPU_LIST} "
-                              f"during GPU measurements only)"))
+                         else "(gpu-quiet held EXCLUSIVE during GPU measurements only; "
+                              "no CPU region claim)"))
             print()
             # R23-44: snapshot the starting champion into the protected champion-of-record slot
             # BEFORE the accumulator can advance and prune. The serving gate reads cor_build as

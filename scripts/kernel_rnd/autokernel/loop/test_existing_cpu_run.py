@@ -102,7 +102,7 @@ def test_existing_main_cpu_five_iterations_preserves_canonical_champion(
         real_main = run.main
 
         @contextmanager
-        def cpu_hold(cpu_list):
+        def cpu_hold(cpu_list, **_quiet):
             assert cpu_list == "0-95"
             held.append(True)
             try:

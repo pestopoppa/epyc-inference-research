@@ -550,7 +550,11 @@ def test_actual_main_measures_only_on_a_held_claim_and_off_is_the_batch_long_cla
         fixture_hold = claim.hold_cpu        # the fixture's double, installed by its cpu_main
 
         @contextmanager
-        def nested(cpu_list):
+        def nested(cpu_list, **kwargs):
+            # A CPU run asks for gpu-quiet SHARED under the default quiet window; the
+            # fake provider here has no gpu-quiet owner (test_gpu_quiet_measurement_window
+            # covers that path), so the lease is exercised on the regions alone.
+            seen["hold_kwargs"] = kwargs
             with fixture_hold(cpu_list):
                 with real_hold(cpu_list) as receipt:
                     seen["receipt"] = receipt
@@ -584,6 +588,7 @@ def test_actual_main_measures_only_on_a_held_claim_and_off_is_the_batch_long_cla
         cpu_fixture.test_existing_main_cpu_five_iterations_preserves_canonical_champion(False)
     assert steps and all(held for _name, held in steps), steps
     assert {name for name, _held in steps} >= {"compile", "oracle", "measure"}
+    assert seen["hold_kwargs"] == {"gpu_quiet": True}   # the default quiet window
     lease = claim.yield_lease(seen["receipt"])
     serial_scheduling._component(seen["receipt"].retained_interval())
     if knob == "off":

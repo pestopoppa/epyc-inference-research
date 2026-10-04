@@ -214,7 +214,7 @@ def test_actual_run_startup_compare_then_floor_reuse(monkeypatch):
         calls, comparisons = [], []
         real_main = run.main
         @contextmanager
-        def hold(*_args): yield {"device_id": "synthetic-cpu-claim"}
+        def hold(*_args, **_quiet): yield {"device_id": "synthetic-cpu-claim"}
         def drive(**kwargs):
             measure = kwargs["make_measure"](SimpleNamespace(build_dir=fixture.startup_anchor))
             comparison = measure(SimpleNamespace(runtime_pair=None), ())

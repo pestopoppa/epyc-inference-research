@@ -68,7 +68,7 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None, s
                   # CPU windows (cpu_window.py): a claim-yield policy, not an identity.
                   "--cpu-window-yield", "--cpu-window-wait-bound-s",
                   "--cpu-window-bus-agent",
-                  # Whether CPU measurement windows also take the MI210 claim
+                  # Whether measurements take the orchestrator's gpu-quiet lock
                   # (run.py --cpu-measurement-gpu-quiet): host hygiene, not an identity.
                   "--cpu-measurement-gpu-quiet",
                   # Post-keep measurement cadence (accumulate bench every N keeps,

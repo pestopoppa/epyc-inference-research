@@ -17,8 +17,8 @@ loop:
   exit -- hence the long TERM grace (a SIGKILL loses the whole trace).
 * **Host threads on the GPU lane**: `numactl --membind=3 -- taskset -c 184-191`
   (SMT siblings of cores 88-95, NUMA node 3). The caller holds the `mi210_0` device
-  claim (the loop holds it for a GPU run's whole life) and the q3 measurement claim
-  (`run._gpu_q3_measurement_window`) around this call.
+  claim (the loop holds it for a GPU run's whole life) and the orchestrator's gpu-quiet
+  lock EXCLUSIVE (`run._gpu_quiet_measurement_window`) around this call.
 * **Per-kernel tables with registers, spills and occupancy** (like
   `tmp/lb1-profile-20261003/`). rocprofv3 6.2's kernel trace carries no VGPR columns,
   so register/spill/LDS figures come from the AMDGPU code-object metadata of the

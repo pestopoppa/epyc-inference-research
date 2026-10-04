@@ -48,7 +48,7 @@ def test_selected_startup_prepares_only_missing_exact_floor(backend, case):
         original_main = run.main
 
         @contextmanager
-        def hold(*_args):
+        def hold(*_args, **_quiet):
             held.append("open")
             try:
                 yield {"device_id": "synthetic-owned-" + backend}

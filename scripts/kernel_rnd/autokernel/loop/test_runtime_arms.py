@@ -704,7 +704,7 @@ def test_main_keep_grade_arm_is_adopted_then_restored_into_a_new_epoch(monkeypat
             return base * 1.2 if recipe.threads == launch.template.threads + 1 else base
 
         @contextmanager
-        def hold(*_args):
+        def hold(*_args, **_quiet):
             yield {"device_id": "synthetic-cpu-claim"}
 
         def drive(**kwargs):
