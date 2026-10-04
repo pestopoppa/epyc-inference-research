@@ -2131,23 +2131,20 @@ def main(argv: list[str] | None = None) -> int:
             lane_binding = lane_targets.resolve(
                 args.lane_targets, args.lane, target_id=args.target_id, workers=args.workers,
                 lock=not args.dry_run,
-                champion_branch=args.experimental_branch or args.champion_branch)
+                working_branch=args.experimental_branch or args.champion_branch,
+                canonical_champion=champion.CANONICAL_BRANCH)
             lane_peer_serving = {peer.entry.name: lane_targets.peer_serving(peer)
                                  for peer in lane_binding.peers}
-            if lane_binding.trunk_branch is not None and subprocess.run(
+            # ONE champion (2026-08-31 incident): the binding's champion IS
+            # champion.CANONICAL_BRANCH (checked in resolve), and it must exist in the
+            # object store the lane works in. A clean checkout of it (pool.CHAMPION_TREE)
+            # is fast-forwarded at a fold (cross_target.fold_onto_champion).
+            if lane_binding.champion_branch is not None and subprocess.run(
                     ["git", "-C", str(args.worktree), "rev-parse", "--verify", "--quiet",
-                     f"refs/heads/{lane_binding.trunk_branch}"],
+                     f"refs/heads/{lane_binding.champion_branch}"],
                     capture_output=True, check=False).returncode != 0:
-                raise LookupError(f"trunk branch {lane_binding.trunk_branch} does not exist "
-                                  f"in {args.worktree} (create it at the common champion)")
-            if lane_binding.trunk_branch is not None and (
-                    f"branch refs/heads/{lane_binding.trunk_branch}\n" in subprocess.run(
-                        ["git", "-C", str(args.worktree), "worktree", "list", "--porcelain"],
-                        capture_output=True, text=True, check=False).stdout):
-                # The trunk moves by compare-and-swap ref updates only; a checkout of it
-                # would go stale under every shared keep.
-                raise LookupError(f"trunk branch {lane_binding.trunk_branch} is checked out "
-                                  "in a worktree; it must stay a bare ref")
+                raise LookupError(f"champion branch {lane_binding.champion_branch} does not "
+                                  f"exist in {args.worktree}")
         except (OSError, ValueError, RuntimeError, LookupError) as exc:
             parser.error(f"lane binding: {exc}")
         if (lane_binding.lane.cpu_window_path is not None
@@ -4783,8 +4780,9 @@ def main(argv: list[str] | None = None) -> int:
                 # LANE BINDING (lane_targets.py): a keep touching a path shared with
                 # another lane's target is A/B'd on that target. Same two builds this
                 # keep was measured with; the peer's own launch, requests and bar. A
-                # peer regression makes the keep TARGET-ONLY (cross_target.py), never
-                # a veto: it is kept on this target's champion branch only.
+                # peer regression makes the keep target_only_pending_gate
+                # (cross_target.py), never a veto: it is held on this lane's working
+                # branch and a gating hypothesis is queued; it cannot fold until gated.
                 def cross_compare(peer, bar):
                     peer_launch, peer_requests = lane_peer_serving[peer.entry.name]
                     return measured_serving_compare(
@@ -4823,6 +4821,15 @@ def main(argv: list[str] | None = None) -> int:
             if not preservation["passed"]:
                 raise loop.ConfirmVetoed("KEEP_CANDIDATE-kernel-coverage: "
                                          + preservation["reason"])
+            gate_texts = (hypothesis.statement, hypothesis.falsifier, hypothesis.mechanism_id)
+            if lane_binding is not None and cross_target.gate_declarations(*gate_texts):
+                # A GATE (`GATES-KEEP:`) must key on GGUF metadata or argv, never an env
+                # var: runtime_attestation sees argv/GGUF, not undeclared env.
+                gate_ok, gate_why = cross_target.gate_mechanism(
+                    _git(worker.worktree, "diff", "HEAD", checked.tree))
+                evidence["gate_mechanism"] = {"passed": gate_ok, "reason": gate_why}
+                if not gate_ok:
+                    raise loop.ConfirmVetoed("KEEP_CANDIDATE-gate-attestation: " + gate_why)
             cross_decision = (cross_target.decide(cross, preservation["peers"])
                               if cross is not None else None)
             if cross_decision is not None:
@@ -4843,17 +4850,22 @@ def main(argv: list[str] | None = None) -> int:
                                          branch=args.champion_branch,
                                          expected_tree=checked.tree)
             if cross_decision is not None:
-                # Per-target lineage (cross_target.py): ledger the decision, put a
-                # shared keep on the trunk, and bring the trunk's missing commits onto
-                # this target's branch BEFORE the anchor is rebuilt from it.
+                # ONE-champion lineage (cross_target.py): ledger the decision, fold a
+                # non-regressing keep into THE champion (G0 first), or hold it and
+                # queue its gating hypothesis; then housekeep this lane's held series
+                # and bring the champion's missing commits onto this working branch
+                # BEFORE the anchor is rebuilt from it.
                 try:
                     cross_target.record_keep(
                         lane_binding, repo=args.worktree, keep_commit=head,
                         decision=cross_decision, cross=cross,
-                        coverage=preservation["peers"], mechanism_id=hypothesis.mechanism_id)
-                    cross_target.sync_from_trunk(lane_binding, repo=args.worktree,
-                                                 champion_tree=args.worktree,
-                                                 branch=args.champion_branch)
+                        coverage=preservation["peers"], mechanism_id=hypothesis.mechanism_id,
+                        store=args.store, declaration_texts=gate_texts)
+                    cross_target.refresh_gates(lane_binding, repo=args.worktree,
+                                               store=args.store, branch=args.champion_branch)
+                    cross_target.sync_from_champion(lane_binding, repo=args.worktree,
+                                                    champion_tree=args.worktree,
+                                                    branch=args.champion_branch)
                 except Exception as exc:  # a missed propagation; the keep stands
                     print(f"warning: cross-target lineage step failed after keep: "
                           f"{type(exc).__name__}: {exc}", file=sys.stderr)
@@ -4893,24 +4905,30 @@ def main(argv: list[str] | None = None) -> int:
             # serving floor, spend the one serving gate that can advance the champion of record.
             accumulate_after_keep(hypothesis.mechanism_id)
             if lane_binding is not None and cpu_launch is not None:
-                recheck_target_only(worker)
+                fold_check_held(worker)
             return head
 
-        def recheck_target_only(worker):
-            """Cross-target propagation check (cross_target.recheck_one): ONE pending
-            target-only keep of another lane, applied onto this target's champion,
-            built, gated and A/B'd against this target's floor; propagated onto this
-            branch (and the trunk once every target carries it) if it helps, or is
-            neutral and simplifies. Never raises: a failure is a missed propagation."""
+        def fold_check_held(worker):
+            """ONE-champion fold check (cross_target.check_one): ONE eligible held
+            series of another lane -- its target-only keep(s) plus their gating
+            keep(s) -- applied onto this lane's working branch, built, MUL_MAT oracle,
+            A/B'd against this target's floor and kernel-coverage diffed on this
+            target's executed path. Approved when it does not regress this target and
+            leaves its executed path unchanged; once every other lane approves, the
+            series folds into THE champion (G0 first). This lane's branch never moves
+            here: the series reaches it through the champion. Never raises."""
             own = lane_targets.PeerTarget(entry=lane_binding.lane, launch_path=Path("/"),
                                           frozen_prompts=Path("/"), store=None)
+            own_target = args.target_id or args.surface
 
-            def measure(entry):
+            def measure(series):
                 pool.reset_to_champion(worker, champion_tree=args.worktree,
                                        branch=args.champion_branch)
-                commit = cross_target.apply_in_worktree(worker.worktree, entry["keep_commit"])
-                if commit is None:
-                    return {"error": "does not apply onto this target's champion"}
+                base = _git(worker.worktree, "rev-parse", "HEAD")
+                for commit in series["commits"]:
+                    if cross_target.apply_in_worktree(worker.worktree, commit) is None:
+                        return {"error": f"{commit[:12]} does not apply onto this lane's "
+                                         "working branch"}
                 built = gates.compiles(worker.worktree, worker.build_dir,
                                        cmake_defines=recipe.cmake_defines(), jobs=build_jobs,
                                        cpu_list=build_cpu_list,
@@ -4932,34 +4950,38 @@ def main(argv: list[str] | None = None) -> int:
                     candidate_resolved_recipe=arm, frozen_requests=frozen_requests,
                     instrument=serving.MATCHED_INSTRUMENT,
                     **lane_targets.compare_kwargs(bar, serving_recipe, frozen_requests))
+                passed, reason = lane_targets.decide(dict(row), bar)
                 kept = kernel_coverage.keep_gate(
-                    store=args.store, repo=worker.worktree, base_ref="HEAD^",
+                    store=args.store, repo=worker.worktree, base_ref=base,
                     candidate_ref="HEAD", anchor_build=anchor_build[0],
-                    candidate_build=worker.build_dir,
-                    own_target=args.target_id or args.surface,
-                    declaration_texts=(), mechanism_id=f"recheck-{entry['keep_commit'][:12]}")
+                    candidate_build=worker.build_dir, own_target=own_target,
+                    peer_shapes={own_target: kernel_coverage.shape_names(serving_recipe)},
+                    measured_peers=[own_target], declaration_texts=(),
+                    mechanism_id=f"foldcheck-{series['origin_head'][:12]}")
                 if not kept["passed"]:
                     return {"error": f"kernel coverage: {kept['reason']}"}
-                return {"row": dict(row), "candidate_commit": commit}
+                return {"row": dict(row), "passed": passed, "reason": reason,
+                        "coverage": kept["peers"].get(own_target) or {}}
 
             try:
-                event = cross_target.recheck_one(
-                    lane_binding, repo=args.worktree, champion_tree=args.worktree,
-                    branch=args.champion_branch, measure=measure,
-                    advance=lambda _commit: promote_anchor())
+                event = cross_target.check_one(lane_binding, repo=args.worktree,
+                                               measure=measure)
                 if event is not None:
-                    print(f"crosstgt  recheck {event['keep_commit'][:12]} from "
+                    print(f"crosstgt  fold-check {event['origin_head'][:12]} from "
                           f"{event.get('origin_target')}: {event.get('result')} "
-                          f"({event.get('why')}: {event.get('reason')})")
+                          f"({event.get('reason')})"
+                          + (f"; champion fold: {event['fold'].get('result')}"
+                             if event.get("fold") else ""))
             except Exception as exc:  # noqa: BLE001
-                print(f"warning: cross-target recheck failed: {type(exc).__name__}: {exc}",
+                print(f"warning: cross-target fold check failed: {type(exc).__name__}: {exc}",
                       file=sys.stderr)
             finally:
                 try:
                     pool.reset_to_champion(worker, champion_tree=args.worktree,
                                            branch=args.champion_branch)
                 except Exception as exc:  # noqa: BLE001
-                    print(f"warning: lane reset after recheck failed: {exc}", file=sys.stderr)
+                    print(f"warning: lane reset after fold check failed: {exc}",
+                          file=sys.stderr)
 
         def reset_retained(worker):
             # STOP before the gate, or a hard interruption during authoring, leaves

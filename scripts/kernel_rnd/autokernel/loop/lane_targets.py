@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lane -> target binding: one lane per model, one shared champion lineage (2026-10-03).
+"""Lane -> target binding: one lane per model, ONE champion lineage (2026-10-03/04).
 
 WHY. Operator directive 2026-10-03: of the DS41 loop's two lanes, one keeps exploring
 DeepSeek-V4.1-Flash and the other explores Qwen3.8-Flash-Next (Q38FN), whose token
@@ -39,12 +39,18 @@ args `--lane-targets <file> --lane <name>`:
   `serving.compare`). Without one it is the peer's explicit
   `as_peer_max_regression_pct` (a point-estimate bar, recorded as such). With
   neither, the check does not pass: an absent bar never passes silently.
-  (2026-10-04, per-target lineage) A failed check no longer vetoes the keep. It makes
-  the keep TARGET-ONLY: it stays on this lane's `champion_branch` and stays off the
-  shared `trunk`. See `cross_target.py` for the trunk, propagation and re-check rules.
-* LINEAGE (optional `"trunk": {"branch": ...}` at the top level). Each lane names its
-  own `champion_branch`, which must be the instance's `--champion-branch`. All of them
-  live in one repository with the trunk branch, and the trunk is never a lane's branch.
+  (2026-10-04) A failed check no longer vetoes the keep. It makes the keep
+  `target_only_pending_gate`: the keep stays on this lane's WORKING branch, and the
+  loop queues a hypothesis to gate it by model, arch or shape. A keep that passes folds
+  into the ONE champion immediately. See `cross_target.py`.
+* LINEAGE. This is optional: a top-level `"champion": {"branch": ...}` plus a per-lane
+  `working_branch`. The champion is THE single champion of the tree
+  (`champion.CANONICAL_BRANCH`, checked at `resolve`). There is never a second
+  champion or trunk for one production tree (2026-08-31 single-champion incident).
+  Each lane's `working_branch` must be that instance's `--experimental-branch`. It
+  must not be a champion (`ak/champion/*`) or a production branch, and it must be
+  distinct from every other lane's. The 4f8f11c7 shape (`trunk` plus a per-lane
+  `champion_branch`) is refused.
 
 The flags are keep POLICY, not identity: the launch, requests, campaign and lineage of
 each target are unchanged, so they are excluded from the serial continuation binding
@@ -68,7 +74,10 @@ CHECK_DIR = "cross-target-checks"
 MAX_BYTES = 64 * 1024
 _ENTRY_FIELDS = {"target_id", "owned_targets", "exclusive_paths", "as_peer_floor_file",
                  "as_peer_max_regression_pct"}
-_OPTIONAL_FIELDS = {"cpu_window_path", "champion_branch"}
+_OPTIONAL_FIELDS = {"cpu_window_path", "working_branch"}
+#: Branch prefixes a lane working branch may never take: the single champion's
+#: namespace and the frozen production namespace.
+_NOT_WORKING = ("ak/champion/", "production-", "refs/")
 
 
 class LaneBindingError(ValueError):
@@ -84,7 +93,7 @@ class LaneEntry:
     as_peer_floor_file: Path | None
     as_peer_max_regression_pct: float | None
     cpu_window_path: Path | None = None
-    champion_branch: str | None = None
+    working_branch: str | None = None
 
 
 @dataclass(frozen=True)
@@ -101,7 +110,7 @@ class Bound:
     path: Path
     lane: LaneEntry
     peers: tuple[PeerTarget, ...]
-    trunk_branch: str | None = None
+    champion_branch: str | None = None
     _lock: Any = field(default=None, repr=False)
 
     def release(self) -> None:
@@ -118,6 +127,10 @@ def _abs(value: Any, what: str) -> Path:
 
 
 def _entry(name: str, body: Any) -> LaneEntry:
+    if isinstance(body, Mapping) and "champion_branch" in body:
+        raise LaneBindingError(f"{name}: a per-lane champion_branch is a second champion "
+                               "lineage for one production tree; name the lane's "
+                               "working_branch, and the ONE champion at the top level")
     if not isinstance(body, Mapping) or _ENTRY_FIELDS - body.keys() \
             or body.keys() - _ENTRY_FIELDS - _OPTIONAL_FIELDS:
         raise LaneBindingError(f"{name}: expected fields {sorted(_ENTRY_FIELDS)} "
@@ -137,10 +150,11 @@ def _entry(name: str, body: Any) -> LaneEntry:
                             or not math.isfinite(bar) or not 0 < bar <= 20):
         raise LaneBindingError(f"{name}: as_peer_max_regression_pct must be in (0, 20]")
     window = body.get("cpu_window_path")
-    branch = body.get("champion_branch")
+    branch = body.get("working_branch")
     if branch is not None and (not isinstance(branch, str) or not branch.strip()
-                               or branch.startswith("refs/") or " " in branch):
-        raise LaneBindingError(f"{name}: champion_branch must be a short branch name")
+                               or branch.startswith(_NOT_WORKING) or " " in branch):
+        raise LaneBindingError(f"{name}: working_branch must be a short branch name that "
+                               "is neither a champion nor a production branch")
     return LaneEntry(name=name, target_id=target, owned_targets=_abs(body["owned_targets"],
                      f"{name}.owned_targets"), exclusive_paths=tuple(globs),
                      as_peer_floor_file=(None if floor is None
@@ -148,7 +162,7 @@ def _entry(name: str, body: Any) -> LaneEntry:
                      as_peer_max_regression_pct=None if bar is None else float(bar),
                      cpu_window_path=None if window is None else _abs(window,
                                                                       f"{name}.cpu_window_path"),
-                     champion_branch=branch)
+                     working_branch=branch)
 
 
 def load(path: Path) -> dict[str, LaneEntry]:
@@ -156,16 +170,20 @@ def load(path: Path) -> dict[str, LaneEntry]:
 
 
 def load_binding(path: Path) -> tuple[dict[str, LaneEntry], str | None]:
-    """(lanes, trunk branch or None)."""
+    """(lanes, the ONE champion branch or None)."""
     path = Path(path)
     raw = path.read_bytes()
     if len(raw) > MAX_BYTES:
         raise LaneBindingError("lane binding file exceeds 64 KiB")
     body = json.loads(raw)
-    if not isinstance(body, Mapping) or set(body) - {"trunk"} != {"schema", "lanes"} \
+    if isinstance(body, Mapping) and "trunk" in body:
+        raise LaneBindingError("a `trunk` beside the champion is a second lineage for one "
+                               "production tree; the trunk IS the champion: "
+                               "`champion: {branch}`")
+    if not isinstance(body, Mapping) or set(body) - {"champion"} != {"schema", "lanes"} \
             or body["schema"] != SCHEMA or not isinstance(body["lanes"], Mapping):
         raise LaneBindingError(f"lane binding must be {{schema: {SCHEMA}, lanes: {{...}}"
-                               "[, trunk: {branch}]}")
+                               "[, champion: {branch}]}")
     lanes = {name: _entry(name, entry) for name, entry in body["lanes"].items()}
     if len(lanes) < 2:
         raise LaneBindingError("a lane binding names at least two lanes")
@@ -174,21 +192,20 @@ def load_binding(path: Path) -> tuple[dict[str, LaneEntry], str | None]:
     targets = [entry.target_id for entry in lanes.values()]
     if len(set(targets)) != len(targets):
         raise LaneBindingError("one target is bound to two lanes")
-    trunk = body.get("trunk")
-    if trunk is None:
+    champion = body.get("champion")
+    if champion is None:
         return lanes, None
-    if not isinstance(trunk, Mapping) or set(trunk) != {"branch"} \
-            or not isinstance(trunk["branch"], str) or not trunk["branch"].strip():
-        raise LaneBindingError("trunk must be {branch: <name>}")
-    if any(b.startswith(("production-", "refs/")) for b in [trunk["branch"], *(
-            entry.champion_branch or "" for entry in lanes.values())]):
-        raise LaneBindingError("a lineage branch is never a production branch")
-    branches = [entry.champion_branch for entry in lanes.values()]
+    if not isinstance(champion, Mapping) or set(champion) != {"branch"} \
+            or not isinstance(champion["branch"], str) or not champion["branch"].strip():
+        raise LaneBindingError("champion must be {branch: <the single champion branch>}")
+    if champion["branch"].startswith(("production-", "refs/")):
+        raise LaneBindingError("the champion is never a production branch")
+    branches = [entry.working_branch for entry in lanes.values()]
     if any(b is None for b in branches) or len(set(branches)) != len(branches) \
-            or trunk["branch"] in branches:
-        raise LaneBindingError("with a trunk, every lane names its own champion_branch, "
-                               "distinct from each other and from the trunk")
-    return lanes, trunk["branch"]
+            or champion["branch"] in branches:
+        raise LaneBindingError("with a champion, every lane names its own working_branch, "
+                               "distinct from each other and from the champion")
+    return lanes, champion["branch"]
 
 
 def _owned(entry: LaneEntry) -> Mapping[str, Any]:
@@ -201,11 +218,19 @@ def _owned(entry: LaneEntry) -> Mapping[str, Any]:
 
 
 def resolve(path: Path | None, lane: str | None, *, target_id: str | None, workers: int,
-            lock: bool = True, champion_branch: str | None = None) -> Bound:
-    """The child's lane, after every refusal that can be made before measuring."""
+            lock: bool = True, working_branch: str | None = None,
+            canonical_champion: str | None = None) -> Bound:
+    """The child's lane, after every refusal that can be made before measuring.
+
+    `canonical_champion` (run.py passes `champion.CANONICAL_BRANCH`): a binding that
+    names any other champion is refused, because there is ONE champion per tree."""
     if path is None or lane is None:
         raise LaneBindingError("--lane-targets and --lane are given together")
-    lanes, trunk = load_binding(path)
+    lanes, champion_branch = load_binding(path)
+    if champion_branch is not None and canonical_champion is not None \
+            and champion_branch != canonical_champion:
+        raise LaneBindingError(f"binding champion {champion_branch} is not THE champion "
+                               f"{canonical_champion}: one champion per production tree")
     if lane not in lanes:
         raise LaneBindingError(f"--lane {lane} is not bound in {path}")
     entry = lanes[lane]
@@ -214,10 +239,9 @@ def resolve(path: Path | None, lane: str | None, *, target_id: str | None, worke
     if int(workers) != 1:
         raise LaneBindingError("a bound lane runs ONE worker (--workers 1): the other lane "
                                "is the other target's instance")
-    if entry.champion_branch is not None and champion_branch is not None \
-            and champion_branch != entry.champion_branch:
-        raise LaneBindingError(f"{lane}'s champion branch is {entry.champion_branch}, "
-                               f"not --champion-branch {champion_branch}")
+    if entry.working_branch is not None and working_branch != entry.working_branch:
+        raise LaneBindingError(f"{lane}'s working branch is {entry.working_branch}, "
+                               f"not --experimental-branch {working_branch}")
     peers = []
     for name, other in sorted(lanes.items()):
         if name == lane:
@@ -229,7 +253,8 @@ def resolve(path: Path | None, lane: str | None, *, target_id: str | None, worke
                                        else _abs(owner["store"], f"{name} store"))))
     # A peer with no bar is not a startup refusal: a keep touching only this lane's
     # exclusive paths needs none, and any other keep is refused at `decide`.
-    bound = Bound(path=Path(path), lane=entry, peers=tuple(peers), trunk_branch=trunk)
+    bound = Bound(path=Path(path), lane=entry, peers=tuple(peers),
+                  champion_branch=champion_branch)
     if lock:
         handle = (Path(path).parent / f".lane-{lane}.lock").open("a")
         try:
@@ -317,9 +342,9 @@ def cross_check(bound: Bound, *, changed: Iterable[str],
 
     `compare(peer, bar)` runs the peer A/B (injected: the loop owns builds/launches)
     and returns the `serving.compare` row. Returns the verdict (`passed`), which
-    `cross_target.decide` turns into shared / target-only (never a veto of the keep).
-    A comparison that raises is a failed check (fail closed: target-only), recorded
-    with its error."""
+    `cross_target.decide` turns into fold / target_only_pending_gate (never a veto of
+    the keep). A comparison that raises is a failed check (fail closed: pending gate),
+    recorded with its error."""
     changed = sorted({p for p in changed if p})
     verdict: dict[str, Any] = {"schema": CHECK_SCHEMA, "lane": bound.lane.name,
                                "target_id": bound.lane.target_id,

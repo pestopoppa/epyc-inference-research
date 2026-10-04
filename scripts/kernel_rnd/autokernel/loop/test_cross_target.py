@@ -1,10 +1,13 @@
-"""Per-target champion lineage (cross_target.py) -- temp git repos, injected measurement.
+"""ONE-champion cross-target lineage (cross_target.py): temp git repos, injected measurement.
 
-The scenario is the DS41 / Q38FN pair. A DS41 keep that also helps (or is neutral on)
-Q38FN goes to the trunk, and Q38FN picks it up at its next advancement. A DS41 keep that
-regresses Q38FN (b3e0b0902's -29..-41% prefill class) stays on DS41's branch only. It is
-re-checked on Q38FN at Q38FN's advancements: it propagates if it helps, or if it is
-neutral and simplifies. Otherwise it stays.
+The scenario is the DS41 / Q38FN pair. Each lane keeps on its own WORKING branch.
+A DS41 keep that does not regress Q38FN folds into THE champion immediately, and Q38FN
+picks it up from the champion at its next keep. A DS41 keep that regresses Q38FN
+(b3e0b0902's -29..-41% prefill class) is held on DS41's working branch as
+target_only_pending_gate, and a gating hypothesis is queued in DS41's inbox. Once a
+gating keep lands (keyed on GGUF metadata, never an env var), Q38FN fold-checks the
+held series on its own target. On approval the series folds into the champion. There
+is never a second champion or trunk.
 """
 from __future__ import annotations
 
@@ -15,6 +18,9 @@ import subprocess
 import pytest
 
 from . import cross_target as ct, lane_targets
+
+CHAMPION = "ak/champion/llama-cpp-test"
+DS41_WB, Q38_WB = "experimental/ds41-wb", "experimental/q38-wb"
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -28,10 +34,18 @@ def _write(path: Path, body) -> Path:
     return path
 
 
+def g0_pass(**_kw):
+    return {"passed": True, "reason": "no kernel path lost"}
+
+
+def g0_fail(**_kw):
+    return {"passed": False, "reason": "source : omp_pragma:ggml/ops.cpp 1->0 (undeclared)"}
+
+
 @pytest.fixture
 def world(tmp_path):
-    """One repo; trunk + two lane branches at a common champion; a champion worktree
-    per lane (branch checked out) and a worker worktree for q38's rechecks."""
+    """One repo. THE champion is checked out in its own tree, as pool.CHAMPION_TREE
+    is. Each lane's working branch is checked out in its lane tree."""
     repo = tmp_path / "llama"
     repo.mkdir()
     _git(repo, "init", "-q", "-b", "base")
@@ -43,32 +57,34 @@ def world(tmp_path):
     (repo / "src" / "deepseek.cpp").write_text("ds\n")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-q", "-m", "champion")
-    _git(repo, "branch", "trunk")      # a bare ref: never checked out in a deployment
-    _git(repo, "branch", "ds41-champ")
-    _git(repo, "branch", "q38-champ")
+    for branch in (CHAMPION, DS41_WB, Q38_WB):
+        _git(repo, "branch", branch)
+    champ_tree = tmp_path / "ak-loop-tree"
+    _git(repo, "worktree", "add", "-q", str(champ_tree), CHAMPION)
     trees = {}
-    for name, branch in (("ds41", "ds41-champ"), ("q38", "q38-champ")):
-        trees[name] = tmp_path / f"champ-{name}"
+    for name, branch in (("ds41", DS41_WB), ("q38", Q38_WB)):
+        trees[name] = tmp_path / f"lane-{name}"
         _git(repo, "worktree", "add", "-q", str(trees[name]), branch)
-    worker = tmp_path / "worker-q38"
-    _git(repo, "worktree", "add", "-q", "--detach", str(worker), "q38-champ")
     owned0 = _write(tmp_path / "ds41" / "owned.json", {"ds41-t": {
         "launch": str(tmp_path / "l0.json"), "frozen_prompts": str(tmp_path / "p0.json")}})
     owned1 = _write(tmp_path / "q38" / "owned.json", {"q38-t": {
         "launch": str(tmp_path / "l1.json"), "frozen_prompts": str(tmp_path / "p1.json")}})
     binding = _write(tmp_path / "bind" / "lane-targets.json", {
-        "schema": lane_targets.SCHEMA, "trunk": {"branch": "trunk"}, "lanes": {
+        "schema": lane_targets.SCHEMA, "champion": {"branch": CHAMPION}, "lanes": {
             "lane0": {"target_id": "ds41-t", "owned_targets": str(owned0),
                       "exclusive_paths": ["src/deepseek*.cpp"], "as_peer_floor_file": None,
-                      "as_peer_max_regression_pct": 2.0, "champion_branch": "ds41-champ"},
+                      "as_peer_max_regression_pct": 2.0, "working_branch": DS41_WB},
             "lane1": {"target_id": "q38-t", "owned_targets": str(owned1),
                       "exclusive_paths": ["src/qwen*.cpp"], "as_peer_floor_file": None,
-                      "as_peer_max_regression_pct": 2.0, "champion_branch": "q38-champ"}}})
+                      "as_peer_max_regression_pct": 2.0, "working_branch": Q38_WB}}})
     ds41 = lane_targets.resolve(binding, "lane0", target_id="ds41-t", workers=1, lock=False,
-                                champion_branch="ds41-champ")
+                                working_branch=DS41_WB, canonical_champion=CHAMPION)
     q38 = lane_targets.resolve(binding, "lane1", target_id="q38-t", workers=1, lock=False,
-                               champion_branch="q38-champ")
-    return {"repo": repo, "trees": trees, "worker": worker, "ds41": ds41, "q38": q38}
+                               working_branch=Q38_WB, canonical_champion=CHAMPION)
+    worker = tmp_path / "worker-q38"
+    _git(repo, "worktree", "add", "-q", "--detach", str(worker), Q38_WB)
+    return {"repo": repo, "trees": trees, "champ_tree": champ_tree, "worker": worker,
+            "ds41": ds41, "q38": q38, "store": tmp_path / "ds41-store"}
 
 
 def _keep(tree: Path, rel: str, text: str, message: str) -> str:
@@ -84,154 +100,294 @@ def _cross(passed=True, effect=0.0, decisive=False, required=True):
 
 
 UNCHANGED = {"q38-t": {"observed": True, "unchanged": True, "losses": [], "changed": []}}
+REGRESSED = _cross(passed=False, effect=-0.35, decisive=True)
+
+
+def _hold(world, text="a\nb\nc\nd\ne\nf\ng\nH\n", mechanism="m-ds41-only"):
+    """A DS41 keep that regresses Q38FN: held, gate queued."""
+    keep = _keep(world["trees"]["ds41"], "ggml/ops.cpp", text, "ds41 keep")
+    row = ct.record_keep(world["ds41"], repo=world["repo"], keep_commit=keep,
+                         decision=ct.decide(REGRESSED, UNCHANGED), cross=REGRESSED,
+                         coverage=UNCHANGED, mechanism_id=mechanism, store=world["store"],
+                         fold_check=g0_pass)
+    return keep, row
+
+
+def _gate(world, pid, line="if (model.arch == LLM_ARCH_DEEPSEEK2) { fast(); }\n", n=1):
+    tree = world["trees"]["ds41"]
+    path = tree / "src" / "deepseek.cpp"
+    path.write_text(path.read_text() + line)
+    _git(tree, "commit", "-q", "-am", f"gate {n}")
+    gate = _git(tree, "rev-parse", "HEAD")
+    statement = f"Gate the held keep to DeepSeek only. GATES-KEEP: {pid[:12]}"
+    row = ct.record_keep(world["ds41"], repo=world["repo"], keep_commit=gate,
+                         decision=ct.decide(_cross(effect=0.3, decisive=True), UNCHANGED),
+                         cross=_cross(effect=0.3, decisive=True), coverage=UNCHANGED,
+                         mechanism_id=f"m-gate-{n}", store=world["store"],
+                         declaration_texts=(statement,), fold_check=g0_pass)
+    return gate, row
+
+
+def _inbox(world):
+    inbox = world["store"] / "inbox"
+    return sorted(p.name for p in inbox.glob("*.md")) if inbox.is_dir() else []
 
 
 # ------------------------------------------------------------------ pure decisions
 
 def test_decide():
-    assert ct.decide(_cross(required=False), {})["decision"] == ct.SHARED
-    assert ct.decide(_cross(), UNCHANGED)["decision"] == ct.SHARED
-    regressed = ct.decide(_cross(passed=False, effect=-0.3, decisive=True), UNCHANGED)
-    assert regressed["decision"] == ct.TARGET_ONLY and "regressed" in regressed["reason"]
+    assert ct.decide(_cross(required=False), {})["decision"] == ct.FOLD
+    assert ct.decide(_cross(), UNCHANGED)["decision"] == ct.FOLD
+    regressed = ct.decide(REGRESSED, UNCHANGED)
+    assert regressed["decision"] == ct.PENDING_GATE and "regressed" in regressed["reason"]
+    assert ct.PENDING_GATE == "target_only_pending_gate"
     lost = {"q38-t": {"observed": True, "losses": [{"key": "iqk.gemm:Q8_0:act=Q8_0"}],
                       "changed": ["s:iqk.gemm:Q8_0:act=Q8_0"]}}
-    assert ct.decide(_cross(effect=0.2, decisive=True), lost)["decision"] == ct.TARGET_ONLY
+    assert ct.decide(_cross(effect=0.2, decisive=True), lost)["decision"] == ct.PENDING_GATE
     changed = {"q38-t": {"observed": True, "losses": [], "changed": ["s:iqk.gemm:Q4_K"]}}
-    assert ct.decide(_cross(effect=0.001), changed)["decision"] == ct.TARGET_ONLY
-    assert ct.decide(_cross(effect=0.05, decisive=True), changed)["decision"] == ct.SHARED
-    assert ct.decide(_cross(), {})["decision"] == ct.TARGET_ONLY      # coverage unobserved
+    assert ct.decide(_cross(effect=0.001), changed)["decision"] == ct.PENDING_GATE
+    assert ct.decide(_cross(effect=0.05, decisive=True), changed)["decision"] == ct.FOLD
+    assert ct.decide(_cross(), {})["decision"] == ct.PENDING_GATE    # coverage unobserved
 
 
-@pytest.mark.parametrize("row,simpler,expected", [
-    ({"effect": 0.04, "decisive": True}, False, ("propagate", "helps")),
-    ({"effect": -0.04, "decisive": True}, True, ("stay", "regressed")),
-    ({"effect": 0.001, "decisive": False}, True, ("propagate", "neutral_simplifies")),
-    ({"effect": 0.001, "decisive": False}, False, ("stay", "neutral_not_simpler")),
-    (None, True, ("stay", "failed")),
-])
-def test_recheck_decision(row, simpler, expected):
-    out = ct.recheck_decision(row, simplifies=simpler)
-    assert (out["result"], out["why"]) == expected
+def test_gate_declarations_and_attestation_visible_mechanism():
+    assert ct.gate_declarations("x GATES-KEEP: 0123456789ab y", None) == ["0123456789ab"]
+    assert ct.gate_declarations("no gate here") == []
+    arch = "+++ b/src/x.cpp\n+    if (model.arch == LLM_ARCH_DEEPSEEK2) {\n"
+    assert ct.gate_mechanism(arch)[0]
+    assert ct.gate_mechanism("+ if (t->type == GGML_TYPE_Q4_K && t->ne[0] % 256 == 0)\n")[0]
+    env = "+ if (getenv(\"GGML_DS41_FAST\")) {\n+   (void) model.arch;\n"
+    ok, why = ct.gate_mechanism(env)
+    assert not ok and "runtime_attestation" in why
+    assert not ct.gate_mechanism("+ static bool fast = std::getenv(\"X\") != nullptr;\n")[0]
+    ok, why = ct.gate_mechanism("+ if (fast) { go(); }\n")
+    assert not ok and "GGUF" in why
 
 
-# ------------------------------------------------------------------ lineage moves
+# ------------------------------------------------------------------ fold now
 
-def test_shared_keep_goes_to_trunk_and_syncs_into_the_peer(world):
+def test_non_regressing_keep_folds_into_the_champion_and_syncs_into_the_peer(world):
     repo, ds41, q38 = world["repo"], world["ds41"], world["q38"]
     keep = _keep(world["trees"]["ds41"], "ggml/ops.cpp", "A\nb\nc\nd\ne\nf\ng\nh\n", "k1")
     row = ct.record_keep(ds41, repo=repo, keep_commit=keep,
                          decision=ct.decide(_cross(), UNCHANGED), cross=_cross(),
-                         coverage=UNCHANGED, mechanism_id="m-shared")
-    assert row["decision"] == ct.SHARED and row["trunk"]["result"] == "applied"
-    assert _git(repo, "show", "trunk:ggml/ops.cpp").startswith("A\n")
-    synced = ct.sync_from_trunk(q38, repo=repo, champion_tree=world["trees"]["q38"],
-                                branch="q38-champ")
+                         coverage=UNCHANGED, mechanism_id="m-fold", store=world["store"],
+                         fold_check=g0_pass)
+    assert row["decision"] == ct.FOLD and row["fold"]["result"] == "folded", row["fold"]
+    assert row["fold"]["branch"] == CHAMPION
+    assert _git(repo, "show", f"{CHAMPION}:ggml/ops.cpp").startswith("A\n")
+    # The clean champion checkout (pool.CHAMPION_TREE) was fast-forwarded with it.
+    assert (world["champ_tree"] / "ggml/ops.cpp").read_text().startswith("A\n")
+    assert _git(world["champ_tree"], "status", "--porcelain", "--untracked-files=no") == ""
+    assert ct.held(repo, CHAMPION, DS41_WB) == []
+    assert _inbox(world) == []
+    synced = ct.sync_from_champion(q38, repo=repo, champion_tree=world["trees"]["q38"],
+                                   branch=Q38_WB)
     assert [r["applied"] for r in synced] == [True]
     assert (world["trees"]["q38"] / "ggml/ops.cpp").read_text().startswith("A\n")
-    # Idempotent: nothing more to bring over, and DS41's own branch sees it as present.
-    assert ct.sync_from_trunk(q38, repo=repo, champion_tree=world["trees"]["q38"],
-                              branch="q38-champ") == []
-    assert ct.sync_from_trunk(ds41, repo=repo, champion_tree=world["trees"]["ds41"],
-                              branch="ds41-champ") == []
-    events = [r["event"] for r in ct.read(ds41)]
-    assert events == ["keep_decision", "trunk_sync_commit"]
+    assert ct.sync_from_champion(q38, repo=repo, champion_tree=world["trees"]["q38"],
+                                 branch=Q38_WB) == []
+    assert ct.sync_from_champion(ds41, repo=repo, champion_tree=world["trees"]["ds41"],
+                                 branch=DS41_WB) == []
+    # No second lineage anywhere: the only ak/champion ref is THE champion.
+    refs = _git(repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/ak/")
+    assert refs.split() == [CHAMPION]
 
 
-def test_target_only_keep_stays_off_trunk_and_rechecks_on_the_peer(world):
-    repo, ds41, q38 = world["repo"], world["ds41"], world["q38"]
-    trunk_before = _git(repo, "rev-parse", "trunk")
-    keep = _keep(world["trees"]["ds41"], "ggml/ops.cpp", "a\nb\nc\nd\ne\nf\ng\nH\n", "k2")
-    cross = _cross(passed=False, effect=-0.35, decisive=True)
-    row = ct.record_keep(ds41, repo=repo, keep_commit=keep, decision=ct.decide(cross, UNCHANGED),
-                         cross=cross, coverage=UNCHANGED, mechanism_id="m-ds41-only")
-    assert row["decision"] == ct.TARGET_ONLY and "trunk" not in row
-    assert _git(repo, "rev-parse", "trunk") == trunk_before
-    head = _git(repo, "rev-parse", "q38-champ")
-    assert [p["keep_commit"] for p in ct.pending(q38, repo=repo, head=head)] == [keep]
-    assert ct.pending(ds41, repo=repo, head=_git(repo, "rev-parse", "ds41-champ")) == []
-
-    def measure_regressed(entry):
-        commit = ct.apply_in_worktree(world["worker"], entry["keep_commit"])
-        return {"row": {"effect": -0.30, "decisive": True}, "candidate_commit": commit}
-
-    advanced = []
-    event = ct.recheck_one(q38, repo=repo, champion_tree=world["trees"]["q38"],
-                           branch="q38-champ", measure=measure_regressed,
-                           advance=advanced.append)
-    assert (event["result"], event["why"], event["applied"]) == ("stay", "regressed", False)
-    assert advanced == [] and _git(repo, "rev-parse", "q38-champ") == head
-    # Re-checked once per champion head: nothing pending until q38 advances.
-    assert ct.recheck_one(q38, repo=repo, champion_tree=world["trees"]["q38"],
-                          branch="q38-champ", measure=measure_regressed,
-                          advance=advanced.append) is None
-    _keep(world["trees"]["q38"], "ggml/ops.cpp", "a\nB\nc\nd\ne\nf\ng\nh\n", "q38 own keep")
-    _git(world["worker"], "checkout", "-q", "--detach", "q38-champ")
-
-    def measure_helps(entry):
-        commit = ct.apply_in_worktree(world["worker"], entry["keep_commit"])
-        return {"row": {"effect": 0.06, "decisive": True}, "candidate_commit": commit}
-
-    event = ct.recheck_one(q38, repo=repo, champion_tree=world["trees"]["q38"],
-                           branch="q38-champ", measure=measure_helps, advance=advanced.append)
-    assert (event["result"], event["why"], event["applied"]) == ("propagate", "helps", True)
-    assert advanced == [event["new_head"]] == [_git(repo, "rev-parse", "q38-champ")]
-    assert (world["trees"]["q38"] / "ggml/ops.cpp").read_text() == "a\nB\nc\nd\ne\nf\ng\nH\n"
-    # Both targets carry it now, so it went onto the trunk too.
-    assert event["trunk"]["result"] == "applied"
-    assert _git(repo, "show", "trunk:ggml/ops.cpp").endswith("H")   # _git strips
-    assert ct.pending(q38, repo=repo, head=_git(repo, "rev-parse", "q38-champ")) == []
+def test_manual_champion_work_reaches_every_lane(world):
+    repo = world["repo"]
+    _keep(world["champ_tree"], "ggml/ops.cpp", "a\nb\nc\nd\nE\nf\ng\nh\n", "manual fold")
+    for lane, branch in (("ds41", DS41_WB), ("q38", Q38_WB)):
+        rows = ct.sync_from_champion(world[lane], repo=repo,
+                                     champion_tree=world["trees"][lane], branch=branch)
+        assert [r["applied"] for r in rows] == [True]
+        assert "E\n" in (world["trees"][lane] / "ggml/ops.cpp").read_text()
 
 
-def test_recheck_failure_is_recorded_not_raised(world):
-    repo, ds41, q38 = world["repo"], world["ds41"], world["q38"]
-    keep = _keep(world["trees"]["ds41"], "ggml/ops.cpp", "a\nb\nC\nd\ne\nf\ng\nh\n", "k3")
-    cross = _cross(passed=False, effect=-0.2, decisive=True)
-    ct.record_keep(ds41, repo=repo, keep_commit=keep, decision=ct.decide(cross, UNCHANGED),
-                   cross=cross, coverage=UNCHANGED, mechanism_id="m3")
-
-    def boom(_entry):
-        raise RuntimeError("build failed")
-
-    event = ct.recheck_one(q38, repo=repo, champion_tree=world["trees"]["q38"],
-                           branch="q38-champ", measure=boom, advance=lambda _c: None)
-    assert (event["result"], event["why"]) == ("stay", "failed")
-    assert "build failed" in event["reason"]
-
-
-def test_simplifies_and_patch_id(world):
-    repo, tree = world["repo"], world["trees"]["ds41"]
-    shrink = _keep(tree, "ggml/ops.cpp", "a\n", "shrink")
-    grow = _keep(tree, "ggml/ops.cpp", "a\nb\nc\n", "grow")
-    assert ct.simplifies(repo, shrink) and not ct.simplifies(repo, grow)
-    assert len(ct.patch_id(repo, grow)) == 40
-
-
-def test_conflicting_trunk_pick_is_a_recorded_miss(world):
+def test_g0_refusal_leaves_the_champion_untouched(world):
     repo, ds41 = world["repo"], world["ds41"]
-    # The trunk moved on the same line independently: the cherry-pick conflicts.
-    _git(repo, "worktree", "add", "-q", str(repo.parent / "trunk-tree"), "trunk")
-    _keep(repo.parent / "trunk-tree", "ggml/ops.cpp", "Z\nb\nc\nd\ne\nf\ng\nh\n", "trunk edit")
+    before = _git(repo, "rev-parse", CHAMPION)
+    keep = _keep(world["trees"]["ds41"], "ggml/ops.cpp", "A\nb\nc\nd\ne\nf\ng\nh\n", "k")
+    row = ct.record_keep(ds41, repo=repo, keep_commit=keep,
+                         decision=ct.decide(_cross(), UNCHANGED), cross=_cross(),
+                         coverage=UNCHANGED, mechanism_id="m", fold_check=g0_fail)
+    assert row["fold"]["result"] == "g0_refused" and "omp_pragma" in row["fold"]["g0"]
+    assert _git(repo, "rev-parse", CHAMPION) == before
+    assert ct.held(repo, CHAMPION, DS41_WB) == [keep]
+
+
+def test_dirty_champion_checkout_defers_the_fold_then_the_retry_folds(world):
+    repo, ds41 = world["repo"], world["ds41"]
+    before = _git(repo, "rev-parse", CHAMPION)
+    (world["champ_tree"] / "ggml/ops.cpp").write_text("dirty\n")
+    keep = _keep(world["trees"]["ds41"], "ggml/ops.cpp", "A\nb\nc\nd\ne\nf\ng\nh\n", "k")
+    row = ct.record_keep(ds41, repo=repo, keep_commit=keep,
+                         decision=ct.decide(_cross(), UNCHANGED), cross=_cross(),
+                         coverage=UNCHANGED, mechanism_id="m", fold_check=g0_pass)
+    assert row["fold"]["result"] == "checkout_dirty"
+    assert _git(repo, "rev-parse", CHAMPION) == before
+    _git(world["champ_tree"], "checkout", "--", "ggml/ops.cpp")
+    out = ct.refresh_gates(ds41, repo=repo, store=world["store"], branch=DS41_WB,
+                           fold_check=g0_pass)
+    assert [r["fold"]["result"] for r in out if r["event"] == "fold_retry"] == ["folded"]
+    assert ct.held(repo, CHAMPION, DS41_WB) == []
+
+
+def test_conflicting_fold_is_held_not_forced(world):
+    repo, ds41 = world["repo"], world["ds41"]
+    _keep(world["champ_tree"], "ggml/ops.cpp", "Z\nb\nc\nd\ne\nf\ng\nh\n", "champion edit")
     keep = _keep(world["trees"]["ds41"], "ggml/ops.cpp", "A\nb\nc\nd\ne\nf\ng\nh\n", "k4")
     row = ct.record_keep(ds41, repo=repo, keep_commit=keep,
                          decision=ct.decide(_cross(), UNCHANGED), cross=_cross(),
-                         coverage=UNCHANGED, mechanism_id="m4")
-    assert row["decision"] == ct.SHARED
-    assert row["trunk"] == {"branch": "trunk", "commit": None, "result": "conflict"}
+                         coverage=UNCHANGED, mechanism_id="m4", fold_check=g0_pass)
+    assert row["fold"]["result"] == "conflict"
+    assert _git(repo, "show", f"{CHAMPION}:ggml/ops.cpp").startswith("Z\n")
+
+
+# ------------------------------------------------------------------ hold, gate, fold
+
+def test_regressing_keep_is_held_and_a_gate_hypothesis_is_queued(world):
+    repo, q38 = world["repo"], world["q38"]
+    before = _git(repo, "rev-parse", CHAMPION)
+    keep, row = _hold(world)
+    assert row["decision"] == ct.PENDING_GATE and "fold" not in row
+    assert _git(repo, "rev-parse", CHAMPION) == before
+    assert ct.held(repo, CHAMPION, DS41_WB) == [keep]
+    names = _inbox(world)
+    assert names == [f"00-gate-{row['patch_id'][:12]}-a1.md"]
+    text = (world["store"] / "inbox" / names[0]).read_text()
+    assert f"GATES-KEEP: {row['patch_id'][:12]}" in text
+    assert "general.architecture" in text and "getenv" in text and "REFUSED" in text
+    events = [r["event"] for r in ct.read(q38)]
+    assert events == ["keep_decision", "gate_enqueued"]
+    # Not eligible for a fold-check until a gating keep exists.
+    assert ct.eligible(q38, repo=repo) == []
+
+
+def test_gated_series_is_fold_checked_by_the_peer_then_folds(world):
+    repo, ds41, q38 = world["repo"], world["ds41"], world["q38"]
+    keep, held_row = _hold(world)
+    gate, gate_row = _gate(world, held_row["patch_id"])
+    assert gate_row["decision"] == ct.GATE_COMMIT
+    assert gate_row["gates"] == [held_row["patch_id"]] and "fold" not in gate_row
+    queue = ct.eligible(q38, repo=repo)
+    assert [s["commits"] for s in queue] == [[keep, gate]]
+    assert ct.eligible(ds41, repo=repo) == []        # a lane never checks its own series
+    seen = []
+
+    def approve(series):
+        seen.append(series["commits"])
+        _git(world["worker"], "checkout", "-q", "--detach", Q38_WB)
+        for commit in series["commits"]:
+            assert ct.apply_in_worktree(world["worker"], commit)
+        return {"row": {"effect": 0.001, "decisive": False}, "passed": True,
+                "reason": "within", "coverage": UNCHANGED["q38-t"]}
+
+    event = ct.check_one(q38, repo=repo, measure=approve, fold_check=g0_pass)
+    assert seen == [[keep, gate]]
+    assert event["result"] == "approve" and event["fold"]["result"] == "folded"
+    assert _git(repo, "show", f"{CHAMPION}:ggml/ops.cpp").endswith("H")
+    assert "LLM_ARCH_DEEPSEEK2" in _git(repo, "show", f"{CHAMPION}:src/deepseek.cpp")
+    assert _git(repo, "rev-parse", Q38_WB) == _git(repo, "rev-parse", "base")  # never moved
+    assert ct.held(repo, CHAMPION, DS41_WB) == []
+    # DS41's next boundary retires the queued gate: the champion carries the keep.
+    out = ct.refresh_gates(ds41, repo=repo, store=world["store"], branch=DS41_WB)
+    assert [r["event"] for r in out] == ["gate_resolved"] and _inbox(world) == []
+    # Once per origin head: nothing more to check.
+    assert ct.check_one(q38, repo=repo, measure=approve) is None
+
+
+def test_rejected_series_requeues_the_gate_then_exhausts(world):
+    repo, ds41, q38 = world["repo"], world["ds41"], world["q38"]
+    keep, held_row = _hold(world)
+    pid = held_row["patch_id"]
+
+    def reject(_series):
+        return {"row": {"effect": -0.2, "decisive": True}, "passed": False,
+                "reason": "peer regressed -20.000% past the declared -2.000% point bar",
+                "coverage": UNCHANGED["q38-t"]}
+
+    for attempt in range(1, ct.MAX_GATE_ATTEMPTS + 1):
+        _gate(world, pid, line=f"if (hparams.n_expert == {attempt}) {{ f(); }}\n", n=attempt)
+        event = ct.check_one(q38, repo=repo, measure=reject, fold_check=g0_pass)
+        assert event["result"] == "reject" and "fold" not in event
+        out = ct.refresh_gates(ds41, repo=repo, store=world["store"], branch=DS41_WB)
+        if attempt < ct.MAX_GATE_ATTEMPTS:
+            assert [r["event"] for r in out] == ["gate_enqueued"]
+            assert _inbox(world) == [f"00-gate-{pid[:12]}-a{attempt + 1}.md"]
+            assert "past the declared" in out[0]["rejection"]
+        else:
+            assert [r["event"] for r in out] == ["gate_exhausted"]
+            assert "NOT in production" in out[0]["why"] and _inbox(world) == []
+    assert keep in ct.held(repo, CHAMPION, DS41_WB)       # still held, never folded
+    assert ct.refresh_gates(ds41, repo=repo, store=world["store"], branch=DS41_WB) == []
+
+
+def test_env_var_gate_is_refused_and_cannot_fold(world):
+    repo, ds41, q38 = world["repo"], world["ds41"], world["q38"]
+    _keep_commit, held_row = _hold(world)
+    _gate_commit, row = _gate(world, held_row["patch_id"],
+                              line='if (getenv("GGML_DS41_FAST")) { fast(); }\n')
+    assert row["decision"] == ct.GATE_REFUSED and "runtime_attestation" in row["reason"]
+    assert row["gates"] == [] and row["refused_gates"] == [held_row["patch_id"]]
+    assert ct.eligible(q38, repo=repo) == []
+    out = ct.refresh_gates(ds41, repo=repo, store=world["store"], branch=DS41_WB)
+    assert [r["event"] for r in out] == ["gate_enqueued"]
+    assert "runtime_attestation" in out[0]["rejection"]
+
+
+def test_fold_check_failure_is_recorded_as_a_rejection(world):
+    repo, q38 = world["repo"], world["q38"]
+    _keep_commit, held_row = _hold(world)
+    _gate(world, held_row["patch_id"])
+
+    def boom(_series):
+        raise RuntimeError("build failed")
+
+    event = ct.check_one(q38, repo=repo, measure=boom)
+    assert event["result"] == "reject" and "build failed" in event["reason"]
+
+
+def test_real_g0_runs_on_a_fold(world):
+    """The default G0 is kernel_coverage.fold_check on the champion tip vs the fold."""
+    repo, ds41 = world["repo"], world["ds41"]
+    keep = _keep(world["trees"]["ds41"], "ggml/ops.cpp", "A\nb\nc\nd\ne\nf\ng\nh\n", "k")
+    row = ct.record_keep(ds41, repo=repo, keep_commit=keep,
+                         decision=ct.decide(_cross(), UNCHANGED), cross=_cross(),
+                         coverage=UNCHANGED, mechanism_id="m")
+    assert row["fold"]["result"] == "folded", row["fold"]
+
+
+def test_patch_id(world):
+    keep = _keep(world["trees"]["ds41"], "ggml/ops.cpp", "a\n", "shrink")
+    assert len(ct.patch_id(world["repo"], keep)) == 40
 
 
 # ------------------------------------------------------------------ binding
 
-def test_trunk_binding_requires_distinct_lane_branches(tmp_path, world):
+def test_binding_refuses_a_second_lineage(tmp_path, world):
     path = world["ds41"].path
     body = json.loads(path.read_text())
-    body["lanes"]["lane1"]["champion_branch"] = "ds41-champ"
-    bad = _write(tmp_path / "bad.json", body)
+    trunk = {**body, "trunk": {"branch": "ak-trunk"}}
+    with pytest.raises(lane_targets.LaneBindingError, match="second lineage"):
+        lane_targets.load_binding(_write(tmp_path / "trunk.json", trunk))
+    per_lane = json.loads(path.read_text())
+    per_lane["lanes"]["lane0"]["champion_branch"] = "ds41-champ"
+    with pytest.raises(lane_targets.LaneBindingError, match="second champion"):
+        lane_targets.load_binding(_write(tmp_path / "perlane.json", per_lane))
+    named = json.loads(path.read_text())
+    named["lanes"]["lane0"]["working_branch"] = "ak/champion/ds41"
+    with pytest.raises(lane_targets.LaneBindingError, match="neither a champion"):
+        lane_targets.load_binding(_write(tmp_path / "named.json", named))
+    same = json.loads(path.read_text())
+    same["lanes"]["lane1"]["working_branch"] = DS41_WB
     with pytest.raises(lane_targets.LaneBindingError, match="distinct"):
-        lane_targets.load_binding(bad)
-    body["lanes"]["lane1"]["champion_branch"] = "trunk"
-    with pytest.raises(lane_targets.LaneBindingError, match="distinct"):
-        lane_targets.load_binding(_write(tmp_path / "bad2.json", body))
-    with pytest.raises(lane_targets.LaneBindingError, match="not --champion-branch"):
+        lane_targets.load_binding(_write(tmp_path / "same.json", same))
+    with pytest.raises(lane_targets.LaneBindingError, match="not THE champion"):
         lane_targets.resolve(path, "lane0", target_id="ds41-t", workers=1, lock=False,
-                             champion_branch="other")
-    assert lane_targets.load_binding(path)[1] == "trunk"
+                             working_branch=DS41_WB,
+                             canonical_champion="ak/champion/llama-cpp-ffc1bac82eec")
+    with pytest.raises(lane_targets.LaneBindingError, match="not --experimental-branch"):
+        lane_targets.resolve(path, "lane0", target_id="ds41-t", workers=1, lock=False,
+                             working_branch=CHAMPION, canonical_champion=CHAMPION)
+    assert lane_targets.load_binding(path)[1] == CHAMPION

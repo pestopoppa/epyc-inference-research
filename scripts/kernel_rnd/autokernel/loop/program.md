@@ -592,21 +592,42 @@ every bound target. Folds and forward-ports run the same check without a loop:
 --base <champion> --candidate <ref> [--base-build B --candidate-build C]`, which
 `fold2_gates.py` runs as G0. Declarations there come from commit messages.
 
-## One champion branch per target, one shared trunk (cross_target.py, 2026-10-04)
+## ONE champion; lanes keep on working branches and fold into it (cross_target.py, 2026-10-04)
 
 A shared change can help one model and hurt another: DS41's held keeps `b3e0b0902`
-cost Qwen3.8-Flash-Next 29-41% of prefill. With a lane binding (`lane_targets.py`),
-each target keeps on its OWN `champion_branch`, so its anchor and accumulator stay as
-they are. A keep that clears its own target's gates is kept there even if a peer
-regresses, and the patch does not have to be model-gated. The **trunk** takes only
-keeps that regress no target: every peer's A/B within its floor or bar, and every
-peer's executed-kernel manifest unchanged (a change is allowed only with a decisive
-peer gain). The trunk reaches the other targets at their next keep. A target-only keep
-is re-checked on each other target at that target's champion advancements, one per
-advancement. It propagates if it helps, or if it is neutral and removes more lines
-than it adds. Otherwise it stays target-only. Every decision is a line in
-`<binding dir>/cross-target-ledger.jsonl` and rides in the keep's experiments-DB row.
-So a peer regression is no reason to abandon a mechanism that wins on your target.
+cost Qwen3.8-Flash-Next 29-41% of prefill. There is still exactly ONE champion per
+production kernel tree (`champion.CANONICAL_BRANCH`). Production is one CPU build and
+one GPU build of that one commit. Never fork a second champion or trunk.
+
+With a lane binding (`lane_targets.py`), each target keeps on its own WORKING branch
+(its `--experimental-branch`), so its anchor and accumulator stay as they are. A keep
+that regresses no peer folds into the champion straight away. "Regresses no peer"
+means every peer's A/B is within its floor or bar, and every peer's executed-kernel
+manifest is unchanged; a changed manifest is allowed only with a decisive peer gain.
+The source coverage gate G0 runs first. Other lanes pick the change up from the
+champion at their next keep.
+
+A keep that regresses a peer is still KEPT on your working branch, as
+`target_only_pending_gate`. It cannot reach the champion, or production, until it is
+gated. The loop then puts one queued hypothesis in your inbox,
+`00-gate-<patch>-aN.md`. When you see one, propose a patch that keeps the mechanism
+for your target only, through runtime dispatch, so every other model executes exactly
+the champion's kernel path.
+
+**The gate must key on something runtime_attestation can see.** That means GGUF
+metadata (`general.architecture` / `LLM_ARCH_*`, hparams, tensor shapes, quant types)
+or llama-server argv (cparams). An environment-variable gate (`getenv`) is vetoed
+(`KEEP_CANDIDATE-gate-attestation`).
+
+Put `GATES-KEEP: <patch id>` in the hypothesis statement. The other lanes then each
+fold-check the whole held series on their own target, and when all of them approve,
+the series folds into the champion. If a lane rejects it, the next gate attempt is
+queued, up to 3 attempts. After that the keep stays on your branch, out of production,
+and the ledger records it as `gate_exhausted`.
+
+Every decision is a line in `<binding dir>/cross-target-ledger.jsonl` and rides in the
+keep's experiments-DB row. So a peer regression is no reason to abandon a mechanism
+that wins on your target; gate it.
 
 ## Not this loop's surface — do not propose these
 

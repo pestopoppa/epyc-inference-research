@@ -728,6 +728,8 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     "cpu_quant_reference.py:check_cpu_quant_suite:TemporaryDirectory": (1, _SELF_CLEANING + " (probe build)"),
     "cpu_fusion_reference.py:check_norm_mulmat_suite:TemporaryDirectory": (1, _SELF_CLEANING + " (probe build)"),
     "cross_target.py:append:open-write": (1, "evidence: cross-target lineage ledger (flock append beside the lane binding)"),
+    "cross_target.py:enqueue_gate:mkdir": (1, "input: <lane store>/inbox, the planner's existing hypothesis channel"),
+    "cross_target.py:enqueue_gate:write_text": (1, "input: one queued gate-this-keep hypothesis in the lane inbox (retired when the champion carries the keep)"),
     "kernel_coverage.py:LaunchSink.__init__:open-write": (1, "per-launch stderr capture under <store>/kernel-coverage, deleted at close"),
     "kernel_coverage.py:close_launch_sink:write_text": (1, "evidence: compacted launch kernel markers (capped per shape, pruned per build)"),
     "kernel_coverage.py:enable_capture:mkdir": (1, "evidence: <store>/kernel-coverage capture root"),

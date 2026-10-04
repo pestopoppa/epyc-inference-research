@@ -589,8 +589,9 @@ def verdict(*, static: tuple[Mapping, Mapping] | None = None,
 def peer_coverage(base: Mapping[str, Any], cand: Mapping[str, Any]) -> dict[str, Any]:
     """A peer target's executed-path change between two builds (its own shapes only).
 
-    `unchanged` is the per-target-lineage trunk condition: observed on both builds, no
-    stable marker lost, no extra-buffer shrink, and no marker or buffer changed at all."""
+    `unchanged` is the condition for folding into the ONE champion: observed on both
+    builds, no stable marker lost, no extra-buffer shrink, and no marker or buffer
+    changed at all."""
     shared = sorted(set(base["shapes"]) & set(cand["shapes"]))
     out: dict[str, Any] = {"observed": bool(shared), "shapes": shared, "losses": [],
                            "changed": [], "gained": []}
@@ -624,8 +625,8 @@ def keep_gate(*, store: Path | str, repo: Path | str, base_ref: str, candidate_r
     The verdict (`passed`) vetoes the keep: static and source losses are model-agnostic
     (they hit the keep's own lineage too), and own-target runtime losses are its own
     model's. `peer_shapes` maps each peer target id to the serving-shape names its A/B
-    launched; their diffs land in `peers` (`peer_coverage`) and decide shared-trunk vs
-    target-only (`cross_target.decide`), never the veto. A static/source layer that
+    launched; their diffs land in `peers` (`peer_coverage`) and decide fold-into-champion
+    vs target_only_pending_gate (`cross_target.decide`), never the veto. A static/source layer that
     cannot be collected fails closed; an unobserved runtime layer is a note."""
     repo = Path(repo)
     diff = _git(repo, "diff", base_ref, candidate_ref, check=False)
