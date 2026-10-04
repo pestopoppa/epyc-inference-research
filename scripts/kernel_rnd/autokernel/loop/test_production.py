@@ -928,6 +928,24 @@ class ThePromotionWritesProductionsBaseline(unittest.TestCase):
                          MEASURED["surfaces"]["tg128"]["candidate_samples"])
 
 
+class TheProtocolRefusesAnUnknownSurface(unittest.TestCase):
+    """`protocol()` hard-codes `bench.SURFACES` (llama-bench only): a serving surface
+    from a different instrument -- e.g. an `ab_probe_*` probe surface -- must be
+    refused with a named exception, not let `bench.SURFACES[surface]` raise a bare
+    `KeyError` the caller never expects."""
+
+    def test_an_ab_probe_surface_is_refused_not_a_keyerror(self):
+        with self.assertRaises(ValueError) as ctx:
+            _protocol(surface="ab_probe_mtp_tg256")
+        self.assertIn("ab_probe_mtp_tg256", str(ctx.exception))
+        for surface in bench.SURFACES:
+            self.assertIn(surface, str(ctx.exception))
+
+    def test_every_bench_surface_is_still_accepted(self):
+        for surface in bench.SURFACES:
+            self.assertEqual(_protocol(surface=surface)["surface"], surface)
+
+
 def _git(repo: Path, *args: str) -> str:
     return subprocess.run(["git", "-C", str(repo), *args], check=True,
                           capture_output=True, text=True).stdout.strip()
@@ -999,6 +1017,27 @@ class TheCliIsThePromotionStep(unittest.TestCase):
 
     def test_a_flag_contradicting_the_source_is_refused(self):
         self.assertEqual(self._main("--model", "/other.gguf"), 2)
+        self.assertFalse(self.store.exists())
+
+    def test_an_ab_probe_surface_is_refused_cleanly_not_a_traceback(self):
+        """BROKEN READS: `protocol()` indexes `bench.SURFACES[surface]` directly, so an
+        `ab_probe_*` serving surface -- a different instrument, never in that table --
+        raises an uncaught `KeyError` out of `main`, instead of the REFUSED message
+        every other bad input here gets. `self._main` returning (rather than raising)
+        is itself the proof: an uncaught exception would blow up this call."""
+        row = MEASURED["surfaces"]["tg128"]
+        probe_source = Path(self.tmp.name) / "ab-probe-result.json"
+        probe_source.write_text(json.dumps({"g5_full": {
+            "surface": "ab_probe_mtp_tg256", "model": MODEL,
+            "candidate_samples": row["candidate_samples"]}}))
+        self.assertEqual(production.main([
+            "write-baseline", "--source", str(probe_source),
+            "--samples-path", "g5_full.candidate_samples",
+            "--measured-commit", self.measured[:9],
+            "--production-commit", self.frozen,
+            "--production-label", "production-consolidated-v10",
+            "--lineage-tree", str(self.repo), "--lineage-note", "moe only",
+            "--host-facts", "none", "--store", str(self.store)]), 2)
         self.assertFalse(self.store.exists())
 
     def test_a_non_ancestor_is_not_productions_numbers(self):

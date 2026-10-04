@@ -285,7 +285,18 @@ def protocol(*, model: Path | str, surface: str, reps: int = 9,
     binary and hardening seed as placeholders, so the recorded protocol is what runs.
     Pass `argv` explicitly only to describe a historical measurement whose instrument
     has since changed -- and say so in `argv_provenance`.
+
+    `surface` must be one of `bench.SURFACES`: those are the only shapes this protocol
+    (and the llama-bench harness it describes) knows how to run or record. A surface
+    from a different serving instrument (e.g. an `ab_probe_*` surface) is refused here
+    rather than let `bench.SURFACES[surface]` raise an opaque `KeyError` -- this module
+    does not support that instrument, and the caller (`write-baseline`) needs a message
+    naming the problem, not a traceback.
     """
+    if surface not in bench.SURFACES:
+        raise ValueError(
+            f"unknown surface {surface!r}; production.protocol only knows the "
+            f"llama-bench surfaces {sorted(bench.SURFACES)}")
     pp, tg, ubatch = bench.SURFACES[surface]
     argv = (list(argv) if argv is not None else
             bench.llama_bench_argv("<llama-bench>", model, pp=pp, tg=tg, reps=reps,
