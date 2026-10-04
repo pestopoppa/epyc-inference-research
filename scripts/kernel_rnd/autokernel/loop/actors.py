@@ -2245,6 +2245,47 @@ def _num(value: Any) -> str:
     return f"{value:g}" if float(value).is_integer() else f"{value:.3g}"
 
 
+def _render_gpu_serving_profile(observation: Mapping[str, Any], *, limit: int = 12) -> list[str]:
+    """G2 (2026-10-04): the selected GPU serving target's own rocprofv3 windows.
+
+    One whole-lifetime trace of the target's server, windows cut by timestamp; per kernel
+    the device-time share plus registers, spills, scratch, LDS and a gfx90a occupancy
+    estimate from the build's own code objects. Skipped windows are printed with their
+    reason so the planner never reads absence as "no time there"."""
+    lines = ["", "## GPU serving profile — the target's own server under rocprofv3, by window"]
+    if observation.get("status") != "observed":
+        lines.append(f"GPU serving profile {observation.get('status')}: "
+                     f"{observation.get('reason', 'not collected')}")
+        return lines
+    lines.append(f"Record: {observation.get('record')}; clock {observation.get('clock')}; "
+                 f"HIP proof {observation.get('hip_proof')}; primary window "
+                 f"`{observation.get('primary_window')}`. Occupancy is an ESTIMATE "
+                 "(waves/SIMD from VGPR+AGPR, SGPR and LDS), not a counter.")
+    for name, window in (observation.get("windows") or {}).items():
+        status = window.get("status")
+        if status != "observed":
+            lines.append(f"- `{name}`: {status} — {window.get('reason', '')}")
+            continue
+        rows = (window.get("kernels") or [])[:limit if name == observation.get("primary_window")
+                                             else max(4, limit // 2)]
+        lines.append(f"### `{name}` — {window.get('window_s')} s, busy "
+                     f"{(window.get('busy_fraction') or 0) * 100:.1f}%, "
+                     f"{window.get('dispatches')} dispatches")
+        lines.append("| share | calls | mean µs | VGPR/AGPR | SGPR | spills v/s | scratch B | "
+                     "LDS B | waves/SIMD (limiter) | kernel |")
+        lines.append("|---|---|---|---|---|---|---|---|---|---|")
+        for row in rows:
+            waves = row.get("waves_per_simd_est")
+            lines.append(
+                f"| {row['share'] * 100:.2f}% | {row['calls']} | {row['mean_us']} | "
+                f"{row.get('vgpr')}/{row.get('agpr')} | {row.get('sgpr')} | "
+                f"{row.get('vgpr_spill')}/{row.get('sgpr_spill')} | {row.get('scratch_bytes')} | "
+                f"{row.get('lds_bytes')} | "
+                f"{'' if waves is None else str(waves) + ' (' + str(row.get('occupancy_limiter')) + ')'} | "
+                f"`{row['kernel']}` |")
+    return lines
+
+
 def _render_node_profile(observation: Mapping[str, Any], *, limit: int = 12) -> list[str]:
     """`node_profile.section()` as the planner reads it: SHARES and ratios only.
 
@@ -2475,6 +2516,8 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
     # context modes: the A/B arms differ only in where they read it.
     if cpu and context.get("node_profile"):
         lines.extend(_render_node_profile(context["node_profile"], limit=limit))
+    if not cpu and context.get("gpu_serving_profile"):
+        lines.extend(_render_gpu_serving_profile(context["gpu_serving_profile"], limit=limit))
 
     prior = context.get("prior_experiments") or []
 

@@ -70,6 +70,36 @@ def kfd_processes() -> int:
         return -1
 
 
+def kfd_pid_vram(pid: int) -> int | None:
+    """Device memory held by ONE process (KFD per-process `vram_*`); None if unread.
+
+    0 means the KFD tree was readable and the PID is not registered (or holds no
+    VRAM). A global VRAM reading cannot separate a launch's own allocation from a
+    co-resident server's; this can (G6 per-launch HIP proof).
+    """
+    try:
+        if not KFD_PROC.is_dir():
+            return None
+        root = KFD_PROC / str(int(pid))
+        if not root.is_dir():
+            return 0
+        return sum(int(path.read_text().strip()) for path in root.glob("vram_*"))
+    except (OSError, ValueError):
+        return None
+
+
+def pid_peak_rss(pid: int, proc_root: Path = Path("/proc")) -> int | None:
+    """`VmHWM` (peak resident set, bytes) of one live process; None if unreadable."""
+    try:
+        for line in (proc_root / str(int(pid)) / "status").read_text().splitlines():
+            if line.startswith("VmHWM:"):
+                return int(line.split()[1]) * 1024
+    except (OSError, ValueError, IndexError):
+        return None
+    return None
+
+
+
 class Sampler:
     """Peak VRAM and KFD process count over one process lifetime."""
 
@@ -89,6 +119,30 @@ class Sampler:
         #: returns -1 on a failed read and -1 never enters this list, so
         #: `len(vram_readings) == 0` with `samples > 0` means UNSAMPLEABLE, not idle.
         self.vram_readings: list[int] = []
+        #: Opt-in (`watch_pid`): the launched server's own KFD VRAM and peak RSS.
+        self._watched_pid: int | None = None
+        self.own_pid_peak_vram = 0
+        self.own_pid_kfd_reads = 0
+        self.own_pid_peak_rss = 0
+        self.own_pid_rss_reads = 0
+
+    def watch_pid(self, pid: int) -> None:
+        """Also sample this PID's own device memory and peak RSS. Additive: the proof
+        gains `own_pid_*` keys only once a PID is watched."""
+        self._watched_pid = int(pid)
+
+    def _watch_once(self) -> None:
+        pid = self._watched_pid
+        if pid is None:
+            return
+        own = kfd_pid_vram(pid)
+        if own is not None:
+            self.own_pid_kfd_reads += 1
+            self.own_pid_peak_vram = max(self.own_pid_peak_vram, own)
+        rss = pid_peak_rss(pid)
+        if rss is not None:
+            self.own_pid_rss_reads += 1
+            self.own_pid_peak_rss = max(self.own_pid_peak_rss, rss)
 
     def _loop(self) -> None:
         while not self._stop.is_set():
@@ -97,6 +151,7 @@ class Sampler:
                 self.vram_readings.append(vram)
                 self.peak_vram = max(self.peak_vram, vram)
             self.peak_kfd = max(self.peak_kfd, kfd_processes())
+            self._watch_once()
             clock = sclk_mhz()
             if clock:
                 self.max_sclk = max(self.max_sclk, clock)
@@ -119,7 +174,13 @@ class Sampler:
         # Snapshot: the sampling thread may still be appending, and `statistics.median`
         # sorts a copy either way.
         readings = list(self.vram_readings)
-        return {
+        watched = {} if self._watched_pid is None else {
+            "own_pid": self._watched_pid,
+            "own_pid_peak_vram_bytes": self.own_pid_peak_vram,
+            "own_pid_kfd_reads": self.own_pid_kfd_reads,
+            "own_pid_peak_rss_bytes": self.own_pid_peak_rss,
+            "own_pid_rss_reads": self.own_pid_rss_reads}
+        return {**watched,
             "peak_vram_bytes": self.peak_vram,
             # The peak answers "did it ever get there"; the median answers "did it STAY
             # there". A window whose peak clears the floor on one sample out of forty is
@@ -547,4 +608,5 @@ def loader_env(binary: Path) -> dict[str, str]:
 
 
 __all__ = ["KFD_PROC", "RESIDENT_FLOOR_BYTES", "Sampler", "VRAM_SYSFS",
-           "kfd_processes", "loader_env", "sclk_mhz", "vram_bytes"]
+           "kfd_pid_vram", "kfd_processes", "loader_env", "pid_peak_rss", "sclk_mhz",
+           "vram_bytes"]

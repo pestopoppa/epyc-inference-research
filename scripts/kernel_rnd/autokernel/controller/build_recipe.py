@@ -186,6 +186,64 @@ HOUSE_GPU_RECIPE = BuildRecipe(
 )
 
 
+#: G6 (AK long-context audit 2026-10-04 §4.2): the HIP gfx90a recipe for SELECTED GPU
+#: serving targets, read back from production-consolidated-v10's own configure cache
+#: (`kernels/builds/gpu-20260921-ffc1bac82/CMakeCache.txt`) rather than declared from
+#: memory. Every flag v10 set explicitly, or that the frozen tree's option default makes
+#: load-bearing for the serving surface, is NAMED so a later CMake default flip cannot
+#: silently move the build: rocWMMA FA (default OFF upstream, ON in v10 -- the 2026-08-27
+#: non-finite long-prompt defect is the OFF path), MMQ MFMA, HIP graphs, no-VMM, a
+#: relocatable `$ORIGIN` rpath (the kernel store serves relocated trees) and the ROCm 6.2
+#: clang the cache records. The house recipe stays unchanged so the legacy bench screen's
+#: epoch identity does not move.
+#:
+#: rocWMMA as an in-binary ARM (one binary carrying both FA paths behind a runtime
+#: selector, per the v11 audit) is a LATER source change, not a define; until it lands
+#: the arm is the build flag itself (`ROCWMMA_IN_BINARY_ARM`).
+ROCM_VERSION_REQUIRED = "6.2.0"
+ROCM_VERSION_FILE = "/opt/rocm/.info/version"
+ROCWMMA_IN_BINARY_ARM = "planned: carried as GGML_HIP_ROCWMMA_FATTN=ON until the runtime arm lands"
+
+GFX90A_ROCM62_V10_RECIPE = BuildRecipe(
+    name="gfx90a-rocm62-v10",
+    notes=("Read back from production-consolidated-v10 (gpu-20260921-ffc1bac82 "
+           "CMakeCache.txt), ROCm 6.2.0-66. Matches production on every named flag; "
+           "the build host must report ROCm " + ROCM_VERSION_REQUIRED + " "
+           "(check_rocm_version). rocWMMA in-binary arm: " + ROCWMMA_IN_BINARY_ARM + "."),
+    flags=(
+        Flag("GGML_HIP", "ON", "ON"),
+        Flag("AMDGPU_TARGETS", "gfx90a", "gfx90a"),
+        Flag("GGML_HIP_ROCWMMA_FATTN", "ON", "ON"),
+        Flag("GGML_HIP_MMQ_MFMA", "ON", "ON"),
+        Flag("GGML_HIP_GRAPHS", "ON", "ON"),
+        Flag("GGML_HIP_NO_VMM", "ON", "ON"),
+        Flag("GGML_CUDA_FA", "ON", "ON"),
+        Flag("GGML_NATIVE", "ON", "ON"),
+        Flag("GGML_OPENMP", "ON", "ON"),
+        Flag("BUILD_SHARED_LIBS", "ON", "ON"),
+        Flag("CMAKE_BUILD_TYPE", "Release", "Release"),
+        Flag("CMAKE_BUILD_RPATH_USE_ORIGIN", "ON", "ON"),
+        Flag("CMAKE_HIP_COMPILER", "/opt/rocm/lib/llvm/bin/clang++",
+             "/opt/rocm/lib/llvm/bin/clang++"),
+    ),
+)
+
+
+def check_rocm_version(version_file: str = ROCM_VERSION_FILE) -> tuple[bool, str]:
+    """(ok, observed) for the ROCm release a gfx90a-rocm62 build would compile against.
+
+    A HIP build against a different ROCm is a different kernel set (the speech kernels
+    carry ROCm-6.2-specific gfx90a patches for exactly this reason), so the recipe's
+    ROCm pin is a precondition to check, not a note to trust.
+    """
+    try:
+        with open(version_file, encoding="utf-8") as handle:
+            observed = handle.read().strip()
+    except OSError as exc:
+        return False, f"unreadable: {exc}"
+    return observed.split("-", 1)[0] == ROCM_VERSION_REQUIRED, observed
+
+
 # The historical serializer is named gpu_build_recipe.v1, but its payload is the
 # generic flags/notes contract consumed by the existing builder/archive. Preserve
 # that contract rather than creating another recipe parser for CPU configuration.
@@ -267,7 +325,7 @@ NATIVE_CPU_NODE_PROFILE_RECIPE = profiling_variant(
 def recipe_for(name: str) -> BuildRecipe:
     recipes = {
         recipe.name: recipe for recipe in (
-            HOUSE_GPU_RECIPE, NATIVE_CPU_RECIPE,
+            HOUSE_GPU_RECIPE, NATIVE_CPU_RECIPE, GFX90A_ROCM62_V10_RECIPE,
             HOUSE_GPU_COVERAGE_RECIPE, NATIVE_CPU_COVERAGE_RECIPE,
             NATIVE_CPU_NODE_PROFILE_RECIPE,
         )
@@ -290,7 +348,9 @@ def from_flags(name: str, flags: Sequence[Mapping[str, Any]], *,
                     for item in flags))
 
 
-__all__ = ["BuildRecipe", "BuildRecipeError", "Flag", "HOUSE_GPU_RECIPE",
+__all__ = ["BuildRecipe", "BuildRecipeError", "Flag", "GFX90A_ROCM62_V10_RECIPE",
+           "HOUSE_GPU_RECIPE", "ROCM_VERSION_REQUIRED", "ROCWMMA_IN_BINARY_ARM",
+           "check_rocm_version",
            "HOUSE_GPU_COVERAGE_RECIPE", "NATIVE_CPU_RECIPE",
            "NATIVE_CPU_COVERAGE_RECIPE", "NATIVE_CPU_NODE_PROFILE_RECIPE",
            "NonAdoption", "PRODUCTION_RECIPE_IS_VERIFIABLE", "RECIPE_SCHEMA",

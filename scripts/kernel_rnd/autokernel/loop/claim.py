@@ -313,6 +313,128 @@ def hold_cpu(cpu_list: str) -> Iterator[dict]:
         yield receipt
 
 
+#: The q3 MEASUREMENT claim a GPU measurement takes (operator 2026-10-04 backlog
+#: schedule: GPU benches and CPU measurements never overlap). GPU host threads run on
+#: 184-191, the SMT siblings of physical cores 88-95 (region q3); a pinned GPU bench
+#: raised a CPU A/A floor 0.80% -> 7.22% (INF-70, 2026-09-08). Claimed as `88-95`, NOT
+#: `184-191`: the orchestrator's `cpu_list_to_regions` does not fold SMT siblings yet
+#: (REGION-SIBLING-1, still on a branch), so `184-191` maps to NO region today and
+#: would claim nothing. Measurement-only: production :8083 serving never takes it.
+GPU_Q3_MEASUREMENT_CPU_LIST = "88-95"
+GPU_Q3_MEASUREMENT_ROLE = "autokernel-gpu-measurement"
+
+
+@contextmanager
+def hold_q3_measurement(timeout_s: float = 1.0) -> Iterator[dict]:
+    """Hold region q3 through the orchestrator's region owner for ONE GPU measurement.
+
+    Raises the provider's `CpuRegionLockTimeout` when another holder has q3
+    (`region_lock_busy` recognises it); the caller waits and retries between
+    attempts, never pre-empting the holder.
+    """
+    os.environ.setdefault("ORCHESTRATOR_CROSS_ROLE_DISJOINT_PLACEMENT", "1")
+    if os.environ["ORCHESTRATOR_CROSS_ROLE_DISJOINT_PLACEMENT"].lower() not in {
+            "1", "true", "yes", "on"}:
+        raise ClaimRefused("GPU q3 measurement claim requires the cross-role region mutex")
+    _ensure_orchestrator_importable()
+    from src.runtime.cpu_region_lock import cpu_region_lock
+    from src.runtime.instance_topology import cpu_list_to_regions
+    from src.runtime.region_lock_cli import _preflight
+
+    reason = _preflight(strict=True)
+    if reason:
+        raise ClaimRefused(reason)
+    regions = cpu_list_to_regions(GPU_Q3_MEASUREMENT_CPU_LIST)
+    if set(regions) != {"q3"}:
+        raise ClaimRefused(f"{GPU_Q3_MEASUREMENT_CPU_LIST} maps to {sorted(regions)}, not q3")
+    with cpu_region_lock(GPU_Q3_MEASUREMENT_ROLE, regions, timeout_s=timeout_s,
+                         request_tag="autokernel-gpu-measurement-q3") as held:
+        if set(held) != {"q3"}:
+            raise ClaimRefused("region owner did not grant q3 for the GPU measurement")
+        yield {"device_id": "cpu", "purpose": "gpu_measurement_quiet", "regions": ["q3"],
+               "cpu_list": GPU_Q3_MEASUREMENT_CPU_LIST,
+               "lock_paths": {key: str(value) for key, value in held.items()},
+               "pid": os.getpid()}
+
+
+# ---------------------------------------------------------------- q3-honouring GPU holder
+#
+# Deadlock this avoids: a GPU AutoKernel run holds `mi210_0` for its whole life and
+# takes q3 only around each measurement; a CPU run holds its q3 region claim and, under
+# the q3 quiet window, wants `mi210_0` around each measurement. Each would wait on the
+# other forever. But a CPU run that already holds q3 is ALREADY excluded from every
+# measurement of a GPU holder that takes q3 for its measurements, so it need not wait
+# on that holder's device flock. The GPU run advertises this with a marker written
+# while it holds the flock; the CPU side trusts it only when the marker's PID is alive
+# with the same start time AND is the only process holding the flock (/proc/locks).
+
+def q3_honouring_marker_path(lock_path: Path | None = None) -> Path:
+    lock_path = DEVICE_LOCK if lock_path is None else lock_path
+    return lock_path.with_name(lock_path.name + ".q3-honouring.json")
+
+
+def _start_ticks(pid: int) -> int | None:
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+        return int(stat.rpartition(") ")[2].split()[19])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+@contextmanager
+def q3_honouring_marker(lock_path: Path | None = None) -> Iterator[Path]:
+    """Advertise, while this process holds the device flock, that its GPU measurements
+    take the q3 measurement claim. Removed on exit (only if still ours)."""
+    path = q3_honouring_marker_path(lock_path)
+    pid = os.getpid()
+    body = {"pid": pid, "start_ticks": _start_ticks(pid),
+            "role": GPU_Q3_MEASUREMENT_ROLE, "cpu_list": GPU_Q3_MEASUREMENT_CPU_LIST}
+    tmp = path.with_name(path.name + f".{pid}.tmp")
+    tmp.write_text(json.dumps(body, sort_keys=True), encoding="utf-8")
+    os.replace(tmp, path)
+    try:
+        yield path
+    finally:
+        try:
+            if json.loads(path.read_text(encoding="utf-8")).get("pid") == pid:
+                path.unlink()
+        except (OSError, ValueError):
+            pass
+
+
+def _flock_holders(lock_path: Path, proc_locks: Path = Path("/proc/locks")) -> set[int] | None:
+    """PIDs holding an FLOCK on `lock_path` (by inode); None if unreadable."""
+    try:
+        inode = os.stat(lock_path).st_ino
+        lines = proc_locks.read_text().splitlines()
+    except OSError:
+        return None
+    holders = set()
+    for line in lines:
+        fields = line.split()
+        if "->" in fields or len(fields) < 6 or fields[1] != "FLOCK":
+            continue
+        try:
+            if int(fields[5].rsplit(":", 1)[1]) == inode:
+                holders.add(int(fields[4]))
+        except (ValueError, IndexError):
+            continue
+    return holders
+
+
+def device_holder_honours_q3(lock_path: Path | None = None, *,
+                             proc_locks: Path = Path("/proc/locks")) -> bool:
+    lock_path = DEVICE_LOCK if lock_path is None else lock_path
+    try:
+        marker = json.loads(q3_honouring_marker_path(lock_path).read_text(encoding="utf-8"))
+        pid = int(marker["pid"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+    if marker.get("start_ticks") is None or _start_ticks(pid) != marker.get("start_ticks"):
+        return False
+    return _flock_holders(lock_path, proc_locks) == {pid}
+
+
 def region_lock_busy(error: BaseException) -> bool:
     """True when the provider refused because another holder has the regions.
 
@@ -455,5 +577,8 @@ def _cpu_numbers(cpu_list):
     return parse_cpu_list(cpu_list)
 
 
-__all__ = ["ClaimRefused", "CpuClaimLease", "DEVICE_ID", "DEVICE_LOCK", "hold", "hold_cpu",
-           "region_lock_busy", "yield_lease"]
+__all__ = ["ClaimRefused", "CpuClaimLease", "DEVICE_ID", "DEVICE_LOCK",
+           "GPU_Q3_MEASUREMENT_CPU_LIST", "GPU_Q3_MEASUREMENT_ROLE",
+           "device_holder_honours_q3", "hold", "hold_cpu", "hold_q3_measurement",
+           "q3_honouring_marker", "q3_honouring_marker_path", "region_lock_busy",
+           "yield_lease"]
