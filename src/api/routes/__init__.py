@@ -17,6 +17,7 @@ from src.api.routes.documents import router as documents_router
 from src.api.routes.config import router as config_router
 from src.api.routes.delegate import router as delegate_router
 from src.api.routes.dashboard import router as dashboard_router
+from src.api.routes.typed_judge import router as typed_judge_router
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,8 @@ def create_api_router() -> APIRouter:
     router.include_router(openai_router, prefix="/v1", tags=["openai"])
     # UFH14-B6: raw OpenAI passthrough for one role, behind the admission gate.
     router.include_router(passthrough_router, prefix="/v1", tags=["passthrough"])
+    # Tier-2 coherence judge (typed decision; localhost only).
+    router.include_router(typed_judge_router, prefix="/v1", tags=["typed"])
     router.include_router(sessions_router, tags=["sessions"])
     # Vision router requires optional native deps. Import lazily.
     try:
@@ -68,4 +71,5 @@ __all__ = [
     "documents_router",
     "config_router",
     "delegate_router",
+    "typed_judge_router",
 ]

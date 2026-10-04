@@ -1,0 +1,45 @@
+# Cloud judge registry (coherence judge, operator-approved 2026-10-04).
+#
+# Minimal cloud registration for TYPED JUDGE calls only. It is NOT a serving role and
+# is never routed to: a judge entry is used only when a caller names it explicitly as
+# `backend: cloud:<name>` on POST /v1/typed/coherence_judge.
+#
+# Policy (operator): LOCAL models are the default judge. A cloud judge may be selected
+# when the CALLER already runs on cloud models (AutoKernel's planner and critic are
+# cloud-hosted), so the judged text is already crossing that boundary.
+#
+# Why a new file instead of the `external_*` roles in model_registry_full.yaml: those
+# roles drive the Anthropic/OpenAI HTTP APIs with ANTHROPIC_API_KEY / OPENAI_API_KEY,
+# and this host has no API key (AutoKernel's actors.py: `--bare` "refuses OAuth and this
+# host has no API key"). The cloud models the host can reach are the two account-authed
+# CLIs AutoKernel already drives headless: `codex exec` (ChatGPT account) and
+# `claude -p` (OAuth). Neither CLI exposes token logprobs, so a cloud verdict carries
+# confidence=null; both expose structured output (codex --output-schema, claude
+# --json-schema), which the judge uses so the verdict is schema-bound, not parsed prose.
+#
+# Fields:
+#   transport      codex_exec | claude_cli
+#   model          default model id passed to the CLI
+#   models         other model ids a request may select with `model` (allow-list)
+#   effort         reasoning effort (codex model_reasoning_effort / claude --effort)
+#   timeout_s      wall-clock cap for one call
+#   egress         where the judged text goes (for the call log and the operator)
+#   verified_live  false until one live call has been checked end to end
+schema: epyc.orchestrator.cloud_judges.v1
+judges:
+  codex-luna-low:
+    transport: codex_exec
+    model: gpt-5.6-luna
+    models: [gpt-5.6-terra]
+    effort: low
+    timeout_s: 300
+    egress: openai (ChatGPT account via codex CLI)
+    verified_live: false
+  sonnet-low:
+    transport: claude_cli
+    model: sonnet
+    models: []
+    effort: low
+    timeout_s: 300
+    egress: anthropic (OAuth via claude CLI)
+    verified_live: false
