@@ -282,6 +282,42 @@ def llama_bench_argv(binary: Path | str, model: Path | str, *, pp: int, tg: int,
             + (["-b", str(ubatch), "-ub", str(ubatch)] if ubatch else []))
 
 
+def _launch(argv, *, timeout: float, env, sampler) -> subprocess.CompletedProcess:
+    """Run llama-bench as a CAPTURED child so the in-run guards can stop exactly it.
+
+    Round-2 item 8: the residency sampler watches this child's own KFD VRAM and, past
+    `GPU_CAPACITY_CEILING_BYTES` (62 GiB), terminates it (SIGTERM -> SIGKILL, verified
+    dead -- `residency.terminate_own_process`). The child is also registered with
+    `residency.OWN_LAUNCHES`, so the G1 expiry watcher can stop it at expected_end.
+    Returns a CompletedProcess like `subprocess.run(capture_output=True, text=True)`."""
+    from .surface_validation import GPU_CAPACITY_CEILING_BYTES
+    proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            text=True, env=env)
+    residency.OWN_LAUNCHES.register(proc)
+    try:
+        if callable(getattr(sampler, "watch_pid", None)):
+            sampler.watch_pid(proc.pid)
+        if callable(getattr(sampler, "abort_above", None)):
+            sampler.abort_above(GPU_CAPACITY_CEILING_BYTES,
+                                lambda: residency.terminate_own_process(proc))
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            residency.terminate_own_process(proc)
+            stdout, stderr = proc.communicate()
+            raise subprocess.TimeoutExpired(argv, timeout, output=stdout, stderr=stderr)
+    finally:
+        if proc.poll() is None:
+            residency.terminate_own_process(proc)
+        residency.OWN_LAUNCHES.unregister(proc)
+    return subprocess.CompletedProcess(argv, proc.returncode, stdout, stderr)
+
+
+def _ceiling_breach(sampler) -> dict | None:
+    breach = getattr(sampler, "ceiling_breach", None)
+    return breach if isinstance(breach, dict) else None
+
+
 def run_once(binary: Path, model: Path, *, pp: int, tg: int, ubatch: int | None = None,
              reps: int = 9, timeout_s: int = 3600, sleep=time.sleep,
              capture=None, hardening_seed: int | None = None) -> tuple[float, dict]:
@@ -302,8 +338,13 @@ def run_once(binary: Path, model: Path, *, pp: int, tg: int, ubatch: int | None 
         env = residency.loader_env(binary)
         with (nullcontext() if capture is None else capture.invocation(argv, env, attempt)):
             with residency.Sampler() as sampler:
-                done = subprocess.run(argv, capture_output=True, text=True,
-                                      timeout=timeout_s, env=env)
+                done = _launch(argv, timeout=timeout_s, env=env, sampler=sampler)
+            # A child WE stopped is neither an external kill to retry nor a result to
+            # capture: the G1 window ended (F6) or it passed the 62 GiB ceiling (item 8).
+            residency.OWN_LAUNCHES.raise_if_aborted()
+            breach = _ceiling_breach(sampler)
+            if breach is not None:
+                raise residency.VramCeilingExceeded(breach)
             if capture is not None:
                 capture.completed(done, sampler.proof)
         if done.returncode in EXTERNAL_KILL_CODES and attempt < KILL_RETRIES:

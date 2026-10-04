@@ -895,7 +895,7 @@ class ThePromotionWritesProductionsBaseline(unittest.TestCase):
             def __exit__(self, *exc):
                 return False
 
-        with mock.patch.object(bench.subprocess, "run", side_effect=fake_run), \
+        with mock.patch.object(bench, "_launch", side_effect=fake_run), \
                 mock.patch.object(bench.residency, "Sampler", Sampler), \
                 mock.patch.object(bench.residency, "loader_env", lambda _b: {}), \
                 mock.patch.object(bench, "hardened_row",

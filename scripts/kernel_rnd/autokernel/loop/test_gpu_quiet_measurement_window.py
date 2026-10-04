@@ -347,7 +347,7 @@ def test_gpu_only_run_wires_launcher_gpu_quiet_into_its_device_claim():
                      r"CPU_MEASUREMENT_GPU_QUIET_OFF:", body)
     assert "gpu_only_quiet_path = claim.gpu_quiet_preflight()" in body
     assert re.search(r"claim\.hold\(\n\s+gpu_quiet_path=gpu_only_quiet_path if gpu_skip_cpu_claim "
-                     r"else None\)\)", body)
+                     r"else None,\n\s+\*\*window_kwargs\)\)", body)
     assert re.search(r"if gpu_only_quiet_path is not None and claim\.gpu_quiet_exclusive_holder\(\n\s+"
                      r"receipt\.gpu_quiet_open\(\)\) is None:\n\s+raise claim\.ClaimRefused", body)
     assert "return gpu_local.compute()" in body

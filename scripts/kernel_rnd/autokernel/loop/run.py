@@ -63,9 +63,12 @@ CPU_MEASUREMENT_GPU_QUIET_POLICIES = (CPU_MEASUREMENT_GPU_QUIET_OFF,
 CPU_MEASUREMENT_GPU_QUIET_DEPRECATED = {"q3": CPU_MEASUREMENT_GPU_QUIET_LOCK}
 #: `--gpu-window`: G1 MI210 window enforcement (gpu_window.py). "required" = every GPU
 #: measurement first re-reads the executor-owned window file and stops the run unless
-#: it grants AutoKernel the device (`gpu_window.assert_window_active`). Default "off"
-#: until the stack-owned executor ships: no executor-written window exists yet, and
-#: "required" would refuse every GPU run.
+#: it grants AutoKernel the device (`gpu_window.assert_window_active`), confirms the window
+#: only AFTER the device flock is held, and aborts a measurement in flight at the window's
+#: expected_end (round-2 F6). Default "off" stays until the executor's watchdog is
+#: installed and serving (round-2 F2, orchestrator side): before that no executor-written
+#: window exists and "required" would refuse every GPU run. AK-requested windows
+#: (serial_run --gpu-window-request-*) cannot be sent without "required".
 GPU_WINDOW_OFF = "off"
 GPU_WINDOW_REQUIRED = "required"
 
@@ -110,6 +113,7 @@ from . import noop_build
 from . import cpu_window
 from . import cpu_repack_cases
 from . import gpu_window
+from . import residency
 from . import resume as resume_mod
 from . import bestof
 from . import gpu_serving_profile as gpu_serving_profile_mod
@@ -230,20 +234,61 @@ def _gpu_quiet_measurement_window(gpu_run: bool, *, on_wait, should_stop,
         yield
 
 
+class GpuWindowMeasurementAborted(loop.TailRefused):
+    """G1 round-2 F6: the window ended (expected_end, or the executor took the device
+    back) while a GPU measurement was in flight. The measurement's own launches were
+    stopped by captured PID and it has NO result: a TailRefused, so the loop carries the
+    hypothesis as `superseded` and records no measurement, null or failure."""
+
+
 @contextmanager
-def _gpu_window_boundary(required: bool, path, *, on_preempt):
+def _gpu_window_boundary(required: bool, path, *, on_preempt, watch: bool = True,
+                         poll_s: float = 1.0):
     """G1 GPU batch boundary: re-read the executor-owned window before a GPU measurement.
 
     Under `--gpu-window required` a window that no longer grants AutoKernel the device
     (preempt requested, not `granted`, expired, foreign writer) calls `on_preempt` (the
-    run winds down) and refuses the measurement. AK never writes the window file."""
-    if required:
-        try:
-            gpu_window.assert_window_active(path)
-        except gpu_window.GpuWindowPreempted as exc:
-            on_preempt()
-            raise loop.TailRefused(str(exc)) from exc
-    yield
+    run winds down) and refuses the measurement. AK never writes the window file.
+
+    `watch` (round-2 F6): while the measurement runs, an expiry watcher re-reads the
+    window; at expected_end, or if the executor takes the device back, it stops this
+    run's OWN launches (`residency.OWN_LAUNCHES`, captured PIDs, SIGTERM -> SIGKILL,
+    verified) and the measurement ends as `GpuWindowMeasurementAborted` -- never
+    recorded, whatever the body returned or raised. `watch=False` is the bare re-check
+    taken again AFTER the gpu-quiet wait (round-2 item 5)."""
+    if not required:
+        yield
+        return
+    try:
+        grant = gpu_window.assert_window_active(path)
+    except gpu_window.GpuWindowPreempted as exc:
+        on_preempt()
+        raise loop.TailRefused(str(exc)) from exc
+    if not watch:
+        yield
+        return
+
+    def _abort(reason: str) -> None:
+        on_preempt()
+        residency.OWN_LAUNCHES.abort(reason)
+
+    residency.OWN_LAUNCHES.reset()
+    watcher = gpu_window.ExpiryWatcher(grant, _abort, path=path, poll_s=poll_s)
+    try:
+        with watcher:
+            try:
+                yield
+            except BaseException as exc:
+                if watcher.fired is not None or isinstance(exc, residency.MeasurementAborted):
+                    raise GpuWindowMeasurementAborted(
+                        f"GPU measurement aborted, no result recorded: "
+                        f"{watcher.fired or exc}") from exc
+                raise
+        if watcher.fired is not None:
+            raise GpuWindowMeasurementAborted(
+                f"GPU measurement aborted, no result recorded: {watcher.fired}")
+    finally:
+        residency.OWN_LAUNCHES.reset()
 
 
 @contextmanager
@@ -3051,6 +3096,12 @@ def _main(argv: list[str] | None = None) -> int:
             source_repo=args.worktree, branch=args.champion_branch,
             store=None if args.dry_run else args.store,
             allow_stale=args.floor_allow_stale_upstream)
+    if (args.gpu_window == GPU_WINDOW_REQUIRED
+            and args.cpu_measurement_gpu_quiet == CPU_MEASUREMENT_GPU_QUIET_OFF):
+        # G1 round-2 item 1 residual: a window run is a GPU run on the shared host; its
+        # measurements must take gpu-quiet EXCLUSIVE (no CPU measurement overlaps).
+        parser.error("--gpu-window required cannot run with --cpu-measurement-gpu-quiet off: "
+                     "a windowed GPU measurement always takes the gpu-quiet lock")
     if args.cpu_window_wait_bound_s <= 0:
         parser.error("--cpu-window-wait-bound-s must be > 0")
     if args.no_measurement_alarm_n < 1:
@@ -5489,9 +5540,16 @@ def _main(argv: list[str] | None = None) -> int:
         if not cpu_launch:
             # G1 GPU measurement boundary: the window check comes first -- a preempted
             # window never waits on a lock.
+            # Round-2 item 5: the window is checked again AFTER the gpu-quiet wait (a
+            # long wait can outlive the window); the outer boundary also watches
+            # expected_end for the whole measurement (F6).
+            window_required = args.gpu_window == GPU_WINDOW_REQUIRED
             quiet = _stacked(_gpu_window_boundary(
-                args.gpu_window == GPU_WINDOW_REQUIRED, args.gpu_window_path,
-                on_preempt=lambda: stopping.__setitem__("asked", True)), quiet)
+                window_required, args.gpu_window_path,
+                on_preempt=lambda: stopping.__setitem__("asked", True)),
+                _stacked(quiet, _gpu_window_boundary(
+                    window_required, args.gpu_window_path, watch=False,
+                    on_preempt=lambda: stopping.__setitem__("asked", True))))
         quiet = _reentrant(quiet_depth, quiet)
         if cpu_window_ref[0] is None:
             return quiet
@@ -7851,8 +7909,17 @@ def _main(argv: list[str] | None = None) -> int:
                     cpu_win.set_reserved(cpu_window.ak_check_cpus())
                     cpu_win.bind(original_claims[0])
                 if not cpu_launch:
+                    # G1 F4: under --gpu-window required the window is confirmed AFTER
+                    # the device flock is held (never check-then-acquire); under a
+                    # serial_run window hold this re-enters the parent's flock.
+                    window_verify = ((lambda: gpu_window.assert_window_active(
+                                         args.gpu_window_path))
+                                     if getattr(args, "gpu_window", "off")
+                                     == "required" else None)
+                    window_kwargs = {} if window_verify is None else {"verify": window_verify}
                     receipt = ownership.enter_context(claim.hold(
-                        gpu_quiet_path=gpu_only_quiet_path if gpu_skip_cpu_claim else None))
+                        gpu_quiet_path=gpu_only_quiet_path if gpu_skip_cpu_claim else None,
+                        **window_kwargs))
                     original_claims.append(receipt)
                     if gpu_only_quiet_path is not None and claim.gpu_quiet_exclusive_holder(
                             receipt.gpu_quiet_open()) is None:

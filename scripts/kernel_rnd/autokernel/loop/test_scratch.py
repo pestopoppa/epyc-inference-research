@@ -846,6 +846,10 @@ ALLOWLIST: dict[str, tuple[int, str]] = {
     "model_identity.py:_persist_divergence:write_text": (1, "evidence: content-named full original anchor/candidate observation arrays behind an identity refusal; no grading projection"),
     "claim.py:hold:mkdir": (1, "state: device claim lock file"),
     "claim.py:hold:open-write": (1, "state: device claim lock file"),
+    "claim.py:WindowDeviceHold.acquire:mkdir": (
+        1, "state: device claim lock file (G1 window-scoped hold in the serial parent)"),
+    "claim.py:WindowDeviceHold.acquire:open-write": (
+        1, "state: device claim lock file (G1 window-scoped hold in the serial parent)"),
     "cpu_profile.py:CpuProfileCapture._initialize:mkdir": (1, "evidence: cpu-raw capture dir, retained and referenced"),
     "cpu_profile.py:CpuProfileCapture._open:os-open-create": (1, "evidence: files of the cpu-raw capture dir"),
     "cpu_screen.py:prepare_batch:mkdir": (1, "evidence: retained CPU screen selection"),

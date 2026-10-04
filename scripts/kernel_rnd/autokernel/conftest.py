@@ -27,7 +27,7 @@ import subprocess
 
 import pytest
 
-from .loop import belief_context, claim
+from .loop import belief_context, claim, gpu_window
 
 _REAL_GPU_QUIET = {"hold_gpu_quiet_measurement": claim.hold_gpu_quiet_measurement,
                    "gpu_quiet_preflight": claim.gpu_quiet_preflight}
@@ -56,6 +56,13 @@ def _isolate_host_claims(tmp_path_factory):
         patch.setattr(claim, "DEVICE_LOCK", root / "gpu_device.mi210_0.lock")
         patch.setattr(claim, "hold_gpu_quiet_measurement", hold_gpu_quiet_measurement)
         patch.setattr(claim, "gpu_quiet_preflight", lambda: root / "gpu_quiet.lock")
+        # G1: the MI210 window file, schedule and session bus are live shared state;
+        # code that resolves them at call time sees temporary paths instead, and no
+        # test inherits a real serial_run parent's device-hold fd.
+        patch.setattr(gpu_window, "WINDOW_FILE", root / "gpu-window" / "mi210.json")
+        patch.setattr(gpu_window, "SCHEDULE_FILE", root / "gpu-window" / "schedule.json")
+        patch.setattr(gpu_window, "BUS_ROOT", root / "session-bus")
+        patch.delenv(claim.INHERITED_DEVICE_LOCK_ENV, raising=False)
         yield holds
 
 

@@ -100,13 +100,99 @@ def pid_peak_rss(pid: int, proc_root: Path = Path("/proc")) -> int | None:
 
 
 
+def terminate_own_process(proc, *, grace_s: float = 5.0, kill_wait_s: float = 10.0) -> bool:
+    """Stop ONE process this run launched (a captured `Popen`): SIGTERM, wait, SIGKILL,
+    wait, then verify it is dead. True once it is reaped; False only if it still lives
+    after SIGKILL (never reported as stopped). Never a name pattern, never a group."""
+    if proc.poll() is not None:
+        return True
+    try:
+        proc.terminate()
+    except ProcessLookupError:
+        pass
+    try:
+        proc.wait(timeout=grace_s)
+    except Exception:  # noqa: BLE001 -- subprocess.TimeoutExpired; escalate
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            pass
+        try:
+            proc.wait(timeout=kill_wait_s)
+        except Exception:  # noqa: BLE001
+            return False
+    return proc.poll() is not None
+
+
+class OwnLaunches:
+    """The processes THIS run launched for the measurement in flight (by captured Popen).
+
+    G1 round-2 F6: when the window's expected_end arrives mid-measurement the expiry
+    watcher calls `abort(reason)`, which terminates exactly these (SIGTERM -> SIGKILL,
+    verified) and latches the reason so the launch site raises `MeasurementAborted`
+    instead of retrying the kill as an external one or recording a result."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._procs: dict[int, object] = {}
+        self._reason: str | None = None
+
+    def register(self, proc) -> None:
+        with self._lock:
+            self._procs[int(proc.pid)] = proc
+            abort_now = self._reason
+        if abort_now is not None:
+            terminate_own_process(proc)
+
+    def unregister(self, proc) -> None:
+        with self._lock:
+            self._procs.pop(int(proc.pid), None)
+
+    def abort(self, reason: str) -> dict[int, bool]:
+        with self._lock:
+            if self._reason is None:
+                self._reason = str(reason)
+            procs = list(self._procs.values())
+        return {int(proc.pid): terminate_own_process(proc) for proc in procs}
+
+    @property
+    def reason(self) -> str | None:
+        return self._reason
+
+    def reset(self) -> None:
+        with self._lock:
+            self._reason = None
+
+    def raise_if_aborted(self) -> None:
+        if self._reason is not None:
+            raise MeasurementAborted(self._reason)
+
+
+class MeasurementAborted(RuntimeError):
+    """The measurement was aborted by the G1 window watcher; it has NO result."""
+
+
+#: Process-wide: one run, one measurement in flight at a time (the serialized tail).
+OWN_LAUNCHES = OwnLaunches()
+
+#: Consecutive samples with no readable VRAM value (own KFD and device both unread)
+#: after which an armed ceiling FAILS CLOSED (treated as a breach). 8 x 0.25 s = 2 s.
+UNREADABLE_SAMPLES_FAIL_CLOSED = 8
+
+
 class VramCeilingExceeded(RuntimeError):
     """In-run abort (G1 constraint e): the sampled VRAM passed the capacity ceiling."""
 
     def __init__(self, breach: dict) -> None:
-        super().__init__(
-            f"VRAM {breach['bytes'] / (1 << 30):.2f} GiB ({breach['source']}) exceeded the "
-            f"{breach['ceiling_bytes'] / (1 << 30):.2f} GiB ceiling; run aborted")
+        if breach.get("source") == "unreadable":
+            message = (f"VRAM unreadable for {breach.get('unreadable_samples')} consecutive "
+                       f"samples; the {breach['ceiling_bytes'] / (1 << 30):.2f} GiB ceiling "
+                       "cannot be shown to hold; run aborted (fail closed)")
+        else:
+            message = (f"VRAM {breach['bytes'] / (1 << 30):.2f} GiB ({breach['source']}) "
+                       f"exceeded the {breach['ceiling_bytes'] / (1 << 30):.2f} GiB ceiling; "
+                       "run aborted")
+        super().__init__(message)
         self.breach = dict(breach)
 
 
@@ -118,12 +204,23 @@ class Sampler:
     anything else -- the first time a sample exceeds the ceiling, and record the breach.
     The watched PID's own KFD VRAM is compared when a PID is watched, the device total
     otherwise. The caller raises `VramCeilingExceeded` via `raise_if_ceiling_breached`.
+
+    Unreadable samples (round-2 item 8: the hook used to read a None KFD value as
+    "under the limit"). Policy, armed ceiling only:
+      * own-PID KFD read is None -> compare the DEVICE total instead. It is an upper
+        bound on the launch's own VRAM, so it can only abort earlier, never later;
+      * both unreadable -> the sample counts as unreadable; after
+        `UNREADABLE_SAMPLES_FAIL_CLOSED` consecutive unreadable samples the hook
+        fails CLOSED (breach source `unreadable`, the launch is terminated): a run
+        whose VRAM cannot be seen cannot be shown to be under the ceiling.
+    A readable sample resets the count, so a single torn sysfs read never aborts.
     """
 
     def __init__(self, interval: float = 0.25) -> None:
         self.interval = interval
         self._ceiling_bytes: int | None = None
         self._terminate = None
+        self._unreadable_streak = 0
         self.ceiling_breach: dict | None = None
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -157,15 +254,26 @@ class Sampler:
     def _check_ceiling(self, device_vram: int, own_vram: int | None) -> None:
         if self._ceiling_bytes is None or self.ceiling_breach is not None:
             return
-        if self._watched_pid is not None:
+        if self._watched_pid is not None and own_vram is not None and own_vram >= 0:
             value, source = own_vram, "own_pid_kfd_vram"
+        elif device_vram is not None and device_vram >= 0:
+            value, source = device_vram, "device_vram"   # upper bound on the launch's own
         else:
-            value, source = device_vram, "device_vram"
-        if value is None or value < 0 or value <= self._ceiling_bytes:
-            return
+            value, source = None, "unreadable"
+        if value is None:
+            self._unreadable_streak += 1
+            if self._unreadable_streak < UNREADABLE_SAMPLES_FAIL_CLOSED:
+                return
+            value = -1
+        else:
+            self._unreadable_streak = 0
+            if value <= self._ceiling_bytes:
+                return
         self.ceiling_breach = {"bytes": int(value), "source": source,
                                "ceiling_bytes": self._ceiling_bytes, "at": time.time(),
                                "terminated": False}
+        if source == "unreadable":
+            self.ceiling_breach["unreadable_samples"] = self._unreadable_streak
         if self._terminate is not None:
             try:
                 self._terminate()
@@ -721,6 +829,8 @@ def loader_env(binary: Path) -> dict[str, str]:
     return env
 
 
-__all__ = ["KFD_PROC", "RESIDENT_FLOOR_BYTES", "Sampler", "VRAM_SYSFS", "VramCeilingExceeded",
+__all__ = ["KFD_PROC", "MeasurementAborted", "OWN_LAUNCHES", "OwnLaunches",
+           "RESIDENT_FLOOR_BYTES", "Sampler", "UNREADABLE_SAMPLES_FAIL_CLOSED", "VRAM_SYSFS",
+           "VramCeilingExceeded", "terminate_own_process",
            "kfd_pid_vram", "kfd_processes", "loader_env", "pid_peak_rss", "sclk_mhz",
            "vram_bytes"]

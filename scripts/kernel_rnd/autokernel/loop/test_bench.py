@@ -199,7 +199,7 @@ class AnExternalKillIsRetriedAndACrashIsNot(unittest.TestCase):
         def fake(*a, **k):
             return mock.Mock(returncode=next(seen), stdout="[]", stderr="killed")
 
-        with mock.patch.object(bench.subprocess, "run", side_effect=fake), \
+        with mock.patch.object(bench, "_launch", side_effect=fake), \
              mock.patch.object(bench.residency, "Sampler"), \
              mock.patch.object(bench.residency, "loader_env", return_value={}), \
              mock.patch.object(bench, "hardened_row",
@@ -231,7 +231,7 @@ class AnExternalKillIsRetriedAndACrashIsNot(unittest.TestCase):
             code = next(seen)
             return mock.Mock(returncode=code, stdout=rows, stderr="")
 
-        with mock.patch.object(bench.subprocess, "run", side_effect=fake), \
+        with mock.patch.object(bench, "_launch", side_effect=fake), \
              mock.patch.object(bench.residency, "Sampler"), \
              mock.patch.object(bench.residency, "loader_env", return_value={}), \
              mock.patch.object(bench, "hardened_row",
@@ -365,7 +365,7 @@ class TheSurfaceTableDrivesTheBatchWidth(unittest.TestCase):
             return mock.Mock(returncode=0, stdout=json.dumps(
                 [{"n_prompt": 512, "n_gen": 0, "avg_ts": 100.0}]), stderr="")
 
-        with mock.patch.object(bench.subprocess, "run", side_effect=fake_run), \
+        with mock.patch.object(bench, "_launch", side_effect=fake_run), \
              mock.patch.object(bench.residency, "Sampler", FakeSampler), \
              mock.patch.object(bench.residency, "loader_env", lambda _b: {}), \
              mock.patch.object(bench, "hardened_row",

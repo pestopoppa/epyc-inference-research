@@ -1330,6 +1330,94 @@ def gpu_batch_window_refusal(path: Path | None = None) -> str | None:
     return None
 
 
+def _gpu_window_target_refusal(gpu_window, targets) -> str | None:
+    """Under --gpu-window required every GPU target re-checks the window itself
+    (`--gpu-window required` in its argv) and keeps the gpu-quiet lock (round-2 item 1
+    residual: `--cpu-measurement-gpu-quiet off` is refused under a window)."""
+    if gpu_window != "required":
+        return None
+    for row in targets:
+        if option(row, "--cpu-serving-launch") is not None:
+            continue
+        name = option(row, "--target-id", "<gpu target>")
+        if option(row, "--gpu-window", "off") != "required":
+            return (f"{name}: --gpu-window required needs the same flag in every GPU "
+                    "target argv, so each GPU measurement re-checks the window")
+        if option(row, "--cpu-measurement-gpu-quiet") == "off":
+            return (f"{name}: --cpu-measurement-gpu-quiet off is refused under "
+                    "--gpu-window required")
+    return None
+
+
+class _GpuWindowSession:
+    """G1 F4/F5 at the serial_run (parent) level: one window, many GPU batches.
+
+    `ensure()` at a GPU batch boundary: on first use, optionally request the window
+    (compute-request -> verified grant, `gpu_window.BusStackOwnerWindow`), then take
+    the device flock ONCE (`claim.WindowDeviceHold`: atomic LOCK_EX|LOCK_NB, window
+    confirmed only after the lock is held). Later boundaries only re-check that the SAME
+    window still grants it. GPU children re-enter the hold through `popen_kwargs`, so
+    the flock never drops between batches. `close()` drops the flock (the executor's
+    release signal) and appends the courtesy release note when a request was sent."""
+
+    #: After the window's hard end, a child still alive this long is SIGKILLed (its own
+    #: watcher already stopped its measurement launches at expected_end).
+    EXPIRY_KILL_AFTER_S = 120.0
+
+    def __init__(self, window_path=None, request=None, *, hold=None, handshake=None):
+        from . import claim
+        self.hold = hold or claim.WindowDeviceHold(window_path=window_path)
+        self.request = request
+        self.handshake = handshake
+        self.bus_grant = None
+
+    def ensure(self) -> str | None:
+        """None when this batch may start under the hold, else the refusal reason."""
+        from . import claim, gpu_window
+        if self.hold.held:
+            refusal = self.hold.refusal()
+            if refusal is not None:
+                self.close()
+            return refusal
+        try:
+            if self.request is not None and self.bus_grant is None:
+                if self.handshake is None:
+                    kwargs = {}
+                    if self.request.get("bus_root") is not None:
+                        kwargs["bus_root"] = self.request["bus_root"]
+                    if self.hold.window_path is not None:
+                        kwargs["window_path"] = self.hold.window_path
+                    self.handshake = gpu_window.BusStackOwnerWindow(**kwargs)
+                corr_id = self.handshake.request(self.request["request"])
+                self.bus_grant = self.handshake.wait_grant(corr_id, self.request["timeout_s"])
+            grant = self.hold.acquire()
+            if self.bus_grant is not None and grant.window_id != self.bus_grant.window_id:
+                self.hold.release()
+                return (f"window {grant.window_id!r} is not the granted window "
+                        f"{self.bus_grant.window_id!r}")
+        except (claim.ClaimRefused, gpu_window.GpuWindowPreempted, gpu_window.WindowDenied,
+                gpu_window.WindowGrantTimeout, gpu_window.GrantUnverified,
+                gpu_window.ScheduleInvalid) as exc:
+            return f"{type(exc).__name__}: {exc}"
+        return None
+
+    def popen_kwargs(self) -> dict:
+        return self.hold.popen_kwargs() if self.hold.held else {}
+
+    def popen_kwargs_for(self, env) -> dict:
+        """`popen_kwargs` layered over `env` (None = os.environ)."""
+        return self.hold.popen_kwargs(env) if self.hold.held else {}
+
+    def close(self) -> None:
+        released = self.hold.release()
+        if released and self.handshake is not None and self.bus_grant is not None:
+            try:
+                self.handshake.release(self.bus_grant,
+                                       campaign_id=self.request["request"].campaign_id)
+            except Exception as exc:  # noqa: BLE001 -- the flock release already happened
+                print(f"gpu window release note not sent: {exc}", file=sys.stderr)
+
+
 def _main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     source = parser.add_mutually_exclusive_group()
@@ -1385,7 +1473,36 @@ def _main(argv=None) -> int:
     parser.add_argument("--gpu-window-path", type=Path, default=None,
                         help="the executor-owned MI210 window file, read-only "
                              "(default: gpu_window.WINDOW_FILE)")
+    parser.add_argument("--gpu-window-request-schedule-ref",
+                        help="G1 (b): before the first GPU batch, send a compute-request for "
+                             "this shared-schedule entry to the coordinator-daemon and wait "
+                             "for a verified grant + executor window (needs --gpu-window "
+                             "required, --gpu-window-request-campaign and -duration-s)")
+    parser.add_argument("--gpu-window-request-campaign",
+                        help="campaign id the schedule entry is booked for")
+    parser.add_argument("--gpu-window-request-purpose", default="autokernel GPU batches",
+                        help="purpose named in the compute-request")
+    parser.add_argument("--gpu-window-request-duration-s", type=int,
+                        help="requested window length, (0, 3600] s")
+    parser.add_argument("--gpu-window-grant-timeout-s", type=float, default=900.0,
+                        help="how long to wait for the verified grant before refusing "
+                             "(default: %(default)s)")
+    parser.add_argument("--gpu-window-bus-root", type=Path, default=None,
+                        help="session-bus root (default: the live bus; tests only)")
     args = parser.parse_args(argv)
+    request_flags = (args.gpu_window_request_schedule_ref, args.gpu_window_request_campaign,
+                     args.gpu_window_request_duration_s)
+    if any(value is not None for value in request_flags):
+        if args.gpu_window != "required":
+            parser.error("a GPU window request needs --gpu-window required")
+        if any(value is None for value in request_flags):
+            parser.error("--gpu-window-request-schedule-ref, -campaign and -duration-s "
+                         "are required together")
+        if not 0 < args.gpu_window_request_duration_s <= 3600:
+            parser.error("--gpu-window-request-duration-s must be in (0, 3600]; longer "
+                         "needs the operator")
+        if args.gpu_window_grant_timeout_s <= 0:
+            parser.error("--gpu-window-grant-timeout-s must be > 0")
     if ((not args.retention_plan_only
          and (args.batch_iterations is None or args.batch_iterations <= 0
               or not (args.target_args or args.resolved_campaign)))
@@ -1485,6 +1602,19 @@ def _main(argv=None) -> int:
                     "confirmation requires --batch-iterations 1")
     except (OSError, ValueError) as exc:
         parser.error(str(exc))
+    window_refusal = _gpu_window_target_refusal(args.gpu_window, targets)
+    if window_refusal is not None:
+        parser.error(window_refusal)
+    window_request = None
+    if args.gpu_window_request_schedule_ref is not None:
+        from . import gpu_window
+        window_request = {
+            "request": gpu_window.WindowRequest(
+                args.gpu_window_request_campaign, args.gpu_window_request_purpose,
+                args.gpu_window_request_duration_s,
+                schedule_ref=args.gpu_window_request_schedule_ref),
+            "timeout_s": args.gpu_window_grant_timeout_s,
+            "bus_root": args.gpu_window_bus_root}
     if args.retention_plan_only:
         root = args.state_dir.resolve()
         retention_plan = _retention_plan(args, root, targets)
@@ -1552,7 +1682,8 @@ def _main(argv=None) -> int:
                             source_validation_priority_dir=args.source_validation_priority_dir,
                             control_listen=args.control_listen, control_origin=args.control_origin,
                             initial_continuation=initial_continuation,
-                            gpu_window=args.gpu_window, gpu_window_path=args.gpu_window_path)
+                            gpu_window=args.gpu_window, gpu_window_path=args.gpu_window_path,
+                            gpu_window_request=window_request)
             terminal_phase = "complete" if result == 0 else "failed"
             return result
         finally:
@@ -2345,7 +2476,8 @@ def _scheduled_failure_account(state, manifest, active, batch_dir, original):
 def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
            scheduler_manifest=None, source_validation_priority_dir=None,
            control_listen=None, control_origin=None, initial_continuation=None,
-           gpu_window="off", gpu_window_path=None):
+           gpu_window="off", gpu_window_path=None, gpu_window_request=None,
+           gpu_window_session=None):
     # Preserve the existing scheduler contract unless the operator/campaign
     # explicitly enrolls the AKX priority producer.  Making an absent optional
     # producer a new default launch dependency would stop every existing
@@ -2464,6 +2596,10 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
             elif key in state["runtime_recovery"] and previous_pending is None:
                 state["runtime_recovery"].pop(key)
 
+    window_session = None
+    if gpu_window == "required":
+        window_session = gpu_window_session or _GpuWindowSession(gpu_window_path,
+                                                                 gpu_window_request)
     for sig in handlers:
         signal.signal(sig, request_stop)
     try:
@@ -2632,12 +2768,17 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                 save()
                 continue
             original = targets[index]
-            if (gpu_window == "required"
-                    and option(original, "--cpu-serving-launch") is None):
+            gpu_batch = (gpu_window == "required"
+                         and option(original, "--cpu-serving-launch") is None)
+            if gpu_batch:
                 # G1 GPU batch boundary: never start a GPU batch outside an executor-
                 # granted window. Nothing is consumed: this selection is NOT saved, so
                 # the batch stays pending for the next invocation.
                 window_refusal = gpu_batch_window_refusal(gpu_window_path)
+                if window_refusal is None:
+                    # F4: the parent holds the device flock across every GPU batch of
+                    # the window (taken once, atomically; re-checked here each batch).
+                    window_refusal = window_session.ensure()
                 if window_refusal is not None:
                     publish("failed", reason=window_refusal)
                     return 1
@@ -2680,6 +2821,12 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                     capability_env, capability_fds = lane_watchdog.serial_child_capability(
                         option(child_argv, "--store"))
                     child_env = dict(os.environ, **capability_env)
+                if gpu_batch:
+                    # G1 F4: hand the window-scoped device flock to this GPU child.
+                    window_kwargs = window_session.popen_kwargs_for(child_env)
+                    if window_kwargs:
+                        child_env = window_kwargs["env"]
+                        capability_fds = (*capability_fds, *window_kwargs["pass_fds"])
                 process = subprocess.Popen(
                     [*child_prefix, *_child_command(child_argv)],
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -2696,12 +2843,30 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
                 save()
                 publish("running", active)
                 sent = False
+                window_end_at = None
                 heartbeat_at = time.monotonic() + 30
                 while process.poll() is None:
                     if control is not None:
                         previous = control.publish_snapshot()
                         if control.pump(active, stopped=stopped()) != previous:
                             publish("running", active)
+                    if gpu_batch and window_end_at is None:
+                        # F6: the window's hard end (or the executor taking the device
+                        # back) mid-batch. The child's own watcher stops its measurement
+                        # launches; here the captured child is told to wind down and,
+                        # if it outlives the grace, killed (own PID only) so the device
+                        # flock cannot outlive the window.
+                        window_abort = window_session.hold.expired_or_revoked()
+                        if window_abort is not None:
+                            window_end_at = time.monotonic()
+                            active["gpu_window_abort"] = window_abort
+                            stop.set()  # in-memory only: no STOP file outlives the window
+                    if (window_end_at is not None and process.poll() is None
+                            and time.monotonic() - window_end_at
+                            >= window_session.EXPIRY_KILL_AFTER_S):
+                        process.kill()  # This captured child only.
+                        process.wait()
+                        break
                     if stopped() and not sent:
                         process.send_signal(signal.SIGTERM)  # This captured child only; it drains its tail.
                         sent = True
@@ -2781,8 +2946,12 @@ def _drive(root, targets, batch_iterations, rounds, *, child_prefix=(),
             if service is not None:
                 service.close()
         finally:
-            for sig, handler in handlers.items():
-                signal.signal(sig, handler)
+            try:
+                if window_session is not None:
+                    window_session.close()  # every child is reaped by now
+            finally:
+                for sig, handler in handlers.items():
+                    signal.signal(sig, handler)
 
 
 def main(argv=None) -> int:

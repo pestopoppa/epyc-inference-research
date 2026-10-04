@@ -32,11 +32,16 @@ def test_request_is_a_compute_request_to_the_coordinator_daemon(tmp_path):
     request = gw.WindowRequest("ak-27b", "rocprof serving profile", 1800, schedule_ref="sched-4")
     msg = request.to_bus_payload(now=NOW, schedule_path=schedule)
     assert msg["kind"] == "compute-request" and msg["from"] == "inference"
-    assert msg["needs_routing_to"] == ["coordinator-daemon"] and msg["requires_ack"] is True
+    # coordinator-daemon has no roster row, so it is the transport `to`, never a
+    # `needs_routing_to` entry (session_bus.py append refuses non-roster routing ids).
+    assert msg["to"] == "coordinator-daemon" and "needs_routing_to" not in msg
+    assert msg["requires_ack"] is True
     payload = msg["payload"]
     assert payload["device"] == "gpu" and payload["device_id"] == "mi210_0"
-    assert payload["window"] == {"duration_s": 1800,
-                                 "expected_end": _iso(NOW + timedelta(seconds=1800))}
+    assert payload["device_region"] == "gpu/mi210_0"
+    assert isinstance(payload["window"], str) and "1800 s" in payload["window"]
+    assert payload["window_detail"] == {"duration_s": 1800, "start": _iso(NOW),
+                                        "expected_end": _iso(NOW + timedelta(seconds=1800))}
     assert payload["est_h"] == 0.5 and payload["release_condition"] and payload["task"]
     assert payload["parked_ports"] == [8083] and payload["parked_roles"] == ["architect_critic"]
     assert payload["gpu_peak_ceiling_bytes"] == 62 << 30
@@ -144,7 +149,7 @@ def test_ak_never_writes_the_window_file(tmp_path):
     before = path.read_bytes()
     grant = gw.read_grant(path)
     msg = gw.release_message(grant, campaign_id="ak-27b")
-    assert msg["payload"]["window_id"] == "w-1" and msg["needs_routing_to"] == ["coordinator-daemon"]
+    assert msg["payload"]["window_id"] == "w-1" and msg["to"] == "coordinator-daemon"
     assert path.read_bytes() == before
     with open(gw.__file__, encoding="utf-8") as handle:
         text = handle.read()
@@ -171,7 +176,7 @@ def test_serial_router_refuses_a_gpu_batch_outside_a_granted_window(tmp_path):
     assert params["gpu_window"].default == "off" and "gpu_window_path" in params
     source = open(serial_run.__file__, encoding="utf-8").read()
     assert "gpu_window=args.gpu_window, gpu_window_path=args.gpu_window_path" in source
-    boundary = source.index('if (gpu_window == "required"')
+    boundary = source.index('gpu_batch = (gpu_window == "required"')
     assert boundary < source.index("process = subprocess.Popen(", boundary)
 
 

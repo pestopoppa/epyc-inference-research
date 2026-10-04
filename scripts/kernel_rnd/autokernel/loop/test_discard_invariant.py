@@ -23,7 +23,7 @@ REVIEWED = {
     "pipeline.py": "642b5ade0bd6dc972fa22ca93a5249889b1f1ba564af248a31e69604bdcadfcf",
     "pool.py": "768e004884627cb611e5ebdc4a64c72c69fefaa631d89efe426b80766fe45985",  # custody review CUSTODY-REVIEW.md 2026-11-07
     "resume.py": "f166268ed0546172869976df0eefcceabb1f1d05f74afc7f891d336e27c43d7b",  # custody review CUSTODY-REVIEW.md 2026-11-07 (fix)
-    "run.py": "f60a74a92949d42070c06fdcfbccfdda35fe8a83b007f3c646e88991cdf93601",  # custody review CUSTODY-REVIEW.md 2026-11-07
+    "run.py": "10722656d8976aa98e8fef368ba7155429c9528984abe77e352b3e38c0dc427f",  # custody review 2026-11-07 G1 F6 (d6b1a5ac1 rebase): window abort -> TailRefused, no result recorded; failure injection test_gpu_window_round2::test_measurement_in_flight_is_aborted_at_expected_end_and_never_returned
     "scratch.py": "22cc3536d195f17b39617982df3116c83b5c9f9c213233d59c8775d06badceb8",
 }
 

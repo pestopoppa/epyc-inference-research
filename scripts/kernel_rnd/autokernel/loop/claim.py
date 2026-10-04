@@ -20,7 +20,7 @@ from pathlib import Path
 import sys
 import threading
 import time
-from typing import Iterator
+from typing import Iterator, Mapping
 
 DEVICE_LOCK = Path("/mnt/raid0/llm/tmp/gpu_device.mi210_0.lock")
 DEVICE_ID = "mi210_0"
@@ -161,12 +161,17 @@ class HeldCpuClaim(dict):
     """
 
     def __init__(self, receipt, lock_paths, *, region_fraction=0.0, affinity=(),
-                 gpu_quiet_path=None, ownership_generation=1):
+                 gpu_quiet_path=None, ownership_generation=1, lock_owner_pid=None):
         if type(ownership_generation) is not int or ownership_generation < 1:
             raise ClaimRefused("original ownership generation must be positive")
         super().__init__(receipt)
         self._receipt = dict(receipt)
         self._owner_pid = os.getpid()
+        #: The pid the kernel lists for the flock in /proc/locks. Normally this
+        #: process; a run.py child re-entering its serial_run parent's window-scoped
+        #: device hold (`WindowDeviceHold`, inherited fd) shares the parent's open file
+        #: description, and the kernel keeps naming the parent as the lock's taker.
+        self._lock_owner_pid = os.getpid() if lock_owner_pid is None else int(lock_owner_pid)
         self._lock_paths = tuple(Path(path) for path in lock_paths)
         self._active = True
         self._started_at = time.monotonic()
@@ -227,7 +232,8 @@ class HeldCpuClaim(dict):
                 unchanged = (after.st_dev, after.st_ino) == (identity.st_dev, identity.st_ino)
                 result["locks"].append({"path": str(path), "device": identity.st_dev,
                     "inode": identity.st_ino, "path_unchanged": unchanged, "owners": owners,
-                    "same_holder": unchanged and [row["pid"] for row in owners] == [self._owner_pid]})
+                    "same_holder": unchanged and [row["pid"] for row in owners] == [
+                        self._lock_owner_pid]})
             result["status"] = ("held" if result["locks"] and all(
                 row["same_holder"] for row in result["locks"]) else "lost")
         except (OSError, ValueError, ClaimRefused) as exc:
@@ -321,9 +327,74 @@ def publish_intervals(store, selection, contexts, *, target, phases=None, cpu_se
     return store.write("direct-held-intervals", body)
 
 
+#: G1 F4: a serial_run parent holding the device flock for a whole granted window
+#: passes the open lock fd to its GPU run.py children (`pass_fds`) and names it here.
+#: The value is ``<fd>:<st_dev>:<st_ino>:<parent pid>``; a child re-enters the
+#: parent's hold on that SAME open file description instead of opening its own (which
+#: would conflict with the parent: flock excludes distinct open file descriptions).
+INHERITED_DEVICE_LOCK_ENV = "AUTOKERNEL_GPU_DEVICE_LOCK_INHERITED"
+
+
+def _inherited_device_fd(lock_path: Path) -> tuple[int, int] | None:
+    """(fd, parent pid) when this process inherited its parent's window-scoped hold on
+    `lock_path`, else None. Every mismatch (no env, closed fd, another inode) is None,
+    so the caller falls back to its own non-blocking acquisition -- which refuses while
+    the parent holds the lock: fail closed, never a second holder."""
+    raw = os.environ.get(INHERITED_DEVICE_LOCK_ENV, "")
+    try:
+        fd_s, dev_s, ino_s, pid_s = raw.split(":")
+        fd, dev, ino, pid = int(fd_s), int(dev_s), int(ino_s), int(pid_s)
+        held = os.fstat(fd)
+        on_disk = os.stat(lock_path)
+    except (ValueError, OSError):
+        return None
+    if (held.st_dev, held.st_ino) != (dev, ino) or (on_disk.st_dev, on_disk.st_ino) != (dev, ino):
+        return None
+    return fd, pid
+
+
+@contextmanager
+def _hold_inherited(fd: int, parent_pid: int, lock_path: Path, device_id: str,
+                    verify, gpu_quiet_path=None) -> Iterator[dict]:
+    """Re-enter the parent's window-scoped hold on an inherited fd.
+
+    `flock(LOCK_EX|LOCK_NB)` on the inherited descriptor is atomic: on the parent's
+    open file description it succeeds because that description already holds the lock;
+    on anything else it either takes the lock or refuses. It is NEVER unlocked here:
+    `LOCK_UN` on a shared description would drop the parent's hold for the whole
+    window, which is exactly the between-batches gap F4 closes."""
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as exc:
+        raise ClaimRefused(f"{device_id}: the inherited window hold is not held "
+                           f"({lock_path}); refusing") from exc
+    if verify is not None:
+        verify()
+    receipt = None
+    try:
+        receipt = HeldCpuClaim({"device_id": device_id, "lock_path": str(lock_path),
+                               "pid": os.getpid(), "window_hold_pid": parent_pid},
+                               [lock_path], lock_owner_pid=parent_pid,
+                               gpu_quiet_path=gpu_quiet_path)
+        yield receipt
+    finally:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            raise ClaimRefused(
+                f"{device_id} claim did not survive the measurement window; "
+                f"results taken under it cannot be trusted")
+        if receipt is not None:
+            try:
+                receipt._closing()
+            except Exception as error:
+                receipt._close_observation_failed(error)
+            receipt._released_now()
+
+
 @contextmanager
 def hold(lock_path: Path | None = None, *, device_id: str = DEVICE_ID,
-         gpu_quiet_path: Path | None = None) -> Iterator[dict]:
+         gpu_quiet_path: Path | None = None, verify=None) -> Iterator[dict]:
     """Hold an exclusive claim for the whole window, or refuse.
 
     Non-blocking on purpose: a loop that waits on a lock behind an unknown holder is
@@ -333,9 +404,23 @@ def hold(lock_path: Path | None = None, *, device_id: str = DEVICE_ID,
     `gpu_quiet_path` (GPU-only runs, `--gpu-cpu-region-claim off`): also observe the
     launcher's gpu-quiet EXCLUSIVE hold at open and close; it is retained as the
     host-side resource receipt of a run that holds no CPU region.
+
+    `verify()` runs once the flock is HELD and before anything uses the device; if it
+    raises, the lock is released and the error propagates. G1 passes the window check
+    here, so "lock taken, then window confirmed" is the order -- the executor cannot
+    have handed the device back between a check and the acquisition (F4 TOCTOU).
+
+    Under a serial_run parent's window-scoped hold (`INHERITED_DEVICE_LOCK_ENV`) the
+    claim re-enters the parent's hold instead of acquiring its own.
     """
     lock_path = DEVICE_LOCK if lock_path is None else lock_path
     lock_path.parent.mkdir(parents=True, exist_ok=True)
+    inherited = _inherited_device_fd(lock_path)
+    if inherited is not None:
+        with _hold_inherited(inherited[0], inherited[1], lock_path, device_id,
+                             verify, gpu_quiet_path) as receipt:
+            yield receipt
+        return
     handle = lock_path.open("a")
     try:
         fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -344,6 +429,13 @@ def hold(lock_path: Path | None = None, *, device_id: str = DEVICE_ID,
         raise ClaimRefused(
             f"{device_id} is claimed by another holder ({lock_path}); "
             f"this loop does not queue behind an unknown holder") from exc
+    if verify is not None:
+        try:
+            verify()
+        except BaseException:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+            handle.close()
+            raise
 
     receipt = None
     try:
@@ -781,6 +873,126 @@ def _cpu_numbers(cpu_list):
     return parse_cpu_list(cpu_list)
 
 
+class WindowDeviceHold:
+    """G1 F4: the serial_run parent's device flock, held across EVERY GPU batch of one
+    executor-granted MI210 window.
+
+    Why the parent: a run.py child's own `hold()` lives only as long as that batch, so
+    under serial_run the flock went free between batches and the executor's watchdog
+    (it reads "AK held the device, now it is free" as AK's release) restored
+    production after batch 1. The parent takes the flock once, keeps it until the
+    window ends, and hands the SAME open file description to each GPU child
+    (`popen_kwargs`); the child's `hold()` re-enters it and never unlocks it.
+
+    Acquisition is one atomic `flock(LOCK_EX|LOCK_NB)` on the lock file the executor
+    probes (`gpu_device.mi210_0.lock` under the shared tmp root), never a
+    check-then-create. The window is re-read only AFTER the lock is held: if the
+    executor began restoring before we got the lock, the re-read sees it and we let go.
+    Release is the flock going free; nothing here writes the window file.
+    """
+
+    def __init__(self, lock_path: Path | None = None, *, window_path: Path | None = None,
+                 device_id: str = DEVICE_ID, clock=None) -> None:
+        self.lock_path = DEVICE_LOCK if lock_path is None else Path(lock_path)
+        self.window_path = window_path
+        self.device_id = device_id
+        self._clock = clock
+        self._handle = None
+        self.grant = None
+        self._abort_watch = None
+
+    @property
+    def held(self) -> bool:
+        return self._handle is not None
+
+    def _window(self):
+        from . import gpu_window
+        return gpu_window, (gpu_window.WINDOW_FILE if self.window_path is None
+                            else self.window_path)
+
+    def _now(self):
+        from datetime import datetime, timezone
+        return datetime.now(timezone.utc) if self._clock is None else self._clock()
+
+    def acquire(self):
+        """Take the device for the window; returns the verified WindowGrant or raises
+        ClaimRefused (lock busy) / GpuWindowPreempted (window not granted)."""
+        if self._handle is not None:
+            return self.grant
+        self.lock_path.parent.mkdir(parents=True, exist_ok=True)
+        handle = self.lock_path.open("a")
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            handle.close()
+            raise ClaimRefused(f"{self.device_id} is claimed by another holder "
+                               f"({self.lock_path}); the window hold does not queue") from exc
+        try:
+            gpu_window, path = self._window()
+            grant = gpu_window.read_grant(path)
+            reason = grant.inactive_reason(self._now())
+            if reason is not None:
+                raise gpu_window.GpuWindowPreempted(
+                    f"MI210 window not granted to AutoKernel ({path}): {reason}")
+        except BaseException:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+            handle.close()
+            raise
+        self._handle, self.grant = handle, grant
+        return grant
+
+    def refusal(self) -> str | None:
+        """None while the SAME window still grants AutoKernel the device, else why not.
+        Checked at every GPU batch boundary and polled while a batch runs."""
+        if self._handle is None:
+            return "the window device hold is not held"
+        gpu_window, path = self._window()
+        grant = gpu_window.read_grant(path)
+        reason = grant.inactive_reason(self._now())
+        if reason is not None:
+            return f"MI210 window not granted to AutoKernel ({path}): {reason}"
+        if grant.window_id != self.grant.window_id:
+            return (f"window changed under the hold: {self.grant.window_id!r} -> "
+                    f"{grant.window_id!r}")
+        return None
+
+    def expired_or_revoked(self) -> str | None:
+        """Mid-batch abort test (F6): the hard end of the window or the executor taking
+        the device back. A preempt request alone is a drain, honoured at the next batch
+        boundary (`refusal`), never by killing a measurement. The clock end fires at
+        once; a revocation read from the file must persist across two polls."""
+        if self._handle is None:
+            return None
+        if self._abort_watch is None:
+            gpu_window, path = self._window()
+            self._abort_watch = gpu_window.ExpiryWatcher(
+                self.grant, lambda _reason: None, path=path, clock=self._clock)
+        return self._abort_watch.check()
+
+    def popen_kwargs(self, env: Mapping[str, str] | None = None) -> dict:
+        """`pass_fds` + env naming the inherited fd, for ONE GPU child Popen."""
+        if self._handle is None:
+            raise ClaimRefused("no window device hold to hand to a child")
+        fd = self._handle.fileno()
+        st = os.fstat(fd)
+        child_env = dict(os.environ if env is None else env)
+        child_env[INHERITED_DEVICE_LOCK_ENV] = f"{fd}:{st.st_dev}:{st.st_ino}:{os.getpid()}"
+        return {"pass_fds": (fd,), "env": child_env}
+
+    def release(self) -> bool:
+        """Drop the flock (the executor's release signal). False when not held."""
+        handle, self._handle = self._handle, None
+        self._abort_watch = None
+        if handle is None:
+            return False
+        try:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+        finally:
+            handle.close()
+        return True
+
+
 __all__ = ["ClaimRefused", "CpuClaimLease", "DEVICE_ID", "DEVICE_LOCK", "GPU_QUIET_ROLE",
+           "INHERITED_DEVICE_LOCK_ENV", "WindowDeviceHold",
            "gpu_quiet_preflight", "hold", "hold_cpu", "hold_gpu_quiet_measurement",
            "region_lock_busy", "yield_lease"]

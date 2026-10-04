@@ -1107,6 +1107,7 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
     request_end: float | None = None
     hip_maps = None
     affinity_pin = None
+    srv = None
     try:
         if cpu_profile_capture is None:
             sampler = residency.Sampler()
@@ -1125,6 +1126,8 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
                                            else coverage_sink.handle),
                                    env=launch_env)
             process_pid = srv.pid
+            # G1 round-2 F6: the expiry watcher stops exactly this launch at expected_end.
+            residency.OWN_LAUNCHES.register(srv)
             # G6: own-PID KFD VRAM (a HIP-proof leg) on GPU launches only; a CPU
             # residency record is unchanged.
             if backend == "gpu" and callable(getattr(sampler, "watch_pid", None)):
@@ -1134,7 +1137,8 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
             # passes the ceiling; the breach is raised below as VramCeilingExceeded.
             if backend == "gpu" and callable(getattr(sampler, "abort_above", None)):
                 from .surface_validation import GPU_CAPACITY_CEILING_BYTES
-                sampler.abort_above(GPU_CAPACITY_CEILING_BYTES, srv.terminate)
+                sampler.abort_above(GPU_CAPACITY_CEILING_BYTES,
+                                    lambda: residency.terminate_own_process(srv))
             observe("attach_target", srv.pid)
             # Placement is an overlapping launcher marker inside the load window;
             # load itself remains open until the health marker below.
@@ -1370,6 +1374,12 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
         failure = f"ServerDied: {serving_exception}"
         raise serving_exception from exc
     except Exception as exc:
+        if residency.OWN_LAUNCHES.reason is not None:
+            # The G1 window watcher stopped this launch: an aborted measurement, never a
+            # server failure and never a result.
+            serving_exception = residency.MeasurementAborted(residency.OWN_LAUNCHES.reason)
+            failure = f"{type(serving_exception).__name__}: {serving_exception}"
+            raise serving_exception from exc
         breach = getattr(sampler, "ceiling_breach", None)
         if isinstance(breach, dict):
             # The server died because the ceiling hook terminated it: that is the cause.
@@ -1380,6 +1390,8 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
         failure = f"{type(exc).__name__}: {exc}"
         raise
     finally:
+        if srv is not None:
+            residency.OWN_LAUNCHES.unregister(srv)
         if cpu_observer is not None:
             try:
                 cpu_observer.finish()
@@ -1445,6 +1457,7 @@ def _measure_once(recipe: Recipe, build_dir: Path, port: int,
     # Success path only. An exception already in flight carries its own reason, and
     # replacing it with a residency refusal would hide the real fault -- while the
     # record above is appended either way, so a failed launch still leaves its window.
+    residency.OWN_LAUNCHES.raise_if_aborted()
     if callable(getattr(sampler, "raise_if_ceiling_breached", None)):
         sampler.raise_if_ceiling_breached()
     _refuse_if_not_resident(recipe, record, backend=backend)
