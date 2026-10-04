@@ -325,20 +325,16 @@ GPU_Q3_MEASUREMENT_CPU_LIST = "88-95"
 GPU_Q3_MEASUREMENT_ROLE = "autokernel-gpu-measurement"
 
 
-@contextmanager
-def hold_q3_measurement(timeout_s: float = 1.0) -> Iterator[dict]:
-    """Hold region q3 through the orchestrator's region owner for ONE GPU measurement.
-
-    Raises the provider's `CpuRegionLockTimeout` when another holder has q3
-    (`region_lock_busy` recognises it); the caller waits and retries between
-    attempts, never pre-empting the holder.
-    """
+def q3_measurement_preflight() -> set:
+    """Everything `hold_q3_measurement` needs short of the lock itself: the cross-role
+    mutex enabled, the orchestrator importable, its region-lock preflight green and
+    `88-95` mapping to exactly q3. Raises ClaimRefused (or ImportError) so a GPU run
+    refuses at STARTUP, not at its first measurement after a build."""
     os.environ.setdefault("ORCHESTRATOR_CROSS_ROLE_DISJOINT_PLACEMENT", "1")
     if os.environ["ORCHESTRATOR_CROSS_ROLE_DISJOINT_PLACEMENT"].lower() not in {
             "1", "true", "yes", "on"}:
         raise ClaimRefused("GPU q3 measurement claim requires the cross-role region mutex")
     _ensure_orchestrator_importable()
-    from src.runtime.cpu_region_lock import cpu_region_lock
     from src.runtime.instance_topology import cpu_list_to_regions
     from src.runtime.region_lock_cli import _preflight
 
@@ -348,6 +344,19 @@ def hold_q3_measurement(timeout_s: float = 1.0) -> Iterator[dict]:
     regions = cpu_list_to_regions(GPU_Q3_MEASUREMENT_CPU_LIST)
     if set(regions) != {"q3"}:
         raise ClaimRefused(f"{GPU_Q3_MEASUREMENT_CPU_LIST} maps to {sorted(regions)}, not q3")
+    return set(regions)
+
+
+@contextmanager
+def hold_q3_measurement(timeout_s: float = 1.0) -> Iterator[dict]:
+    """Hold region q3 through the orchestrator's region owner for ONE GPU measurement.
+
+    Raises the provider's `CpuRegionLockTimeout` when another holder has q3
+    (`region_lock_busy` recognises it); the caller waits and retries between
+    attempts, never pre-empting the holder.
+    """
+    regions = q3_measurement_preflight()
+    from src.runtime.cpu_region_lock import cpu_region_lock
     with cpu_region_lock(GPU_Q3_MEASUREMENT_ROLE, regions, timeout_s=timeout_s,
                          request_tag="autokernel-gpu-measurement-q3") as held:
         if set(held) != {"q3"}:
@@ -578,7 +587,7 @@ def _cpu_numbers(cpu_list):
     return parse_cpu_list(cpu_list)
 
 
-__all__ = ["ClaimRefused", "CpuClaimLease", "DEVICE_ID", "DEVICE_LOCK",
+__all__ = ["ClaimRefused", "CpuClaimLease", "DEVICE_ID", "DEVICE_LOCK", "q3_measurement_preflight",
            "GPU_Q3_MEASUREMENT_CPU_LIST", "GPU_Q3_MEASUREMENT_ROLE",
            "device_holder_honours_q3", "hold", "hold_cpu", "hold_q3_measurement",
            "q3_honouring_marker", "q3_honouring_marker_path", "region_lock_busy",

@@ -2713,6 +2713,17 @@ def main(argv: list[str] | None = None) -> int:
         if not rocm_ok:
             parser.error(f"{recipe.name} requires ROCm {build_recipe.ROCM_VERSION_REQUIRED}; "
                          f"host reports {rocm_seen}")
+    if (direct_launch and not cpu_launch
+            and args.cpu_measurement_gpu_quiet != CPU_MEASUREMENT_GPU_QUIET_OFF):
+        # Quiet window, GPU half: every GPU measurement takes the q3 region claim through
+        # the orchestrator. Prove that path at startup; a run that discovers it is
+        # unimportable at its first measurement has already paid for a build.
+        try:
+            claim.q3_measurement_preflight()
+        except (claim.ClaimRefused, ImportError, OSError) as exc:
+            parser.error(f"GPU quiet window ({args.cpu_measurement_gpu_quiet}) cannot take "
+                         f"the q3 region claim on this host: {exc}; pass "
+                         "--cpu-measurement-gpu-quiet off only with the operator's leave")
     print(f"workload  {args.model.name}: n_embd={census.n_embd}, "
           f"dominant {census.dominant_quant}")
     print(f"recipe    {recipe.name} {recipe.sha256()[:12]}  "

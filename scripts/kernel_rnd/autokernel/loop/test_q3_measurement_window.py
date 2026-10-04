@@ -258,3 +258,19 @@ def test_invalid_arm_reschedule_reacquires_measurement_window(monkeypatch):
     assert events == ["enter", "exit"]
     assert caught.value.reschedule() == ({"continued": True}, "fixture")
     assert events == ["enter", "exit", "enter", "exit"]
+
+
+def test_q3_preflight_refuses_without_the_cross_role_mutex_and_run_probes_it_at_startup(monkeypatch):
+    """The GPU half of the quiet window is proven at STARTUP (claim.q3_measurement_preflight
+    behind parser.error), not discovered at the first measurement after a build."""
+    from pathlib import Path
+    import re
+    from . import claim
+    monkeypatch.setenv("ORCHESTRATOR_CROSS_ROLE_DISJOINT_PLACEMENT", "0")
+    with pytest.raises(claim.ClaimRefused, match="cross-role region mutex"):
+        claim.q3_measurement_preflight()
+    body = (Path(__file__).parent / "run.py").read_text(encoding="utf-8")
+    assert re.search(r"if \(direct_launch and not cpu_launch\n\s+and args\.cpu_measurement_gpu_quiet "
+                     r"!= CPU_MEASUREMENT_GPU_QUIET_OFF\):\n(?:.*\n){1,6}?\s+claim\.q3_measurement_preflight\(\)"
+                     r"\n\s+except \(claim\.ClaimRefused, ImportError, OSError\) as exc:\n\s+parser\.error",
+                     body)
