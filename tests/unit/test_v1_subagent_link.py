@@ -181,6 +181,55 @@ def test_entries_expire_after_the_idle_ttl():
     assert len(reg) == 1
 
 
+def test_explicit_final_signal_and_idle_ttl_keep_distinct_end_sources(caplog):
+    now = [0.0]
+    reg = SubagentTreeRegistry(ttl_s=10.0, clock=lambda: now[0])
+    reg.observe("ses_signal", None)
+    reg.observe("ses_ttl", None)
+    with caplog.at_level("INFO", logger=link_mod.__name__):
+        assert reg.end("ses_signal", event="deleted") is True
+        assert reg.end("ses_signal", event="deleted") is False
+        now[0] = 11.0
+        reg.observe("ses_fresh", None)
+    records = [r.message for r in caplog.records]
+    assert any(
+        "session_end_source=signal" in s and "session_end_event=deleted" in s
+        for s in records
+    )
+    assert any(
+        "session_end_source=ttl" in s and "session_end_event=idle_retention_expired" in s
+        for s in records
+    )
+    assert len(reg) == 1
+
+
+def test_final_resolution_without_observe_does_not_create_registry_entry():
+    reg = SubagentTreeRegistry()
+    link = link_mod.resolve_subagent_link(
+        body_session_id=CHILD,
+        body_parent_session_id=None,
+        body_agent_name=None,
+        headers={},
+        registry=reg,
+        observe=False,
+    )
+    assert link.session_id == CHILD
+    assert len(reg) == 0
+
+
+def test_end_expires_stale_session_before_classifying_signal(caplog):
+    now = [0.0]
+    reg = SubagentTreeRegistry(ttl_s=10.0, clock=lambda: now[0])
+    reg.observe("ses_stale", None)
+    now[0] = 11.0
+    with caplog.at_level("INFO", logger=link_mod.__name__):
+        assert reg.end("ses_stale", event="deleted") is False
+    records = [r.message for r in caplog.records]
+    assert any("session_end_source=ttl" in s for s in records)
+    assert not any("session_end_source=signal" in s for s in records)
+    assert len(reg) == 0
+
+
 def test_registry_is_bounded():
     reg = SubagentTreeRegistry(max_entries=3)
     for i in range(10):
@@ -444,6 +493,98 @@ def test_flag_on_header_identity_satisfies_the_client_mode_guard(monkeypatch, pr
     assert keys["session_id_source"] == "header:x-session-id"
     assert keys["parent_session_id"] == PARENT
     assert progress_log.entries[0].data["session_id_source"] == "header:x-session-id"
+
+
+def test_explicit_final_request_releases_session_without_inference(monkeypatch, progress_log, caplog):
+    with caplog.at_level("INFO", logger=link_mod.__name__):
+        with _client(monkeypatch, progress_log, flag_on=True) as c:
+            primitives = _install(monkeypatch)
+            started = _post(c, _body(x_session_id=CHILD), CHILD_HEADERS)
+            assert started.status_code == 200, started.text
+            assert len(link_mod.get_registry()) == 1
+            ended = _post(
+                c,
+                _body(
+                    messages=[], x_session_id=CHILD, x_session_final=True,
+                    x_session_end_event="deleted",
+                ),
+                {"User-Agent": "opencode/1.18.31", "X-Session-Id": CHILD},
+            )
+            repeated = _post(
+                c,
+                _body(
+                    messages=[], x_session_id=CHILD, x_session_final=True,
+                    x_session_end_event="deleted",
+                ),
+                {"User-Agent": "opencode/1.18.31", "X-Session-Id": CHILD},
+            )
+    assert ended.status_code == 200, ended.text
+    assert repeated.status_code == 200, repeated.text
+    assert ended.json()["choices"][0]["message"]["content"] == ""
+    primitives.chat_completion_call.assert_called_once()
+    assert len(link_mod.get_registry()) == 0
+    signals = [
+        r.message for r in caplog.records
+        if "session_end_source=signal" in r.message
+        and "session_end_event=deleted" in r.message
+    ]
+    assert len(signals) == 1
+
+
+def test_unknown_final_request_does_not_create_or_signal_a_session(monkeypatch, progress_log, caplog):
+    with caplog.at_level("INFO", logger=link_mod.__name__):
+        with _client(monkeypatch, progress_log, flag_on=True) as c:
+            primitives = _install(monkeypatch)
+            r = _post(
+                c,
+                _body(messages=[], x_session_id="ses_unknown", x_session_final=True,
+                      x_session_end_event="deleted"),
+                {"User-Agent": "opencode/1.18.31", "X-Session-Id": "ses_unknown"},
+            )
+    assert r.status_code == 200, r.text
+    primitives.chat_completion_call.assert_not_called()
+    assert len(link_mod.get_registry()) == 0
+    assert not any("session_end_source=signal" in r.message for r in caplog.records)
+
+
+def test_stale_final_request_expires_without_manufacturing_a_signal(monkeypatch, progress_log, caplog):
+    now = [0.0]
+    with caplog.at_level("INFO", logger=link_mod.__name__):
+        with _client(monkeypatch, progress_log, flag_on=True) as c:
+            primitives = _install(monkeypatch)
+            reg = SubagentTreeRegistry(ttl_s=10.0, clock=lambda: now[0])
+            monkeypatch.setattr(link_mod, "_registry", reg)
+            reg.observe("ses_stale", None)
+            now[0] = 11.0
+            r = _post(
+                c,
+                _body(messages=[], x_session_id="ses_stale", x_session_final=True,
+                      x_session_end_event="deleted"),
+                {"User-Agent": "opencode/1.18.31", "X-Session-Id": "ses_stale"},
+            )
+    assert r.status_code == 200, r.text
+    primitives.chat_completion_call.assert_not_called()
+    assert len(reg) == 0
+    assert any("session_end_source=ttl" in r.message for r in caplog.records)
+    assert not any("session_end_source=signal" in r.message for r in caplog.records)
+
+
+def test_flag_off_final_packet_acknowledges_without_releasing_or_inference(
+    monkeypatch, progress_log
+):
+    with _client(monkeypatch, progress_log, flag_on=False) as c:
+        primitives = _install(monkeypatch)
+        reg = link_mod.get_registry()
+        reg.observe(CHILD, None)
+        r = _post(
+            c,
+            _body(messages=[], x_session_id=CHILD, x_session_final=True,
+                  x_session_end_event="deleted"),
+            {"User-Agent": "opencode/1.18.31", "X-Session-Id": CHILD},
+        )
+        assert len(reg) == 1
+    assert r.status_code == 200, r.text
+    primitives.chat_completion_call.assert_not_called()
 
 
 def test_flag_on_opencode_user_agent_still_needs_the_body_key(monkeypatch, progress_log):

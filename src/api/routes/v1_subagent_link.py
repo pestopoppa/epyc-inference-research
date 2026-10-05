@@ -145,8 +145,32 @@ class SubagentTreeRegistry:
             if now - node.last_seen <= self._ttl_s:
                 break
             del self._nodes[sid]
+            logger.info(
+                "harness_subagent_session_ended session_end_source=ttl "
+                "session_end_event=idle_retention_expired session_id=%s",
+                sid,
+            )
         while len(self._nodes) > self._max_entries:
             self._nodes.popitem(last=False)
+
+    def end(self, session_id: str, *, event: str = "final") -> bool:
+        """Release one observed session after an explicit lifecycle signal.
+
+        ``event`` describes the client's final signal (currently ``deleted`` or
+        ``final``); it is kept separate from ``session_end_source``, whose values
+        are the signal/TTL provenance used by the lifecycle contract.
+        """
+        with self._lock:
+            self._expire(self._clock())
+            existed = self._nodes.pop(session_id, None) is not None
+        if existed:
+            logger.info(
+                "harness_subagent_session_ended session_end_source=signal "
+                "session_end_event=%s session_id=%s",
+                event,
+                session_id,
+            )
+        return existed
 
     def _touch(self, sid: str, node: _Node, now: float) -> None:
         node.last_seen = now
@@ -270,6 +294,7 @@ def resolve_subagent_link(
     body_agent_name: str | None,
     headers: Mapping[str, str],
     registry: SubagentTreeRegistry | None = None,
+    observe: bool = True,
 ) -> SubagentLink:
     """Resolve and record one request's place in the subagent tree (flag on).
 
@@ -307,7 +332,7 @@ def resolve_subagent_link(
     depth: int | None = None
     basis: str | None = None
     newly_linked = False
-    if session_id is not None:
+    if session_id is not None and observe:
         reg = registry if registry is not None else get_registry()
         try:
             depth, basis, newly_linked = reg.observe(session_id, parent_id)

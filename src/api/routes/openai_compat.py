@@ -42,6 +42,7 @@ from src.api.routes.v1_escalation import (
 )
 from src.api.routes.v1_subagent_link import (
     SubagentLink,
+    get_registry,
     log_subagent_link,
     resolve_subagent_link,
 )
@@ -511,7 +512,7 @@ def _enforce_client_session_guard(
 
 
 def _resolve_subagent_link(
-    request: OpenAIChatRequest, http_request: Request
+    request: OpenAIChatRequest, http_request: Request, *, observe: bool = True
 ) -> SubagentLink | None:
     """HS-19a stage 1 (flag ``v1_subagent_link``): resolve the parent link.
 
@@ -527,6 +528,7 @@ def _resolve_subagent_link(
         body_parent_session_id=request.x_parent_session_id,
         body_agent_name=request.x_agent_name,
         headers=http_request.headers,
+        observe=observe,
     )
 
 
@@ -1124,6 +1126,26 @@ async def openai_chat_completions(
     - Configure ~/.aider.conf.yml with openai-api-base: http://localhost:8000/v1
     - Aider will use this endpoint for all LLM calls
     """
+
+    # HS-16 lifecycle control packet. It is intentionally handled before prompt
+    # parsing, role resolution, scheduling, or inference. The feature flag keeps
+    # the release behavior opt-in alongside the observed session registry.
+    if request.x_session_final:
+        # Resolve identity and precedence without touching the live tree: a final
+        # packet may refer to an unknown or already-expired session.
+        subagent_link = _resolve_subagent_link(request, http_request, observe=False)
+        if subagent_link is not None:
+            if subagent_link.session_id is None:
+                raise HTTPException(status_code=422, detail="x_session_final requires a session id")
+            get_registry().end(
+                subagent_link.session_id,
+                event=request.x_session_end_event or "final",
+            )
+        return OpenAIChatResponse(
+            model=request.model,
+            choices=[OpenAIChoice(message=OpenAIMessage(role="assistant", content=""), finish_reason="stop")],
+            usage=OpenAIUsage(),
+        )
 
     # Extract the last user message as the prompt
     user_messages = [m for m in request.messages if m.role == "user"]

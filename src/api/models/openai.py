@@ -281,6 +281,14 @@ class OpenAIChatRequest(BaseModel):
         "x-parent-session-id header, and RECORDED ONLY (inference-tap request_keys and the "
         "session log). It never changes model selection. Ignored while the flag is off.",
     )
+    # HS-16: control-only lifecycle request emitted by the OpenCode event hook.
+    # It is acknowledged before prompt parsing and never enters inference.
+    x_session_final: bool = Field(
+        default=False, description="Release observed session state without inference"
+    )
+    x_session_end_event: Literal["final", "idle", "deleted"] | None = Field(
+        default=None, description="Client lifecycle event associated with x_session_final"
+    )
     x_agent_name: Any = Field(
         default=None,
         description="Harness agent name (string), e.g. OpenCode's 'general' sub-agent "
