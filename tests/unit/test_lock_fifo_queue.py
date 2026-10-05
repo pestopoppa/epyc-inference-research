@@ -734,3 +734,52 @@ class TestNestingAudit:
         assert child.exitcode == 0
         assert elapsed < 3.0
         assert result_path.read_text() == "NESTED_REFUSED"
+
+    def test_cross_role_mutex_off_does_not_falsely_serialize_different_roles(self, tmp_path):
+        """Discriminating test for the resource-key fix (coordinator review
+        2026-10-05): per-role lock FILES are genuinely separate
+        (cpu_region.<role>.<region>.lock), so two different roles requesting
+        the same region with the cross-role GLOBAL mutex OFF do not
+        physically conflict at all and must be able to run CONCURRENTLY.
+
+        A ticket keyed on the bare region name (the pre-fix design) would
+        wrongly serialize them anyway -- manufacturing contention between
+        roles that never touch the same lock file. This test fails on that
+        design and passes on the role+global composite-key design, so it
+        guards the fix rather than just re-confirming the mutual-exclusion
+        tests above."""
+        results = tmp_path / "events.log"
+        ctx = _ctx()
+        # Deliberately NOT cross_role=True: this models the primitive used
+        # directly, without hold_cpu/region-lock's self-forced
+        # ORCHESTRATOR_CROSS_ROLE_DISJOINT_PLACEMENT=1 -- the GLOBAL mutex is
+        # off, exactly as the coordinator found in /etc/environment.
+        bench = ctx.Process(
+            target=_cpu_worker,
+            args=(str(tmp_path), str(results), "bench", "bench", ["q0"], 0.4, 10, True, 0.0, None, False),
+        )
+        ak = ctx.Process(
+            target=_cpu_worker,
+            args=(str(tmp_path), str(results), "ak", "autokernel-cpu", ["q0"], 0.4, 10, True, 0.0, None, False),
+        )
+        bench.start()
+        ak.start()
+        bench.join(timeout=10)
+        ak.join(timeout=10)
+        assert bench.exitcode == 0
+        assert ak.exitcode == 0
+
+        spans: dict[str, dict[str, float]] = {}
+        for label, event, ts in _read_events(results):
+            spans.setdefault(label, {})[event] = ts
+        b, a = spans["bench"], spans["ak"]
+        assert "acquire" in b and "release" in b
+        assert "acquire" in a and "release" in a
+        # They must OVERLAP: with the GLOBAL mutex off, different roles never
+        # contend the same lock file, so a region-based (role-blind) ticket
+        # key would be the only thing serializing them -- and it must not.
+        overlap = min(b["release"], a["release"]) - max(b["acquire"], a["acquire"])
+        assert overlap > 0, (
+            "bench and autokernel-cpu were serialized with the GLOBAL mutex "
+            f"off -- ticket key is not scoped to the real contended resource: {spans}"
+        )
