@@ -1366,7 +1366,13 @@ def test_native_enqueue_stamp_precedes_backend_admission(mock_backend, monkeypat
         return True
     prims.admission_controller.acquire.side_effect = acquire
     mock_backend.infer.return_value = InferenceResult(
-        role="coder", output="ok", tokens_generated=1, elapsed_seconds=.01, success=True)
+        role="coder",
+        output="ok",
+        tokens_generated=1,
+        generation_speed=100.0,
+        elapsed_time=0.01,
+        success=True,
+    )
     captured = []
     original = serving_calls.annotate_staged
     def observe(**fields):
