@@ -8,8 +8,8 @@ here (a parse failure after retries is a typed PARSER failure).
 Dry-run mode plays a scripted fixture (see env_state.py): turn 1 returns the
 fixture's tool calls, turn 2 the fixture's final agent responses. The stub is
 deterministic per seed: the seed only decorates the response envelope (ids),
-never the semantics, so the same seed reproduces a byte-identical trace while
-different seeds produce distinguishable-but-equivalent runs.
+never the semantics, so the same seed reproduces semantic events and verdicts.
+Original per-execution UTC/elapsed observations give each trace its own identity.
 """
 from __future__ import annotations
 
@@ -41,6 +41,7 @@ class ChatResult:
     tool_calls: List[Dict[str, Any]] = field(default_factory=list)
     finish_reason: str = "stop"
     raw: Optional[Dict[str, Any]] = None
+    transport_detail: Optional[Dict[str, Any]] = None
 
 
 class ChatEndpoint:
@@ -78,11 +79,16 @@ class ChatEndpoint:
             method="POST",
         )
         last_err: Optional[BaseException] = None
+        timeout_attempts = 0
         for attempt in range(self.retries + 1):
             try:
                 with urllib.request.urlopen(request, timeout=self.timeout) as resp:
                     raw = json.loads(resp.read().decode("utf-8"))
-                return self._parse(raw)
+                parsed = self._parse(raw)
+                parsed.transport_detail = {"terminal_native_timeout": False,
+                    "timeout_attempts": timeout_attempts, "attempts": attempt + 1,
+                    "cap_scope": "endpoint_request", "request_timeout_s": self.timeout}
+                return parsed
             except OverflowFailure:
                 raise
             except ParseFailure:
@@ -92,20 +98,37 @@ class ChatEndpoint:
                     last_err = exc
                     time.sleep(0.5 * (2 ** attempt))
                     continue
-                raise EndpointFailure(f"endpoint HTTP {exc.code}: {exc.reason}") from exc
+                raise EndpointFailure(f"endpoint HTTP {exc.code}: {exc.reason}", detail={
+                    "terminal_native_timeout": False, "timeout_attempts": timeout_attempts,
+                    "attempts": attempt + 1, "cap_scope": "endpoint_request",
+                    "request_timeout_s": self.timeout}) from exc
             except urllib.error.URLError as exc:
+                native_timeout = isinstance(exc.reason, TimeoutError)
+                timeout_attempts += int(native_timeout)
                 if attempt < self.retries:
                     last_err = exc
                     time.sleep(0.5 * (2 ** attempt))
                     continue
-                raise EndpointFailure(f"endpoint unreachable: {exc.reason}") from exc
+                raise EndpointFailure(f"endpoint unreachable: {exc.reason}", detail={
+                    "terminal_native_timeout": native_timeout,
+                    "timeout_attempts": timeout_attempts, "attempts": attempt + 1,
+                    "cap_scope": "endpoint_request", "request_timeout_s": self.timeout,
+                }) from exc
             except TimeoutError as exc:
+                timeout_attempts += 1
                 if attempt < self.retries:
                     last_err = exc
                     time.sleep(0.5 * (2 ** attempt))
                     continue
-                raise EndpointFailure(f"endpoint timeout after {self.retries + 1} attempts") from exc
-        raise EndpointFailure(f"endpoint failed after retries: {last_err}")
+                raise EndpointFailure(f"endpoint timeout after {self.retries + 1} attempts", detail={
+                    "terminal_native_timeout": True,
+                    "timeout_attempts": timeout_attempts, "attempts": attempt + 1,
+                    "cap_scope": "endpoint_request", "request_timeout_s": self.timeout,
+                }) from exc
+        raise EndpointFailure(f"endpoint failed after retries: {last_err}", detail={
+            "terminal_native_timeout": False, "timeout_attempts": timeout_attempts,
+            "attempts": self.retries + 1, "cap_scope": "endpoint_request",
+            "request_timeout_s": self.timeout})
 
     def _parse(self, raw: Dict[str, Any]) -> ChatResult:
         try:

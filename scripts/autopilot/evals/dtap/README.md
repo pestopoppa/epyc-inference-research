@@ -167,3 +167,67 @@ never rewrite an upstream digest.
   `state_delta` JSON-merge patches (lists append; `{"$set": [...]}` replaces).
 - Live mode models endpoint interaction only; simulated-service integration is
   out of scope for this import.
+
+## Timeout-censoring components (TU-TM-1 / NI37)
+
+Each new execution records original UTC start/end and monotonic elapsed seconds,
+without adding a whole-case deadline. `ChatEndpoint.timeout` remains a per-request
+transport bound with the existing retries. Only native `TimeoutError` (including
+that exception in `URLError.reason`) at terminal refusal marks a censored unit.
+Recovered retry timeouts stay in transport detail and do not censor a completed
+unit. HTTP 504, error-message text and max-turn refusal do not become timeouts.
+The existing eight-type failure taxonomy and deterministic judges are unchanged.
+
+Matrix `timeout_reporting` reports total, terminal timeouts, other errors, judged
+units, and finished non-timeout units. Overall rate uses all selected executions;
+finished rate uses total minus terminal timeouts and retains other errors as
+failures. Judged-only rate is a separate descriptive component. Empty denominators
+are null. The primary metric remains task success for benign cases (higher is
+better) and attack success for attack cases (lower is better); attack success is
+never relabeled a pass rate. Existing `rate`/Wilson fields retain compatibility.
+
+`run_matrix(..., native_capture_root=...,
+capture_applicability={"scope": ..., "mode": "synthetic"})`
+opts into a prospective private native report. Its exclusive original request is
+written before any endpoint factory/run; it captures selected case/arm/seed,
+declared arm configuration/model, source/readset digests and producer-decided
+applicability. The supported modes are `synthetic` and `live_endpoint`; live mode
+requires actual `ChatEndpoint` transport configuration in every original run.
+Custom endpoints have unspecified transport semantics. Synthetic typed-fault
+fixtures claim no enforced live deadline. Native transport configuration is
+recorded separately when present.
+`argv_redacted` omits API-key values and records their omission count; it is not a
+claim to credential-bearing argv completeness. No environment or API key is dumped.
+
+The private UUID archive retains exclusive original trace/source snapshots, an
+original terminal report and a sealed receipt. It requires owned private custody,
+rejects symlink or writable-by-other ancestors, and reads only bounded regular
+inputs without following symlinks. Only root-owned `/tmp` or `/var/tmp` with exact
+sticky mode 01777 is exempt from the ancestor write-bit check; the capsule remains
+owned mode 0700. The original pre-request captures its own UUID, and the reader
+refuses an archive renamed to a different UUID. Public locators use that original
+UUID alone. The source readset contains all harness/shim
+modules, the registry, selected judges and explicit `capture_fixture_paths`.
+Source bytes and repository HEAD are checked again at the terminal boundary.
+Loaded harness module `__file__`/loader origins must match this checkout and the
+original source readset; newly imported shims are checked at the terminal boundary.
+Each judged execution records the actual loaded judge origin. Native mode parses
+the registry from the same bounded no-follow bytes that its original request binds.
+The writer independently derives components from the retained original traces
+and compares the reported components before asserting report integrity.
+Original false judge outcomes,
+native timeouts and other errors remain explicit. Missing closure, incomplete
+selection, failed aggregation/output, inconsistent components or observed source
+drift yields diagnostic/null, never successful report
+integrity. All-timeout or all-error reports may still have valid integrity while
+their rates retain the stated null/zero denominator semantics. This verifier
+finding grants no performance, field robustness, inference or promotion authority.
+Old plain matrices and traces are never reconstructed into native findings.
+Terminal capture runs on every post-request matrix exit; capture failure never
+replaces an original execution exception. A failed original capture stays partial.
+
+Repeated-seed semantics remain deterministic; original per-execution timing makes
+trace identities distinct. New trace paths include an execution UUID so repeated
+case/arm/seed executions preserve their earlier trace bytes. Each original chain
+and replay is verified independently. Raw trace bodies remain private; public
+projection must emit only safe counts/digests/applicability and an opaque locator.

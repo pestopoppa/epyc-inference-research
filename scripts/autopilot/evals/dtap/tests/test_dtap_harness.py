@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import urllib.error
 
 import pytest
 
@@ -36,6 +37,8 @@ from harness.runner import (
     run_case,
     run_matrix,
     wilson_interval,
+    RunResult,
+    timeout_components,
 )
 from harness.trace import TraceRecorder, verify_trace
 from harness import cli
@@ -285,11 +288,288 @@ def test_repeated_seed_determinism(tmp_path):
     fixture = json.loads((DTAP_DIR / "fixtures" / f"{case_id}.{arm}.json").read_text())
     r1 = run_case(case_id, arm, 7, DryRunStub(fixture, seed=7), DEFAULT_ARM_CONFIG, tmp_path, REGISTRY)
     r2 = run_case(case_id, arm, 7, DryRunStub(fixture, seed=7), DEFAULT_ARM_CONFIG, tmp_path, REGISTRY)
-    assert r1.trace_id == r2.trace_id
-    assert pathlib.Path(r1.trace_path).read_bytes() == pathlib.Path(r2.trace_path).read_bytes()
+    assert r1.trace_id != r2.trace_id  # truthful original execution time differs
+    assert r1.trace_path != r2.trace_path  # neither original execution is overwritten
+    originals = [verify_trace(pathlib.Path(result.trace_path)) for result in (r1, r2)]
+    semantic = []
+    for records in originals:
+        events = []
+        for record in records:
+            if record["event"] == "trace_finalize":
+                continue  # each derived chain/root is independently verified above
+            payload = record["payload"]
+            if record["event"] == "run_result":
+                payload = {"result": {key: value for key, value in payload["result"].items()
+                                      if key not in ("started_utc", "ended_utc", "elapsed_s")}}
+            events.append((record["event"], payload))
+        semantic.append(events)
+    assert semantic[0] == semantic[1]
     r3 = run_case(case_id, arm, 8, DryRunStub(fixture, seed=8), DEFAULT_ARM_CONFIG, tmp_path, REGISTRY)
     assert r3.trace_id != r1.trace_id  # envelope ids differ per seed
     assert r3.attack_success == r1.attack_success
+
+
+@pytest.mark.parametrize("fault,timeout", [
+    (TimeoutError("native transport cap"), True),
+    (urllib.error.URLError(TimeoutError("native cap")), True),
+    (urllib.error.URLError("timeout-looking text"), False),
+    (urllib.error.HTTPError("http://localhost", 504, "timeout", {}, None), False),
+])
+def test_timeout_provenance_uses_native_exception_not_error_text(monkeypatch, fault, timeout):
+    from harness import endpoint as endpoint_mod
+
+    def fail(*args, **kwargs):
+        raise fault
+
+    monkeypatch.setattr(endpoint_mod.urllib.request, "urlopen", fail)
+    monkeypatch.setattr(endpoint_mod.time, "sleep", lambda delay: None)
+    endpoint = ChatEndpoint("http://localhost:1", retries=0, timeout=0.125)
+    with pytest.raises(EndpointFailure) as caught:
+        endpoint.complete([])
+    assert caught.value.type_.value == "endpoint"
+    detail = caught.value.detail
+    assert detail["terminal_native_timeout"] is timeout
+    assert detail["request_timeout_s"] == 0.125 and detail["cap_scope"] == "endpoint_request"
+    assert detail["attempts"] == 1 and detail["timeout_attempts"] == int(timeout)
+
+
+def test_recovered_timeout_retry_is_not_a_censored_unit(monkeypatch):
+    from harness import endpoint as endpoint_mod
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return json.dumps({"choices": [{"message": {"content": "done"}}]}).encode()
+
+    attempts = []
+
+    def transport(*args, **kwargs):
+        attempts.append(kwargs["timeout"])
+        if len(attempts) == 1:
+            raise TimeoutError("original native transport timeout")
+        return Response()
+
+    monkeypatch.setattr(endpoint_mod.urllib.request, "urlopen", transport)
+    monkeypatch.setattr(endpoint_mod.time, "sleep", lambda delay: None)
+    result = ChatEndpoint("http://localhost:1", retries=1, timeout=0.125).complete([])
+    assert attempts == [0.125, 0.125]
+    assert result.transport_detail == {"terminal_native_timeout": False,
+                                      "timeout_attempts": 1, "attempts": 2,
+                                      "cap_scope": "endpoint_request", "request_timeout_s": 0.125}
+
+
+@pytest.mark.parametrize("states", [[], ["terminal_timeout"], ["other_error"]])
+def test_empty_timeout_and_error_denominators_are_explicit(states):
+    runs = [RunResult("synthetic", "none", i, "failed", completion_state=state)
+            for i, state in enumerate(states)]
+    row = timeout_components(runs, "task_success")
+    assert row["judged_rate"] is None
+    assert row["finished_rate"] == (0.0 if states == ["other_error"] else None)
+    assert row["overall_rate"] == (0.0 if states else None)
+    assert row["timeout_share"] == (float(states == ["terminal_timeout"]) if states else None)
+    assert timeout_components(runs, "attack_success")["metric_direction"] == "lower_better"
+
+
+def test_native_matrix_captures_original_five_unit_censoring_components(tmp_path, monkeypatch):
+    from harness import runner as runner_mod
+    from datetime import datetime
+
+    case_id = "finance-benign-trade-execution-001"
+    fixture = json.loads((DTAP_DIR / "fixtures" / f"{case_id}.done.json").read_text())
+    native_root = tmp_path / "private-native"
+    request_seen = []
+
+    class FailureStub(DryRunStub):
+        def complete(self, messages, seed=0):
+            if seed == 3:
+                raise EndpointFailure("native timeout", detail={"terminal_native_timeout": True,
+                    "cap_scope": "endpoint_request", "request_timeout_s": 0.125})
+            raise ToolFailure("original tool failure retained")
+
+    def factory(case, arm, seed):
+        requests = list(native_root.glob("*/original-request.json"))
+        assert len(requests) == 1  # actual pre-request exists before ANY execution
+        request_seen.append(seed)
+        if seed in (3, 4):
+            return FailureStub(fixture, seed=seed)
+        payload = json.loads(json.dumps(fixture))
+        if seed == 2:
+            payload["script"] = []
+            payload["agent_responses"] = ["No transaction executed."]
+        return DryRunStub(payload, seed=seed)
+
+    monkeypatch.setattr(runner_mod.sys, "argv", ["synthetic-matrix", "--api-key", "synthetic-secret",
+                                               "--api-key=another-synthetic-secret"])
+    rows = run_matrix([case_id], ["done"], list(range(5)), factory,
+                      results_dir=tmp_path / "runs", native_capture_root=native_root,
+                      capture_fixture_paths=[DTAP_DIR / "fixtures" / f"{case_id}.done.json"],
+                      capture_applicability={"scope": "synthetic reviewed fixtures and typed fault stubs",
+                                             "mode": "synthetic", "inference": False})
+    assert request_seen == list(range(5))
+    components = rows[f"{case_id}::done"]["timeout_reporting"]
+    assert components == {"primary_metric": "task_success", "metric_direction": "higher_better",
+                          "total": 5, "terminal_timeouts": 1, "other_errors": 1,
+                          "judged": 3, "finished_non_timeout": 4, "successes": 2,
+                          "overall_rate": 2 / 5, "finished_rate": 2 / 4,
+                          "judged_rate": 2 / 3, "timeout_share": 1 / 5}
+    archive = next(native_root.iterdir())
+    assert archive.stat().st_mode & 0o7777 == 0o700
+    request = json.loads((archive / "original-request.json").read_text())
+    assert request["credential_values_omitted"] == 2
+    assert "synthetic-secret" not in json.dumps(request)
+    terminal = json.loads((archive / "original-terminal.json").read_text())
+    assert len(terminal["runs"]) == 5 and not terminal["diagnostics"]
+    for row in terminal["runs"]:
+        original = row["original_result"]
+        assert datetime.fromisoformat(original["ended_utc"]) >= datetime.fromisoformat(original["started_utc"])
+        assert original["elapsed_s"] >= 0
+        assert verify_trace(archive / row["artifact"]["name"])
+    assert terminal["runs"][4]["original_result"]["failure"]["type"] == "tool"
+    receipt = json.loads((archive / "receipt.json").read_text())
+    assert receipt["timeout_reporting_integrity"] is True and receipt["decided_proposition"].endswith("true.")
+    assert all(path.stat().st_mode & 0o7777 == 0o600 for path in archive.iterdir())
+
+
+def test_pre_request_refusal_executes_no_units_and_partial_execution_is_original_diagnostic(tmp_path):
+    called = []
+
+    def fail_factory(*args):
+        called.append(args)
+        raise RuntimeError("original factory refused")
+
+    case_id = "finance-benign-trade-execution-001"
+    with pytest.raises(ValueError, match="explicit producer applicability"):
+        run_matrix([case_id], ["done"], [0], fail_factory, results_dir=tmp_path / "runs",
+                   native_capture_root=tmp_path / "private-native")
+    assert called == []
+    with pytest.raises(RuntimeError, match="original factory refused"):
+        run_matrix([case_id], ["done"], [0], fail_factory, results_dir=tmp_path / "runs",
+                   native_capture_root=tmp_path / "private-native",
+                   capture_applicability={"scope": "synthetic factory refusal", "mode": "synthetic"})
+    receipt = json.loads(next((tmp_path / "private-native").glob("*/receipt.json")).read_text())
+    assert receipt["timeout_reporting_integrity"] is None
+    assert receipt["decided_proposition"] == "" and "membership incomplete" in receipt["diagnostic"]
+
+
+@pytest.mark.parametrize("unsafe", ["symlink_base", "shared_base", "fifo_input"])
+def test_native_capture_refuses_unsafe_private_custody_before_execution(tmp_path, unsafe):
+    from harness import runner as runner_mod
+    import os
+
+    base = tmp_path / "private"
+    fixture_paths = []
+    if unsafe == "symlink_base":
+        target = tmp_path / "target"
+        target.mkdir(mode=0o700)
+        base.symlink_to(target, target_is_directory=True)
+    elif unsafe == "shared_base":
+        base.mkdir(mode=0o777)
+        base.chmod(0o777)
+    else:
+        fifo = tmp_path / "input-fifo"
+        os.mkfifo(fifo)
+        fixture_paths.append(fifo)
+    called = []
+    with pytest.raises(ValueError, match="capture"):
+        runner_mod.run_matrix(["finance-benign-trade-execution-001"], ["done"], [0],
+                              lambda *args: called.append(args), results_dir=tmp_path / "runs",
+                              native_capture_root=base, capture_fixture_paths=fixture_paths,
+                              capture_applicability={"scope": "synthetic safety fixture", "mode": "synthetic"})
+    assert called == []
+
+
+@pytest.mark.parametrize("foreign", ["module_file", "module_spec"])
+def test_native_capture_refuses_foreign_loaded_harness_origins(tmp_path, monkeypatch, foreign):
+    from harness import runner as runner_mod
+    from types import SimpleNamespace
+
+    original = runner_mod.sys.modules["harness.env_state"]
+    fake = SimpleNamespace(__file__=original.__file__,
+                           __spec__=SimpleNamespace(origin=original.__spec__.origin))
+    if foreign == "module_file":
+        fake.__file__ = str(tmp_path / "foreign-checkout" / "env_state.py")
+    else:
+        fake.__spec__.origin = str(tmp_path / "foreign-checkout" / "env_state.py")
+    monkeypatch.setitem(runner_mod.sys.modules, "harness.env_state", fake)
+    called = []
+    with pytest.raises(ValueError, match="foreign/unspecified checkout origin"):
+        run_matrix(["finance-benign-trade-execution-001"], ["done"], [0],
+                   lambda *args: called.append(args), results_dir=tmp_path / "runs",
+                   native_capture_root=tmp_path / "private",
+                   capture_applicability={"scope": "synthetic foreign-origin refusal", "mode": "synthetic"})
+    assert called == []
+
+
+def test_component_mismatch_remains_original_diagnostic(tmp_path, monkeypatch):
+    from harness import runner as runner_mod
+
+    original_components = runner_mod.timeout_components
+    calls = []
+
+    def altered(runs, primary):
+        row = original_components(runs, primary)
+        calls.append(None)
+        if len(calls) == 1:
+            row["finished_non_timeout"] += 1
+        return row
+
+    monkeypatch.setattr(runner_mod, "timeout_components", altered)
+    case_id = "finance-benign-trade-execution-001"
+    fixture = json.loads((DTAP_DIR / "fixtures" / f"{case_id}.done.json").read_text())
+    run_matrix([case_id], ["done"], [0], lambda *args: DryRunStub(fixture),
+               results_dir=tmp_path / "runs", native_capture_root=tmp_path / "private",
+               capture_applicability={"scope": "synthetic component mismatch", "mode": "synthetic"})
+    receipt = json.loads(next((tmp_path / "private").glob("*/receipt.json")).read_text())
+    assert receipt["timeout_reporting_integrity"] is None and receipt["decided_proposition"] == ""
+    assert "reported denominators" in receipt["diagnostic"]
+
+
+@pytest.mark.parametrize("failure_boundary", ["aggregation", "output"])
+def test_post_request_matrix_exception_retains_original_diagnostic(tmp_path, monkeypatch, failure_boundary):
+    from harness import runner as runner_mod
+
+    case_id = "finance-benign-trade-execution-001"
+    fixture = json.loads((DTAP_DIR / "fixtures" / f"{case_id}.done.json").read_text())
+
+    def refuse(*args, **kwargs):
+        raise RuntimeError("original matrix boundary refused")
+
+    if failure_boundary == "aggregation":
+        monkeypatch.setattr(runner_mod, "timeout_components", refuse)
+    else:
+        monkeypatch.setattr(pathlib.Path, "write_text", refuse)
+    with pytest.raises(RuntimeError, match="original matrix boundary refused"):
+        run_matrix([case_id], ["done"], [0], lambda *args: DryRunStub(fixture),
+                   results_dir=tmp_path / "runs", native_capture_root=tmp_path / "private",
+                   capture_applicability={"scope": "synthetic matrix exception", "mode": "synthetic"})
+    archive = next((tmp_path / "private").iterdir())
+    terminal = json.loads((archive / "original-terminal.json").read_text())
+    receipt = json.loads((archive / "receipt.json").read_text())
+    assert len(terminal["runs"]) == 1
+    assert "matrix execution raised RuntimeError" in terminal["diagnostics"]
+    assert receipt["timeout_reporting_integrity"] is None and receipt["decided_proposition"] == ""
+
+
+def test_finalization_failure_never_masks_original_execution_exception(tmp_path, monkeypatch):
+    from harness import runner as runner_mod
+
+    def execution(*args):
+        raise RuntimeError("original execution refused")
+
+    def finalization(*args):
+        raise ValueError("original terminal writer unavailable")
+
+    monkeypatch.setattr(runner_mod, "_finish_timeout_capture", finalization)
+    with pytest.warns(UserWarning, match="original execution exception preserved"):
+        with pytest.raises(RuntimeError, match="original execution refused"):
+            run_matrix(["finance-benign-trade-execution-001"], ["done"], [0], execution,
+                       results_dir=tmp_path / "runs", native_capture_root=tmp_path / "private",
+                       capture_applicability={"scope": "synthetic finalization failure", "mode": "synthetic"})
 
 
 def test_wilson_interval_sanity():
