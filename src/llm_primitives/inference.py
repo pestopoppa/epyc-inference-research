@@ -1169,6 +1169,9 @@ class InferenceMixin:
                 prefill_allowance["allowance_s"]
             )
             prefill_timeout_raised = deadline_s is None
+        # HSF-3: the native backend-admission boundary. This is not frontend
+        # arrival, and is recorded only on records produced after this hook.
+        enqueue_ts_epoch = time.time()
         if backend_url and admission:
             # Bounded wait at admission gate to smooth burst contention while
             # honoring request cancellation/deadlines.
@@ -1365,6 +1368,7 @@ class InferenceMixin:
                 )
 
             self._stage_serving_caller(role, request, backend_url, _cb_port)
+            serving_calls.annotate_staged(enqueue_ts_epoch=enqueue_ts_epoch)
             if pool_admission is not None and pool_ticket is not None:
                 # KVU-15c: the admission decision (credit, its source) rides
                 # the serving record as ``kv_admission``, so KVU-15b can compare

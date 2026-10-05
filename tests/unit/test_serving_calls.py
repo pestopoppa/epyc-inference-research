@@ -369,3 +369,15 @@ def test_llama_server_backend_entry_points_are_recorded(log_file):
     assert rec["method"] == "infer" and rec["caller"]["task_id"] == "chat-42"
     assert rec["timings"]["prompt_n"] == 340 and rec["timings"]["draft_n_accepted"] == 30
     assert rec["notes"] == {"endpoint": "/completion", "stream": False}
+
+
+def test_native_enqueue_is_optional_and_never_inherited_by_another_call(log_file):
+    sc.stage_caller(role="frontdoor", task_id="post-hook")
+    sc.annotate_staged(enqueue_ts_epoch=1234.125)
+    _Backend(_server_ok).infer(_role_config(), InferenceRequest(role="frontdoor", prompt="x"))
+    sc.stage_caller(role="frontdoor", task_id="pre-hook-shaped")
+    _Backend(_server_ok).infer(_role_config(), InferenceRequest(role="frontdoor", prompt="y"))
+    first, second = _records(log_file)
+    assert first["queue"]["enqueue_ts_epoch"] == 1234.125
+    assert "enqueue_ts_epoch" not in first["caller"]
+    assert "enqueue_ts_epoch" not in second["queue"]

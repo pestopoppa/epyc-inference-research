@@ -1351,3 +1351,30 @@ class TestStreamingRepetitionGuardSchemaExemption:
         # The guard must have fired before all 60 chunks were delivered.
         assert result.count(self._REPEATING_BLOCK) < 60
         assert result.count(self._REPEATING_BLOCK) > 0
+
+
+def test_native_enqueue_stamp_precedes_backend_admission(mock_backend, monkeypatch):
+    import time
+    from src.backends import serving_calls
+    prims = LLMPrimitives(mock_mode=True, server_urls={"coder": "http://localhost:8081"})
+    prims.mock_mode = False
+    prims.health_tracker = None
+    admitted_at = []
+    prims.admission_controller = Mock()
+    def acquire(*args, **kwargs):
+        admitted_at.append(time.time())
+        return True
+    prims.admission_controller.acquire.side_effect = acquire
+    mock_backend.infer.return_value = InferenceResult(
+        role="coder", output="ok", tokens_generated=1, elapsed_seconds=.01, success=True)
+    captured = []
+    original = serving_calls.annotate_staged
+    def observe(**fields):
+        if "enqueue_ts_epoch" in fields:
+            captured.append(fields["enqueue_ts_epoch"])
+        original(**fields)
+    monkeypatch.setattr(serving_calls, "annotate_staged", observe)
+    assert prims._call_caching_backend(mock_backend, "hello", "coder") == "ok"
+    assert len(captured) == len(admitted_at) == 1
+    assert captured[0] <= admitted_at[0]
+    serving_calls.clear_staged()

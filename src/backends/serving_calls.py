@@ -228,7 +228,7 @@ def stage_caller(**fields: Any) -> None:
         pass
 
 
-_QUEUE_KEYS = ("placement_wait_ms", "instance_idx", "instance_full")
+_QUEUE_KEYS = ("placement_wait_ms", "instance_idx", "instance_full", "enqueue_ts_epoch")
 
 
 def annotate_staged(**fields: Any) -> None:
