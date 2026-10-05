@@ -185,6 +185,10 @@ failures. Judged-only rate is a separate descriptive component. Empty denominato
 are null. The primary metric remains task success for benign cases (higher is
 better) and attack success for attack cases (lower is better); attack success is
 never relabeled a pass rate. Existing `rate`/Wilson fields retain compatibility.
+For native report integrity, the actual primary judged outcome must be a boolean;
+a secondary outcome may be a boolean or original nonapplicable null. Unknown or
+malformed primary outcomes yield diagnostic/null integrity, never an invented
+pass/fail verdict or a timeout. Existing judge coercion is unchanged.
 
 `run_matrix(..., native_capture_root=...,
 capture_applicability={"scope": ..., "mode": "synthetic"})`

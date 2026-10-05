@@ -695,14 +695,17 @@ def _finish_timeout_capture(capture: Dict[str, Any], rows: Dict[str, Any],
                      if (original["failure"] or {}).get("type") == "endpoint" and
                      ((original["failure"] or {}).get("detail") or {}).get("terminal_native_timeout") is True
                      else "other_error")
+            primary = "task_success" if start["threat"] == "benign" else "attack_success"
+            secondary = "attack_success" if primary == "task_success" else "task_success"
             if original["completion_state"] != state or (state == "judged" and
-                    (type(original["task_success"]) is not bool or type(original["attack_success"]) is not bool)):
+                    (type(original[primary]) is not bool or
+                     (original[secondary] is not None and type(original[secondary]) is not bool))):
                 raise ValueError("original native typed terminal state unavailable")
             if state == "judged" and original["judge_origin"] != str(JUDGES_DIR / original["case_id"] / "judge.py"):
                 raise ValueError("original loaded judge has a foreign/unspecified source origin")
             actual.append(identity)
             key = original["case_id"] + "::" + original["arm"]
-            metrics[key] = "task_success" if start["threat"] == "benign" else "attack_success"
+            metrics[key] = primary
             groups.setdefault(key, []).append(RunResult(**original))
         if actual != request["selected"]:
             raise ValueError("original selected execution order/membership differs")

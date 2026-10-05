@@ -505,6 +505,71 @@ def test_native_capture_refuses_foreign_loaded_harness_origins(tmp_path, monkeyp
     assert called == []
 
 
+@pytest.mark.parametrize("case_id,arm,secondary", [
+    ("finance-benign-trade-execution-001", "done", "attack_success"),
+    ("crm-malicious-direct-general-ai-restrictions-001", "compromised", "task_success"),
+])
+def test_native_secondary_nonapplicability_preserves_original_none(tmp_path, monkeypatch, case_id, arm, secondary):
+    from harness import runner as runner_mod
+
+    actual_judge = runner_mod.JudgeApplication.run
+
+    def source_shaped_secondary(self, responses, trajectory):
+        result = actual_judge(self, responses, trajectory)
+        # Benign judges return bare None; the direct attack source's eval_task
+        # returns (None, metadata), which the existing wrapper coerces to False.
+        # Exercise the nullable original schema in an explicitly synthetic fixture;
+        # production wrapper and transcribed judge behavior remain unchanged.
+        result[secondary] = None
+        return result
+
+    monkeypatch.setattr(runner_mod.JudgeApplication, "run", source_shaped_secondary)
+    fixture_path = DTAP_DIR / "fixtures" / f"{case_id}.{arm}.json"
+    fixture = json.loads(fixture_path.read_text())
+    rows = run_matrix([case_id], [arm], [0], lambda *args: DryRunStub(fixture),
+                      results_dir=tmp_path / "runs", native_capture_root=tmp_path / "private",
+                      capture_fixture_paths=[fixture_path, pathlib.Path(__file__)],
+                      capture_applicability={"mode": "synthetic", "scope": "actual-source-shaped nullable secondary control"})
+    archive = next((tmp_path / "private").iterdir())
+    terminal = json.loads((archive / "original-terminal.json").read_text())
+    receipt = json.loads((archive / "receipt.json").read_text())
+    original = terminal["runs"][0]["original_result"]
+    components = rows[f"{case_id}::{arm}"]["timeout_reporting"]
+    primary = "task_success" if secondary == "attack_success" else "attack_success"
+    assert original[secondary] is None and type(original[primary]) is bool
+    assert receipt["timeout_reporting_integrity"] is True
+    assert components["total"] == components["finished_non_timeout"] == components["judged"] == 1
+    assert components["terminal_timeouts"] == components["other_errors"] == 0
+    assert components["overall_rate"] == components["finished_rate"] == components["judged_rate"]
+
+
+@pytest.mark.parametrize("field,value", [("task_success", None), ("task_success", "unknown"), ("attack_success", "unknown")])
+def test_unknown_or_malformed_native_outcome_is_retained_but_not_verified(tmp_path, monkeypatch, field, value):
+    from harness import runner as runner_mod
+
+    actual_judge = runner_mod.JudgeApplication.run
+
+    def malformed(self, responses, trajectory):
+        result = actual_judge(self, responses, trajectory)
+        result[field] = value
+        return result
+
+    monkeypatch.setattr(runner_mod.JudgeApplication, "run", malformed)
+    case_id = "finance-benign-trade-execution-001"
+    fixture_path = DTAP_DIR / "fixtures" / f"{case_id}.done.json"
+    fixture = json.loads(fixture_path.read_text())
+    rows = run_matrix([case_id], ["done"], [0], lambda *args: DryRunStub(fixture),
+                      results_dir=tmp_path / "runs", native_capture_root=tmp_path / "private",
+                      capture_fixture_paths=[fixture_path, pathlib.Path(__file__)],
+                      capture_applicability={"mode": "synthetic", "scope": "malformed original outcome refusal"})
+    archive = next((tmp_path / "private").iterdir())
+    original = json.loads((archive / "original-terminal.json").read_text())["runs"][0]["original_result"]
+    receipt = json.loads((archive / "receipt.json").read_text())
+    assert original[field] == value and original["completion_state"] == "judged"
+    assert receipt["timeout_reporting_integrity"] is None and receipt["decided_proposition"] == ""
+    assert rows[f"{case_id}::done"]["timeout_reporting"]["terminal_timeouts"] == 0
+
+
 def test_component_mismatch_remains_original_diagnostic(tmp_path, monkeypatch):
     from harness import runner as runner_mod
 
