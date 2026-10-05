@@ -171,5 +171,6 @@ def test_large_scan_requires_explicit_acknowledgement(tmp_path: Path) -> None:
                 output=tmp_path / "cache.bin",
                 input_file=tmp_path / "source.txt",
                 max_bytes=builder.LARGE_SCAN_BYTES + 1,
+                llama_bin_dir=tmp_path / "unused-bin",
             )
         )
