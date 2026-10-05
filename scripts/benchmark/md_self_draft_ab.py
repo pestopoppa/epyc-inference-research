@@ -31,7 +31,6 @@ from scripts.benchmark.mtp_acceptance_report import parse_log
 from src.registry.kernel_paths import server_binary
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_BINARY = server_binary("cpu")
 DEFAULT_MODEL = Path("/mnt/raid0/llm/models/Qwen3.6-35B-A3B-MTP-Q8_0.gguf")
 DEFAULT_PROMPT = (
     "Solve this precisely and show the final numeric answer only after ####.\n"
@@ -520,7 +519,7 @@ def autopilot_quiet(project_root: Path) -> tuple[bool, dict[str, Any]]:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--binary", type=Path, default=DEFAULT_BINARY)
+    parser.add_argument("--binary", type=Path, default=None)
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=18070)
@@ -555,7 +554,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.set_defaults(jinja=True)
     parser.add_argument("--skip-autopilot-idle-check", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.binary is None:
+        args.binary = server_binary("cpu")
+    return args
 
 
 def main(argv: list[str] | None = None) -> int:

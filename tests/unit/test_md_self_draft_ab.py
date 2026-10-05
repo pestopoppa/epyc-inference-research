@@ -3,12 +3,51 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from argparse import Namespace
 from pathlib import Path
 
 import pytest
 
 from scripts.benchmark import md_self_draft_ab as ab
+
+
+@pytest.mark.parametrize("mode", ["explicit", "help", "missing-default"])
+def test_fresh_cli_import_honors_binary_override_without_kernel_store(tmp_path, mode):
+    missing_store = tmp_path / "absent-kernel-store"
+    code = """
+import sys
+from pathlib import Path
+from src.registry import kernel_paths
+kernel_paths.PRODUCTION_ROOT = Path(sys.argv[1])
+assert not kernel_paths.PRODUCTION_ROOT.exists()
+from scripts.benchmark import md_self_draft_ab as ab
+mode = sys.argv[2]
+if mode == 'explicit':
+    assert ab.parse_args(['--binary', '/tmp/explicit-unused-server']).binary == Path('/tmp/explicit-unused-server')
+elif mode == 'help':
+    try:
+        ab.parse_args(['--help'])
+    except SystemExit as exc:
+        assert exc.code == 0
+    else:
+        raise AssertionError('help must exit')
+else:
+    try:
+        ab.parse_args([])
+    except kernel_paths.KernelPathError as exc:
+        assert "kernel backend 'cpu'" in str(exc)
+    else:
+        raise AssertionError('missing default store must fail closed')
+assert not kernel_paths.PRODUCTION_ROOT.exists()
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code, str(missing_store), mode],
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def _args(tmp_path: Path) -> Namespace:
