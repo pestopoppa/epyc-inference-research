@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
-import subprocess
+import re
 import sys
 from typing import Any
 
@@ -173,33 +173,46 @@ def build_baseline_seed_event(
     return BaselineSeedResult(status="ready", event=event, before=before, after=after)
 
 
-def _autopilot_running_pids() -> list[int]:
-    try:
-        out = subprocess.check_output(
-            ["pgrep", "-af", "autopilot.py start"],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        )
-    except subprocess.CalledProcessError:
-        return []
-    except FileNotFoundError:
-        return []
+def _autopilot_running_pids(proc_root: Path = Path("/proc")) -> list[int]:
+    """Find live AutoPilot commands from exact argv positions, without name-pattern tools."""
     pids: list[int] = []
     me = os.getpid()
-    for line in out.strip().splitlines():
-        parts = line.split(None, 1)
-        if not parts:
+    process_dirs = list(proc_root.iterdir())
+    for process_dir in process_dirs:
+        if not process_dir.name.isdecimal():
             continue
         try:
-            pid = int(parts[0])
+            pid = int(process_dir.name)
         except ValueError:
             continue
         if pid == me:
             continue
-        if "baseline_authority_seed.py" in line:
+        cmdline_path = process_dir / "cmdline"
+        try:
+            raw_cmdline = cmdline_path.read_bytes()
+        except (FileNotFoundError, ProcessLookupError):
             continue
-        pids.append(pid)
-    return pids
+        except OSError as exc:
+            raise OSError(f"cannot inspect process command line {cmdline_path}") from exc
+        argv = [os.fsdecode(token) for token in raw_cmdline.split(b"\0") if token]
+        if not argv:
+            continue
+        executable = Path(argv[0]).name
+        if executable == "autopilot.py":
+            script_index = 0
+        elif re.fullmatch(r"python(?:3(?:\.\d+)*)?", executable):
+            script_index = 1
+            while script_index < len(argv) and argv[script_index] in {"-u", "-B"}:
+                script_index += 1
+        else:
+            continue
+        if (
+            script_index + 1 < len(argv)
+            and Path(argv[script_index]).name == "autopilot.py"
+            and argv[script_index + 1] == "start"
+        ):
+            pids.append(pid)
+    return sorted(pids)
 
 
 def append_baseline_seed_event(
@@ -209,7 +222,16 @@ def append_baseline_seed_event(
     """Append a prepared baseline seed event to the JSONL journal."""
     if result.status != "ready" or result.event is None:
         return result
-    live_pids = _autopilot_running_pids()
+    try:
+        live_pids = _autopilot_running_pids()
+    except OSError as exc:
+        return BaselineSeedResult(
+            status="process_observation_unknown",
+            event=result.event,
+            before=result.before,
+            after=result.after,
+            warning=f"cannot inspect the process table; refusing baseline seed append: {exc}",
+        )
     if live_pids:
         return BaselineSeedResult(
             status="live_autopilot_running",
@@ -351,6 +373,7 @@ def main(argv: list[str] | None = None) -> int:
         "journal_max_trial_id_mismatch",
         "trial_counter_mismatch",
         "live_autopilot_running",
+        "process_observation_unknown",
     }:
         return 2
     return 1
