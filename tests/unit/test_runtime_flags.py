@@ -2,13 +2,17 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import textwrap
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
 
 from scripts.autopilot.species.structural_lab import StructuralLab
-from scripts.server import orchestrator_stack
 from src import features as feature_module
 from src.api.routes.config import attest_config, update_config
 from src.features import (
@@ -235,41 +239,110 @@ def test_runtime_flag_writer_allows_long_ttls_and_rejects_datetime_overflow(tmp_
         )
 
 
-def test_stack_production_feature_env_is_complete_and_wave_gated() -> None:
-    env = orchestrator_stack._production_feature_env()
+def _assert_launcher_with_synthetic_host(assertions: str) -> None:
+    """One fresh process per case; synthetic 1 TiB host facts never escape it."""
+    env = dict(os.environ)
+    env.update(
+        ORCHESTRATOR_MOCK_MODE="true",
+        ORCHESTRATOR_PATHS_LLAMA_CPP_BIN="/fixture/unused-cpu-bin",
+        ORCHESTRATOR_PATHS_LLAMA_MTMD="/fixture/unused-mtmd",
+        ORCHESTRATOR_PATHS_LLAMA_SERVER="/fixture/unused-llama-server",
+    )
+    setup = textwrap.dedent(r"""
+        from pathlib import Path
+        from unittest.mock import patch
 
-    assert env["ORCHESTRATOR_FEATURE_SPECIALIST_ROUTING"] == "1"
-    assert env["ORCHESTRATOR_FEATURE_MODEL_FALLBACK"] == "1"
-    assert env["ORCHESTRATOR_FEATURE_PLAN_REVIEW"] == "0"
-    assert env["ORCHESTRATOR_FEATURE_ARCHITECT_DELEGATION"] == "0"
-    assert env["ORCHESTRATOR_FEATURE_PARALLEL_EXECUTION"] == "0"
-    assert env["ORCHESTRATOR_FEATURE_UNIFIED_STREAMING"] == "0"
-    assert env["ORCHESTRATOR_FEATURE_ROUTING_CLASSIFIER"] == "0"
-    assert env["ORCHESTRATOR_FEATURE_EVAL_BATCH_SERVING"] == "0"
-    assert "ORCHESTRATOR_FEATURE_LANGGRAPH_ARCHITECT_CODING" not in env
-    assert "ORCHESTRATOR_REPL" not in env
-    assert "ORCHESTRATOR_LANGGRAPH_ARCHITECT_CODING" not in env
-    for spec in feature_module._FEATURE_REGISTRY:
-        assert f"ORCHESTRATOR_FEATURE_{spec.env_var}" in env
+        original_read_text = Path.read_text
+        def synthetic_one_tib_host(path, *args, **kwargs):
+            if path == Path("/proc/meminfo"):
+                return "MemTotal: 1073741824 kB\n"
+            return original_read_text(path, *args, **kwargs)
+
+        with patch.object(Path, "read_text", synthetic_one_tib_host):
+            from scripts.server import orchestrator_stack
+        from src import features as feature_module
+    """)
+    result = subprocess.run(
+        [sys.executable, "-c", setup + textwrap.dedent(assertions)],
+        cwd=Path(__file__).resolve().parents[2], env=env,
+        capture_output=True, text=True, timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_fresh_launcher_import_keeps_real_host_capacity_guard() -> None:
+    """The unpatched subprocess observes its own RAM and retains the guard."""
+    env = dict(os.environ)
+    env.update(
+        ORCHESTRATOR_MOCK_MODE="true",
+        ORCHESTRATOR_PATHS_LLAMA_CPP_BIN="/fixture/unused-cpu-bin",
+        ORCHESTRATOR_PATHS_LLAMA_MTMD="/fixture/unused-mtmd",
+        ORCHESTRATOR_PATHS_LLAMA_SERVER="/fixture/unused-llama-server",
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", textwrap.dedent("""
+            from pathlib import Path
+
+            actual_gib = next(
+                float(line.split()[1]) / (1024 * 1024)
+                for line in Path("/proc/meminfo").read_text().splitlines()
+                if line.startswith("MemTotal:")
+            )
+            try:
+                from scripts.server import orchestrator_stack
+            except ValueError as error:
+                assert "device host (CPU RAM) OVERSUBSCRIBED" in str(error)
+                assert f"{actual_gib:.2f} GiB MemTotal" in str(error)
+            else:
+                from scripts.server.stack_manifest import serving_shape_capacity_report
+                host = serving_shape_capacity_report()["host"]
+                assert host["capacity_gib"] == round(actual_gib, 4)
+                assert host["gated"] and host["ok"]
+        """)],
+        cwd=Path(__file__).resolve().parents[2], env=env,
+        capture_output=True, text=True, timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_stack_production_feature_env_is_complete_and_wave_gated() -> None:
+    _assert_launcher_with_synthetic_host("""
+        env = orchestrator_stack._production_feature_env()
+        assert env["ORCHESTRATOR_FEATURE_SPECIALIST_ROUTING"] == "1"
+        assert env["ORCHESTRATOR_FEATURE_MODEL_FALLBACK"] == "1"
+        assert env["ORCHESTRATOR_FEATURE_PLAN_REVIEW"] == "0"
+        assert env["ORCHESTRATOR_FEATURE_ARCHITECT_DELEGATION"] == "0"
+        assert env["ORCHESTRATOR_FEATURE_PARALLEL_EXECUTION"] == "0"
+        assert env["ORCHESTRATOR_FEATURE_UNIFIED_STREAMING"] == "0"
+        assert env["ORCHESTRATOR_FEATURE_ROUTING_CLASSIFIER"] == "0"
+        assert env["ORCHESTRATOR_FEATURE_EVAL_BATCH_SERVING"] == "0"
+        assert "ORCHESTRATOR_FEATURE_LANGGRAPH_ARCHITECT_CODING" not in env
+        assert "ORCHESTRATOR_REPL" not in env
+        assert "ORCHESTRATOR_LANGGRAPH_ARCHITECT_CODING" not in env
+        for spec in feature_module._FEATURE_REGISTRY:
+            assert f"ORCHESTRATOR_FEATURE_{spec.env_var}" in env
+    """)
 
 
 def test_stack_production_feature_env_preserves_launch_override() -> None:
-    env = {"ORCHESTRATOR_FEATURE_EVAL_BATCH_SERVING": "1"}
-
-    orchestrator_stack._apply_production_feature_env(env)
-
-    assert env["ORCHESTRATOR_FEATURE_EVAL_BATCH_SERVING"] == "1"
-    assert env["ORCHESTRATOR_FEATURE_SPECIALIST_ROUTING"] == "1"
-    assert env["ORCHESTRATOR_FEATURE_PLAN_REVIEW"] == "0"
+    _assert_launcher_with_synthetic_host("""
+        env = {"ORCHESTRATOR_FEATURE_EVAL_BATCH_SERVING": "1"}
+        orchestrator_stack._apply_production_feature_env(env)
+        assert env["ORCHESTRATOR_FEATURE_EVAL_BATCH_SERVING"] == "1"
+        assert env["ORCHESTRATOR_FEATURE_SPECIALIST_ROUTING"] == "1"
+        assert env["ORCHESTRATOR_FEATURE_PLAN_REVIEW"] == "0"
+    """)
 
 
 def test_stack_live_langgraph_env_excludes_retired_architect_coding() -> None:
-    assert "ORCHESTRATOR_LANGGRAPH_ARCHITECT" in (
-        orchestrator_stack.LANGGRAPH_PHASE3_LIVE_ENV_VARS
-    )
-    assert "ORCHESTRATOR_LANGGRAPH_ARCHITECT_CODING" not in (
-        orchestrator_stack.LANGGRAPH_PHASE3_LIVE_ENV_VARS
-    )
+    _assert_launcher_with_synthetic_host("""
+        assert "ORCHESTRATOR_LANGGRAPH_ARCHITECT" in (
+            orchestrator_stack.LANGGRAPH_PHASE3_LIVE_ENV_VARS
+        )
+        assert "ORCHESTRATOR_LANGGRAPH_ARCHITECT_CODING" not in (
+            orchestrator_stack.LANGGRAPH_PHASE3_LIVE_ENV_VARS
+        )
+    """)
 
 
 def test_retired_architect_coding_feature_env_is_ignored(monkeypatch) -> None:
