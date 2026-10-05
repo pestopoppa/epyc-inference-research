@@ -17,6 +17,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
+
+import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
 AUTOPILOT_DIR = ROOT / "scripts" / "autopilot"
@@ -44,6 +47,13 @@ KNOWN_ACTIONS = [
     "distill_skillbank", "reset_memories", "deep_eval",
     "rollback", "distill_knowledge",
 ]
+
+
+class _DeterministicEmbedder:
+    """Fixed local vector fixture; it makes no semantic-quality claim."""
+
+    def embed_text(self, _text: str) -> np.ndarray:
+        return np.full(1024, 1.0 / np.sqrt(1024), dtype=np.float32)
 
 
 # ── helpers ─────────────────────────────────────────────────────
@@ -867,11 +877,17 @@ def test_planner_strategy_hints_see_external_store_writes_without_restart(
     tmp_path: Path,
 ) -> None:
     monkeypatch.setattr(autopilot, "_PLANNER_HINTS_ENABLED", True)
+    monkeypatch.delenv("EPISODIC_ALLOW_DEGRADED_EMBEDDINGS", raising=False)
+    from orchestration.repl_memory import embedder as embedder_module
     from orchestration.repl_memory.strategy_store import StrategyStore
 
+    task_embedder = Mock(
+        side_effect=AssertionError("fixture must not construct TaskEmbedder")
+    )
+    monkeypatch.setattr(embedder_module, "TaskEmbedder", task_embedder)
     strategy_path = tmp_path / "strategies"
-    live_store = StrategyStore(path=strategy_path)
-    writer_store = StrategyStore(path=strategy_path)
+    live_store = StrategyStore(path=strategy_path, embedder=_DeterministicEmbedder())
+    writer_store = StrategyStore(path=strategy_path, embedder=_DeterministicEmbedder())
     journal = object()
     try:
         first = autopilot._build_planner_strategy_hints(
@@ -910,6 +926,7 @@ def test_planner_strategy_hints_see_external_store_writes_without_restart(
         assert "Fresh external tool-use hint" in second
         assert "tools,repl,react_mode" in second
         assert "scope=orchestrator_eval_tools_not_planner_tools" in second
+        task_embedder.assert_not_called()
     finally:
         writer_store.close()
         live_store.close()
