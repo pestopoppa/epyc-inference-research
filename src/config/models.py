@@ -1660,10 +1660,9 @@ class WorkerPoolPathsConfig:
 
     llama_server_path: Path = field(
         default_factory=lambda: Path(
-            os.environ.get(
-                "ORCHESTRATOR_PATHS_LLAMA_SERVER",
-                str(_kernel_server_binary("cpu")),
-            )
+            os.environ["ORCHESTRATOR_PATHS_LLAMA_SERVER"]
+            if "ORCHESTRATOR_PATHS_LLAMA_SERVER" in os.environ
+            else str(_kernel_server_binary("cpu"))
         )
     )
     log_dir: Path = field(

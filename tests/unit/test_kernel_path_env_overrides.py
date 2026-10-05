@@ -27,6 +27,7 @@ def _clean_kernel_override_env() -> dict[str, str]:
     env = os.environ.copy()
     env.pop("ORCHESTRATOR_PATHS_LLAMA_CPP_BIN", None)
     env.pop("ORCHESTRATOR_PATHS_LLAMA_MTMD", None)
+    env.pop("ORCHESTRATOR_PATHS_LLAMA_SERVER", None)
     return env
 
 
@@ -34,6 +35,7 @@ def test_explicit_kernel_path_overrides_bypass_store_lookup_on_import() -> None:
     env = _clean_kernel_override_env()
     env["ORCHESTRATOR_PATHS_LLAMA_CPP_BIN"] = "/fixture/kernel-bin"
     env["ORCHESTRATOR_PATHS_LLAMA_MTMD"] = "/fixture/llama-mtmd-cli"
+    env["ORCHESTRATOR_PATHS_LLAMA_SERVER"] = "/fixture/llama-server"
 
     _run_isolated(
         """
@@ -46,20 +48,26 @@ def test_explicit_kernel_path_overrides_bypass_store_lookup_on_import() -> None:
             raise AssertionError(f"unexpected production store lookup: {backend}")
 
         kernel_paths.backend_dir = fail_if_looked_up
+        kernel_paths.server_binary = fail_if_looked_up
 
-        from src.config.models import PathsConfig, VisionConfig
+        from src.config.models import PathsConfig, VisionConfig, WorkerPoolPathsConfig
         import scripts.server.stack_paths as stack_paths
 
         assert PathsConfig().llama_cpp_bin == Path(os.environ["ORCHESTRATOR_PATHS_LLAMA_CPP_BIN"])
         assert VisionConfig().llama_mtmd_cli == Path(os.environ["ORCHESTRATOR_PATHS_LLAMA_MTMD"])
+        assert WorkerPoolPathsConfig().llama_server_path == Path(
+            os.environ["ORCHESTRATOR_PATHS_LLAMA_SERVER"]
+        )
         assert stack_paths._PATHS["llama_cpp_bin"] == Path(
             os.environ["ORCHESTRATOR_PATHS_LLAMA_CPP_BIN"]
         )
 
         os.environ["ORCHESTRATOR_PATHS_LLAMA_CPP_BIN"] = ""
         os.environ["ORCHESTRATOR_PATHS_LLAMA_MTMD"] = ""
+        os.environ["ORCHESTRATOR_PATHS_LLAMA_SERVER"] = ""
         assert PathsConfig().llama_cpp_bin == Path("")
         assert VisionConfig().llama_mtmd_cli == Path("")
+        assert WorkerPoolPathsConfig().llama_server_path == Path("")
         assert stack_paths._get_paths()["llama_cpp_bin"] == Path("")
         """,
         env=env,
@@ -82,9 +90,9 @@ import src.registry.kernel_paths as kernel_paths
 kernel_paths.PRODUCTION_ROOT = Path(sys.argv[1])
 assert not kernel_paths.PRODUCTION_ROOT.exists()
 
-from src.config.models import PathsConfig, VisionConfig
+from src.config.models import PathsConfig, VisionConfig, WorkerPoolPathsConfig
 
-for construct in (PathsConfig, VisionConfig):
+for construct in (PathsConfig, VisionConfig, WorkerPoolPathsConfig):
     try:
         construct()
     except kernel_paths.KernelPathError:
