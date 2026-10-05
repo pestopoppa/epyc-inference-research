@@ -228,17 +228,19 @@ def test_cli_exit_codes(adapter_root, capsys):
     assert ingest.main([str(failed), "--root", str(ROOT), "--ledger", str(ledger)]) == 3
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    "producer/adapter contract defect: summarize_cell emits prompt_tokens/kv_k_mib/kv_v_mib as "
-    "stats dicts, the ROOT adapter requires numbers; remove this marker when either side is fixed"))
 def test_the_producers_native_summary_shape_is_ingestable(adapter_root):
     run = _sweep(adapter_root / "data", native_shape=True)
     assert _ingest(run, adapter_root / "ledger.jsonl")["status"] == "ingested"
 
 
-def test_the_native_shape_fails_closed_today(adapter_root):
-    """Until the defect is fixed, the ingester refuses (nothing half-written), never crashes."""
+def test_native_statistics_without_a_median_fail_closed(adapter_root):
+    """The accepted native stats shape still requires its finite median."""
     run, ledger = _sweep(adapter_root / "data", native_shape=True), adapter_root / "ledger.jsonl"
+    sidecar = run / "belief_measurements.jsonl"
+    rows = [json.loads(line) for line in sidecar.read_text().splitlines()]
+    rows[0]["extra"]["arm"]["prefill_tokens_measured"].pop("median")
+    rows[0]["row_sha256"] = runner.row_digest(rows[0])
+    sidecar.write_text("".join(json.dumps(row) + "\n" for row in rows))
     with pytest.raises(ingest.Refused, match="prefill depth evidence missing"):
         _ingest(run, ledger)
     assert not ledger.exists()
