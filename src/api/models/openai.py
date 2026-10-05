@@ -202,9 +202,10 @@ class OpenAIChatRequest(BaseModel):
     )
     x_disable_repl: bool = Field(
         default=False,
-        description="Skip REPL code execution -- direct response only. With x_tool_mode='client', "
-        "the client/backend remains the tool executor. Otherwise, a request that would render "
-        "tool instructions is rejected (422) because no executor would be available.",
+        description="Skip REPL code execution on the text direct-response path. With "
+        "x_tool_mode='client', the client/backend remains the tool executor; this flag is not "
+        "consulted to select client mode or the separate vision path. Otherwise, a request that "
+        "would render tool instructions is rejected (422) because no executor would be available.",
     )
     x_show_routing: bool = Field(default=False, description="Include routing metadata")
     # HS-4 P0.2 — typed session/arm keys. Each value is validated (422 on a bad
