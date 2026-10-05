@@ -2,11 +2,58 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 from scripts.corpus import build_static_ngram_cache as builder
+
+
+@pytest.mark.parametrize("mode", ["explicit-config", "explicit-cli", "missing-default"])
+def test_fresh_builder_import_honors_directory_override_without_kernel_store(tmp_path, mode):
+    code = """
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+from src.registry import kernel_paths
+kernel_paths.PRODUCTION_ROOT = Path(sys.argv[1])
+assert not kernel_paths.PRODUCTION_ROOT.exists()
+from scripts.corpus import build_static_ngram_cache as builder
+explicit = Path('/tmp/explicit-unused-tools')
+mode = sys.argv[2]
+if mode == 'explicit-config':
+    config = builder.BuildConfig(model=Path('/tmp/model'), output=Path('/tmp/output'), llama_bin_dir=explicit)
+    assert config.llama_bin_dir == explicit
+elif mode == 'explicit-cli':
+    captured = []
+    def fake_build(config):
+        captured.append(config)
+        return SimpleNamespace(to_dict=lambda: {})
+    builder.build_static_ngram_cache = fake_build
+    assert builder.main(['--model', '/tmp/model', '--output', '/tmp/output', '--llama-bin-dir', str(explicit)]) == 0
+    assert len(captured) == 1
+    assert captured[0].llama_bin_dir == explicit
+else:
+    for default_call in (
+        lambda: builder.BuildConfig(model=Path('/tmp/model'), output=Path('/tmp/output')),
+        lambda: builder.main(['--model', '/tmp/model', '--output', '/tmp/output']),
+    ):
+        try:
+            default_call()
+        except kernel_paths.KernelPathError as exc:
+            assert "kernel backend 'cpu'" in str(exc)
+        else:
+            raise AssertionError('missing default store must fail closed')
+assert not kernel_paths.PRODUCTION_ROOT.exists()
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code, str(tmp_path / "absent-kernel-store"), mode],
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def _fake_tool_dir(tmp_path: Path) -> Path:

@@ -25,7 +25,6 @@ if str(REPO_ROOT) not in sys.path:
 
 from src.registry.kernel_paths import backend_dir  # noqa: E402
 
-DEFAULT_LLAMA_BIN_DIR = backend_dir("cpu")
 DEFAULT_CORPUS_DIR = Path("/mnt/raid0/llm/cache/corpus/v3_sharded")
 DEFAULT_CHUNK_BYTES = 128 * 1024 * 1024
 DEFAULT_MAX_BYTES = 1024 * 1024 * 1024
@@ -51,7 +50,7 @@ class BuildConfig:
     max_bytes: int = DEFAULT_MAX_BYTES
     allow_large_scan: bool = False
     tmp_dir: Path | None = None
-    llama_bin_dir: Path = DEFAULT_LLAMA_BIN_DIR
+    llama_bin_dir: Path = field(default_factory=lambda: backend_dir("cpu"))
     threads: int | None = None
     dry_run: bool = False
     keep_parts: bool = False
@@ -437,7 +436,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Allow scans above the safety cap or unbounded scans.",
     )
     parser.add_argument("--tmp-dir", type=Path, help="Parent temp directory for chunks and parts.")
-    parser.add_argument("--llama-bin-dir", type=Path, default=DEFAULT_LLAMA_BIN_DIR)
+    parser.add_argument("--llama-bin-dir", type=Path, default=None)
     parser.add_argument("--threads", type=int, help="Threads passed to llama-lookup-create.")
     parser.add_argument("--dry-run", action="store_true", help="Write manifest/chunks, skip tool execution.")
     parser.add_argument("--keep-parts", action="store_true", help="Copy part caches next to output.")
@@ -462,7 +461,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         max_bytes=args.max_bytes,
         allow_large_scan=args.allow_large_scan,
         tmp_dir=args.tmp_dir,
-        llama_bin_dir=args.llama_bin_dir,
+        llama_bin_dir=args.llama_bin_dir if args.llama_bin_dir is not None else backend_dir("cpu"),
         threads=args.threads,
         dry_run=args.dry_run,
         keep_parts=args.keep_parts,
