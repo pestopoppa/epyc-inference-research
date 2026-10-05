@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import json
+import os
 from pathlib import Path
 import sys
 from typing import Any
@@ -37,22 +39,54 @@ def build_strategy_projection_report(
         # Fail before opening/writing the store if no semantic embedding path
         # is currently available.
         embedder.embed_text("strategy projection write preflight")
-    store = StrategyStore(path=strategy_path, embedder=embedder)
-    try:
-        report = store.sync_frontier_journal_entries(
-            journal,
-            dry_run=not write_missing,
-        )
-        if hasattr(store, "sync_consult_gate_journal_entries"):
-            report["consult_gate"] = store.sync_consult_gate_journal_entries(
+    degraded_write = write_missing and allow_hash_fallback
+    with _degraded_embedding_opt_in(degraded_write):
+        store = StrategyStore(path=strategy_path, embedder=embedder)
+        try:
+            report = store.sync_frontier_journal_entries(
                 journal,
                 dry_run=not write_missing,
             )
-            report["ok"] = bool(report.get("ok")) and bool(report["consult_gate"].get("ok"))
-        report["allow_hash_fallback"] = allow_hash_fallback
-        return report
+            if hasattr(store, "sync_consult_gate_journal_entries"):
+                report["consult_gate"] = store.sync_consult_gate_journal_entries(
+                    journal,
+                    dry_run=not write_missing,
+                )
+                report["ok"] = bool(report.get("ok")) and bool(report["consult_gate"].get("ok"))
+            report["allow_hash_fallback"] = allow_hash_fallback
+            report["embedding_policy"] = (
+                "hash_fallback_permitted"
+                if degraded_write
+                else ("semantic" if write_missing else "not_used")
+            )
+            if degraded_write:
+                report["embedding_policy_warning"] = (
+                    "DEGRADED HASH FALLBACK IS PERMITTED FOR THIS EXPLICIT WRITE. "
+                    "If used, pseudo-embeddings may be semantically unretrievable; "
+                    "this policy does not establish which embedding was actually produced."
+                )
+            return report
+        finally:
+            store.close()
+
+
+@contextmanager
+def _degraded_embedding_opt_in(enabled: bool):
+    """Scope the existing degraded-write contract to this explicit CLI operation."""
+    name = "EPISODIC_ALLOW_DEGRADED_EMBEDDINGS"
+    if not enabled:
+        yield
+        return
+    was_present = name in os.environ
+    previous = os.environ.get(name)
+    os.environ[name] = "1"
+    try:
+        yield
     finally:
-        store.close()
+        if was_present:
+            os.environ[name] = previous if previous is not None else ""
+        else:
+            os.environ.pop(name, None)
 
 
 def render_markdown(report: dict[str, Any]) -> str:
@@ -79,6 +113,17 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"inserted={report.get('inserted_count', 0)}"
         ),
     ]
+    if report.get("embedding_policy") == "hash_fallback_permitted":
+        lines.extend(
+            [
+                "",
+                "## DEGRADED EMBEDDING POLICY ENABLED",
+                "",
+                "HASH FALLBACK IS PERMITTED FOR THIS EXPLICIT WRITE. If used, "
+                "pseudo-embeddings may be semantically unretrievable; this report "
+                "does not establish which embedding was actually produced.",
+            ]
+        )
     consult_gate = report.get("consult_gate")
     if isinstance(consult_gate, dict):
         lines.append(
