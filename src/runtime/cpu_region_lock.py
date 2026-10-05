@@ -985,23 +985,47 @@ def cpu_region_lock(
     fifo_wait_s = 0.0
     acquire_wall_start = time.perf_counter()
 
+    # The ACTUAL serialization domain this acquire will contend, so the ticket
+    # orders exactly what the flocks exclude — never more (that would create
+    # fairness-induced contention between roles that never physically
+    # conflict), never less (that would leave the real contention path
+    # unordered). Two components:
+    #   - the per-role lock, always taken: `role:<role>:<region>` — only
+    #     orders waiters of the SAME role for the SAME region (e.g. two
+    #     AutoKernel loops both claiming role "autokernel-cpu").
+    #   - the cross-role GLOBAL mutex, taken only when
+    #     ORCHESTRATOR_CROSS_ROLE_DISJOINT_PLACEMENT is on AND this is not a
+    #     shared cohort join: `global:<region>` — orders waiters across
+    #     DIFFERENT roles (e.g. "autokernel-cpu" vs "bench"), which is the
+    #     cross-role starvation case this layer exists for.
+    # One ticket, one admission wait, written/awaited at the OUTERMOST point
+    # before either flock layer is attempted: there is no separate "per-role
+    # queue" and "global queue" to invert against each other, because both
+    # live in the same ticket (same file, same monotonic_ns arrival order).
+    fifo_resource_keys = [f"role:{role}:{region}" for region in sorted_regions]
+    if cross_role_mutex and not shared:
+        fifo_resource_keys += [f"global:{region}" for region in sorted_regions]
+
     def _region_holder_pids() -> set[int]:
         pids: set[int] = set()
         for region in sorted_regions:
             pids.update(int(p) for p in _current_lock_owner_pids(region_lock_path(role, region)))
+            if cross_role_mutex and not shared:
+                pids.update(int(p) for p in _current_lock_owner_pids(global_region_lock_path(region)))
         return pids
 
     try:
         if fifo_enabled:
             check_nesting(
-                sorted_regions,
+                fifo_resource_keys,
                 holder_pids=_region_holder_pids,
                 queue_dir_path=fifo_qdir,
                 label=f"cpu_region:{role}",
             )
             fifo_ticket_id, fifo_ticket_path = write_ticket(
                 fifo_qdir,
-                regions=sorted_regions,
+                resource_keys=fifo_resource_keys,
+                display_regions=sorted_regions,
                 mode="shared" if shared else "exclusive",
                 tag=request_tag,
                 client_version=CLIENT_VERSION,
@@ -1010,7 +1034,7 @@ def cpu_region_lock(
                 fifo_wait_s = wait_for_admission(
                     fifo_qdir,
                     fifo_ticket_id,
-                    sorted_regions,
+                    fifo_resource_keys,
                     deadline_s=deadline_s,
                     timeout_s=timeout_s,
                     cancel_check=cancel_check,

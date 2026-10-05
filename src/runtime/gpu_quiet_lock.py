@@ -242,7 +242,7 @@ def gpu_quiet_lock(
             )
             fifo_ticket_id, fifo_ticket_path = write_ticket(
                 fifo_qdir,
-                regions=[GPU_QUIET_RESOURCE],
+                resource_keys=[GPU_QUIET_RESOURCE],
                 mode=mode,
                 tag=request_tag,
                 client_version=CLIENT_VERSION,

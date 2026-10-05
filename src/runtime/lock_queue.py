@@ -165,11 +165,20 @@ def queue_dir(lock_dir: Path) -> Path:
 def write_ticket(
     qdir: Path,
     *,
-    regions: Iterable[str],
+    resource_keys: Iterable[str],
     mode: str,
     tag: Optional[str],
     client_version: int = CLIENT_VERSION,
+    display_regions: Optional[Iterable[str]] = None,
 ) -> tuple[str, Path]:
+    """Write one ticket. `resource_keys` is what admission overlap is computed
+    over — the ACTUAL serialization domain (e.g. `role:<role>:<region>` for a
+    per-role lock, `global:<region>` for the cross-role mutex, or a single
+    fixed string for a host-wide lock like gpu-quiet). `display_regions`
+    (default: `resource_keys` themselves) is the human-readable field
+    `region-lock status` prints — callers that key by composite strings pass
+    the bare region names here so the queue view stays readable.
+    """
     qdir.mkdir(parents=True, exist_ok=True)
     pid = os.getpid()
     ticket_id = f"{time.monotonic_ns():020d}-{pid:08d}-{uuid.uuid4().hex[:8]}"
@@ -178,7 +187,8 @@ def write_ticket(
         "pid": pid,
         "start_ticks": proc_start_ticks(pid),
         "boot_id": read_boot_id(),
-        "regions": sorted(regions),
+        "resources": sorted(resource_keys),
+        "regions": sorted(display_regions) if display_regions is not None else sorted(resource_keys),
         "mode": mode,
         "tag": tag or "",
         "client_version": client_version,
@@ -250,21 +260,21 @@ def read_live_tickets(qdir: Path, *, reap: bool = True) -> list[dict]:
 
 
 def older_overlapping_blocks(
-    live_tickets: list[dict], self_ticket_id: str, self_regions: Iterable[str]
+    live_tickets: list[dict], self_ticket_id: str, self_resource_keys: Iterable[str]
 ) -> list[dict]:
-    want = set(self_regions)
+    want = set(self_resource_keys)
     return [
         ticket
         for ticket in live_tickets
         if str(ticket.get("ticket_id") or "") < self_ticket_id
-        and want.intersection(str(r) for r in ticket.get("regions") or [])
+        and want.intersection(str(r) for r in ticket.get("resources") or ticket.get("regions") or [])
     ]
 
 
 def wait_for_admission(
     qdir: Path,
     ticket_id: str,
-    regions: Iterable[str],
+    resource_keys: Iterable[str],
     *,
     deadline_s: Optional[float],
     timeout_s: Optional[float],
@@ -280,13 +290,13 @@ def wait_for_admission(
     timeout — the ticket is NOT removed here; callers must remove it in
     `finally` regardless of outcome.
     """
-    regions = list(regions)
+    resource_keys = list(resource_keys)
     start = time.perf_counter()
     abs_deadline = None if not timeout_s or timeout_s <= 0 else start + timeout_s
     last_log = start
     while True:
         live = read_live_tickets(qdir)
-        blockers = older_overlapping_blocks(live, ticket_id, regions)
+        blockers = older_overlapping_blocks(live, ticket_id, resource_keys)
         if not blockers:
             return time.perf_counter() - start
         if cancel_check is not None and cancel_check():
@@ -300,9 +310,9 @@ def wait_for_admission(
             )
         if now - last_log >= log_every_s:
             logger.info(
-                "still queued for %s regions=%s elapsed=%.1fs blockers=%s",
+                "still queued for %s resources=%s elapsed=%.1fs blockers=%s",
                 label,
-                sorted(regions),
+                sorted(resource_keys),
                 now - start,
                 [b.get("ticket_id") for b in blockers],
             )
@@ -316,7 +326,7 @@ def wait_for_admission(
 
 
 def check_nesting(
-    regions: Iterable[str],
+    resource_keys: Iterable[str],
     *,
     holder_pids: Callable[[], set[int]],
     queue_dir_path: Path,
@@ -333,7 +343,7 @@ def check_nesting(
     ancestors = set(ancestor_pids(pid, max_depth=max_depth))
     if not ancestors:
         return
-    want = set(regions)
+    want = set(resource_keys)
     try:
         held_by = set(holder_pids())
     except Exception:  # best-effort probe; never let it mask a real nesting bug
@@ -342,19 +352,20 @@ def check_nesting(
     if overlap_holders:
         raise NestedLockError(
             f"{label}: refusing nested acquire — ancestor pid(s) {sorted(overlap_holders)} "
-            f"already hold this lock (regions={sorted(want)}); a descendant acquire would "
+            f"already hold this lock (resources={sorted(want)}); a descendant acquire would "
             "self-deadlock (flock is per open-file-description, not inherited)"
         )
     live = read_live_tickets(queue_dir_path)
     conflicting_pids = {
         int(t["pid"])
         for t in live
-        if int(t.get("pid", -1)) in ancestors and want.intersection(t.get("regions") or [])
+        if int(t.get("pid", -1)) in ancestors
+        and want.intersection(t.get("resources") or t.get("regions") or [])
     }
     if conflicting_pids:
         raise NestedLockError(
             f"{label}: refusing nested acquire — ancestor pid(s) {sorted(conflicting_pids)} "
-            f"are queued for an overlapping resource (regions={sorted(want)}); a descendant "
+            f"are queued for an overlapping resource (resources={sorted(want)}); a descendant "
             "acquire would self-deadlock"
         )
 

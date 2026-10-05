@@ -81,10 +81,13 @@ def _cpu_worker(
     fifo: bool,
     start_delay: float = 0.0,
     ready_path: str | None = None,
+    cross_role: bool = False,
 ) -> None:
     os.environ["ORCHESTRATOR_TMP_DIR"] = tmp_dir
     os.environ["ORCHESTRATOR_INFERENCE_LOCK_POLL_MS"] = "10"
     os.environ["EPYC_LOCK_FIFO"] = "1" if fifo else "0"
+    if cross_role:
+        os.environ["ORCHESTRATOR_CROSS_ROLE_DISJOINT_PLACEMENT"] = "1"
     import src.runtime.cpu_region_lock as crl
 
     if start_delay:
@@ -98,6 +101,41 @@ def _cpu_worker(
             _append_event(results_path, label, "release")
     except crl.CpuRegionLockTimeout:
         _append_event(results_path, label, "timeout")
+
+
+def _cpu_worker_n_phase(
+    tmp_dir: str,
+    results_path: str,
+    role: str,
+    regions: list[str],
+    labels: list[str],
+    hold_s: float,
+    gap_s: float,
+    cross_role: bool = True,
+    start_delay: float = 0.0,
+    ready_path: str | None = None,
+) -> None:
+    """Acquire/hold/release `len(labels)` times in sequence — each a brand-new
+    (younger) ticket — to model a role that keeps re-requesting (the
+    "alternating" starvation shape)."""
+    os.environ["ORCHESTRATOR_TMP_DIR"] = tmp_dir
+    os.environ["ORCHESTRATOR_INFERENCE_LOCK_POLL_MS"] = "10"
+    os.environ["EPYC_LOCK_FIFO"] = "1"
+    if cross_role:
+        os.environ["ORCHESTRATOR_CROSS_ROLE_DISJOINT_PLACEMENT"] = "1"
+    import src.runtime.cpu_region_lock as crl
+
+    if start_delay:
+        time.sleep(start_delay)
+    for i, label in enumerate(labels):
+        with crl.cpu_region_lock(role, set(regions), timeout_s=10, request_tag=label):
+            _append_event(results_path, label, "acquire")
+            if ready_path and i == 0:
+                Path(ready_path).touch()
+            time.sleep(hold_s)
+            _append_event(results_path, label, "release")
+        if i < len(labels) - 1:
+            time.sleep(gap_s)
 
 
 def _cpu_worker_two_phase(
@@ -179,7 +217,7 @@ class TestTicketMechanics:
         qdir = lq.queue_dir(tmp_path)
         ids = []
         for _ in range(5):
-            tid, _path = lq.write_ticket(qdir, regions=["q0"], mode="exclusive", tag="t")
+            tid, _path = lq.write_ticket(qdir, resource_keys=["q0"], mode="exclusive", tag="t")
             ids.append(tid)
             time.sleep(0.001)
         assert ids == sorted(ids)
@@ -238,9 +276,9 @@ class TestTicketMechanics:
 
     def test_older_overlapping_blocks(self, tmp_path):
         qdir = lq.queue_dir(tmp_path)
-        tid_a, _ = lq.write_ticket(qdir, regions=["q0", "q1"], mode="exclusive", tag="a")
+        tid_a, _ = lq.write_ticket(qdir, resource_keys=["q0", "q1"], mode="exclusive", tag="a")
         time.sleep(0.002)
-        tid_b, _ = lq.write_ticket(qdir, regions=["q1"], mode="exclusive", tag="b")
+        tid_b, _ = lq.write_ticket(qdir, resource_keys=["q1"], mode="exclusive", tag="b")
         live = lq.read_live_tickets(qdir)
         blockers_b = lq.older_overlapping_blocks(live, tid_b, ["q1"])
         assert [b["tag"] for b in blockers_b] == ["a"]
@@ -252,7 +290,7 @@ class TestTicketMechanics:
         that is merely QUEUED (not yet holding the flock) must still block a
         nested descendant acquire — refuse fast, never queue behind it."""
         qdir = lq.queue_dir(tmp_path)
-        lq.write_ticket(qdir, regions=["q0"], mode="exclusive", tag="ancestor")
+        lq.write_ticket(qdir, resource_keys=["q0"], mode="exclusive", tag="ancestor")
         monkeypatch.setattr(lq, "ancestor_pids", lambda pid, max_depth=64: [os.getpid()])
         with pytest.raises(lq.NestedLockError):
             lq.check_nesting(
@@ -496,3 +534,203 @@ class TestGpuQuietFifoOrdering:
 
         acquires = [label for label, event, _ts in _read_events(results) if event == "acquire"]
         assert acquires == ["S1", "E", "S2"], acquires
+
+
+class TestCrossRoleGlobalFifoOrdering:
+    """The main case per the coordinator's review: AutoKernel loops claim CPU
+    regions as role `autokernel-cpu` and benches as role `bench` — DIFFERENT
+    per-role lock files, so they never contend the per-role flock at all. The
+    only place they actually serialize is the cross-role GLOBAL mutex
+    (`global_region_lock_path`, gated by
+    ORCHESTRATOR_CROSS_ROLE_DISJOINT_PLACEMENT=1), which a same-role-only
+    ticket (the first version of this layer) never ordered. These tests run
+    with that flag on, which is how `region-lock run` and `claim.hold_cpu`
+    both already run it in production."""
+
+    def test_all_region_bench_request_admitted_before_newer_autokernel_request(self, tmp_path):
+        """A `bench` all-region request queued behind an `autokernel-cpu`
+        single-region holder (via the GLOBAL mutex, not the per-role lock —
+        they're different roles) gets in before a NEWER `autokernel-cpu`
+        request for that same region."""
+        results = tmp_path / "events.log"
+        ctx = _ctx()
+        ak_ready = tmp_path / "ak_ready"
+        ak_holder = ctx.Process(
+            target=_cpu_worker,
+            args=(str(tmp_path), str(results), "ak_holder", "autokernel-cpu", ["q0"], 0.6, 10, True, 0.0, str(ak_ready), True),
+        )
+        ak_holder.start()
+        deadline = time.time() + 5
+        while time.time() < deadline and not ak_ready.exists():
+            time.sleep(0.02)
+        assert ak_ready.exists()
+
+        bench_all = ctx.Process(
+            target=_cpu_worker,
+            args=(str(tmp_path), str(results), "bench_all", "bench", ["q0", "q1", "q2", "q3"], 0.1, 10, True, 0.0, None, True),
+        )
+        bench_all.start()
+        # Give bench's ticket time to register (global:q0 overlap with the
+        # holder would be moot — the holder has no ticket — but it must be
+        # registered and admitted/blocked on the physical GLOBAL q0 flock
+        # before the newer autokernel-cpu request shows up).
+        time.sleep(0.3)
+
+        ak_newer = ctx.Process(
+            target=_cpu_worker,
+            args=(str(tmp_path), str(results), "ak_newer", "autokernel-cpu", ["q0"], 0.1, 10, True, 0.0, None, True),
+        )
+        ak_newer.start()
+
+        for p in (ak_holder, bench_all, ak_newer):
+            p.join(timeout=10)
+            assert p.exitcode == 0
+
+        acquires = [label for label, event, _ts in _read_events(results) if event == "acquire"]
+        assert acquires.index("bench_all") < acquires.index("ak_newer"), acquires
+        assert acquires.index("bench_all") > acquires.index("ak_holder"), acquires
+
+    def test_two_roles_alternating_cannot_starve_a_third_waiting_role(self, tmp_path):
+        """roleA and roleB keep releasing and immediately re-requesting
+        (each re-request is a brand-new, younger ticket) while roleC's
+        ticket sits older than all of those re-requests — roleC must be
+        admitted right after the first holder releases, not starved by the
+        ongoing A/B alternation."""
+        results = tmp_path / "events.log"
+        ctx = _ctx()
+        a_ready = tmp_path / "a_ready"
+        # roleA holds first (uncontended), then alternates A2.
+        a = ctx.Process(
+            target=_cpu_worker_n_phase,
+            args=(str(tmp_path), str(results), "roleA", ["q0"], ["A1", "A2"], 1.0, 0.05, True, 0.0, str(a_ready)),
+        )
+        a.start()
+        deadline = time.time() + 5
+        while time.time() < deadline and not a_ready.exists():
+            time.sleep(0.02)
+        assert a_ready.exists()
+
+        # roleC queues immediately — its ticket predates both A2 and roleB's
+        # request, which are written later. A1's long hold (1.0s) gives C's
+        # (and B's) process-start/ticket-write overhead a wide margin to land
+        # well before A2's ticket is written at ~1.05s.
+        c = ctx.Process(
+            target=_cpu_worker,
+            args=(str(tmp_path), str(results), "C", "roleC", ["q0"], 0.1, 10, True, 0.0, None, True),
+        )
+        c.start()
+        time.sleep(0.3)
+
+        b = ctx.Process(
+            target=_cpu_worker_n_phase,
+            args=(str(tmp_path), str(results), "roleB", ["q0"], ["B1", "B2"], 0.1, 0.02, True, 0.0, None),
+        )
+        b.start()
+
+        for p in (a, c, b):
+            p.join(timeout=10)
+            assert p.exitcode == 0
+
+        acquires = [label for label, event, _ts in _read_events(results) if event == "acquire"]
+        # A1 is the uncontested first holder; C's ticket predates every
+        # subsequent A/B request, so C must be admitted immediately after A1
+        # releases — strictly before A2, B1 and B2, regardless of how many
+        # times A and B keep alternating afterward.
+        assert acquires[0] == "A1", acquires
+        c_pos = acquires.index("C")
+        for later in ("A2", "B1", "B2"):
+            assert acquires.index(later) > c_pos, acquires
+
+    def test_no_deadlock_across_per_role_and_global_queues_three_contenders(self, tmp_path):
+        """Three different roles requesting overlapping-but-not-identical
+        region sets (a circular shape: A wants q0+q1, B wants q1+q2, C wants
+        q0+q2) must all complete — the single outermost ticket plus the
+        existing sorted-region GLOBAL-then-per-role acquire order must stay
+        deadlock free with the queue layer added on top."""
+        results = tmp_path / "events.log"
+        ctx = _ctx()
+        procs = [
+            ctx.Process(
+                target=_cpu_worker,
+                args=(str(tmp_path), str(results), label, role, regions, 0.2, 10, True, delay, None, True),
+            )
+            for label, role, regions, delay in [
+                ("A", "roleX", ["q0", "q1"], 0.0),
+                ("B", "roleY", ["q1", "q2"], 0.02),
+                ("C", "roleZ", ["q0", "q2"], 0.04),
+            ]
+        ]
+        for p in procs:
+            p.start()
+        for p in procs:
+            p.join(timeout=15)
+            assert p.exitcode == 0, "a hung/killed process means a deadlock"
+
+        acquires = {label for label, event, _ts in _read_events(results) if event == "acquire"}
+        releases = {label for label, event, _ts in _read_events(results) if event == "release"}
+        assert acquires == {"A", "B", "C"}
+        assert releases == {"A", "B", "C"}
+
+
+class TestNestingAudit:
+    """2026-10-05 audit (coordinator review): does any EXISTING caller do a
+    nested acquire that would newly raise NestedLockError under
+    EPYC_LOCK_FIFO=1?
+
+    Grepped (both repos) for `--inside`, `region-lock run` invocations, and
+    the AutoKernel loop's `ak-check` / tail fence:
+
+    - `--inside`: no match anywhere in either repo.
+    - `src/runtime/region_lock_cli.py` (`region-lock run`): the only
+      in-tree caller that shells out to it is documentation/comments
+      (`scripts/kernel_rnd/autokernel/loop/cpu_window.py`,
+      `scripts/kernel_rnd/autokernel/loop/ak_check.py`) describing a PEER
+      process (a different session/loop) taking the SAME cores after the
+      AutoKernel loop has released them — never a child of a process that
+      still holds the claim.
+    - `scripts/kernel_rnd/autokernel/loop/ak_check.py` (the AK loop's
+      ak-check, run inside the loop's tail fence): `default_peer_status` /
+      `_flock_currently_held` only probe with a non-blocking
+      `LOCK_EX|LOCK_NB` + immediate `LOCK_UN` — they NEVER call
+      `cpu_region_lock`/`gpu_quiet_lock`/`write_ticket`. ak-check cannot
+      trigger `NestedLockError` because it never enters the ticket machinery
+      at all; its own docstring states the loop "yields its own CPU-region
+      claim during actor phases" (`cpu_window.py`'s `CpuClaimLease` yield/
+      reacquire) before any such child process runs.
+    - `scripts/kernel_rnd/autokernel/loop/claim.py::hold_cpu`: the one
+      in-process caller of `cpu_region_lock("autokernel-cpu", ...)`. It
+      acquires once per lease and the lease is explicitly released
+      (`CpuClaimLease`) before the loop's actor/build/test phases spawn any
+      subprocess — by design there is no window where a child of the holding
+      process would call back into the same lock while it is still held.
+
+    Conclusion: no existing caller performs a same-lock nested acquire today.
+    If that design invariant (yield-before-spawn) is ever violated, the
+    FAILURE MODE CHANGES FOR THE BETTER under EPYC_LOCK_FIFO=1: today it
+    would hang forever (the parent thread waiting on the child, the child
+    blocked on the parent's flock); under the flag it fails fast with
+    `NestedLockError` instead. That is a visible new exception type an
+    operator could see for the first time post-flip, which is exactly why
+    this is called out here rather than silently assumed safe.
+    """
+
+    def test_claim_hold_cpu_style_acquire_then_child_reacquire_refuses_fast(self, tmp_path):
+        """Models the one-in-process caller (`claim.hold_cpu`) if its
+        yield-before-spawn invariant were ever violated: a child of the
+        holding process calling back into the SAME role+region must refuse
+        fast, not hang — this is the safety net for that invariant, not
+        evidence it is currently violated (see class docstring)."""
+        result_path = tmp_path / "nested_result"
+        ctx = _ctx()
+        with cpu_region_lock("autokernel-cpu", {"q1"}, timeout_s=10):
+            child = ctx.Process(
+                target=_nested_worker,
+                args=(str(tmp_path), "autokernel-cpu", ["q1"], str(result_path)),
+            )
+            start = time.time()
+            child.start()
+            child.join(timeout=5)
+            elapsed = time.time() - start
+        assert child.exitcode == 0
+        assert elapsed < 3.0
+        assert result_path.read_text() == "NESTED_REFUSED"
