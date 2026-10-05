@@ -958,9 +958,9 @@ class PathsConfig:
 
     llama_cpp_bin: Path = field(
         default_factory=lambda: Path(
-            os.environ.get(
-                "ORCHESTRATOR_PATHS_LLAMA_CPP_BIN", str(_kernel_backend_dir("cpu"))
-            )
+            os.environ["ORCHESTRATOR_PATHS_LLAMA_CPP_BIN"]
+            if "ORCHESTRATOR_PATHS_LLAMA_CPP_BIN" in os.environ
+            else str(_kernel_backend_dir("cpu"))
         )
     )
     """llama.cpp binary directory."""
@@ -1225,10 +1225,9 @@ class VisionConfig:
     )
     llama_mtmd_cli: Path = field(
         default_factory=lambda: Path(
-            os.environ.get(
-                "ORCHESTRATOR_PATHS_LLAMA_MTMD",
-                str(_kernel_backend_dir("cpu") / "llama-mtmd-cli"),
-            )
+            os.environ["ORCHESTRATOR_PATHS_LLAMA_MTMD"]
+            if "ORCHESTRATOR_PATHS_LLAMA_MTMD" in os.environ
+            else str(_kernel_backend_dir("cpu") / "llama-mtmd-cli")
         )
     )
     # 2026-08-01 W1 CUTOVER. This is a SECOND, OFFLINE vision pipeline
