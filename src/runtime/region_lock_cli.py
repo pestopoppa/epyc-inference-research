@@ -76,6 +76,8 @@ from src.runtime.gpu_quiet_lock import (  # noqa: E402
 )
 from src.runtime.gpu_quiet_lock import holders as gpu_quiet_holders  # noqa: E402
 from src.runtime.instance_topology import ATOMIC_REGIONS, cpu_list_to_regions  # noqa: E402
+from src.runtime.lock_queue import queue_dir as _fifo_queue_dir  # noqa: E402
+from src.runtime.lock_queue import queue_status as _fifo_queue_status  # noqa: E402
 
 EX_TEMPFAIL = 75
 EX_USAGE = 64
@@ -342,11 +344,15 @@ def _status(args: argparse.Namespace) -> int:
         rows.append({"region": region, "global_held": held, "holders": holders})
 
     quiet = gpu_quiet_holders()
+    queue_rows = _fifo_queue_status(_fifo_queue_dir(_lock_dir()))
     if args.json:
         # The bare list stays the default shape: consumers validate it as exactly
         # q0..q3 (e.g. the research reanchor runner). gpu-quiet is opt-in.
         if args.gpu_quiet:
-            print(json.dumps({"regions": rows, "gpu_quiet": quiet}, indent=2, default=str))
+            print(json.dumps(
+                {"regions": rows, "gpu_quiet": quiet, "queue": queue_rows},
+                indent=2, default=str,
+            ))
         else:
             print(json.dumps(rows, indent=2, default=str))
         return 0
@@ -366,6 +372,14 @@ def _status(args: argparse.Namespace) -> int:
         for h in quiet["holders"]
     )
     print(f"gpu-quiet  {state:<5}  {who}")
+    if queue_rows:
+        print("queue (FIFO, EPYC_LOCK_FIFO=1 clients only):")
+        for row in queue_rows:
+            print(
+                f"  #{row['position']:<3} age={row['age_s']:>6.1f}s "
+                f"pid={row['pid']:<8} mode={row['mode']:<9} "
+                f"regions={','.join(row['regions']) or '-':<12} tag={row['tag']}"
+            )
     return 0
 
 

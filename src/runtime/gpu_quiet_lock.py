@@ -48,6 +48,18 @@ from src.runtime.cpu_region_lock import (
     _try_flock,
     cpu_region_lock,
 )
+from src.runtime.lock_queue import (
+    CLIENT_VERSION,
+    GPU_QUIET_RESOURCE,
+    LockQueueTimeout,
+    append_event_log,
+    check_nesting,
+    is_fifo_enabled,
+    queue_dir as _fifo_queue_dir,
+    remove_ticket as _fifo_remove_ticket,
+    wait_for_admission,
+    write_ticket,
+)
 
 GPU_QUIET_EXCLUSIVE = "exclusive"
 GPU_QUIET_SHARED = "shared"
@@ -208,7 +220,47 @@ def gpu_quiet_lock(
     path.parent.mkdir(parents=True, exist_ok=True)
     fh = open(path, "a+b")
     record_path: Path | None = None
+    fifo_enabled = is_fifo_enabled()
+    fifo_qdir = _fifo_queue_dir(_tmp_dir())
+    fifo_ticket_id: str | None = None
+    fifo_ticket_path: Path | None = None
+    fifo_wait_s = 0.0
+    acquire_wall_start = time.perf_counter()
+
+    def _gpu_quiet_holder_pids() -> set[int]:
+        owners = lock_owners(path)
+        return set(owners.keys()) if owners else set()
+
+    flock_acquired = False
     try:
+        if fifo_enabled:
+            check_nesting(
+                [GPU_QUIET_RESOURCE],
+                holder_pids=_gpu_quiet_holder_pids,
+                queue_dir_path=fifo_qdir,
+                label="gpu_quiet",
+            )
+            fifo_ticket_id, fifo_ticket_path = write_ticket(
+                fifo_qdir,
+                regions=[GPU_QUIET_RESOURCE],
+                mode=mode,
+                tag=request_tag,
+                client_version=CLIENT_VERSION,
+            )
+            try:
+                fifo_wait_s = wait_for_admission(
+                    fifo_qdir,
+                    fifo_ticket_id,
+                    [GPU_QUIET_RESOURCE],
+                    deadline_s=deadline_s,
+                    timeout_s=timeout_s,
+                    cancel_check=cancel_check,
+                    poll_s=0.05,
+                    tag=request_tag,
+                    label="gpu_quiet",
+                )
+            except LockQueueTimeout as exc:
+                raise CpuRegionLockTimeout(str(exc)) from exc
         _acquire_one_with_timeout(
             fh,
             region="gpu-quiet",
@@ -219,6 +271,24 @@ def gpu_quiet_lock(
             request_tag=request_tag,
             lock_type=fcntl.LOCK_EX if mode == GPU_QUIET_EXCLUSIVE else fcntl.LOCK_SH,
         )
+        flock_acquired = True
+        if fifo_ticket_path is not None:
+            _fifo_remove_ticket(fifo_ticket_path)
+            append_event_log(
+                _tmp_dir(),
+                {
+                    "event": "acquire",
+                    "lock": "gpu_quiet",
+                    "ts": time.time(),
+                    "pid": os.getpid(),
+                    "tag": request_tag,
+                    "regions": [GPU_QUIET_RESOURCE],
+                    "mode": mode,
+                    "wait_s": time.perf_counter() - acquire_wall_start,
+                    "client_version": CLIENT_VERSION,
+                },
+            )
+            fifo_ticket_path = None
         pid = os.getpid()
         record: dict[str, object] = {
             "schema": SCHEMA,
@@ -247,6 +317,23 @@ def gpu_quiet_lock(
                 record_path.unlink()
             except OSError:
                 pass
+        if fifo_ticket_path is not None:
+            _fifo_remove_ticket(fifo_ticket_path)
+        if fifo_enabled and flock_acquired:
+            append_event_log(
+                _tmp_dir(),
+                {
+                    "event": "release",
+                    "lock": "gpu_quiet",
+                    "ts": time.time(),
+                    "pid": os.getpid(),
+                    "tag": request_tag,
+                    "regions": [GPU_QUIET_RESOURCE],
+                    "mode": mode,
+                    "hold_s": time.perf_counter() - acquire_wall_start - fifo_wait_s,
+                    "client_version": CLIENT_VERSION,
+                },
+            )
         fh.close()  # closing the fd releases the flock
 
 

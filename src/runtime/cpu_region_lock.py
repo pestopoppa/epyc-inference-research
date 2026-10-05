@@ -59,6 +59,18 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, IO, Optional
 
+from src.runtime.lock_queue import (
+    CLIENT_VERSION,
+    LockQueueTimeout,
+    append_event_log,
+    check_nesting,
+    is_fifo_enabled,
+    queue_dir as _fifo_queue_dir,
+    remove_ticket as _fifo_remove_ticket,
+    wait_for_admission,
+    write_ticket,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -966,7 +978,48 @@ def cpu_region_lock(
     ) + [(role, region) for region in sorted_regions]
     local_acquired = False
 
+    fifo_enabled = is_fifo_enabled()
+    fifo_qdir = _fifo_queue_dir(_tmp_dir())
+    fifo_ticket_id: str | None = None
+    fifo_ticket_path: Path | None = None
+    fifo_wait_s = 0.0
+    acquire_wall_start = time.perf_counter()
+
+    def _region_holder_pids() -> set[int]:
+        pids: set[int] = set()
+        for region in sorted_regions:
+            pids.update(int(p) for p in _current_lock_owner_pids(region_lock_path(role, region)))
+        return pids
+
     try:
+        if fifo_enabled:
+            check_nesting(
+                sorted_regions,
+                holder_pids=_region_holder_pids,
+                queue_dir_path=fifo_qdir,
+                label=f"cpu_region:{role}",
+            )
+            fifo_ticket_id, fifo_ticket_path = write_ticket(
+                fifo_qdir,
+                regions=sorted_regions,
+                mode="shared" if shared else "exclusive",
+                tag=request_tag,
+                client_version=CLIENT_VERSION,
+            )
+            try:
+                fifo_wait_s = wait_for_admission(
+                    fifo_qdir,
+                    fifo_ticket_id,
+                    sorted_regions,
+                    deadline_s=deadline_s,
+                    timeout_s=timeout_s,
+                    cancel_check=cancel_check,
+                    poll_s=_lock_poll_s(),
+                    tag=request_tag,
+                    label=f"cpu_region:{role}",
+                )
+            except LockQueueTimeout as exc:
+                raise CpuRegionLockTimeout(str(exc)) from exc
         if cross_role_mutex:
             reservation_token = _reserve_region_admission(
                 role=role,
@@ -1000,6 +1053,25 @@ def cpu_region_lock(
             path = region_lock_path(role, region)
             _acquire(role, path)
             acquired_paths[region] = path
+        if fifo_ticket_path is not None:
+            # The ticket's job (ordering the WAIT) ends the moment the flock
+            # is actually held; the flock itself is now the liveness fact.
+            _fifo_remove_ticket(fifo_ticket_path)
+            append_event_log(
+                _tmp_dir(),
+                {
+                    "event": "acquire",
+                    "lock": "cpu_region",
+                    "ts": time.time(),
+                    "pid": os.getpid(),
+                    "tag": request_tag,
+                    "regions": sorted_regions,
+                    "mode": "shared" if shared else "exclusive",
+                    "wait_s": time.perf_counter() - acquire_wall_start,
+                    "client_version": CLIENT_VERSION,
+                },
+            )
+            fifo_ticket_path = None
         emitted_lease_token = reservation_token or (
             f"flock-{os.getpid()}-{threading.get_ident()}-{uuid.uuid4().hex}"
         )
@@ -1042,6 +1114,7 @@ def cpu_region_lock(
     finally:
         # LIFO release: close in reverse acquire order. Closing the file
         # descriptor releases the fcntl lock automatically.
+        released_any_flock = bool(handles)
         for _region, _path, fh in reversed(handles):
             try:
                 if not shared:
@@ -1051,6 +1124,26 @@ def cpu_region_lock(
                 pass
         if local_acquired:
             _release_local_region_locks(local_keys, shared=shared)
+        # Covers every early-exit path (nesting refusal, admission timeout,
+        # cancellation, or a mid-acquisition failure): the ticket must never
+        # outlive the attempt it represents.
+        if fifo_ticket_path is not None:
+            _fifo_remove_ticket(fifo_ticket_path)
+        if fifo_enabled and released_any_flock:
+            append_event_log(
+                _tmp_dir(),
+                {
+                    "event": "release",
+                    "lock": "cpu_region",
+                    "ts": time.time(),
+                    "pid": os.getpid(),
+                    "tag": request_tag,
+                    "regions": sorted_regions,
+                    "mode": "shared" if shared else "exclusive",
+                    "hold_s": time.perf_counter() - acquire_wall_start - fifo_wait_s,
+                    "client_version": CLIENT_VERSION,
+                },
+            )
         if reservation_token is not None:
             try:
                 _update_region_occupancy(remove_token=reservation_token)
