@@ -58,13 +58,16 @@ class Clock:
         return self.t
 
 
-def _history(*, clock=None, cache_ram=65536, launch="L1", host_wide=False):
+def _history(*, clock=None, cache_ram=65536, launch="L1", host_wide=False, idle_residency=None):
     launch_ids = {"id": launch}
     hist = ph.PrefixHistory(
         clock=clock or Clock(),
         cache_ram_mib=lambda url: cache_ram,
         launch_id=lambda url: launch_ids["id"],
         host_wide=host_wide,
+        # Injected like cache_ram, so these cases never read the tree's compiled
+        # priors (STACKCHG-8083BATCH-20261004 added the idle-slot purge bound).
+        idle_residency=lambda url: idle_residency,
     )
     hist.launch_ids = launch_ids  # test handle
     return hist

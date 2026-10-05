@@ -213,7 +213,19 @@ def recommend(
         verdict, chosen = "keep", int(current_mib)
 
     if workload.kv_unified and workload.slots > 1:
-        notes.append("kv_unified: --cache-idle-slots must stay on (idle slots survive only in the cache)")
+        # STACKCHG-8083BATCH-20261004: this note used to say --cache-idle-slots "must stay
+        # on (idle slots survive only in the cache)". That holds only WITH the flag on:
+        # it moves idle slots to the cache and clears them from the pool at every task
+        # launch. With --no-cache-idle-slots they stay in the pool, reach the cache on
+        # slot reuse, and are lost only when the server purges them under pool pressure.
+        # Measured on :8083 (UFH14-B4i, 2026-10-04): same hit rate (0.81), turn-2+ TTFT
+        # median 16.3 s OFF vs 66.4 s ON. This module does not choose the flag; the
+        # registry declares it (server_mode.<server>.cache_idle_slots).
+        notes.append(
+            "kv_unified: with --cache-idle-slots idle slots move to this cache at every task "
+            "launch; with --no-cache-idle-slots they stay in the pool and this cache only "
+            "receives reused slots (size it for those)"
+        )
 
     return Recommendation(
         server=server,

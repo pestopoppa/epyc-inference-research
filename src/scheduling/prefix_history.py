@@ -32,6 +32,16 @@ and errs low:
   guards) an idle conversation then survives nowhere: no credit.
 * Time. ``ORCHESTRATOR_KV_POOL_CACHE_CREDIT_WINDOW_S`` (default 1800 s) bounds
   an entry's age whatever the volume.
+* Idle-slot purge (STACKCHG-8083BATCH-20261004). On a unified pool launched with
+  ``--no-cache-idle-slots`` an idle conversation stays in its SLOT; it reaches the
+  RAM cache only when its slot is reused, and is lost without a copy when the server
+  purges idle slots because the pool is full. An entry then also has to pass a
+  no-purge bound: its own size plus the (slots - 1) largest other remembered entries
+  of the same launch must fit in the pool -- if they do, the pool can never have
+  been full while it sat idle. Entries the history no longer holds (pruned by age or
+  count, or traffic that bypassed the orchestrator) are not seen, so this errs low
+  like the rest of the credit, not safe. With idle-slot caching on (the server
+  default) the volume rule alone applies, unchanged.
 * Relaunch. An entry carries the server's launch id (the stack's per-port launch
   sidecar, ``serving_calls.server_identity``); after a relaunch the cache is
   empty, so an entry from another launch never counts.
@@ -105,6 +115,12 @@ def _default_cache_ram(url: str) -> int | None:
     return get_context_limit_resolver().cache_ram_mib(url)
 
 
+def _default_idle_residency(url: str) -> tuple[int, int] | None:
+    from src.backends.context_limits import get_context_limit_resolver
+
+    return get_context_limit_resolver().idle_slot_residency(url)
+
+
 def _default_launch_id(url: str) -> str | None:
     from src.backends import serving_calls
 
@@ -146,9 +162,11 @@ class PrefixHistory:
         launch_id: Callable[[str], str | None] | None = None,
         host_wide: bool | None = None,
         directory: Callable[[], Path] | None = None,
+        idle_residency: Callable[[str], tuple[int, int] | None] | None = None,
     ) -> None:
         self._clock = clock
         self._cache_ram_fn = cache_ram_mib or _default_cache_ram
+        self._idle_residency_fn = idle_residency or _default_idle_residency
         self._launch_id_fn = launch_id or _default_launch_id
         self._host_wide = host_wide
         self._dir_fn = directory or _history_dir
@@ -189,6 +207,30 @@ class PrefixHistory:
             return 0
         per_token = max(1, _env_int(BYTES_PER_TOKEN_ENV, DEFAULT_BYTES_PER_TOKEN))
         return int(mib) * _MIB // per_token
+
+    def idle_residency(self, url: str) -> tuple[int, int] | None:
+        """``(pool_tokens, slots)`` when idle slots stay resident (see the module
+        docstring, "Idle-slot purge"), else None. Never raises."""
+        try:
+            value = self._idle_residency_fn(url)
+        except Exception:
+            return None
+        if (isinstance(value, tuple) and len(value) == 2
+                and all(isinstance(v, int) and not isinstance(v, bool) and v > 0 for v in value)):
+            return value
+        return None
+
+    @staticmethod
+    def _purge_safe(entry: dict[str, Any], entries: list[dict[str, Any]],
+                    launch_id: str | None, pool_tokens: int, slots: int) -> bool:
+        """True when ``entry`` cannot have been purged from an idle slot: its size plus
+        the ``slots - 1`` largest OTHER entries of the same launch fit in the pool."""
+        others = sorted(
+            (int(e.get("size_tokens", 0)) for e in entries
+             if e is not entry and e.get("launch_id") == launch_id),
+            reverse=True,
+        )
+        return int(entry.get("size_tokens", 0)) + sum(others[: max(0, slots - 1)]) <= pool_tokens
 
     def _launch_id(self, url: str) -> str | None:
         try:
@@ -303,8 +345,9 @@ class PrefixHistory:
     def lookup(self, url: str, ladder: dict[str, Any] | None
                ) -> tuple[HistoryMatch | None, str | None]:
         """``(best match, None)`` or ``(None, reason)`` — reason is one of
-        ``disabled``, ``no_fingerprint``, ``cache_ram_off``, ``no_history`` or
-        ``no_match``. Never raises."""
+        ``disabled``, ``no_fingerprint``, ``cache_ram_off``, ``no_history``,
+        ``no_match`` or ``idle_purge_risk`` (a fingerprint matched, but every matching
+        entry fails the idle-slot no-purge bound). Never raises."""
         try:
             if not self.enabled():
                 return None, "disabled"
@@ -325,13 +368,19 @@ class PrefixHistory:
             launch_id = self._launch_id(url)
             cum = int(state.get("cum", 0))
             want = sorted(((int(d), h) for d, h in ladder["fp"].items()), reverse=True)
+            residency = self.idle_residency(url)
             best: HistoryMatch | None = None
+            purge_rejected = False
             for entry in reversed(state["entries"]):  # newest first: ties keep the newest
                 if not self._alive(entry, cum, now, capacity, window_s, launch_id):
                     continue
                 fp = entry.get("fp") or {}
                 for depth, digest in want:
                     if fp.get(str(depth)) == digest:
+                        if residency is not None and not self._purge_safe(
+                                entry, state["entries"], launch_id, *residency):
+                            purge_rejected = True
+                            break
                         if best is None or depth > best.matched_chars:
                             best = HistoryMatch(
                                 matched_chars=depth,
@@ -342,7 +391,7 @@ class PrefixHistory:
                             )
                         break
             if best is None:
-                return None, "no_match"
+                return None, "idle_purge_risk" if purge_rejected else "no_match"
             return best, None
         except Exception:
             logger.debug("prefix history: lookup failed", exc_info=True)

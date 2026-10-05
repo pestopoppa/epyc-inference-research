@@ -48,7 +48,7 @@ def test_27b_today_keeps_65536():
     assert rec.need_mib < 65536 * 1.0 + 1  # today's value already covers the derived need
     assert rec.verdict == "keep" and rec.cache_ram_mib == 65536
     assert rec.cache_reuse == 0  # hybrid
-    assert any("cache-idle-slots must stay on" in n for n in rec.notes)
+    assert any("--no-cache-idle-slots they stay in the pool" in n for n in rec.notes)
 
 
 def test_more_sessions_raise_and_round_to_4gib():

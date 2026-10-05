@@ -2353,6 +2353,11 @@ def _launch_runtime_record(
         key="ubatch",
         fallback=512,
     )
+    # `--cache-idle-slots` / `--no-cache-idle-slots` (llama-server, default on when
+    # --cache-ram > 0). Declared as `server_mode.<role>.cache_idle_slots`, beside
+    # cache_ram; compiled ONLY when declared (None -> the launcher emits nothing), so
+    # every other role's compiled record is byte-identical. STACKCHG-8083BATCH-20261004.
+    cache_idle_slots = _runtime_flag_bool_prior(server_cfg, role_cfg, key="cache_idle_slots")
 
     return {
         "binary_family": binary_family,
@@ -2460,6 +2465,10 @@ def _launch_runtime_record(
                 server_cfg, role_cfg, key="image_min_tokens"
             ),
             "cache_ram": _runtime_flag_int_prior(server_cfg, role_cfg, key="cache_ram"),
+            # Companion of cache_ram: whether idle slots are saved to the prompt cache
+            # (and, on a unified pool, cleared from it) when a new task starts. Present
+            # only when declared. STACKCHG-8083BATCH-20261004.
+            **({"cache_idle_slots": cache_idle_slots} if cache_idle_slots is not None else {}),
             # Per-role chat template FILE (llama-server --chat-template-file).
             # Declared as `server_mode.<role>.chat_template_file` (absolute path
             # string); role-local server/serving/launch sub-mappings work too via

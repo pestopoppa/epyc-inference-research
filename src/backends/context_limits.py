@@ -288,6 +288,13 @@ def registry_facts_by_port(priors_path: Path | None = None) -> dict[int, dict[st
         cache_ram = flags.get("cache_ram") if isinstance(flags, dict) else None
         if isinstance(cache_ram, bool) or not isinstance(cache_ram, int) or cache_ram < 0:
             cache_ram = None
+        # STACKCHG-8083BATCH-20261004: ``--no-cache-idle-slots`` changes WHERE an idle
+        # conversation survives on a unified pool (in its slot, not the RAM cache) and
+        # adds a loss path (the server purges idle slots under pool pressure without a
+        # cache copy). None = undeclared (server default: on).
+        cache_idle_slots = flags.get("cache_idle_slots") if isinstance(flags, dict) else None
+        if not isinstance(cache_idle_slots, bool):
+            cache_idle_slots = None
         by_port = cache.get("slots_by_port") if isinstance(cache.get("slots_by_port"), dict) else {}
         ports = set(stack_prior_serving_ports(serving))
         for raw in by_port:
@@ -299,7 +306,8 @@ def registry_facts_by_port(priors_path: Path | None = None) -> dict[int, dict[st
             facts.setdefault(
                 port,
                 {"context_tokens": context_tokens, "slots": slots, "kv_unified": kv_unified,
-                 "ctx_max": ctx_max, "cache_ram_mib": cache_ram},
+                 "ctx_max": ctx_max, "cache_ram_mib": cache_ram,
+                 "cache_idle_slots": cache_idle_slots},
             )
     return facts
 
@@ -688,6 +696,28 @@ class ContextLimitResolver:
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             return None
         return value
+
+    def idle_slot_residency(self, url: str) -> tuple[int, int] | None:
+        """``(pool_tokens, slots)`` when ``url``'s server keeps IDLE slots resident in a
+        shared unified pool -- ``kv_unified`` with ``cache_idle_slots: false`` and more
+        than one slot -- else None. Registry facts only (no network).
+
+        On such a server an idle conversation survives in its slot, is copied to the
+        ``--cache-ram`` cache when its slot is reused (``server-context.cpp`` slot
+        selection, ``update_cache``), and is LOST, with no cache copy, when the server
+        purges idle slots because the pool is full (``try_clear_idle_slots``). With
+        idle-slot caching on (the server default) idle slots are moved to the cache at
+        every task launch instead, so the cache-volume model alone describes survival.
+        """
+        port = _port((split_urls(url) or [""])[0])
+        reg = self._registry_facts().get(port) if port is not None else None
+        if not reg or reg.get("cache_idle_slots") is not False or reg.get("kv_unified") is not True:
+            return None
+        pool = _positive_int(reg.get("context_tokens"))
+        slots = _positive_int(reg.get("slots"))
+        if pool is None or slots is None or slots < 2:
+            return None
+        return pool, slots
 
     def pool_occupancy(self, url: str) -> PoolOccupancy | None:
         """Live ``/slots`` occupancy for ``url``, cached ``occupancy_ttl_s``

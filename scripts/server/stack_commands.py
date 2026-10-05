@@ -596,6 +596,9 @@ _RUNTIME_FIELD_CHECKS: dict[str, tuple[str, tuple[str, ...], str]] = {
     "runtime.flags.n_gpu_layers": ("int_or_token_flag", ("-ngl", "--n-gpu-layers", "--gpu-layers"), ""),
     "runtime.flags.image_min_tokens": ("int_flag", ("--image-min-tokens",), ""),
     "runtime.flags.cache_ram": ("int_flag", ("--cache-ram",), ""),
+    # A BOOLEAN with two spellings whose live truth also depends on --cache-ram
+    # (the server turns it off when the cache is 0) -- see the dedicated block.
+    "runtime.flags.cache_idle_slots": ("dedicated", (), ""),
     # Per-role chat template file: a string token on the cmdline, same emission
     # rule as `-ngl all` (the launcher additionally refuses at build time when the
     # declared path is missing, so a live server always matches its declaration).
@@ -888,6 +891,30 @@ def _live_kv_unified(cmdline: list[str]) -> bool:
     return _last_cmdline_flag_value(cmdline, "-np", "--parallel") is None
 
 
+_CACHE_IDLE_SLOTS_ON_FLAGS: frozenset[str] = frozenset({"--cache-idle-slots"})
+_CACHE_IDLE_SLOTS_OFF_FLAGS: frozenset[str] = frozenset({"--no-cache-idle-slots"})
+
+
+def _live_cache_idle_slots(cmdline: list[str]) -> bool:
+    """What llama-server resolved ``cache_idle_slots`` to for this cmdline.
+
+    Last explicit flag wins; with neither, the server default (on). The server then
+    turns it OFF when ``--cache-ram`` is 0 ("--cache-idle-slots requires --cache-ram,
+    disabling", tools/server/server-context.cpp:1485-1488), and so does this reader.
+    """
+    resolved = True
+    for token in reversed(cmdline):
+        if token in _CACHE_IDLE_SLOTS_ON_FLAGS:
+            break
+        if token in _CACHE_IDLE_SLOTS_OFF_FLAGS:
+            resolved = False
+            break
+    cache_ram = _last_cmdline_flag_value(cmdline, "--cache-ram", "-cram")
+    if cache_ram is not None and cache_ram.strip() == "0":
+        resolved = False
+    return resolved
+
+
 def _runtime_attestation_warnings(
     name: str,
     info: ProcessInfo,
@@ -1012,6 +1039,16 @@ def _runtime_attestation_warnings(
         if actual_kvu != expected_kvu:
             warnings.append(_runtime_value_warning(
                 name, info, "kv_unified", expected_kvu, actual_kvu
+            ))
+
+    # cache_idle_slots: compared against what the server RESOLVED (last flag, else on;
+    # off whenever --cache-ram is 0), not flag presence. STACKCHG-8083BATCH-20261004.
+    expected_cis = flags.get("cache_idle_slots")
+    if isinstance(expected_cis, bool):
+        actual_cis = _live_cache_idle_slots(cmdline)
+        if actual_cis != expected_cis:
+            warnings.append(_runtime_value_warning(
+                name, info, "cache_idle_slots", expected_cis, actual_cis
             ))
 
     slot_save_path = cache.get("slot_save_path")

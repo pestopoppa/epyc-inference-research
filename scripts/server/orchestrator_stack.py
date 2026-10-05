@@ -513,6 +513,16 @@ _RUNTIME_SERVING_FLAG_ARGS: tuple[tuple[str, str, bool, bool], ...] = (
     ("chat_template_file", "--chat-template-file", True, True),
 )
 
+# Declared BOOLEAN serving flags: (compiled key, flag when True, flag when False).
+# Emitted in BOTH directions when declared and never when not, so a pinned fact
+# never silently falls back to the kernel default (same rule as kv_unified).
+# cache_idle_slots: llama-server saves idle slots to the --cache-ram prompt cache
+# when a new task starts and, under --kv-unified, CLEARS them from the pool
+# (tools/server/server-context.cpp:2469-2484). STACKCHG-8083BATCH-20261004.
+_RUNTIME_SERVING_BOOL_FLAG_ARGS: tuple[tuple[str, str, str], ...] = (
+    ("cache_idle_slots", "--cache-idle-slots", "--no-cache-idle-slots"),
+)
+
 
 def _append_runtime_serving_flags(cmd: list[str], flags: dict[str, Any]) -> None:
     """Emit the declared serving flags that the compiled priors carry.
@@ -543,6 +553,10 @@ def _append_runtime_serving_flags(cmd: list[str], flags: dict[str, Any]) -> None
                 f"restore the file)"
             )
         cmd.extend([arg, token])
+    for key, on_flag, off_flag in _RUNTIME_SERVING_BOOL_FLAG_ARGS:
+        value = flags.get(key)
+        if isinstance(value, bool):
+            cmd.append(on_flag if value else off_flag)
 
 
 def _append_runtime_kv_args(cmd: list[str], cache: dict[str, Any]) -> None:
