@@ -24,6 +24,20 @@ log = logging.getLogger(__name__)
 Ctx = GraphRunContext[TaskState, TaskDeps]
 
 
+def _admit_early_abort_escalation(ctx: Ctx) -> bool:
+    """Apply the shared budget and role-cycle gate for first-strike aborts.
+
+    Early aborts intentionally bypass the retry-count threshold, but they may
+    not bypass escalation admission controls. This predicate is side-effect
+    free so both graph engines can preserve their existing fallthrough path
+    when admission is denied.
+    """
+    state = ctx.state
+    if state.escalation_count >= ctx.deps.config.max_escalations:
+        return False
+    return not _detect_role_cycle_impl(state.role_history)
+
+
 def _is_infra_failure(artifacts: dict) -> bool:
     """True when this turn's ``error`` is an in-band backend/infra sentinel.
 

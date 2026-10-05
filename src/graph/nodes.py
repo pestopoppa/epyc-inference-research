@@ -28,6 +28,7 @@ from src.graph.state import (
     TaskResult,
     TaskState,
 )
+from src.graph.decision_gates import _admit_early_abort_escalation
 from src.graph.langgraph.state import (
     APPEND_FIELDS,
     lg_to_task_state,
@@ -227,7 +228,7 @@ class FrontdoorNode(BaseNode[TaskState, TaskDeps, TaskResult]):
             error_cat = _classify_error(error)
             _record_failure(ctx, error_cat, error)
 
-            if error_cat == ErrorCategory.EARLY_ABORT and state.escalation_count < ctx.deps.config.max_escalations:
+            if error_cat == ErrorCategory.EARLY_ABORT and _admit_early_abort_escalation(ctx):
                 # NIB2-80: budget-gated. Immediate escalation (skipping the retry
                 # precondition _should_escalate enforces for other categories) is
                 # deliberate; the max_escalations bound still applies. When the
@@ -350,7 +351,7 @@ class WorkerNode(BaseNode[TaskState, TaskDeps, TaskResult]):
             error_cat = _classify_error(error)
             _record_failure(ctx, error_cat, error)
 
-            if error_cat == ErrorCategory.EARLY_ABORT and state.escalation_count < ctx.deps.config.max_escalations:
+            if error_cat == ErrorCategory.EARLY_ABORT and _admit_early_abort_escalation(ctx):
                 # NIB2-80: budget-gated — see FrontdoorNode for rationale.
                 state.escalation_count += 1
                 state.consecutive_failures = 0
@@ -470,7 +471,7 @@ class CoderNode(BaseNode[TaskState, TaskDeps, TaskResult]):
             error_cat = _classify_error(error)
             _record_failure(ctx, error_cat, error)
 
-            if error_cat == ErrorCategory.EARLY_ABORT and state.escalation_count < ctx.deps.config.max_escalations:
+            if error_cat == ErrorCategory.EARLY_ABORT and _admit_early_abort_escalation(ctx):
                 # NIB2-80: budget-gated — see FrontdoorNode for rationale.
                 state.escalation_count += 1
                 state.consecutive_failures = 0
@@ -577,7 +578,7 @@ class CoderEscalationNode(BaseNode[TaskState, TaskDeps, TaskResult]):
             error_cat = _classify_error(error)
             _record_failure(ctx, error_cat, error)
 
-            if error_cat == ErrorCategory.EARLY_ABORT and state.escalation_count < ctx.deps.config.max_escalations:
+            if error_cat == ErrorCategory.EARLY_ABORT and _admit_early_abort_escalation(ctx):
                 # NIB2-80: budget-gated — see FrontdoorNode for rationale.
                 state.escalation_count += 1
                 state.consecutive_failures = 0
@@ -683,7 +684,7 @@ class IngestNode(BaseNode[TaskState, TaskDeps, TaskResult]):
             error_cat = _classify_error(error)
             _record_failure(ctx, error_cat, error)
 
-            if error_cat == ErrorCategory.EARLY_ABORT and state.escalation_count < ctx.deps.config.max_escalations:
+            if error_cat == ErrorCategory.EARLY_ABORT and _admit_early_abort_escalation(ctx):
                 # NIB2-80: budget-gated — see FrontdoorNode for rationale.
                 state.escalation_count += 1
                 state.consecutive_failures = 0

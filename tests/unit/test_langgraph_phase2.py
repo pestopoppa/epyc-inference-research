@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.graph.state import TaskDeps, TaskState
+from src.graph.state import GraphConfig, TaskDeps, TaskState
 from src.roles import Role
 
 _RETIRED_ARCHITECT_ROLE = "architect_" "coding"
@@ -517,6 +517,91 @@ class TestDualRunValidation:
         mock_turn.assert_not_called()
         assert result["_result"]["success"] is False
         assert "budget" in result["_result"]["answer"].lower()
+
+    @pytest.mark.asyncio
+    async def test_early_abort_first_strike_escalates_with_retries_remaining(self):
+        """LangGraph preserves immediate escalation for an admitted abort."""
+        from src.graph.langgraph.nodes import frontdoor_node
+        from src.graph.langgraph.state import task_state_to_lg
+
+        state = self._make_state(current_role=Role.FRONTDOOR, role_history=["frontdoor"])
+        state_dict = task_state_to_lg(state)
+        deps = self._make_deps()
+        deps.config = GraphConfig(max_retries=3, max_escalations=2, max_turns=10)
+        config = {"configurable": {"deps": deps}}
+
+        with patch(
+            "src.graph.langgraph.nodes._execute_turn",
+            AsyncMock(return_value=("", "Generation aborted: quality low", False, {})),
+        ), patch("src.graph.langgraph.nodes._record_failure"), patch(
+            "src.graph.langgraph.nodes._log_escalation"
+        ):
+            result = await frontdoor_node(state_dict, config)
+
+        assert result["next_node"] == "coder_escalation"
+        assert result["escalation_count"] == 1
+        assert result["role_history"] == ["coder_escalation"]
+
+    @pytest.mark.asyncio
+    async def test_early_abort_cycle_falls_through_without_escalating(self):
+        """A cyclic LangGraph route follows the existing retry/failure chain."""
+        from src.graph.langgraph.nodes import frontdoor_node
+        from src.graph.langgraph.state import task_state_to_lg
+
+        state = self._make_state(
+            current_role=Role.FRONTDOOR,
+            role_history=["frontdoor", "worker_math", "frontdoor", "worker_math"],
+        )
+        state_dict = task_state_to_lg(state)
+        deps = self._make_deps()
+        deps.config = GraphConfig(max_retries=1, max_escalations=2, max_turns=10)
+        config = {"configurable": {"deps": deps}}
+
+        with patch(
+            "src.graph.langgraph.nodes._execute_turn",
+            AsyncMock(return_value=("", "Generation aborted: quality low", False, {})),
+        ), patch("src.graph.langgraph.nodes._record_failure"), patch(
+            "src.graph.langgraph.nodes._should_think_harder", return_value=False
+        ), patch("src.graph.langgraph.nodes._should_retry", return_value=False), patch(
+            "src.graph.langgraph.nodes._make_end_result"
+        ):
+            result = await frontdoor_node(state_dict, config)
+
+        assert result["next_node"] == "__end__"
+        assert result["_result"]["success"] is False
+        assert result["escalation_count"] == 0
+        assert result["role_history"] == []
+
+    @pytest.mark.asyncio
+    async def test_early_abort_at_budget_falls_through_without_escalating(self):
+        """An exhausted escalation budget refuses LangGraph first-strike routing."""
+        from src.graph.langgraph.nodes import frontdoor_node
+        from src.graph.langgraph.state import task_state_to_lg
+
+        state = self._make_state(
+            current_role=Role.FRONTDOOR,
+            escalation_count=2,
+            role_history=["frontdoor"],
+        )
+        state_dict = task_state_to_lg(state)
+        deps = self._make_deps()
+        deps.config = GraphConfig(max_retries=1, max_escalations=2, max_turns=10)
+        config = {"configurable": {"deps": deps}}
+
+        with patch(
+            "src.graph.langgraph.nodes._execute_turn",
+            AsyncMock(return_value=("", "Generation aborted: quality low", False, {})),
+        ), patch("src.graph.langgraph.nodes._record_failure"), patch(
+            "src.graph.langgraph.nodes._should_think_harder", return_value=False
+        ), patch("src.graph.langgraph.nodes._should_retry", return_value=False), patch(
+            "src.graph.langgraph.nodes._make_end_result"
+        ):
+            result = await frontdoor_node(state_dict, config)
+
+        assert result["next_node"] == "__end__"
+        assert result["_result"]["success"] is False
+        assert result["escalation_count"] == 2
+        assert result["role_history"] == []
 
 
 # ---------------------------------------------------------------------------

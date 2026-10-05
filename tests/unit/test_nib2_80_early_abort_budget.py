@@ -45,13 +45,33 @@ class TestEarlyAbortBudget:
                 "x = broken_code()",  # error turn — no FINAL to avoid rescue
                 "FINAL('fixed by escalation')",
             ],
-            config=GraphConfig(max_retries=1, max_escalations=2, max_turns=10),
+            # First-strike escalation remains immediate even when ordinary
+            # retries would still be available.
+            config=GraphConfig(max_retries=3, max_escalations=2, max_turns=10),
         )
         result = await orchestration_graph.run(FrontdoorNode(), state=state, deps=deps)
 
         assert isinstance(result.output.answer, str)
         assert state.escalation_count == 1
         assert str(Role.CODER_ESCALATION) in state.role_history
+
+    @pytest.mark.asyncio
+    async def test_early_abort_cycle_is_denied_without_charging_escalation(self):
+        """An early abort cannot bypass the shared role-cycle guard."""
+        state = make_state(
+            current_role=Role.FRONTDOOR,
+            role_history=["frontdoor", "worker_math", "frontdoor", "worker_math"],
+        )
+        deps = make_deps(
+            repl_results=[MockREPLResult(error="Generation aborted: quality low")],
+            llm_responses=["x = broken_code()"],
+            config=GraphConfig(max_retries=1, max_escalations=2, max_turns=10),
+        )
+        result = await orchestration_graph.run(FrontdoorNode(), state=state, deps=deps)
+
+        assert result.output.success is False
+        assert state.escalation_count == 0
+        assert str(Role.CODER_ESCALATION) not in state.role_history
 
     @pytest.mark.asyncio
     async def test_early_abort_blocked_at_budget_falls_through_to_normal_failure_path(self):

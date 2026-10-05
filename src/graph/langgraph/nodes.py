@@ -21,6 +21,7 @@ from langchain_core.runnables import RunnableConfig
 from src.escalation import ErrorCategory
 from src.roles import Role
 from src.graph.state import TaskDeps, TaskState
+from src.graph.decision_gates import _admit_early_abort_escalation
 from src.graph.helpers import (
     MAX_CONSECUTIVE_NUDGES,
     _add_evidence,
@@ -180,7 +181,7 @@ async def frontdoor_node(state: dict[str, Any], config: RunnableConfig) -> dict[
         error_cat = _classify_error(error)
         _record_failure(ctx, error_cat, error)
 
-        if error_cat == ErrorCategory.EARLY_ABORT:
+        if error_cat == ErrorCategory.EARLY_ABORT and _admit_early_abort_escalation(ctx):
             task_state.escalation_count += 1
             task_state.consecutive_failures = 0
             from_role = str(task_state.current_role)
@@ -277,7 +278,7 @@ async def worker_node(state: dict[str, Any], config: RunnableConfig) -> dict[str
         error_cat = _classify_error(error)
         _record_failure(ctx, error_cat, error)
 
-        if error_cat == ErrorCategory.EARLY_ABORT:
+        if error_cat == ErrorCategory.EARLY_ABORT and _admit_early_abort_escalation(ctx):
             task_state.escalation_count += 1
             task_state.consecutive_failures = 0
             from_role = str(task_state.current_role)
@@ -380,7 +381,7 @@ async def coder_node(state: dict[str, Any], config: RunnableConfig) -> dict[str,
         error_cat = _classify_error(error)
         _record_failure(ctx, error_cat, error)
 
-        if error_cat == ErrorCategory.EARLY_ABORT:
+        if error_cat == ErrorCategory.EARLY_ABORT and _admit_early_abort_escalation(ctx):
             task_state.escalation_count += 1
             task_state.consecutive_failures = 0
             from_role = str(task_state.current_role)
@@ -471,7 +472,7 @@ async def coder_escalation_node(state: dict[str, Any], config: RunnableConfig) -
         error_cat = _classify_error(error)
         _record_failure(ctx, error_cat, error)
 
-        if error_cat == ErrorCategory.EARLY_ABORT:
+        if error_cat == ErrorCategory.EARLY_ABORT and _admit_early_abort_escalation(ctx):
             task_state.escalation_count += 1
             task_state.consecutive_failures = 0
             from_role = str(task_state.current_role)
@@ -560,7 +561,7 @@ async def ingest_node(state: dict[str, Any], config: RunnableConfig) -> dict[str
         error_cat = _classify_error(error)
         _record_failure(ctx, error_cat, error)
 
-        if error_cat == ErrorCategory.EARLY_ABORT:
+        if error_cat == ErrorCategory.EARLY_ABORT and _admit_early_abort_escalation(ctx):
             task_state.escalation_count += 1
             task_state.consecutive_failures = 0
             from_role = str(task_state.current_role)
