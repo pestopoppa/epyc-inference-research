@@ -92,3 +92,20 @@ def test_symlink_inside_tree_pointing_out_is_bad(tmp_path):
     result = _run(stub_dir, store_gpu / "llama-server", store_gpu)
     assert result.returncode == 1, result.stdout
     assert "BAD  libggml-base.so.0" in result.stdout
+
+
+def test_real_non_ggml_binary_is_rejected_as_vacuous(tmp_path):
+    """The non-vacuity guard also works with real ldd, not only stubbed rows."""
+    env = os.environ.copy()
+    env["PATH"] = "/usr/bin:/bin"
+    env.pop("LD_LIBRARY_PATH", None)
+    result = subprocess.run(
+        ["bash", str(SCRIPT), "/bin/true", str(tmp_path)],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+    assert result.returncode == 2, result.stdout
+    assert "FAIL: VACUOUS CHECK" in result.stdout
+    assert "libggml-base.so seen                   : 0" in result.stdout
