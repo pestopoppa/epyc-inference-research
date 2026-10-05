@@ -14,9 +14,10 @@ from pathlib import Path
 
 import pytest
 
+import src.typed_decisions.routing_replay as routing_replay
+
 from src.llm_primitives.stat_tests import expected_calibration_error, wilson_interval
 from src.typed_decisions.routing_replay import (
-    LIVE_DB_PATH,
     ReplayError,
     RoutingRow,
     RowOutcome,
@@ -341,9 +342,21 @@ def test_require_live_primitives_refuses_mock_and_none():
         require_live_primitives(None)
 
 
-def test_resolve_snapshot_refuses_live_database_without_reading_it():
+def test_resolve_snapshot_refuses_live_database_without_reading_it(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    live_db = tmp_path / "live-episodic.db"
+    original_bytes = b"fixture sentinel; not a database"
+    live_db.write_bytes(original_bytes)
+    monkeypatch.setattr(routing_replay, "LIVE_DB_PATH", live_db)
+
+    def fail_if_database_is_opened(_path: Path):
+        raise AssertionError("live database contents must not be read")
+
+    monkeypatch.setattr(routing_replay, "_db_max_timestamps", fail_if_database_is_opened)
     with pytest.raises(ReplayError, match="LIVE"):
-        resolve_snapshot(LIVE_DB_PATH)
+        resolve_snapshot(live_db)
+    assert live_db.read_bytes() == original_bytes
 
 
 def test_main_refuses_without_live_or_dry_run(capsys):
