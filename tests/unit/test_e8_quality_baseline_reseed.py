@@ -1779,3 +1779,70 @@ def _legacy_t1_questions() -> list[dict]:
     return [dict(replacements.get(runner._question_qid(question), question)) for question in questions]
 
 
+
+
+# NI74: tiny synthetic algorithm controls; no real-pool distribution proposition.
+class _TinySourceVectorTower:
+    def __init__(self, pool):
+        self.pool = pool
+
+    def _load_pool(self):
+        return self.pool
+
+    def _load_designed_core(self, core_id):
+        assert core_id == "synthetic-core"
+        return [{"id": "t1-only", "suite": "synthetic-a", "prompt": "fixture",
+                 "scoring_method": "exact_match", "expected": "1"}], {}, None
+
+
+def _tiny_source_vector_pool():
+    def row(qid, method="exact_match", expected="1"):
+        return {"id": qid, "suite": "synthetic-a", "prompt": "fixture " + qid,
+                "scoring_method": method, "expected": expected}
+    return {"synthetic-a": [row("t1-only"), row("a"), row("b"),
+                             row("unscoreable", expected="")],
+            "synthetic-b": [dict(row("c"), suite="synthetic-b"),
+                             dict(row("d", "llm_judge"), suite="synthetic-b")]}
+
+
+def test_tiny_t2_vector_is_seeded_and_excludes_t1_and_unscoreable_rows():
+    tower = _TinySourceVectorTower(_tiny_source_vector_pool())
+    first, core = runner.question_vector(tower, tier=2, t1_core_id="synthetic-core", n=3, seed=17)
+    second, again = runner.question_vector(tower, tier=2, t1_core_id="synthetic-core", n=3, seed=17)
+    assert first == second and core == again == "legacy_pool_t2_seed_17_n3"
+    assert len(first) == 3
+    assert {runner._question_qid(q) for q in first} <= {"a", "b", "c", "d"}
+    assert len({runner._question_qid(q) for q in first}) == 3
+    assert all(q["eval_partition"] == "core" for q in first)
+
+
+def test_tiny_t2_vector_refuses_an_unavailable_pool():
+    with pytest.raises(ValueError, match="current T2 question pool is unavailable"):
+        runner.question_vector(_TinySourceVectorTower({}), tier=2,
+                               t1_core_id="synthetic-core", n=1, seed=17)
+
+
+def test_tiny_t2_vector_refuses_an_insufficient_scoreable_draw():
+    with pytest.raises(ValueError, match="T2 full-pool draw returned 4, expected 9"):
+        runner.question_vector(_TinySourceVectorTower(_tiny_source_vector_pool()), tier=2,
+                               t1_core_id="synthetic-core", n=9, seed=17)
+
+
+def test_tiny_t1_vector_retains_exact_core_cardinality_refusal():
+    with pytest.raises(ValueError, match="T1 current full-pool core has 1 questions, expected 2"):
+        runner.question_vector(_TinySourceVectorTower({}), tier=1,
+                               t1_core_id="synthetic-core", n=2, seed=17)
+
+
+def test_tiny_t2_vector_names_the_first_zero_group_pattern_refusal():
+    questions = [{"id": name, "scoring_method": "exact_match",
+                  "scoring_config": {"extract_pattern": r"\d+"}}
+                 for name in ("first-invalid", "second-invalid")]
+    with pytest.raises(ValueError, match="one capture group for first-invalid; got 0"):
+        runner.validate_source_vector_scorer_config(questions, tier=2)
+
+
+def test_tiny_t2_vector_accepts_one_capture_group_without_running_a_scorer():
+    questions = [{"id": "synthetic-valid", "scoring_method": "exact_match",
+                  "scoring_config": {"extract_pattern": r"(\d+)"}}]
+    assert runner.validate_source_vector_scorer_config(questions, tier=2) is None
