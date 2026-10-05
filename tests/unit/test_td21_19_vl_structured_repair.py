@@ -27,6 +27,11 @@ from src.vision.analyzers import vl_describe
 
 
 @pytest.fixture(autouse=True)
+def _use_temporary_vision_cache(monkeypatch, tmp_path):
+    monkeypatch.setattr(vl_describe, "VISION_CACHE_DIR", tmp_path / "vision-cache")
+
+
+@pytest.fixture(autouse=True)
 def _clear_counts():
     reset_counts_for_tests()
     yield
