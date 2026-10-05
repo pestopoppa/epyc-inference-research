@@ -32,50 +32,53 @@ STATE="${E8_V5_STATE:-$ORCH/orchestration/autopilot_state.json}"
 LOCK="${E8_V5_LOCK_PATH:-/mnt/raid0/llm/tmp/e8-quality-baseline-v5-apply.lock}"
 TRUST_LOCK="${E8_V5_TRUST_LOCK:-/run/lock/epyc-measurement-trust-boundary.lock}"
 
-fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+fail() {
+  printf 'ERROR: %s\n' "$*" >&2
+  exit 1
+}
 sha() { sha256sum -- "$1" | awk '{print $1}'; }
 
 TEST_SANDBOX=0
 override_count=0
 for variable in E8_V5_OPERATOR_ROOT E8_V5_STATE E8_V5_LOCK_PATH E8_V5_TRUST_LOCK; do
-    [[ -n "${!variable:-}" ]] && ((override_count += 1))
+  [[ -n "${!variable:-}" ]] && ((override_count += 1))
 done
-if (( override_count == 4 )); then
-    [[ "${E8_V5_TEST_MODE:-}" == "1" && -n "${PYTEST_CURRENT_TEST:-}" ]] ||
-        fail 'noncanonical state/artifact paths are pytest-only'
-    [[ -d "$ROOT" && -f "$STATE" && -d "$(dirname -- "$LOCK")" && -d "$(dirname -- "$TRUST_LOCK")" ]] ||
-        fail 'pytest-only root, state, and lock parents must already exist'
-    [[ ! -L "$ROOT" && ! -L "$STATE" && ! -L "$(dirname -- "$LOCK")" && ! -L "$LOCK" &&
-       ! -L "$(dirname -- "$TRUST_LOCK")" && ! -L "$TRUST_LOCK" ]] ||
-        fail 'pytest-only paths must not be symlinks'
-    ROOT_LEXICAL="$(realpath -ms -- "$ROOT")"
-    STATE_LEXICAL="$(realpath -ms -- "$STATE")"
-    LOCK_PARENT_LEXICAL="$(realpath -ms -- "$(dirname -- "$LOCK")")"
-    TRUST_LOCK_PARENT_LEXICAL="$(realpath -ms -- "$(dirname -- "$TRUST_LOCK")")"
-    ROOT_RESOLVED="$(realpath -e -- "$ROOT")"
-    STATE_RESOLVED="$(realpath -e -- "$STATE")"
-    LOCK_PARENT_RESOLVED="$(realpath -e -- "$(dirname -- "$LOCK")")"
-    TRUST_LOCK_PARENT_RESOLVED="$(realpath -e -- "$(dirname -- "$TRUST_LOCK")")"
-    [[ "$ROOT_LEXICAL" == "$ROOT_RESOLVED" && "$STATE_LEXICAL" == "$STATE_RESOLVED" &&
-       "$LOCK_PARENT_LEXICAL" == "$LOCK_PARENT_RESOLVED" &&
-       "$TRUST_LOCK_PARENT_LEXICAL" == "$TRUST_LOCK_PARENT_RESOLVED" ]] ||
-        fail 'pytest-only paths must not traverse symlinked components'
-    [[ "$ROOT_RESOLVED" == /tmp/* && "$STATE_RESOLVED" == /tmp/* &&
-       "$LOCK_PARENT_RESOLVED" == /tmp/* && "$TRUST_LOCK_PARENT_RESOLVED" == /tmp/* ]] ||
-        fail 'pytest-only resolved paths must remain below /tmp'
-    [[ "$(stat -c '%d:%i' -- "$STATE_RESOLVED")" != "$(stat -c '%d:%i' -- "$ORCH/orchestration/autopilot_state.json")" ]] ||
-        fail 'pytest-only state must not resolve to the canonical production state inode'
-    ROOT="$ROOT_RESOLVED"
-    STATE="$STATE_RESOLVED"
-    LOCK="$LOCK_PARENT_RESOLVED/$(basename -- "$LOCK")"
-    TRUST_LOCK="$TRUST_LOCK_PARENT_RESOLVED/$(basename -- "$TRUST_LOCK")"
-    TEST_SANDBOX=1
-elif (( override_count != 0 )); then
-    fail 'test sandbox requires E8_V5_OPERATOR_ROOT, E8_V5_STATE, E8_V5_LOCK_PATH, and E8_V5_TRUST_LOCK'
+if ((override_count == 4)); then
+  [[ "${E8_V5_TEST_MODE:-}" == "1" && -n "${PYTEST_CURRENT_TEST:-}" ]] ||
+    fail 'noncanonical state/artifact paths are pytest-only'
+  [[ -d "$ROOT" && -f "$STATE" && -d "$(dirname -- "$LOCK")" && -d "$(dirname -- "$TRUST_LOCK")" ]] ||
+    fail 'pytest-only root, state, and lock parents must already exist'
+  [[ ! -L "$ROOT" && ! -L "$STATE" && ! -L "$(dirname -- "$LOCK")" && ! -L "$LOCK" &&
+  ! -L "$(dirname -- "$TRUST_LOCK")" && ! -L "$TRUST_LOCK" ]] ||
+    fail 'pytest-only paths must not be symlinks'
+  ROOT_LEXICAL="$(realpath -ms -- "$ROOT")"
+  STATE_LEXICAL="$(realpath -ms -- "$STATE")"
+  LOCK_PARENT_LEXICAL="$(realpath -ms -- "$(dirname -- "$LOCK")")"
+  TRUST_LOCK_PARENT_LEXICAL="$(realpath -ms -- "$(dirname -- "$TRUST_LOCK")")"
+  ROOT_RESOLVED="$(realpath -e -- "$ROOT")"
+  STATE_RESOLVED="$(realpath -e -- "$STATE")"
+  LOCK_PARENT_RESOLVED="$(realpath -e -- "$(dirname -- "$LOCK")")"
+  TRUST_LOCK_PARENT_RESOLVED="$(realpath -e -- "$(dirname -- "$TRUST_LOCK")")"
+  [[ "$ROOT_LEXICAL" == "$ROOT_RESOLVED" && "$STATE_LEXICAL" == "$STATE_RESOLVED" &&
+    "$LOCK_PARENT_LEXICAL" == "$LOCK_PARENT_RESOLVED" &&
+    "$TRUST_LOCK_PARENT_LEXICAL" == "$TRUST_LOCK_PARENT_RESOLVED" ]] ||
+    fail 'pytest-only paths must not traverse symlinked components'
+  [[ "$ROOT_RESOLVED" == /tmp/* && "$STATE_RESOLVED" == /tmp/* &&
+    "$LOCK_PARENT_RESOLVED" == /tmp/* && "$TRUST_LOCK_PARENT_RESOLVED" == /tmp/* ]] ||
+    fail 'pytest-only resolved paths must remain below /tmp'
+  [[ "$(stat -c '%d:%i' -- "$STATE_RESOLVED")" != "$(stat -c '%d:%i' -- "$ORCH/orchestration/autopilot_state.json")" ]] ||
+    fail 'pytest-only state must not resolve to the canonical production state inode'
+  ROOT="$ROOT_RESOLVED"
+  STATE="$STATE_RESOLVED"
+  LOCK="$LOCK_PARENT_RESOLVED/$(basename -- "$LOCK")"
+  TRUST_LOCK="$TRUST_LOCK_PARENT_RESOLVED/$(basename -- "$TRUST_LOCK")"
+  TEST_SANDBOX=1
+elif ((override_count != 0)); then
+  fail 'test sandbox requires E8_V5_OPERATOR_ROOT, E8_V5_STATE, E8_V5_LOCK_PATH, and E8_V5_TRUST_LOCK'
 fi
 
 acquire_trust_boundary_lock() {
-    /usr/bin/python3 - "$TRUST_LOCK" <<'PY'
+  /usr/bin/python3 - "$TRUST_LOCK" <<'PY'
 import os
 import stat
 import sys
@@ -96,10 +99,10 @@ try:
 finally:
     os.close(dirfd)
 PY
-    exec 8<>"$TRUST_LOCK"
-    /usr/bin/flock -n 8 ||
-        fail "measurement trust-boundary lock is already held: $TRUST_LOCK"
-    /usr/bin/python3 - "$TRUST_LOCK" "/proc/$$/fd/8" <<'PY'
+  exec 8<>"$TRUST_LOCK"
+  /usr/bin/flock -n 8 ||
+    fail "measurement trust-boundary lock is already held: $TRUST_LOCK"
+  /usr/bin/python3 - "$TRUST_LOCK" "/proc/$$/fd/8" <<'PY'
 import os
 import stat
 import sys
@@ -109,49 +112,49 @@ held = os.stat(sys.argv[2])
 if not stat.S_ISREG(named.st_mode) or (named.st_dev, named.st_ino) != (held.st_dev, held.st_ino):
     raise SystemExit("measurement trust-boundary lock inode changed during acquisition")
 PY
-    if (( TEST_SANDBOX == 1 )) && [[ "${E8_V5_TEST_HOLD_TRUST_LOCK_SECONDS:-0}" != 0 ]]; then
-        [[ "${E8_V5_TEST_HOLD_TRUST_LOCK_SECONDS}" =~ ^[0-9]+([.][0-9]+)?$ ]] ||
-            fail 'invalid test-only trust-lock hold duration'
-        sleep "${E8_V5_TEST_HOLD_TRUST_LOCK_SECONDS}"
-    fi
+  if ((TEST_SANDBOX == 1)) && [[ "${E8_V5_TEST_HOLD_TRUST_LOCK_SECONDS:-0}" != 0 ]]; then
+    [[ "${E8_V5_TEST_HOLD_TRUST_LOCK_SECONDS}" =~ ^[0-9]+([.][0-9]+)?$ ]] ||
+      fail 'invalid test-only trust-lock hold duration'
+    sleep "${E8_V5_TEST_HOLD_TRUST_LOCK_SECONDS}"
+  fi
 }
 
 verify_reviewed_bindings() {
-    for binding in \
-        "E8_V5_WRAPPER_SHA256:$0" \
-        "E8_V5_PRODUCER_SHA256:$PRODUCER" \
-        "E8_V5_RUNNER_SHA256:$RUNNER" \
-        "E8_V5_BASE_RUNNER_SHA256:$BASE_RUNNER" \
-        "E8_V5_RESUME_RUNNER_SHA256:$RESUME_RUNNER" \
-        "E8_V5_RECOVERY_RUNNER_SHA256:$RECOVERY_RUNNER" \
-        "E8_V5_FINALIZER_RUNNER_SHA256:$FINALIZER_RUNNER" \
-        "E8_V5_SUCCESSOR_RUNNER_SHA256:$SUCCESSOR_RUNNER" \
-        "E8_V5_RACE_RETRY_RUNNER_SHA256:$RACE_RETRY_RUNNER" \
-        "E8_V5_MIXED_TAIL_REPAIR_RUNNER_SHA256:$MIXED_TAIL_REPAIR_RUNNER" \
-        "E8_V5_FINAL_C1_RETRY_RUNNER_SHA256:$FINAL_C1_RETRY_RUNNER" \
-        "E8_V5_FINAL_C1_VALIDATOR_SHA256:$FINAL_C1_VALIDATOR" \
-        "E8_V5_VALIDATOR_SHA256:$VALIDATOR" \
-        "E8_V5_VALIDATOR_PY_SHA256:$VALIDATOR_PY" \
-        "E8_V5_APPLIER_SHA256:$APPLIER" \
-        "E8_V5_CANONICAL_APPLIER_SHA256:$CANONICAL_APPLIER"; do
-        name="${binding%%:*}"
-        path="${binding#*:}"
-        expected="${!name:-}"
-        [[ "$expected" =~ ^[0-9a-f]{64}$ && -f "$path" && "$(sha "$path")" == "$expected" ]] ||
-            fail "reviewed artifact pin differs: $name"
-    done
-    if [[ -n "${E8_V5_TERMINALIZER_RUNNER_SHA256:-}" ]]; then
-        [[ "$E8_V5_TERMINALIZER_RUNNER_SHA256" =~ ^[0-9a-f]{64}$ && -f "$TERMINALIZER_RUNNER" && "$(sha "$TERMINALIZER_RUNNER")" == "$E8_V5_TERMINALIZER_RUNNER_SHA256" ]] ||
-            fail 'reviewed artifact pin differs: E8_V5_TERMINALIZER_RUNNER_SHA256'
-    fi
-    [[ "${E8_V5_ORCHESTRATOR_HEAD:-}" =~ ^[0-9a-f]{40}$ && "$(git -C "$SOURCE_ROOT" rev-parse HEAD)" == "$E8_V5_ORCHESTRATOR_HEAD" ]] ||
-        fail 'reviewed source HEAD differs from the supplied source pin'
-    [[ -x "$PYTHON" && "$(readlink -f -- "$PYTHON")" == "$(readlink -f -- "$ORCH/.venv/bin/python")" ]] ||
-        fail 'canonical orchestrator venv is unavailable or differs'
+  for binding in \
+    "E8_V5_WRAPPER_SHA256:$0" \
+    "E8_V5_PRODUCER_SHA256:$PRODUCER" \
+    "E8_V5_RUNNER_SHA256:$RUNNER" \
+    "E8_V5_BASE_RUNNER_SHA256:$BASE_RUNNER" \
+    "E8_V5_RESUME_RUNNER_SHA256:$RESUME_RUNNER" \
+    "E8_V5_RECOVERY_RUNNER_SHA256:$RECOVERY_RUNNER" \
+    "E8_V5_FINALIZER_RUNNER_SHA256:$FINALIZER_RUNNER" \
+    "E8_V5_SUCCESSOR_RUNNER_SHA256:$SUCCESSOR_RUNNER" \
+    "E8_V5_RACE_RETRY_RUNNER_SHA256:$RACE_RETRY_RUNNER" \
+    "E8_V5_MIXED_TAIL_REPAIR_RUNNER_SHA256:$MIXED_TAIL_REPAIR_RUNNER" \
+    "E8_V5_FINAL_C1_RETRY_RUNNER_SHA256:$FINAL_C1_RETRY_RUNNER" \
+    "E8_V5_FINAL_C1_VALIDATOR_SHA256:$FINAL_C1_VALIDATOR" \
+    "E8_V5_VALIDATOR_SHA256:$VALIDATOR" \
+    "E8_V5_VALIDATOR_PY_SHA256:$VALIDATOR_PY" \
+    "E8_V5_APPLIER_SHA256:$APPLIER" \
+    "E8_V5_CANONICAL_APPLIER_SHA256:$CANONICAL_APPLIER"; do
+    name="${binding%%:*}"
+    path="${binding#*:}"
+    expected="${!name:-}"
+    [[ "$expected" =~ ^[0-9a-f]{64}$ && -f "$path" && "$(sha "$path")" == "$expected" ]] ||
+      fail "reviewed artifact pin differs: $name"
+  done
+  if [[ -n "${E8_V5_TERMINALIZER_RUNNER_SHA256:-}" ]]; then
+    [[ "$E8_V5_TERMINALIZER_RUNNER_SHA256" =~ ^[0-9a-f]{64}$ && -f "$TERMINALIZER_RUNNER" && "$(sha "$TERMINALIZER_RUNNER")" == "$E8_V5_TERMINALIZER_RUNNER_SHA256" ]] ||
+      fail 'reviewed artifact pin differs: E8_V5_TERMINALIZER_RUNNER_SHA256'
+  fi
+  [[ "${E8_V5_ORCHESTRATOR_HEAD:-}" =~ ^[0-9a-f]{40}$ && "$(git -C "$SOURCE_ROOT" rev-parse HEAD)" == "$E8_V5_ORCHESTRATOR_HEAD" ]] ||
+    fail 'reviewed source HEAD differs from the supplied source pin'
+  [[ -x "$PYTHON" && "$(readlink -f -- "$PYTHON")" == "$(readlink -f -- "$ORCH/.venv/bin/python")" ]] ||
+    fail 'canonical orchestrator venv is unavailable or differs'
 }
 
 usage() {
-    fail 'usage: --prevalidate|--apply|--finalize-receipt --evidence EVIDENCE --expected-pre-state-sha256 SHA --expected-candidate-state-sha256 SHA'
+  fail 'usage: --prevalidate|--apply|--finalize-receipt --evidence EVIDENCE --expected-pre-state-sha256 SHA --expected-candidate-state-sha256 SHA'
 }
 
 MODE="${1:-}"
@@ -162,7 +165,7 @@ EXPECTED_PRE="$5"
 EXPECTED_CANDIDATE="$7"
 [[ "$EVIDENCE" = /* && -f "$EVIDENCE" ]] || fail 'evidence must be an existing absolute path'
 [[ "$EXPECTED_PRE" =~ ^[0-9a-f]{64}$ && "$EXPECTED_CANDIDATE" =~ ^[0-9a-f]{64}$ ]] ||
-    fail 'reviewed state hashes must be lowercase SHA-256'
+  fail 'reviewed state hashes must be lowercase SHA-256'
 acquire_trust_boundary_lock
 verify_reviewed_bindings
 
@@ -178,17 +181,17 @@ CANONICAL_ATTESTATION="$TRANSACTION/canonical_apply_attestation.json"
 REVIEW_RECORD="$ROOT/artifacts/operator/e8_quality_baseline_state_v5_${EVIDENCE_SHA256}.six_row_review.json"
 [[ ! -e "$RECEIPT" ]] || fail 'a consolidated receipt already exists for this sealed evidence'
 [[ "$MODE" == "--prevalidate" || "$MODE" == "--finalize-receipt" || ! -e "$TRANSACTION" ]] ||
-    fail 'a transaction already exists for this sealed evidence; inspect/recover it instead'
+  fail 'a transaction already exists for this sealed evidence; inspect/recover it instead'
 
 if [[ "$MODE" != "--finalize-receipt" ]]; then
-    REVIEW="$(mktemp /mnt/raid0/llm/tmp/e8-quality-v5-review.XXXXXX.json)"
-    cleanup() { rm -f -- "$REVIEW"; }
-    trap cleanup EXIT
+  REVIEW="$(mktemp /mnt/raid0/llm/tmp/e8-quality-v5-review.XXXXXX.json)"
+  cleanup() { rm -f -- "$REVIEW"; }
+  trap cleanup EXIT
 
-    # Reconstruct and retain exactly the six state rows while the state is still
-    # pre-apply.  The canonical helper independently repeats the sealed validator.
-    PYTHONOPTIMIZE=0 "$PYTHON" - "$APPLIER" "$STATE" "$EVIDENCE" "$VALIDATOR" "$REVIEW" \
-        "$EXPECTED_PRE" "$EXPECTED_CANDIDATE" "$MODE" <<'PY'
+  # Reconstruct and retain exactly the six state rows while the state is still
+  # pre-apply.  The canonical helper independently repeats the sealed validator.
+  PYTHONOPTIMIZE=0 "$PYTHON" - "$APPLIER" "$STATE" "$EVIDENCE" "$VALIDATOR" "$REVIEW" \
+    "$EXPECTED_PRE" "$EXPECTED_CANDIDATE" "$MODE" <<'PY'
 import hashlib
 import importlib.util
 import json
@@ -227,11 +230,11 @@ if len(review["exact_state_diff"]) != 6:
 output_path.write_text(json.dumps(review, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 PY
 
-    if [[ "$MODE" == "--prevalidate" ]]; then
-        cat "$REVIEW"
-        printf 'E8 v5 prevalidation passed; no state, transaction, or receipt changed.\n'
-        exit 0
-    fi
+  if [[ "$MODE" == "--prevalidate" ]]; then
+    cat "$REVIEW"
+    printf 'E8 v5 prevalidation passed; no state, transaction, or receipt changed.\n'
+    exit 0
+  fi
 fi
 
 exec 9>"$LOCK"
@@ -239,31 +242,31 @@ flock -n 9 || fail 'another v5 apply owns the lock'
 verify_reviewed_bindings
 
 if [[ "$MODE" == "--apply" ]]; then
-    [[ ! -e "$RECEIPT" && ! -e "$TRANSACTION" && ! -e "$REVIEW_RECORD" ]] ||
-        fail 'state transaction, review, or receipt appeared during prevalidation; refusing to continue'
-    CONFIRMATION="APPLY-E8-V5:${EVIDENCE_SHA256}:${EXPECTED_CANDIDATE}"
-    PROMPT='commit the state CAS'
+  [[ ! -e "$RECEIPT" && ! -e "$TRANSACTION" && ! -e "$REVIEW_RECORD" ]] ||
+    fail 'state transaction, review, or receipt appeared during prevalidation; refusing to continue'
+  CONFIRMATION="APPLY-E8-V5:${EVIDENCE_SHA256}:${EXPECTED_CANDIDATE}"
+  PROMPT='commit the state CAS'
 else
-    [[ -d "$TRANSACTION" && -f "$REVIEW_RECORD" && -f "$CANONICAL_ATTESTATION" ]] ||
-        fail 'receipt recovery requires a committed transaction, retained review, and canonical attestation'
-    CONFIRMATION="FINALIZE-E8-V5:${EVIDENCE_SHA256}:${EXPECTED_CANDIDATE}"
-    PROMPT='finalize the missing consolidated receipt without reapplying state'
+  [[ -d "$TRANSACTION" && -f "$REVIEW_RECORD" && -f "$CANONICAL_ATTESTATION" ]] ||
+    fail 'receipt recovery requires a committed transaction, retained review, and canonical attestation'
+  CONFIRMATION="FINALIZE-E8-V5:${EVIDENCE_SHA256}:${EXPECTED_CANDIDATE}"
+  PROMPT='finalize the missing consolidated receipt without reapplying state'
 fi
 
-if (( TEST_SANDBOX == 1 )) && [[ "${E8_V5_TEST_AUTO_CONFIRM:-}" == "1" ]]; then
-    ANSWER="$CONFIRMATION"
+if ((TEST_SANDBOX == 1)) && [[ "${E8_V5_TEST_AUTO_CONFIRM:-}" == "1" ]]; then
+  ANSWER="$CONFIRMATION"
 else
-    [[ -t 0 && -t 1 ]] || fail 'apply requires an interactive terminal confirmation'
-    printf 'The sealed validator passed and the six-row candidate review is bound.\n'
-    printf 'Type the following exact, transaction-specific phrase to %s:\n%s\n> ' "$PROMPT" "$CONFIRMATION"
-    IFS= read -r ANSWER
+  [[ -t 0 && -t 1 ]] || fail 'apply requires an interactive terminal confirmation'
+  printf 'The sealed validator passed and the six-row candidate review is bound.\n'
+  printf 'Type the following exact, transaction-specific phrase to %s:\n%s\n> ' "$PROMPT" "$CONFIRMATION"
+  IFS= read -r ANSWER
 fi
 [[ "$ANSWER" == "$CONFIRMATION" ]] || fail 'interactive confirmation did not match; no state changed'
 
 if [[ "$MODE" == "--apply" ]]; then
-    # Persist the exact pre-apply review before the CAS so post-commit receipt
-    # recovery can validate, but never regenerate, a committed candidate.
-    PYTHONOPTIMIZE=0 "$PYTHON" - "$REVIEW" "$REVIEW_RECORD" <<'PY'
+  # Persist the exact pre-apply review before the CAS so post-commit receipt
+  # recovery can validate, but never regenerate, a committed candidate.
+  PYTHONOPTIMIZE=0 "$PYTHON" - "$REVIEW" "$REVIEW_RECORD" <<'PY'
 import os, sys
 from pathlib import Path
 source, destination = map(Path, sys.argv[1:3])
@@ -287,38 +290,38 @@ finally:
     os.close(dir_fd)
 PY
 
-    COMMON=(
-        --state "$STATE"
-        --evidence "$EVIDENCE"
-        --canonical-evidence "$EVIDENCE"
-        --validator "$VALIDATOR"
-        --transaction-dir "$TRANSACTION"
-        --attestation "$CANONICAL_ATTESTATION"
-        --expected-pre-state-sha256 "$EXPECTED_PRE"
-        --expected-candidate-state-sha256 "$EXPECTED_CANDIDATE"
-    )
-    # The canonical applier owns lifecycle/state locks, durable preimage,
-    # evidence re-validation, CAS, rollback, and the transaction-local receipt.
-    if E8_BASELINE_APPLY_TOKEN="$CONFIRMATION" EPYC_MEASUREMENT_TRUST_LOCK_FD=8 \
-        PYTHONOPTIMIZE=0 "$PYTHON" "$APPLIER" \
-        "${COMMON[@]}" --attest "$CONFIRMATION"; then
-        :
-    else
-        applier_status=$?
-        if [[ ! -e "$TRANSACTION" && -f "$REVIEW_RECORD" && "$(sha "$STATE")" == "$EXPECTED_PRE" ]]; then
-            rm -f -- "$REVIEW_RECORD"
-        fi
-        exit "$applier_status"
+  COMMON=(
+    --state "$STATE"
+    --evidence "$EVIDENCE"
+    --canonical-evidence "$EVIDENCE"
+    --validator "$VALIDATOR"
+    --transaction-dir "$TRANSACTION"
+    --attestation "$CANONICAL_ATTESTATION"
+    --expected-pre-state-sha256 "$EXPECTED_PRE"
+    --expected-candidate-state-sha256 "$EXPECTED_CANDIDATE"
+  )
+  # The canonical applier owns lifecycle/state locks, durable preimage,
+  # evidence re-validation, CAS, rollback, and the transaction-local receipt.
+  if E8_BASELINE_APPLY_TOKEN="$CONFIRMATION" EPYC_MEASUREMENT_TRUST_LOCK_FD=8 \
+    PYTHONOPTIMIZE=0 "$PYTHON" "$APPLIER" \
+    "${COMMON[@]}" --attest "$CONFIRMATION"; then
+    :
+  else
+    applier_status=$?
+    if [[ ! -e "$TRANSACTION" && -f "$REVIEW_RECORD" && "$(sha "$STATE")" == "$EXPECTED_PRE" ]]; then
+      rm -f -- "$REVIEW_RECORD"
     fi
+    exit "$applier_status"
+  fi
 fi
 
 # Create the one external receipt only after the canonical commit has returned
 # successfully.  A failed apply therefore cannot look ratified.
 PYTHONOPTIMIZE=0 "$PYTHON" - "$APPLIER" "$STATE" "$EVIDENCE" "$VALIDATOR" "$REVIEW_RECORD" \
-    "$TRANSACTION" "$CANONICAL_ATTESTATION" "$RECEIPT" "$0" "$PRODUCER" "$RUNNER" "$BASE_RUNNER" \
-    "$RESUME_RUNNER" "$RECOVERY_RUNNER" "$FINALIZER_RUNNER" "$SUCCESSOR_RUNNER" "$RACE_RETRY_RUNNER" \
-    "$MIXED_TAIL_REPAIR_RUNNER" "$TERMINALIZER_RUNNER" "$FINAL_C1_RETRY_RUNNER" "$FINAL_C1_VALIDATOR" "$VALIDATOR_PY" "$CANONICAL_APPLIER" \
-    "$EXPECTED_PRE" "$EXPECTED_CANDIDATE" "$CONFIRMATION" <<'PY'
+  "$TRANSACTION" "$CANONICAL_ATTESTATION" "$RECEIPT" "$0" "$PRODUCER" "$RUNNER" "$BASE_RUNNER" \
+  "$RESUME_RUNNER" "$RECOVERY_RUNNER" "$FINALIZER_RUNNER" "$SUCCESSOR_RUNNER" "$RACE_RETRY_RUNNER" \
+  "$MIXED_TAIL_REPAIR_RUNNER" "$TERMINALIZER_RUNNER" "$FINAL_C1_RETRY_RUNNER" "$FINAL_C1_VALIDATOR" "$VALIDATOR_PY" "$CANONICAL_APPLIER" \
+  "$EXPECTED_PRE" "$EXPECTED_CANDIDATE" "$CONFIRMATION" <<'PY'
 import hashlib
 import importlib.util
 import json

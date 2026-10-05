@@ -19,54 +19,57 @@ TERMINALIZER_RUNNER="$SOURCE_ROOT/scripts/benchmark/terminalize_e8_quality_basel
 FINAL_C1_RETRY_RUNNER="$SOURCE_ROOT/scripts/benchmark/final_c1_retry.py"
 FINAL_C1_VALIDATOR="$SOURCE_ROOT/scripts/benchmark/final_c1_validator.py"
 
-fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+fail() {
+  printf 'ERROR: %s\n' "$*" >&2
+  exit 1
+}
 sha() { sha256sum -- "$1" | awk '{print $1}'; }
 [[ $# -eq 2 && "$1" == "--validate-evidence" ]] ||
-    fail 'usage: prepare_e8_quality_baseline_v5_candidate.sh --validate-evidence EVIDENCE'
+  fail 'usage: prepare_e8_quality_baseline_v5_candidate.sh --validate-evidence EVIDENCE'
 [[ -x "$PYTHON" && -f "$VALIDATOR" && -f "$PRODUCER" && -f "$RUNNER" && -f "$BASE_RUNNER" && -f "$RESUME_RUNNER" && -f "$RECOVERY_RUNNER" && -f "$FINALIZER_RUNNER" && -f "$SUCCESSOR_RUNNER" && -f "$RACE_RETRY_RUNNER" && -f "$MIXED_TAIL_REPAIR_RUNNER" && -f "$TERMINALIZER_RUNNER" && -f "$FINAL_C1_RETRY_RUNNER" && -f "$FINAL_C1_VALIDATOR" ]] ||
-    fail 'v5 composite validator prerequisite is missing'
+  fail 'v5 composite validator prerequisite is missing'
 [[ "$(readlink -f -- "$PYTHON")" == "$(readlink -f -- "$ORCH/.venv/bin/python")" ]] ||
-    fail 'canonical orchestrator venv identity differs'
+  fail 'canonical orchestrator venv identity differs'
 [[ "${E8_V5_ORCHESTRATOR_HEAD:-}" =~ ^[0-9a-f]{40}$ && "$(git -C "$SOURCE_ROOT" rev-parse HEAD)" == "$E8_V5_ORCHESTRATOR_HEAD" ]] ||
-    fail 'reviewed source HEAD differs from the supplied source pin'
+  fail 'reviewed source HEAD differs from the supplied source pin'
 [[ "${E8_V5_VALIDATOR_SHA256:-}" =~ ^[0-9a-f]{64}$ && "$(sha "$0")" == "$E8_V5_VALIDATOR_SHA256" ]] ||
-    fail 'v5 validator wrapper differs from the externally reviewed hash'
+  fail 'v5 validator wrapper differs from the externally reviewed hash'
 for binding in \
-    "E8_V5_PRODUCER_SHA256:$PRODUCER" \
-    "E8_V5_RUNNER_SHA256:$RUNNER" \
-    "E8_V5_BASE_RUNNER_SHA256:$BASE_RUNNER" \
-    "E8_V5_RESUME_RUNNER_SHA256:$RESUME_RUNNER" \
-    "E8_V5_RECOVERY_RUNNER_SHA256:$RECOVERY_RUNNER" \
-    "E8_V5_FINALIZER_RUNNER_SHA256:$FINALIZER_RUNNER" \
-    "E8_V5_SUCCESSOR_RUNNER_SHA256:$SUCCESSOR_RUNNER" \
-    "E8_V5_RACE_RETRY_RUNNER_SHA256:$RACE_RETRY_RUNNER" \
-    "E8_V5_MIXED_TAIL_REPAIR_RUNNER_SHA256:$MIXED_TAIL_REPAIR_RUNNER" \
-    "E8_V5_FINAL_C1_RETRY_RUNNER_SHA256:$FINAL_C1_RETRY_RUNNER" \
-    "E8_V5_FINAL_C1_VALIDATOR_SHA256:$FINAL_C1_VALIDATOR" \
-    "E8_V5_VALIDATOR_PY_SHA256:$VALIDATOR"; do
-    name="${binding%%:*}"
-    path="${binding#*:}"
-    expected="${!name:-}"
-    [[ "$expected" =~ ^[0-9a-f]{64}$ && "$(sha "$path")" == "$expected" ]] ||
-        fail "reviewed composite artifact pin differs: $name"
+  "E8_V5_PRODUCER_SHA256:$PRODUCER" \
+  "E8_V5_RUNNER_SHA256:$RUNNER" \
+  "E8_V5_BASE_RUNNER_SHA256:$BASE_RUNNER" \
+  "E8_V5_RESUME_RUNNER_SHA256:$RESUME_RUNNER" \
+  "E8_V5_RECOVERY_RUNNER_SHA256:$RECOVERY_RUNNER" \
+  "E8_V5_FINALIZER_RUNNER_SHA256:$FINALIZER_RUNNER" \
+  "E8_V5_SUCCESSOR_RUNNER_SHA256:$SUCCESSOR_RUNNER" \
+  "E8_V5_RACE_RETRY_RUNNER_SHA256:$RACE_RETRY_RUNNER" \
+  "E8_V5_MIXED_TAIL_REPAIR_RUNNER_SHA256:$MIXED_TAIL_REPAIR_RUNNER" \
+  "E8_V5_FINAL_C1_RETRY_RUNNER_SHA256:$FINAL_C1_RETRY_RUNNER" \
+  "E8_V5_FINAL_C1_VALIDATOR_SHA256:$FINAL_C1_VALIDATOR" \
+  "E8_V5_VALIDATOR_PY_SHA256:$VALIDATOR"; do
+  name="${binding%%:*}"
+  path="${binding#*:}"
+  expected="${!name:-}"
+  [[ "$expected" =~ ^[0-9a-f]{64}$ && "$(sha "$path")" == "$expected" ]] ||
+    fail "reviewed composite artifact pin differs: $name"
 done
 terminalizer_args=()
 if [[ -n "${E8_V5_TERMINALIZER_RUNNER_SHA256:-}" ]]; then
-    [[ "$E8_V5_TERMINALIZER_RUNNER_SHA256" =~ ^[0-9a-f]{64}$ && "$(sha "$TERMINALIZER_RUNNER")" == "$E8_V5_TERMINALIZER_RUNNER_SHA256" ]] ||
-        fail 'reviewed composite artifact pin differs: E8_V5_TERMINALIZER_RUNNER_SHA256'
-    terminalizer_args=(--expected-terminalizer-runner-sha256 "$E8_V5_TERMINALIZER_RUNNER_SHA256")
+  [[ "$E8_V5_TERMINALIZER_RUNNER_SHA256" =~ ^[0-9a-f]{64}$ && "$(sha "$TERMINALIZER_RUNNER")" == "$E8_V5_TERMINALIZER_RUNNER_SHA256" ]] ||
+    fail 'reviewed composite artifact pin differs: E8_V5_TERMINALIZER_RUNNER_SHA256'
+  terminalizer_args=(--expected-terminalizer-runner-sha256 "$E8_V5_TERMINALIZER_RUNNER_SHA256")
 fi
 
 PYTHONOPTIMIZE=0 "$PYTHON" "$VALIDATOR" \
-    --evidence "$2" \
-    --expected-runner-sha256 "$E8_V5_RUNNER_SHA256" \
-    --expected-base-runner-sha256 "$E8_V5_BASE_RUNNER_SHA256" \
-    --expected-resume-runner-sha256 "$E8_V5_RESUME_RUNNER_SHA256" \
-    --expected-recovery-runner-sha256 "$E8_V5_RECOVERY_RUNNER_SHA256" \
-    --expected-finalizer-runner-sha256 "$E8_V5_FINALIZER_RUNNER_SHA256" \
-    --expected-successor-runner-sha256 "$E8_V5_SUCCESSOR_RUNNER_SHA256" \
-    --expected-race-retry-runner-sha256 "$E8_V5_RACE_RETRY_RUNNER_SHA256" \
-    --expected-mixed-tail-repair-runner-sha256 "$E8_V5_MIXED_TAIL_REPAIR_RUNNER_SHA256" \
-    --expected-final-c1-retry-runner-sha256 "$E8_V5_FINAL_C1_RETRY_RUNNER_SHA256" \
-    --expected-final-c1-validator-sha256 "$E8_V5_FINAL_C1_VALIDATOR_SHA256" \
-    "${terminalizer_args[@]}"
+  --evidence "$2" \
+  --expected-runner-sha256 "$E8_V5_RUNNER_SHA256" \
+  --expected-base-runner-sha256 "$E8_V5_BASE_RUNNER_SHA256" \
+  --expected-resume-runner-sha256 "$E8_V5_RESUME_RUNNER_SHA256" \
+  --expected-recovery-runner-sha256 "$E8_V5_RECOVERY_RUNNER_SHA256" \
+  --expected-finalizer-runner-sha256 "$E8_V5_FINALIZER_RUNNER_SHA256" \
+  --expected-successor-runner-sha256 "$E8_V5_SUCCESSOR_RUNNER_SHA256" \
+  --expected-race-retry-runner-sha256 "$E8_V5_RACE_RETRY_RUNNER_SHA256" \
+  --expected-mixed-tail-repair-runner-sha256 "$E8_V5_MIXED_TAIL_REPAIR_RUNNER_SHA256" \
+  --expected-final-c1-retry-runner-sha256 "$E8_V5_FINAL_C1_RETRY_RUNNER_SHA256" \
+  --expected-final-c1-validator-sha256 "$E8_V5_FINAL_C1_VALIDATOR_SHA256" \
+  "${terminalizer_args[@]}"

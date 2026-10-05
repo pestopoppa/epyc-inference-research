@@ -42,8 +42,8 @@ fi
 cp "$PTH" "${PTH}.bak"
 # Deduplicate the baked path (pip wrote it twice here) and append the shim.
 # The path must remain FIRST so `import epyc_worktree_path` can resolve.
-awk 'NF && !seen[$0]++' "$PTH" > "${PTH}.tmp"
-printf '%s\n' "$SHIM" >> "${PTH}.tmp"
+awk 'NF && !seen[$0]++' "$PTH" >"${PTH}.tmp"
+printf '%s\n' "$SHIM" >>"${PTH}.tmp"
 mv "${PTH}.tmp" "$PTH"
 echo "  installed ${PTH}"
 cat "$PTH" | sed 's/^/    | /'

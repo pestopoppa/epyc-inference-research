@@ -108,7 +108,7 @@ if [[ -z "${ORCHESTRATOR_PATHS_LLAMA_MTMD:-}" ]]; then
     "${LLM_ROOT}/llama.cpp/build_libomp_pgo_bolt/bin/llama-mtmd-cli"; do
     [[ -x "${mtmd_candidate}" ]] || continue
     if LD_LIBRARY_PATH="$(dirname "${mtmd_candidate}")${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" \
-       timeout 20 "${mtmd_candidate}" --version 2>&1 | grep -q 'version:'; then
+      timeout 20 "${mtmd_candidate}" --version 2>&1 | grep -q 'version:'; then
       export ORCHESTRATOR_PATHS_LLAMA_MTMD="${mtmd_candidate}"
       break
     fi

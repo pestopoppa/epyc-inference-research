@@ -51,24 +51,24 @@ DRY_RUN=""
 SUITES="math simpleqa hotpotqa gpqa coder thinking general agentic instruction_precision mode_advantage_hard"
 
 while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --dry-run)
-            DRY_RUN="--dry-run"
-            shift
-            ;;
-        --sample-size)
-            SAMPLE_SIZE="$2"
-            shift 2
-            ;;
-        --suites)
-            SUITES="$2"
-            shift 2
-            ;;
-        *)
-            EXTRA_ARGS+=("$1")
-            shift
-            ;;
-    esac
+  case "$1" in
+    --dry-run)
+      DRY_RUN="--dry-run"
+      shift
+      ;;
+    --sample-size)
+      SAMPLE_SIZE="$2"
+      shift 2
+      ;;
+    --suites)
+      SUITES="$2"
+      shift 2
+      ;;
+    *)
+      EXTRA_ARGS+=("$1")
+      shift
+      ;;
+  esac
 done
 
 # ── Pre-flight ──────────────────────────────────────────────────
@@ -89,23 +89,23 @@ echo "║    SESSION_COMPACTION = 1      (compaction enabled)"
 echo "║    difficulty_signal = shadow   (from config)"
 echo "║    factual_risk = shadow        (from config)"
 if [[ -n "$DRY_RUN" ]]; then
-echo "║    [DRY RUN — no reward injection]"
+  echo "║    [DRY RUN — no reward injection]"
 fi
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
 
 # Health check — restart API if needed
 echo "→ Checking orchestrator health..."
-if ! curl -sf http://localhost:8000/health > /dev/null 2>&1; then
-    echo "  ✗ Orchestrator API not responding — attempting restart..."
+if ! curl -sf http://localhost:8000/health >/dev/null 2>&1; then
+  echo "  ✗ Orchestrator API not responding — attempting restart..."
 
-    # Kill any stale uvicorn on port 8000
-    fuser -k 8000/tcp 2>/dev/null || true
-    sleep 1
+  # Kill any stale uvicorn on port 8000
+  fuser -k 8000/tcp 2>/dev/null || true
+  sleep 1
 
-    # Restart the API server (model servers should still be running)
-    cd "$PROJECT_ROOT"
-    ORCHESTRATOR_MOCK_MODE=0 \
+  # Restart the API server (model servers should still be running)
+  cd "$PROJECT_ROOT"
+  ORCHESTRATOR_MOCK_MODE=0 \
     ORCHESTRATOR_MEMRL=1 \
     ORCHESTRATOR_TOOLS=1 \
     ORCHESTRATOR_SCRIPTS=1 \
@@ -125,39 +125,39 @@ if ! curl -sf http://localhost:8000/health > /dev/null 2>&1; then
     ORCHESTRATOR_SIDE_EFFECT_TRACKING=1 \
     ORCHESTRATOR_STRUCTURED_TOOL_OUTPUT=1 \
     nohup python3 -m uvicorn src.api:app \
-        --host 127.0.0.1 --port 8000 --workers 6 --limit-concurrency 4 \
-        > "$PROJECT_ROOT/logs/orchestrator.log" 2>&1 &
-    API_PID=$!
-    echo "  → Started uvicorn (PID $API_PID), waiting for health..."
+    --host 127.0.0.1 --port 8000 --workers 6 --limit-concurrency 4 \
+    >"$PROJECT_ROOT/logs/orchestrator.log" 2>&1 &
+  API_PID=$!
+  echo "  → Started uvicorn (PID $API_PID), waiting for health..."
 
-    # Wait up to 60s for health
-    for i in $(seq 1 60); do
-        if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
-            echo "  ✓ Orchestrator API healthy (took ${i}s)"
-            break
-        fi
-        if ! kill -0 "$API_PID" 2>/dev/null; then
-            echo "  ✗ API process died. Check logs/orchestrator.log"
-            exit 1
-        fi
-        sleep 1
-    done
-
-    if ! curl -sf http://localhost:8000/health > /dev/null 2>&1; then
-        echo "  ✗ Orchestrator API failed to start after 60s"
-        echo "    Check: $PROJECT_ROOT/logs/orchestrator.log"
-        echo "    You may need to start the full stack: python3 scripts/server/orchestrator_stack.py start"
-        exit 1
+  # Wait up to 60s for health
+  for i in $(seq 1 60); do
+    if curl -sf http://localhost:8000/health >/dev/null 2>&1; then
+      echo "  ✓ Orchestrator API healthy (took ${i}s)"
+      break
     fi
+    if ! kill -0 "$API_PID" 2>/dev/null; then
+      echo "  ✗ API process died. Check logs/orchestrator.log"
+      exit 1
+    fi
+    sleep 1
+  done
+
+  if ! curl -sf http://localhost:8000/health >/dev/null 2>&1; then
+    echo "  ✗ Orchestrator API failed to start after 60s"
+    echo "    Check: $PROJECT_ROOT/logs/orchestrator.log"
+    echo "    You may need to start the full stack: python3 scripts/server/orchestrator_stack.py start"
+    exit 1
+  fi
 else
-    echo "  ✓ Orchestrator healthy"
+  echo "  ✓ Orchestrator healthy"
 fi
 
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
 
 # Save environment snapshot
-env | grep -E "^ORCHESTRATOR_" | sort > "$OUTPUT_DIR/env_flags.txt"
+env | grep -E "^ORCHESTRATOR_" | sort >"$OUTPUT_DIR/env_flags.txt"
 echo "  ✓ Environment snapshot saved"
 
 # ── Phase 1: 3-Way Seeding Eval ────────────────────────────────
@@ -168,13 +168,13 @@ echo ""
 
 cd "$PROJECT_ROOT"
 python3 scripts/benchmark/seed_specialist_routing.py \
-    --3way \
-    --suites $SUITES \
-    --sample-size "$SAMPLE_SIZE" \
-    --output "$OUTPUT_DIR/seeding_results.json" \
-    --preflight \
-    $DRY_RUN \
-    "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
+  --3way \
+  --suites $SUITES \
+  --sample-size "$SAMPLE_SIZE" \
+  --output "$OUTPUT_DIR/seeding_results.json" \
+  --preflight \
+  $DRY_RUN \
+  "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
 
 echo ""
 echo "  ✓ Seeding eval complete → $OUTPUT_DIR/seeding_results.json"
@@ -187,11 +187,11 @@ echo ""
 
 cd /mnt/raid0/llm/epyc-inference-research
 python3 scripts/benchmark/eval_trimr.py \
-    --suites math gpqa \
-    --n-questions "$SAMPLE_SIZE" \
-    --strategy all \
-    --output "$OUTPUT_DIR/trimr_results.jsonl" \
-    ${DRY_RUN:+--dry-run}
+  --suites math gpqa \
+  --n-questions "$SAMPLE_SIZE" \
+  --strategy all \
+  --output "$OUTPUT_DIR/trimr_results.jsonl" \
+  ${DRY_RUN:+--dry-run}
 
 echo ""
 echo "  ✓ TrimR eval complete → $OUTPUT_DIR/trimr_results.jsonl"
@@ -204,21 +204,21 @@ echo "═══ Phase 3: Collect Telemetry ═══"
 PROGRESS_DATE=$(date -u +%Y-%m-%d)
 PROGRESS_LOG="$PROJECT_ROOT/logs/progress/$PROGRESS_DATE.jsonl"
 if [[ -f "$PROGRESS_LOG" ]]; then
-    cp "$PROGRESS_LOG" "$OUTPUT_DIR/progress_log.jsonl"
-    echo "  ✓ Progress log copied"
+  cp "$PROGRESS_LOG" "$OUTPUT_DIR/progress_log.jsonl"
+  echo "  ✓ Progress log copied"
 fi
 
 # Run SLO report
 cd "$PROJECT_ROOT"
 python3 scripts/server/delegation_slo_report.py \
-    --date "$PROGRESS_DATE" \
-    --json > "$OUTPUT_DIR/slo_report.json" 2>/dev/null || true
+  --date "$PROGRESS_DATE" \
+  --json >"$OUTPUT_DIR/slo_report.json" 2>/dev/null || true
 echo "  ✓ SLO report generated"
 
 # Run anomaly detector
 python3 scripts/server/chain_anomaly_detector.py \
-    --date "$PROGRESS_DATE" \
-    --json > "$OUTPUT_DIR/anomaly_report.json" 2>/dev/null || true
+  --date "$PROGRESS_DATE" \
+  --json >"$OUTPUT_DIR/anomaly_report.json" 2>/dev/null || true
 echo "  ✓ Anomaly report generated"
 
 # ── Phase 4: Analysis ──────────────────────────────────────────

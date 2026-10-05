@@ -21,11 +21,14 @@ QUALITY_ERA="E9-eval-resource-lanes-quality"
 SPEED_ERA="E9-autopilot-resource-lanes-speed"
 MODE="${1:-apply}"
 
-fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
+fail() {
+  printf 'ERROR: %s\n' "$*" >&2
+  exit 1
+}
 
 [[ "$(id -u)" -ne 0 ]] || fail "run as the normal operator account, not root"
 [[ "$MODE" == "apply" || "$MODE" == "--prevalidate" ]] ||
-    fail "usage: $0 [--prevalidate]"
+  fail "usage: $0 [--prevalidate]"
 [[ -x "$PYTHON" && -f "$STATE" && -f "$ERAS" ]] || fail "canonical files are unavailable"
 mkdir -p -- "$(dirname -- "$RECEIPT")"
 
@@ -35,8 +38,8 @@ exec 9>"$AUTOPILOT_LOCK"
 flock -n 9 || fail "AutoPilot is running; stop it before applying the boundary"
 
 "$PYTHON" - "$STATE" "$ERAS" "$RECEIPT" "$STATE_BACKUP" "$0" \
-    "$BOUNDARY_ISO" "$BOUNDARY_EPOCH" "$POLICY" "$EXECUTION_ID" "$SCORING_ID" \
-    "$QUALITY_ERA" "$SPEED_ERA" "$MODE" <<'PY'
+  "$BOUNDARY_ISO" "$BOUNDARY_EPOCH" "$POLICY" "$EXECUTION_ID" "$SCORING_ID" \
+  "$QUALITY_ERA" "$SPEED_ERA" "$MODE" <<'PY'
 from __future__ import annotations
 
 import hashlib

@@ -25,8 +25,14 @@ THREADS="${SD_THREADS:-96}"
 # Parse arguments
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --port)        PORT="$2"; shift 2 ;;
-    --listen)      LISTEN="$2"; shift 2 ;;
+    --port)
+      PORT="$2"
+      shift 2
+      ;;
+    --listen)
+      LISTEN="$2"
+      shift 2
+      ;;
     *)
       echo "Unknown option: $1" >&2
       echo "Usage: $0 [--port N] [--listen IP]" >&2
