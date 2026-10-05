@@ -5,7 +5,7 @@ specialist execution and return the cached compressed report. This saves
 the full specialist loop (REPL turns, tool calls, LLM inference).
 
 Key: SHA-256(brief_normalized[:200] + "|" + delegate_to)
-Value: compressed report text + metadata (timestamp, tokens, quality)
+Value: compressed report text, optional original report, and metadata
 
 Design:
 - In-memory dict (no disk persistence — delegation results are session-scoped)
@@ -39,6 +39,7 @@ class DelegationCacheEntry:
     ttl_seconds: float = DEFAULT_TTL_SECONDS
     tokens_used: int = 0       # tokens consumed in original execution
     report_handle: dict[str, str] | None = None  # if a handle was stored
+    full_report: str | None = None  # original report for user-facing returns
 
     @property
     def is_expired(self) -> bool:
@@ -96,10 +97,15 @@ class DelegationCache:
             )
         return hashlib.sha256(payload.encode()).hexdigest()
 
-    def get(self, key: str) -> DelegationCacheEntry | None:
+    def get(
+        self,
+        key: str,
+        *,
+        require_full_report: bool = False,
+    ) -> DelegationCacheEntry | None:
         """Look up a cached delegation result.
 
-        Returns None on miss or expired entry.
+        Returns None on miss, expiry, or when a required original report is absent.
         """
         entry = self._store.get(key)
         if entry is None:
@@ -107,6 +113,9 @@ class DelegationCache:
             return None
         if entry.is_expired:
             del self._store[key]
+            self._misses += 1
+            return None
+        if require_full_report and not entry.full_report:
             self._misses += 1
             return None
         self._hits += 1
@@ -119,6 +128,7 @@ class DelegationCache:
         delegate_to: str,
         tokens_used: int = 0,
         report_handle: dict[str, str] | None = None,
+        full_report: str | None = None,
     ) -> None:
         """Store a delegation result."""
         if not report or not report.strip():
@@ -140,6 +150,7 @@ class DelegationCache:
             ttl_seconds=self._ttl,
             tokens_used=tokens_used,
             report_handle=report_handle,
+            full_report=full_report,
         )
 
     def _evict_expired(self) -> None:

@@ -56,7 +56,6 @@ def _to_report_handle_text(handle: dict[str, str], summary: str) -> str:
     return (
         f"[REPORT_HANDLE id={handle.get('id')} chars={handle.get('chars')} "
         f"sha16={handle.get('sha16')}]\n"
-        f"Use fetch_report('{handle.get('id')}') for full content.\n\n"
         f"Summary:\n{(summary or '').strip()}"
     )
 

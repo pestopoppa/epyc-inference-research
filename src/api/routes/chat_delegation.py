@@ -1016,12 +1016,16 @@ def _architect_delegated_answer_inner(
         stats["delegation_cache_lookups"] = (
             int(stats.get("delegation_cache_lookups", 0) or 0) + 1
         )
-        _cached = _deleg_cache.get(_cache_key)
+        # Legacy cache entries contain only the loop-compressed text. They
+        # cannot safely stand in for the original user-facing report.
+        _cached = _deleg_cache.get(_cache_key, require_full_report=True)
+        if _cached is not None and not getattr(_cached, "full_report", None):
+            _cached = None
         if _cached is not None:
             report = _cached.report
             report_for_loop = report
             final_report = report
-            full_report = report
+            full_report = _cached.full_report
             report_handle = _cached.report_handle
             specialist_timed_out = False
             report_rescued = False
@@ -1086,6 +1090,7 @@ def _architect_delegated_answer_inner(
                     _cache_key, cache_report, delegate_to,
                     tokens_used=delegate_tokens_for_cache,
                     report_handle=report_handle,
+                    full_report=full_report,
                 )
 
         phase_b_ms = (time.perf_counter() - phase_b_start) * 1000

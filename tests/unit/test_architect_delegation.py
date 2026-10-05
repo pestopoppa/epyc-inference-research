@@ -867,7 +867,128 @@ class RateLimiter:
         assert stats["report_handles"]
         # The architect loop prompt still carries the compact handle+summary text.
         assert "[REPORT_HANDLE id=" in arch_prompts[1]
+        assert "fetch_report" not in arch_prompts[1]
         assert "compact summary" in arch_prompts[1]
+        cache_kwargs = mock_cache.put.call_args.kwargs
+        assert cache_kwargs["full_report"] == full_report
+        assert cache_kwargs["report_handle"] == stats["report_handles"][0]
+
+    def test_non_rescued_cache_hit_keeps_full_user_report_and_compact_loop_text(self):
+        from types import SimpleNamespace
+
+        from src.api.routes.chat_delegation import _architect_delegated_answer
+
+        primitives = MagicMock()
+        primitives._backends = {"test": True}
+        primitives.total_tokens_generated = 0
+        state = MagicMock()
+        state.tool_registry = None
+        full_report = "FULL CACHED REPORT\n" + ("details\n" * 300)
+        loop_report = "[REPORT_HANDLE id=report-123 chars=2400 sha16=abc]\nSummary:\nshort form"
+        handle = {"id": "report-123", "chars": "2400", "sha16": "abc"}
+        mock_cache = MagicMock()
+        mock_cache.make_key.return_value = "cached-key"
+        mock_cache.get.return_value = SimpleNamespace(
+            report=loop_report,
+            full_report=full_report,
+            report_handle=handle,
+            age_seconds=1.0,
+        )
+        arch_prompts: list[str] = []
+        decisions = iter([
+            ("I|brief:investigate|to:coder_escalation", 1, 0),
+            ("D|Approved", 1, 0),
+        ])
+
+        def _decision(prompt_text, *_a, **_kw):
+            arch_prompts.append(prompt_text)
+            return next(decisions)
+
+        with patch(
+            "src.api.routes.chat_delegation._run_architect_decision",
+            side_effect=_decision,
+        ), patch(
+            "src.api.routes.chat_delegation._run_specialist_loop",
+        ) as run_specialist, patch(
+            "src.delegation_cache.get_delegation_cache",
+            return_value=mock_cache,
+        ):
+            answer, stats = _architect_delegated_answer(
+                question="q",
+                context="",
+                primitives=primitives,
+                state=state,
+                max_loops=3,
+                force_response_on_cap=True,
+            )
+
+        assert answer == full_report
+        assert stats["specialist_output"] == full_report
+        assert stats["delegation_cache_hits"] == 1
+        assert stats["report_handles"] == [handle]
+        assert "short form" in arch_prompts[1]
+        assert full_report not in arch_prompts[1]
+        run_specialist.assert_not_called()
+
+    def test_legacy_compact_cache_entry_is_not_used_as_full_report(self):
+        from types import SimpleNamespace
+
+        from src.api.routes.chat_delegation import _architect_delegated_answer
+
+        primitives = MagicMock()
+        primitives._backends = {"test": True}
+        primitives.total_tokens_generated = 0
+        primitives.llm_call = MagicMock(return_value="summary")
+        state = MagicMock()
+        state.tool_registry = None
+        full_report = "NEW FULL SPECIALIST REPORT"
+        legacy_entry = SimpleNamespace(
+            report="legacy compact summary",
+            report_handle=None,
+            age_seconds=1.0,
+        )
+        mock_cache = MagicMock()
+        mock_cache.make_key.return_value = "legacy-key"
+        mock_cache.get.return_value = None
+        arch_prompts: list[str] = []
+        decisions = iter([
+            ("I|brief:investigate|to:coder_escalation", 1, 0),
+            ("D|Approved", 1, 0),
+        ])
+
+        def _decision(prompt_text, *_a, **_kw):
+            arch_prompts.append(prompt_text)
+            return next(decisions)
+
+        def _get_cache_entry(*_args, **_kwargs):
+            return legacy_entry
+
+        with patch(
+            "src.api.routes.chat_delegation._run_architect_decision",
+            side_effect=_decision,
+        ), patch(
+            "src.api.routes.chat_delegation._run_specialist_loop",
+            return_value=(full_report, 0, [], [], False, False, {}, []),
+        ) as run_specialist, patch(
+            "src.delegation_cache.get_delegation_cache",
+            return_value=mock_cache,
+        ):
+            mock_cache.get.side_effect = _get_cache_entry
+            answer, stats = _architect_delegated_answer(
+                question="q",
+                context="",
+                primitives=primitives,
+                state=state,
+                max_loops=3,
+                force_response_on_cap=True,
+            )
+
+        assert answer == full_report
+        assert stats["delegation_cache_misses"] == 1
+        assert stats.get("delegation_cache_hits", 0) == 0
+        assert stats["specialist_output"] == full_report
+        assert "legacy compact summary" not in arch_prompts[1]
+        run_specialist.assert_called_once()
 
     def test_timeout_skip_synthesis_non_rescued_long_report_returns_full_report(
         self, monkeypatch, tmp_path

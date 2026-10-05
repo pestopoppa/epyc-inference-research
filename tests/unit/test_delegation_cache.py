@@ -117,3 +117,25 @@ def test_report_handle_preserved():
     entry = c.get(key)
     assert entry is not None
     assert entry.report_handle == handle
+
+
+def test_full_report_is_preserved_separately_from_loop_report():
+    c = DelegationCache()
+    key = c.make_key("brief", "coder")
+    c.put(key, "compact handle and summary", "coder", full_report="original full report")
+
+    entry = c.get(key, require_full_report=True)
+
+    assert entry is not None
+    assert entry.report == "compact handle and summary"
+    assert entry.full_report == "original full report"
+
+
+def test_full_report_required_cache_lookup_misses_legacy_entry():
+    c = DelegationCache()
+    key = c.make_key("brief", "coder")
+    c.put(key, "legacy compact summary", "coder")
+
+    assert c.get(key, require_full_report=True) is None
+    # General lookups retain the old entry/API behavior.
+    assert c.get(key).report == "legacy compact summary"
