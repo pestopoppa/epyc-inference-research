@@ -174,18 +174,28 @@ USAGE
     python3 scripts/validate/check_evidence_durability.py --fix-hint
     python3 scripts/validate/check_evidence_durability.py --json
     python3 scripts/validate/check_evidence_durability.py path/to/registry.yaml
+    python3 scripts/validate/check_evidence_durability.py --scan-docs --handoff-root /workspace
+
+Optional docs/handoff scans report source-file and line provenance. Legacy prose
+defects are advisories, separate from the unchanged strict registry gate and its
+exit status (including -W). The handoff root is explicit because handoffs belong
+to the umbrella repo, not the research checkout.
 """
 from __future__ import annotations
 
 import argparse
 import functools
+import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass, field, asdict
+from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import unquote
 
 # --------------------------------------------------------------------------- config
 
@@ -266,6 +276,8 @@ class Citation:
     resolved: str = ""
     hint: str = ""
     context: str = ""
+    source: str = ""
+    source_sha256: str = ""
 
 
 @dataclass
@@ -683,11 +695,90 @@ def check_campaign_docs(cites: list[Citation], repo: Path) -> list[dict]:
 
 # ------------------------------------------------------------------------------ run
 
-def check(registry: Path, repo: Path) -> Result:
-    text = Path(registry).read_text()
+def check(registry: Path, repo: Path, *, readset: list | None = None) -> Result:
+    raw = Path(registry).read_bytes()
+    text = raw.decode("utf-8")
+    if readset is not None:
+        readset.append({"path": str(registry), "sha256": hashlib.sha256(raw).hexdigest(),
+                        "kind": "registry"})
     cites = [classify(c, repo) for c in extract_citations(text, repo)]
     return Result(registry=str(registry), repo=str(repo), citations=cites,
                   campaign_issues=check_campaign_docs(cites, repo))
+
+
+def scan_markdown(root: Path, repo: Path, *, readset: list | None = None) -> list[Citation]:
+    """Report legacy prose separately from the strict registry gate.
+
+    Bare evidence paths use the owning repository's root. Markdown link targets
+    use the source document's directory, including links into sibling repos.
+    """
+    links = re.compile(r'\[[^\]]*\]\((<[^>]+>|[^\s)]+)(?:\s+"[^"]*")?\)')
+    cites = []
+    for source in sorted(root.rglob("*.md")):
+        raw = source.read_bytes()
+        text = raw.decode("utf-8")
+        source_sha = hashlib.sha256(raw).hexdigest()
+        if readset is not None:
+            readset.append({"path": str(source), "sha256": source_sha, "kind": "prose"})
+        # Link targets have a different base from bare repository paths, and
+        # external URLs must not become apparent local /artifacts citations.
+        masked = links.sub(lambda m: "".join("\n" if ch == "\n" else " "
+                                              for ch in m.group()), text)
+        found = extract_citations(masked, repo)
+        for lineno, line in enumerate(text.splitlines(), 1):
+            if any(marker in line for marker in PROVENANCE_MARKERS):
+                continue
+            for match in links.finditer(line):
+                target = match.group(1).strip("<>").split("#", 1)[0]
+                if not target or re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", target):
+                    continue
+                path, lineref = _clean(unquote(target))
+                resolved = Path(path) if Path(path).is_absolute() else source.parent / path
+                resolved = Path(os.path.abspath(resolved))
+                if _in_scope(str(resolved), repo):
+                    found.append(Citation(raw=target, path=str(resolved), line=lineno,
+                                          lineref=lineref, context=line.strip()))
+        seen = set()
+        for cite in sorted(found, key=lambda c: (c.line, c.path)):
+            key = (cite.line, cite.path, cite.lineref)
+            if key in seen:
+                continue
+            seen.add(key)
+            cite = classify(cite, repo)
+            cite.source = str(source)
+            cite.source_sha256 = source_sha
+            if cite.severity == "error":
+                cite.severity = "warn"
+            cites.append(cite)
+    return cites
+
+
+def scan_receipt(readset: list, advisories: list[Citation], repo: Path) -> dict:
+    """Capture native observations, without inventing scientific qualification."""
+    checker = Path(__file__).resolve()
+    revision = subprocess.run(["git", "-C", str(checker.parent), "rev-parse", "HEAD"],
+                              capture_output=True, text=True, timeout=10)
+    return {
+        "schema": "epyc.evidence_durability_scan.v1",
+        "repo": str(repo),
+        "metric": "citation_durability_verified",
+        "metric_direction": "higher_better",
+        "emitted_at_utc": datetime.now(timezone.utc).isoformat(),
+        "checker": {"git_revision": revision.stdout.strip() if revision.returncode == 0 else None,
+                    "source_sha256": hashlib.sha256(checker.read_bytes()).hexdigest()},
+        "readset": readset,
+        "target_verdicts": [{"source": c.source, "source_sha256": c.source_sha256,
+                             "line": c.line, "target": c.path, "resolved": c.resolved,
+                             "verdict": c.verdict, "severity": c.severity,
+                             "decided_proposition": (
+                                 f"The evidence reference {c.path!r} from {c.source!r}:{c.line} "
+                                 "resolves on this host through the checker's declared "
+                                 "repo/main-clone resolution rules to a readable artifact outside "
+                                 "the checker's configured scratch roots."),
+                             "result": (c.verdict == "OK" if c.verdict in
+                                        {"OK", "EPHEMERAL", "MISSING", "UNREADABLE"} else None)}
+                            for c in advisories],
+    }
 
 
 # `info` sorts between `warn` and `ok`: it is listed by default (the filter below shows
@@ -861,6 +952,12 @@ def main(argv=None) -> int:
                     help="treat warnings (recorded ARTIFACT LOST waivers) as failures")
     ap.add_argument("--require-campaign-docs", action="store_true",
                     help="fail when a cited data/<campaign>/ lacks README.md or SHA256SUMS")
+    ap.add_argument("--scan-docs", action="store_true",
+                    help="also report legacy docs/ evidence advisories (never changes registry exit status)")
+    ap.add_argument("--handoff-root", type=Path,
+                    help="explicit owning repository root whose handoffs/ to scan as legacy advisories")
+    ap.add_argument("--scan-receipt", type=Path,
+                    help="write the optional scan's native capture as an atomic JSON sidecar")
     a = ap.parse_args(argv)
 
     registry = Path(a.registry)
@@ -868,19 +965,65 @@ def main(argv=None) -> int:
         print(f"registry not found: {registry}", file=sys.stderr)
         return 2
 
-    res = check(registry, Path(a.repo))
+    optional_scan = a.scan_docs or a.handoff_root is not None
+    if a.scan_receipt is not None and not optional_scan:
+        ap.error("--scan-receipt requires --scan-docs or --handoff-root")
+    readset = [] if optional_scan else None
+    res = check(registry, Path(a.repo), readset=readset)
+    advisories = scan_markdown(Path(a.repo) / "docs", Path(a.repo), readset=readset) if a.scan_docs else []
+    if a.handoff_root is not None:
+        root = a.handoff_root.resolve()
+        if not (root / "handoffs").is_dir():
+            print(f"handoffs directory not found: {root / 'handoffs'}", file=sys.stderr)
+            return 2
+        advisories.extend(scan_markdown(root / "handoffs", root, readset=readset))
+    receipt = scan_receipt(readset, advisories, Path(a.repo)) if optional_scan else None
+    if a.scan_receipt is not None:
+        a.scan_receipt.parent.mkdir(parents=True, exist_ok=True)
+        receipt_bytes = (json.dumps(receipt, indent=1) + "\n").encode("utf-8")
+        archive_dir = a.scan_receipt.with_name(a.scan_receipt.name + ".d")
+        archive_dir.mkdir(parents=True, exist_ok=True)
+        archive_path = archive_dir / (hashlib.sha256(receipt_bytes).hexdigest() + ".json")
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8",
+                                         dir=a.scan_receipt.parent, delete=False) as stream:
+            tmp_receipt = Path(stream.name)
+            try:
+                stream.write(receipt_bytes.decode("utf-8"))
+                stream.flush()
+                os.fsync(stream.fileno())
+                try:
+                    os.link(tmp_receipt, archive_path)
+                except FileExistsError:
+                    if archive_path.read_bytes() != receipt_bytes:
+                        raise RuntimeError(f"scan receipt archive collision: {archive_path}")
+                os.replace(tmp_receipt, a.scan_receipt)
+            finally:
+                tmp_receipt.unlink(missing_ok=True)
 
     if a.as_json:
-        print(json.dumps({
+        payload = {
             "registry": res.registry,
             "repo": res.repo,
             "errors": len(res.errors),
             "warnings": len(res.warnings),
-            "citations": [asdict(c) for c in res.citations],
+            "citations": [{k: v for k, v in asdict(c).items()
+                           if k not in ("source", "source_sha256")}
+                          for c in res.citations],
             "campaign_issues": res.campaign_issues,
-        }, indent=1))
+        }
+        if a.scan_docs or a.handoff_root is not None:
+            payload["advisory_citations"] = [asdict(c) for c in advisories]
+            payload["scan_receipt"] = receipt
+        print(json.dumps(payload, indent=1))
     else:
         report(res, a.show_ok, a.fix_hint)
+        if a.scan_docs or a.handoff_root is not None:
+            print(f"\nlegacy prose advisories: {len(advisories)} citations (outside the registry gate)")
+            for cite in advisories:
+                if a.show_ok or cite.severity != "ok":
+                    print(f"  {cite.severity:>4}  {cite.source}:{cite.line}  {cite.verdict}  {cite.path}{cite.lineref}")
+                    if cite.hint:
+                        print(f"        -> {cite.hint}")
 
     failed = bool(res.errors)
     if a.warnings_as_errors and res.warnings:
