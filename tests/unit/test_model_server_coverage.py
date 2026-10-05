@@ -391,23 +391,6 @@ class TestCachingModelServer:
         assert stats["hit_rate"] == 0.75
         assert stats["token_savings"] == 1000
 
-    def test_save_hot_prefixes(self, caching_server):
-        """Test CachingModelServer.save_hot_prefixes()."""
-        caching_server.backend.save_hot_prefixes.return_value = 5
-
-        count = caching_server.save_hot_prefixes("/tmp/cache", top_n=10)
-
-        assert count == 5
-        caching_server.backend.save_hot_prefixes.assert_called_once_with("/tmp/cache", 10)
-
-    def test_restore_hot_prefixes(self, caching_server):
-        """Test CachingModelServer.restore_hot_prefixes()."""
-        caching_server.backend.restore_hot_prefixes.return_value = 3
-
-        count = caching_server.restore_hot_prefixes("/tmp/cache")
-
-        assert count == 3
-        caching_server.backend.restore_hot_prefixes.assert_called_once_with("/tmp/cache")
 
 
 class TestMain:

@@ -1042,15 +1042,16 @@ This chapter's routing and escalation mechanics are grounded in several research
 
 </details>
 
-## Architect KV Cache Pre-warming (2026-02-19)
+## Architect KV Cache Pre-warming (2026-02-19) — DELETED 2026-10-05
 
-`EscalationPrewarmer` (`src/services/escalation_prewarmer.py`) speculatively prefills architect KV cache when `classify_task_complexity()` returns COMPLEX at turn 1. Sends `n_predict=0, cache_prompt=true` to warm the system prompt prefix (~500 tokens) before escalation actually happens.
-
-**Validation**: The architect server (8083 general) confirmed receiving pre-warm requests; port 8084 (architect_coding) was decommissioned on 2026-05-06. Process-wide singleton via `get_shared_prewarmer()` with thread-safe hit/port telemetry. <!-- stack-change-guard: allow historical retired-role note -->
-
-**Bug found and fixed**: `_check_slot_available()` checked `s.get("state") == 0` but modern llama-server uses `is_processing` (boolean). Also assumed `/slots` returns a list, but single-slot servers (`-np 1`) return a dict. Fixed to `not s.get("is_processing", True)` with `isinstance(data, list)` guard.
-
-**Risk**: Architect `-np 1` means pre-warming fills the only slot. Beneficial when escalation follows (shared prefix), wastes slot if no escalation. The `_check_slot_available()` guard prevents pre-warming a busy slot.
+`EscalationPrewarmer` (`src/services/escalation_prewarmer.py`) sent an `n_predict=0, cache_prompt=true` prefill of
+`ARCHITECT_SYSTEM_PREFIX` + the objective to the architect server when `classify_task_complexity()` returned COMPLEX at
+turn 1. It was **deleted in UFH14-B4e** (design `docs/design/ufh14-b4-prefix-cache-policy-20261003.md` §4.2 item 5,
+delete-lens 4, in epyc-root): no real architect request starts with `ARCHITECT_SYSTEM_PREFIX`, so the warmed entry
+was never a prefix of a later request, and on llama-server v10 a warm entry serves at most one session anyway (it
+is moved into the slot that loads it). It still cost a prefill on the architect server (a CPU server, under a CPU
+region claim, since the 2026-09-27 architect swap) on every COMPLEX task. Prefix warming, where it pays, belongs in
+the client-side warm + stagger recipe (design §3.5), not in the orchestrator.
 
 ## LLMLingua-2 Escalation Compression — Not Viable (2026-02-19)
 

@@ -737,7 +737,6 @@ class ModelServer:
 def create_caching_server(
     base_url: str = "http://localhost:8080",
     num_slots: int = 4,
-    cache_dir: str | None = None,
     registry_path: str | None = None,
 ) -> "CachingModelServer":
     """Create a ModelServer with prefix caching enabled.
@@ -748,7 +747,6 @@ def create_caching_server(
     Args:
         base_url: URL of the running llama-server instance.
         num_slots: Number of parallel slots on the server.
-        cache_dir: Directory for persisting hot prefix caches.
         registry_path: Path to model registry YAML file.
 
     Returns:
@@ -765,7 +763,7 @@ def create_caching_server(
     config = ServerConfig(base_url=base_url, num_slots=num_slots)
     backend = LlamaServerBackend(config)
     router = PrefixRouter(num_slots=num_slots)
-    caching = CachingBackend(backend, router, cache_dir=cache_dir)
+    caching = CachingBackend(backend, router)
 
     registry = RegistryLoader(registry_path) if registry_path else RegistryLoader()
 
@@ -837,28 +835,6 @@ class CachingModelServer:
         """
         return self.backend.get_stats()
 
-    def save_hot_prefixes(self, cache_dir: str | None = None, top_n: int = 10) -> int:
-        """Save hot prefixes to disk.
-
-        Args:
-            cache_dir: Directory to save cache files.
-            top_n: Number of hot prefixes to save.
-
-        Returns:
-            Number of prefixes saved.
-        """
-        return self.backend.save_hot_prefixes(cache_dir, top_n)
-
-    def restore_hot_prefixes(self, cache_dir: str | None = None) -> int:
-        """Restore hot prefixes from disk.
-
-        Args:
-            cache_dir: Directory containing saved cache files.
-
-        Returns:
-            Number of prefixes restored.
-        """
-        return self.backend.restore_hot_prefixes(cache_dir)
 
 
 def main() -> int:

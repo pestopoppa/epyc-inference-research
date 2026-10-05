@@ -12,8 +12,10 @@ Acceptance:
     the REPL -- so the planner's root prompt reads: scout block, caller prompt, bundle index;
   * the bundle's bytes stay out of every prompt sent to any role, and the pulls are
     accounted (ChatResponse.context_pulls) alongside the scout provenance (ChatResponse.scouts);
-  * quiescence holds: the turn-1 architect prewarm is suppressed, no scout is still in
-    flight, and the process does no measurable CPU work after the reply.
+  * quiescence holds: the carrier is installed and echoed, no scout is still in flight,
+    and the process does no measurable CPU work after the reply. (The turn-1 architect
+    prewarm this test used to inject was deleted in UFH14-B4e; OAB-3's own acceptance test
+    covers suppression of an injected launch site.)
 
 Run: taskset -c 72-79 .venv/bin/python -m pytest tests/unit/test_inf78_oab7_oab8_composition.py -q
 """
@@ -87,21 +89,6 @@ class _FakeHttpRequest:
         return False
 
 
-def _burn(seconds: float) -> None:
-    end = time.thread_time() + seconds
-    while time.thread_time() < end:
-        pass
-
-
-class _BurningPrewarmer:
-    """Work the process would keep doing after /chat replied, if the prewarm launched."""
-
-    async def prewarm_if_complex(self, objective, complexity_level, target_port=None):
-        await asyncio.sleep(0.05)
-        await asyncio.to_thread(_burn, 1.2)
-        return True
-
-
 def _state():
     from src.api.state import AppState
 
@@ -117,7 +104,6 @@ async def test_bundle_and_scouts_compose_in_one_chat_request(lane):
     from src.api.routes.chat import chat
     from src.api.routes.chat_utils import RoutingResult
     from src.backends import context_limits as CL
-    from src.proactive_delegation.types import TaskComplexity
 
     transport = ScriptedTransport({"T-dot": [_summary("dot")], "T-ops": [_summary("ops")]})
     prims = _Primitives([
@@ -155,10 +141,6 @@ async def test_bundle_and_scouts_compose_in_one_chat_request(lane):
                       return_value=proactive_feats), \
                 patch("src.proactive_delegation.classify_task_complexity",
                       side_effect=AssertionError("proactive stage intercepted the request")), \
-                patch("src.proactive_delegation.complexity.classify_task_complexity",
-                      return_value=(TaskComplexity.COMPLEX, {})), \
-                patch("src.services.escalation_prewarmer.get_shared_prewarmer",
-                      return_value=_BurningPrewarmer()), \
                 patch.object(S, "ChatCompletionsTransport",
                              side_effect=lambda url, **kw: (captured.setdefault("url", url),
                                                             transport)[1]):
@@ -205,10 +187,9 @@ async def test_bundle_and_scouts_compose_in_one_chat_request(lane):
     assert big["bytes_pulled"] >= big["offered_bytes"] and big["coverage"] == 1.0
     assert [t["turn"] for t in acc["turns"]] == [1, 2]
 
-    # quiescence: the prewarm was suppressed, the carrier did not outlive the request,
+    # quiescence: the carrier was installed and echoed, it did not outlive the request,
     # and nothing burned CPU after the reply
-    assert resp.quiescence is not None
-    assert "architect_prewarm" in resp.quiescence["suppressed"], resp.quiescence
+    assert resp.quiescence is not None and resp.quiescence["quiescent_after"] is True
     assert Q.current() is None
     assert verdict["quiescent"] is True, verdict
     assert resp.task_scope is not None

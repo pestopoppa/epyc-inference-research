@@ -4,8 +4,7 @@ Why this exists
 ---------------
 The AutoKernel loop calls ``/chat`` for a plan or a patch, and its NEXT step is a CPU
 measurement window. Any orchestrator-owned work still running after the reply — MemRL
-q-scoring, an architect prewarm, a typed-decision shadow call, a KV migration, the idle-time
-scoring batch — lands inside that window and poisons it. ``ChatRequest.quiescent_after=True``
+q-scoring, a typed-decision shadow call, a KV migration, the idle-time scoring batch — lands inside that window and poisons it. ``ChatRequest.quiescent_after=True``
 asks the orchestrator to start none of it.
 
 Two mechanisms, because the work has two shapes:

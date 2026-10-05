@@ -1,15 +1,14 @@
-"""ARCHSWAP 2026-09-27 item A-3: the escalation prewarm and the OAB-8 scouts call a
-llama-server directly, bypassing ``LLMPrimitives``. A CPU-resident target must still be
-claimed with the SAME ``cpu_region_lock`` claim the normal call path takes:
+"""ARCHSWAP 2026-09-27 item A-3: the OAB-8 scouts call a llama-server directly, bypassing
+``LLMPrimitives``. A CPU-resident target must still be claimed with the SAME
+``cpu_region_lock`` claim the normal call path takes:
 
-  * a prewarm to a CPU target takes the claim, one non-blocking attempt, and holds it
-    across the send;
-  * a contended claim SKIPS the prewarm (no wait, no raise, counted in stats);
+  * the scouts take ONE claim per stage, run concurrently inside it, and get status
+    ``error`` when it cannot be had;
   * a GPU target (no CPU regions) takes no claim and is unchanged;
   * with the per-region flag off (legacy mode) nothing takes a claim, and the legacy
-    ``inference_lock`` is never used;
-  * the scouts take ONE claim per stage, run concurrently inside it, and get status
-    ``error`` when it cannot be had.
+    ``inference_lock`` is never used.
+
+(The escalation prewarmer, the second direct caller, was deleted in UFH14-B4e.)
 
 Offline: the topology is synthetic, lock files live in ``tmp_path``, model calls go to
 fakes, and nothing reaches a real port.
@@ -33,7 +32,6 @@ import src.runtime.instance_topology as topo
 from src.api.routes.chat_pipeline import scout_stage as S
 from src.repl_environment import task_root as TR
 from src.runtime import direct_region_claim as drc
-from src.services import escalation_prewarmer as EP
 
 CPU_PORT = 18074
 GPU_PORT = 18083
@@ -117,107 +115,6 @@ def test_resolution_follows_the_normal_path():
 def test_legacy_mode_takes_no_claim(monkeypatch):
     monkeypatch.setenv("ORCHESTRATOR_PER_REGION_LOCKS", "0")
     assert drc.resolve_claim_target("architect_general", f"http://localhost:{CPU_PORT}") is None
-
-
-# ── prewarm ───────────────────────────────────────────────────────────────────────────────
-
-
-def _prewarmer(monkeypatch, *, held_during_send: list | None = None, claim=None):
-    prewarmer = EP.EscalationPrewarmer(timeout=0.1, stack_priors_path=Path("/nonexistent"))
-    sent: list[int] = []
-
-    async def fake_check(port):
-        return True
-
-    async def fake_send(port, objective):
-        sent.append(port)
-        if held_during_send is not None and claim is not None:
-            held_during_send.append(claim.held)
-        return True
-
-    monkeypatch.setattr(prewarmer, "_check_slot_available", fake_check)
-    monkeypatch.setattr(prewarmer, "_send_prewarm", fake_send)
-    return prewarmer, sent
-
-
-def test_cpu_target_prewarm_takes_the_claim(monkeypatch):
-    _no_legacy_lock(monkeypatch)
-    claim = RecordingClaim()
-    monkeypatch.setattr(crl, "cpu_region_lock_for_instance", claim)
-    held: list[int] = []
-    prewarmer, sent = _prewarmer(monkeypatch, held_during_send=held, claim=claim)
-
-    ok = asyncio.run(prewarmer.prewarm_if_complex("design it", "COMPLEX", target_port=CPU_PORT))
-
-    assert ok is True and sent == [CPU_PORT]
-    assert [(r, i) for r, i, _ in claim.calls] == [("architect_general", 0)]
-    kwargs = claim.calls[0][2]
-    assert kwargs["timeout_s"] == EP.PREWARM_CLAIM_TIMEOUT_S > 0, "one attempt, never 'forever'"
-    assert kwargs["request_tag"] == "architect_prewarm"
-    assert held == [1], "the claim is held across the send"
-    assert claim.held == 0, "and released after it"
-    stats = prewarmer.get_stats()
-    assert stats["prewarm_region_claimed"] == 1 and stats["prewarm_skipped_region_claim"] == 0
-
-
-def test_contended_claim_skips_the_prewarm_without_waiting(monkeypatch):
-    """Real lock files (in tmp_path): an outside holder owns the regions; the prewarm skips."""
-    _no_legacy_lock(monkeypatch)
-    prewarmer, sent = _prewarmer(monkeypatch)
-    with crl.cpu_region_lock_for_instance(
-        "architect_general", 0, timeout_s=5.0, request_tag="autokernel-window"
-    ):
-        started = time.perf_counter()
-        ok = asyncio.run(prewarmer.prewarm_if_complex("design it", "COMPLEX", target_port=CPU_PORT))
-        elapsed = time.perf_counter() - started
-    assert ok is False and sent == [], "skipped, never sent"
-    assert elapsed < 1.0, f"a prewarm never waits for the claim ({elapsed:.3f}s)"
-    stats = prewarmer.get_stats()
-    assert stats["prewarm_skipped_region_claim"] == 1 and stats["prewarm_count"] == 0
-    # Once the holder is gone the same prewarm goes through on the real lock.
-    assert (
-        asyncio.run(prewarmer.prewarm_if_complex("design it", "COMPLEX", target_port=CPU_PORT))
-        is True
-    )
-    assert sent == [CPU_PORT]
-
-
-def test_contended_prewarm_never_fails_the_request(monkeypatch):
-    """The fire-and-forget path from the graph: a denied claim raises nothing anywhere."""
-    claim = RecordingClaim(fail=crl.CpuRegionLockTimeout("held by autokernel"))
-    monkeypatch.setattr(crl, "cpu_region_lock_for_instance", claim)
-    prewarmer, sent = _prewarmer(monkeypatch)
-
-    async def _request():
-        task = asyncio.ensure_future(
-            prewarmer.prewarm_if_complex("design it", "COMPLEX", target_port=CPU_PORT)
-        )
-        result = await task
-        return "request-ok", result
-
-    assert asyncio.run(_request()) == ("request-ok", False)
-    assert sent == []
-
-
-def test_gpu_target_prewarm_is_unchanged(monkeypatch):
-    _no_legacy_lock(monkeypatch)
-    claim = RecordingClaim()
-    monkeypatch.setattr(crl, "cpu_region_lock_for_instance", claim)
-    prewarmer, sent = _prewarmer(monkeypatch)
-
-    assert asyncio.run(prewarmer.prewarm_if_complex("x", "COMPLEX", target_port=GPU_PORT)) is True
-    assert sent == [GPU_PORT] and claim.calls == []
-    assert prewarmer.get_stats()["prewarm_region_claimed"] == 0
-
-
-def test_legacy_mode_prewarm_uses_no_lock(monkeypatch):
-    monkeypatch.setenv("ORCHESTRATOR_PER_REGION_LOCKS", "0")
-    _no_legacy_lock(monkeypatch)
-    claim = RecordingClaim()
-    monkeypatch.setattr(crl, "cpu_region_lock_for_instance", claim)
-    prewarmer, sent = _prewarmer(monkeypatch)
-    assert asyncio.run(prewarmer.prewarm_if_complex("x", "COMPLEX", target_port=CPU_PORT)) is True
-    assert sent == [CPU_PORT] and claim.calls == []
 
 
 # ── scouts ────────────────────────────────────────────────────────────────────────────────

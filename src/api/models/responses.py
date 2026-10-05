@@ -145,7 +145,7 @@ class ChatResponse(BaseModel):
         description=(
             "INF-78 OAB-3 echo, present only when the request carried quiescent_after=true: "
             "suppressed (labels of fire-and-forget work NOT started: memrl_q_scoring, "
-            "architect_prewarm, typed_decisions_shadow, kv_migration, kv_reverse_migration), "
+            "typed_decisions_shadow, kv_migration, kv_reverse_migration), "
             "suppressed_count, hold_after_s (the idle-scoring hold after the reply)."
         ),
         **_omit_when_none(),

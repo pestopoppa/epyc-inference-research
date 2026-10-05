@@ -171,16 +171,8 @@ async def _run_via_langgraph(ctx, node_name: str):
 
 
 def _record_escalation_role(state: TaskState, role: Role) -> None:
-    """Record role transition and attribute architect prewarm hits."""
+    """Record a role transition."""
     state.record_role(role)
-    if role is not Role.ARCHITECT_GENERAL:
-        return
-    try:
-        from src.services.escalation_prewarmer import get_shared_prewarmer
-
-        get_shared_prewarmer().record_prewarm_hit(str(role))
-    except Exception as exc:
-        log.debug("Prewarm hit attribution failed for role=%s: %s", role, exc)
 
 
 
