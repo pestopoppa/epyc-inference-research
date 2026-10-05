@@ -523,6 +523,10 @@ def test_stream_backend_failure_is_terminal_error_event(client, monkeypatch):
         {"x_session_id": "has space"},
         {"x_session_id": ""},
         {"x_session_id": "x" * 129},
+        {"x_client_class": "has space"},
+        {"x_client_class": ""},
+        {"x_client_class": "x" * 65},
+        {"x_client_class": 17},
         {"x_user_id": "-leading-dash"},
         {"x_user_id": 42},
     ],
@@ -556,6 +560,24 @@ def test_keys_are_echoed_in_nonstream_metadata_and_trace(client, monkeypatch):
     assert meta["response_tool_calls"] == "emitted"
     assert meta["tool_calls_emitted"] == ["read"]
     primitives.set_request_trace_keys.assert_called_once_with({**KEYS, "x_tool_mode": "client"})
+
+
+def test_explicit_client_class_is_echoed_and_bound_to_trace_keys(client, monkeypatch):
+    primitives = _install(monkeypatch, result=_tool_result(content="ok"))
+
+    response = client.post(
+        "/v1/chat/completions",
+        json=_body(x_show_routing=True, x_client_class="opencode"),
+    )
+
+    assert response.status_code == 200, response.text
+    expected = {
+        "x_session_id": "ses_default",
+        "x_tool_mode": "client",
+        "x_client_class": "opencode",
+    }
+    assert response.json()["x_orchestrator_metadata"]["request_keys"] == expected
+    primitives.set_request_trace_keys.assert_called_once_with(expected)
 
 
 def test_keys_are_echoed_in_stream_metadata(client, monkeypatch):

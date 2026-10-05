@@ -519,7 +519,14 @@ class InferenceMixin:
             meta["workload_class"] = getter() if callable(getter) else None
             getter = getattr(self, "get_request_priority", None)
             meta["priority"] = getter() if callable(getter) else None
-            meta["trace_keys"] = _request_trace_keys(self) or None
+            trace_keys = _request_trace_keys(self)
+            meta["trace_keys"] = trace_keys or None
+            client_class = trace_keys.get("x_client_class")
+            if isinstance(client_class, str) and client_class:
+                # Only an explicit typed request tag is a client-class claim.
+                # Scheduler workload and process-wide client id are separate fields.
+                meta["client_class"] = client_class
+                meta["client_class_provenance"] = "caller_supplied:x_client_class"
             meta["client"] = os.environ.get("ORCHESTRATOR_CLIENT_ID") or None
             serving_calls.stage_caller(**meta)
         except Exception:

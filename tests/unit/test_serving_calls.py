@@ -108,6 +108,43 @@ def test_one_record_per_call_with_timings_caller_and_wait(log_file):
     assert "orch_commit" in prov
 
 
+@pytest.mark.parametrize("client_class", ["opencode", None])
+def test_explicit_client_class_reaches_native_record_without_inference(
+    log_file, client_class,
+):
+    from src.api.models.openai import OpenAIChatRequest
+    from src.api.routes.openai_compat import _request_keys
+    from src.llm_primitives import LLMPrimitives
+
+    request = OpenAIChatRequest(
+        model="orchestrator",
+        messages=[{"role": "user", "content": "metadata-only fixture"}],
+        x_session_id="ses_native_record",
+        x_client_class=client_class,
+    )
+    primitives = LLMPrimitives(mock_mode=True)
+    request_keys = _request_keys(request)
+    primitives.set_request_trace_keys(request_keys)
+    primitives._stage_serving_caller(
+        "frontdoor", request, "http://localhost:8070", 8070
+    )
+
+    _Backend(_server_ok).infer(
+        _role_config(), InferenceRequest(role="frontdoor", prompt="fixture")
+    )
+
+    [record] = _records(log_file)
+    assert record["caller"]["trace_keys"]["x_session_id"] == "ses_native_record"
+    if client_class is None:
+        assert "client_class" not in record["caller"]
+        assert "client_class_provenance" not in record["caller"]
+    else:
+        assert record["caller"]["client_class"] == client_class
+        assert record["caller"]["client_class_provenance"] == "caller_supplied:x_client_class"
+        assert record["caller"]["trace_keys"]["x_client_class"] == client_class
+    assert record["caller"]["workload_class"] == "interactive"
+
+
 def test_every_line_is_self_hashed(log_file):
     _Backend(_server_ok).infer(_role_config(), InferenceRequest(role="frontdoor", prompt="x"))
     [rec] = _records(log_file)

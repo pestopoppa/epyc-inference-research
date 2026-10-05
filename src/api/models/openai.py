@@ -222,6 +222,16 @@ class OpenAIChatRequest(BaseModel):
         "x_tool_mode='client' or an OpenCode user-agent when the v1_client_session_guard "
         "flag is on.",
     )
+    x_client_class: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=64,
+        pattern=_REQUEST_KEY_ID_PATTERN,
+        description="Self-reported client class tag for serving-call attribution. Validated and "
+        "recorded only in request metadata and native serving-call records; it does not verify "
+        "client identity or change routing. Omission remains unknown, with no class inferred "
+        "from workload_class or process configuration.",
+    )
     x_user_id: str | None = Field(
         default=None,
         min_length=1,

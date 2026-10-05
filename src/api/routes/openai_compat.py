@@ -416,7 +416,9 @@ def _apply_openai_tool_contract_metadata(
 
 
 # ── HS-4 P0.2: typed request keys ────────────────────────────────────────────
-_REQUEST_KEY_FIELDS = ("x_session_id", "x_user_id", "x_memory", "x_tool_mode", "x_escalation")
+_REQUEST_KEY_FIELDS = (
+    "x_session_id", "x_client_class", "x_user_id", "x_memory", "x_tool_mode", "x_escalation"
+)
 
 
 def _request_keys(request: OpenAIChatRequest) -> dict[str, str]:
