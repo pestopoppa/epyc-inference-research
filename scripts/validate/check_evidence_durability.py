@@ -753,6 +753,17 @@ def scan_markdown(root: Path, repo: Path, *, readset: list | None = None) -> lis
     return cites
 
 
+def durability_proposition(target: str, source: str, line: int, verdict: str) -> str:
+    """Author the original finding, including its outcome; frames do not carry value."""
+    outcome = 'true' if verdict == 'OK' else ('false' if verdict in
+              {'EPHEMERAL', 'MISSING', 'UNREADABLE'} else 'unknown')
+    return (f"The declared durable-resolution criterion for evidence reference {target!r} "
+            f"from {source!r}:{line} evaluated {outcome} with native verdict {verdict}; "
+            "the criterion is resolution on this host through the checker's declared "
+            "repo/main-clone resolution rules to a readable artifact outside "
+            "the checker's configured scratch roots.")
+
+
 def scan_receipt(readset: list, advisories: list[Citation], repo: Path) -> dict:
     """Capture native observations, without inventing scientific qualification."""
     checker = Path(__file__).resolve()
@@ -770,11 +781,7 @@ def scan_receipt(readset: list, advisories: list[Citation], repo: Path) -> dict:
         "target_verdicts": [{"source": c.source, "source_sha256": c.source_sha256,
                              "line": c.line, "target": c.path, "resolved": c.resolved,
                              "verdict": c.verdict, "severity": c.severity,
-                             "decided_proposition": (
-                                 f"The evidence reference {c.path!r} from {c.source!r}:{c.line} "
-                                 "resolves on this host through the checker's declared "
-                                 "repo/main-clone resolution rules to a readable artifact outside "
-                                 "the checker's configured scratch roots."),
+                             "decided_proposition": durability_proposition(c.path, c.source, c.line, c.verdict),
                              "result": (c.verdict == "OK" if c.verdict in
                                         {"OK", "EPHEMERAL", "MISSING", "UNREADABLE"} else None)}
                             for c in advisories],
