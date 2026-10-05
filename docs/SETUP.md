@@ -16,11 +16,14 @@ Complete setup instructions for the AMD EPYC 9655 Inference Optimization project
 - **numactl** — required for NUMA memory interleaving (`apt install numactl`)
 - **lsof** — used for port checking (`apt install lsof`)
 
-### Optional (for `make gates`)
+### Required for `make gates`
 
 - **shellcheck** — shell script linting (`apt install shellcheck`)
-- **shfmt** — shell script formatting (`go install mvdan.cc/sh/v3/cmd/shfmt@latest`)
+- **shfmt** — shell format checking (`go install mvdan.cc/sh/v3/cmd/shfmt@latest`); `make shfmt` applies fixes
 - **markdownlint** — markdown linting (`npm install -g markdownlint-cli`)
+
+Missing linters fail the local gates. NextPLAID reindexing is a separate service operation:
+run `make nextplaid-reindex` when NextPLAID is available on `:8088`.
 
 ## Quick Setup
 

@@ -84,7 +84,7 @@ check_prerequisites() {
   check_command lsof "apt install lsof" || log_warn "lsof not found - needed for port checking"
 
   echo ""
-  echo "Optional (for make gates):"
+  echo "Required for make gates (bootstrap can run without these):"
   check_command shellcheck "apt install shellcheck" || true
   check_command shfmt "go install mvdan.cc/sh/v3/cmd/shfmt@latest" || true
   check_command markdownlint "npm install -g markdownlint-cli" || true

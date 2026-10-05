@@ -8,13 +8,13 @@
 # Run specific:  make shellcheck
 
 SHELL := /usr/bin/env bash
-.PHONY: all gates schema shellcheck shfmt mdlint format lint typecheck coverage coverage-orchestrator-slice warnings-orchestrator-slice integration-sanity unit integration security security-check health docs docs-check bench clean help setup bootstrap download-models validate-paths docker-build docker-build-dev docker-run docker-dev docker-test docker-lint docker-clean nix-develop nix-build nix-shell nextplaid-reindex check-agent-config check-numerics report-numerics
+.PHONY: all gates schema shellcheck shfmt shfmt-check mdlint format lint typecheck coverage coverage-orchestrator-slice warnings-orchestrator-slice integration-sanity unit integration security security-check health docs docs-check bench clean help setup bootstrap download-models validate-paths docker-build docker-build-dev docker-run docker-dev docker-test docker-lint docker-clean nix-develop nix-build nix-shell nextplaid-reindex check-agent-config
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 
 PY ?= python3
 
-GATES_DEPS := schema shellcheck format lint nextplaid-reindex
+GATES_DEPS := schema shellcheck format lint
 ifneq ($(CI),)
 GATES_DEPS += integration-sanity
 endif
@@ -69,8 +69,7 @@ help:
 	@echo "  make docs-check - Verify generated docs index is current"
 	@echo "  make check-memory - Check available RAM before tests (prevents crashes)"
 	@echo "  make check-agent-config - Validate agent prompt structure and CLAUDE matrix"
-	@echo "  make check-numerics - Enforce numeric literal policy on changed Python files"
-	@echo "  make report-numerics - Print numeric literal policy report (non-blocking)"
+	@echo "  make nextplaid-reindex - Reindex changed files (requires the NextPLAID service)"
 	@echo "  make coverage-orchestrator-slice - Focused per-file coverage gate for benchmark/runtime seeding slice"
 	@echo "  make warnings-orchestrator-slice - Focused warning gate (ResourceWarning + DeprecationWarning as errors)"
 	@echo "  make integration-sanity - Integration suite with strict warning policy (CI-enforced)"
@@ -108,7 +107,7 @@ shellcheck:
 			echo "  (no .sh files found)"; \
 		fi \
 	else \
-		echo "  ⚠ shellcheck not installed (apt install shellcheck)"; \
+		echo "  ERROR: shellcheck not installed (apt install shellcheck)" >&2; exit 1; \
 	fi
 
 shfmt:
@@ -120,20 +119,26 @@ shfmt:
 			echo "  (no .sh files found)"; \
 		fi \
 	else \
-		echo "  ⚠ shfmt not installed (go install mvdan.cc/sh/v3/cmd/shfmt@latest)"; \
+		echo "  ERROR: shfmt not installed (go install mvdan.cc/sh/v3/cmd/shfmt@latest)" >&2; exit 1; \
 	fi
+
+shfmt-check:
+	@echo "==> shfmt (check shell formatting)"
+	@command -v shfmt >/dev/null 2>&1 || { echo "  ERROR: shfmt not installed" >&2; exit 1; }
+	@if [ -n "$(SHELL_SCRIPTS)" ]; then shfmt -d -i 2 -ci $(SHELL_SCRIPTS); fi
 
 # ── Markdown Gates ────────────────────────────────────────────────────────────
 
 mdlint:
 	@echo "==> mdlint"
 	@if command -v markdownlint >/dev/null 2>&1; then \
-		markdownlint --config .markdownlint.json $(MD_FILES) 2>/dev/null || \
-		markdownlint $(MD_FILES) && echo "  ✓ markdownlint passed"; \
+		if [ -f .markdownlint.json ]; then \
+			markdownlint --config .markdownlint.json $(MD_FILES); \
+		else markdownlint $(MD_FILES); fi && echo "  ✓ markdownlint passed"; \
 	elif command -v mdl >/dev/null 2>&1; then \
 		mdl $(MD_FILES) && echo "  ✓ mdl passed"; \
 	else \
-		echo "  ⚠ markdownlint not installed (npm install -g markdownlint-cli)"; \
+		echo "  ERROR: markdownlint not installed (npm install -g markdownlint-cli)" >&2; exit 1; \
 	fi
 
 mdformat:
@@ -146,7 +151,7 @@ mdformat:
 
 # ── Aggregate Targets ─────────────────────────────────────────────────────────
 
-format: shfmt
+format: shfmt-check
 	@# Add mdformat here when ready: format: shfmt mdformat
 
 lint: shellcheck mdlint
@@ -289,15 +294,6 @@ check-agent-config:
 	@$(PY) scripts/validate/validate_doc_drift.py
 	@echo "  ✓ agent config checks passed"
 
-check-numerics:
-	@echo "==> check-numerics (changed files)"
-	@$(PY) scripts/validate/check_numeric_literals.py --mode enforce-changed --diff-range origin/main...HEAD
-	@echo "  ✓ numeric policy checks passed"
-
-report-numerics:
-	@echo "==> report-numerics"
-	@$(PY) scripts/validate/check_numeric_literals.py --mode report
-
 security:
 	@echo "==> security (stub)"
 	@# Add bandit, semgrep, trivy, etc. when needed
@@ -310,13 +306,13 @@ bench:
 
 # ── NextPLAID Index ──────────────────────────────────────────────────────────
 
-# Re-index changed files into NextPLAID (skips gracefully if container not running)
+# Explicit service operation, separate from the local verification gates.
 nextplaid-reindex:
 	@echo "==> nextplaid-reindex"
 	@if curl -sf http://localhost:8088/health >/dev/null 2>&1; then \
 		$(PY) scripts/nextplaid/reindex_changed.py && echo "  ✓ nextplaid reindex complete"; \
 	else \
-		echo "  ⚠ NextPLAID not running on :8088 (skipping)"; \
+		echo "  ERROR: NextPLAID not running on :8088" >&2; exit 1; \
 	fi
 
 # ── Repo Hygiene ──────────────────────────────────────────────────────────────
@@ -359,11 +355,11 @@ install-dev-deps:
 	@echo "Installing development dependencies..."
 	pip install pyyaml jsonschema pytest ruff
 	@echo ""
-	@echo "For shell linting, also install:"
+	@echo "Required for make gates (shell linting and format checking):"
 	@echo "  apt install shellcheck"
 	@echo "  go install mvdan.cc/sh/v3/cmd/shfmt@latest"
 	@echo ""
-	@echo "For markdown linting:"
+	@echo "Required for make gates (markdown linting):"
 	@echo "  npm install -g markdownlint-cli"
 
 # ── Convenience Aliases ──────────────────────────────────────────────────────
