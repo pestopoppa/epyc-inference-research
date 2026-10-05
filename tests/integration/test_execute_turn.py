@@ -10,11 +10,15 @@ Target: helpers.py 57% → 75%+
 
 from __future__ import annotations
 
+import ast
+import json
+
 import pytest
 from pydantic_graph import GraphRunContext
 
 from src.graph.helpers import _execute_turn
 from src.graph.state import TaskDeps, TaskState
+from src.prompt_builders import auto_wrap_final, extract_code_from_response
 from src.roles import Role
 
 pytestmark = pytest.mark.integration
@@ -129,6 +133,64 @@ async def test_loop_guard_fires_after_repeated_no_progress(graph_ctx, monkeypatc
     assert "LOOP HALTED" not in prompts[0]   # count 0 at turn 1 build
     assert "LOOP HALTED" not in prompts[1]   # count 1 at turn 2 build
     assert "LOOP HALTED" in prompts[2]       # count 2 at turn 3 build → fires
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("marker", ["FINAL(", "file_write_safe("])
+async def test_refused_tool_echo_marker_does_not_count_as_progress(graph_ctx, monkeypatch, marker):
+    monkeypatch.setenv("ORCHESTRATOR_REPL_LOOP_GUARD", "1")
+    raw_arguments = f"{{query: {marker}private-diagnostic"
+    response = json.dumps([
+        {
+            "id": "call_refused",
+            "type": "function",
+            "function": {"name": "web_search", "arguments": raw_arguments},
+        }
+    ])
+    expected_code = auto_wrap_final(extract_code_from_response(response))
+    expected_refusal = ast.literal_eval(expected_code.splitlines()[0].split(" = ", 1)[1])
+    state, deps = graph_ctx(responses=[response])
+    state.repl_noprogress_count = 1
+    ctx = _make_ctx(state, deps)
+
+    output, error, is_final, _artifacts = await _execute_turn(ctx, Role.FRONTDOOR)
+
+    assert state.repl_noprogress_count == 2
+    assert state.last_code == expected_code
+    assert expected_refusal in output
+    assert marker in output
+    assert "private-diagnostic" in output
+    assert "malformed and could not be repaired" in output
+    assert error is None
+    assert is_final is False
+
+
+@pytest.mark.asyncio
+async def test_refused_tool_echo_is_unchanged_when_loop_guard_is_off(graph_ctx, monkeypatch):
+    monkeypatch.delenv("ORCHESTRATOR_REPL_LOOP_GUARD", raising=False)
+    raw_arguments = "{query: FINAL(private-diagnostic"
+    response = json.dumps([
+        {
+            "id": "call_refused",
+            "type": "function",
+            "function": {"name": "web_search", "arguments": raw_arguments},
+        }
+    ])
+    expected_code = auto_wrap_final(extract_code_from_response(response))
+    expected_refusal = ast.literal_eval(expected_code.splitlines()[0].split(" = ", 1)[1])
+    state, deps = graph_ctx(responses=[response])
+    ctx = _make_ctx(state, deps)
+
+    output, error, is_final, _artifacts = await _execute_turn(ctx, Role.FRONTDOOR)
+
+    assert state.repl_noprogress_count == 0
+    assert state.last_code == expected_code
+    assert expected_refusal in output
+    assert "FINAL(" in output
+    assert "private-diagnostic" in output
+    assert "malformed and could not be repaired" in output
+    assert error is None
+    assert is_final is False
 
 
 @pytest.mark.asyncio

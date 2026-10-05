@@ -1,5 +1,6 @@
 """Unit tests for graph helper utilities."""
 
+import json
 from types import SimpleNamespace
 
 from src.escalation import ErrorCategory
@@ -8,6 +9,7 @@ from src.graph.helpers import (
     _classify_error,
     _detect_role_cycle,
     _looks_like_prompt_echo,
+    _loop_guard_classification_view,
     _record_mitigation,
     _select_and_broadcast_workspace_delta,
     _should_attempt_prose_rescue,
@@ -159,3 +161,74 @@ class TestProseRescueGuards:
     def test_code_fence_not_allowed(self):
         raw = "```python\nprint('x')\n```"
         assert _should_attempt_prose_rescue(raw, "") is False
+
+
+class TestLoopGuardClassificationView:
+    def _extract_refusal_code(self, raw_arguments: str) -> str:
+        from src.prompt_builders.code_utils import extract_code_from_response
+
+        response = json.dumps(
+            [{
+                "id": "call_refused",
+                "type": "function",
+                "function": {
+                    "name": "web_search",
+                    "arguments": raw_arguments,
+                },
+            }]
+        )
+        return extract_code_from_response(response)
+
+    def test_refusal_echo_markers_do_not_count_but_remain_in_original_code(self):
+        for marker in ("FINAL(", "file_write_safe("):
+            raw_arguments = f"{{query: {marker}private-diagnostic"
+            code = self._extract_refusal_code(raw_arguments)
+
+            assert marker in code
+            assert "private-diagnostic" in code
+            classification = _loop_guard_classification_view(code)
+            assert marker not in classification
+            assert "[ERROR:" in code  # Raw refusal remains available for execution/display.
+
+    def test_mixed_valid_and_refused_calls_keep_real_call_progress(self):
+        from src.prompt_builders.code_utils import extract_code_from_response
+
+        response = json.dumps([
+            {
+                "id": "call_valid",
+                "function": {
+                    "name": "file_write_safe",
+                    "arguments": json.dumps({"path": "answer.txt", "content": "ready"}),
+                },
+            },
+            {
+                "id": "call_refused",
+                "function": {"name": "web_search", "arguments": "{query: FINAL(private"},
+            },
+        ])
+        code = extract_code_from_response(response)
+        classification = _loop_guard_classification_view(code)
+
+        assert 'result_0 = CALL("file_write_safe", path="answer.txt", content="ready")' in classification
+        assert "file_write_safe" in classification
+        assert ("file_write_safe" in classification) or ("FINAL(" in classification)
+        assert 'result_1 = "[ERROR:' in code
+        assert "FINAL(" in code
+        assert "FINAL(" not in classification
+
+    def test_unicode_line_separator_in_prior_literal_does_not_shift_refusal_span(self):
+        prefix = 'status = "before\u0085after"\n'
+        code = prefix + self._extract_refusal_code("{query: FINAL(private")
+
+        classification = _loop_guard_classification_view(code)
+
+        assert classification.startswith(prefix)
+        assert "FINAL(" not in classification
+
+    def test_real_progress_markers_are_unchanged(self):
+        for code in ("FINAL('answer')", "file_write_safe('answer.py', 'content')"):
+            assert _loop_guard_classification_view(code) == code
+
+    def test_malformed_python_falls_back_to_original_classification_text(self):
+        code = "result = '''[ERROR: tool call 'x' NOT executed: Raw: FINAL("
+        assert _loop_guard_classification_view(code) == code

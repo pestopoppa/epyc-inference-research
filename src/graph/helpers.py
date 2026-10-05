@@ -14,9 +14,12 @@ Bug fixes included in this migration:
 from __future__ import annotations
 
 import asyncio
+import ast
+import io
 import logging
 import os
 import re
+import tokenize
 from pathlib import Path
 from typing import Any
 from pydantic_graph import GraphRunContext
@@ -194,6 +197,54 @@ def _loop_guard_noprogress(made_progress: bool, prev_count: int) -> int:
     an identical-match trigger missed them (proven: the hard intervention never fired in
     results-readfix3 because the model emptied out). Reset on progress; else increment."""
     return 0 if made_progress else prev_count + 1
+
+
+_REFUSED_TOOL_CALL_LITERAL_RE = re.compile(
+    r"\[ERROR: tool call .+ NOT executed: its JSON arguments "
+    r"are malformed and could not be repaired\. Raw: .* -- re-emit "
+    r"the call with valid JSON arguments\.\]",
+    re.DOTALL,
+)
+
+
+def _loop_guard_classification_view(code: str) -> str:
+    """Hide only native malformed-tool refusal literals from progress markers.
+
+    Keep the original code for execution and diagnostics. The loop guard uses
+    substring markers, so a raw refused-call echo containing ``FINAL(`` or
+    ``file_write_safe`` must not masquerade as progress. Tokenize the source and
+    blank only string-token spans whose decoded value matches the refusal
+    envelope emitted by ``code_utils._render_call_code``. If tokenization fails,
+    preserve the existing classification behavior.
+    """
+    spans: list[tuple[int, int]] = []
+    line_starts = [0, *(match.end() for match in re.finditer("\n", code))]
+
+    try:
+        for token in tokenize.generate_tokens(io.StringIO(code).readline):
+            if token.type != tokenize.STRING:
+                continue
+            try:
+                value = ast.literal_eval(token.string)
+            except (SyntaxError, ValueError):
+                continue
+            if not isinstance(value, str) or not _REFUSED_TOOL_CALL_LITERAL_RE.fullmatch(value):
+                continue
+            start = line_starts[token.start[0] - 1] + token.start[1]
+            end = line_starts[token.end[0] - 1] + token.end[1]
+            spans.append((start, end))
+    except (IndentationError, SyntaxError, tokenize.TokenError):
+        return code
+
+    if not spans:
+        return code
+
+    view = list(code)
+    for start, end in spans:
+        for index in range(start, end):
+            if view[index] not in "\r\n":
+                view[index] = " "
+    return "".join(view)
 
 
 # ── Shared helpers ─────────────────────────────────────────────────────
@@ -1200,13 +1251,16 @@ async def _execute_turn(ctx: Ctx, role: Role | str) -> tuple[str, str | None, bo
     code = auto_wrap_final(code)
 
     # REPL loop-guard Fix B: count consecutive no-progress turns (no file write / no FINAL).
+    loop_guard_enabled = _repl_loop_guard_enabled()
+    progress_code = _loop_guard_classification_view(code) if loop_guard_enabled else code
     if __import__("os").environ.get("ORCHESTRATOR_LOOPGUARD_PROBE") == "1":  # prod-safe diagnostic
         log.warning("LOOPGUARD-PROBE t=%s enabled=%s env=%r count=%s fws=%s final=%s",
-                    getattr(state, "turns", "?"), _repl_loop_guard_enabled(),
+                    getattr(state, "turns", "?"), loop_guard_enabled,
                     __import__("os").environ.get("ORCHESTRATOR_REPL_LOOP_GUARD"),
-                    state.repl_noprogress_count, "file_write_safe" in code, "FINAL(" in code)
-    if _repl_loop_guard_enabled():
-        _made_progress = ("file_write_safe" in code) or ("FINAL(" in code)
+                    state.repl_noprogress_count, "file_write_safe" in progress_code,
+                    "FINAL(" in progress_code)
+    if loop_guard_enabled:
+        _made_progress = ("file_write_safe" in progress_code) or ("FINAL(" in progress_code)
         state.repl_noprogress_count = _loop_guard_noprogress(_made_progress, state.repl_noprogress_count)
 
     # Persist extracted code for incremental editing on error/escalation
