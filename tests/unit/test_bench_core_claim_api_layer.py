@@ -275,6 +275,7 @@ def test_llamacppbackend_cmd_pinned_off_bench_claim(monkeypatch) -> None:
     monkeypatch.setattr(
         bcc, "read_bench_claim", lambda proc_root=Path("/proc"): BenchClaim(cores=frozenset(range(96)))
     )
+    monkeypatch.setattr(bcc, "host_core_set", lambda *_a, **_k: HOST_CORES)
     backend = LlamaCppBackend(_FakeRegistry())
     cmd = backend._build_command(
         _FakeRoleConfig(), _FakeRequest(timeout=60)
@@ -307,13 +308,18 @@ def test_llamacppbackend_cmd_refuses_unobservable_claim(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_lightonocr_spawn_pinned_off_bench_claim(monkeypatch) -> None:
+async def test_lightonocr_spawn_pinned_off_bench_claim(monkeypatch, tmp_path: Path) -> None:
     """Per-request llama-mtmd-cli spawns get taskset-pinned off a live bench."""
     import src.services.lightonocr_llama_server as ocr_mod
 
     monkeypatch.setattr(
         bcc, "read_bench_claim", lambda proc_root=Path("/proc"): BenchClaim(cores=frozenset(range(96)))
     )
+    configured_cli = Path(tmp_path) / "ni18-unavailable-mtmd-bin" / "llama-mtmd-cli"
+    assert configured_cli.name == "llama-mtmd-cli"
+    assert not configured_cli.exists() and not configured_cli.is_symlink()
+    monkeypatch.setattr(ocr_mod, "CLI_PATH", str(configured_cli))
+    monkeypatch.setattr(bcc, "host_core_set", lambda *_a, **_k: HOST_CORES)
     captured: list[list[str]] = []
 
     async def fake_exec(*cmd, **kw):
@@ -325,14 +331,19 @@ async def test_lightonocr_spawn_pinned_off_bench_claim(monkeypatch) -> None:
     worker = ocr_mod.LlamaOCRWorker(worker_id=1, threads=8)
     await worker._run_inference("/tmp/fake.png")
     assert captured and captured[0][:3] == ["taskset", "-c", "96-191"]
+    assert captured[0][3] == str(configured_cli)
 
 
 @pytest.mark.asyncio
-async def test_lightonocr_spawn_quiet_path_unchanged(monkeypatch) -> None:
+async def test_lightonocr_spawn_quiet_path_unchanged(monkeypatch, tmp_path: Path) -> None:
     """No bench -> the spawn argv is the CLI + flags, no taskset prefix."""
     import src.services.lightonocr_llama_server as ocr_mod
 
     monkeypatch.setattr(bcc, "read_bench_claim", lambda proc_root=Path("/proc"): EMPTY_BENCH_CLAIM)
+    configured_cli = tmp_path / "ni18-unavailable-mtmd-bin" / "llama-mtmd-cli"
+    assert configured_cli.name == "llama-mtmd-cli"
+    assert not configured_cli.exists() and not configured_cli.is_symlink()
+    monkeypatch.setattr(ocr_mod, "CLI_PATH", str(configured_cli))
     captured: list[list[str]] = []
 
     async def fake_exec(*cmd, **kw):
@@ -345,7 +356,7 @@ async def test_lightonocr_spawn_quiet_path_unchanged(monkeypatch) -> None:
     monkeypatch.setattr(ocr_mod.asyncio, "create_subprocess_exec", fake_exec)
     worker = ocr_mod.LlamaOCRWorker(worker_id=1, threads=8)
     await worker._run_inference("/tmp/fake.png")
-    assert captured and captured[0][0].endswith("llama-mtmd-cli")
+    assert captured and captured[0][0] == str(configured_cli)
 
 
 class _FakeRoleConfig:
