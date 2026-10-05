@@ -51,7 +51,14 @@ echo "== registry evidence durability =="
 # and it is the check that turns "the artifact behind this ratified hash was swept" from
 # a silent event into a red health check. Deliberately NOT a check that the evidence is
 # committed: raw campaign output is gitignored on purpose (2026-08-03 operator ruling).
-uv run python scripts/validate/check_evidence_durability.py
+evidence_scan_args=(--scan-docs --scan-receipt "${EVIDENCE_DURABILITY_RECEIPT:-logs/evidence_durability_scan.json}")
+evidence_handoff_root="${EPYC_HANDOFF_ROOT:-/workspace}"
+if [[ -d "$evidence_handoff_root/handoffs" ]]; then
+  evidence_scan_args+=(--handoff-root "$evidence_handoff_root")
+else
+  echo "WARNING: umbrella handoff evidence scan unavailable: $evidence_handoff_root/handoffs" >&2
+fi
+uv run python scripts/validate/check_evidence_durability.py "${evidence_scan_args[@]}"
 
 echo
 echo "== no-inference manifest dry-runs =="

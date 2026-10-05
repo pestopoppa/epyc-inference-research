@@ -882,3 +882,118 @@ def test_the_only_scratch_paths_left_are_recorded_losses():
     assert scratch, "extraction is broken if it finds no scratch paths at all"
     assert all(c.verdict == "WAIVED_LOST" for c in scratch), [
         (c.line, c.verdict, c.path) for c in scratch if c.verdict != "WAIVED_LOST"]
+
+
+def test_prose_scan_reports_durable_missing_and_scratch_with_source(repo):
+    from check_evidence_durability import scan_markdown
+    docs = repo / "docs"
+    docs.mkdir()
+    source = docs / "findings.md"
+    source.write_text("data/good_campaign_20260801/summary.json\n"
+                      "[missing](../artifacts/gone.json)\n"
+                      "`/mnt/raid0/llm/tmp/run/summary.json`\n")
+    cites = scan_markdown(docs, repo)
+    assert [(c.line, c.verdict, c.severity) for c in cites] == [
+        (1, "OK", "ok"), (2, "MISSING", "warn"), (3, "EPHEMERAL", "warn")]
+    assert all(c.source == str(source) for c in cites)
+
+
+def test_prose_relative_markdown_links_resolve_in_sibling_repo(repo, tmp_path):
+    from check_evidence_durability import scan_markdown
+    docs = repo / "docs"
+    docs.mkdir()
+    sibling = tmp_path / "sibling"
+    (sibling / "artifacts").mkdir(parents=True)
+    artifact = sibling / "artifacts" / "untracked.json"
+    artifact.write_text("{}")
+    spaced = repo / "artifacts" / "with space.json"
+    spaced.write_text("{}")
+    (docs / "findings.md").write_text(
+        "[local](../artifacts/run-a-scored.json#evidence)\n"
+        "[sibling](../../sibling/artifacts/untracked.json)\n"
+        "[escaped](../artifacts/with%20space.json)\n"
+        "[code](../src/missing.py)\n"
+        "[web](https://example.invalid/artifacts/gone.json)\n")
+    cites = scan_markdown(docs, repo)
+    assert len(cites) == 3
+    assert all(c.verdict == "OK" for c in cites)
+    assert cites[1].resolved == str(artifact)
+    assert cites[2].resolved == str(spaced)
+
+
+def test_optional_prose_advisories_do_not_weaken_or_fail_registry_gate(repo, capsys):
+    reg = write_registry(repo, "evidence: artifacts/run-a-scored.json\n")
+    docs = repo / "docs"
+    docs.mkdir()
+    (docs / "legacy.md").write_text("artifacts/gone.json\n")
+    assert main([str(reg), "--repo", str(repo), "--scan-docs", "--json", "-W"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["errors"] == 0
+    assert payload["advisory_citations"][0]["verdict"] == "MISSING"
+    reg.write_text("evidence: artifacts/gone.json\n")
+    assert main([str(reg), "--repo", str(repo), "--scan-docs", "--json"]) == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["errors"] == 1
+
+
+def test_handoff_scan_uses_explicit_owning_repo(repo, tmp_path, capsys):
+    reg = write_registry(repo, "evidence: artifacts/run-a-scored.json\n")
+    root = tmp_path / "root"
+    (root / "handoffs" / "active").mkdir(parents=True)
+    (root / "artifacts").mkdir()
+    (root / "artifacts" / "receipt.json").write_text("{}")
+    source = root / "handoffs" / "active" / "task.md"
+    source.write_text("[receipt](../../artifacts/receipt.json)\n")
+    assert main([str(reg), "--repo", str(repo), "--handoff-root", str(root), "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert [(c["source"], c["verdict"]) for c in payload["advisory_citations"]] == [(str(source), "OK")]
+
+
+def test_default_json_contract_is_unchanged(repo, capsys):
+    reg = write_registry(repo, "evidence: artifacts/run-a-scored.json\n")
+    assert main([str(reg), "--repo", str(repo), "--json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert set(payload) == {"registry", "repo", "errors", "warnings", "citations", "campaign_issues"}
+    assert "source" not in payload["citations"][0]
+
+
+def test_prose_scan_native_receipt_binds_actual_read_bytes(repo, capsys):
+    import hashlib
+    from datetime import datetime
+
+    reg = write_registry(repo, "evidence: artifacts/run-a-scored.json\n")
+    docs = repo / "docs"
+    docs.mkdir()
+    source = docs / "finding.md"
+    raw = b"A finding.\nartifacts/run-a-scored.json\n"
+    source.write_bytes(raw)
+    (docs / "no-citations.md").write_text("No evidence claims here.\n")
+    sidecar = repo / "logs" / "scan.json"
+    assert main([str(reg), "--repo", str(repo), "--scan-docs", "--json",
+                 "--scan-receipt", str(sidecar)]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    receipt = payload["scan_receipt"]
+    assert receipt == json.loads(sidecar.read_text())
+    archive = sidecar.with_name(sidecar.name + ".d")
+    original = next(archive.glob("*.json"))
+    original_bytes = original.read_bytes()
+    assert original.stem == hashlib.sha256(original_bytes).hexdigest()
+    assert receipt["schema"] == "epyc.evidence_durability_scan.v1"
+    assert datetime.fromisoformat(receipt["emitted_at_utc"]).utcoffset().total_seconds() == 0
+    source_sha = hashlib.sha256(raw).hexdigest()
+    assert receipt["target_verdicts"][0]["source_sha256"] == source_sha
+    assert receipt["target_verdicts"][0]["line"] == 2
+    assert receipt["target_verdicts"][0]["verdict"] == "OK"
+    assert receipt["target_verdicts"][0]["result"] is True
+    assert str(source) in receipt["target_verdicts"][0]["decided_proposition"]
+    assert {r["path"] for r in receipt["readset"]} == {
+        str(reg), str(source), str(docs / "no-citations.md")}
+    assert receipt["checker"]["source_sha256"] == hashlib.sha256(SCRIPT.read_bytes()).hexdigest()
+    assert "reps" not in receipt and "attestation" not in receipt and "protocol" not in receipt
+    source.write_text("Changed finding.\nartifacts/gone.json\n")
+    assert main([str(reg), "--repo", str(repo), "--scan-docs", "--json",
+                 "--scan-receipt", str(sidecar)]) == 0
+    capsys.readouterr()
+    assert json.loads(sidecar.read_text())["target_verdicts"][0]["result"] is False
+    assert original.read_bytes() == original_bytes
+    assert len(list(archive.glob("*.json"))) == 2
