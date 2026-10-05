@@ -17,6 +17,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from src.api import app
+from src.api.routes import openai_compat
 from src.api.state import get_state, reset_state
 from src.features import reset_features
 from src.scheduling.contention_gate import ContentionDenied
