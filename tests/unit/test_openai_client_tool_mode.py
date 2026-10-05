@@ -313,20 +313,65 @@ def test_invalid_tool_choice_is_422_in_client_mode(client, monkeypatch, override
 
 
 def test_default_mode_keeps_permissive_tool_choice(client, monkeypatch):
-    """The strict check is client-mode only; the REPL bridge is unchanged."""
+    """The strict choice validation is client-mode only when REPL can execute tools."""
     primitives = MagicMock()
     primitives.llm_call.return_value = "fine"
     primitives.total_tokens_generated = 1
     import src.llm_primitives as llm_primitives_module
 
     monkeypatch.setattr(llm_primitives_module, "LLMPrimitives", lambda **_kw: primitives)
-    body = _body(tool_choice="sometimes", x_disable_repl=True)
+    body = _body(tool_choice="sometimes", x_disable_repl=False)
     body.pop("x_tool_mode")
 
     r = client.post("/v1/chat/completions", json=body)
 
     assert r.status_code == 200
     primitives.chat_completion_call.assert_not_called()
+
+
+@pytest.mark.parametrize("stream", [False, True], ids=["nonstream", "stream"])
+def test_disable_repl_refuses_rendered_tool_instructions_before_inference(
+    client, monkeypatch, stream
+):
+    primitives = _install(monkeypatch, result=_tool_result(content="must not run"))
+    body = _body(x_tool_mode=None, x_disable_repl=True, stream=stream)
+
+    response = client.post("/v1/chat/completions", json=body)
+
+    assert response.status_code == 422
+    assert "tools" in response.json()["detail"]
+    primitives.llm_call.assert_not_called()
+    primitives.chat_completion_call.assert_not_called()
+
+
+def test_disable_repl_with_tool_choice_none_keeps_direct_path(client, monkeypatch):
+    primitives = MagicMock()
+    primitives.llm_call.return_value = "fine"
+    primitives.total_tokens_generated = 1
+    import src.llm_primitives as llm_primitives_module
+
+    monkeypatch.setattr(llm_primitives_module, "LLMPrimitives", lambda **_kw: primitives)
+    response = client.post(
+        "/v1/chat/completions",
+        json=_body(x_tool_mode=None, x_disable_repl=True, tool_choice="none"),
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["choices"][0]["message"]["content"] == "fine"
+    primitives.llm_call.assert_called_once()
+
+
+def test_client_tool_mode_with_disable_repl_uses_external_executor(client, monkeypatch):
+    primitives = _install(monkeypatch, result=_tool_result(content="fine"))
+
+    response = client.post(
+        "/v1/chat/completions",
+        json=_body(x_disable_repl=True),
+    )
+
+    assert response.status_code == 200, response.text
+    assert primitives.chat_completion_call.call_args.kwargs["tools"] == [READ_TOOL, BASH_TOOL]
+    primitives.llm_call.assert_not_called()
 
 
 # ── routing still happens in client mode ────────────────────────────────────
@@ -543,13 +588,14 @@ def test_keys_in_default_mode_are_echoed_without_changing_the_repl_contract(clie
             "model": "frontdoor",
             "messages": [{"role": "user", "content": "hi"}],
             "tools": [READ_TOOL],
-            "x_disable_repl": True,
+            "x_disable_repl": False,
             "x_show_routing": True,
             "x_tool_mode": "repl",
             "x_session_id": "ses_1",
         },
     )
 
+    assert r.status_code == 200, r.text
     meta = r.json()["x_orchestrator_metadata"]
     assert meta["request_keys"] == {"x_tool_mode": "repl", "x_session_id": "ses_1"}
     assert meta["native_tool_contract"] == "internal_repl_execution"
@@ -568,11 +614,12 @@ def test_absent_keys_leave_trace_untouched(client, monkeypatch):
 
     monkeypatch.setattr(llm_primitives_module, "LLMPrimitives", lambda **_kw: primitives)
 
-    client.post(
+    response = client.post(
         "/v1/chat/completions",
         json={"messages": [{"role": "user", "content": "hi"}], "x_disable_repl": True},
     )
 
+    assert response.status_code == 200, response.text
     primitives.set_request_trace_keys.assert_not_called()
 
 

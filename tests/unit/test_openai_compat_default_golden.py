@@ -16,7 +16,9 @@ The ``*_include_usage`` cases were added by HS-4 P0.4; the pre-existing cases
 were not regenerated. 2026-09-28 (intended): the ``direct_*`` cases' ``llm_call``
 now carries ``skip_suffix=True`` — the x_disable_repl direct call follows /chat's
 direct-stage prompt contract (tests/unit/test_openai_direct_prompt_contract.py);
-the response bytes did not change.
+the response bytes did not change. HS-OD-6 (2026-10-05) intentionally changes the
+three direct-with-tools cases: they now return a 422 before inference because the
+disabled REPL cannot execute the tool instructions.
 """
 
 from __future__ import annotations
@@ -195,7 +197,9 @@ def _capture(client, monkeypatch, name: str) -> dict[str, Any]:
         for c in primitives.llm_call.call_args_list
     ]
     record: dict[str, Any] = {"status": r.status_code, "llm_calls": calls}
-    if body.get("stream"):
+    if r.status_code >= 400:
+        record["json"] = _normalise_obj(r.json())
+    elif body.get("stream"):
         record["sse"] = _normalise_sse(r.text)
     else:
         record["json"] = _normalise_obj(r.json())
@@ -212,5 +216,10 @@ def test_default_mode_matches_pre_client_mode_golden(client, monkeypatch, name):
         GOLDEN.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
         pytest.skip("golden regenerated")
     expected = json.loads(GOLDEN.read_text())[name]
-    assert got["status"] == 200
+    expected_status = 422 if name in {
+        "direct_nonstream_tools",
+        "direct_stream_tools",
+        "direct_stream_tools_include_usage",
+    } else 200
+    assert got["status"] == expected_status
     assert got == expected

@@ -202,10 +202,9 @@ class OpenAIChatRequest(BaseModel):
     )
     x_disable_repl: bool = Field(
         default=False,
-        description="Skip REPL code execution -- direct text response only. Honoured on the text "
-        "path. Not consulted with x_tool_mode='client' (which never uses the REPL) or on image "
-        "(vision) requests. Any tools sent alongside it are rendered as prompt text with no "
-        "executor.",
+        description="Skip REPL code execution -- direct response only. With x_tool_mode='client', "
+        "the client/backend remains the tool executor. Otherwise, a request that would render "
+        "tool instructions is rejected (422) because no executor would be available.",
     )
     x_show_routing: bool = Field(default=False, description="Include routing metadata")
     # HS-4 P0.2 — typed session/arm keys. Each value is validated (422 on a bad
@@ -244,7 +243,8 @@ class OpenAIChatRequest(BaseModel):
         default=None,
         description="Tool execution mode (HS-4 P0.1). 'repl' (default when absent): client "
         "tools are rendered into the prompt as orchestrator REPL CALL() instructions and "
-        "tool_calls are never returned (with x_disable_repl=true nothing executes them). "
+        "tool_calls are never returned (with x_disable_repl=true, requests that render tool "
+        "instructions are refused with 422). "
         "'client': tools, tool_choice and tool history are forwarded to the backend and "
         "tool_calls are returned for the client to execute; tool_choice is validated (422), "
         "image input is refused (400), and x_session_id may be required (422, "

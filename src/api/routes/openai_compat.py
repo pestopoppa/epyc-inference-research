@@ -1171,6 +1171,19 @@ async def openai_chat_completions(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     prompt = prompt_parts.text
 
+    if (
+        request.x_disable_repl
+        and request.x_tool_mode != "client"
+        and _format_native_tools_for_repl(request.tools, request.tool_choice)
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "tools cannot be used with x_disable_repl=true because no tool executor is "
+                "available"
+            ),
+        )
+
     if prompt_parts.image_base64:
         unsupported_sampling_field = _unsupported_vision_sampling_field(request)
         if unsupported_sampling_field is not None:

@@ -42,85 +42,24 @@
   },
   "direct_nonstream_tools": {
     "json": {
-      "choices": [
-        {
-          "delta": null,
-          "finish_reason": "stop",
-          "index": 0,
-          "message": {
-            "content": "the answer",
-            "name": null,
-            "role": "assistant",
-            "tool_call_id": null,
-            "tool_calls": null
-          }
-        }
-      ],
-      "created": "<created>",
-      "id": "<id>",
-      "model": "frontdoor",
-      "object": "chat.completion",
-      "usage": {
-        "completion_tokens": 7,
-        "prompt_tokens": 4,
-        "total_tokens": 11
-      },
-      "x_orchestrator_metadata": {
-        "elapsed_seconds": "<elapsed>",
-        "max_escalation": "B1",
-        "native_tool_contract": "internal_repl_execution",
-        "repl_disabled": true,
-        "response_tool_calls": "not_emitted",
-        "role": "frontdoor",
-        "tools_called": [],
-        "tools_used": 0
-      }
+      "detail": "tools cannot be used with x_disable_repl=true because no tool executor is available"
     },
-    "llm_calls": [
-      {
-        "args": [
-          "System: You are helpful.\n\nUser: open a.txt\n\nAssistant tool_calls: call_1: read_file({\"path\": \"a.txt\"})\n\nTool result call_1: alpha\n\nOpenAI native tools were supplied by the caller.\nUse the existing REPL bridge to execute function tools as Python code:\n  result = CALL(\"tool_name\", arg=value)\nDo not invent tool results; call the tool before FINAL when the answer depends on it.\nAvailable function tools:\n- read_file - Read a file\n  parameters: {\"properties\": {\"path\": {\"type\": \"string\"}}, \"required\": [\"path\"], \"type\": \"object\"}\n\nUser: what did it say?"
-        ],
-        "kwargs": {
-          "n_tokens": 1024,
-          "role": "frontdoor",
-          "skip_suffix": true
-        }
-      }
-    ],
-    "status": 200
+    "llm_calls": [],
+    "status": 422
   },
   "direct_stream_tools": {
-    "llm_calls": [
-      {
-        "args": [
-          "System: You are helpful.\n\nUser: open a.txt\n\nAssistant tool_calls: call_1: read_file({\"path\": \"a.txt\"})\n\nTool result call_1: alpha\n\nOpenAI native tools were supplied by the caller.\nUse the existing REPL bridge to execute function tools as Python code:\n  result = CALL(\"tool_name\", arg=value)\nDo not invent tool results; call the tool before FINAL when the answer depends on it.\nTool choice policy: read_file.\nAvailable function tools:\n- read_file - Read a file\n  parameters: {\"properties\": {\"path\": {\"type\": \"string\"}}, \"required\": [\"path\"], \"type\": \"object\"}\n\nUser: what did it say?"
-        ],
-        "kwargs": {
-          "n_tokens": 1024,
-          "role": "frontdoor",
-          "skip_suffix": true
-        }
-      }
-    ],
-    "sse": "data: {\"id\": \"<id>\", \"object\": \"chat.completion.chunk\", \"created\": \"<created>\", \"model\": \"frontdoor\", \"choices\": [{\"index\": 0, \"delta\": {\"role\": \"assistant\", \"content\": \"t\"}, \"finish_reason\": null}], \"x_role\": \"frontdoor\"}\n\ndata: {\"id\": \"<id>\", \"object\": \"chat.completion.chunk\", \"created\": \"<created>\", \"model\": \"frontdoor\", \"choices\": [{\"index\": 0, \"delta\": {\"content\": \"h\"}, \"finish_reason\": null}], \"x_role\": \"frontdoor\"}\n\ndata: {\"id\": \"<id>\", \"object\": \"chat.completion.chunk\", \"created\": \"<created>\", \"model\": \"frontdoor\", \"choices\": [{\"index\": 0, \"delta\": {\"content\": \"e\"}, \"finish_reason\": null}], \"x_role\": \"frontdoor\"}\n\ndata: {\"id\": \"<id>\", \"object\": \"chat.completion.chunk\", \"created\": \"<created>\", \"model\": \"frontdoor\", \"choices\": [{\"index\": 0, \"delta\": {\"content\": \" \"}, \"finish_reason\": null}], \"x_role\": \"frontdoor\"}\n\ndata: {\"id\": \"<id>\", \"object\": \"chat.completion.chunk\", \"created\": \"<created>\", \"model\": \"frontdoor\", \"choices\": [{\"index\": 0, \"delta\": {\"content\": \"a\"}, \"finish_reason\": null}], \"x_role\": \"frontdoor\"}\n\ndata: {\"id\": \"<id>\", \"object\": \"chat.completion.chunk\", \"created\": \"<created>\", \"model\": \"frontdoor\", \"choices\": [{\"index\": 0, \"delta\": {\"content\": \"n\"}, \"finish_reason\": null}], \"x_role\": \"frontdoor\"}\n\ndata: {\"id\": \"<id>\", \"object\": \"chat.completion.chunk\", \"created\": \"<created>\", \"model\": \"frontdoor\", \"choices\": [{\"index\": 0, \"delta\": {\"content\": \"s\"}, \"finish_reason\": null}], \"x_role\": \"frontdoor\"}\n\ndata: {\"id\": \"<id>\", \"object\": \"chat.completion.chunk\", \"created\": \"<created>\", \"model\": \"frontdoor\", \"choices\": [{\"index\": 0, \"delta\": {\"content\": \"w\"}, \"finish_reason\": null}], \"x_role\": \"frontdoor\"}\n\ndata: {\"id\": \"<id>\", \"object\": \"chat.completion.chunk\", \"created\": \"<created>\", \"model\": \"frontdoor\", \"choices\": [{\"index\": 0, \"delta\": {\"content\": \"e\"}, \"finish_reason\": null}], \"x_role\": \"frontdoor\"}\n\ndata: {\"id\": \"<id>\", \"object\": \"chat.completion.chunk\", \"created\": \"<created>\", \"model\": \"frontdoor\", \"choices\": [{\"index\": 0, \"delta\": {\"content\": \"r\"}, \"finish_reason\": null}], \"x_role\": \"frontdoor\"}\n\ndata: {\"id\": \"<id>\", \"object\": \"chat.completion.chunk\", \"created\": \"<created>\", \"model\": \"frontdoor\", \"choices\": [{\"index\": 0, \"delta\": {}, \"finish_reason\": \"stop\"}], \"x_orchestrator_metadata\": {\"role\": \"frontdoor\", \"elapsed_seconds\": \"<elapsed>\", \"tokens\": 7, \"repl_disabled\": true, \"native_tool_contract\": \"internal_repl_execution\", \"response_tool_calls\": \"not_emitted\", \"tools_used\": 0, \"tools_called\": []}}\n\ndata: [DONE]\n\n",
-    "status": 200
+    "json": {
+      "detail": "tools cannot be used with x_disable_repl=true because no tool executor is available"
+    },
+    "llm_calls": [],
+    "status": 422
   },
   "direct_stream_tools_include_usage": {
-    "llm_calls": [
-      {
-        "args": [
-          "System: You are helpful.\n\nUser: open a.txt\n\nAssistant tool_calls: call_1: read_file({\"path\": \"a.txt\"})\n\nTool result call_1: alpha\n\nOpenAI native tools were supplied by the caller.\nUse the existing REPL bridge to execute function tools as Python code:\n  result = CALL(\"tool_name\", arg=value)\nDo not invent tool results; call the tool before FINAL when the answer depends on it.\nTool choice policy: read_file.\nAvailable function tools:\n- read_file - Read a file\n  parameters: {\"properties\": {\"path\": {\"type\": \"string\"}}, \"required\": [\"path\"], \"type\": \"object\"}\n\nUser: what did it say?"
-        ],
-        "kwargs": {
-          "n_tokens": 1024,
-          "role": "frontdoor",
-          "skip_suffix": true
-        }
-      }
-    ],
-    "sse": "data: {\"id\": \"<id>\", \"object\": \"chat.completion.chunk\", \"created\": \"<created>\", \"model\": \"frontdoor\", \"choices\": [{\"index\": 0, \"delta\": {\"role\": \"assistant\", \"content\": \"t\"}, \"finish_reason\": null}], \"x_role\": \"frontdoor\"}\n\ndata: {\"id\": \"<id>\", \"object\": \"chat.completion.chunk\", \"created\": \"<created>\", \"model\": \"frontdoor\", \"choices\": [{\"index\": 0, \"delta\": {\"content\": \"h\"}, \"finish_reason\": null}], \"x_role\": \"frontdoor\"}\n\ndata: {\"id\": \"<id>\", \"object\": \"chat.completion.chunk\", \"created\": \"<created>\", \"model\": \"frontdoor\", \"choices\": [{\"index\": 0, \"delta\": {\"content\": \"e\"}, \"finish_reason\": null}], \"x_role\": \"frontdoor\"}\n\ndata: {\"id\": \"<id>\", \"object\": \"chat.completion.chunk\", \"created\": \"<created>\", \"model\": \"frontdoor\", \"choices\": [{\"index\": 0, \"delta\": {\"content\": \" \"}, \"finish_reason\": null}], \"x_role\": \"frontdoor\"}\n\ndata: {\"id\": \"<id>\", \"object\": \"chat.completion.chunk\", \"created\": \"<created>\", \"model\": \"frontdoor\", \"choices\": [{\"index\": 0, \"delta\": {\"content\": \"a\"}, \"finish_reason\": null}], \"x_role\": \"frontdoor\"}\n\ndata: {\"id\": \"<id>\", \"object\": \"chat.completion.chunk\", \"created\": \"<created>\", \"model\": \"frontdoor\", \"choices\": [{\"index\": 0, \"delta\": {\"content\": \"n\"}, \"finish_reason\": null}], \"x_role\": \"frontdoor\"}\n\ndata: {\"id\": \"<id>\", \"object\": \"chat.completion.chunk\", \"created\": \"<created>\", \"model\": \"frontdoor\", \"choices\": [{\"index\": 0, \"delta\": {\"content\": \"s\"}, \"finish_reason\": null}], \"x_role\": \"frontdoor\"}\n\ndata: {\"id\": \"<id>\", \"object\": \"chat.completion.chunk\", \"created\": \"<created>\", \"model\": \"frontdoor\", \"choices\": [{\"index\": 0, \"delta\": {\"content\": \"w\"}, \"finish_reason\": null}], \"x_role\": \"frontdoor\"}\n\ndata: {\"id\": \"<id>\", \"object\": \"chat.completion.chunk\", \"created\": \"<created>\", \"model\": \"frontdoor\", \"choices\": [{\"index\": 0, \"delta\": {\"content\": \"e\"}, \"finish_reason\": null}], \"x_role\": \"frontdoor\"}\n\ndata: {\"id\": \"<id>\", \"object\": \"chat.completion.chunk\", \"created\": \"<created>\", \"model\": \"frontdoor\", \"choices\": [{\"index\": 0, \"delta\": {\"content\": \"r\"}, \"finish_reason\": null}], \"x_role\": \"frontdoor\"}\n\ndata: {\"id\": \"<id>\", \"object\": \"chat.completion.chunk\", \"created\": \"<created>\", \"model\": \"frontdoor\", \"choices\": [{\"index\": 0, \"delta\": {}, \"finish_reason\": \"stop\"}], \"x_orchestrator_metadata\": {\"role\": \"frontdoor\", \"elapsed_seconds\": \"<elapsed>\", \"tokens\": 7, \"repl_disabled\": true, \"native_tool_contract\": \"internal_repl_execution\", \"response_tool_calls\": \"not_emitted\", \"tools_used\": 0, \"tools_called\": []}}\n\ndata: {\"id\": \"<id>\", \"object\": \"chat.completion.chunk\", \"created\": \"<created>\", \"model\": \"frontdoor\", \"choices\": [], \"usage\": {\"prompt_tokens\": 4, \"completion_tokens\": 7, \"total_tokens\": 11}}\n\ndata: [DONE]\n\n",
-    "status": 200
+    "json": {
+      "detail": "tools cannot be used with x_disable_repl=true because no tool executor is available"
+    },
+    "llm_calls": [],
+    "status": 422
   },
   "repl_nonstream_tools": {
     "json": {
