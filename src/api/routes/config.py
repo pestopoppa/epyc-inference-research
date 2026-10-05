@@ -44,10 +44,28 @@ async def update_config(
             detail="Config changes only allowed from localhost",
         )
     body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(status_code=422, detail="Config body must be an object")
+    ttl_supplied = "ttl_s" in body
+    expiry_supplied = "expires_at" in body
+    ttl_s = body.pop("ttl_s", None)
+    expires_at = body.pop("expires_at", None)
+    if ttl_supplied and expiry_supplied:
+        raise HTTPException(status_code=422, detail="Specify ttl_s or expires_at, not both")
+    if (ttl_supplied and ttl_s is None) or (expiry_supplied and expires_at is None):
+        raise HTTPException(status_code=422, detail="ttl_s and expires_at must have values")
     current_summary = current.summary()
     overrides = {k: bool(v) for k, v in body.items() if k in current_summary}
     if overrides:
-        write_runtime_flag_overrides(overrides, set_by=f"api:{client_ip}")
+        try:
+            write_runtime_flag_overrides(
+                overrides,
+                set_by=f"api:{client_ip}",
+                ttl_s=ttl_s,
+                expires_at=expires_at,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
     new = Features(**{**current_summary, **overrides})
     set_features(new)
     publish_config_attestation(new)

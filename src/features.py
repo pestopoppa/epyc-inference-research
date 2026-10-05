@@ -47,11 +47,13 @@ Adding New Features:
 from __future__ import annotations
 
 import json
+import logging
+import math
 import os
 import threading
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -67,6 +69,9 @@ ENV_PREFIX = "ORCHESTRATOR_"
 FEATURE_ENV_PREFIX = "ORCHESTRATOR_FEATURE_"
 RUNTIME_FLAGS_ENV = "ORCHESTRATOR_RUNTIME_FLAGS_PATH"
 RUNTIME_FLAGS_TTL_S = 1.0
+# A recovery lifetime for experiment enables, not a measurement threshold.
+EXPERIMENT_FLAG_TTL_S = 6 * 60 * 60
+logger = logging.getLogger(__name__)
 
 
 # ── Declarative Feature Registry ──────────────────────────────────────────
@@ -318,8 +323,44 @@ def _coerce_bool(value: Any) -> bool | None:
     return None
 
 
-def _runtime_records(path: Path | None = None) -> dict[str, dict[str, Any]]:
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _parse_runtime_expiry(value: Any) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (ValueError, OverflowError):
+        return None
+    try:
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            return None
+        return parsed.astimezone(timezone.utc)
+    except (ValueError, OverflowError):
+        return None
+
+
+def _validate_runtime_flag_ttl(ttl_s: Any) -> float:
+    if isinstance(ttl_s, bool) or not isinstance(ttl_s, (int, float)):
+        raise ValueError("ttl_s must be a finite number of seconds")
+    try:
+        ttl = float(ttl_s)
+    except OverflowError as exc:
+        raise ValueError("ttl_s must be a finite number of seconds") from exc
+    if not math.isfinite(ttl) or ttl <= 0:
+        raise ValueError("ttl_s must be a finite positive number of seconds")
+    return ttl
+
+
+def _runtime_records(
+    path: Path | None = None,
+    *,
+    as_of: datetime | None = None,
+) -> dict[str, dict[str, Any]]:
     path = path or runtime_flags_path()
+    as_of = as_of or _utc_now()
     if not path.exists():
         return {}
     try:
@@ -337,11 +378,21 @@ def _runtime_records(path: Path | None = None) -> dict[str, dict[str, Any]]:
             value = _coerce_bool(record.get("value"))
             if value is None:
                 continue
-            records[name] = {
+            normalized = {
                 "value": value,
                 "set_by": str(record.get("set_by") or "unknown"),
                 "ts": str(record.get("ts") or ""),
             }
+            if "expires_at" in record:
+                expiry = _parse_runtime_expiry(record.get("expires_at"))
+                if expiry is None:
+                    logger.warning("Ignoring runtime flag %s with invalid or timezone-naive expiry", name)
+                    continue
+                if expiry <= as_of:
+                    logger.warning("Ignoring expired runtime flag override %s; using environment/registry baseline", name)
+                    continue
+                normalized["expires_at"] = expiry.isoformat(timespec="seconds")
+            records[name] = normalized
         else:
             value = _coerce_bool(record)
             if value is not None:
@@ -349,29 +400,61 @@ def _runtime_records(path: Path | None = None) -> dict[str, dict[str, Any]]:
     return records
 
 
-def runtime_flag_overrides(path: Path | None = None) -> dict[str, bool]:
+def runtime_flag_overrides(
+    path: Path | None = None,
+    *,
+    as_of: datetime | None = None,
+) -> dict[str, bool]:
     """Return valid runtime overrides from the shared flag file."""
-    return {name: bool(record["value"]) for name, record in _runtime_records(path).items()}
+    return {
+        name: bool(record["value"])
+        for name, record in _runtime_records(path, as_of=as_of).items()
+    }
 
 
 def write_runtime_flag_overrides(
     overrides: dict[str, bool],
     *,
     set_by: str = "unknown",
+    ttl_s: int | float | None = None,
+    expires_at: datetime | str | None = None,
     path: Path | None = None,
 ) -> Path:
-    """Atomically write runtime feature overrides for all worker processes."""
+    """Atomically write runtime overrides; expiry metadata applies only to enables."""
+    if ttl_s is not None and expires_at is not None:
+        raise ValueError("specify ttl_s or expires_at, not both")
     path = path or runtime_flags_path()
     records = _runtime_records(path)
-    ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    now = _utc_now()
+    ts = now.isoformat(timespec="seconds")
+    expiry = None
+    if ttl_s is not None:
+        ttl = _validate_runtime_flag_ttl(ttl_s)
+        try:
+            expiry = now + timedelta(seconds=ttl)
+        except OverflowError as exc:
+            raise ValueError("ttl_s exceeds the supported datetime range") from exc
+    elif expires_at is not None:
+        expiry = _parse_runtime_expiry(expires_at.isoformat() if isinstance(expires_at, datetime) else expires_at)
+        if expiry is None or expiry <= now:
+            raise ValueError("expires_at must be a future timezone-aware ISO-8601 timestamp")
     for name, value in overrides.items():
         if name not in _REGISTRY_BY_NAME:
             continue
-        records[name] = {
+        record = {
             "value": bool(value),
             "set_by": set_by,
             "ts": ts,
         }
+        record_expiry = expiry
+        if value and record_expiry is None and name == "repl_embedding_pool":
+            try:
+                record_expiry = now + timedelta(seconds=EXPERIMENT_FLAG_TTL_S)
+            except OverflowError as exc:
+                raise ValueError("default runtime flag expiry exceeds the supported datetime range") from exc
+        if value and record_expiry is not None:
+            record["expires_at"] = record_expiry.isoformat(timespec="seconds")
+        records[name] = record
     payload = {
         "version": 1,
         "updated_at": ts,
@@ -785,6 +868,7 @@ def _compute_feature_flags(
     *,
     production: bool = False,
     override: dict[str, bool] | None = None,
+    runtime_at: datetime | None = None,
 ) -> tuple[dict[str, bool], dict[str, str]]:
     defaults = {
         spec.name: (spec.default_prod if production else spec.default_test)
@@ -809,7 +893,7 @@ def _compute_feature_flags(
 
     known_names = set(defaults)
     runtime_path = runtime_flags_path()
-    for name, value in runtime_flag_overrides(runtime_path).items():
+    for name, value in runtime_flag_overrides(runtime_path, as_of=runtime_at).items():
         if name not in known_names:
             continue
         flags[name] = value
@@ -829,6 +913,7 @@ def get_features(
     *,
     production: bool = False,
     override: dict[str, bool] | None = None,
+    _runtime_at: datetime | None = None,
 ) -> Features:
     """Get feature flags from environment variables.
 
@@ -856,7 +941,9 @@ def get_features(
         # Test with specific features
         features = get_features(override={"memrl": True, "tools": False})
     """
-    flags, _sources = _compute_feature_flags(production=production, override=override)
+    flags, _sources = _compute_feature_flags(
+        production=production, override=override, runtime_at=_runtime_at
+    )
     return Features(**flags)
 
 
@@ -872,6 +959,7 @@ _features_lock = threading.Lock()
 _features_runtime_path: Path | None = None
 _features_runtime_mtime: float | None = None
 _features_runtime_last_check = 0.0
+_features_runtime_next_expiry: float | None = None
 
 
 def _runtime_mtime(path: Path) -> float | None:
@@ -879,6 +967,28 @@ def _runtime_mtime(path: Path) -> float | None:
         return path.stat().st_mtime
     except FileNotFoundError:
         return None
+
+
+def _runtime_next_expiry(path: Path, *, loaded_at: datetime) -> float | None:
+    # Inspect the raw records so an expiry that crosses between feature loading
+    # and this calculation still schedules an immediate cache refresh.
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    raw = data.get("flags", {}) if isinstance(data, dict) else {}
+    if not isinstance(raw, dict):
+        return None
+    expiries = [
+        _parse_runtime_expiry(record["expires_at"])
+        for record in raw.values()
+        if isinstance(record, dict) and "expires_at" in record
+    ]
+    valid = [expiry for expiry in expiries if expiry is not None and expiry > loaded_at]
+    if not valid:
+        return None
+    seconds_left = min((expiry - _utc_now()).total_seconds() for expiry in valid)
+    return time.monotonic() + max(0.0, seconds_left)
 
 
 def features() -> Features:
@@ -896,22 +1006,28 @@ def features() -> Features:
         Global Features instance.
     """
     global _features, _features_runtime_last_check, _features_runtime_mtime, _features_runtime_path
+    global _features_runtime_next_expiry
     now = time.monotonic()
     path = runtime_flags_path()
     with _features_lock:
         if _features is None:
-            _features = get_features()
+            loaded_at = _utc_now()
+            _features = get_features(_runtime_at=loaded_at)
             _features_runtime_path = path
             _features_runtime_mtime = _runtime_mtime(path)
+            _features_runtime_next_expiry = _runtime_next_expiry(path, loaded_at=loaded_at)
             _features_runtime_last_check = now
             return _features
 
         if now - _features_runtime_last_check >= RUNTIME_FLAGS_TTL_S:
             mtime = _runtime_mtime(path)
-            if path != _features_runtime_path or mtime != _features_runtime_mtime:
-                _features = get_features()
+            expired = _features_runtime_next_expiry is not None and now >= _features_runtime_next_expiry
+            if path != _features_runtime_path or mtime != _features_runtime_mtime or expired:
+                loaded_at = _utc_now()
+                _features = get_features(_runtime_at=loaded_at)
                 _features_runtime_path = path
                 _features_runtime_mtime = mtime
+                _features_runtime_next_expiry = _runtime_next_expiry(path, loaded_at=loaded_at)
             _features_runtime_last_check = now
         return _features
 
@@ -922,11 +1038,13 @@ def reset_features() -> None:
     Call this to re-read feature flags from environment.
     """
     global _features, _features_runtime_last_check, _features_runtime_mtime, _features_runtime_path
+    global _features_runtime_next_expiry
     with _features_lock:
         _features = None
         _features_runtime_path = None
         _features_runtime_mtime = None
         _features_runtime_last_check = 0.0
+        _features_runtime_next_expiry = None
 
 
 def set_features(new_features: Features) -> None:
@@ -936,8 +1054,10 @@ def set_features(new_features: Features) -> None:
         new_features: Features instance to use globally.
     """
     global _features, _features_runtime_last_check, _features_runtime_mtime, _features_runtime_path
+    global _features_runtime_next_expiry
     with _features_lock:
         _features = new_features
         _features_runtime_path = runtime_flags_path()
         _features_runtime_mtime = _runtime_mtime(_features_runtime_path)
+        _features_runtime_next_expiry = _runtime_next_expiry(_features_runtime_path)
         _features_runtime_last_check = time.monotonic()
