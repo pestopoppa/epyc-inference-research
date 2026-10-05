@@ -49,10 +49,9 @@ def _get_paths() -> dict[str, Path]:
         # symlink (same string as the old literal today) and RAISES rather than
         # substituting when the store is dangling.
         "llama_cpp_bin": Path(
-            os.environ.get(
-                "ORCHESTRATOR_PATHS_LLAMA_CPP_BIN",
-                str(_kernel_backend_dir("cpu")),
-            )
+            os.environ["ORCHESTRATOR_PATHS_LLAMA_CPP_BIN"]
+            if "ORCHESTRATOR_PATHS_LLAMA_CPP_BIN" in os.environ
+            else str(_kernel_backend_dir("cpu"))
         ),
         "log_dir": Path(
             os.environ.get("ORCHESTRATOR_PATHS_LOG_DIR", str(project_root / "logs"))
