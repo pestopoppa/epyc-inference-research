@@ -817,8 +817,18 @@ class ExperimentStore:
                 payload = {}
             from ..loop import claims as claim_contract
             mechanism_claim = claim_contract.mechanism_status(payload)
+            # Display only: a "kept" row can be a decisive keep (effect clears the
+            # noise floor) or a compound-then-gate accumulator keep (sub-floor
+            # positive, banked because `comparison.decisive` was False at keep
+            # time -- loop.py's `accumulatable_positive` path). Both share the
+            # machine-readable status "kept"; the reader must not conflate them.
+            # This never touches `row["status"]`, the DB, or anything that matches
+            # on "kept" -- it only changes what this one rendered cell says.
+            status_cell = row["status"]
+            if status_cell == "kept" and (payload.get("comparison") or {}).get("decisive") is False:
+                status_cell = "kept (accumulate)"
             lines.append(
-                f"| {row['recorded_at']} | {row['status']} | "
+                f"| {row['recorded_at']} | {status_cell} | "
                 f"{row['mechanism_id'] or '—'} | "
                 f"{row['target_symbol'] or row['target_surface'] or '—'} | "
                 f"{effect} | {row['epoch_sha256'][:12]}{stale} | "

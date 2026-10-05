@@ -301,6 +301,36 @@ class Memory(unittest.TestCase):
             path = store.write_markdown(epoch=EPOCH_A)
             self.assertTrue(path.is_file())
 
+    def test_decisive_and_accumulator_keeps_render_different_status_cells(self):
+        """Display-only distinction (R23-44 compound-then-gate).
+
+        Both rows carry the machine-readable status "kept" -- `record()`'s status
+        column and the Outcome's own status string are untouched -- but a reader of
+        the rendered table must not mistake a sub-floor accumulator keep for a
+        decisive one.
+        """
+        with tempfile.TemporaryDirectory() as tmp, self.store(tmp) as store:
+            store.record(_attempt(
+                result_sha256="2" * 64, status="kept", mechanism_id="akm-decisive",
+                comparison={"decisive": True, "effect": 0.02}),
+                epoch=EPOCH_A, recorded_at="2026-10-05T00:00:00Z", campaign_id="c1")
+            store.record(_attempt(
+                result_sha256="3" * 64, status="kept", mechanism_id="akm-accumulate",
+                comparison={"decisive": False, "effect": 0.004}),
+                epoch=EPOCH_A, recorded_at="2026-10-05T00:00:01Z", campaign_id="c1")
+            text = store.render_markdown(epoch=EPOCH_A)
+            decisive_row = [line for line in text.splitlines()
+                            if "akm-decisive" in line][0]
+            accumulate_row = [line for line in text.splitlines()
+                              if "akm-accumulate" in line][0]
+            self.assertIn("| kept |", decisive_row)
+            self.assertIn("| kept (accumulate) |", accumulate_row)
+            # The machine-readable status in the DB is untouched by either rendering.
+            recalled = {row["mechanism_id"]: row["status"]
+                       for row in store.recall(epoch=EPOCH_A, limit=10)}
+            self.assertEqual(recalled["akm-decisive"], "kept")
+            self.assertEqual(recalled["akm-accumulate"], "kept")
+
     def test_a_pipe_in_a_reason_cannot_break_the_table(self):
         with tempfile.TemporaryDirectory() as tmp, self.store(tmp) as store:
             store.record({"status": "authoring_refused", "turn": 5,
