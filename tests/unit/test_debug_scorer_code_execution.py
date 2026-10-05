@@ -15,7 +15,18 @@ sys.path.insert(0, str(REPO_ROOT / "scripts" / "benchmark"))
 
 import pytest
 
+import debug_scorer
 from debug_scorer import ScoringUnavailableError, score_answer  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _bind_scorer_scratch_to_private_test_root(tmp_path: Path, monkeypatch) -> None:
+    scratch_root = tmp_path / "debug-scorer-scratch"
+    scratch_root.mkdir(mode=0o700)
+    assert not scratch_root.is_symlink()
+    assert scratch_root.stat().st_uid == os.getuid()
+    assert scratch_root.stat().st_mode & 0o777 == 0o700
+    monkeypatch.setattr(debug_scorer, "_SCORER_TMP_ROOT", scratch_root)
 
 
 _BCB190_ANSWER = """```python
@@ -136,6 +147,30 @@ def test_code_execution_entry_point_cases_execute() -> None:
     )
 
 
+def test_code_execution_refuses_missing_scorer_scratch(monkeypatch, tmp_path: Path) -> None:
+    missing_root = tmp_path / "missing-scratch-root"
+    assert not missing_root.exists()
+
+    monkeypatch.setattr(debug_scorer, "_SCORER_TMP_ROOT", missing_root)
+
+    def unexpected_spawn(*args, **kwargs):
+        pytest.fail("scorer must refuse before spawning when its scratch root is missing")
+
+    monkeypatch.setattr(debug_scorer.subprocess, "Popen", unexpected_spawn)
+    with pytest.raises(ScoringUnavailableError, match="temporary harness"):
+        score_answer(
+            answer="```python\ndef add(a, b):\n    return a + b\n```",
+            expected="",
+            scoring_method="code_execution",
+            scoring_config={
+                "language": "python",
+                "timeout": 5,
+                "test_code": "assert add(1, 2) == 3",
+            },
+        )
+    assert not missing_root.exists()
+
+
 def test_code_execution_rejects_unsafe_entry_point_name() -> None:
     with pytest.raises(ScoringUnavailableError):
         score_answer(
@@ -227,9 +262,14 @@ assert time.monotonic() >= 0
 def test_code_execution_child_dies_when_its_scorer_parent_is_killed(tmp_path: Path) -> None:
     """An externally killed scorer must not strand its isolated child on CPU."""
     pid_file = tmp_path / "solution.pid"
+    child_scratch = tmp_path / "child-scorer-scratch"
+    child_scratch.mkdir(mode=0o700)
     wrapper = f"""
 import sys
+from pathlib import Path
 sys.path.insert(0, {str(REPO_ROOT / 'scripts' / 'benchmark')!r})
+import debug_scorer
+debug_scorer._SCORER_TMP_ROOT = Path({str(child_scratch)!r})
 from debug_scorer import score_answer
 answer = '''```python
 from pathlib import Path

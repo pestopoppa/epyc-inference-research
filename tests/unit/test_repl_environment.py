@@ -358,15 +358,19 @@ class TestSecuritySandbox:
 class TestOutputCapping:
     """Test output capping functionality."""
 
-    def test_output_capped(self):
+    def test_output_capped(self, tmp_path):
         """Test that large output is spilled to file with summary."""
-        config = REPLConfig(output_cap=100)
+        config = REPLConfig(output_cap=100, spill_dir=str(tmp_path))
         repl = REPLEnvironment(context="test", config=config)
         result = repl.execute("print('x' * 200)")
 
         # Output should be a spill summary, not raw output
         assert "chars" in result.output
         assert "peek(" in result.output
+        spill = tmp_path / repl._session_id / "turn_1.txt"
+        assert spill.is_file()
+        assert spill.parent.resolve().is_relative_to(tmp_path.resolve())
+        assert spill.read_text().strip() == "x" * 200
 
     def test_normal_output_not_capped(self):
         """Test that normal output is not capped."""
