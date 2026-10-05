@@ -93,6 +93,9 @@ dev = [
     "hypothesis>=6.0.0",
     "pandas>=2.0.0",  # Required for canvas export tests
 ]
+eval-scoring = [
+    "math-verify[antlr4_13_2]==0.9.0",
+]
 toon = [
     # Token-Oriented Object Notation - 55% token reduction on structured data
     # Install from git until official PyPI release
