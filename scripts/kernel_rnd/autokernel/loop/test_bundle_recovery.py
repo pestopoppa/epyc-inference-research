@@ -8,6 +8,7 @@ import pytest
 from autokernel import journal
 from autokernel.loop import accumulate as A
 from autokernel.loop import new_epoch
+from autokernel.loop import run as run_mod
 
 
 def _linear(*commits):
@@ -399,35 +400,50 @@ def test_read_only_journal_replay_leaves_entire_tree_unchanged(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# DS41-C126: supported new-anchor epoch path (gaps a/b/c).
+# DS41-C126: supported new-anchor epoch path (gaps a/b/c/d).
 # ---------------------------------------------------------------------------
 
-def test_would_refuse_anchor_reports_ancestry_reason_without_mutating(tmp_path):
+def test_would_refuse_anchor_reports_ancestry_reason_and_kind_without_mutating(tmp_path):
     bundle = A.Bundle(champion_of_record="cor0", tip="dd6c9c")
     bundle.save(tmp_path)
     before = _tree_bytes(tmp_path)
-    would_refuse, reason = A.would_refuse_anchor(
+    would_refuse, reason, kind = A.would_refuse_anchor(
         tmp_path, anchor_commit="b0ba1d4", is_ancestor=_linear("cor0", "dd6c9c"))
     assert would_refuse is True
     assert "invalid tip/anchor ancestry" in reason
+    assert kind == A.REFUSAL_KIND_ANCESTRY
     assert _tree_bytes(tmp_path) == before  # preflight is read-only
+
+
+def test_would_refuse_anchor_reports_other_kind_for_a_corrupt_journal(tmp_path):
+    bundle = A.Bundle(champion_of_record="cor0", tip="k2")
+    bundle.save(tmp_path)
+    # Corrupt a journal shard so the journal cannot be read at all.
+    shard = next((tmp_path / A.JOURNAL_DIRNAME).glob("*.jsonl"))
+    shard.write_bytes(b"{not json\n")
+    would_refuse, reason, kind = A.would_refuse_anchor(
+        tmp_path, anchor_commit="anchor", is_ancestor=_linear("cor0", "k2", "anchor"))
+    assert would_refuse is True
+    assert kind == A.REFUSAL_KIND_OTHER
+    assert "invalid tip/anchor ancestry" not in reason
 
 
 def test_would_refuse_anchor_is_false_for_a_compatible_store(tmp_path):
     bundle = A.Bundle(champion_of_record="cor0", tip="k2")
     bundle.save(tmp_path)
     before = _tree_bytes(tmp_path)
-    would_refuse, note = A.would_refuse_anchor(
+    would_refuse, note, kind = A.would_refuse_anchor(
         tmp_path, anchor_commit="anchor",
         is_ancestor=_linear("cor0", "k2", "anchor"))
     assert would_refuse is False
     assert "restored" in note
+    assert kind == A.REFUSAL_KIND_OTHER
     assert _tree_bytes(tmp_path) == before
 
 
 def test_would_refuse_anchor_is_false_for_a_genuinely_new_store(tmp_path):
     empty_store = tmp_path / "brand-new"
-    would_refuse, note = A.would_refuse_anchor(
+    would_refuse, note, kind = A.would_refuse_anchor(
         empty_store, anchor_commit="anchor", is_ancestor=_linear("anchor"))
     assert would_refuse is False
     assert "initialize a fresh baseline" in note
@@ -443,6 +459,31 @@ def test_start_new_anchor_epoch_refuses_without_an_actual_refusal(tmp_path):
             tmp_path, anchor_commit="anchor",
             is_ancestor=_linear("cor0", "k2", "anchor"))
     assert _tree_bytes(tmp_path) == before  # never a reset switch; nothing moved
+
+
+def test_start_new_anchor_epoch_refuses_a_non_ancestry_refusal_even_with_the_flag(tmp_path):
+    bundle = A.Bundle(champion_of_record="cor0", tip="k2")
+    bundle.save(tmp_path)
+    shard = next((tmp_path / A.JOURNAL_DIRNAME).glob("*.jsonl"))
+    shard.write_bytes(b"{not json\n")
+    before = _tree_bytes(tmp_path)
+    with pytest.raises(ValueError, match="not an ancestry mismatch"):
+        new_epoch.start_new_anchor_epoch(
+            tmp_path, anchor_commit="anchor",
+            is_ancestor=_linear("cor0", "k2", "anchor"))
+    assert _tree_bytes(tmp_path) == before  # corrupt journal: nothing moved, still refused
+
+
+def test_start_new_anchor_epoch_refuses_when_store_has_a_live_owner(tmp_path):
+    bundle = A.Bundle(champion_of_record="cor0", tip="dd6c9c")
+    bundle.save(tmp_path)
+    before = _tree_bytes(tmp_path)
+    book = _book(tmp_path)
+    with book.write_lock():  # simulate a live loop process holding the store
+        with pytest.raises(ValueError, match="live owner"):
+            new_epoch.start_new_anchor_epoch(
+                tmp_path, anchor_commit="b0ba1d4", is_ancestor=_linear("cor0", "dd6c9c"))
+    assert _tree_bytes(tmp_path) == before  # nothing moved while the owner held it
 
 
 def test_start_new_anchor_epoch_archives_old_state_and_initializes_fresh(tmp_path):
@@ -476,3 +517,65 @@ def test_start_new_anchor_epoch_archives_old_state_and_initializes_fresh(tmp_pat
     assert live.champion_of_record == "b0ba1d4"
     assert live.tip == "b0ba1d4"
     assert live.keeps == []
+
+
+def test_start_new_anchor_epoch_dry_run_mutates_nothing(tmp_path):
+    bundle = A.Bundle(champion_of_record="cor0", tip="dd6c9c",
+                      keeps=["m1"], compounded_bench_pct=4.0)
+    bundle.save(tmp_path)
+    before = _tree_bytes(tmp_path)
+
+    restored, note = new_epoch.start_new_anchor_epoch(
+        tmp_path, anchor_commit="b0ba1d4", is_ancestor=_linear("cor0", "dd6c9c"),
+        dry_run=True)
+
+    assert restored is None
+    assert "would start new anchor epoch at b0ba1d4" in note
+    assert "archiving" in note
+    assert _tree_bytes(tmp_path) == before  # dry run never touches disk
+    assert not (tmp_path / new_epoch.ARCHIVE_DIRNAME).exists()
+
+
+def test_start_new_anchor_epoch_dry_run_still_refuses_non_ancestry(tmp_path):
+    bundle = A.Bundle(champion_of_record="cor0", tip="k2")
+    bundle.save(tmp_path)
+    shard = next((tmp_path / A.JOURNAL_DIRNAME).glob("*.jsonl"))
+    shard.write_bytes(b"{not json\n")
+    before = _tree_bytes(tmp_path)
+    with pytest.raises(ValueError, match="not an ancestry mismatch"):
+        new_epoch.start_new_anchor_epoch(
+            tmp_path, anchor_commit="anchor",
+            is_ancestor=_linear("cor0", "k2", "anchor"), dry_run=True)
+    assert _tree_bytes(tmp_path) == before
+
+
+# ---------------------------------------------------------------------------
+# DS41-C126 gap (3): the --new-anchor-epoch CLI flag binds to ONE commit. This is
+# run.py's own gate (`_check_new_anchor_epoch_binding`), exercised directly -- a true
+# run.main() CLI-level test is impractical here: main() is one monolithic function with
+# no seam before this check, requiring a real worktree, model file, census/recipe
+# resolution, and GPU/CPU claim plumbing just to reach it.
+# ---------------------------------------------------------------------------
+
+def test_new_anchor_epoch_binding_absent_flag_is_a_noop():
+    assert run_mod._check_new_anchor_epoch_binding(
+        None, "b0ba1d427835", resolve=lambda ref: "should not be called") is None
+
+
+def test_new_anchor_epoch_binding_accepts_exact_match():
+    assert run_mod._check_new_anchor_epoch_binding(
+        "HEAD", "b0ba1d427835", resolve=lambda ref: "b0ba1d427835") is None
+
+
+def test_new_anchor_epoch_binding_refuses_a_stale_or_unrelated_commit():
+    error = run_mod._check_new_anchor_epoch_binding(
+        "b0ba1d427835", "dd6c9cdbdf85", resolve=lambda ref: "b0ba1d427835")
+    assert error is not None
+    assert "b0ba1d427835" in error and "dd6c9cdbdf85" in error
+
+
+def test_new_anchor_epoch_binding_refuses_an_unresolvable_ref():
+    error = run_mod._check_new_anchor_epoch_binding(
+        "not-a-commit", "dd6c9cdbdf85", resolve=lambda ref: "")
+    assert error is not None
+    assert "<nothing>" in error

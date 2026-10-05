@@ -122,11 +122,23 @@ def negative_beyond_floor(comparison: dict, fallback_floor_pct: float | None = N
             and float(effect_pct) < -float(floor))
 
 
+#: DS41-C126 gap (2): a machine-checkable refusal kind, not a string the caller must
+#: pattern-match. ANCESTRY is the one kind a supported new-anchor epoch may ever act on
+#: (the persisted tip provably predates a champion-branch move); every other refusal --
+#: corrupt/unreadable journal, a symlinked store, a torn projection -- is OTHER and must
+#: keep refusing even with an explicit new-anchor-epoch request, because "the tip isn't
+#: an ancestor of the anchor" and "the journal cannot be trusted" look identical from a
+#: flag's perspective but demand opposite responses.
+REFUSAL_KIND_ANCESTRY = "ancestry"
+REFUSAL_KIND_OTHER = "other"
+
+
 class BundleRecoveryRequired(RuntimeError):
     """Authoritative accumulator state cannot be proved safe to resume."""
 
-    def __init__(self, reason: str) -> None:
+    def __init__(self, reason: str, *, kind: str = REFUSAL_KIND_OTHER) -> None:
         self.reason = reason
+        self.kind = kind
         super().__init__(f"bundle recovery required: {reason}")
 
 
@@ -436,7 +448,8 @@ def _require_valid_ancestry(bundle: Bundle, anchor_commit: str, is_ancestor) -> 
     if not tip_precedes_anchor:
         raise BundleRecoveryRequired(
             f"invalid tip/anchor ancestry: persisted tip {bundle.tip[:12]} is not "
-            f"an ancestor of anchor {anchor_commit[:12]}"
+            f"an ancestor of anchor {anchor_commit[:12]}",
+            kind=REFUSAL_KIND_ANCESTRY,
         )
 
 
@@ -552,7 +565,8 @@ def load_bundle(store: Path, *, anchor_commit: str, is_ancestor,
                    f"{b.champion_of_record[:12]} from {provenance}")
 
 
-def would_refuse_anchor(store: Path, *, anchor_commit: str, is_ancestor) -> tuple[bool, str]:
+def would_refuse_anchor(store: Path, *, anchor_commit: str,
+                        is_ancestor) -> tuple[bool, str, str]:
     """Pre-flight: would `load_bundle` refuse this anchor against the store's persisted
     bundle? Pure and read-only -- never claims the journal lock for write, never
     initializes a store, never mutates anything on disk. Usable before any build or CPU
@@ -560,8 +574,12 @@ def would_refuse_anchor(store: Path, *, anchor_commit: str, is_ancestor) -> tupl
     only AFTER a build and a region lock were already taken, on a champion-anchor move to
     b0ba1d427 whose history the persisted tip did not descend from).
 
-    Returns (True, reason) when `load_bundle` would raise `BundleRecoveryRequired` for
-    this anchor against the current store contents; (False, note) otherwise, including
+    Returns ``(True, reason, kind)`` when `load_bundle` would raise
+    `BundleRecoveryRequired` for this anchor against the current store contents --
+    ``kind`` is `REFUSAL_KIND_ANCESTRY` only for the "persisted tip is not an ancestor of
+    the anchor" case (a new-anchor-epoch candidate) and `REFUSAL_KIND_OTHER` for every
+    other reason (corrupt journal, symlinked store, ...), which a flag must never act on.
+    Returns ``(False, note, REFUSAL_KIND_OTHER)`` when the anchor is accepted, including
     for a store `load_bundle` would initialize fresh (a genuinely new/empty store never
     refuses)."""
     store = Path(store)
@@ -575,22 +593,70 @@ def would_refuse_anchor(store: Path, *, anchor_commit: str, is_ancestor) -> tupl
         # tip = anchor. Only a populated-but-unreadable store counts as a refusal here.
         try:
             if store.is_symlink():
-                return True, "new accumulator store cannot be a symlink"
+                return True, "new accumulator store cannot be a symlink", REFUSAL_KIND_OTHER
             with os.scandir(store) as contents:
                 if next(contents, None) is not None:
-                    return True, f"no accumulator state: {legacy_error}"
+                    return (True, f"no accumulator state: {legacy_error}",
+                           REFUSAL_KIND_OTHER)
         except FileNotFoundError:
             pass  # A genuinely new store, not a lost snapshot in an existing history.
         except OSError as exc:
-            return True, f"cannot inspect new accumulator store: {exc}"
-        return False, ("no persisted bundle; a write-capable run would initialize a "
-                       "fresh baseline at this anchor")
+            return True, f"cannot inspect new accumulator store: {exc}", REFUSAL_KIND_OTHER
+        return (False, ("no persisted bundle; a write-capable run would initialize a "
+                        "fresh baseline at this anchor"), REFUSAL_KIND_OTHER)
     try:
         _, note = load_bundle(store, anchor_commit=anchor_commit, is_ancestor=is_ancestor,
                               read_only=True)
-        return False, note
+        return False, note, REFUSAL_KIND_OTHER
     except BundleRecoveryRequired as exc:
-        return True, exc.reason
+        return True, exc.reason, exc.kind
+
+
+def peek_refusal(store: Path, *, anchor_commit: str,
+                 is_ancestor) -> "BundleRecoveryRequired | None":
+    """Classify a refusal WITHOUT acquiring any lock and WITHOUT mutating anything.
+
+    For a caller that already holds the store's journal write lock exclusively (so a
+    nested nonblocking nested lock request here would risk deadlocking the same process
+    against itself -- the journal's advisory flock is per open-file-description, not
+    per-process). Reads the current journal/legacy snapshot directly and re-runs the
+    same ancestry check `load_bundle` would, returning the `BundleRecoveryRequired` it
+    would raise (carrying `.reason` and `.kind`), or `None` if the anchor is accepted.
+
+    This is a narrower, lock-free twin of `would_refuse_anchor` -- NOT a general
+    replacement for it; `would_refuse_anchor` remains the right call for a lock-free
+    pre-flight, including the genuinely-new-store case this function does not special
+    case (a caller re-verifying under its own lock already knows the store is populated,
+    since only a populated store's refusal is worth re-checking)."""
+    store = Path(store)
+    p = store / Bundle.FILENAME
+    journal_root = store / JOURNAL_DIRNAME
+    legacy, legacy_error = _read_legacy_projection(p)
+    journal_exists = journal_root.exists()
+    try:
+        if journal_exists:
+            book = journal.Journal(str(journal_root))
+            entries = _read_entries(book)
+            saved = _last_saved_snapshot(entries)
+            if saved is not None:
+                snapshot, _provenance = saved
+            elif legacy is not None:
+                snapshot = legacy
+            else:
+                return BundleRecoveryRequired(
+                    "journal contains no LOOP_BUNDLE_SAVED snapshot and "
+                    f"{legacy_error}")
+        elif legacy is not None:
+            snapshot = legacy
+        else:
+            return None  # a genuinely new/empty store never refuses
+        b = Bundle.from_dict(snapshot)
+        _require_valid_ancestry(b, anchor_commit, is_ancestor)
+        return None
+    except BundleRecoveryRequired as exc:
+        return exc
+    except (TypeError, ValueError) as exc:
+        return BundleRecoveryRequired(f"bundle snapshot cannot be restored: {exc}")
 
 
 def gate_trigger(bundle: Bundle, serving_floor_pct: float | None,

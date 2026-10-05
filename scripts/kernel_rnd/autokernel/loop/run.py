@@ -517,6 +517,19 @@ def _dry_run_accumulator_and_resume(args, *, anchor_commit: str, experimental: b
             peek, note = accumulate.load_bundle(args.store, anchor_commit=anchor_commit,
                                                 is_ancestor=is_ancestor, read_only=True)
         except accumulate.BundleRecoveryRequired as exc:
+            if args.new_anchor_epoch:
+                # DS41-C126 gap (4): a dry run with the flag reports what the live run
+                # WOULD do and exits cleanly -- it never takes the lock and never
+                # touches disk (`dry_run=True`); without the flag it keeps refusing.
+                try:
+                    _, dry_note = new_epoch.start_new_anchor_epoch(
+                        args.store, anchor_commit=anchor_commit, is_ancestor=is_ancestor,
+                        dry_run=True)
+                except ValueError as new_epoch_exc:
+                    raise champion.StartupRefused(
+                        f"REFUSED (dry run): {new_epoch_exc}") from new_epoch_exc
+                print(f"accum     (dry) {dry_note}")
+                return
             raise champion.StartupRefused(
                 f"REFUSED (dry run): accumulator cannot be restored: {exc}") from exc
         print(f"accum     (dry) {note}; keeps={list(peek.keeps)}")
@@ -1485,6 +1498,26 @@ def _git(repo: Path, *args: str) -> str:
                           capture_output=True, text=True, timeout=600).stdout.strip()
 
 
+def _check_new_anchor_epoch_binding(requested: str | None, anchor_commit: str, *,
+                                    resolve) -> str | None:
+    """DS41-C126 gap (3): ``--new-anchor-epoch`` BINDS to one commit -- resolved and
+    full-SHA compared against the anchor this exact run computed -- so a watchdog or
+    relaunch script that always passes the flag cannot silently repair a LATER,
+    unrelated ancestry refusal once the champion branch moves again. Pure (``resolve``
+    is injected) so this is unit-testable without a real git worktree. Returns an
+    error message for ``parser.error`` on a mismatch, ``None`` when the flag is absent
+    or correctly bound."""
+    if requested is None:
+        return None
+    resolved = resolve(requested)
+    if not resolved or resolved != anchor_commit:
+        return (f"--new-anchor-epoch {requested!r} resolves to "
+                f"{resolved or '<nothing>'!r}, which is not this run's anchor commit "
+                f"{anchor_commit!r} (--anchor-build's HEAD); pass the exact anchor "
+                "commit this run is starting, never a fixed/stale value")
+    return None
+
+
 def pending_hypotheses_view(args, epoch: str, anchor_commit: str | None,
                             **bind) -> list[dict]:
     """Accepted hypotheses pending authoring (resume.pending_hypotheses), for the
@@ -1615,15 +1648,20 @@ def main(argv: list[str] | None = None) -> int:
                         help="existing resolved campaign or campaign_cli output; selects inputs only")
     parser.add_argument("--target-id", help="exact enrolled target ID/alias; requires --resolved-campaign")
     parser.add_argument("--store", type=Path, required=True)
-    parser.add_argument("--new-anchor-epoch", action="store_true",
-                        help="EXPLICIT opt-in (DS41-C126): when the persisted accumulator "
-                        "bundle's tip is not an ancestor of --anchor-build's commit (a "
-                        "champion-branch new epoch, not a corrupt journal), archive the "
-                        "existing accumulator-bundle.json + journal under the store "
-                        "(timestamped, never deleted) and initialize a fresh bundle with "
-                        "champion_of_record = tip = anchor. Refused silently-never: it "
-                        "only acts when the store would actually refuse the anchor; "
-                        "preflight with `new_epoch.start_new_anchor_epoch`'s underlying "
+    parser.add_argument("--new-anchor-epoch", metavar="COMMIT",
+                        help="EXPLICIT opt-in (DS41-C126), bound to ONE commit: when the "
+                        "persisted accumulator bundle's tip is not an ancestor of "
+                        "--anchor-build's commit (a champion-branch new epoch, never a "
+                        "corrupt journal -- any OTHER refusal reason still refuses even "
+                        "with this flag), archive the existing accumulator-bundle.json + "
+                        "journal under the store (timestamped, never deleted) and "
+                        "initialize a fresh bundle with champion_of_record = tip = "
+                        "anchor. The value MUST resolve to the exact anchor commit this "
+                        "run computes from --anchor-build/--worktree (full SHA compared) "
+                        "-- a mismatch refuses, so a watchdog that always passes a fixed "
+                        "value cannot silently repair a later, unrelated anchor move. "
+                        "Also refuses if the store has a live owner (its journal write "
+                        "lock is held). Preflight with "
                         "`accumulate.would_refuse_anchor` before taking a CPU region lock")
     parser.add_argument("--belief-root-repo", type=Path,
                         help="ROOT owning serving-observation reader (default EPYC_ROOT_REPO or /workspace)")
@@ -2708,6 +2746,11 @@ def main(argv: list[str] | None = None) -> int:
           f"divergences={[f.name for f in recipe.divergences()] or 'none'}")
 
     anchor_commit = _git(args.worktree, "rev-parse", "HEAD")
+    new_anchor_epoch_error = _check_new_anchor_epoch_binding(
+        args.new_anchor_epoch, anchor_commit,
+        resolve=lambda ref: _git(args.worktree, "rev-parse", ref))
+    if new_anchor_epoch_error is not None:
+        parser.error(new_anchor_epoch_error)
     # A carried runtime selection (a previous launch ADOPTED a runtime recipe) is a
     # measured input (P-AK-SEARCH-1-A3.1 Clause 1a): its build-independent runtime
     # surface enters the epoch, so rows measured under the adopted recipe never share
@@ -3531,10 +3574,15 @@ def main(argv: list[str] | None = None) -> int:
     except accumulate.BundleRecoveryRequired as exc:
         if args.new_anchor_epoch:
             # DS41-C126 gap (a): an EXPLICIT opt-in only, never a silent reset -- the
-            # flag must not catch a genuinely corrupt journal, so it is still routed
-            # through the same refusal and only acts because the caller asked for it.
-            restored, note = new_epoch.start_new_anchor_epoch(
-                args.store, anchor_commit=anchor_commit, is_ancestor=_is_ancestor)
+            # flag must not catch a genuinely corrupt journal (new_epoch narrows to the
+            # ancestry-refusal kind and takes the store's journal lock itself), so it is
+            # still routed through the same refusal and only acts because the caller
+            # asked for it, AND named this exact anchor commit (checked above).
+            try:
+                restored, note = new_epoch.start_new_anchor_epoch(
+                    args.store, anchor_commit=anchor_commit, is_ancestor=_is_ancestor)
+            except ValueError as new_epoch_exc:
+                raise champion.StartupRefused(str(new_epoch_exc)) from new_epoch_exc
         else:
             raise champion.StartupRefused(
                 f"REFUSED: {exc}. Inspect and restore the authoritative accumulator "
