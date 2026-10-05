@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 from typing import Any
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -364,6 +364,76 @@ def test_sampling_and_max_tokens_are_forwarded(client, monkeypatch):
     assert (kwargs["temperature"], kwargs["seed"], kwargs["top_p"], kwargs["top_k"]) == (
         0.2, 7, 0.9, 20,
     )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "reported_field"),
+    [
+        ("temperature", 0.0, "temperature"),
+        ("top_p", 0.9, "top_p"),
+        ("top_k", 20, "top_k"),
+        ("seed", 7, "seed"),
+        ("max_tokens", 300, "max_tokens"),
+        ("max_completion_tokens", 300, "max_tokens"),
+    ],
+)
+def test_explicit_vision_sampling_control_is_refused_before_inference(
+    client, monkeypatch, field, value, reported_field
+):
+    vision = AsyncMock(return_value="should not run")
+    monkeypatch.setattr(openai_compat, "_run_openai_vision_completion", vision)
+    body = _body(
+        x_tool_mode=None,
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Describe this image"},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "data:image/png;base64,aW1hZ2U="},
+                    },
+                ],
+            }
+        ],
+        **{field: value},
+    )
+
+    response = client.post("/v1/chat/completions", json=body)
+
+    assert response.status_code == 422
+    assert reported_field in response.json()["detail"]
+    vision.assert_not_awaited()
+
+
+def test_omitted_vision_sampling_controls_keep_vision_path(client, monkeypatch):
+    _install(monkeypatch, result=_tool_result(content="unused"))
+    vision = AsyncMock(return_value="vision answer")
+    monkeypatch.setattr(openai_compat, "_run_openai_vision_completion", vision)
+    body = _body(
+        x_tool_mode=None,
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Describe this image"},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "data:image/png;base64,aW1hZ2U="},
+                    },
+                ],
+            }
+        ],
+        top_p=None,
+        top_k=None,
+        seed=None,
+    )
+
+    response = client.post("/v1/chat/completions", json=body)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["choices"][0]["message"]["content"] == "vision answer"
+    vision.assert_awaited_once()
 
 
 # ── failures keep HS-OD-2 semantics ─────────────────────────────────────────

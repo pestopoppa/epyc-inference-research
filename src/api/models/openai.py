@@ -103,26 +103,26 @@ class OpenAIChatRequest(BaseModel):
         le=2.0,
         description="Decode temperature. Forwarded to the backend ONLY when sent explicitly; "
         "the schema default 0.0 is NOT forwarded, so an omitted temperature uses the "
-        "backend's per-role default. Ignored on image (vision) requests, which take no "
-        "sampling overrides.",
+        "backend's per-role default. Explicit sampling controls are rejected on image "
+        "(vision) requests because that path cannot honor them.",
     )
     top_p: float | None = Field(
         default=None,
         ge=0.0,
         le=1.0,
-        description="Nucleus sampling override. Forwarded when set; ignored on image (vision) "
-        "requests, which take no sampling overrides.",
+        description="Nucleus sampling override. Forwarded when set; explicit non-null values "
+        "are rejected on image (vision) requests.",
     )
     top_k: int | None = Field(
         default=None,
         ge=1,
         description="Orchestrator extension: llama.cpp top-k sampling override. Forwarded when "
-        "set; ignored on image (vision) requests, which take no sampling overrides.",
+        "set; explicit non-null values are rejected on image (vision) requests.",
     )
     seed: int | None = Field(
         default=None,
-        description="Optional deterministic decode seed. Forwarded when set; ignored on image "
-        "(vision) requests, which take no sampling overrides.",
+        description="Optional deterministic decode seed. Forwarded when set; explicit non-null "
+        "values are rejected on image (vision) requests.",
     )
     max_tokens: int = Field(
         default=1024,
@@ -131,7 +131,8 @@ class OpenAIChatRequest(BaseModel):
         description="Generation cap ONLY with x_tool_mode='client' or x_disable_repl=true. In the "
         "default REPL mode it is NOT the token budget: each REPL turn generates up to a "
         "fixed 1024 tokens and max_tokens only sets the turn count (max_tokens // 500, "
-        "clamped to 1..5). Ignored on image (vision) requests. max_completion_tokens is "
+        "clamped to 1..5). Explicit values are rejected on image (vision) requests. "
+        "max_completion_tokens is "
         "accepted as an alias (422 if both are sent).",
     )
     stream: bool = Field(default=False, description="Enable streaming")

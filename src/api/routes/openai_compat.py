@@ -792,6 +792,19 @@ def _sampling_kwargs(request: OpenAIChatRequest) -> dict[str, Any]:
     return kwargs
 
 
+def _unsupported_vision_sampling_field(request: OpenAIChatRequest) -> str | None:
+    """Return the first explicit sampling control the vision path cannot honor."""
+    explicit_fields = getattr(request, "model_fields_set", set())
+    for field in ("temperature", "top_p", "top_k", "seed", "max_tokens"):
+        if field not in explicit_fields:
+            continue
+        # Explicit null on optional controls has no effect and is not forwarded.
+        if getattr(request, field) is None:
+            continue
+        return field
+    return None
+
+
 def _sampling_metadata(sampling_kwargs: dict[str, Any]) -> dict[str, Any]:
     if not sampling_kwargs:
         return {}
@@ -1157,6 +1170,17 @@ async def openai_chat_completions(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     prompt = prompt_parts.text
+
+    if prompt_parts.image_base64:
+        unsupported_sampling_field = _unsupported_vision_sampling_field(request)
+        if unsupported_sampling_field is not None:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"'{unsupported_sampling_field}' is not supported for image (vision) "
+                    "requests"
+                ),
+            )
 
     # Build conversation context from message history
     # B2: Apply context compression on structured messages before flattening.
