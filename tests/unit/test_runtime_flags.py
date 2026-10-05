@@ -15,6 +15,7 @@ import pytest
 from scripts.autopilot.species.structural_lab import StructuralLab
 from src import features as feature_module
 from src.api.routes.config import attest_config, update_config
+from src.runtime import config_attestation
 from src.features import (
     Features,
     feature_sources,
@@ -24,6 +25,13 @@ from src.features import (
     runtime_flag_overrides,
     write_runtime_flag_overrides,
 )
+
+
+@pytest.fixture
+def config_attestation_directory(monkeypatch, tmp_path) -> Path:
+    directory = tmp_path / "attestations"
+    monkeypatch.setattr(config_attestation, "attestation_dir", lambda: directory)
+    return directory
 
 
 def test_runtime_flag_file_overrides_env(monkeypatch, tmp_path) -> None:
@@ -181,7 +189,9 @@ def test_set_features_refreshes_expiry_crossed_during_cache_install(monkeypatch,
     assert runtime_path.read_bytes() == original_payload
 
 
-def test_config_post_writes_runtime_file_and_attests(monkeypatch, tmp_path) -> None:
+def test_config_post_writes_runtime_file_and_attests(
+    monkeypatch, tmp_path, config_attestation_directory
+) -> None:
     runtime_path = tmp_path / "runtime_flags.json"
     monkeypatch.setenv("ORCHESTRATOR_RUNTIME_FLAGS_PATH", str(runtime_path))
     reset_features()
@@ -195,13 +205,22 @@ def test_config_post_writes_runtime_file_and_attests(monkeypatch, tmp_path) -> N
     response = asyncio.run(update_config(Request(), current=Features()))
     assert response["status"] == "ok"
     assert response["features"]["model_fallback"] is True
+    native_path = config_attestation_directory / f"{os.getpid()}.json"
+    native = json.loads(native_path.read_text())
+    assert native["pid"] == os.getpid()
+    assert native["flags"] == response["features"]
+    assert native["flags"]["model_fallback"] is True
+    assert native["sources"] == response["sources"]
+    assert native["sources"]["model_fallback"].startswith("runtime_file:")
 
     attestation = asyncio.run(attest_config(current=features()))
     assert attestation["flags"]["model_fallback"] is True
     assert attestation["sources"]["model_fallback"].startswith("runtime_file:")
 
 
-def test_experiment_pool_enable_gets_default_expiry_and_restore_clears_it(monkeypatch, tmp_path) -> None:
+def test_experiment_pool_enable_gets_default_expiry_and_restore_clears_it(
+    monkeypatch, tmp_path, config_attestation_directory
+) -> None:
     runtime_path = tmp_path / "runtime_flags.json"
     monkeypatch.setenv("ORCHESTRATOR_RUNTIME_FLAGS_PATH", str(runtime_path))
     reset_features()
@@ -232,7 +251,9 @@ def test_experiment_pool_enable_gets_default_expiry_and_restore_clears_it(monkey
     assert "expires_at" not in restored
 
 
-def test_explicit_runtime_ttl_replaces_experiment_default(monkeypatch, tmp_path) -> None:
+def test_explicit_runtime_ttl_replaces_experiment_default(
+    monkeypatch, tmp_path, config_attestation_directory
+) -> None:
     runtime_path = tmp_path / "runtime_flags.json"
     monkeypatch.setenv("ORCHESTRATOR_RUNTIME_FLAGS_PATH", str(runtime_path))
     reset_features()
