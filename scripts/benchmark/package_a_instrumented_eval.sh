@@ -94,64 +94,14 @@ fi
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
 
-# Health check — restart API if needed
+# Health check — require API availability before starting the eval.
 echo "→ Checking orchestrator health..."
 if ! curl -sf http://localhost:8000/health >/dev/null 2>&1; then
-  echo "  ✗ Orchestrator API not responding — attempting restart..."
-
-  # Kill any stale uvicorn on port 8000
-  fuser -k 8000/tcp 2>/dev/null || true
-  sleep 1
-
-  # Restart the API server (model servers should still be running)
-  cd "$PROJECT_ROOT"
-  ORCHESTRATOR_MOCK_MODE=0 \
-    ORCHESTRATOR_MEMRL=1 \
-    ORCHESTRATOR_TOOLS=1 \
-    ORCHESTRATOR_SCRIPTS=1 \
-    ORCHESTRATOR_CACHING=1 \
-    ORCHESTRATOR_STREAMING=1 \
-    ORCHESTRATOR_GENERATION_MONITOR=1 \
-    ORCHESTRATOR_REACT_MODE=1 \
-    ORCHESTRATOR_CASCADING_TOOL_POLICY=1 \
-    ORCHESTRATOR_WORKER_CALL_BUDGET=1 \
-    ORCHESTRATOR_TASK_TOKEN_BUDGET=1 \
-    ORCHESTRATOR_SESSION_SCRATCHPAD=1 \
-    ORCHESTRATOR_SESSION_LOG=1 \
-    ORCHESTRATOR_SESSION_COMPACTION=1 \
-    ORCHESTRATOR_TWO_LEVEL_CONDENSATION=1 \
-    ORCHESTRATOR_APPROVAL_GATES=1 \
-    ORCHESTRATOR_RESUME_TOKENS=1 \
-    ORCHESTRATOR_SIDE_EFFECT_TRACKING=1 \
-    ORCHESTRATOR_STRUCTURED_TOOL_OUTPUT=1 \
-    nohup python3 -m uvicorn src.api:app \
-    --host 127.0.0.1 --port 8000 --workers 6 --limit-concurrency 4 \
-    >"$PROJECT_ROOT/logs/orchestrator.log" 2>&1 &
-  API_PID=$!
-  echo "  → Started uvicorn (PID $API_PID), waiting for health..."
-
-  # Wait up to 60s for health
-  for i in $(seq 1 60); do
-    if curl -sf http://localhost:8000/health >/dev/null 2>&1; then
-      echo "  ✓ Orchestrator API healthy (took ${i}s)"
-      break
-    fi
-    if ! kill -0 "$API_PID" 2>/dev/null; then
-      echo "  ✗ API process died. Check logs/orchestrator.log"
-      exit 1
-    fi
-    sleep 1
-  done
-
-  if ! curl -sf http://localhost:8000/health >/dev/null 2>&1; then
-    echo "  ✗ Orchestrator API failed to start after 60s"
-    echo "    Check: $PROJECT_ROOT/logs/orchestrator.log"
-    echo "    You may need to start the full stack: python3 scripts/server/orchestrator_stack.py start"
-    exit 1
-  fi
-else
-  echo "  ✓ Orchestrator healthy"
+  echo "  ✗ Orchestrator API health check failed at http://localhost:8000/health"
+  echo "    Package A does not manage API lifecycle. Recover API health from its owning session, then retry."
+  exit 1
 fi
+echo "  ✓ Orchestrator healthy"
 
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
