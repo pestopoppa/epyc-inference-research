@@ -32,6 +32,7 @@ sys.path.insert(0, str(AUTOPILOT_DIR))
 
 import species.prompt_forge as prompt_forge_mod  # noqa: E402
 from species.prompt_forge import (  # noqa: E402
+    EvalIdVocabulary,
     MUTATION_EXTRACTION_COUNTS,
     PromptForge,
 )
@@ -126,7 +127,14 @@ class TestProposeMutationSkipsOnExtractionFailure:
         prompts_dir = tmp_path / "prompts"
         prompts_dir.mkdir()
         (prompts_dir / "worker_math.md").write_text("Base prompt\n")
-        forge = PromptForge(prompts_dir=prompts_dir, auto_commit=False)
+        vocabulary = EvalIdVocabulary.from_rows([
+            {"suite": "synthetic_suite", "id": "synthetic_eval_001", "prompt": "synthetic eval prompt"},
+        ])
+        forge = PromptForge(
+            prompts_dir=prompts_dir,
+            auto_commit=False,
+            eval_id_vocabulary=vocabulary,
+        )
         monkeypatch.setattr(
             forge, "_invoke_claude", lambda _p: "```markdown\nBase prompt\nBe careful.\n```"
         )
