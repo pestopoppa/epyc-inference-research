@@ -154,6 +154,33 @@ def test_features_singleton_reloads_runtime_file_after_ttl(monkeypatch, tmp_path
     assert features().model_fallback is True
 
 
+def test_set_features_refreshes_expiry_crossed_during_cache_install(monkeypatch, tmp_path) -> None:
+    runtime_path = tmp_path / "runtime_flags.json"
+    now = [datetime(2030, 1, 1, tzinfo=timezone.utc)]
+    monotonic = [10.0]
+    monkeypatch.setenv("ORCHESTRATOR_RUNTIME_FLAGS_PATH", str(runtime_path))
+    monkeypatch.setattr(feature_module, "_utc_now", lambda: now[0])
+    monkeypatch.setattr(feature_module.time, "monotonic", lambda: monotonic[0])
+    monkeypatch.setattr(feature_module, "RUNTIME_FLAGS_TTL_S", 0.0)
+    reset_features()
+    write_runtime_flag_overrides({"repl_embedding_pool": True}, ttl_s=2)
+    original_payload = runtime_path.read_bytes()
+    original_mtime = feature_module._runtime_mtime
+
+    def cross_expiry_while_reading_mtime(path):
+        now[0] += timedelta(seconds=3)
+        monotonic[0] += 3
+        return original_mtime(path)
+
+    with monkeypatch.context() as installing:
+        installing.setattr(feature_module, "_runtime_mtime", cross_expiry_while_reading_mtime)
+        feature_module.set_features(Features(repl_embedding_pool=True))
+
+    assert feature_module._features_runtime_next_expiry == monotonic[0]
+    assert features().repl_embedding_pool is False
+    assert runtime_path.read_bytes() == original_payload
+
+
 def test_config_post_writes_runtime_file_and_attests(monkeypatch, tmp_path) -> None:
     runtime_path = tmp_path / "runtime_flags.json"
     monkeypatch.setenv("ORCHESTRATOR_RUNTIME_FLAGS_PATH", str(runtime_path))

@@ -1056,8 +1056,11 @@ def set_features(new_features: Features) -> None:
     global _features, _features_runtime_last_check, _features_runtime_mtime, _features_runtime_path
     global _features_runtime_next_expiry
     with _features_lock:
+        loaded_at = _utc_now()
         _features = new_features
         _features_runtime_path = runtime_flags_path()
         _features_runtime_mtime = _runtime_mtime(_features_runtime_path)
-        _features_runtime_next_expiry = _runtime_next_expiry(_features_runtime_path)
+        _features_runtime_next_expiry = _runtime_next_expiry(
+            _features_runtime_path, loaded_at=loaded_at
+        )
         _features_runtime_last_check = time.monotonic()
