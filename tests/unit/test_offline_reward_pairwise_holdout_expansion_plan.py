@@ -56,6 +56,27 @@ def _result_record() -> dict:
     }
 
 
+def _install_instruction_precision_prompt_fixture(tmp_path: Path, monkeypatch) -> Path:
+    prompt_dir = tmp_path / "reference-prompts"
+    prompt_dir.mkdir()
+    (prompt_dir / "instruction_precision.yaml").write_text(
+        "prompts:\n"
+        "  a:\n"
+        "    prompt: 'A'\n"
+        "    reference_answer: 'A ref'\n"
+        "  b:\n"
+        "    prompt: 'B'\n"
+        "    reference_answer: 'B ref'\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setitem(
+        mod.REFERENCE_BACKED_COLLECTION_SOURCES,
+        "instruction_precision",
+        prompt_dir,
+    )
+    return prompt_dir
+
+
 def test_pairwise_holdout_plan_selects_non_overlapping_cross_action_group(
     tmp_path: Path,
 ) -> None:
@@ -638,7 +659,9 @@ def test_pairwise_holdout_plan_rejects_non_matching_audit_collection_targets(
 
 def test_pairwise_holdout_plan_uses_reference_backed_instruction_source(
     tmp_path: Path,
+    monkeypatch,
 ) -> None:
+    prompt_dir = _install_instruction_precision_prompt_fixture(tmp_path, monkeypatch)
     source = tmp_path / "seeding_a9_suite_instruction_precision.json"
     record = {
         "question_id": "ifeval_1",
@@ -710,9 +733,7 @@ def test_pairwise_holdout_plan_uses_reference_backed_instruction_source(
     assert candidates == []
     assert summary["unavailable_collection_targets"] == {}
     assert summary["collection_guidance"]["reference_backed_suite_sources"] == {
-        "instruction_precision": (
-            "/mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/v1"
-        )
+        "instruction_precision": str(prompt_dir)
     }
     assert summary["source_record_requirements"][0]["status"] == "needs_new_source_records"
     assert summary["source_record_requirements"][0]["suggested_min_new_source_records"] == 20
@@ -722,19 +743,21 @@ def test_pairwise_holdout_plan_uses_reference_backed_instruction_source(
     assert batch["targets"] == ["suite:instruction_precision:architect_general>frontdoor"]
     assert batch["suite_argument"] == "instruction_precision"
     assert batch["question_source"] == "yaml"
-    assert batch["debug_prompts_dir"] == (
-        "/mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/v1"
-    )
-    assert batch["sample_size"] <= 20
-    assert batch["estimated_new_source_records"] == batch["reference_source_prompt_count"]
+    assert batch["debug_prompts_dir"] == str(prompt_dir)
+    assert batch["sample_size"] == 2
+    assert batch["reference_source_prompt_count"] == 2
+    assert batch["estimated_new_source_records"] == 2
     assert "--question-source yaml" in batch["command"]
     assert (
-        "--debug-prompts-dir /mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/v1"
-        in batch["command"]
+        f"--debug-prompts-dir {prompt_dir}" in batch["command"]
     )
 
 
-def test_pairwise_holdout_collection_batches_prioritize_source_family_blockers() -> None:
+def test_pairwise_holdout_collection_batches_prioritize_source_family_blockers(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    prompt_dir = _install_instruction_precision_prompt_fixture(tmp_path, monkeypatch)
     suite_requirement = {
         "target": "suite:instruction_precision:architect_general>frontdoor",
         "stratum_field": "suite",
@@ -764,13 +787,12 @@ def test_pairwise_holdout_collection_batches_prioritize_source_family_blockers()
     assert batches[0]["question_source"] == "auto"
     assert batches[0]["requested_new_source_records"] == 20
     assert batches[0]["estimated_new_source_records"] == 36
-    assert 1 <= batches[1]["sample_size"] <= 20
+    assert batches[1]["sample_size"] == 2
     assert batches[1]["question_source"] == "yaml"
-    assert batches[1]["debug_prompts_dir"] == (
-        "/mnt/raid0/llm/epyc-inference-research/benchmarks/prompts/v1"
-    )
+    assert batches[1]["debug_prompts_dir"] == str(prompt_dir)
     assert batches[1]["requested_new_source_records"] == 20
-    assert batches[1]["estimated_new_source_records"] == batches[1]["reference_source_prompt_count"]
+    assert batches[1]["reference_source_prompt_count"] == 2
+    assert batches[1]["estimated_new_source_records"] == 2
     assert batches[0]["collection_priority_reason"] == (
         "independent_holdout_source_family_blocker"
     )
