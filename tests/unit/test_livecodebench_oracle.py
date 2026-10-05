@@ -98,27 +98,32 @@ CORRECT = (
 # ── the two directions ───────────────────────────────────────────────────
 
 
+@pytest.mark.usefixtures("_owned_synthetic_scorer_scratch")
 def test_echoing_the_whole_prompt_fails() -> None:
     """THE decisive test. Under the shipped `substring "def "` oracle this passed."""
     prompt = lcb.default_prompt(ROW, "twoSum", ["nums", "target"])
     assert _score(prompt, _oracle()) is False
 
 
+@pytest.mark.usefixtures("_owned_synthetic_scorer_scratch")
 def test_a_signature_correct_stub_that_does_nothing_fails() -> None:
     """`def f(): pass` passed 100% of the shipped suite. It must not pass here."""
     assert _score(_fenced("def twoSum(nums, target):\n    pass"), _oracle()) is False
 
 
+@pytest.mark.usefixtures("_owned_synthetic_scorer_scratch")
 def test_returning_the_first_example_output_verbatim_fails() -> None:
     """The example outputs are printed IN the prompt, so a constant is an echo."""
     stub = "def twoSum(nums, target):\n    return [0, 1]"
     assert _score(_fenced(stub), _oracle()) is False
 
 
+@pytest.mark.usefixtures("_owned_synthetic_scorer_scratch")
 def test_returning_the_first_argument_fails() -> None:
     assert _score(_fenced("def twoSum(nums, target):\n    return nums"), _oracle()) is False
 
 
+@pytest.mark.usefixtures("_owned_synthetic_scorer_scratch")
 def test_a_different_but_correct_solution_passes() -> None:
     """The other direction: an oracle a correct answer fails is equally useless.
 
@@ -128,6 +133,7 @@ def test_a_different_but_correct_solution_passes() -> None:
     assert _score(_fenced(CORRECT), _oracle()) is True
 
 
+@pytest.mark.usefixtures("_owned_synthetic_scorer_scratch")
 def test_a_correct_answer_with_different_parameter_names_passes() -> None:
     """Arguments are bound POSITIONALLY; the reference's parameter NAMES are not the test."""
     renamed = CORRECT.replace("nums", "values").replace("target", "goal")
@@ -135,11 +141,13 @@ def test_a_correct_answer_with_different_parameter_names_passes() -> None:
     assert _score(_fenced(renamed), _oracle()) is True
 
 
+@pytest.mark.usefixtures("_owned_synthetic_scorer_scratch")
 def test_a_correct_answer_wrapped_in_prose_passes() -> None:
     answer = f"Sure — here's an O(n) approach.\n\n{_fenced(CORRECT)}\n\nIt uses a dict."
     assert _score(answer, _oracle()) is True
 
 
+@pytest.mark.usefixtures("_owned_synthetic_scorer_scratch")
 def test_a_solution_correct_on_the_first_example_only_fails() -> None:
     """Why MIN_CASES exists: one case is satisfiable by memorising one answer."""
     partial = (
@@ -151,6 +159,7 @@ def test_a_solution_correct_on_the_first_example_only_fails() -> None:
     assert _score(_fenced(partial), _oracle()) is False
 
 
+@pytest.mark.usefixtures("_owned_synthetic_scorer_scratch")
 def test_an_answer_defining_the_wrong_function_name_fails() -> None:
     """Which is exactly why `prompt_contract` must ship in the prompt."""
     assert _score(_fenced(CORRECT.replace("twoSum", "two_sum")), _oracle()) is False
@@ -159,6 +168,7 @@ def test_an_answer_defining_the_wrong_function_name_fails() -> None:
 # ── the build gate ───────────────────────────────────────────────────────
 
 
+@pytest.mark.usefixtures("_owned_synthetic_scorer_scratch")
 def test_the_gate_emits_a_row_that_discriminates() -> None:
     oracle, diagnostics = lcb.build_validated_oracle(ROW)
     assert oracle is not None
@@ -167,6 +177,7 @@ def test_the_gate_emits_a_row_that_discriminates() -> None:
     assert diagnostics["all_correct_pass"] is True
 
 
+@pytest.mark.usefixtures("_owned_synthetic_scorer_scratch")
 def test_the_gate_drops_a_row_whose_examples_all_share_one_answer() -> None:
     """A constant is guessable from the prompt, so such a row measures nothing.
 
@@ -321,6 +332,7 @@ def test_an_argument_count_the_signature_cannot_accept_is_refused() -> None:
     assert lcb.order_args({"n": 5, "bad": 4}, [5, 4], ["n"], 1) is None
 
 
+@pytest.mark.usefixtures("_owned_synthetic_scorer_scratch")
 def test_arguments_bind_by_source_order_when_the_prose_names_differ() -> None:
     """MUTATION-DISCOVERED. Deleting the positional fallback in `order_args` left
     all 35 tests green, so nothing pinned it.
@@ -553,7 +565,7 @@ def test_a_missing_manifest_empties_the_suite_rather_than_scoring_nothing(
     monkeypatch.setattr(coding, "_LIVECODEBENCH_MANIFEST", None)
     monkeypatch.setattr(coding, "LIVECODEBENCH_MANIFEST_PATH", Path("/nonexistent/x.json"))
     assert coding.livecodebench_manifest() == {"oracles": {}}
-    assert coding.LiveCodeBenchAdapter()._row_to_prompt(0, _upstream_two_sum()) is None
+    assert coding.LiveCodeBenchAdapter()._row_to_prompt(0, dict(ROW)) is None
     monkeypatch.setattr(coding, "_LIVECODEBENCH_MANIFEST", None)
 
 
@@ -584,3 +596,41 @@ def test_a_real_upstream_row_survives_the_gate_end_to_end() -> None:
     assert oracle is not None, diagnostics
     assert oracle["entry_point"] == "twoSum"
     assert len(oracle["entry_point_cases"]) >= lcb.MIN_CASES
+
+
+@pytest.fixture
+def _owned_synthetic_scorer_scratch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Real local synthetic scorer subprocesses; no model, dataset or network access."""
+    import os
+    import subprocess
+
+    scratch = tmp_path / "synthetic-scorer"
+    scratch.mkdir(mode=0o700)
+    assert scratch.stat().st_uid == os.getuid()
+    assert not list(scratch.iterdir())
+    actual_oracle_scorer = lcb._scorer()
+    monkeypatch.setattr(scorer, "_SCORER_TMP_ROOT", scratch)
+    monkeypatch.setattr(actual_oracle_scorer, "_SCORER_TMP_ROOT", scratch)
+    original_popen = subprocess.Popen
+    children = []
+
+    def bounded_local_child(argv, *args, **kwargs):
+        assert isinstance(argv, list) and len(argv) == 2
+        assert Path(argv[0]).resolve() == Path(sys.executable).resolve()
+        solution = Path(argv[1]).resolve()
+        cwd = Path(kwargs["cwd"]).resolve()
+        assert solution.name == "solution.py" and solution.parent == cwd
+        assert cwd.is_relative_to(scratch.resolve()) and cwd != scratch.resolve()
+        assert not args
+        assert kwargs == {"stdout": subprocess.PIPE, "stderr": subprocess.PIPE,
+                          "text": True, "cwd": Path(kwargs["cwd"]),
+                          "start_new_session": True}
+        child = original_popen(argv, **kwargs)
+        children.append(child)
+        return child
+
+    monkeypatch.setattr(subprocess, "Popen", bounded_local_child)
+    yield scratch
+    assert children, "selected synthetic scorer case never reached its real execution seam"
+    assert all(child.poll() is not None for child in children)
+    assert not list(scratch.iterdir())
