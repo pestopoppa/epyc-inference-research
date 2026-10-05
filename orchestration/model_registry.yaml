@@ -3,7 +3,7 @@
 #
 # This file is compiled at every `orchestrator_stack.py start` from the master
 # registry at /mnt/raid0/llm/epyc-inference-research/orchestration/model_registry.yaml
-# with drafter selection from /mnt/raid0/llm/epyc-orchestrator/orchestration/stack_topology.yaml
+# with drafter selection from /mnt/raid0/llm/worktrees/stackchg8083-orch-20261005T044423Z/orchestration/stack_topology.yaml
 # by src/registry/registry_compiler.py.
 #
 # Runtime stack truth lives in the MASTER registry. The next start detects master
@@ -11,8 +11,8 @@
 # temporarily skip the compile (e.g. during a master schema change), set
 # ORCHESTRATOR_REGISTRY_NO_COMPILE=1.
 #
-# Compiled at: 2026-10-03T11:51:53+00:00
-# Cache key:   9048120c210f531a...
+# Compiled at: 2026-10-05T04:58:10+00:00
+# Cache key:   50c56ac0f21f21d8...
 # Active roles: architect_critic, architect_general, coder_escalation, embedder, embedder_1, embedder_2, embedder_3, embedder_4, embedder_5, embedder_bge_m3, embedder_granite_97m_r2, embedder_multilingual_e5_base, frontdoor, ingest_long_context, toolrunner, vision_escalation, worker, worker_explore, worker_fast, worker_general, worker_math, worker_summarize, worker_vision
 # =============================================================================
 
@@ -1835,15 +1835,19 @@ server_mode:
     port: 8083
     slots: 4
     cache_ram: 65536
+    cache_idle_slots: false
     serving_shape:
       n_ctx: 393216
+      batch: 512
+      ubatch: 512
       kv_unified: true
       kv_quant:
         k: q8_0
         v: q8_0
       kv_kib_per_token_f16: 64.0
-      vram_non_kv_gib: 39.15
+      vram_non_kv_gib: 38.03
       vram_non_kv_drafter: dflash2
+      vram_non_kv_ubatch: 512
     chat_template_kwargs:
       enable_thinking: true
       reasoning_effort: medium
@@ -2968,7 +2972,7 @@ roles:
         - '2026-10-01 operator: ALWAYS use dflash2 (for the 27B)'
         evidence:
         - artifacts/architect-bench-gpu-20260814/dflash2_np1_20260820/campaign-summary.json
-        qualification_note: v10 was qualified on candidate DFlash2 vs v9 MTP self-draft (epyc-root artifacts/operator/v10-qualification-20260921-ffc1bac82.json)
+        qualification_note: v10 was qualified on candidate DFlash2 vs v9 MTP self-draft (/workspace/artifacts/operator/v10-qualification-20260921-ffc1bac82.json)
     memory:
       residency: cold
       pinned: false
