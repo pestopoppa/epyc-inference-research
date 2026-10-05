@@ -1542,6 +1542,23 @@ server_mode:
       # does it reproduces the exhaustion cascade described above.
       # (was) n_ctx: 196608   # 2026-09-22 .. 2026-10-03
       n_ctx: 393216
+      # ── 2026-10-04 (STACKCHG-8083BATCH-20261004 part B, operator-decided): -b 512 -ub 512 ──
+      # (was: -ub 2048 from launch_manifest default_ubatch_tokens, no -b = llama.cpp 2048.)
+      # WHY (KVU-16b root cause, data/stackchg-8083batch-20261004/kvu16b-rootcause-20261004-REPORT.md): the
+      # server packs up to n_batch PROMPT tokens into every iteration beside the decode/verify
+      # rows (update_slots), and llama_decode runs all of that batch's ubatches before it
+      # returns, so every decoding slot waits for a whole n_batch prefill chunk per step. With
+      # no masked-block skip in v10 the chunk's attention reads EVERY occupied cell: measured
+      # T = 2.6 s + 0.052 s per 1k occupied cells per 2048-token chunk, 17-19 s at 240-310k
+      # cells, three decoders summing to 0.52 tok/s. -b caps the prompt tokens per iteration;
+      # -ub alone does nothing (it only splits the same iteration). Expected ~4x decode while a
+      # prefill runs; prefill rate ~unchanged at depth. Measured: workspace-89 KVU-16b replay,
+      # -b 512 arm (STACKCHG-8083BATCH PACKAGE section 5, evidence slot B).
+      # ubatch is ALSO a VRAM fact: the KQ mask [n_kv, n_ubatch, 1, 1] f16 lives in
+      # vram_non_kv_gib below, which names the ubatch it was derived at (vram_non_kv_ubatch);
+      # the compiler refuses a mismatch, and refuses ubatch > batch (K4).
+      batch: 512
+      ubatch: 512
       # ── UNIFIED KV POOL — DECLARED 2026-09-24 (stack-change-kvu, operator-signed) ──
       # true -> launcher emits `--kv-unified`; false would emit `--no-kv-unified`;
       # absent -> nothing (kernel default = split whenever -np is explicit).
@@ -1639,9 +1656,27 @@ server_mode:
       #    Conservative bound if the DFlash2 drafter graph ALSO carried a -c-sized mask:
       #    +0.75 -> 52.65 GiB. It is runtime-based, so it already includes first-execution
       #    growth. Replace it with the bring-up load-time KFD peak (PACKAGE §7.3).
+      # ── 2026-10-04 (STACKCHG-8083BATCH-20261004 part B): 39.15 -> 38.03 for -ub 2048 -> 512. ──
+      #    The 39.15 above was confirmed at load: KFD pid 1703677 (393216/d7/-ub 2048) read
+      #    51.694 GiB just after load vs the 51.90 derived (-0.21); B4i's two fresh launches
+      #    read 50.77 at load. ONLY the KQ-mask term depends on -ub, and it scales linearly:
+      #      KQ mask, 393216 cells x 2048 x 2 B = 1536 MiB  ->  x 512 x 2 B = 384 MiB   -1.125
+      #      FA F16 conversion scratch (1024 x n_kv x 2 B x K+V): sized by n_kv, NOT by -ub;
+      #        gfx90a still takes the WMMA path at >=3 rows, so it stays             0
+      #      other target activations (~0.3 GiB at -ub 2048) shrink ~4x: NOT credited  0
+      #      DFlash2 drafter mask (4096-cell SWA cache): < 0.02 GiB, not credited       0
+      #    = 39.15 - 1.125 = 38.03 DERIVED;  + 12.75 KV @393216 = 50.78 GiB at load.
+      #    RUNTIME GROWTH IS NOT IN THIS SCALAR (gate convention = load-time figure + the
+      #    2.0 GiB first-execution headroom). The 393216/-ub 2048 process GREW while serving:
+      #    51.69 -> 58.88 -> 59.77 GiB and still rising (KVU-16b report section 3; mechanism
+      #    unattributed: legacy ggml-cuda pool, compute-buffer realloc, BLAS workspaces). At
+      #    -ub 512 the reserved mask is 1.125 GiB smaller; whether the growth shrinks too is
+      #    unmeasured. Margins against the 62.00 GiB gate: PACKAGE section 4.
+      # (was, -ub 2048, DERIVED + load-confirmed) vram_non_kv_gib: 39.15
       # (was, DFlash2 d8 @196608, MEASURED pid 3737649) vram_non_kv_gib: 37.92
-      vram_non_kv_gib: 39.15
+      vram_non_kv_gib: 38.03
       vram_non_kv_drafter: dflash2
+      vram_non_kv_ubatch: 512
       # (was, MTP d4, live-confirmed 2026-10-03) vram_non_kv_gib: 32.80
       # superseded provenance, kept for audit:
       # (was) vram_non_kv_gib: 27.33 # 29.36 GiB resident (/sys/class/kfd, pid 2019908, 2026-08-02)
