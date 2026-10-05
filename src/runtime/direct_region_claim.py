@@ -1,9 +1,9 @@
 """The CPU region claim for model calls that bypass ``LLMPrimitives``.
 
-Two callers talk to a llama-server directly instead of through
-``LLMPrimitives._real_call_single``: the escalation prewarmer
-(``src/services/escalation_prewarmer.py``, an ``n_predict=0`` prefill) and the
-OAB-8 scouts (``src/api/routes/chat_pipeline/scout_stage.py``). The normal call
+The OAB-8 scouts (``src/api/routes/chat_pipeline/scout_stage.py``) talk to a
+llama-server directly instead of through ``LLMPrimitives._real_call_single``.
+(The escalation prewarmer was the second such caller; it was deleted in
+UFH14-B4e, 2026-10-05.) The normal call
 path claims the target instance's CPU regions before every direct-backend call
 (``src/llm_primitives/inference.py``, the ``_per_region_on`` branch):
 

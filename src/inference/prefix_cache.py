@@ -33,6 +33,11 @@ holds the request's longest prefix; otherwise this module behaves exactly as
 before. Retiring the 256-char hash routing on ``--kv-unified`` servers waits on
 the index's shadow metric (``slot_prediction_hits`` against the server's own
 ``id_slot``) and on INF-05 KV-6's measurement of ``canonicalize_prompt``.
+
+UFH14-B4h (2026-10-05): with pinning off (the default) ``CachingBackend`` returns
+before ``get_slot_for_prompt``, so ``canonicalize_prompt`` never runs on the
+production path and costs nothing there. It is kept for the opt-in pin path; whether
+it survives is KPF-23's decision, on KV-6's measurement.
 """
 
 from __future__ import annotations
@@ -48,23 +53,6 @@ from dataclasses import dataclass, field, is_dataclass, replace
 from typing import Callable
 
 logger = logging.getLogger(__name__)
-
-
-def _slot_state_filename(slot_id: int, prefix_hash: str) -> str:
-    """Return a llama-server slot-save filename accepted under --slot-save-path.
-
-    BARE filename only -- never a path. llama-server rejects any name containing a
-    path separator via ``fs_validate_filename(name, allow_subdirs=false)`` before it
-    concatenates ``params.slot_save_path + filename``.
-
-    Mirrors ``src/backends/concurrency_aware.py::_slot_filename`` deliberately; the two
-    are siblings and must not drift. Sanitisation is defensive here (slot_id is an int
-    and prefix_hash is hex), but it is what makes the contract enforced rather than
-    assumed.
-    """
-    raw = f"slot_{slot_id}_{prefix_hash}"
-    safe = re.sub(r"[^A-Za-z0-9_.-]+", "_", raw).strip("._")
-    return f"{safe[:180] or 'slot'}.bin"
 
 
 # =============================================================================
@@ -347,7 +335,6 @@ class CachingBackend:
     - Route requests to optimal slots
     - Track cache performance metrics
     - Report savings from prefix reuse
-    - Persist hot prefixes across server restarts (Phase E)
 
     Usage:
         from src.backends.llama_server import LlamaServerBackend, ServerConfig
@@ -360,8 +347,13 @@ class CachingBackend:
         result = caching.infer(role_config, request)
         print(f"Cache hit rate: {caching.get_hit_rate():.1%}")
 
-        # Persist hot prefixes before shutdown (use configured cache_dir in practice)
-        caching.save_hot_prefixes("/path/to/cache/prefixes")
+    The Phase E hot-prefix persistence (``save_hot_prefixes`` / ``restore_hot_prefixes``
+    / ``clear_saved_prefixes``, slot files under the server's ``--slot-save-path``) was
+    deleted in UFH14-B4h (2026-10-05): it had no production caller, and a slot file
+    carries no context checkpoints, so a restored prefix on a hybrid model cannot be
+    partially reused. The server's own host-RAM prompt cache (``--cache-ram``) is the
+    prefix store. ``--slot-save-path`` itself stays on the launch argv: KV migration
+    (``src/backends/concurrency_aware.py``) saves and restores slot files under it.
     """
 
     def __init__(
@@ -369,20 +361,17 @@ class CachingBackend:
         backend: "LlamaServerBackend",  # noqa: F821 - forward reference
         router: PrefixRouter | None = None,
         canonicalize: bool = True,
-        cache_dir: str | None = None,
     ):
         """Initialize the caching wrapper.
 
         Args:
             backend: The LlamaServerBackend to wrap.
             router: PrefixRouter instance. Creates default if None.
-            canonicalize: Whether to canonicalize prompts.
-            cache_dir: Directory for persisting hot prefix cache files.
+            canonicalize: Whether to canonicalize prompts (pin path only).
         """
         self.backend = backend
         self.router = router if router is not None else PrefixRouter()
         self.canonicalize = canonicalize
-        self.cache_dir = cache_dir
         self.frontdoor_repl_bypass_count = 0
 
     def _frontdoor_repl_bypass_enabled(self) -> bool:
@@ -596,167 +585,6 @@ class CachingBackend:
             "frontdoor_repl_bypass_enabled": self._frontdoor_repl_bypass_enabled(),
             "frontdoor_repl_bypass_count": self.frontdoor_repl_bypass_count,
         }
-
-    # =========================================================================
-    # Phase E: Hot Prefix Persistence
-    # =========================================================================
-
-    def save_hot_prefixes(self, cache_dir: str | None = None, top_n: int = 10) -> int:
-        """Persist the hottest prefix caches to disk.
-
-        Saves the KV cache state for the most frequently accessed slots
-        to enable restoration after server restart.
-
-        Args:
-            cache_dir: Directory to save cache files. Uses self.cache_dir if None.
-            top_n: Number of hot prefixes to save.
-
-        Returns:
-            Number of prefixes successfully saved.
-        """
-        import json
-        import os
-
-        save_dir = cache_dir or self.cache_dir
-        if not save_dir:
-            logger.warning("No cache_dir configured, cannot save hot prefixes")
-            return 0
-
-        os.makedirs(save_dir, exist_ok=True)
-
-        # Sort slots by hit count for saving the hottest ones
-        sorted_slots = sorted(
-            self.router.slots.values(),
-            key=lambda s: s.hit_count,
-            reverse=True,
-        )
-
-        saved_count = 0
-        manifest: list[dict] = []
-
-        for slot in sorted_slots[:top_n]:
-            slot_id = slot.slot_id
-            prefix_hash = slot.prefix_hash  # Full hash, not truncated
-
-            if not prefix_hash or slot.hit_count == 0:
-                continue
-
-            # Save slot state via backend.
-            #
-            # MUST be a BARE filename, never a path. llama-server validates with
-            # fs_validate_filename(allow_subdirs=false), which rejects '/' outright,
-            # and only then does `params.slot_save_path + filename` (a plain string
-            # concatenation). Passing an absolute path made every save 400 and return
-            # False -- silently, because nothing above inspects the return value.
-            # Sibling path that always did this correctly:
-            # src/backends/concurrency_aware.py::_slot_filename.
-            filename = _slot_state_filename(slot_id, prefix_hash)
-            if self.backend.save_slot(slot_id, filename):
-                manifest.append(
-                    {
-                        "slot_id": slot_id,
-                        "prefix_hash": prefix_hash,
-                        "hit_count": slot.hit_count,
-                        # Bare name. Resolves under the SERVER's --slot-save-path,
-                        # which is not necessarily reachable from this process.
-                        "filename": filename,
-                    }
-                )
-                saved_count += 1
-                logger.info(f"Saved slot {slot_id} ({prefix_hash[:8]}..., {slot.hit_count} hits)")
-
-        # Write manifest for restoration
-        manifest_path = os.path.join(save_dir, "manifest.json")
-        with open(manifest_path, "w") as f:
-            json.dump(
-                {
-                    "saved_at": time.time(),
-                    "slots": manifest,
-                },
-                f,
-                indent=2,
-            )
-
-        logger.info(f"Saved {saved_count} hot prefixes to {save_dir}")
-        return saved_count
-
-    def restore_hot_prefixes(self, cache_dir: str | None = None) -> int:
-        """Restore hot prefix caches from disk.
-
-        Loads previously saved KV cache states to warm up the cache
-        after a server restart.
-
-        Args:
-            cache_dir: Directory containing saved cache files.
-
-        Returns:
-            Number of prefixes successfully restored.
-        """
-        import json
-        import os
-
-        load_dir = cache_dir or self.cache_dir
-        if not load_dir:
-            logger.warning("No cache_dir configured, cannot restore hot prefixes")
-            return 0
-
-        manifest_path = os.path.join(load_dir, "manifest.json")
-        if not os.path.exists(manifest_path):
-            logger.info(f"No manifest found at {manifest_path}, nothing to restore")
-            return 0
-
-        with open(manifest_path) as f:
-            manifest = json.load(f)
-
-        restored_count = 0
-        for entry in manifest.get("slots", []):
-            slot_id = entry["slot_id"]
-            # Bare name by contract (see _slot_state_filename). Tolerate legacy
-            # manifests that recorded a full path by reducing to the basename --
-            # llama-server would reject anything with a separator.
-            filename = os.path.basename(entry["filename"])
-            prefix_hash = entry["prefix_hash"]
-
-            # NO client-side os.path.exists() check here. The file lives under the
-            # SERVER's --slot-save-path, which this process may not share; the old
-            # check tested the wrong filesystem and skipped every entry. Let the
-            # backend call be the arbiter and report its own failure.
-            if self.backend.restore_slot(slot_id, filename):
-                # Update router state
-                self.router.prefix_to_slot[prefix_hash] = slot_id
-                self.router.slots[slot_id].prefix_hash = prefix_hash
-                self.router.slots[slot_id].hit_count = entry.get("hit_count", 0)
-                restored_count += 1
-                logger.info(f"Restored slot {slot_id} ({prefix_hash[:8]}...)")
-
-        logger.info(f"Restored {restored_count} hot prefixes from {load_dir}")
-        return restored_count
-
-    def clear_saved_prefixes(self, cache_dir: str | None = None) -> int:
-        """Clear saved prefix cache files.
-
-        Args:
-            cache_dir: Directory containing saved cache files.
-
-        Returns:
-            Number of files removed.
-        """
-        import os
-
-        clear_dir = cache_dir or self.cache_dir
-        if not clear_dir:
-            return 0
-
-        removed = 0
-        for filename in os.listdir(clear_dir):
-            filepath = os.path.join(clear_dir, filename)
-            if os.path.isfile(filepath):
-                os.remove(filepath)
-                removed += 1
-
-        logger.info(f"Cleared {removed} cache files from {clear_dir}")
-        return removed
-
 
 # =============================================================================
 # Utility Functions

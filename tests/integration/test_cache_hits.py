@@ -18,7 +18,6 @@ To run without server (mocked):
     pytest tests/integration/test_cache_hits.py -v
 """
 
-import json
 import os
 import pytest
 import time
@@ -189,95 +188,6 @@ class TestPrefixRouterIntegration:
         assert hit_rate > 0.5, f"Expected hit rate > 50%, got {hit_rate:.1%}"
         # With shared prefix, expect very high hit rate
         assert hit_rate > 0.9, f"Expected hit rate > 90%, got {hit_rate:.1%}"
-
-
-# =============================================================================
-# Hot Prefix Persistence Tests
-# =============================================================================
-
-
-class TestHotPrefixPersistence:
-    """Tests for hot prefix save/restore functionality."""
-
-    def test_save_restore_cycle(self, mock_backend, tmp_path):
-        """Should save and restore hot prefixes correctly."""
-        from src.prefix_cache import PrefixRouter, CachingBackend
-
-        router = PrefixRouter(num_slots=4)
-        caching = CachingBackend(mock_backend, router, cache_dir=str(tmp_path))
-
-        # Generate some cache usage
-        for i in range(10):
-            router.get_slot_for_prompt(f"Prefix{i % 2}: Query {i}")
-
-        # Save hot prefixes
-        saved = caching.save_hot_prefixes(top_n=5)
-
-        # Verify manifest was created
-        manifest_path = tmp_path / "manifest.json"
-        assert manifest_path.exists()
-
-        with open(manifest_path) as f:
-            manifest = json.load(f)
-
-        assert "saved_at" in manifest
-        assert len(manifest["slots"]) == saved
-
-    def test_restore_updates_router_state(self, mock_backend, tmp_path):
-        """Restored prefixes should update router state."""
-        from src.prefix_cache import PrefixRouter, CachingBackend
-
-        # Setup initial caching with prefix_length=16 to match "System prompt: "
-        router1 = PrefixRouter(num_slots=4, prefix_length=16)
-        caching1 = CachingBackend(mock_backend, router1, cache_dir=str(tmp_path))
-
-        # Make mock_backend.save_slot actually create the file
-        def mock_save_slot(slot_id, filename):
-            import pathlib
-
-            pathlib.Path(filename).write_bytes(b"mock cache data")
-            return True
-
-        mock_backend.save_slot.side_effect = mock_save_slot
-
-        # Generate usage - both queries share "System prompt: " prefix
-        router1.get_slot_for_prompt("System prompt: Query 1")
-        router1.get_slot_for_prompt("System prompt: Query 2")  # Hit on shared prefix
-
-        # Save
-        saved = caching1.save_hot_prefixes()
-        assert saved > 0
-
-        # Create new router and restore (must use same prefix_length)
-        router2 = PrefixRouter(num_slots=4, prefix_length=16)
-        caching2 = CachingBackend(mock_backend, router2, cache_dir=str(tmp_path))
-
-        restored = caching2.restore_hot_prefixes()
-        assert restored > 0
-
-        # Router should have restored prefix mappings
-        assert len(router2.prefix_to_slot) > 0
-
-        # The restored prefix hash should match the original
-        original_hash = list(router1.prefix_to_slot.keys())[0]
-        assert original_hash in router2.prefix_to_slot
-
-    def test_clear_removes_all_files(self, mock_backend, tmp_path):
-        """Clear should remove all cache files."""
-        from src.prefix_cache import PrefixRouter, CachingBackend
-
-        router = PrefixRouter(num_slots=4)
-        caching = CachingBackend(mock_backend, router, cache_dir=str(tmp_path))
-
-        # Create some files
-        (tmp_path / "slot_0.bin").write_bytes(b"data")
-        (tmp_path / "slot_1.bin").write_bytes(b"data")
-        (tmp_path / "manifest.json").write_text("{}")
-
-        cleared = caching.clear_saved_prefixes()
-
-        assert cleared == 3
-        assert len(list(tmp_path.iterdir())) == 0
 
 
 # =============================================================================

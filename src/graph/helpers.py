@@ -204,44 +204,6 @@ def _classify_error(error_message: str) -> ErrorCategory:
     return _classify_error_impl(error_message)
 
 
-def _maybe_prewarm_architect(state: "TaskState") -> None:
-    """Fire-and-forget pre-warm of architect KV cache for complex tasks (WS3C).
-
-    Called at turn 1. Uses classify_task_complexity to decide whether to
-    speculatively prefill the architect server's KV cache.
-    """
-    try:
-        from src.proactive_delegation.complexity import classify_task_complexity
-        from src.proactive_delegation.types import TaskComplexity
-
-        complexity, _ = classify_task_complexity(state.prompt)
-        if complexity != TaskComplexity.COMPLEX:
-            return
-
-        # INF-78 OAB-3 (R2): a quiescent_after request starts no fire-and-forget prewarm
-        # (it would prefill the architect after the reply). No-op otherwise.
-        from src.runtime import quiescence
-
-        if quiescence.suppress("architect_prewarm"):
-            return
-
-        from src.services.escalation_prewarmer import get_shared_prewarmer
-
-        prewarmer = get_shared_prewarmer()
-
-        # Fire and forget — don't block the main execution
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            asyncio.ensure_future(
-                prewarmer.prewarm_if_complex(state.prompt, "COMPLEX")
-            )
-        else:
-            # Shouldn't happen in normal flow, but be safe
-            log.debug("No running event loop for pre-warm, skipping")
-    except Exception as e:
-        log.debug("Pre-warm setup failed: %s", e)
-
-
 def _maybe_compress_for_escalation(prompt: str, state: "TaskState") -> str:
     """Compress prompt when escalating to architect tier (WS3B).
 
@@ -856,9 +818,6 @@ async def _execute_turn(ctx: Ctx, role: Role | str) -> tuple[str, str | None, bo
                 task_description=state.prompt,
                 task_id=state.task_id or None,
             )
-
-            # Speculative pre-warm of architect KV cache for complex tasks (WS3C)
-            _maybe_prewarm_architect(state)
 
         # Pass solution file path when there's an error so the model can patch
         sol_file = ""

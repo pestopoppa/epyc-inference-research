@@ -377,7 +377,7 @@ class ChatRequest(BaseModel):
         default=False,
         description=(
             "INF-78 OAB-3 (R2). True: the orchestrator starts NO fire-and-forget work for "
-            "this request (MemRL q-scoring, architect prewarm, typed-decision shadow, KV "
+            "this request (MemRL q-scoring, typed-decision shadow, KV "
             "migration), and the idle-time scoring loop stays quiet for a window after the "
             "reply, so nothing orchestrator-owned accrues CPU after /chat returns. The "
             "response echoes what was suppressed in `quiescence`."

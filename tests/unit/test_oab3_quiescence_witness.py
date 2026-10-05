@@ -1,11 +1,14 @@
 """INF-78 OAB-3 (R2): quiescent_after suppression + the trailing-work witness.
 
-Offline and inference-free. The acceptance test injects a real CPU-burning "prewarm" behind
-the production launch site (``graph.helpers._maybe_prewarm_architect``), lets ``chat()``
-return, and witnesses this process's utime+stime AFTER the reply:
-  * without ``quiescent_after`` the prewarm outlives the reply and the witness FAILS;
-  * with ``quiescent_after=True`` the prewarm is never started and the witness PASSES.
-The burn is ~1.2 core-seconds on one thread, once.
+Offline and inference-free. The acceptance test injects a real CPU-burning Q-scorer behind
+the production launch site (``api.services.memrl.score_completed_task``, the fire-and-forget
+MemRL q-scoring submit), lets ``chat()`` return, and witnesses this process's utime+stime
+AFTER the reply:
+  * without ``quiescent_after`` the scoring outlives the reply and the witness FAILS;
+  * with ``quiescent_after=True`` the scoring is never started and the witness PASSES.
+The burn is ~1.2 core-seconds on one thread, once. (Until UFH14-B4e, 2026-10-05, the vehicle
+was the architect prewarm launch site, ``graph.helpers._maybe_prewarm_architect``; the
+prewarmer was deleted, so the test now rides a launch site that still exists.)
 
 Run: .venv/bin/python -m pytest tests/unit/test_oab3_quiescence_witness.py -q
 """
@@ -41,7 +44,7 @@ def _isolated_quiescence(monkeypatch, tmp_path_factory):
 
 def test_flag_absent_is_a_noop(_isolated_quiescence):
     assert Q.begin(False) is None
-    assert Q.suppress("architect_prewarm") is False
+    assert Q.suppress("typed_decisions_shadow") is False
     assert Q.suppress_scoring("t1") is False
     assert not (_isolated_quiescence / "holds").exists()
     assert Q.quiet_active() is False
@@ -50,10 +53,10 @@ def test_flag_absent_is_a_noop(_isolated_quiescence):
 def test_carrier_records_and_holds(monkeypatch):
     monkeypatch.setenv(Q.HOLD_AFTER_ENV, "30")
     carrier = Q.begin(True, request_id="req-1", budget_s=100)
-    assert Q.suppress("architect_prewarm") and Q.suppress("architect_prewarm")
+    assert Q.suppress("typed_decisions_shadow") and Q.suppress("typed_decisions_shadow")
     assert Q.suppress_scoring("task-9")
     snap = carrier.snapshot()
-    assert snap["suppressed"] == ["architect_prewarm", "memrl_q_scoring"]
+    assert snap["suppressed"] == ["typed_decisions_shadow", "memrl_q_scoring"]
     assert snap["suppressed_count"] == 3 and snap["hold_after_s"] == 30.0
     assert Q.is_excluded("task-9") and not Q.is_excluded("task-10")
     now = time.time()
@@ -194,7 +197,7 @@ def test_discovery_finds_api_tree_and_configured_llama_servers(tmp_path):
     assert found == {10: "api", 11: "api-child", 12: "api-child", 20: "llama-server:8083"}
 
 
-# ── acceptance: injected prewarm trips the witness; quiescent_after suppresses it ──
+# ── acceptance: injected trailing scoring trips the witness; quiescent_after suppresses it ──
 
 
 class _FakeHttpRequest:
@@ -209,33 +212,31 @@ def _burn(seconds: float) -> None:
         x += 1
 
 
-class _BurningPrewarmer:
-    """Stands in for EscalationPrewarmer: its prewarm burns ~1.2 core-s in a worker thread,
-    i.e. work the orchestrator process keeps doing after /chat has replied."""
+class _BurningScorer:
+    """Stands in for the MemRL Q-scorer: ``_score_task`` burns ~1.2 core-s in the q-scorer
+    pool thread, i.e. work the orchestrator process keeps doing after /chat has replied."""
 
-    async def prewarm_if_complex(self, objective, complexity_level, target_port=None):
-        await asyncio.sleep(0.05)  # starts after the handler has returned
-        await asyncio.to_thread(_burn, 1.2)
-        return True
+    def _score_task(self, task_id, mode_context=None):
+        time.sleep(0.05)  # starts after the handler has returned
+        _burn(1.2)
 
 
 async def _run_chat_then_witness(quiescent_after: bool) -> tuple[dict, object]:
     from src.api.models import ChatRequest, ChatResponse
     from src.api.routes.chat import chat
-    from src.graph.helpers import _maybe_prewarm_architect
-    from src.proactive_delegation.types import TaskComplexity
+    from src.api.services.memrl import score_completed_task
+
+    app_state = SimpleNamespace(
+        q_scorer=_BurningScorer(), q_scorer_enabled=True, progress_logger=None
+    )
 
     async def fake_handle_chat(*_args, **_kwargs):
-        # The real pipeline reaches this launch site from _execute_turn at turn 1.
-        _maybe_prewarm_architect(SimpleNamespace(prompt="design a distributed system"))
+        # The real pipeline reaches this launch site when a turn completes.
+        score_completed_task(app_state, "oab3-witness-task")
         return ChatResponse(answer="ok", turns=1, elapsed_seconds=0.01, mock_mode=True)
 
     request = ChatRequest(prompt="t", quiescent_after=quiescent_after)
-    with patch("src.api.routes.chat._handle_chat", new=fake_handle_chat), \
-         patch("src.proactive_delegation.complexity.classify_task_complexity",
-               return_value=(TaskComplexity.COMPLEX, {})), \
-         patch("src.services.escalation_prewarmer.get_shared_prewarmer",
-               return_value=_BurningPrewarmer()):
+    with patch("src.api.routes.chat._handle_chat", new=fake_handle_chat):
         response = await chat(request, _FakeHttpRequest(), MagicMock())
         # ── the reply has been produced; witness this process from here ──
         verdict = await asyncio.to_thread(
@@ -246,7 +247,7 @@ async def _run_chat_then_witness(quiescent_after: bool) -> tuple[dict, object]:
 
 
 @pytest.mark.asyncio
-async def test_injected_prewarm_trips_the_witness():
+async def test_injected_trailing_work_trips_the_witness():
     verdict, response = await _run_chat_then_witness(quiescent_after=False)
     assert verdict["quiescent"] is False, verdict
     assert verdict["violations"][0]["reason"] == "cpu_work"
@@ -255,8 +256,9 @@ async def test_injected_prewarm_trips_the_witness():
 
 
 @pytest.mark.asyncio
-async def test_quiescent_after_suppresses_the_prewarm():
+async def test_quiescent_after_suppresses_the_trailing_work():
     verdict, response = await _run_chat_then_witness(quiescent_after=True)
     assert verdict["quiescent"] is True, verdict
-    assert response.quiescence["suppressed"] == ["architect_prewarm"]
+    assert response.quiescence["suppressed"] == ["memrl_q_scoring"]
+    assert Q.is_excluded("oab3-witness-task")  # never scored later by the idle loop either
     assert Q.current() is None  # never outlives the request
