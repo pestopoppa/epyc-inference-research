@@ -524,13 +524,17 @@ class TestOnnxThreadBound:
     dropped when the session moved.
     """
 
-    def test_shared_default_is_bounded(self):
+    @pytest.mark.parametrize("visible_cpu_count", [1, 8, 16, 192])
+    def test_shared_default_is_deterministic_across_visible_cpu_counts(
+        self, monkeypatch, visible_cpu_count
+    ):
         import os
 
-        assert colbert_encoder._DEFAULT_ONNX_THREADS > 0
-        # 0 is ORT's "use every core" sentinel, and the bound must stay well under
-        # the host's core count or the oversubscription this guards is back.
-        assert colbert_encoder._DEFAULT_ONNX_THREADS < (os.cpu_count() or 2)
+        monkeypatch.setattr(os, "cpu_count", lambda: visible_cpu_count)
+        monkeypatch.delenv("COLBERT_ENCODE_ONNX_THREADS", raising=False)
+        monkeypatch.delenv("COLBERT_RERANK_ONNX_THREADS", raising=False)
+        assert colbert_encoder._DEFAULT_ONNX_THREADS == 8
+        assert colbert_encoder._onnx_threads() == 8
 
     def test_rerank_env_knob_is_honoured_as_an_alias(self, monkeypatch):
         monkeypatch.delenv("COLBERT_ENCODE_ONNX_THREADS", raising=False)

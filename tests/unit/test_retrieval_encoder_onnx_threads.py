@@ -99,8 +99,12 @@ def _load_with_stubs(monkeypatch, module_name: str, model_dir):
 
 
 @pytest.mark.parametrize("module_name,env_var,expected", MODULES)
-def test_encoder_bounds_the_intra_op_pool(monkeypatch, tmp_path, module_name, env_var, expected):
-    """The defect: a session built with no SessionOptions gets one thread per core."""
+@pytest.mark.parametrize("visible_cpu_count", [1, 8, 16, 192])
+def test_encoder_uses_deterministic_intra_op_default(
+    monkeypatch, tmp_path, module_name, env_var, expected, visible_cpu_count
+):
+    """The measured defaults do not vary with the host running the test."""
+    monkeypatch.setattr(os, "cpu_count", lambda: visible_cpu_count)
     monkeypatch.delenv(env_var, raising=False)
     mod, captured = _load_with_stubs(monkeypatch, module_name, tmp_path)
     opts = captured["sess_options"]
@@ -115,10 +119,7 @@ def test_encoder_bounds_the_intra_op_pool(monkeypatch, tmp_path, module_name, en
         f"re-measure — do not copy a sibling's value, the optimum is call-shape "
         f"dependent (see the module comment)."
     )
-    # 0 is ORT's "use every core" sentinel; the bound must stay well under the
-    # host core count or the oversubscription this guards is back.
     assert opts.intra_op_num_threads > 0
-    assert opts.intra_op_num_threads < (os.cpu_count() or 2)
     assert opts.inter_op_num_threads == 1
     assert captured["providers"] == ["CPUExecutionProvider"]
 
