@@ -386,9 +386,11 @@ def _warn_if_ubatch_exceeds_batch(
 ) -> None:
     """K4 guard: llama.cpp clamps cparams.n_ubatch = min(n_batch, n_ubatch).
 
-    Every command builder here emits ``-ub`` without an accompanying ``-b``, so
-    the effective micro-batch is whatever ``-b`` would default to (2048) unless
-    ``batch`` names an explicit value this builder actually emits. A declared
+    Every command builder here emits ``-ub``; only ``_build_role_command`` also
+    emits ``-b``, and only for a server that DECLARES ``serving_shape.batch``
+    (STACKCHG-8083BATCH-20261004). Otherwise the effective micro-batch is whatever
+    ``-b`` would default to (2048) unless ``batch`` names an explicit value this
+    builder actually emits. A declared
     ubatch above that ceiling is silently inert — warn at build time so the
     next case of this (handoffs/active/dynamic-stack-concurrency.md K4) is
     visible instead of requiring a fresh audit to rediscover.
@@ -404,8 +406,9 @@ def _warn_if_ubatch_exceeds_batch(
     if ubatch_int > batch_int:
         print(
             f"    [WARN] {role_name}: -ub {ubatch_int} exceeds the effective "
-            f"-b {batch_int} (llama.cpp clamps n_ubatch to n_batch; no -b is "
-            "emitted here) -- the declared ubatch is INERT. K4."
+            f"-b {batch_int} (llama.cpp clamps n_ubatch to n_batch"
+            f"{'' if batch is not None else '; no -b is emitted here'}) -- the declared "
+            "ubatch is INERT. K4."
         )
 
 
@@ -1559,14 +1562,23 @@ def _build_role_command(
     )
     binary = _runtime_string(runtime, "binary_path", str(_resolve_binary_for_role(role_name)))
     ubatch = _runtime_positive_int(cache, "ubatch", DEFAULT_UBATCH_TOKENS)
+    # `-b` only when the compiled record DECLARES it (serving_shape.batch,
+    # STACKCHG-8083BATCH-20261004: :8083 runs -b 512 -ub 512 so a prefill cannot
+    # pack 2048 prompt tokens into one server iteration beside the decode rows).
+    batch_value = cache.get("batch")
+    batch = (
+        str(batch_value)
+        if isinstance(batch_value, int) and not isinstance(batch_value, bool) and batch_value > 0
+        else None
+    )
 
-    # K4 (handoffs/active/dynamic-stack-concurrency.md): this builder never
-    # emits -b, and llama.cpp clamps cparams.n_ubatch = min(n_batch, n_ubatch)
-    # against the DEFAULT n_batch (2048) whenever -b is absent. So the -ub
-    # value below is a ceiling that is only ever real up to 2048 — raising it
-    # further requires ALSO passing -b, plus a measured window (this is not a
+    # K4 (handoffs/active/dynamic-stack-concurrency.md): llama.cpp clamps
+    # cparams.n_ubatch = min(n_batch, n_ubatch), against the DEFAULT n_batch
+    # (2048) whenever -b is absent. So without a declared batch the -ub value
+    # below is a ceiling that is only ever real up to 2048 — raising it further
+    # requires ALSO declaring a batch, plus a measured window (this is not a
     # config-only change). See _warn_if_ubatch_exceeds_batch just below.
-    _warn_if_ubatch_exceeds_batch(role_name, ubatch)
+    _warn_if_ubatch_exceeds_batch(role_name, ubatch, batch)
     cmd = [
         binary,
         "-m",
@@ -1582,6 +1594,8 @@ def _build_role_command(
         "-t",
         thread_count,
     ]
+    if batch is not None:
+        cmd.extend(["-b", batch])
     cmd.extend(["-ub", ubatch])
     if flags.get("flash_attn", True) is True:
         cmd.extend(["--flash-attn", "on"])

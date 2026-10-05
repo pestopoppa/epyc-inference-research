@@ -1711,6 +1711,65 @@ def _nested_mapping(container: dict[str, Any] | None, *path: str) -> dict[str, A
     return current if isinstance(current, dict) else None
 
 
+#: llama.cpp's own n_batch default (common/common.h), i.e. the logical batch whenever
+#: the launcher emits no ``-b``. llama.cpp clamps ``n_ubatch = min(n_batch, n_ubatch)``.
+LLAMACPP_DEFAULT_N_BATCH = 2048
+
+#: serving_shape key naming the ``-ub`` that ``vram_non_kv_gib`` was derived at (optional).
+#: The KQ mask ([n_kv, n_ubatch, 1, 1] f16 on a unified pool) lives in that scalar and
+#: scales with ``-ub``, so the figure is a function of the micro-batch.
+VRAM_UBATCH_KEY = "vram_non_kv_ubatch"
+
+
+def _declared_batch_shape_prior(
+    role: str,
+    server_cfg: dict[str, Any] | None,
+    role_cfg: dict[str, Any] | None,
+    *,
+    default_ubatch: int,
+) -> tuple[int, int | None]:
+    """Resolve a DECLARED ``-ub`` / ``-b`` pair for a default-mode server, or refuse.
+
+    STACKCHG-8083BATCH-20261004. ``serving_shape.ubatch`` and ``serving_shape.batch``
+    (same search order as every other serving fact) are optional; undeclared, the
+    server keeps ``default_ubatch`` and no ``-b`` (llama.cpp's 2048).
+
+    Two refusals, both at compile time rather than at launch:
+
+    * K4: a declared ``ubatch`` above the effective batch is silently clamped by
+      llama.cpp (``n_ubatch = min(n_batch, n_ubatch)``), so the declaration would be
+      a promise the launch cannot keep.
+    * RESTATED DERIVATION: ``serving_shape.vram_non_kv_gib`` carries the KQ-mask
+      term, which scales with ``-ub``. When ``vram_non_kv_ubatch`` names the ``-ub``
+      the figure was derived at, the resolved ``-ub`` must equal it; changing one
+      without re-deriving the other would pass the capacity gate on a stale number.
+    """
+    declared_ubatch = _runtime_flag_int_prior(server_cfg, role_cfg, key="ubatch", minimum=1)
+    declared_batch = _runtime_flag_int_prior(server_cfg, role_cfg, key="batch", minimum=1)
+    ubatch = declared_ubatch if declared_ubatch is not None else default_ubatch
+    effective_batch = declared_batch if declared_batch is not None else LLAMACPP_DEFAULT_N_BATCH
+    if (declared_ubatch is not None or declared_batch is not None) and ubatch > effective_batch:
+        raise ValueError(
+            f"role {role!r}: declared -ub {ubatch} exceeds the effective -b {effective_batch} "
+            "(llama.cpp clamps n_ubatch = min(n_batch, n_ubatch)); the declared ubatch would be "
+            "INERT (K4). Declare serving_shape.batch >= ubatch, or lower ubatch."
+        )
+    for cfg in (server_cfg, role_cfg):
+        shape = _nested_mapping(cfg, "serving_shape")
+        derived_for = shape.get(VRAM_UBATCH_KEY) if shape else None
+        if derived_for is None:
+            continue
+        if isinstance(derived_for, bool) or not isinstance(derived_for, int) or derived_for != ubatch:
+            raise ValueError(
+                f"role {role!r}: serving_shape.vram_non_kv_gib was derived at -ub "
+                f"{derived_for!r} ({VRAM_UBATCH_KEY}), but the server resolves -ub {ubatch}. "
+                f"Re-derive vram_non_kv_gib (the KQ-mask term scales with -ub) and update "
+                f"{VRAM_UBATCH_KEY} in the same change."
+            )
+        break
+    return ubatch, declared_batch
+
+
 def _kv_types_prior(
     server_cfg: dict[str, Any] | None,
     role_cfg: dict[str, Any] | None,
@@ -2358,6 +2417,15 @@ def _launch_runtime_record(
     # cache_ram; compiled ONLY when declared (None -> the launcher emits nothing), so
     # every other role's compiled record is byte-identical. STACKCHG-8083BATCH-20261004.
     cache_idle_slots = _runtime_flag_bool_prior(server_cfg, role_cfg, key="cache_idle_slots")
+    # A default-mode server may DECLARE its -ub/-b (serving_shape.ubatch / .batch).
+    # Undeclared -> DEFAULT_UBATCH_TOKENS and no -b, exactly as before; the declared
+    # batch is compiled ONLY when declared. STACKCHG-8083BATCH-20261004 part B.
+    default_ubatch: int | None = None
+    default_batch: int | None = None
+    if mode == "default":
+        default_ubatch, default_batch = _declared_batch_shape_prior(
+            role, server_cfg, role_cfg, default_ubatch=DEFAULT_UBATCH_TOKENS
+        )
 
     return {
         "binary_family": binary_family,
@@ -2390,9 +2458,11 @@ def _launch_runtime_record(
             ),
             "ubatch": worker_ubatch
             if mode == "worker_pool" and worker_type == "explore"
-            else DEFAULT_UBATCH_TOKENS
+            else default_ubatch
             if mode == "default"
             else None,
+            # Logical batch (-b). Present only when declared (see above).
+            **({"batch": default_batch} if default_batch is not None else {}),
             "kv_type_k": kv_types[0] if kv_types else None,
             "kv_type_v": kv_types[1] if kv_types else None,
             "kv_hadamard": bool(primary_role in _V2_ROLES and LLAMA_SERVER_V2.exists()),

@@ -554,6 +554,9 @@ _RUNTIME_FIELD_CHECKS: dict[str, tuple[str, tuple[str, ...], str]] = {
     # instances of a role whose full and halves differ.
     "runtime.cache.slots_by_port": ("dedicated", (), ""),
     "runtime.cache.ubatch": ("dedicated", (), ""),
+    # Logical batch (-b). Compiled only when DECLARED (serving_shape.batch); checked
+    # beside -ub in the scalar block below. STACKCHG-8083BATCH-20261004.
+    "runtime.cache.batch": ("dedicated", (), ""),
     "runtime.cache.kv_type_k": ("dedicated", (), ""),
     "runtime.cache.kv_type_v": ("dedicated", (), ""),
     "runtime.cache.no_mmap": ("dedicated", (), ""),
@@ -982,6 +985,7 @@ def _runtime_attestation_warnings(
     scalar_flags = {
         "context_tokens": ("-c", "--ctx-size"),
         "ubatch": ("-ub", "--ubatch-size"),
+        "batch": ("-b", "--batch-size"),
         "kv_type_k": ("-ctk",),
         "kv_type_v": ("-ctv",),
     }

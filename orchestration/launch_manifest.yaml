@@ -505,8 +505,10 @@ vision:
 launch_shape:
   default_effective_context_tokens: 32768
   # K4 (handoffs/active/dynamic-stack-concurrency.md): llama.cpp clamps
-  # cparams.n_ubatch = min(n_batch, n_ubatch), and the launcher never passes
-  # -b, so n_batch defaults to 2048 for every role built off this value.
+  # cparams.n_ubatch = min(n_batch, n_ubatch), and the launcher passes -b only
+  # for a server that DECLARES serving_shape.batch (STACKCHG-8083BATCH-20261004:
+  # :8083 at -b 512 -ub 512), so n_batch defaults to 2048 for every role built
+  # off this value.
   # A declared 8192 here was misrepresenting itself: the EFFECTIVE micro-batch
   # was already 2048 for every server, silently. This value must equal the
   # clamp until a future change adds -b and validates a real >2048 batch shape
