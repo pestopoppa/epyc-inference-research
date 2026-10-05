@@ -64,9 +64,11 @@ from src.runtime.lock_queue import (
     LockQueueTimeout,
     append_event_log,
     check_nesting,
+    install_ticket_sigterm_cleanup as _fifo_install_sigterm_cleanup,
     is_fifo_enabled,
     queue_dir as _fifo_queue_dir,
     remove_ticket as _fifo_remove_ticket,
+    restore_ticket_sigterm_cleanup as _fifo_restore_sigterm_cleanup,
     wait_for_admission,
     write_ticket,
 )
@@ -925,6 +927,17 @@ def cpu_region_lock(
 
     if timeout_s is None:
         timeout_s = _default_timeout_s()
+    if deadline_s is None and timeout_s and timeout_s > 0:
+        # Pin ONE absolute deadline for the whole acquisition up front. Every
+        # phase below (FIFO admission wait, then the GLOBAL and per-role
+        # flock attempts) is handed this SAME deadline_s in addition to its
+        # own relative timeout_s; deadline_s is the tighter, authoritative
+        # bound once it exists, so re-deriving it here means a caller's
+        # single `timeout_s` still caps total wall-clock time once — not
+        # once per phase (fixed 2026-10: the admission wait and the flock
+        # wait were each separately allowed up to `timeout_s`, so a blocked
+        # acquisition could take up to 2x timeout_s with deadline_s unset).
+        deadline_s = time.perf_counter() + timeout_s
 
     sorted_regions = sorted(regions)
     started_at = time.time()
@@ -983,6 +996,7 @@ def cpu_region_lock(
     fifo_ticket_id: str | None = None
     fifo_ticket_path: Path | None = None
     fifo_wait_s = 0.0
+    fifo_prev_sigterm = None
     acquire_wall_start = time.perf_counter()
 
     # The ACTUAL serialization domain this acquire will contend, so the ticket
@@ -1030,6 +1044,7 @@ def cpu_region_lock(
                 tag=request_tag,
                 client_version=CLIENT_VERSION,
             )
+            fifo_prev_sigterm = _fifo_install_sigterm_cleanup(fifo_ticket_path)
             try:
                 fifo_wait_s = wait_for_admission(
                     fifo_qdir,
@@ -1148,6 +1163,8 @@ def cpu_region_lock(
                 pass
         if local_acquired:
             _release_local_region_locks(local_keys, shared=shared)
+        if fifo_prev_sigterm is not None:
+            _fifo_restore_sigterm_cleanup(fifo_prev_sigterm)
         # Covers every early-exit path (nesting refusal, admission timeout,
         # cancellation, or a mid-acquisition failure): the ticket must never
         # outlive the attempt it represents.

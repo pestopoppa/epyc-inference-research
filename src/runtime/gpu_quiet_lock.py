@@ -54,9 +54,11 @@ from src.runtime.lock_queue import (
     LockQueueTimeout,
     append_event_log,
     check_nesting,
+    install_ticket_sigterm_cleanup as _fifo_install_sigterm_cleanup,
     is_fifo_enabled,
     queue_dir as _fifo_queue_dir,
     remove_ticket as _fifo_remove_ticket,
+    restore_ticket_sigterm_cleanup as _fifo_restore_sigterm_cleanup,
     wait_for_admission,
     write_ticket,
 )
@@ -216,6 +218,11 @@ def gpu_quiet_lock(
     """
     if mode not in GPU_QUIET_MODES:
         raise ValueError(f"gpu-quiet mode must be one of {GPU_QUIET_MODES}, got {mode!r}")
+    if deadline_s is None and timeout_s and timeout_s > 0:
+        # Same fix as cpu_region_lock: one absolute deadline shared by the
+        # FIFO admission wait and the flock wait, so `timeout_s` caps total
+        # wall-clock time once rather than once per phase.
+        deadline_s = time.perf_counter() + timeout_s
     path = gpu_quiet_lock_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     fh = open(path, "a+b")
@@ -232,6 +239,7 @@ def gpu_quiet_lock(
         return set(owners.keys()) if owners else set()
 
     flock_acquired = False
+    fifo_prev_sigterm = None
     try:
         if fifo_enabled:
             check_nesting(
@@ -247,6 +255,7 @@ def gpu_quiet_lock(
                 tag=request_tag,
                 client_version=CLIENT_VERSION,
             )
+            fifo_prev_sigterm = _fifo_install_sigterm_cleanup(fifo_ticket_path)
             try:
                 fifo_wait_s = wait_for_admission(
                     fifo_qdir,
@@ -317,6 +326,8 @@ def gpu_quiet_lock(
                 record_path.unlink()
             except OSError:
                 pass
+        if fifo_prev_sigterm is not None:
+            _fifo_restore_sigterm_cleanup(fifo_prev_sigterm)
         if fifo_ticket_path is not None:
             _fifo_remove_ticket(fifo_ticket_path)
         if fifo_enabled and flock_acquired:

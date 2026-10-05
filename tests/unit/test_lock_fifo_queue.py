@@ -34,6 +34,13 @@ def _lock_tmpdir(tmp_path, monkeypatch):
     monkeypatch.setenv("ORCHESTRATOR_TMP_DIR", str(tmp_path))
     monkeypatch.setenv("ORCHESTRATOR_INFERENCE_LOCK_POLL_MS", "10")
     monkeypatch.setenv("EPYC_LOCK_FIFO", "1")
+    # Explicitly CLEAR, never just "don't set": when this suite runs under
+    # `region-lock run ... --role bench`, region_lock_cli.py's own
+    # `os.environ.setdefault("ORCHESTRATOR_CROSS_ROLE_DISJOINT_PLACEMENT", "1")`
+    # (module import time) has already set it in THIS process's environ, and
+    # the pytest subprocess inherits it — a bare "don't set" leaves it leaked
+    # in from the wrapper, not actually unset (2026-10 review finding).
+    monkeypatch.delenv("ORCHESTRATOR_CROSS_ROLE_DISJOINT_PLACEMENT", raising=False)
     yield
 
 
@@ -88,6 +95,11 @@ def _cpu_worker(
     os.environ["EPYC_LOCK_FIFO"] = "1" if fifo else "0"
     if cross_role:
         os.environ["ORCHESTRATOR_CROSS_ROLE_DISJOINT_PLACEMENT"] = "1"
+    else:
+        # Defense in depth: the fork should already have inherited the
+        # fixture's delenv, but a worker that runs cross_role=False must
+        # never see this flag on regardless of HOW it got invoked.
+        os.environ.pop("ORCHESTRATOR_CROSS_ROLE_DISJOINT_PLACEMENT", None)
     import src.runtime.cpu_region_lock as crl
 
     if start_delay:
@@ -114,15 +126,19 @@ def _cpu_worker_n_phase(
     cross_role: bool = True,
     start_delay: float = 0.0,
     ready_path: str | None = None,
+    fifo: bool = True,
 ) -> None:
     """Acquire/hold/release `len(labels)` times in sequence — each a brand-new
     (younger) ticket — to model a role that keeps re-requesting (the
-    "alternating" starvation shape)."""
+    "alternating" starvation shape). `fifo=False` is the non-vacuity control:
+    EPYC_LOCK_FIFO off means releases/re-requests just race the bare flock."""
     os.environ["ORCHESTRATOR_TMP_DIR"] = tmp_dir
     os.environ["ORCHESTRATOR_INFERENCE_LOCK_POLL_MS"] = "10"
-    os.environ["EPYC_LOCK_FIFO"] = "1"
+    os.environ["EPYC_LOCK_FIFO"] = "1" if fifo else "0"
     if cross_role:
         os.environ["ORCHESTRATOR_CROSS_ROLE_DISJOINT_PLACEMENT"] = "1"
+    else:
+        os.environ.pop("ORCHESTRATOR_CROSS_ROLE_DISJOINT_PLACEMENT", None)
     import src.runtime.cpu_region_lock as crl
 
     if start_delay:
@@ -146,10 +162,11 @@ def _cpu_worker_two_phase(
     hold_s: float,
     gap_s: float,
     ready_path: str,
+    fifo: bool = True,
 ) -> None:
     os.environ["ORCHESTRATOR_TMP_DIR"] = tmp_dir
     os.environ["ORCHESTRATOR_INFERENCE_LOCK_POLL_MS"] = "10"
-    os.environ["EPYC_LOCK_FIFO"] = "1"
+    os.environ["EPYC_LOCK_FIFO"] = "1" if fifo else "0"
     import src.runtime.cpu_region_lock as crl
 
     with crl.cpu_region_lock(role, set(regions), timeout_s=10, request_tag="A1"):
@@ -178,6 +195,17 @@ def _nested_worker(tmp_dir: str, role: str, regions: list[str], result_path: str
         Path(result_path).write_text("NESTED_REFUSED")
     except Exception as exc:  # noqa: BLE001
         Path(result_path).write_text(f"OTHER:{type(exc).__name__}")
+
+
+def _sigterm_ticket_worker(tmp_dir: str, ready_path: str) -> None:
+    os.environ["ORCHESTRATOR_TMP_DIR"] = tmp_dir
+    import src.runtime.lock_queue as lq2
+
+    qdir = lq2.queue_dir(Path(tmp_dir))
+    _tid, path = lq2.write_ticket(qdir, resource_keys=["q0"], mode="exclusive", tag="sigterm-test")
+    lq2.install_ticket_sigterm_cleanup(path)
+    Path(ready_path).write_text(str(path))
+    time.sleep(30)  # waits to be SIGTERMed by the test
 
 
 def _gpu_worker(
@@ -303,6 +331,53 @@ class TestTicketMechanics:
         qdir = lq.queue_dir(tmp_path)
         lq.check_nesting(["q0"], holder_pids=lambda: set(), queue_dir_path=qdir, label="test")
 
+    def test_zombie_pid_is_dead_for_ticket_liveness(self):
+        """2026-10 review finding: a SIGKILLed waiter not yet reaped by its
+        parent still passes `kill(pid, 0)` (it IS a real pid, just a zombie)
+        -- its ticket must not be treated as live, or it blocks every
+        younger overlapping waiter until something happens to reap it."""
+        pid = os.fork()
+        if pid == 0:
+            os._exit(0)
+        try:
+            deadline = time.time() + 2
+            state = None
+            while time.time() < deadline:
+                fields = lq._proc_stat_fields(pid)
+                state = fields[0] if fields else None
+                if state == "Z":
+                    break
+                time.sleep(0.01)
+            assert state == "Z", f"child did not become a zombie in time (state={state!r})"
+            assert lq._pid_alive(pid) is False
+            payload = {
+                "pid": pid,
+                "start_ticks": lq.proc_start_ticks(pid),
+                "boot_id": lq.read_boot_id(),
+            }
+            assert lq.ticket_is_live(payload) is False
+        finally:
+            os.waitpid(pid, 0)
+
+    def test_sigterm_handler_removes_own_ticket(self, tmp_path):
+        """A SIGTERMed waiter must remove its own outstanding ticket rather
+        than leaving it for liveness-reaping to eventually clear."""
+        ready_path = tmp_path / "ticket_path.txt"
+        ctx = _ctx()
+        p = ctx.Process(target=_sigterm_ticket_worker, args=(str(tmp_path), str(ready_path)))
+        p.start()
+        deadline = time.time() + 5
+        while time.time() < deadline and not ready_path.exists():
+            time.sleep(0.02)
+        assert ready_path.exists(), "worker never installed its ticket/handler"
+        ticket_path = Path(ready_path.read_text())
+        assert ticket_path.exists()
+
+        p.terminate()  # multiprocessing.Process.terminate() sends SIGTERM
+        p.join(timeout=5)
+        assert not p.is_alive(), "SIGTERM handler must still let the process terminate"
+        assert not ticket_path.exists(), "SIGTERM handler must remove the ticket"
+
 
 # ───────────────────────────── cross-process FIFO behavior ─────────────────────────────
 
@@ -341,7 +416,25 @@ class TestCpuRegionFifoOrdering:
         acquires = [label for label, event, _ts in _read_events(results) if event == "acquire"]
         assert acquires == ["blocker", "w1", "w2", "w3"]
 
-    def test_no_barging_by_rerequesting_releaser(self, tmp_path):
+    @pytest.mark.parametrize(
+        "fifo_on",
+        [
+            True,
+            pytest.param(
+                False,
+                marks=pytest.mark.xfail(
+                    strict=False,  # best-effort: real flock wake order is not adversarial, so an occasional XPASS is expected noise, not a signal
+                    reason="non-vacuity control (2026-10 review): with EPYC_LOCK_FIFO "
+                    "unset, A's immediate re-request races the bare flock against B's "
+                    "already-pending wait with no ordering guarantee, and B does not "
+                    "reliably win -- this must fail, or the fifo_on=True pass above is "
+                    "vacuous (a 50ms+ re-request gap used to let a plain flock waiter "
+                    "win anyway; this is why the gap below is zero).",
+                ),
+            ),
+        ],
+    )
+    def test_no_barging_by_rerequesting_releaser(self, tmp_path, fifo_on):
         """A holder that releases and immediately re-requests must get a NEW
         ticket, not barge an already-queued older waiter."""
         results = tmp_path / "events.log"
@@ -349,7 +442,11 @@ class TestCpuRegionFifoOrdering:
         ctx = _ctx()
         a = ctx.Process(
             target=_cpu_worker_two_phase,
-            args=(str(tmp_path), str(results), "roleB", ["q1"], 0.3, 0.05, str(a_ready)),
+            # A1's hold is long (1.0s) so B's process-start/ticket-write
+            # overhead has a wide margin to land well before A1 releases,
+            # even under host load (2026-10 review: a tight hold here flaked
+            # under concurrent host activity).
+            args=(str(tmp_path), str(results), "roleB", ["q1"], 1.0, 0.0, str(a_ready), fifo_on),
         )
         a.start()
         deadline = time.time() + 5
@@ -359,7 +456,7 @@ class TestCpuRegionFifoOrdering:
 
         b = ctx.Process(
             target=_cpu_worker,
-            args=(str(tmp_path), str(results), "B", "roleB", ["q1"], 0.1, 10, True, 0.0, None),
+            args=(str(tmp_path), str(results), "B", "roleB", ["q1"], 0.1, 10, fifo_on, 0.0, None),
         )
         b.start()
 
@@ -590,19 +687,35 @@ class TestCrossRoleGlobalFifoOrdering:
         assert acquires.index("bench_all") < acquires.index("ak_newer"), acquires
         assert acquires.index("bench_all") > acquires.index("ak_holder"), acquires
 
-    def test_two_roles_alternating_cannot_starve_a_third_waiting_role(self, tmp_path):
-        """roleA and roleB keep releasing and immediately re-requesting
-        (each re-request is a brand-new, younger ticket) while roleC's
+    @pytest.mark.parametrize(
+        "fifo_on",
+        [
+            True,
+            pytest.param(
+                False,
+                marks=pytest.mark.xfail(
+                    strict=False,  # best-effort: real flock wake order is not adversarial, so an occasional XPASS is expected noise, not a signal
+                    reason="non-vacuity control (2026-10 review): with EPYC_LOCK_FIFO "
+                    "unset, A and B's immediate re-requests race the bare flock with no "
+                    "ordering guarantee against C's already-pending wait, so C is not "
+                    "reliably admitted first -- this must fail.",
+                ),
+            ),
+        ],
+    )
+    def test_two_roles_alternating_cannot_starve_a_third_waiting_role(self, tmp_path, fifo_on):
+        """roleA and roleB keep releasing and IMMEDIATELY re-requesting (zero
+        gap — each re-request is a brand-new, younger ticket) while roleC's
         ticket sits older than all of those re-requests — roleC must be
         admitted right after the first holder releases, not starved by the
         ongoing A/B alternation."""
         results = tmp_path / "events.log"
         ctx = _ctx()
         a_ready = tmp_path / "a_ready"
-        # roleA holds first (uncontended), then alternates A2.
+        # roleA holds first (uncontended), then alternates A2 with zero gap.
         a = ctx.Process(
             target=_cpu_worker_n_phase,
-            args=(str(tmp_path), str(results), "roleA", ["q0"], ["A1", "A2"], 1.0, 0.05, True, 0.0, str(a_ready)),
+            args=(str(tmp_path), str(results), "roleA", ["q0"], ["A1", "A2"], 1.0, 0.0, True, 0.0, str(a_ready), fifo_on),
         )
         a.start()
         deadline = time.time() + 5
@@ -613,17 +726,17 @@ class TestCrossRoleGlobalFifoOrdering:
         # roleC queues immediately — its ticket predates both A2 and roleB's
         # request, which are written later. A1's long hold (1.0s) gives C's
         # (and B's) process-start/ticket-write overhead a wide margin to land
-        # well before A2's ticket is written at ~1.05s.
+        # well before A2's ticket is written just after A1 releases.
         c = ctx.Process(
             target=_cpu_worker,
-            args=(str(tmp_path), str(results), "C", "roleC", ["q0"], 0.1, 10, True, 0.0, None, True),
+            args=(str(tmp_path), str(results), "C", "roleC", ["q0"], 0.1, 10, fifo_on, 0.0, None, True),
         )
         c.start()
         time.sleep(0.3)
 
         b = ctx.Process(
             target=_cpu_worker_n_phase,
-            args=(str(tmp_path), str(results), "roleB", ["q0"], ["B1", "B2"], 0.1, 0.02, True, 0.0, None),
+            args=(str(tmp_path), str(results), "roleB", ["q0"], ["B1", "B2"], 0.1, 0.0, True, 0.0, None, fifo_on),
         )
         b.start()
 
@@ -641,35 +754,79 @@ class TestCrossRoleGlobalFifoOrdering:
         for later in ("A2", "B1", "B2"):
             assert acquires.index(later) > c_pos, acquires
 
-    def test_no_deadlock_across_per_role_and_global_queues_three_contenders(self, tmp_path):
-        """Three different roles requesting overlapping-but-not-identical
-        region sets (a circular shape: A wants q0+q1, B wants q1+q2, C wants
-        q0+q2) must all complete — the single outermost ticket plus the
-        existing sorted-region GLOBAL-then-per-role acquire order must stay
-        deadlock free with the queue layer added on top."""
+    @pytest.mark.parametrize(
+        "fifo_on",
+        [
+            True,
+            pytest.param(
+                False,
+                marks=pytest.mark.xfail(
+                    strict=False,  # best-effort: real flock wake order is not adversarial, so an occasional XPASS is expected noise, not a signal
+                    reason="non-vacuity control (2026-10 review): with EPYC_LOCK_FIFO "
+                    "unset, A and B's immediate re-requests race the bare flock with no "
+                    "ordering guarantee against C's already-pending wait, so C is not "
+                    "reliably admitted before A2/B2 -- this must fail. The deadlock-"
+                    "freedom assertions (every process completes) are expected to keep "
+                    "passing in both modes; only the fairness ordering should flip.",
+                ),
+            ),
+        ],
+    )
+    def test_no_deadlock_across_per_role_and_global_queues_three_contenders(self, tmp_path, fifo_on):
+        """Three different roles: A wants q0 only, B wants q1 only (DISJOINT
+        from each other — both can hold concurrently, same as real
+        full+quarter placement), C wants BOTH q0 and q1 (overlaps each of
+        them, the same "all-region vs singles" shape as
+        test_all_region_request_admitted_before_newer_single_region_waiter,
+        but across THREE different roles and TWO independent tickets/flock
+        pairs instead of one). A and B each cycle twice with an IMMEDIATE
+        (zero-gap) re-request; C's single request is queued while A1/B1 both
+        hold, so it is older than A2/B2.
+
+        Two independent properties: (1) deadlock freedom — the single
+        outermost ticket plus the existing sorted-region GLOBAL-then-per-role
+        acquire order must stay deadlock free with the queue layered on top,
+        checked unconditionally; (2) fairness — C must not be starved by A/B's
+        alternation, checked only with FIFO on (see the xfail control)."""
         results = tmp_path / "events.log"
         ctx = _ctx()
-        procs = [
-            ctx.Process(
-                target=_cpu_worker,
-                args=(str(tmp_path), str(results), label, role, regions, 0.2, 10, True, delay, None, True),
-            )
-            for label, role, regions, delay in [
-                ("A", "roleX", ["q0", "q1"], 0.0),
-                ("B", "roleY", ["q1", "q2"], 0.02),
-                ("C", "roleZ", ["q0", "q2"], 0.04),
-            ]
-        ]
-        for p in procs:
-            p.start()
-        for p in procs:
+        a_ready = tmp_path / "a_ready"
+        b_ready = tmp_path / "b_ready"
+        a = ctx.Process(
+            target=_cpu_worker_n_phase,
+            args=(str(tmp_path), str(results), "roleX", ["q0"], ["A1", "A2"], 0.6, 0.0, True, 0.0, str(a_ready), fifo_on),
+        )
+        b = ctx.Process(
+            target=_cpu_worker_n_phase,
+            args=(str(tmp_path), str(results), "roleY", ["q1"], ["B1", "B2"], 0.6, 0.0, True, 0.0, str(b_ready), fifo_on),
+        )
+        a.start()
+        b.start()
+        deadline = time.time() + 5
+        while time.time() < deadline and not (a_ready.exists() and b_ready.exists()):
+            time.sleep(0.02)
+        assert a_ready.exists() and b_ready.exists()
+
+        c = ctx.Process(
+            target=_cpu_worker,
+            args=(str(tmp_path), str(results), "C", "roleZ", ["q0", "q1"], 0.1, 10, fifo_on, 0.0, None, True),
+        )
+        c.start()
+
+        for p in (a, b, c):
             p.join(timeout=15)
             assert p.exitcode == 0, "a hung/killed process means a deadlock"
 
-        acquires = {label for label, event, _ts in _read_events(results) if event == "acquire"}
+        acquires_list = [label for label, event, _ts in _read_events(results) if event == "acquire"]
         releases = {label for label, event, _ts in _read_events(results) if event == "release"}
-        assert acquires == {"A", "B", "C"}
-        assert releases == {"A", "B", "C"}
+        # Deadlock freedom: unconditional, must hold in BOTH modes.
+        assert set(acquires_list) == {"A1", "A2", "B1", "B2", "C"}
+        assert releases == {"A1", "A2", "B1", "B2", "C"}
+        # Fairness: C's ticket predates A2 and B2 (both registered only after
+        # A1/B1 release) -- it must be admitted before either of them.
+        c_pos = acquires_list.index("C")
+        assert acquires_list.index("A2") > c_pos, acquires_list
+        assert acquires_list.index("B2") > c_pos, acquires_list
 
 
 class TestNestingAudit:

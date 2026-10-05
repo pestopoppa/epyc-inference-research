@@ -496,7 +496,7 @@ class TestCpuRegionLockCrossProcess:
             ):
                 assert p.is_alive(), "same-server request should join before child exits"
 
-            with pytest.raises(CpuRegionLockTimeout, match="admission timeout"):
+            with pytest.raises(CpuRegionLockTimeout, match="admission timeout|admission deadline exceeded"):
                 with cpu_region_lock(
                     "worker_general",
                     {"q0"},
@@ -565,7 +565,7 @@ class TestSharedNativeBatchOccupancy:
             with cpu_region_lock(
                 "frontdoor", {"q0"}, instance_idx=0, shared=True, capacity=2
             ):
-                with pytest.raises(CpuRegionLockTimeout, match="admission timeout"):
+                with pytest.raises(CpuRegionLockTimeout, match="admission timeout|admission deadline exceeded"):
                     with cpu_region_lock(
                         "frontdoor",
                         {"q0"},

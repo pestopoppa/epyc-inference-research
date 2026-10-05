@@ -55,6 +55,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import signal
 import time
 import uuid
 from pathlib import Path
@@ -143,6 +144,23 @@ def ancestor_pids(pid: int, *, max_depth: int = 64) -> list[int]:
     return out
 
 
+#: /proc/<pid>/stat state codes that mean "not a live ticket holder" even
+#: though the pid still exists and `kill(pid, 0)` succeeds: 'Z' (zombie —
+#: already exited, not yet wait()ed by its parent) and 'X' (dead, the brief
+#: window between exit and reaping on some kernels). A SIGKILLed waiter sits
+#: as 'Z' for as long as its parent is slow to reap it, which could be
+#: indefinite for a wedged parent — without this check its ticket stays
+#: "live" and blocks every younger overlapping waiter forever.
+_DEAD_PROC_STATES = frozenset("ZX")
+
+
+def _proc_state(pid: int) -> str | None:
+    fields = _proc_stat_fields(pid)
+    if not fields:
+        return None
+    return fields[0] or None
+
+
 def _pid_alive(pid: int) -> bool:
     if pid <= 0:
         return False
@@ -152,6 +170,9 @@ def _pid_alive(pid: int) -> bool:
         return False
     except PermissionError:
         return True
+    state = _proc_state(pid)
+    if state is not None and state in _DEAD_PROC_STATES:
+        return False
     return True
 
 
@@ -205,6 +226,58 @@ def remove_ticket(path: Path) -> None:
     try:
         path.unlink()
     except OSError:
+        pass
+
+
+def install_ticket_sigterm_cleanup(ticket_path: Path):
+    """Best-effort: remove `ticket_path` if this process is SIGTERMed while
+    the ticket is outstanding, then chain to whatever handler was already
+    installed (restoring it first, so the previous handler's own semantics —
+    including the default "terminate the process" — still apply; we only add
+    cleanup, never swallow the signal).
+
+    Returns the previous handler to pass to `restore_ticket_sigterm_cleanup`,
+    or `None` if no handler was installed (not the main thread, or the
+    platform/interpreter refused — `signal.signal` only works in the main
+    thread of the main interpreter). Reaping on read (pid+start+boot liveness)
+    remains the backstop for every other kill signal (SIGKILL cannot be
+    caught) and for a SIGTERM that races this install.
+    """
+    try:
+        previous = signal.getsignal(signal.SIGTERM)
+    except (ValueError, OSError):
+        return None
+
+    def _handler(signum, frame):
+        remove_ticket(ticket_path)
+        if callable(previous):
+            previous(signum, frame)
+            return
+        # SIG_DFL/SIG_IGN aren't callable. SIG_IGN means "do nothing further",
+        # exactly as the process itself asked. SIG_DFL (the common case) must
+        # still terminate the process — cleaning up the ticket is additive,
+        # never a reason to swallow the kill.
+        if previous == signal.SIG_IGN:
+            return
+        try:
+            signal.signal(signal.SIGTERM, signal.SIG_DFL)
+        except (ValueError, OSError):
+            pass
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    try:
+        signal.signal(signal.SIGTERM, _handler)
+    except (ValueError, OSError):
+        return None
+    return previous
+
+
+def restore_ticket_sigterm_cleanup(previous) -> None:
+    if previous is None:
+        return
+    try:
+        signal.signal(signal.SIGTERM, previous)
+    except (ValueError, OSError):
         pass
 
 
@@ -412,6 +485,7 @@ __all__ = [
     "ancestor_pids",
     "append_event_log",
     "check_nesting",
+    "install_ticket_sigterm_cleanup",
     "is_fifo_enabled",
     "older_overlapping_blocks",
     "proc_ppid",
@@ -421,6 +495,7 @@ __all__ = [
     "read_boot_id",
     "read_live_tickets",
     "remove_ticket",
+    "restore_ticket_sigterm_cleanup",
     "ticket_is_live",
     "wait_for_admission",
     "write_ticket",
