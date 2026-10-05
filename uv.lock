@@ -1003,7 +1003,7 @@ requires-dist = [
     { name = "pillow", specifier = ">=10.0.0" },
     { name = "psutil", specifier = ">=5.9.0" },
     { name = "pydantic", specifier = ">=2.5.0" },
-    { name = "pydantic-graph", specifier = ">=0.1.0" },
+    { name = "pydantic-graph", specifier = ">=1.80.0,<2" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },
     { name = "pylate", marker = "extra == 'colbert-export'", specifier = ">=1.2.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4.0" },

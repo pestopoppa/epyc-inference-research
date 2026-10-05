@@ -55,7 +55,7 @@ dependencies = [
     "mcp>=1.0.0",
 
     # Orchestration graph (escalation flow)
-    "pydantic-graph>=0.1.0",
+    "pydantic-graph>=1.80.0,<2",
 
     # LangGraph migration (Phase 1: hybrid bridge alongside pydantic-graph)
     "langgraph>=0.2.0",
