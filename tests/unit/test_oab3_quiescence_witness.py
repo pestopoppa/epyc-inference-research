@@ -17,7 +17,6 @@ from __future__ import annotations
 import asyncio
 import os
 import time
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -28,8 +27,8 @@ from src.runtime import trailing_work_witness as W
 
 
 @pytest.fixture(autouse=True)
-def _isolated_quiescence(monkeypatch, tmp_path_factory):
-    base = Path("/mnt/raid0/llm/tmp") / f"test_oab3_{os.getpid()}_{time.monotonic_ns()}"
+def _isolated_quiescence(monkeypatch, tmp_path):
+    base = tmp_path / "quiescence"
     monkeypatch.setenv(Q.HOLD_DIR_ENV, str(base))
     Q.clear()
     yield base
