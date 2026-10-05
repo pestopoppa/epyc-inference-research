@@ -22,6 +22,7 @@ from .stats import StatsMixin
 from .tokens import TokensMixin
 from .teleport import TeleportDecision, TeleportInputs, TeleportPolicy, decide_teleport
 from .types import CallLogEntry, LLMResult
+from src.exceptions import AdmissionDenied, AdmissionDeniedText
 from src.roles import Role
 from src.workload_model import infer_workload_class
 
@@ -986,6 +987,8 @@ class LLMPrimitives(
             log_entry.error = str(e)
             log_entry.elapsed_seconds = time.perf_counter() - start_time
             self.call_log.append(log_entry)
+            if isinstance(e, AdmissionDenied):
+                return AdmissionDeniedText(e)
             return f"[ERROR: {e}]"
 
     def _should_rag(self, role: str) -> bool:

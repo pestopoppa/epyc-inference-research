@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 from src.backends import serving_calls
-from src.exceptions import ContextOverflowError
+from src.exceptions import AdmissionDenied, ContextOverflowError
 from src.scheduling import gate_observation
 
 from .types import LLMResult
@@ -1181,7 +1181,7 @@ class InferenceMixin:
                 deadline_s=deadline_s,
                 cancel_check=cancel_check,
             ):
-                raise RuntimeError(f"[ERROR: admission] Backend queue full for {backend_url}")
+                raise AdmissionDenied(f"[ERROR: admission] Backend queue full for {backend_url}")
             admitted = True
 
         # Shared (unified) KV pool — the PRIMARY overflow defence: never

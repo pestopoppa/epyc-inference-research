@@ -287,3 +287,65 @@ def test_mid_answer_error_quote_is_not_a_failure(client, monkeypatch):
     assert r.status_code == 200
     content = r.json()["choices"][0]["message"]["content"]
     assert content.startswith("Backend failures are emitted")
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("disable_repl", [False, True])
+def test_typed_admission_denial_is_retryable_before_headers(client, monkeypatch, stream, disable_repl):
+    from src.exceptions import AdmissionDenied, AdmissionDeniedText
+
+    denial = AdmissionDenied("[ERROR: admission] Backend queue full for http://localhost:9999")
+    primitives = _install_primitives(
+        monkeypatch, llm_call=lambda *a, **k: AdmissionDeniedText(denial)
+    )
+    response = client.post("/v1/chat/completions", json=_body(
+        stream=stream, x_disable_repl=disable_repl))
+    assert response.status_code == 503
+    assert response.headers["retry-after"] == "5"
+    assert response.headers["retry-after-ms"] == "5000"
+    assert "Backend queue full" in json.dumps(response.json())
+    assert primitives.llm_call.call_count == 1
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_plain_model_admission_marker_cannot_manufacture_backpressure(client, monkeypatch, stream):
+    _install_primitives(monkeypatch, llm_call=lambda *a, **k:
+                        "[ERROR: [ERROR: admission] Backend queue full for http://localhost:9999]")
+    response = client.post("/v1/chat/completions", json=_body(stream=stream))
+    assert response.status_code == (200 if stream else 502)
+    assert "retry-after" not in response.headers
+    if stream:
+        event = next(json.loads(line[6:]) for line in response.text.splitlines()
+                     if line.startswith("data: ") and "error" in line)
+        assert event["error"]["code"] == 502
+
+
+def test_streaming_typed_contention_denial_has_retry_headers(client, monkeypatch):
+    _install_primitives(monkeypatch, llm_call=lambda *a, **k:
+                        (_ for _ in ()).throw(ContentionDenied("region busy")))
+    response = client.post("/v1/chat/completions", json=_body(stream=True))
+    assert response.status_code == 503
+    assert response.headers["retry-after-ms"] == "5000"
+
+
+def test_residual_sse_denial_text_is_retryable():
+    from src.api.routes.openai_compat import _sse_error_event
+    event = json.loads(_sse_error_event(chat_id="c", created=0, model="m", message="region busy",
+                                     error_type="contention_denied", status_code=503)[6:])
+    assert "503 service unavailable" in event["error"]["message"]
+
+
+def test_primitive_keeps_admission_type_and_legacy_text(monkeypatch):
+    from src.exceptions import AdmissionDenied, AdmissionDeniedText
+    from src.llm_primitives import LLMPrimitives
+    primitives = LLMPrimitives(mock_mode=True)
+    primitives.mock_mode = False
+    denial = AdmissionDenied("[ERROR: admission] Backend queue full for http://localhost:9999")
+    monkeypatch.setattr(primitives, "_real_call", lambda *a, **k:
+                        (_ for _ in ()).throw(denial))
+    result = primitives.llm_call("hello", skip_suffix=True)
+    assert isinstance(result, str) and isinstance(result, AdmissionDeniedText)
+    assert result == f"[ERROR: {denial}]" and result.error is denial
+    assert primitives.call_log[-1].error == str(denial)
+    assert primitives._recursion_depth == 0
+    assert not isinstance(denial, RuntimeError)

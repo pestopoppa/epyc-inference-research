@@ -25,6 +25,19 @@ class BackendUnavailableError(InferenceError):
     """Backend server is unreachable or returned 502/503."""
 
 
+class AdmissionDenied(BackendUnavailableError):
+    """Admission refused before dispatch; waiting may make the same request fit."""
+
+
+class AdmissionDeniedText(str):
+    """Legacy error text retaining its typed admission cause for API callers."""
+
+    def __new__(cls, error: AdmissionDenied):
+        value = super().__new__(cls, f"[ERROR: {error}]")
+        value.error = error
+        return value
+
+
 class ContextOverflowError(InferenceError, RuntimeError):
     """llama-server refused or aborted a request because the KV context ran out.
 

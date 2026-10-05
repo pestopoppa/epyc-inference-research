@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from typing import Any, AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from src.api.dependencies import dep_app_state
 from src.api.models import (
@@ -59,7 +59,7 @@ from src.registry.stack_priors import (
     stack_prior_serving,
 )
 from src.repl_environment import REPLEnvironment
-from src.exceptions import ContextOverflowError
+from src.exceptions import AdmissionDenied, AdmissionDeniedText, ContextOverflowError
 from src.scheduling.contention_gate import ContentionDenied
 from src.roles import Role
 
@@ -141,6 +141,13 @@ def _repl_memrl_kwargs(state: AppState) -> dict[str, Any]:
     }
 
 
+def _raise_admission_denied_text(value: str) -> None:
+    # Preserve the typed cause before parsing, stripping or executing model text.
+    # A model string with the same spelling cannot manufacture backpressure.
+    if isinstance(value, AdmissionDeniedText):
+        raise value.error
+
+
 def _sse_error_event(
     *,
     chat_id: str,
@@ -164,6 +171,8 @@ def _sse_error_event(
     ``detail``) and the OpenAI streaming-error convention (``error.message`` /
     ``error.type``), so both kinds of client can key off it.
     """
+    if status_code == 503:
+        message = f"503 service unavailable: {message}"
     return "data: " + json.dumps(
         {
             "id": chat_id,
@@ -1304,10 +1313,12 @@ async def openai_chat_completions(
                                     role=role, sampling_kwargs=sampling_kwargs,
                                 )
                             )
-                        except ContentionDenied as e:
+                            _raise_admission_denied_text(response_text)
+                        except (AdmissionDenied, ContentionDenied) as e:
                             yield _sse_error_event(
                                 chat_id=chat_id, created=created, model=request.model,
-                                message=str(e), error_type="contention_denied",
+                                message=str(e), error_type=("admission_denied" if isinstance(e, AdmissionDenied)
+                                                        else "contention_denied"),
                                 status_code=503,
                             )
                             yield "data: [DONE]\n\n"
@@ -1344,10 +1355,12 @@ async def openai_chat_completions(
                                 state=state,
                                 task_id=chat_id,
                             )
-                        except ContentionDenied as e:
+                            _raise_admission_denied_text(response_text)
+                        except (AdmissionDenied, ContentionDenied) as e:
                             yield _sse_error_event(
                                 chat_id=chat_id, created=created, model=request.model,
-                                message=str(e), error_type="contention_denied",
+                                message=str(e), error_type=("admission_denied" if isinstance(e, AdmissionDenied)
+                                                        else "contention_denied"),
                                 status_code=503,
                             )
                             yield "data: [DONE]\n\n"
@@ -1387,10 +1400,12 @@ async def openai_chat_completions(
                                 skip_suffix=True,
                                 **sampling_kwargs,
                             )
-                        except ContentionDenied as e:
+                            _raise_admission_denied_text(response_text)
+                        except (AdmissionDenied, ContentionDenied) as e:
                             yield _sse_error_event(
                                 chat_id=chat_id, created=created, model=request.model,
-                                message=str(e), error_type="contention_denied",
+                                message=str(e), error_type=("admission_denied" if isinstance(e, AdmissionDenied)
+                                                        else "contention_denied"),
                                 status_code=503,
                             )
                             yield "data: [DONE]\n\n"
@@ -1471,6 +1486,7 @@ async def openai_chat_completions(
                                     n_tokens=1024,
                                     **sampling_kwargs,
                                 )
+                                _raise_admission_denied_text(code)
                                 turn_reasoning = _last_call_reasoning(primitives)
                                 # In-band guard: "[ERROR: ...]" at start-of-answer
                                 # is a backend failure, not a generation — do not
@@ -1490,10 +1506,11 @@ async def openai_chat_completions(
                                     return
                                 code = extract_code_from_response(code)
                                 code = auto_wrap_final(code)
-                            except ContentionDenied as e:
+                            except (AdmissionDenied, ContentionDenied) as e:
                                 yield _sse_error_event(
                                     chat_id=chat_id, created=created, model=request.model,
-                                    message=str(e), error_type="contention_denied",
+                                    message=str(e), error_type=("admission_denied" if isinstance(e, AdmissionDenied)
+                                                        else "contention_denied"),
                                     status_code=503,
                                 )
                                 yield "data: [DONE]\n\n"
@@ -1694,8 +1711,36 @@ async def openai_chat_completions(
                 yield f"data: {json.dumps(usage_chunk)}\n\n"
             yield "data: [DONE]\n\n"
 
+        stream = generate_stream()
+        try:
+            first = await anext(stream, None)
+        except BaseException:
+            await stream.aclose()
+            raise
+        if first is not None and first.startswith("data: "):
+            event = json.loads(first[6:])
+            error = event.get("error", {})
+            if error.get("code") == 503 and error.get("type") in {
+                "admission_denied", "contention_denied", "context_overflow"
+            }:
+                await stream.aclose()
+                return JSONResponse(
+                    status_code=503,
+                    content={"error": error, "detail": error["message"]},
+                    headers={"Retry-After": "5", "retry-after-ms": "5000"},
+                )
+
+        async def replay_stream():
+            try:
+                if first is not None:
+                    yield first
+                async for event in stream:
+                    yield event
+            finally:
+                await stream.aclose()
+
         return StreamingResponse(
-            generate_stream(),
+            replay_stream(),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
@@ -1761,6 +1806,7 @@ async def openai_chat_completions(
                     # in-band "[ERROR: ...]" at start-of-answer (LLMPrimitives
                     # fail-open contract). Without this, that string reached the
                     # client as assistant content with HTTP 200 (HS-OD-2).
+                    _raise_admission_denied_text(response_text)
                     inband_error = inband_error_text(response_text)
                     if inband_error is not None:
                         raise HTTPException(
@@ -1804,6 +1850,7 @@ async def openai_chat_completions(
                             n_tokens=1024,
                             **sampling_kwargs,
                         )
+                        _raise_admission_denied_text(code)
                         turn_reasoning = _last_call_reasoning(primitives)
                         # Same in-band guard as the direct path: an "[ERROR: ...]"
                         # generation is a backend failure, not code to auto-wrap
@@ -1859,6 +1906,11 @@ async def openai_chat_completions(
                 # lines above for uninitialised primitives, which the old blanket
                 # `except Exception` swallowed into a 200.
                 raise
+            except AdmissionDenied as e:
+                raise HTTPException(
+                    status_code=503, detail=str(e),
+                    headers={"Retry-After": "5", "retry-after-ms": "5000"},
+                ) from e
             except ContextOverflowError:
                 # Dedicated app-level handler: 413 (too large for the role) or
                 # 503 + Retry-After (shared KV pool stayed exhausted).
