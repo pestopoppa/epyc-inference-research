@@ -1133,9 +1133,7 @@ def test_main_question_ids_empty_lookup_exits(tmp_path, monkeypatch):
     args.question_ids = str(tmp_path / "qids.json")
     Path(args.question_ids).write_text(json.dumps(["suite_a/q1"]))
 
-    pool_mod = ModuleType("question_pool")
-    pool_mod.load_questions_by_ids = Mock(return_value=[])
-    monkeypatch.setitem(sys.modules, "question_pool", pool_mod)
+    pool_mod = _bind_research_pool(mod, monkeypatch, questions=[])
 
     with (
         patch("argparse.ArgumentParser.parse_args", return_value=args),
@@ -1145,6 +1143,7 @@ def test_main_question_ids_empty_lookup_exits(tmp_path, monkeypatch):
         mod.main()
 
     assert excinfo.value.code == 1
+    pool_mod.load_pool.assert_called_once_with(None, warn_stale=False)
 
 
 @pytest.mark.parametrize("file_name", _ROUTING_FILES)
