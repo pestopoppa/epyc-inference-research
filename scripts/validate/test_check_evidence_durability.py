@@ -898,7 +898,7 @@ def test_prose_scan_reports_durable_missing_and_scratch_with_source(repo):
     assert all(c.source == str(source) for c in cites)
 
 
-def test_prose_relative_markdown_links_resolve_in_sibling_repo(repo, tmp_path):
+def test_prose_relative_markdown_links_resolve_in_sibling_repo(repo, tmp_path, no_ephemeral_tmp):
     from check_evidence_durability import scan_markdown
     docs = repo / "docs"
     docs.mkdir()
