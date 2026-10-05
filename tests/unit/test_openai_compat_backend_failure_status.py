@@ -349,3 +349,17 @@ def test_primitive_keeps_admission_type_and_legacy_text(monkeypatch):
     assert primitives.call_log[-1].error == str(denial)
     assert primitives._recursion_depth == 0
     assert not isinstance(denial, RuntimeError)
+
+
+@pytest.mark.parametrize("answer", ["unique replay", ""])
+def test_successful_stream_replays_primed_chunk_once(client, monkeypatch, answer):
+    primitives = _install_primitives(monkeypatch, llm_call=lambda *a, **k: answer)
+    response = client.post("/v1/chat/completions", json=_body(stream=True))
+    assert response.status_code == 200
+    events = [json.loads(line[6:]) for line in response.text.splitlines()
+              if line.startswith("data: ") and line[6:] != "[DONE]"]
+    choices = [choice for event in events for choice in event.get("choices", [])]
+    assert "".join(choice.get("delta", {}).get("content", "") for choice in choices) == answer
+    assert sum(choice.get("finish_reason") == "stop" for choice in choices) == 1
+    assert response.text.count("data: [DONE]") == 1
+    assert primitives.llm_call.call_count == 1
