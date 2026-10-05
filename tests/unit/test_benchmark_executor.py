@@ -68,7 +68,7 @@ def test_server_manager_http_status_sets_failure_metadata():
 
 
 def test_executor_subprocess_timeout_sets_partial_and_degraded_metadata():
-    executor = Executor()
+    executor = Executor(validate=False)
     timeout_error = subprocess.TimeoutExpired(
         cmd=["llama-cli"],
         timeout=5,

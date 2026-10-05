@@ -156,7 +156,7 @@ def test_server_manager_stop_kills_process_after_timeout():
 
 
 def test_executor_run_inference_nonzero_exit_sets_failure_metadata():
-    executor = Executor()
+    executor = Executor(validate=False)
     temp_file = MagicMock()
     temp_file.name = "/tmp/fake-prompt.txt"
     completed = subprocess.CompletedProcess(
@@ -276,7 +276,7 @@ def test_convenience_functions_delegate_to_executor_methods():
 
 
 def test_executor_run_inference_enables_paged_attention_env_when_recommended():
-    executor = Executor()
+    executor = Executor(validate=False)
     executor.registry = MagicMock()
     executor.registry.get_role_config.return_value = {
         "paged_attention": {"recommended": True, "block_size": 128}
@@ -310,7 +310,7 @@ def test_executor_run_inference_enables_paged_attention_env_when_recommended():
 
 
 def test_executor_run_inference_cleans_up_temp_prompt_file():
-    executor = Executor()
+    executor = Executor(validate=False)
     temp_file = MagicMock()
     temp_file.name = "/tmp/fake-prompt-cleanup.txt"
     completed = subprocess.CompletedProcess(
