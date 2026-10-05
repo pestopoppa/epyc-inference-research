@@ -1,0 +1,14 @@
+runtime_defaults:
+  timeouts: {}
+server_mode:
+  fixture_host:
+    port: 19090
+    device: CPU
+    slots: 1
+    memory_gb: 0.01
+    no_mmap: false
+    serving_shape:
+      n_ctx: 1
+      kv_kib_per_token_f16: 1
+  worker_vision:
+    device: CPU

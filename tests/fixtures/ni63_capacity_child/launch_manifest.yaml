@@ -1,0 +1,53 @@
+# Fixture-only declarations. The 1 GiB host reserve is not production policy.
+port_map:
+  fixture_host: 19090
+optional_auxiliary_roles: []
+hot_roles:
+  - fixture_host
+serial_roles: []
+role_launch_meta:
+  fixture_host:
+    tier: hot
+    mode: default
+models:
+  embedding_model_path: /fixture/absent/embedder.gguf
+  worker_pool: {}
+  explore_draft_model: /fixture/absent/draft.gguf
+  dev_model: /fixture/absent/dev.gguf
+embedding:
+  pool_ports: []
+  pool_recipe: {}
+  extra_recipes: {}
+  placement: {}
+vision:
+  worker:
+    model: /fixture/absent/vision.gguf
+    mmproj: /fixture/absent/vision-mmproj.gguf
+    image_min_tokens: 1
+    cache_ram: false
+  escalation:
+    same_as_worker: true
+    reasoning: fixture-only
+launch_shape:
+  default_effective_context_tokens: 1
+  default_ubatch_tokens: 1
+  context_tokens: {}
+  fallback_slots:
+    default: 1
+  no_spec_decode_roles: []
+capacity:
+  host_os_reserve_gib: 1
+  # Explicit test-only policy value, never copied into production config.
+gpu_shadow_lane:
+  tenant_role: fixture_unused
+  device: none
+  reasoning: fixture-only
+  fallback_slots: 1
+  fallback_context_tokens: 1
+orchestrator_profiles: {}
+parity:
+  derived_from_master: []
+  checked: []
+  exceptions: []
+docker_services: []
+aux_services: []

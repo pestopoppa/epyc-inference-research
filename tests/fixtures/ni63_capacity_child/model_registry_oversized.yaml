@@ -1,0 +1,15 @@
+runtime_defaults:
+  timeouts: {}
+server_mode:
+  fixture_host:
+    port: 19090
+    device: CPU
+    slots: 1
+    # Synthetic arithmetic-only refusal input; no model is opened or allocated.
+    memory_gb: 1000000
+    no_mmap: false
+    serving_shape:
+      n_ctx: 1
+      kv_kib_per_token_f16: 1
+  worker_vision:
+    device: CPU

@@ -1,0 +1,7 @@
+# Minimal schema-valid CPU placement used only inside the external fixture clone.
+numa_config:
+  fixture_host:
+    instances:
+      - cpu_shape: NUMA_FULL
+        port: 19090
+    numactl_policy: interleave=all
