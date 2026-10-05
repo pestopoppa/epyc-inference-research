@@ -79,6 +79,10 @@ def build_targets(resolved_path, owned_path, *, target_root, common_path=None, s
                   # which target, plus a cross-target keep veto; never an identity
                   # (serial_run.LANE_BINDING_FLAGS).
                   *sr.LANE_BINDING_FLAGS,
+                  # Long-context surface (longctx.py): keep POLICY over the same
+                  # launch, excluded from the resume binding like the lane binding
+                  # (serial_run.LONGCTX_SURFACE_FLAGS); common args are its only opt-in.
+                  *sr.LONGCTX_SURFACE_FLAGS,
                   # Best-of-N author wall budgets (bestof.WallBudget): a time policy.
                   "--actor-authors-wall", "--actor-authors-panel-wall",
                   "--actor-authors-cancel-factor",

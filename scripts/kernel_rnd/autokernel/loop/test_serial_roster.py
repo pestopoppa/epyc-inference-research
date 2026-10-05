@@ -359,3 +359,19 @@ def test_a_validation_stage_stays_one_iteration_under_a_batched_schedule(tmp_pat
     # Batch size 1: the historical argv whatever the stage.
     assert sr._batch_argv(original, None, 1, tmp_path / "b2") == \
         sr._batch_argv(original, None, 1, tmp_path / "b2", validate_source=True)
+
+
+def test_common_args_admit_the_longctx_surface_and_lane_binding(tmp_path):
+    """The long-context surface is keep POLICY like the lane binding (serial_run.
+    LONGCTX_SURFACE_FLAGS: resume_binding excludes it so turning it on at a batch
+    boundary carries the lineage). The common-args admission list must accept it too,
+    or the only way to opt in -- the shared common args -- refuses at startup."""
+    _resolved, _owners, argv = _inputs(tmp_path, backends=("cpu",))
+    common = tmp_path / "common.json"
+    common.write_text(json.dumps(["--workers", "1", "--longctx-surface", "/x/spec.json",
+                                  "--lane-targets", "/x/lt.json", "--lane", "lane0"]))
+    targets, _skipped, _cpus = serial_roster.build_targets(
+        Path(sr.option(argv, "--resolved-campaign")), Path(sr.option(argv, "--owned-targets")),
+        target_root=Path(sr.option(argv, "--state-dir")) / "targets", common_path=common)
+    assert sr.option(targets[0], "--longctx-surface") == "/x/spec.json"
+    assert sr.option(targets[0], "--lane") == "lane0"
