@@ -80,7 +80,7 @@ def _gpu_quiet_policy(value: str) -> str:
 #: DS41 rate; a run restart always samples on its first keep.
 ANCHOR_GUARD_AA_WINDOW_S = 6 * 3600.0
 
-from . import (accumulate, actors, anchor, archive, bench, champion, claim, gates,
+from . import (accumulate, actors, anchor, archive, bench, champion, claim, gates, new_epoch,
                dispatch_guard, heartbeat, hotspots, loop, serving, serving_beliefs,
                integrity, heldout_serving, lineage_beliefs, pipeline, pool, production, status, surface_fold,
                surface_validation)
@@ -1615,6 +1615,16 @@ def main(argv: list[str] | None = None) -> int:
                         help="existing resolved campaign or campaign_cli output; selects inputs only")
     parser.add_argument("--target-id", help="exact enrolled target ID/alias; requires --resolved-campaign")
     parser.add_argument("--store", type=Path, required=True)
+    parser.add_argument("--new-anchor-epoch", action="store_true",
+                        help="EXPLICIT opt-in (DS41-C126): when the persisted accumulator "
+                        "bundle's tip is not an ancestor of --anchor-build's commit (a "
+                        "champion-branch new epoch, not a corrupt journal), archive the "
+                        "existing accumulator-bundle.json + journal under the store "
+                        "(timestamped, never deleted) and initialize a fresh bundle with "
+                        "champion_of_record = tip = anchor. Refused silently-never: it "
+                        "only acts when the store would actually refuse the anchor; "
+                        "preflight with `new_epoch.start_new_anchor_epoch`'s underlying "
+                        "`accumulate.would_refuse_anchor` before taking a CPU region lock")
     parser.add_argument("--belief-root-repo", type=Path,
                         help="ROOT owning serving-observation reader (default EPYC_ROOT_REPO or /workspace)")
     parser.add_argument("--iterations", type=int, default=10,
@@ -3519,12 +3529,23 @@ def main(argv: list[str] | None = None) -> int:
             restored, note = accumulate.load_bundle(
                 args.store, anchor_commit=anchor_commit, is_ancestor=_is_ancestor)
     except accumulate.BundleRecoveryRequired as exc:
-        raise champion.StartupRefused(
-            f"REFUSED: {exc}. Inspect and restore the authoritative accumulator "
-            "journal and its evidence before restarting. `seed_bundle` applies only "
-            "to a genuinely new explicit baseline under existing measurement and "
-            "resource authorization; it is not a repair for a corrupt journal. No "
-            "automatic rerun occurred and no champion-of-record was inferred.") from exc
+        if args.new_anchor_epoch:
+            # DS41-C126 gap (a): an EXPLICIT opt-in only, never a silent reset -- the
+            # flag must not catch a genuinely corrupt journal, so it is still routed
+            # through the same refusal and only acts because the caller asked for it.
+            restored, note = new_epoch.start_new_anchor_epoch(
+                args.store, anchor_commit=anchor_commit, is_ancestor=_is_ancestor)
+        else:
+            raise champion.StartupRefused(
+                f"REFUSED: {exc}. Inspect and restore the authoritative accumulator "
+                "journal and its evidence before restarting. `seed_bundle` applies only "
+                "to a genuinely new explicit baseline under existing measurement and "
+                "resource authorization; it is not a repair for a corrupt journal. Pass "
+                "--new-anchor-epoch only if this is a genuine new champion-anchor epoch "
+                "(the persisted tip predates a champion-branch move, not a corrupt "
+                "journal) -- it archives the old bundle/journal under the store and "
+                "starts fresh at the new anchor. No automatic rerun occurred and no "
+                "champion-of-record was inferred.") from exc
     bundle = [restored]
     cor_commit = [restored.champion_of_record]
     cor_build = [args.cor_build or args.anchor_build]

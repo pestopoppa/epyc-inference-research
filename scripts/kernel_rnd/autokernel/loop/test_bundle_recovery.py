@@ -7,6 +7,7 @@ import pytest
 
 from autokernel import journal
 from autokernel.loop import accumulate as A
+from autokernel.loop import new_epoch
 
 
 def _linear(*commits):
@@ -395,3 +396,83 @@ def test_read_only_journal_replay_leaves_entire_tree_unchanged(tmp_path):
         read_only=True)
     assert restored.to_dict() == bundle.to_dict()
     assert _tree_bytes(tmp_path) == before
+
+
+# ---------------------------------------------------------------------------
+# DS41-C126: supported new-anchor epoch path (gaps a/b/c).
+# ---------------------------------------------------------------------------
+
+def test_would_refuse_anchor_reports_ancestry_reason_without_mutating(tmp_path):
+    bundle = A.Bundle(champion_of_record="cor0", tip="dd6c9c")
+    bundle.save(tmp_path)
+    before = _tree_bytes(tmp_path)
+    would_refuse, reason = A.would_refuse_anchor(
+        tmp_path, anchor_commit="b0ba1d4", is_ancestor=_linear("cor0", "dd6c9c"))
+    assert would_refuse is True
+    assert "invalid tip/anchor ancestry" in reason
+    assert _tree_bytes(tmp_path) == before  # preflight is read-only
+
+
+def test_would_refuse_anchor_is_false_for_a_compatible_store(tmp_path):
+    bundle = A.Bundle(champion_of_record="cor0", tip="k2")
+    bundle.save(tmp_path)
+    before = _tree_bytes(tmp_path)
+    would_refuse, note = A.would_refuse_anchor(
+        tmp_path, anchor_commit="anchor",
+        is_ancestor=_linear("cor0", "k2", "anchor"))
+    assert would_refuse is False
+    assert "restored" in note
+    assert _tree_bytes(tmp_path) == before
+
+
+def test_would_refuse_anchor_is_false_for_a_genuinely_new_store(tmp_path):
+    empty_store = tmp_path / "brand-new"
+    would_refuse, note = A.would_refuse_anchor(
+        empty_store, anchor_commit="anchor", is_ancestor=_linear("anchor"))
+    assert would_refuse is False
+    assert "initialize a fresh baseline" in note
+    assert not empty_store.exists()  # preflight never creates the store
+
+
+def test_start_new_anchor_epoch_refuses_without_an_actual_refusal(tmp_path):
+    bundle = A.Bundle(champion_of_record="cor0", tip="k2")
+    bundle.save(tmp_path)
+    before = _tree_bytes(tmp_path)
+    with pytest.raises(ValueError, match="does not refuse this anchor"):
+        new_epoch.start_new_anchor_epoch(
+            tmp_path, anchor_commit="anchor",
+            is_ancestor=_linear("cor0", "k2", "anchor"))
+    assert _tree_bytes(tmp_path) == before  # never a reset switch; nothing moved
+
+
+def test_start_new_anchor_epoch_archives_old_state_and_initializes_fresh(tmp_path):
+    old_bundle = A.Bundle(champion_of_record="cor0", tip="dd6c9c",
+                          keeps=["m1", "m2"], compounded_bench_pct=6.13)
+    old_bundle.save(tmp_path)
+    old_projection = (tmp_path / A.Bundle.FILENAME).read_bytes()
+    old_journal_entries = _book(tmp_path).read_all()
+
+    restored, note = new_epoch.start_new_anchor_epoch(
+        tmp_path, anchor_commit="b0ba1d4",
+        is_ancestor=_linear("cor0", "dd6c9c"), stamp="20261005T000000000000Z")
+
+    # Fresh bundle at the new anchor -- champion_of_record = tip = anchor.
+    assert restored.champion_of_record == "b0ba1d4"
+    assert restored.tip == "b0ba1d4"
+    assert restored.keeps == []
+    assert "b0ba1d4" in note and "archived" in note
+
+    # Nothing was deleted: the old projection and journal are archived under the
+    # store, byte-identical, alongside the fresh live state.
+    archive_root = tmp_path / new_epoch.ARCHIVE_DIRNAME / "20261005T000000000000Z"
+    assert (archive_root / A.Bundle.FILENAME).read_bytes() == old_projection
+    archived_entries = journal.Journal(
+        str(archive_root / A.JOURNAL_DIRNAME)).read_all()
+    assert [e.payload for e in archived_entries] == [e.payload for e in old_journal_entries]
+
+    # The live store now reads cleanly at the new anchor with no recovery needed.
+    live, _ = A.load_bundle(tmp_path, anchor_commit="b0ba1d4",
+                            is_ancestor=_linear("b0ba1d4"))
+    assert live.champion_of_record == "b0ba1d4"
+    assert live.tip == "b0ba1d4"
+    assert live.keeps == []

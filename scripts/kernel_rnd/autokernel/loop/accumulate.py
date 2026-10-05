@@ -552,6 +552,47 @@ def load_bundle(store: Path, *, anchor_commit: str, is_ancestor,
                    f"{b.champion_of_record[:12]} from {provenance}")
 
 
+def would_refuse_anchor(store: Path, *, anchor_commit: str, is_ancestor) -> tuple[bool, str]:
+    """Pre-flight: would `load_bundle` refuse this anchor against the store's persisted
+    bundle? Pure and read-only -- never claims the journal lock for write, never
+    initializes a store, never mutates anything on disk. Usable before any build or CPU
+    region claim (the incident this answers: a relaunch discovered an ancestry refusal
+    only AFTER a build and a region lock were already taken, on a champion-anchor move to
+    b0ba1d427 whose history the persisted tip did not descend from).
+
+    Returns (True, reason) when `load_bundle` would raise `BundleRecoveryRequired` for
+    this anchor against the current store contents; (False, note) otherwise, including
+    for a store `load_bundle` would initialize fresh (a genuinely new/empty store never
+    refuses)."""
+    store = Path(store)
+    p = store / Bundle.FILENAME
+    journal_root = store / JOURNAL_DIRNAME
+    legacy, legacy_error = _read_legacy_projection(p)
+    journal_exists = journal_root.exists()
+    if not journal_exists and legacy is None:
+        # Mirror load_bundle's fresh-store branch exactly: a genuinely new/empty store
+        # is never refused -- it would be initialized fresh with champion_of_record =
+        # tip = anchor. Only a populated-but-unreadable store counts as a refusal here.
+        try:
+            if store.is_symlink():
+                return True, "new accumulator store cannot be a symlink"
+            with os.scandir(store) as contents:
+                if next(contents, None) is not None:
+                    return True, f"no accumulator state: {legacy_error}"
+        except FileNotFoundError:
+            pass  # A genuinely new store, not a lost snapshot in an existing history.
+        except OSError as exc:
+            return True, f"cannot inspect new accumulator store: {exc}"
+        return False, ("no persisted bundle; a write-capable run would initialize a "
+                       "fresh baseline at this anchor")
+    try:
+        _, note = load_bundle(store, anchor_commit=anchor_commit, is_ancestor=is_ancestor,
+                              read_only=True)
+        return False, note
+    except BundleRecoveryRequired as exc:
+        return True, exc.reason
+
+
 def gate_trigger(bundle: Bundle, serving_floor_pct: float | None,
                  policy: AccumulatorPolicy) -> str | None:
     """WHY the serving gate should fire now, or None to keep accumulating.
