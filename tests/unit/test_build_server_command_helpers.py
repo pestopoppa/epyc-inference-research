@@ -52,6 +52,23 @@ def _write_launch_prior(
     return path
 
 
+def _point_prior_templates_at_tmp_path(tmp_path: Path, monkeypatch) -> None:
+    """Keep launch-command fixtures independent of the host model-template tree."""
+    payload = yaml.safe_load(Path(oss.STACK_PRIORS_PATH).read_text(encoding="utf-8"))
+    for role, record in payload.get("roles", {}).items():
+        launch = ((record.get("serving") or {}).get("launch") or {})
+        runtime = launch.get("runtime") or {}
+        flags = runtime.get("flags") or {}
+        if not flags.get("chat_template_file"):
+            continue
+        template = tmp_path / f"{role}-template.jinja"
+        template.write_text("{{ messages }}", encoding="utf-8")
+        flags["chat_template_file"] = str(template)
+    priors = tmp_path / "runner-local-stack-priors.yaml"
+    priors.write_text(yaml.safe_dump(payload, sort_keys=False), encoding="utf-8")
+    monkeypatch.setattr(oss, "STACK_PRIORS_PATH", priors)
+
+
 def _flag_value(cmd: list[str], flag: str) -> str | None:
     if flag not in cmd:
         return None
@@ -447,7 +464,9 @@ def test_build_worker_general_command_engages_mtp_path() -> None:
     assert cmd[cmd.index("--reasoning") + 1] == "off"
 
 
-def test_worker_general_launch_witness_is_its_host_primary_role_command() -> None:
+def test_worker_general_launch_witness_is_its_host_primary_role_command(
+    tmp_path: Path, monkeypatch,
+) -> None:
     """Renamed from ``test_build_worker_general_command_matches_stack_prior_launch_witness``.
 
     Since the 2026-09-22 lineup cutover (860b0b2d) worker_general launches NOTHING:
@@ -463,6 +482,7 @@ def test_worker_general_launch_witness_is_its_host_primary_role_command() -> Non
     launcher deliberately suppresses same-realpath ``-md`` while keeping
     ``--spec-type``/``--spec-draft-n-max``.
     """
+    _point_prior_templates_at_tmp_path(tmp_path, monkeypatch)
     alias_launch = _stack_prior_role("worker_general")["serving"]["launch"]
     entries = alias_launch["entries"]
     assert entries and all(entry["alias"] is True for entry in entries)
@@ -663,7 +683,9 @@ def test_build_worker_general_command_falls_back_to_llama_server_without_priors(
     assert cmd[0] == str(oss.LLAMA_SERVER)
 
 
-def test_worker_lane_host_command_uses_numa_thread_count_per_instance() -> None:
+def test_worker_lane_host_command_uses_numa_thread_count_per_instance(
+    tmp_path: Path, monkeypatch,
+) -> None:
     """Sub-full instances must get the per-instance thread count from NUMA_CONFIG.
 
     Renamed from ``test_build_worker_general_command_uses_numa_thread_count_for_port``.
@@ -679,6 +701,7 @@ def test_worker_lane_host_command_uses_numa_thread_count_per_instance() -> None:
     full machine's — the over-subscription the launcher bug once applied to every
     sub-full instance.
     """
+    _point_prior_templates_at_tmp_path(tmp_path, monkeypatch)
     from scripts.server import stack_manifest
 
     host, _row, _binding = stack_manifest.master_server_row("worker_general")

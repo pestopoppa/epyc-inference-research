@@ -10,6 +10,7 @@ import importlib.util
 import json
 import re
 import sys
+import types
 from pathlib import Path
 
 
@@ -37,6 +38,36 @@ MANIFEST = {
 
 def _cpus(s: str) -> set[int]:
     return affinity_preflight._parse_cpulist(s)
+
+
+def _bind_canonical_lane_fold_without_a_kernel_store(monkeypatch) -> None:
+    """Load the real pure fold helper without resolving a production GPU binary.
+
+    The lane module resolves its GPU store at import time. These tests exercise
+    only the canonical CPU-set fold, so provide the minimal lane constants and
+    disabled-flag function needed to import the real lease module; no launch
+    path or fake kernel asset is exercised.
+    """
+    lane = types.ModuleType("scripts.server.gpu_shadow_lane")
+    lane.GpuShadowLaneDisabled = type("GpuShadowLaneDisabled", (RuntimeError,), {})
+    lane.LANE_DEVICE = "ROCm0"
+    lane.LANE_HOST_CPUSET = "184-191"
+    lane.LANE_NAME = "gpu_shadow_lane"
+    lane.lane_enabled = lambda *_args, **_kwargs: False
+    monkeypatch.setitem(sys.modules, "scripts.server.gpu_shadow_lane", lane)
+
+    name = "_ssu_f13_test_gpu_shadow_lane_lease"
+    path = Path(__file__).resolve().parents[2] / "scripts/server/gpu_shadow_lane_lease.py"
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
+    lease = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, name, lease)
+    spec.loader.exec_module(lease)
+    monkeypatch.setattr(
+        affinity_preflight,
+        "_fold_cpus_to_physical",
+        lease.fold_cpus_to_physical,
+    )
 
 
 def _patch_live(monkeypatch, *, pids=None, unions=None, procs=None):
@@ -469,13 +500,14 @@ def test_foreign_allow_pattern_records_but_does_not_gate(monkeypatch, tmp_path):
     assert len(art2["foreign_llama_overlaps"]) == 1
     assert rc2 != 0 and art2["live_affinity_verified"] is False
 
-def test_smt_fold_makes_the_gpu_lane_visible_to_a_full_machine_cell() -> None:
+def test_smt_fold_makes_the_gpu_lane_visible_to_a_full_machine_cell(monkeypatch) -> None:
     """E5 protection defect: the logical-id intersection reported ZERO overlap.
 
     GPU host threads sit on 184-191, which are the SMT siblings of physical 88-95.
     An E5 cell on 0-95 owns those physical cores, so the two genuinely contend —
     but their LOGICAL id sets are disjoint, so the old gate saw nothing at all.
     """
+    _bind_canonical_lane_fold_without_a_kernel_store(monkeypatch)
     lane = set(range(184, 192))
     cell = set(range(0, 96))
     assert not (lane & cell), "premise: the logical sets really are disjoint"
@@ -483,13 +515,14 @@ def test_smt_fold_makes_the_gpu_lane_visible_to_a_full_machine_cell() -> None:
     assert physical == set(range(88, 96)), physical
 
 
-def test_physical_overlap_is_empty_for_a_genuinely_disjoint_half() -> None:
+def test_physical_overlap_is_empty_for_a_genuinely_disjoint_half(monkeypatch) -> None:
     """The guard must not forbid its own compliant idiom.
 
     HALF_A (0-47,96-143) is GPU-DISJOINT by construction — that is why the half
     fleet exists. If folding reported contention here too, every shape would look
     contended and the signal would be worthless.
     """
+    _bind_canonical_lane_fold_without_a_kernel_store(monkeypatch)
     lane = set(range(184, 192))
     half_a = set(range(0, 48)) | set(range(96, 144))
     assert affinity_preflight._physical_overlap(lane, half_a) == set()

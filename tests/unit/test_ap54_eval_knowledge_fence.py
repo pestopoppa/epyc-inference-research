@@ -1148,16 +1148,39 @@ def test_unarmed_python_launch_is_output_identical(llm_root: Path, monkeypatch) 
 _CONTAINER_TMP = "/mnt/raid0/llm/tmp"
 
 
-def _container_holds_fenced() -> bool:
-    roots = kf.fence_roots()
-    fenced = set(roots.fenced_dirs) | set(roots.explicit_roots) | set(roots.tree_only)
-    return any(f.startswith(_CONTAINER_TMP + "/") for f in fenced)
+@pytest.fixture
+def _container_tmp_with_real_fenced_child(monkeypatch):
+    """Materialize one disposable protected child beneath the container TMPDIR.
+
+    The nominal default artifact-root path is included in ``fence_roots`` even
+    when it does not exist. Landlock only receives existing roots, so create an
+    actual child and assert it reaches the kernel fence before testing the
+    inherited parent directory.
+    """
+    import shutil
+    import tempfile
+
+    if not Path(_CONTAINER_TMP).is_dir():
+        pytest.skip("no container tmp dir on this host")
+    protected = Path(
+        tempfile.mkdtemp(prefix="ap54-fenced-child-", dir=_CONTAINER_TMP)
+    )
+    monkeypatch.setenv("AUTOPILOT_EVAL_ARTIFACT_ROOT", str(protected))
+    try:
+        fk.reset_caches()
+        roots = kf.fence_roots()
+        assert str(protected) in roots.explicit_roots
+        assert str(protected) in fk.kernel_fenced_paths(roots)
+        yield protected
+    finally:
+        shutil.rmtree(protected, ignore_errors=True)
+        fk.reset_caches()
 
 
 @_kernel
-def test_armed_tempfile_works_with_inherited_container_tmpdir(monkeypatch) -> None:
-    if not Path(_CONTAINER_TMP).is_dir() or not _container_holds_fenced():
-        pytest.skip("no fenced-sibling container tmp dir on this host")
+def test_armed_tempfile_works_with_inherited_container_tmpdir(
+    monkeypatch, _container_tmp_with_real_fenced_child: Path,
+) -> None:
     monkeypatch.setenv("TMPDIR", _CONTAINER_TMP)
     monkeypatch.setattr(__import__("tempfile"), "tempdir", None)  # re-read TMPDIR
     code = (
@@ -1171,11 +1194,11 @@ def test_armed_tempfile_works_with_inherited_container_tmpdir(monkeypatch) -> No
 
 
 @_kernel
-def test_inherited_container_tmpdir_is_itself_unwritable(monkeypatch) -> None:
+def test_inherited_container_tmpdir_is_itself_unwritable(
+    monkeypatch, _container_tmp_with_real_fenced_child: Path,
+) -> None:
     """Negative control: the redirect is needed, because Landlock denies creating a
     file directly in the container dir (widening it would reach the fenced subtrees)."""
-    if not Path(_CONTAINER_TMP).is_dir() or not _container_holds_fenced():
-        pytest.skip("no fenced-sibling container tmp dir on this host")
     code = (
         "import os\n"
         "p = '" + _CONTAINER_TMP + "/direct_' + str(os.getpid())\n"

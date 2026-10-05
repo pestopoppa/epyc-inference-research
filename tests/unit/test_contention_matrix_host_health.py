@@ -27,6 +27,7 @@ probe directly.
 from __future__ import annotations
 
 import json
+import sys
 import types
 
 import pytest
@@ -249,8 +250,15 @@ def test_lineup_resolution_is_not_needed_on_an_empty_host() -> None:
     assert probe["decision_grade"] is True
 
 
-def test_the_declared_lineup_covers_fulls_halves_and_embedders() -> None:
+def test_the_declared_lineup_covers_fulls_halves_and_embedders(monkeypatch) -> None:
     """The real resolver, against the declared artifacts (no process touched)."""
+    from scripts.server import stack_manifest, stack_numa
+
+    # contention_matrix imports these helpers by their legacy top-level names.
+    # Bind those names to the already-loaded canonical modules so this fixture
+    # doesn't import stack_manifest a second time and re-read actual host RAM.
+    monkeypatch.setitem(sys.modules, "stack_manifest", stack_manifest)
+    monkeypatch.setitem(sys.modules, "stack_numa", stack_numa)
     ports = cm._expected_lineup_ports()
     from stack_numa import NUMA_CONFIG
     import stack_manifest
