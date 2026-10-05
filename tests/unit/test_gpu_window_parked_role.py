@@ -143,7 +143,8 @@ def test_cli_park_status_restore(window, capsys, monkeypatch):
     monkeypatch.setattr(gwe, "live_ops", lambda: gwe.StackOps(
         stop=lambda c: True, reload=lambda c: True, get_json=lambda u, t: (0, None),
         post_json=lambda u, b, t: (0, None), pids_on_port=lambda p: [],
-        proc_maps=lambda pid: [], proc_exe=lambda pid: "", device_held=lambda d: False))
+        proc_maps=lambda pid: [], proc_exe=lambda pid: "", device_held=lambda d: False,
+        kfd_pids=lambda: [], gpu_quiet_exclusive=lambda: []))
     monkeypatch.setattr(gwe, "serving_proof", lambda ops, port: (True, "ok"))
     rc = gw.main(["park", "--roles", ",".join(PARKED_ROLES), "--ports", "8083",
                   "--holder", "autokernel", "--expected-end", "+45m"])
