@@ -19,10 +19,13 @@ So `cross_encoder` deliberately uses 16 while its siblings use 8, and
 from "harmonising" them back to one number. That would look like cleanup and cost
 40% on the batched path, silently, with every test still green.
 
-WHAT IS PINNED. Behaviour, not spelling: that SessionOptions reaches the real
-InferenceSession call with a positive intra-op bound strictly below the host core
-count. `< os.cpu_count()` is the load-bearing assertion — it is what fails if
-anyone drops the options and returns to ORT's default.
+WHAT IS PINNED. Behaviour, not spelling: SessionOptions reaches the real
+InferenceSession call with the exact measured default (8 for single-row ColBERT,
+16 for batched cross-encoder), `inter_op_num_threads=1`, and the CPU provider.
+The default must remain identical when the visible CPU count is mocked to 1, 8,
+16, or 192; this is a deterministic configuration contract, not a claim about
+host topology or performance. The separate benchmark records the production
+topology and call-shape measurements.
 """
 from __future__ import annotations
 
