@@ -1399,10 +1399,34 @@ server_mode:
     # np4/196608/kvu/q8-draft/d4 = 40,522 MiB (epyc-inference-research
     # artifacts/np_context_kvu_study_20260924/q38_27b_q8_loadonly/loadonly.txt).
     slots: 4
-    # llama-server --cache-ram (MiB): host-RAM prompt cache. Under kv_unified idle slots are
-    # saved here AND cleared from VRAM when a new task starts (server-context.cpp:2469-2482),
-    # so this is where warm prefixes survive. Default is 8192. Operator-approved 2026-09-24.
+    # llama-server --cache-ram (MiB): host-RAM prompt cache. Default is 8192. Operator-approved
+    # 2026-09-24. (Until 2026-10-04 idle slots were saved here AND cleared from VRAM at every
+    # task launch, server-context.cpp:2469-2484; see cache_idle_slots below for what changed.)
     cache_ram: 65536
+    # ── 2026-10-04 (STACKCHG-8083BATCH-20261004 part A, operator-decided): --no-cache-idle-slots ──
+    # false -> launcher emits `--no-cache-idle-slots`; true -> `--cache-idle-slots`; absent ->
+    # nothing (server default ON whenever --cache-ram > 0). With it ON, every task launch
+    # serialises each idle slot to this RAM cache and, under kv_unified, clears it from the
+    # pool, so the next turn of that conversation restores it from RAM. With it OFF, an idle
+    # slot keeps its KV in the pool; it reaches this cache only when the slot is reused for
+    # another prompt (slot selection, server-context.cpp:1650-1700), and it is DROPPED with no
+    # cache copy if the server purges idle slots because the pool is full (try_clear_idle_slots,
+    # :1716-1740, on "failed to find a memory slot").
+    # EVIDENCE (UFH14-B4i scratch A/B on :18083, this exact argv at -c 393216, n=1 rep per arm,
+    # 3 conversations x 6 turns, ~20k base + 1.5k per turn; durable copies
+    # data/stackchg-8083batch-20261004/b4i/{ON-r1-20261004T040819Z,OFF-r1-20261004T042211Z}/report.json
+    # (SHA256SUMS alongside; runners: epyc-root origin/main 67637155 gpu-block-27b-20261004):
+    #   turn-2+ TTFT median  ON 66.4 s  vs  OFF 16.3 s   (p90 81.0 vs 19.2)
+    #   hit_tok              ON 0.809   vs  OFF 0.808    (same cache reuse)
+    #   decode tok/s mean    ON 18.8    vs  OFF 20.8;   KFD peak 51.707 GiB in BOTH arms
+    #   ON cleared 9 idle slots of 20-29k tokens each; at the SAME hit rate every later turn
+    #   paid ~50 s more TTFT (66.4 - 16.3), the idle-slot save/restore through RAM.
+    # COST NOT MEASURED BY B4i: its 3 x ~30k never filled the 393216 pool. Under pool pressure
+    # (e.g. a 262144-token ingest_long_context request beside three idle ~60k conversations)
+    # OFF purges an idle conversation outright where ON would have kept a RAM copy, and its
+    # next turn re-prefills. The orchestrator's prefix credit models that loss path
+    # (src/scheduling/prefix_history.py, "Idle-slot purge").
+    cache_idle_slots: false
     serving_shape:
       # ── THE GPU CAP, RECOMPUTED 2026-09-22 ON A CORRECTED KV RATE ───────────────
       # ⚠ THE OLD BANNER'S ARITHMETIC WAS WRONG IN ITS INPUT, NOT IN ITS METHOD, AND
@@ -1501,8 +1525,8 @@ server_mode:
       # WHY: every one of the 17 pool-exhaustion episodes in logs/llama-server-8083.log
       # (lines 35063-213100, 456 "failed to find a memory slot") was FOUR live requests filling
       # the whole 196608 pool (four ~45-55k contexts). 393216 holds four concurrent p90 prompts
-      # (4 x 86,988 = 347,952). Decision package: /mnt/raid0/llm/tmp/kv-sizing-8083-20261003/
-      # DECISION.md (option (a) at 393216; np 4, kv_unified, q8_0 K/V all UNCHANGED).
+      # (4 x 86,988 = 347,952). Decision package (durable copy):
+      # data/stackchg-8083batch-20261004/kv-sizing-8083-20261003-DECISION.md (option (a) at 393216; np 4, kv_unified, q8_0 K/V all UNCHANGED).
       # PER-REQUEST CAP = 262144 = n_ctx_train (GGUF `qwen35.context_length`, read 2026-10-03
       # from Qwen3.8-27B-Q8_0.gguf). Under kv_unified n_ctx_seq = -c = 393216 > n_ctx_train, and
       # the v10 server CAPS EVERY SLOT at n_ctx_train itself (llama.cpp ffc1bac82
@@ -11566,7 +11590,7 @@ roles:
         - "2026-10-01 operator: ALWAYS use dflash2 (for the 27B)"
         evidence:
         - artifacts/architect-bench-gpu-20260814/dflash2_np1_20260820/campaign-summary.json
-        qualification_note: "v10 was qualified on candidate DFlash2 vs v9 MTP self-draft (epyc-root artifacts/operator/v10-qualification-20260921-ffc1bac82.json)"
+        qualification_note: "v10 was qualified on candidate DFlash2 vs v9 MTP self-draft (/workspace/artifacts/operator/v10-qualification-20260921-ffc1bac82.json)"
     memory:
       residency: cold
       pinned: false
