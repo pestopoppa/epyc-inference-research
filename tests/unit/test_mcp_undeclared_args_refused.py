@@ -71,10 +71,35 @@ def test_every_orchestrator_tool_declares_session_id():
     assert missing == []
 
 
+def test_chat_context_is_injected_and_default_schema_stays_caller_safe(monkeypatch):
+    async def _schema():
+        async with Client(mcp) as client:
+            tools = {tool.name: tool for tool in await client.list_tools()}
+            chat = tools["orchestrator_chat"].inputSchema
+            assert "ctx" not in chat.get("properties", {})
+            assert "timeout_s" not in chat.get("required", [])
+            assert chat["properties"]["timeout_s"]["type"] == "integer"
+            return await client.call_tool("orchestrator_chat", {"prompt": "hi"}, raise_on_error=False)
+
+    # The following test configures a fast fake endpoint response; no inference occurs.
+    monkeypatch.setattr(mcp_server, "_is_mcp_chat_enabled", lambda: True)
+
+    async def post_chat(_payload):
+        return {"answer": "ok"}
+
+    monkeypatch.setattr(mcp_server, "_post_chat_async", post_chat)
+    result = _run(_schema())
+    assert not result.is_error
+
+
 @pytest.mark.parametrize("tool", ["orchestrator_chat", "orchestrator_route_explain"])
 def test_stamped_session_id_reaches_the_chat_payload(tool, monkeypatch):
     sent: list[dict] = []
     monkeypatch.setattr(mcp_server, "_is_mcp_chat_enabled", lambda: True)
+    async def post_chat(payload):
+        sent.append(payload)
+        return {"answer": "ok"}
+    monkeypatch.setattr(mcp_server, "_post_chat_async", post_chat)
     monkeypatch.setattr(mcp_server, "_post_chat", lambda payload: sent.append(payload) or {"answer": "ok"})
 
     async def _call():
@@ -104,8 +129,14 @@ def test_stamped_session_id_is_accepted_by_a_session_independent_tool():
 def test_empty_session_id_is_not_forwarded(tool, monkeypatch):
     sent: list[dict] = []
     monkeypatch.setattr(mcp_server, "_is_mcp_chat_enabled", lambda: True)
+    async def post_chat_async(payload):
+        sent.append(payload)
+        return {"answer": "ok"}
+    monkeypatch.setattr(mcp_server, "_post_chat_async", post_chat_async)
     monkeypatch.setattr(mcp_server, "_post_chat", lambda payload: sent.append(payload) or {"answer": "ok"})
-    getattr(mcp_server, tool)("hi")
+    result = getattr(mcp_server, tool)("hi")
+    if tool == "orchestrator_chat":
+        _run(result)
     assert "session_id" not in sent[0]
 
 

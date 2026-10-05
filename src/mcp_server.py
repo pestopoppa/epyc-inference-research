@@ -22,13 +22,16 @@ Configuration (.mcp.json):
 
 from __future__ import annotations
 
+import asyncio
 import csv
 import json
 import logging
 import sys
+import time
 from pathlib import Path
 
 from fastmcp import FastMCP
+from fastmcp import Context
 
 logger = logging.getLogger(__name__)
 
@@ -359,6 +362,8 @@ def reload_plugins(session_id: str = "") -> str:
 # ---------------------------------------------------------------------------
 
 _ORCHESTRATOR_API_URL = None
+_MCP_PROGRESS_INTERVAL_S = 5
+_MAX_MCP_CHAT_TIMEOUT_S = 120
 
 
 def _get_api_url() -> str:
@@ -408,6 +413,54 @@ def _post_chat(payload: dict) -> dict:
         return {"error": f"Invalid JSON response: {exc}"}
 
 
+async def _post_chat_async(payload: dict) -> dict:
+    """POST asynchronously so cancellation closes the request and its socket."""
+    import httpx
+
+    url = f"{_get_api_url()}/chat"
+    timeout_s = payload.get("timeout_s", 120)
+    try:
+        async with httpx.AsyncClient(timeout=timeout_s + 5) as client:
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
+            return response.json()
+    except httpx.TimeoutException:
+        return {"error": f"Request timed out after {timeout_s}s"}
+    except httpx.HTTPStatusError as exc:
+        return {"error": f"Orchestrator returned HTTP {exc.response.status_code}"}
+    except httpx.RequestError as exc:
+        return {"error": f"Orchestrator not reachable at {url}: {exc}"}
+    except json.JSONDecodeError as exc:
+        return {"error": f"Invalid JSON response: {exc}"}
+
+
+async def _await_chat_request(payload: dict, ctx: Context | None) -> dict:
+    """Keep a single cancellable HTTP task and report progress while it runs."""
+    request_task = asyncio.create_task(_post_chat_async(payload))
+    started = time.monotonic()
+    timeout_s = payload.get("timeout_s", 120)
+    progress_total = timeout_s + 5
+    try:
+        while True:
+            done, _ = await asyncio.wait(
+                {request_task}, timeout=min(_MCP_PROGRESS_INTERVAL_S, timeout_s)
+            )
+            if done:
+                return request_task.result()
+            if ctx is not None:
+                elapsed = min(time.monotonic() - started, progress_total)
+                await ctx.report_progress(
+                    elapsed, progress_total, "Orchestrator request is running"
+                )
+    finally:
+        if not request_task.done():
+            request_task.cancel()
+            try:
+                await request_task
+            except asyncio.CancelledError:
+                pass
+
+
 def _format_chat_response(resp: dict) -> str:
     """Format a ChatResponse dict into a readable MCP tool result."""
     if "error" in resp:
@@ -449,13 +502,14 @@ def _format_chat_response(resp: dict) -> str:
 
 
 @mcp.tool()
-def orchestrator_chat(
+async def orchestrator_chat(
     prompt: str,
     context: str = "",
     force_role: str = "",
     force_mode: str = "",
     timeout_s: int = 120,
     session_id: str = "",
+    ctx: Context | None = None,
 ) -> str:
     """Send a prompt to the local orchestrator for inference via the full routing pipeline.
 
@@ -472,6 +526,7 @@ def orchestrator_chat(
         timeout_s: Request timeout in seconds (default 120).
         session_id: Shell session identifier. Forwarded as ``ChatRequest.session_id``
                     when non-empty (the OpenCode plugin stamps it on every call).
+        ctx: MCP request context used for progress notifications.
 
     Returns:
         The model's response with routing metadata.
@@ -479,7 +534,12 @@ def orchestrator_chat(
     if not _is_mcp_chat_enabled():
         return "CC Local integration disabled. Set ORCHESTRATOR_CLAUDE_CODE_MCP_CHAT=1 to enable."
 
-    import time
+    if (
+        isinstance(timeout_s, bool)
+        or not isinstance(timeout_s, int)
+        or not 1 <= timeout_s <= _MAX_MCP_CHAT_TIMEOUT_S
+    ):
+        return f"Error: timeout_s must be an integer from 1 to {_MAX_MCP_CHAT_TIMEOUT_S} seconds"
 
     payload: dict = {
         "prompt": prompt,
@@ -497,7 +557,16 @@ def orchestrator_chat(
     if session_id:
         payload["session_id"] = session_id
 
-    resp = _post_chat(payload)
+    if ctx is not None:
+        progress_total = timeout_s + 5
+        await ctx.report_progress(0, progress_total, "Submitting request to the orchestrator")
+    try:
+        async with asyncio.timeout(timeout_s + 5):
+            resp = await _await_chat_request(payload, ctx)
+    except TimeoutError:
+        resp = {"error": f"Request timed out after {timeout_s}s"}
+    if ctx is not None:
+        await ctx.report_progress(progress_total, progress_total, "Orchestrator request finished")
     return _format_chat_response(resp)
 
 
