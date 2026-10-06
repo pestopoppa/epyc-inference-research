@@ -10,6 +10,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import types
 from pathlib import Path
 
@@ -43,6 +44,55 @@ from src.registry.stack_priors import STACK_PRIORS_VERSION, stack_priors_contrac
 def _write_yaml(path: Path, data: dict) -> Path:
     path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     return path
+
+
+@pytest.fixture
+def _synthetic_stack_manifest_meminfo(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make the two launch-helper import controls independent of runner RAM.
+
+    stack_manifest reads /proc/meminfo once at import time. The captured GitHub
+    runner has 15.61 GiB while the production capacity contract reserves 64 GiB,
+    so these pure helper tests need a synthetic import-only value. This fixture
+    primes the exact module under a narrowly patched Path.read_text, then removes
+    that cached module at teardown so the synthetic value cannot leak to later
+    tests. Every other path read delegates to Path.read_text unchanged. The
+    recipe separately records the runner's physical /proc/meminfo as context.
+    """
+    import importlib
+
+    module_name = "scripts.server.stack_manifest"
+    missing = object()
+    cached_module = sys.modules.pop(module_name, missing)
+    server_package = sys.modules.get("scripts.server")
+    cached_attribute = (
+        getattr(server_package, "stack_manifest", missing)
+        if server_package is not None
+        else missing
+    )
+    if server_package is not None and cached_attribute is not missing:
+        delattr(server_package, "stack_manifest")
+
+    original_read_text = Path.read_text
+
+    def synthetic_meminfo(path: Path, *args, **kwargs) -> str:
+        if path == Path("/proc/meminfo"):
+            return "MemTotal: 1073741824 kB\n"
+        return original_read_text(path, *args, **kwargs)
+
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(Path, "read_text", synthetic_meminfo)
+            importlib.import_module(module_name)
+        yield
+    finally:
+        sys.modules.pop(module_name, None)
+        if server_package is not None:
+            if hasattr(server_package, "stack_manifest"):
+                delattr(server_package, "stack_manifest")
+            if cached_attribute is not missing:
+                setattr(server_package, "stack_manifest", cached_attribute)
+        if cached_module is not missing:
+            sys.modules[module_name] = cached_module
 
 
 def _consumer_surface(surface_id: str = "unit_consumer") -> dict:
@@ -3194,7 +3244,9 @@ def test_staleness_check_is_reachable_from_the_guard_cli(staleness_repo, capsys)
     assert "OK: source artifacts match the pins" in clean_out
 
 
-def test_launch_view_rejects_invalid_explicit_numa_mode_as_could_not_check() -> None:
+def test_launch_view_rejects_invalid_explicit_numa_mode_as_could_not_check(
+    _synthetic_stack_manifest_meminfo: None,
+) -> None:
     """NIB2-69: an explicit launch mode is never silently normalised to a default."""
     targets, view_errors = stack_change_guard._launch_manifest_targets_or_error(
         launch_numa_mode="halves"
@@ -3207,6 +3259,7 @@ def test_launch_view_rejects_invalid_explicit_numa_mode_as_could_not_check() -> 
 
 def test_explicit_launch_numa_mode_bypasses_realized_fleet_probe(
     monkeypatch: pytest.MonkeyPatch,
+    _synthetic_stack_manifest_meminfo: None,
 ) -> None:
     def _probe_must_not_run() -> str:
         raise AssertionError("explicit launch mode must not consult the realized fleet")
@@ -3227,11 +3280,12 @@ def test_standalone_guard_uses_declared_mode_despite_ambient_and_fleet(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     topology = tmp_path / "orchestration" / "stack_topology.yaml"
+    topology.parent.mkdir(parents=True)
     _write_yaml(topology, {"numa_mode": "both"})
     scanner_root = tmp_path / "scanner-root"
-    _write_yaml(
-        scanner_root / "orchestration" / "stack_topology.yaml", {"numa_mode": "quarter"}
-    )
+    scanner_topology = scanner_root / "orchestration" / "stack_topology.yaml"
+    scanner_topology.parent.mkdir(parents=True)
+    _write_yaml(scanner_topology, {"numa_mode": "quarter"})
     monkeypatch.setattr(stack_change_guard, "REPO_ROOT", tmp_path)
     monkeypatch.setenv("ORCHESTRATOR_STACK_NUMA_MODE", "full")
 
