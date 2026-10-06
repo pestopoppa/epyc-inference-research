@@ -301,9 +301,10 @@ class TestBasicREPLExecution:
 
     @pytest.mark.asyncio
     async def test_cross_request_roundtrip_restores_globals(
-        self, basic_routing, mock_primitives, tmp_path
+        self, basic_routing, mock_primitives, tmp_path, monkeypatch
     ):
         """End-to-end stage roundtrip: request1 saves globals, request2 restores them."""
+        monkeypatch.setenv("ORCHESTRATOR_SESSION_HMAC_KEY", "ni07-test-key")
         store = SQLiteSessionStore(
             db_path=tmp_path / "sessions.db",
             embeddings_path=tmp_path / "embeddings.npy",
@@ -335,10 +336,12 @@ class TestBasicREPLExecution:
             run_count["n"] += 1
             if run_count["n"] == 1:
                 task_deps.repl._globals["persist_me"] = {"x": 42}
+                task_deps.repl._globals["persist_set"] = {"alpha", "beta"}
                 return TaskResult(answer="saved", success=True, turns=1, role_history=["frontdoor"])
             restored = task_deps.repl._globals.get("persist_me")
+            restored_set = task_deps.repl._globals.get("persist_set")
             return TaskResult(
-                answer=f"restored={restored}",
+                answer=f"restored={restored}; set={sorted(restored_set or set())}",
                 success=True,
                 turns=1,
                 role_history=["frontdoor"],
@@ -370,6 +373,7 @@ class TestBasicREPLExecution:
         assert r2.session_persistence["restore_success"] is True
         assert r2.session_persistence["restored_globals"] >= 1
         assert "restored={'x': 42}" in r2.answer
+        assert "set=['alpha', 'beta']" in r2.answer
 
 
 # ── Generation Monitoring ────────────────────────────────────────────────
