@@ -27,7 +27,7 @@
   "policy_evidence": [
     {
       "evidence_id": "ev-gfx90a-sol-bound-quality-20260815",
-      "path": "/workspace/handoffs/active/agentic-rocm-kernel-authoring.md",
+      "path": "repo://scripts/kernel_rnd/autokernel/evidence/c5-sol-bound-policy-20260815.md",
       "sha256": "c8cec57941b5c0954cd65b44719b984612d9c25094fce3e2ef4bcd42e8ec4f70",
       "claims": [
         "k215 has meaningful SOL-bound quality at 6.8x median headroom",
