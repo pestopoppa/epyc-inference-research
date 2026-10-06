@@ -623,6 +623,7 @@ def build_report(
     }
     return {
         "schema_version": REPORT_SCHEMA,
+        "category": "BASELINE",
         "generated_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
         "measurement_class": "OBSERVATION",
         "config": asdict(cfg),

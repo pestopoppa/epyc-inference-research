@@ -404,6 +404,7 @@ def summarize(trajs: list[Trajectory]) -> dict:
     auto_final_single_turn = [t.traj_id for t in voluntary if t.auto_finalized_single_turn]
 
     return {
+        "category": "BASELINE",
         "prior_reference": {
             "source": "stock OpenCode + GPT-OSS-20B-low",
             "unexecuted_edit_before_stop": "110/248 voluntary stops",
