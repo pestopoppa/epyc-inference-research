@@ -1,0 +1,7 @@
+{
+  "schema": "utm-v3-synthetic-rubric/1",
+  "purpose": "Structural contract fixture; no semantic gold, source resolution, or quality claim.",
+  "semantic_gold": null,
+  "semantic_axes": ["source_resolution", "privacy", "scope", "freshness", "poisoning", "manipulation"],
+  "required_readout": ["case_manifest_sha256", "rubric_sha256", "case_counts", "structural_dispositions", "parser_dispositions", "resolved_denominator", "unresolved_denominator", "reader_agreement_not_accuracy", "semantic_gold_accuracy", "semantic_calibration", "case_sha256"]
+}
