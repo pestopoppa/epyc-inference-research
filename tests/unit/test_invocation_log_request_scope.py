@@ -281,36 +281,58 @@ def test_snapshot_serializes_concurrent_ring_writes(writer_operation):
     assert [entry.tool_name for entry in registry.get_invocation_log()] == expected
 
 
-# ── No reader of the shared log may build per-request telemetry ─────────────
+# ── No route may read the shared log for per-request telemetry ──────────────
 
 
-@pytest.mark.parametrize(
-    "module_path",
-    [
-        "src/api/routes/chat_pipeline/stages.py",
-        "src/api/routes/chat_delegation.py",
-        "src/api/routes/chat.py",
-        "src/api/routes/chat_pipeline/stream_adapter.py",
-        "src/api/routes/chat_pipeline/repl_executor.py",
-    ],
-)
-def test_request_path_does_not_read_the_process_global_log(module_path):
-    """Structural guard: these request-scoped modules must not CALL
-    get_invocation_log(). Parsed with ast, so the prose that explains why they
-    must not (comments and docstrings) does not trip the guard."""
+def _global_invocation_log_calls(source: str) -> list[int]:
+    """Return call lines that read the process-global invocation log.
+
+    Parse Python syntax, rather than grep: comments and strings that explain the
+    hazard are harmless. Request-local ``repl._invoked_tools`` remains allowed.
+    """
     import ast
-    from pathlib import Path
 
-    root = Path(__file__).resolve().parents[2]
-    tree = ast.parse((root / module_path).read_text())
-    offenders = [
+    tree = ast.parse(source)
+    return [
         node.lineno
         for node in ast.walk(tree)
         if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "get_invocation_log"
+        and (
+            (isinstance(node.func, ast.Attribute) and node.func.attr == "get_invocation_log")
+            or (isinstance(node.func, ast.Name) and node.func.id == "get_invocation_log")
+        )
     ]
+
+
+def test_request_paths_do_not_read_the_process_global_log():
+    """Scan every current route source so a new endpoint joins the guard."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[2]
+    route_root = root / "src/api/routes"
+    offenders = {}
+    for path in sorted(route_root.rglob("*.py")):
+        module_path = path.relative_to(root).as_posix()
+        lines = _global_invocation_log_calls(path.read_text(encoding="utf-8"))
+        if lines:
+            offenders[module_path] = lines
+
     assert not offenders, (
-        f"{module_path} still reads the process-global log at line(s) {offenders}; "
-        "per-request telemetry must come from repl._invoked_tools"
+        "route code must not read the process-global log for request telemetry; "
+        f"per-request records must come from repl._invoked_tools: {offenders}"
     )
+
+
+def test_route_guard_detects_calls_but_ignores_comments_strings_and_request_local_log():
+    """Pin both the forbidden syntax and the legitimate request-local spelling."""
+    assert _global_invocation_log_calls(
+        "registry.get_invocation_log()\n"
+    ) == [1]
+    assert _global_invocation_log_calls(
+        "get_invocation_log()\n"
+    ) == [1]
+    assert _global_invocation_log_calls(
+        "# registry.get_invocation_log()\n"
+        "note = 'registry.get_invocation_log()'\n"
+        "calls = list(getattr(repl, '_invoked_tools', None) or [])\n"
+    ) == []
