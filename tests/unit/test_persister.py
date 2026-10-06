@@ -289,7 +289,8 @@ class TestSaveCheckpoint:
         assert checkpoint.variable_lineage["total"]["role"] == "frontdoor"
         assert checkpoint.skipped_user_globals == ["tmp_lambda"]
 
-    def test_save_checkpoint_forwards_pickled_globals(self):
+    def test_save_checkpoint_forwards_pickled_globals(self, monkeypatch):
+        monkeypatch.setenv("ORCHESTRATOR_SESSION_HMAC_KEY", "ni07-forward-test-key")
         session_store = Mock()
         mock_session = Session(
             id="sess_123",
