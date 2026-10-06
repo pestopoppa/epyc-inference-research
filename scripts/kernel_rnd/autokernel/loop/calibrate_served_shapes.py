@@ -40,6 +40,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shlex
 import tempfile
 from datetime import datetime, timezone
@@ -74,6 +75,10 @@ DEFAULT_SHARDS = 16
 #: fix: exactly ONE region-lock claim wraps every shard; the shards run as background
 #: jobs of one `bash -c` script executed under that single claim.
 CALIBRATION_LOCK_TAG = "ak-served-shape-calibration"
+#: taskset/region-lock cpu-list syntax: comma-separated singles or ranges (e.g.
+#: "0-95" or "0,2-4,7"). Used to validate a RECORDED lock_cpu_list before trusting it
+#: to rebuild the expected lock-claim argv for import replay (Codex Astra review).
+CPU_LIST_RE = re.compile(r"^\d+(-\d+)?(,\d+(-\d+)?)*$")
 
 
 class Refused(RuntimeError):
@@ -377,6 +382,16 @@ def execute(build: Path, store: Path, recipe: dict, region_lock: str, lane: str,
         except subprocess.TimeoutExpired as exc:
             raise Refused(f"the correctness-mode region-lock claim timed out after "
                           f"{timeout_s}s (wraps all {n_shards} shards): {exc}") from exc
+        if claim.returncode != 0:
+            # Codex Astra review (2026-10-06): a non-zero outer exit must refuse even
+            # when every shard happened to record an rc file -- e.g. region-lock itself
+            # failing AFTER the wrapped script ran (a late acquisition fault, a
+            # region-lock bug, or anything else) must never be read as a passing run.
+            raise Refused(
+                f"the region-lock claim exited {claim.returncode} (wraps all {n_shards} "
+                f"shards); refusing even though shard exit codes were recorded -- an "
+                f"outer claim failure is never evidence of a passing run: "
+                f"{(claim.stderr or claim.stdout)[-600:]}")
         missing = [i for i in range(n_shards) if not rc_paths[i].is_file()]
         if missing:
             raise Refused(
@@ -488,8 +503,17 @@ def measurement_record_refusal(path: Path, launch: Path, lane: str,
                 "re-calibrate)")
     if body.get("partition") != [shape.name for shape in ssc.lane_served_shapes(lane)]:
         return f"{path} does not carry lane {lane}'s candidate partition"
+    # Codex Astra review (2026-10-06): rebuild the recipe's LOCK cpu list from the
+    # RECORD's own recorded lock_cpu_list (which may be narrowed or disjoint from the
+    # served topology, by design -- correctness mode needs no exclusivity), not from
+    # the served topology's default. Using `cpu_list=None` here would silently default
+    # back to the served list and refuse every honestly-narrowed-lock record forever.
+    # Still validated as a cpu-list before being trusted.
+    lock_cpu_list = prov.get("lock_cpu_list")
+    if not isinstance(lock_cpu_list, str) or not CPU_LIST_RE.fullmatch(lock_cpu_list):
+        return f"{path} carries no valid lock_cpu_list in provenance: {lock_cpu_list!r}"
     try:
-        recipe = served_recipe(launch, build, cpu_list=None, threads=None)
+        recipe = served_recipe(launch, build, cpu_list=lock_cpu_list, threads=None)
     except Refused as exc:
         return str(exc)
     n_shards = prov.get("shards")

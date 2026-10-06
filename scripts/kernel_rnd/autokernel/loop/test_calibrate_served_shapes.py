@@ -235,6 +235,41 @@ def test_a_failing_shard_fails_the_whole_execute_and_records_nothing(tmp_path):
         (store / "served_shape").glob("calibration-*.json"))
 
 
+def _fake_region_lock_with_late_failure(tmp: Path, exit_code: int) -> Path:
+    """Like `_fake_region_lock`, but runs the wrapped command (never via `exec`) and
+    THEN exits `exit_code` -- simulating a region-lock-side fault (a late
+    acquisition/release problem, say) that happens even though the wrapped fan-out
+    script itself ran every shard to completion and wrote every rc file. Codex Astra
+    review (2026-10-06): execute() must still refuse."""
+    script = tmp / "region-lock"
+    script.write_text(textwrap.dedent(f"""\
+        #!/bin/bash
+        echo call >> {tmp}/region-lock.calls
+        while [ "$1" != "--" ]; do shift; done; shift
+        "$@"
+        exit {exit_code}
+        """))
+    script.chmod(0o755)
+    return script
+
+
+def test_a_nonzero_claim_exit_refuses_even_when_every_shard_rc_file_exists(tmp_path, capsys):
+    """Codex Astra review (2026-10-06): execute() must refuse when the OUTER
+    region-lock claim itself exits non-zero, even though every shard's rc file was
+    written (e.g. every shard succeeded but region-lock faulted on release
+    afterward) -- an outer claim failure must never be read as a passing run."""
+    build = _fake_build(tmp_path)
+    lock = _fake_region_lock_with_late_failure(tmp_path, 13)
+    store = tmp_path / "s"
+    rc, out = _run("--store", store, "--anchor-build", build, "--launch", _launch(tmp_path),
+                   "--region-lock", lock, "--execute", "--lane", "q38fn", "--shards", "1")
+    assert rc == 2
+    assert "exited 13" in capsys.readouterr().err
+    assert len(_region_lock_invocations(tmp_path)) == 1   # the claim DID run
+    assert not (store / "served_shape").exists() or not list(
+        (store / "served_shape").glob("calibration-*.json"))
+
+
 def test_execute_then_apply_writes_manifest_and_stages_the_final_block(tmp_path):
     build, lock, store = _fake_build(tmp_path), _fake_region_lock(tmp_path), tmp_path / "s"
     tree = _tree(tmp_path)
@@ -517,6 +552,31 @@ def test_imported_measurements_must_match_the_intended_recipe(tmp_path):
                  "--lane", "q38fn", "--region-lock", lock)
     assert rc == 2   # binary changed above
     assert not (store / "served_shape" / "manifest.json").exists()
+
+
+def test_a_record_measured_under_a_narrowed_lock_cpu_list_imports_cleanly(tmp_path):
+    """Codex Astra review (2026-10-06): a record measured with --cpu-list narrowed (or
+    disjoint) from the served topology -- valid, since correctness mode needs no
+    exclusivity -- must still import via --measurements. The earlier bug rebuilt the
+    expected lock argv from the SERVED cpu list, ignoring the record's own
+    lock_cpu_list, so a narrowed-lock record could never be imported again."""
+    from unittest import mock
+    build, lock, store = _fake_build(tmp_path), _fake_region_lock(tmp_path), tmp_path / "s"
+    launch = _launch(tmp_path)   # served cpu list is "0-95"
+    assert _run("--store", store, "--anchor-build", build, "--launch", launch,
+                "--cpu-list", "0-47", "--region-lock", lock, "--execute",
+                "--lane", "q38fn")[0] == 0
+    record = next((store / "served_shape").glob("calibration-*.json"))
+    body = json.loads(record.read_text())
+    assert body["provenance"]["lock_cpu_list"] == "0-47"
+    assert body["provenance"]["cpu_list"] == "0-95"   # served topology, unaffected
+    with mock.patch.object(cal, "lane_profile_refusal", return_value=None):
+        why = cal.measurement_record_refusal(record, launch, "q38fn", str(lock))
+    assert why is None, why
+    rc, out = _run("--store", store, "--measurements", record, "--launch", launch,
+                   "--apply", "--lane", "q38fn", "--region-lock", lock)
+    assert rc == 0, out
+    assert (store / "served_shape" / "manifest.json").exists()
 
 
 def test_timeout_s_reaches_subprocess_call(tmp_path):
