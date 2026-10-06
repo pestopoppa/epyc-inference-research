@@ -73,7 +73,10 @@ def get_binary_paths(registry: Optional["ModelRegistry"] = None) -> dict[str, st
         try:
             registry = load_registry()
         except Exception:
-            return {
+            # The wrapper loader is the single patchable load attempt. Preserve
+            # its legacy binary names, then apply the same kernel-store policy
+            # as executor_paths without passing None (which would retry loading).
+            binaries = {
                 "base_dir": "/mnt/raid0/llm/llama.cpp/build/bin",
                 "completion": "llama-completion",
                 "speculative": "llama-speculative",
@@ -81,6 +84,14 @@ def get_binary_paths(registry: Optional["ModelRegistry"] = None) -> dict[str, st
                 "cli": "llama-cli",
                 "server": "llama-server",
             }
+            explicit = os.environ.get("ORCHESTRATOR_PATHS_LLAMA_CPP_BIN", "").strip()
+            if explicit:
+                binaries["base_dir"] = explicit
+            else:
+                from src.registry.kernel_paths import backend_dir
+
+                binaries["base_dir"] = str(backend_dir("cpu"))
+            return binaries
     return _executor_paths.get_binary_paths(registry)
 
 
