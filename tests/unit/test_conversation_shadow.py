@@ -178,7 +178,7 @@ def test_actual_runner_unresolved_invalid_and_transport_failures_remain_observat
 
     path = tmp_path / "transport.jsonl"
     shadow.shadow_decision(
-        _FakePrimitives(RuntimeError("offline")),
+        _FakePrimitives("[ERROR: offline]"),
         surface="unit.cs24",
         state="synthetic state",
         questions=(conversation.build_conversation_question(),),
@@ -188,5 +188,6 @@ def test_actual_runner_unresolved_invalid_and_transport_failures_remain_observat
         mode="json",
     )
     transport_record = json.loads(path.read_text(encoding="utf-8"))
-    assert transport_record["status"] == "shadow_error"
+    assert transport_record["decisions"] == []
+    assert transport_record["failures"][0]["reason"] == "transport_error"
     assert transport_record["incumbent"] == incumbent
