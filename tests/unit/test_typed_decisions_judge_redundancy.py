@@ -1,8 +1,9 @@
 """Unit tests for the CJ-13/CJ-14 judge redundancy harness.
 
-All runs use ``_FakePrimitives``: calls carrying a ``json_schema`` kwarg are
+All runs use ``_FakePrimitives``: calls whose schema contains ``answers`` are
 the typed arm and are answered with a schema-valid runner response built from
-the case's frozen verdicts; plain calls are the LLM arm and are answered with
+the case's frozen verdicts; schemas containing ``verdicts`` identify the LLM
+arm and are answered with
 a canned ``{"verdicts": [...]}`` emission (or a deliberate failure shape in
 the failure tests). No model or server is touched.
 
@@ -14,17 +15,21 @@ perfectly while both deviate from the frozen ground truth must report
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
 import pytest
+from jsonschema import Draft202012Validator
 
 from src.typed_decisions.judge_redundancy import (
     AGREEMENT_LABEL,
     OVERALL_PASS,
     OVERALL_ID,
     RubricCase,
+    _llm_response_schema,
     _parse_verdicts,
+    _run_llm_case,
     blind_prior,
     build_cases,
     build_typed_questions,
@@ -114,7 +119,7 @@ class _FakePrimitives:
         self.calls.append({"prompt": prompt, **kwargs})
         self._last_inference_meta = {"tokens": self._tokens, "elapsed_ms": 1.0}
         case = self._case_for(prompt)
-        if kwargs.get("json_schema") is not None:
+        if "answers" in kwargs["json_schema"]["properties"]:
             return self._typed(case)
         return self._llm(case)
 
@@ -171,7 +176,11 @@ class TestRubricCatalogue:
 
     def test_digests_are_deterministic_and_sensitive(self):
         assert rubric_set_sha256(_CASES) == rubric_set_sha256(build_cases())
-        assert len(rubric_set_sha256(_CASES)) == 64
+        # Frozen CJ-13 receipt: artifacts/typed_decisions/run_20260918/
+        # judge-redundancy-20260918.json (root repository).
+        assert rubric_set_sha256(_CASES) == (
+            "bcfc61909aa84c79cf46d9cc7954ec1b31dedbd0ed9e02c34f036088f17b4e85"
+        )
         assert len({case_sha256(case) for case in _CASES}) == len(_CASES)
         original = _CASES[0]
         altered = RubricCase(
@@ -272,8 +281,16 @@ class TestRun:
         assert agreement["disagreements"] == []
 
         assert len(primitives.calls) == 48
-        typed_calls = [call for call in primitives.calls if call.get("json_schema") is not None]
-        llm_calls = [call for call in primitives.calls if call.get("json_schema") is None]
+        typed_calls = [
+            call
+            for call in primitives.calls
+            if "answers" in call["json_schema"]["properties"]
+        ]
+        llm_calls = [
+            call
+            for call in primitives.calls
+            if "verdicts" in call["json_schema"]["properties"]
+        ]
         assert len(typed_calls) == 24
         assert len(llm_calls) == 24
         assert all(call.get("temperature") == 0.0 for call in primitives.calls)
@@ -285,6 +302,10 @@ class TestRun:
             row = rows[case.case_id]
             assert row["typed"]["values"] == list(case.expected)
             assert row["llm"]["verdicts"] == list(case.expected)
+            assert row["llm"]["criterion_verdicts"] == {
+                criterion_question_id(index): value
+                for index, value in enumerate(case.expected)
+            }
             assert row["typed"]["correct"] == [True] * len(case.criteria)
             assert row["llm"]["correct"] == [True] * len(case.criteria)
             assert row["agreement"] == {
@@ -416,7 +437,8 @@ class TestRun:
         target_calls = [
             call
             for call in primitives.calls
-            if call.get("json_schema") is not None and target.answer in call["prompt"]
+            if "answers" in call["json_schema"]["properties"]
+            and target.answer in call["prompt"]
         ]
         assert len(target_calls) == 2
 
@@ -571,3 +593,114 @@ class TestDryRunAndCli:
         assert receipt["role"] == ROLE
         assert receipt["counts"]["agreement_agreeing_criteria"] == _CRITERIA_TOTAL
         assert receipt["results"]["agreement"]["label"] == AGREEMENT_LABEL
+
+
+class TestConstrainedReaderB:
+    def test_schema_closes_shape_and_pins_criterion_count(self):
+        assert _llm_response_schema(3) == {
+            "type": "object",
+            "properties": {
+                "verdicts": {
+                    "type": "array",
+                    "items": {"type": "boolean"},
+                    "minItems": 3,
+                    "maxItems": 3,
+                }
+            },
+            "required": ["verdicts"],
+            "additionalProperties": False,
+        }
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            '{}',
+            '{"verdicts": [true, true, true], "verdicts": [false, false, false]}',
+            '{"verdicts": [true, true]}',
+            '{"verdicts": [true, true, true, true]}',
+            '{"verdicts": [true, true, true], "extra": false}',
+            '{"verdicts": [true, true, "false"]}',
+            '{"verdicts": [true, true, 0]}',
+            '{"verdicts": [true, true, null]}',
+        ],
+    )
+    def test_invalid_emission_stays_unresolved_without_retry(self, raw):
+        primitives = _FakePrimitives(llm=lambda case: raw)
+        record = _run_llm_case(primitives, _CASES[0], ROLE)
+        assert len(primitives.calls) == 1
+        assert record["verdicts"] is None
+        assert record["overall"] is None
+        assert record["error"]
+        assert record["tokens"] == 7.0
+        assert primitives.calls[0]["json_schema"] == _llm_response_schema(3)
+
+    def test_transport_failure_is_single_call(self):
+        def fail(case):
+            raise RuntimeError("injected transport failure")
+
+        primitives = _FakePrimitives(llm=fail)
+        record = _run_llm_case(primitives, _CASES[0], ROLE)
+        assert len(primitives.calls) == 1
+        assert record["verdicts"] is None
+        assert record["error"] == "RuntimeError: injected transport failure"
+
+    def test_missing_metadata_is_not_zero(self):
+        class NoMetadata(_FakePrimitives):
+            def llm_call(self, prompt, **kwargs):
+                result = super().llm_call(prompt, **kwargs)
+                self._last_inference_meta = {}
+                return result
+
+        primitives = NoMetadata()
+        record = _run_llm_case(primitives, _CASES[0], ROLE)
+        assert len(primitives.calls) == 1
+        assert record["verdicts"] == list(_CASES[0].expected)
+        assert record["tokens"] is None
+
+
+    @pytest.mark.parametrize(
+        "payload,valid",
+        [
+            ({"verdicts": [True, False, True]}, True),
+            ({"verdicts": [False, False, False]}, True),
+            ({}, False),
+            ({"verdicts": [True]}, False),
+            ({"verdicts": [True] * 4}, False),
+            ({"verdicts": [True, False, 0]}, False),
+            ({"verdicts": [True, False, "true"]}, False),
+            ({"verdicts": [True, False, None]}, False),
+            ({"verdicts": [True] * 3, "extra": False}, False),
+        ],
+    )
+    def test_schema_semantics(self, payload, valid):
+        schema = _llm_response_schema(3)
+        Draft202012Validator.check_schema(schema)
+        assert Draft202012Validator(schema).is_valid(payload) is valid
+
+    def test_instrument_identity_matches_dry_run_and_wire(self, tmp_path):
+        primitives = _FakePrimitives()
+        receipt = run_judge_redundancy(
+            primitives, role=ROLE, receipt_path=tmp_path / "r.json"
+        )
+        instrument = receipt["manifest"]["llm_instrument"]
+        plan = run_judge_redundancy(None, role=ROLE, dry_run=True)
+        assert instrument == plan["plan"]["llm_instrument"]
+        assert instrument["id"] == "independent_llm_judge_constrained_verdicts_v1"
+        assert instrument["calls_per_case"] == 1
+        assert instrument["repair_calls"] == 0
+        llm_calls = [
+            call
+            for call in primitives.calls
+            if "verdicts" in call["json_schema"]["properties"]
+        ]
+        assert len(instrument["response_schemas"]) == len(llm_calls) == len(_CASES)
+        for case, call, entry in zip(
+            _CASES, llm_calls, instrument["response_schemas"], strict=True
+        ):
+            encoded = json.dumps(
+                call["json_schema"], sort_keys=True, separators=(",", ":")
+            )
+            assert entry == {
+                "case_id": case.case_id,
+                "schema_sha256": hashlib.sha256(encoded.encode()).hexdigest(),
+            }

@@ -2,8 +2,9 @@
 
 The typed-decision plane answers a rubric directly (``noul`` per criterion,
 one ``choice`` overall) in ONE JSON pass — this is the **typed judge**. A
-plain single ``llm_call`` asks for the same per-criterion pass/fail list and
-has its emission parsed and validated — this is the **LLM judge**. Both read
+single ``llm_call`` independently asks for the same per-criterion pass/fail
+list under a constrained verdict-array schema, then has its emission parsed
+and validated — this is the **LLM judge**. Both read
 the SAME ~24 deterministic rubric cases, each a (answer text, criteria list)
 pair whose per-criterion verdict is fully determined by the answer text and
 frozen here as ground truth.
@@ -821,6 +822,55 @@ def _llm_prompt(case: RubricCase) -> str:
     )
 
 
+def _llm_response_schema(expected_count: int) -> dict[str, Any]:
+    """Constrain reader B's own shape without changing its independent prompt."""
+    return {
+        "type": "object",
+        "properties": {
+            "verdicts": {
+                "type": "array",
+                "items": {"type": "boolean"},
+                "minItems": expected_count,
+                "maxItems": expected_count,
+            }
+        },
+        "required": ["verdicts"],
+        "additionalProperties": False,
+    }
+
+
+def _llm_instrument(cases: Sequence[RubricCase]) -> dict[str, Any]:
+    """Identify constrained reader B separately from historical free-form runs."""
+    return {
+        "id": "independent_llm_judge_constrained_verdicts_v1",
+        "calls_per_case": 1,
+        "repair_calls": 0,
+        "response_schemas": [
+            {
+                "case_id": case.case_id,
+                "schema_sha256": _sha256_text(
+                    json.dumps(
+                        _llm_response_schema(len(case.criteria)),
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    )
+                ),
+            }
+            for case in cases
+        ],
+    }
+
+
+def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    """Reject duplicate JSON keys instead of silently keeping the last value."""
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON object key: {key}")
+        result[key] = value
+    return result
+
+
 def _parse_verdicts(
     raw_text: str, expected_count: int
 ) -> tuple[tuple[bool, ...] | None, str | None]:
@@ -837,11 +887,12 @@ def _parse_verdicts(
     if candidate is None:
         return None, "no balanced JSON object found"
     try:
-        parsed = json.loads(candidate)
-    except json.JSONDecodeError as exc:
+        parsed = json.loads(candidate, object_pairs_hook=_unique_object)
+    except ValueError as exc:
         return None, f"JSON decode error: {exc}"
-    if isinstance(parsed, Mapping):
-        parsed = parsed.get("verdicts")
+    if not isinstance(parsed, Mapping) or set(parsed) != {"verdicts"}:
+        return None, "expected exactly one object key: verdicts"
+    parsed = parsed["verdicts"]
     if not isinstance(parsed, list):
         return None, "'verdicts' is not a list"
     if len(parsed) != expected_count:
@@ -888,6 +939,7 @@ def _run_llm_case(primitives: Any, case: RubricCase, role: str) -> dict[str, Any
                 prompt,
                 role=role,
                 n_tokens=_LLM_N_TOKENS,
+                json_schema=_llm_response_schema(len(case.criteria)),
                 temperature=0.0,
                 seed=_DECODE_SEED,
             )
@@ -1157,6 +1209,7 @@ def run_judge_redundancy(
         "role": role,
         "agreement_label": AGREEMENT_LABEL,
         "manifest": {
+            "llm_instrument": _llm_instrument(cases),
             "rubric_set_sha256": rubric_set_sha256(cases),
             "cases": [
                 {
@@ -1231,6 +1284,7 @@ def _dry_run_plan(cases: Sequence[RubricCase], role: str) -> dict[str, Any]:
             "mode": MODE,
             "role": role,
             "readers": ["typed", "llm"],
+            "llm_instrument": _llm_instrument(cases),
             "agreement_label": AGREEMENT_LABEL,
             "rubric_set_sha256": rubric_set_sha256(cases),
             "cases": [
@@ -1299,6 +1353,10 @@ def _case_rows(
                 },
                 "llm": {
                     "verdicts": llm_values,
+                    "criterion_verdicts": {
+                        criterion_question_id(index): value
+                        for index, value in enumerate(llm_values)
+                    },
                     "correct": llm_flags,
                     "overall": llm["overall"],
                     "overall_correct": (
