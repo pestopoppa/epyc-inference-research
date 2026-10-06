@@ -86,11 +86,11 @@ def _synthetic_stack_manifest_meminfo(monkeypatch: pytest.MonkeyPatch) -> None:
         yield
     finally:
         sys.modules.pop(module_name, None)
-        if server_package is not None:
-            if hasattr(server_package, "stack_manifest"):
-                delattr(server_package, "stack_manifest")
-            if cached_attribute is not missing:
-                setattr(server_package, "stack_manifest", cached_attribute)
+        current_package = sys.modules.get("scripts.server")
+        if current_package is not None and hasattr(current_package, "stack_manifest"):
+            delattr(current_package, "stack_manifest")
+        if server_package is not None and cached_attribute is not missing:
+            setattr(server_package, "stack_manifest", cached_attribute)
         if cached_module is not missing:
             sys.modules[module_name] = cached_module
 
