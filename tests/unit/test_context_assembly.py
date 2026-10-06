@@ -186,6 +186,79 @@ def test_pack_includes_high_priority_full_then_downgrades() -> None:
     assert bundle.fits()
 
 
+def test_pack_colgrep_spans_keep_allowed_slice_mode_without_codemap_fallback() -> None:
+    candidate = Candidate(
+        path="hit.py",
+        priority=1,
+        cost_full=60,
+        cost_slices=20,
+        cost_codemap=5,
+        desired_mode=InclusionMode.FULL,
+        line_ranges=[LineRange(10, 12)],
+        source=SourceKind.COLGREP,
+    )
+
+    bundle = pack_to_budget([candidate], budget=20)
+
+    entry = bundle.entries[0]
+    assert entry.mode == InclusionMode.SLICES
+    assert [(item.start, item.end) for item in entry.line_ranges] == [(10, 12)]
+    assert entry.estimated_tokens == 20
+
+
+def test_pack_colgrep_spans_exclude_when_only_codemap_would_fit() -> None:
+    candidate = Candidate(
+        path="hit.py",
+        priority=1,
+        cost_full=60,
+        cost_slices=20,
+        cost_codemap=5,
+        desired_mode=InclusionMode.SLICES,
+        line_ranges=[LineRange(10, 12)],
+        source=SourceKind.COLGREP,
+    )
+
+    bundle = pack_to_budget([candidate], budget=5)
+
+    entry = bundle.entries[0]
+    assert entry.mode == InclusionMode.EXCLUDED
+    assert [(item.start, item.end) for item in entry.line_ranges] == [(10, 12)]
+    assert "missing evidence" in entry.reason_downgraded_or_excluded
+    assert bundle.total_tokens() == 0
+
+
+def test_pack_colgrep_without_spans_keeps_existing_codemap_fallback() -> None:
+    candidate = Candidate(
+        path="spanless.py",
+        priority=1,
+        cost_full=60,
+        cost_slices=20,
+        cost_codemap=5,
+        source=SourceKind.COLGREP,
+    )
+
+    bundle = pack_to_budget([candidate], budget=5)
+
+    assert bundle.entries[0].mode == InclusionMode.CODEMAP_ONLY
+
+
+def test_pack_non_colgrep_spans_keep_existing_codemap_fallback() -> None:
+    candidate = Candidate(
+        path="direct.py",
+        priority=1,
+        cost_full=60,
+        cost_slices=20,
+        cost_codemap=5,
+        desired_mode=InclusionMode.SLICES,
+        line_ranges=[LineRange(10, 12)],
+        source=SourceKind.DIRECT_READ,
+    )
+
+    bundle = pack_to_budget([candidate], budget=5)
+
+    assert bundle.entries[0].mode == InclusionMode.CODEMAP_ONLY
+
+
 def test_pack_excludes_when_nothing_fits() -> None:
     cands = [
         Candidate(path="a.py", priority=10, cost_full=100, cost_slices=100, cost_codemap=100),
