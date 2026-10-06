@@ -7,6 +7,8 @@ Focus on checkpoint triggers, finding sync, and lifecycle events.
 import base64
 import pickle
 import time
+import uuid
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 
@@ -336,8 +338,12 @@ class TestSaveCheckpoint:
                 pickle.dumps({"forged": True}, protocol=safe_pickle.PICKLE_PROTOCOL)
             ).decode("ascii")
             unsupported_blob = pickle.dumps(eval, protocol=safe_pickle.PICKLE_PROTOCOL)
-            saved.pickled_globals.update(
-                {
+            injected = replace(
+                saved,
+                id=str(uuid.uuid4()),
+                created_at=datetime.now(timezone.utc),
+                pickled_globals={
+                    **saved.pickled_globals,
                     "tampered_set": tampered,
                     "unsupported_callable": {
                         "b64": base64.b64encode(unsupported_blob).decode("ascii"),
@@ -345,12 +351,12 @@ class TestSaveCheckpoint:
                         "type": "builtin_function_or_method",
                         "bytes": len(unsupported_blob),
                     },
-                }
+                },
             )
-            store.save_checkpoint(saved)
+            store.save_checkpoint(injected)
             loaded = store.get_latest_checkpoint(session.id)
             assert loaded is not None
-            assert loaded.pickled_globals == saved.pickled_globals
+            assert loaded.pickled_globals == injected.pickled_globals
 
             restored = REPLEnvironment(context="resume set")
             result = restored.restore(loaded.to_dict())
