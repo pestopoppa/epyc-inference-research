@@ -278,6 +278,26 @@ def _load_declared_config(model_dir: Path) -> dict:
     return merged
 
 
+def _validate_query_expansion_config(model_dir: Path) -> None:
+    """Refuse a declared query-expansion mode this encoder cannot implement.
+
+    The capability is optional in both supported config files. An absent key is
+    the historical no-expansion behavior; an explicit false value is identical.
+    A true declaration must not be silently ignored, and malformed present
+    values must not be coerced into either behavior.
+    """
+    config = _load_declared_config(model_dir)
+    if "do_query_expansion" not in config:
+        return
+    value = config["do_query_expansion"]
+    if type(value) is not bool:
+        raise ValueError("do_query_expansion must be a boolean when declared")
+    if value:
+        raise RuntimeError(
+            "do_query_expansion=true is unsupported by the ColBERT encoder"
+        )
+
+
 def _load_declared_prefix_ids(model_dir: Path) -> dict:
     """Declared `{"query": id, "document": id}`; a key is absent when unstated.
 
@@ -473,6 +493,11 @@ def ensure_loaded() -> bool:
         return False
 
     try:
+        # Refuse unsupported declared behavior before constructing a session or
+        # tokenizer. The surrounding loader contract logs, clears state, and
+        # returns False for this configuration failure just like other failures.
+        _validate_query_expansion_config(_MODEL_DIR)
+
         import onnxruntime as ort
         from tokenizers import Tokenizer
 
