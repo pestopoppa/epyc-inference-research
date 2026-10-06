@@ -44,7 +44,14 @@ def _response(choice: str) -> str:
 def _reset_flags(monkeypatch):
     reset_features()
     monkeypatch.delenv(shadow.ENV_LOG_PATH, raising=False)
+    with shadow._state_lock:
+        shadow._pending = 0
+        shadow._dropped = 0
     yield
+    assert shadow._executor is None  # these fixtures never start an executor
+    with shadow._state_lock:
+        shadow._pending = 0
+        shadow._dropped = 0
     reset_features()
 
 
@@ -53,9 +60,20 @@ def test_builder_emits_only_provisional_binary_choice():
     assert question.kind is QuestionKind.CHOICE
     assert question.options == ("LOCAL", "ORCH")
     assert "provisional" in question.criteria[0].lower()
+    assert "social/backchannel/control" in question.criteria[0]
+    assert "factual/reasoning/code/memory/current-events" in question.criteria[0]
 
 
-@pytest.mark.parametrize("labels", [("LOCAL",), ("LOCAL", "ORCH", "UNKNOWN"), ("local", "ORCH"), ("LOCAL", "LOCAL")])
+@pytest.mark.parametrize(
+    "labels",
+    [
+        ("LOCAL",),
+        ("LOCAL", "ORCH", "UNKNOWN"),
+        ("LOCAL", "ORCH", "ABSTAIN"),
+        ("local", "ORCH"),
+        ("LOCAL", "LOCAL"),
+    ],
+)
 def test_builder_refuses_unverified_or_unsupported_catalog(labels):
     with pytest.raises(ValueError, match="provisional"):
         conversation.build_conversation_question(labels=labels)
@@ -92,7 +110,7 @@ def test_invalid_catalog_fails_open_without_submit_or_incumbent_change(monkeypat
 
 
 @pytest.mark.parametrize("reason", ["flag_off", "missing_sink", "queue_full", "submit_error"])
-def test_submission_refusals_are_nonblocking_and_fail_open(monkeypatch, reason):
+def test_submission_refusals_are_nonblocking_and_fail_open(monkeypatch, tmp_path, reason):
     incumbent = {"route": "host-route"}
     if reason == "flag_off":
         assert not conversation.submit_conversation_shadow(
@@ -103,6 +121,25 @@ def test_submission_refusals_are_nonblocking_and_fail_open(monkeypatch, reason):
         assert not conversation.submit_conversation_shadow(
             object(), state="synthetic", incumbent=incumbent, role="worker_general"
         )
+    elif reason == "queue_full":
+        set_features(Features(typed_decisions_shadow=True))
+        monkeypatch.setattr(shadow, "_get_executor", lambda: pytest.fail("queue-full path started executor"))
+        with shadow._state_lock:
+            shadow._pending = shadow.MAX_PENDING
+            shadow._dropped = 0
+        primitives = _FakePrimitives(_response("LOCAL"))
+        assert not shadow.submit_shadow(
+            primitives,
+            surface="unit.queue_full",
+            state="synthetic",
+            questions=(conversation.build_conversation_question(),),
+            incumbent=incumbent,
+            role="worker_general",
+            log_path=tmp_path / "queue-full.jsonl",
+            mode="json",
+        )
+        assert shadow.shadow_stats() == {"pending": shadow.MAX_PENDING, "dropped": 1, "bound": shadow.MAX_PENDING}
+        assert primitives.calls == []
     else:
         monkeypatch.setattr(
             conversation,
@@ -191,3 +228,46 @@ def test_actual_runner_unresolved_invalid_and_transport_failures_remain_observat
     assert transport_record["decisions"] == []
     assert transport_record["failures"][0]["reason"] == "transport_error"
     assert transport_record["incumbent"] == incumbent
+
+
+@pytest.mark.parametrize(
+    "raw,expected_reason",
+    [
+        ("not JSON", "no_json"),
+        (
+            json.dumps({"answers": {"not_conversation_route": {
+                "choice": "LOCAL", "probabilities": {"LOCAL": 0.35, "ORCH": 0.65}, "confidence": 0.65,
+            }}}),
+            "schema_violation",
+        ),
+        (
+            json.dumps({"answers": {"conversation_route": {
+                "choice": ["LOCAL"], "probabilities": {"LOCAL": 0.35, "ORCH": 0.65}, "confidence": 0.65,
+            }}}),
+            "schema_violation",
+        ),
+    ],
+)
+def test_actual_runner_records_malformed_wrong_id_and_wrong_type_controls(tmp_path, raw, expected_reason):
+    path = tmp_path / "negative-control.jsonl"
+    shadow.shadow_decision(
+        _FakePrimitives(raw),
+        surface="unit.cs24",
+        state="synthetic negative control",
+        questions=(conversation.build_conversation_question(),),
+        incumbent={"route": "host-route"},
+        role="worker_general",
+        log_path=path,
+        mode="json",
+    )
+    record = json.loads(path.read_text(encoding="utf-8"))
+    assert record["decisions"] == []
+    assert record["failures"]
+    assert {failure["reason"] for failure in record["failures"]} == {expected_reason}
+    assert record["incumbent"] == {"route": "host-route"}
+
+
+def test_abstention_is_not_a_supported_third_label():
+    for label in ("UNKNOWN", "ABSTAIN"):
+        with pytest.raises(ValueError, match="provisional"):
+            conversation.build_conversation_question(labels=("LOCAL", "ORCH", label))

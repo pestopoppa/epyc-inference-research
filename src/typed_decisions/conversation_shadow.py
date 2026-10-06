@@ -40,10 +40,16 @@ def build_conversation_question(
     return Question(
         id=question_id,
         kind=QuestionKind.CHOICE,
-        text="Classify this conversation turn using the provisional CS-4 routing labels.",
+        text=(
+            "Classify this conversation turn using the provisional CS-4 routing labels. "
+            "LOCAL covers social, backchannel, or control turns; ORCH covers factual, "
+            "reasoning, code, memory, or current-events turns."
+        ),
         options=catalog,
         criteria=(
-            "Provisional labels only: use LOCAL or ORCH; the CS-4 annotation schema is not yet verified.",
+            "The handoff documents LOCAL as social/backchannel/control and ORCH as "
+            "factual/reasoning/code/memory/current-events. These are provisional routing "
+            "descriptions, not a verified corpus schema; use only LOCAL or ORCH.",
         ),
     )
 
