@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from pathlib import Path
 
 import pytest
 
@@ -141,6 +142,7 @@ def test_stack_numa_mode_defaults_are_named() -> None:
 
 
 @pytest.mark.parametrize("mode", ["full", "quarter", "both"])
+@pytest.mark.usefixtures("_declared_backend_metadata")
 def test_stack_numa_readers_agree_on_host_role_ports(
     mode: str,
     monkeypatch: pytest.MonkeyPatch,
@@ -165,6 +167,7 @@ def test_stack_numa_readers_agree_on_host_role_ports(
 
 
 @pytest.mark.parametrize("mode", ["full", "quarter", "both"])
+@pytest.mark.usefixtures("_declared_backend_metadata")
 def test_alias_serving_fleet_converges_on_host_launch_views_diverge(
     mode: str,
     monkeypatch: pytest.MonkeyPatch,
@@ -215,3 +218,31 @@ def test_alias_serving_fleet_converges_on_host_launch_views_diverge(
                 f"launch view tags {sorted(tagged)}; WP-13 requires the serving "
                 f"view to strictly exceed the launch-tagged subset"
             )
+
+
+@pytest.fixture
+def _declared_backend_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Owned path metadata for pure compilation; no binary or store evidence."""
+    import subprocess
+    from src.registry import kernel_paths
+
+    directories = {}
+    for backend in ("cpu", "gpu"):
+        directory = tmp_path / "declared-backends" / backend
+        directory.mkdir(mode=0o700, parents=True)
+        directories[backend] = directory
+
+    def declared_backend_dir(backend):
+        if backend not in directories:
+            raise AssertionError(f"unexpected metadata backend: {backend!r}")
+        return directories[backend]
+
+    def refuse_child(*args, **kwargs):
+        raise AssertionError("pure metadata fixture must not create a child process")
+
+    monkeypatch.setattr(kernel_paths, "backend_dir", declared_backend_dir)
+    # Preserve real CPU [] and GPU vendor-path library policy.
+    monkeypatch.setattr(subprocess, "Popen", refuse_child)
+    yield directories
+    for directory in directories.values():
+        assert not list(directory.iterdir()), "metadata fixture acquired a binary or output"
