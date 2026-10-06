@@ -5,6 +5,8 @@ response usage. It is not a grade, ClaimTuple, or replacement for matrix.json.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
@@ -89,9 +91,7 @@ def summarize_response_usage(response_events: Iterable[Mapping[str, Any]]) -> di
             attempts_complete = False
 
     has_report = reported > 0
-    total_complete = (
-        response_count > 0 and reported == response_count and attempts_complete
-    )
+    successful_response_usage_complete = response_count > 0 and reported == response_count
     incomplete_reasons: list[str] = []
     if response_count == 0:
         incomplete_reasons.append("no_successful_endpoint_response")
@@ -101,6 +101,9 @@ def summarize_response_usage(response_events: Iterable[Mapping[str, Any]]) -> di
         incomplete_reasons.append("endpoint_retries_have_no_attempt_level_usage")
     if response_count and not retry_seen and not attempts_complete:
         incomplete_reasons.append("endpoint_attempt_count_unavailable")
+    incomplete_reasons.append(
+        "successful_response_events_do_not_cover_failed_or_unobserved_endpoint_attempts"
+    )
 
     return {
         "reported_prompt_tokens": prompt_total if has_report else None,
@@ -111,8 +114,9 @@ def summarize_response_usage(response_events: Iterable[Mapping[str, Any]]) -> di
             "scope": "successful_endpoint_responses_only",
             "response_events": response_count,
             "responses_with_reported_usage": reported,
+            "successful_response_usage_complete": successful_response_usage_complete,
             "unavailable_reasons": dict(sorted(reasons.items())),
-            "total_attempt_cost_complete": total_complete,
+            "total_attempt_cost_complete": False,
             "incomplete_reasons": incomplete_reasons,
         },
     }
@@ -136,6 +140,33 @@ def unit_record(
         primary_value = None
 
     status = run.get("status")
+    native_failure = run.get("failure")
+    failure_projection = None
+    if isinstance(native_failure, Mapping):
+        native_type = native_failure.get("type")
+        failure_bytes = json.dumps(
+            native_failure, sort_keys=True, separators=(",", ":"), allow_nan=False
+        ).encode("utf-8")
+        detail = native_failure.get("detail")
+        timeout_fields: dict[str, Any] = {}
+        if isinstance(detail, Mapping):
+            terminal_timeout = detail.get("terminal_native_timeout")
+            if type(terminal_timeout) is bool:
+                timeout_fields["terminal_native_timeout"] = terminal_timeout
+            for key in ("timeout_attempts", "attempts"):
+                value = detail.get(key)
+                if type(value) is int and value >= 0:
+                    timeout_fields[key] = value
+            cap_scope = detail.get("cap_scope")
+            if isinstance(cap_scope, str) and cap_scope in {
+                "endpoint_request", "native_transport", "endpoint_attempt"
+            }:
+                timeout_fields["cap_scope"] = cap_scope
+        failure_projection = {
+            "type": native_type if isinstance(native_type, str) else None,
+            "content_sha256": hashlib.sha256(failure_bytes).hexdigest(),
+            "native_timeout_fields": timeout_fields,
+        }
     if status == "failed":
         still_failing, still_failing_basis = True, "native_run_status_failed"
     elif primary_value is None:
@@ -153,7 +184,7 @@ def unit_record(
         "seed": run.get("seed"),
         "threat": threat,
         "status": status,
-        "failure": run.get("failure"),
+        "failure": failure_projection,
         "task_success": run.get("task_success"),
         "attack_success": run.get("attack_success"),
         "primary_metric": {

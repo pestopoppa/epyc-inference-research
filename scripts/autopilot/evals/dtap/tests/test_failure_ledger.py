@@ -94,11 +94,14 @@ def test_still_failing_uses_threat_specific_primary_metric_and_null_is_unresolve
 
 @pytest.mark.parametrize("native_type", ["endpoint", "overflow", "model", "parser", "harness"])
 def test_native_failure_type_is_preserved_not_regraded(native_type):
-    failure = {"type": native_type, "message": "native fixture failure", "detail": {"fixture": True}}
+    failure = {"type": native_type, "message": "SECRET raw API body sentinel",
+               "detail": {"fixture": True, "body": "SECRET raw API body sentinel"}}
     unit = _unit(_run("a", "compliant", 0, status="failed", failure=failure,
                       completion="other_error"), "direct")
     assert unit["status"] == "failed"
-    assert unit["failure"] == failure
+    assert unit["failure"]["type"] == native_type
+    assert unit["failure"]["content_sha256"]
+    assert "SECRET raw API body sentinel" not in json.dumps(unit)
     assert unit["completion_state"] == "other_error"
 
 
@@ -138,7 +141,54 @@ def test_usage_totals_keep_unknown_and_retry_coverage_explicit():
          "usage_status": "reported", "transport_detail": {"attempts": 1}},
     ])
     assert complete["reported_total_tokens"] == 0
-    assert complete["coverage"]["total_attempt_cost_complete"] is True
+    assert complete["coverage"]["successful_response_usage_complete"] is True
+    assert complete["coverage"]["total_attempt_cost_complete"] is False
+    assert "failed_or_unobserved_endpoint_attempts" in " ".join(
+        complete["coverage"]["incomplete_reasons"]
+    )
+
+
+def test_terminal_endpoint_failure_keeps_prior_successful_usage_partial(tmp_path):
+    failure = {"type": "endpoint", "message": "SECRET raw response",
+               "detail": {"terminal_native_timeout": True, "timeout_attempts": 1}}
+    run = _run("a", "compliant", 0, status="failed", failure=failure,
+               completion="terminal_timeout")
+    usage = summarize_response_usage([
+        {"usage": {"prompt_tokens": 9, "completion_tokens": 4},
+         "usage_status": "reported", "transport_detail": {"attempts": 1}},
+    ])
+    unit = _unit(run, "direct")
+    unit["usage"] = usage
+    assert run.to_dict()["failure"] == failure
+    assert unit["failure"]["native_timeout_fields"] == {
+        "terminal_native_timeout": True, "timeout_attempts": 1,
+    }
+    assert "SECRET raw response" not in json.dumps(unit)
+    assert unit["usage"]["reported_total_tokens"] == 13
+    assert unit["usage"]["coverage"]["successful_response_usage_complete"] is True
+    assert unit["usage"]["coverage"]["total_attempt_cost_complete"] is False
+
+
+def test_ledger_trace_binding_rejects_mutation_during_verification(monkeypatch, tmp_path):
+    trace_path = tmp_path / "closed.trace.jsonl"
+    recorder = runner.TraceRecorder(trace_path)
+    recorder.record("synthetic", {"fixture": True})
+    trace_id = recorder.close()
+    run = _run("a", "compliant", 0, trace_id=trace_id, trace_path=str(trace_path))
+    original_result = run.to_dict()
+    verify = runner.verify_trace
+
+    def verify_then_mutate(path):
+        records = verify(path)
+        pathlib.Path(path).write_bytes(b"changed after verify")
+        return records
+
+    monkeypatch.setattr(runner, "verify_trace", verify_then_mutate)
+    sha, status, usage = runner._ledger_trace_observation(run)
+    assert sha is None
+    assert status.startswith("unavailable:closed_trace_verification_failed:")
+    assert usage["reported_total_tokens"] is None
+    assert run.to_dict() == original_result
 
 
 def test_directional_pairs_cover_gain_giveback_missing_and_native_null():

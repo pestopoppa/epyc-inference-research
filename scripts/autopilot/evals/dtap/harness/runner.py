@@ -827,6 +827,9 @@ def _ledger_trace_observation(run: RunResult) -> tuple[Optional[str], str, Dict[
     try:
         raw = _regular_bytes(path)
         records = verify_trace(path)
+        verified_raw = _regular_bytes(path)
+        if verified_raw != raw:
+            raise ValueError("closed trace bytes changed during verification")
         if records[-1]["payload"].get("trace_id") != run.trace_id:
             raise ValueError("closed trace id differs from returned RunResult")
         response_events = [
@@ -835,7 +838,7 @@ def _ledger_trace_observation(run: RunResult) -> tuple[Optional[str], str, Dict[
         ]
         return (hashlib.sha256(raw).hexdigest(), "verified_closed_trace",
                 summarize_response_usage(response_events))
-    except (OSError, ValueError, RunFailure) as exc:
+    except (OSError, ValueError, RunFailure, KeyError, TypeError, IndexError) as exc:
         return None, f"unavailable:closed_trace_verification_failed:{type(exc).__name__}", unavailable
 
 
