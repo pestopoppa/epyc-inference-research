@@ -225,8 +225,16 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
           stale_after_s: int = DEFAULT_STALE_AFTER_S,
           actor_health: dict | None = None,
           scratch: Mapping[str, Any] | None = None,
-          comparability: Mapping[str, Any] | None = None) -> Path:
+          comparability: Mapping[str, Any] | None = None,
+          uncovered_gap: Mapping[str, Any] | None = None) -> Path:
     """Atomically publish the loop's current standing.
+
+    `uncovered_gap` (2026-10-06 autonomy self-check, `roofline_coverage.py`): the
+    latest `uncovered_gap_summary` from the roofline/route-coverage cross-check,
+    carried through so the dashboard shows "biggest headroom sits in source nothing
+    can touch today" as a LIVE field, not only inside a node-profile prose block.
+    `None` (no node profile collected yet, or no ceiling configured) omits the field
+    from the body rather than publishing a fabricated "not triggered".
 
     Atomic because a dashboard polling a half-written file is how a surface reports
     something that was never true. `state` is what the loop is DOING, and it is
@@ -335,6 +343,8 @@ def write(store_root: Path, *, state: str, epoch: str, campaign_id: str,
     if scratch is not None:
         # The scratch registry's counters (allocated/released/live/sweeps/guard).
         body["scratch"] = dict(scratch)
+    if uncovered_gap is not None:
+        body["uncovered_gap"] = dict(uncovered_gap)
     return write_json(store_root, STATUS_FILENAME, body)
 
 

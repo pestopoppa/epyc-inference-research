@@ -191,6 +191,27 @@ def parse_node_dump(raw: bytes | str) -> dict[str, Any]:
                       "bytes": _number(row, "bytes", "node dump.paths")})
     ops.sort(key=lambda row: (-row["wall_us"], row["op"]))
     paths.sort(key=lambda row: (-row["wall_us"], row["path"]))
+    # Per-node rows (idx/op/src0_type/src0_ne/dst_ne/wall_us/evals), kept SEPARATE
+    # from `paths` above: `paths` pools every node of every shape and phase that hits
+    # one weight path, which the 2026-10-06 roofline audit found contaminated by
+    # prefill. `nodes` is what `roofline_coverage.from_node_dump` reads for a
+    # per-node achieved-bandwidth-vs-ceiling view. Older dumps carry no `nodes` array
+    # at all -- that is "not collected", not malformed, so it defaults to empty
+    # rather than refusing the whole dump; a single malformed row is dropped rather
+    # than failing the ops/paths view this dump otherwise carries cleanly.
+    nodes = []
+    for row in _rows(body.get("nodes", []), "node dump.nodes"):
+        try:
+            nodes.append({"idx": row.get("idx"),
+                          "op": _text(row, "op", "node dump.nodes"),
+                          "name": row.get("name") or row.get("label"),
+                          "src0_type": row.get("src0_type"),
+                          "src0_ne": list(row.get("src0_ne") or []),
+                          "dst_ne": list(row.get("dst_ne") or []),
+                          "wall_us": _number(row, "wall_us", "node dump.nodes"),
+                          "evals": _number(row, "evals", "node dump.nodes")})
+        except NodeProfileRefused:
+            continue
     return {"schema": NODE_DUMP_SCHEMA,
             "graph_evals_accumulated": _number(body, "graph_evals_accumulated", "node dump"),
             "n_nodes": _number(body, "n_nodes", "node dump"),
@@ -198,7 +219,7 @@ def parse_node_dump(raw: bytes | str) -> dict[str, Any]:
             "total_wall_us": total_wall,
             "total_compute_us": _number(body, "total_compute_us", "node dump"),
             "barriers": _number(body, "barriers", "node dump", default=0.0),
-            "ops": ops, "weight_paths": paths,
+            "ops": ops, "weight_paths": paths, "nodes": nodes,
             # The shares are per-op fractions of the SAME denominator, so their sum is
             # a coverage reading of the instrument, not a normalisation to apply.
             "op_wall_fraction_sum": sum(row["wall_fraction"] for row in ops)}
@@ -411,8 +432,15 @@ def read_dumps(directory: Path | str) -> dict[str, Any]:
 
 
 def section(dumps: Mapping[str, Any], *, build: Mapping[str, Any],
-            teardown: str | None = None) -> dict[str, Any]:
-    """Assemble the planner-facing record; `absent` parts stay absent, never zeroed."""
+            teardown: str | None = None,
+            host_ceiling_gb_s: float | None = None) -> dict[str, Any]:
+    """Assemble the planner-facing record; `absent` parts stay absent, never zeroed.
+
+    `host_ceiling_gb_s` is opt-in: pass it to also attach `roofline_gaps` (per-node
+    achieved-bandwidth-vs-ceiling, cross-checked against `gates.py`'s admitted-route
+    tables -- see `roofline_coverage.py`). Omitted, or a dump with no per-node rows,
+    leaves it out entirely rather than publishing an empty/zeroed table.
+    """
     node = dumps.get("node", absent("not collected"))
     host = dumps.get("host", absent("not collected"))
     engram = dumps.get("engram", absent("not collected"))
@@ -425,6 +453,14 @@ def section(dumps: Mapping[str, Any], *, build: Mapping[str, Any],
         body["ranked_op_shares"] = node["ops"][:12]
         body["weight_path_shares"] = node["weight_paths"]
         body["mechanism_shares"] = mechanism_shares(node)
+        if host_ceiling_gb_s is not None and node.get("nodes"):
+            from . import roofline_coverage
+            try:
+                body["roofline_gaps"] = roofline_coverage.from_node_dump(
+                    {"nodes": node["nodes"], "total_wall_us": node["total_wall_us"]},
+                    ceiling_gb_s=host_ceiling_gb_s)
+            except roofline_coverage.RooflineRefused as exc:
+                body["roofline_gaps"] = {"status": "absent", "reason": str(exc)}
     else:
         body["reason"] = node.get("reason", "node dump absent")
     if host.get("status") == "observed":
@@ -479,12 +515,16 @@ def retain_observation(observed: Mapping[str, Any], *, store_root: Path | str,
 
 
 def profile_loop(arm_for_env, prompts, *, store_root: Path | str, build: Mapping[str, Any],
-                 level: int = 1, timeout_s: int = 1800, launch=None) -> dict[str, Any]:
+                 level: int = 1, timeout_s: int = 1800, launch=None,
+                 host_ceiling_gb_s: float | None = None) -> dict[str, Any]:
     """Launch the instrumented sibling once, replay the frozen requests, read the dumps.
 
     `arm_for_env` takes the instrument environment and returns the resolved launch for
     the SIBLING build -- the caller owns the rebind, exactly as the perf capture lets
     `run.reprofile` own `_cpu_arm`. Nothing here touches the measured arm.
+
+    `host_ceiling_gb_s` is forwarded to `section()` to attach `roofline_gaps`; see
+    its docstring. `None` (the default) keeps today's output unchanged.
     """
     directory = Path(store_root) / "node-profiles" / ("run-" + _digest(
         {"build": dict(build), "level": int(level)})[:32])
@@ -508,7 +548,8 @@ def profile_loop(arm_for_env, prompts, *, store_root: Path | str, build: Mapping
     launch(arm.template, Path(arm.build_dir), arm.port, boot_timeout_s=timeout_s,
            resolved_recipe=arm, frozen_requests=frozen, observation=observation)
     teardown = observation[-1].get("teardown") if observation else None
-    return section(read_dumps(directory), build=build, teardown=teardown)
+    return section(read_dumps(directory), build=build, teardown=teardown,
+                   host_ceiling_gb_s=host_ceiling_gb_s)
 
 
 __all__ = ["BASIS", "CPU_PROF_GATE_ENV", "CPU_PROF_JSON_ENV", "DUMPS",

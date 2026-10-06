@@ -4029,6 +4029,11 @@ def main(argv: list[str] | None = None) -> int:
     #: Seam for the long-context surface (`gpu_serving_profile.LongContextHook`); None
     #: records long_decode / prefill_at_depth as skipped with that reason.
     gpu_long_context_hook: list = [None]
+    #: 2026-10-06 autonomy self-check (`roofline_coverage.py`): the latest
+    #: `uncovered_gap_summary`, refreshed on every `node_reprofile` and carried into
+    #: `loop-status.json` and the stagnation hook by `publish`. `None` until the first
+    #: node profile with per-node rows is collected.
+    uncovered_gap_state: list = [None]
 
     def node_reprofile(profile_arm) -> None:
         """The SECOND, out-of-band capture of the same anchor and the same requests.
@@ -4081,13 +4086,15 @@ def main(argv: list[str] | None = None) -> int:
                      "recipe_sha256": build_recipe.NATIVE_CPU_NODE_PROFILE_RECIPE.sha256(),
                      "anchor_commit": current_anchor_commit[0],
                      "measured_build_dir": str(anchor_build[0])}
+            from . import roofline_coverage
             with cpu_measurement_window():
                 observed = node_profile.profile_loop(
                     lambda env: _cpu_arm(direct_launch, build_dir, extra_env=env),
                     manifest, store_root=args.store, build=build,
                     level=args.node_profile_level,
                     timeout_s=min(1800, resolved_campaign.resources.stage_timeout_s)
-                    if selected_identity else 1800)
+                    if selected_identity else 1800,
+                    host_ceiling_gb_s=roofline_coverage.DEFAULT_HOST_CEILING_GB_S)
         except (node_profile.NodeProfileRefused, serving.ServerDied, loop.MeasurementInvalid,
                 OSError, ValueError, subprocess.SubprocessError) as exc:
             node_profile_observation.update(node_profile.absent(
@@ -4099,6 +4106,18 @@ def main(argv: list[str] | None = None) -> int:
         node_profile.retain_observation(observed, store_root=args.store, **key)
         print(f"profile   node/host/engram {observed['status']}; "
               f"{len(observed.get('mechanism_shares', []))} grouped op mechanisms")
+        # 2026-10-06 autonomy self-check: refresh the live uncovered-gap reading.
+        # Observe-only -- a failure here must never cost this stage its own result.
+        try:
+            uncovered_gap_state[0] = (
+                (observed.get("roofline_gaps") or {}).get("uncovered_gap"))
+            if uncovered_gap_state[0] and uncovered_gap_state[0].get("triggered"):
+                print("profile   ROOFLINE GAP (where headroom is): "
+                      f"{uncovered_gap_state[0]['uncovered_fraction'] * 100:.1f}% of "
+                      "top-K gap share sits in nodes with NO admitted route")
+        except Exception as exc:  # pragma: no cover - defensive, observe-only
+            print(f"profile   roofline-gap coverage check skipped "
+                  f"({type(exc).__name__}: {exc})")
 
     #: Audit C4: planner inputs AT DEPTH for an opted-in target (`--longctx-surface`).
     longctx_observation: dict = {"cpu_profile": None, "node_profile": None, "histogram": None}
@@ -4876,6 +4895,21 @@ def main(argv: list[str] | None = None) -> int:
     def publish(state: str, outcomes=(), gpu=None, hotspot_rows=(),
                 step: str | None = None) -> None:
         """A loop that only reports when it succeeds looks identical to a stuck one."""
+        # 2026-10-06 autonomy self-check: on confirmed stagnation (flat best-effect
+        # slope, or a long run of measured nulls) WITH an uncovered roofline gap
+        # already triggered, write the durable scope_gap.json naming the uncovered
+        # files/symbols for a human to act on. Entirely observe-only: never widens a
+        # route, never blocks the publish this function exists to make.
+        try:
+            from . import roofline_coverage
+            attempts = [o.to_attempt() for o in outcomes]
+            scope_gap_path = roofline_coverage.stagnation_scope_gap_hook(
+                uncovered_gap_state[0], status.stagnation_signal(attempts),
+                store_root=args.store)
+            if scope_gap_path is not None:
+                print(f"profile   STAGNATION + UNCOVERED ROOFLINE GAP: wrote {scope_gap_path}")
+        except Exception as exc:  # pragma: no cover - defensive, observe-only
+            print(f"profile   scope-gap stagnation hook skipped ({type(exc).__name__}: {exc})")
         status.write(
             args.store, state=state, epoch=epoch, campaign_id="ak-loop",
             anchor_commit=current_anchor_commit[0], surface=args.surface,
@@ -4899,7 +4933,8 @@ def main(argv: list[str] | None = None) -> int:
             stale_after_s=HEARTBEAT_S * 6,
             actor_health=actor_health(outcomes),
             comparability=history_view[0],
-            scratch=(scratch_registry[0].stats() if scratch_registry[0] is not None else None))
+            scratch=(scratch_registry[0].stats() if scratch_registry[0] is not None else None),
+            uncovered_gap=uncovered_gap_state[0])
 
     latest: list = []
     original_source_keeps: list[dict] = []

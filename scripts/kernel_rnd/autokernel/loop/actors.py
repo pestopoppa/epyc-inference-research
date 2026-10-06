@@ -2300,6 +2300,55 @@ def _render_gpu_serving_profile(observation: Mapping[str, Any], *, limit: int = 
     return lines
 
 
+#: 2026-10-06 autonomy self-check (`roofline_coverage.py`): where the measured
+#: bandwidth headroom actually is, per NODE (not the prefill-pooled path aggregate
+#: above), and whether `gates.py` admits ANY route that could touch it today.
+ROOFLINE_GAP_HEADER = ("### ROOFLINE GAP (where headroom is) -- per-node achieved "
+                       "bandwidth vs the host ceiling, cross-checked against admitted "
+                       "routes")
+
+
+def _render_roofline_gaps(roofline_gaps: Mapping[str, Any] | None, *,
+                          limit: int = 12) -> list[str]:
+    """The planner's replacement for raw path-level share on bandwidth-bound nodes.
+
+    `roofline_gaps` is `roofline_coverage.from_node_dump`'s output, attached by
+    `node_profile.section()` only when a host ceiling was configured and the dump
+    carried per-node rows. Absent (not collected, or the dump predates per-node
+    rows) prints nothing -- this is an addition to the node-profile section, never a
+    required one.
+    """
+    if not isinstance(roofline_gaps, Mapping) or not roofline_gaps.get("gap_table"):
+        return []
+    lines = ["", ROOFLINE_GAP_HEADER,
+             f"Ceiling: {_num(roofline_gaps.get('ceiling_gb_s'))} GB/s (host memory-bandwidth "
+             "ceiling, configured not measured here). gap share = time share x "
+             "(1 - achieved/ceiling); `route` is `covered` only when `gates.py`'s OWN "
+             "admitted-route tables name the resolved (file, symbol) -- never this "
+             "module's own guess.",
+             "| gap share | achieved GB/s | op | type | route | covered |",
+             "|---|---|---|---|---|---|"]
+    for row in roofline_gaps["gap_table"][:limit]:
+        symbol = row.get("symbol")
+        route = f"`{row.get('file')}` ({symbol})" if row.get("file") else "unresolved"
+        covered = row.get("covered")
+        covered_text = "yes" if covered is True else ("NO" if covered is False else "unknown")
+        lines.append(f"| {_pct(row.get('gap_share'))} | {_num(row.get('achieved_gb_s'))} | "
+                     f"`{row.get('op')}` | `{row.get('src0_type')}` | {route} | {covered_text} |")
+    uncovered = roofline_gaps.get("uncovered_gap") or {}
+    if uncovered.get("triggered"):
+        lines.append("")
+        lines.append(f"**UNCOVERED GAP: {_pct(uncovered.get('uncovered_fraction'))} of the "
+                     "top-K gap share above sits in nodes with NO admitted route.** Widening "
+                     "a route is an explicit operator decision (CLAUDE.md, Experimental "
+                     "Kernel Workflow) -- do not author a patch against these files/symbols "
+                     "until one is admitted: "
+                     + "; ".join(f"`{item.get('file')}` ({item.get('symbol')})"
+                                 for item in uncovered.get("uncovered_nodes", [])[:6]
+                                 if item.get("file")) + ".")
+    return lines
+
+
 def _render_node_profile(observation: Mapping[str, Any], *, limit: int = 12) -> list[str]:
     """`node_profile.section()` as the planner reads it: SHARES and ratios only.
 
@@ -2357,6 +2406,11 @@ def _render_node_profile(observation: Mapping[str, Any], *, limit: int = 12) -> 
         for row in paths[:limit]:
             lines.append(f"| {_pct(row.get('wall_fraction'))} | `{row.get('path')}` | "
                          f"{_num(row.get('calls'))} |")
+        lines.append("Per-call PATH aggregates above pool every node shape and phase "
+                     "that hits one weight path, prefill included -- their bandwidth is "
+                     "NOT a roofline reading. The ROOFLINE GAP table below is the "
+                     "per-node replacement for that framing.")
+    lines.extend(_render_roofline_gaps(observation.get("roofline_gaps"), limit=limit))
     phases = observation.get("host_phase_shares") or []
     if phases:
         lines.append("")
