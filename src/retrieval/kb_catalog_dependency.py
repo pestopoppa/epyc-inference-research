@@ -158,6 +158,8 @@ def read_dependency(catalog: Path | str) -> dict | None:
         if not isinstance(body, str) or _hash(body.encode('utf-8')) != seal:
             raise ValueError('catalog dependency record bytes changed')
         record = json.loads(body)
+        if not isinstance(record, dict):
+            raise ValueError("catalog dependency native JSON must be an object")
         fields = {'format', 'digest_basis', 'operation', 'captured_at',
                   'logical_catalog_sha256', 'stored_identity', 'loaded_identity', 'scope'}
         if (set(record) != fields or record['format'] != FORMAT or record['digest_basis'] != BASIS

@@ -277,3 +277,112 @@ def test_stored_caps_and_identity_are_not_replaced_by_live_values(catalog):
     assert dependency.read_dependency(catalog) == record
     with sqlite3.connect(catalog) as conn:
         assert dict(conn.execute('SELECT key, value FROM index_meta')) == stored
+
+
+@pytest.fixture
+def removal_bytes(catalog):
+    target = catalog.parent / 'file.md'
+    vector = catalog.parent / 'emb' / 'preserved.npz'
+    vector.parent.mkdir()
+    body = b'exact synthetic vector bytes; never encoded or loaded'
+    vector.write_bytes(body)
+    with sqlite3.connect(catalog) as conn:
+        conn.execute('UPDATE chunk SET file_path=?, emb_path=?', (str(target.resolve()), 'emb/preserved.npz'))
+        kb_rag._ensure_fts(conn)
+        conn.execute('INSERT INTO chunk_fts(rowid, file_path, heading_path, text) VALUES (1, ?, ?, ?)',
+                     (str(target.resolve()), '[]', 'fixture'))
+    previous = publish(catalog)
+    return catalog, target, vector, body, previous
+
+
+@pytest.mark.parametrize('failure', ['hash', 'commit'])
+def test_remove_failure_preserves_actual_rows_and_vector_bytes(removal_bytes, monkeypatch, failure):
+    catalog, target, vector, body, previous = removal_bytes
+    monkeypatch.setattr(encoder, 'ensure_loaded', lambda: pytest.fail('no load'))
+    if failure == 'hash':
+        original = dependency.logical_digest
+        monkeypatch.setattr(dependency, 'logical_digest', Mock(side_effect=ValueError('fake hash failure')))
+        expected_error = ValueError
+    else:
+        class FailFinalCommit(sqlite3.Connection):
+            commits = 0
+            def commit(self):
+                self.commits += 1
+                if self.commits == 2:  # FTS initialization succeeds; final/native commit fails.
+                    raise sqlite3.OperationalError('fake final commit failure')
+                super().commit()
+        monkeypatch.setattr(kb_rag, '_ensure_catalog', lambda *a, **k:
+                            sqlite3.connect(catalog, factory=FailFinalCommit))
+        expected_error = sqlite3.OperationalError
+    with pytest.raises(expected_error):
+        kb_rag.remove_files([str(target)], index_dir=catalog.parent)
+    assert vector.read_bytes() == body
+    with sqlite3.connect(catalog) as conn:
+        assert conn.execute('SELECT COUNT(*) FROM chunk').fetchone()[0] == 1
+        assert conn.execute('SELECT COUNT(*) FROM chunk_fts').fetchone()[0] == 1
+    if failure == 'hash':
+        monkeypatch.setattr(dependency, 'logical_digest', original)
+    assert dependency.read_dependency(catalog) == previous
+
+
+def test_remove_success_deletes_bytes_only_after_committed_native_record(removal_bytes, monkeypatch):
+    catalog, target, vector, body, _ = removal_bytes
+    unlink = type(vector).unlink
+    observed = []
+    def after_commit(path, *args, **kwargs):
+        if path == vector:
+            assert path.read_bytes() == body
+            with sqlite3.connect(catalog) as conn:
+                assert conn.execute('SELECT COUNT(*) FROM chunk').fetchone()[0] == 0
+            assert dependency.read_dependency(catalog)['operation'] == 'remove_files'
+            observed.append('after native commit')
+        return unlink(path, *args, **kwargs)
+    monkeypatch.setattr(type(vector), 'unlink', after_commit)
+    monkeypatch.setattr(encoder, 'ensure_loaded', lambda: pytest.fail('no load'))
+    result = kb_rag.remove_files([str(target)], index_dir=catalog.parent)
+    assert observed == ['after native commit']
+    assert not vector.exists()
+    assert result['embeddings_removed'] == 1
+    assert result['embedding_cleanup_ok'] and result['orphaned_embeddings'] == 0
+
+
+def test_remove_cleanup_failure_preserves_committed_outcome_and_reports_orphan(removal_bytes, monkeypatch):
+    catalog, target, vector, body, _ = removal_bytes
+    unlink = type(vector).unlink
+    def refuse(path, *args, **kwargs):
+        if path == vector:
+            raise PermissionError('fake orphan cleanup refusal')
+        return unlink(path, *args, **kwargs)
+    monkeypatch.setattr(type(vector), 'unlink', refuse)
+    monkeypatch.setattr(encoder, 'ensure_loaded', lambda: pytest.fail('no load'))
+    result = kb_rag.remove_files([str(target)], index_dir=catalog.parent)
+    assert result['ok'] and result['files_removed'] == 1 and result['chunks_removed'] == 1
+    assert result['embeddings_removed'] == 0 and not result['embedding_cleanup_ok']
+    assert result['orphaned_embeddings'] == 1
+    assert result['embedding_cleanup_errors'] == [{
+        'path': str(vector), 'error': 'PermissionError: fake orphan cleanup refusal'}]
+    assert vector.read_bytes() == body
+    assert dependency.read_dependency(catalog)['operation'] == 'remove_files'
+    with sqlite3.connect(catalog) as conn:
+        assert conn.execute('SELECT COUNT(*) FROM chunk').fetchone()[0] == 0
+
+
+def test_remove_preserves_vectors_shared_with_surviving_rows(removal_bytes):
+    catalog, target, vector, body, _ = removal_bytes
+    with sqlite3.connect(catalog) as conn:
+        conn.execute("INSERT INTO chunk VALUES (2, 'other.md', '[]', 1, 1, 'hash', 0, 'emb/preserved.npz', '', 0)")
+    result = kb_rag.remove_files([str(target)], index_dir=catalog.parent)
+    assert result['chunks_removed'] == 1 and result['embeddings_removed'] == 0
+    assert vector.read_bytes() == body
+    assert dependency.read_dependency(catalog)['operation'] == 'remove_files'
+
+
+@pytest.mark.parametrize('value', [None, [], 'native scalar', 1, True])
+def test_non_object_native_json_explicitly_refused(catalog, value):
+    publish(catalog)
+    body = dependency._bytes(value)
+    with sqlite3.connect(catalog) as conn:
+        conn.execute('UPDATE catalog_dependency SET record_json=?, record_sha256=?',
+                     (body.decode(), hashlib.sha256(body).hexdigest()))
+    with pytest.raises(ValueError, match='native JSON must be an object'):
+        dependency.read_dependency(catalog)

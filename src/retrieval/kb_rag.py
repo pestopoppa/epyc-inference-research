@@ -749,7 +749,13 @@ def remove_files(
     paths: list[str],
     index_dir: Path | str = DEFAULT_INDEX_DIR,
 ) -> dict[str, Any]:
-    """Remove catalog rows for files that left the source corpus."""
+    """Commit removed rows before model-free orphan-vector cleanup.
+
+    Catalog/native-record failures preserve referenced bytes. Cleanup failures
+    after commit are reported separately; they leave orphans, not live references
+    to files deleted by a rolled-back transaction. Concurrent writers remain
+    outside this per-call contract.
+    """
     index_dir = Path(index_dir)
     conn = _ensure_catalog(index_dir)
     with kb_catalog_dependency.writer_connection(conn):
@@ -759,7 +765,7 @@ def remove_files(
 
         removed_files = 0
         removed_chunks = 0
-        removed_embeddings = 0
+        pending_embeddings: set[str] = set()
         for raw_path in paths:
             p = Path(raw_path).expanduser().resolve()
             rows = cur.execute(
@@ -773,21 +779,34 @@ def remove_files(
             for row in rows:
                 if fts_enabled:
                     cur.execute("DELETE FROM chunk_fts WHERE rowid = ?", (int(row["chunk_id"]),))
-                emb_path = index_dir / str(row["emb_path"])
-                try:
-                    emb_path.unlink()
-                    removed_embeddings += 1
-                except FileNotFoundError:
-                    pass
+                pending_embeddings.add(str(row["emb_path"]))
             cur.execute("DELETE FROM chunk WHERE file_path = ?", (str(p),))
 
+        # A vector shared by surviving rows is still active in this catalog.
+        orphan_paths = [index_dir / relative for relative in sorted(pending_embeddings)
+                        if not cur.execute("SELECT 1 FROM chunk WHERE emb_path=? LIMIT 1",
+                                           (relative,)).fetchone()]
         kb_catalog_dependency.commit_completed_writer(conn, "remove_files", loaded=None)
+    removed_embeddings = 0
+    cleanup_errors = []
+    for emb_path in orphan_paths:
+        try:
+            emb_path.unlink()
+            removed_embeddings += 1
+        except FileNotFoundError:
+            pass
+        except OSError as exc:
+            cleanup_errors.append({"path": str(emb_path), "error": f"{type(exc).__name__}: {exc}"})
+            logger.warning("kb_rag: committed removal left orphan %s: %s", emb_path, exc)
     _clear_embedding_cache()
     return {
         "ok": True,
         "files_removed": removed_files,
         "chunks_removed": removed_chunks,
         "embeddings_removed": removed_embeddings,
+        "embedding_cleanup_ok": not cleanup_errors,
+        "orphaned_embeddings": len(cleanup_errors),
+        "embedding_cleanup_errors": cleanup_errors,
     }
 
 
