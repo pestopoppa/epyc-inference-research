@@ -112,6 +112,11 @@ CASE_SET_ENV = "AUTOKERNEL_CORRECTNESS_CASE_SET"
 #: from ever being looser than the generic check. (1e-4 refused 12 IQ3_XXS shared-
 #: expert cases whose anchor itself measured 2e-4 .. 5.25e-4.)
 SERVED_SHAPE_NMSE_CAP = 5e-4
+#: The previous cap. Review of bb169f4b: raising the cap must not LOOSEN any case the
+#: old policy accepted, so every anchor below 1e-4 keeps exactly its old bound
+#: min(max(anchor x factor, floor), 1e-4); only anchors in [1e-4, 5e-4) use the new
+#: min(anchor x factor, 5e-4) path.
+SERVED_SHAPE_NMSE_LEGACY_CAP = 1e-4
 #: A measured-zero anchor NMSE (quantization noise reading as exactly 0.0 in a small
 #: sample) must not produce a bound of 0.0, which would refuse every candidate
 #: including a bit-identical one to floating-point noise.
@@ -344,7 +349,13 @@ def tightened_nmse_bound(anchor_nmse: float, *, factor: float = 3.0,
                              f"bound {SERVED_SHAPE_NMSE_CAP}: the anchor itself fails "
                              "the generic check here -- investigate, do not clip")
         return anchor_nmse * factor
-    return min(SERVED_SHAPE_NMSE_CAP, max(SERVED_SHAPE_NMSE_FLOOR, anchor_nmse * factor))
+    if anchor_nmse < SERVED_SHAPE_NMSE_LEGACY_CAP:
+        # Every case the old policy accepted keeps its OLD bound exactly (no loosening).
+        return min(SERVED_SHAPE_NMSE_LEGACY_CAP,
+                   max(SERVED_SHAPE_NMSE_FLOOR, anchor_nmse * factor))
+    # 1e-4 <= anchor < 5e-4: the old policy refused; now factor x anchor, never looser
+    # than the generic bound.
+    return min(SERVED_SHAPE_NMSE_CAP, anchor_nmse * factor)
 
 
 @dataclass(frozen=True)

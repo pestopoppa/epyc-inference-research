@@ -93,6 +93,45 @@ def test_tightened_bound_scales_caps_and_floors():
     assert ssc.tightened_nmse_bound(5.25e-4, anchor_relative=True) == pytest.approx(1.575e-3)
     # A measured-zero anchor NMSE must not produce a zero bound.
     assert ssc.tightened_nmse_bound(0.0) == ssc.SERVED_SHAPE_NMSE_FLOOR
+    # Review of bb169f4b: an anchor the old policy accepted keeps its old bound.
+    assert ssc.tightened_nmse_bound(5e-5, factor=3.0) == pytest.approx(1e-4)
+
+
+def _old_bound(anchor, factor=3.0):
+    """The pre-bb169f4b policy (cap 1e-4), verbatim."""
+    return min(1e-4, max(ssc.SERVED_SHAPE_NMSE_FLOOR, anchor * factor))
+
+
+def test_every_anchor_the_old_policy_accepted_keeps_its_old_bound():
+    import numpy as np
+    for anchor in np.concatenate(([0.0], np.logspace(-12, np.log10(9.9999e-5), 400))):
+        assert ssc.tightened_nmse_bound(float(anchor)) == _old_bound(float(anchor)), anchor
+    assert ssc.SERVED_SHAPE_NMSE_LEGACY_CAP == 1e-4
+
+
+def test_the_real_ds41_record_keeps_every_old_bound(capsys):
+    """Read-only replay of the first real calibration record (DS41)."""
+    import json
+    record = Path("/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/"
+                  "store-b0ba1d427/served_shape/calibration-20261006T104207Z.json")
+    if not record.is_file():
+        pytest.skip("DS41 calibration record not present")
+    values = [row["nmse"] for row in json.loads(record.read_text())["measurements"]]
+    regimes = {"old (<1e-4)": 0, "new [1e-4,5e-4)": 0, "anchor>=5e-4": 0}
+    for anchor in values:
+        if anchor < 1e-4:
+            regimes["old (<1e-4)"] += 1
+            assert ssc.tightened_nmse_bound(anchor) == _old_bound(anchor)
+        elif anchor < 5e-4:
+            regimes["new [1e-4,5e-4)"] += 1
+            bound = ssc.tightened_nmse_bound(anchor)
+            assert anchor < bound <= 5e-4
+        else:
+            regimes["anchor>=5e-4"] += 1
+            with pytest.raises(ValueError):
+                ssc.tightened_nmse_bound(anchor)
+    print(f"DS41 record regimes: {regimes}")
+    assert sum(regimes.values()) == len(values)
 
 
 def test_anchor_relative_cases_are_recorded_and_only_they_may_exceed_the_cap(tmp_path):
