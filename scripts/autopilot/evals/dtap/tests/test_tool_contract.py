@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -213,7 +214,7 @@ def test_declared_function_uses_fake_parser_and_preserves_native_judge_result(tm
     assert result.status == "ok" and len(calls) == 2
     assert calls[0]["tools"] == contract.for_case(case_id)
     assert calls[0]["tools"][0]["type"] == "function"
-    records = verify_trace(result.trace_path)
+    records = verify_trace(Path(result.trace_path))
     request = next(record["payload"] for record in records if record["event"] == "endpoint_request")
     assert request["request_tools_sha256"] == contract.tools_sha256(case_id)
     accepted = [record["payload"] for record in records if record["event"] == "tool_call"]
@@ -244,7 +245,7 @@ def test_unknown_function_is_rejected_before_runner_records_accepted_call(tmp_pa
         native_tool_contract=contract,
     )
     assert result.status == "failed" and result.failure["type"] == "tool"
-    records = verify_trace(result.trace_path)
+    records = verify_trace(Path(result.trace_path))
     assert not any(record["event"] == "tool_call" for record in records)
 
 
