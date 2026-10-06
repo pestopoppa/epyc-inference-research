@@ -11059,6 +11059,15 @@ def _run_loop_inner(
             run_manifest=_in_flight_run_manifest(state, trial_counter),  # AP-63(a)
             lineage=trial_lineage,  # AP-63(a)
         )
+        # AP-ME-3 native prospective diagnostics, independent of BSV enforcement flags.
+        if os.environ.get("AUTOPILOT_CROSSOVER_COMPLEMENTARITY_DIAGNOSTICS") == "1":
+            try:
+                from crossover_diagnostics import capture_trial_features
+                capture_trial_features(
+                    journal_entry, verdict=verdict, action=effective_action,
+                    eval_result=eval_result, history=journal.entries_with_supersessions())
+            except Exception as exc:
+                log.warning("Crossover feature metadata unavailable (%s)", type(exc).__name__)
         _sync_segment_snapshot_scope(journal, state)  # W3
         journal.record(journal_entry)
         baseline_update = _reconcile_promotion_with_journal(

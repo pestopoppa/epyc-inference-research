@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, Any, Iterable
 
 from controller_io import suppressed_numeric_surfaces, validate_single_variable
 import rejected_mutation_ledger
+from mutation_author_capture import author_capture_kwargs
 from safety_gate import EvalResult, SafetyGate
 from species.prompt_forge import diversity_coverage_penalty
 from src.autopilot_core.tier_specs import UnmeasuredObjectiveError, objectives_from
@@ -1165,6 +1166,14 @@ def _build_mutation_context(
         last_entries[-1].eval_details.get("per_suite_quality") if last_entries else None
     )
 
+    if mutation_type == "crossover":
+        try:
+            from crossover_diagnostics import crossover_context
+            donor_context = crossover_context(ctx.journal, target)
+            if donor_context:
+                failure_context = f"{failure_context}\n\n{donor_context}"
+        except Exception as exc:
+            log.warning("Crossover donor context unavailable (%s)", type(exc).__name__)
     return failure_context, last_per_suite
 
 
@@ -1524,6 +1533,7 @@ def _action_prompt_mutation(action: dict[str, Any], ctx: _ActionContext):
             failure_context=failure_context,
             per_suite_quality=last_per_suite,
             description=description,
+            **author_capture_kwargs(action, ctx),
         )
     except FileNotFoundError:
         log.warning("Prompt file not found: %s (may have been removed in refactoring)", target)
@@ -1769,6 +1779,7 @@ def _action_code_mutation(action: dict[str, Any], ctx: _ActionContext):
             failure_context=failure_context,
             per_suite_quality=last_per_suite,
             description=description,
+            **author_capture_kwargs(action, ctx),
         )
     except (ValueError, FileNotFoundError, FileExistsError) as e:
         log.error("Code mutation blocked: %s", e)
