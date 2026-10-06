@@ -14,6 +14,20 @@ from . import c5_rocm_oracle as C
 
 
 class C5RocmOracleConfigTest(unittest.TestCase):
+    def setUp(self):
+        # These tests exercise joins and projected metadata. Keep the production
+        # loader's historical policy-byte verification enabled everywhere else.
+        original_load = C.c5_seed_corpus.load
+        self.metadata_loader = mock.patch.object(
+            C.c5_seed_corpus,
+            "load",
+            side_effect=lambda path=None, **kwargs: original_load(
+                path, verify_evidence=False
+            ),
+        )
+        self.metadata_loader.start()
+        self.addCleanup(self.metadata_loader.stop)
+
     def document(self):
         return json.loads(C._config_path().read_text(encoding="utf-8"))
 
@@ -95,6 +109,20 @@ class C5RocmOracleConfigTest(unittest.TestCase):
 
 
 class C5RocmOraclePlanTest(unittest.TestCase):
+    def setUp(self):
+        # The plan/join fixture is metadata-only; policy-byte verification has
+        # separate default-load refusal coverage in test_c5_seed_corpus.py.
+        original_load = C.c5_seed_corpus.load
+        self.metadata_loader = mock.patch.object(
+            C.c5_seed_corpus,
+            "load",
+            side_effect=lambda path=None, **kwargs: original_load(
+                path, verify_evidence=False
+            ),
+        )
+        self.metadata_loader.start()
+        self.addCleanup(self.metadata_loader.stop)
+
     @staticmethod
     def runtime():
         return {
