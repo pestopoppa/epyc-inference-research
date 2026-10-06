@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import stat
 import sqlite3
 from pathlib import Path
 from types import SimpleNamespace
@@ -68,6 +70,21 @@ def _fts_rows(index: Path) -> list[tuple]:
         return conn.execute(
             "SELECT rowid, file_path, heading_path, text FROM chunk_fts ORDER BY rowid"
         ).fetchall()
+
+
+def _all_chunk_rows(index: Path) -> list[tuple]:
+    with sqlite3.connect(index / "catalog.sqlite") as conn:
+        return conn.execute("SELECT * FROM chunk ORDER BY chunk_id").fetchall()
+
+
+def _run_writer(
+    operation: str, config: kb_rag.CorpusConfig, source: Path, index: Path
+) -> dict:
+    if operation == "build_index":
+        return kb_rag.build_index(config, index_dir=index, force=True)
+    if operation == "update_files":
+        return kb_rag.update_files([str(source)], config, index_dir=index)
+    raise AssertionError(f"unknown fixture writer: {operation}")
 
 
 def test_two_forced_builds_reuse_identity_and_publish_native_record(
@@ -220,3 +237,159 @@ def test_touched_duplicate_identity_converges_without_unlinking_active_vector(
     assert active_vector.is_file()
     assert unrelated_vector_before == original[5]
     assert kb_catalog_dependency.read_dependency(index / "catalog.sqlite") is not None
+
+
+@pytest.mark.parametrize("operation", ["build_index", "update_files"])
+def test_partial_staged_vector_write_preserves_active_state(
+    fake_encoder: Mock,
+    corpus: tuple[kb_rag.CorpusConfig, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+) -> None:
+    config, source = corpus
+    index = tmp_path / "index"
+    kb_rag.build_index(config, index_dir=index, force=True)
+    before_rows = _all_chunk_rows(index)
+    before_fts = _fts_rows(index)
+    before_dependency = kb_catalog_dependency.read_dependency(index / "catalog.sqlite")
+    vector = index / _rows(index)[0][5]
+    np.savez_compressed(vector, emb=np.full((2, 4), -0.5, dtype=np.float32))
+    sentinel_bytes = vector.read_bytes()
+    assert before_dependency is not None
+    fake_encoder.return_value = np.full((2, 4), 0.75, dtype=np.float32)
+    stage_token = "fixture-stage-token"
+    monkeypatch.setattr(kb_rag.secrets, "token_hex", lambda _: stage_token)
+    staged_path = vector.with_name(f".{vector.name}.{stage_token}.tmp.npz")
+
+    def fail_after_partial_write(staged_file, **arrays) -> None:
+        assert staged_path.exists()
+        staged_file.write(b"partial synthetic npz")
+        raise OSError("fake staged serialization failure")
+
+    monkeypatch.setattr(kb_rag.np, "savez_compressed", fail_after_partial_write)
+    with pytest.raises(OSError, match="fake staged serialization failure"):
+        _run_writer(operation, config, source, index)
+
+    assert _all_chunk_rows(index) == before_rows
+    assert _fts_rows(index) == before_fts
+    assert kb_catalog_dependency.read_dependency(index / "catalog.sqlite") == before_dependency
+    assert vector.read_bytes() == sentinel_bytes
+    assert staged_path.parent == vector.parent
+    assert staged_path != vector
+    assert not staged_path.exists()
+
+
+def test_partial_staged_write_without_prior_target_publishes_no_vector(
+    fake_encoder: Mock,
+    corpus: tuple[kb_rag.CorpusConfig, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, source = corpus
+    index = tmp_path / "index"
+
+    def fail_after_partial_write(staged_file, **arrays) -> None:
+        staged_file.write(b"partial synthetic npz")
+        raise OSError("fake staged serialization failure")
+
+    monkeypatch.setattr(kb_rag.np, "savez_compressed", fail_after_partial_write)
+    with pytest.raises(OSError, match="fake staged serialization failure"):
+        kb_rag.build_index(config, index_dir=index, force=True)
+
+    assert _all_chunk_rows(index) == []
+    with sqlite3.connect(index / "catalog.sqlite") as conn:
+        if conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE name='chunk_fts'"
+        ).fetchone():
+            assert conn.execute("SELECT COUNT(*) FROM chunk_fts").fetchone()[0] == 0
+    assert kb_catalog_dependency.read_dependency(index / "catalog.sqlite") is None
+    assert list((index / "emb").glob("*.npz")) == []
+    assert list((index / "emb").glob(".*.tmp.npz")) == []
+
+
+@pytest.mark.parametrize("operation", ["build_index", "update_files"])
+def test_staged_vector_replace_refusal_preserves_active_state(
+    fake_encoder: Mock,
+    corpus: tuple[kb_rag.CorpusConfig, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    operation: str,
+) -> None:
+    config, source = corpus
+    index = tmp_path / "index"
+    kb_rag.build_index(config, index_dir=index, force=True)
+    before_rows = _all_chunk_rows(index)
+    before_fts = _fts_rows(index)
+    before_dependency = kb_catalog_dependency.read_dependency(index / "catalog.sqlite")
+    vector = index / _rows(index)[0][5]
+    np.savez_compressed(vector, emb=np.full((2, 4), -0.5, dtype=np.float32))
+    sentinel_bytes = vector.read_bytes()
+    assert before_dependency is not None
+    fake_encoder.return_value = np.full((2, 4), 0.75, dtype=np.float32)
+
+    def refuse_replace(source_path, target_path) -> None:
+        assert Path(target_path) == vector
+        raise PermissionError("fake atomic replace refusal")
+
+    monkeypatch.setattr(kb_rag.os, "replace", refuse_replace)
+    with pytest.raises(PermissionError, match="fake atomic replace refusal"):
+        _run_writer(operation, config, source, index)
+
+    assert _all_chunk_rows(index) == before_rows
+    assert _fts_rows(index) == before_fts
+    assert kb_catalog_dependency.read_dependency(index / "catalog.sqlite") == before_dependency
+    assert vector.read_bytes() == sentinel_bytes
+    assert list((index / "emb").glob(".*.tmp.npz")) == []
+
+
+@pytest.mark.parametrize("operation", ["build_index", "update_files"])
+def test_staged_vector_success_keeps_npz_format_and_cleans_temporary(
+    fake_encoder: Mock,
+    corpus: tuple[kb_rag.CorpusConfig, Path],
+    tmp_path: Path,
+    operation: str,
+) -> None:
+    config, source = corpus
+    index = tmp_path / "index"
+    kb_rag.build_index(config, index_dir=index, force=True)
+    vector = index / _rows(index)[0][5]
+    vector.chmod(0o640)
+
+    result = _run_writer(operation, config, source, index)
+
+    rows = _rows(index)
+    assert result["chunks_encoded"] == 1
+    assert len(rows) == 1
+    vector = index / rows[0][5]
+    assert stat.S_IMODE(vector.stat().st_mode) == 0o640
+    with np.load(vector) as stored:
+        np.testing.assert_array_equal(stored["emb"], fake_encoder.return_value)
+    assert list((index / "emb").glob(".*.tmp.npz")) == []
+    record = kb_catalog_dependency.read_dependency(index / "catalog.sqlite")
+    assert record is not None
+    assert record["operation"] == operation
+
+
+@pytest.mark.skipif(os.name != "posix", reason="vector permission modes are POSIX-specific")
+@pytest.mark.parametrize("operation", ["build_index", "update_files"])
+def test_new_staged_vector_uses_standard_create_mode(
+    fake_encoder: Mock,
+    corpus: tuple[kb_rag.CorpusConfig, Path],
+    tmp_path: Path,
+    operation: str,
+) -> None:
+    config, source = corpus
+    index = tmp_path / "index"
+    probe = tmp_path / "create-mode-probe"
+    probe_fd = os.open(probe, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
+    os.close(probe_fd)
+    expected_mode = stat.S_IMODE(probe.stat().st_mode)
+    if operation == "update_files":
+        kb_rag.build_index(config, index_dir=index, force=True)
+        (index / _rows(index)[0][5]).unlink()
+
+    _run_writer(operation, config, source, index)
+
+    vector = index / _rows(index)[0][5]
+    assert stat.S_IMODE(vector.stat().st_mode) == expected_mode

@@ -36,7 +36,9 @@ import json
 import logging
 import math
 import os
+import secrets
 import sqlite3
+import stat
 import time
 from contextlib import closing
 from dataclasses import dataclass
@@ -497,6 +499,58 @@ def _emb_relative_path(file_path: str, content_hash: str) -> str:
     return f"emb/{safe_name}__{content_hash}.npz"
 
 
+def _write_embedding_atomic(path: Path, emb: np.ndarray) -> None:
+    """Publish a fully serialized vector without exposing a partial target."""
+    target = path.resolve(strict=False)
+    staged_path: Path | None = None
+    staged_fd: int | None = None
+    try:
+        try:
+            target_stat = target.lstat()
+        except FileNotFoundError:
+            target_mode = None
+        else:
+            if not stat.S_ISREG(target_stat.st_mode):
+                raise OSError(f"embedding target is not a regular file: {target}")
+            target_mode = stat.S_IMODE(target_stat.st_mode)
+
+        for _ in range(10):
+            candidate = target.with_name(f".{target.name}.{secrets.token_hex(12)}.tmp.npz")
+            try:
+                staged_fd = os.open(
+                    candidate,
+                    os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                    0o666,
+                )
+            except FileExistsError:
+                continue
+            staged_path = candidate
+            break
+        if staged_fd is None or staged_path is None:
+            raise FileExistsError(f"could not allocate staged embedding beside {target}")
+        if target_mode is not None:
+            os.fchmod(staged_fd, target_mode)
+        with os.fdopen(staged_fd, "wb") as staged:
+            staged_fd = None
+            np.savez_compressed(staged, emb=emb)
+        os.replace(staged_path, target)
+        staged_path = None
+    except BaseException:
+        if staged_fd is not None:
+            try:
+                os.close(staged_fd)
+            except OSError:
+                pass
+        if staged_path is not None:
+            try:
+                staged_path.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError as exc:
+                logger.warning("kb_rag: failed to clean staged embedding %s: %s", staged_path, exc)
+        raise
+
+
 @colbert_encoder.state_transaction
 def build_index(
     config: CorpusConfig,
@@ -582,7 +636,7 @@ def build_index(
                 emb_rel = _emb_relative_path(str(f), ch.content_hash)
                 emb_abs = index_dir / emb_rel
                 emb_abs.parent.mkdir(parents=True, exist_ok=True)
-                np.savez_compressed(emb_abs, emb=emb)
+                _write_embedding_atomic(emb_abs, emb)
 
                 preview = ch.text.strip()[:240]
                 row_values = (
@@ -726,7 +780,7 @@ def update_files(
                 emb_rel = _emb_relative_path(str(p), ch.content_hash)
                 emb_abs = index_dir / emb_rel
                 emb_abs.parent.mkdir(parents=True, exist_ok=True)
-                np.savez_compressed(emb_abs, emb=emb)
+                _write_embedding_atomic(emb_abs, emb)
                 cur.execute(
                     "INSERT INTO chunk "
                     "(file_path, heading_path, line_start, line_end, content_hash, "
