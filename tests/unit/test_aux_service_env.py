@@ -20,6 +20,8 @@ against llama.cpp's 0.16.0 `libggml-base`, an ABI mismatch that does not raise.
 from __future__ import annotations
 
 import os
+from pathlib import Path
+import sys
 import subprocess
 
 import pytest
@@ -80,6 +82,7 @@ def test_unknown_mode_is_rejected_rather_than_defaulted() -> None:
 
 
 @pytest.mark.parametrize("name", BACKEND_SERVICES)
+@pytest.mark.usefixtures("_pure_speech_backend_paths")
 def test_service_env_leads_with_its_own_tree(name: str) -> None:
     service = AUX_SERVICES[name]
     env = _composed_env(name, ADVERSARIAL_AMBIENT)
@@ -90,6 +93,7 @@ def test_service_env_leads_with_its_own_tree(name: str) -> None:
 
 
 @pytest.mark.parametrize("name", BACKEND_SERVICES)
+@pytest.mark.usefixtures("_pure_speech_backend_paths")
 def test_ambient_foreign_ggml_tree_cannot_reach_a_backend_service(name: str) -> None:
     """The ambient path may not override, and may not even be present.
 
@@ -104,6 +108,7 @@ def test_ambient_foreign_ggml_tree_cannot_reach_a_backend_service(name: str) -> 
 
 
 @pytest.mark.parametrize("name", BACKEND_SERVICES)
+@pytest.mark.usefixtures("_pure_speech_backend_paths")
 def test_declared_env_var_cannot_reintroduce_the_ambient_path(name: str) -> None:
     """LD_LIBRARY_PATH is composed LAST, after the service's plain env vars.
 
@@ -197,6 +202,7 @@ def test_llama_role_env_is_unchanged_by_aux_service_support() -> None:
     assert "GGML_IQK" in env and env["OMP_PROC_BIND"] == "spread"
 
 
+@pytest.mark.usefixtures("_pure_speech_backend_paths")
 def test_aux_services_do_not_inherit_the_llama_omp_recipe() -> None:
     """whisper.cpp and qwentts.cpp are not llama-server and must not be tuned as if.
 
@@ -292,3 +298,29 @@ def test_missing_ld_preload_fails_only_that_launch(tmp_path, monkeypatch) -> Non
     monkeypatch.setattr(oss.subprocess, "Popen", lambda *a, **k: popen.append(a) or None)
     assert oss.start_aux_service("tts") is None
     assert popen == []
+
+
+@pytest.fixture
+def _pure_speech_backend_paths(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Declared speech path metadata only; real loader tests never use this fixture."""
+    from src.registry import kernel_paths
+
+    directories = {}
+    for backend in ("stt", "tts"):
+        directory = tmp_path / backend
+        directory.mkdir(mode=0o700)
+        directories[backend] = directory
+
+    def declared_dir(backend):
+        assert backend in directories, backend
+        return directories[backend]
+
+    def refuse_child(*args, **kwargs):
+        raise AssertionError("pure speech environment composition cannot execute a child")
+
+    monkeypatch.setattr(kernel_paths, "backend_dir", declared_dir)
+    monkeypatch.setattr(sys.modules[__name__], "backend_dir", declared_dir)
+    # backend_ld_library_path remains real: matching tree first, then vendor policy.
+    monkeypatch.setattr(subprocess, "Popen", refuse_child)
+    yield directories
+    assert all(not list(directory.iterdir()) for directory in directories.values())
