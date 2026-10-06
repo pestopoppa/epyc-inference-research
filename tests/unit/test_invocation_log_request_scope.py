@@ -202,12 +202,30 @@ def test_get_invocation_log_returns_a_snapshot():
     assert len(registry.get_invocation_log()) == 1
 
 
-def test_snapshot_serializes_concurrent_append():
-    """A reader holds a snapshot while a writer attempts to append."""
+@pytest.mark.parametrize("writer_operation", ["append", "clear"], ids=["append", "clear"])
+def test_snapshot_serializes_concurrent_ring_writes(writer_operation):
+    """A reader holds a snapshot while append/clear reach the same lock."""
     reader_entered = Event()
     release_reader = Event()
-    writer_started = Event()
+    writer_lock_attempted = Event()
     writer_finished = Event()
+    thread_errors = []
+
+    class InstrumentedLock:
+        """A real lock with an event marking the writer's acquisition attempt."""
+
+        def __init__(self):
+            from threading import Lock
+
+            self._lock = Lock()
+
+        def __enter__(self):
+            writer_lock_attempted.set()
+            self._lock.acquire()
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            self._lock.release()
 
     class PausingDeque(deque):
         def __iter__(self):
@@ -219,23 +237,36 @@ def test_snapshot_serializes_concurrent_append():
     first = ToolInvocation("first", {}, "worker", True, "ok")
     second = ToolInvocation("second", {}, "worker", True, "ok")
     registry._invocation_log = PausingDeque([first], maxlen=2)
+    registry._invocation_log_lock = InstrumentedLock()
 
-    reader = Thread(target=registry.get_invocation_log)
+    def capture_reader():
+        try:
+            reader_snapshot.extend(registry.get_invocation_log())
+        except BaseException as exc:  # transfer thread failures to the test thread
+            thread_errors.append(exc)
 
-    def append_from_writer():
-        writer_started.set()
-        registry._record_invocation(second)
-        writer_finished.set()
+    def write_from_thread():
+        try:
+            if writer_operation == "append":
+                registry._record_invocation(second)
+            else:
+                registry.clear_invocation_log()
+        except BaseException as exc:  # transfer thread failures to the test thread
+            thread_errors.append(exc)
+        finally:
+            writer_finished.set()
 
-    writer = Thread(target=append_from_writer)
+    reader_snapshot = []
+    reader = Thread(target=capture_reader)
+    writer = Thread(target=write_from_thread)
     reader.start()
     try:
         assert reader_entered.wait(timeout=2)
         writer.start()
-        assert writer_started.wait(timeout=2)
+        assert writer_lock_attempted.wait(timeout=2)
         # The reader is deliberately paused inside deque iteration. The writer
-        # must wait until that snapshot has copied the ring.
-        assert not writer_finished.wait(timeout=0.05)
+        # has reached the same real lock and cannot mutate until the snapshot ends.
+        assert not writer_finished.is_set()
     finally:
         release_reader.set()
         reader.join(timeout=2)
@@ -244,10 +275,10 @@ def test_snapshot_serializes_concurrent_append():
 
     assert not reader.is_alive()
     assert not writer.is_alive()
-    assert [entry.tool_name for entry in registry.get_invocation_log()] == [
-        "first",
-        "second",
-    ]
+    assert thread_errors == []
+    assert [entry.tool_name for entry in reader_snapshot] == ["first"]
+    expected = ["first", "second"] if writer_operation == "append" else []
+    assert [entry.tool_name for entry in registry.get_invocation_log()] == expected
 
 
 # ── No reader of the shared log may build per-request telemetry ─────────────
