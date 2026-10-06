@@ -21,7 +21,7 @@ def _fake_build(tmp: Path, *, calibrated=True, values=None, skip=0, rc=0) -> Pat
     (build / "bin").mkdir(parents=True)
     lines = [f"{ssc.CALIBRATION_MARKER}\t{ssc.calibration_vars(*t)}\t"
              f"{(values or {}).get(i, 1e-6)}"
-             for i, t in enumerate(ssc.calibration_triples())][skip:]
+             for i, t in enumerate(ssc.calibration_triples("q38fn"))][skip:]
     payload = "\n".join(lines)
     literal = (f"# {ssc.CALIBRATION_CASE_SET_ID} {ssc.CALIBRATION_MARKER} "
                f"{ssc.BACKEND_THREADS_ENV}" if calibrated else "# nothing")
@@ -83,13 +83,16 @@ def _launch(tmp: Path) -> Path:
                        "LD_LIBRARY_PATH": f"{served}/bin"},
         "topology_prefix": ["taskset", "-c", "0-95"],
         "command_argv": ["llama-server", "-m", "m.gguf", "-t", "48", "-tb", "48"],
-        "build_dir": str(served), "template": {"cpu_list": "0-95"}}))
+        "build_dir": str(served), "template": {"cpu_list": "0-95"},
+        "model": {"path": cal.ssc.LANE_PROFILES["q38fn"].model}}))
     return path
 
 
 def _run(*argv):
     out = io.StringIO()
-    rc = cal.main(list(map(str, argv)), out=out)
+    from unittest import mock
+    with mock.patch.object(cal, "lane_profile_refusal", return_value=None):
+        rc = cal.main(list(map(str, argv)), out=out)
     return rc, out.getvalue()
 
 
@@ -104,12 +107,12 @@ def test_dry_by_default_changes_nothing(tmp_path):
 def test_execute_takes_the_region_lock_and_records_provenance(tmp_path):
     build, lock, store = _fake_build(tmp_path), _fake_region_lock(tmp_path), tmp_path / "s"
     rc, out = _run("--store", store, "--anchor-build", build, "--launch", _launch(tmp_path),
-                   "--region-lock", lock, "--execute")
+                   "--region-lock", lock, "--execute", "--lane", "q38fn")
     assert rc == 0, out
     argv = (tmp_path / "region-lock.argv").read_text()
     assert argv.startswith("run --cpu-list 0-95 --role bench --")
     record = json.loads(next((store / "served_shape").glob("calibration-*.json")).read_text())
-    assert len(record["measurements"]) == len(ssc.calibration_triples())
+    assert len(record["measurements"]) == len(ssc.calibration_triples("q38fn"))
     prov = record["provenance"]
     assert prov["anchor_commit"] == "c" * 40 and prov["cpu_list"] == "0-95"
     assert prov["threads"] == 48 and "test-backend-ops" in prov["binary_digests"]
@@ -120,12 +123,12 @@ def test_execute_takes_the_region_lock_and_records_provenance(tmp_path):
 def test_execute_then_apply_writes_manifest_and_stages_the_final_block(tmp_path):
     build, lock, store = _fake_build(tmp_path), _fake_region_lock(tmp_path), tmp_path / "s"
     tree = _tree(tmp_path)
-    rc, _ = _run("--store", store, "--tree", tree, "--stage-calibration-patch")
+    rc, _ = _run("--store", store, "--tree", tree, "--stage-calibration-patch", "--lane", "q38fn")
     assert rc == 0
     staged = (tree / "tests" / "test-backend-ops.cpp").read_text()
     assert ssc.CALIBRATION_CASE_SET_ID in staged and staged.count(ssc.PATCH_CALL) == 1
     rc, out = _run("--store", store, "--anchor-build", build, "--launch", _launch(tmp_path),
-                   "--region-lock", lock, "--execute", "--apply", "--tree", tree)
+                   "--region-lock", lock, "--execute", "--apply", "--tree", tree, "--lane", "q38fn")
     assert rc == 0, out
     cases = ssc.load_manifest(store / "served_shape" / "manifest.json")
     assert len(cases) == len(ssc.canonical_triples())
@@ -143,7 +146,8 @@ def test_incomplete_or_failed_calibration_refuses(tmp_path):
         build = _fake_build(sub, **kwargs)
         with pytest.raises((cal.Refused, ValueError)):
             recipe = cal.served_recipe(_launch(sub), build, cpu_list=None, threads=None)
-            cal.execute(build, sub / "store", recipe, str(lock), out=io.StringIO())
+            cal.execute(build, sub / "store", recipe, str(lock), "q38fn",
+                        out=io.StringIO())
         assert not (sub / "store" / "served_shape" / "manifest.json").exists()
 
 
@@ -151,7 +155,8 @@ def test_an_anchor_at_or_above_the_cap_refuses_to_bake(tmp_path):
     lock = _fake_region_lock(tmp_path)
     build = _fake_build(tmp_path, values={5: ssc.SERVED_SHAPE_NMSE_CAP})
     rc, _ = _run("--store", tmp_path / "s", "--anchor-build", build,
-                 "--launch", _launch(tmp_path), "--region-lock", lock, "--execute", "--apply")
+                 "--launch", _launch(tmp_path), "--region-lock", lock, "--execute", "--apply",
+                 "--lane", "q38fn")
     assert rc == 2
     assert not (tmp_path / "s" / "served_shape" / "manifest.json").exists()
 
@@ -161,14 +166,14 @@ def test_refuses_while_the_loop_owning_the_store_is_alive(tmp_path):
     status.write_json(store, status.STATUS_FILENAME, {
         "state": "running", "generated_at": status.datetime.now(
             status.timezone.utc).isoformat(), "stale_after_s": 180})
-    rc, _ = _run("--store", store, "--tree", _tree(tmp_path), "--stage-calibration-patch")
+    rc, _ = _run("--store", store, "--tree", _tree(tmp_path), "--stage-calibration-patch", "--lane", "q38fn")
     assert rc == 2
 
 
 def test_refuses_the_frozen_production_tree(tmp_path, monkeypatch):
     tree = _tree(tmp_path)
     monkeypatch.setattr(cal, "FROZEN_TREE", str(tree))
-    rc, _ = _run("--store", tmp_path / "s", "--tree", tree, "--stage-calibration-patch")
+    rc, _ = _run("--store", tmp_path / "s", "--tree", tree, "--stage-calibration-patch", "--lane", "q38fn")
     assert rc == 2
     subprocess.run(["git", "-C", str(tmp_path / "t2"), "init", "-q"], capture_output=True)
     other = tmp_path / "prod"
@@ -181,8 +186,9 @@ def test_refuses_the_frozen_production_tree(tmp_path, monkeypatch):
 
 def test_the_test_expert_count_is_eight_with_real_per_expert_dims():
     experts = [s for s in ssc.SERVED_SHAPES if s.op == "MUL_MAT_ID"]
-    assert experts and all(s.n_mats == 8 and s.n_used <= 8 for s in experts)
-    assert {(s.k, s.m) for s in experts} == {(5120, 2304), (2304, 5120)}
+    assert experts and all(s.n_mats in (8, 16) and s.n_used <= s.n_mats for s in experts)
+    assert {(s.k, s.m) for s in experts} == {(5120, 2304), (2304, 5120), (2560, 640),
+                                             (640, 2560)}
 
 
 def test_build_calibration_uses_the_anchor_recipe_under_the_build_lock(tmp_path):
@@ -190,7 +196,7 @@ def test_build_calibration_uses_the_anchor_recipe_under_the_build_lock(tmp_path)
     store = tmp_path / "s"
     rc, _ = _run("--store", store, "--tree", tree, "--build-calibration", "--cpu-list", "0-95")
     assert rc == 2   # no calibration block staged yet
-    assert _run("--store", store, "--tree", tree, "--stage-calibration-patch")[0] == 0
+    assert _run("--store", store, "--tree", tree, "--stage-calibration-patch", "--lane", "q38fn")[0] == 0
     lock = tmp_path / "region-lock"
     lock.write_text(textwrap.dedent(f"""\
         #!/bin/bash
@@ -216,7 +222,7 @@ def test_build_calibration_refuses_other_tree_changes_and_a_live_loop(tmp_path):
     store = tmp_path / "s"
     (tree / "other.c").write_text("x")
     subprocess.run(["git", "-C", str(tree), "add", "other.c"], check=True)
-    assert _run("--store", store, "--tree", tree, "--stage-calibration-patch")[0] == 0
+    assert _run("--store", store, "--tree", tree, "--stage-calibration-patch", "--lane", "q38fn")[0] == 0
     rc, _ = _run("--store", store, "--tree", tree, "--build-calibration", "--cpu-list", "0-95")
     assert rc == 2
     status.write_json(store, status.STATUS_FILENAME, {
@@ -248,3 +254,14 @@ def test_execute_reproduces_the_served_recipe_or_refuses(tmp_path):
     rc, _ = _run("--store", tmp_path / "s", "--anchor-build", build, "--region-lock", lock,
                  "--execute")
     assert rc == 2   # no --launch: the served env cannot be reproduced
+
+
+
+def test_the_lane_is_required_and_checked_against_its_gguf(tmp_path):
+    tree = _tree(tmp_path)
+    out = io.StringIO()
+    rc = cal.main(["--store", str(tmp_path / "s"), "--tree", str(tree),
+                   "--stage-calibration-patch"], out=out)
+    assert rc == 2   # no --lane
+    launch = _launch(tmp_path)
+    assert "not lane ds41" in cal.lane_profile_refusal(launch, "ds41")

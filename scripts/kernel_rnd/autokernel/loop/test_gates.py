@@ -2850,8 +2850,8 @@ class Round12HonestAuthorRefinements(unittest.TestCase):
     def test_the_bundle_tier_runs_the_routed_corpus_and_the_candidate_tier_does_not(self):
         seen = []
 
-        def fake(build, *, resolved_recipe, manifest_path, routed=False):
-            seen.append(routed)
+        def fake(build, *, resolved_recipe, manifest_path, routed=False, lane=None):
+            seen.append((routed, lane))
             return gates.Verdict("served_shape_case_set", True, "ok")
         with mock.patch.object(gates, "check_served_shape_case_set", fake), \
                 mock.patch.object(gates, "op_correctness",
@@ -2862,13 +2862,15 @@ class Round12HonestAuthorRefinements(unittest.TestCase):
                     numerics="ppl_contract"),
                 resolved_recipe=None, model=Path("/m"), threads=1, cpu_list="0", env={},
                 log_dir=Path("/tmp/x"), served_shape_manifest=Path("/s/manifest.json"))
-            self.assertEqual(seen, [False])
+            self.assertEqual(seen, [(False, None)])
             seen.clear()
             passing = {name: (lambda: gates.Verdict("x", True, "ok"))
                        for name in gates.PPL_CONTRACT_BUNDLE_LAYERS if name != "nmse"}
+            from autokernel.loop import served_shape_cases as ssc
             gates.ppl_contract_bundle_gate(
-                Path("/cor"), Path("/tip"), resolved_recipe=None, model=Path("/m"),
+                Path("/cor"), Path("/tip"), resolved_recipe=None,
+                model=Path(ssc.LANE_PROFILES["q38fn"].model),
                 threads=1, cpu_list="0", env={}, log_dir=Path("/tmp/x"),
                 reference_build=Path("/ref"), served_shape_manifest=Path("/s/manifest.json"),
                 _layers=passing)
-            self.assertEqual(seen, [False, True])
+            self.assertEqual(seen, [(False, None), (True, "q38fn")])

@@ -213,35 +213,58 @@ def served_recipe(launch_path: Path, build: Path, *, cpu_list: "str | None",
             "launch_sha256": _sha256(Path(launch_path))}
 
 
-def calibration_argv(build: Path, recipe: dict, region_lock: str) -> list:
+def calibration_argv(build: Path, recipe: dict, region_lock: str, lane: str) -> list:
     binary = Path(build) / "bin" / "test-backend-ops"
     return [region_lock, "run", "--cpu-list", recipe["cpu_list"], "--role", "bench", "--",
             *recipe["prefix"], str(binary), "test", "-o", "MUL_MAT,MUL_MAT_ID",
-            "-b", "CPU", "-p", ssc.calibration_regex()]
+            "-b", "CPU", "-p", ssc.calibration_regex(lane)]
 
 
-def execute(build: Path, store: Path, recipe: dict, region_lock: str,
+def lane_profile_refusal(launch_path: Path, lane: str) -> "str | None":
+    """Round-13: the served model in the launch record must BE the lane's profiled
+    GGUF, and re-deriving its MoE profile from the header must give the recorded one."""
+    try:
+        model = Path(json.loads(Path(launch_path).read_text(encoding="utf-8"))["model"]["path"])
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return f"{launch_path} names no served model: {exc}"
+    if ssc.lane_for_model(model) != lane:
+        return f"served model {model} is not lane {lane}'s profiled GGUF"
+    shards = sorted(model.parent.glob(model.name.replace("00001-of", "*-of"))) or [model]
+    try:
+        derived = ssc.moe_profile_from_gguf(shards, lane)
+    except Exception as exc:  # noqa: BLE001 -- an unreadable header is a refusal
+        return f"cannot read {model}'s MoE profile: {type(exc).__name__}: {exc}"
+    recorded = ssc.LANE_PROFILES[lane]
+    fields = ("expert_count", "expert_used", "hidden", "expert_ff", "shexp_ff")
+    diff = {f: (getattr(derived, f), getattr(recorded, f)) for f in fields
+            if getattr(derived, f) != getattr(recorded, f)}
+    if diff or set(derived.expert_types) != set(recorded.expert_types):
+        return f"{lane}'s GGUF disagrees with LANE_PROFILES: {diff or derived.expert_types}"
+    return None
+
+
+def execute(build: Path, store: Path, recipe: dict, region_lock: str, lane: str,
             out=sys.stdout) -> Path:
     if not ssc.binary_has_calibration(build):
         raise Refused(f"{build}/bin/test-backend-ops does not carry the calibration block "
                       f"({ssc.CALIBRATION_CASE_SET_ID}) with the backend-thread control; "
                       "stage it with --stage-calibration-patch and rebuild first")
     cpu_list, threads = recipe["cpu_list"], recipe["threads"]
-    argv = calibration_argv(build, recipe, region_lock)
-    print(f"execute   {' '.join(argv[:12])} ... -p <{len(ssc.calibration_triples())} cases> "
+    argv = calibration_argv(build, recipe, region_lock, lane)
+    print(f"execute   {' '.join(argv[:12])} ... -p <{len(ssc.calibration_triples(lane))} cases> "
           f"({ssc.BACKEND_THREADS_ENV}={threads})", file=out)
     done = subprocess.run(argv, capture_output=True, text=True, env=recipe["env"],
                           stdin=subprocess.DEVNULL, timeout=CALIBRATION_TIMEOUT_S)
     if done.returncode != 0:
         raise Refused(f"calibration run exited {done.returncode}: "
                       f"{(done.stderr or done.stdout)[-600:]}")
-    measurements = ssc.parse_calibration(done.stdout)
+    measurements = ssc.parse_calibration(done.stdout, lane)
     folder = Path(store) / "served_shape"
     folder.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     path = folder / f"calibration-{stamp}.json"
     body = {"schema": "epyc.autokernel.served_shape_calibration.v1",
-            "case_set_id": ssc.CASE_SET_ID,
+            "case_set_id": ssc.CASE_SET_ID, "lane": lane,
             "provenance": {**provenance(build, cpu_list, threads, argv),
                            "launch": recipe["launch"], "launch_sha256": recipe["launch_sha256"],
                            "served_env": {k: v for k, v in sorted(recipe["env"].items())
@@ -261,10 +284,11 @@ def load_measurements(path: Path) -> dict:
             for row in body["measurements"]}
 
 
-def apply(measurements: dict, store: Path, tree: "Path | None", out=sys.stdout) -> None:
+def apply(measurements: dict, store: Path, tree: "Path | None", lane: str,
+          out=sys.stdout) -> None:
     try:
         cases = ssc.case_set(measurements)
-        routed = ssc.case_set(measurements, routed=True)
+        routed = ssc.case_set(measurements, routed=True, lane=lane)
     except (KeyError, ValueError) as exc:
         raise Refused(f"calibration cannot be baked: {exc}") from exc
     folder = Path(store) / "served_shape"
@@ -272,7 +296,7 @@ def apply(measurements: dict, store: Path, tree: "Path | None", out=sys.stdout) 
     block = ssc.backend_ops_patch_block(cases, routed)
     (folder / "patch.cpp").write_text(block, encoding="utf-8")
     ssc.write_manifest(folder / "manifest.json", cases)
-    ssc.write_manifest(folder / "manifest-routed.json", routed, routed=True)
+    ssc.write_manifest(folder / "manifest-routed.json", routed, routed=True, lane=lane)
     print(f"apply     manifest {folder / 'manifest.json'} ({len(cases)} cases), routed "
           f"manifest ({len(routed)} cases), patch {folder / 'patch.cpp'}", file=out)
     if tree is not None:
@@ -295,6 +319,8 @@ def main(argv: "list[str] | None" = None, out=sys.stdout) -> int:
     parser.add_argument("--threads", type=int)
     parser.add_argument("--region-lock", default=REGION_LOCK)
     parser.add_argument("--measurements", type=Path)
+    parser.add_argument("--lane", choices=sorted(ssc.LANE_PROFILES),
+                        help="the lane whose GGUF MoE profile the routed corpus derives from")
     parser.add_argument("--launch", type=Path,
                         help="the lane's resolved launch JSON (served env, prefix, -t)")
     parser.add_argument("--stage-calibration-patch", action="store_true")
@@ -315,12 +341,15 @@ def main(argv: "list[str] | None" = None, out=sys.stdout) -> int:
             frozen = frozen_tree_refusal(args.tree)
             if frozen:
                 raise Refused(frozen)
+        if (args.stage_calibration_patch or args.execute or args.apply) and not args.lane:
+            raise Refused("--lane is required: the routed corpus derives from that lane's "
+                          "GGUF expert_count / expert_used_count")
         if args.stage_calibration_patch:
             if args.tree is None:
                 raise Refused("--stage-calibration-patch needs --tree")
             try:
                 ssc.apply_patch_block(args.tree / "tests" / "test-backend-ops.cpp",
-                                      ssc.calibration_patch_block())
+                                      ssc.calibration_patch_block(args.lane))
             except ValueError as exc:
                 raise Refused(f"cannot stage the calibration block: {exc}") from exc
             print(f"staged    calibration block into {args.tree}/tests/test-backend-ops.cpp",
@@ -341,21 +370,25 @@ def main(argv: "list[str] | None" = None, out=sys.stdout) -> int:
                               "recipe it must reproduce)")
             recipe = served_recipe(args.launch, args.anchor_build, cpu_list=args.cpu_list,
                                    threads=args.threads)
-            path = execute(args.anchor_build, args.store, recipe, args.region_lock, out=out)
+            profile_refusal = lane_profile_refusal(args.launch, args.lane)
+            if profile_refusal:
+                raise Refused(profile_refusal)
+            path = execute(args.anchor_build, args.store, recipe, args.region_lock,
+                           args.lane, out=out)
             measurements = load_measurements(path)
         elif args.measurements is not None:
             measurements = load_measurements(args.measurements)
         if args.apply:
             if measurements is None:
                 raise Refused("--apply needs --execute or --measurements")
-            apply(measurements, args.store, args.tree, out=out)
+            apply(measurements, args.store, args.tree, args.lane, out=out)
             return 0
         if not mutating:
             ready = (args.anchor_build is not None
                      and ssc.binary_has_calibration(args.anchor_build))
             print(f"DRY RUN   store {args.store}; anchor build {args.anchor_build} "
                   f"{'carries' if ready else 'does NOT carry'} the calibration block; "
-                  f"{len(ssc.canonical_triples())} cases; region-lock {args.region_lock} "
+                  f"{len(ssc.canonical_triples())} candidate cases; region-lock {args.region_lock} "
                   f"--cpu-list {args.cpu_list or '<served list>'} --role bench. "
                   "Pass --stage-calibration-patch / --execute / --apply.", file=out)
         return 0

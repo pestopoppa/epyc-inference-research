@@ -11,21 +11,23 @@ n_used) dims read directly off the lanes' own GGUF headers (never invented), at 
 served widths (decode n=1, verify n=2-5), for the witness quant types the admitted
 low-bit CPU routes edit.
 
-PROVENANCE (2026-10-06, read-only header parse, no build/inference):
-  * Q38FN dense: `/mnt/raid0/llm/models/Qwen3.8-27B-Q8_0.gguf` ("qwen35" arch) --
-    `embedding_length=5120`, `feed_forward_length=17408`. No `.expert_count` key and
-    no `ffn_*_exps` tensors: Q38FN is DENSE-only (hybrid attention+SSM, no MoE),
-    matching the task's own "Q38FN ... dense shapes" framing.
-  * DS41 expert + dense: `/mnt/raid0/llm/models/deepseek-ai/
-    DeepSeek-V4.1-Flash-DSpark.gguf` ("deepseek41-dspark" arch, the DSpark drafter
-    extraction that shares the served backbone's FFN dims per its own
-    `dspark.target_arch=deepseek41` field) -- `embedding_length=5120`,
-    `expert_feed_forward_length=2304`, `expert_count=128`, `expert_used_count=3`,
-    plus the dense shared-expert tensors `ffn_{gate,up,down}_shexp` at the same
-    (5120, 2304) dims. `ffn_{gate,up}_exps.weight` is `[5120, 2304, 128]` and
-    `ffn_down_exps.weight` is `[2304, 5120, 128]` in GGUF's `ne[]` (ggml-major,
-    reversed from the C `(rows, cols)` convention) -- `k` (test-backend-ops'
-    reduction dim) is `ne[0]`, `m` is `ne[1]`, `n_mats` is `ne[2]`.
+PROVENANCE (2026-10-06 round 13, read-only header parse of the SERVED models -- the
+models in each lane's resolved launch record, not a drafter or a sibling model):
+  * DS41: `/mnt/raid0/llm/models/antirez/deepseek-v4.1-flash-gguf/
+    DeepSeek-V4.1-Flash-Q4.gguf` ("deepseek41"): `n_routed_experts=384`,
+    `num_experts_per_tok=6`, `n_shared_experts=1`; `ffn_{gate,up}_exps [5120, 2304, 384]`
+    and `ffn_down_exps [2304, 5120, 384]` (Q4_K); `ffn_*_shexp` at (5120, 2304) (Q8_0).
+  * Q38FN: `/mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/
+    Qwen3.8-Flash-Next-UD-IQ4_XS-0000{1,2,3}-of-00003.gguf` ("qwen4exp"):
+    `expert_count=512`, `expert_used_count=10`, `embedding_length=2560`,
+    `expert_feed_forward_length=640`; `ffn_{gate,up}_exps [2560, 640, 512]` (IQ3_S /
+    IQ4_XS), `ffn_down_exps [640, 2560, 512]` (IQ4_NL / Q8_0); `ffn_*_shexp` at
+    (2560, 640) (Q8_0).
+  (The first cut read the DSpark drafter -- 128 experts / 3 used -- for DS41 and a dense
+  Qwen3.8-27B GGUF for Q38FN; both were the wrong models.) GGUF `ne[]` is ggml-major:
+  `k` (test-backend-ops' reduction dim) is `ne[0]`, `m` is `ne[1]`, `n_mats` is
+  `ne[2]`. `LANE_PROFILES` records these values; `moe_profile_from_gguf` re-derives
+  them from the files, and calibration refuses a lane whose GGUF disagrees.
 
 SCOPE. Covers MUL_MAT (dense) and MUL_MAT_ID (expert), at `SERVED_WIDTHS` (must stay
 identical to `gates.PPL_CONTRACT_SERVED_WIDTHS`; cross-checked by
@@ -135,49 +137,153 @@ class ServedShape:
             raise ValueError(f"{self.name}: n_used must be in [1, n_mats]")
 
 
-#: Real (k, m[, n_mats, n_used]) dims, 2026-10-06 GGUF header read (see module
-#: docstring PROVENANCE). `k` is test-backend-ops' reduction dim == GGUF `ne[0]`;
-#: `m` is the per-expert/per-row output dim == GGUF `ne[1]`.
-SERVED_SHAPES: tuple[ServedShape, ...] = (
-    # DS41 (deepseek41) expert matmuls: ffn_{gate,up}_exps [5120, 2304, 128],
-    # ffn_down_exps [2304, 5120, 128]; expert_used_count=3.
-    #
-    # TEST EXPERT COUNT (operator 2026-10-06, layer (a) cost): the served model has 128
-    # experts, the test cases carry 8. Per-expert arithmetic is expert-count-
-    # independent: MUL_MAT_ID computes each routed (token, expert) pair as an ordinary
-    # (m x k) . (k x 1) product over that ONE expert's weight slab -- the kernel, its
-    # k-loop, row partitioning and activation quantization see only k, m, the width
-    # and n_used; n_mats only sizes the id range and the weight allocation. 8 >= n_used
-    # (3) keeps distinct routed experts per token and the same dispatch path, at 1/16
-    # of the weights to quantize (128 x 2304 x 5120 = 1.5e9 -> 9.4e7 per case).
-    ServedShape("ds41_expert_gate_up", "MUL_MAT_ID", k=5120, m=2304, n_mats=8, n_used=3),
-    ServedShape("ds41_expert_down", "MUL_MAT_ID", k=2304, m=5120, n_mats=8, n_used=3),
-    # DS41 dense shared-expert path: ffn_{gate,up}_shexp [5120, 2304],
-    # ffn_down_shexp [2304, 5120] -- same dims as the expert path, MUL_MAT not _ID.
-    ServedShape("ds41_dense_shexp_gate_up", "MUL_MAT", k=5120, m=2304),
-    ServedShape("ds41_dense_shexp_down", "MUL_MAT", k=2304, m=5120),
-    # Q38FN (qwen35) dense FFN: ffn_{gate,up} [5120, 17408], ffn_down [17408, 5120].
-    ServedShape("q38fn_dense_ffn_gate_up", "MUL_MAT", k=5120, m=17408),
-    ServedShape("q38fn_dense_ffn_down", "MUL_MAT", k=17408, m=5120),
-)
+@dataclass(frozen=True)
+class MoeProfile:
+    """One lane's served MoE FFN, as its GGUF header states it."""
+    lane: str
+    model: str               # first GGUF file of the served model
+    expert_count: int
+    expert_used: int
+    hidden: int              # embedding_length == ffn_{gate,up}_exps ne[0]
+    expert_ff: int           # expert_feed_forward_length == ffn_{gate,up}_exps ne[1]
+    shexp_ff: int            # shared-expert ffn length (ffn_{gate,up}_shexp ne[1])
+    expert_types: tuple[str, ...]   # quant types of the expert tensors
+    extra_types: tuple[str, ...] = ()   # operator-listed served types beyond the experts
 
 
-#: Round-12 (bundle tier, operator honest-author model): the served 128 experts, with
-#: ids chosen deterministically so a verify call (widths 2-5, n_used 3) routes to up to
-#: 15 DISTINCT experts spread over 0-127 incl. 64-127 -- the dispatch/mapping logic
-#: (expert-id masks, per-expert counts, row partitions) that 8-expert cases cannot reach.
-#: Row r uses ids 127 - (29 r + 43 j) mod 128 for j < n_used (r=0: 127, 84, 41; r=1: 98,
-#: 55, 12; ...). One type per iqk activation path plus the common served types: the
-#: per-type kernels are already covered by the 8-expert corpus at every type.
-ROUTED_SHAPES: tuple[ServedShape, ...] = (
-    ServedShape("ds41_expert_gate_up_routed128", "MUL_MAT_ID", k=5120, m=2304, n_mats=128,
-                n_used=3, routed=True),
-    ServedShape("ds41_expert_down_routed128", "MUL_MAT_ID", k=2304, m=5120, n_mats=128,
-                n_used=3, routed=True),
-)
-ROUTED_TYPES: tuple[str, ...] = ("Q4_0", "Q8_0", "Q4_K", "Q6_K", "IQ4_XS", "IQ3_S",
-                                 "IQ2_XXS", "IQ4_NL")
+#: Derived from each lane's served GGUF (see PROVENANCE; `moe_profile_from_gguf`).
+LANE_PROFILES: dict[str, MoeProfile] = {
+    "ds41": MoeProfile(
+        "ds41", "/mnt/raid0/llm/models/antirez/deepseek-v4.1-flash-gguf/"
+        "DeepSeek-V4.1-Flash-Q4.gguf", expert_count=384, expert_used=6, hidden=5120,
+        expert_ff=2304, shexp_ff=2304, expert_types=("Q4_K",)),
+    "q38fn": MoeProfile(
+        "q38fn", "/mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/"
+        "Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf", expert_count=512, expert_used=10,
+        hidden=2560, expert_ff=640, shexp_ff=640,
+        expert_types=("IQ3_S", "IQ4_XS", "IQ4_NL", "Q8_0"), extra_types=("Q6_K",)),
+}
+
+
+def candidate_experts(profile: MoeProfile) -> int:
+    """The CANDIDATE corpus' test expert count: 8, or the next power of two that still
+    routes `expert_used` DISTINCT experts per token (Q38FN: 10 used -> 16).
+
+    Per-expert arithmetic is expert-count-independent: MUL_MAT_ID computes each routed
+    (token, expert) pair as an ordinary (m x k) . (k x 1) product over that ONE
+    expert's weight slab -- the kernel, its k-loop, row partitioning and activation
+    quantization see only k, m, the width and n_used; n_mats only sizes the id range
+    and the weight allocation. The served expert count (and its high ids) is exercised
+    at the bundle tier by the routed corpus."""
+    n = 8
+    while n < profile.expert_used:
+        n *= 2
+    return n
+
+
+def _lane_served_shapes(profile: MoeProfile) -> tuple[ServedShape, ...]:
+    lane, n = profile.lane, candidate_experts(profile)
+    return (
+        ServedShape(f"{lane}_expert_gate_up", "MUL_MAT_ID", k=profile.hidden,
+                    m=profile.expert_ff, n_mats=n, n_used=profile.expert_used),
+        ServedShape(f"{lane}_expert_down", "MUL_MAT_ID", k=profile.expert_ff,
+                    m=profile.hidden, n_mats=n, n_used=profile.expert_used),
+        ServedShape(f"{lane}_shexp_gate_up", "MUL_MAT", k=profile.hidden, m=profile.shexp_ff),
+        ServedShape(f"{lane}_shexp_down", "MUL_MAT", k=profile.shexp_ff, m=profile.hidden),
+    )
+
+
+#: The CANDIDATE corpus: every lane's real per-expert and shared-expert dims (cheap
+#: expert counts, see `candidate_experts`), every witness type, widths 1-5.
+SERVED_SHAPES: tuple[ServedShape, ...] = tuple(
+    shape for profile in LANE_PROFILES.values() for shape in _lane_served_shapes(profile))
+
+
+#: Round-12/13 (bundle tier, honest-author model): each lane's SERVED expert count and
+#: expert_used, with ids chosen deterministically so a verify call (widths 2-5) routes
+#: to up to 5 * expert_used DISTINCT experts spread over the whole id range -- the
+#: dispatch/mapping logic (expert-id masks, per-expert counts, row partitions) that
+#: small-expert cases cannot reach. Row r uses ids
+#: n_mats - 1 - (29 r + step j) mod n_mats, step = (n_mats / n_used) | 1, j < n_used
+#: (Q38FN r=0: 511, 460, 409, 358, 307, 256, 205, 154, 103, 52; DS41 r=0: 383, 318, ...).
 ROUTED_WIDTHS: tuple[int, ...] = (2, 3, 4, 5)
+
+
+def route_ids(n_mats: int, n_used: int, row: int) -> tuple[int, ...]:
+    """The routed ids of row `row` -- byte-for-byte what `autokernel_route_ids` sets."""
+    step = (n_mats // n_used) | 1
+    return tuple(n_mats - 1 - (row * 29 + j * step) % n_mats for j in range(n_used))
+
+
+def routed_shapes(lane: str) -> tuple[ServedShape, ...]:
+    profile = LANE_PROFILES[lane]
+    return (
+        ServedShape(f"{lane}_expert_gate_up_routed{profile.expert_count}", "MUL_MAT_ID",
+                    k=profile.hidden, m=profile.expert_ff, n_mats=profile.expert_count,
+                    n_used=profile.expert_used, routed=True),
+        ServedShape(f"{lane}_expert_down_routed{profile.expert_count}", "MUL_MAT_ID",
+                    k=profile.expert_ff, m=profile.hidden, n_mats=profile.expert_count,
+                    n_used=profile.expert_used, routed=True),
+    )
+
+
+def routed_types(lane: str) -> tuple[str, ...]:
+    """The lane's served expert types plus its operator-listed extras, in witness order."""
+    profile = LANE_PROFILES[lane]
+    wanted = set(profile.expert_types) | set(profile.extra_types)
+    return tuple(t for t in WITNESS_TYPES if t in wanted)
+
+
+def lane_for_model(model) -> "str | None":
+    """The lane whose served GGUF `model` is (by resolved path, shard-tolerant)."""
+    import os
+    if model is None:
+        return None
+    real = os.path.realpath(str(model))
+    for lane, profile in LANE_PROFILES.items():
+        if real == os.path.realpath(profile.model) or \
+                os.path.dirname(real) == os.path.dirname(os.path.realpath(profile.model)):
+            return lane
+    return None
+
+
+def moe_profile_from_gguf(paths, lane: str, *,
+                          gguf_py: str = "/mnt/raid0/llm/llama.cpp/gguf-py") -> MoeProfile:
+    """Re-derive a lane's `MoeProfile` from its GGUF shard(s) (read-only header parse).
+    Expert counts come from `<arch>.expert_count` / `<arch>.n_routed_experts`, used
+    counts from `<arch>.expert_used_count` / `<arch>.num_experts_per_tok`; dims and
+    types from the `ffn_*_exps` / `ffn_*_shexp` tensors. Raises ValueError when any of
+    these is missing."""
+    import sys as _sys
+    if gguf_py not in _sys.path:
+        _sys.path.insert(0, gguf_py)
+    from gguf import GGUFReader  # noqa: PLC0415
+    values, types, dims = {}, set(), {}
+    for path in paths:
+        reader = GGUFReader(str(path))
+        for field in reader.fields.values():
+            name = field.name.split(".", 1)[-1]
+            if name in ("expert_count", "n_routed_experts", "expert_used_count",
+                        "num_experts_per_tok"):
+                values[name] = int(field.parts[field.data[0]][0])
+        for tensor in reader.tensors:
+            base = tensor.name.split(".", 2)[-1]
+            if base in ("ffn_gate_exps.weight", "ffn_up_exps.weight", "ffn_down_exps.weight"):
+                types.add(tensor.tensor_type.name)
+                dims.setdefault(base, [int(x) for x in tensor.shape])
+            elif base == "ffn_gate_shexp.weight":
+                dims.setdefault(base, [int(x) for x in tensor.shape])
+    count = values.get("expert_count", values.get("n_routed_experts"))
+    used = values.get("expert_used_count", values.get("num_experts_per_tok"))
+    if not count or not used or "ffn_gate_exps.weight" not in dims:
+        raise ValueError(f"{lane}: GGUF carries no MoE expert count/used/expert tensors")
+    gate = dims["ffn_gate_exps.weight"]
+    shexp = dims.get("ffn_gate_shexp.weight", [gate[0], gate[1]])
+    known = LANE_PROFILES.get(lane)
+    return MoeProfile(lane, str(paths[0]), expert_count=count, expert_used=used,
+                      hidden=gate[0], expert_ff=gate[1], shexp_ff=shexp[1],
+                      expert_types=tuple(t for t in WITNESS_TYPES if t in types),
+                      extra_types=known.extra_types if known else ())
 
 
 def tightened_nmse_bound(anchor_nmse: float, *, factor: float = 3.0) -> float:
@@ -246,15 +352,18 @@ class ServedShapeCase:
                 f"{self.max_nmse:g}));")
 
 
-def corpus(routed: bool = False):
-    """(shapes, types, widths) of the candidate corpus or the bundle-tier routed one."""
+def corpus(routed: bool = False, lane: "str | None" = None):
+    """(shapes, types, widths) of the candidate corpus or a lane's bundle-tier routed one."""
     if routed:
-        return ROUTED_SHAPES, ROUTED_TYPES, ROUTED_WIDTHS
+        if lane not in LANE_PROFILES:
+            raise ValueError(f"the routed corpus needs a known lane, got {lane!r}")
+        return routed_shapes(lane), routed_types(lane), ROUTED_WIDTHS
     return SERVED_SHAPES, WITNESS_TYPES, SERVED_WIDTHS
 
 
 def case_set(anchor_nmse_by_shape: Mapping[tuple[str, str, int], float], *,
-            factor: float = 3.0, routed: bool = False) -> tuple[ServedShapeCase, ...]:
+            factor: float = 3.0, routed: bool = False,
+            lane: "str | None" = None) -> tuple[ServedShapeCase, ...]:
     """Every `(ServedShape, type, width)` case, bound from `anchor_nmse_by_shape`
     keyed `(shape.name, type_a, n)` -- the independent reference run's measured NMSE on
     the anchor build at that exact shape, type AND width (re-review 2026-10-06: one
@@ -262,7 +371,7 @@ def case_set(anchor_nmse_by_shape: Mapping[tuple[str, str, int], float], *,
     `KeyError` naming the missing triple -- a served-shape case this caller cannot
     justify a bound for is never silently dropped OR silently given a guessed one."""
     cases = []
-    shapes, types, widths = corpus(routed)
+    shapes, types, widths = corpus(routed, lane)
     for shape in shapes:
         for type_a in types:
             for width in widths:
@@ -303,9 +412,9 @@ static int autokernel_backend_threads() {
     }
     return (int) N_THREADS;
 }
-// Round-12: deterministic, dispersed, high expert ids for the 128-expert routed cases:
-// row r routes to 127 - (29 r + 43 j) mod n_mats for j < n_used; the rest of the row
-// keeps a full permutation so the ids tensor stays well-formed.
+// Round-12/13: deterministic, dispersed, high expert ids for the routed cases: row r
+// routes to n_mats - 1 - (29 r + step j) mod n_mats, step = (n_mats / n_used) | 1, for
+// j < n_used; the rest of the row keeps a full permutation (well-formed ids tensor).
 static void autokernel_route_ids(ggml_context * ctx, int n_mats, int n_used) {
     for (ggml_tensor * t = ggml_get_first_tensor(ctx); t != NULL; t = ggml_get_next_tensor(ctx, t)) {
         if (t->type != GGML_TYPE_I32 || ggml_is_view_op(t->op)) { continue; }
@@ -313,8 +422,9 @@ static void autokernel_route_ids(ggml_context * ctx, int n_mats, int n_used) {
             std::vector<int32_t> data(t->ne[0]);
             std::vector<char> used(n_mats, 0);
             int pos = 0;
+            const int64_t step = (n_mats / n_used) | 1;
             for (int j = 0; j < n_used && pos < t->ne[0]; j++) {
-                const int id = n_mats - 1 - (int) ((r * 29 + j * 43) % n_mats);
+                const int id = n_mats - 1 - (int) ((r * 29 + j * step) % n_mats);
                 data[pos++] = id;
                 used[id] = 1;
             }
@@ -419,9 +529,9 @@ static int autokernel_backend_threads() {
     }
     return (int) N_THREADS;
 }
-// Round-12: deterministic, dispersed, high expert ids for the 128-expert routed cases:
-// row r routes to 127 - (29 r + 43 j) mod n_mats for j < n_used; the rest of the row
-// keeps a full permutation so the ids tensor stays well-formed.
+// Round-12/13: deterministic, dispersed, high expert ids for the routed cases: row r
+// routes to n_mats - 1 - (29 r + step j) mod n_mats, step = (n_mats / n_used) | 1, for
+// j < n_used; the rest of the row keeps a full permutation (well-formed ids tensor).
 static void autokernel_route_ids(ggml_context * ctx, int n_mats, int n_used) {
     for (ggml_tensor * t = ggml_get_first_tensor(ctx); t != NULL; t = ggml_get_next_tensor(ctx, t)) {
         if (t->type != GGML_TYPE_I32 || ggml_is_view_op(t->op)) { continue; }
@@ -429,8 +539,9 @@ static void autokernel_route_ids(ggml_context * ctx, int n_mats, int n_used) {
             std::vector<int32_t> data(t->ne[0]);
             std::vector<char> used(n_mats, 0);
             int pos = 0;
+            const int64_t step = (n_mats / n_used) | 1;
             for (int j = 0; j < n_used && pos < t->ne[0]; j++) {
-                const int id = n_mats - 1 - (int) ((r * 29 + j * 43) % n_mats);
+                const int id = n_mats - 1 - (int) ((r * 29 + j * step) % n_mats);
                 data[pos++] = id;
                 used[id] = 1;
             }
@@ -503,26 +614,27 @@ def calibration_vars(shape: ServedShape, type_a: str, n: int) -> str:
             f"m={shape.m},n={n},k={shape.k}{routed},calibrate=1")
 
 
-def canonical_triples(routed: bool = False) -> tuple[tuple[ServedShape, str, int], ...]:
-    shapes, types, widths = corpus(routed)
+def canonical_triples(routed: bool = False,
+                      lane: "str | None" = None) -> tuple[tuple[ServedShape, str, int], ...]:
+    shapes, types, widths = corpus(routed, lane)
     return tuple((shape, type_a, width) for shape in shapes
                  for type_a in types for width in widths)
 
 
-def calibration_triples() -> tuple[tuple[ServedShape, str, int], ...]:
-    """Both corpora: the candidate corpus and the bundle-tier routed one."""
-    return canonical_triples() + canonical_triples(routed=True)
+def calibration_triples(lane: str) -> tuple[tuple[ServedShape, str, int], ...]:
+    """Both corpora: the candidate corpus and `lane`'s bundle-tier routed one."""
+    return canonical_triples() + canonical_triples(routed=True, lane=lane)
 
 
-def calibration_regex() -> str:
+def calibration_regex(lane: str) -> str:
     import re
     return "^(" + "|".join(re.escape(calibration_vars(*t))
-                           for t in calibration_triples()) + ")$"
+                           for t in calibration_triples(lane)) + ")$"
 
 
-def calibration_patch_block() -> str:
+def calibration_patch_block(lane: str) -> str:
     lines = []
-    for shape, type_a, n in calibration_triples():
+    for shape, type_a, n in calibration_triples(lane):
         if shape.routed:
             lines.append(f"        test_cases.emplace_back(new test_mul_mat_id_served_routed_calib("
                          f"GGML_TYPE_{type_a}, GGML_TYPE_F32, {shape.n_mats}, {shape.n_used}, "
@@ -544,12 +656,13 @@ def calibration_patch_block() -> str:
             + "\n".join(lines) + "\n    }\n}\n")
 
 
-def parse_calibration(output: str) -> dict:
+def parse_calibration(output: str, lane: str) -> dict:
     """{(shape name, type, width): NMSE} from calibration output -- the max over any
     repeated print of one case. Raises ValueError unless EVERY canonical triple has a
     finite, non-negative value and no unknown case was printed."""
     import math
-    by_vars = {calibration_vars(*t): (t[0].name, t[1], t[2]) for t in calibration_triples()}
+    by_vars = {calibration_vars(*t): (t[0].name, t[1], t[2])
+               for t in calibration_triples(lane)}
     found: dict = {}
     for line in output.splitlines():
         if not line.startswith(CALIBRATION_MARKER + "\t"):
@@ -632,11 +745,10 @@ def binary_has_routed_case_set(build_dir: Path) -> bool:
 
 
 _SHAPES_BY_NAME: dict[str, ServedShape] = {shape.name: shape for shape in SERVED_SHAPES}
-_ROUTED_BY_NAME: dict[str, ServedShape] = {shape.name: shape for shape in ROUTED_SHAPES}
 
 
 def write_manifest(path: Path, cases: tuple[ServedShapeCase, ...], *,
-                   routed: bool = False) -> None:
+                   routed: bool = False, lane: "str | None" = None) -> None:
     """Persist the EXACT baked case set (with its anchor-derived `max_nmse` bounds)
     beside the applied llama-tree patch, so a later gate run reads what was actually
     compiled in rather than recomputing (and potentially drifting from) it."""
@@ -644,6 +756,10 @@ def write_manifest(path: Path, cases: tuple[ServedShapeCase, ...], *,
             "case_set_id": ROUTED_CASE_SET_ID if routed else CASE_SET_ID,
            "cases": [{"shape_name": c.shape.name, "type_a": c.type_a, "n": c.n,
                       "max_nmse": c.max_nmse} for c in cases]}
+    if routed:
+        if lane not in LANE_PROFILES:
+            raise ValueError(f"a routed manifest needs a known lane, got {lane!r}")
+        body["lane"] = lane
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".{path.name}.tmp")
     tmp.write_text(json.dumps(body, indent=2, sort_keys=True), encoding="utf-8")
@@ -654,7 +770,8 @@ class ManifestRefused(ValueError):
     """A served-shape manifest is absent, malformed, or names an unknown shape."""
 
 
-def load_manifest(path: Path, *, routed: bool = False) -> tuple[ServedShapeCase, ...]:
+def load_manifest(path: Path, *, routed: bool = False,
+                  lane: "str | None" = None) -> tuple[ServedShapeCase, ...]:
     """Reload a `write_manifest` file, re-resolving each row's `ServedShape` from
     `SERVED_SHAPES` by name -- never trusting the file's own k/m/n_mats/n_used, so a
     manifest that drifted from this module's canonical shapes is refused, not
@@ -671,8 +788,14 @@ def load_manifest(path: Path, *, routed: bool = False) -> tuple[ServedShapeCase,
         raise ManifestRefused(f"{path}: served-shape manifest is not valid JSON: {exc}") from exc
     schema = ROUTED_MANIFEST_SCHEMA if routed else MANIFEST_SCHEMA
     set_id = ROUTED_CASE_SET_ID if routed else CASE_SET_ID
-    by_name = _ROUTED_BY_NAME if routed else _SHAPES_BY_NAME
-    _shapes, types, widths = corpus(routed)
+    if routed:
+        recorded = body.get("lane") if isinstance(body, dict) else None
+        if recorded not in LANE_PROFILES or (lane is not None and recorded != lane):
+            raise ManifestRefused(f"{path}: routed manifest is for lane {recorded!r}, "
+                                  f"not {lane!r}")
+        lane = recorded
+    shapes, types, widths = corpus(routed, lane)
+    by_name = {shape.name: shape for shape in shapes}
     if not isinstance(body, dict) or body.get("schema") != schema \
             or body.get("case_set_id") != set_id or not isinstance(body.get("cases"), list) \
             or not body["cases"]:
@@ -698,7 +821,7 @@ def load_manifest(path: Path, *, routed: bool = False) -> tuple[ServedShapeCase,
     # Re-review 2026-10-06: exact canonical SET equality, duplicates refused -- a row
     # count alone accepted 180 copies of one case.
     keys = [(c.shape.name, c.type_a, c.n) for c in cases]
-    canonical = {(t[0].name, t[1], t[2]) for t in canonical_triples(routed)}
+    canonical = {(t[0].name, t[1], t[2]) for t in canonical_triples(routed, lane)}
     if len(keys) != len(set(keys)):
         raise ManifestRefused(f"{path}: manifest repeats a (shape, type, width) case")
     if set(keys) != canonical:
@@ -716,6 +839,7 @@ __all__ = ["CASE_SET_ENV", "CASE_SET_ID", "MANIFEST_SCHEMA", "ManifestRefused",
            "CALIBRATION_CASE_SET_ID", "CALIBRATION_MARKER", "PATCH_BEGIN", "PATCH_END",
            "PATCH_CALL", "calibration_vars", "canonical_triples", "calibration_regex",
            "calibration_patch_block", "parse_calibration", "apply_patch_block",
-           "binary_has_calibration", "ROUTED_CASE_SET_ID", "ROUTED_SHAPES",
-           "ROUTED_TYPES", "ROUTED_WIDTHS", "BACKEND_THREADS_ENV", "corpus",
+           "binary_has_calibration", "ROUTED_CASE_SET_ID", "routed_shapes",
+           "routed_types", "ROUTED_WIDTHS", "LANE_PROFILES", "MoeProfile", "route_ids",
+           "candidate_experts", "lane_for_model", "moe_profile_from_gguf", "BACKEND_THREADS_ENV", "corpus",
            "calibration_triples", "binary_has_routed_case_set", "THREADS_PATCHED"]

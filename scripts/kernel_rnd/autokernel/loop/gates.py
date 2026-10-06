@@ -2349,7 +2349,8 @@ def check_cpu_fa_perf_screen(anchor_build: Path, candidate_build: Path, *, ancho
 
 
 def check_served_shape_case_set(build_dir: Path, *, resolved_recipe,
-                                manifest_path: Path, routed: bool = False) -> Verdict:
+                                manifest_path: Path, routed: bool = False,
+                                lane: "str | None" = None) -> Verdict:
     """ppl_contract layer (a) addendum (review 2026-10-06): the model's OWN served
     (k, m[, n_mats, n_used]) matmul shapes, at the served widths, for every witness
     quant -- `served_shape_cases.py`'s HONEST LIMITATIONS fix for the generic
@@ -2364,8 +2365,12 @@ def check_served_shape_case_set(build_dir: Path, *, resolved_recipe,
     # Round-12: unavailable evidence is gate "oracle_unavailable" (never a numerical
     # FAIL), so a bundle bisect can tell "could not measure" from "measured wrong".
     set_id = ssc.ROUTED_CASE_SET_ID if routed else ssc.CASE_SET_ID
+    if routed and lane not in ssc.LANE_PROFILES:
+        return Verdict("oracle_unavailable", False,
+                       f"no MoE profile for this model (lane {lane!r}); the routed corpus "
+                       "derives from the lane's GGUF expert_count/expert_used_count")
     try:
-        cases = ssc.load_manifest(manifest_path, routed=routed)
+        cases = ssc.load_manifest(manifest_path, routed=routed, lane=lane)
     except ssc.ManifestRefused as exc:
         return Verdict("oracle_unavailable", False,
                        f"served-shape case set is not available: {exc}")
@@ -3395,6 +3400,7 @@ def ppl_contract_op_nmse(candidate_build: Path, *, resolved_recipe,
                          ops: tuple[str, ...] = ("MUL_MAT", "MUL_MAT_ID"),
                          served_shape_manifest: "Path | None" = None,
                          routed_manifest: "Path | None" = None,
+                         routed_lane: "str | None" = None,
                          _op_correctness=None,
                          _check_served_shape_case_set=None) -> Verdict:
     """Layer (a): test-backend-ops vs the independent `use_ref=true` reference at the
@@ -3434,7 +3440,8 @@ def ppl_contract_op_nmse(candidate_build: Path, *, resolved_recipe,
     if served_shape_manifest is not None:
         corpora.append(("served-shape", served_shape_manifest, {}))
     if routed_manifest is not None:
-        corpora.append(("128-expert routed", routed_manifest, {"routed": True}))
+        corpora.append((f"{routed_lane} served-expert routed", routed_manifest,
+                        {"routed": True, "lane": routed_lane}))
     for label, manifest, extra in corpora:
         served_verdict = check(candidate_build, resolved_recipe=resolved_recipe,
                                manifest_path=manifest, **extra)
@@ -3812,7 +3819,9 @@ def _ppl_contract_layers(anchor_build: Path, candidate_build: Path, *, route_nam
             # Round-12: the 128-expert routed corpus runs at the BUNDLE tier only.
             routed_manifest=(Path(served_shape_manifest).with_name("manifest-routed.json")
                              if served_shape_manifest is not None
-                             and "ppl" in layer_names else None))),
+                             and "ppl" in layer_names else None),
+            # the lane's own MoE profile (GGUF expert_count / expert_used_count)
+            routed_lane=_lane_for_model(model))),
         ("ppl", lambda: ppl_wikitext2(
             anchor_build, candidate_build, model=model, threads=threads, env=env,
             cpu_list=cpu_list, log_dir=log_dir, reference_build=reference_build,
@@ -3843,6 +3852,11 @@ def _ppl_contract_layers(anchor_build: Path, candidate_build: Path, *, route_nam
     return Verdict(gate_name, True,
                    f"ppl_contract layers {', '.join(layer_names)} passed: " +
                    "; ".join(f"{v.gate}={v.reason}" for v in verdicts))
+
+
+def _lane_for_model(model) -> "str | None":
+    from . import served_shape_cases as ssc
+    return ssc.lane_for_model(model)
 
 
 def _layer_failure_class(name: str, verdict: Verdict) -> str:

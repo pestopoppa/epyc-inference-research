@@ -29,22 +29,35 @@ def _served_recipe():
 
 # ---- shapes / provenance ----------------------------------------------------------
 
-def test_served_shapes_match_the_2026_10_06_gguf_header_read():
-    """Real dims read off the lanes' own GGUF headers (module docstring PROVENANCE),
-    never invented. DS41 (deepseek41) expert: embedding_length=5120,
-    expert_feed_forward_length=2304, expert_count=128, expert_used_count=3. Q38FN
-    (qwen35) dense: embedding_length=5120, feed_forward_length=17408."""
+def test_served_shapes_derive_from_each_lanes_served_gguf():
+    """Round-13: dims and expert counts come from the SERVED models' GGUF headers
+    (DS41 DeepSeek-V4.1-Flash-Q4: 384 experts / 6 used, 5120 x 2304; Q38FN
+    Qwen3.8-Flash-Next: 512 / 10, 2560 x 640) -- never a drafter or a sibling model."""
     by_name = {s.name: s for s in ssc.SERVED_SHAPES}
     assert by_name["ds41_expert_gate_up"] == ssc.ServedShape(
-        "ds41_expert_gate_up", "MUL_MAT_ID", k=5120, m=2304, n_mats=8, n_used=3)
+        "ds41_expert_gate_up", "MUL_MAT_ID", k=5120, m=2304, n_mats=8, n_used=6)
     assert by_name["ds41_expert_down"] == ssc.ServedShape(
-        "ds41_expert_down", "MUL_MAT_ID", k=2304, m=5120, n_mats=8, n_used=3)
-    assert by_name["ds41_dense_shexp_gate_up"].op == "MUL_MAT"
-    assert by_name["q38fn_dense_ffn_gate_up"] == ssc.ServedShape(
-        "q38fn_dense_ffn_gate_up", "MUL_MAT", k=5120, m=17408)
-    assert by_name["q38fn_dense_ffn_down"] == ssc.ServedShape(
-        "q38fn_dense_ffn_down", "MUL_MAT", k=17408, m=5120)
+        "ds41_expert_down", "MUL_MAT_ID", k=2304, m=5120, n_mats=8, n_used=6)
+    assert by_name["q38fn_expert_gate_up"] == ssc.ServedShape(
+        "q38fn_expert_gate_up", "MUL_MAT_ID", k=2560, m=640, n_mats=16, n_used=10)
+    assert by_name["q38fn_expert_down"] == ssc.ServedShape(
+        "q38fn_expert_down", "MUL_MAT_ID", k=640, m=2560, n_mats=16, n_used=10)
+    assert by_name["q38fn_shexp_gate_up"].op == "MUL_MAT"
     assert {s.op for s in ssc.SERVED_SHAPES} == {"MUL_MAT", "MUL_MAT_ID"}
+    assert all(s.n_used <= s.n_mats for s in ssc.SERVED_SHAPES)
+
+
+@pytest.mark.parametrize("lane", sorted(ssc.LANE_PROFILES))
+def test_lane_profiles_match_a_fresh_gguf_header_read(lane):
+    profile = ssc.LANE_PROFILES[lane]
+    model = Path(profile.model)
+    if not model.is_file() or not Path("/mnt/raid0/llm/llama.cpp/gguf-py").is_dir():
+        pytest.skip("served GGUF or gguf-py not present")
+    shards = sorted(model.parent.glob(model.name.replace("00001-of", "*-of"))) or [model]
+    derived = ssc.moe_profile_from_gguf(shards, lane)
+    for field in ("expert_count", "expert_used", "hidden", "expert_ff", "shexp_ff"):
+        assert getattr(derived, field) == getattr(profile, field), field
+    assert set(derived.expert_types) == set(profile.expert_types)
 
 
 def test_served_widths_match_the_ppl_contract_served_widths():
@@ -369,28 +382,52 @@ def test_witness_types_cover_every_type_the_iqk_whitelist_admits():
     assert admitted and admitted <= set(ssc.WITNESS_TYPES), admitted - set(ssc.WITNESS_TYPES)
 
 
-def test_the_routed_corpus_has_128_experts_high_ids_and_verify_widths():
-    """Round-12: the bundle tier restores 128 experts with dispersed high ids."""
-    assert all(s.n_mats == 128 and s.routed for s in ssc.ROUTED_SHAPES)
+def test_each_lanes_routed_corpus_uses_its_served_expert_count_and_dispersed_ids():
+    """Round-12/13: the bundle tier runs each lane's SERVED expert count / used with
+    deterministic ids spanning the whole range."""
+    q = ssc.routed_shapes("q38fn")
+    assert all(s.n_mats == 512 and s.n_used == 10 and s.routed for s in q)
+    assert {(s.k, s.m) for s in q} == {(2560, 640), (640, 2560)}
+    assert set(ssc.routed_types("q38fn")) == {"IQ3_S", "IQ4_NL", "IQ4_XS", "Q8_0", "Q6_K"}
+    d = ssc.routed_shapes("ds41")
+    assert all(s.n_mats == 384 and s.n_used == 6 for s in d)
     assert ssc.ROUTED_WIDTHS == (2, 3, 4, 5)
-    ids = {127 - (r * 29 + j * 43) % 128 for r in range(5) for j in range(3)}
-    assert len(ids) == 15 and any(i >= 64 for i in ids) and any(i < 64 for i in ids)
-    anchor = {(t[0].name, t[1], t[2]): 1e-6 for t in ssc.calibration_triples()}
-    routed = ssc.case_set(anchor, routed=True)
-    assert len(routed) == len(ssc.ROUTED_SHAPES) * len(ssc.ROUTED_TYPES) * 4
+    for n_mats, n_used in ((512, 10), (384, 6)):
+        rows = [ssc.route_ids(n_mats, n_used, r) for r in range(5)]
+        assert all(len(set(row)) == n_used for row in rows)
+        ids = {i for row in rows for i in row}
+        assert len(ids) == 5 * n_used and max(ids) == n_mats - 1
+        assert any(i >= n_mats * 3 // 4 for i in ids) and any(i < n_mats // 4 for i in ids)
+    q_ids = {i for r in range(5) for i in ssc.route_ids(512, 10, r)}
+    assert any(256 <= i < 384 for i in q_ids) and any(i >= 384 for i in q_ids)
+    anchor = {(t[0].name, t[1], t[2]): 1e-6 for t in ssc.calibration_triples("q38fn")}
+    routed = ssc.case_set(anchor, routed=True, lane="q38fn")
+    assert len(routed) == 2 * 5 * 4
     assert routed[0].vars().endswith(",routed=1,max_nmse=3e-06")
     block = ssc.backend_ops_patch_block(ssc.case_set(anchor), routed)
     assert "test_mul_mat_id_served_routed(" in block and ssc.ROUTED_CASE_SET_ID in block
-    assert "autokernel_route_ids(ctx, n_mats, n_used)" in block
+    assert "const int64_t step = (n_mats / n_used) | 1;" in block
     assert "static int autokernel_backend_threads()" in block
+    with pytest.raises(ValueError):
+        ssc.case_set(anchor, routed=True)   # no lane: refused
+
+
+def test_the_model_selects_its_lane():
+    assert ssc.lane_for_model(ssc.LANE_PROFILES["ds41"].model) == "ds41"
+    shard2 = ssc.LANE_PROFILES["q38fn"].model.replace("00001-of", "00002-of")
+    assert ssc.lane_for_model(shard2) == "q38fn"
+    assert ssc.lane_for_model("/elsewhere/model.gguf") is None
 
 
 def test_routed_manifest_round_trips_separately(tmp_path):
-    anchor = {(t[0].name, t[1], t[2]): 1e-6 for t in ssc.calibration_triples()}
-    routed = ssc.case_set(anchor, routed=True)
+    anchor = {(t[0].name, t[1], t[2]): 1e-6 for t in ssc.calibration_triples("q38fn")}
+    routed = ssc.case_set(anchor, routed=True, lane="q38fn")
     path = tmp_path / "manifest-routed.json"
-    ssc.write_manifest(path, routed, routed=True)
+    ssc.write_manifest(path, routed, routed=True, lane="q38fn")
     assert ssc.load_manifest(path, routed=True) == routed
+    assert ssc.load_manifest(path, routed=True, lane="q38fn") == routed
+    with pytest.raises(ssc.ManifestRefused):
+        ssc.load_manifest(path, routed=True, lane="ds41")
     with pytest.raises(ssc.ManifestRefused):
         ssc.load_manifest(path)
 
@@ -402,12 +439,13 @@ def test_the_patch_sets_the_backend_thread_count_the_tool_uses(tmp_path):
         "    std::vector<std::unique_ptr<test_case>> test_cases;\n    return test_cases;\n}\n"
         "int main() {\n"
         "            ggml_backend_set_n_threads_fn(backend.get(), N_THREADS);\n}\n")
-    ssc.apply_patch_block(test_file, ssc.calibration_patch_block())
-    ssc.apply_patch_block(test_file, ssc.calibration_patch_block())
+    ssc.apply_patch_block(test_file, ssc.calibration_patch_block("q38fn"))
+    ssc.apply_patch_block(test_file, ssc.calibration_patch_block("q38fn"))
     text = test_file.read_text()
     assert text.count(ssc.THREADS_PATCHED) == 1 and "N_THREADS);" not in text.split("int main")[1]
 
 
 def test_the_calibration_set_covers_both_corpora():
-    assert len(ssc.calibration_triples()) == (len(ssc.canonical_triples())
-                                              + len(ssc.canonical_triples(routed=True)))
+    for lane in ssc.LANE_PROFILES:
+        assert len(ssc.calibration_triples(lane)) == (
+            len(ssc.canonical_triples()) + len(ssc.canonical_triples(routed=True, lane=lane)))
