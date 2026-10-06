@@ -269,7 +269,8 @@ def execute(build: Path, store: Path, recipe: dict, region_lock: str, lane: str,
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     path = folder / f"calibration-{stamp}.json"
     body = {"schema": "epyc.autokernel.served_shape_calibration.v1",
-            "case_set_id": ssc.CASE_SET_ID, "lane": lane,
+            "case_set_id": ssc.CASE_SET_ID, "lane": lane, "seed_scheme": ssc.SEED_SCHEME,
+            "partition": [shape.name for shape in ssc.lane_served_shapes(lane)],
             "provenance": {**provenance(build, cpu_list, threads, argv, timeout_s=timeout_s),
                            "launch": recipe["launch"], "launch_sha256": recipe["launch_sha256"],
                            "served_env": {k: v for k, v in sorted(recipe["env"].items())
@@ -298,6 +299,12 @@ def measurement_record_refusal(path: Path, launch: Path, lane: str,
         return f"{path} is not a served-shape calibration record"
     if body.get("lane") != lane:
         return f"{path} was measured for lane {body.get('lane')!r}, not {lane!r}"
+    if body.get("seed_scheme") != ssc.SEED_SCHEME:
+        return (f"{path} was measured with input-seed scheme {body.get('seed_scheme')!r}, "
+                f"not {ssc.SEED_SCHEME!r} (random-input records cannot bound seeded runs; "
+                "re-calibrate)")
+    if body.get("partition") != [shape.name for shape in ssc.lane_served_shapes(lane)]:
+        return f"{path} does not carry lane {lane}'s candidate partition"
     try:
         recipe = served_recipe(launch, build, cpu_list=None, threads=None)
     except Refused as exc:
@@ -344,7 +351,7 @@ def apply(measurements: dict, store: Path, tree: "Path | None", lane: str,
                  else " -> refusing (pass --anchor-exceeds-generic anchor-relative to "
                       "hold them to factor x the anchor instead)"), file=out)
     try:
-        cases = ssc.case_set(measurements, anchor_relative_keys=relative)
+        cases = ssc.case_set(measurements, lane=lane, anchor_relative_keys=relative)
         routed = ssc.case_set(measurements, routed=True, lane=lane,
                               anchor_relative_keys=relative)
     except (KeyError, ValueError) as exc:
@@ -353,7 +360,8 @@ def apply(measurements: dict, store: Path, tree: "Path | None", lane: str,
     folder.mkdir(parents=True, exist_ok=True)
     block = ssc.backend_ops_patch_block(cases, routed)
     (folder / "patch.cpp").write_text(block, encoding="utf-8")
-    ssc.write_manifest(folder / "manifest.json", cases, anchor_relative_keys=relative)
+    ssc.write_manifest(folder / "manifest.json", cases, lane=lane,
+                       anchor_relative_keys=relative)
     ssc.write_manifest(folder / "manifest-routed.json", routed, routed=True, lane=lane,
                        anchor_relative_keys=relative)
     print(f"apply     manifest {folder / 'manifest.json'} ({len(cases)} cases), routed "

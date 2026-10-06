@@ -131,7 +131,7 @@ def test_execute_then_apply_writes_manifest_and_stages_the_final_block(tmp_path)
                    "--region-lock", lock, "--execute", "--apply", "--tree", tree, "--lane", "q38fn")
     assert rc == 0, out
     cases = ssc.load_manifest(store / "served_shape" / "manifest.json")
-    assert len(cases) == len(ssc.canonical_triples())
+    assert len(cases) == len(ssc.canonical_triples(lane="q38fn"))
     final = (tree / "tests" / "test-backend-ops.cpp").read_text()
     assert ssc.CASE_SET_ID in final and ssc.CALIBRATION_CASE_SET_ID not in final
     assert final.count(ssc.PATCH_BEGIN) == 1 and final.count(ssc.PATCH_CALL) == 1
@@ -337,3 +337,18 @@ def test_timeout_s_reaches_subprocess_call(tmp_path):
     record = json.loads(next((store / "served_shape").glob("calibration-*.json")).read_text())
     prov = record["provenance"]
     assert prov["timeout_s"] == 7200
+
+
+def test_random_input_records_are_refused_for_baking(tmp_path):
+    """Round-15: a record without the seeded-input scheme (both pre-15 records) refuses."""
+    record = tmp_path / "calibration-old.json"
+    record.write_text(json.dumps({
+        "schema": "epyc.autokernel.served_shape_calibration.v1", "lane": "q38fn",
+        "provenance": {"anchor_build": str(tmp_path)}, "measurements": []}))
+    why = cal.measurement_record_refusal(record, _launch(tmp_path), "q38fn", "region-lock")
+    assert why and "seed scheme" in why
+    real = Path("/mnt/raid0/llm/autokernel/campaigns/ak-ds41-cpu-decode-20260923/"
+                "store-b0ba1d427/served_shape/calibration-20261006T104207Z.json")
+    if real.is_file():
+        assert "seed scheme" in cal.measurement_record_refusal(
+            real, _launch(tmp_path), "ds41", "region-lock")

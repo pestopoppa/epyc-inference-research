@@ -2862,7 +2862,7 @@ class Round12HonestAuthorRefinements(unittest.TestCase):
                     numerics="ppl_contract"),
                 resolved_recipe=None, model=Path("/m"), threads=1, cpu_list="0", env={},
                 log_dir=Path("/tmp/x"), served_shape_manifest=Path("/s/manifest.json"))
-            self.assertEqual(seen, [(False, None)])
+            self.assertEqual(seen, [(False, None)])   # unknown model: no lane
             seen.clear()
             passing = {name: (lambda: gates.Verdict("x", True, "ok"))
                        for name in gates.PPL_CONTRACT_BUNDLE_LAYERS if name != "nmse"}
@@ -2873,7 +2873,7 @@ class Round12HonestAuthorRefinements(unittest.TestCase):
                 threads=1, cpu_list="0", env={}, log_dir=Path("/tmp/x"),
                 reference_build=Path("/ref"), served_shape_manifest=Path("/s/manifest.json"),
                 _layers=passing)
-            self.assertEqual(seen, [(False, None), (True, "q38fn")])
+            self.assertEqual(seen, [(False, "q38fn"), (True, "q38fn")])
 
 
 

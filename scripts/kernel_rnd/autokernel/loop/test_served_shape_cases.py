@@ -319,29 +319,30 @@ def test_manifest_refuses_an_incomplete_case_set(tmp_path):
 
 def test_check_served_shape_case_set_fails_closed_on_missing_manifest(tmp_path):
     verdict = gates.check_served_shape_case_set(
-        tmp_path / "build", resolved_recipe=_recipe(), manifest_path=tmp_path / "absent.json")
+        tmp_path / "build", resolved_recipe=_recipe(), manifest_path=tmp_path / "absent.json",
+        lane="ds41")
     assert verdict.passed is False
     assert verdict.gate == "oracle_unavailable"   # round-12: unavailable, not numerical
     assert "not available" in verdict.reason
 
 
 def test_check_served_shape_case_set_fails_closed_on_missing_binary_literal(tmp_path):
-    cases = ssc.case_set(ANCHOR_NMSE)
+    cases = ssc.case_set(ANCHOR_NMSE, lane="ds41")
     manifest = tmp_path / "manifest.json"
-    ssc.write_manifest(manifest, cases)
+    ssc.write_manifest(manifest, cases, lane="ds41")
     build = tmp_path / "build"
     (build / "bin").mkdir(parents=True)
     (build / "bin" / "test-backend-ops").write_bytes(b"\0ELF\0")
     verdict = gates.check_served_shape_case_set(
-        build, resolved_recipe=_recipe(), manifest_path=manifest)
+        build, resolved_recipe=_recipe(), manifest_path=manifest, lane="ds41")
     assert verdict.passed is False
     assert "does not carry" in verdict.reason
 
 
 def test_check_served_shape_case_set_runs_op_correctness_when_available(tmp_path, monkeypatch):
-    cases = ssc.case_set(ANCHOR_NMSE)
+    cases = ssc.case_set(ANCHOR_NMSE, lane="ds41")
     manifest = tmp_path / "manifest.json"
-    ssc.write_manifest(manifest, cases)
+    ssc.write_manifest(manifest, cases, lane="ds41")
     build = tmp_path / "build"
     (build / "bin").mkdir(parents=True)
     (build / "bin" / "test-backend-ops").write_bytes(
@@ -356,11 +357,14 @@ def test_check_served_shape_case_set_runs_op_correctness_when_available(tmp_path
 
     monkeypatch.setattr(gates, "op_correctness", fake_op_correctness)
     unknown = gates.check_served_shape_case_set(
-        build, resolved_recipe=_recipe(), manifest_path=manifest)
+        build, resolved_recipe=_recipe(), manifest_path=manifest, lane="ds41")
     assert unknown.passed is False and unknown.gate == "oracle_unavailable"
     assert "thread count" in unknown.reason
-    verdict = gates.check_served_shape_case_set(
+    no_lane = gates.check_served_shape_case_set(
         build, resolved_recipe=_served_recipe(), manifest_path=manifest)
+    assert no_lane.passed is False and no_lane.gate == "oracle_unavailable"
+    verdict = gates.check_served_shape_case_set(
+        build, resolved_recipe=_served_recipe(), manifest_path=manifest, lane="ds41")
     assert verdict.passed is True
     assert seen["expected_cases"] == len(cases)
     assert seen["environment_overrides"] == ((ssc.CASE_SET_ENV, ssc.CASE_SET_ID),
@@ -385,7 +389,7 @@ def test_ppl_contract_op_nmse_fails_closed_when_served_shape_check_fails():
     def op_correctness(build, *, op, backend, resolved_recipe, params_filter):
         return gates.Verdict("correctness", True, "ok")
 
-    def failing_served_shape_check(build, *, resolved_recipe, manifest_path):
+    def failing_served_shape_check(build, *, resolved_recipe, manifest_path, **_kw):
         return gates.Verdict("served_shape_case_set", False, "manifest refused: boom")
 
     verdict = gates.ppl_contract_op_nmse(
@@ -401,7 +405,7 @@ def test_ppl_contract_op_nmse_passes_when_both_the_generic_and_served_shape_suit
     def op_correctness(build, *, op, backend, resolved_recipe, params_filter):
         return gates.Verdict("correctness", True, "ok")
 
-    def passing_served_shape_check(build, *, resolved_recipe, manifest_path):
+    def passing_served_shape_check(build, *, resolved_recipe, manifest_path, **_kw):
         return gates.Verdict("served_shape_case_set", True, "ok")
 
     verdict = gates.ppl_contract_op_nmse(
@@ -478,7 +482,7 @@ def test_each_lanes_routed_corpus_uses_its_served_expert_count_and_dispersed_ids
                      ("q38fn_expert_gate_up", "Q6_K"), ("q38fn_expert_down", "IQ4_NL"),
                      ("q38fn_expert_down", "Q8_0")}
     assert routed[0].vars().endswith(",routed=1,max_nmse=3e-06")
-    block = ssc.backend_ops_patch_block(ssc.case_set(anchor), routed)
+    block = ssc.backend_ops_patch_block(ssc.case_set(anchor, lane="q38fn"), routed)
     assert "test_mul_mat_id_served_routed(" in block and ssc.ROUTED_CASE_SET_ID in block
     assert "const int64_t step = (n_mats / n_used) | 1;" in block
     assert "static int autokernel_backend_threads()" in block
@@ -522,7 +526,8 @@ def test_the_patch_sets_the_backend_thread_count_the_tool_uses(tmp_path):
 def test_the_calibration_set_covers_both_corpora():
     for lane in ssc.LANE_PROFILES:
         assert len(ssc.calibration_triples(lane)) == (
-            len(ssc.canonical_triples()) + len(ssc.canonical_triples(routed=True, lane=lane)))
+            len(ssc.canonical_triples(lane=lane))
+            + len(ssc.canonical_triples(routed=True, lane=lane)))
 
 
 
@@ -540,3 +545,69 @@ def test_routed_types_follow_the_served_direction():
     gate, down = ssc.routed_shapes("q38fn")
     assert ssc.routed_types("q38fn", gate) == ("Q6_K", "IQ4_XS", "IQ3_S")
     assert ssc.routed_types("q38fn", down) == ("Q8_0", "IQ4_NL")
+
+
+
+def test_the_candidate_corpus_is_lane_partitioned():
+    """Round-15: each lane measures only its own served shapes (+ identical-dim shapes
+    of another lane, none today)."""
+    for lane in ssc.LANE_PROFILES:
+        names = {shape.name for shape in ssc.lane_served_shapes(lane)}
+        assert names and all(name.startswith(lane + "_") for name in names)
+    assert len(ssc.canonical_triples(lane="ds41")) == 340
+    assert len(ssc.canonical_triples(lane="q38fn")) == 230
+    assert len(ssc.calibration_triples("ds41")) == 348
+    assert len(ssc.calibration_triples("q38fn")) == 250
+
+
+def test_manifests_record_seed_scheme_and_partition(tmp_path):
+    import json
+    anchor = {(t[0].name, t[1], t[2]): 1e-6 for t in ssc.calibration_triples("q38fn")}
+    cases = ssc.case_set(anchor, lane="q38fn")
+    path = tmp_path / "manifest.json"
+    ssc.write_manifest(path, cases, lane="q38fn")
+    body = json.loads(path.read_text())
+    assert body["seed_scheme"] == ssc.SEED_SCHEME and body["lane"] == "q38fn"
+    assert body["partition"] == [s.name for s in ssc.lane_served_shapes("q38fn")]
+    assert ssc.load_manifest(path, lane="q38fn") == cases
+    with pytest.raises(ssc.ManifestRefused):
+        ssc.load_manifest(path, lane="ds41")
+    for field, value in (("seed_scheme", "random-inputs"), ("partition", ["x"])):
+        tampered = dict(body, **{field: value})
+        path.write_text(json.dumps(tampered))
+        with pytest.raises(ssc.ManifestRefused):
+            ssc.load_manifest(path, lane="q38fn")
+
+
+def test_generated_cpp_seeds_every_case_from_its_case_key_hash():
+    """Round-15: deterministic per-case inputs, identical for calibration and gating."""
+    anchor = {(t[0].name, t[1], t[2]): 1e-6 for t in ssc.calibration_triples("q38fn")}
+    final = ssc.backend_ops_patch_block(ssc.case_set(anchor, lane="q38fn"),
+                                        ssc.case_set(anchor, routed=True, lane="q38fn"))
+    calib = ssc.calibration_patch_block("q38fn")
+    for block in (final, calib):
+        assert "suite_seed_begin(0x414b53455256ULL, (size_t) h, \"AK_SERVED_SHAPE\");" in block
+        assert "h ^= c; h *= 0x100000001B3ULL;" in block and "0x14650FB0739D0383ULL" in block
+        # every subclass seeds BEFORE the base initialisation (covers the MUL_MAT_ID ids)
+        assert block.count("autokernel_seed_case(test_mul_mat::vars());") == 1
+        assert block.count("autokernel_seed_case(test_mul_mat_id::vars());") == 1
+        assert block.count('autokernel_seed_case(test_mul_mat_id::vars() + ",routed=1");') == 1
+        for match in re.finditer(r"autokernel_seed_case\(([^;]*)\);\n\s*(\S+)", block):
+            assert "initialize_tensors(ctx)" in match.group(2), match.group(0)
+    assert ssc.AK_SERVED_SHAPE_SEED == 0x414B53455256
+
+
+def test_the_same_case_key_and_seed_for_the_bound_and_calibrate_variants():
+    anchor = {(t[0].name, t[1], t[2]): 1e-6 for t in ssc.calibration_triples("q38fn")}
+    cases = (ssc.case_set(anchor, lane="q38fn")
+             + ssc.case_set(anchor, routed=True, lane="q38fn"))
+    seeds = set()
+    for case in cases:
+        key = ssc.case_key(case.shape, case.type_a, case.n)
+        bound_key = case.vars()[:case.vars().rindex(",max_nmse=")]
+        calib = ssc.calibration_vars(case.shape, case.type_a, case.n)
+        assert key == bound_key == calib[:-len(",calibrate=1")]
+        seeds.add(ssc.case_seed_index(key))
+    assert len(seeds) == len(cases)    # distinct inputs per case
+    # pinned value (the tree's suite_seed_hash_string offset basis, see case_seed_index)
+    assert ssc.case_seed_index("abc") == 0xE16801510DB89EFD

@@ -2379,10 +2379,12 @@ def check_served_shape_case_set(build_dir: Path, *, resolved_recipe,
     # Round-12: unavailable evidence is gate "oracle_unavailable" (never a numerical
     # FAIL), so a bundle bisect can tell "could not measure" from "measured wrong".
     set_id = ssc.ROUTED_CASE_SET_ID if routed else ssc.CASE_SET_ID
-    if routed and lane not in ssc.LANE_PROFILES:
+    if lane not in ssc.LANE_PROFILES:
+        # Round-15: both corpora are lane-partitioned (the candidate corpus measures the
+        # lane's own served shapes; the routed one its GGUF expert profile).
         return Verdict("oracle_unavailable", False,
-                       f"no MoE profile for this model (lane {lane!r}); the routed corpus "
-                       "derives from the lane's GGUF expert_count/expert_used_count")
+                       f"no served-shape profile for this model (lane {lane!r}); the "
+                       "corpora derive from the lane's served GGUF")
     try:
         cases = ssc.load_manifest(manifest_path, routed=routed, lane=lane)
     except ssc.ManifestRefused as exc:
@@ -3452,7 +3454,7 @@ def ppl_contract_op_nmse(candidate_build: Path, *, resolved_recipe,
     check = _check_served_shape_case_set or check_served_shape_case_set
     corpora = []
     if served_shape_manifest is not None:
-        corpora.append(("served-shape", served_shape_manifest, {}))
+        corpora.append(("served-shape", served_shape_manifest, {"lane": routed_lane}))
     if routed_manifest is not None:
         corpora.append((f"{routed_lane} served-expert routed", routed_manifest,
                         {"routed": True, "lane": routed_lane}))

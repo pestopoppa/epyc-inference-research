@@ -104,6 +104,29 @@ ROUTED_MANIFEST_SCHEMA = "epyc.autokernel.served_shape_routed_manifest.v1"
 #: The env var the patched test-backend-ops reads for its CPU backend thread count
 #: (the stock tool always uses hardware_concurrency()).
 BACKEND_THREADS_ENV = "AUTOKERNEL_BACKEND_THREADS"
+#: Round-15: the input-seeding scheme the generated subclasses use (recorded in every
+#: manifest; a manifest from another scheme -- e.g. the random-input calibrations --
+#: is refused).
+SEED_SCHEME = "ak-served-shape-fnv1a64-casekey-v1"
+AK_SERVED_SHAPE_SEED = 0x414B53455256
+
+
+def case_key(shape: "ServedShape", type_a: str, n: int) -> str:
+    """The bound-free case key the generated C++ hashes: the base `vars()` (plus
+    `,routed=1` for a routed case) -- identical for the bound and calibrate variants."""
+    return calibration_vars(shape, type_a, n)[:-len(",calibrate=1")]
+
+
+def case_seed_index(key: str) -> int:
+    """FNV-1a-style 64-bit hash of `key`, exactly as `autokernel_seed_case` computes it.
+    The offset basis is the tree's own `suite_seed_hash_string` constant
+    (0x14650FB0739D0383, decimal one digit short of canonical FNV's) -- kept identical so
+    both sides agree; only determinism matters here, not FNV conformance."""
+    h = 0x14650FB0739D0383
+    for byte in key.encode():
+        h ^= byte
+        h = (h * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+    return h
 CASE_SET_ENV = "AUTOKERNEL_CORRECTNESS_CASE_SET"
 
 #: Operator 2026-10-06 (after the first real calibration): the cap is the generic
@@ -228,6 +251,19 @@ def route_ids(n_mats: int, n_used: int, row: int) -> tuple[int, ...]:
     """The routed ids of row `row` -- byte-for-byte what `autokernel_route_ids` sets."""
     step = (n_mats // n_used) | 1
     return tuple(n_mats - 1 - (row * 29 + j * step) % n_mats for j in range(n_used))
+
+
+def lane_served_shapes(lane: str) -> tuple[ServedShape, ...]:
+    """Round-15 partition: the candidate corpus a lane measures -- its OWN served shapes
+    plus any other lane's shape with the identical (op, k, m), i.e. a shape this lane's
+    selection routes reach with the same kernels (none today: DS41 5120x2304 and Q38FN
+    2560x640 share no dims)."""
+    own = _lane_served_shapes(LANE_PROFILES[lane])
+    dims = {(shape.op, shape.k, shape.m) for shape in own}
+    shared = tuple(shape for other, profile in LANE_PROFILES.items() if other != lane
+                   for shape in _lane_served_shapes(profile)
+                   if (shape.op, shape.k, shape.m) in dims)
+    return own + shared
 
 
 def routed_shapes(lane: str) -> tuple[ServedShape, ...]:
@@ -418,7 +454,11 @@ def corpus(routed: bool = False, lane: "str | None" = None):
         if lane not in LANE_PROFILES:
             raise ValueError(f"the routed corpus needs a known lane, got {lane!r}")
         return routed_shapes(lane), routed_types(lane), ROUTED_WIDTHS
-    return SERVED_SHAPES, WITNESS_TYPES, SERVED_WIDTHS
+    if lane is None:   # unpartitioned (unit tests / tooling only); gates always pass a lane
+        return SERVED_SHAPES, WITNESS_TYPES, SERVED_WIDTHS
+    if lane not in LANE_PROFILES:
+        raise ValueError(f"unknown lane {lane!r}")
+    return lane_served_shapes(lane), WITNESS_TYPES, SERVED_WIDTHS
 
 
 def case_set(anchor_nmse_by_shape: Mapping[tuple[str, str, int], float], *,
@@ -461,6 +501,15 @@ static std::string autokernel_served_shape_nmse_str(double v) {
     snprintf(buf, sizeof(buf), "%g", v);   // == Python f"{v:g}"
     return buf;
 }
+// Round-15: deterministic per-case inputs. Every served / routed / calibration case
+// seeds from AK_SERVED_SHAPE_SEED and the FNV-1a 64 hash of its bound-free case key, so
+// the calibration run and every candidate see byte-identical inputs -- list position
+// and --suite-seed play no part. The MUL_MAT_ID ids draw from the same seeded stream.
+static void autokernel_seed_case(const std::string & key) {
+    uint64_t h = 0x14650FB0739D0383ULL;
+    for (unsigned char c : key) { h ^= c; h *= 0x100000001B3ULL; }
+    suite_seed_begin(0x414b53455256ULL, (size_t) h, "AK_SERVED_SHAPE");
+}
 // Round-12: the CPU backend thread count the tool ACTUALLY uses -- the served -t,
 // passed by the gate/calibration in AUTOKERNEL_BACKEND_THREADS (stock: hardware
 // concurrency, whatever the affinity). Called from main's backend init.
@@ -501,6 +550,10 @@ struct test_mul_mat_served_shape : public test_mul_mat {
             std::array<int64_t, 4> per, int64_t k_v, uint32_t o, double max_nmse)
         : test_mul_mat(type_a, type_b, m, n, k, bs, nr, per, k_v, o), max_nmse(max_nmse) {}
     double max_nmse_err() override { return max_nmse; }
+    void initialize_tensors(ggml_context * ctx) override {
+        autokernel_seed_case(test_mul_mat::vars());
+        test_mul_mat::initialize_tensors(ctx);
+    }
     std::string vars() override {
         return test_mul_mat::vars() + ",max_nmse=" + autokernel_served_shape_nmse_str(max_nmse);
     }
@@ -514,6 +567,10 @@ struct test_mul_mat_id_served_shape : public test_mul_mat_id {
     std::string vars() override {
         return test_mul_mat_id::vars() + ",max_nmse=" + autokernel_served_shape_nmse_str(max_nmse);
     }
+    void initialize_tensors(ggml_context * ctx) override {
+        autokernel_seed_case(test_mul_mat_id::vars());
+        test_mul_mat_id::initialize_tensors(ctx);
+    }
 };
 struct test_mul_mat_id_served_routed : public test_mul_mat_id {
     const double max_nmse;
@@ -525,6 +582,7 @@ struct test_mul_mat_id_served_routed : public test_mul_mat_id {
         return test_mul_mat_id::vars() + ",routed=1,max_nmse=" + autokernel_served_shape_nmse_str(max_nmse);
     }
     void initialize_tensors(ggml_context * ctx) override {
+        autokernel_seed_case(test_mul_mat_id::vars() + ",routed=1");
         test_mul_mat_id::initialize_tensors(ctx);
         autokernel_route_ids(ctx, n_mats, n_used);
     }
@@ -578,7 +636,16 @@ _COMMON_CPP = (
     "    char buf[32];\n"
     "    snprintf(buf, sizeof(buf), \"%g\", v);\n"
     "    return buf;\n"
-    "}\n") + """// Round-12: the CPU backend thread count the tool ACTUALLY uses -- the served -t,
+    "}\n") + """// Round-15: deterministic per-case inputs. Every served / routed / calibration case
+// seeds from AK_SERVED_SHAPE_SEED and the FNV-1a 64 hash of its bound-free case key, so
+// the calibration run and every candidate see byte-identical inputs -- list position
+// and --suite-seed play no part. The MUL_MAT_ID ids draw from the same seeded stream.
+static void autokernel_seed_case(const std::string & key) {
+    uint64_t h = 0x14650FB0739D0383ULL;
+    for (unsigned char c : key) { h ^= c; h *= 0x100000001B3ULL; }
+    suite_seed_begin(0x414b53455256ULL, (size_t) h, "AK_SERVED_SHAPE");
+}
+// Round-12: the CPU backend thread count the tool ACTUALLY uses -- the served -t,
 // passed by the gate/calibration in AUTOKERNEL_BACKEND_THREADS (stock: hardware
 // concurrency, whatever the affinity). Called from main's backend init.
 static int autokernel_backend_threads() {
@@ -622,6 +689,10 @@ struct test_mul_mat_served_calib : public test_mul_mat {
         : test_mul_mat(type_a, type_b, m, n, k, bs, nr, per, k_v, o) {}
     double max_nmse_err() override { return 1.0; }
     std::string vars() override { return test_mul_mat::vars() + ",calibrate=1"; }
+    void initialize_tensors(ggml_context * ctx) override {
+        autokernel_seed_case(test_mul_mat::vars());
+        test_mul_mat::initialize_tensors(ctx);
+    }
     double err(const float * a, const float * b, size_t n) override {
         const double e = test_case::err(a, b, n);
         fprintf(stdout, "AK_SERVED_NMSE\\t%s\\t%.17g\\n", vars().c_str(), e);
@@ -635,6 +706,10 @@ struct test_mul_mat_id_served_calib : public test_mul_mat_id {
         : test_mul_mat_id(type_a, type_b, n_mats, n_used, b, m, n, k) {}
     double max_nmse_err() override { return 1.0; }
     std::string vars() override { return test_mul_mat_id::vars() + ",calibrate=1"; }
+    void initialize_tensors(ggml_context * ctx) override {
+        autokernel_seed_case(test_mul_mat_id::vars());
+        test_mul_mat_id::initialize_tensors(ctx);
+    }
     double err(const float * a, const float * b, size_t n) override {
         const double e = test_case::err(a, b, n);
         fprintf(stdout, "AK_SERVED_NMSE\\t%s\\t%.17g\\n", vars().c_str(), e);
@@ -649,6 +724,7 @@ struct test_mul_mat_id_served_routed_calib : public test_mul_mat_id {
     double max_nmse_err() override { return 1.0; }
     std::string vars() override { return test_mul_mat_id::vars() + ",routed=1,calibrate=1"; }
     void initialize_tensors(ggml_context * ctx) override {
+        autokernel_seed_case(test_mul_mat_id::vars() + ",routed=1");
         test_mul_mat_id::initialize_tensors(ctx);
         autokernel_route_ids(ctx, n_mats, n_used);
     }
@@ -684,8 +760,8 @@ def canonical_triples(routed: bool = False,
 
 
 def calibration_triples(lane: str) -> tuple[tuple[ServedShape, str, int], ...]:
-    """Both corpora: the candidate corpus and `lane`'s bundle-tier routed one."""
-    return canonical_triples() + canonical_triples(routed=True, lane=lane)
+    """Both of `lane`'s corpora: its partitioned candidate corpus and its routed one."""
+    return canonical_triples(lane=lane) + canonical_triples(routed=True, lane=lane)
 
 
 def calibration_regex(lane: str) -> str:
@@ -819,10 +895,11 @@ def write_manifest(path: Path, cases: tuple[ServedShapeCase, ...], *,
             "case_set_id": ROUTED_CASE_SET_ID if routed else CASE_SET_ID,
            "cases": [{"shape_name": c.shape.name, "type_a": c.type_a, "n": c.n,
                       "max_nmse": c.max_nmse} for c in cases]}
-    if routed:
-        if lane not in LANE_PROFILES:
-            raise ValueError(f"a routed manifest needs a known lane, got {lane!r}")
-        body["lane"] = lane
+    if routed and lane not in LANE_PROFILES:
+        raise ValueError(f"a routed manifest needs a known lane, got {lane!r}")
+    body["lane"] = lane
+    body["seed_scheme"] = SEED_SCHEME
+    body["partition"] = [shape.name for shape in corpus(routed, lane)[0]]
     own = {(c.shape.name, c.type_a, c.n) for c in cases}
     body["anchor_relative"] = sorted(list(k) for k in anchor_relative_keys if tuple(k) in own)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -853,12 +930,25 @@ def load_manifest(path: Path, *, routed: bool = False,
         raise ManifestRefused(f"{path}: served-shape manifest is not valid JSON: {exc}") from exc
     schema = ROUTED_MANIFEST_SCHEMA if routed else MANIFEST_SCHEMA
     set_id = ROUTED_CASE_SET_ID if routed else CASE_SET_ID
-    if routed:
-        recorded = body.get("lane") if isinstance(body, dict) else None
-        if recorded not in LANE_PROFILES or (lane is not None and recorded != lane):
-            raise ManifestRefused(f"{path}: routed manifest is for lane {recorded!r}, "
-                                  f"not {lane!r}")
-        lane = recorded
+    if not isinstance(body, dict) or body.get("schema") != schema \
+            or body.get("case_set_id") != set_id or not isinstance(body.get("cases"), list) \
+            or not body["cases"]:
+        raise ManifestRefused(f"{path}: served-shape manifest has the wrong shape or schema")
+    recorded = body.get("lane") if isinstance(body, dict) else None
+    if (routed and recorded not in LANE_PROFILES) or (lane is not None and recorded != lane) \
+            or (recorded is not None and recorded not in LANE_PROFILES):
+        raise ManifestRefused(f"{path}: manifest is for lane {recorded!r}, not {lane!r}")
+    lane = recorded
+    if not isinstance(body, dict) or body.get("seed_scheme") != SEED_SCHEME:
+        raise ManifestRefused(f"{path}: manifest input-seed scheme "
+                              f"{body.get('seed_scheme') if isinstance(body, dict) else None!r}"
+                              f" is not {SEED_SCHEME!r} (re-calibrate)")
+    try:
+        partition = [shape.name for shape in corpus(routed, lane)[0]]
+    except ValueError as exc:
+        raise ManifestRefused(f"{path}: {exc}") from exc
+    if body.get("partition") != partition:
+        raise ManifestRefused(f"{path}: manifest partition does not match lane {lane!r}")
     shapes, types, widths = corpus(routed, lane)
     by_name = {shape.name: shape for shape in shapes}
     if not isinstance(body, dict) or body.get("schema") != schema \
@@ -918,5 +1008,6 @@ __all__ = ["CASE_SET_ENV", "CASE_SET_ID", "MANIFEST_SCHEMA", "ManifestRefused",
            "binary_has_calibration", "ROUTED_CASE_SET_ID", "routed_shapes",
            "routed_types", "ROUTED_WIDTHS", "LANE_PROFILES", "MoeProfile", "route_ids",
            "candidate_experts", "lane_for_model", "moe_profile_from_gguf", "BLOCK_SIZE",
-           "type_fits", "anchor_exceeds_generic", "BACKEND_THREADS_ENV", "corpus",
+           "type_fits", "anchor_exceeds_generic", "SEED_SCHEME", "AK_SERVED_SHAPE_SEED",
+           "case_key", "case_seed_index", "lane_served_shapes", "BACKEND_THREADS_ENV", "corpus",
            "calibration_triples", "binary_has_routed_case_set", "THREADS_PATCHED"]
