@@ -385,7 +385,9 @@ def test_invalid_kb_catalog_dependency_refuses_before_query_backend_or_publicati
                 "UPDATE catalog_dependency SET record_json = record_json || ' ' WHERE singleton=1"
             )
         else:
-            conn.execute("INSERT INTO chunk(file_path) VALUES ('changed-after-record.md')")
+            conn.execute(
+                "UPDATE chunk SET content_hash = 'changed-after-record' WHERE chunk_id=1"
+            )
 
     events: list[str] = []
     read_dependency = run_job.kb_catalog_dependency.read_dependency
