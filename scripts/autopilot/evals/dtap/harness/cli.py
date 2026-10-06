@@ -68,6 +68,13 @@ def _build_parser() -> argparse.ArgumentParser:
     mat = sub.add_parser("matrix", help="repeated seeds with Wilson CIs")
     mat.add_argument("--case", required=True)
     mat.add_argument("--arms", nargs="+", default=None)
+    mat.add_argument(
+        "--compare-arm",
+        action="append",
+        default=None,
+        metavar="BASELINE:CANDIDATE",
+        help="explicit paired comparison for failure_ledger.json (repeatable; no inferred pairs)",
+    )
     mat.add_argument("--seeds", type=int, default=5)
     mat.add_argument("--stub", action="store_true")
     mat.add_argument("--endpoint", default=None)
@@ -145,6 +152,27 @@ def _default_arm(case: dict) -> str:
     return "done" if case["threat"] == "benign" else "compliant"
 
 
+def _comparison_pairs_from(values: list[str] | None) -> list[tuple[str, str]] | None:
+    if values is None:
+        return None
+    pairs = []
+    seen = set()
+    for value in values:
+        if not isinstance(value, str) or value.count(":") != 1:
+            raise SystemExit("--compare-arm must be BASELINE:CANDIDATE")
+        baseline, candidate = value.split(":", 1)
+        if not baseline or not candidate:
+            raise SystemExit("--compare-arm must name two nonempty arms")
+        if baseline == candidate:
+            raise SystemExit("--compare-arm baseline and candidate must differ")
+        pair = (baseline, candidate)
+        if pair in seen:
+            raise SystemExit(f"duplicate --compare-arm: {value}")
+        seen.add(pair)
+        pairs.append(pair)
+    return pairs
+
+
 def _tool_contract_from(args: argparse.Namespace, registry: CaseRegistry):
     selected = getattr(args, "tool_contract", None)
     if selected is None:
@@ -216,6 +244,7 @@ def main(argv: list | None = None) -> int:
         rows = run_matrix(
             [args.case], arms, list(range(args.seeds)), factory, arm_config, Path(args.out),
             native_tool_contract=native_tool_contract, endpoint_mode=args.endpoint_mode,
+            comparison_pairs=_comparison_pairs_from(args.compare_arm),
         )
         print(json.dumps(rows, indent=2, sort_keys=True))
         return 0

@@ -42,6 +42,28 @@ class ChatResult:
     finish_reason: str = "stop"
     raw: Optional[Dict[str, Any]] = None
     transport_detail: Optional[Dict[str, Any]] = None
+    usage: Optional[Dict[str, int]] = None
+    usage_status: str = "unavailable:usage_not_reported"
+
+
+def _parse_usage(raw: Dict[str, Any]) -> tuple[Optional[Dict[str, int]], str]:
+    """Keep only complete provider-reported prompt/completion token counts."""
+    if "usage" not in raw:
+        return None, "unavailable:usage_missing"
+    usage = raw.get("usage")
+    if not isinstance(usage, dict):
+        return None, "unavailable:usage_not_object"
+    required = ("prompt_tokens", "completion_tokens")
+    missing = [key for key in required if key not in usage]
+    if missing:
+        return None, "unavailable:usage_missing_fields:" + ",".join(missing)
+    invalid = [
+        key for key in required
+        if type(usage[key]) is not int or usage[key] < 0
+    ]
+    if invalid:
+        return None, "unavailable:usage_invalid_fields:" + ",".join(invalid)
+    return {key: usage[key] for key in required}, "reported"
 
 
 class ChatEndpoint:
@@ -176,7 +198,9 @@ class ChatEndpoint:
             tool_calls.append({"name": name, "arguments": arguments, "id": tc.get("id") or ""})
         if not text and not tool_calls:
             raise ModelFailure("endpoint returned an empty completion with no tool calls")
-        return ChatResult(text=text, tool_calls=tool_calls, finish_reason=finish, raw=raw)
+        usage, usage_status = _parse_usage(raw)
+        return ChatResult(text=text, tool_calls=tool_calls, finish_reason=finish, raw=raw,
+                          usage=usage, usage_status=usage_status)
 
 
 class DryRunStub:
