@@ -67,17 +67,61 @@ from __future__ import annotations
 
 import argparse
 import glob
+import hashlib
 import json
 import math
 import os
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 
 # Execution-capable tool names the REPL sandbox exposes to the model (src/repl_environment/
 # environment.py _CHAINABLE_REPL_TOOLS / _PARALLEL_MUTATION_REPL_TOOLS). subprocess/os.system are
 # NOT importable (not in SAFE_IMPORT_MODULES), so these two calls are the only way a model turn
 # can execute or test code inside its own episode.
 EXECUTION_CALL_RE = re.compile(r"\brun_shell\s*\(|\brun_python_code\s*\(")
+REPORT_SCHEMA = "mf_vbs1_verify_before_stop_report.v2"
+_PRODUCER_SOURCE_SHA256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+
+
+def _canonical_sha256(value: dict) -> str:
+    raw = json.dumps(value, sort_keys=True, separators=(",", ":"),
+                     ensure_ascii=False, allow_nan=False).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _seal_report(report: dict, repo_root: str, inputs: list[dict],
+                 missing_inputs: list[str] | None = None) -> dict:
+    """Bind the unchanged analysis body to the exact parsed inputs and producer bytes."""
+    if not inputs:
+        return report
+    root = Path(repo_root).resolve()
+    producer = Path(__file__).resolve()
+    try:
+        producer_path = producer.relative_to(root).as_posix()
+    except ValueError as exc:
+        raise ValueError("producer must be inside repo-root for a source-bound report") from exc
+    manifest = sorted(inputs, key=lambda item: item["path"])
+    source_sha = _PRODUCER_SOURCE_SHA256
+    provenance = {
+        "schema": REPORT_SCHEMA,
+        "producer_path": producer_path,
+        "producer_sha256": source_sha,
+        "input_root": "epyc-orchestrator",
+        "inputs": manifest,
+        "missing_inputs": sorted(missing_inputs or []),
+        "analysis_config_sha256": _canonical_sha256({}),
+        "report_body_sha256": _canonical_sha256(report),
+    }
+    provenance["record_id"] = _canonical_sha256(provenance)
+    report["native_provenance"] = provenance
+    try:
+        provenance["report_sha256"] = _canonical_sha256(report)
+    except ValueError:
+        # Empty/invalid corpora may contain the existing non-finite no-denominator sentinel.
+        # Preserve that diagnostic output; it cannot become a native receipt.
+        report.pop("native_provenance", None)
+    return report
 
 # Text heuristic for "delegates execution to the user": the final answer tells the user to
 # run/test the code themselves instead of the model doing it. Matched case-insensitively against
@@ -101,23 +145,42 @@ DELEGATES_TO_USER_PATTERNS = [
 DELEGATES_TO_USER_RE = re.compile("|".join(DELEGATES_TO_USER_PATTERNS), re.IGNORECASE)
 
 
-def _load_jsonl(path: str) -> list[dict]:
+def _load_jsonl(path: str, *, input_manifest: list[dict] | None = None,
+                repo_root: str | None = None,
+                missing_inputs: list[str] | None = None) -> list[dict]:
     out = []
     if not os.path.exists(path):
+        if input_manifest is not None and missing_inputs is not None:
+            root = Path(repo_root or ".").resolve()
+            source = Path(path).resolve()
+            try:
+                missing_inputs.append(source.relative_to(root).as_posix())
+            except ValueError as exc:
+                raise ValueError("missing input is outside repo-root") from exc
         return out
-    with open(path) as fh:
-        for line in fh:
-            line = line.strip()
-            if not line:
-                continue
+    raw = Path(path).read_bytes()
+    text = raw.decode("utf-8")
+    for line in text.splitlines():
+        line = line.strip()
+        if line:
             out.append(json.loads(line))
+    if input_manifest is not None:
+        root = Path(repo_root or ".").resolve()
+        source = Path(path).resolve()
+        try:
+            relative = source.relative_to(root).as_posix()
+        except ValueError as exc:
+            raise ValueError("parsed input is outside repo-root") from exc
+        input_manifest.append({"path": relative, "sha256": hashlib.sha256(raw).hexdigest(),
+                               "byte_count": len(raw), "row_count": len(out),
+                               "normalized_row_count": len(out)})
     return out
 
 
-def wilson_ci(successes: int, n: int, z: float = 1.96) -> tuple[float, float, float]:
-    """Wilson score interval. Returns (point_estimate, lo, hi). n==0 -> (nan, nan, nan)."""
+def wilson_ci(successes: int, n: int, z: float = 1.96) -> tuple[float | None, float | None, float | None]:
+    """Wilson score interval. Zero trials have unknown rates, represented as JSON nulls."""
     if n == 0:
-        return (float("nan"), float("nan"), float("nan"))
+        return (None, None, None)
     p = successes / n
     denom = 1 + z * z / n
     center = p + z * z / (2 * n)
@@ -196,21 +259,25 @@ def classify(t: Trajectory) -> None:
         t.vbs_class = "c"
 
 
-def load_trajectories(repo_root: str) -> list[Trajectory]:
+def load_trajectories(repo_root: str, *, input_manifest: list[dict] | None = None,
+                      missing_inputs: list[str] | None = None) -> list[Trajectory]:
     trajs: list[Trajectory] = []
     pattern = os.path.join(repo_root, "data", "bep_sandbox", "*", "results.jsonl")
     for results_path in sorted(glob.glob(pattern)):
         resdir = os.path.dirname(results_path)
         if "INVALID" in resdir:
             continue
-        for row in _load_jsonl(results_path):
+        for row in _load_jsonl(str(results_path), input_manifest=input_manifest,
+                               repo_root=repo_root, missing_inputs=missing_inputs):
             if row.get("mode") != "real":
                 continue
             trace_info = row.get("trace") or {}
             trace_rel = trace_info.get("path")
             trace_turns = []
             if trace_rel:
-                trace_turns = _load_jsonl(os.path.join(resdir, trace_rel))
+                trace_turns = _load_jsonl(os.path.join(resdir, trace_rel),
+                                          input_manifest=input_manifest, repo_root=repo_root,
+                                          missing_inputs=missing_inputs)
             t = Trajectory(
                 resdir=resdir,
                 task=row.get("task", ""),
@@ -236,9 +303,13 @@ def summarize(trajs: list[Trajectory]) -> dict:
     # Corpus-wide (forced + voluntary) execution-call and edit signals: is verification ever
     # attempted at all in this harness, independent of how the episode ended?
     any_edited_corpuswide = [t for t in trajs if t.edited]
-    any_executed_corpuswide = [t for t in trajs if t.executed]
+    any_edited_and_call_bearing = [t for t in trajs if t.edited and t.executed]
     any_syntax_verified = [
-        t for t in trajs if "sandbox-verified" in (t.answer_preview or "")
+        t for t in trajs if any(label in (t.answer_preview or "")
+                                for label in ("sandbox-verified", "syntax-only (py_compile)"))
+    ]
+    any_owner_command_passed = [
+        t for t in trajs if "py_compile + owner command passed" in (t.answer_preview or "")
     ]
 
     by_class = {c: [t for t in voluntary if t.vbs_class == c] for c in "abcd"}
@@ -246,13 +317,13 @@ def summarize(trajs: list[Trajectory]) -> dict:
     n_failure = len(by_class["c"]) + len(by_class["d"])  # edit landed, no execution (incl. delegated)
     n_edited = len(by_class["b"]) + len(by_class["c"]) + len(by_class["d"])
 
-    rate_of_voluntary = wilson_ci(n_failure, n_vol) if n_vol else (float("nan"),) * 3
-    rate_of_edited = wilson_ci(n_failure, n_edited) if n_edited else (float("nan"),) * 3
+    rate_of_voluntary = wilson_ci(n_failure, n_vol)
+    rate_of_edited = wilson_ci(n_failure, n_edited)
 
     n_edited_corpuswide = sum(1 for t in trajs if t.edited)
-    n_executed_corpuswide = sum(1 for t in trajs if t.executed)
+    n_edited_and_call_bearing = len(any_edited_and_call_bearing)
     rate_execution_after_edit_corpuswide = (
-        wilson_ci(n_executed_corpuswide, n_edited_corpuswide) if n_edited_corpuswide else (float("nan"),) * 3
+        wilson_ci(n_edited_and_call_bearing, n_edited_corpuswide)
     )
 
     def by_key(keyfn):
@@ -289,8 +360,9 @@ def summarize(trajs: list[Trajectory]) -> dict:
             "n_forced_max_turns": len(forced_max),
             "n_forced_error": len(forced_err),
             "n_voluntary": n_vol,
-            "role_model": "coder_escalation (Qwen3.6-35B-A3B Q8, general MoE ~3B active) -- the only role/model represented in this corpus",
-            "date_range": "2026-05-27 (single day; all 62 real trajectories timestamped 2026-05-27)",
+            "role_model": None,
+            "date_range": None,
+            "scope_note": "Role, model, and timestamps are not bound by the parsed native result rows; unknown in this report.",
         },
         "classification": {
             "a_no_edit": len(by_class["a"]),
@@ -311,48 +383,45 @@ def summarize(trajs: list[Trajectory]) -> dict:
             },
             "no_execution_after_edit_corpuswide_forced_and_voluntary": {
                 "description": (
-                    "Of every trajectory (forced-stop max-turns/error included) where an edit landed "
-                    "anywhere in the episode, the fraction where run_shell/run_python_code was NEVER "
-                    "called. This is the cleanest number in this report: it is not confounded by the "
-                    "auto-finalize artifact (multi-turn forced-stop episodes had many turns to call it) "
-                    "and not restricted to voluntary stops."
+                    "Among all forced and voluntary trajectories with an edit signal, the complement "
+                    "of trajectories whose raw trace contains a run_shell/run_python_code call-shaped "
+                    "string. This episode-level text heuristic does not prove a native tool call occurred "
+                    "or that it occurred after the edit."
                 ),
-                "numerator": n_edited_corpuswide - n_executed_corpuswide, "denominator": n_edited_corpuswide,
-                "point": 1 - rate_execution_after_edit_corpuswide[0] if n_edited_corpuswide else float("nan"),
-                "wilson_95ci_lo_of_never_executed": 1 - rate_execution_after_edit_corpuswide[2] if n_edited_corpuswide else float("nan"),
-                "wilson_95ci_hi_of_never_executed": 1 - rate_execution_after_edit_corpuswide[1] if n_edited_corpuswide else float("nan"),
+                "numerator": n_edited_corpuswide - n_edited_and_call_bearing, "denominator": n_edited_corpuswide,
+                "point": 1 - rate_execution_after_edit_corpuswide[0] if rate_execution_after_edit_corpuswide[0] is not None else None,
+                "wilson_95ci_lo_of_never_executed": 1 - rate_execution_after_edit_corpuswide[2] if rate_execution_after_edit_corpuswide[2] is not None else None,
+                "wilson_95ci_hi_of_never_executed": 1 - rate_execution_after_edit_corpuswide[1] if rate_execution_after_edit_corpuswide[1] is not None else None,
+                "call_bearing_edited_trajectories": n_edited_and_call_bearing,
             },
         },
         "delegates_to_user_variant": {
             "n_matches": len(by_class["d"]),
             "example_matched_text": [m for t in trajs for m in t.delegate_matches][:20],
             "precision_note": (
-                "0 matches found across all 62 real trajectories -- precision is N/A, not 0/0-as-good. "
+                "0 matches found in the parsed real trajectories -- precision is N/A, not 0/0-as-good. "
                 "See report for why the harness's fixed FINAL(\"done\") / auto-wrap protocol structurally "
-                "forecloses natural-language delegation text; every raw_output in the corpus was scanned "
-                "(not sampled), so this is a full-corpus negative, not an under-sampled one."
+                "may foreclose natural-language delegation text; every parsed raw_output was scanned, "
+                "but this remains a text heuristic."
             ) if len(by_class["d"]) == 0 else "hand-check the example_matched_text sample and report precision",
         },
         "execution_tool_availability": {
             "note": (
                 "run_shell()/run_python_code() are real callables injected into the REPL sandbox globals "
                 "(src/repl_environment/environment.py _CHAINABLE_REPL_TOOLS) -- the model COULD have executed "
-                "or tested code. subprocess/os.system are not importable (SAFE_IMPORT_MODULES whitelist), so "
-                "these two calls are the only execution path available. Counts below are CORPUS-WIDE (forced "
-                "+ voluntary stops, all 62 real trajectories), not just voluntary ones -- this answers whether "
-                "verification happens in this harness at all, independent of how the episode ended."
+                "or tested code. The counts below are corpus-wide text/answer-label heuristics over parsed "
+                "real trajectories; they do not establish that a native tool call actually executed."
             ),
             "n_trajectories_total": len(trajs),
             "n_trajectories_with_any_edit": len(any_edited_corpuswide),
-            "n_trajectories_with_any_execution_call": len(any_executed_corpuswide),
+            "n_trajectories_with_any_execution_call_text_signal": sum(1 for t in trajs if t.executed),
             "n_trajectories_with_automatic_syntax_verify_only": len(any_syntax_verified),
+            "n_trajectories_with_owner_command_passed": len(any_owner_command_passed),
             "automatic_syntax_verify_caveat": (
-                "'sandbox-verified (py_compile)' in answer_preview marks the batch-edit ('on') arm's own "
-                "promotion-time py_compile syntax check (src edit_transaction module) -- an infrastructure "
-                "safeguard triggered automatically on every batch-edit apply, NOT a model-initiated "
-                "verification decision, and it checks syntax only, never the task's actual acceptance test "
-                "(e.g. 'python3 main.py == 25'). It is listed separately from run_shell/run_python_code and "
-                "is not counted toward class (b)."
+                "'sandbox-verified (py_compile)' is a legacy batch-edit label and 'syntax-only (py_compile)' "
+                "is the current syntax-only label. Both denote an infrastructure syntax check, not a "
+                "model-initiated acceptance decision. 'py_compile + owner command passed' is counted "
+                "separately as an infrastructure check; neither label is treated as a model execution call."
             ),
         },
         "auto_finalize_caveat": {
@@ -379,8 +448,8 @@ def summarize(trajs: list[Trajectory]) -> dict:
             "this_corpus_rate_over_all_voluntary": rate_of_voluntary[0],
             "this_corpus_rate_over_edited": rate_of_edited[0],
             "note": (
-                "n is far smaller here (62 real trajectories vs 248) and comes from one role/model/day/"
-                "harness, so this is a directional read, not a like-for-like replication."
+                "The historical comparison (110/248) is retained as context only. Current role, model, "
+                "and time scope are unknown because the native result rows do not bind them."
             ),
         },
     }
@@ -392,8 +461,12 @@ def main() -> None:
     ap.add_argument("--out", default=None, help="write JSON result here (default: print to stdout)")
     args = ap.parse_args()
 
-    trajs = load_trajectories(args.repo_root)
+    input_manifest: list[dict] = []
+    missing_inputs: list[str] = []
+    trajs = load_trajectories(args.repo_root, input_manifest=input_manifest,
+                              missing_inputs=missing_inputs)
     result = summarize(trajs)
+    result = _seal_report(result, args.repo_root, input_manifest, missing_inputs)
     text = json.dumps(result, indent=2, sort_keys=False)
     if args.out:
         with open(args.out, "w") as fh:

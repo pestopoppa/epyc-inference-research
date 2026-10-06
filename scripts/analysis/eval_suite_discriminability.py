@@ -60,6 +60,7 @@ from collections import defaultdict
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 import glob
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -85,6 +86,40 @@ DEFAULT_REPORTS_ROOT = _REPO_ROOT / "orchestration" / "reports"
 # lacks the ledger so the same evaluation is never counted twice.
 LEDGER_NAME = "question_ledger.jsonl"
 RESULTS_NAME = "question_results.jsonl"
+REPORT_SCHEMA = "eval_suite_discriminability_report.v2"
+_PRODUCER_SOURCE_SHA256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+
+
+def _canonical_sha256(value: dict[str, Any]) -> str:
+    raw = json.dumps(value, sort_keys=True, separators=(",", ":"),
+                     ensure_ascii=False, allow_nan=False).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _seal_report(report: dict[str, Any], inputs: list[dict[str, Any]]) -> dict[str, Any]:
+    """Bind the unchanged report body to the exact parsed input bytes and producer source."""
+    if not inputs:
+        return report
+    producer = Path(__file__).resolve()
+    try:
+        producer_path = producer.relative_to(_REPO_ROOT).as_posix()
+    except ValueError as exc:
+        raise ValueError("producer must be inside its repository root") from exc
+    manifest = sorted(inputs, key=lambda item: item["path"])
+    provenance: dict[str, Any] = {
+        "schema": REPORT_SCHEMA,
+        "producer_path": producer_path,
+        "producer_sha256": _PRODUCER_SOURCE_SHA256,
+        "input_root": "epyc-orchestrator",
+        "inputs": manifest,
+        "missing_inputs": [],
+        "analysis_config_sha256": _canonical_sha256(report.get("config", {})),
+        "report_body_sha256": _canonical_sha256(report),
+    }
+    provenance["record_id"] = _canonical_sha256(provenance)
+    report["native_provenance"] = provenance
+    provenance["report_sha256"] = _canonical_sha256(report)
+    return report
 
 
 # ---------------------------------------------------------------------------
@@ -231,7 +266,8 @@ def _expand_input(spec: str) -> list[Path]:
     return sorted(m for m in matches if m.is_file())
 
 
-def load_rows(paths: list[Path]) -> tuple[list[dict[str, Any]], list[str]]:
+def load_rows(paths: list[Path], *, input_manifest: list[dict[str, Any]] | None = None
+              ) -> tuple[list[dict[str, Any]], list[str]]:
     """Load + normalize rows from JSONL files. Returns (rows, warnings)."""
     rows: list[dict[str, Any]] = []
     warnings: list[str] = []
@@ -239,14 +275,21 @@ def load_rows(paths: list[Path]) -> tuple[list[dict[str, Any]], list[str]]:
         run_id = path.parent.name
         source = str(path)
         try:
-            text = path.read_text()
+            raw_bytes = path.read_bytes()
+            text = raw_bytes.decode("utf-8")
         except OSError as exc:  # noqa: BLE001
             warnings.append(f"unreadable: {path} ({exc})")
             continue
+        except UnicodeDecodeError as exc:
+            warnings.append(f"unreadable: {path} ({exc})")
+            continue
+        rows_before = len(rows)
+        nonempty_lines = 0
         for lineno, line in enumerate(text.splitlines(), 1):
             line = line.strip()
             if not line:
                 continue
+            nonempty_lines += 1
             try:
                 raw = json.loads(line)
             except json.JSONDecodeError:
@@ -257,6 +300,17 @@ def load_rows(paths: list[Path]) -> tuple[list[dict[str, Any]], list[str]]:
                 warnings.append(f"no qid: {path}:{lineno}")
                 continue
             rows.append(norm)
+        if input_manifest is not None:
+            resolved = path.resolve()
+            try:
+                source_path = resolved.relative_to(_REPO_ROOT).as_posix()
+            except ValueError:
+                source_path = resolved.as_posix()
+            input_manifest.append({"path": source_path,
+                                   "sha256": hashlib.sha256(raw_bytes).hexdigest(),
+                                   "byte_count": len(raw_bytes),
+                                   "row_count": nonempty_lines,
+                                   "normalized_row_count": len(rows) - rows_before})
     return rows, warnings
 
 
@@ -510,7 +564,7 @@ def build_report(
         "n_underpowered_task_classes": _count(task_classes, lambda g: g["underpowered"]),
     }
     return {
-        "schema_version": "eval_suite_discriminability_report.v1",
+        "schema_version": REPORT_SCHEMA,
         "generated_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
         "measurement_class": "OBSERVATION",
         "config": asdict(cfg),
@@ -716,7 +770,8 @@ def main(argv: list[str] | None = None) -> int:
         print("no per-question eval JSONL found", file=sys.stderr)
         return 2
 
-    rows, warnings = load_rows(paths)
+    input_manifest: list[dict[str, Any]] = []
+    rows, warnings = load_rows(paths, input_manifest=input_manifest)
     if not rows:
         print("inputs contained no usable per-question rows", file=sys.stderr)
         for w in warnings:
@@ -724,6 +779,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     report = build_report(rows, cfg, [str(p) for p in paths], warnings)
+    report = _seal_report(report, input_manifest)
     md = render_markdown(report)
 
     if args.out_dir:
