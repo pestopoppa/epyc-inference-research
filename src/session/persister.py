@@ -157,28 +157,41 @@ class SessionPersister:
         # Compute context hash (for integrity verification)
         context_hash = hashlib.sha256(repl_env.context.encode()).hexdigest()[:16]
         user_globals = dict(repl_checkpoint.get("user_globals", {}))
+        pickled_globals = dict(repl_checkpoint.get("pickled_globals", {}))
         variable_lineage = dict(repl_checkpoint.get("variable_lineage", {}))
         skipped_user_globals = list(repl_checkpoint.get("skipped_user_globals", []))
         evicted_user_globals: list[str] = []
 
-        payload_size = len(json.dumps(user_globals, default=str).encode("utf-8"))
+        def checkpoint_payload_size() -> int:
+            return len(
+                json.dumps(
+                    {"user_globals": user_globals, "pickled_globals": pickled_globals},
+                    default=str,
+                ).encode("utf-8")
+            )
+
+        payload_size = checkpoint_payload_size()
         if payload_size >= CHECKPOINT_GLOBALS_WARN_BYTES:
             logger.warning(
                 "Checkpoint globals payload is large: %.1fMB for session=%s",
                 payload_size / (1024 * 1024),
                 self.session_id[:8],
             )
-        if payload_size > CHECKPOINT_GLOBALS_HARD_BYTES and user_globals:
+        if payload_size > CHECKPOINT_GLOBALS_HARD_BYTES and (user_globals or pickled_globals):
             ordered = sorted(
-                user_globals.keys(),
-                key=lambda k: float(variable_lineage.get(k, {}).get("saved_at_ts", 0.0)),
+                user_globals.keys() | pickled_globals.keys(),
+                key=lambda k: (
+                    float(variable_lineage.get(k, {}).get("saved_at_ts", 0.0)),
+                    k,
+                ),
             )
             while ordered and payload_size > CHECKPOINT_GLOBALS_HARD_BYTES:
                 victim = ordered.pop(0)
                 user_globals.pop(victim, None)
+                pickled_globals.pop(victim, None)
                 variable_lineage.pop(victim, None)
                 evicted_user_globals.append(victim)
-                payload_size = len(json.dumps(user_globals, default=str).encode("utf-8"))
+                payload_size = checkpoint_payload_size()
             if evicted_user_globals:
                 logger.warning(
                     "Evicted %d globals to enforce checkpoint size cap for session=%s",
@@ -198,6 +211,7 @@ class SessionPersister:
             message_count=self._turn_count,
             trigger=trigger,
             user_globals=user_globals,
+            pickled_globals=pickled_globals,
             variable_lineage=variable_lineage,
             skipped_user_globals=skipped_user_globals,
         )

@@ -20,6 +20,9 @@ from src.session.models import (
     Session,
     SessionStatus,
 )
+from src.repl_environment import safe_pickle
+from src.repl_environment import REPLEnvironment
+from src.session.sqlite_store import SQLiteSessionStore
 
 
 class TestSessionPersisterInit:
@@ -285,6 +288,95 @@ class TestSaveCheckpoint:
         assert checkpoint.user_globals == {"total": 9}
         assert checkpoint.variable_lineage["total"]["role"] == "frontdoor"
         assert checkpoint.skipped_user_globals == ["tmp_lambda"]
+
+    def test_save_checkpoint_forwards_pickled_globals(self):
+        session_store = Mock()
+        mock_session = Session(
+            id="sess_123",
+            task_id="task_456",
+            created_at=datetime.now(timezone.utc),
+            last_active=datetime.now(timezone.utc),
+        )
+        session_store.get_session.return_value = mock_session
+        persister = SessionPersister(session_store, "sess_123")
+        envelope = safe_pickle.dumps({"alpha", "beta"})
+        repl_env = Mock()
+        repl_env.checkpoint.return_value = {
+            "version": 1,
+            "artifacts": {},
+            "pickled_globals": {"persist_set": envelope},
+            "variable_lineage": {"persist_set": {"saved_at_ts": 1.0}},
+        }
+        repl_env.context = "test context"
+        repl_env.get_findings.return_value = []
+        repl_env.clear_findings = Mock()
+
+        checkpoint = persister.save_checkpoint(repl_env)
+        assert checkpoint.pickled_globals == {"persist_set": envelope}
+
+    def test_sqlite_checkpoint_restores_pickled_global(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("ORCHESTRATOR_SESSION_HMAC_KEY", "ni07-persister-test-key")
+        store = SQLiteSessionStore(
+            db_path=tmp_path / "sessions.db",
+            embeddings_path=tmp_path / "embeddings.npy",
+        )
+        session = Session.create(name="pickle", working_directory=str(tmp_path))
+        store.create_session(session)
+        persister = SessionPersister(store, session.id)
+        source = REPLEnvironment(context="persist set")
+        source._globals["persist_set"] = {"alpha", "beta"}
+
+        try:
+            saved = persister.save_checkpoint(source, trigger="explicit")
+            loaded = store.get_latest_checkpoint(session.id)
+            assert loaded is not None
+            assert loaded.pickled_globals == saved.pickled_globals
+
+            restored = REPLEnvironment(context="resume set")
+            result = restored.restore(loaded.to_dict())
+            assert "persist_set" in result["restored"]
+            assert restored._globals["persist_set"] == {"alpha", "beta"}
+        finally:
+            store.close()
+
+    def test_combined_globals_cap_evicts_oldest_across_json_and_pickle(self, monkeypatch):
+        import src.session.persister as persister_module
+
+        session_store = Mock()
+        mock_session = Session(
+            id="sess_123",
+            task_id="task_456",
+            created_at=datetime.now(timezone.utc),
+            last_active=datetime.now(timezone.utc),
+        )
+        session_store.get_session.return_value = mock_session
+        persister = SessionPersister(session_store, "sess_123")
+        old_envelope = {"b64": "o" * 220, "hmac": "x" * 64}
+        newer_envelope = {"b64": "n" * 220, "hmac": "x" * 64}
+        repl_env = Mock()
+        repl_env.checkpoint.return_value = {
+            "version": 1,
+            "artifacts": {},
+            "user_globals": {"new_json": "j" * 220},
+            "pickled_globals": {"old_pickle": old_envelope, "new_pickle": newer_envelope},
+            "variable_lineage": {
+                "old_pickle": {"saved_at_ts": 1.0},
+                "new_pickle": {"saved_at_ts": 3.0},
+                "new_json": {"saved_at_ts": 2.0},
+            },
+        }
+        repl_env.context = "test context"
+        repl_env.get_findings.return_value = []
+        repl_env.clear_findings = Mock()
+        monkeypatch.setattr(persister_module, "CHECKPOINT_GLOBALS_HARD_BYTES", 500)
+        monkeypatch.setattr(persister_module, "CHECKPOINT_GLOBALS_WARN_BYTES", 10_000)
+
+        checkpoint = persister.save_checkpoint(repl_env)
+
+        assert checkpoint.skipped_user_globals == ["old_pickle", "new_json"]
+        assert checkpoint.pickled_globals == {"new_pickle": newer_envelope}
+        assert checkpoint.user_globals == {}
+        assert checkpoint.variable_lineage == {"new_pickle": {"saved_at_ts": 3.0}}
 
 
 class TestSyncFindings:

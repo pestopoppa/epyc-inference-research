@@ -915,6 +915,7 @@ async def _execute_repl_body(
                     message_count=turns,
                     trigger="chat_request",
                     user_globals=repl_checkpoint.get("user_globals", {}),
+                    pickled_globals=repl_checkpoint.get("pickled_globals", {}),
                     variable_lineage=repl_checkpoint.get("variable_lineage", {}),
                     skipped_user_globals=repl_checkpoint.get("skipped_user_globals", []),
                     protocol_version=1,
