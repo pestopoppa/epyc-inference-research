@@ -258,13 +258,12 @@ def test_partial_staged_vector_write_preserves_active_state(
     sentinel_bytes = vector.read_bytes()
     assert before_dependency is not None
     fake_encoder.return_value = np.full((2, 4), 0.75, dtype=np.float32)
-    staged_paths: list[Path] = []
+    stage_token = "fixture-stage-token"
+    monkeypatch.setattr(kb_rag.secrets, "token_hex", lambda _: stage_token)
+    staged_path = vector.with_name(f".{vector.name}.{stage_token}.tmp.npz")
 
     def fail_after_partial_write(staged_file, **arrays) -> None:
-        staged_path = Path(staged_file.name)
-        staged_paths.append(staged_path)
-        assert staged_path.parent == vector.parent
-        assert staged_path != vector
+        assert staged_path.exists()
         staged_file.write(b"partial synthetic npz")
         raise OSError("fake staged serialization failure")
 
@@ -276,8 +275,9 @@ def test_partial_staged_vector_write_preserves_active_state(
     assert _fts_rows(index) == before_fts
     assert kb_catalog_dependency.read_dependency(index / "catalog.sqlite") == before_dependency
     assert vector.read_bytes() == sentinel_bytes
-    assert len(staged_paths) == 1
-    assert not staged_paths[0].exists()
+    assert staged_path.parent == vector.parent
+    assert staged_path != vector
+    assert not staged_path.exists()
 
 
 def test_partial_staged_write_without_prior_target_publishes_no_vector(
