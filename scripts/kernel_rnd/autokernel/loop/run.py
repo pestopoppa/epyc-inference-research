@@ -3565,27 +3565,14 @@ def main(argv: list[str] | None = None) -> int:
                             "ppl_contract", False,
                             f"ppl_contract admission could not be recorded: {exc}")]
                     def _ppl_gate(arm, route=admitted_route):
-                        # Re-review 2026-10-06: the anchor the layers compare against must
-                        # carry the tools (a tools build of the SAME commit, object-
-                        # identical, when the slot predates the obligation), and the
-                        # fixed reference is PINNED in the store. Any failure to provide
-                        # either is a refusal, never an exception out of the gate.
-                        try:
-                            anchor_for_gate = ppl_contract_anchor_for_gate()
-                            reference = gates.pinned_production_reference(
-                                args.store, env=dict(arm.launch_env),
-                                candidate_build=worker.build_dir)
-                        except Exception as exc:  # noqa: BLE001 -- fail CLOSED
-                            return gates.Verdict("ppl_contract", False,
-                                                 f"ppl_contract preconditions unmet: "
-                                                 f"{type(exc).__name__}: {exc}")
+                        # Operator tiering (2026-10-06): a candidate pays layer (a) only;
+                        # (b)-(d) run once per bundle at the fold (ppl_contract_fold_check),
+                        # so no anchor tools build or reference pin is needed here.
                         return gates.ppl_contract_gate(
-                            anchor_for_gate, worker.build_dir, route=route,
+                            anchor_build[0], worker.build_dir, route=route,
                             resolved_recipe=arm, model=args.model,
                             threads=len(_parse_cpu_list(build_cpu_list)),
                             cpu_list=build_cpu_list, env=dict(arm.launch_env),
-                            reference_build=reference,
-                            cache_dir=Path(args.store) / "ppl_contract" / "cache",
                             log_dir=Path(args.store) / "ppl_contract" / route.route,
                             served_shape_manifest=Path(args.store) / "served_shape"
                                                   / "manifest.json")
@@ -3645,17 +3632,14 @@ def main(argv: list[str] | None = None) -> int:
             # concurrent 64-job builds would oversubscribe an 88-core lane and every
             # build time recorded during the overlap would be a measurement of
             # contention.
-            # A ppl_contract candidate also builds the tools its layers (b)-(d) run
-            # (review 2026-10-06): without them every such candidate failed closed.
-            ppl_route = admitted_route is not None and admitted_route.numerics == "ppl_contract"
-            build_targets = ((gates.PROMOTION_TARGETS if direct_launch else gates.DEFAULT_TARGETS)
-                             + (gates.PPL_CONTRACT_TOOL_TARGETS if ppl_route else ()))
+            # Operator tiering: the candidate runs only layer (a) (test-backend-ops), so
+            # its build needs no extra tools; the anchor carries them for the fold.
             checks = [
                 lambda: gates.compiles(worker.worktree, worker.build_dir,
                                        cmake_defines=recipe.cmake_defines(),
                                        jobs=build_jobs, cpu_list=build_cpu_list,
-                                       **({"targets": build_targets}
-                                          if direct_launch or ppl_route else {})),
+                                       **({"targets": gates.PROMOTION_TARGETS}
+                                          if direct_launch else {})),
             ]
             if cpu_launch:
                 checks.extend(lambda op=op: gates.op_correctness(worker.build_dir, op=op,
@@ -4859,6 +4843,13 @@ def main(argv: list[str] | None = None) -> int:
                         "planner_evidence": {"kind": "ppl_contract_quality_hold",
                                              "bundled_keeps": list(bundle[0].keeps),
                                              "reason": quality.reason}}
+                # Operator tiering: bisect the bundle's ppl-relevant keeps and evict the
+                # culprit from the accumulator instead of discarding the whole bundle;
+                # the champion of record still HOLDS this round, and the next trigger
+                # re-judges the bundle without it. Any fault leaves the plain hold.
+                eviction = ppl_contract_evict_culprit(head)
+                plan["planner_evidence"]["eviction"] = eviction
+                print(f"quality   bundle bisect: {eviction}")
         # WHY it fired is part of the reading: a cadence firing at +2% compounded is a
         # different fact from a threshold firing at +9%, and the 2026-09-08 divergence is
         # the reason a reader must never have to infer which one happened.
@@ -4977,6 +4968,103 @@ def main(argv: list[str] | None = None) -> int:
 
     def ppl_contract_anchor_for_gate() -> Path:
         return ppl_contract_tools_build(anchor_build[0], current_anchor_commit[0])
+
+    def ppl_contract_bisect_build(commit: str) -> Path:
+        """A tools-carrying build of `commit` for the bundle bisect: the tip reuses the
+        anchor (tools build); any other commit is built from a detached scratch worktree
+        under the store (never the champion tree, which stays at the tip)."""
+        if commit == current_anchor_commit[0]:
+            return ppl_contract_anchor_for_gate()
+        base = Path(args.store) / "ppl_contract" / "bisect"
+        src, dest = base / f"src-{commit[:12]}", base / f"build-{commit[:12]}"
+        marker = dest / "ak_bisect_build.json"
+        if marker.is_file() and json.loads(marker.read_text(encoding="utf-8")).get(
+                "commit") == commit:
+            return dest
+        if not (src / ".git").exists():
+            base.mkdir(parents=True, exist_ok=True)
+            _git(args.worktree, "worktree", "add", "--detach", str(src), commit)
+        if _git(src, "rev-parse", "HEAD") != commit or \
+                _git(src, "status", "--porcelain", "--untracked-files=no"):
+            raise ValueError(f"bisect source {src} is not clean at {commit[:12]}")
+        verdict = gates.compiles(src, dest, cmake_defines=recipe.cmake_defines(),
+                                 jobs=anchor_build_jobs(recipe, build_jobs),
+                                 cpu_list=build_cpu_list,
+                                 targets=gates.PROMOTION_TARGETS + gates.PPL_CONTRACT_TOOL_TARGETS)
+        if not verdict.passed:
+            raise ValueError(f"bisect build of {commit[:12]} failed: {verdict.reason}")
+        marker.write_text(json.dumps({"commit": commit}), encoding="utf-8")
+        return dest
+
+    def ppl_contract_judge_bundle(build: Path) -> "gates.Verdict":
+        """Layers (a)-(d) of champion-of-record -> `build`, as the fold judges them."""
+        from ..execution.cpu_region_claim import parse_cpu_list as _parse_cpu_list
+        arm = _cpu_arm(direct_launch, build)
+        reference = gates.pinned_production_reference(args.store, env=dict(arm.launch_env),
+                                                      candidate_build=build)
+        cor_has_tools = all((Path(cor_build[0]) / "bin" / tool).is_file()
+                            for tool in gates.PPL_CONTRACT_TOOL_TARGETS)
+        return gates.ppl_contract_bundle_gate(
+            cor_build[0] if cor_has_tools else reference, build, resolved_recipe=arm,
+            model=args.model, threads=len(_parse_cpu_list(build_cpu_list)),
+            cpu_list=build_cpu_list, env=dict(arm.launch_env), reference_build=reference,
+            cache_dir=Path(args.store) / "ppl_contract" / "cache",
+            log_dir=Path(args.store) / "ppl_contract" / "bundle",
+            served_shape_manifest=Path(args.store) / "served_shape" / "manifest.json")
+
+    def ppl_contract_evict_culprit(tip_commit: str) -> dict:
+        """Bisect the bundle's ppl-relevant (non-merge) commits for the FIRST whose state
+        fails the bundle gate, revert it on the accumulator, rebuild the anchor and drop
+        its mechanism from the bundle. Returns evidence; never raises."""
+        try:
+            if tip_commit != current_anchor_commit[0] or \
+                    _git(args.worktree, "rev-parse", "HEAD") != tip_commit or \
+                    _git(args.worktree, "status", "--porcelain", "--untracked-files=no"):
+                return {"result": "skipped", "reason": "champion tree is not clean at the tip"}
+            shas = _git(args.worktree, "rev-list", "--reverse", "--no-merges",
+                        f"{cor_commit[0]}..{tip_commit}").split()
+            suspects = [sha for sha in shas if gates.ppl_contract_range_requires_gate(
+                args.worktree, f"{sha}^", sha)]
+            if not suspects:
+                return {"result": "no_suspect"}
+            judged = {}
+
+            def fails(sha):
+                if sha not in judged:
+                    judged[sha] = not ppl_contract_judge_bundle(
+                        ppl_contract_bisect_build(sha)).passed
+                return judged[sha]
+            if not fails(suspects[-1]):
+                return {"result": "not_isolated", "judged": judged,
+                        "reason": "the last ppl-relevant keep's state passes; the failure "
+                                  "is not attributable to one keep"}
+            lo, hi = 0, len(suspects) - 1
+            while lo < hi:
+                mid = (lo + hi) // 2
+                if fails(suspects[mid]):
+                    hi = mid
+                else:
+                    lo = mid + 1
+            culprit = suspects[lo]
+            subject = _git(args.worktree, "log", "-1", "--format=%s", culprit)
+            done = subprocess.run(["git", "-C", str(args.worktree), "revert", "--no-edit",
+                                   culprit], capture_output=True, text=True)
+            if done.returncode != 0:
+                subprocess.run(["git", "-C", str(args.worktree), "revert", "--abort"],
+                               capture_output=True, text=True)
+                return {"result": "revert_conflict", "culprit": culprit, "judged": judged}
+            new_tip = _git(args.worktree, "rev-parse", "HEAD")
+            mechanism = subject.split(":", 1)[0].strip()
+            if mechanism in bundle[0].keeps:
+                bundle[0].keeps.remove(mechanism)
+            bundle[0].tip = new_tip
+            bundle[0].measurement_validity = accumulate.MEASUREMENT_DEFERRED_BENCH
+            bundle[0].save(args.store)
+            promote_anchor()
+            return {"result": "evicted", "culprit": culprit, "mechanism_id": mechanism,
+                    "new_tip": new_tip, "judged": judged}
+        except Exception as exc:  # noqa: BLE001 -- a failed bisect leaves the plain hold
+            return {"result": "error", "reason": f"{type(exc).__name__}: {exc}"}
 
     def ppl_contract_fold_check(tip_commit: str) -> "gates.Verdict | None":
         """None when the bundle carries no ppl_contract change; else the whole-bundle

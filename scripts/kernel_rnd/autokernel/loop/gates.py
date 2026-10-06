@@ -2729,7 +2729,8 @@ def pinned_production_reference(store: Path, env: "dict | None" = None,
 
 def check_production_reference_loads(reference_build: Path, *, model: Path, cpu_list: str,
                                      env: dict, log_dir: Path, threads: int = 1,
-                                     candidate_build: "Path | None" = None) -> Verdict:
+                                     candidate_build: "Path | None" = None,
+                                     launch: "dict | None" = None) -> Verdict:
     """Fail closed when the frozen production CPU kernel reference cannot load THIS
     lane's model at all (review 2026-10-06).
 
@@ -2755,7 +2756,7 @@ def check_production_reference_loads(reference_build: Path, *, model: Path, cpu_
     result = _completion(reference_build, "The quick brown fox jumps.", 8, 64, model=model,
                          threads=threads, env=env, cpu_list=cpu_list, log_dir=log_dir,
                          cache_dir=None, label="production_reference_load",
-                         candidate_build=candidate_build)
+                         candidate_build=candidate_build, launch=launch)
     if result is None:
         return Verdict("production_reference_load", False,
                        f"the frozen production CPU kernel reference at {reference_build} "
@@ -3007,6 +3008,43 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+_SERVED_FLAGS = {"-t": "-t", "--threads": "-t", "-tb": "-tb", "--threads-batch": "-tb",
+                 "-ub": "-ub", "--ubatch-size": "-ub", "-b": "-b", "--batch-size": "-b",
+                 "--numa": "--numa"}
+
+
+def served_launch(resolved_recipe) -> dict:
+    """Round-10 N1: the SERVED recipe's execution shape for layers (b)-(d) -- the same
+    topology prefix (taskset/numactl) layer (a) and serving use, the served thread
+    counts, batch/ubatch and NUMA mode, read from the recipe's own command. Raises
+    ValueError when the recipe has no thread count (never a silent default)."""
+    prefix = tuple(getattr(resolved_recipe, "topology_prefix", ()) or ())
+    argv = list(getattr(resolved_recipe, "command_argv", ()) or ())
+    found: dict = {}
+    for i, token in enumerate(argv[:-1]):
+        if token in _SERVED_FLAGS:
+            found[_SERVED_FLAGS[token]] = argv[i + 1]
+    if "-t" not in found or not str(found["-t"]).isdigit() or int(found["-t"]) <= 0:
+        raise ValueError("the served recipe carries no thread count (-t); refusing to run "
+                         "the quality layers at a different partition")
+    return {"prefix": prefix, "threads": int(found["-t"]),
+            "args": tuple(item for flag in ("-tb", "-b", "-ub", "--numa") if flag in found
+                          for item in (flag, str(found[flag])))}
+
+
+def _launch_argv(launch: "dict | None", cpu_list: str, threads: int, *, batch_ok: bool):
+    """(prefix, threads, extra args) for a tool run: the served launch when bound, else
+    the unit-seam default. `batch_ok=False` drops `-b` (llama-perplexity sizes its own
+    batch to the context; the served ubatch, threads and placement still apply)."""
+    if launch is None:
+        return ["taskset", "-c", cpu_list, "numactl", "--interleave=all"], threads, []
+    args = list(launch["args"])
+    if not batch_ok and "-b" in args:
+        i = args.index("-b")
+        del args[i:i + 2]
+    return list(launch["prefix"]), int(launch["threads"]), args
+
+
 def _rebind_ld(env: dict, build: Path, candidate_build: "Path | None") -> str:
     """Round-9 resolution D: the LD_LIBRARY_PATH a tool on `build` runs under -- the
     candidate arm's RESOLVED RECIPE value (the one layer (a) and serving use) with the
@@ -3187,8 +3225,10 @@ def ppl_wikitext2(anchor_build: Path, candidate_build: Path, *, model: Path, thr
                   env: dict, cpu_list: str, log_dir: Path,
                   reference_build: "Path | None" = None,
                   cache_dir: "Path | None" = None,
+                  launch: "dict | None" = None,
                   _run_binary: "Callable[[Path], float | None] | None" = None) -> Verdict:
-    # Round-9 resolution D: every arm runs under the candidate's resolved recipe env.
+    # Round-9 resolution D: every arm runs under the candidate's resolved recipe env;
+    # round-10 N1: and under the served launch shape (`launch`).
     """Layer (b): wikitext2 perplexity under the lane's CPU claim.
 
     Pass iff |ppl_c - ppl_a| / ppl_a <= PPL_REL_BAR (marginal) AND, when a fixed
@@ -3199,25 +3239,31 @@ def ppl_wikitext2(anchor_build: Path, candidate_build: Path, *, model: Path, thr
         if _run_binary is not None:
             return _run_binary(build)
         ld_path = _rebind_ld(env, build, candidate_build)
-        key = _key(kind="ppl", build=_build_identity(build, "llama-perplexity", ld_path),
+        prefix, run_threads, extra = _launch_argv(launch, cpu_list, threads, batch_ok=False)
+        key = _key(kind="ppl-v2", build=_build_identity(build, "llama-perplexity", ld_path),
                    model=_model_identity(model), corpus=PPL_CORPUS_SHA256,
-                   chunks=PPL_CHUNKS, ctx=PPL_CTX, batch=PPL_BATCH, threads=threads,
-                   cpu_list=cpu_list, env=_env_identity(env))
+                   chunks=PPL_CHUNKS, ctx=PPL_CTX, batch=PPL_BATCH, threads=run_threads,
+                   prefix=prefix, extra=extra, env=_env_identity(env))
         cached = _cache_get(cache_dir, key)
         if isinstance(cached, (int, float)):
             return float(cached)
         if hashlib.sha256(Path(PPL_CORPUS).read_bytes()).hexdigest() != PPL_CORPUS_SHA256:
             raise ValueError(f"{PPL_CORPUS} sha256 differs from PPL_CORPUS_SHA256")
-        argv = ["taskset", "-c", cpu_list, "numactl", "--interleave=all",
+        argv = [*prefix,
                 str(Path(build) / "bin" / "llama-perplexity"), "-m", str(model),
                 "-f", PPL_CORPUS, "-c", str(PPL_CTX), "--chunks", str(PPL_CHUNKS),
-                "-t", str(threads), "-b", str(PPL_BATCH), "--no-mmap"]
+                "-t", str(run_threads), *extra, "-b", str(PPL_BATCH), "--no-mmap"]
         rc, out, err = _run_tool(argv, env={**env, "LD_LIBRARY_PATH": ld_path},
                                  log_dir=log_dir, label=f"ppl_{Path(build).name}")
-        found = re.search(r"Final estimate: PPL = ([0-9.]+)", out + err)
-        if rc != 0 or not found:
+        # Round-10 N3: the FINAL-estimate line only, anchored, exactly one value. This
+        # tree prints it with LOG_INF (tools/perplexity/perplexity.cpp:654), i.e. on
+        # STDERR -- a stdout-only parse would refuse every run. Absent or conflicting
+        # estimates refuse.
+        finals = set(re.findall(r"^Final estimate: PPL = ([0-9]+\.[0-9]+) \+/- [0-9.]+\s*$",
+                                err, flags=re.M))
+        if rc != 0 or len(finals) != 1:
             return None
-        ppl = float(found.group(1))
+        ppl = float(next(iter(finals)))
         if not ppl > 0.0:
             return None
         _cache_put(cache_dir, key, ppl, {"build": str(build), "model": str(model)})
@@ -3354,7 +3400,7 @@ _SESSION_SAVE_LINE = re.compile(r"\n?[\w:]*: saving final output to session file
 def _completion(build: Path, prompt: str, n_predict: int, ctx: int, *, model: Path,
                 threads: int, env: dict, cpu_list: str, log_dir: Path,
                 cache_dir: "Path | None", label: str,
-                candidate_build: "Path | None" = None
+                candidate_build: "Path | None" = None, launch: "dict | None" = None
                 ) -> "tuple[str, int, tuple[int, ...], tuple[int, ...]] | None":
     """Greedy raw completion on `build`: (generated text, prompt token count, GENERATED
     TOKEN IDS) or None.
@@ -3369,9 +3415,11 @@ def _completion(build: Path, prompt: str, n_predict: int, ctx: int, *, model: Pa
     import uuid
     prompt_sha = hashlib.sha256(prompt.encode()).hexdigest()
     ld_path = _rebind_ld(env, build, candidate_build)
-    key = _key(kind="completion-v5", build=_build_identity(build, "llama-completion", ld_path),
+    prefix, run_threads, extra = _launch_argv(launch, cpu_list, threads, batch_ok=True)
+    key = _key(kind="completion-v6", build=_build_identity(build, "llama-completion", ld_path),
                model=_model_identity(model), prompt=prompt_sha, n_predict=n_predict,
-               ctx=ctx, threads=threads, cpu_list=cpu_list, env=_env_identity(env))
+               ctx=ctx, threads=run_threads, prefix=prefix, extra=extra,
+               env=_env_identity(env))
     cached = _cache_get(cache_dir, key)
     if isinstance(cached, list) and len(cached) == 4 and isinstance(cached[2], list) \
             and isinstance(cached[3], list):
@@ -3383,10 +3431,10 @@ def _completion(build: Path, prompt: str, n_predict: int, ctx: int, *, model: Pa
     session = log_dir / f"session-{uuid.uuid4().hex}.bin"
     if session.exists():
         return None
-    argv = ["taskset", "-c", cpu_list, "numactl", "--interleave=all",
+    argv = [*prefix,
             str(Path(build) / "bin" / "llama-completion"), "-m", str(model),
             "-f", str(prompt_file), "-n", str(n_predict), "-c", str(ctx),
-            "-t", str(threads), "--temp", "0", "--top-k", "1", "--seed", "0",
+            "-t", str(run_threads), *extra, "--temp", "0", "--top-k", "1", "--seed", "0",
             "-no-cnv", "--no-display-prompt", "--ignore-eos", "--verbose-prompt",
             "--perf", "--prompt-cache", str(session), "--prompt-cache-all", "--no-mmap"]
     try:
@@ -3432,6 +3480,7 @@ def ppl_contract_coherence(anchor_build: Path, candidate_build: Path, *, model: 
                            cpu_list: str, log_dir: Path, threads: int = 1,
                            reference_build: "Path | None" = None,
                            cache_dir: "Path | None" = None,
+                           launch: "dict | None" = None,
                            _generate: "Callable[[Path, str], tuple | None] | None" = None
                            ) -> Verdict:
     """Layer (c): greedy agreement over GENERATED TOKEN IDS on >=
@@ -3448,7 +3497,7 @@ def ppl_contract_coherence(anchor_build: Path, candidate_build: Path, *, model: 
         return _completion(build, prompt, n_predict, PPL_CONTRACT_GEN_CTX, model=model,
                            threads=threads, env=env, cpu_list=cpu_list, log_dir=log_dir,
                            cache_dir=cache_dir, label="coherence",
-                           candidate_build=candidate_build)
+                           candidate_build=candidate_build, launch=launch)
     if len(prompts) < PPL_CONTRACT_PROD_PROMPT_COUNT_MIN:
         return Verdict("ppl_contract_coherence", False,
                        f"{len(prompts)} production-length prompt(s) supplied; "
@@ -3520,6 +3569,7 @@ def ppl_contract_long_canary(candidate_build: Path, *, model: Path, prompt: str,
                              reference_build: "Path | None" = None, threads: int = 1,
                              cache_dir: "Path | None" = None,
                              n_predict: int = PPL_CONTRACT_CANARY_TOKENS,
+                             launch: "dict | None" = None,
                              _generate: "Callable[[Path, str, int], tuple | None] | None" = None
                              ) -> Verdict:
     """Layer (d): a >= 1024-token greedy free generation (EOS ignored) on the candidate
@@ -3545,7 +3595,7 @@ def ppl_contract_long_canary(candidate_build: Path, *, model: Path, prompt: str,
         return _completion(build, prompt, n_predict, PPL_CONTRACT_CANARY_CTX, model=model,
                            threads=threads, env=env, cpu_list=cpu_list, log_dir=log_dir,
                            cache_dir=cache_dir, label="canary",
-                           candidate_build=candidate_build)
+                           candidate_build=candidate_build, launch=launch)
 
     def stats(ids) -> tuple[float, float, int]:
         ids = list(ids)
@@ -3585,12 +3635,22 @@ def ppl_contract_long_canary(candidate_build: Path, *, model: Path, prompt: str,
     return Verdict("ppl_contract_long_canary", passed, reason)
 
 
+#: Operator tiering (2026-10-06, "don't introduce excessive friction"): a CANDIDATE
+#: keep pays only layer (a) (plus its route oracles); layers (b)-(d) -- with the fixed
+#: reference preflight -- run once per BUNDLE, at the fold / serving-gate decision that
+#: actually changes the champion of record.
+PPL_CONTRACT_CANDIDATE_LAYERS = ("nmse",)
+PPL_CONTRACT_BUNDLE_LAYERS = ("production_reference_load", "nmse", "ppl", "coherence",
+                              "long_canary")
+
+
 def _ppl_contract_layers(anchor_build: Path, candidate_build: Path, *, route_name, resolved_recipe,
                          model: Path, threads: int, cpu_list: str, env: dict, log_dir: Path,
                          reference_build: "Path | None", cache_dir: "Path | None",
                          prod_prompts, canary_prompt, _layers: dict | None,
                          gate_name: str,
-                         served_shape_manifest: "Path | None" = None) -> Verdict:
+                         served_shape_manifest: "Path | None" = None,
+                         layer_names: tuple = PPL_CONTRACT_BUNDLE_LAYERS) -> Verdict:
     overrides = _layers or {}
 
     def layer(name: str, default):
@@ -3603,19 +3663,31 @@ def _ppl_contract_layers(anchor_build: Path, candidate_build: Path, *, route_nam
             return Verdict(f"ppl_contract_{name}", False, f"layer {name!r} produced no verdict")
         return verdict
 
-    if served_shape_manifest is None and "nmse" not in overrides:
+    if "nmse" in layer_names and served_shape_manifest is None and "nmse" not in overrides:
         return Verdict(gate_name, False, "no served-shape manifest: layer (a) would run "
                        "without served-shape evidence, refusing (re-review 2026-10-06)")
-    if reference_build is None and not {"ppl", "coherence", "long_canary"} <= set(overrides):
+    needs_reference = {"production_reference_load", "ppl", "coherence",
+                       "long_canary"} & set(layer_names)
+    if needs_reference and reference_build is None and \
+            not ({"ppl", "coherence", "long_canary"} & set(layer_names)) <= set(overrides):
         return Verdict(gate_name, False, "no fixed reference build: cumulative drift across "
                        "advancing anchors cannot be bounded, refusing")
     prompts = prod_prompts
     canary = canary_prompt
+    launch = None
+    if resolved_recipe is not None and getattr(resolved_recipe, "command_argv", None) and \
+            ({"production_reference_load", "ppl", "coherence", "long_canary"}
+             & set(layer_names)):
+        try:
+            launch = served_launch(resolved_recipe)
+        except ValueError as exc:
+            return Verdict(gate_name, False, f"{gate_name} refused: {exc}")
     layers = (
         ("production_reference_load", lambda: (
             check_production_reference_loads(
                 reference_build, model=model, cpu_list=cpu_list, env=env,
-                log_dir=log_dir, threads=threads, candidate_build=candidate_build)
+                log_dir=log_dir, threads=threads, candidate_build=candidate_build,
+                launch=launch)
             if reference_build is not None else
             Verdict("production_reference_load", True,
                    "no fixed reference build supplied (test seam)"))),
@@ -3625,19 +3697,21 @@ def _ppl_contract_layers(anchor_build: Path, candidate_build: Path, *, route_nam
         ("ppl", lambda: ppl_wikitext2(
             anchor_build, candidate_build, model=model, threads=threads, env=env,
             cpu_list=cpu_list, log_dir=log_dir, reference_build=reference_build,
-            cache_dir=cache_dir)),
+            cache_dir=cache_dir, launch=launch)),
         ("coherence", lambda: ppl_contract_coherence(
             anchor_build, candidate_build, model=model,
             prompts=prompts if prompts is not None else ppl_contract_prod_prompts(),
             n_predict=PPL_CONTRACT_PROD_GEN_TOKENS, env=env, cpu_list=cpu_list,
             log_dir=log_dir, threads=threads, reference_build=reference_build,
-            cache_dir=cache_dir)),
+            cache_dir=cache_dir, launch=launch)),
         ("long_canary", lambda: ppl_contract_long_canary(
             candidate_build, model=model,
             prompt=canary if canary is not None else ppl_contract_canary_prompt(),
             env=env, cpu_list=cpu_list, log_dir=log_dir, anchor_build=anchor_build,
-            reference_build=reference_build, threads=threads, cache_dir=cache_dir)),
+            reference_build=reference_build, threads=threads, cache_dir=cache_dir,
+            launch=launch)),
     )
+    layers = tuple(item for item in layers if item[0] in layer_names)
     verdicts = []
     for name, default in layers:   # cheapest first; the first refusal stops the spend
         verdict = layer(name, default)
@@ -3647,7 +3721,7 @@ def _ppl_contract_layers(anchor_build: Path, candidate_build: Path, *, route_nam
                            f"{gate_name} refused at layer {name}: {verdict.gate}: {verdict.reason}",
                            "\n".join(f"{v.gate}: passed={v.passed} {v.reason}" for v in verdicts))
     return Verdict(gate_name, True,
-                   "all four ppl_contract layers passed: " +
+                   f"ppl_contract layers {', '.join(layer_names)} passed: " +
                    "; ".join(f"{v.gate}={v.reason}" for v in verdicts))
 
 
@@ -3659,9 +3733,11 @@ def ppl_contract_gate(anchor_build: Path, candidate_build: Path, *, route: "CpuS
                       canary_prompt: "str | None" = None,
                       served_shape_manifest: "Path | None" = None,
                       _layers: dict | None = None) -> Verdict:
-    """The single blocking pre-keep check for a `numerics="ppl_contract"` route: ALL FOUR
-    layers (a)-(d) must pass, fail-closed on any missing/errored layer or a missing fixed
-    reference. `prod_prompts`/`canary_prompt` default to the pinned corpus slices.
+    """The blocking pre-keep check for a `numerics="ppl_contract"` CANDIDATE: layer (a)
+    only (`PPL_CONTRACT_CANDIDATE_LAYERS`), fail-closed on a missing/errored layer.
+    Layers (b)-(d) run once per bundle in `ppl_contract_bundle_gate` (operator tiering).
+    `anchor_build`, `reference_build`, the prompts and the cache are accepted for call
+    compatibility and unused at this tier.
     `served_shape_manifest` is layer (a)'s served-shape addendum (`ppl_contract_op_nmse`);
     `None` leaves layer (a) exactly as it ran before the 2026-10-06 served-shape review.
     `_layers` is a test seam (layer name -> callable returning `Verdict`)."""
@@ -3676,7 +3752,8 @@ def ppl_contract_gate(anchor_build: Path, candidate_build: Path, *, route: "CpuS
         resolved_recipe=resolved_recipe, model=model, threads=threads, cpu_list=cpu_list,
         env=env, log_dir=log_dir, reference_build=reference_build, cache_dir=cache_dir,
         prod_prompts=prod_prompts, canary_prompt=canary_prompt, _layers=_layers,
-        gate_name="ppl_contract", served_shape_manifest=served_shape_manifest)
+        gate_name="ppl_contract", served_shape_manifest=served_shape_manifest,
+        layer_names=PPL_CONTRACT_CANDIDATE_LAYERS)
 
 
 def ppl_contract_bundle_gate(cor_build: Path, tip_build: Path, *, resolved_recipe,
@@ -3695,7 +3772,7 @@ def ppl_contract_bundle_gate(cor_build: Path, tip_build: Path, *, resolved_recip
         threads=threads, cpu_list=cpu_list, env=env, log_dir=log_dir,
         reference_build=reference_build, cache_dir=cache_dir, prod_prompts=prod_prompts,
         canary_prompt=canary_prompt, _layers=_layers, gate_name="ppl_contract_bundle",
-        served_shape_manifest=served_shape_manifest)
+        served_shape_manifest=served_shape_manifest, layer_names=PPL_CONTRACT_BUNDLE_LAYERS)
 
 
 def cpu_route_witness_quants(route: "CpuSourceRoute") -> tuple[str, ...]:
@@ -3731,7 +3808,8 @@ __all__ = ["BACKEND_OPS_SELECTORS", "BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S",
            "ppl_contract_commits_in_range", "PPL_CONTRACT_REFERENCE_PIN",
            "ppl_contract_range_requires_gate", "prefix_id_agreement",
            "PPL_CONTRACT_BIT_EXACT_TRAILER", "PPL_CONTRACT_ORACLE_PREFIX",
-           "ppl_contract_relevant",
+           "ppl_contract_relevant", "PPL_CONTRACT_CANDIDATE_LAYERS",
+           "PPL_CONTRACT_BUNDLE_LAYERS", "served_launch",
            "pinned_production_reference",
            "PPL_CONTRACT_SERVED_WIDTHS", "PPL_CONTRACT_AGREEMENT_FLOOR",
            "PPL_CONTRACT_PROD_PROMPT_TOKENS_MIN", "PPL_CONTRACT_CANARY_TOKENS",

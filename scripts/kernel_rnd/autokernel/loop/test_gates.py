@@ -1,5 +1,6 @@
 """The gates, and the one property that makes them gates: order."""
 import ast
+import hashlib
 import inspect
 from pathlib import Path
 import re
@@ -1707,8 +1708,9 @@ class TheLowBitRoutesAdmitOnlyTheirOwnBodies(unittest.TestCase):
 
 
 class ThePplContractGateIsLayeredAndFailsClosed(unittest.TestCase):
-    """2026-10-06 operator amendment: ALL FOUR layers required, fail-closed on any
-    missing/errored layer, and ppl_contract/model_identity are mutually exclusive."""
+    """Operator tiering (2026-10-06): a CANDIDATE pays layer (a) only; the BUNDLE gate
+    runs the reference preflight + layers (a)-(d), all required, fail-closed; and
+    ppl_contract/model_identity are mutually exclusive."""
 
     @staticmethod
     def _route(**overrides):
@@ -1720,33 +1722,63 @@ class ThePplContractGateIsLayeredAndFailsClosed(unittest.TestCase):
     @staticmethod
     def _passing():
         return {
+            "production_reference_load": lambda: gates.Verdict("prl", True, "ok"),
             "nmse": lambda: gates.Verdict("ppl_contract_nmse", True, "ok"),
             "ppl": lambda: gates.Verdict("ppl_contract_ppl", True, "ok"),
             "coherence": lambda: gates.Verdict("ppl_contract_coherence", True, "ok"),
             "long_canary": lambda: gates.Verdict("ppl_contract_long_canary", True, "ok"),
         }
 
-    def _call(self, route=None, **overrides):
+    def _candidate(self, route=None, **overrides):
         passing = self._passing()
         passing.update(overrides)
         return gates.ppl_contract_gate(
             Path("/anchor"), Path("/candidate"), route=route or self._route(),
             resolved_recipe=None, model=Path("/model.gguf"), threads=48, cpu_list="0-47",
-            env={}, prod_prompts=("hello world",), canary_prompt="hello",
-            log_dir=Path("/tmp/ppl-log"), _layers=passing)
+            env={}, log_dir=Path("/tmp/ppl-log"), _layers=passing)
 
-    def test_all_four_layers_passing_passes(self):
+    def _call(self, **overrides):   # the bundle gate (layers a-d)
+        passing = self._passing()
+        passing.update(overrides)
+        return gates.ppl_contract_bundle_gate(
+            Path("/cor"), Path("/tip"), resolved_recipe=None, model=Path("/m.gguf"),
+            threads=48, cpu_list="0-47", env={}, log_dir=Path("/tmp/x"),
+            reference_build=Path("/ref"), prod_prompts=("hello world",),
+            canary_prompt="hello", _layers=passing)
+
+    def test_the_candidate_tier_runs_layer_a_only(self):
+        ran = []
+        layers = {name: (lambda n=name: ran.append(n) or gates.Verdict(n, True, n))
+                  for name in gates.PPL_CONTRACT_BUNDLE_LAYERS}
+        verdict = self._candidate(**layers)
+        self.assertTrue(verdict.passed)
+        self.assertEqual(ran, ["nmse"])
+        self.assertEqual(gates.PPL_CONTRACT_CANDIDATE_LAYERS, ("nmse",))
+        verdict = self._candidate(nmse=lambda: gates.Verdict("n", False, "bad op"))
+        self.assertFalse(verdict.passed)
+        self.assertIn("bad op", verdict.reason)
+
+    def test_the_candidate_tier_needs_no_reference_but_does_need_the_manifest(self):
+        verdict = gates.ppl_contract_gate(
+            Path("/anchor"), Path("/candidate"), route=self._route(), resolved_recipe=None,
+            model=Path("/model.gguf"), threads=48, cpu_list="0-47", env={},
+            log_dir=Path("/tmp/ppl-log"))
+        self.assertFalse(verdict.passed)
+        self.assertIn("served-shape manifest", verdict.reason)
+
+    def test_all_bundle_layers_passing_passes(self):
         verdict = self._call()
         self.assertTrue(verdict.passed)
         for name in ("nmse", "ppl", "coherence", "long_canary"):
             self.assertIn(name, verdict.reason)
 
-    def test_each_layer_failing_independently_refuses_the_keep(self):
-        for name in ("nmse", "ppl", "coherence", "long_canary"):
+    def test_each_bundle_layer_failing_independently_refuses(self):
+        for name in gates.PPL_CONTRACT_BUNDLE_LAYERS:
             verdict = self._call(**{name: lambda n=name: gates.Verdict(
                 f"ppl_contract_{n}", False, f"{n} refused on purpose")})
             self.assertFalse(verdict.passed, name)
             self.assertIn(f"{name} refused on purpose", verdict.reason, name)
+            self.assertEqual(verdict.gate, "ppl_contract_bundle")
 
     def test_a_layer_that_raises_fails_closed_not_open(self):
         def boom():
@@ -1765,29 +1797,26 @@ class ThePplContractGateIsLayeredAndFailsClosed(unittest.TestCase):
     def test_the_first_refusal_stops_the_spend(self):
         ran = []
         layers = {name: (lambda n=name: ran.append(n) or gates.Verdict(n, n != "ppl", n))
-                  for name in ("nmse", "ppl", "coherence", "long_canary")}
+                  for name in gates.PPL_CONTRACT_BUNDLE_LAYERS}
         verdict = self._call(**layers)
         self.assertFalse(verdict.passed)
-        self.assertEqual(ran, ["nmse", "ppl"])
+        self.assertEqual(ran, ["production_reference_load", "nmse", "ppl"])
 
-    def test_a_missing_fixed_reference_refuses_unstubbed_layers(self):
-        """Without a fixed reference the anchor-only bars compound across advancing
-        anchors: the gate refuses before running any real layer."""
-        verdict = gates.ppl_contract_gate(
-            Path("/anchor"), Path("/candidate"), route=self._route(), resolved_recipe=None,
-            model=Path("/model.gguf"), threads=48, cpu_list="0-47", env={},
-            log_dir=Path("/tmp/ppl-log"),
-            _layers={"nmse": lambda: gates.Verdict("n", True, "ok")})
+    def test_a_missing_fixed_reference_refuses_the_bundle(self):
+        verdict = gates.ppl_contract_bundle_gate(
+            Path("/cor"), Path("/tip"), resolved_recipe=None, model=Path("/m.gguf"),
+            threads=48, cpu_list="0-47", env={}, log_dir=Path("/tmp/x"),
+            reference_build=None, _layers={"nmse": lambda: gates.Verdict("n", True, "ok")})
         self.assertFalse(verdict.passed)
         self.assertIn("fixed reference", verdict.reason)
 
     def test_bit_exact_route_is_refused_a_ppl_contract_judgement(self):
         with self.assertRaises(ValueError):
-            self._call(route=self._route(numerics="bit_exact"))
+            self._candidate(route=self._route(numerics="bit_exact"))
 
     def test_model_identity_and_ppl_contract_are_mutually_exclusive(self):
         with self.assertRaises(ValueError):
-            self._call(route=self._route(model_identity=True))
+            self._candidate(route=self._route(model_identity=True))
 
     def test_no_real_route_declares_both_contracts(self):
         for route in gates.CPU_SOURCE_ROUTES:
@@ -1795,51 +1824,67 @@ class ThePplContractGateIsLayeredAndFailsClosed(unittest.TestCase):
             self.assertFalse(route.numerics == "ppl_contract" and route.model_identity,
                              route.route)
 
-    def test_bundle_gate_runs_the_same_four_layers(self):
-        verdict = gates.ppl_contract_bundle_gate(
-            Path("/cor"), Path("/tip"), resolved_recipe=None, model=Path("/m.gguf"),
-            threads=48, cpu_list="0-47", env={}, log_dir=Path("/tmp/x"),
-            reference_build=None, _layers=self._passing())
-        self.assertTrue(verdict.passed)
-        failing = self._passing()
-        failing["long_canary"] = lambda: gates.Verdict("c", False, "loop")
-        verdict = gates.ppl_contract_bundle_gate(
-            Path("/cor"), Path("/tip"), resolved_recipe=None, model=Path("/m.gguf"),
-            threads=48, cpu_list="0-47", env={}, log_dir=Path("/tmp/x"),
-            reference_build=None, _layers=failing)
-        self.assertFalse(verdict.passed)
-        self.assertEqual(verdict.gate, "ppl_contract_bundle")
-
-    def test_production_reference_load_runs_first_and_fails_closed(self):
-        """2026-10-06 follow-up: a reference build that cannot load the lane's model
-        refuses the WHOLE gate before any of the four named layers spend anything,
-        with a specific reason naming production_reference_load, not a generic
-        'no fixed reference' or a layer-(b)/(c)/(d) failure that could be misread as
-        the kernel being wrong rather than the reference being unusable."""
+    def test_bundle_layers_run_at_the_served_launch_shape(self):
+        """Round-10 N1: threads, placement and batch come from the served recipe."""
+        recipe = SimpleNamespace(
+            topology_prefix=("numactl", "--physcpubind=0-47", "--membind=0"),
+            command_argv=("llama-server", "-m", "m", "-t", "48", "-tb", "48", "-b", "2048",
+                          "-ub", "512", "--numa", "distribute", "-c", "8192"))
+        launch = gates.served_launch(recipe)
+        self.assertEqual(launch["threads"], 48)
+        self.assertEqual(launch["prefix"], recipe.topology_prefix)
+        self.assertEqual(launch["args"], ("-tb", "48", "-b", "2048", "-ub", "512",
+                                          "--numa", "distribute"))
+        with self.assertRaises(ValueError):
+            gates.served_launch(SimpleNamespace(topology_prefix=(), command_argv=("x",)))
+        seen = {}
         passing = self._passing()
-        with mock.patch.object(gates, "check_production_reference_loads",
-                               return_value=gates.Verdict(
-                                   "production_reference_load", False,
-                                   "could not load the model")) as check:
-            verdict = gates.ppl_contract_gate(
-                Path("/anchor"), Path("/candidate"), route=self._route(),
-                resolved_recipe=None, model=Path("/model.gguf"), threads=48,
-                cpu_list="0-47", env={}, log_dir=Path("/tmp/ppl-log"),
-                reference_build=Path("/prod-ref"), _layers=passing)
+        passing.pop("ppl")
+        with mock.patch.object(gates, "ppl_wikitext2",
+                               side_effect=lambda *a, **k: seen.update(k) or
+                               gates.Verdict("p", True, "ok")):
+            verdict = gates.ppl_contract_bundle_gate(
+                Path("/cor"), Path("/tip"), resolved_recipe=recipe, model=Path("/m.gguf"),
+                threads=88, cpu_list="0-87", env={}, log_dir=Path("/tmp/x"),
+                reference_build=Path("/ref"), _layers=passing)
+        self.assertTrue(verdict.passed, verdict.reason)
+        self.assertEqual(seen["launch"]["threads"], 48)
+        bad = SimpleNamespace(topology_prefix=(), command_argv=("llama-server", "-m", "m"))
+        verdict = gates.ppl_contract_bundle_gate(
+            Path("/cor"), Path("/tip"), resolved_recipe=bad, model=Path("/m.gguf"),
+            threads=88, cpu_list="0-87", env={}, log_dir=Path("/tmp/x"),
+            reference_build=Path("/ref"), _layers=self._passing())
         self.assertFalse(verdict.passed)
-        self.assertIn("production_reference_load", verdict.reason)
-        self.assertIn("could not load the model", verdict.reason)
-        check.assert_called_once()
+        self.assertIn("thread count", verdict.reason)
 
-    def test_production_reference_load_is_skipped_without_a_reference_build(self):
-        """No `reference_build` at all (every existing `_call()`-based test, which
-        stubs ppl/coherence/long_canary so the pre-existing 'no fixed reference'
-        early-return never fires): the new layer must read as a harmless skip, never
-        a refusal of its own and never a call into the real loadability check."""
-        with mock.patch.object(gates, "check_production_reference_loads") as check:
-            verdict = self._call()
-        self.assertTrue(verdict.passed)
-        check.assert_not_called()
+    def test_the_perplexity_final_estimate_is_parsed_strictly(self):
+        """Round-10 N3: the anchored final line only, exactly one value, from stderr
+        (LOG_INF in this tree)."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name in ("a", "c"):
+                (root / name / "bin").mkdir(parents=True)
+                (root / name / "bin" / "llama-perplexity").write_bytes(b"t")
+            corpus = root / "corpus.txt"
+            corpus.write_text("x")
+            model = root / "m.gguf"
+            model.write_bytes(b"x")
+            sha = hashlib.sha256(b"x").hexdigest()
+
+            def run(err, out=""):
+                with mock.patch.object(gates, "PPL_CORPUS", str(corpus)), \
+                        mock.patch.object(gates, "PPL_CORPUS_SHA256", sha), \
+                        mock.patch.object(gates, "_resolved_closure", return_value=[]), \
+                        mock.patch.object(gates, "_run_tool", return_value=(0, out, err)):
+                    return gates.ppl_wikitext2(root / "a", root / "c", model=model,
+                                               threads=1, cpu_list="0",
+                                               env={"LD_LIBRARY_PATH": str(root / "c" / "bin")},
+                                               log_dir=root / "log")
+            ok = "Final estimate: PPL = 7.1234 +/- 0.05000\n"
+            self.assertTrue(run(ok).passed)
+            self.assertFalse(run("[1]5.0,[2]6.0 PPL = 1.0\n").passed)
+            self.assertFalse(run(ok + "Final estimate: PPL = 9.0000 +/- 0.1\n").passed)
+            self.assertFalse(run("", out=ok).passed)
 
 
 class CheckProductionReferenceLoads(unittest.TestCase):
@@ -2389,7 +2434,7 @@ class ThePplContractReReviewFixesHold(unittest.TestCase):
         self.assertIn('"decision": cross_target.GATE_REFUSED', run_src)
         self.assertIn("ppl_contract=ppl_keep,", run_src)
         self.assertIn("bit_exact_oracle=bit_exact_oracle)", run_src)
-        self.assertIn("anchor_for_gate = ppl_contract_anchor_for_gate()", run_src)
+        self.assertIn("ppl_contract_evict_culprit(head)", run_src)
         self.assertIn("gates.pinned_production_reference(", run_src)
         self.assertNotIn("gates.production_cpu_reference_build()", run_src)
 
