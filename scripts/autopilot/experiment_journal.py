@@ -203,6 +203,143 @@ def failure_analysis_for_prompt(entry: "JournalEntry", limit: int | None = None)
     return text
 
 
+
+FAILURE_SIGNATURE_VERSION = 1
+# Only categories emitted on actual measured violation branches of SafetyGate.check.
+_FAILURE_CODES = frozenset({
+    "quality_floor", "regression", "per_suite_regression", "routing_diversity", "throughput",
+})
+
+
+def is_learning_eligible(entry: "JournalEntry") -> bool:
+    """Shared existing STM trust filters; does not change any admission decision."""
+    details = entry.eval_details if isinstance(entry.eval_details, dict) else {}
+    return (not entry.bug_corrupted_by and entry.outcome_status == "ok"
+            and entry.keep_revert_decision != "excluded"
+            and not details.get("learning_exclusion"))
+
+
+def build_error_signature(*, passed: bool, retry_not_revert: bool,
+                          categories: list[str], species: str, action_type: str,
+                          tier: int) -> dict[str, Any] | None:
+    """Capture machine branch identity at the producer, never infer it from prose."""
+    if passed or retry_not_revert:
+        return None
+    codes = sorted({code for code in categories
+                    if isinstance(code, str) and code in _FAILURE_CODES})
+    if (not codes or not _machine_label(species) or not _machine_label(action_type)
+            or type(tier) is not int or not 0 <= tier <= 3):
+        return None
+    return {"schema_version": FAILURE_SIGNATURE_VERSION, "stage": "safety_gate",
+            "codes": codes, "species": species, "action_type": action_type, "tier": tier}
+
+
+def build_error_scope(*, core_id: str, baseline_pin: dict[str, Any],
+                      regime_digest: str, comparability: dict[str, Any]) -> dict[str, Any] | None:
+    """Explicit recorded context, separate from the failure identity."""
+    if not isinstance(baseline_pin, dict) or not isinstance(comparability, dict):
+        return None
+    fields = {"core_id": core_id, "infra_regime_digest": regime_digest,
+              "eval_quality_era": baseline_pin.get("eval_quality_era"),
+              "autopilot_speed_era": baseline_pin.get("autopilot_speed_era")}
+    if comparability.get("status") != "COMPARABLE" or not all(
+            type(value) is str and value.strip() for value in fields.values()):
+        return None
+    return {"schema_version": FAILURE_SIGNATURE_VERSION, "comparability": "COMPARABLE", **fields}
+
+
+
+_SIGNATURE_KEYS = {"schema_version", "stage", "codes", "species", "action_type", "tier"}
+_SCOPE_KEYS = {"schema_version", "comparability", "core_id", "infra_regime_digest",
+               "eval_quality_era", "autopilot_speed_era"}
+
+
+def _machine_label(value: Any) -> bool:
+    return type(value) is str and re.fullmatch(r"[A-Za-z0-9_.:-]{1,64}", value) is not None
+
+
+def _valid_error_signature(entry: "JournalEntry") -> bool:
+    signature = entry.error_signature
+    if type(signature) is not dict or set(signature) != _SIGNATURE_KEYS:
+        return False
+    codes = signature.get("codes")
+    return (type(signature["schema_version"]) is int
+            and signature["schema_version"] == FAILURE_SIGNATURE_VERSION
+            and type(signature["stage"]) is str and signature["stage"] == "safety_gate"
+            and type(codes) is list and bool(codes)
+            and all(type(code) is str and code in _FAILURE_CODES for code in codes)
+            and codes == sorted(set(codes))
+            and _machine_label(signature["species"]) and signature["species"] == entry.species
+            and _machine_label(signature["action_type"])
+            and signature["action_type"] == entry.action_type
+            and type(signature["tier"]) is int and 0 <= signature["tier"] <= 3
+            and type(entry.tier) is int
+            and signature["tier"] == entry.tier)
+
+
+def _valid_error_scope(entry: "JournalEntry") -> bool:
+    scope = entry.error_scope
+    if type(scope) is not dict or set(scope) != _SCOPE_KEYS:
+        return False
+    if (type(scope["schema_version"]) is not int
+            or scope["schema_version"] != FAILURE_SIGNATURE_VERSION
+            or type(scope["comparability"]) is not str or scope["comparability"] != "COMPARABLE"):
+        return False
+    return all(type(scope[key]) is str and bool(scope[key].strip()) for key in (
+        "core_id", "infra_regime_digest", "eval_quality_era", "autopilot_speed_era"))
+
+
+def _countable_failure(entry: "JournalEntry") -> bool:
+    return (is_learning_eligible(entry) and entry.pareto_status != "frontier"
+            and _valid_error_signature(entry) and _valid_error_scope(entry))
+
+
+def has_negative_evidence(entry: "JournalEntry") -> bool:
+    return bool(entry.failure_analysis) or _valid_error_signature(entry)
+
+
+def prior_repeated_failures(entry: "JournalEntry", entries: list["JournalEntry"]) -> int | None:
+    """Total PRIOR eligible matches in this folded ledger, never a consecutive streak."""
+    if not _countable_failure(entry):
+        return None
+    return sum(1 for prior in entries
+               if prior.trial_id < entry.trial_id and _countable_failure(prior)
+               and prior.error_signature == entry.error_signature
+               and prior.error_scope == entry.error_scope)
+
+def grouped_negative_evidence(entries: list["JournalEntry"],
+                              history: list["JournalEntry"]) -> list[str]:
+    """One most-recent compact card per typed identity/scope, preserving unknowns."""
+    groups: dict[str, JournalEntry] = {}
+    for entry in entries:
+        if not has_negative_evidence(entry) or entry.pareto_status == "frontier":
+            continue
+        key = (json.dumps([entry.error_signature, entry.error_scope], sort_keys=True)
+               if _valid_error_signature(entry) else f"unclassified-trial-{entry.trial_id}")
+        groups[key] = entry
+    return [negative_evidence_for_prompt(entry, entries=history, limit=160)
+            for entry in groups.values()]
+
+def negative_evidence_for_prompt(entry: "JournalEntry", *,
+                                 entries: list["JournalEntry"] | None = None,
+                                 limit: int | None = None) -> str:
+    """One compact typed line, or explicitly unclassified bounded legacy prose."""
+    if _valid_error_signature(entry):
+        count = (prior_repeated_failures(entry, entries) if entries is not None
+                 else entry.repeated_failures_prior if _countable_failure(entry) else None)
+        repeat = str(count) if type(count) is int and count >= 0 else "unknown"
+        signature = entry.error_signature
+        scope_label = (hashlib.sha256(json.dumps(entry.error_scope, sort_keys=True,
+                       separators=(",", ":")).encode()).hexdigest()[:12]
+                       if _valid_error_scope(entry) else "unknown")
+        text = (f"failure/v1 {signature['species']}/{signature['action_type']} "
+                f"tier={signature['tier']} safety_gate:" + ",".join(signature["codes"])
+                + f" scope={scope_label} prior_total={repeat}")
+        # Identity/count must remain intact even when a legacy prose limit is tiny.
+        return text
+    text = "[unclassified] " + failure_analysis_for_prompt(entry, limit=160)
+    return text if limit is None else text[:limit]
+
 def scrub_legacy_scale_text(text: str) -> str:
     """Redact any free-text field carrying impossible 0-3 quality-scale values.
 
@@ -377,6 +514,9 @@ class JournalEntry:
     oracle_adequacy: dict[str, Any] = field(default_factory=dict)
     seq: dict[str, Any] = field(default_factory=dict)
     failure_analysis: str = ""
+    error_signature: dict[str, Any] | None = None
+    error_scope: dict[str, Any] | None = None
+    repeated_failures_prior: int | None = None
     hypothesis: str = ""
     expected_mechanism: str = ""
     deficiency_category: str = ""  # AP-14: DeficiencyCategory value or empty
@@ -943,6 +1083,9 @@ class ExperimentJournal:
                     ),
                     seq=data.get("seq", {}),
                     failure_analysis=data.get("failure_analysis", ""),
+                    error_signature=data.get("error_signature"),
+                    error_scope=data.get("error_scope"),
+                    repeated_failures_prior=data.get("repeated_failures_prior"),
                     hypothesis=data.get("hypothesis", ""),
                     expected_mechanism=data.get("expected_mechanism", ""),
                     deficiency_category=data.get("deficiency_category", ""),
@@ -1102,6 +1245,9 @@ class ExperimentJournal:
 
     def record(self, entry: JournalEntry) -> None:
         """Append a trial entry to both TSV and JSONL."""
+        # Native snapshot at append; reads recount folded supersessions independently.
+        entry.repeated_failures_prior = (prior_repeated_failures(
+            entry, self.entries_with_supersessions()) if _countable_failure(entry) else None)
         self._maybe_close_segment(entry.trial_id)
         batch = entry.trial_id // MAX_TRIALS_PER_FILE
         tsv = self._tsv_path(batch)
@@ -1521,17 +1667,17 @@ class ExperimentJournal:
                         + f"c={e.cost:.3f} r={e.reliability:.2f} "
                         + f"→ {e.pareto_status}"
                     )
-                if e.failure_analysis:
+                if has_negative_evidence(e):
                     # Compact single-line failure summary for controller visibility.
                     # Prompt-budget trim (2026-06-10): full detail only for the most
                     # recent 6 failures (the ones the planner actually reasons about
                     # next); older failures show a short tag so the journal section
                     # stays small. Cap shortened 200→140.
                     if i >= len(recent) - 6:
-                        fa_oneline = failure_analysis_for_prompt(e, limit=140)
+                        fa_oneline = negative_evidence_for_prompt(e, entries=entries, limit=140)
                         line += f"  FAILED: {fa_oneline}"
                     else:
-                        fa_oneline = failure_analysis_for_prompt(e, limit=60)
+                        fa_oneline = negative_evidence_for_prompt(e, entries=entries, limit=60)
                         line += f"  FAILED({fa_oneline})"
                 lines.append(line)
         return "\n".join(lines)
@@ -1691,8 +1837,8 @@ class ExperimentJournal:
         )
         failed = [
             e for e in entries
-            if e.failure_analysis
-            and (not exclude_bug_corrupted or not e.bug_corrupted_by)
+            if has_negative_evidence(e)
+            and (not exclude_bug_corrupted or is_learning_eligible(e))
             and (species is None or e.species == species)
         ]
         return failed[-n:]
@@ -1700,7 +1846,7 @@ class ExperimentJournal:
     def failure_analysis_for_prompt(
         self, entry: JournalEntry, limit: int | None = None
     ) -> str:
-        return failure_analysis_for_prompt(entry, limit=limit)
+        return negative_evidence_for_prompt(entry, entries=self.entries_with_supersessions(), limit=limit)
 
     def suite_quality_trend(
         self, last_n: int = 10
@@ -1730,10 +1876,11 @@ class ExperimentJournal:
         learning from.  Returns a compact text block suitable for injection
         into species prompts (cross-species fertilization).
         """
+        history = self.entries_with_supersessions()
         interesting = [
-            e for e in self.entries_with_supersessions()
-            if e.pareto_status == "frontier" or e.failure_analysis
-            if not e.bug_corrupted_by
+            e for e in history
+            if e.pareto_status == "frontier" or has_negative_evidence(e)
+            if is_learning_eligible(e)
         ][-n:]
         if not interesting:
             return "(no insights yet)"
@@ -1746,9 +1893,9 @@ class ExperimentJournal:
             detail = ""
             if e.pareto_status == "frontier":
                 detail = f"q={e.quality:.3f} s={e.speed:.1f}"
-            elif e.failure_analysis:
+            elif has_negative_evidence(e):
                 # Compact single-line failure summary
-                detail = failure_analysis_for_prompt(e, limit=120)
+                detail = negative_evidence_for_prompt(e, entries=history, limit=120)
             species_label = e.species
             lines.append(
                 f"  [{tag}] #{e.trial_id} ({species_label}/{hyp})"
@@ -1778,8 +1925,10 @@ class ExperimentJournal:
         Bug-corrupted entries are excluded by default so the planner doesn't
         learn from poisoned signal.
         """
+        history = self.entries_with_supersessions()
         pool = (
-            self.trustworthy_entries() if exclude_bug_corrupted else self._entries
+            [e for e in history if is_learning_eligible(e)]
+            if exclude_bug_corrupted else self._entries
         )
         recent = pool[-n:]
         if not recent:
@@ -1787,7 +1936,7 @@ class ExperimentJournal:
 
         buckets: dict[str, list[JournalEntry]] = {}
         for e in recent:
-            if not (e.pareto_status == "frontier" or e.failure_analysis):
+            if not (e.pareto_status == "frontier" or has_negative_evidence(e)):
                 continue
             buckets.setdefault(e.action_type or "unknown", []).append(e)
 
@@ -1795,7 +1944,7 @@ class ExperimentJournal:
         for action_type, entries in buckets.items():
             entries.sort(key=lambda x: x.trial_id)
             successes = sum(1 for e in entries if e.pareto_status == "frontier")
-            failures = sum(1 for e in entries if e.failure_analysis)
+            failures = sum(1 for e in entries if has_negative_evidence(e) and e.pareto_status != "frontier")
             n_sup = len(entries)
             success_rate = successes / n_sup if n_sup else 0.0
             if n_sup >= 3 and success_rate >= 0.66:
@@ -1806,10 +1955,12 @@ class ExperimentJournal:
                 confidence = "low"
             latest = entries[-1]
             observation = latest.hypothesis or latest.expected_mechanism or (
-                failure_analysis_for_prompt(latest, limit=160)
+                negative_evidence_for_prompt(latest, entries=history, limit=160)
             ) or "(no description)"
             out[action_type] = {
                 "observation": observation[:240],
+                "negative_evidence": grouped_negative_evidence(
+                    entries, history),
                 "trials_supporting": [e.trial_id for e in entries],
                 "successes": successes,
                 "failures": failures,
@@ -1875,6 +2026,8 @@ class ExperimentJournal:
                 f"trials {info['trials_supporting']}):"
             )
             lines.append(f"  Observation: {info['observation']}")
+            for negative in info["negative_evidence"]:
+                lines.append(f"  Negative: {negative}")
             lines.append(
                 f"  Latest trial #{info['latest_trial_id']} → "
                 f"{info['latest_outcome']} (q={info['latest_q']:.3f} "

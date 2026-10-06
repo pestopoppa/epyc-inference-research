@@ -22,7 +22,9 @@ from context_budget import truncate_to_budget  # noqa: E402
 from experiment_journal import (  # noqa: E402
     ExperimentJournal,
     JournalEntry,
-    failure_analysis_for_prompt,
+    negative_evidence_for_prompt,
+    is_learning_eligible,
+    has_negative_evidence,
     scrub_legacy_scale_text,
 )
 
@@ -31,18 +33,9 @@ DEFAULT_LAST_N = 30
 DEFAULT_BUDGET_TOKENS = 2000
 
 
-def _learning_exclusion(entry: JournalEntry) -> bool:
-    details = entry.eval_details or {}
-    return isinstance(details, dict) and bool(details.get("learning_exclusion"))
-
-
 def is_stm_eligible(entry: JournalEntry) -> bool:
-    """Mirror AP-22 memory-update trust filters for generated STM preview."""
-    if entry.bug_corrupted_by:
-        return False
-    if entry.outcome_status != "ok":
-        return False
-    return not _learning_exclusion(entry)
+    """Shared AP-22 trust filters for generated STM preview."""
+    return is_learning_eligible(entry)
 
 
 def _split_semicolon_text(text: str) -> list[str]:
@@ -94,8 +87,8 @@ def render_generated_stm(
         if entry.optimization_directions:
             for direction in _split_semicolon_text(entry.optimization_directions):
                 _append_capped(directions, f"{tag} {direction}", cap)
-        if entry.failure_analysis:
-            failure = failure_analysis_for_prompt(entry, 160)
+        if has_negative_evidence(entry):
+            failure = negative_evidence_for_prompt(entry, entries=entries, limit=160)
             _append_capped(
                 failures,
                 f"{tag} {entry.species}/{entry.action_type}: {failure}",
