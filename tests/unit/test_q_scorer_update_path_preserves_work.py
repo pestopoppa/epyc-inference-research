@@ -13,9 +13,8 @@ branch fires ~11x more often than create (SUM(update_count)=668,070 vs 59,337
 rows), so both fields were effectively never populated: the values were computed
 off the very entries already passed in, then dropped on the floor.
 
-These tests assert on the SQLite row after an UPDATE, with `Q_TD_WRITE` forced on
-(it is a module constant read at import time, so it is 0 under pytest — which is
-exactly why the earlier tests for this field only ever exercised create).
+These tests assert on the SQLite row after an UPDATE, with
+`ORCHESTRATOR_Q_TD_WRITE=1` set before the scorer is constructed.
 """
 
 from __future__ import annotations
@@ -26,7 +25,6 @@ import sqlite3
 import numpy as np
 import pytest
 
-from orchestration.repl_memory import q_scorer as q_scorer_module
 from orchestration.repl_memory.episodic_store import EpisodicStore
 from orchestration.repl_memory.progress_logger import ProgressLogger, ProgressReader
 from orchestration.repl_memory.q_scorer import QScorer
@@ -56,7 +54,8 @@ class _StubEmbedder:
 @pytest.fixture
 def wiring(tmp_path, monkeypatch):
     """Real store + progress logger/reader + QScorer, with Q_TD_WRITE ON."""
-    monkeypatch.setattr(q_scorer_module, "Q_TD_WRITE", True)
+    monkeypatch.setenv("ORCHESTRATOR_Q_TD_WRITE", "1")
+    monkeypatch.setenv("ORCHESTRATOR_Q_TD_MATCH_K", "10")
     store = EpisodicStore(db_path=tmp_path / "sessions", use_faiss=True)
     log_dir = tmp_path / "progress"
     log_dir.mkdir(parents=True, exist_ok=True)
