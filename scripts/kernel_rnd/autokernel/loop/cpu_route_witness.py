@@ -143,6 +143,45 @@ WITNESSES = {
     "cpu_weight_placement": RouteWitness(
         op=None, case=None, breakpoint=None, symbol_pattern=None, active=None,
         quants=(), ops=(), reference="model_identity"),
+    # 2026-10-06 low-bit routes: engagement is the exact edited kernel symbol hitting in
+    # the candidate DSO; the numerical verdict is NEVER `cpu_quant_reference` (it has no
+    # IQ3_S/IQ4_NL/Q6_K/IQ4_XS fixture) but `reference="ppl_contract"` -- the four
+    # layers in `gates.ppl_contract_gate`, wired directly into the loop (run.py), never
+    # by this witness module. A route with no single representative case (the type
+    # whitelist and the kquants dispatch switch, both of which affect many types/ops at
+    # once) carries op=case=None, matching the `cpu_weight_placement`/`cpu_graph_sync`
+    # convention above rather than a fabricated single case.
+    "iqk_iquants_dequant": RouteWitness(
+        op="MUL_MAT", case=f"type_a=iq3_s,type_b=f32,m=16,n=16,k=256,{_DENSE}",
+        breakpoint=("rbreak", r"mul_mat_qX_K_q8_K_IQ_[1N]<.*DequantizerIQ3S"),
+        symbol_pattern=r"mul_mat_qX_K_q8_K_IQ_[1N]<.*DequantizerIQ3S", active="[iqk] ACTIVE",
+        quants=("IQ3_S", "IQ2_XXS", "IQ3_XXS"), ops=("MUL_MAT", "MUL_MAT_ID"),
+        expert_modes=("alternating", "single"), reference="ppl_contract"),
+    "iqk_legacy_iq4nl": RouteWitness(
+        op="MUL_MAT", case=f"type_a=iq4_nl,type_b=f32,m=16,n=16,k=256,{_DENSE}",
+        breakpoint=("rbreak", r"IQ4_NL_Unpacker[US]"), symbol_pattern=r"IQ4_NL_Unpacker[US]",
+        active="[iqk] ACTIVE", quants=("IQ4_NL", "Q8_0"), ops=("MUL_MAT", "MUL_MAT_ID"),
+        expert_modes=("alternating", "single"), reference="ppl_contract"),
+    "iqk_type_whitelist": RouteWitness(
+        op=None, case=None, breakpoint=None, symbol_pattern=None, active=None,
+        quants=("IQ4_NL", "IQ3_S", "Q4_K", "Q8_0"), ops=("MUL_MAT", "MUL_MAT_ID"),
+        expert_modes=("alternating", "single"), reference="ppl_contract"),
+    "cpu_repack_mmid": RouteWitness(
+        op="MUL_MAT_ID",
+        case="type_a=iq4_nl,type_b=f32,n_mats=4,n_used=2,b=0,m=512,n=4,k=256",
+        breakpoint=("break", "ggml_repack_get_optimal_repack_type"),
+        symbol_pattern=r"^ggml_repack_get_optimal_repack_type$", active=None,
+        quants=("IQ4_NL", "Q4_0", "Q4_K"), ops=("MUL_MAT", "MUL_MAT_ID"),
+        expert_modes=("alternating", "single"), reference="ppl_contract"),
+    "iqk_kquants_q6_iq4xs_dequant": RouteWitness(
+        op="MUL_MAT", case=f"type_a=q6_K,type_b=f32,m=16,n=16,k=256,{_DENSE}",
+        breakpoint=("rbreak", r"mul_mat_qY_K_q8_2_X4_T<.*DequantizerQ6K_AVX2"),
+        symbol_pattern=r"mul_mat_qY_K_q8_2_X4_T<.*DequantizerQ6K_AVX2", active=None,
+        quants=("Q6_K", "IQ4_XS"), ops=("MUL_MAT", "MUL_MAT_ID"), reference="ppl_contract"),
+    "iqk_kquants_set_kernels": RouteWitness(
+        op=None, case=None, breakpoint=None, symbol_pattern=None, active=None,
+        quants=("Q6_K", "IQ4_XS", "Q4_K", "Q5_K"), ops=("MUL_MAT", "MUL_MAT_ID"),
+        reference="ppl_contract"),
 }
 # 2026-10-04 structural routes. Scheduling (R1) and its plan-time home (R3) keep the
 # cpu_graph_sync witness -- the scalar quant suite runs through the candidate's walk and

@@ -451,6 +451,27 @@ class CpuSourceRoute:
     #: call-free initializer: a static whose initializer calls anything runs at library
     #: load, outside every gate (audit 2026-10-04: `static int x = (setenv(..), 0);`).
     helper_objects_const: bool = False
+    #: "bit_exact" (default: the route's existing reference decides) or "ppl_contract"
+    #: (2026-10-06, operator layered-acceptance amendment): the kernel may change
+    #: floating-point accumulation order. Whole-model judgement is NEVER byte identity
+    #: for these routes; it is the four independently-gated layers in
+    #: `ppl_contract_gate` (op-level NMSE on served shapes, wikitext2 |delta ppl|,
+    #: production-length coherence/agreement, long-generation canary), ALL required,
+    #: fail-closed on any missing or errored layer. A ppl_contract route must never
+    #: also be model_identity=True (the two numerics contracts are mutually exclusive).
+    numerics: str = "bit_exact"
+    #: Labels (from `bodies`) whose marker is legitimately DUPLICATED in HEAD, e.g. a
+    #: `#ifdef HAVE_FANCY_SIMD` / `#else` pair defining the same struct/function twice
+    #: with different bodies for two mutually-exclusive compiled variants. Normally a
+    #: marker occurring more than once REFUSES (ambiguous widening). For a label named
+    #: here, every occurrence inside the admitted window is a candidate and the LAST
+    #: one (source order) is admitted -- by convention in this tree the later `#else`
+    #: arm is the one actually compiled on this host (the `#if` arm uses a disabled
+    #: sentinel macro, e.g. `z_HAVE_FANCY_SIMD`, or is the non-fancy-SIMD default).
+    #: `route.fence` should still exclude an unrelated far-away duplicate (e.g. the
+    #: `__aarch64__` branch of the same file) -- this field only disambiguates
+    #: occurrences the fence cannot tell apart.
+    body_duplicates: tuple[str, ...] = ()
 
 
 CPU_SOURCE_ROUTES = (
@@ -502,6 +523,142 @@ CPU_SOURCE_ROUTES = (
         ops=("MUL_MAT", "MUL_MAT_ID"),
         admitted_text=("hunks inside the iqk_q8_0_enabled or implemented ggml_iqk_try_mul_mat "
                        "bodies; signatures, the stub and every other helper unchanged")),
+    # 2026-10-06 low-bit kernel routes (operator: "WE MUST improve lower quant
+    # performance"). Numerics: ppl_contract (see `ppl_contract_gate` below) -- the
+    # independent per-op reference is the native `use_ref=true` path plus
+    # test-backend-ops on the exact served shapes (decode N=1, verify widths 2-5);
+    # whole-model judgement is wikitext2 |delta ppl| <= 0.5%, a production-length
+    # coherence/agreement floor and a long-generation canary, never byte identity.
+    #
+    # Each of these four files carries the x86_64 implementation ABOVE a top-level
+    # `#else` / `// ------- __aarch64__ -------` arm that redefines several of the
+    # same symbols verbatim for NEON (confirmed against the champion tree
+    # llama.cpp-experimental-cor-b0ba1d427-20261005, 2026-10-06): every route below
+    # fences the window to end before that arm, or the generic single-occurrence
+    # marker check refuses EVERY patch to the admitted symbol as "occurs 2 times".
+    CpuSourceRoute(
+        route="iqk_iquants_dequant",
+        path="ggml/src/ggml-cpu/iqk/iqk_gemm_iquants.cpp",
+        symbols=("IndexHelperIQ3S", "DequantizerIQ3S", "EvenSignHelper",
+                 "mul_mat_qX_K_q8_K_IQ_1", "mul_mat_qX_K_q8_K_IQ_N", "iqk_set_kernels_iquants"),
+        fence="// --------------------------------------- __aarch64__ "
+              "---------------------------------------------",
+        bodies=(("IndexHelperIQ3S", "struct IndexHelperIQ3S {"),
+                ("DequantizerIQ3S", "struct DequantizerIQ3S final : public BaseDequantizer<block_iq3_s> {"),
+                ("EvenSignHelper", "struct EvenSignHelper {"),
+                ("mul_mat_qX_K_q8_K_IQ_1",
+                 "static void mul_mat_qX_K_q8_K_IQ_1(int n, const void * vx, size_t bx, const DataInfo& info, int nrc_x) {"),
+                ("mul_mat_qX_K_q8_K_IQ_N",
+                 "static void mul_mat_qX_K_q8_K_IQ_N(int n, const void * vx, size_t bx, const DataInfo& info, int nrc_x) {"),
+                ("iqk_set_kernels_iquants",
+                 "bool iqk_set_kernels_iquants(int ne00, int typeA, int typeB, std::array<mul_mat_t, IQK_MAX_NY>& kernels, mul_mat_t& func16) {")),
+        # IndexHelperIQ3S is defined TWICE in the x86 window, once under `#ifdef
+        # z_HAVE_FANCY_SIMD` (a never-defined sentinel name -- this tree's convention
+        # for a disabled variant, see the comment above it: "makes PP ~6% slower")
+        # and once in the paired `#else`. The `#else` (plain AVX2) arm is the one
+        # actually compiled; it is also the LAST occurrence in source order.
+        body_duplicates=("IndexHelperIQ3S",),
+        ops=("MUL_MAT", "MUL_MAT_ID"),
+        new_helpers=True,
+        forbidden_added=r"#pragma omp|_Pragma|#define|#undef|#include \"",
+        numerics="ppl_contract",
+        admitted_text=("hunks inside the IQ3_S index/sign helpers, DequantizerIQ3S, the IQ_1/IQ_N "
+                       "kernel bodies or the iquants kernel-selection switch (x86_64 arm only), "
+                       "plus new static helpers; block layouts, iq3s_grid, every other quant's "
+                       "dequantizer, the aarch64 arm and the x86 native path unchanged")),
+    CpuSourceRoute(
+        route="iqk_legacy_iq4nl",
+        path="ggml/src/ggml-cpu/iqk/iqk_gemm_legacy_quants.cpp",
+        symbols=("IQ4_NL_DequantizerU", "IQ4_NL_DequantizerS", "IQ4_NL_UnpackerU", "IQ4_NL_UnpackerS",
+                 "iqk_set_kernels_legacy_quants"),
+        fence="// ---------------------------- __aarch64__ "
+              "----------------------------------------------",
+        bodies=(("IQ4_NL_DequantizerU", "struct IQ4_NL_DequantizerU {"),
+                ("IQ4_NL_DequantizerS", "struct IQ4_NL_DequantizerS {"),
+                ("IQ4_NL_UnpackerU",
+                 "struct IQ4_NL_UnpackerU final : public Q_Unpacker<block_iq4_nl, ScaleHelperQ_0_1<128>, IQ4_NL_DequantizerU> {"),
+                ("IQ4_NL_UnpackerS",
+                 "struct IQ4_NL_UnpackerS final : public Q_Unpacker<block_iq4_nl, ScaleHelperQ_0, IQ4_NL_DequantizerS> {"),
+                ("iqk_set_kernels_legacy_quants",
+                 "bool iqk_set_kernels_legacy_quants(int ne00, int typeA, int typeB, std::array<mul_mat_t, IQK_MAX_NY>& kernels, mul_mat_t& func16) {")),
+        ops=("MUL_MAT", "MUL_MAT_ID"),
+        new_helpers=True,
+        numerics="ppl_contract",
+        admitted_text=("hunks inside the IQ4_NL dequantizers/unpackers or the legacy "
+                       "kernel-selection switch (x86_64 arm only), plus new static helpers; "
+                       "Q8_0/Q4_0/Q5_x unpackers, the repack path and the aarch64 arm unchanged")),
+    # The constexpr whitelists sit ABOVE the two admitted dispatch bodies (iqk_mmid_dispatch,
+    # iqk_dense_dispatch above); a type can only be routed to iqk by editing them. Repack
+    # must release the same type (cpu_repack_mmid below) or the type still falls back to
+    # the un-repacked generic path despite being iqk-admitted.
+    CpuSourceRoute(
+        route="iqk_type_whitelist",
+        path="ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp",
+        symbols=("iqk_typeA_supported", "iqk_weight_uses_q8_k", "iqk_mmid_shape_supported"),
+        fence="#else  // iqk not implemented",
+        bodies=(("iqk_typeA_supported", "constexpr bool iqk_typeA_supported(int t) {"),
+                ("iqk_weight_uses_q8_k", "constexpr bool iqk_weight_uses_q8_k(int t) {"),
+                ("iqk_mmid_shape_supported", "constexpr bool iqk_mmid_shape_supported(int weight_type, int64_t n_tokens) {")),
+        ops=("MUL_MAT", "MUL_MAT_ID"),
+        required_added=(r"static_assert\(",
+                        "a whitelist change must carry a matching static_assert (positive or "
+                        "negative) proving the new admission/refusal, as every existing case does"),
+        numerics="ppl_contract",
+        admitted_text=("case additions/removals inside the three constexpr whitelists, each with a "
+                       "matching static_assert; the dispatch bodies, kernels and the disabled-build "
+                       "stub unchanged")),
+    CpuSourceRoute(
+        route="cpu_repack_mmid",
+        path="ggml/src/ggml-cpu/repack.cpp",
+        symbols=("ggml_repack_get_optimal_repack_type", "forward_mul_mat_id"),
+        bodies=(("ggml_repack_get_optimal_repack_type",
+                 "static const ggml::cpu::tensor_traits * ggml_repack_get_optimal_repack_type(const struct ggml_tensor * cur) {"),
+                ("forward_mul_mat_id", "    void forward_mul_mat_id(ggml_compute_params * params, ggml_tensor * op) {")),
+        ops=("MUL_MAT", "MUL_MAT_ID"),
+        forbidden_added=r"getenv\(",
+        numerics="ppl_contract",
+        admitted_text=("hunks inside the repack type-claim (which types repack takes when "
+                       "GGML_IQK is on) and the repack MUL_MAT_ID walk; the packed layouts, "
+                       "gemv/gemm kernels and the GGML_IQK env read unchanged")),
+    # Q6_K/IQ4_XS dequantizers (seed 6 widening): DequantizerQ6K_AVX2's own kernel body
+    # (mul_mat_qY_K_q8_2_X4_T, a DIFFERENT template than Q4_K/Q5_K's mul_mat_qX_K_q8_2_X4_T,
+    # so this route cannot collide with the existing Q4_K/Q5_K ad-hoc admission) and
+    # DequantizerIQ4XS (also defined under `#ifdef HAVE_FANCY_SIMD`/`#else` -- same
+    # disambiguation as IndexHelperIQ3S above, last occurrence = the compiled plain arm).
+    CpuSourceRoute(
+        route="iqk_kquants_q6_iq4xs_dequant",
+        path="ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp",
+        symbols=("DequantizerQ6K_AVX2", "mul_mat_qY_K_q8_2_X4_T", "DequantizerIQ4XS"),
+        fence="// --------------------------------- __aarch64__ --------------------------------------",
+        bodies=(("DequantizerQ6K_AVX2",
+                 "struct DequantizerQ6K_AVX2 final : public BaseDequantizer<block_q6_K> {"),
+                ("mul_mat_qY_K_q8_2_X4_T",
+                 "static void mul_mat_qY_K_q8_2_X4_T(int n, const void * vx, size_t bx, const DataInfo& info, int nrc_x) {"),
+                ("DequantizerIQ4XS",
+                 "struct DequantizerIQ4XS final : public BaseDequantizer<block_iq4_xs> {")),
+        body_duplicates=("DequantizerIQ4XS",),
+        ops=("MUL_MAT", "MUL_MAT_ID"),
+        new_helpers=True,
+        numerics="ppl_contract",
+        admitted_text=("hunks inside the DequantizerQ6K_AVX2 struct, its mul_mat_qY_K_q8_2_X4_T "
+                       "kernel body, or the DequantizerIQ4XS struct (x86_64 plain-AVX2 arm only), "
+                       "plus new static helpers; Q4Bits_AVX2, the Q4_K/Q5_K dot route, every other "
+                       "dequantizer and the aarch64 arm unchanged")),
+    # iqk_set_kernels_kquants: the type-dispatch switch Q6_K/IQ4_XS admission actually
+    # needs to route through. Its x86_64 signature differs textually from the aarch64
+    # one (`[[maybe_unused]]` on func16), so it is already unambiguous without
+    # `body_duplicates`; the fence is kept anyway as defence in depth.
+    CpuSourceRoute(
+        route="iqk_kquants_set_kernels",
+        path="ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp",
+        symbols=("iqk_set_kernels_kquants",),
+        fence="// --------------------------------- __aarch64__ --------------------------------------",
+        bodies=(("iqk_set_kernels_kquants",
+                 "bool iqk_set_kernels_kquants(int ne00, int typeA, int typeB, std::array<mul_mat_t, IQK_MAX_NY>& kernels, mul_mat_t& func16) {"),),
+        ops=("MUL_MAT", "MUL_MAT_ID"),
+        numerics="ppl_contract",
+        admitted_text=("hunks inside the iqk_set_kernels_kquants (x86_64) switch body; its "
+                       "signature, every kernel it dispatches to and the aarch64 arm unchanged")),
     # Per-node synchronisation, graph walk, tiny-solo selection and in-backend fusion.
     # Numerics-free by construction, so the independent reference is the full scalar
     # quant suite (it runs through the candidate's barriers) plus every DS41 and
@@ -909,10 +1066,16 @@ def _cpu_route_bounds(text: str, side: str, route: CpuSourceRoute):
     regions, headers = [], []
     for label, prefix in route.bodies:
         hits = [i + 1 for i in range(lo - 1, hi) if lines[i].startswith(prefix)]
-        if len(hits) != 1:
+        if label in route.body_duplicates:
+            if not hits:
+                return (f"{side}: marker `{prefix.strip()}` occurs 0 times inside the "
+                        f"admitted window (the {label} boundary needs at least one)")
+            start = hits[-1]
+        elif len(hits) != 1:
             return (f"{side}: marker `{prefix.strip()}` occurs {len(hits)} times inside the "
                     f"admitted window (the {label} boundary needs exactly one)")
-        start = hits[0]
+        else:
+            start = hits[0]
         opening = next((pos for pos in range(start, hi + 1) if "{" in
                         _strip_code_line(lines[pos - 1], False)[0]), None)
         end = block_end(start)
@@ -2197,6 +2360,337 @@ def run_all(*checks: "Callable[[], Verdict]") -> tuple[bool, list[Verdict]]:
     return True, collected
 
 
+# --- ppl_contract numerics (2026-10-06, operator layered-acceptance amendment) -------
+#
+# A `CpuSourceRoute` with `numerics="ppl_contract"` trades bit-exactness for performance.
+# The operator's instruction, verbatim: design this "with utmost care to not introduce
+# garbage-generating changes"; acceptance is LAYERED, every layer REQUIRED, none alone
+# sufficient, FAIL CLOSED on any layer that is missing or errors:
+#   (a) op-level NMSE vs the independent reference, on the EXACT served shapes (decode
+#       N=1, verify widths 2-5), tight threshold;
+#   (b) wikitext2 |delta ppl| <= 0.5% vs the anchor (32x512 chunks);
+#   (c) coherence: greedy token agreement vs the anchor on PRODUCTION-length prompts
+#       (not only the short frozen prompt), floor 0.98;
+#   (d) a long-generation canary (>=1024 tokens): no pathological repetition/drift.
+# Layer (e) -- "never folds on bench evidence alone" -- is enforced by WIRING, not a
+# fifth check here: `ppl_contract_gate` is called as a `route_references` entry in
+# run.py, i.e. a BLOCKING pre-keep check exactly like every other route reference. A
+# failing layer refuses the keep before `pool.advance_champion` runs, so there is no
+# path from a ppl_contract route to a champion commit on bench evidence alone. Bit-exact
+# routes never call anything in this section.
+#
+# HONEST LIMITATION on layer (a): no instrument in this tree reports a literal NMSE
+# float for IQ3_S/IQ4_NL/Q6_K/IQ4_XS (`cpu_quant_reference.py`'s scalar decode fixture
+# supports only Q4_K/Q5_K/Q8_0/float types; extending it needs a new C++ probe, out of
+# scope for a branch-only, no-build session). Layer (a) is therefore implemented as
+# `test-backend-ops`'s own per-case numerical acceptance -- which IS an independent,
+# already-enforced bound against ggml's native `use_ref=true` reference -- filtered to
+# the route's quant type(s) AND the served-shape widths, rather than its broader default
+# shape sweep. This is real and testable; it is not the same artifact as a bare float.
+PPL_CORPUS = "/mnt/raid0/llm/data/wikitext2_test.txt"
+PPL_CHUNKS, PPL_CTX, PPL_REL_BAR = 32, 512, 0.005
+#: Layer (a): the activation-width ("n") values a decode step (1) and a speculative
+#: verify step (2-5) actually serve; test-backend-ops case strings carry `n=<int>`.
+PPL_CONTRACT_SERVED_WIDTHS = (1, 2, 3, 4, 5)
+#: Layer (c): the existing T0 coherence floor (campaign.py:3054), reused verbatim --
+#: this is not a new number, only a new case (production-length prompts) it applies to.
+PPL_CONTRACT_AGREEMENT_FLOOR = 0.98
+#: Layer (c): "production-length", not the ~100-token frozen-request probe.
+PPL_CONTRACT_PROD_PROMPT_TOKENS_MIN = 1024
+#: Layer (d): canary length and the longest exact-repeated generated-token run
+#: admitted before the candidate is judged to have fallen into a degenerate loop a
+#: short probe would never see.
+PPL_CONTRACT_CANARY_TOKENS = 1024
+PPL_CONTRACT_CANARY_MAX_REPEAT_RUN = 32
+
+
+def _run_logged(argv: list[str], *, env: dict, log_dir: Path, label: str,
+               timeout: int = 1800) -> str:
+    """Run `argv`, persist combined stdout+stderr under `log_dir/<label>.log`, return it."""
+    log_dir.mkdir(parents=True, exist_ok=True)
+    done = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, env=env)
+    out = done.stdout + done.stderr
+    try:
+        (log_dir / f"{label}.log").write_text(out[-200_000:], encoding="utf-8")
+    except OSError:
+        pass
+    return out
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _cached_anchor_ppl(anchor_build: Path, model: Path,
+                       run: "Callable[[Path], float | None]") -> float | None:
+    """One wikitext2 anchor calibration per (anchor binary, model, corpus) sha256 triple;
+    every later candidate in the epoch reuses it instead of re-measuring ~2-4 CPU-minutes.
+    A cache miss or a hashing failure (missing file) always falls back to measuring."""
+    cache_dir = Path(anchor_build) / "ak_ppl_cache"
+    cache_file = cache_dir / "anchor_ppl.json"
+    try:
+        key = "-".join((_file_sha256(Path(anchor_build) / "bin" / "llama-perplexity"),
+                        _file_sha256(Path(model)), _file_sha256(Path(PPL_CORPUS))))
+    except OSError:
+        key = None
+    if key is not None and cache_file.is_file():
+        try:
+            cached = json.loads(cache_file.read_text(encoding="utf-8"))
+            if cached.get("key") == key and isinstance(cached.get("ppl"), (int, float)):
+                return float(cached["ppl"])
+        except (OSError, ValueError):
+            pass
+    ppl = run(Path(anchor_build))
+    if ppl is not None and key is not None:
+        try:
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            cache_file.write_text(json.dumps({"key": key, "ppl": ppl}), encoding="utf-8")
+        except OSError:
+            pass
+    return ppl
+
+
+def ppl_wikitext2(anchor_build: Path, candidate_build: Path, *, model: Path, threads: int,
+                  env: dict, cpu_list: str, log_dir: Path,
+                  _run_binary: "Callable[[Path], float | None] | None" = None) -> Verdict:
+    """Layer (b): anchor-vs-candidate wikitext2 perplexity under the lane's CPU claim.
+
+    Pass iff |ppl_c - ppl_a| / ppl_a <= PPL_REL_BAR. `_run_binary` is a test seam (and an
+    escape hatch for a build without `llama-perplexity`'s exact CLI): given, it REPLACES
+    the subprocess entirely and must return the parsed PPL or None."""
+    def run(build: Path) -> float | None:
+        if _run_binary is not None:
+            return _run_binary(build)
+        argv = ["taskset", "-c", cpu_list, "numactl", "--interleave=all",
+                str(build / "bin" / "llama-perplexity"), "-m", str(model), "-f", PPL_CORPUS,
+                "-c", str(PPL_CTX), "--chunks", str(PPL_CHUNKS), "-t", str(threads),
+                "-b", "512", "--no-mmap"]
+        out = _run_logged(argv, env={**env, "LD_LIBRARY_PATH": str(build / "bin")},
+                          log_dir=log_dir, label=f"ppl_{Path(build).name}")
+        found = re.search(r"Final estimate: PPL = ([0-9.]+)", out)
+        return float(found.group(1)) if found else None
+    ppl_a = _cached_anchor_ppl(anchor_build, model, run)
+    ppl_c = run(candidate_build)
+    if ppl_a is None or ppl_c is None:
+        return Verdict("ppl_wikitext2", False,
+                       "perplexity run did not report a final estimate "
+                       f"(anchor={ppl_a!r} candidate={ppl_c!r})")
+    rel = abs(ppl_c - ppl_a) / ppl_a
+    return Verdict("ppl_wikitext2", rel <= PPL_REL_BAR,
+                   f"ppl anchor {ppl_a:.4f} candidate {ppl_c:.4f} rel {rel:.5f} "
+                   f"(bar {PPL_REL_BAR})")
+
+
+def ppl_contract_op_nmse(candidate_build: Path, *, resolved_recipe, quants: tuple[str, ...],
+                         ops: tuple[str, ...] = ("MUL_MAT", "MUL_MAT_ID"),
+                         _op_correctness=None) -> Verdict:
+    """Layer (a): op-level correctness vs the independent native reference, on the EXACT
+    served shapes (decode N=1, verify widths 2-5) for the quant(s) this route touches.
+
+    See the module-level note above for why this is test-backend-ops's own per-case
+    bound (already independent and already enforced) rather than a bare NMSE float.
+    `_op_correctness` is a test seam: given, it REPLACES `op_correctness` and must have
+    the same signature/return type.
+    """
+    run = _op_correctness or op_correctness
+    type_pattern = "|".join(re.escape(q.lower()) for q in quants)
+    width_pattern = "|".join(str(w) for w in PPL_CONTRACT_SERVED_WIDTHS)
+    params_filter = rf"type_a=({type_pattern}).*n=({width_pattern})\b"
+    verdicts = []
+    for op in ops:
+        verdict = run(candidate_build, op=op, backend="CPU", resolved_recipe=resolved_recipe,
+                      params_filter=params_filter)
+        verdicts.append(verdict)
+        if not verdict.passed:
+            return Verdict("ppl_contract_nmse", False,
+                           f"{op} served-shape suite ({params_filter}) refused: {verdict.reason}",
+                           verdict.detail)
+    return Verdict("ppl_contract_nmse", True,
+                   f"served-shape suite ({params_filter}) passed for {', '.join(ops)}")
+
+
+def prefix_token_agreement(candidate_text: str, anchor_text: str, *,
+                           tokenize: "Callable[[str], list[str]] | None" = None
+                           ) -> tuple[float, "int | None"]:
+    """Prefix token-agreement ratio between two greedy completions of the SAME prompt.
+
+    `tokenize` should be the model's own tokenizer (byte-identical token boundaries);
+    the default is a conservative whitespace split, which can only UNDERSTATE agreement
+    on texts differing inside what the real tokenizer would call one token -- never
+    overstate it -- so it is a safe (if less precise) floor check without one.
+    Returns (ratio, first divergence index or None if one is a prefix of the other and
+    neither is empty, or both are identical)."""
+    tok = tokenize or (lambda text: text.split())
+    candidate_tokens, anchor_tokens = tok(candidate_text), tok(anchor_text)
+    denom = min(len(candidate_tokens), len(anchor_tokens))
+    if denom == 0:
+        return (1.0 if not candidate_tokens and not anchor_tokens else 0.0), 0
+    first_divergence = next(
+        (i for i, (a, b) in enumerate(zip(candidate_tokens, anchor_tokens)) if a != b), None)
+    agree = denom if first_divergence is None else first_divergence
+    return agree / denom, first_divergence
+
+
+def ppl_contract_coherence(anchor_build: Path, candidate_build: Path, *, model: Path,
+                           prompts: tuple[str, ...], n_predict: int, env: dict,
+                           cpu_list: str, log_dir: Path,
+                           _generate: "Callable[[Path, str], str | None] | None" = None
+                           ) -> Verdict:
+    """Layer (c): greedy coherence/token-agreement on PRODUCTION-length prompts (not
+    only the short frozen-request probe), floor PPL_CONTRACT_AGREEMENT_FLOOR.
+
+    Self-contained: serves each prompt fresh on BOTH builds (greedy, temp 0) rather than
+    depending on the T0 anchor capture, which retains only an output DIGEST, never the
+    text a prefix-token comparison needs. `_generate(build, prompt) -> text|None` is a
+    test seam; the default runs `llama-cli -no-cnv` greedily on each build."""
+    def generate(build: Path, prompt: str) -> str | None:
+        if _generate is not None:
+            return _generate(build, prompt)
+        argv = ["taskset", "-c", cpu_list, "numactl", "--interleave=all",
+                str(build / "bin" / "llama-cli"), "-m", str(model), "-p", prompt,
+                "-n", str(n_predict), "--temp", "0", "--top-k", "1", "-no-cnv", "--no-mmap"]
+        return _run_logged(argv, env={**env, "LD_LIBRARY_PATH": str(build / "bin")},
+                           log_dir=log_dir, label=f"coherence_{Path(build).name}")
+    worst_ratio, worst_detail = None, ""
+    for index, prompt in enumerate(prompts):
+        anchor_text = generate(anchor_build, prompt)
+        candidate_text = generate(candidate_build, prompt)
+        if anchor_text is None or candidate_text is None:
+            return Verdict("ppl_contract_coherence", False,
+                           f"production-prompt {index} did not generate on both builds "
+                           f"(anchor={'ok' if anchor_text is not None else 'none'} "
+                           f"candidate={'ok' if candidate_text is not None else 'none'})")
+        ratio, first_divergence = prefix_token_agreement(candidate_text, anchor_text)
+        if worst_ratio is None or ratio < worst_ratio:
+            worst_ratio, worst_detail = ratio, (
+                f"prompt {index}: agreement {ratio:.4f}, first divergence "
+                f"{first_divergence!r}")
+    if worst_ratio is None:
+        return Verdict("ppl_contract_coherence", False, "no production-length prompts supplied")
+    return Verdict("ppl_contract_coherence", worst_ratio >= PPL_CONTRACT_AGREEMENT_FLOOR,
+                   f"worst token agreement {worst_ratio:.4f} "
+                   f"(floor {PPL_CONTRACT_AGREEMENT_FLOOR}); {worst_detail}")
+
+
+#: Layer (d): a run of this many IDENTICAL generated tokens in a row (candidate's own
+#: output, not vs. the anchor) is judged a degenerate loop, not a legitimate repeat
+#: (e.g. a short refrain); real text essentially never repeats one token this long.
+def _longest_exact_repeat_run(tokens: list[str]) -> int:
+    best = run = 1 if tokens else 0
+    for i in range(1, len(tokens)):
+        run = run + 1 if tokens[i] == tokens[i - 1] else 1
+        best = max(best, run)
+    return best
+
+
+def ppl_contract_long_canary(candidate_build: Path, *, model: Path, prompt: str,
+                             env: dict, cpu_list: str, log_dir: Path,
+                             n_predict: int = PPL_CONTRACT_CANARY_TOKENS,
+                             _generate: "Callable[[Path, str, int], str | None] | None" = None
+                             ) -> Verdict:
+    """Layer (d): a long (>=1024 token) generation on the CANDIDATE alone, checked for
+    pathological repetition/drift a short probe would never see. `_generate` is a test
+    seam; the default runs `llama-cli -no-cnv` greedily for `n_predict` tokens."""
+    if n_predict < PPL_CONTRACT_CANARY_TOKENS:
+        raise ValueError(
+            f"ppl_contract_long_canary requires >= {PPL_CONTRACT_CANARY_TOKENS} tokens")
+
+    def generate(build: Path, text_prompt: str, count: int) -> str | None:
+        if _generate is not None:
+            return _generate(build, text_prompt, count)
+        argv = ["taskset", "-c", cpu_list, "numactl", "--interleave=all",
+                str(build / "bin" / "llama-cli"), "-m", str(model), "-p", text_prompt,
+                "-n", str(count), "--temp", "0", "--top-k", "1", "-no-cnv", "--no-mmap"]
+        return _run_logged(argv, env={**env, "LD_LIBRARY_PATH": str(build / "bin")},
+                           log_dir=log_dir, label=f"canary_{Path(build).name}")
+    text = generate(candidate_build, prompt, n_predict)
+    if text is None:
+        return Verdict("ppl_contract_long_canary", False,
+                       f"candidate did not complete a {n_predict}-token generation")
+    tokens = text.split()
+    if len(tokens) < n_predict // 2:
+        return Verdict("ppl_contract_long_canary", False,
+                       f"candidate produced only {len(tokens)} tokens of a requested "
+                       f"{n_predict} (truncated/aborted generation)")
+    longest_run = _longest_exact_repeat_run(tokens)
+    return Verdict("ppl_contract_long_canary",
+                   longest_run <= PPL_CONTRACT_CANARY_MAX_REPEAT_RUN,
+                   f"longest exact-repeat run {longest_run} tokens "
+                   f"(bar {PPL_CONTRACT_CANARY_MAX_REPEAT_RUN}) over {len(tokens)} generated")
+
+
+def ppl_contract_gate(anchor_build: Path, candidate_build: Path, *, route: "CpuSourceRoute",
+                      resolved_recipe, model: Path, threads: int, cpu_list: str, env: dict,
+                      prod_prompts: tuple[str, ...], canary_prompt: str, log_dir: Path,
+                      _layers: dict | None = None) -> Verdict:
+    """The single blocking pre-keep check for a `numerics="ppl_contract"` route: ALL FOUR
+    layers (a)-(d) must pass, fail-closed on any missing/errored layer. `_layers` is a
+    test seam: a dict of layer name -> callable returning `Verdict`, overriding the
+    corresponding default (for stubbing the expensive ones without touching the others).
+
+    This function itself is layer (e)'s enforcement: called from `route_references` in
+    run.py exactly like every other route reference, so a failing/missing layer refuses
+    the keep before any fold -- there is no bench-evidence-only path to a champion commit
+    for a ppl_contract route.
+    """
+    if route.numerics != "ppl_contract":
+        raise ValueError(f"ppl_contract_gate called for a {route.numerics!r} route "
+                         f"({route.route}); this gate is for ppl_contract routes only")
+    if route.model_identity:
+        raise ValueError(f"route {route.route} declares both model_identity and "
+                         "ppl_contract numerics; the two contracts are mutually exclusive")
+    overrides = _layers or {}
+
+    def layer(name: str, default):
+        try:
+            fn = overrides.get(name, default)
+            verdict = fn()
+        except Exception as exc:  # noqa: BLE001 -- fail CLOSED, never silently pass
+            return Verdict(f"ppl_contract_{name}", False,
+                           f"layer {name!r} errored: {type(exc).__name__}: {exc}")
+        if verdict is None:
+            return Verdict(f"ppl_contract_{name}", False, f"layer {name!r} produced no verdict")
+        return verdict
+
+    layers = (
+        ("nmse", lambda: ppl_contract_op_nmse(
+            candidate_build, resolved_recipe=resolved_recipe,
+            quants=cpu_route_witness_quants(route))),
+        ("ppl", lambda: ppl_wikitext2(
+            anchor_build, candidate_build, model=model, threads=threads, env=env,
+            cpu_list=cpu_list, log_dir=log_dir)),
+        ("coherence", lambda: ppl_contract_coherence(
+            anchor_build, candidate_build, model=model, prompts=prod_prompts,
+            n_predict=PPL_CONTRACT_PROD_PROMPT_TOKENS_MIN, env=env, cpu_list=cpu_list,
+            log_dir=log_dir)),
+        ("long_canary", lambda: ppl_contract_long_canary(
+            candidate_build, model=model, prompt=canary_prompt, env=env, cpu_list=cpu_list,
+            log_dir=log_dir)),
+    )
+    verdicts = [layer(name, default) for name, default in layers]
+    failed = [v for v in verdicts if not v.passed]
+    if failed:
+        return Verdict("ppl_contract", False,
+                       "ppl_contract route refused: " +
+                       " | ".join(f"{v.gate}: {v.reason}" for v in failed),
+                       "\n".join(f"{v.gate}: passed={v.passed} {v.reason}" for v in verdicts))
+    return Verdict("ppl_contract", True,
+                   "all four ppl_contract layers passed: " +
+                   "; ".join(f"{v.gate}={v.reason}" for v in verdicts))
+
+
+def cpu_route_witness_quants(route: "CpuSourceRoute") -> tuple[str, ...]:
+    """The quant types `ppl_contract_gate` scopes layer (a) to, from the route's own
+    reviewed witness (never guessed from the route name)."""
+    from . import cpu_route_witness
+    witness = cpu_route_witness.WITNESSES.get(route.route)
+    return witness.quants if witness is not None else ()
+
+
 __all__ = ["BACKEND_OPS_SELECTORS", "BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S",
            "CPU_SOURCE_ROUTES",
            "CPU_SOURCE_ROUTE_PATHS", "DEFAULT_TARGETS",
@@ -2206,4 +2700,11 @@ __all__ = ["BACKEND_OPS_SELECTORS", "BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S",
            "affected_op_scope", "check_cpu_fa_case_set", "check_cpu_fa_perf_screen",
            "check_cpu_fa_reference", "check_cpu_gdn_reference", "check_cpu_iqk_reference",
            "check_cpu_route_reference", "gpu_graph_pool_hold_refusal",
-           "no_fallback_dispatch", "op_correctness", "run_all"]
+           "no_fallback_dispatch", "op_correctness", "run_all",
+           "PPL_CORPUS", "PPL_CHUNKS", "PPL_CTX", "PPL_REL_BAR",
+           "PPL_CONTRACT_SERVED_WIDTHS", "PPL_CONTRACT_AGREEMENT_FLOOR",
+           "PPL_CONTRACT_PROD_PROMPT_TOKENS_MIN", "PPL_CONTRACT_CANARY_TOKENS",
+           "PPL_CONTRACT_CANARY_MAX_REPEAT_RUN",
+           "ppl_wikitext2", "ppl_contract_op_nmse", "prefix_token_agreement",
+           "ppl_contract_coherence", "ppl_contract_long_canary", "ppl_contract_gate",
+           "cpu_route_witness_quants"]

@@ -1060,6 +1060,12 @@ class AffectedOpAndIndependentReference(unittest.TestCase):
             witness = cpu_route_witness.WITNESSES[route.route]
             self.assertTrue(set(witness.ops) >= set(route.ops) or
                             route.route in ("cpu_graph_sync", "cpu_graph_sched"), route.route)
+            # ppl_contract routes (2026-10-06) are judged by gates.ppl_contract_gate, never
+            # by cpu_quant_reference's scalar fixture (which has no IQ3_S/IQ4_NL/Q6_K/
+            # IQ4_XS case) -- see cpu_route_witness.check's own `!= "quant"` refusal.
+            if route.numerics == "ppl_contract":
+                self.assertEqual(witness.reference, "ppl_contract", route.route)
+                continue
             self.assertTrue(set(witness.quants) <= set(cpu_quant_reference.QUANTS) |
                             set(cpu_quant_reference.FLOAT_TYPES), route.route)
         float_route = cpu_route_witness.WITNESSES["float_tinyblas_plan"]
@@ -1479,3 +1485,377 @@ class TwoTierChampionWiring(unittest.TestCase):
         for field in ("compounded_bench_pct", "fire_threshold_pct", "n_keeps",
                       "progress_fraction", "champion_of_record"):
             self.assertIn(field, acc)
+
+
+_DS41_ANCHOR = Path("/mnt/raid0/llm/llama.cpp-experimental-fastload-ds41-20260925")
+
+
+def _ds41_present():
+    return (_DS41_ANCHOR / "ggml/src/ggml-cpu/ggml-cpu.c").is_file()
+
+
+class TheLowBitRoutesAdmitOnlyTheirOwnBodies(unittest.TestCase):
+    """2026-10-06 low-bit widening (Q38FN seeds 1/3/6): `iqk_iquants_dequant`,
+    `iqk_legacy_iq4nl`, `iqk_type_whitelist`, `cpu_repack_mmid`,
+    `iqk_kquants_q6_iq4xs_dequant` and `iqk_kquants_set_kernels`. Uses the real on-disk
+    DS41 anchor tree (same fixture as `test_route_markers_resolve_once_on_the_ds41_anchor`
+    above) so the admitted line ranges are never a synthetic fiction.
+    """
+
+    @staticmethod
+    def _route(name):
+        return gates.cpu_route_named(name)
+
+    @staticmethod
+    def _edit_line(lines, line_no, old_suffix=";", new_suffix=";  // edited"):
+        """A -U0 hunk editing exactly HEAD line `line_no` (1-based), trailing-safe."""
+        before = lines[line_no - 1]
+        after = before.rstrip("\n") + " /* edited */\n" if before.endswith("\n") else before
+        patch = f"@@ -{line_no} +{line_no} @@\n-{before.rstrip(chr(10))}\n+{after.rstrip(chr(10))}\n"
+        new_lines = list(lines)
+        new_lines[line_no - 1] = after
+        return "".join(new_lines), patch
+
+    def _check(self, route_name, symbol, inside_line, outside_line):
+        if not _ds41_present():
+            self.skipTest("DS41 anchor tree not present")
+        route = self._route(route_name)
+        path = _DS41_ANCHOR / route.path
+        head = path.read_text(encoding="utf-8")
+        lines = head.splitlines(keepends=True)
+        candidate, patch = self._edit_line(lines, inside_line)
+        admitted, refusal = gates.admit_cpu_route(route.path, symbol, candidate, head, patch)
+        self.assertEqual(admitted.route if admitted else None, route_name,
+                         f"{route_name}: inside-body edit at line {inside_line} refused: {refusal}")
+        self.assertIsNone(refusal, f"{route_name}: {refusal}")
+        candidate, patch = self._edit_line(lines, outside_line)
+        admitted, refusal = gates.admit_cpu_route(route.path, symbol, candidate, head, patch)
+        self.assertIsNotNone(refusal,
+                             f"{route_name}: outside-body edit at line {outside_line} "
+                             "was NOT refused")
+
+    def test_iqk_iquants_dequant_admits_the_else_arm_and_refuses_the_fancy_arm(self):
+        if not _ds41_present():
+            self.skipTest("DS41 anchor tree not present")
+        route = self._route("iqk_iquants_dequant")
+        path = _DS41_ANCHOR / route.path
+        head = path.read_text(encoding="utf-8")
+        lines = head.splitlines(keepends=True)
+        # The #else (plain AVX2) IndexHelperIQ3S body is admitted (body_duplicates picks
+        # the LAST occurrence); a line inside the disabled z_HAVE_FANCY_SIMD arm above it
+        # is refused even though it carries the exact same struct name.
+        fancy_start = next(i for i, line in enumerate(lines, 1)
+                          if line.startswith("struct IndexHelperIQ3S {"))
+        fancy_line = fancy_start + 2
+        else_start = next(i for i in range(fancy_start, len(lines) + 1)
+                          if lines[i - 1].rstrip() == "#else")
+        # confirm the fancy struct precedes the #else that opens the admitted arm
+        self.assertLess(fancy_line, else_start)
+        plain_line = else_start + 2  # inside "struct IndexHelperIQ3S {" (else arm) body
+        self._check_lines(route, "IndexHelperIQ3S", head, lines, plain_line, fancy_line)
+        # an edit in the aarch64 arm (far past the fence) is refused too.
+        aarch64 = next(i for i, line in enumerate(lines, 1)
+                       if line.startswith("// ---") and "__aarch64__" in line)
+        candidate, patch = self._edit_line(lines, aarch64 + 5)
+        admitted, refusal = gates.admit_cpu_route(route.path, "IndexHelperIQ3S",
+                                                   candidate, head, patch)
+        self.assertIsNotNone(refusal)
+
+    def _check_lines(self, route, symbol, head, lines, inside_line, outside_line):
+        candidate, patch = self._edit_line(lines, inside_line)
+        admitted, refusal = gates.admit_cpu_route(route.path, symbol, candidate, head, patch)
+        self.assertEqual(admitted.route if admitted else None, route.route,
+                         f"inside-body edit at line {inside_line} refused: {refusal}")
+        self.assertIsNone(refusal)
+        candidate, patch = self._edit_line(lines, outside_line)
+        admitted, refusal = gates.admit_cpu_route(route.path, symbol, candidate, head, patch)
+        self.assertIsNotNone(refusal, f"outside-body edit at line {outside_line} not refused")
+
+    def test_iqk_legacy_iq4nl_admits_its_bodies_and_refuses_the_aarch64_duplicate(self):
+        if not _ds41_present():
+            self.skipTest("DS41 anchor tree not present")
+        route = self._route("iqk_legacy_iq4nl")
+        path = _DS41_ANCHOR / route.path
+        head = path.read_text(encoding="utf-8")
+        lines = head.splitlines(keepends=True)
+        x86_line = next(i for i, line in enumerate(lines, 1)
+                        if line.startswith("bool iqk_set_kernels_legacy_quants(")) + 2
+        aarch64_dupe = next(i for i, line in enumerate(lines, 1)
+                            if line.startswith("bool iqk_set_kernels_legacy_quants(")
+                            and i > x86_line) + 2
+        self._check_lines(route, "iqk_set_kernels_legacy_quants", head, lines,
+                          x86_line, aarch64_dupe)
+
+    def test_iqk_type_whitelist_requires_a_static_assert(self):
+        if not _ds41_present():
+            self.skipTest("DS41 anchor tree not present")
+        route = self._route("iqk_type_whitelist")
+        path = _DS41_ANCHOR / route.path
+        head = path.read_text(encoding="utf-8")
+        lines = head.splitlines(keepends=True)
+        body_line = next(i for i, line in enumerate(lines, 1)
+                         if line.startswith("constexpr bool iqk_typeA_supported(")) + 1
+        # a plain edit inside the body with NO static_assert is refused for that reason
+        before = lines[body_line - 1]
+        after = "    return true; // a new admission without proof\n"
+        candidate_lines = list(lines)
+        candidate_lines[body_line - 1] = after
+        candidate = "".join(candidate_lines)
+        patch = f"@@ -{body_line} +{body_line} @@\n-{before.rstrip(chr(10))}\n+{after.rstrip(chr(10))}\n"
+        refusal = gates._cpu_route_scope_refusal(route, candidate, head, patch)
+        self.assertIsNotNone(refusal)
+        self.assertIn("static_assert", refusal)
+        # the same edit WITH a static_assert elsewhere in the same -U0 patch is admitted
+        patch_with_assert = patch.replace(
+            f"+{after.rstrip(chr(10))}",
+            f"+{after.rstrip(chr(10))}\n+static_assert(iqk_typeA_supported(GGML_TYPE_Q8_0));")
+        self.assertIsNone(gates._cpu_route_scope_refusal(
+            route, candidate, head, patch_with_assert))
+
+    def test_cpu_repack_mmid_admits_its_two_bodies_and_refuses_outside(self):
+        if not _ds41_present():
+            self.skipTest("DS41 anchor tree not present")
+        route = self._route("cpu_repack_mmid")
+        path = _DS41_ANCHOR / route.path
+        head = path.read_text(encoding="utf-8")
+        lines = head.splitlines(keepends=True)
+        inside = next(i for i, line in enumerate(lines, 1)
+                     if line.startswith(
+                         "static const ggml::cpu::tensor_traits * "
+                         "ggml_repack_get_optimal_repack_type(")) + 2
+        outside = 1  # file-scope top, nowhere near either admitted body
+        self._check_lines(route, "ggml_repack_get_optimal_repack_type", head, lines,
+                          inside, outside)
+
+    def test_iqk_kquants_q6_iq4xs_dequant_picks_the_plain_iq4xs_arm(self):
+        if not _ds41_present():
+            self.skipTest("DS41 anchor tree not present")
+        route = self._route("iqk_kquants_q6_iq4xs_dequant")
+        path = _DS41_ANCHOR / route.path
+        head = path.read_text(encoding="utf-8")
+        lines = head.splitlines(keepends=True)
+        occurrences = [i for i, line in enumerate(lines, 1)
+                      if line.startswith("struct DequantizerIQ4XS final")]
+        self.assertGreaterEqual(len(occurrences), 2)
+        fancy_line = occurrences[0] + 2
+        plain_line = occurrences[1] + 2
+        self._check_lines(route, "DequantizerIQ4XS", head, lines, plain_line, fancy_line)
+
+    def test_iqk_kquants_set_kernels_is_separate_from_the_q4_q5_dot_route(self):
+        if not _ds41_present():
+            self.skipTest("DS41 anchor tree not present")
+        route = self._route("iqk_kquants_set_kernels")
+        path = _DS41_ANCHOR / route.path
+        head = path.read_text(encoding="utf-8")
+        lines = head.splitlines(keepends=True)
+        inside = next(i for i, line in enumerate(lines, 1)
+                     if line.startswith("bool iqk_set_kernels_kquants(")) + 2
+        outside = next(i for i, line in enumerate(lines, 1)
+                      if line.startswith("struct DequantizerQ4K_AVX2 final")) + 2
+        self._check_lines(route, "iqk_set_kernels_kquants", head, lines, inside, outside)
+
+
+class ThePplContractGateIsLayeredAndFailsClosed(unittest.TestCase):
+    """2026-10-06 operator amendment: ALL FOUR layers required, fail-closed on any
+    missing/errored layer, and ppl_contract/model_identity are mutually exclusive."""
+
+    @staticmethod
+    def _route(**overrides):
+        base = dict(route="fake_ppl_route", path="x.cpp", symbols=(), bodies=(), ops=(),
+                   numerics="ppl_contract")
+        base.update(overrides)
+        return gates.CpuSourceRoute(**base)
+
+    def _call(self, route=None, **overrides):
+        passing = {
+            "nmse": lambda: gates.Verdict("ppl_contract_nmse", True, "ok"),
+            "ppl": lambda: gates.Verdict("ppl_contract_ppl", True, "ok"),
+            "coherence": lambda: gates.Verdict("ppl_contract_coherence", True, "ok"),
+            "long_canary": lambda: gates.Verdict("ppl_contract_long_canary", True, "ok"),
+        }
+        passing.update(overrides)
+        return gates.ppl_contract_gate(
+            Path("/anchor"), Path("/candidate"), route=route or self._route(),
+            resolved_recipe=None, model=Path("/model.gguf"), threads=48, cpu_list="0-47",
+            env={}, prod_prompts=("hello world",), canary_prompt="hello",
+            log_dir=Path("/tmp/ppl-log"), _layers=passing)
+
+    def test_all_four_layers_passing_passes(self):
+        verdict = self._call()
+        self.assertTrue(verdict.passed)
+        for name in ("nmse", "ppl", "coherence", "long_canary"):
+            self.assertIn(name, verdict.reason)
+
+    def test_each_layer_failing_independently_refuses_the_keep(self):
+        for name in ("nmse", "ppl", "coherence", "long_canary"):
+            verdict = self._call(**{name: lambda n=name: gates.Verdict(
+                f"ppl_contract_{n}", False, f"{n} refused on purpose")})
+            self.assertFalse(verdict.passed, name)
+            self.assertIn(f"{name} refused on purpose", verdict.reason, name)
+
+    def test_a_layer_that_raises_fails_closed_not_open(self):
+        def boom():
+            raise RuntimeError("perplexity binary crashed")
+        verdict = self._call(ppl=boom)
+        self.assertFalse(verdict.passed)
+        self.assertIn("errored", verdict.reason)
+        self.assertIn("perplexity binary crashed", verdict.reason)
+
+    def test_a_layer_returning_none_fails_closed(self):
+        verdict = self._call(coherence=lambda: None)
+        self.assertFalse(verdict.passed)
+        self.assertIn("produced no verdict", verdict.reason)
+
+    def test_bit_exact_route_is_refused_a_ppl_contract_judgement(self):
+        with self.assertRaises(ValueError):
+            self._call(route=self._route(numerics="bit_exact"))
+
+    def test_model_identity_and_ppl_contract_are_mutually_exclusive(self):
+        with self.assertRaises(ValueError):
+            self._call(route=self._route(model_identity=True))
+
+
+class ThePplWikitext2GateComparesAnchorAndCandidate(unittest.TestCase):
+    def test_pass_within_bar_fail_outside_it(self):
+        values = iter([100.0, 100.4])  # anchor, candidate: 0.4% < 0.5% bar
+        verdict = gates.ppl_wikitext2(
+            Path("/anchor"), Path("/candidate"), model=Path("/m.gguf"), threads=48,
+            env={}, cpu_list="0-47", log_dir=Path("/tmp/x"),
+            _run_binary=lambda build: next(values))
+        self.assertTrue(verdict.passed)
+        values = iter([100.0, 101.0])  # 1.0% > 0.5% bar
+        verdict = gates.ppl_wikitext2(
+            Path("/anchor"), Path("/candidate"), model=Path("/m.gguf"), threads=48,
+            env={}, cpu_list="0-47", log_dir=Path("/tmp/x"),
+            _run_binary=lambda build: next(values))
+        self.assertFalse(verdict.passed)
+
+    def test_a_missing_final_estimate_refuses_rather_than_crashing(self):
+        verdict = gates.ppl_wikitext2(
+            Path("/anchor"), Path("/candidate"), model=Path("/m.gguf"), threads=48,
+            env={}, cpu_list="0-47", log_dir=Path("/tmp/x"),
+            _run_binary=lambda build: None)
+        self.assertFalse(verdict.passed)
+
+
+class PrefixTokenAgreementIsASafeFloorCheck(unittest.TestCase):
+    def test_identical_text_agrees_fully(self):
+        ratio, first = gates.prefix_token_agreement("one two three", "one two three")
+        self.assertEqual(ratio, 1.0)
+        self.assertIsNone(first)
+
+    def test_divergence_partway_through(self):
+        ratio, first = gates.prefix_token_agreement("one two THREE four", "one two three four")
+        self.assertEqual(first, 2)
+        self.assertAlmostEqual(ratio, 2 / 4)
+
+    def test_empty_both_sides_agrees_vacuously(self):
+        ratio, first = gates.prefix_token_agreement("", "")
+        self.assertEqual(ratio, 1.0)
+
+    def test_one_side_empty_disagrees(self):
+        ratio, _first = gates.prefix_token_agreement("", "some text")
+        self.assertEqual(ratio, 0.0)
+
+
+class ThePplContractLongCanaryCatchesDegenerateLoops(unittest.TestCase):
+    def test_healthy_generation_passes(self):
+        text = " ".join(f"word{i}" for i in range(gates.PPL_CONTRACT_CANARY_TOKENS))
+        verdict = gates.ppl_contract_long_canary(
+            Path("/candidate"), model=Path("/m.gguf"), prompt="go",
+            env={}, cpu_list="0-47", log_dir=Path("/tmp/x"),
+            _generate=lambda build, prompt, count: text)
+        self.assertTrue(verdict.passed)
+
+    def test_a_degenerate_repeat_loop_is_refused(self):
+        text = " ".join(["loop"] * gates.PPL_CONTRACT_CANARY_TOKENS)
+        verdict = gates.ppl_contract_long_canary(
+            Path("/candidate"), model=Path("/m.gguf"), prompt="go",
+            env={}, cpu_list="0-47", log_dir=Path("/tmp/x"),
+            _generate=lambda build, prompt, count: text)
+        self.assertFalse(verdict.passed)
+        self.assertIn("exact-repeat run", verdict.reason)
+
+    def test_a_truncated_generation_is_refused(self):
+        text = "word " * 10  # far short of the requested canary length
+        verdict = gates.ppl_contract_long_canary(
+            Path("/candidate"), model=Path("/m.gguf"), prompt="go",
+            env={}, cpu_list="0-47", log_dir=Path("/tmp/x"),
+            _generate=lambda build, prompt, count: text)
+        self.assertFalse(verdict.passed)
+
+    def test_requesting_fewer_than_the_canary_floor_is_refused_by_construction(self):
+        with self.assertRaises(ValueError):
+            gates.ppl_contract_long_canary(
+                Path("/candidate"), model=Path("/m.gguf"), prompt="go", env={},
+                cpu_list="0-47", log_dir=Path("/tmp/x"), n_predict=10,
+                _generate=lambda build, prompt, count: "irrelevant")
+
+
+class ThePplContractCoherenceLayerComparesFreshGenerations(unittest.TestCase):
+    def test_full_agreement_on_every_prompt_passes(self):
+        verdict = gates.ppl_contract_coherence(
+            Path("/anchor"), Path("/candidate"), model=Path("/m.gguf"),
+            prompts=("prompt one", "prompt two"), n_predict=64, env={}, cpu_list="0-47",
+            log_dir=Path("/tmp/x"),
+            _generate=lambda build, prompt: "same output every time")
+        self.assertTrue(verdict.passed)
+
+    def test_divergent_output_on_one_prompt_refuses(self):
+        def generate(build, prompt):
+            if "anchor" in str(build):
+                return "a b c d e"
+            return "a b X d e"
+        verdict = gates.ppl_contract_coherence(
+            Path("/anchor"), Path("/candidate"), model=Path("/m.gguf"),
+            prompts=("only prompt",), n_predict=64, env={}, cpu_list="0-47",
+            log_dir=Path("/tmp/x"), _generate=generate)
+        self.assertFalse(verdict.passed)
+
+    def test_a_generation_failure_on_either_build_refuses(self):
+        verdict = gates.ppl_contract_coherence(
+            Path("/anchor"), Path("/candidate"), model=Path("/m.gguf"),
+            prompts=("only prompt",), n_predict=64, env={}, cpu_list="0-47",
+            log_dir=Path("/tmp/x"), _generate=lambda build, prompt: None)
+        self.assertFalse(verdict.passed)
+
+    def test_no_prompts_supplied_refuses_rather_than_vacuously_passing(self):
+        verdict = gates.ppl_contract_coherence(
+            Path("/anchor"), Path("/candidate"), model=Path("/m.gguf"),
+            prompts=(), n_predict=64, env={}, cpu_list="0-47",
+            log_dir=Path("/tmp/x"), _generate=lambda build, prompt: "text")
+        self.assertFalse(verdict.passed)
+
+
+class ThePplContractOpNmseLayerScopesToServedShapes(unittest.TestCase):
+    def test_filters_to_the_routes_quants_and_served_widths(self):
+        calls = []
+
+        def fake_op_correctness(build_dir, *, op, backend, resolved_recipe, params_filter):
+            calls.append((op, params_filter))
+            return gates.Verdict("correctness", True)
+
+        verdict = gates.ppl_contract_op_nmse(
+            Path("/candidate"), resolved_recipe=None, quants=("IQ3_S",),
+            ops=("MUL_MAT",), _op_correctness=fake_op_correctness)
+        self.assertTrue(verdict.passed)
+        self.assertEqual(len(calls), 1)
+        op, params_filter = calls[0]
+        self.assertEqual(op, "MUL_MAT")
+        self.assertIn("iq3_s", params_filter)
+        for width in gates.PPL_CONTRACT_SERVED_WIDTHS:
+            self.assertIn(str(width), params_filter)
+
+    def test_a_failing_shape_refuses_without_running_the_remaining_ops(self):
+        calls = []
+
+        def fake_op_correctness(build_dir, *, op, backend, resolved_recipe, params_filter):
+            calls.append(op)
+            return gates.Verdict("correctness", op == "MUL_MAT",
+                                 "served-shape case failed" if op != "MUL_MAT" else "")
+
+        verdict = gates.ppl_contract_op_nmse(
+            Path("/candidate"), resolved_recipe=None, quants=("IQ4_NL",),
+            ops=("MUL_MAT", "MUL_MAT_ID"), _op_correctness=fake_op_correctness)
+        self.assertFalse(verdict.passed)
+        self.assertEqual(calls, ["MUL_MAT", "MUL_MAT_ID"])

@@ -103,7 +103,14 @@ def test_fa_body_markers_resolve_once_on_both_trees():
 
 def test_existing_routes_are_unaffected():
     names = [r.route for r in gates.CPU_SOURCE_ROUTES]
+    # 2026-10-06: the six low-bit ppl_contract routes land right after
+    # iqk_dense_dispatch (their natural neighbour: iqk_type_whitelist shares its
+    # dispatch boundary, the rest share its iqk/ directory); every PRE-EXISTING
+    # route keeps its own relative order around them, which is what this test guards.
     assert names[:-1] == ["dense_q8_tinyblas", "iqk_mmid_dispatch", "iqk_dense_dispatch",
+                          "iqk_iquants_dequant", "iqk_legacy_iq4nl", "iqk_type_whitelist",
+                          "cpu_repack_mmid", "iqk_kquants_q6_iq4xs_dequant",
+                          "iqk_kquants_set_kernels",
                           "cpu_graph_sync", "cpu_graph_sched", "float_tinyblas_plan",
                           "cpu_norm_rowsplit", "cpu_norm_numerics", "cpu_mul_mat_body",
                           "cpu_weight_placement"]

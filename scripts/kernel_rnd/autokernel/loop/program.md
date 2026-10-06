@@ -164,6 +164,35 @@ class, or before the disabled-build stub.
   - **Reference:** scalar Q4_K/Q5_K/Q8_0 at widths 1–8, plus a GDB entry hit and the
     dense ACTIVE marker. Routing Q8_0 into iqk changes the activation quantization.
     The outputs are therefore not bit-identical to tinyBLAS: say so and price it.
+- **2026-10-06 low-bit routes** (operator: "WE MUST improve lower quant performance").
+  Numerics: `ppl_contract`, never bit-exact -- judged by `gates.ppl_contract_gate`'s
+  four layers (op NMSE on served shapes, wikitext2 |delta ppl| <= 0.5%,
+  production-length coherence/agreement, a >=1024-token repetition canary), ALL
+  required, fail-closed, NEVER folded on bench evidence alone. Every file below has an
+  x86_64 implementation above a top-level `#else` / `__aarch64__` arm redefining
+  several of the same symbols; every route's window ends before that arm.
+  - **`iqk_iquants_dequant`**: `ggml/src/ggml-cpu/iqk/iqk_gemm_iquants.cpp`, target
+    `IndexHelperIQ3S`, `DequantizerIQ3S`, `EvenSignHelper`,
+    `mul_mat_qX_K_q8_K_IQ_1`/`_IQ_N` or `iqk_set_kernels_iquants` (Q38FN seed 1).
+    `IndexHelperIQ3S` is defined twice (a disabled `z_HAVE_FANCY_SIMD` arm and its
+    `#else`); the `#else` (last in source order) is the one admitted.
+  - **`iqk_legacy_iq4nl`**: `ggml/src/ggml-cpu/iqk/iqk_gemm_legacy_quants.cpp`, target
+    the IQ4_NL dequantizers/unpackers or `iqk_set_kernels_legacy_quants` (Q38FN seed 3).
+  - **`iqk_type_whitelist`**: `ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp`, target
+    `iqk_typeA_supported`, `iqk_weight_uses_q8_k` or `iqk_mmid_shape_supported` (Q38FN
+    seed 3). The three constexpr whitelists a type must clear to reach `iqk_dense_dispatch`/
+    `iqk_mmid_dispatch` at all; every admission needs a matching `static_assert`.
+  - **`cpu_repack_mmid`**: `ggml/src/ggml-cpu/repack.cpp`, target
+    `ggml_repack_get_optimal_repack_type` or `forward_mul_mat_id` (Q38FN seed 3). A type
+    admitted into iqk by `iqk_type_whitelist` still needs repack to release it here, or
+    it falls back to the generic un-repacked path.
+  - **`iqk_kquants_q6_iq4xs_dequant`** / **`iqk_kquants_set_kernels`**: both
+    `ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp` (Q38FN seed 6). The first widens the
+    existing Q4_K/Q5_K dot admission to `DequantizerQ6K_AVX2`'s own kernel body
+    (`mul_mat_qY_K_q8_2_X4_T`, a different template than Q4/Q5's, so it cannot collide
+    with that route) and `DequantizerIQ4XS` (also duplicated under `HAVE_FANCY_SIMD`/
+    `#else`, same last-occurrence rule as `IndexHelperIQ3S`); the second is the
+    type-dispatch switch, `iqk_set_kernels_kquants`, a separate body entirely.
 - **`float_tinyblas_plan`**: `ggml/src/ggml-cpu/llamafile/sgemm.cpp`, target `tinyBLAS`
   or `matmul` (class-qualified names resolve to the class they name).
   - **Scope:** only the `matmul` body of the float `class tinyBLAS` (F32/F16/BF16): the

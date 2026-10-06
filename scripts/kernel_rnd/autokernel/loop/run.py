@@ -3516,12 +3516,40 @@ def main(argv: list[str] | None = None) -> int:
                 witness = (cpu_route_witness.WITNESSES.get(admitted_route.route)
                            if admitted_route is not None else None)
                 if witness is None or witness.reference not in ("model_identity",
-                                                                 "fa_anchor_bits"):
+                                                                 "fa_anchor_bits",
+                                                                 "ppl_contract"):
                     route_references.append(lambda arm: gates.check_cpu_route_reference(
                         worker.build_dir, worker.worktree, resolved_recipe=arm,
                         path=changed[0] if route_edit else hypothesis.target_surface,
                         target_symbol=hypothesis.target_symbol,
                         route_name=admitted_route.route if admitted_route is not None else None))
+                if (admitted_route is not None and admitted_route.numerics == "ppl_contract"):
+                    # 2026-10-06 operator amendment: a ppl_contract route NEVER folds on
+                    # bench evidence alone. This is a `route_references` entry -- a
+                    # BLOCKING pre-keep check exactly like every other route reference --
+                    # so the four layers in `gates.ppl_contract_gate` refuse the keep
+                    # outright before any `pool.advance_champion`, never after.
+                    #
+                    # PRODUCTION-LENGTH PROMPTS: the frozen-request manifest's own
+                    # prompts are the short (~102-token) probe this amendment explicitly
+                    # distinguishes from. Until the lane owner supplies a genuine
+                    # production-length corpus (a DATA decision, not a code one), the
+                    # longest available frozen prompt stands in, scoped to exactly ONE
+                    # prompt so a thin stand-in fails loudly (low agreement ratio, not a
+                    # false pass) rather than quietly asserting coverage it lacks.
+                    from ..execution.cpu_region_claim import parse_cpu_list as _parse_cpu_list
+                    _prod_prompts = tuple(
+                        p for p in (getattr(request, "prompt", None)
+                                    for request in (frozen_requests or ())) if p)
+                    _prod_prompts = (max(_prod_prompts, key=len),) if _prod_prompts else ()
+                    route_references.append(lambda arm: gates.ppl_contract_gate(
+                        anchor_build[0], worker.build_dir, route=admitted_route,
+                        resolved_recipe=arm, model=args.model,
+                        threads=len(_parse_cpu_list(build_cpu_list)), cpu_list=build_cpu_list,
+                        env=dict(arm.launch_env), prod_prompts=_prod_prompts,
+                        canary_prompt=(_prod_prompts[0] if _prod_prompts else
+                                      "Once upon a time"),
+                        log_dir=Path(args.store) / "ppl_contract" / admitted_route.route))
                 if witness is not None and witness.reference == "fa_anchor_bits":
                     # cpu_fa_schedule (audit 2026-10-04 C2/C3): the case-set corpus, bit
                     # identity with the ANCHOR build, then the paired FA perf screen
