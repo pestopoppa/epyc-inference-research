@@ -161,6 +161,31 @@ def test_an_anchor_at_or_above_the_cap_refuses_to_bake(tmp_path):
     assert not (tmp_path / "s" / "served_shape" / "manifest.json").exists()
 
 
+def test_an_existing_record_applies_under_the_new_policy_and_anchor_relative_opt_in(tmp_path):
+    """Operator 2026-10-06: a record measured before the policy change applies via
+    --measurements (lane/launch/binary validated); cases whose anchor is >= the generic
+    bound refuse by default and are held anchor-relative only when asked."""
+    lock, launch, store = _fake_region_lock(tmp_path), _launch(tmp_path), tmp_path / "s"
+    build = _fake_build(tmp_path, values={3: 2e-4, 5: 5.25e-4})
+    assert _run("--store", store, "--anchor-build", build, "--launch", launch,
+                "--region-lock", lock, "--execute", "--lane", "q38fn")[0] == 0
+    record = next((store / "served_shape").glob("calibration-*.json"))
+    base = ("--store", store, "--measurements", record, "--launch", launch, "--lane", "q38fn",
+            "--region-lock", lock, "--apply")
+    rc, out = _run(*base)
+    assert rc == 2 and "anchor-relative" in out
+    assert not (store / "served_shape" / "manifest.json").exists()
+    rc, out = _run(*base, "--anchor-exceeds-generic", "anchor-relative")
+    assert rc == 0, out
+    cases = ssc.load_manifest(store / "served_shape" / "manifest.json")
+    triples = ssc.calibration_triples("q38fn")
+    by_key = {(c.shape.name, c.type_a, c.n): c.max_nmse for c in cases}
+    over = (triples[5][0].name, triples[5][1], triples[5][2])
+    tight = (triples[3][0].name, triples[3][1], triples[3][2])
+    assert by_key[over] > ssc.SERVED_SHAPE_NMSE_CAP     # anchor-relative, recorded
+    assert by_key[tight] == ssc.SERVED_SHAPE_NMSE_CAP   # min(3 x 2e-4, 5e-4)
+
+
 def test_refuses_while_the_loop_owning_the_store_is_alive(tmp_path):
     store = tmp_path / "s"
     status.write_json(store, status.STATUS_FILENAME, {

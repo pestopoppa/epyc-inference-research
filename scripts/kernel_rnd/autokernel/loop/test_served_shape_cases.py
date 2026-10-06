@@ -78,17 +78,44 @@ def test_shape_constructor_refuses_malformed_moe_fields():
 
 def test_tightened_bound_scales_caps_and_floors():
     assert ssc.tightened_nmse_bound(1e-6, factor=3.0) == pytest.approx(3e-6)
-    # Capped well below the generic 5e-4 bound, never above it...
-    assert ssc.tightened_nmse_bound(5e-5, factor=3.0) == ssc.SERVED_SHAPE_NMSE_CAP
-    # ...but an anchor already at/above the cap is REFUSED, never clipped below its
-    # own error (re-review 2026-10-06).
+    # Operator 2026-10-06: the cap is the generic test-backend-ops bound (5e-4); tight
+    # wherever the anchor is accurate, never looser than the generic check...
+    assert ssc.SERVED_SHAPE_NMSE_CAP == 5e-4
+    assert ssc.tightened_nmse_bound(1e-4, factor=3.0) == pytest.approx(3e-4)
+    assert ssc.tightened_nmse_bound(2e-4, factor=3.0) == ssc.SERVED_SHAPE_NMSE_CAP
+    # ...an anchor already at/above it is REFUSED by default, never clipped below its
+    # own error...
     with pytest.raises(ValueError, match="do not clip"):
         ssc.tightened_nmse_bound(1.0, factor=3.0)
     with pytest.raises(ValueError):
         ssc.tightened_nmse_bound(ssc.SERVED_SHAPE_NMSE_CAP)
-    assert ssc.SERVED_SHAPE_NMSE_CAP < 5e-4
+    # ...or, as an explicit choice, held to factor x the anchor (still checked).
+    assert ssc.tightened_nmse_bound(5.25e-4, anchor_relative=True) == pytest.approx(1.575e-3)
     # A measured-zero anchor NMSE must not produce a zero bound.
     assert ssc.tightened_nmse_bound(0.0) == ssc.SERVED_SHAPE_NMSE_FLOOR
+
+
+def test_anchor_relative_cases_are_recorded_and_only_they_may_exceed_the_cap(tmp_path):
+    import json
+    anchor = dict(ANCHOR_NMSE)
+    key = ("ds41_shexp_down", "IQ3_XXS", 5)
+    assert key in anchor
+    anchor[key] = 5.25e-4
+    with pytest.raises(ValueError):
+        ssc.case_set(anchor)
+    over = ssc.anchor_exceeds_generic(anchor)
+    assert over == {key}
+    cases = ssc.case_set(anchor, anchor_relative_keys=over)
+    bound = next(c.max_nmse for c in cases if (c.shape.name, c.type_a, c.n) == key)
+    assert bound == pytest.approx(1.575e-3)
+    path = tmp_path / "manifest.json"
+    ssc.write_manifest(path, cases, anchor_relative_keys=over)
+    assert ssc.load_manifest(path) == cases
+    body = json.loads(path.read_text())
+    body["anchor_relative"] = []
+    path.write_text(json.dumps(body))
+    with pytest.raises(ssc.ManifestRefused):
+        ssc.load_manifest(path)   # an unrecorded case above the cap refuses
 
 
 def test_tightened_bound_refuses_bad_inputs():

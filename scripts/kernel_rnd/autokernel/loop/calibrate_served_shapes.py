@@ -332,18 +332,30 @@ def load_measurements(path: Path) -> dict:
 
 
 def apply(measurements: dict, store: Path, tree: "Path | None", lane: str,
-          out=sys.stdout) -> None:
+          out=sys.stdout, anchor_exceeds_generic: str = "refuse") -> None:
+    over = ssc.anchor_exceeds_generic(measurements)
+    relative = over if anchor_exceeds_generic == "anchor-relative" else frozenset()
+    if over:
+        print(f"anchor    {len(over)} case(s) where the ANCHOR's NMSE is >= the generic "
+              f"bound {ssc.SERVED_SHAPE_NMSE_CAP}: "
+              + ", ".join(f"{k[0]}/{k[1]}/n={k[2]}={measurements[k]:.3g}"
+                          for k in sorted(over))
+              + (" -> held anchor-relative (factor x anchor)" if relative
+                 else " -> refusing (pass --anchor-exceeds-generic anchor-relative to "
+                      "hold them to factor x the anchor instead)"), file=out)
     try:
-        cases = ssc.case_set(measurements)
-        routed = ssc.case_set(measurements, routed=True, lane=lane)
+        cases = ssc.case_set(measurements, anchor_relative_keys=relative)
+        routed = ssc.case_set(measurements, routed=True, lane=lane,
+                              anchor_relative_keys=relative)
     except (KeyError, ValueError) as exc:
         raise Refused(f"calibration cannot be baked: {exc}") from exc
     folder = Path(store) / "served_shape"
     folder.mkdir(parents=True, exist_ok=True)
     block = ssc.backend_ops_patch_block(cases, routed)
     (folder / "patch.cpp").write_text(block, encoding="utf-8")
-    ssc.write_manifest(folder / "manifest.json", cases)
-    ssc.write_manifest(folder / "manifest-routed.json", routed, routed=True, lane=lane)
+    ssc.write_manifest(folder / "manifest.json", cases, anchor_relative_keys=relative)
+    ssc.write_manifest(folder / "manifest-routed.json", routed, routed=True, lane=lane,
+                       anchor_relative_keys=relative)
     print(f"apply     manifest {folder / 'manifest.json'} ({len(cases)} cases), routed "
           f"manifest ({len(routed)} cases), patch {folder / 'patch.cpp'}", file=out)
     if tree is not None:
@@ -366,6 +378,10 @@ def main(argv: "list[str] | None" = None, out=sys.stdout) -> int:
     parser.add_argument("--threads", type=int)
     parser.add_argument("--region-lock", default=REGION_LOCK)
     parser.add_argument("--measurements", type=Path)
+    parser.add_argument("--anchor-exceeds-generic", choices=("refuse", "anchor-relative"),
+                        default="refuse",
+                        help="cases where the anchor's own NMSE is >= the generic 5e-4 bound: "
+                             "refuse to bake (default) or hold them to factor x the anchor")
     parser.add_argument("--lane", choices=sorted(ssc.LANE_PROFILES),
                         help="the lane whose GGUF MoE profile the routed corpus derives from")
     parser.add_argument("--launch", type=Path,
@@ -438,7 +454,8 @@ def main(argv: "list[str] | None" = None, out=sys.stdout) -> int:
         if args.apply:
             if measurements is None:
                 raise Refused("--apply needs --execute or --measurements")
-            apply(measurements, args.store, args.tree, args.lane, out=out)
+            apply(measurements, args.store, args.tree, args.lane, out=out,
+                  anchor_exceeds_generic=args.anchor_exceeds_generic)
             return 0
         if not mutating:
             ready = (args.anchor_build is not None

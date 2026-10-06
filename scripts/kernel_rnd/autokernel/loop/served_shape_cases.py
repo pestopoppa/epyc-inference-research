@@ -52,7 +52,7 @@ it, instead of the flat constant. The bound is never invented here: callers MUST
 supply the anchor's OWN measured NMSE on that exact shape/type (the independent
 `use_ref=true` native-CPU reference run on the anchor build), and
 `tightened_nmse_bound` is only the FORMULA -- anchor NMSE times a small safety
-factor, hard-capped at `SERVED_SHAPE_NMSE_CAP` (well below the generic 5e-4) and
+factor, capped at `SERVED_SHAPE_NMSE_CAP` (the generic test-backend-ops 5e-4) and
 floored at `SERVED_SHAPE_NMSE_FLOOR` so a near-zero anchor measurement (quantization
 noise can read as 0.0 in a tiny sample) never produces a bound so tight it refuses
 numerically-legitimate rounding. `backend_ops_patch_block` REFUSES (raises) to emit a
@@ -106,9 +106,12 @@ ROUTED_MANIFEST_SCHEMA = "epyc.autokernel.served_shape_routed_manifest.v1"
 BACKEND_THREADS_ENV = "AUTOKERNEL_BACKEND_THREADS"
 CASE_SET_ENV = "AUTOKERNEL_CORRECTNESS_CASE_SET"
 
-#: Well below the generic sweep's flat 5e-4 bound: a "tightened" bound that could
-#: reach 5e-4 would not be a tightening of the existing correctness floor at all.
-SERVED_SHAPE_NMSE_CAP = 1e-4
+#: Operator 2026-10-06 (after the first real calibration): the cap is the generic
+#: test-backend-ops MUL_MAT/MUL_MAT_ID bound, 5e-4. The per-case bound stays TIGHT
+#: wherever the anchor is accurate (anchor x factor, floored); the cap only stops it
+#: from ever being looser than the generic check. (1e-4 refused 12 IQ3_XXS shared-
+#: expert cases whose anchor itself measured 2e-4 .. 5.25e-4.)
+SERVED_SHAPE_NMSE_CAP = 5e-4
 #: A measured-zero anchor NMSE (quantization noise reading as exactly 0.0 in a small
 #: sample) must not produce a bound of 0.0, which would refuse every candidate
 #: including a bit-identical one to floating-point noise.
@@ -319,7 +322,8 @@ def moe_profile_from_gguf(paths, lane: str, *,
                       extra_types=known.extra_types if known else ())
 
 
-def tightened_nmse_bound(anchor_nmse: float, *, factor: float = 3.0) -> float:
+def tightened_nmse_bound(anchor_nmse: float, *, factor: float = 3.0,
+                         anchor_relative: bool = False) -> float:
     """anchor NMSE * `factor`, capped at `SERVED_SHAPE_NMSE_CAP`, floored at
     `SERVED_SHAPE_NMSE_FLOOR`. Raises on a negative/non-finite input: a bound must
     never be derived from a measurement that cannot itself be trusted."""
@@ -327,15 +331,19 @@ def tightened_nmse_bound(anchor_nmse: float, *, factor: float = 3.0) -> float:
             or anchor_nmse != anchor_nmse or anchor_nmse in (float("inf"), float("-inf")) \
             or anchor_nmse < 0:
         raise ValueError(f"anchor_nmse must be a finite non-negative number, got {anchor_nmse!r}")
-    if anchor_nmse >= SERVED_SHAPE_NMSE_CAP:
-        # Re-review 2026-10-06: clipping would yield a bound BELOW the anchor's own
-        # error, refusing an unchanged correct kernel. Incompatible calibration is
-        # refused explicitly instead.
-        raise ValueError(f"anchor_nmse {anchor_nmse!r} is at or above the cap "
-                         f"{SERVED_SHAPE_NMSE_CAP}; this shape/type cannot be bound "
-                         "tighter than the generic sweep -- investigate, do not clip")
     if not isinstance(factor, (int, float)) or isinstance(factor, bool) or factor <= 0:
         raise ValueError(f"factor must be a positive number, got {factor!r}")
+    if anchor_nmse >= SERVED_SHAPE_NMSE_CAP:
+        # The anchor itself fails the generic bound on this case. Clipping would set a
+        # bound BELOW the anchor's own error (refusing an unchanged correct kernel), so
+        # by default this refuses. `anchor_relative=True` (an explicit, recorded
+        # operator choice) instead holds the candidate to "no worse than factor x the
+        # anchor" on this case -- looser than the generic bound, but never unchecked.
+        if not anchor_relative:
+            raise ValueError(f"anchor_nmse {anchor_nmse!r} is at or above the generic "
+                             f"bound {SERVED_SHAPE_NMSE_CAP}: the anchor itself fails "
+                             "the generic check here -- investigate, do not clip")
+        return anchor_nmse * factor
     return min(SERVED_SHAPE_NMSE_CAP, max(SERVED_SHAPE_NMSE_FLOOR, anchor_nmse * factor))
 
 
@@ -385,6 +393,14 @@ class ServedShapeCase:
                 f"{self.max_nmse:g}));")
 
 
+def anchor_exceeds_generic(anchor_nmse_by_shape: Mapping[tuple[str, str, int], float]
+                           ) -> frozenset:
+    """The measured (shape, type, width) keys whose ANCHOR NMSE is at/above the generic
+    bound -- the cases `--anchor-exceeds-generic anchor-relative` holds anchor-relative."""
+    return frozenset(key for key, value in anchor_nmse_by_shape.items()
+                     if value >= SERVED_SHAPE_NMSE_CAP)
+
+
 def corpus(routed: bool = False, lane: "str | None" = None):
     """(shapes, types, widths) of the candidate corpus or a lane's bundle-tier routed one."""
     if routed:
@@ -396,7 +412,8 @@ def corpus(routed: bool = False, lane: "str | None" = None):
 
 def case_set(anchor_nmse_by_shape: Mapping[tuple[str, str, int], float], *,
             factor: float = 3.0, routed: bool = False,
-            lane: "str | None" = None) -> tuple[ServedShapeCase, ...]:
+            lane: "str | None" = None,
+            anchor_relative_keys=frozenset()) -> tuple[ServedShapeCase, ...]:
     """Every `(ServedShape, type, width)` case, bound from `anchor_nmse_by_shape`
     keyed `(shape.name, type_a, n)` -- the independent reference run's measured NMSE on
     the anchor build at that exact shape, type AND width (re-review 2026-10-06: one
@@ -409,7 +426,8 @@ def case_set(anchor_nmse_by_shape: Mapping[tuple[str, str, int], float], *,
         if key not in anchor_nmse_by_shape:
             raise KeyError(f"no anchor NMSE measurement for {key}; refusing to "
                            "bake a served-shape case with a guessed bound")
-        bound = tightened_nmse_bound(anchor_nmse_by_shape[key], factor=factor)
+        bound = tightened_nmse_bound(anchor_nmse_by_shape[key], factor=factor,
+                                     anchor_relative=key in anchor_relative_keys)
         cases.append(ServedShapeCase(shape, type_a, width, bound))
     return tuple(cases)
 
@@ -781,7 +799,8 @@ _SHAPES_BY_NAME: dict[str, ServedShape] = {shape.name: shape for shape in SERVED
 
 
 def write_manifest(path: Path, cases: tuple[ServedShapeCase, ...], *,
-                   routed: bool = False, lane: "str | None" = None) -> None:
+                   routed: bool = False, lane: "str | None" = None,
+                   anchor_relative_keys=frozenset()) -> None:
     """Persist the EXACT baked case set (with its anchor-derived `max_nmse` bounds)
     beside the applied llama-tree patch, so a later gate run reads what was actually
     compiled in rather than recomputing (and potentially drifting from) it."""
@@ -793,6 +812,8 @@ def write_manifest(path: Path, cases: tuple[ServedShapeCase, ...], *,
         if lane not in LANE_PROFILES:
             raise ValueError(f"a routed manifest needs a known lane, got {lane!r}")
         body["lane"] = lane
+    own = {(c.shape.name, c.type_a, c.n) for c in cases}
+    body["anchor_relative"] = sorted(list(k) for k in anchor_relative_keys if tuple(k) in own)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".{path.name}.tmp")
     tmp.write_text(json.dumps(body, indent=2, sort_keys=True), encoding="utf-8")
@@ -833,6 +854,11 @@ def load_manifest(path: Path, *, routed: bool = False,
             or body.get("case_set_id") != set_id or not isinstance(body.get("cases"), list) \
             or not body["cases"]:
         raise ManifestRefused(f"{path}: served-shape manifest has the wrong shape or schema")
+    recorded = body.get("anchor_relative", [])
+    if not isinstance(recorded, list) or not all(
+            isinstance(k, list) and len(k) == 3 for k in recorded):
+        raise ManifestRefused(f"{path}: malformed anchor_relative list")
+    anchor_relative = {tuple(k) for k in recorded}
     cases: list[ServedShapeCase] = []
     for row in body["cases"]:
         if not isinstance(row, dict) or set(row) != {"shape_name", "type_a", "n", "max_nmse"}:
@@ -846,10 +872,16 @@ def load_manifest(path: Path, *, routed: bool = False,
         if row["n"] not in widths:
             raise ManifestRefused(f"{path}: n={row['n']!r} is not a served width")
         max_nmse = row["max_nmse"]
+        key = (row["shape_name"], row["type_a"], row["n"])
+        # Above the generic bound only for a case the calibration RECORDED as
+        # anchor-relative (the anchor itself measured >= the generic bound there).
+        limit = (SERVED_SHAPE_NMSE_CAP * 1000 if key in anchor_relative
+                 else SERVED_SHAPE_NMSE_CAP)
         if not isinstance(max_nmse, (int, float)) or isinstance(max_nmse, bool) \
-                or not (0 < max_nmse <= SERVED_SHAPE_NMSE_CAP):
+                or not (0 < max_nmse <= limit) \
+                or (key in anchor_relative and max_nmse <= SERVED_SHAPE_NMSE_CAP):
             raise ManifestRefused(f"{path}: max_nmse={max_nmse!r} is out of bounds "
-                                  f"(0, {SERVED_SHAPE_NMSE_CAP}]")
+                                  f"(0, {SERVED_SHAPE_NMSE_CAP}] for {key}")
         cases.append(ServedShapeCase(shape, row["type_a"], row["n"], float(max_nmse)))
     # Re-review 2026-10-06: exact canonical SET equality, duplicates refused -- a row
     # count alone accepted 180 copies of one case.
@@ -875,5 +907,5 @@ __all__ = ["CASE_SET_ENV", "CASE_SET_ID", "MANIFEST_SCHEMA", "ManifestRefused",
            "binary_has_calibration", "ROUTED_CASE_SET_ID", "routed_shapes",
            "routed_types", "ROUTED_WIDTHS", "LANE_PROFILES", "MoeProfile", "route_ids",
            "candidate_experts", "lane_for_model", "moe_profile_from_gguf", "BLOCK_SIZE",
-           "type_fits", "BACKEND_THREADS_ENV", "corpus",
+           "type_fits", "anchor_exceeds_generic", "BACKEND_THREADS_ENV", "corpus",
            "calibration_triples", "binary_has_routed_case_set", "THREADS_PATCHED"]
