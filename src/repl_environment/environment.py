@@ -196,6 +196,11 @@ class REPLEnvironment(
         self.role = role or "worker_general"  # Default to restricted role
         self.tool_context = tool_context or {}
 
+        # A timed-out REPL request may leave its worker thread running. Keep
+        # this environment terminal so its late mutations cannot be executed
+        # again or checkpointed as a completed turn.
+        self._timeout_terminal = False
+
         # MemRL components for routing-aware functions (recall, route_advice)
         self._retriever = retriever
         self._hybrid_router = hybrid_router
@@ -308,6 +313,31 @@ class REPLEnvironment(
             assert hasattr(self, attr), (
                 f"Mixin contract violated: missing required attribute '{attr}'"
             )
+
+    @property
+    def timed_out(self) -> bool:
+        """Whether execution timed out and this environment is terminal."""
+        return self._timeout_terminal
+
+    @property
+    def timeout_error(self) -> str:
+        """Canonical user-facing error for this environment's timeout."""
+        return f"REPLTimeout: Execution timed out after {self.config.timeout_seconds}s"
+
+    def mark_timed_out(self) -> str:
+        """Make timeout terminal for this environment and return its error."""
+        self._timeout_terminal = True
+        return self.timeout_error
+
+    def _timeout_result(self, start_time: float) -> ExecutionResult:
+        import time
+
+        return ExecutionResult(
+            output="",
+            is_final=False,
+            error=self.timeout_error,
+            elapsed_seconds=time.perf_counter() - start_time,
+        )
 
     # Modules safe for import inside the REPL sandbox.  These are
     # pure-computation or data-structure libraries — no filesystem,
@@ -862,6 +892,9 @@ class REPLEnvironment(
         import re
         import time
 
+        if self.timed_out:
+            return self._timeout_result(start_time)
+
         code = sanitize_code_unicode(code)
 
         # Validate code for dangerous patterns first
@@ -1172,6 +1205,9 @@ class REPLEnvironment(
                 )
 
             except Exception as e:
+                if isinstance(e, REPLTimeout):
+                    self.mark_timed_out()
+                    return self._timeout_result(start_time)
                 hint = self._tool_hint_if_relevant(code, e)
                 return ExecutionResult(
                     output=self._bundle_cap_output(stdout_capture.getvalue()),
@@ -1405,6 +1441,9 @@ class REPLEnvironment(
         """
         import time
 
+        if self.timed_out:
+            return self._timeout_result(time.perf_counter())
+
         self._execution_count += 1
         start_time = time.perf_counter()
         self._bundle_begin_turn()
@@ -1502,6 +1541,9 @@ class REPLEnvironment(
                 )
 
             except Exception as e:
+                if isinstance(e, REPLTimeout):
+                    self.mark_timed_out()
+                    return self._timeout_result(start_time)
                 hint = self._tool_hint_if_relevant(code, e)
                 return ExecutionResult(
                     # INF-78 OAB-7: the print cap holds on the error path too -- for the
@@ -1627,8 +1669,18 @@ class _RestrictedREPLEnvironment(REPLEnvironment):
         Returns:
             ExecutionResult with output, is_final flag, and optional error.
         """
+        import time
+
+        if self.timed_out:
+            return self._timeout_result(time.perf_counter())
+
         # Use the restricted executor
         result = self._restricted_executor.execute(code)
+
+        expected_timeout = f"Execution timed out after {self.config.timeout_seconds}s"
+        if result.error == expected_timeout:
+            self.mark_timed_out()
+            result.error = self.timeout_error
 
         # Redact credentials from output
         output = result.output

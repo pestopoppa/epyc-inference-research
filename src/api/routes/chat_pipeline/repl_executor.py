@@ -899,7 +899,12 @@ async def _execute_repl_body(
                 read_only = set()
         parallel_tools = all(t in read_only for t in tools_called) and len(tools_called) >= 2
 
-    if session_id and session_store and not lease_blocked:
+    if (
+        session_id
+        and session_store
+        and not lease_blocked
+        and getattr(repl, "timed_out", False) is not True
+    ):
         try:
             session = session_store.get_session(session_id)
             if session:
@@ -942,6 +947,8 @@ async def _execute_repl_body(
                 e,
                 extra=task_extra(task_id=task_id, stage="execute", mode="repl_checkpoint"),
             )
+    elif session_id and session_store and getattr(repl, "timed_out", False) is True:
+        session_persistence["save_error"] = "repl_timed_out"
 
     # Extract web_research tool results for Search-R1 reward pipeline
     web_research_results = []

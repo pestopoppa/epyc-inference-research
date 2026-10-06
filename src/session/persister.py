@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, Callable
 
 from src.session.models import Checkpoint, Finding, FindingSource, Session
 from src.config import get_config
+from src.repl_environment.types import REPLTimeout
 
 if TYPE_CHECKING:
     from src.session.sqlite_store import SQLiteSessionStore
@@ -151,6 +152,12 @@ class SessionPersister:
         Returns:
             The saved Checkpoint.
         """
+        if getattr(repl_env, "timed_out", False) is True:
+            timeout_error = getattr(repl_env, "timeout_error", None)
+            if not isinstance(timeout_error, str):
+                timeout_error = "REPLTimeout: Execution timed out"
+            raise REPLTimeout(timeout_error.removeprefix("REPLTimeout: "))
+
         # Get REPL checkpoint data
         repl_checkpoint = repl_env.checkpoint()
 

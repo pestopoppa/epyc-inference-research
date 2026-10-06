@@ -12,7 +12,7 @@ import types
 from typing import Any, TYPE_CHECKING
 
 from src.repl_environment import safe_pickle
-from src.repl_environment.types import ExplorationEvent, ExplorationLog
+from src.repl_environment.types import ExplorationEvent, ExplorationLog, REPLTimeout
 
 if TYPE_CHECKING:
     from orchestration.repl_memory.retriever import TwoPhaseRetriever
@@ -407,6 +407,12 @@ class _StateMixin:
         Returns:
             Dict suitable for JSON serialization and later restore().
         """
+        if getattr(self, "timed_out", False) is True:
+            timeout_error = getattr(self, "timeout_error", None)
+            if not isinstance(timeout_error, str):
+                timeout_error = "REPLTimeout: Execution timed out"
+            raise REPLTimeout(timeout_error.removeprefix("REPLTimeout: "))
+
         def sanitize_value(value: Any) -> Any:
             """Sanitize a value for JSON serialization."""
             if _is_json_serializable(value):

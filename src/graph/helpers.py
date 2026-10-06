@@ -107,6 +107,40 @@ log = logging.getLogger(__name__)
 Ctx = GraphRunContext[TaskState, TaskDeps]
 
 
+def _typed_repl_timeout_error(repl: Any) -> str:
+    error = getattr(repl, "timeout_error", None)
+    if isinstance(error, str):
+        return error
+    seconds = getattr(getattr(repl, "config", None), "timeout_seconds", 120)
+    return f"REPLTimeout: Execution timed out after {seconds}s"
+
+
+async def _execute_repl_with_timeout(repl: Any, code: str) -> Any:
+    """Run one REPL call and make its environment terminal on timeout."""
+    from src.repl_environment.types import ExecutionResult
+
+    try:
+        result = await asyncio.wait_for(
+            asyncio.to_thread(repl.execute, code),
+            timeout=repl.config.timeout_seconds,
+        )
+    except asyncio.TimeoutError:
+        mark_timed_out = getattr(repl, "mark_timed_out", None)
+        marked_error = mark_timed_out() if callable(mark_timed_out) else None
+        error = (
+            marked_error
+            if isinstance(marked_error, str)
+            else _typed_repl_timeout_error(repl)
+        )
+        return ExecutionResult(output="", is_final=False, error=error)
+
+    if getattr(repl, "timed_out", False) is True:
+        return ExecutionResult(
+            output="", is_final=False, error=_typed_repl_timeout_error(repl)
+        )
+    return result
+
+
 def _use_inline_calls_in_tests() -> bool:
     """Return True when running under pytest to avoid threadpool teardown hangs."""
     return bool(os.getenv("PYTEST_CURRENT_TEST"))
@@ -787,6 +821,11 @@ async def _execute_turn(ctx: Ctx, role: Role | str) -> tuple[str, str | None, bo
     """
     state = ctx.state
     deps = ctx.deps
+    if deps.repl is not None and getattr(deps.repl, "timed_out", False) is True:
+        timeout_error = _typed_repl_timeout_error(deps.repl)
+        _record_session_turn(state, role=str(role), error=timeout_error)
+        return "", timeout_error, False, {}
+
     state.turns += 1
     log.debug("_execute_turn: turn=%d, role=%s", state.turns, role)
 
@@ -1373,6 +1412,7 @@ async def _execute_turn(ctx: Ctx, role: Role | str) -> tuple[str, str | None, bo
     _tap_write_repl_exec(code, state.turns)
 
     # REPL execution
+    timeout_terminal = False
     try:
         repl_execute = deps.repl.execute
         if _use_inline_calls_in_tests() or type(repl_execute).__module__.startswith("unittest.mock"):
@@ -1380,18 +1420,29 @@ async def _execute_turn(ctx: Ctx, role: Role | str) -> tuple[str, str | None, bo
             if asyncio.iscoroutine(result):
                 result = await result
         else:
-            result = await asyncio.wait_for(
-                asyncio.to_thread(repl_execute, code),
-                timeout=deps.repl.config.timeout_seconds,
-            )
+            result = await _execute_repl_with_timeout(deps.repl, code)
     except asyncio.TimeoutError:
+        # Inline test doubles may implement their own asynchronous timeout.
+        timeout_terminal = True
         from src.repl_environment.types import ExecutionResult
 
-        result = ExecutionResult(
-            output="",
-            is_final=False,
-            error=f"REPL execution timed out after {deps.repl.config.timeout_seconds}s",
+        mark_timed_out = getattr(deps.repl, "mark_timed_out", None)
+        marked_error = mark_timed_out() if callable(mark_timed_out) else None
+        error = (
+            marked_error
+            if isinstance(marked_error, str)
+            else _typed_repl_timeout_error(deps.repl)
         )
+        result = ExecutionResult(output="", is_final=False, error=error)
+
+    timeout_terminal = (
+        timeout_terminal or getattr(deps.repl, "timed_out", False) is True
+    )
+    if timeout_terminal:
+        from src.repl_environment.types import ExecutionResult
+
+        timeout_error = _typed_repl_timeout_error(deps.repl)
+        result = ExecutionResult(output="", is_final=False, error=timeout_error)
 
     # Track REPL execution count (Fast-RLM budget control)
     state.repl_executions += 1
@@ -1402,7 +1453,7 @@ async def _execute_turn(ctx: Ctx, role: Role | str) -> tuple[str, str | None, bo
     # FINAL() rescue: if REPL execution failed but the model DID write
     # FINAL("answer") in its output, extract the answer directly.
     # This prevents escalation when code before FINAL() has errors.
-    if not result.is_final and result.error:
+    if not timeout_terminal and not result.is_final and result.error:
         final_rescue = _extract_final_from_raw(raw_llm_output)
         if final_rescue is not None:
             log.info("FINAL() rescue: extracted %r from raw output (REPL error: %s)",
@@ -1502,7 +1553,11 @@ async def _execute_turn(ctx: Ctx, role: Role | str) -> tuple[str, str | None, bo
             _record_session_turn(state, role=str(role), code=code, nudge=nudge)
             return "", None, False, {"_nudge": nudge}
 
-    artifacts = dict(deps.repl.artifacts) if hasattr(deps.repl, "artifacts") else {}
+    artifacts = (
+        {}
+        if timeout_terminal
+        else (dict(deps.repl.artifacts) if hasattr(deps.repl, "artifacts") else {})
+    )
     # Prefer final_answer when is_final=True (FINAL() captures the answer
     # in final_answer, not in output)
     output = result.output

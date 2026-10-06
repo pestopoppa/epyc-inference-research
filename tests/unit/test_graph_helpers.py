@@ -1,13 +1,20 @@
 """Unit tests for graph helper utilities."""
 
 import json
+import asyncio
+from threading import Event
 from types import SimpleNamespace
+from unittest.mock import Mock
+
+import pytest
 
 from src.escalation import ErrorCategory
 from src.graph.helpers import (
     _add_evidence,
     _classify_error,
     _detect_role_cycle,
+    _execute_turn,
+    _execute_repl_with_timeout,
     _looks_like_prompt_echo,
     _loop_guard_classification_view,
     _record_mitigation,
@@ -17,6 +24,9 @@ from src.graph.helpers import (
     _update_workspace_from_turn,
 )
 from src.graph.state import TaskState
+from src.repl_environment import REPLConfig, REPLEnvironment
+from src.repl_environment.types import ExecutionResult, REPLTimeout
+from src.session.persister import SessionPersister
 
 
 class TestClassifyError:
@@ -31,6 +41,77 @@ class TestClassifyError:
 
     def test_classifies_unknown(self):
         assert _classify_error("completely novel failure") == ErrorCategory.UNKNOWN
+
+
+class TestReplTimeoutTerminal:
+    @pytest.mark.asyncio
+    async def test_terminal_environment_stops_future_turn_before_llm_work(self, monkeypatch):
+        repl = REPLEnvironment(context="test", config=REPLConfig(timeout_seconds=7))
+        repl.mark_timed_out()
+        state = TaskState(task_id="timed-out", prompt="p")
+        monkeypatch.setattr("src.graph.helpers._record_session_turn", Mock())
+        ctx = SimpleNamespace(state=state, deps=SimpleNamespace(repl=repl))
+
+        result = await _execute_turn(ctx, "worker_general")
+
+        assert result == (
+            "", "REPLTimeout: Execution timed out after 7s", False, {}
+        )
+        assert state.turns == 0
+
+    @pytest.mark.asyncio
+    async def test_late_worker_cannot_resume_execute_or_checkpoint(self):
+        started = Event()
+        release = Event()
+        finished = Event()
+        repl = REPLEnvironment(
+            context="test", config=REPLConfig(timeout_seconds=0.05)
+        )
+
+        execute = repl.execute
+
+        def late_execute(code):
+            if not started.is_set():
+                started.set()
+                try:
+                    if not release.wait(timeout=2):
+                        raise AssertionError("test did not release late worker")
+                    repl.artifacts["late_write"] = True
+                    return ExecutionResult(output="late", is_final=False)
+                finally:
+                    finished.set()
+            return execute(code)
+
+        repl.execute = late_execute
+        worker = asyncio.create_task(_execute_repl_with_timeout(repl, "blocked"))
+        try:
+            assert await asyncio.to_thread(started.wait, 1)
+            result = await asyncio.wait_for(worker, timeout=1)
+            assert result.error == "REPLTimeout: Execution timed out after 0.05s"
+            assert repl.timed_out is True
+            assert repl.execute("second").error == result.error
+            with pytest.raises(REPLTimeout, match="Execution timed out"):
+                repl.checkpoint()
+
+            persister = SessionPersister.__new__(SessionPersister)
+            persister.session_store = Mock()
+            with pytest.raises(REPLTimeout, match="Execution timed out"):
+                persister.save_checkpoint(repl)
+            persister.session_store.save_checkpoint.assert_not_called()
+
+            release.set()
+            assert await asyncio.to_thread(finished.wait, 1)
+            assert repl.artifacts["late_write"] is True
+            assert repl.execute("after completion").error == result.error
+            with pytest.raises(REPLTimeout, match="Execution timed out"):
+                repl.checkpoint()
+            with pytest.raises(REPLTimeout, match="Execution timed out"):
+                persister.save_checkpoint(repl)
+            persister.session_store.save_checkpoint.assert_not_called()
+        finally:
+            release.set()
+            if not finished.is_set():
+                assert await asyncio.to_thread(finished.wait, 2)
 
 
 class TestRoleCycleDetection:

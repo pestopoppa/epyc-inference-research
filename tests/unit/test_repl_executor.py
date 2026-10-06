@@ -1335,6 +1335,39 @@ class TestSessionLease:
             store.close()
 
     @pytest.mark.asyncio
+    async def test_timed_out_request_releases_lease_without_checkpoint(
+        self, basic_routing, mock_primitives, tmp_path
+    ):
+        store = SQLiteSessionStore(
+            db_path=tmp_path / "sessions.db", embeddings_path=tmp_path / "embeddings.npy"
+        )
+        session = Session.create(name="timed-out-lease", working_directory="/tmp")
+        store.create_session(session)
+
+        async def _fake_run_task(task_state, task_deps, start_role=None):
+            task_deps.repl.mark_timed_out()
+            return TaskResult(answer="REPLTimeout", success=False, turns=1, role_history=["frontdoor"])
+
+        request = ChatRequest(
+            prompt="p", context="", real_mode=True, mock_mode=False, max_turns=3,
+            force_role="frontdoor", session_id=session.id,
+        )
+        try:
+            with patch("src.api.routes.chat_pipeline.repl_executor.run_task", side_effect=_fake_run_task):
+                response = await _execute_repl(
+                    request=request, routing=basic_routing, primitives=mock_primitives,
+                    state=_lease_state(store), start_time=time.perf_counter(),
+                    initial_role=Role.FRONTDOOR,
+                )
+            persistence = response.session_persistence
+            assert persistence["checkpoint_saved"] is False
+            assert persistence["save_error"] == "repl_timed_out"
+            assert store.get_checkpoints(session.id) == []
+            assert not store.leases.get(session.id).is_live(time.time())
+        finally:
+            store.close()
+
+    @pytest.mark.asyncio
     async def test_session_owned_elsewhere_runs_stateless_and_says_so(
         self, basic_routing, mock_primitives, tmp_path, monkeypatch
     ):
