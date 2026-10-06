@@ -46,7 +46,7 @@ class C5SeedCorpusTest(unittest.TestCase):
         self.assertEqual(evidence["evidence_id"], C.SOL_BOUND_EVIDENCE_ID)
         self.assertEqual(
             evidence["path"],
-            "/workspace/handoffs/active/agentic-rocm-kernel-authoring.md",
+            "repo://scripts/kernel_rnd/autokernel/evidence/c5-sol-bound-policy-20260815.md",
         )
         self.assertEqual(
             evidence["sha256"],
@@ -112,7 +112,7 @@ class C5SeedCorpusTest(unittest.TestCase):
             payload["policy_evidence"],
             [{
                 "evidence_id": C.SOL_BOUND_EVIDENCE_ID,
-                "path": "/workspace/handoffs/active/agentic-rocm-kernel-authoring.md",
+                "path": "repo://scripts/kernel_rnd/autokernel/evidence/c5-sol-bound-policy-20260815.md",
                 "sha256": "c8cec57941b5c0954cd65b44719b984612d9c25094fce3e2ef4bcd42e8ec4f70",
             }],
         )
@@ -232,6 +232,12 @@ class C5SeedCorpusTest(unittest.TestCase):
         with self.assertRaisesRegex(C.SeedCorpusError, "absolute"):
             self.parse(document)
 
+        for unsafe in ("repo://../outside.md", "repo:///absolute.md", "repo://a//b.md"):
+            document = self.document()
+            document["policy_evidence"][0]["path"] = unsafe
+            with self.assertRaisesRegex(C.SeedCorpusError, "traversal-free"):
+                self.parse(document)
+
         document = self.document()
         document["policy_evidence"][0]["sha256"] = "0" * 63
         with self.assertRaisesRegex(C.SeedCorpusError, "SHA-256"):
@@ -243,6 +249,13 @@ class C5SeedCorpusTest(unittest.TestCase):
             self.parse(document)
 
     def test_runtime_policy_evidence_bytes_and_file_identity_are_verified(self):
+        # The checked-in default path must verify the exact recovered authority bytes.
+        default_verified = C.load()
+        self.assertEqual(
+            default_verified.policy_evidence[0]["sha256"],
+            "c8cec57941b5c0954cd65b44719b984612d9c25094fce3e2ef4bcd42e8ec4f70",
+        )
+
         document = self.document()
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -285,6 +298,63 @@ class C5SeedCorpusTest(unittest.TestCase):
             with mock.patch.object(C, "_registry_path", return_value=registry):
                 with self.assertRaisesRegex(C.SeedCorpusError, "cannot open evidence"):
                     C.load()
+
+    def test_repository_relative_policy_path_verifies_then_refuses_tamper_and_missing(self):
+        document = self.document()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            relative = "scripts/kernel_rnd/autokernel/evidence/policy.md"
+            evidence = root / relative
+            evidence.parent.mkdir(parents=True)
+            evidence.write_bytes(b"reviewed policy\n")
+            document["policy_evidence"][0]["path"] = f"repo://{relative}"
+            document["policy_evidence"][0]["sha256"] = hashlib.sha256(
+                evidence.read_bytes()).hexdigest()
+            registry = root / "registry.json"
+            registry.write_text(json.dumps(document), encoding="utf-8")
+            with mock.patch.object(C, "_REPOSITORY_EVIDENCE_ROOT", root):
+                C.load(registry)
+                evidence.write_bytes(b"tampered policy\n")
+                with self.assertRaisesRegex(C.SeedCorpusError, "SHA-256 mismatch"):
+                    C.load(registry)
+                evidence.write_bytes(b"reviewed policy\n")
+                link = evidence.with_name("linked-policy.md")
+                link.symlink_to(evidence.name)
+                document["policy_evidence"][0]["path"] = f"repo://{link.relative_to(root).as_posix()}"
+                registry.write_text(json.dumps(document), encoding="utf-8")
+                with self.assertRaisesRegex(C.SeedCorpusError, "without following links"):
+                    C.load(registry)
+
+                evidence_dir = evidence.parent
+                outside_dir = root / "outside"
+                outside_dir.mkdir()
+                (outside_dir / "policy.md").write_bytes(b"reviewed policy\n")
+                intermediate = evidence_dir / "linked-dir"
+                intermediate.symlink_to(outside_dir, target_is_directory=True)
+                document["policy_evidence"][0]["path"] = (
+                    "repo://scripts/kernel_rnd/autokernel/evidence/linked-dir/policy.md"
+                )
+                registry.write_text(json.dumps(document), encoding="utf-8")
+                with self.assertRaisesRegex(C.SeedCorpusError, "without following links"):
+                    C.load(registry)
+                intermediate.unlink()
+
+                document["policy_evidence"][0]["path"] = f"repo://{relative}"
+                registry.write_text(json.dumps(document), encoding="utf-8")
+                linked_root = root / "linked-repo"
+                linked_root.symlink_to(root, target_is_directory=True)
+                with mock.patch.object(C, "_REPOSITORY_EVIDENCE_ROOT", linked_root):
+                    with self.assertRaisesRegex(C.SeedCorpusError, "without following links"):
+                        C.load(registry)
+
+                hardlink = evidence.with_name("second-link.md")
+                os.link(evidence, hardlink)
+                with self.assertRaisesRegex(C.SeedCorpusError, "single-link"):
+                    C.load(registry)
+                hardlink.unlink()
+                evidence.unlink()
+                with self.assertRaisesRegex(C.SeedCorpusError, "cannot open repository evidence"):
+                    C.load(registry)
 
 
 if __name__ == "__main__":

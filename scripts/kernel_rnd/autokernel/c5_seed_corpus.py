@@ -64,6 +64,8 @@ _SEED_RE = re.compile(r"k[0-9]{3}")
 _SLUG_RE = re.compile(r"[a-z0-9][a-z0-9_-]+")
 _SHA256_RE = re.compile(r"[0-9a-f]{64}")
 _COMMIT_RE = re.compile(r"[0-9a-f]{40}")
+_REPO_EVIDENCE_PREFIX = "repo://"
+_REPOSITORY_EVIDENCE_ROOT = Path(__file__).resolve().parents[3]
 
 
 class SeedCorpusError(ValueError):
@@ -372,8 +374,21 @@ class C5SeedCorpus:
         if evidence.get("evidence_id") != SOL_BOUND_EVIDENCE_ID:
             raise SeedCorpusError("policy evidence id drifted")
         evidence_path = _text(evidence.get("path"), "policy_evidence[0].path")
-        if not Path(evidence_path).is_absolute() or ".." in Path(evidence_path).parts:
-            raise SeedCorpusError("policy evidence path must be absolute and traversal-free")
+        if evidence_path.startswith(_REPO_EVIDENCE_PREFIX):
+            relative_text = evidence_path[len(_REPO_EVIDENCE_PREFIX):]
+            path_parts = relative_text.split("/")
+            if (not relative_text or relative_text.startswith("/")
+                    or any(part in {"", ".", ".."} for part in path_parts)
+                    or "\\" in evidence_path):
+                raise SeedCorpusError("repository policy evidence path must be relative and traversal-free")
+            if tuple(path_parts[:4]) != (
+                    "scripts", "kernel_rnd", "autokernel", "evidence") or len(path_parts) <= 4:
+                raise SeedCorpusError(
+                    "repository policy evidence must stay under "
+                    "scripts/kernel_rnd/autokernel/evidence")
+        elif not Path(evidence_path).is_absolute() or ".." in Path(evidence_path).parts:
+            # Preserve support for existing externally pinned authorities.
+            raise SeedCorpusError("policy evidence path must be absolute or repo:// relative and traversal-free")
         _sha256(evidence.get("sha256"), "policy_evidence[0].sha256")
         claims = _tuple_of_text(evidence.get("claims"), "policy_evidence[0].claims")
         if len(claims) < 4:
@@ -424,6 +439,82 @@ def _registry_path() -> Path:
     return Path(__file__).with_name("c5_seed_corpus.json")
 
 
+def _repository_evidence_relative(value: str) -> Path:
+    if not value.startswith(_REPO_EVIDENCE_PREFIX):
+        raise SeedCorpusError("policy evidence path is not a repository carrier")
+    relative_text = value[len(_REPO_EVIDENCE_PREFIX):]
+    parts = relative_text.split("/")
+    if (not relative_text or relative_text.startswith("/")
+            or "\\" in relative_text
+            or any(part in {"", ".", ".."} for part in parts)
+            or tuple(parts[:4]) != (
+                "scripts", "kernel_rnd", "autokernel", "evidence")
+            or len(parts) <= 4):
+        raise SeedCorpusError(
+            "repository policy evidence must stay under "
+            "scripts/kernel_rnd/autokernel/evidence")
+    return Path(*parts)
+
+
+def _read_repository_pinned(value: str, label: str) -> bytes:
+    """Read repository evidence through a descriptor-pinned no-follow walk."""
+    relative = _repository_evidence_relative(value)
+    directory_flags = (os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+                       | getattr(os, "O_DIRECTORY", 0)
+                       | getattr(os, "O_NOFOLLOW", 0))
+    leaf_flags = (os.O_RDONLY | getattr(os, "O_CLOEXEC", 0)
+                  | getattr(os, "O_NOFOLLOW", 0)
+                  | getattr(os, "O_NONBLOCK", 0))
+    descriptors: list[int] = []
+    parent_fd: int | None = None
+    try:
+        parent_fd = os.open(_REPOSITORY_EVIDENCE_ROOT, directory_flags)
+        descriptors.append(parent_fd)
+        for part in relative.parts[:-1]:
+            parent_fd = os.open(part, directory_flags, dir_fd=parent_fd)
+            descriptors.append(parent_fd)
+        leaf = relative.parts[-1]
+        leaf_fd = os.open(leaf, leaf_flags, dir_fd=parent_fd)
+        descriptors.append(leaf_fd)
+        before = os.fstat(leaf_fd)
+        if (not stat.S_ISREG(before.st_mode) or before.st_nlink != 1
+                or before.st_uid != os.geteuid()):
+            raise SeedCorpusError(
+                f"{label}: repository evidence must be an owned single-link regular file")
+        chunks: list[bytes] = []
+        while True:
+            chunk = os.read(leaf_fd, 1024 * 1024)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        raw = b"".join(chunks)
+        after = os.fstat(leaf_fd)
+        path_after = os.stat(leaf, dir_fd=parent_fd, follow_symlinks=False)
+    except OSError as exc:
+        raise SeedCorpusError(
+            f"{label}: cannot open repository evidence without following links: {exc}") from exc
+    finally:
+        for descriptor in reversed(descriptors):
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+    before_id = (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
+    after_id = (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
+    path_id = (path_after.st_dev, path_after.st_ino, path_after.st_size, path_after.st_mtime_ns)
+    if (before_id != after_id or before_id != path_id or len(raw) != before.st_size
+            or not stat.S_ISREG(after.st_mode) or after.st_nlink != 1
+            or after.st_uid != os.geteuid()):
+        raise SeedCorpusError(f"{label}: repository evidence changed while it was read")
+    return raw
+
+
+def _read_policy_evidence(value: str, label: str) -> bytes:
+    if value.startswith(_REPO_EVIDENCE_PREFIX):
+        return _read_repository_pinned(value, label)
+    return _read_pinned(Path(value), label)
+
+
 def _read_pinned(path: Path, label: str) -> bytes:
     flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
     try:
@@ -461,7 +552,7 @@ def verify_policy_evidence_files(corpus: C5SeedCorpus) -> None:
     """Verify internal policy authority bytes before any author-facing projection."""
     for evidence in corpus.policy_evidence:
         evidence_id = str(evidence["evidence_id"])
-        raw = _read_pinned(Path(str(evidence["path"])), evidence_id)
+        raw = _read_policy_evidence(str(evidence["path"]), evidence_id)
         if hashlib.sha256(raw).hexdigest() != evidence["sha256"]:
             raise SeedCorpusError(f"{evidence_id}: policy evidence SHA-256 mismatch")
 
