@@ -38,6 +38,7 @@ import math
 import os
 import sqlite3
 import time
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -66,6 +67,34 @@ DEFAULT_INDEX_DIR = Path(
 # Encoding bounds.
 _QUERY_MAX_TOKENS = 48
 _DOC_MAX_TOKENS = 256  # higher than reranker's 64; chunks are markdown sections
+
+
+def _index_token_caps(meta: dict[str, str]) -> tuple[int, int]:
+    """Stored caps are authoritative; missing historical keys keep old bounds."""
+    caps = []
+    for key, fallback in (
+        ("query_max_tokens", _QUERY_MAX_TOKENS),
+        ("doc_max_tokens", _DOC_MAX_TOKENS),
+    ):
+        value = meta.get(key)
+        if value is None:
+            caps.append(fallback)
+        elif not value.isascii() or not value.isdecimal() or int(value) <= 0:
+            raise RuntimeError(f"kb_rag: invalid stored {key}: {value!r}")
+        else:
+            caps.append(int(value))
+    return caps[0], caps[1]
+
+
+def _read_index_meta(index_dir: Path) -> dict[str, str]:
+    """Read existing metadata without creating a catalog or running DDL."""
+    catalog = index_dir / "catalog.sqlite"
+    if not catalog.exists():
+        return {}
+    with closing(sqlite3.connect(catalog.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
+        meta = _read_meta(conn)
+        _index_token_caps(meta)
+        return meta
 
 
 def _env_float(name: str, default: float) -> float:
@@ -259,8 +288,8 @@ def _stamp_meta(conn: sqlite3.Connection, convention: str) -> None:
         else "",
         "encoder_model_dir": str(colbert_encoder._MODEL_DIR),
         "encoder_model_file": colbert_encoder._MODEL_PATH.name,
-        "doc_max_tokens": str(_DOC_MAX_TOKENS),
-        "query_max_tokens": str(_QUERY_MAX_TOKENS),
+        "doc_max_tokens": str(colbert_encoder.max_document_tokens()),
+        "query_max_tokens": str(colbert_encoder.max_query_tokens()),
         # K9: the identity that actually breaks the arithmetic. A model swap
         # changing embedding WIDTH (128 -> 64 across the mxbai family) leaves
         # every key above looking plausible; the mismatch then surfaces as a
@@ -293,8 +322,14 @@ def _roles_for_convention(convention: str) -> tuple[str, str]:
 
 def _writer_convention(conn: sqlite3.Connection) -> str:
     """Convention a writer must use, adopting + stamping only on an empty index."""
-    _check_tokenizer_identity(_read_meta(conn))
+    meta = _read_meta(conn)
+    _index_token_caps(meta)
+    _check_tokenizer_identity(meta)
     convention = _index_convention(conn)
+    if convention is None and meta:
+        # Partial historical metadata is still identity; never replace stored
+        # cap keys merely because an empty catalog lacks a convention stamp.
+        convention = colbert_encoder.LEGACY_CONVENTION
     if convention is None:
         convention = colbert_encoder.PREFIX_CONVENTION
         _stamp_meta(conn, convention)
@@ -352,7 +387,9 @@ def _ensure_catalog(
     conn = sqlite3.connect(str(index_dir / "catalog.sqlite"))
     try:
         if verify_tokenizer:
-            _check_tokenizer_identity(_read_meta(conn))
+            meta = _read_meta(conn)
+            _index_token_caps(meta)
+            _check_tokenizer_identity(meta)
     except RuntimeError:
         conn.close()
         raise
@@ -460,6 +497,7 @@ def build_index(
     Returns stats dict.
     """
     index_dir = Path(index_dir)
+    _read_index_meta(index_dir)
     (index_dir / "emb").mkdir(parents=True, exist_ok=True)
 
     if not colbert_encoder.is_available():
@@ -475,6 +513,7 @@ def build_index(
     conn = _ensure_catalog(index_dir, verify_tokenizer=True)
     conn.row_factory = sqlite3.Row
     convention = _writer_convention(conn)
+    _, doc_cap = _index_token_caps(_read_meta(conn))
     fts_enabled = _ensure_fts(conn)
     _, doc_role = _roles_for_convention(convention)
     cur = conn.cursor()
@@ -516,7 +555,7 @@ def build_index(
                 )
                 continue
 
-            emb = colbert_encoder.encode(ch.text, _DOC_MAX_TOKENS, role=doc_role)
+            emb = colbert_encoder.encode(ch.text, doc_cap, role=doc_role)
             if emb is None:
                 continue
 
@@ -613,6 +652,7 @@ def update_files(
     re-encoding. Files not matching any include glob are skipped silently.
     """
     index_dir = Path(index_dir)
+    _read_index_meta(index_dir)
     (index_dir / "emb").mkdir(parents=True, exist_ok=True)
     if not colbert_encoder.ensure_loaded():
         return {"ok": False, "error": "encoder failed to load"}
@@ -620,6 +660,7 @@ def update_files(
     conn = _ensure_catalog(index_dir, verify_tokenizer=True)
     conn.row_factory = sqlite3.Row
     convention = _writer_convention(conn)
+    _, doc_cap = _index_token_caps(_read_meta(conn))
     fts_enabled = _ensure_fts(conn)
     _, doc_role = _roles_for_convention(convention)
     cur = conn.cursor()
@@ -642,7 +683,7 @@ def update_files(
         chunks = chunk_file(p, max_chars=config.max_chunk_chars)
         mtime = p.stat().st_mtime
         for ch in chunks:
-            emb = colbert_encoder.encode(ch.text, _DOC_MAX_TOKENS, role=doc_role)
+            emb = colbert_encoder.encode(ch.text, doc_cap, role=doc_role)
             if emb is None:
                 continue
             emb_rel = _emb_relative_path(str(p), ch.content_hash)
@@ -789,6 +830,7 @@ def query(
     meta = _read_meta(conn)
     try:
         _warn_on_encoder_drift(meta)
+        query_cap, _ = _index_token_caps(meta)
     except RuntimeError:
         conn.close()
         raise
@@ -800,14 +842,14 @@ def query(
         conn.close()
         return []
 
-    q_emb = colbert_encoder.encode(text, _QUERY_MAX_TOKENS, role=query_role)
+    q_emb = colbert_encoder.encode(text, query_cap, role=query_role)
     if q_emb is None:
         conn.close()
         return []
     # H2: observe the UNTRUNCATED query length (encode() output always equals the cap).
     kb_rag_query_telemetry.record_query_length(
         text,
-        cap=_QUERY_MAX_TOKENS,
+        cap=query_cap,
         role=query_role,
         prefix_convention=convention,
         index_dir=index_dir,
