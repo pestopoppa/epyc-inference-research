@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from argparse import Namespace
 from pathlib import Path
 import sys
@@ -63,13 +64,51 @@ def _write_dcp_jobs_file(path: Path) -> None:
     path.write_text(yaml.safe_dump(doc, sort_keys=False))
 
 
-def _write_kb_jobs_file(path: Path) -> None:
+def _write_kb_jobs_file(path: Path, *, index_dir: Path | None = None) -> None:
     _write_jobs_file(path, enabled=True)
     doc = yaml.safe_load(path.read_text())
     doc["jobs"][0]["input_spec"]["context_modes"] = ["kb_rag", "source_excerpt"]
     doc["jobs"][0]["input_spec"]["kb_queries"] = ["freshness lint handoff"]
     doc["jobs"][0]["input_spec"]["kb_top_k"] = 2
+    doc["jobs"][0]["input_spec"]["kb_index_dir"] = str(index_dir or path.parent / "kb-index")
     path.write_text(yaml.safe_dump(doc, sort_keys=False))
+
+
+def _write_catalog(index_dir: Path, *, with_dependency: bool) -> tuple[Path, dict | None]:
+    index_dir.mkdir(parents=True, exist_ok=True)
+    catalog = index_dir / "catalog.sqlite"
+    conn = sqlite3.connect(catalog)
+    try:
+        conn.executescript(run_job.kb_rag._CATALOG_SCHEMA)
+        conn.execute(
+            "INSERT INTO chunk (chunk_id, file_path, heading_path, line_start, line_end, "
+            "content_hash, mtime, emb_path, text_preview, token_count) "
+            "VALUES (1, ?, '[]', 1, 1, 'fixture-hash', 1, '', 'fixture evidence', 1)",
+            (str(index_dir / "evidence.md"),),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    if not with_dependency:
+        return catalog, None
+    conn = sqlite3.connect(catalog)
+    with run_job.kb_catalog_dependency.writer_connection(conn):
+        record = run_job.kb_catalog_dependency.commit_completed_writer(
+            conn, "build_index", loaded=None
+        )
+    return catalog, record
+
+
+def _write_native_catalog(index_dir: Path) -> tuple[Path, dict]:
+    catalog, record = _write_catalog(index_dir, with_dependency=True)
+    assert record is not None
+    return catalog, record
+
+
+def _write_legacy_catalog(index_dir: Path) -> Path:
+    catalog, record = _write_catalog(index_dir, with_dependency=False)
+    assert record is None
+    return catalog
 
 
 def _write_command_jobs_file(path: Path, *, risk: str = "read_only") -> None:
@@ -163,6 +202,7 @@ def test_dry_run_stub_writes_review_artifacts(tmp_path: Path) -> None:
     assert task_record["context"]["kinds"] == {"source_excerpt": 1}
     context_manifest = json.loads((result.output_path.parent / "context_manifest.json").read_text())
     assert context_manifest["summary"] == task_record["context"]
+    assert context_manifest["kb_catalog_dependency_at_context_collection"] is None
     assert "source.md" in (result.output_path.parent / "prompt.txt").read_text()
     rows = [json.loads(line) for line in result.task_record_log.read_text().splitlines()]
     assert rows[-1]["run_id"] == "sample-run"
@@ -271,19 +311,31 @@ def test_kb_rag_context_mode_adds_retrieved_snippets(tmp_path: Path, monkeypatch
     assert task_record["context"]["repos"] == ["kb-rag"]
     manifest = json.loads((result.output_path.parent / "context_manifest.json").read_text())
     assert manifest["sources"][0]["path"].endswith("autonomous-research.md:22-24")
+    assert manifest["kb_catalog_dependency_at_context_collection"] == {
+        "catalog_path": str((tmp_path / "kb-index" / "catalog.sqlite").resolve()),
+        "record": None,
+    }
     prompt = (result.output_path.parent / "prompt.txt").read_text()
     assert "AutoPilot may suggest closure candidates" in prompt
 
 
-def test_kb_rag_context_mode_falls_back_to_sources_on_empty_results(
+@pytest.mark.parametrize("query_outcome", ["empty", "exception"])
+def test_kb_rag_context_mode_falls_back_to_sources_on_query_miss(
     tmp_path: Path,
     monkeypatch,
+    query_outcome: str,
 ) -> None:
     (tmp_path / "docs").mkdir()
     (tmp_path / "docs" / "source.md").write_text("# source\nEvidence.\n")
     jobs_file = tmp_path / "lab_jobs.yaml"
     _write_kb_jobs_file(jobs_file)
-    monkeypatch.setattr(run_job.kb_rag, "query", lambda *args, **kwargs: [])
+    if query_outcome == "empty":
+        monkeypatch.setattr(run_job.kb_rag, "query", lambda *args, **kwargs: [])
+    else:
+        def fail_query(*args, **kwargs):
+            raise RuntimeError("synthetic query failure")
+
+        monkeypatch.setattr(run_job.kb_rag, "query", fail_query)
 
     result = run_job.run_from_args(
         _args(
@@ -297,8 +349,162 @@ def test_kb_rag_context_mode_falls_back_to_sources_on_empty_results(
     task_record = json.loads(result.task_record_path.read_text())
     assert task_record["context"]["kinds"] == {"source_excerpt": 1}
     manifest = json.loads((result.output_path.parent / "context_manifest.json").read_text())
+    expected_reason = (
+        "kb_rag_no_results"
+        if query_outcome == "empty"
+        else "kb_rag_error:synthetic query failure"
+    )
     assert manifest["missing_sources"] == [
-        {"repo": "kb-rag", "path": "freshness lint handoff", "reason": "kb_rag_no_results"}
+        {"repo": "kb-rag", "path": "freshness lint handoff", "reason": expected_reason}
+    ]
+    assert manifest["kb_catalog_dependency_at_context_collection"]["record"] is None
+
+
+@pytest.mark.parametrize("corruption", ["record_seal", "logical_catalog"])
+@pytest.mark.parametrize("backend", ["chat", "command"])
+def test_invalid_kb_catalog_dependency_refuses_before_query_backend_or_publication(
+    tmp_path: Path,
+    monkeypatch,
+    corruption: str,
+    backend: str,
+) -> None:
+    jobs_file = tmp_path / "lab_jobs.yaml"
+    _write_kb_jobs_file(jobs_file)
+    if backend == "command":
+        jobs_doc = yaml.safe_load(jobs_file.read_text())
+        jobs_doc["jobs"][0]["risk"] = "read_only"
+        jobs_doc["jobs"][0]["execution"] = {
+            "mode": run_job.DETERMINISTIC_COMMAND_MODE,
+            "command": [sys.executable, "-c", "raise SystemExit(0)"],
+        }
+        jobs_file.write_text(yaml.safe_dump(jobs_doc, sort_keys=False))
+    catalog, _ = _write_native_catalog(tmp_path / "kb-index")
+    with sqlite3.connect(catalog) as conn:
+        if corruption == "record_seal":
+            conn.execute(
+                "UPDATE catalog_dependency SET record_json = record_json || ' ' WHERE singleton=1"
+            )
+        else:
+            conn.execute(
+                "UPDATE chunk SET content_hash = 'changed-after-record' WHERE chunk_id=1"
+            )
+
+    events: list[str] = []
+    read_dependency = run_job.kb_catalog_dependency.read_dependency
+
+    def observe_dependency(path):
+        events.append("read_dependency")
+        return read_dependency(path)
+
+    def forbidden_query(*args, **kwargs):
+        events.append("query")
+        raise AssertionError("KB query must not run after dependency refusal")
+
+    def forbidden_chat(**kwargs):
+        events.append("chat")
+        raise AssertionError("chat backend must not run after dependency refusal")
+
+    def forbidden_command(**kwargs):
+        events.append("command")
+        raise AssertionError("command backend must not run after dependency refusal")
+
+    monkeypatch.setattr(run_job.kb_catalog_dependency, "read_dependency", observe_dependency)
+    monkeypatch.setattr(run_job.kb_rag, "query", forbidden_query)
+    monkeypatch.setattr(run_job, "call_chat_api", forbidden_chat)
+    monkeypatch.setattr(run_job, "run_deterministic_command", forbidden_command)
+
+    with pytest.raises(run_job.LabRunnerError, match="KB catalog dependency refused"):
+        run_job.run_from_args(
+            _args(
+                tmp_path,
+                jobs_file,
+                allow_disabled=False,
+                dry_run_stub=False,
+                execute_chat=backend == "chat",
+                execute_command=backend == "command",
+            )
+        )
+
+    assert not (tmp_path / "queue").exists()
+    assert events == ["read_dependency"]
+
+
+def test_valid_kb_catalog_dependency_is_attached_at_collection_time(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    jobs_file = tmp_path / "lab_jobs.yaml"
+    _write_kb_jobs_file(jobs_file)
+    _, expected_record = _write_native_catalog(tmp_path / "kb-index")
+    events: list[str] = []
+    read_dependency = run_job.kb_catalog_dependency.read_dependency
+
+    def observe_dependency(path):
+        events.append("read_dependency")
+        return read_dependency(path)
+
+    def fake_query(*args, **kwargs):
+        events.append("query")
+        return [
+            {
+                "file": "/fixture/kb.md",
+                "line_range": (1, 2),
+                "snippet": "synthetic KB context",
+                "content_hash": "fixture-hash",
+            }
+        ]
+
+    monkeypatch.setattr(run_job.kb_catalog_dependency, "read_dependency", observe_dependency)
+    monkeypatch.setattr(run_job.kb_rag, "query", fake_query)
+
+    result = run_job.run_from_args(
+        _args(tmp_path, jobs_file, allow_disabled=False, max_context_chars=1000)
+    )
+
+    manifest = json.loads((result.output_path.parent / "context_manifest.json").read_text())
+    assert manifest["kb_catalog_dependency_at_context_collection"] == {
+        "catalog_path": str((tmp_path / "kb-index" / "catalog.sqlite").resolve()),
+        "record": expected_record,
+    }
+    assert events == ["read_dependency", "query"]
+
+
+def test_legacy_kb_catalog_has_unknown_dependency_at_collection_time(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    jobs_file = tmp_path / "lab_jobs.yaml"
+    _write_kb_jobs_file(jobs_file)
+    _write_legacy_catalog(tmp_path / "kb-index")
+    monkeypatch.setattr(run_job.kb_rag, "query", lambda *args, **kwargs: [])
+
+    result = run_job.run_from_args(
+        _args(tmp_path, jobs_file, allow_disabled=False, max_context_chars=1000)
+    )
+
+    manifest = json.loads((result.output_path.parent / "context_manifest.json").read_text())
+    assert manifest["kb_catalog_dependency_at_context_collection"] == {
+        "catalog_path": str((tmp_path / "kb-index" / "catalog.sqlite").resolve()),
+        "record": None,
+    }
+
+
+def test_collect_context_keeps_two_value_return_shape(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(run_job.kb_rag, "query", lambda *args, **kwargs: [])
+
+    excerpts, missing = run_job.collect_context(
+        {
+            "context_modes": ["kb_rag"],
+            "kb_queries": ["fixture query"],
+            "kb_index_dir": str(tmp_path / "missing-index"),
+        },
+        {},
+        max_context_chars=100,
+    )
+
+    assert excerpts == []
+    assert missing == [
+        {"repo": "kb-rag", "path": "fixture query", "reason": "kb_rag_no_results"}
     ]
 
 

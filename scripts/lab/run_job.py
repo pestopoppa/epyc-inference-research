@@ -32,7 +32,7 @@ from src.context_assembly import (
     pack_to_budget,
 )
 from src.context_discovery import build_python_codemap
-from src.retrieval import kb_rag
+from src.retrieval import kb_catalog_dependency, kb_rag
 from src.roles import Role
 
 
@@ -415,15 +415,30 @@ def _collect_kb_rag_excerpts(
     input_spec: dict[str, Any],
     *,
     max_context_chars: int,
-) -> tuple[list[SourceExcerpt], list[dict[str, Any]]]:
+) -> tuple[list[SourceExcerpt], list[dict[str, Any]], dict[str, Any]]:
     excerpts: list[SourceExcerpt] = []
     missing: list[dict[str, Any]] = []
+    index_dir = input_spec.get("kb_index_dir") or kb_rag.DEFAULT_INDEX_DIR
+    catalog_path = Path(index_dir) / "catalog.sqlite"
+    try:
+        dependency_record = kb_catalog_dependency.read_dependency(catalog_path)
+    except Exception as exc:  # noqa: BLE001
+        raise LabRunnerError(
+            f"KB catalog dependency refused at context collection for {catalog_path}: {exc}"
+        ) from exc
+    dependency_at_collection = {
+        "catalog_path": str(catalog_path.resolve(strict=False)),
+        "record": dependency_record,
+    }
     queries = _kb_rag_queries(input_spec)
     if not queries:
-        return excerpts, [{"repo": "kb-rag", "path": "", "reason": "kb_rag_no_query"}]
+        return (
+            excerpts,
+            [{"repo": "kb-rag", "path": "", "reason": "kb_rag_no_query"}],
+            dependency_at_collection,
+        )
 
     top_k = int(input_spec.get("kb_top_k") or DEFAULT_KB_RAG_TOP_K)
-    index_dir = input_spec.get("kb_index_dir") or kb_rag.DEFAULT_INDEX_DIR
     remaining = max_context_chars
     seen: set[tuple[str, str]] = set()
     for query in queries:
@@ -462,18 +477,19 @@ def _collect_kb_rag_excerpts(
             )
         if remaining <= 0:
             break
-    return excerpts, missing
+    return excerpts, missing, dependency_at_collection
 
 
-def collect_context(
+def _collect_context(
     input_spec: dict[str, Any],
     roots: dict[str, Path],
     *,
     max_context_chars: int,
-) -> tuple[list[SourceExcerpt], list[dict[str, Any]]]:
+) -> tuple[list[SourceExcerpt], list[dict[str, Any]], dict[str, Any] | None]:
     modes = _context_modes(input_spec)
     missing: list[dict[str, Any]] = []
     excerpts: list[SourceExcerpt] = []
+    kb_dependency_at_collection = None
     if DCP_CONTEXT_MODE in modes:
         excerpts, missing = _collect_dcp_excerpts(
             input_spec,
@@ -481,7 +497,7 @@ def collect_context(
             max_context_chars=max_context_chars,
         )
     if KB_RAG_CONTEXT_MODE in modes:
-        kb_excerpts, kb_missing = _collect_kb_rag_excerpts(
+        kb_excerpts, kb_missing, kb_dependency_at_collection = _collect_kb_rag_excerpts(
             input_spec,
             max_context_chars=max(0, max_context_chars - sum(len(item.excerpt) for item in excerpts)),
         )
@@ -495,6 +511,21 @@ def collect_context(
         )
         excerpts.extend(source_excerpts)
         missing.extend(source_missing)
+    return excerpts, missing, kb_dependency_at_collection
+
+
+def collect_context(
+    input_spec: dict[str, Any],
+    roots: dict[str, Path],
+    *,
+    max_context_chars: int,
+) -> tuple[list[SourceExcerpt], list[dict[str, Any]]]:
+    """Collect excerpts while preserving the established two-value API."""
+    excerpts, missing, _ = _collect_context(
+        input_spec,
+        roots,
+        max_context_chars=max_context_chars,
+    )
     return excerpts, missing
 
 
@@ -824,6 +855,7 @@ def write_review_artifacts(
     missing_sources: list[dict[str, Any]],
     max_context_chars: int,
     chat_meta: dict[str, Any],
+    kb_catalog_dependency_at_context_collection: dict[str, Any] | None = None,
 ) -> RunnerResult:
     job_id = str(job["job_id"])
     run_dir = queue_dir / job_id / run_id
@@ -842,6 +874,7 @@ def write_review_artifacts(
         "missing_sources": missing_sources,
         "summary": context_stats,
         "sources": [item.__dict__ for item in excerpts],
+        "kb_catalog_dependency_at_context_collection": kb_catalog_dependency_at_context_collection,
     }
     task_record = {
         "schema_version": "lab_task_record.v1",
@@ -914,7 +947,7 @@ def run_from_args(args: argparse.Namespace) -> RunnerResult:
     input_spec = job.get("input_spec", {}) or {}
     context_budget = int(input_spec.get("context_budget_tokens") or 0) * 4
     max_context_chars = args.max_context_chars or context_budget or 16000
-    excerpts, missing_sources = collect_context(
+    excerpts, missing_sources, kb_catalog_dependency_at_context_collection = _collect_context(
         input_spec,
         repo_roots(repo_root, args.repo_map),
         max_context_chars=max_context_chars,
@@ -972,6 +1005,7 @@ def run_from_args(args: argparse.Namespace) -> RunnerResult:
         missing_sources=missing_sources,
         max_context_chars=max_context_chars,
         chat_meta=chat_meta,
+        kb_catalog_dependency_at_context_collection=kb_catalog_dependency_at_context_collection,
     )
     if args.print_output:
         print(json.dumps(output, indent=2, sort_keys=True))
