@@ -1186,6 +1186,7 @@ class TestExecuteTimeout:
         assert result.error is None
 
     def test_alarm_timeout_marks_terminal_and_refuses_later_execute(self, monkeypatch):
+        import builtins
         import signal
 
         handlers = {}
@@ -1195,14 +1196,20 @@ class TestExecuteTimeout:
             handlers[signum] = handler
             return old_handler
 
-        def fake_alarm(seconds):
-            if seconds:
-                handlers[signal.SIGALRM](signal.SIGALRM, None)
+        def fake_alarm(_seconds):
             return 0
 
         monkeypatch.setattr("src.repl_environment.environment.signal.signal", fake_signal)
         monkeypatch.setattr("src.repl_environment.environment.signal.alarm", fake_alarm)
         repl = REPLEnvironment(context="test", config=REPLConfig(timeout_seconds=1))
+        original_exec = builtins.exec
+
+        def timeout_during_exec(*args, **kwargs):
+            if len(args) > 1 and args[1] is repl._globals:
+                handlers[signal.SIGALRM](signal.SIGALRM, None)
+            return original_exec(*args, **kwargs)
+
+        monkeypatch.setattr("builtins.exec", timeout_during_exec)
 
         result = repl.execute("x = 1")
 
@@ -1213,6 +1220,7 @@ class TestExecuteTimeout:
         assert repl.execute("print('after reset')").error == result.error
 
     def test_structured_alarm_timeout_is_sticky(self, monkeypatch):
+        import builtins
         import signal
 
         handlers = {}
@@ -1222,9 +1230,7 @@ class TestExecuteTimeout:
             handlers[signum] = handler
             return old_handler
 
-        def fake_alarm(seconds):
-            if seconds:
-                handlers[signal.SIGALRM](signal.SIGALRM, None)
+        def fake_alarm(_seconds):
             return 0
 
         monkeypatch.setattr("src.repl_environment.environment.signal.signal", fake_signal)
@@ -1232,6 +1238,14 @@ class TestExecuteTimeout:
         repl = REPLEnvironment(
             context="test", config=REPLConfig(timeout_seconds=1, structured_mode=True)
         )
+        original_exec = builtins.exec
+
+        def timeout_during_exec(*args, **kwargs):
+            if len(args) > 1 and args[1] is repl._globals:
+                handlers[signal.SIGALRM](signal.SIGALRM, None)
+            return original_exec(*args, **kwargs)
+
+        monkeypatch.setattr("builtins.exec", timeout_during_exec)
 
         result = repl.execute("print('hello')")
 
