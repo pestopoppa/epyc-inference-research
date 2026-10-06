@@ -2,8 +2,10 @@
 
 from dataclasses import FrozenInstanceError
 from inspect import signature
+from pathlib import Path
 
 import pytest
+import yaml
 
 from src.typed_decisions.confidence_expectation import (
     PROBABILITY_SUM_ABS_TOLERANCE,
@@ -13,18 +15,17 @@ from src.typed_decisions.confidence_expectation import (
 from src.typed_decisions.types import Decision, DecisionResult, ParseFailure, QuestionKind
 
 
-ANSWER_QUALITY = {
-    "choice_strings": ["A", "B", "C", "D", "E"],
-    "choice_scores": {"A": 1.0, "B": 0.6, "C": 0.3, "D": 0.0, "E": 0.8},
-}
-ROUTING_OPTIMALITY = {
-    "choice_strings": ["A", "B", "C", "D"],
-    "choice_scores": {"A": 1.0, "B": 0.7, "C": 0.3, "D": 0.0},
-}
-SYNTHESIS_COHERENCE = {
-    "choice_strings": ["A", "B", "C", "D"],
-    "choice_scores": {"A": 1.0, "B": 0.7, "C": 0.3, "D": 0.0},
-}
+_SPEC_DIR = Path(__file__).resolve().parents[2] / "orchestration" / "grading_specs"
+
+
+def _load_spec(name):
+    with (_SPEC_DIR / f"{name}.yaml").open(encoding="utf-8") as stream:
+        return yaml.safe_load(stream)
+
+
+ANSWER_QUALITY = _load_spec("answer_quality")
+ROUTING_OPTIMALITY = _load_spec("routing_optimality")
+SYNTHESIS_COHERENCE = _load_spec("synthesis_coherence")
 
 
 def _result(probabilities, *, value="A", kind=QuestionKind.CHOICE, failures=()):
