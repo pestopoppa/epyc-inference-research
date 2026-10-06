@@ -358,13 +358,23 @@ def test_kb_rag_context_mode_falls_back_to_sources_on_query_miss(
 
 
 @pytest.mark.parametrize("corruption", ["record_seal", "logical_catalog"])
+@pytest.mark.parametrize("backend", ["chat", "command"])
 def test_invalid_kb_catalog_dependency_refuses_before_query_backend_or_publication(
     tmp_path: Path,
     monkeypatch,
     corruption: str,
+    backend: str,
 ) -> None:
     jobs_file = tmp_path / "lab_jobs.yaml"
     _write_kb_jobs_file(jobs_file)
+    if backend == "command":
+        jobs_doc = yaml.safe_load(jobs_file.read_text())
+        jobs_doc["jobs"][0]["risk"] = "read_only"
+        jobs_doc["jobs"][0]["execution"] = {
+            "mode": run_job.DETERMINISTIC_COMMAND_MODE,
+            "command": [sys.executable, "-c", "raise SystemExit(0)"],
+        }
+        jobs_file.write_text(yaml.safe_dump(jobs_doc, sort_keys=False))
     catalog, _ = _write_native_catalog(tmp_path / "kb-index")
     with sqlite3.connect(catalog) as conn:
         if corruption == "record_seal":
@@ -380,8 +390,12 @@ def test_invalid_kb_catalog_dependency_refuses_before_query_backend_or_publicati
     def forbidden_chat(**kwargs):
         raise AssertionError("chat backend must not run after dependency refusal")
 
+    def forbidden_command(**kwargs):
+        raise AssertionError("command backend must not run after dependency refusal")
+
     monkeypatch.setattr(run_job.kb_rag, "query", forbidden_query)
     monkeypatch.setattr(run_job, "call_chat_api", forbidden_chat)
+    monkeypatch.setattr(run_job, "run_deterministic_command", forbidden_command)
 
     with pytest.raises(run_job.LabRunnerError, match="KB catalog dependency refused"):
         run_job.run_from_args(
@@ -390,7 +404,8 @@ def test_invalid_kb_catalog_dependency_refuses_before_query_backend_or_publicati
                 jobs_file,
                 allow_disabled=False,
                 dry_run_stub=False,
-                execute_chat=True,
+                execute_chat=backend == "chat",
+                execute_command=backend == "command",
             )
         )
 
