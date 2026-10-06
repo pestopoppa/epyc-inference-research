@@ -214,13 +214,15 @@ def _global_invocation_log_calls(source: str) -> list[int]:
         node.lineno
         for node in ast.walk(tree)
         if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "get_invocation_log"
+        and (
+            (isinstance(node.func, ast.Attribute) and node.func.attr == "get_invocation_log")
+            or (isinstance(node.func, ast.Name) and node.func.id == "get_invocation_log")
+        )
     ]
 
 
 def test_request_paths_do_not_read_the_process_global_log():
-    """Scan every tracked route source so a new endpoint joins the guard."""
+    """Scan every current route source so a new endpoint joins the guard."""
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[2]
@@ -242,6 +244,9 @@ def test_route_guard_detects_calls_but_ignores_comments_strings_and_request_loca
     """Pin both the forbidden syntax and the legitimate request-local spelling."""
     assert _global_invocation_log_calls(
         "registry.get_invocation_log()\n"
+    ) == [1]
+    assert _global_invocation_log_calls(
+        "get_invocation_log()\n"
     ) == [1]
     assert _global_invocation_log_calls(
         "# registry.get_invocation_log()\n"
