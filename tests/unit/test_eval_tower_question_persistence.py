@@ -231,7 +231,8 @@ def test_writer_initialization_failure_is_reported_without_changing_results(
     ]
     assert "private path detail" not in json.dumps(status)
     aggregate = tower._aggregate(results, tier=1)
-    assert aggregate.quality == 0.5
+    # _aggregate's existing quality scale is correct_count / n_scored * 3.0.
+    assert aggregate.quality == 1.5
     assert aggregate.details["question_sidecar_persistence"] == status
 
 
@@ -290,7 +291,8 @@ def test_result_append_failure_keeps_completion_marker_but_marks_archive_incompl
     ]
     assert "/unreported/private/path" not in json.dumps(status)
     aggregate = tower._aggregate(results, tier=1)
-    assert aggregate.quality == 0.5
+    # Persistence failures must not change the existing 0..3 quality scale.
+    assert aggregate.quality == 1.5
     assert aggregate.details["quality_denominator"] == 2
     assert aggregate.details["question_sidecar_persistence"]["archive_complete"] is False
 
@@ -396,7 +398,8 @@ def test_partition_filtered_aggregate_keeps_full_batch_capture_status(
         excluded_partitions={"audit"},
     )
 
-    assert aggregate.quality == 1.0
+    # Excluding the incorrect audit row leaves one correct row on the 0..3 scale.
+    assert aggregate.quality == 3.0
     assert aggregate.details["quality_denominator"] == 1
     assert aggregate.details["question_sidecar_persistence"] == results.sidecar_persistence
     assert aggregate.details["question_sidecar_persistence"]["completed_n"] == 2
