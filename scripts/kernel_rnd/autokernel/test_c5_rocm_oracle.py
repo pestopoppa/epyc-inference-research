@@ -19,7 +19,10 @@ class C5RocmOracleConfigTest(unittest.TestCase):
 
     def test_checked_in_config_covers_all_eight_seeds_and_193_workloads(self):
         config = C.load()
-        self.assertEqual(tuple(seed.seed_id for seed in config.seeds), tuple(C.EXPECTED_PROBLEMS))
+        self.assertEqual(
+            tuple(seed.seed_id for seed in config.seeds),
+            C.c5_seed_corpus.EXPECTED_SEED_IDS,
+        )
         self.assertEqual(sum(seed.workload_count for seed in config.seeds), 193)
         self.assertEqual(
             [seed.workload_count for seed in config.seeds],
@@ -72,6 +75,11 @@ class C5RocmOracleConfigTest(unittest.TestCase):
     def test_problem_join_population_and_dtype_drift_refuse(self):
         document = self.document()
         document["seeds"][0]["problem_id"] = document["seeds"][1]["problem_id"]
+        with self.assertRaisesRegex(C.OracleRefusal, "problem join"):
+            C._parse_config(document)
+
+        document = self.document()
+        document["seeds"][1]["problem_id"] = document["seeds"][0]["problem_id"]
         with self.assertRaisesRegex(C.OracleRefusal, "problem join"):
             C._parse_config(document)
 
@@ -193,6 +201,14 @@ class C5RocmOraclePlanTest(unittest.TestCase):
             self.assertNotIn("EPYC_AUTOKERNEL_C5_CORRECTNESS_ONLY", rendered)
             self.assertNotIn("if os.environ", C._EVAL_REPLACEMENT)
             self.assertIn('"performance": None', rendered)
+            corpus = C.c5_seed_corpus.load()
+            expected_problem_to_seed = {
+                seed.sol_execbench_problem_id: seed.seed_id for seed in corpus.seeds
+            }
+            self.assertIn(
+                "_epyc_seed_by_problem = " + json.dumps(expected_problem_to_seed, sort_keys=True),
+                rendered,
+            )
             self.assertIn("continue\n\n    # -- Monkey-patch defense before timing --", rendered)
             self.assertEqual(receipt["correctness_stop"], "unconditional_before_timing")
             self.assertFalse(receipt["timing_path_reachable"])

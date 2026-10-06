@@ -156,6 +156,34 @@ class C5SeedCorpusTest(unittest.TestCase):
             with self.subTest(message=message), self.assertRaisesRegex(C.SeedCorpusError, message):
                 self.parse(copy.deepcopy(document))
 
+    def test_sol_execbench_problem_join_is_required_unique_and_slug_bound(self):
+        document = self.document()
+        self.assertEqual(len(document["seeds"]), 8)
+        self.assertEqual(
+            len({row["sol_execbench_problem_id"] for row in document["seeds"]}), 8
+        )
+
+        document = self.document()
+        del document["seeds"][0]["sol_execbench_problem_id"]
+        with self.assertRaisesRegex(C.SeedCorpusError, "keys differ"):
+            self.parse(document)
+
+        document = self.document()
+        shared_problem_id = "L2__000_" + "_".join(
+            row["slug"] for row in document["seeds"][:2]
+        )
+        document["seeds"][0]["sol_execbench_problem_id"] = shared_problem_id
+        document["seeds"][1]["sol_execbench_problem_id"] = shared_problem_id
+        with self.assertRaisesRegex(C.SeedCorpusError, "problem IDs must be unique"):
+            self.parse(document)
+
+        document = self.document()
+        document["seeds"][0]["sol_execbench_problem_id"] = (
+            "L2__044_different_problem_slug"
+        )
+        with self.assertRaisesRegex(C.SeedCorpusError, "does not bind the seed slug"):
+            self.parse(document)
+
     def test_bound_policy_tampering_is_refused_adversarially(self):
         mutations = []
 
