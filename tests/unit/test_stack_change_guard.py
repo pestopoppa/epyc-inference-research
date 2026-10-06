@@ -2955,7 +2955,7 @@ def _staleness(sandbox, **kwargs) -> GuardResult:
 
 
 def _repin(sandbox) -> None:
-    """Stand-in for `compile_stack_priors.py`: re-pin from current bytes."""
+    """Stand-in for `stack_change_pipeline.py update`: re-pin from current bytes."""
     _write_staleness_priors(sandbox.priors, sandbox.artifacts)
 
 
@@ -2982,7 +2982,10 @@ def test_staleness_fails_then_passes_again_after_repinning(staleness_repo) -> No
 
     assert not stale.ok
     assert any("source_artifacts.stack_numa is STALE" in e for e in stale.errors)
-    assert any("compile_stack_priors.py" in e for e in stale.errors)
+    assert any(
+        "uv run python scripts/registry/stack_change_pipeline.py update" in e
+        for e in stale.errors
+    )
 
     # Remedy 1: regenerate the priors (what the guard tells you to do).
     _repin(staleness_repo)

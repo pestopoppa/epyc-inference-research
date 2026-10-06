@@ -76,7 +76,7 @@ REQUIRED_SOURCE_ARTIFACTS = (
 # meaningful against the bytes a commit will CONTAIN, so `staged` reads the git
 # index; `worktree` reads the files on disk and blames every mismatch.
 STALENESS_SCOPES = ("staged", "worktree")
-RECOMPILE_PRIORS_COMMAND = "uv run python scripts/registry/compile_stack_priors.py"
+RECOMPILE_PRIORS_COMMAND = "uv run python scripts/registry/stack_change_pipeline.py update"
 SOURCE_ARTIFACT_REMEDIATION = f"regenerate the priors: {RECOMPILE_PRIORS_COMMAND}"
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 # `git diff --cached` against an empty repository has no HEAD to diff; git's
