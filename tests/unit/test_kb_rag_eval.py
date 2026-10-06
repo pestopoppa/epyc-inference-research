@@ -40,7 +40,9 @@ def _make_catalog(index_dir: Path, *, with_dependency: bool) -> tuple[Path, dict
     try:
         conn.executescript(kb_rag._CATALOG_SCHEMA)
         conn.execute(
-            "INSERT INTO chunk VALUES (1, ?, '[]', 1, 1, 'fixture-hash', 1, '', 'fixture evidence', 1)",
+            "INSERT INTO chunk (chunk_id, file_path, heading_path, line_start, line_end, "
+            "content_hash, mtime, emb_path, text_preview, token_count) "
+            "VALUES (1, ?, '[]', 1, 1, 'fixture-hash', 1, '', 'fixture evidence', 1)",
             (str(index_dir / "evidence.md"),),
         )
         conn.commit()
