@@ -57,6 +57,10 @@ from src.typed_decisions.native import (
     CueStyle,
     _cue_text,
     _DECODE_SEED,
+    _NativeCandidate,
+    _NativeQuestion,
+    _native_from_layout,
+    _native_layout,
     build_native_prompt,
     native_diagnostics,
     run_typed_decisions_native_parallel,
@@ -1163,6 +1167,78 @@ class TestPromptCueing:
 
         assert failures == []
         assert build_native_prompt(STATE, native) == build_native_prompt(STATE, QUESTIONS)
+
+    def test_descriptions_are_label_bound_and_native_layout_roundtrips(self):
+        question = Question(
+            id="described", kind=QuestionKind.CHOICE, text="Pick.",
+            options=("beta", "alpha"), option_descriptions=(None, "first meaning"),
+        )
+        native = _NativeQuestion(
+            question=question,
+            candidates=(
+                _NativeCandidate("beta", (12,), ("beta",), key="A"),
+                _NativeCandidate("alpha", (11,), ("alpha",), key="B"),
+            ),
+            cue_token_ids=(990,),
+        )
+
+        prompt = build_native_prompt(STATE, (native,))
+        assert "   candidates: A = beta | B = alpha" in prompt
+        assert "   candidate description [alpha]: first meaning" in prompt
+        assert "Answer with the key (one of: A, B):" in prompt
+        assert prompt.index("A = beta") < prompt.index("candidate description [alpha]")
+        unkeyed_prompt = build_native_prompt(STATE, (question,))
+        assert "   candidates: beta | alpha" in unkeyed_prompt
+        assert "   candidate description [alpha]: first meaning" in unkeyed_prompt
+        assert unkeyed_prompt.index("candidates: beta | alpha") < unkeyed_prompt.index(
+            "candidate description [alpha]"
+        ) < unkeyed_prompt.index("Answer (one of: beta, alpha):")
+
+        layout = _native_layout(
+            (native,), prompt=prompt, prompt_sha256="0" * 64, n_probs=2,
+            n_tokens=1, cue_style=CueStyle.ID_ONLY, excluded=(),
+        )
+        question_record = layout["positions"][0]["question"]
+        assert question_record["option_descriptions"] == [None, "first meaning"]
+        rebuilt = _native_from_layout(layout["positions"][0])
+        assert rebuilt.question.option_descriptions == (None, "first meaning")
+        assert [candidate.label for candidate in rebuilt.candidates] == ["beta", "alpha"]
+        assert rebuilt.keys == ("A", "B")
+
+        malformed = dict(layout["positions"][0])
+        malformed["question"] = dict(question_record, option_descriptions="xy")
+        with pytest.raises(ValueError, match="sequence, not text or bytes"):
+            _native_from_layout(malformed)
+        for invalid in ("", False, 0, None):
+            malformed["question"] = dict(question_record, option_descriptions=invalid)
+            with pytest.raises(ValueError):
+                _native_from_layout(malformed)
+
+    def test_legacy_native_prompt_and_layout_omit_descriptions(self):
+        from src.typed_decisions.native import _NATIVE_INSTRUCTIONS
+
+        question = Question(
+            id="legacy", kind=QuestionKind.CHOICE, text="Pick.", options=("alpha", "beta")
+        )
+        expected = (
+            f"{_NATIVE_INSTRUCTIONS}\n\nSTATE:\n{STATE}\n\nQUESTION SEQUENCE:\n"
+            "1. id=legacy kind=choice\n   question: Pick.\n"
+            "   candidates: alpha | beta\n   Answer (one of: alpha, beta):\n"
+        )
+        prompt = build_native_prompt(STATE, (question,))
+        assert prompt == expected
+        native = _NativeQuestion(
+            question=question,
+            candidates=(_NativeCandidate("alpha", (11,), ("alpha",)),
+                        _NativeCandidate("beta", (12,), ("beta",))),
+            cue_token_ids=(990,),
+        )
+        layout = _native_layout(
+            (native,), prompt=prompt, prompt_sha256="0" * 64, n_probs=2,
+            n_tokens=1, cue_style=CueStyle.ID_ONLY, excluded=(),
+        )
+        assert "option_descriptions" not in layout["positions"][0]["question"]
+        assert _native_from_layout(layout["positions"][0]).question.option_descriptions == ()
 
     def test_build_native_prompt_rejects_unknown_entries(self):
         with pytest.raises(TypeError, match="expects Question or _NativeQuestion"):

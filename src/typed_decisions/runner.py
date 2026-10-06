@@ -313,9 +313,13 @@ def _build_prompt(state: str, questions: Sequence[Question], schema: dict[str, A
 def _build_catalog(questions: Sequence[Question]) -> str:
     lines: list[str] = []
     for index, question in enumerate(questions, start=1):
+        labels = _candidate_labels(question)
         lines.append(f"Q{index} id={question.id} kind={question.kind.value}")
         lines.append(f"  question: {question.text}")
-        lines.append(f"  candidates: {' | '.join(_candidate_labels(question))}")
+        lines.append(f"  candidates: {' | '.join(labels)}")
+        for label, description in zip(labels, question.option_descriptions):
+            if description is not None:
+                lines.append(f"  candidate description [{label}]: {description}")
         for criterion in question.criteria:
             lines.append(f"  criterion: {criterion}")
         lines.append("")

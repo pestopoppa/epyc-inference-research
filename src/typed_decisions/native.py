@@ -691,6 +691,11 @@ def _native_layout(
                     "options": list(question.options),
                     "levels": list(question.levels),
                     "criteria": list(question.criteria),
+                    **(
+                        {"option_descriptions": list(question.option_descriptions)}
+                        if question.option_descriptions
+                        else {}
+                    ),
                 },
                 "candidates": [_layout_candidate(candidate) for candidate in native.candidates],
             }
@@ -1235,12 +1240,17 @@ def build_native_prompt(
         lines.append(f"   question: {question.text}")
         if keys is None:
             lines.append(f"   candidates: {' | '.join(labels)}")
-            lines.append(f"   Answer (one of: {', '.join(labels)}):")
         else:
             # TD-29 single-token keys: the label stays the display text, the
             # answer token is its key.
             legend = " | ".join(f"{key} = {label}" for key, label in zip(keys, labels))
             lines.append(f"   candidates: {legend}")
+        for label, description in zip(labels, question.option_descriptions):
+            if description is not None:
+                lines.append(f"   candidate description [{label}]: {description}")
+        if keys is None:
+            lines.append(f"   Answer (one of: {', '.join(labels)}):")
+        else:
             lines.append(f"   Answer with the key (one of: {', '.join(keys)}):")
     return "\n".join(lines) + "\n"
 
@@ -2001,6 +2011,7 @@ def _native_from_layout(position: Mapping[str, Any]) -> _NativeQuestion:
         options=tuple(question_data.get("options", ()) or ()),
         levels=tuple(question_data.get("levels", ()) or ()),
         criteria=tuple(question_data.get("criteria", ()) or ()),
+        option_descriptions=question_data.get("option_descriptions", ()),
     )
     candidates = tuple(
         _NativeCandidate(
