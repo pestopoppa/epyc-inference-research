@@ -61,6 +61,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import random
 import sys
@@ -94,6 +95,11 @@ __all__ = [
 # Equal-width reliability bins; the same count ``expected_calibration_error``
 # defaults to, so the reported bins explain the reported ECE exactly.
 _ECE_BINS = 10
+
+_CALIBRATION_INPUT_BINDING_SCHEMA = "typed_decisions.calibration_inputs.v1"
+_CALIBRATION_INPUT_NAMES = ("state_file", "questions_file", "labels_file")
+_CALIBRATION_INPUT_FIELDS = frozenset({"sha256", "byte_length", "path_hint"})
+_MAX_CALIBRATION_PATH_HINT_CHARS = 128
 
 # Fan-out probe catalogue: the study measures transport overhead, so the
 # questions are deliberately generic and content-neutral. Ids are stable for
@@ -143,6 +149,97 @@ def _same_value(left: object, right: object) -> bool:
 
 def _prompt_hashes(results: Sequence[DecisionResult]) -> list[str]:
     return [result.prompt_sha256 for result in results]
+
+
+def _validate_calibration_input_binding(
+    value: Mapping[str, Any] | None,
+    *,
+    method: str,
+) -> dict[str, Any] | None:
+    """Validate input byte identities before a calibration call can run.
+
+    Direct callers may provide identities they observed, but the method label
+    is assigned here so supplied metadata cannot claim CLI byte custody.
+    """
+    if method not in {"caller_asserted", "cli_read_once"}:
+        raise ValueError("invalid calibration input binding method")
+    if value is None:
+        return None
+    if not isinstance(value, Mapping) or set(value) != {"schema", "inputs"}:
+        raise ValueError("calibration input binding must contain exactly schema and inputs")
+    if value.get("schema") != _CALIBRATION_INPUT_BINDING_SCHEMA:
+        raise ValueError("unsupported calibration input binding schema")
+    inputs = value.get("inputs")
+    if not isinstance(inputs, Mapping) or set(inputs) != set(_CALIBRATION_INPUT_NAMES):
+        raise ValueError(
+            "calibration input binding must name state_file, questions_file, labels_file"
+        )
+
+    validated: dict[str, dict[str, Any]] = {}
+    for name in _CALIBRATION_INPUT_NAMES:
+        record = inputs[name]
+        if not isinstance(record, Mapping) or set(record) != _CALIBRATION_INPUT_FIELDS:
+            raise ValueError(f"calibration input binding {name} has invalid fields")
+        digest = record.get("sha256")
+        if (
+            not isinstance(digest, str)
+            or len(digest) != 64
+            or any(char not in "0123456789abcdef" for char in digest)
+        ):
+            raise ValueError(f"calibration input binding {name} sha256 must be lowercase hex")
+        byte_length = record.get("byte_length")
+        if type(byte_length) is not int or byte_length < 0:
+            raise ValueError(
+                f"calibration input binding {name} byte_length must be nonnegative int"
+            )
+        path_hint = record.get("path_hint")
+        if path_hint is not None and (
+            not isinstance(path_hint, str)
+            or len(path_hint) > _MAX_CALIBRATION_PATH_HINT_CHARS
+            or "/" in path_hint
+            or "\\" in path_hint
+            or not path_hint.isprintable()
+        ):
+            raise ValueError(f"calibration input binding {name} path_hint is invalid")
+        validated[name] = {
+            "sha256": digest,
+            "byte_length": byte_length,
+            "path_hint": path_hint,
+        }
+    return {
+        "schema": _CALIBRATION_INPUT_BINDING_SCHEMA,
+        "method": method,
+        "inputs": validated,
+    }
+
+
+def _calibration_source_binding_from_bytes(
+    sources: Mapping[str, tuple[bytes, str | Path]],
+) -> dict[str, Any]:
+    """Describe original CLI bytes, without retaining file content or full paths."""
+    if set(sources) != set(_CALIBRATION_INPUT_NAMES):
+        raise ValueError(
+            "calibration CLI sources must name state_file, questions_file, labels_file"
+        )
+    inputs: dict[str, dict[str, Any]] = {}
+    for name in _CALIBRATION_INPUT_NAMES:
+        raw, source_path = sources[name]
+        if not isinstance(raw, bytes):
+            raise TypeError(f"calibration CLI source {name} must be bytes")
+        basename = Path(source_path).name
+        if (
+            len(basename) > _MAX_CALIBRATION_PATH_HINT_CHARS
+            or "/" in basename
+            or "\\" in basename
+            or not basename.isprintable()
+        ):
+            basename = None
+        inputs[name] = {
+            "sha256": hashlib.sha256(raw).hexdigest(),
+            "byte_length": len(raw),
+            "path_hint": basename,
+        }
+    return {"schema": _CALIBRATION_INPUT_BINDING_SCHEMA, "inputs": inputs}
 
 
 def _write_receipt(
@@ -390,6 +487,7 @@ def run_calibration_study(
     receipt_path: str | Path | None = None,
     artifacts_dir: str | Path | None = None,
     dry_run: bool = False,
+    input_binding: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Calibrate the local confidence statistic against labeled outcomes.
 
@@ -408,7 +506,41 @@ def run_calibration_study(
     equal-width bins, final bin closed), ``brier`` as mean squared error
     between confidence and the 0/1 outcome, plus per-bin reliability
     (count, mean confidence, accuracy) using the identical bin boundaries.
+
+    ``input_binding`` is optional caller-supplied source metadata. Its digest
+    values are stamped ``caller_asserted``; only the CLI can stamp identities
+    derived from its original one-read byte buffers.
     """
+    validated_binding = _validate_calibration_input_binding(
+        input_binding,
+        method="caller_asserted",
+    )
+    return _run_calibration_study(
+        primitives,
+        state=state,
+        questions=questions,
+        labels=labels,
+        role=role,
+        receipt_path=receipt_path,
+        artifacts_dir=artifacts_dir,
+        dry_run=dry_run,
+        input_binding=validated_binding,
+    )
+
+
+def _run_calibration_study(
+    primitives: Any,
+    *,
+    state: str,
+    questions: Sequence[Question],
+    labels: Mapping[str, object],
+    role: str,
+    receipt_path: str | Path | None,
+    artifacts_dir: str | Path | None,
+    dry_run: bool,
+    input_binding: Mapping[str, Any] | None,
+) -> dict[str, Any]:
+    """Internal calibration runner; CLI passes binding from its one-read buffers."""
     questions = list(questions)
     label_map = dict(labels)
     _validate_unique_ids(questions)
@@ -519,6 +651,7 @@ def run_calibration_study(
             "accuracy": "higher_better",
         },
         "prompt_sha256": _prompt_hashes([result]),
+        "input_binding": dict(input_binding) if input_binding is not None else None,
     }
     _write_receipt(receipt, receipt_path=receipt_path, artifacts_dir=artifacts_dir)
     return receipt
@@ -1350,6 +1483,32 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 2
 
     try:
+        calibration_inputs: tuple[str, list[Question], dict[str, object]] | None = None
+        calibration_binding: dict[str, Any] | None = None
+        if args.study == "calibration":
+            source_paths = {
+                "state_file": Path(args.state_file),
+                "questions_file": Path(args.questions_file),
+                "labels_file": Path(args.labels_file),
+            }
+            source_bytes = {name: path.read_bytes() for name, path in source_paths.items()}
+            calibration_binding = _validate_calibration_input_binding(
+                _calibration_source_binding_from_bytes(
+                    {
+                        name: (source_bytes[name], path)
+                        for name, path in source_paths.items()
+                    }
+                ),
+                method="cli_read_once",
+            )
+            calibration_inputs = (
+                _parse_state_bytes(source_bytes["state_file"], source_paths["state_file"]),
+                _parse_questions_bytes(
+                    source_bytes["questions_file"], source_paths["questions_file"]
+                ),
+                _parse_labels_bytes(source_bytes["labels_file"], source_paths["labels_file"]),
+            )
+
         primitives = _live_primitives() if (args.live and not args.dry_run) else None
         if args.study == "contamination":
             receipt = run_contamination_study(
@@ -1364,15 +1523,18 @@ def main(argv: Sequence[str] | None = None) -> int:
                 dry_run=args.dry_run,
             )
         elif args.study == "calibration":
-            receipt = run_calibration_study(
+            assert calibration_inputs is not None and calibration_binding is not None
+            state, questions, labels = calibration_inputs
+            receipt = _run_calibration_study(
                 primitives,
-                state=_load_state(args.state_file),
-                questions=_load_questions(args.questions_file),
-                labels=_load_labels(args.labels_file),
+                state=state,
+                questions=questions,
+                labels=labels,
                 role=args.role,
                 receipt_path=args.receipt,
                 artifacts_dir=args.artifacts_dir,
                 dry_run=args.dry_run,
+                input_binding=calibration_binding,
             )
         elif args.study == "parallel":
             receipt = run_parallel_fanout_study(
@@ -1467,8 +1629,17 @@ def _load_provenance(path: str | Path | None) -> dict[str, Any] | None:
     return dict(payload)
 
 
-def _load_questions(path: str | Path) -> list[Question]:
-    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+def _load_json_bytes(raw: bytes) -> Any:
+    """Parse bytes with the same UTF-8 and universal-newline behavior as read_text()."""
+    with io.TextIOWrapper(io.BytesIO(raw), encoding="utf-8") as stream:
+        return json.load(stream)
+
+
+def _parse_questions_bytes(raw: bytes, path: str | Path) -> list[Question]:
+    return _questions_from_payload(_load_json_bytes(raw), path)
+
+
+def _questions_from_payload(payload: Any, path: str | Path) -> list[Question]:
     if isinstance(payload, Mapping):
         payload = payload.get("questions")
     if not isinstance(payload, list):
@@ -1491,13 +1662,26 @@ def _load_questions(path: str | Path) -> list[Question]:
     return questions
 
 
-def _load_state(path: str | Path) -> str:
+def _load_questions(path: str | Path) -> list[Question]:
     payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    return _questions_from_payload(payload, path)
+
+
+def _parse_state_bytes(raw: bytes, path: str | Path) -> str:
+    return _state_from_payload(_load_json_bytes(raw), path)
+
+
+def _state_from_payload(payload: Any, path: str | Path) -> str:
     if isinstance(payload, str):
         return payload
     if isinstance(payload, Mapping) and isinstance(payload.get("state"), str):
         return payload["state"]
     raise ValueError(f"state file {path} must contain a string or {{'state': string}}")
+
+
+def _load_state(path: str | Path) -> str:
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    return _state_from_payload(payload, path)
 
 
 def _load_states(path: str | Path) -> list[str]:
@@ -1514,11 +1698,19 @@ def _load_states(path: str | Path) -> list[str]:
     )
 
 
-def _load_labels(path: str | Path) -> dict[str, object]:
-    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+def _parse_labels_bytes(raw: bytes, path: str | Path) -> dict[str, object]:
+    return _labels_from_payload(_load_json_bytes(raw), path)
+
+
+def _labels_from_payload(payload: Any, path: str | Path) -> dict[str, object]:
     if not isinstance(payload, Mapping):
         raise ValueError(f"labels file {path} must contain a JSON object")
     return {str(key): value for key, value in payload.items()}
+
+
+def _load_labels(path: str | Path) -> dict[str, object]:
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    return _labels_from_payload(payload, path)
 
 
 if __name__ == "__main__":
