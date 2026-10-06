@@ -174,6 +174,9 @@ def test_touched_duplicate_identity_converges_without_unlinking_active_vector(
         unrelated_before = conn.execute(
             "SELECT * FROM chunk WHERE chunk_id=?", (unrelated[0],)
         ).fetchone()
+        unrelated_vector_before = conn.execute(
+            "SELECT emb_path FROM chunk WHERE chunk_id=?", (unrelated[0],)
+        ).fetchone()[0]
     unrelated_fts_before = next(row for row in _fts_rows(index) if row[0] == unrelated[0])
     with sqlite3.connect(index / "catalog.sqlite") as conn:
         conn.execute(
@@ -215,5 +218,5 @@ def test_touched_duplicate_identity_converges_without_unlinking_active_vector(
     assert duplicate_id not in {row[0] for row in rows_after}
     assert duplicate_id not in {row[0] for row in fts_after}
     assert active_vector.is_file()
-    assert unrelated_before[5] == original[5]
+    assert unrelated_vector_before == original[5]
     assert kb_catalog_dependency.read_dependency(index / "catalog.sqlite") is not None
