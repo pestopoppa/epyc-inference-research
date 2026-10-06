@@ -19,6 +19,7 @@ from pathlib import Path
 
 import pytest
 
+from src.typed_decisions import measure as measure_module
 from src.typed_decisions.measure import (
     MeasurementError,
     _load_questions,
@@ -397,6 +398,20 @@ def _calibration_response() -> str:
     )
 
 
+def _calibration_input_binding() -> dict:
+    return {
+        "schema": "typed_decisions.calibration_inputs.v1",
+        "inputs": {
+            name: {
+                "sha256": hashlib.sha256(name.encode()).hexdigest(),
+                "byte_length": len(name),
+                "path_hint": f"{name}.json",
+            }
+            for name in ("state_file", "questions_file", "labels_file")
+        },
+    }
+
+
 class TestCalibrationStudy:
     def test_exact_ece_brier_and_reliability_bins(self, tmp_path: Path):
         primitives = _FakePrimitives(lambda prompt, **kwargs: _calibration_response())
@@ -452,10 +467,53 @@ class TestCalibrationStudy:
 
         loaded = json.loads(receipt_path.read_text(encoding="utf-8"))
         assert loaded == receipt
+        assert receipt["input_binding"] is None
         assert receipt["mode"] == "json"
         assert receipt["role"] == ROLE
         expected_hash = hashlib.sha256(primitives.calls[0]["prompt"].encode()).hexdigest()
         assert receipt["prompt_sha256"] == [expected_hash]
+
+    def test_direct_input_binding_is_explicitly_caller_asserted(self, tmp_path: Path):
+        receipt = run_calibration_study(
+            _FakePrimitives(lambda prompt, **kwargs: _calibration_response()),
+            state=STATE,
+            questions=CALIBRATION_QUESTIONS,
+            labels=CALIBRATION_LABELS,
+            role=ROLE,
+            receipt_path=tmp_path / "calibration.json",
+            input_binding=_calibration_input_binding(),
+        )
+
+        binding = receipt["input_binding"]
+        assert binding["schema"] == "typed_decisions.calibration_inputs.v1"
+        assert binding["method"] == "caller_asserted"
+        assert set(binding["inputs"]) == {"state_file", "questions_file", "labels_file"}
+
+    @pytest.mark.parametrize(
+        "mutate",
+        [
+            lambda binding: binding.update(method="cli_read_once"),
+            lambda binding: binding["inputs"]["state_file"].update(sha256="A" * 64),
+            lambda binding: binding["inputs"]["state_file"].update(byte_length=True),
+            lambda binding: binding["inputs"]["state_file"].update(path_hint="../state.json"),
+            lambda binding: binding["inputs"].pop("labels_file"),
+        ],
+    )
+    def test_invalid_input_binding_fails_before_model_call(self, mutate):
+        primitives = _FakePrimitives(lambda prompt, **kwargs: _calibration_response())
+        binding = _calibration_input_binding()
+        mutate(binding)
+
+        with pytest.raises(ValueError):
+            run_calibration_study(
+                primitives,
+                state=STATE,
+                questions=CALIBRATION_QUESTIONS,
+                labels=CALIBRATION_LABELS,
+                role=ROLE,
+                input_binding=binding,
+            )
+        assert primitives.calls == []
 
     def test_unknown_labels_are_reported_not_scored(self, tmp_path: Path):
         primitives = _FakePrimitives(lambda prompt, **kwargs: _calibration_response())
@@ -1161,6 +1219,76 @@ class TestCli:
         )
 
         assert code == 2
+
+    def test_calibration_cli_hashes_and_parses_each_original_buffer_once(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        state_file = tmp_path / "state.json"
+        questions_file = tmp_path / "questions.json"
+        labels_file = tmp_path / "labels.json"
+        receipt_file = tmp_path / "calibration.json"
+        state_bytes = b'"original state"\r\n'
+        question_bytes = (
+            b'{"questions":[{"id":"cal-0","kind":"choice","text":"Pick.",'
+            b'"options":["a","b"]}]}\r\n'
+        )
+        label_bytes = b'{"cal-0":"a"}\r\n'
+        state_file.write_bytes(state_bytes)
+        questions_file.write_bytes(question_bytes)
+        labels_file.write_bytes(label_bytes)
+
+        primitives = _FakePrimitives(
+            lambda prompt, **kwargs: json.dumps(
+                {"answers": {"cal-0": _choice_entry("a", 0.875)}}
+            )
+        )
+        monkeypatch.setattr(measure_module, "_live_primitives", lambda: primitives)
+        original_read_bytes = Path.read_bytes
+        reads: dict[Path, int] = {}
+
+        def read_bytes_once(path: Path) -> bytes:
+            if path in {state_file, questions_file, labels_file}:
+                reads[path] = reads.get(path, 0) + 1
+            raw = original_read_bytes(path)
+            if path == state_file:
+                # A post-read replacement must not alter parsed prompt content.
+                state_file.write_bytes(b'"replacement state"\r\n')
+            return raw
+
+        monkeypatch.setattr(Path, "read_bytes", read_bytes_once)
+        code = main(
+            [
+                "calibration",
+                "--state-file", str(state_file),
+                "--questions-file", str(questions_file),
+                "--labels-file", str(labels_file),
+                "--receipt", str(receipt_file),
+                "--live",
+            ]
+        )
+
+        assert code == 0
+        assert reads == {state_file: 1, questions_file: 1, labels_file: 1}
+        assert "original state" in primitives.calls[0]["prompt"]
+        binding = json.loads(receipt_file.read_text(encoding="utf-8"))["input_binding"]
+        assert binding["method"] == "cli_read_once"
+        assert binding["inputs"] == {
+            "state_file": {
+                "sha256": hashlib.sha256(state_bytes).hexdigest(),
+                "byte_length": len(state_bytes),
+                "path_hint": "state.json",
+            },
+            "questions_file": {
+                "sha256": hashlib.sha256(question_bytes).hexdigest(),
+                "byte_length": len(question_bytes),
+                "path_hint": "questions.json",
+            },
+            "labels_file": {
+                "sha256": hashlib.sha256(label_bytes).hexdigest(),
+                "byte_length": len(label_bytes),
+                "path_hint": "labels.json",
+            },
+        }
 
 
 # ── TD-21.33: _last_inference_meta's real-LLMPrimitives branch ────────────
