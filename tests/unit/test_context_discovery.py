@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 import textwrap
 
-from src.context_assembly import InclusionMode, LineRange
+import pytest
+
+from src.context_assembly import BundleEntry, ContextBundle, InclusionMode, LineRange
 from src.context_discovery import (
     DiscoveredHit,
     parse_colgrep_json,
@@ -12,6 +15,7 @@ from src.context_discovery import (
     build_python_codemap,
     cost_candidates,
     assemble_delegation_bundle,
+    render_bundle,
 )
 
 
@@ -183,3 +187,61 @@ def test_assemble_tight_budget_downgrades_or_excludes() -> None:
     )
     # budget of 5 tokens → can't fit full; ends up sliced/codemap or excluded — but never overflows
     assert bundle.total_tokens() <= 5
+
+
+# ─── DCP-4 render identity ───────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "mode",
+    [InclusionMode.FULL, InclusionMode.SLICES, InclusionMode.CODEMAP_ONLY],
+)
+def test_render_rejects_changed_bound_body_before_mode_processing(mode) -> None:
+    planned_body = "def planned():\n    return 'old'\n"
+    changed_body = "def changed():\n    return 'new'\n"
+    bundle = ContextBundle(budget=1000)
+    bundle.add_entry(
+        BundleEntry(
+            path="module.py",
+            mode=mode,
+            line_ranges=[LineRange(1, 2)] if mode == InclusionMode.SLICES else [],
+            content_sha256=hashlib.sha256(planned_body.encode("utf-8")).hexdigest(),
+        )
+    )
+    codemap_calls = []
+
+    with pytest.raises(ValueError, match="content changed after context planning"):
+        render_bundle(
+            bundle,
+            file_reader_fn=lambda _path: changed_body,
+            codemap_fn=lambda body: codemap_calls.append(body) or "stale codemap",
+        )
+    assert codemap_calls == []
+
+
+def test_render_keeps_same_bound_and_unbound_entries_compatible() -> None:
+    body = "def current():\n    return 'same'\n"
+    bundle = ContextBundle(budget=1000)
+    digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
+    bundle.add_entry(BundleEntry(path="bound.py", mode=InclusionMode.FULL, content_sha256=digest))
+    bundle.add_entry(BundleEntry(path="unbound.py", mode=InclusionMode.FULL))
+
+    rendered = render_bundle(bundle, file_reader_fn=lambda _path: body)
+
+    assert "### bound.py (full)\n" + body in rendered
+    assert "### unbound.py (full)\n" + body in rendered
+
+
+@pytest.mark.parametrize("unreadable", ["none", "exception"])
+def test_render_keeps_unreadable_bound_entries_as_skips(unreadable) -> None:
+    bundle = ContextBundle(budget=1000)
+    bundle.add_entry(
+        BundleEntry(path="gone.py", mode=InclusionMode.FULL, content_sha256="0" * 64)
+    )
+
+    def reader(_path):
+        if unreadable == "exception":
+            raise OSError("unreadable")
+        return None
+
+    assert render_bundle(bundle, file_reader_fn=reader) == ""

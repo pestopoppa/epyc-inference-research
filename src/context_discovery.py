@@ -268,6 +268,15 @@ def render_bundle(
             body = file_reader_fn(e.path)
         except Exception:
             body = None
+        if body is None:
+            continue
+        if e.content_sha256 is not None:
+            rendered_sha256 = hashlib.sha256(body.encode("utf-8")).hexdigest()
+            if rendered_sha256 != e.content_sha256:
+                raise ValueError(
+                    f"content changed after context planning for {e.path!r}: "
+                    f"expected {e.content_sha256}, got {rendered_sha256}"
+                )
         if not body:
             continue
         if e.mode == InclusionMode.FULL:
