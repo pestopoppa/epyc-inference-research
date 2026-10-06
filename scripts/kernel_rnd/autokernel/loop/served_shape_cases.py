@@ -147,8 +147,14 @@ class MoeProfile:
     hidden: int              # embedding_length == ffn_{gate,up}_exps ne[0]
     expert_ff: int           # expert_feed_forward_length == ffn_{gate,up}_exps ne[1]
     shexp_ff: int            # shared-expert ffn length (ffn_{gate,up}_shexp ne[1])
-    expert_types: tuple[str, ...]   # quant types of the expert tensors
+    gate_up_types: tuple[str, ...]  # quant types of ffn_{gate,up}_exps
+    down_types: tuple[str, ...]     # quant types of ffn_down_exps
     extra_types: tuple[str, ...] = ()   # operator-listed served types beyond the experts
+
+    @property
+    def expert_types(self) -> tuple[str, ...]:
+        return tuple(t for t in WITNESS_TYPES
+                     if t in set(self.gate_up_types) | set(self.down_types))
 
 
 #: Derived from each lane's served GGUF (see PROVENANCE; `moe_profile_from_gguf`).
@@ -156,12 +162,13 @@ LANE_PROFILES: dict[str, MoeProfile] = {
     "ds41": MoeProfile(
         "ds41", "/mnt/raid0/llm/models/antirez/deepseek-v4.1-flash-gguf/"
         "DeepSeek-V4.1-Flash-Q4.gguf", expert_count=384, expert_used=6, hidden=5120,
-        expert_ff=2304, shexp_ff=2304, expert_types=("Q4_K",)),
+        expert_ff=2304, shexp_ff=2304, gate_up_types=("Q4_K",), down_types=("Q4_K",)),
     "q38fn": MoeProfile(
         "q38fn", "/mnt/raid0/llm/models/unsloth/Qwen3.8-Flash-Next-GGUF/UD-IQ4_XS/"
         "Qwen3.8-Flash-Next-UD-IQ4_XS-00001-of-00003.gguf", expert_count=512, expert_used=10,
         hidden=2560, expert_ff=640, shexp_ff=640,
-        expert_types=("IQ3_S", "IQ4_XS", "IQ4_NL", "Q8_0"), extra_types=("Q6_K",)),
+        gate_up_types=("IQ3_S", "IQ4_XS"), down_types=("IQ4_NL", "Q8_0"),
+        extra_types=("Q6_K",)),
 }
 
 
@@ -227,11 +234,33 @@ def routed_shapes(lane: str) -> tuple[ServedShape, ...]:
     )
 
 
-def routed_types(lane: str) -> tuple[str, ...]:
-    """The lane's served expert types plus its operator-listed extras, in witness order."""
+#: ggml block size (elements) per witness type: a MUL_MAT over a type needs
+#: k % block == 0 (Q38FN's down shape has k=640, invalid for every 256-block type).
+BLOCK_SIZE: dict[str, int] = {
+    "Q4_0": 32, "Q4_1": 32, "Q5_0": 32, "Q5_1": 32, "Q8_0": 32, "IQ4_NL": 32,
+    "Q2_K": 256, "Q3_K": 256, "Q4_K": 256, "Q5_K": 256, "Q6_K": 256, "IQ4_XS": 256,
+    "IQ2_XXS": 256, "IQ2_XS": 256, "IQ2_S": 256, "IQ3_XXS": 256, "IQ3_S": 256}
+
+
+def type_fits(shape: ServedShape, type_a: str) -> bool:
+    return shape.k % BLOCK_SIZE[type_a] == 0
+
+
+def _direction(shape: ServedShape) -> str:
+    return "down" if "_down" in shape.name else "gate_up"
+
+
+def routed_types(lane: str, shape: "ServedShape | None" = None) -> tuple[str, ...]:
+    """The lane's served expert types for `shape`'s direction (gate/up vs down, as the
+    served GGUF's tensors carry them) plus its operator-listed extras, valid for the
+    shape's k, in witness order. Without a shape: the union over both directions."""
     profile = LANE_PROFILES[lane]
-    wanted = set(profile.expert_types) | set(profile.extra_types)
-    return tuple(t for t in WITNESS_TYPES if t in wanted)
+    if shape is None:
+        wanted = set(profile.gate_up_types) | set(profile.down_types) | set(profile.extra_types)
+        return tuple(t for t in WITNESS_TYPES if t in wanted)
+    direct = profile.down_types if _direction(shape) == "down" else profile.gate_up_types
+    wanted = set(direct) | set(profile.extra_types)
+    return tuple(t for t in WITNESS_TYPES if t in wanted and type_fits(shape, t))
 
 
 def lane_for_model(model) -> "str | None":
@@ -268,8 +297,11 @@ def moe_profile_from_gguf(paths, lane: str, *,
                 values[name] = int(field.parts[field.data[0]][0])
         for tensor in reader.tensors:
             base = tensor.name.split(".", 2)[-1]
-            if base in ("ffn_gate_exps.weight", "ffn_up_exps.weight", "ffn_down_exps.weight"):
-                types.add(tensor.tensor_type.name)
+            if base in ("ffn_gate_exps.weight", "ffn_up_exps.weight"):
+                types.add(("gate_up", tensor.tensor_type.name))
+                dims.setdefault(base, [int(x) for x in tensor.shape])
+            elif base == "ffn_down_exps.weight":
+                types.add(("down", tensor.tensor_type.name))
                 dims.setdefault(base, [int(x) for x in tensor.shape])
             elif base == "ffn_gate_shexp.weight":
                 dims.setdefault(base, [int(x) for x in tensor.shape])
@@ -282,7 +314,8 @@ def moe_profile_from_gguf(paths, lane: str, *,
     known = LANE_PROFILES.get(lane)
     return MoeProfile(lane, str(paths[0]), expert_count=count, expert_used=used,
                       hidden=gate[0], expert_ff=gate[1], shexp_ff=shexp[1],
-                      expert_types=tuple(t for t in WITNESS_TYPES if t in types),
+                      gate_up_types=tuple(t for t in WITNESS_TYPES if ("gate_up", t) in types),
+                      down_types=tuple(t for t in WITNESS_TYPES if ("down", t) in types),
                       extra_types=known.extra_types if known else ())
 
 
@@ -371,16 +404,13 @@ def case_set(anchor_nmse_by_shape: Mapping[tuple[str, str, int], float], *,
     `KeyError` naming the missing triple -- a served-shape case this caller cannot
     justify a bound for is never silently dropped OR silently given a guessed one."""
     cases = []
-    shapes, types, widths = corpus(routed, lane)
-    for shape in shapes:
-        for type_a in types:
-            for width in widths:
-                key = (shape.name, type_a, width)
-                if key not in anchor_nmse_by_shape:
-                    raise KeyError(f"no anchor NMSE measurement for {key}; refusing to "
-                                   "bake a served-shape case with a guessed bound")
-                bound = tightened_nmse_bound(anchor_nmse_by_shape[key], factor=factor)
-                cases.append(ServedShapeCase(shape, type_a, width, bound))
+    for shape, type_a, width in canonical_triples(routed, lane):
+        key = (shape.name, type_a, width)
+        if key not in anchor_nmse_by_shape:
+            raise KeyError(f"no anchor NMSE measurement for {key}; refusing to "
+                           "bake a served-shape case with a guessed bound")
+        bound = tightened_nmse_bound(anchor_nmse_by_shape[key], factor=factor)
+        cases.append(ServedShapeCase(shape, type_a, width, bound))
     return tuple(cases)
 
 
@@ -616,9 +646,12 @@ def calibration_vars(shape: ServedShape, type_a: str, n: int) -> str:
 
 def canonical_triples(routed: bool = False,
                       lane: "str | None" = None) -> tuple[tuple[ServedShape, str, int], ...]:
+    """Every VALID (shape, type, width): the type fits the shape's k (block size) and,
+    for a routed shape, is one its direction actually serves."""
     shapes, types, widths = corpus(routed, lane)
     return tuple((shape, type_a, width) for shape in shapes
-                 for type_a in types for width in widths)
+                 for type_a in (routed_types(lane, shape) if routed else types)
+                 if type_fits(shape, type_a) for width in widths)
 
 
 def calibration_triples(lane: str) -> tuple[tuple[ServedShape, str, int], ...]:
@@ -841,5 +874,6 @@ __all__ = ["CASE_SET_ENV", "CASE_SET_ID", "MANIFEST_SCHEMA", "ManifestRefused",
            "calibration_patch_block", "parse_calibration", "apply_patch_block",
            "binary_has_calibration", "ROUTED_CASE_SET_ID", "routed_shapes",
            "routed_types", "ROUTED_WIDTHS", "LANE_PROFILES", "MoeProfile", "route_ids",
-           "candidate_experts", "lane_for_model", "moe_profile_from_gguf", "BACKEND_THREADS_ENV", "corpus",
+           "candidate_experts", "lane_for_model", "moe_profile_from_gguf", "BLOCK_SIZE",
+           "type_fits", "BACKEND_THREADS_ENV", "corpus",
            "calibration_triples", "binary_has_routed_case_set", "THREADS_PATCHED"]

@@ -238,8 +238,10 @@ def lane_profile_refusal(launch_path: Path, lane: str) -> "str | None":
     fields = ("expert_count", "expert_used", "hidden", "expert_ff", "shexp_ff")
     diff = {f: (getattr(derived, f), getattr(recorded, f)) for f in fields
             if getattr(derived, f) != getattr(recorded, f)}
-    if diff or set(derived.expert_types) != set(recorded.expert_types):
-        return f"{lane}'s GGUF disagrees with LANE_PROFILES: {diff or derived.expert_types}"
+    if diff or set(derived.gate_up_types) != set(recorded.gate_up_types) \
+            or set(derived.down_types) != set(recorded.down_types):
+        return (f"{lane}'s GGUF disagrees with LANE_PROFILES: "
+                f"{diff or (derived.gate_up_types, derived.down_types)}")
     return None
 
 
@@ -274,6 +276,48 @@ def execute(build: Path, store: Path, recipe: dict, region_lock: str, lane: str,
     path.write_text(json.dumps(body, indent=2, sort_keys=True), encoding="utf-8")
     print(f"measured  {len(measurements)} cases -> {path}", file=out)
     return path
+
+
+def measurement_record_refusal(path: Path, launch: Path, lane: str,
+                               region_lock: str) -> "str | None":
+    """Round-14: an IMPORTED calibration record (--apply --measurements) may bake bounds
+    only if it was measured for THIS lane under THIS served recipe: same lane, same
+    launch record (sha256), the same served env, cpu list, threads, topology and case
+    argv as the recipe would produce now, the lane's served GGUF, and the calibration
+    binary it names still byte-identical. Any mismatch refuses."""
+    try:
+        body = json.loads(Path(path).read_text(encoding="utf-8"))
+        prov = body["provenance"]
+        build = Path(prov["anchor_build"])
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        return f"{path} is not a calibration record with provenance: {exc}"
+    if body.get("schema") != "epyc.autokernel.served_shape_calibration.v1":
+        return f"{path} is not a served-shape calibration record"
+    if body.get("lane") != lane:
+        return f"{path} was measured for lane {body.get('lane')!r}, not {lane!r}"
+    try:
+        recipe = served_recipe(launch, build, cpu_list=None, threads=None)
+    except Refused as exc:
+        return str(exc)
+    checks = {
+        "launch_sha256": (prov.get("launch_sha256"), recipe["launch_sha256"]),
+        "served_env": (prov.get("served_env"),
+                       {k: v for k, v in sorted(recipe["env"].items()) if k != "PATH"}),
+        "cpu_list": (prov.get("cpu_list"), recipe["cpu_list"]),
+        "threads": (prov.get("threads"), recipe["threads"]),
+    }
+    argv = prov.get("argv") or []
+    expected = calibration_argv(build, recipe, region_lock, lane)
+    tail = lambda items: list(items[items.index("--") + 1:]) if "--" in items else None
+    checks["argv"] = (tail(list(argv)), tail(expected))
+    bad = [name for name, (got, want) in checks.items() if got != want]
+    if bad:
+        return f"{path} does not match the intended served recipe: {', '.join(bad)}"
+    binary = build / "bin" / "test-backend-ops"
+    if not binary.is_file() or _sha256(binary) != prov.get("binary_digests", {}).get(
+            "test-backend-ops"):
+        return f"{binary} is not the calibration binary the record measured"
+    return lane_profile_refusal(launch, lane)
 
 
 def load_measurements(path: Path) -> dict:
@@ -377,6 +421,13 @@ def main(argv: "list[str] | None" = None, out=sys.stdout) -> int:
                            args.lane, out=out)
             measurements = load_measurements(path)
         elif args.measurements is not None:
+            if args.launch is None or not args.lane:
+                raise Refused("--measurements needs --launch and --lane: an imported "
+                              "record is validated against the intended served recipe")
+            refusal = measurement_record_refusal(args.measurements, args.launch, args.lane,
+                                                 args.region_lock)
+            if refusal:
+                raise Refused(refusal)
             measurements = load_measurements(args.measurements)
         if args.apply:
             if measurements is None:

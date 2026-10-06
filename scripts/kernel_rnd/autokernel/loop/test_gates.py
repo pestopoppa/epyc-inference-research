@@ -2874,3 +2874,21 @@ class Round12HonestAuthorRefinements(unittest.TestCase):
                 reference_build=Path("/ref"), served_shape_manifest=Path("/s/manifest.json"),
                 _layers=passing)
             self.assertEqual(seen, [(False, None), (True, "q38fn")])
+
+
+
+class Round14LexerComments(unittest.TestCase):
+    def test_apostrophes_and_quotes_inside_comments_are_comments(self):
+        lex = lambda line: gates._lexical_refusal(line, file_scope_helper=False,
+                                                  new_helpers=False)
+        for line in ("    x = y; /* don't reorder */", "    // it's the hot loop",
+                     '    /* say "hi" */ x = 1;', '    x = 1; // a "quote',
+                     "    /* it's */ y = 2; // and it's", "    char c = '/';",
+                     '    s = "/* not a comment */";', "    s = \"it's\"; // ok"):
+            self.assertIsNone(lex(line), line)
+        for line in ("    x = y; /* opens", "    y; */ z;", "    /* #define X */",
+                     "    // #include", "    /* a /* b */", "    char c = 'a;",
+                     '    s = "open;'):
+            self.assertIsNotNone(lex(line), line)
+        self.assertEqual(gates._split_line_lexically("a /* it's */ b // c's"),
+                         ("a   b ", " it's \n c's"))

@@ -1493,11 +1493,30 @@ def _directive_balance_refusal(lines) -> "str | None":
 
 
 def _split_line_lexically(line: str) -> "tuple[str, str] | None":
-    """(code outside literals, trailing `//` comment text) for one source line, or None
-    when a string/char literal is unterminated. Literal CONTENTS are dropped."""
-    code, i, n = [], 0, len(line)
+    """(code outside literals and comments, comment text) for one source line, or None
+    when a string/char literal is unterminated. Literal CONTENTS are dropped.
+
+    Round-14: comments are recognised IN the lexer -- a `//` or `/*` outside a literal
+    suspends quote parsing (so `/* don't reorder */` or `// it's` is not an
+    unterminated char literal). A `/* ... */` closed on this line becomes one space in
+    the code and its text joins the comment; an UNCLOSED `/*` is left in the code (as
+    `/*`), and a stray `*/` stays in the code, so the caller refuses both."""
+    code, comments, i, n = [], [], 0, len(line)
     while i < n:
         ch = line[i]
+        if line.startswith("//", i):
+            comments.append(line[i + 2:])
+            break
+        if line.startswith("/*", i):
+            end = line.find("*/", i + 2)
+            if end < 0:
+                code.append("/*")
+                comments.append(line[i + 2:])
+                break
+            comments.append(line[i + 2:end])
+            code.append(" ")
+            i = end + 2
+            continue
         if ch in "\"'":
             quote, i = ch, i + 1
             while i < n and line[i] != quote:
@@ -1507,11 +1526,9 @@ def _split_line_lexically(line: str) -> "tuple[str, str] | None":
             code.append(quote + quote)
             i += 1
             continue
-        if line.startswith("//", i):
-            return "".join(code), line[i + 2:]
         code.append(ch)
         i += 1
-    return "".join(code), ""
+    return "".join(code), "\n".join(comments)
 
 
 #: Round-9 resolution B: process, filesystem, dynamic-loading, environment and
@@ -1544,14 +1561,11 @@ def _lexical_refusal(line: str, *, file_scope_helper: bool, new_helpers: bool) -
         return "unterminated string/char literal"
     code, comment = split
     # Round-12 (honest-author model): a block comment that opens AND closes on this
-    # line is ordinary kernel practice; anything spanning lines stays refused.
-    inline = re.findall(r"/\*.*?\*/", code)
-    code = re.sub(r"/\*.*?\*/", " ", code)
+    # line is ordinary kernel practice (the lexer already removed it from `code`);
+    # an unclosed `/*`, a stray `*/`, or a delimiter inside a comment stays refused.
     for text in (code, comment):
         if "/*" in text or "*/" in text:
             return "multi-line block comment delimiter"
-    if any("#" in block for block in inline):
-        return "`#` in a comment"
     if re.search(r"\b(?:u8|u|U|L)?R\"\"", code):
         return "raw string literal"
     # (an admitted file-scope `#include <...>` line names a header, not a call; the

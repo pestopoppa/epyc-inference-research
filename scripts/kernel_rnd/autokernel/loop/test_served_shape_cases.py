@@ -104,7 +104,10 @@ def test_tightened_bound_refuses_bad_inputs():
 
 def test_case_set_is_the_full_cross_product():
     cases = ssc.case_set(ANCHOR_NMSE)
-    assert len(cases) == len(ssc.SERVED_SHAPES) * len(ssc.WITNESS_TYPES) * len(ssc.SERVED_WIDTHS)
+    # round-14: only VALID pairs -- the type's block size must divide the shape's k
+    valid = sum(1 for shape in ssc.SERVED_SHAPES for t in ssc.WITNESS_TYPES
+                if shape.k % ssc.BLOCK_SIZE[t] == 0)
+    assert len(cases) == valid * len(ssc.SERVED_WIDTHS)
     assert {c.n for c in cases} == set(ssc.SERVED_WIDTHS)
     assert {c.type_a for c in cases} == set(ssc.WITNESS_TYPES)
     assert all(0 < c.max_nmse <= ssc.SERVED_SHAPE_NMSE_CAP for c in cases)
@@ -402,7 +405,12 @@ def test_each_lanes_routed_corpus_uses_its_served_expert_count_and_dispersed_ids
     assert any(256 <= i < 384 for i in q_ids) and any(i >= 384 for i in q_ids)
     anchor = {(t[0].name, t[1], t[2]): 1e-6 for t in ssc.calibration_triples("q38fn")}
     routed = ssc.case_set(anchor, routed=True, lane="q38fn")
-    assert len(routed) == 2 * 5 * 4
+    # gate/up IQ3_S, IQ4_XS (+Q6_K extra); down (k=640) IQ4_NL, Q8_0 only
+    assert len(routed) == (3 + 2) * 4
+    pairs = {(c.shape.name.split("_routed")[0], c.type_a) for c in routed}
+    assert pairs == {("q38fn_expert_gate_up", "IQ3_S"), ("q38fn_expert_gate_up", "IQ4_XS"),
+                     ("q38fn_expert_gate_up", "Q6_K"), ("q38fn_expert_down", "IQ4_NL"),
+                     ("q38fn_expert_down", "Q8_0")}
     assert routed[0].vars().endswith(",routed=1,max_nmse=3e-06")
     block = ssc.backend_ops_patch_block(ssc.case_set(anchor), routed)
     assert "test_mul_mat_id_served_routed(" in block and ssc.ROUTED_CASE_SET_ID in block
@@ -449,3 +457,20 @@ def test_the_calibration_set_covers_both_corpora():
     for lane in ssc.LANE_PROFILES:
         assert len(ssc.calibration_triples(lane)) == (
             len(ssc.canonical_triples()) + len(ssc.canonical_triples(routed=True, lane=lane)))
+
+
+
+@pytest.mark.parametrize("lane", sorted(ssc.LANE_PROFILES))
+def test_every_generated_case_respects_the_block_size(lane):
+    """Round-14: Q38FN's down shape has k=640; no 256-block type may be paired with it."""
+    for shape, type_a, _n in ssc.calibration_triples(lane):
+        assert shape.k % ssc.BLOCK_SIZE[type_a] == 0, (shape.name, type_a)
+    down = [t for s, t, _ in ssc.canonical_triples() if s.name == "q38fn_expert_down"]
+    assert down and set(down) <= {"Q4_0", "Q4_1", "Q5_0", "Q5_1", "Q8_0", "IQ4_NL"}
+    assert set(ssc.BLOCK_SIZE) == set(ssc.WITNESS_TYPES)
+
+
+def test_routed_types_follow_the_served_direction():
+    gate, down = ssc.routed_shapes("q38fn")
+    assert ssc.routed_types("q38fn", gate) == ("Q6_K", "IQ4_XS", "IQ3_S")
+    assert ssc.routed_types("q38fn", down) == ("Q8_0", "IQ4_NL")

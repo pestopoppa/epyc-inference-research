@@ -265,3 +265,37 @@ def test_the_lane_is_required_and_checked_against_its_gguf(tmp_path):
     assert rc == 2   # no --lane
     launch = _launch(tmp_path)
     assert "not lane ds41" in cal.lane_profile_refusal(launch, "ds41")
+
+
+
+def test_imported_measurements_must_match_the_intended_recipe(tmp_path):
+    """Round-14: --apply --measurements validates lane, launch, env, cpu list, threads,
+    topology/argv and the calibration binary before baking bounds."""
+    from unittest import mock
+    build, lock, store = _fake_build(tmp_path), _fake_region_lock(tmp_path), tmp_path / "s"
+    launch = _launch(tmp_path)
+    assert _run("--store", store, "--anchor-build", build, "--launch", launch,
+                "--region-lock", lock, "--execute", "--lane", "q38fn")[0] == 0
+    record = next((store / "served_shape").glob("calibration-*.json"))
+    with mock.patch.object(cal, "lane_profile_refusal", return_value=None):
+        assert cal.measurement_record_refusal(record, launch, "q38fn", str(lock)) is None
+        assert "lane" in cal.measurement_record_refusal(record, launch, "ds41", str(lock))
+        body = json.loads(launch.read_text())
+        body["launch_env"]["GGML_IQK"] = "0"
+        other = tmp_path / "other.launch.json"
+        other.write_text(json.dumps(body))
+        assert "served_env" in cal.measurement_record_refusal(record, other, "q38fn", str(lock))
+        body["launch_env"]["GGML_IQK"] = "1"
+        body["command_argv"][-3] = "24"   # -t 24
+        other.write_text(json.dumps(body))
+        why = cal.measurement_record_refusal(record, other, "q38fn", str(lock))
+        assert why and "threads" in why
+        (build / "bin" / "test-backend-ops").write_text("#!/bin/sh\nexit 0\n")
+        assert "calibration binary" in cal.measurement_record_refusal(
+            record, launch, "q38fn", str(lock))
+    rc, _ = _run("--store", store, "--measurements", record, "--apply", "--lane", "q38fn")
+    assert rc == 2   # no --launch
+    rc, _ = _run("--store", store, "--measurements", record, "--launch", launch, "--apply",
+                 "--lane", "q38fn", "--region-lock", lock)
+    assert rc == 2   # binary changed above
+    assert not (store / "served_shape" / "manifest.json").exists()
