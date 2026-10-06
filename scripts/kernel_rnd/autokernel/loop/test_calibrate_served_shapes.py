@@ -299,3 +299,16 @@ def test_imported_measurements_must_match_the_intended_recipe(tmp_path):
                  "--lane", "q38fn", "--region-lock", lock)
     assert rc == 2   # binary changed above
     assert not (store / "served_shape" / "manifest.json").exists()
+
+
+def test_timeout_s_reaches_subprocess_call(tmp_path):
+    """--timeout-s is passed to region-lock and recorded in provenance."""
+    build, lock, store = _fake_build(tmp_path), _fake_region_lock(tmp_path), tmp_path / "s"
+    rc, out = _run("--store", store, "--anchor-build", build, "--launch", _launch(tmp_path),
+                   "--region-lock", lock, "--timeout-s", "7200", "--execute", "--lane", "q38fn")
+    assert rc == 0, out
+    argv = (tmp_path / "region-lock.argv").read_text()
+    assert "--timeout-s 7200" in argv
+    record = json.loads(next((store / "served_shape").glob("calibration-*.json")).read_text())
+    prov = record["provenance"]
+    assert prov["timeout_s"] == 7200

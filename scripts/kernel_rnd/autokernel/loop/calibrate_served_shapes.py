@@ -100,10 +100,11 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def provenance(build: Path, cpu_list: str, threads: int, argv: list) -> dict:
+def provenance(build: Path, cpu_list: str, threads: int, argv: list,
+               timeout_s: int = CALIBRATION_TIMEOUT_S) -> dict:
     bin_dir = Path(build) / "bin"
     record = {"anchor_build": str(Path(build).resolve()), "cpu_list": cpu_list,
-              "threads": threads, "argv": argv,
+              "threads": threads, "timeout_s": timeout_s, "argv": argv,
               "measured_at": datetime.now(timezone.utc).isoformat(),
               "binary_digests": {p.name: _sha256(p) for p in sorted(bin_dir.iterdir())
                                  if p.is_file()}}
@@ -213,9 +214,11 @@ def served_recipe(launch_path: Path, build: Path, *, cpu_list: "str | None",
             "launch_sha256": _sha256(Path(launch_path))}
 
 
-def calibration_argv(build: Path, recipe: dict, region_lock: str, lane: str) -> list:
+def calibration_argv(build: Path, recipe: dict, region_lock: str, lane: str,
+                     timeout_s: int = CALIBRATION_TIMEOUT_S) -> list:
     binary = Path(build) / "bin" / "test-backend-ops"
-    return [region_lock, "run", "--cpu-list", recipe["cpu_list"], "--role", "bench", "--",
+    return [region_lock, "run", "--cpu-list", recipe["cpu_list"], "--role", "bench",
+            "--timeout-s", str(timeout_s), "--",
             *recipe["prefix"], str(binary), "test", "-o", "MUL_MAT,MUL_MAT_ID",
             "-b", "CPU", "-p", ssc.calibration_regex(lane)]
 
@@ -246,17 +249,17 @@ def lane_profile_refusal(launch_path: Path, lane: str) -> "str | None":
 
 
 def execute(build: Path, store: Path, recipe: dict, region_lock: str, lane: str,
-            out=sys.stdout) -> Path:
+            timeout_s: int = CALIBRATION_TIMEOUT_S, out=sys.stdout) -> Path:
     if not ssc.binary_has_calibration(build):
         raise Refused(f"{build}/bin/test-backend-ops does not carry the calibration block "
                       f"({ssc.CALIBRATION_CASE_SET_ID}) with the backend-thread control; "
                       "stage it with --stage-calibration-patch and rebuild first")
     cpu_list, threads = recipe["cpu_list"], recipe["threads"]
-    argv = calibration_argv(build, recipe, region_lock, lane)
+    argv = calibration_argv(build, recipe, region_lock, lane, timeout_s=timeout_s)
     print(f"execute   {' '.join(argv[:12])} ... -p <{len(ssc.calibration_triples(lane))} cases> "
           f"({ssc.BACKEND_THREADS_ENV}={threads})", file=out)
     done = subprocess.run(argv, capture_output=True, text=True, env=recipe["env"],
-                          stdin=subprocess.DEVNULL, timeout=CALIBRATION_TIMEOUT_S)
+                          stdin=subprocess.DEVNULL, timeout=timeout_s)
     if done.returncode != 0:
         raise Refused(f"calibration run exited {done.returncode}: "
                       f"{(done.stderr or done.stdout)[-600:]}")
@@ -267,7 +270,7 @@ def execute(build: Path, store: Path, recipe: dict, region_lock: str, lane: str,
     path = folder / f"calibration-{stamp}.json"
     body = {"schema": "epyc.autokernel.served_shape_calibration.v1",
             "case_set_id": ssc.CASE_SET_ID, "lane": lane,
-            "provenance": {**provenance(build, cpu_list, threads, argv),
+            "provenance": {**provenance(build, cpu_list, threads, argv, timeout_s=timeout_s),
                            "launch": recipe["launch"], "launch_sha256": recipe["launch_sha256"],
                            "served_env": {k: v for k, v in sorted(recipe["env"].items())
                                           if k != "PATH"}},
@@ -367,6 +370,9 @@ def main(argv: "list[str] | None" = None, out=sys.stdout) -> int:
                         help="the lane whose GGUF MoE profile the routed corpus derives from")
     parser.add_argument("--launch", type=Path,
                         help="the lane's resolved launch JSON (served env, prefix, -t)")
+    parser.add_argument("--timeout-s", type=int, default=CALIBRATION_TIMEOUT_S,
+                        help="calibration timeout in seconds (includes region-lock wait time; "
+                        "default 3600)")
     parser.add_argument("--stage-calibration-patch", action="store_true")
     parser.add_argument("--build-calibration", action="store_true")
     parser.add_argument("--jobs", type=int, default=24)
@@ -418,7 +424,7 @@ def main(argv: "list[str] | None" = None, out=sys.stdout) -> int:
             if profile_refusal:
                 raise Refused(profile_refusal)
             path = execute(args.anchor_build, args.store, recipe, args.region_lock,
-                           args.lane, out=out)
+                           args.lane, timeout_s=args.timeout_s, out=out)
             measurements = load_measurements(path)
         elif args.measurements is not None:
             if args.launch is None or not args.lane:
