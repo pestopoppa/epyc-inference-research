@@ -316,6 +316,24 @@ def test_completion_marker_failure_is_reported_in_role_summary(monkeypatch, tmp_
     def fail_complete(self, *, completed_n: int, elapsed_s: float) -> None:
         raise OSError(errno.ENOSPC, "private completion detail")
 
+    class TransportTripwire:
+        def __init__(self, *args, **kwargs) -> None:
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args) -> bool:
+            return False
+
+        def request(self, *_args, **_kwargs):
+            raise AssertionError("calibration fixture attempted HTTP transport")
+
+        get = request
+        post = request
+
+    monkeypatch.setattr(eval_tower.httpx, "Client", TransportTripwire)
+
     monkeypatch.setattr(tower, "_eval_question", fake_eval_question)
     monkeypatch.setattr(
         tower,
