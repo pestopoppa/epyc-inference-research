@@ -7,6 +7,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[2]
 AUTOPILOT_DIR = ROOT / "scripts" / "autopilot"
@@ -255,6 +257,7 @@ def test_system_card_uses_stack_priors_not_registry_or_removed_role(tmp_path: Pa
     ) in card
 
 
+@pytest.mark.usefixtures("_declared_backend_metadata")
 def test_system_card_compiles_fallback_rows_when_stack_priors_missing(tmp_path: Path) -> None:
     _write_minimal_root(tmp_path)
     _write_minimal_descriptors(tmp_path)
@@ -279,6 +282,7 @@ def test_system_card_compiles_fallback_rows_when_stack_priors_missing(tmp_path: 
     assert f"| {LEGACY_ARCHITECT_ROLE} |" not in card
 
 
+@pytest.mark.usefixtures("_declared_backend_metadata")
 def test_renderer_compiles_fallback_rows_when_stack_priors_missing(tmp_path: Path) -> None:
     _write_minimal_root(tmp_path)
     _write_minimal_descriptors(tmp_path)
@@ -565,3 +569,45 @@ def test_render_system_card_fails_closed_when_generator_unavailable(monkeypatch)
     assert "Do not use checked-in `system_card.md`" in card
     assert "| Role | Port | Model |" not in card
     assert "frontdoor-prior.gguf" not in card
+
+
+@pytest.fixture
+def _declared_backend_metadata(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Owned path metadata for pure compilation; no binary or store evidence."""
+    import subprocess
+    from src.registry import kernel_paths
+
+    directories = {}
+    for backend in ("cpu", "gpu"):
+        directory = tmp_path / "declared-backends" / backend
+        directory.mkdir(mode=0o700, parents=True)
+        directories[backend] = directory
+
+    def declared_backend_dir(backend):
+        if backend not in directories:
+            raise AssertionError(f"unexpected metadata backend: {backend!r}")
+        return directories[backend]
+
+    original_popen = subprocess.Popen
+    provenance_children = []
+    expected_git = ["git", "-C", str(Path(__file__).resolve().parents[2]),
+                    "rev-parse", "--short", "HEAD"]
+    expected_options = {"text": True, "stderr": subprocess.DEVNULL,
+                        "stdout": subprocess.PIPE}
+
+    def refuse_child(*args, **kwargs):
+        # Exact check_output contract: no executable/env/shell or creation flags.
+        if len(args) != 1 or args[0] != expected_git or kwargs != expected_options:
+            raise AssertionError("pure metadata fixture permits only readonly Git provenance")
+        child = original_popen(*args, **kwargs)
+        provenance_children.append(child)
+        return child
+
+    monkeypatch.setattr(kernel_paths, "backend_dir", declared_backend_dir)
+    # Preserve real CPU [] and GPU vendor-path library policy.
+    monkeypatch.setattr(subprocess, "Popen", refuse_child)
+    yield directories
+    assert provenance_children, "missing actual Git provenance read"
+    assert all(child.poll() == 0 for child in provenance_children)
+    for directory in directories.values():
+        assert not list(directory.iterdir()), "metadata fixture acquired a binary or output"
