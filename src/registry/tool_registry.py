@@ -29,6 +29,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+from threading import Lock
 from typing import Any, Callable
 
 import yaml
@@ -272,6 +273,10 @@ class ToolRegistry:
         self._invocation_log: deque[ToolInvocation] = deque(
             maxlen=_invocation_log_max() or 1,
         )
+        # deque.append is thread-safe on CPython, but iterating a deque while
+        # another thread mutates it is not a stable snapshot operation. Keep
+        # append, snapshot, and clear under one lock; tool dispatch stays outside.
+        self._invocation_log_lock = Lock()
         self._invocation_log_enabled: bool = _invocation_log_max() > 0
         self._mcp_configs: dict[str, Any] | None = None
         # Cascading tool policy (used when features().cascading_tool_policy is True)
@@ -786,7 +791,8 @@ ws ::= " "*
         """
         if not self._invocation_log_enabled:
             return
-        self._invocation_log.append(invocation)
+        with self._invocation_log_lock:
+            self._invocation_log.append(invocation)
 
     def get_invocation_log(self) -> list[ToolInvocation]:
         """Get a snapshot of the bounded diagnostic invocation ring.
@@ -802,7 +808,8 @@ ws ::= " "*
         Legitimate uses: tests, interactive debugging, and process-level
         diagnostics that deliberately want the whole-process view.
         """
-        return list(self._invocation_log)
+        with self._invocation_log_lock:
+            return list(self._invocation_log)
 
     def clear_invocation_log(self) -> None:
         """Clear the diagnostic invocation ring.
@@ -812,7 +819,8 @@ ws ::= " "*
         one request's telemetry is racy under concurrency (another request's calls
         land between the clear and the read). Use ``_invoked_tools`` for that.
         """
-        self._invocation_log.clear()
+        with self._invocation_log_lock:
+            self._invocation_log.clear()
 
 
 # Default global registry

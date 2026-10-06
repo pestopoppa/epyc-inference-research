@@ -18,12 +18,16 @@ Two defects, one root cause (the registry is ONE object per API process —
 """
 from __future__ import annotations
 
+from collections import deque
+from threading import Event, Thread
+
 import pytest
 
 from src.registry.tool_registry import (
     INVOCATION_LOG_MAX_DEFAULT,
     Tool,
     ToolCategory,
+    ToolInvocation,
     ToolPermissions,
     ToolRegistry,
 )
@@ -196,6 +200,54 @@ def test_get_invocation_log_returns_a_snapshot():
     snapshot = registry.get_invocation_log()
     snapshot.clear()
     assert len(registry.get_invocation_log()) == 1
+
+
+def test_snapshot_serializes_concurrent_append():
+    """A reader holds a snapshot while a writer attempts to append."""
+    reader_entered = Event()
+    release_reader = Event()
+    writer_started = Event()
+    writer_finished = Event()
+
+    class PausingDeque(deque):
+        def __iter__(self):
+            reader_entered.set()
+            assert release_reader.wait(timeout=2)
+            return super().__iter__()
+
+    registry = ToolRegistry()
+    first = ToolInvocation("first", {}, "worker", True, "ok")
+    second = ToolInvocation("second", {}, "worker", True, "ok")
+    registry._invocation_log = PausingDeque([first], maxlen=2)
+
+    reader = Thread(target=registry.get_invocation_log)
+
+    def append_from_writer():
+        writer_started.set()
+        registry._record_invocation(second)
+        writer_finished.set()
+
+    writer = Thread(target=append_from_writer)
+    reader.start()
+    try:
+        assert reader_entered.wait(timeout=2)
+        writer.start()
+        assert writer_started.wait(timeout=2)
+        # The reader is deliberately paused inside deque iteration. The writer
+        # must wait until that snapshot has copied the ring.
+        assert not writer_finished.wait(timeout=0.05)
+    finally:
+        release_reader.set()
+        reader.join(timeout=2)
+        if writer.ident is not None:
+            writer.join(timeout=2)
+
+    assert not reader.is_alive()
+    assert not writer.is_alive()
+    assert [entry.tool_name for entry in registry.get_invocation_log()] == [
+        "first",
+        "second",
+    ]
 
 
 # ── No reader of the shared log may build per-request telemetry ─────────────
