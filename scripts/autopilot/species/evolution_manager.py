@@ -24,7 +24,11 @@ from typing import Any
 _AUTOPILOT_DIR = str(Path(__file__).resolve().parents[1])
 if _AUTOPILOT_DIR not in _sys.path:
     _sys.path.insert(0, _AUTOPILOT_DIR)
-from experiment_journal import failure_analysis_for_prompt, scrub_legacy_scale_text  # noqa: E402
+from experiment_journal import (  # noqa: E402
+    has_negative_evidence,
+    negative_evidence_for_prompt,
+    scrub_legacy_scale_text,
+)
 
 log = logging.getLogger("autopilot.evolution_manager")
 
@@ -208,7 +212,7 @@ class EvolutionManager:
         # Build trial summaries for the prompt
         summaries = []
         for e in entries:
-            tag = "PASS" if e.pareto_status == "frontier" else "FAIL" if e.failure_analysis else "NEUTRAL"
+            tag = "PASS" if e.pareto_status == "frontier" else "FAIL" if has_negative_evidence(e) else "NEUTRAL"
             summary = (
                 f"#{e.trial_id} [{tag}] {e.species}/{e.action_type} "
                 f"q={e.quality:.3f} s={e.speed:.1f} c={e.cost:.3f} r={e.reliability:.2f}"
@@ -217,10 +221,10 @@ class EvolutionManager:
                 summary += f"\n  Hypothesis: {e.hypothesis}"
             if e.expected_mechanism:
                 summary += f"\n  Mechanism: {e.expected_mechanism}"
-            if e.failure_analysis:
+            if has_negative_evidence(e):
                 # Scrubbed render: omits legacy >3.0-scale baseline/regression text
                 # so distilled strategies can't resurrect the corrupt baseline.
-                fa_short = failure_analysis_for_prompt(e, 200)
+                fa_short = negative_evidence_for_prompt(e, entries=journal_entries, limit=200)
                 summary += f"\n  Failure: {fa_short}"
             if e.config_diff:
                 diff_str = json.dumps(e.config_diff)[:200]

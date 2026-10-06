@@ -82,6 +82,8 @@ from experiment_journal import (
     ExperimentJournal,
     JournalEntry,
     build_baseline_pin,
+    build_error_signature,
+    build_error_scope,
     scrub_legacy_scale_text,
     select_lineage_parent,
 )
@@ -11021,6 +11023,13 @@ def _run_loop_inner(
             memory_count=memory_count,
             active_flags=active_flags_list,
             failure_analysis=failure_analysis,
+            error_signature=build_error_signature(
+                passed=verdict.passed, retry_not_revert=verdict.retry_not_revert,
+                categories=verdict.categories, species=species_name,
+                action_type=action.get("type", ""), tier=eval_result.tier),
+            error_scope=build_error_scope(
+                core_id=eval_result.core_id, baseline_pin=baseline_pin_record,
+                regime_digest=trial_regime_digest, comparability=trial_comparability),
             eval_details=eval_details_dict,
             metric_schema_version=metric_schema_version,
             harness_metrics=harness_metrics,
