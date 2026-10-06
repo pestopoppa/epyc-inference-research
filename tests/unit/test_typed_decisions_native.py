@@ -1199,9 +1199,9 @@ class TestPromptCueing:
             n_tokens=1, cue_style=CueStyle.ID_ONLY, excluded=(),
         )
         question_record = layout["positions"][0]["question"]
-        assert question_record["option_descriptions"] == ["first meaning", None]
+        assert question_record["option_descriptions"] == [None, "first meaning"]
         rebuilt = _native_from_layout(layout["positions"][0])
-        assert rebuilt.question.option_descriptions == ("first meaning", None)
+        assert rebuilt.question.option_descriptions == (None, "first meaning")
         assert [candidate.label for candidate in rebuilt.candidates] == ["beta", "alpha"]
         assert rebuilt.keys == ("A", "B")
 
