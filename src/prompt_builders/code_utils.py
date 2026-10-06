@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -49,9 +50,14 @@ class _RejectedToolCall(NamedTuple):
 def _record_repair_outcome(outcome: str, raw: str) -> None:
     with _repair_lock:
         TOOL_CALL_JSON_REPAIR_COUNTS[outcome] += 1
+    # ``surrogatepass`` gives every Python str a deterministic byte encoding,
+    # including lone surrogates that strict UTF-8 cannot represent. The logged
+    # byte count and digest describe these exact encoded bytes; payload content
+    # itself must not enter application logs.
+    encoded_raw = raw.encode("utf-8", errors="surrogatepass")
     _log.info(
-        "tool_call_json_repair outcome=%s bytes=%d raw=%r",
-        outcome, len(raw), raw[:_RAW_ECHO_LIMIT],
+        "tool_call_json_repair outcome=%s bytes=%d encoding=utf-8-surrogatepass raw_content_sha256=%s",
+        outcome, len(encoded_raw), hashlib.sha256(encoded_raw).hexdigest(),
     )
 
 

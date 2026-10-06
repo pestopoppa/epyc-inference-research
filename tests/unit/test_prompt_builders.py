@@ -252,6 +252,56 @@ class TestToolCallJsonRepair:
         after = self._counts()
         assert after["unrecoverable"] == before["unrecoverable"] + 1
 
+    def test_repair_logs_hash_not_raw_content_for_repaired_and_unrecoverable(
+        self, caplog
+    ):
+        import hashlib
+        import logging
+
+        from src.prompt_builders.code_utils import _loads_with_repair
+
+        sentinel = "PRIVATE_REPAIR_PAYLOAD_秘密😀"
+        repaired_raw = '{"query": "' + sentinel + '"]'
+        rejected_raw = "{query: " + sentinel
+        before = self._counts()
+
+        with caplog.at_level(logging.INFO, logger="src.prompt_builders.code_utils"):
+            assert _loads_with_repair(repaired_raw) == (True, {"query": sentinel})
+            assert _loads_with_repair(rejected_raw) == (False, None)
+
+        assert sentinel not in caplog.text
+        assert "raw_content_sha256=" + hashlib.sha256(
+            repaired_raw.encode("utf-8", errors="surrogatepass")
+        ).hexdigest() in caplog.text
+        assert "raw_content_sha256=" + hashlib.sha256(
+            rejected_raw.encode("utf-8", errors="surrogatepass")
+        ).hexdigest() in caplog.text
+        assert "encoding=utf-8-surrogatepass" in caplog.text
+        assert f"bytes={len(repaired_raw.encode('utf-8', errors='surrogatepass'))}" in caplog.text
+        assert f"bytes={len(rejected_raw.encode('utf-8', errors='surrogatepass'))}" in caplog.text
+        after = self._counts()
+        assert after["repaired"] == before["repaired"] + 1
+        assert after["unrecoverable"] == before["unrecoverable"] + 1
+
+    def test_repair_log_encoding_handles_lone_surrogate(self, caplog):
+        import hashlib
+        import logging
+
+        from src.prompt_builders.code_utils import _record_repair_outcome
+
+        raw = "unicode-秘密-\ud800"
+        encoded = raw.encode("utf-8", errors="surrogatepass")
+        before = self._counts()
+
+        with caplog.at_level(logging.INFO, logger="src.prompt_builders.code_utils"):
+            _record_repair_outcome("repaired", raw)
+
+        assert "encoding=utf-8-surrogatepass" in caplog.text
+        assert f"bytes={len(encoded)}" in caplog.text
+        assert "raw_content_sha256=" + hashlib.sha256(encoded).hexdigest() in caplog.text
+        assert "unicode-秘密" not in caplog.text
+        assert self._counts()["repaired"] == before["repaired"] + 1
+
     def test_unrecoverable_tagged_payload_refused_not_skipped(self):
         response = '<tool_call>{"name":"grep","arguments":{"pattern": TODO @@ }}</tool_call>'
         result = extract_code_from_response(response)
