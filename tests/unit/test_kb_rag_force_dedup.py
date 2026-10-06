@@ -296,6 +296,11 @@ def test_partial_staged_write_without_prior_target_publishes_no_vector(
         kb_rag.build_index(config, index_dir=index, force=True)
 
     assert _all_chunk_rows(index) == []
+    with sqlite3.connect(index / "catalog.sqlite") as conn:
+        if conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE name='chunk_fts'"
+        ).fetchone():
+            assert conn.execute("SELECT COUNT(*) FROM chunk_fts").fetchone()[0] == 0
     assert kb_catalog_dependency.read_dependency(index / "catalog.sqlite") is None
     assert list((index / "emb").glob("*.npz")) == []
     assert list((index / "emb").glob(".*.tmp.npz")) == []
