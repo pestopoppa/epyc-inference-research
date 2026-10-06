@@ -524,55 +524,27 @@ def build_mutation_dependency_entry(
 
 
 def _entry_overlap(a: dict[str, Any], b: dict[str, Any]) -> list[str]:
-    reasons: list[str] = []
-    if a.get("subsystem") and a.get("subsystem") == b.get("subsystem"):
-        reasons.append(f"same subsystem {a['subsystem']}")
-    for key, label in (
-        ("files_touched", "file"),
-        ("prompt_sections_touched", "prompt section"),
-    ):
-        shared = sorted(set(a.get(key) or []) & set(b.get(key) or []))
-        if shared:
-            reasons.append(f"shared {label}: {', '.join(shared[:4])}")
-    shared_flags = sorted(
-        set((a.get("feature_flags") or {}).keys()) & set((b.get("feature_flags") or {}).keys())
-    )
-    if shared_flags:
-        reasons.append(f"shared feature flag: {', '.join(shared_flags[:4])}")
-    return reasons
+    from mutation_pair_features import overlap_reasons
+    return overlap_reasons(a, b)
 
 
 def _conflict_severity(new_entry: dict[str, Any], prior: dict[str, Any]) -> tuple[str, list[str]]:
-    reasons = _entry_overlap(new_entry, prior)
+    if not _entry_overlap(new_entry, prior):
+        return "none", []
+    from mutation_pair_features import compare_mutation_features
+    facts = compare_mutation_features(new_entry, prior)
+    reasons = facts["overlap_reasons"]
     if not reasons:
         return "none", []
-
-    severity = "watch"
-    new_delta = new_entry.get("behavior_signature_delta") or {}
-    old_delta = prior.get("behavior_signature_delta") or {}
-    if new_delta.get("severity") == "blocking" or old_delta.get("severity") == "blocking":
-        severity = "blocking"
-
-    new_changed = set(new_delta.get("changed_fields") or [])
-    old_changed = set(old_delta.get("changed_fields") or [])
-    if new_changed and old_changed and new_changed != old_changed:
+    severity = "blocking" if facts["delta_blocking"] else "watch"
+    if facts["different_surfaces"]:
         reasons.append(
             "different behavior surfaces changed: "
-            f"new={sorted(new_changed)}, prior={sorted(old_changed)}"
+            f"new={facts['new_changed']}, prior={facts['prior_changed']}"
         )
-
-    new_improved = set(new_delta.get("improved_sentinels") or [])
-    old_improved = set(old_delta.get("improved_sentinels") or [])
-    new_regressed = set(new_delta.get("regressed_sentinels") or [])
-    old_regressed = set(old_delta.get("regressed_sentinels") or [])
-    if (
-        (new_improved and old_improved and new_improved.isdisjoint(old_improved))
-        or (new_regressed & old_improved)
-        or (old_regressed & new_improved)
-    ):
+    if facts["disjoint_improvements"] or facts["opposing_movement"]:
         severity = "blocking"
         reasons.append("opposing or disjoint sentinel movement across accepted mutations")
-
     return severity, reasons
 
 

@@ -2403,6 +2403,7 @@ class PromptForge:
         description: str = "",
         eval_tower=None,
         gepa_max_evals: int = 50,
+        author_capture_context: dict[str, Any] | None = None,
     ) -> PromptMutation:
         """Propose a prompt mutation via Claude CLI or GEPA.
 
@@ -2434,6 +2435,16 @@ class PromptForge:
             description=description,
         )
 
+        # Best-effort metadata is captured at the complete-input boundary, before any author call.
+        try:
+            from mutation_author_capture import capture_author_context
+            capture_author_context(
+                prompt, operator=mutation_type, target=target_file,
+                inputs={"original_content": original, "failure_context": failure_context,
+                        "description": description}, context=author_capture_context,
+                parameters={"timeout_s": self.timeout})
+        except Exception as exc:
+            log.warning("Mutation author metadata unavailable (%s)", type(exc).__name__)
         result = self._invoke_claude(prompt)
         mutated_content, extracted_ok = self._extract_mutation(result, original)
 
@@ -2956,6 +2967,7 @@ class PromptForge:
         failure_context: str = "",
         per_suite_quality: dict[str, float] | None = None,
         description: str = "",
+        author_capture_context: dict[str, Any] | None = None,
     ) -> CodeMutation:
         """Propose a mutation to a Python code file (Tier 2 search space).
 
@@ -2996,6 +3008,16 @@ class PromptForge:
             description=description,
         )
 
+        # Best-effort metadata is captured at the complete-input boundary, before any author call.
+        try:
+            from mutation_author_capture import capture_author_context
+            capture_author_context(
+                prompt, operator=mutation_type, target=target_file,
+                inputs={"original_content": original, "failure_context": failure_context,
+                        "description": description}, context=author_capture_context,
+                parameters={"timeout_s": self.timeout})
+        except Exception as exc:
+            log.warning("Mutation author metadata unavailable (%s)", type(exc).__name__)
         result = self._invoke_claude(prompt)
         mutated_content, extracted_ok = self._extract_code_mutation(result, original)
 
