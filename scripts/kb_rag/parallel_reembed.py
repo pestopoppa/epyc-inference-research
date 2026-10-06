@@ -85,7 +85,7 @@ if str(_REPO) not in sys.path:
 
 import numpy as np  # noqa: E402
 
-from src.retrieval import colbert_encoder  # noqa: E402
+from src.retrieval import colbert_encoder, kb_catalog_dependency  # noqa: E402
 from src.retrieval.markdown_chunker import chunk_file  # noqa: E402
 
 DEFAULT_CONFIG = _REPO / "config" / "kb_rag_config.yaml"
@@ -199,21 +199,21 @@ def _parallel_contract(index_dir: Path, *, load_encoder: bool = False) -> tuple[
 def _prepare_encoding_contract(index_dir: Path) -> tuple[int, str]:
     """Stamp only a genuinely new output before any worker/manifest work."""
     from src.retrieval.kb_rag import (
-        _ensure_catalog, _index_convention, _read_meta, _writer_convention,
+        _catalog_loaded_identity, _ensure_catalog, _index_convention, _read_meta, _writer_convention,
     )
 
     contract = _parallel_contract(index_dir, load_encoder=True)
     conn = _ensure_catalog(index_dir, verify_tokenizer=True)
-    try:
+    with kb_catalog_dependency.writer_connection(conn):
         if (
             _index_convention(conn) is None and not _read_meta(conn)
             and any((index_dir / "emb").rglob("*.npz"))
         ):
             raise RuntimeError("cannot stamp new caps over embeddings without catalog identity")
         _writer_convention(conn)
-        conn.commit()
-    finally:
-        conn.close()
+        kb_catalog_dependency.commit_completed_writer(
+            conn, "parallel_prepare", loaded=_catalog_loaded_identity(),
+        )
     return contract
 
 
@@ -351,6 +351,7 @@ def rebuild_catalog(manifest: list[dict], index_dir: Path) -> dict:
     import sqlite3
 
     from src.retrieval.kb_rag import (
+        _catalog_loaded_identity,
         _ensure_catalog,
         _ensure_fts,
         _sync_chunk_fts_row,
@@ -358,51 +359,53 @@ def rebuild_catalog(manifest: list[dict], index_dir: Path) -> dict:
 
     _prepare_encoding_contract(index_dir)
     conn = _ensure_catalog(index_dir, verify_tokenizer=True)
-    conn.row_factory = sqlite3.Row
-    fts_enabled = _ensure_fts(conn)
-    cur = conn.cursor()
-    cur.execute("DELETE FROM chunk")
-    if fts_enabled:
-        cur.execute("DELETE FROM chunk_fts")
+    with kb_catalog_dependency.writer_connection(conn):
+        conn.row_factory = sqlite3.Row
+        fts_enabled = _ensure_fts(conn)
+        cur = conn.cursor()
+        cur.execute("DELETE FROM chunk")
+        if fts_enabled:
+            cur.execute("DELETE FROM chunk_fts")
 
-    inserted = 0
-    missing_emb = 0
-    for rec in manifest:
-        emb_abs = index_dir / rec["emb_rel"]
-        if not emb_abs.exists():
-            missing_emb += 1
-            continue
-        try:
-            with np.load(emb_abs) as z:
-                n_tokens = int(z["emb"].shape[0])
-        except Exception:  # noqa: BLE001
-            missing_emb += 1
-            continue
-        cur.execute(
-            "INSERT INTO chunk "
-            "(file_path, heading_path, line_start, line_end, content_hash, "
-            " mtime, emb_path, text_preview, token_count) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                rec["file_path"],
-                json.dumps(rec["heading_path"]),
-                rec["line_start"],
-                rec["line_end"],
-                rec["content_hash"],
-                rec["mtime"],
-                rec["emb_rel"],
-                rec["text"].strip()[:240],
-                n_tokens,
-            ),
+        inserted = 0
+        missing_emb = 0
+        for rec in manifest:
+            emb_abs = index_dir / rec["emb_rel"]
+            if not emb_abs.exists():
+                missing_emb += 1
+                continue
+            try:
+                with np.load(emb_abs) as z:
+                    n_tokens = int(z["emb"].shape[0])
+            except Exception:  # noqa: BLE001
+                missing_emb += 1
+                continue
+            cur.execute(
+                "INSERT INTO chunk "
+                "(file_path, heading_path, line_start, line_end, content_hash, "
+                " mtime, emb_path, text_preview, token_count) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    rec["file_path"],
+                    json.dumps(rec["heading_path"]),
+                    rec["line_start"],
+                    rec["line_end"],
+                    rec["content_hash"],
+                    rec["mtime"],
+                    rec["emb_rel"],
+                    rec["text"].strip()[:240],
+                    n_tokens,
+                ),
+            )
+            _sync_chunk_fts_row(
+                cur, int(cur.lastrowid), rec["file_path"], rec["heading_path"],
+                rec["text"], fts_enabled,
+            )
+            inserted += 1
+        kb_catalog_dependency.commit_completed_writer(
+            conn, "parallel_rebuild", loaded=_catalog_loaded_identity(),
         )
-        _sync_chunk_fts_row(
-            cur, int(cur.lastrowid), rec["file_path"], rec["heading_path"],
-            rec["text"], fts_enabled,
-        )
-        inserted += 1
-    conn.commit()
-    conn.execute("VACUUM")
-    conn.close()
+        conn.execute("VACUUM")
     return {"catalog_rows": inserted, "manifest_records": len(manifest),
             "missing_embeddings": missing_emb, "fts": fts_enabled}
 
