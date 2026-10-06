@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import pytest
 
@@ -90,17 +91,40 @@ def test_case_set_refuses_a_missing_anchor_measurement():
 
 
 def test_vars_and_cpp_agree_with_the_real_test_backend_ops_constructors():
+    """test-backend-ops prints `ggml_type_name()` spellings (`q4_K`, `iq3_s`, `f32`),
+    and the generated subclasses append `max_nmse` to the base `vars()` (review
+    2026-10-06: the first cut spelled `IQ3_S`/`F32` and the base vars() had no
+    max_nmse, so the anchored selector matched 0 real cases)."""
     cases = ssc.case_set(ANCHOR_NMSE)
     dense = next(c for c in cases if c.shape.op == "MUL_MAT")
     expert = next(c for c in cases if c.shape.op == "MUL_MAT_ID")
-    assert dense.vars().startswith(f"type_a={dense.type_a},type_b=F32,m={dense.shape.m},"
-                                   f"n={dense.n},k={dense.shape.k},")
+    name = ssc.GGML_TYPE_NAMES
+    assert set(name) == set(ssc.WITNESS_TYPES)
+    assert dense.vars() == (f"type_a={name[dense.type_a]},type_b=f32,m={dense.shape.m},"
+                            f"n={dense.n},k={dense.shape.k},bs=[1,1],nr=[1,1],"
+                            f"per=[0,1,2,3],k_v=0,o=1,max_nmse={dense.max_nmse:g}")
     assert "test_mul_mat_served_shape(" in dense.cpp()
     assert f"GGML_TYPE_{dense.type_a}" in dense.cpp()
-    assert expert.vars().startswith(
-        f"type_a={expert.type_a},type_b=F32,n_mats={expert.shape.n_mats},"
-        f"n_used={expert.shape.n_used},b=0,m={expert.shape.m},n={expert.n},k={expert.shape.k}")
+    assert expert.vars() == (
+        f"type_a={name[expert.type_a]},type_b=f32,n_mats={expert.shape.n_mats},"
+        f"n_used={expert.shape.n_used},b=0,m={expert.shape.m},n={expert.n},"
+        f"k={expert.shape.k},max_nmse={expert.max_nmse:g}")
     assert "test_mul_mat_id_served_shape(" in expert.cpp()
+    block = ssc.backend_ops_patch_block(cases[:1])
+    assert block.count('",max_nmse=" + autokernel_served_shape_nmse_str(max_nmse)') == 2
+
+
+def test_type_names_match_the_real_ggml_type_table():
+    tree = Path("/mnt/raid0/llm/llama.cpp-experimental-cor-b0ba1d427-20261005")
+    source = tree / "ggml/src/ggml.c"
+    if not source.is_file():
+        pytest.skip("champion tree not present")
+    text = source.read_text(encoding="utf-8", errors="replace")
+    for spelled in ssc.GGML_TYPE_NAMES.values():
+        assert f'.type_name                = "{spelled}"' in text, spelled
+    vars_src = (tree / "tests/test-backend-ops.cpp").read_text(encoding="utf-8")
+    assert "return VARS_TO_STR10(type_a, type_b, m, n, k, bs, nr, per, k_v, o);" in vars_src
+    assert "return VARS_TO_STR8(type_a, type_b, n_mats, n_used, b, m, n, k);" in vars_src
 
 
 def test_case_set_regex_selects_exactly_its_cases():
@@ -282,3 +306,16 @@ def test_ppl_contract_op_nmse_passes_when_both_the_generic_and_served_shape_suit
         _check_served_shape_case_set=passing_served_shape_check)
     assert verdict.passed is True
     assert "served-shape suite passed" in verdict.reason
+
+
+def test_direct_launch_anchor_build_keeps_widened_targets():
+    """Review 2026-10-06: run.py's build_champion forced PROMOTION_TARGETS on a direct
+    launch, silently DROPPING the ppl_contract tools `promote_anchor` asked for (while
+    provenance.json recorded them). It must take the union instead."""
+    source = (Path(__file__).parent / "run.py").read_text(encoding="utf-8")
+    body = source[source.index("    def build_champion("):source.index("    def build_baseline(")]
+    assert "targets=gates.PROMOTION_TARGETS if direct_launch else targets" not in body
+    assert "dict.fromkeys((*gates.PROMOTION_TARGETS," in body
+    fold = source[source.index("    def ppl_contract_fold_check("):]
+    fold = fold[:fold.index("    def gpu_reading(")]
+    assert "served_shape_manifest=" in fold

@@ -4418,7 +4418,13 @@ def main(argv: list[str] | None = None) -> int:
         return gates.compiles(args.worktree, dest, cmake_defines=recipe.cmake_defines(),
                               jobs=anchor_build_jobs(recipe, build_jobs),
                               cpu_list=build_cpu_list,
-                              targets=gates.PROMOTION_TARGETS if direct_launch else targets)
+                              # Review 2026-10-06: a direct launch always carries
+                              # PROMOTION_TARGETS, but must not DROP targets the caller
+                              # widened (ppl_contract tools) -- the old override silently
+                              # discarded them while provenance.json recorded them.
+                              targets=(tuple(dict.fromkeys((*gates.PROMOTION_TARGETS,
+                                                            *targets)))
+                                       if direct_launch else targets))
 
     def build_baseline(dest: Path, commit: str):
         """The frozen production kernel, built at most once PER FREEZE. Never in the
@@ -4899,7 +4905,10 @@ def main(argv: list[str] | None = None) -> int:
                 env=dict(arm.launch_env),
                 reference_build=gates.production_cpu_reference_build(),
                 cache_dir=Path(args.store) / "ppl_contract" / "cache",
-                log_dir=Path(args.store) / "ppl_contract" / "bundle")
+                log_dir=Path(args.store) / "ppl_contract" / "bundle",
+                # The fold judges the WHOLE bundle with the same layer (a) the keep did,
+                # served-shape case set included (review 2026-10-06).
+                served_shape_manifest=Path(args.store) / "served_shape" / "manifest.json")
         except Exception as exc:  # noqa: BLE001 -- fail CLOSED
             return gates.Verdict("ppl_contract_bundle", False,
                                  f"bundle quality check errored: {type(exc).__name__}: {exc}")

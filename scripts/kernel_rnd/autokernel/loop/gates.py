@@ -2566,7 +2566,9 @@ def check_production_reference_loads(reference_build: Path, *, model: Path, cpu_
                        f"no llama-completion at the frozen production reference "
                        f"{reference_build} (PPL_CONTRACT_TOOL_TARGETS missing from the "
                        "production kernel store build)")
-    result = _completion(reference_build, "The quick brown fox jumps.", 1, 32, model=model,
+    # 8 tokens, not 1: a single generated token can legitimately be whitespace, which
+    # `_completion` (correctly) reads as "no output" -- a spurious fail-closed.
+    result = _completion(reference_build, "The quick brown fox jumps.", 8, 64, model=model,
                          threads=threads, env=env, cpu_list=cpu_list, log_dir=log_dir,
                          cache_dir=None, label="production_reference_load")
     if result is None:

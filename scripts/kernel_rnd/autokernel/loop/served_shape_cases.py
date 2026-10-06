@@ -78,6 +78,11 @@ SERVED_WIDTHS: tuple[int, ...] = (1, 2, 3, 4, 5)
 #: dense Q4_K/Q5_K admission, `iqk_kquants_q6_iq4xs_dequant`).
 WITNESS_TYPES: tuple[str, ...] = ("IQ3_S", "IQ4_NL", "Q4_K", "Q5_K", "Q6_K", "IQ4_XS")
 
+#: `ggml_type_name()` spellings, which test-backend-ops prints in `vars()`.
+GGML_TYPE_NAMES: dict[str, str] = {
+    "IQ3_S": "iq3_s", "IQ4_NL": "iq4_nl", "Q4_K": "q4_K", "Q5_K": "q5_K",
+    "Q6_K": "q6_K", "IQ4_XS": "iq4_xs"}
+
 CASE_SET_ID = "served_shape_lowbit_v1"
 CASE_SET_ENV = "AUTOKERNEL_CORRECTNESS_CASE_SET"
 
@@ -154,12 +159,20 @@ class ServedShapeCase:
         return f"{self.shape.name}_{self.type_a.lower()}_n{self.n}"
 
     def vars(self) -> str:
-        """`test_mul_mat[_id]_served_shape::vars()`, byte for byte (see `.cpp()`)."""
+        """`test_mul_mat[_id]_served_shape::vars()`, byte for byte (see `.cpp()`).
+
+        Review 2026-10-06: test-backend-ops prints types with `ggml_type_name`
+        (`iq3_s`, `q4_K`, `f32`), and the base `vars()` carries no `max_nmse` -- the
+        first cut spelled `IQ3_S`/`F32` and relied on a `max_nmse` field the subclasses
+        never printed, so the anchored selector matched 0 cases and the layer could
+        never pass. The subclasses now override `vars()` to append the bound (binding
+        the manifest to what the binary was compiled with)."""
+        type_a = GGML_TYPE_NAMES[self.type_a]
         if self.shape.op == "MUL_MAT":
-            return (f"type_a={self.type_a},type_b=F32,m={self.shape.m},n={self.n},"
+            return (f"type_a={type_a},type_b=f32,m={self.shape.m},n={self.n},"
                     f"k={self.shape.k},bs=[1,1],nr=[1,1],per=[0,1,2,3],k_v=0,o=1,"
                     f"max_nmse={self.max_nmse:g}")
-        return (f"type_a={self.type_a},type_b=F32,n_mats={self.shape.n_mats},"
+        return (f"type_a={type_a},type_b=f32,n_mats={self.shape.n_mats},"
                 f"n_used={self.shape.n_used},b=0,m={self.shape.m},n={self.n},"
                 f"k={self.shape.k},max_nmse={self.max_nmse:g}")
 
@@ -208,6 +221,11 @@ _SUBCLASSES_CPP = """\
 // test_mul_mat[_id] except max_nmse_err() returns a per-instance bound instead of the
 // flat 5e-4 every generic case carries, so a served-shape case can be held to a
 // tighter, shape-justified floor without touching the generic corpus's bound.
+static std::string autokernel_served_shape_nmse_str(double v) {
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%g", v);   // == Python f"{v:g}"
+    return buf;
+}
 struct test_mul_mat_served_shape : public test_mul_mat {
     const double max_nmse;
     test_mul_mat_served_shape(ggml_type type_a, ggml_type type_b, int64_t m, int64_t n,
@@ -215,6 +233,9 @@ struct test_mul_mat_served_shape : public test_mul_mat {
             std::array<int64_t, 4> per, int64_t k_v, uint32_t o, double max_nmse)
         : test_mul_mat(type_a, type_b, m, n, k, bs, nr, per, k_v, o), max_nmse(max_nmse) {}
     double max_nmse_err() override { return max_nmse; }
+    std::string vars() override {
+        return test_mul_mat::vars() + ",max_nmse=" + autokernel_served_shape_nmse_str(max_nmse);
+    }
 };
 struct test_mul_mat_id_served_shape : public test_mul_mat_id {
     const double max_nmse;
@@ -222,6 +243,9 @@ struct test_mul_mat_id_served_shape : public test_mul_mat_id {
             int n_used, bool b, int64_t m, int64_t n, int64_t k, double max_nmse)
         : test_mul_mat_id(type_a, type_b, n_mats, n_used, b, m, n, k), max_nmse(max_nmse) {}
     double max_nmse_err() override { return max_nmse; }
+    std::string vars() override {
+        return test_mul_mat_id::vars() + ",max_nmse=" + autokernel_served_shape_nmse_str(max_nmse);
+    }
 };
 """
 
@@ -321,6 +345,6 @@ def load_manifest(path: Path) -> tuple[ServedShapeCase, ...]:
 
 __all__ = ["CASE_SET_ENV", "CASE_SET_ID", "MANIFEST_SCHEMA", "ManifestRefused",
            "SERVED_SHAPE_NMSE_CAP", "SERVED_SHAPE_NMSE_FLOOR", "SERVED_SHAPES",
-           "SERVED_WIDTHS", "WITNESS_TYPES", "ServedShape", "ServedShapeCase",
+           "SERVED_WIDTHS", "WITNESS_TYPES", "GGML_TYPE_NAMES", "ServedShape", "ServedShapeCase",
            "backend_ops_patch_block", "binary_has_case_set", "case_set", "case_set_regex",
            "load_manifest", "tightened_nmse_bound", "write_manifest"]
