@@ -10,6 +10,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import types
 from pathlib import Path
 
@@ -43,6 +44,66 @@ from src.registry.stack_priors import STACK_PRIORS_VERSION, stack_priors_contrac
 def _write_yaml(path: Path, data: dict) -> Path:
     path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     return path
+
+
+@pytest.fixture
+def _synthetic_stack_manifest_inputs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Make the two launch-helper controls independent of host RAM/kernel paths.
+
+    stack_manifest reads /proc/meminfo once at import time. The captured GitHub
+    runner has 15.61 GiB while the production capacity contract reserves 64 GiB,
+    so these pure helper tests need a synthetic import-only value. The launch
+    preview also resolves backend directories; empty synthetic backend directories
+    keep that lookup independent of this runner's absent production kernel store.
+    No binary is created or executed. The fixture primes the exact module under a
+    narrowly patched Path.read_text, then removes its cached module/package
+    attribute at teardown so synthetic inputs cannot leak to later tests. Every
+    other path read delegates unchanged. The recipe separately records the
+    runner's physical /proc/meminfo as context.
+    """
+    import importlib
+    from src.registry import kernel_paths
+
+    production_root = tmp_path / "synthetic-kernel-store" / "production"
+    for backend in ("cpu", "gpu", "stt", "tts"):
+        (production_root / backend).mkdir(parents=True)
+    monkeypatch.setattr(kernel_paths, "PRODUCTION_ROOT", production_root)
+
+    module_name = "scripts.server.stack_manifest"
+    missing = object()
+    cached_module = sys.modules.pop(module_name, missing)
+    server_package = sys.modules.get("scripts.server")
+    cached_attribute = (
+        getattr(server_package, "stack_manifest", missing)
+        if server_package is not None
+        else missing
+    )
+    if server_package is not None and cached_attribute is not missing:
+        delattr(server_package, "stack_manifest")
+
+    original_read_text = Path.read_text
+
+    def synthetic_meminfo(path: Path, *args, **kwargs) -> str:
+        if path == Path("/proc/meminfo"):
+            return "MemTotal: 1073741824 kB\n"
+        return original_read_text(path, *args, **kwargs)
+
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(Path, "read_text", synthetic_meminfo)
+            importlib.import_module(module_name)
+        yield
+    finally:
+        sys.modules.pop(module_name, None)
+        current_package = sys.modules.get("scripts.server")
+        if current_package is not None and hasattr(current_package, "stack_manifest"):
+            delattr(current_package, "stack_manifest")
+        if server_package is not None and cached_attribute is not missing:
+            setattr(server_package, "stack_manifest", cached_attribute)
+        if cached_module is not missing:
+            sys.modules[module_name] = cached_module
 
 
 def _consumer_surface(surface_id: str = "unit_consumer") -> dict:
@@ -3194,7 +3255,9 @@ def test_staleness_check_is_reachable_from_the_guard_cli(staleness_repo, capsys)
     assert "OK: source artifacts match the pins" in clean_out
 
 
-def test_launch_view_rejects_invalid_explicit_numa_mode_as_could_not_check() -> None:
+def test_launch_view_rejects_invalid_explicit_numa_mode_as_could_not_check(
+    _synthetic_stack_manifest_inputs: None,
+) -> None:
     """NIB2-69: an explicit launch mode is never silently normalised to a default."""
     targets, view_errors = stack_change_guard._launch_manifest_targets_or_error(
         launch_numa_mode="halves"
@@ -3207,6 +3270,7 @@ def test_launch_view_rejects_invalid_explicit_numa_mode_as_could_not_check() -> 
 
 def test_explicit_launch_numa_mode_bypasses_realized_fleet_probe(
     monkeypatch: pytest.MonkeyPatch,
+    _synthetic_stack_manifest_inputs: None,
 ) -> None:
     def _probe_must_not_run() -> str:
         raise AssertionError("explicit launch mode must not consult the realized fleet")
@@ -3221,6 +3285,173 @@ def test_explicit_launch_numa_mode_bypasses_realized_fleet_probe(
 
     assert not both_errors
     assert set(full["frontdoor"]["ports"]) < set(both["frontdoor"]["ports"])
+
+
+def test_standalone_guard_uses_declared_mode_despite_ambient_and_fleet(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    topology = tmp_path / "orchestration" / "stack_topology.yaml"
+    topology.parent.mkdir(parents=True)
+    _write_yaml(topology, {"numa_mode": "both"})
+    scanner_root = tmp_path / "scanner-root"
+    scanner_topology = scanner_root / "orchestration" / "stack_topology.yaml"
+    scanner_topology.parent.mkdir(parents=True)
+    _write_yaml(scanner_topology, {"numa_mode": "quarter"})
+    monkeypatch.setattr(stack_change_guard, "REPO_ROOT", tmp_path)
+    monkeypatch.setenv("ORCHESTRATOR_STACK_NUMA_MODE", "full")
+
+    def fail_if_fleet_probed() -> str:
+        raise AssertionError("standalone guard must not probe fleet")
+
+    monkeypatch.setattr(
+        stack_change_guard, "_realized_launch_numa_mode", fail_if_fleet_probed
+    )
+    calls: dict[str, object] = {}
+
+    def fake_validate(_priors, **kwargs):
+        calls.update(kwargs)
+        return GuardResult(errors=[], warnings=[])
+
+    monkeypatch.setattr(stack_change_guard, "validate_stack_priors", fake_validate)
+
+    result = stack_change_guard_main(
+        ["--skip-hardcoded-surface-scan", "--repo-root", str(scanner_root)]
+    )
+
+    assert result == 0
+    assert calls["launch_numa_mode"] == "both"
+
+
+def test_standalone_guard_explicit_mode_overrides_declared_topology(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    topology = tmp_path / "orchestration" / "stack_topology.yaml"
+    topology.parent.mkdir(parents=True)
+    topology.write_text("numa_mode: halves\n", encoding="utf-8")
+    monkeypatch.setattr(stack_change_guard, "REPO_ROOT", tmp_path)
+    monkeypatch.setenv("ORCHESTRATOR_STACK_NUMA_MODE", "full")
+    calls: dict[str, object] = {}
+
+    def fake_validate(_priors, **kwargs):
+        calls.update(kwargs)
+        return GuardResult(errors=[], warnings=[])
+
+    monkeypatch.setattr(stack_change_guard, "validate_stack_priors", fake_validate)
+
+    result = stack_change_guard_main(
+        ["--skip-hardcoded-surface-scan", "--numa-mode", "quarter"]
+    )
+
+    assert result == 0
+    assert calls["launch_numa_mode"] == "quarter"
+
+
+@pytest.mark.parametrize(
+    "topology_state",
+    [
+        "missing_file",
+        "malformed_yaml",
+        "not_mapping",
+        "missing_mode",
+        "invalid_mode",
+        "unreadable",
+    ],
+)
+def test_standalone_guard_fails_closed_on_unresolvable_declared_mode(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    topology_state: str,
+) -> None:
+    topology = tmp_path / "orchestration" / "stack_topology.yaml"
+    topology.parent.mkdir(parents=True)
+    contents = {
+        "malformed_yaml": "numa_mode: [\n",
+        "not_mapping": "- full\n",
+        "missing_mode": "{}\n",
+        "invalid_mode": "numa_mode: halves\n",
+        "unreadable": "numa_mode: both\n",
+    }
+    if topology_state != "missing_file":
+        topology.write_text(contents[topology_state], encoding="utf-8")
+    monkeypatch.setattr(stack_change_guard, "REPO_ROOT", tmp_path)
+    validated = False
+
+    def fake_validate(_priors, **_kwargs):
+        nonlocal validated
+        validated = True
+        return GuardResult(errors=[], warnings=[])
+
+    monkeypatch.setattr(stack_change_guard, "validate_stack_priors", fake_validate)
+    if topology_state == "unreadable":
+        real_read_text = Path.read_text
+
+        def unreadable_read_text(path, *args, **kwargs):
+            if path == topology:
+                raise PermissionError("fixture denied read")
+            return real_read_text(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", unreadable_read_text)
+
+    result = stack_change_guard_main(["--skip-hardcoded-surface-scan"])
+
+    output = capsys.readouterr().out
+    assert result == 1
+    assert output.startswith(f"{stack_change_guard.COULD_NOT_CHECK}:")
+    assert not validated
+
+
+def test_standalone_guard_rejects_invalid_explicit_mode_before_validation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(stack_change_guard, "REPO_ROOT", tmp_path)
+    validated = False
+
+    def fake_validate(_priors, **_kwargs):
+        nonlocal validated
+        validated = True
+        return GuardResult(errors=[], warnings=[])
+
+    monkeypatch.setattr(stack_change_guard, "validate_stack_priors", fake_validate)
+
+    result = stack_change_guard_main(
+        ["--skip-hardcoded-surface-scan", "--numa-mode", "halves"]
+    )
+
+    assert result == 1
+    assert capsys.readouterr().out.startswith(f"{stack_change_guard.COULD_NOT_CHECK}:")
+    assert not validated
+
+
+@pytest.mark.parametrize("special_args", ["list", "staleness"])
+def test_special_cli_commands_bypass_standalone_numa_admission(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    special_args: str,
+) -> None:
+    monkeypatch.setattr(stack_change_guard, "REPO_ROOT", tmp_path)
+    if special_args == "list":
+        monkeypatch.setattr(
+            stack_change_guard, "load_surface_manifest", lambda _path: ({}, [])
+        )
+        monkeypatch.setattr(
+            stack_change_guard, "validate_surface_manifest", lambda _path: []
+        )
+        monkeypatch.setattr(
+            stack_change_guard,
+            "hardcoded_surface_rule_inventory",
+            lambda **_kwargs: {},
+        )
+        args = ["--list-hardcoded-surface-rules", "--numa-mode", "invalid"]
+    else:
+        monkeypatch.setattr(
+            stack_change_guard,
+            "check_source_artifact_staleness",
+            lambda *_args, **_kwargs: GuardResult(errors=[], warnings=[]),
+        )
+        args = ["--check-source-artifact-staleness", "--numa-mode", "invalid"]
+
+    assert stack_change_guard_main(args) == 0
 
 
 # ── Portable source pins (2026-09-24) ────────────────────────────────────────

@@ -38,6 +38,7 @@ DEFAULT_ACCEPTED_GAPS = REPO_ROOT / "orchestration" / "accepted_gaps.yaml"
 DEFAULT_MASTER_REGISTRY = Path(
     "/mnt/raid0/llm/epyc-inference-research/orchestration/model_registry.yaml"
 )
+STANDALONE_NUMA_MODES = frozenset({"full", "quarter", "both"})
 
 # Documented FLOOR, not the answer. `RETIRED_LIVE_ROLES` used to BE this literal:
 # a hand-written restatement of "historic roles minus live roles" that could only
@@ -1137,6 +1138,44 @@ def _realized_launch_numa_mode() -> str | None:
         return derive_realized_numa_mode()
     except Exception:
         return None
+
+
+def _standalone_numa_mode(explicit_mode: str | None) -> tuple[str | None, str | None]:
+    """Resolve the standalone guard's declared lineup without consulting the fleet or env."""
+    if explicit_mode is not None:
+        mode = explicit_mode.strip().lower()
+        if mode not in STANDALONE_NUMA_MODES:
+            return None, (
+                f"{COULD_NOT_CHECK}: invalid --numa-mode {explicit_mode!r}; expected one of "
+                f"{sorted(STANDALONE_NUMA_MODES)}"
+            )
+        return mode, None
+
+    topology_path = REPO_ROOT / "orchestration" / "stack_topology.yaml"
+    try:
+        topology = yaml.safe_load(topology_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None, f"{COULD_NOT_CHECK}: declared topology is missing: {topology_path}"
+    except OSError as exc:
+        return None, (
+            f"{COULD_NOT_CHECK}: declared topology is unreadable ({topology_path}): {exc}"
+        )
+    except UnicodeError as exc:
+        return None, (
+            f"{COULD_NOT_CHECK}: declared topology is malformed ({topology_path}): {exc}"
+        )
+    except yaml.YAMLError as exc:
+        return None, f"{COULD_NOT_CHECK}: declared topology is malformed ({topology_path}): {exc}"
+
+    if not isinstance(topology, dict):
+        return None, f"{COULD_NOT_CHECK}: declared topology is not a mapping ({topology_path})"
+    mode = topology.get("numa_mode")
+    if not isinstance(mode, str) or mode.strip() not in STANDALONE_NUMA_MODES:
+        return None, (
+            f"{COULD_NOT_CHECK}: declared topology has no valid numa_mode ({topology_path}); "
+            f"expected one of {sorted(STANDALONE_NUMA_MODES)}"
+        )
+    return mode.strip(), None
 
 
 def _launch_manifest_targets(
@@ -3064,6 +3103,13 @@ def main(argv: list[str] | None = None) -> int:
         help="Repository root used by the hardcoded-surface scanner",
     )
     parser.add_argument(
+        "--numa-mode",
+        help=(
+            "Explicit NUMA lineup to validate; defaults to the lineup declared in this "
+            "checkout's orchestration/stack_topology.yaml"
+        ),
+    )
+    parser.add_argument(
         "--skip-hardcoded-surface-scan",
         action="store_true",
         help="Skip curated hardcoded model/stack surface warnings",
@@ -3192,6 +3238,11 @@ def main(argv: list[str] | None = None) -> int:
             print(yaml.safe_dump(inventory, sort_keys=False))
         return 0
 
+    launch_numa_mode, numa_mode_error = _standalone_numa_mode(args.numa_mode)
+    if numa_mode_error is not None:
+        print(numa_mode_error)
+        return 1
+
     if args.all_hardcoded_surfaces:
         surface_categories = None
     elif args.hardcoded_surface_category:
@@ -3209,6 +3260,7 @@ def main(argv: list[str] | None = None) -> int:
         surface_manifest_path=args.surface_manifest,
         allow_production_blocker_waivers=args.allow_production_blocker_waivers,
         accepted_gaps_path=args.accepted_gaps,
+        launch_numa_mode=launch_numa_mode,
     )
     if result.errors:
         print(f"FAIL: {len(result.errors)} stack-prior error(s)")
