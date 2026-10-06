@@ -52,6 +52,15 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--max-turns", type=int, default=8)
     run.add_argument("--retries", type=int, default=2)
     run.add_argument("--timeout", type=float, default=60.0)
+    run.add_argument(
+        "--tool-contract", choices=["dtap-native-tools-v1"], default=None,
+        help="opt in to the pinned public native tool schemas (default: legacy message-only request)",
+    )
+    run.add_argument(
+        "--endpoint-mode", choices=["openai-compatible", "orchestrator-client"],
+        default="openai-compatible",
+        help="explicit request mode; never inferred from the endpoint URL",
+    )
     run.add_argument("--seed", type=int, default=0)
     run.add_argument("--seeds", type=int, default=None, help="repeat N seeds (implies matrix)")
     run.add_argument("--out", default="results")
@@ -69,6 +78,15 @@ def _build_parser() -> argparse.ArgumentParser:
     mat.add_argument("--max-turns", type=int, default=8)
     mat.add_argument("--retries", type=int, default=2)
     mat.add_argument("--timeout", type=float, default=60.0)
+    mat.add_argument(
+        "--tool-contract", choices=["dtap-native-tools-v1"], default=None,
+        help="opt in to the pinned public native tool schemas (default: legacy message-only request)",
+    )
+    mat.add_argument(
+        "--endpoint-mode", choices=["openai-compatible", "orchestrator-client"],
+        default="openai-compatible",
+        help="explicit request mode; never inferred from the endpoint URL",
+    )
     mat.add_argument("--out", default="results")
 
     rp = sub.add_parser("replay", help="verify + deterministically replay a trace")
@@ -127,9 +145,21 @@ def _default_arm(case: dict) -> str:
     return "done" if case["threat"] == "benign" else "compliant"
 
 
+def _tool_contract_from(args: argparse.Namespace, registry: CaseRegistry):
+    selected = getattr(args, "tool_contract", None)
+    if selected is None:
+        if getattr(args, "endpoint_mode", "openai-compatible") == "orchestrator-client":
+            raise SystemExit("--endpoint-mode orchestrator-client requires --tool-contract dtap-native-tools-v1")
+        return None
+    from .tool_contract import load_native_tool_contract
+
+    return load_native_tool_contract(registry.cases, registry_path=registry.path)
+
+
 def main(argv: list | None = None) -> int:
     args = _build_parser().parse_args(argv)
     registry = CaseRegistry()
+    native_tool_contract = _tool_contract_from(args, registry)
 
     if args.command == "list-cases":
         for case_id in sorted(registry.cases):
@@ -165,11 +195,16 @@ def main(argv: list | None = None) -> int:
                 factory,
                 arm_config,
                 Path(args.out),
+                native_tool_contract=native_tool_contract,
+                endpoint_mode=args.endpoint_mode,
             )
             print(json.dumps(rows, indent=2, sort_keys=True))
             return 0
         endpoint = factory(args.case, arm, args.seed)
-        result = run_case(args.case, arm, args.seed, endpoint, arm_config, Path(args.out), registry)
+        result = run_case(
+            args.case, arm, args.seed, endpoint, arm_config, Path(args.out), registry,
+            native_tool_contract=native_tool_contract, endpoint_mode=args.endpoint_mode,
+        )
         print(json.dumps(result.to_dict(), indent=2, sort_keys=True))
         return 0 if result.status == "ok" else 2
 
@@ -179,7 +214,8 @@ def main(argv: list | None = None) -> int:
         arm_config = _arm_config_from(args)
         factory = _endpoint_factory_from(args, arm_config)
         rows = run_matrix(
-            [args.case], arms, list(range(args.seeds)), factory, arm_config, Path(args.out)
+            [args.case], arms, list(range(args.seeds)), factory, arm_config, Path(args.out),
+            native_tool_contract=native_tool_contract, endpoint_mode=args.endpoint_mode,
         )
         print(json.dumps(rows, indent=2, sort_keys=True))
         return 0
