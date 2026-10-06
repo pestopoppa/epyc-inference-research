@@ -171,7 +171,9 @@ def _validate_calibration_input_binding(
         raise ValueError("unsupported calibration input binding schema")
     inputs = value.get("inputs")
     if not isinstance(inputs, Mapping) or set(inputs) != set(_CALIBRATION_INPUT_NAMES):
-        raise ValueError("calibration input binding must name state_file, questions_file, labels_file")
+        raise ValueError(
+            "calibration input binding must name state_file, questions_file, labels_file"
+        )
 
     validated: dict[str, dict[str, Any]] = {}
     for name in _CALIBRATION_INPUT_NAMES:
@@ -187,14 +189,16 @@ def _validate_calibration_input_binding(
             raise ValueError(f"calibration input binding {name} sha256 must be lowercase hex")
         byte_length = record.get("byte_length")
         if type(byte_length) is not int or byte_length < 0:
-            raise ValueError(f"calibration input binding {name} byte_length must be nonnegative int")
+            raise ValueError(
+                f"calibration input binding {name} byte_length must be nonnegative int"
+            )
         path_hint = record.get("path_hint")
         if path_hint is not None and (
             not isinstance(path_hint, str)
             or len(path_hint) > _MAX_CALIBRATION_PATH_HINT_CHARS
             or "/" in path_hint
             or "\\" in path_hint
-            or any(ord(char) < 32 or ord(char) == 127 for char in path_hint)
+            or not path_hint.isprintable()
         ):
             raise ValueError(f"calibration input binding {name} path_hint is invalid")
         validated[name] = {
@@ -214,7 +218,9 @@ def _calibration_source_binding_from_bytes(
 ) -> dict[str, Any]:
     """Describe original CLI bytes, without retaining file content or full paths."""
     if set(sources) != set(_CALIBRATION_INPUT_NAMES):
-        raise ValueError("calibration CLI sources must name state_file, questions_file, labels_file")
+        raise ValueError(
+            "calibration CLI sources must name state_file, questions_file, labels_file"
+        )
     inputs: dict[str, dict[str, Any]] = {}
     for name in _CALIBRATION_INPUT_NAMES:
         raw, source_path = sources[name]
@@ -225,7 +231,7 @@ def _calibration_source_binding_from_bytes(
             len(basename) > _MAX_CALIBRATION_PATH_HINT_CHARS
             or "/" in basename
             or "\\" in basename
-            or any(ord(char) < 32 or ord(char) == 127 for char in basename)
+            or not basename.isprintable()
         ):
             basename = None
         inputs[name] = {
@@ -1630,7 +1636,10 @@ def _load_json_bytes(raw: bytes) -> Any:
 
 
 def _parse_questions_bytes(raw: bytes, path: str | Path) -> list[Question]:
-    payload = _load_json_bytes(raw)
+    return _questions_from_payload(_load_json_bytes(raw), path)
+
+
+def _questions_from_payload(payload: Any, path: str | Path) -> list[Question]:
     if isinstance(payload, Mapping):
         payload = payload.get("questions")
     if not isinstance(payload, list):
@@ -1654,11 +1663,15 @@ def _parse_questions_bytes(raw: bytes, path: str | Path) -> list[Question]:
 
 
 def _load_questions(path: str | Path) -> list[Question]:
-    return _parse_questions_bytes(Path(path).read_bytes(), path)
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    return _questions_from_payload(payload, path)
 
 
 def _parse_state_bytes(raw: bytes, path: str | Path) -> str:
-    payload = _load_json_bytes(raw)
+    return _state_from_payload(_load_json_bytes(raw), path)
+
+
+def _state_from_payload(payload: Any, path: str | Path) -> str:
     if isinstance(payload, str):
         return payload
     if isinstance(payload, Mapping) and isinstance(payload.get("state"), str):
@@ -1667,7 +1680,8 @@ def _parse_state_bytes(raw: bytes, path: str | Path) -> str:
 
 
 def _load_state(path: str | Path) -> str:
-    return _parse_state_bytes(Path(path).read_bytes(), path)
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    return _state_from_payload(payload, path)
 
 
 def _load_states(path: str | Path) -> list[str]:
@@ -1685,14 +1699,18 @@ def _load_states(path: str | Path) -> list[str]:
 
 
 def _parse_labels_bytes(raw: bytes, path: str | Path) -> dict[str, object]:
-    payload = _load_json_bytes(raw)
+    return _labels_from_payload(_load_json_bytes(raw), path)
+
+
+def _labels_from_payload(payload: Any, path: str | Path) -> dict[str, object]:
     if not isinstance(payload, Mapping):
         raise ValueError(f"labels file {path} must contain a JSON object")
     return {str(key): value for key, value in payload.items()}
 
 
 def _load_labels(path: str | Path) -> dict[str, object]:
-    return _parse_labels_bytes(Path(path).read_bytes(), path)
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    return _labels_from_payload(payload, path)
 
 
 if __name__ == "__main__":

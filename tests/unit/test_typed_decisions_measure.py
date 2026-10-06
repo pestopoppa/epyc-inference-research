@@ -492,11 +492,24 @@ class TestCalibrationStudy:
     @pytest.mark.parametrize(
         "mutate",
         [
+            lambda binding: binding.update(schema="typed_decisions.other.v1"),
             lambda binding: binding.update(method="cli_read_once"),
+            lambda binding: binding.update(extra="not accepted"),
+            lambda binding: binding["inputs"].update(extra={}),
+            lambda binding: binding["inputs"].pop("labels_file"),
+            lambda binding: binding["inputs"].update(extra_file={}),
             lambda binding: binding["inputs"]["state_file"].update(sha256="A" * 64),
+            lambda binding: binding["inputs"]["state_file"].update(sha256="a" * 63),
+            lambda binding: binding["inputs"]["state_file"].update(sha256="g" * 64),
+            lambda binding: binding["inputs"]["state_file"].update(byte_length=-1),
             lambda binding: binding["inputs"]["state_file"].update(byte_length=True),
             lambda binding: binding["inputs"]["state_file"].update(path_hint="../state.json"),
-            lambda binding: binding["inputs"].pop("labels_file"),
+            lambda binding: binding["inputs"]["state_file"].update(path_hint="state\\name.json"),
+            lambda binding: binding["inputs"]["state_file"].update(path_hint="s" * 129),
+            lambda binding: binding["inputs"]["state_file"].update(path_hint="state\n.json"),
+            lambda binding: binding["inputs"]["state_file"].update(path_hint="state\u0085.json"),
+            lambda binding: binding["inputs"]["state_file"].update(path_hint="state\u2028.json"),
+            lambda binding: binding["inputs"]["state_file"].update(path_hint="state\u2029.json"),
         ],
     )
     def test_invalid_input_binding_fails_before_model_call(self, mutate):
@@ -514,6 +527,29 @@ class TestCalibrationStudy:
                 input_binding=binding,
             )
         assert primitives.calls == []
+
+    @pytest.mark.parametrize(
+        "basename",
+        [
+            "x" * 129,
+            "state\\name.json",
+            "state\n.json",
+            "state\u0085.json",
+            "state\u2028.json",
+            "state\u2029.json",
+        ],
+    )
+    def test_cli_input_binding_omits_unbounded_or_control_path_hints(
+        self, basename: str, tmp_path: Path
+    ):
+        sources = {
+            name: (b"{}", tmp_path / (basename if name == "state_file" else f"{name}.json"))
+            for name in ("state_file", "questions_file", "labels_file")
+        }
+
+        binding = measure_module._calibration_source_binding_from_bytes(sources)
+        assert binding["inputs"]["state_file"]["path_hint"] is None
+        assert binding["inputs"]["questions_file"]["path_hint"] == "questions_file.json"
 
     def test_unknown_labels_are_reported_not_scored(self, tmp_path: Path):
         primitives = _FakePrimitives(lambda prompt, **kwargs: _calibration_response())
@@ -1289,6 +1325,76 @@ class TestCli:
                 "path_hint": "labels.json",
             },
         }
+
+    @pytest.mark.parametrize("changed_source", ["state_file", "questions_file", "labels_file"])
+    def test_calibration_cli_input_whitespace_binding_and_replay(
+        self, changed_source: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        paths = {
+            "state_file": tmp_path / "state.json",
+            "questions_file": tmp_path / "questions.json",
+            "labels_file": tmp_path / "labels.json",
+        }
+        original_bytes = {
+            "state_file": b'"same state"\r\n',
+            "questions_file": (
+                b'{"questions":[{"id":"cal-0","kind":"choice","text":"Pick.",'
+                b'"options":["a","b"]}]}\r\n'
+            ),
+            "labels_file": b'{"cal-0":"a"}\r\n',
+        }
+
+        def run_cli(contents: dict[str, bytes], receipt_name: str):
+            for name, path in paths.items():
+                path.write_bytes(contents[name])
+            primitives = _FakePrimitives(
+                lambda prompt, **kwargs: json.dumps(
+                    {"answers": {"cal-0": _choice_entry("a", 0.875)}}
+                )
+            )
+            monkeypatch.setattr(
+                measure_module, "_live_primitives", lambda primitives=primitives: primitives
+            )
+            receipt_path = tmp_path / receipt_name
+            code = main(
+                [
+                    "calibration",
+                    "--state-file", str(paths["state_file"]),
+                    "--questions-file", str(paths["questions_file"]),
+                    "--labels-file", str(paths["labels_file"]),
+                    "--receipt", str(receipt_path),
+                    "--live",
+                ]
+            )
+            assert code == 0
+            return json.loads(receipt_path.read_text(encoding="utf-8")), primitives
+
+        baseline, baseline_primitives = run_cli(original_bytes, "baseline.json")
+        changed_bytes = dict(original_bytes)
+        changed_bytes[changed_source] = (
+            b" \r\n\t" + original_bytes[changed_source] + b" \t\r\n"
+        )
+        changed, changed_primitives = run_cli(changed_bytes, "changed.json")
+        replay, replay_primitives = run_cli(original_bytes, "replay.json")
+
+        for receipt in (changed, replay):
+            assert receipt["results"]["rows"] == baseline["results"]["rows"]
+            assert receipt["results"]["metrics"] == baseline["results"]["metrics"]
+            assert (
+                receipt["results"]["reliability_bins"]
+                == baseline["results"]["reliability_bins"]
+            )
+            assert receipt["counts"] == baseline["counts"]
+        assert baseline_primitives.calls[0]["prompt"] == changed_primitives.calls[0]["prompt"]
+        assert baseline_primitives.calls[0]["prompt"] == replay_primitives.calls[0]["prompt"]
+
+        before = baseline["input_binding"]["inputs"]
+        after = changed["input_binding"]["inputs"]
+        changed_names = [name for name in paths if before[name] != after[name]]
+        assert changed_names == [changed_source]
+        assert before[changed_source]["sha256"] != after[changed_source]["sha256"]
+        assert before[changed_source]["byte_length"] != after[changed_source]["byte_length"]
+        assert replay["input_binding"] == baseline["input_binding"]
 
 
 # ── TD-21.33: _last_inference_meta's real-LLMPrimitives branch ────────────
