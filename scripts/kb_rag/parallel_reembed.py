@@ -161,6 +161,59 @@ def build_manifest(config_path: Path, jobs: int) -> list[dict]:
 _WORKER_STATE: dict = {}
 
 
+def _parallel_contract(index_dir: Path, *, load_encoder: bool = False) -> tuple[int, str]:
+    """Resolve cap and role together without mutating catalog identity."""
+    import sqlite3
+    from contextlib import closing
+
+    from src.retrieval import colbert_encoder
+    from src.retrieval.kb_rag import (
+        _index_convention, _index_token_caps, _read_index_meta,
+        _roles_for_convention, _warn_on_encoder_drift,
+    )
+
+    meta = _read_index_meta(index_dir)  # reject bad metadata before model loading
+    catalog = index_dir / "catalog.sqlite"
+    convention = None
+    if catalog.exists():
+        with closing(sqlite3.connect(catalog.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
+            convention = _index_convention(conn)
+    if convention is None and meta:
+        convention = colbert_encoder.LEGACY_CONVENTION
+    if convention is None:
+        doc_cap = colbert_encoder.max_document_tokens()
+        convention = colbert_encoder.PREFIX_CONVENTION
+    else:
+        _, doc_cap = _index_token_caps(meta)
+    _, role = _roles_for_convention(convention)
+    if load_encoder:
+        if not colbert_encoder.ensure_loaded():
+            raise RuntimeError("colbert encoder failed to load")
+        _warn_on_encoder_drift(meta)
+    return doc_cap, role
+
+
+def _prepare_encoding_contract(index_dir: Path) -> tuple[int, str]:
+    """Stamp only a genuinely new output before any worker/manifest work."""
+    from src.retrieval.kb_rag import (
+        _ensure_catalog, _index_convention, _read_meta, _writer_convention,
+    )
+
+    contract = _parallel_contract(index_dir, load_encoder=True)
+    conn = _ensure_catalog(index_dir, verify_tokenizer=True)
+    try:
+        if (
+            _index_convention(conn) is None and not _read_meta(conn)
+            and any((index_dir / "emb").rglob("*.npz"))
+        ):
+            raise RuntimeError("cannot stamp new caps over embeddings without catalog identity")
+        _writer_convention(conn)
+        conn.commit()
+    finally:
+        conn.close()
+    return contract
+
+
 def _encode_init(index_dir: str, onnx_threads: int, cpus: list[int]) -> None:
     _set_pdeathsig()
     os.environ["COLBERT_ENCODE_ONNX_THREADS"] = str(onnx_threads)
@@ -171,18 +224,18 @@ def _encode_init(index_dir: str, onnx_threads: int, cpus: list[int]) -> None:
         except OSError:
             pass
     from src.retrieval import colbert_encoder
-    from src.retrieval.kb_rag import _DOC_MAX_TOKENS
-
-    if not colbert_encoder.ensure_loaded():
-        raise RuntimeError("colbert encoder failed to load in worker")
+    doc_cap, role = _parallel_contract(Path(index_dir), load_encoder=True)
     _WORKER_STATE["enc"] = colbert_encoder
     _WORKER_STATE["index_dir"] = Path(index_dir)
-    _WORKER_STATE["max_tokens"] = _DOC_MAX_TOKENS
+    _WORKER_STATE["max_tokens"] = doc_cap
+    _WORKER_STATE["role"] = role
 
 
 def _encode_task(task: tuple[str, str, str]) -> tuple[str, int, str]:
     """(emb_rel, text, role) -> (emb_rel, n_tokens, status)."""
     emb_rel, text, role = task
+    if role != _WORKER_STATE["role"]:
+        raise RuntimeError("encode task role differs from stored index convention")
     enc = _WORKER_STATE["enc"]
     out = _WORKER_STATE["index_dir"] / emb_rel
     if out.exists():
@@ -223,6 +276,9 @@ def encode_missing(
     """Fan `tasks` out over `workers` processes. Returns timing + counts."""
     if not tasks:
         return {"tasks": 0, "encoded": 0, "elapsed_sec": 0.0, "chunks_per_sec": 0.0}
+    _, role = _prepare_encoding_contract(index_dir)
+    if any(task[2] != role for task in tasks):
+        raise RuntimeError("encode tasks differ from stored index convention")
     started = time.perf_counter()
     counts = {"encoded": 0, "skipped": 0, "failed": 0, "error": 0}
     pids: list[int] = []
@@ -285,19 +341,16 @@ def _pid_alive(pid: int) -> bool:
 def rebuild_catalog(manifest: list[dict], index_dir: Path) -> dict:
     import sqlite3
 
-    from src.retrieval import colbert_encoder
     from src.retrieval.kb_rag import (
         _ensure_catalog,
         _ensure_fts,
-        _stamp_meta,
         _sync_chunk_fts_row,
     )
 
-    conn = _ensure_catalog(index_dir)
+    _prepare_encoding_contract(index_dir)
+    conn = _ensure_catalog(index_dir, verify_tokenizer=True)
     conn.row_factory = sqlite3.Row
     fts_enabled = _ensure_fts(conn)
-    colbert_encoder.ensure_loaded()
-    _stamp_meta(conn, colbert_encoder.PREFIX_CONVENTION)
     cur = conn.cursor()
     cur.execute("DELETE FROM chunk")
     if fts_enabled:
@@ -408,6 +461,7 @@ def main() -> int:
         }, indent=2))
         return 0
 
+    _, role = _prepare_encoding_contract(index_dir)
     if args.mode == "catalog":
         manifest = _load_or_build_manifest(args)
         print(json.dumps(rebuild_catalog(manifest, index_dir), indent=2))
