@@ -95,6 +95,13 @@ GGML_TYPE_NAMES: dict[str, str] = {
     "IQ2_S": "iq2_s", "IQ3_XXS": "iq3_xxs", "IQ3_S": "iq3_s"}
 
 CASE_SET_ID = "served_shape_lowbit_v1"
+#: Round-12 (bundle tier): 128-expert MUL_MAT_ID cases with deterministic, dispersed,
+#: high expert IDs at the verify widths, run only at bundle promotion.
+ROUTED_CASE_SET_ID = "served_shape_lowbit_routed128_v1"
+ROUTED_MANIFEST_SCHEMA = "epyc.autokernel.served_shape_routed_manifest.v1"
+#: The env var the patched test-backend-ops reads for its CPU backend thread count
+#: (the stock tool always uses hardware_concurrency()).
+BACKEND_THREADS_ENV = "AUTOKERNEL_BACKEND_THREADS"
 CASE_SET_ENV = "AUTOKERNEL_CORRECTNESS_CASE_SET"
 
 #: Well below the generic sweep's flat 5e-4 bound: a "tightened" bound that could
@@ -115,8 +122,11 @@ class ServedShape:
     m: int
     n_mats: int = 1          # MUL_MAT_ID only: total experts (ne[2] of ffn_*_exps)
     n_used: int = 1          # MUL_MAT_ID only: experts routed per token
+    routed: bool = False     # bundle-tier: deterministic dispersed high-ID routing
 
     def __post_init__(self):
+        if self.routed and self.op != "MUL_MAT_ID":
+            raise ValueError(f"{self.name}: only MUL_MAT_ID shapes can be routed")
         if self.op not in ("MUL_MAT", "MUL_MAT_ID"):
             raise ValueError(f"{self.name}: op must be MUL_MAT or MUL_MAT_ID, got {self.op!r}")
         if self.op == "MUL_MAT" and (self.n_mats != 1 or self.n_used != 1):
@@ -150,6 +160,24 @@ SERVED_SHAPES: tuple[ServedShape, ...] = (
     ServedShape("q38fn_dense_ffn_gate_up", "MUL_MAT", k=5120, m=17408),
     ServedShape("q38fn_dense_ffn_down", "MUL_MAT", k=17408, m=5120),
 )
+
+
+#: Round-12 (bundle tier, operator honest-author model): the served 128 experts, with
+#: ids chosen deterministically so a verify call (widths 2-5, n_used 3) routes to up to
+#: 15 DISTINCT experts spread over 0-127 incl. 64-127 -- the dispatch/mapping logic
+#: (expert-id masks, per-expert counts, row partitions) that 8-expert cases cannot reach.
+#: Row r uses ids 127 - (29 r + 43 j) mod 128 for j < n_used (r=0: 127, 84, 41; r=1: 98,
+#: 55, 12; ...). One type per iqk activation path plus the common served types: the
+#: per-type kernels are already covered by the 8-expert corpus at every type.
+ROUTED_SHAPES: tuple[ServedShape, ...] = (
+    ServedShape("ds41_expert_gate_up_routed128", "MUL_MAT_ID", k=5120, m=2304, n_mats=128,
+                n_used=3, routed=True),
+    ServedShape("ds41_expert_down_routed128", "MUL_MAT_ID", k=2304, m=5120, n_mats=128,
+                n_used=3, routed=True),
+)
+ROUTED_TYPES: tuple[str, ...] = ("Q4_0", "Q8_0", "Q4_K", "Q6_K", "IQ4_XS", "IQ3_S",
+                                 "IQ2_XXS", "IQ4_NL")
+ROUTED_WIDTHS: tuple[int, ...] = (2, 3, 4, 5)
 
 
 def tightened_nmse_bound(anchor_nmse: float, *, factor: float = 3.0) -> float:
@@ -199,9 +227,10 @@ class ServedShapeCase:
             return (f"type_a={type_a},type_b=f32,m={self.shape.m},n={self.n},"
                     f"k={self.shape.k},bs=[1,1],nr=[1,1],per=[0,1,2,3],k_v=0,o=1,"
                     f"max_nmse={self.max_nmse:g}")
+        routed = ",routed=1" if self.shape.routed else ""
         return (f"type_a={type_a},type_b=f32,n_mats={self.shape.n_mats},"
                 f"n_used={self.shape.n_used},b=0,m={self.shape.m},n={self.n},"
-                f"k={self.shape.k},max_nmse={self.max_nmse:g}")
+                f"k={self.shape.k}{routed},max_nmse={self.max_nmse:g}")
 
     def cpp(self) -> str:
         if self.shape.op == "MUL_MAT":
@@ -209,14 +238,23 @@ class ServedShapeCase:
                     f"GGML_TYPE_{self.type_a}, GGML_TYPE_F32, {self.shape.m}, {self.n}, "
                     f"{self.shape.k}, {{1, 1}}, {{1, 1}}, {{0, 1, 2, 3}}, 0, 1, "
                     f"{self.max_nmse:g}));")
-        return (f"        test_cases.emplace_back(new test_mul_mat_id_served_shape("
+        cls = ("test_mul_mat_id_served_routed" if self.shape.routed
+               else "test_mul_mat_id_served_shape")
+        return (f"        test_cases.emplace_back(new {cls}("
                 f"GGML_TYPE_{self.type_a}, GGML_TYPE_F32, {self.shape.n_mats}, "
                 f"{self.shape.n_used}, false, {self.shape.m}, {self.n}, {self.shape.k}, "
                 f"{self.max_nmse:g}));")
 
 
+def corpus(routed: bool = False):
+    """(shapes, types, widths) of the candidate corpus or the bundle-tier routed one."""
+    if routed:
+        return ROUTED_SHAPES, ROUTED_TYPES, ROUTED_WIDTHS
+    return SERVED_SHAPES, WITNESS_TYPES, SERVED_WIDTHS
+
+
 def case_set(anchor_nmse_by_shape: Mapping[tuple[str, str, int], float], *,
-            factor: float = 3.0) -> tuple[ServedShapeCase, ...]:
+            factor: float = 3.0, routed: bool = False) -> tuple[ServedShapeCase, ...]:
     """Every `(ServedShape, type, width)` case, bound from `anchor_nmse_by_shape`
     keyed `(shape.name, type_a, n)` -- the independent reference run's measured NMSE on
     the anchor build at that exact shape, type AND width (re-review 2026-10-06: one
@@ -224,9 +262,10 @@ def case_set(anchor_nmse_by_shape: Mapping[tuple[str, str, int], float], *,
     `KeyError` naming the missing triple -- a served-shape case this caller cannot
     justify a bound for is never silently dropped OR silently given a guessed one."""
     cases = []
-    for shape in SERVED_SHAPES:
-        for type_a in WITNESS_TYPES:
-            for width in SERVED_WIDTHS:
+    shapes, types, widths = corpus(routed)
+    for shape in shapes:
+        for type_a in types:
+            for width in widths:
                 key = (shape.name, type_a, width)
                 if key not in anchor_nmse_by_shape:
                     raise KeyError(f"no anchor NMSE measurement for {key}; refusing to "
@@ -254,6 +293,38 @@ static std::string autokernel_served_shape_nmse_str(double v) {
     snprintf(buf, sizeof(buf), "%g", v);   // == Python f"{v:g}"
     return buf;
 }
+// Round-12: the CPU backend thread count the tool ACTUALLY uses -- the served -t,
+// passed by the gate/calibration in AUTOKERNEL_BACKEND_THREADS (stock: hardware
+// concurrency, whatever the affinity). Called from main's backend init.
+static int autokernel_backend_threads() {
+    const char * v = std::getenv("AUTOKERNEL_BACKEND_THREADS");
+    if (v != nullptr && std::atoi(v) > 0) {
+        return std::atoi(v);
+    }
+    return (int) N_THREADS;
+}
+// Round-12: deterministic, dispersed, high expert ids for the 128-expert routed cases:
+// row r routes to 127 - (29 r + 43 j) mod n_mats for j < n_used; the rest of the row
+// keeps a full permutation so the ids tensor stays well-formed.
+static void autokernel_route_ids(ggml_context * ctx, int n_mats, int n_used) {
+    for (ggml_tensor * t = ggml_get_first_tensor(ctx); t != NULL; t = ggml_get_next_tensor(ctx, t)) {
+        if (t->type != GGML_TYPE_I32 || ggml_is_view_op(t->op)) { continue; }
+        for (int64_t r = 0; r < ggml_nrows(t); r++) {
+            std::vector<int32_t> data(t->ne[0]);
+            std::vector<char> used(n_mats, 0);
+            int pos = 0;
+            for (int j = 0; j < n_used && pos < t->ne[0]; j++) {
+                const int id = n_mats - 1 - (int) ((r * 29 + j * 43) % n_mats);
+                data[pos++] = id;
+                used[id] = 1;
+            }
+            for (int i = 0; i < n_mats && pos < t->ne[0]; i++) {
+                if (!used[i]) { data[pos++] = i; }
+            }
+            ggml_backend_tensor_set(t, data.data(), r * t->nb[1], t->ne[0] * sizeof(int32_t));
+        }
+    }
+}
 struct test_mul_mat_served_shape : public test_mul_mat {
     const double max_nmse;
     test_mul_mat_served_shape(ggml_type type_a, ggml_type type_b, int64_t m, int64_t n,
@@ -275,14 +346,31 @@ struct test_mul_mat_id_served_shape : public test_mul_mat_id {
         return test_mul_mat_id::vars() + ",max_nmse=" + autokernel_served_shape_nmse_str(max_nmse);
     }
 };
+struct test_mul_mat_id_served_routed : public test_mul_mat_id {
+    const double max_nmse;
+    test_mul_mat_id_served_routed(ggml_type type_a, ggml_type type_b, int n_mats,
+            int n_used, bool b, int64_t m, int64_t n, int64_t k, double max_nmse)
+        : test_mul_mat_id(type_a, type_b, n_mats, n_used, b, m, n, k), max_nmse(max_nmse) {}
+    double max_nmse_err() override { return max_nmse; }
+    std::string vars() override {
+        return test_mul_mat_id::vars() + ",routed=1,max_nmse=" + autokernel_served_shape_nmse_str(max_nmse);
+    }
+    void initialize_tensors(ggml_context * ctx) override {
+        test_mul_mat_id::initialize_tensors(ctx);
+        autokernel_route_ids(ctx, n_mats, n_used);
+    }
+};
 """
 
 
-def backend_ops_patch_block(cases: tuple[ServedShapeCase, ...]) -> str:
-    """The C++ the llama-tree patch adds: the two subclasses above, plus a static
-    helper (precedent: `cpu_fa_reference.backend_ops_patch_block`) registering every
-    case ONLY when the reviewed selector names this set."""
+def backend_ops_patch_block(cases: tuple[ServedShapeCase, ...],
+                            routed_cases: tuple[ServedShapeCase, ...] = ()) -> str:
+    """The C++ the llama-tree patch adds: the subclasses above, plus a static helper
+    (precedent: `cpu_fa_reference.backend_ops_patch_block`) registering the candidate
+    corpus under CASE_SET_ID and the bundle-tier routed corpus under ROUTED_CASE_SET_ID,
+    each ONLY when the reviewed selector names it."""
     lines = "\n".join(case.cpp() for case in cases)
+    routed = "\n".join(case.cpp() for case in routed_cases)
     return (
         _SUBCLASSES_CPP +
         "static void autokernel_add_served_shape_lowbit_cases("
@@ -290,6 +378,9 @@ def backend_ops_patch_block(cases: tuple[ServedShapeCase, ...]) -> str:
         f"    const char * case_set = std::getenv(\"{CASE_SET_ENV}\");\n"
         f"    if (case_set != nullptr && std::strcmp(case_set, \"{CASE_SET_ID}\") == 0) {{\n"
         f"{lines}\n"
+        "    }\n"
+        f"    if (case_set != nullptr && std::strcmp(case_set, \"{ROUTED_CASE_SET_ID}\") == 0) {{\n"
+        f"{routed}\n"
         "    }\n"
         "}\n")
 
@@ -307,9 +398,50 @@ CALIBRATION_MARKER = "AK_SERVED_NMSE"
 PATCH_BEGIN = "// AK-SERVED-SHAPE-BEGIN (generated by autokernel served_shape_cases.py)"
 PATCH_END = "// AK-SERVED-SHAPE-END"
 PATCH_CALL = "    autokernel_add_served_shape_lowbit_cases(test_cases);  // AK-SERVED-SHAPE-CALL"
+_THREADS_STOCK = "            ggml_backend_set_n_threads_fn(backend.get(), N_THREADS);"
+THREADS_PATCHED = ("            ggml_backend_set_n_threads_fn(backend.get(), "
+                   "autokernel_backend_threads());  // AK-SERVED-SHAPE-THREADS")
 _EVAL_SIGNATURE = "static std::vector<std::unique_ptr<test_case>> make_test_cases_eval() {"
 _EVAL_FIRST_LINE = "    std::vector<std::unique_ptr<test_case>> test_cases;"
 
+_COMMON_CPP = (
+    "static std::string autokernel_served_shape_nmse_str(double v) {\n"
+    "    char buf[32];\n"
+    "    snprintf(buf, sizeof(buf), \"%g\", v);\n"
+    "    return buf;\n"
+    "}\n") + """// Round-12: the CPU backend thread count the tool ACTUALLY uses -- the served -t,
+// passed by the gate/calibration in AUTOKERNEL_BACKEND_THREADS (stock: hardware
+// concurrency, whatever the affinity). Called from main's backend init.
+static int autokernel_backend_threads() {
+    const char * v = std::getenv("AUTOKERNEL_BACKEND_THREADS");
+    if (v != nullptr && std::atoi(v) > 0) {
+        return std::atoi(v);
+    }
+    return (int) N_THREADS;
+}
+// Round-12: deterministic, dispersed, high expert ids for the 128-expert routed cases:
+// row r routes to 127 - (29 r + 43 j) mod n_mats for j < n_used; the rest of the row
+// keeps a full permutation so the ids tensor stays well-formed.
+static void autokernel_route_ids(ggml_context * ctx, int n_mats, int n_used) {
+    for (ggml_tensor * t = ggml_get_first_tensor(ctx); t != NULL; t = ggml_get_next_tensor(ctx, t)) {
+        if (t->type != GGML_TYPE_I32 || ggml_is_view_op(t->op)) { continue; }
+        for (int64_t r = 0; r < ggml_nrows(t); r++) {
+            std::vector<int32_t> data(t->ne[0]);
+            std::vector<char> used(n_mats, 0);
+            int pos = 0;
+            for (int j = 0; j < n_used && pos < t->ne[0]; j++) {
+                const int id = n_mats - 1 - (int) ((r * 29 + j * 43) % n_mats);
+                data[pos++] = id;
+                used[id] = 1;
+            }
+            for (int i = 0; i < n_mats && pos < t->ne[0]; i++) {
+                if (!used[i]) { data[pos++] = i; }
+            }
+            ggml_backend_tensor_set(t, data.data(), r * t->nb[1], t->ne[0] * sizeof(int32_t));
+        }
+    }
+}
+"""
 _CALIBRATION_CPP = """\
 // AutoKernel served-shape CALIBRATION subclasses: never fail (bound 1.0), print the
 // case's NMSE vs the use_ref reference so the anchor's own error can be measured.
@@ -340,6 +472,23 @@ struct test_mul_mat_id_served_calib : public test_mul_mat_id {
         return e;
     }
 };
+struct test_mul_mat_id_served_routed_calib : public test_mul_mat_id {
+    test_mul_mat_id_served_routed_calib(ggml_type type_a, ggml_type type_b, int n_mats,
+            int n_used, bool b, int64_t m, int64_t n, int64_t k)
+        : test_mul_mat_id(type_a, type_b, n_mats, n_used, b, m, n, k) {}
+    double max_nmse_err() override { return 1.0; }
+    std::string vars() override { return test_mul_mat_id::vars() + ",routed=1,calibrate=1"; }
+    void initialize_tensors(ggml_context * ctx) override {
+        test_mul_mat_id::initialize_tensors(ctx);
+        autokernel_route_ids(ctx, n_mats, n_used);
+    }
+    double err(const float * a, const float * b, size_t n) override {
+        const double e = test_case::err(a, b, n);
+        fprintf(stdout, "AK_SERVED_NMSE\\t%s\\t%.17g\\n", vars().c_str(), e);
+        fflush(stdout);
+        return e;
+    }
+};
 """
 
 
@@ -349,23 +498,36 @@ def calibration_vars(shape: ServedShape, type_a: str, n: int) -> str:
     if shape.op == "MUL_MAT":
         return (f"type_a={name},type_b=f32,m={shape.m},n={n},k={shape.k},bs=[1,1],"
                 f"nr=[1,1],per=[0,1,2,3],k_v=0,o=1,calibrate=1")
+    routed = ",routed=1" if shape.routed else ""
     return (f"type_a={name},type_b=f32,n_mats={shape.n_mats},n_used={shape.n_used},b=0,"
-            f"m={shape.m},n={n},k={shape.k},calibrate=1")
+            f"m={shape.m},n={n},k={shape.k}{routed},calibrate=1")
 
 
-def canonical_triples() -> tuple[tuple[ServedShape, str, int], ...]:
-    return tuple((shape, type_a, width) for shape in SERVED_SHAPES
-                 for type_a in WITNESS_TYPES for width in SERVED_WIDTHS)
+def canonical_triples(routed: bool = False) -> tuple[tuple[ServedShape, str, int], ...]:
+    shapes, types, widths = corpus(routed)
+    return tuple((shape, type_a, width) for shape in shapes
+                 for type_a in types for width in widths)
+
+
+def calibration_triples() -> tuple[tuple[ServedShape, str, int], ...]:
+    """Both corpora: the candidate corpus and the bundle-tier routed one."""
+    return canonical_triples() + canonical_triples(routed=True)
 
 
 def calibration_regex() -> str:
     import re
-    return "^(" + "|".join(re.escape(calibration_vars(*t)) for t in canonical_triples()) + ")$"
+    return "^(" + "|".join(re.escape(calibration_vars(*t))
+                           for t in calibration_triples()) + ")$"
 
 
 def calibration_patch_block() -> str:
     lines = []
-    for shape, type_a, n in canonical_triples():
+    for shape, type_a, n in calibration_triples():
+        if shape.routed:
+            lines.append(f"        test_cases.emplace_back(new test_mul_mat_id_served_routed_calib("
+                         f"GGML_TYPE_{type_a}, GGML_TYPE_F32, {shape.n_mats}, {shape.n_used}, "
+                         f"false, {shape.m}, {n}, {shape.k}));")
+            continue
         if shape.op == "MUL_MAT":
             lines.append(f"        test_cases.emplace_back(new test_mul_mat_served_calib("
                          f"GGML_TYPE_{type_a}, GGML_TYPE_F32, {shape.m}, {n}, {shape.k}, "
@@ -374,7 +536,7 @@ def calibration_patch_block() -> str:
             lines.append(f"        test_cases.emplace_back(new test_mul_mat_id_served_calib("
                          f"GGML_TYPE_{type_a}, GGML_TYPE_F32, {shape.n_mats}, {shape.n_used}, "
                          f"false, {shape.m}, {n}, {shape.k}));")
-    return (_CALIBRATION_CPP +
+    return (_COMMON_CPP + _CALIBRATION_CPP +
             "static void autokernel_add_served_shape_lowbit_cases("
             "std::vector<std::unique_ptr<test_case>> & test_cases) {\n"
             f"    const char * case_set = std::getenv(\"{CASE_SET_ENV}\");\n"
@@ -387,7 +549,7 @@ def parse_calibration(output: str) -> dict:
     repeated print of one case. Raises ValueError unless EVERY canonical triple has a
     finite, non-negative value and no unknown case was printed."""
     import math
-    by_vars = {calibration_vars(*t): (t[0].name, t[1], t[2]) for t in canonical_triples()}
+    by_vars = {calibration_vars(*t): (t[0].name, t[1], t[2]) for t in calibration_triples()}
     found: dict = {}
     for line in output.splitlines():
         if not line.startswith(CALIBRATION_MARKER + "\t"):
@@ -429,6 +591,10 @@ def apply_patch_block(test_backend_ops: Path, block: str) -> None:
             raise ValueError("unexpected make_test_cases_eval() prologue")
         cut = first + len(_EVAL_FIRST_LINE)
         text = text[:cut] + "\n" + PATCH_CALL + text[cut:]
+    if THREADS_PATCHED not in text:
+        if text.count(_THREADS_STOCK) != 1:
+            raise ValueError("main()'s backend thread-count line not found exactly once")
+        text = text.replace(_THREADS_STOCK, THREADS_PATCHED, 1)
     Path(test_backend_ops).write_text(text, encoding="utf-8")
 
 
@@ -438,7 +604,8 @@ def binary_has_calibration(build_dir: Path) -> bool:
         data = binary.read_bytes()
     except OSError:
         return False
-    return CALIBRATION_CASE_SET_ID.encode() in data and CALIBRATION_MARKER.encode() in data
+    return (CALIBRATION_CASE_SET_ID.encode() in data and CALIBRATION_MARKER.encode() in data
+            and BACKEND_THREADS_ENV.encode() in data)
 
 
 def binary_has_case_set(build_dir: Path) -> bool:
@@ -449,19 +616,32 @@ def binary_has_case_set(build_dir: Path) -> bool:
     `False`)."""
     binary = Path(build_dir) / "bin" / "test-backend-ops"
     try:
-        return CASE_SET_ID.encode() in binary.read_bytes()
+        data = binary.read_bytes()
     except OSError:
         return False
+    return CASE_SET_ID.encode() in data and BACKEND_THREADS_ENV.encode() in data
+
+
+def binary_has_routed_case_set(build_dir: Path) -> bool:
+    binary = Path(build_dir) / "bin" / "test-backend-ops"
+    try:
+        data = binary.read_bytes()
+    except OSError:
+        return False
+    return ROUTED_CASE_SET_ID.encode() in data and BACKEND_THREADS_ENV.encode() in data
 
 
 _SHAPES_BY_NAME: dict[str, ServedShape] = {shape.name: shape for shape in SERVED_SHAPES}
+_ROUTED_BY_NAME: dict[str, ServedShape] = {shape.name: shape for shape in ROUTED_SHAPES}
 
 
-def write_manifest(path: Path, cases: tuple[ServedShapeCase, ...]) -> None:
+def write_manifest(path: Path, cases: tuple[ServedShapeCase, ...], *,
+                   routed: bool = False) -> None:
     """Persist the EXACT baked case set (with its anchor-derived `max_nmse` bounds)
     beside the applied llama-tree patch, so a later gate run reads what was actually
     compiled in rather than recomputing (and potentially drifting from) it."""
-    body = {"schema": MANIFEST_SCHEMA, "case_set_id": CASE_SET_ID,
+    body = {"schema": ROUTED_MANIFEST_SCHEMA if routed else MANIFEST_SCHEMA,
+            "case_set_id": ROUTED_CASE_SET_ID if routed else CASE_SET_ID,
            "cases": [{"shape_name": c.shape.name, "type_a": c.type_a, "n": c.n,
                       "max_nmse": c.max_nmse} for c in cases]}
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -474,7 +654,7 @@ class ManifestRefused(ValueError):
     """A served-shape manifest is absent, malformed, or names an unknown shape."""
 
 
-def load_manifest(path: Path) -> tuple[ServedShapeCase, ...]:
+def load_manifest(path: Path, *, routed: bool = False) -> tuple[ServedShapeCase, ...]:
     """Reload a `write_manifest` file, re-resolving each row's `ServedShape` from
     `SERVED_SHAPES` by name -- never trusting the file's own k/m/n_mats/n_used, so a
     manifest that drifted from this module's canonical shapes is refused, not
@@ -489,21 +669,25 @@ def load_manifest(path: Path) -> tuple[ServedShapeCase, ...]:
         body = json.loads(raw)
     except ValueError as exc:
         raise ManifestRefused(f"{path}: served-shape manifest is not valid JSON: {exc}") from exc
-    if not isinstance(body, dict) or body.get("schema") != MANIFEST_SCHEMA \
-            or body.get("case_set_id") != CASE_SET_ID or not isinstance(body.get("cases"), list) \
+    schema = ROUTED_MANIFEST_SCHEMA if routed else MANIFEST_SCHEMA
+    set_id = ROUTED_CASE_SET_ID if routed else CASE_SET_ID
+    by_name = _ROUTED_BY_NAME if routed else _SHAPES_BY_NAME
+    _shapes, types, widths = corpus(routed)
+    if not isinstance(body, dict) or body.get("schema") != schema \
+            or body.get("case_set_id") != set_id or not isinstance(body.get("cases"), list) \
             or not body["cases"]:
         raise ManifestRefused(f"{path}: served-shape manifest has the wrong shape or schema")
     cases: list[ServedShapeCase] = []
     for row in body["cases"]:
         if not isinstance(row, dict) or set(row) != {"shape_name", "type_a", "n", "max_nmse"}:
             raise ManifestRefused(f"{path}: malformed served-shape manifest row: {row!r}")
-        shape = _SHAPES_BY_NAME.get(row["shape_name"])
+        shape = by_name.get(row["shape_name"])
         if shape is None:
             raise ManifestRefused(f"{path}: unknown shape {row['shape_name']!r}; "
                                   "this module's SERVED_SHAPES moved on without the manifest")
-        if row["type_a"] not in WITNESS_TYPES:
+        if row["type_a"] not in types:
             raise ManifestRefused(f"{path}: {row['type_a']!r} is not a witness type")
-        if row["n"] not in SERVED_WIDTHS:
+        if row["n"] not in widths:
             raise ManifestRefused(f"{path}: n={row['n']!r} is not a served width")
         max_nmse = row["max_nmse"]
         if not isinstance(max_nmse, (int, float)) or isinstance(max_nmse, bool) \
@@ -514,8 +698,7 @@ def load_manifest(path: Path) -> tuple[ServedShapeCase, ...]:
     # Re-review 2026-10-06: exact canonical SET equality, duplicates refused -- a row
     # count alone accepted 180 copies of one case.
     keys = [(c.shape.name, c.type_a, c.n) for c in cases]
-    canonical = {(shape.name, type_a, width) for shape in SERVED_SHAPES
-                 for type_a in WITNESS_TYPES for width in SERVED_WIDTHS}
+    canonical = {(t[0].name, t[1], t[2]) for t in canonical_triples(routed)}
     if len(keys) != len(set(keys)):
         raise ManifestRefused(f"{path}: manifest repeats a (shape, type, width) case")
     if set(keys) != canonical:
@@ -533,4 +716,6 @@ __all__ = ["CASE_SET_ENV", "CASE_SET_ID", "MANIFEST_SCHEMA", "ManifestRefused",
            "CALIBRATION_CASE_SET_ID", "CALIBRATION_MARKER", "PATCH_BEGIN", "PATCH_END",
            "PATCH_CALL", "calibration_vars", "canonical_triples", "calibration_regex",
            "calibration_patch_block", "parse_calibration", "apply_patch_block",
-           "binary_has_calibration"]
+           "binary_has_calibration", "ROUTED_CASE_SET_ID", "ROUTED_SHAPES",
+           "ROUTED_TYPES", "ROUTED_WIDTHS", "BACKEND_THREADS_ENV", "corpus",
+           "calibration_triples", "binary_has_routed_case_set", "THREADS_PATCHED"]

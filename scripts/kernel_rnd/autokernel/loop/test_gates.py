@@ -919,7 +919,7 @@ class AffectedOpAndIndependentReference(unittest.TestCase):
                 path, "ggml_compute_forward_rms_norm_f32", src, src, patch)
             # round-7 resolution C: block comments and directives are refused lexically
             # by every route, so they no longer fall through to cpu_norm_numerics.
-            if "ggml_barrier" in line or "#pragma omp" in line or "/*" in line:
+            if "ggml_barrier" in line or "#pragma omp" in line:
                 self.assertIsNotNone(refusal, line)
                 verdict = gates.affected_op_scope(
                     (path,), target_surface=path,
@@ -2434,7 +2434,7 @@ class ThePplContractReReviewFixesHold(unittest.TestCase):
         self.assertIn('"decision": cross_target.GATE_REFUSED', run_src)
         self.assertIn("ppl_contract=ppl_keep,", run_src)
         self.assertIn("bit_exact_oracle=bit_exact_oracle)", run_src)
-        self.assertIn("ppl_contract_evict_culprit(head)", run_src)
+        self.assertIn("ppl_contract_evict_culprit(head, quality)", run_src)
         self.assertIn("gates.pinned_production_reference(", run_src)
         self.assertNotIn("gates.production_cpu_reference_build()", run_src)
 
@@ -2712,8 +2712,7 @@ class Round9LexicalAndLoaderRules(unittest.TestCase):
             line, file_scope_helper=k.get("fs", False), new_helpers=k.get("nh", False))
         for line in ("    system(\"touch x\");", "    FILE * f = fopen(p, \"w\");",
                      "    std::ofstream o(p);", "    int fd = open(p, 0);",
-                     "    void * h = dlopen(p, 1);", "    asm volatile(\"nop\");",
-                     "    __asm__(\"nop\");", "    const char * v = getenv(\"X\");",
+                     "    void * h = dlopen(p, 1);", "    const char * v = getenv(\"X\");",
                      "    setenv(\"X\", \"1\", 1);", "    unlink(p);", "    syscall(1);",
                      "    pid_t p = fork();", "    std::filesystem::remove(p);",
                      "    write(1, b, n);", "    popen(c, \"r\");", "    execv(p, a);",
@@ -2781,3 +2780,95 @@ class IsaGuardsAreAClosedBalancedSet(unittest.TestCase):
         self.assertIsNotNone(bal(["#else", "y;", "#endif"]))
         self.assertIsNotNone(bal(["#endif"]))
         self.assertIsNotNone(bal(["#ifdef HAVE_FANCY_SIMD", "x;"]))
+
+
+
+class Round12HonestAuthorRefinements(unittest.TestCase):
+    def test_single_line_block_comments_and_inline_asm_are_admitted(self):
+        lex = lambda line: gates._lexical_refusal(line, file_scope_helper=False,
+                                                  new_helpers=False)
+        for line in ("    acc = _mm512_add_ps(acc, v); /* 16 lanes */",
+                     "    /* unrolled x4 */ x = y;", "    asm volatile(\"nop\");",
+                     "    __asm__ __volatile__(\"vzeroupper\" ::: \"memory\");"):
+            self.assertIsNone(lex(line), line)
+        for line in ("    x = y; /* opens here", "    closes here */ x = y;",
+                     "    /* #define X */", "    /**/ #define iqk_typeA_supported(t) true",
+                     "    system(\"x\");", "#pragma omp simd", "%:define X"):
+            self.assertIsNotNone(lex(line), line)
+
+    def test_guard_balance_is_judged_on_the_resulting_structure(self):
+        head = ["#if defined(__AVX2__)", "x;", "#endif"]
+        replaced = ["#if defined(__AVX512F__)", "x;", "#endif"]
+        self.assertEqual(gates._directive_profile(head), gates._directive_profile(replaced))
+        self.assertNotEqual(gates._directive_profile(head),
+                            gates._directive_profile(["#if defined(__AVX2__)", "x;"]))
+        self.assertNotEqual(gates._directive_profile(["x;"]),
+                            gates._directive_profile(["#else", "x;"]))
+
+    def test_unavailable_evidence_is_never_a_numerical_failure(self):
+        def bundle(**overrides):
+            layers = {name: (lambda: gates.Verdict("x", True, "ok"))
+                      for name in gates.PPL_CONTRACT_BUNDLE_LAYERS}
+            layers.update(overrides)
+            return gates.ppl_contract_bundle_gate(
+                Path("/cor"), Path("/tip"), resolved_recipe=None, model=Path("/m"),
+                threads=1, cpu_list="0", env={}, log_dir=Path("/tmp/x"),
+                reference_build=Path("/ref"), _layers=layers)
+        cls = gates.ppl_contract_failure_class
+        self.assertEqual(cls(bundle(nmse=lambda: gates.Verdict(
+            "ppl_contract_nmse", False, "MUL_MAT case failed"))), "numerical")
+        self.assertEqual(cls(bundle(nmse=lambda: gates.Verdict(
+            "ppl_contract_nmse_unavailable", False, "no manifest"))), "unavailable")
+        self.assertEqual(cls(bundle(ppl=lambda: gates.Verdict(
+            "ppl_wikitext2", False, "ppl anchor 7.0 candidate 7.2 rel 0.03"))), "numerical")
+        self.assertEqual(cls(bundle(ppl=lambda: gates.Verdict(
+            "ppl_wikitext2", False, "perplexity run failed or reported no final estimate"))),
+            "unavailable")
+        self.assertEqual(cls(bundle(production_reference_load=lambda: gates.Verdict(
+            "production_reference_load", False, "could not load"))), "unavailable")
+
+        def boom():
+            raise RuntimeError("tool crashed")
+        self.assertEqual(cls(bundle(nmse=boom)), "unavailable")
+        self.assertEqual(cls(bundle(coherence=lambda: gates.Verdict(
+            "ppl_contract_coherence", False, "agreement below floor 0.98: ..."))), "numerical")
+        self.assertEqual(cls(bundle(coherence=lambda: gates.Verdict(
+            "ppl_contract_coherence", False, "prompt 0: anchor build produced no token-level"))),
+            "unavailable")
+        self.assertEqual(cls(gates.Verdict("g", False, "r", "")), "unavailable")
+
+    def test_the_bisect_holds_on_unavailable_evidence_and_a_failing_base(self):
+        source = (Path(__file__).parent / "run.py").read_text(encoding="utf-8")
+        body = source[source.index("    def ppl_contract_evict_culprit("):]
+        body = body[:body.index("    def ppl_contract_fold_check(")]
+        self.assertIn('gates.ppl_contract_failure_class(quality) != "numerical"', body)
+        self.assertIn("if fails(cor_commit[0]):", body)
+        self.assertIn('"held_base_fails"', body)
+        self.assertIn("raise _EvidenceUnavailable(", body)
+        self.assertLess(body.index("if fails(cor_commit[0]):"), body.index('"revert"'))
+
+    def test_the_bundle_tier_runs_the_routed_corpus_and_the_candidate_tier_does_not(self):
+        seen = []
+
+        def fake(build, *, resolved_recipe, manifest_path, routed=False):
+            seen.append(routed)
+            return gates.Verdict("served_shape_case_set", True, "ok")
+        with mock.patch.object(gates, "check_served_shape_case_set", fake), \
+                mock.patch.object(gates, "op_correctness",
+                                  lambda *a, **k: gates.Verdict("correctness", True, "ok")):
+            gates.ppl_contract_gate(
+                Path("/a"), Path("/c"), route=gates.CpuSourceRoute(
+                    route="r", path="x.cpp", symbols=(), bodies=(), ops=(),
+                    numerics="ppl_contract"),
+                resolved_recipe=None, model=Path("/m"), threads=1, cpu_list="0", env={},
+                log_dir=Path("/tmp/x"), served_shape_manifest=Path("/s/manifest.json"))
+            self.assertEqual(seen, [False])
+            seen.clear()
+            passing = {name: (lambda: gates.Verdict("x", True, "ok"))
+                       for name in gates.PPL_CONTRACT_BUNDLE_LAYERS if name != "nmse"}
+            gates.ppl_contract_bundle_gate(
+                Path("/cor"), Path("/tip"), resolved_recipe=None, model=Path("/m"),
+                threads=1, cpu_list="0", env={}, log_dir=Path("/tmp/x"),
+                reference_build=Path("/ref"), served_shape_manifest=Path("/s/manifest.json"),
+                _layers=passing)
+            self.assertEqual(seen, [False, True])

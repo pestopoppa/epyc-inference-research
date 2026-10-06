@@ -1390,11 +1390,24 @@ def _cpu_route_scope_refusal(route: CpuSourceRoute, source_text: str | None,
     #     (balanced; see `_new_helper_refusal`) and `#include <system>`.
     #   * operator 2026-10-06 (friction): ISA/feature guards from the closed
     #     `_ISA_GUARD_LINE` grammar are admitted anywhere, balanced within the hunk.
-    # Balance is checked per FILE (every added line of this file's patch, in order):
-    # wrapping existing code puts the opening and closing guard in different -U0 hunks.
-    balance = _directive_balance_refusal([line for hunk in hunks for line in hunk[5]])
+    # Round-12: balance is judged on the RESULTING structure -- each edited body's
+    # post-image must have the same conditional-compilation profile as its HEAD image
+    # (so replacing an existing `#if` while keeping its `#endif` is fine); file-scope
+    # helper lines (no body) must balance among themselves.
+    post_lines = source_text.splitlines()
+    for label in dict.fromkeys(label for label in labels if label is not None):
+        head_region = next(r for r in old[0] if r[0] == label)
+        post_region = next(r for r in new[0] if r[0] == label)
+        head_profile = _directive_profile(pre_lines[head_region[1] - 1:head_region[2]])
+        post_profile = _directive_profile(post_lines[post_region[1] - 1:post_region[2]])
+        if post_profile != head_profile:
+            return (f"conditional compilation in {label} no longer balances like HEAD "
+                    f"(net/min depth {post_profile} vs {head_profile})")
+    helper_lines = [line for hunk, label in zip(hunks, labels) if label is None
+                    for line in hunk[5]]
+    balance = _directive_balance_refusal(helper_lines)
     if balance is not None:
-        return f"unbalanced conditional compilation in this file's added lines: {balance}"
+        return f"unbalanced conditional compilation in added file-scope lines: {balance}"
     for hunk, label in zip(hunks, labels):
         for line in hunk[5]:
             directive = _PREPROCESSOR_LINE.match(line)
@@ -1438,6 +1451,24 @@ def _directive_code(line: str) -> str:
     """The code part of a line (trailing `//` comment and literal contents removed)."""
     split = _split_line_lexically(line.rstrip("\n"))
     return line.rstrip("\n") if split is None else split[0]
+
+
+def _directive_profile(lines) -> tuple[int, int]:
+    """(net depth, minimum depth) of the conditional-compilation lines in `lines`."""
+    depth = low = 0
+    for line in lines:
+        match = _PREPROCESSOR_LINE.match(_directive_code(line))
+        if match is None:
+            continue
+        word = match.group(1)
+        if word in ("if", "ifdef", "ifndef"):
+            depth += 1
+        elif word == "endif":
+            depth -= 1
+            low = min(low, depth)
+        elif word in ("elif", "else"):
+            low = min(low, depth - 1)
+    return depth, low
 
 
 def _directive_balance_refusal(lines) -> "str | None":
@@ -1491,7 +1522,7 @@ _DANGEROUS_API = re.compile(
     r"\b(?:system|popen|execl|execlp|execle|execv|execvp|execvpe|execve|fexecve|fork|vfork"
     r"|posix_spawnp?|fopen|fopen64|freopen|open|open64|openat|creat|write|pwrite|pwrite64"
     r"|pwritev2?|fwrite|ofstream|ifstream|fstream|filesystem|rename|renameat2?|unlink"
-    r"|unlinkat|remove|mkdir|mkdirat|syscall|dlopen|dlmopen|dlsym|dlvsym|asm|__asm|__asm__"
+    r"|unlinkat|remove|mkdir|mkdirat|syscall|dlopen|dlmopen|dlsym|dlvsym"
     r"|getenv|secure_getenv|setenv|putenv|unsetenv|clearenv|mmap|mprotect|ptrace|kill"
     r"|raise|signal|sigaction|chmod|chown|truncate|ftruncate|symlink|link|socket|connect)\b")
 _DANGEROUS_INCLUDE = re.compile(
@@ -1512,9 +1543,15 @@ def _lexical_refusal(line: str, *, file_scope_helper: bool, new_helpers: bool) -
     if split is None:
         return "unterminated string/char literal"
     code, comment = split
+    # Round-12 (honest-author model): a block comment that opens AND closes on this
+    # line is ordinary kernel practice; anything spanning lines stays refused.
+    inline = re.findall(r"/\*.*?\*/", code)
+    code = re.sub(r"/\*.*?\*/", " ", code)
     for text in (code, comment):
         if "/*" in text or "*/" in text:
-            return "block comment delimiter"
+            return "multi-line block comment delimiter"
+    if any("#" in block for block in inline):
+        return "`#` in a comment"
     if re.search(r"\b(?:u8|u|U|L)?R\"\"", code):
         return "raw string literal"
     # (an admitted file-scope `#include <...>` line names a header, not a call; the
@@ -2312,7 +2349,7 @@ def check_cpu_fa_perf_screen(anchor_build: Path, candidate_build: Path, *, ancho
 
 
 def check_served_shape_case_set(build_dir: Path, *, resolved_recipe,
-                                manifest_path: Path) -> Verdict:
+                                manifest_path: Path, routed: bool = False) -> Verdict:
     """ppl_contract layer (a) addendum (review 2026-10-06): the model's OWN served
     (k, m[, n_mats, n_used]) matmul shapes, at the served widths, for every witness
     quant -- `served_shape_cases.py`'s HONEST LIMITATIONS fix for the generic
@@ -2324,22 +2361,35 @@ def check_served_shape_case_set(build_dir: Path, *, resolved_recipe,
     gap in the correctness oracle, not a harmlessly-skipped extra."""
     from . import served_shape_cases as ssc
 
+    # Round-12: unavailable evidence is gate "oracle_unavailable" (never a numerical
+    # FAIL), so a bundle bisect can tell "could not measure" from "measured wrong".
+    set_id = ssc.ROUTED_CASE_SET_ID if routed else ssc.CASE_SET_ID
     try:
-        cases = ssc.load_manifest(manifest_path)
+        cases = ssc.load_manifest(manifest_path, routed=routed)
     except ssc.ManifestRefused as exc:
-        return Verdict("served_shape_case_set", False,
+        return Verdict("oracle_unavailable", False,
                        f"served-shape case set is not available: {exc}")
-    if not ssc.binary_has_case_set(build_dir):
-        return Verdict("served_shape_case_set", False,
-                       f"test-backend-ops at {build_dir} does not carry the "
-                       f"{ssc.CASE_SET_ID} case set (llama-tree patch not applied); "
-                       "layer (a) has no served-shape evidence for this candidate")
+    has = ssc.binary_has_routed_case_set if routed else ssc.binary_has_case_set
+    if not has(build_dir):
+        return Verdict("oracle_unavailable", False,
+                       f"test-backend-ops at {build_dir} does not carry the {set_id} case "
+                       "set with the backend-thread control (llama-tree patch not "
+                       "applied); layer (a) has no served-shape evidence for this build")
+    try:
+        threads = served_launch(resolved_recipe)["threads"]
+    except (ValueError, TypeError) as exc:
+        return Verdict("oracle_unavailable", False,
+                       f"served backend thread count is unknown ({exc}); refusing to run "
+                       "the served-shape cases at an uncontrolled thread count")
     ops_present = sorted({c.shape.op for c in cases})
     verdict = op_correctness(build_dir, op=",".join(ops_present), backend="CPU",
         resolved_recipe=resolved_recipe, params_filter=ssc.case_set_regex(cases),
-        environment_overrides=((ssc.CASE_SET_ENV, ssc.CASE_SET_ID),),
+        environment_overrides=((ssc.CASE_SET_ENV, set_id),
+                               (ssc.BACKEND_THREADS_ENV, str(threads))),
         expected_cases=len(cases))
-    return Verdict("served_shape_case_set", verdict.passed, verdict.reason, verdict.detail)
+    gate = ("served_shape_case_set" if verdict.passed or verdict.gate != "oracle_unavailable"
+            else "oracle_unavailable")
+    return Verdict(gate, verdict.passed, verdict.reason, verdict.detail)
 
 
 def check_model_output_identity(*, anchor_recipe, candidate_recipe, requests,
@@ -3344,6 +3394,7 @@ def ppl_contract_op_nmse(candidate_build: Path, *, resolved_recipe,
                          route_name: "str | None" = None,
                          ops: tuple[str, ...] = ("MUL_MAT", "MUL_MAT_ID"),
                          served_shape_manifest: "Path | None" = None,
+                         routed_manifest: "Path | None" = None,
                          _op_correctness=None,
                          _check_served_shape_case_set=None) -> Verdict:
     """Layer (a): test-backend-ops vs the independent `use_ref=true` reference at the
@@ -3362,7 +3413,7 @@ def ppl_contract_op_nmse(candidate_build: Path, *, resolved_recipe,
     explicit, reviewable choice to run layer (a) without served-shape evidence.
     `_check_served_shape_case_set` is a test seam."""
     if route_name in PPL_CONTRACT_NO_OP_ORACLE:
-        return Verdict("ppl_contract_nmse", False,
+        return Verdict("ppl_contract_nmse_unavailable", False,
                        f"route {route_name} has no op-level oracle: test-backend-ops never "
                        "allocates the CPU_REPACK extra buffer, so no case reaches its window")
     run = _op_correctness or op_correctness
@@ -3372,22 +3423,31 @@ def ppl_contract_op_nmse(candidate_build: Path, *, resolved_recipe,
         verdict = run(candidate_build, op=op, backend="CPU", resolved_recipe=resolved_recipe,
                       params_filter=params_filter)
         if verdict is None or not verdict.passed:
-            return Verdict("ppl_contract_nmse", False,
+            unavailable = verdict is None or verdict.gate == "oracle_unavailable"
+            return Verdict("ppl_contract_nmse_unavailable" if unavailable
+                           else "ppl_contract_nmse", False,
                            f"{op} served-width suite ({params_filter}) refused: "
                            f"{getattr(verdict, 'reason', 'no verdict')}",
                            getattr(verdict, "detail", ""))
+    check = _check_served_shape_case_set or check_served_shape_case_set
+    corpora = []
     if served_shape_manifest is not None:
-        check = _check_served_shape_case_set or check_served_shape_case_set
+        corpora.append(("served-shape", served_shape_manifest, {}))
+    if routed_manifest is not None:
+        corpora.append(("128-expert routed", routed_manifest, {"routed": True}))
+    for label, manifest, extra in corpora:
         served_verdict = check(candidate_build, resolved_recipe=resolved_recipe,
-                               manifest_path=served_shape_manifest)
+                               manifest_path=manifest, **extra)
         if not served_verdict.passed:
-            return Verdict("ppl_contract_nmse", False,
-                           f"served-shape suite refused: {served_verdict.reason}",
+            unavailable = served_verdict.gate == "oracle_unavailable"
+            return Verdict("ppl_contract_nmse_unavailable" if unavailable
+                           else "ppl_contract_nmse", False,
+                           f"{label} suite refused: {served_verdict.reason}",
                            served_verdict.detail)
     return Verdict("ppl_contract_nmse", True,
                    f"served-width suite ({params_filter}), all types, passed for "
-                   f"{', '.join(ops)}" + ("; served-shape suite passed"
-                                          if served_shape_manifest is not None else ""))
+                   f"{', '.join(ops)}" + "".join(f"; {label} suite passed"
+                                                 for label, _m, _e in corpora))
 
 
 def _prefix_agreement(candidate, anchor) -> tuple[float, "int | None"]:
@@ -3708,21 +3768,24 @@ def _ppl_contract_layers(anchor_build: Path, candidate_build: Path, *, route_nam
         try:
             verdict = overrides.get(name, default)()
         except Exception as exc:  # noqa: BLE001 -- fail CLOSED, never silently pass
-            return Verdict(f"ppl_contract_{name}", False,
+            return Verdict(f"ppl_contract_{name}_error", False,
                            f"layer {name!r} errored: {type(exc).__name__}: {exc}")
         if not isinstance(verdict, Verdict):
-            return Verdict(f"ppl_contract_{name}", False, f"layer {name!r} produced no verdict")
+            return Verdict(f"ppl_contract_{name}_error", False,
+                           f"layer {name!r} produced no verdict")
         return verdict
 
     if "nmse" in layer_names and served_shape_manifest is None and "nmse" not in overrides:
         return Verdict(gate_name, False, "no served-shape manifest: layer (a) would run "
-                       "without served-shape evidence, refusing (re-review 2026-10-06)")
+                       "without served-shape evidence, refusing (re-review 2026-10-06)",
+                       "failure_class=unavailable")
     needs_reference = {"production_reference_load", "ppl", "coherence",
                        "long_canary"} & set(layer_names)
     if needs_reference and reference_build is None and \
             not ({"ppl", "coherence", "long_canary"} & set(layer_names)) <= set(overrides):
         return Verdict(gate_name, False, "no fixed reference build: cumulative drift across "
-                       "advancing anchors cannot be bounded, refusing")
+                       "advancing anchors cannot be bounded, refusing",
+                       "failure_class=unavailable")
     prompts = prod_prompts
     canary = canary_prompt
     launch = None
@@ -3732,7 +3795,8 @@ def _ppl_contract_layers(anchor_build: Path, candidate_build: Path, *, route_nam
         try:
             launch = served_launch(resolved_recipe)
         except ValueError as exc:
-            return Verdict(gate_name, False, f"{gate_name} refused: {exc}")
+            return Verdict(gate_name, False, f"{gate_name} refused: {exc}",
+                           "failure_class=unavailable")
     layers = (
         ("production_reference_load", lambda: (
             check_production_reference_loads(
@@ -3744,7 +3808,11 @@ def _ppl_contract_layers(anchor_build: Path, candidate_build: Path, *, route_nam
                    "no fixed reference build supplied (test seam)"))),
         ("nmse", lambda: ppl_contract_op_nmse(
             candidate_build, resolved_recipe=resolved_recipe, route_name=route_name,
-            served_shape_manifest=served_shape_manifest)),
+            served_shape_manifest=served_shape_manifest,
+            # Round-12: the 128-expert routed corpus runs at the BUNDLE tier only.
+            routed_manifest=(Path(served_shape_manifest).with_name("manifest-routed.json")
+                             if served_shape_manifest is not None
+                             and "ppl" in layer_names else None))),
         ("ppl", lambda: ppl_wikitext2(
             anchor_build, candidate_build, model=model, threads=threads, env=env,
             cpu_list=cpu_list, log_dir=log_dir, reference_build=reference_build,
@@ -3770,10 +3838,34 @@ def _ppl_contract_layers(anchor_build: Path, candidate_build: Path, *, route_nam
         if not verdict.passed:
             return Verdict(gate_name, False,
                            f"{gate_name} refused at layer {name}: {verdict.gate}: {verdict.reason}",
+                           f"failure_class={_layer_failure_class(name, verdict)}\n" +
                            "\n".join(f"{v.gate}: passed={v.passed} {v.reason}" for v in verdicts))
     return Verdict(gate_name, True,
                    f"ppl_contract layers {', '.join(layer_names)} passed: " +
                    "; ".join(f"{v.gate}={v.reason}" for v in verdicts))
+
+
+def _layer_failure_class(name: str, verdict: Verdict) -> str:
+    """Round-12: "numerical" only for a layer that MEASURED and found the build wrong;
+    every tool/reference/parse/evidence failure is "unavailable" (a bisect must never
+    evict a keep on missing evidence)."""
+    reason = verdict.reason or ""
+    numerical = {
+        "nmse": verdict.gate == "ppl_contract_nmse",
+        "ppl": verdict.gate == "ppl_wikitext2" and reason.startswith("ppl anchor"),
+        "coherence": (verdict.gate == "ppl_contract_coherence"
+                      and reason.startswith("agreement below floor")),
+        "long_canary": (verdict.gate == "ppl_contract_long_canary"
+                        and reason.startswith("agreement vs anchor")),
+    }.get(name, False)
+    return "numerical" if numerical else "unavailable"
+
+
+def ppl_contract_failure_class(verdict: Verdict) -> str:
+    """"numerical" / "unavailable" for a refused ppl_contract gate verdict (anything
+    unrecognised is "unavailable")."""
+    first = (verdict.detail or "").split("\n", 1)[0]
+    return "numerical" if first == "failure_class=numerical" else "unavailable"
 
 
 def ppl_contract_gate(anchor_build: Path, candidate_build: Path, *, route: "CpuSourceRoute",
@@ -3860,7 +3952,7 @@ __all__ = ["BACKEND_OPS_SELECTORS", "BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S",
            "ppl_contract_range_requires_gate", "prefix_id_agreement",
            "PPL_CONTRACT_BIT_EXACT_TRAILER", "PPL_CONTRACT_ORACLE_PREFIX",
            "ppl_contract_relevant", "PPL_CONTRACT_CANDIDATE_LAYERS",
-           "PPL_CONTRACT_BUNDLE_LAYERS", "served_launch",
+           "PPL_CONTRACT_BUNDLE_LAYERS", "served_launch", "ppl_contract_failure_class",
            "pinned_production_reference",
            "PPL_CONTRACT_SERVED_WIDTHS", "PPL_CONTRACT_AGREEMENT_FLOOR",
            "PPL_CONTRACT_PROD_PROMPT_TOKENS_MIN", "PPL_CONTRACT_CANARY_TOKENS",

@@ -21,13 +21,15 @@ def _fake_build(tmp: Path, *, calibrated=True, values=None, skip=0, rc=0) -> Pat
     (build / "bin").mkdir(parents=True)
     lines = [f"{ssc.CALIBRATION_MARKER}\t{ssc.calibration_vars(*t)}\t"
              f"{(values or {}).get(i, 1e-6)}"
-             for i, t in enumerate(ssc.canonical_triples())][skip:]
+             for i, t in enumerate(ssc.calibration_triples())][skip:]
     payload = "\n".join(lines)
-    literal = (f"# {ssc.CALIBRATION_CASE_SET_ID} {ssc.CALIBRATION_MARKER}" if calibrated
-               else "# nothing")
+    literal = (f"# {ssc.CALIBRATION_CASE_SET_ID} {ssc.CALIBRATION_MARKER} "
+               f"{ssc.BACKEND_THREADS_ENV}" if calibrated else "# nothing")
     tool = build / "bin" / "test-backend-ops"
     check = (f'assert os.environ["AUTOKERNEL_CORRECTNESS_CASE_SET"] == '
-             f'"{ssc.CALIBRATION_CASE_SET_ID}"') if calibrated else "pass"
+             f'"{ssc.CALIBRATION_CASE_SET_ID}" and os.environ["AUTOKERNEL_BACKEND_THREADS"] '
+             f'== "48" and os.environ["GGML_IQK"] == "1" and os.environ["LD_LIBRARY_PATH"]'
+             f'.startswith("{build}/bin")') if calibrated else "pass"
     if not calibrated:
         payload = payload.replace(ssc.CALIBRATION_MARKER, "XX")
     tool.write_text(textwrap.dedent(f"""\
@@ -64,9 +66,25 @@ def _tree(tmp: Path) -> Path:
         "int x;\n"
         "static std::vector<std::unique_ptr<test_case>> make_test_cases_eval() {\n"
         "    std::vector<std::unique_ptr<test_case>> test_cases;\n"
-        "    return test_cases;\n}\n")
+        "    return test_cases;\n}\n"
+        "int main() {\n"
+        "            ggml_backend_set_n_threads_fn(backend.get(), N_THREADS);\n}\n")
     subprocess.run(["git", "init", "-q", "-b", "experimental/x", str(tree)], check=True)
     return tree
+
+
+def _launch(tmp: Path) -> Path:
+    """A resolved served launch record like inputs-*/<target>.launch.json."""
+    served = tmp / "served-build"
+    (served / "bin").mkdir(parents=True, exist_ok=True)
+    path = tmp / "target.launch.json"
+    path.write_text(json.dumps({
+        "launch_env": {"GGML_IQK": "1", "OMP_PROC_BIND": "close",
+                       "LD_LIBRARY_PATH": f"{served}/bin"},
+        "topology_prefix": ["taskset", "-c", "0-95"],
+        "command_argv": ["llama-server", "-m", "m.gguf", "-t", "48", "-tb", "48"],
+        "build_dir": str(served), "template": {"cpu_list": "0-95"}}))
+    return path
 
 
 def _run(*argv):
@@ -85,16 +103,18 @@ def test_dry_by_default_changes_nothing(tmp_path):
 
 def test_execute_takes_the_region_lock_and_records_provenance(tmp_path):
     build, lock, store = _fake_build(tmp_path), _fake_region_lock(tmp_path), tmp_path / "s"
-    rc, out = _run("--store", store, "--anchor-build", build, "--cpu-list", "0-95",
-                   "--threads", "48", "--region-lock", lock, "--execute")
+    rc, out = _run("--store", store, "--anchor-build", build, "--launch", _launch(tmp_path),
+                   "--region-lock", lock, "--execute")
     assert rc == 0, out
     argv = (tmp_path / "region-lock.argv").read_text()
     assert argv.startswith("run --cpu-list 0-95 --role bench --")
     record = json.loads(next((store / "served_shape").glob("calibration-*.json")).read_text())
-    assert len(record["measurements"]) == len(ssc.canonical_triples())
+    assert len(record["measurements"]) == len(ssc.calibration_triples())
     prov = record["provenance"]
     assert prov["anchor_commit"] == "c" * 40 and prov["cpu_list"] == "0-95"
     assert prov["threads"] == 48 and "test-backend-ops" in prov["binary_digests"]
+    assert prov["served_env"]["GGML_IQK"] == "1" and prov["launch_sha256"]
+    assert prov["served_env"]["AUTOKERNEL_BACKEND_THREADS"] == "48"
 
 
 def test_execute_then_apply_writes_manifest_and_stages_the_final_block(tmp_path):
@@ -104,9 +124,8 @@ def test_execute_then_apply_writes_manifest_and_stages_the_final_block(tmp_path)
     assert rc == 0
     staged = (tree / "tests" / "test-backend-ops.cpp").read_text()
     assert ssc.CALIBRATION_CASE_SET_ID in staged and staged.count(ssc.PATCH_CALL) == 1
-    rc, out = _run("--store", store, "--anchor-build", build, "--cpu-list", "0-95",
-                   "--threads", "48", "--region-lock", lock, "--execute", "--apply",
-                   "--tree", tree)
+    rc, out = _run("--store", store, "--anchor-build", build, "--launch", _launch(tmp_path),
+                   "--region-lock", lock, "--execute", "--apply", "--tree", tree)
     assert rc == 0, out
     cases = ssc.load_manifest(store / "served_shape" / "manifest.json")
     assert len(cases) == len(ssc.canonical_triples())
@@ -123,15 +142,16 @@ def test_incomplete_or_failed_calibration_refuses(tmp_path):
         sub.mkdir()
         build = _fake_build(sub, **kwargs)
         with pytest.raises((cal.Refused, ValueError)):
-            cal.execute(build, sub / "store", "0-95", 48, str(lock), out=io.StringIO())
+            recipe = cal.served_recipe(_launch(sub), build, cpu_list=None, threads=None)
+            cal.execute(build, sub / "store", recipe, str(lock), out=io.StringIO())
         assert not (sub / "store" / "served_shape" / "manifest.json").exists()
 
 
 def test_an_anchor_at_or_above_the_cap_refuses_to_bake(tmp_path):
     lock = _fake_region_lock(tmp_path)
     build = _fake_build(tmp_path, values={5: ssc.SERVED_SHAPE_NMSE_CAP})
-    rc, _ = _run("--store", tmp_path / "s", "--anchor-build", build, "--cpu-list", "0-95",
-                 "--threads", "48", "--region-lock", lock, "--execute", "--apply")
+    rc, _ = _run("--store", tmp_path / "s", "--anchor-build", build,
+                 "--launch", _launch(tmp_path), "--region-lock", lock, "--execute", "--apply")
     assert rc == 2
     assert not (tmp_path / "s" / "served_shape" / "manifest.json").exists()
 
@@ -176,7 +196,7 @@ def test_build_calibration_uses_the_anchor_recipe_under_the_build_lock(tmp_path)
         #!/bin/bash
         echo "$@" > {tmp_path}/build.argv
         mkdir -p {tree}/build-ak-calib/bin
-        printf '{ssc.CALIBRATION_CASE_SET_ID} {ssc.CALIBRATION_MARKER}' \\
+        printf '{ssc.CALIBRATION_CASE_SET_ID} {ssc.CALIBRATION_MARKER} {ssc.BACKEND_THREADS_ENV}' \\
             > {tree}/build-ak-calib/bin/test-backend-ops
         """))
     lock.chmod(0o755)
@@ -204,3 +224,27 @@ def test_build_calibration_refuses_other_tree_changes_and_a_live_loop(tmp_path):
             status.timezone.utc).isoformat(), "stale_after_s": 180})
     rc, _ = _run("--store", store, "--tree", tree, "--build-calibration", "--cpu-list", "0-95")
     assert rc == 2
+
+
+
+def test_execute_reproduces_the_served_recipe_or_refuses(tmp_path):
+    """Round-12: the served env (GGML_IQK, OMP_*, rebound LD_LIBRARY_PATH), prefix and -t
+    are applied -- the stub asserts them -- and any mismatch refuses."""
+    build, lock = _fake_build(tmp_path), _fake_region_lock(tmp_path)
+    launch = _launch(tmp_path)
+    recipe = cal.served_recipe(launch, build, cpu_list="0-95", threads=48)
+    assert recipe["env"]["GGML_IQK"] == "1" and recipe["threads"] == 48
+    assert recipe["env"]["LD_LIBRARY_PATH"] == f"{build}/bin"
+    assert recipe["env"]["AUTOKERNEL_BACKEND_THREADS"] == "48"
+    with pytest.raises(cal.Refused):
+        cal.served_recipe(launch, build, cpu_list=None, threads=24)
+    with pytest.raises(cal.Refused):
+        cal.served_recipe(launch, build, cpu_list="0-47", threads=None)
+    body = json.loads(launch.read_text())
+    body["launch_env"]["LD_PRELOAD"] = "/x.so"
+    launch.write_text(json.dumps(body))
+    with pytest.raises(cal.Refused):
+        cal.served_recipe(launch, build, cpu_list=None, threads=None)
+    rc, _ = _run("--store", tmp_path / "s", "--anchor-build", build, "--region-lock", lock,
+                 "--execute")
+    assert rc == 2   # no --launch: the served env cannot be reproduced

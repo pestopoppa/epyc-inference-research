@@ -168,31 +168,69 @@ def build_calibration(tree: Path, cpu_list: str, region_lock: str, jobs: int,
     return build
 
 
-def calibration_argv(build: Path, cpu_list: str, region_lock: str) -> list:
+def served_recipe(launch_path: Path, build: Path, *, cpu_list: "str | None",
+                  threads: "int | None") -> dict:
+    """Round-12: the SERVED launch the calibration must reproduce, from the lane's
+    resolved launch JSON (`inputs-*/<target>.launch.json`): its launch environment
+    (GGML_IQK, OMP_*, ...) with LD_LIBRARY_PATH's build entry rebound to `build`, its
+    topology prefix, its cpu list and its -t. Refuses when any of these is missing,
+    when --cpu-list / --threads disagree with it, or when a loader variable other than
+    LD_LIBRARY_PATH is set (the served environment could not be reproduced)."""
+    try:
+        launch = json.loads(Path(launch_path).read_text(encoding="utf-8"))
+        env = dict(launch["launch_env"])
+        prefix = list(launch["topology_prefix"])
+        argv = list(launch["command_argv"])
+        served_build = str(Path(launch["build_dir"]) / "bin")
+        served_cpus = str(launch["template"]["cpu_list"])
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise Refused(f"{launch_path} is not a resolved launch record: {exc}") from exc
+    served_threads = next((int(argv[i + 1]) for i, tok in enumerate(argv[:-1])
+                           if tok in ("-t", "--threads") and str(argv[i + 1]).isdigit()), None)
+    if not served_threads or not prefix:
+        raise Refused(f"{launch_path} carries no -t or no topology prefix")
+    if threads is not None and threads != served_threads:
+        raise Refused(f"--threads {threads} differs from the served -t {served_threads}")
+    if cpu_list is not None and cpu_list != served_cpus:
+        raise Refused(f"--cpu-list {cpu_list} differs from the served cpu list {served_cpus}")
+    loader = sorted(k for k in env if k.startswith("LD_") and k != "LD_LIBRARY_PATH")
+    if loader:
+        raise Refused(f"served env sets loader variables {loader}; cannot reproduce it")
+    parts = str(env.get("LD_LIBRARY_PATH", "")).split(":")
+    hits = [i for i, part in enumerate(parts)
+            if part and os.path.realpath(part) == os.path.realpath(served_build)]
+    if not hits or any(not part for part in parts):
+        raise Refused(f"served LD_LIBRARY_PATH {env.get('LD_LIBRARY_PATH')!r} does not name "
+                      f"the served build bin {served_build}")
+    for i in hits:
+        parts[i] = str(Path(build) / "bin")
+    env["LD_LIBRARY_PATH"] = ":".join(parts)
+    env["PATH"] = os.environ.get("PATH", "/usr/bin:/bin")
+    env[ssc.CASE_SET_ENV] = ssc.CALIBRATION_CASE_SET_ID
+    env[ssc.BACKEND_THREADS_ENV] = str(served_threads)
+    return {"env": env, "prefix": prefix, "cpu_list": served_cpus,
+            "threads": served_threads, "launch": str(Path(launch_path).resolve()),
+            "launch_sha256": _sha256(Path(launch_path))}
+
+
+def calibration_argv(build: Path, recipe: dict, region_lock: str) -> list:
     binary = Path(build) / "bin" / "test-backend-ops"
-    return [region_lock, "run", "--cpu-list", cpu_list, "--role", "bench", "--",
-            "taskset", "-c", cpu_list, str(binary), "test", "-o", "MUL_MAT,MUL_MAT_ID",
+    return [region_lock, "run", "--cpu-list", recipe["cpu_list"], "--role", "bench", "--",
+            *recipe["prefix"], str(binary), "test", "-o", "MUL_MAT,MUL_MAT_ID",
             "-b", "CPU", "-p", ssc.calibration_regex()]
 
 
-def calibration_env(build: Path) -> dict:
-    env = dict(os.environ)
-    env["LD_LIBRARY_PATH"] = str(Path(build) / "bin")
-    env[ssc.CASE_SET_ENV] = ssc.CALIBRATION_CASE_SET_ID
-    env.pop("LD_PRELOAD", None)
-    return env
-
-
-def execute(build: Path, store: Path, cpu_list: str, threads: int, region_lock: str,
+def execute(build: Path, store: Path, recipe: dict, region_lock: str,
             out=sys.stdout) -> Path:
     if not ssc.binary_has_calibration(build):
         raise Refused(f"{build}/bin/test-backend-ops does not carry the calibration block "
-                      f"({ssc.CALIBRATION_CASE_SET_ID}); stage it with "
-                      "--stage-calibration-patch and rebuild test-backend-ops first")
-    argv = calibration_argv(build, cpu_list, region_lock)
-    print(f"execute   {' '.join(argv[:12])} ... -p <{len(ssc.canonical_triples())} cases>",
-          file=out)
-    done = subprocess.run(argv, capture_output=True, text=True, env=calibration_env(build),
+                      f"({ssc.CALIBRATION_CASE_SET_ID}) with the backend-thread control; "
+                      "stage it with --stage-calibration-patch and rebuild first")
+    cpu_list, threads = recipe["cpu_list"], recipe["threads"]
+    argv = calibration_argv(build, recipe, region_lock)
+    print(f"execute   {' '.join(argv[:12])} ... -p <{len(ssc.calibration_triples())} cases> "
+          f"({ssc.BACKEND_THREADS_ENV}={threads})", file=out)
+    done = subprocess.run(argv, capture_output=True, text=True, env=recipe["env"],
                           stdin=subprocess.DEVNULL, timeout=CALIBRATION_TIMEOUT_S)
     if done.returncode != 0:
         raise Refused(f"calibration run exited {done.returncode}: "
@@ -204,7 +242,10 @@ def execute(build: Path, store: Path, cpu_list: str, threads: int, region_lock: 
     path = folder / f"calibration-{stamp}.json"
     body = {"schema": "epyc.autokernel.served_shape_calibration.v1",
             "case_set_id": ssc.CASE_SET_ID,
-            "provenance": provenance(build, cpu_list, threads, argv),
+            "provenance": {**provenance(build, cpu_list, threads, argv),
+                           "launch": recipe["launch"], "launch_sha256": recipe["launch_sha256"],
+                           "served_env": {k: v for k, v in sorted(recipe["env"].items())
+                                          if k != "PATH"}},
             "measurements": [{"shape_name": k[0], "type_a": k[1], "n": k[2], "nmse": v}
                              for k, v in sorted(measurements.items())]}
     path.write_text(json.dumps(body, indent=2, sort_keys=True), encoding="utf-8")
@@ -223,15 +264,17 @@ def load_measurements(path: Path) -> dict:
 def apply(measurements: dict, store: Path, tree: "Path | None", out=sys.stdout) -> None:
     try:
         cases = ssc.case_set(measurements)
+        routed = ssc.case_set(measurements, routed=True)
     except (KeyError, ValueError) as exc:
         raise Refused(f"calibration cannot be baked: {exc}") from exc
     folder = Path(store) / "served_shape"
     folder.mkdir(parents=True, exist_ok=True)
-    block = ssc.backend_ops_patch_block(cases)
+    block = ssc.backend_ops_patch_block(cases, routed)
     (folder / "patch.cpp").write_text(block, encoding="utf-8")
     ssc.write_manifest(folder / "manifest.json", cases)
-    print(f"apply     manifest {folder / 'manifest.json'} ({len(cases)} cases), "
-          f"patch {folder / 'patch.cpp'}", file=out)
+    ssc.write_manifest(folder / "manifest-routed.json", routed, routed=True)
+    print(f"apply     manifest {folder / 'manifest.json'} ({len(cases)} cases), routed "
+          f"manifest ({len(routed)} cases), patch {folder / 'patch.cpp'}", file=out)
     if tree is not None:
         ssc.apply_patch_block(Path(tree) / "tests" / "test-backend-ops.cpp", block)
         print(f"staged    final served-shape block into {tree}/tests/test-backend-ops.cpp",
@@ -252,6 +295,8 @@ def main(argv: "list[str] | None" = None, out=sys.stdout) -> int:
     parser.add_argument("--threads", type=int)
     parser.add_argument("--region-lock", default=REGION_LOCK)
     parser.add_argument("--measurements", type=Path)
+    parser.add_argument("--launch", type=Path,
+                        help="the lane's resolved launch JSON (served env, prefix, -t)")
     parser.add_argument("--stage-calibration-patch", action="store_true")
     parser.add_argument("--build-calibration", action="store_true")
     parser.add_argument("--jobs", type=int, default=24)
@@ -273,8 +318,11 @@ def main(argv: "list[str] | None" = None, out=sys.stdout) -> int:
         if args.stage_calibration_patch:
             if args.tree is None:
                 raise Refused("--stage-calibration-patch needs --tree")
-            ssc.apply_patch_block(args.tree / "tests" / "test-backend-ops.cpp",
-                                  ssc.calibration_patch_block())
+            try:
+                ssc.apply_patch_block(args.tree / "tests" / "test-backend-ops.cpp",
+                                      ssc.calibration_patch_block())
+            except ValueError as exc:
+                raise Refused(f"cannot stage the calibration block: {exc}") from exc
             print(f"staged    calibration block into {args.tree}/tests/test-backend-ops.cpp",
                   file=out)
             print("next      --build-calibration --cpu-list <served list> (builds "
@@ -288,10 +336,12 @@ def main(argv: "list[str] | None" = None, out=sys.stdout) -> int:
             return 0
         measurements = None
         if args.execute:
-            if args.anchor_build is None or not args.cpu_list or not args.threads:
-                raise Refused("--execute needs --anchor-build, --cpu-list and --threads")
-            path = execute(args.anchor_build, args.store, args.cpu_list, args.threads,
-                           args.region_lock, out=out)
+            if args.anchor_build is None or args.launch is None:
+                raise Refused("--execute needs --anchor-build and --launch (the served "
+                              "recipe it must reproduce)")
+            recipe = served_recipe(args.launch, args.anchor_build, cpu_list=args.cpu_list,
+                                   threads=args.threads)
+            path = execute(args.anchor_build, args.store, recipe, args.region_lock, out=out)
             measurements = load_measurements(path)
         elif args.measurements is not None:
             measurements = load_measurements(args.measurements)

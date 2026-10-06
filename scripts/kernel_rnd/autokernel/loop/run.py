@@ -4847,7 +4847,7 @@ def main(argv: list[str] | None = None) -> int:
                 # culprit from the accumulator instead of discarding the whole bundle;
                 # the champion of record still HOLDS this round, and the next trigger
                 # re-judges the bundle without it. Any fault leaves the plain hold.
-                eviction = ppl_contract_evict_culprit(head)
+                eviction = ppl_contract_evict_culprit(head, quality)
                 plan["planner_evidence"]["eviction"] = eviction
                 print(f"quality   bundle bisect: {eviction}")
         # WHY it fired is part of the reading: a cadence firing at +2% compounded is a
@@ -4975,6 +4975,9 @@ def main(argv: list[str] | None = None) -> int:
         under the store (never the champion tree, which stays at the tip)."""
         if commit == current_anchor_commit[0]:
             return ppl_contract_anchor_for_gate()
+        if commit == cor_commit[0] and all((Path(cor_build[0]) / "bin" / tool).is_file()
+                                           for tool in gates.PPL_CONTRACT_TOOL_TARGETS):
+            return Path(cor_build[0])
         base = Path(args.store) / "ppl_contract" / "bisect"
         src, dest = base / f"src-{commit[:12]}", base / f"build-{commit[:12]}"
         marker = dest / "ak_bisect_build.json"
@@ -5012,11 +5015,21 @@ def main(argv: list[str] | None = None) -> int:
             log_dir=Path(args.store) / "ppl_contract" / "bundle",
             served_shape_manifest=Path(args.store) / "served_shape" / "manifest.json")
 
-    def ppl_contract_evict_culprit(tip_commit: str) -> dict:
+    class _EvidenceUnavailable(Exception):
+        """A bisect step could not MEASURE (tool/reference/parse failure)."""
+
+    def ppl_contract_evict_culprit(tip_commit: str, quality=None) -> dict:
         """Bisect the bundle's ppl-relevant (non-merge) commits for the FIRST whose state
-        fails the bundle gate, revert it on the accumulator, rebuild the anchor and drop
-        its mechanism from the bundle. Returns evidence; never raises."""
+        NUMERICALLY fails the bundle gate, revert it on the accumulator, rebuild the
+        anchor and drop its mechanism from the bundle. Round-12: unavailable evidence
+        (reference load, tool, parse failure) anywhere -- in the fold verdict, the base
+        or any bisect step -- HOLDS without evicting; and the champion-of-record base
+        state must itself pass before any keep is blamed. Returns evidence; never raises."""
         try:
+            if quality is not None and gates.ppl_contract_failure_class(quality) != "numerical":
+                return {"result": "held_unavailable",
+                        "reason": "the fold verdict is unavailable evidence, not a "
+                                  "numerical failure; nothing evicted"}
             if tip_commit != current_anchor_commit[0] or \
                     _git(args.worktree, "rev-parse", "HEAD") != tip_commit or \
                     _git(args.worktree, "status", "--porcelain", "--untracked-files=no"):
@@ -5031,20 +5044,35 @@ def main(argv: list[str] | None = None) -> int:
 
             def fails(sha):
                 if sha not in judged:
-                    judged[sha] = not ppl_contract_judge_bundle(
-                        ppl_contract_bisect_build(sha)).passed
+                    verdict = ppl_contract_judge_bundle(ppl_contract_bisect_build(sha))
+                    if not verdict.passed and \
+                            gates.ppl_contract_failure_class(verdict) != "numerical":
+                        raise _EvidenceUnavailable(f"{sha[:12]}: {verdict.reason}")
+                    judged[sha] = not verdict.passed
                 return judged[sha]
-            if not fails(suspects[-1]):
+            try:
+                # The base (champion of record) must pass before any keep is blamed.
+                if fails(cor_commit[0]):
+                    return {"result": "held_base_fails", "judged": judged,
+                            "reason": "the champion-of-record state itself fails the "
+                                      "bundle gate; no keep is attributable"}
+                last_fails = fails(suspects[-1])
+            except _EvidenceUnavailable as exc:
+                return {"result": "held_unavailable", "judged": judged, "reason": str(exc)}
+            if not last_fails:
                 return {"result": "not_isolated", "judged": judged,
                         "reason": "the last ppl-relevant keep's state passes; the failure "
                                   "is not attributable to one keep"}
             lo, hi = 0, len(suspects) - 1
-            while lo < hi:
-                mid = (lo + hi) // 2
-                if fails(suspects[mid]):
-                    hi = mid
-                else:
-                    lo = mid + 1
+            try:
+                while lo < hi:
+                    mid = (lo + hi) // 2
+                    if fails(suspects[mid]):
+                        hi = mid
+                    else:
+                        lo = mid + 1
+            except _EvidenceUnavailable as exc:
+                return {"result": "held_unavailable", "judged": judged, "reason": str(exc)}
             culprit = suspects[lo]
             subject = _git(args.worktree, "log", "-1", "--format=%s", culprit)
             done = subprocess.run(["git", "-C", str(args.worktree), "revert", "--no-edit",

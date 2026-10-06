@@ -20,6 +20,13 @@ def _recipe():
     return object()
 
 
+def _served_recipe():
+    from types import SimpleNamespace
+    return SimpleNamespace(topology_prefix=("taskset", "-c", "0-95"),
+                           command_argv=("llama-server", "-t", "48", "-tb", "48"),
+                           launch_env=(), backend="cpu")
+
+
 # ---- shapes / provenance ----------------------------------------------------------
 
 def test_served_shapes_match_the_2026_10_06_gguf_header_read():
@@ -159,6 +166,9 @@ def test_binary_has_case_set_scans_for_the_literal(tmp_path):
     binary.write_bytes(b"\0ELF\0")
     assert ssc.binary_has_case_set(build) is False
     binary.write_bytes(b"\0ELF" + ssc.CASE_SET_ID.encode() + b"\0")
+    assert ssc.binary_has_case_set(build) is False   # round-12: thread control required
+    binary.write_bytes(b"\0ELF" + ssc.CASE_SET_ID.encode() + b"\0"
+                       + ssc.BACKEND_THREADS_ENV.encode())
     assert ssc.binary_has_case_set(build) is True
     assert ssc.binary_has_case_set(tmp_path / "missing") is False
 
@@ -229,7 +239,7 @@ def test_check_served_shape_case_set_fails_closed_on_missing_manifest(tmp_path):
     verdict = gates.check_served_shape_case_set(
         tmp_path / "build", resolved_recipe=_recipe(), manifest_path=tmp_path / "absent.json")
     assert verdict.passed is False
-    assert verdict.gate == "served_shape_case_set"
+    assert verdict.gate == "oracle_unavailable"   # round-12: unavailable, not numerical
     assert "not available" in verdict.reason
 
 
@@ -253,7 +263,7 @@ def test_check_served_shape_case_set_runs_op_correctness_when_available(tmp_path
     build = tmp_path / "build"
     (build / "bin").mkdir(parents=True)
     (build / "bin" / "test-backend-ops").write_bytes(
-        b"\0ELF" + ssc.CASE_SET_ID.encode() + b"\0")
+        b"\0ELF" + ssc.CASE_SET_ID.encode() + b"\0" + ssc.BACKEND_THREADS_ENV.encode())
     seen = {}
 
     def fake_op_correctness(build_dir, *, op, backend, resolved_recipe, params_filter,
@@ -263,11 +273,16 @@ def test_check_served_shape_case_set_runs_op_correctness_when_available(tmp_path
         return gates.Verdict("correctness", True, "ok")
 
     monkeypatch.setattr(gates, "op_correctness", fake_op_correctness)
-    verdict = gates.check_served_shape_case_set(
+    unknown = gates.check_served_shape_case_set(
         build, resolved_recipe=_recipe(), manifest_path=manifest)
+    assert unknown.passed is False and unknown.gate == "oracle_unavailable"
+    assert "thread count" in unknown.reason
+    verdict = gates.check_served_shape_case_set(
+        build, resolved_recipe=_served_recipe(), manifest_path=manifest)
     assert verdict.passed is True
     assert seen["expected_cases"] == len(cases)
-    assert seen["environment_overrides"] == ((ssc.CASE_SET_ENV, ssc.CASE_SET_ID),)
+    assert seen["environment_overrides"] == ((ssc.CASE_SET_ENV, ssc.CASE_SET_ID),
+                                             (ssc.BACKEND_THREADS_ENV, "48"))
     assert "MUL_MAT" in seen["op"] and "MUL_MAT_ID" in seen["op"]
 
 
@@ -352,3 +367,47 @@ def test_witness_types_cover_every_type_the_iqk_whitelist_admits():
     body = body[:body.index("default:")]
     admitted = set(re.findall(r"case GGML_TYPE_(\w+):", body))
     assert admitted and admitted <= set(ssc.WITNESS_TYPES), admitted - set(ssc.WITNESS_TYPES)
+
+
+def test_the_routed_corpus_has_128_experts_high_ids_and_verify_widths():
+    """Round-12: the bundle tier restores 128 experts with dispersed high ids."""
+    assert all(s.n_mats == 128 and s.routed for s in ssc.ROUTED_SHAPES)
+    assert ssc.ROUTED_WIDTHS == (2, 3, 4, 5)
+    ids = {127 - (r * 29 + j * 43) % 128 for r in range(5) for j in range(3)}
+    assert len(ids) == 15 and any(i >= 64 for i in ids) and any(i < 64 for i in ids)
+    anchor = {(t[0].name, t[1], t[2]): 1e-6 for t in ssc.calibration_triples()}
+    routed = ssc.case_set(anchor, routed=True)
+    assert len(routed) == len(ssc.ROUTED_SHAPES) * len(ssc.ROUTED_TYPES) * 4
+    assert routed[0].vars().endswith(",routed=1,max_nmse=3e-06")
+    block = ssc.backend_ops_patch_block(ssc.case_set(anchor), routed)
+    assert "test_mul_mat_id_served_routed(" in block and ssc.ROUTED_CASE_SET_ID in block
+    assert "autokernel_route_ids(ctx, n_mats, n_used)" in block
+    assert "static int autokernel_backend_threads()" in block
+
+
+def test_routed_manifest_round_trips_separately(tmp_path):
+    anchor = {(t[0].name, t[1], t[2]): 1e-6 for t in ssc.calibration_triples()}
+    routed = ssc.case_set(anchor, routed=True)
+    path = tmp_path / "manifest-routed.json"
+    ssc.write_manifest(path, routed, routed=True)
+    assert ssc.load_manifest(path, routed=True) == routed
+    with pytest.raises(ssc.ManifestRefused):
+        ssc.load_manifest(path)
+
+
+def test_the_patch_sets_the_backend_thread_count_the_tool_uses(tmp_path):
+    test_file = tmp_path / "test-backend-ops.cpp"
+    test_file.write_text(
+        "static std::vector<std::unique_ptr<test_case>> make_test_cases_eval() {\n"
+        "    std::vector<std::unique_ptr<test_case>> test_cases;\n    return test_cases;\n}\n"
+        "int main() {\n"
+        "            ggml_backend_set_n_threads_fn(backend.get(), N_THREADS);\n}\n")
+    ssc.apply_patch_block(test_file, ssc.calibration_patch_block())
+    ssc.apply_patch_block(test_file, ssc.calibration_patch_block())
+    text = test_file.read_text()
+    assert text.count(ssc.THREADS_PATCHED) == 1 and "N_THREADS);" not in text.split("int main")[1]
+
+
+def test_the_calibration_set_covers_both_corpora():
+    assert len(ssc.calibration_triples()) == (len(ssc.canonical_triples())
+                                              + len(ssc.canonical_triples(routed=True)))
