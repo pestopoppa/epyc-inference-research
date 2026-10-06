@@ -556,11 +556,13 @@ def build_index(
                 n_chunks_seen += 1
                 line_start, line_end = ch.line_range
                 current_chunk_keys.add((ch.content_hash, line_start, line_end))
-                existing = cur.execute(
+                existing_rows = cur.execute(
                     "SELECT chunk_id, content_hash FROM chunk "
-                    "WHERE file_path=? AND content_hash=? AND line_start=? AND line_end=?",
+                    "WHERE file_path=? AND content_hash=? AND line_start=? AND line_end=? "
+                    "ORDER BY chunk_id",
                     (str(f), ch.content_hash, line_start, line_end),
-                ).fetchone()
+                ).fetchall()
+                existing = existing_rows[0] if existing_rows else None
                 if existing and not force:
                     n_chunks_skipped += 1
                     _sync_chunk_fts_row(
@@ -583,26 +585,42 @@ def build_index(
                 np.savez_compressed(emb_abs, emb=emb)
 
                 preview = ch.text.strip()[:240]
-                cur.execute(
-                    "INSERT INTO chunk "
-                    "(file_path, heading_path, line_start, line_end, content_hash, "
-                    " mtime, emb_path, text_preview, token_count) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (
-                        str(f),
-                        json.dumps(ch.heading_path),
-                        ch.line_range[0],
-                        ch.line_range[1],
-                        ch.content_hash,
-                        mtime,
-                        emb_rel,
-                        preview,
-                        int(emb.shape[0]),
-                    ),
+                row_values = (
+                    str(f),
+                    json.dumps(ch.heading_path),
+                    line_start,
+                    line_end,
+                    ch.content_hash,
+                    mtime,
+                    emb_rel,
+                    preview,
+                    int(emb.shape[0]),
                 )
+                if existing:
+                    chunk_id = int(existing["chunk_id"])
+                    cur.execute(
+                        "UPDATE chunk SET file_path=?, heading_path=?, line_start=?, line_end=?, "
+                        "content_hash=?, mtime=?, emb_path=?, text_preview=?, token_count=? "
+                        "WHERE chunk_id=?",
+                        (*row_values, chunk_id),
+                    )
+                    for duplicate in existing_rows[1:]:
+                        duplicate_id = int(duplicate["chunk_id"])
+                        if fts_enabled:
+                            cur.execute("DELETE FROM chunk_fts WHERE rowid = ?", (duplicate_id,))
+                        cur.execute("DELETE FROM chunk WHERE chunk_id = ?", (duplicate_id,))
+                else:
+                    cur.execute(
+                        "INSERT INTO chunk "
+                        "(file_path, heading_path, line_start, line_end, content_hash, "
+                        " mtime, emb_path, text_preview, token_count) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        row_values,
+                    )
+                    chunk_id = int(cur.lastrowid)
                 _sync_chunk_fts_row(
                     cur,
-                    int(cur.lastrowid),
+                    chunk_id,
                     str(f),
                     ch.heading_path,
                     ch.text,
