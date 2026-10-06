@@ -521,6 +521,7 @@ def _load_questions(path: str | Path) -> list[Question]:
                 options=tuple(item.get("options", ())),
                 levels=tuple(item.get("levels", ())),
                 criteria=tuple(item.get("criteria", ())),
+                option_descriptions=item.get("option_descriptions", ()),
             )
         )
     return questions

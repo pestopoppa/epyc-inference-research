@@ -28,6 +28,7 @@ from src.typed_decisions.confidence import (
     score_confidence,
 )
 from src.typed_decisions.schema import build_gbnf, build_response_schema
+from src.typed_decisions.runner import _build_catalog
 
 ROLE = "worker"
 STATE = "unit-test state: refactor candidate A against candidate B."
@@ -614,3 +615,69 @@ class TestQuestionInvariants:
     def test_kind_coerces_from_plain_string(self):
         question = Question(id="x", kind="noul", text="?")
         assert question.kind is QuestionKind.NOUL
+
+    def test_option_descriptions_are_optional_ordered_choice_metadata(self):
+        legacy = Question("x", QuestionKind.CHOICE, "Pick.", ("alpha", "beta"), (), ())
+        described = Question(
+            "x", QuestionKind.CHOICE, "Pick.", ("alpha", "beta"), (), (),
+            ("first meaning", None),
+        )
+
+        assert legacy.option_descriptions == ()
+        assert described.option_descriptions == ("first meaning", None)
+        assert _build_catalog((legacy,)) == (
+            "Q1 id=x kind=choice\n  question: Pick.\n  candidates: alpha | beta"
+        )
+        assert _build_catalog((described,)) == (
+            "Q1 id=x kind=choice\n  question: Pick.\n  candidates: alpha | beta\n"
+            "  candidate description [alpha]: first meaning"
+        )
+        assert build_response_schema((described,)) == build_response_schema((legacy,))
+
+    @pytest.mark.parametrize("raw", ["xy", b"xy", bytearray(b"xy")])
+    def test_option_descriptions_reject_text_as_the_outer_sequence(self, raw):
+        with pytest.raises(ValueError, match="sequence, not text or bytes"):
+            Question(
+                id="x", kind=QuestionKind.CHOICE, text="Pick.",
+                options=("alpha", "beta"), option_descriptions=raw,
+            )
+
+    @pytest.mark.parametrize("raw", [{"a": "first", "b": "second"}, {"first", "second"}])
+    def test_option_descriptions_reject_unordered_outer_containers(self, raw):
+        with pytest.raises(ValueError, match="preserve candidate order"):
+            Question(
+                id="x", kind=QuestionKind.CHOICE, text="Pick.",
+                options=("alpha", "beta"), option_descriptions=raw,
+            )
+
+    def test_option_descriptions_validate_kind_arity_and_content(self):
+        with pytest.raises(ValueError, match="same length and order"):
+            Question(
+                id="x", kind=QuestionKind.CHOICE, text="Pick.",
+                options=("alpha", "beta"), option_descriptions=("only one",),
+            )
+        with pytest.raises(ValueError, match="only valid for choice"):
+            Question(
+                id="x", kind=QuestionKind.SCORE, text="Rate.", levels=(0, 1),
+                option_descriptions=("low", "high"),
+            )
+        for invalid in ("", "   ", "first\nsecond", "first\rsecond", "first\u2028second", 7):
+            with pytest.raises(ValueError):
+                Question(
+                    id="x", kind=QuestionKind.CHOICE, text="Pick.",
+                    options=("alpha", "beta"), option_descriptions=(invalid, None),
+                )
+
+    def test_descriptions_do_not_change_resolved_choice_labels(self):
+        question = Question(
+            id="choice-described", kind=QuestionKind.CHOICE, text="Pick.",
+            options=("alpha", "beta"), option_descriptions=("first", "second"),
+        )
+        primitives = _FakePrimitives(_valid_response((question,)))
+
+        result = run_typed_decisions(
+            primitives, state=STATE, questions=(question,), role=ROLE
+        )
+
+        assert result.decisions[0].value == "alpha"
+        assert primitives.calls[0]["json_schema"] == build_response_schema((question,))

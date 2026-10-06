@@ -33,6 +33,9 @@ from enum import Enum
 from typing import Mapping
 
 
+_OPTION_DESCRIPTION_LINE_SEPARATORS = frozenset("\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029")
+
+
 class QuestionKind(str, Enum):
     """The three typed question shapes the plane supports.
 
@@ -58,6 +61,9 @@ class Question:
         levels: Candidate integer levels for ``score`` (unique).
         criteria: Optional per-question criteria lines appended to the
             catalogue entry.
+        option_descriptions: Optional per-choice-candidate descriptions in
+            the same order as ``options``. These explain candidates but never
+            change their labels or the answer schema.
     """
 
     id: str
@@ -66,6 +72,7 @@ class Question:
     options: tuple[str, ...] = ()
     levels: tuple[int, ...] = ()
     criteria: tuple[str, ...] = ()
+    option_descriptions: tuple[str | None, ...] = ()
 
     def __post_init__(self) -> None:
         kind = QuestionKind(self.kind)
@@ -73,6 +80,38 @@ class Question:
         object.__setattr__(self, "options", tuple(self.options))
         object.__setattr__(self, "levels", tuple(self.levels))
         object.__setattr__(self, "criteria", tuple(self.criteria))
+
+        raw_descriptions = self.option_descriptions
+        if isinstance(raw_descriptions, (str, bytes, bytearray)):
+            raise ValueError("option_descriptions must be a sequence, not text or bytes")
+        if isinstance(raw_descriptions, (Mapping, set, frozenset)):
+            raise ValueError("option_descriptions must preserve candidate order")
+        try:
+            descriptions = tuple(raw_descriptions)
+        except TypeError as exc:
+            raise ValueError("option_descriptions must be a sequence") from exc
+        object.__setattr__(self, "option_descriptions", descriptions)
+
+        if descriptions:
+            if kind is not QuestionKind.CHOICE:
+                raise ValueError("option_descriptions are only valid for choice questions")
+            if len(descriptions) != len(self.options):
+                raise ValueError(
+                    "option_descriptions must have the same length and order as options"
+                )
+            for index, description in enumerate(descriptions):
+                if description is None:
+                    continue
+                if not isinstance(description, str):
+                    raise ValueError(
+                        f"option description {index} must be a string or None"
+                    )
+                if not description.strip():
+                    raise ValueError(f"option description {index} must not be blank")
+                if any(char in _OPTION_DESCRIPTION_LINE_SEPARATORS for char in description):
+                    raise ValueError(
+                        f"option description {index} must be a single line"
+                    )
 
         if kind is QuestionKind.CHOICE:
             if len(self.options) < 2:

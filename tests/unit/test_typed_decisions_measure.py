@@ -21,6 +21,7 @@ import pytest
 
 from src.typed_decisions.measure import (
     MeasurementError,
+    _load_questions,
     _last_inference_meta,
     main,
     run_calibration_study,
@@ -29,6 +30,7 @@ from src.typed_decisions.measure import (
     run_parallel_fanout_study,
 )
 from src.typed_decisions.types import Question, QuestionKind
+from src.typed_decisions.bench import _load_questions as _load_bench_questions
 
 ROLE = "worker"
 STATE = "unit-test state"
@@ -51,6 +53,47 @@ class _FakePrimitives:
             "elapsed_ms": 4.0,
         }
         return self.responder(prompt, **kwargs)
+
+
+@pytest.mark.parametrize("loader", [_load_questions, _load_bench_questions])
+def test_question_json_loader_preserves_optional_descriptions_and_legacy_default(
+    loader, tmp_path: Path
+):
+    described_path = tmp_path / "described.json"
+    described_path.write_text(
+        json.dumps({"questions": [{
+            "id": "q", "kind": "choice", "text": "Pick.",
+            "options": ["alpha", "beta"],
+            "option_descriptions": ["first meaning", None],
+        }]}),
+        encoding="utf-8",
+    )
+    legacy_path = tmp_path / "legacy.json"
+    legacy_path.write_text(
+        json.dumps([{
+            "id": "q", "kind": "choice", "text": "Pick.",
+            "options": ["alpha", "beta"],
+        }]),
+        encoding="utf-8",
+    )
+
+    assert loader(described_path)[0].option_descriptions == ("first meaning", None)
+    assert loader(legacy_path)[0].option_descriptions == ()
+
+
+@pytest.mark.parametrize("loader", [_load_questions, _load_bench_questions])
+def test_question_json_loader_rejects_string_as_description_sequence(loader, tmp_path: Path):
+    path = tmp_path / "bad.json"
+    path.write_text(
+        json.dumps({"questions": [{
+            "id": "q", "kind": "choice", "text": "Pick.",
+            "options": ["x", "y"], "option_descriptions": "xy",
+        }]}),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="sequence, not text or bytes"):
+        loader(path)
 
 
 def _parse_catalog(prompt: str) -> list[dict]:
