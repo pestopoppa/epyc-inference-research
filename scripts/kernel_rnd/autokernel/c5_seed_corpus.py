@@ -123,6 +123,7 @@ class C5Seed:
     seed_id: str
     submission_id: int
     slug: str
+    sol_execbench_problem_id: str
     artifact: str
     artifact_sha256: str
     reference_kind: str
@@ -144,7 +145,8 @@ class C5Seed:
     @classmethod
     def from_dict(cls, row: Mapping[str, Any]) -> "C5Seed":
         _exact_keys(row, {
-            "seed_id", "submission_id", "slug", "artifact", "artifact_sha256",
+            "seed_id", "submission_id", "slug", "sol_execbench_problem_id",
+            "artifact", "artifact_sha256",
             "reference_kind", "operator_family", "dtypes", "observed_nvidia_bindings",
             "upstream_result", "gfx90a", "sol_bound",
         }, "seed")
@@ -163,6 +165,14 @@ class C5Seed:
         slug = _text(row.get("slug"), f"{seed_id}.slug")
         if not _SLUG_RE.fullmatch(slug):
             raise SeedCorpusError(f"{seed_id}: invalid slug")
+        problem_id = _text(
+            row.get("sol_execbench_problem_id"),
+            f"{seed_id}.sol_execbench_problem_id",
+        )
+        if slug not in problem_id:
+            raise SeedCorpusError(
+                f"{seed_id}: SOL-ExecBench problem ID does not bind the seed slug"
+            )
         artifact = _text(row.get("artifact"), f"{seed_id}.artifact")
         parsed = PurePosixPath(artifact)
         if parsed.is_absolute() or ".." in parsed.parts:
@@ -252,6 +262,7 @@ class C5Seed:
             seed_id=seed_id,
             submission_id=submission_id,
             slug=slug,
+            sol_execbench_problem_id=problem_id,
             artifact=artifact,
             artifact_sha256=_sha256(row.get("artifact_sha256"), f"{seed_id}.artifact_sha256"),
             reference_kind=kind,
@@ -384,6 +395,8 @@ class C5SeedCorpus:
             raise SeedCorpusError("a seed artifact escapes the declared artifact root")
         if len({seed.artifact for seed in seeds}) != len(seeds):
             raise SeedCorpusError("seed artifacts must be unique")
+        if len({seed.sol_execbench_problem_id for seed in seeds}) != len(seeds):
+            raise SeedCorpusError("SOL-ExecBench problem IDs must be unique across seeds")
         return cls(
             source_url=source_url,
             source_revision=revision,

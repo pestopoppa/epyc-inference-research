@@ -37,16 +37,6 @@ TARGET_ARCH = "gfx90a"
 TARGET_HARDWARE = "LOCAL"
 AUTHORITY = "correctness_oracle_only"
 EXPECTED_WORKLOADS = 193
-EXPECTED_PROBLEMS = {
-    "k138": "L2__044_mamba_discretization_and_segsum",
-    "k145": "L2__051_seqlen-finetuned-reconstructed_hyena_complete_forward_block",
-    "k154": "L2__060_chunk_gated_delta_rule_linear_attention",
-    "k175": "L2__081_moe_sparse_expert_dispatch",
-    "k215": "FlashInfer-Bench__006_gemm_n2048_k4096",
-    "k225": "FlashInfer-Bench__016_gqa_ragged_prefill_causal_h32_kv4_d128",
-    "k227": "FlashInfer-Bench__018_mla_paged_decode_h16_ckv512_kpe64_ps1",
-    "k228": "FlashInfer-Bench__019_mla_paged_prefill_causal_h16_ckv512_kpe64_ps1",
-}
 EXPECTED_ORACLE_DTYPES = {
     "k138": ("bf16",),
     # The port's tracked workload/tolerance records say fp32.  HyRA's k145
@@ -75,6 +65,7 @@ _EVAL_ANCHOR = """    if _correctness_failed:
 
     # -- Monkey-patch defense before timing --
 """
+_PROBLEM_TO_SEED_PLACEHOLDER = "__EPYC_C5_PROBLEM_TO_SEED__"
 _EVAL_REPLACEMENT = f"""    if _correctness_failed:
         continue
 
@@ -107,7 +98,7 @@ _EVAL_REPLACEMENT = f"""    if _correctness_failed:
         }},
         \"authority\": \"{AUTHORITY}\",
     }}
-    _epyc_seed_by_problem = {json.dumps({value: key for key, value in EXPECTED_PROBLEMS.items()}, sort_keys=True)}
+    _epyc_seed_by_problem = {_PROBLEM_TO_SEED_PLACEHOLDER}
     _epyc_record[\"seed_id\"] = _epyc_seed_by_problem.get(definition.name)
     if _epyc_record[\"seed_id\"] is None:
         raise RuntimeError(\"EPYC AutoKernel C5 problem identity is not in the sealed seed join\")
@@ -309,6 +300,14 @@ def _parse_config(document: Mapping[str, Any]) -> OracleConfig:
         if not _SHA256_RE.fullmatch(str(primary[f"{field}_sha256"])):
             raise OracleRefusal(f"primary {field} digest must be a lowercase SHA-256")
 
+    corpus = c5_seed_corpus.load()
+    problem_by_seed = {
+        seed.seed_id: seed.sol_execbench_problem_id for seed in corpus.seeds
+    }
+    if (tuple(problem_by_seed) != c5_seed_corpus.EXPECTED_SEED_IDS
+            or len(set(problem_by_seed.values())) != len(problem_by_seed)):
+        raise OracleRefusal("C5 corpus problem join is not a unique ordered bijection")
+
     rows = document["seeds"]
     if not isinstance(rows, list):
         raise OracleRefusal("seeds must be a list")
@@ -327,9 +326,9 @@ def _parse_config(document: Mapping[str, Any]) -> OracleConfig:
         if not isinstance(dtypes, list) or not dtypes or len(dtypes) != len(set(dtypes)):
             raise OracleRefusal(f"{seed_id}: oracle dtypes must be a unique non-empty list")
         dtypes_tuple = tuple(_text(item, f"{seed_id}.dtype") for item in dtypes)
-        if seed_id not in EXPECTED_PROBLEMS:
+        if seed_id not in problem_by_seed:
             raise OracleRefusal(f"unknown seed id {seed_id!r}")
-        if row["problem_id"] != EXPECTED_PROBLEMS[seed_id]:
+        if row["problem_id"] != problem_by_seed[seed_id]:
             raise OracleRefusal(f"{seed_id}: SOL-ExecBench problem join drifted")
         if dtypes_tuple != EXPECTED_ORACLE_DTYPES[seed_id]:
             raise OracleRefusal(f"{seed_id}: oracle workload dtype evidence drifted")
@@ -350,7 +349,6 @@ def _parse_config(document: Mapping[str, Any]) -> OracleConfig:
 
     # Keep HyRA candidate metadata and the port's actual oracle-workload dtype
     # evidence distinct.  In particular k145 and k227 are not identical.
-    corpus = c5_seed_corpus.load()
     if tuple(seed.seed_id for seed in corpus.seeds) != ids:
         raise OracleRefusal("HyRA C5 corpus and oracle provider seed join differ")
     return OracleConfig(document=json.loads(json.dumps(document)), seeds=tuple(parsed))
@@ -473,6 +471,15 @@ def _render_correctness_driver(root: Path, oracle: OracleConfig) -> str:
     if source.count(_EVAL_ANCHOR) != 1:
         raise OracleRefusal("provider evaluation template correctness/timing boundary drifted")
     rendered = source.replace(_EVAL_ANCHOR, _EVAL_REPLACEMENT)
+    if rendered.count(_PROBLEM_TO_SEED_PLACEHOLDER) != 1:
+        raise OracleRefusal("correctness-driver problem join placeholder drifted")
+    problem_to_seed = {seed.problem_id: seed.seed_id for seed in oracle.seeds}
+    if len(problem_to_seed) != len(oracle.seeds):
+        raise OracleRefusal("oracle config problem join is ambiguous")
+    rendered = rendered.replace(
+        _PROBLEM_TO_SEED_PLACEHOLDER,
+        json.dumps(problem_to_seed, sort_keys=True),
+    )
     if (rendered.count(RAW_TRACE_SCHEMA) != 1
             or "EPYC_AUTOKERNEL_C5_CORRECTNESS_ONLY" in rendered
             or "if os.environ" in _EVAL_REPLACEMENT):

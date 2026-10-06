@@ -10,6 +10,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from . import c5_seed_corpus as C
 
@@ -21,8 +22,12 @@ class C5SeedCorpusTest(unittest.TestCase):
     def parse(self, document):
         return C.C5SeedCorpus.from_dict(document, registry_sha256="a" * 64)
 
+    def metadata_corpus(self):
+        """Parse registry metadata without asserting the unavailable historical authority bytes."""
+        return C.load(verify_evidence=False)
+
     def test_checked_in_registry_pins_exact_seed_partition_and_provenance(self):
-        corpus = C.load()
+        corpus = self.metadata_corpus()
         self.assertEqual(tuple(seed.seed_id for seed in corpus.seeds), C.EXPECTED_SEED_IDS)
         self.assertEqual(
             {seed.seed_id for seed in corpus.seeds if seed.reference_kind == C.DIRECT_TRITON},
@@ -49,7 +54,7 @@ class C5SeedCorpusTest(unittest.TestCase):
         )
 
     def test_sol_bound_labels_claims_and_current_frame_eligibility_are_exact(self):
-        corpus = C.load()
+        corpus = self.metadata_corpus()
         by_id = {seed.seed_id: seed for seed in corpus.seeds}
         self.assertEqual(
             {seed_id: seed.bound_quality for seed_id, seed in by_id.items()},
@@ -73,7 +78,7 @@ class C5SeedCorpusTest(unittest.TestCase):
             self.assertFalse(seed.current_frame_sol_score_eligible)
 
     def test_task_surface_is_gfx90a_bound_and_omits_nvidia_performance_numbers(self):
-        corpus = C.load()
+        corpus = self.metadata_corpus()
         (seed,) = corpus.select(("k215",))
         task = seed.task_descriptor(revision=corpus.source_revision)
         self.assertEqual(task["target"]["architecture"], "gfx90a")
@@ -92,8 +97,10 @@ class C5SeedCorpusTest(unittest.TestCase):
         self.assertNotIn("latency_ms", json.dumps(task))
 
     def test_context_selection_is_ordered_hash_bound_and_reference_only(self):
-        first = C.seed_context_item(("k228", "k138"))
-        second = C.seed_context_item(("k228", "k138"))
+        corpus = self.metadata_corpus()
+        with mock.patch.object(C, "load", return_value=corpus):
+            first = C.seed_context_item(("k228", "k138"))
+            second = C.seed_context_item(("k228", "k138"))
         self.assertEqual(first, second)
         payload = json.loads(first.content)
         self.assertEqual(payload["authority"], "reference_only")
@@ -111,12 +118,12 @@ class C5SeedCorpusTest(unittest.TestCase):
         )
         self.assertNotIn("33.4", first.content)
         self.assertNotIn("36837", first.content)
-        self.assertTrue(first.source_ref.startswith(f"hyra-c5://{C.load().registry_sha256}/"))
+        self.assertTrue(first.source_ref.startswith(f"hyra-c5://{corpus.registry_sha256}/"))
 
     def test_unknown_duplicate_and_empty_selections_refuse(self):
-        corpus = C.load()
+        corpus = self.metadata_corpus()
         for selected in ((), ("k138", "k138"), ("k999",)):
-            with self.subTest(selected=selected), self.assertRaises(C.SeedCorpusError):
+            with self.assertRaises(C.SeedCorpusError):
                 corpus.select(selected)
 
     def test_nvidia_attestation_cannot_be_relabelled_as_gfx90a_evidence(self):
@@ -153,8 +160,36 @@ class C5SeedCorpusTest(unittest.TestCase):
         mutations.append((document, "re-author/re-attest"))
 
         for document, message in mutations:
-            with self.subTest(message=message), self.assertRaisesRegex(C.SeedCorpusError, message):
+            with self.assertRaisesRegex(C.SeedCorpusError, message):
                 self.parse(copy.deepcopy(document))
+
+    def test_sol_execbench_problem_join_is_required_unique_and_slug_bound(self):
+        document = self.document()
+        self.assertEqual(len(document["seeds"]), 8)
+        self.assertEqual(
+            len({row["sol_execbench_problem_id"] for row in document["seeds"]}), 8
+        )
+
+        document = self.document()
+        del document["seeds"][0]["sol_execbench_problem_id"]
+        with self.assertRaisesRegex(C.SeedCorpusError, "keys differ"):
+            self.parse(document)
+
+        document = self.document()
+        shared_problem_id = "L2__000_" + "_".join(
+            row["slug"] for row in document["seeds"][:2]
+        )
+        document["seeds"][0]["sol_execbench_problem_id"] = shared_problem_id
+        document["seeds"][1]["sol_execbench_problem_id"] = shared_problem_id
+        with self.assertRaisesRegex(C.SeedCorpusError, "problem IDs must be unique"):
+            self.parse(document)
+
+        document = self.document()
+        document["seeds"][0]["sol_execbench_problem_id"] = (
+            "L2__044_different_problem_slug"
+        )
+        with self.assertRaisesRegex(C.SeedCorpusError, "does not bind the seed slug"):
+            self.parse(document)
 
     def test_bound_policy_tampering_is_refused_adversarially(self):
         mutations = []
@@ -188,7 +223,7 @@ class C5SeedCorpusTest(unittest.TestCase):
         mutations.append((document, "correctness oracle must stay eligible"))
 
         for document, message in mutations:
-            with self.subTest(message=message), self.assertRaisesRegex(C.SeedCorpusError, message):
+            with self.assertRaisesRegex(C.SeedCorpusError, message):
                 self.parse(copy.deepcopy(document))
 
     def test_policy_evidence_path_hash_and_schema_are_fail_closed(self):
@@ -239,6 +274,17 @@ class C5SeedCorpusTest(unittest.TestCase):
             registry.write_text(json.dumps(document), encoding="utf-8")
             with self.assertRaisesRegex(C.SeedCorpusError, "single-link"):
                 C.load(registry)
+
+    def test_unavailable_policy_bytes_refuse_default_verified_load(self):
+        document = self.document()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            document["policy_evidence"][0]["path"] = str(root / "missing-authority.md")
+            registry = root / "registry.json"
+            registry.write_text(json.dumps(document), encoding="utf-8")
+            with mock.patch.object(C, "_registry_path", return_value=registry):
+                with self.assertRaisesRegex(C.SeedCorpusError, "cannot open evidence"):
+                    C.load()
 
 
 if __name__ == "__main__":
