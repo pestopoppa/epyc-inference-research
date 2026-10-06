@@ -51,7 +51,9 @@ tools or run code incrementally. Output a single fenced block:
 Rules: every `modify`/`delete`/`rename` MUST include the `base_content_sha256` of the file you \
 read (stale-base protection); `create` sets `new_content` only; for an insertion before line N \
 use start_line=N, end_line=N-1; declare cross-file ordering in `depends_on`. Emit the block and \
-nothing after it."""
+nothing after it. `postconditions` are descriptive declarations only, never executable commands; \
+the runner does not execute strings from the patchset. The staged sandbox verifier is the only \
+batch acceptance gate."""
 
 
 # BEP-2 baseline rider (symmetric to BATCH_EDIT_INSTRUCTIONS): puts the coder into the
@@ -64,8 +66,11 @@ ONE action per turn, as a single CLOSED ```python code block the REPL will run:
  - WRITE turns: emit a block containing only `file_write_safe(path, content)` call(s), then close \
 the ``` fence. Use file_write_safe(...), NOT open() (open is blocked). Do NOT call FINAL() in a \
 write turn — the REPL runs your writes and reports the result back to you next turn.
- - FINISH turn: only AFTER you have written every file and seen each write succeed, emit a separate \
-block containing only `FINAL("done")`.
+ - FINISH turn: only AFTER you have written every file and seen each write succeed, run the task's \
+stated acceptance check through `run_shell(cmd=...)` or `run_python_code(code=...)`, as appropriate. \
+Inspect the result and repair/recheck any failure. Do not call a missing or failing check a pass. Emit \
+a separate `FINAL(...)` block with the result; if no runnable check exists or a failure remains, \
+state that explicitly and mark the work unverified or failed rather than claiming acceptance.
 Never put file_write_safe(...) and FINAL() in the same block (FINAL ends the turn before the write \
 runs). Relative paths resolve inside the working directory; you may read files first with the read \
 tools."""

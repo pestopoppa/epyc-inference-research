@@ -153,6 +153,47 @@ async def test_verify_command_uses_full_tree_sandbox(monkeypatch, tmp_path):
     assert result is not None
     assert result[2] is True
     assert (tmp_path / "added.py").read_text() == "VALUE = 7\n"
+    assert "py_compile + owner command passed" in result[0]
+    assert result[3]["_batch_edit"]["verifier"] == "py_compile + owner command passed"
+
+
+@pytest.mark.asyncio
+async def test_verifier_label_uses_the_command_snapshot(monkeypatch, tmp_path):
+    _set_flag(monkeypatch, True)
+    _point_repo(monkeypatch, tmp_path)
+    monkeypatch.setenv("ORCHESTRATOR_BATCH_EDIT_VERIFY_CMD", "true")
+    from src import batch_edit_runner
+
+    apply_real = batch_edit_runner.apply_patchset_sandboxed
+
+    def change_env_then_apply(*args, **kwargs):
+        # The invocation already captured `true`; changing ambient env now must
+        # not change which command runs or the label attached to its result.
+        monkeypatch.setenv("ORCHESTRATOR_BATCH_EDIT_VERIFY_CMD", "exit 7")
+        return apply_real(*args, **kwargs)
+
+    monkeypatch.setattr(batch_edit_runner, "apply_patchset_sandboxed", change_env_then_apply)
+    body = '{"files": [{"path": "snapshot.py", "operation": "create", "new_content": "OK = 1\\n"}]}'
+
+    result = await _run(_wrap(body))
+
+    assert result is not None and result[2] is True
+    assert result[3]["_batch_edit"]["verifier"] == "py_compile + owner command passed"
+
+
+@pytest.mark.asyncio
+async def test_syntax_only_success_is_not_described_as_acceptance_verified(monkeypatch, tmp_path):
+    _set_flag(monkeypatch, True)
+    _point_repo(monkeypatch, tmp_path)
+    monkeypatch.delenv("ORCHESTRATOR_BATCH_EDIT_VERIFY_CMD", raising=False)
+    body = '{"files": [{"path": "syntax.py", "operation": "create", "new_content": "OK = 1\\n"}]}'
+
+    result = await _run(_wrap(body))
+
+    assert result is not None and result[2] is True
+    assert "syntax-only (py_compile)" in result[0]
+    assert "acceptance verified" not in result[0].lower()
+    assert result[3]["_batch_edit"]["verifier"] == "syntax-only (py_compile)"
 
 
 @pytest.mark.asyncio

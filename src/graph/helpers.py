@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import asyncio
 import ast
+import functools
 import io
 import logging
 import os
@@ -517,7 +518,7 @@ def _batch_edit_repo_root() -> Path:
     return get_task_root()
 
 
-def _batch_edit_verify_fn(sandbox_root: Path) -> bool:
+def _batch_edit_verify_fn(sandbox_root: Path, *, verify_cmd: str | None = None) -> bool:
     """Inference-free accept gate.
 
     Default behavior is unchanged: py_compile every staged .py file. When
@@ -534,7 +535,10 @@ def _batch_edit_verify_fn(sandbox_root: Path) -> bool:
             py_compile.compile(str(p), doraise=True)
         except Exception:
             return False
-    verify_cmd = os.environ.get("ORCHESTRATOR_BATCH_EDIT_VERIFY_CMD", "").strip()
+    if verify_cmd is None:
+        # Preserve direct callers: when no command snapshot is supplied, use the
+        # configured command as before. Production batch flow passes its snapshot.
+        verify_cmd = os.environ.get("ORCHESTRATOR_BATCH_EDIT_VERIFY_CMD", "").strip()
     if not verify_cmd:
         return True
     try:
@@ -577,19 +581,20 @@ def _batch_edit_failure_summary(result: Any) -> str:
 
 
 def _finalize_batch_edit(
-    state: Any, role: Role | str, result: Any, ps: Any
+    state: Any, role: Role | str, result: Any, ps: Any, *, verifier_label: str
 ) -> tuple[str, str | None, bool, dict]:
     """Synthesize the terminal turn result for a successfully applied + promoted patch set."""
     files = ", ".join(sorted(result.diff_paths)) or "(none)"
     summary = (
         f"Batch edit applied {len(ps.files)} file change(s) [{files}] — "
-        f"sandbox-verified (py_compile) and promoted transactionally."
+        f"sandbox verifier: {verifier_label}; promoted transactionally."
     )
     artifacts = {
         "_batch_edit": {
             "files": sorted(result.diff_paths),
             "n_patches": len(ps.files),
             "verified": result.verify_passed,
+            "verifier": verifier_label,
         }
     }
     _record_session_turn(state, role=str(role), output=summary, is_final=True)
@@ -648,13 +653,17 @@ async def _maybe_batch_edit_turn(
     )
 
     repo_root = _batch_edit_repo_root()
-    full_tree_verify = bool(os.environ.get("ORCHESTRATOR_BATCH_EDIT_VERIFY_CMD", "").strip())
+    # Snapshot once so the staged verifier and synthetic-final label cannot
+    # disagree if the parent environment changes while verification runs.
+    verify_cmd = os.environ.get("ORCHESTRATOR_BATCH_EDIT_VERIFY_CMD", "").strip()
+    full_tree_verify = bool(verify_cmd)
+    verify_fn = functools.partial(_batch_edit_verify_fn, verify_cmd=verify_cmd)
     try:
         result = await asyncio.to_thread(
             apply_patchset_sandboxed,
             ps,
             repo_root=repo_root,
-            verify_fn=_batch_edit_verify_fn,
+            verify_fn=verify_fn,
             full_tree=full_tree_verify,
         )
     except Exception as e:  # noqa: BLE001 — apply must never crash the turn
@@ -677,7 +686,12 @@ async def _maybe_batch_edit_turn(
                 state.turns,
                 len(result.diff_paths),
             )
-            return _finalize_batch_edit(state, role, result, ps)
+            verifier_label = (
+                "py_compile + owner command passed" if verify_cmd else "syntax-only (py_compile)"
+            )
+            return _finalize_batch_edit(
+                state, role, result, ps, verifier_label=verifier_label
+            )
         _record_batch_edit_state("promote_failed", turn=turn)
         log.warning(
             "batch-edit verify passed but promotion failed (turn %d) — falling back to REPL",
