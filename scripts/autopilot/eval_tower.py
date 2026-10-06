@@ -5823,6 +5823,12 @@ class EvalTower:
     def _aggregate(self, results: list[QuestionResult], tier: int) -> EvalResult:
         """Aggregate individual question results into an EvalResult."""
         if not results:
+            sidecar_status = _question_sidecar_status(results)
+            details = (
+                {"question_sidecar_persistence": sidecar_status}
+                if sidecar_status is not None
+                else {}
+            )
             # No rows at all: `quality=0` is a placeholder, not a measurement.
             # Say so, rather than emitting a number that reads as "scored 0%".
             return EvalResult(
@@ -5833,6 +5839,7 @@ class EvalTower:
                 reliability=0,
                 quality_measured=False,
                 quality_unmeasured_reason="no_question_results",
+                details=details,
             )
 
         total_count = len(results)

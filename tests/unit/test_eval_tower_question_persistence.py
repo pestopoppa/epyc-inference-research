@@ -43,7 +43,7 @@ def test_eval_batch_persists_serial_question_rows(monkeypatch, tmp_path: Path) -
 
     monkeypatch.setattr(tower, "_eval_question", fake_eval_question)
 
-    tower._eval_batch(
+    results = tower._eval_batch(
         [{"id": "q1", "correct": True}, {"id": "q2", "correct": False}],
         client=object(),  # type: ignore[arg-type]
         label="T1",
@@ -85,7 +85,7 @@ def test_eval_batch_persists_concurrent_question_rows(monkeypatch, tmp_path: Pat
 
     monkeypatch.setattr(tower, "_generate_question", fake_generate)
 
-    tower._eval_batch(
+    results = tower._eval_batch(
         [
             {"id": "q1", "delay": 0.02},
             {"id": "q2", "delay": 0.0},
@@ -100,6 +100,8 @@ def test_eval_batch_persists_concurrent_question_rows(monkeypatch, tmp_path: Pat
     assert sorted(row["ordinal"] for row in question_rows) == [0, 1, 2]
     assert {row["result"]["question_id"] for row in question_rows} == {"q1", "q2", "q3"}
     assert len({row["eval_batch_id"] for row in question_rows}) == 1
+    assert results.sidecar_persistence["result_rows_fsync_returned_n"] == 3
+    assert results.sidecar_persistence["archive_complete"] is True
 
 
 def test_eval_batch_sidecar_persists_answer_but_not_prompt_or_expected(
@@ -340,3 +342,59 @@ def test_completion_marker_failure_is_reported_in_role_summary(monkeypatch, tmp_
         }
     ]
     assert "private completion detail" not in json.dumps(role_status)
+
+
+def test_partition_filtered_aggregate_keeps_full_batch_capture_status(
+    monkeypatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("AUTOPILOT_EVAL_ARTIFACT_ROOT", str(tmp_path))
+    monkeypatch.setenv("AUTOPILOT_EVAL_CONCURRENCY", "1")
+    tower = EvalTower()
+
+    def fake_eval_question(q: dict, client: object) -> QuestionResult:
+        return QuestionResult(
+            question_id=str(q["id"]),
+            suite="unit",
+            prompt="prompt",
+            expected="ok",
+            answer="ok" if q["correct"] else "wrong",
+            correct=bool(q["correct"]),
+            eval_partition=str(q["eval_partition"]),
+        )
+
+    monkeypatch.setattr(tower, "_eval_question", fake_eval_question)
+    results = tower._eval_batch(
+        [
+            {"id": "core", "correct": True, "eval_partition": "core"},
+            {"id": "audit", "correct": False, "eval_partition": "audit"},
+        ],
+        client=object(),  # type: ignore[arg-type]
+        label="partition-filter",
+    )
+
+    aggregate = tower._aggregate_decision_partitions(
+        results,
+        tier=1,
+        excluded_partitions={"audit"},
+    )
+
+    assert aggregate.quality == 1.0
+    assert aggregate.details["quality_denominator"] == 1
+    assert aggregate.details["question_sidecar_persistence"] == results.sidecar_persistence
+    assert aggregate.details["question_sidecar_persistence"]["completed_n"] == 2
+    assert aggregate.details["question_sidecar_persistence"]["result_rows_fsync_returned_n"] == 2
+
+
+def test_empty_or_missing_batch_status_is_never_reported_complete() -> None:
+    tower = EvalTower()
+    empty_batch = tower._eval_batch([], client=object(), label="empty")  # type: ignore[arg-type]
+    empty_aggregate = tower._aggregate(empty_batch, tier=1)
+    legacy_aggregate = tower._aggregate([], tier=1)
+
+    assert empty_batch.sidecar_persistence["archive_status"] == "not_applicable"
+    assert empty_batch.sidecar_persistence["archive_complete"] is None
+    assert (
+        empty_aggregate.details["question_sidecar_persistence"]["archive_status"]
+        == "not_applicable"
+    )
+    assert "question_sidecar_persistence" not in legacy_aggregate.details
