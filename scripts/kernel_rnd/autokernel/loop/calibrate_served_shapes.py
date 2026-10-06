@@ -35,6 +35,7 @@ import hashlib
 import json
 import os
 import shlex
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 import subprocess
@@ -54,6 +55,11 @@ ANCHOR_RECIPE_DEFINES = ("-DCMAKE_BUILD_TYPE=Release", "-DGGML_HIP=OFF", "-DGGML
                          "-DGGML_OPENMP=ON", "-DCMAKE_C_COMPILER=/usr/bin/gcc-15",
                          "-DCMAKE_CXX_COMPILER=/usr/bin/g++-15")
 CALIBRATION_BUILD_DIRNAME = "build-ak-calib"
+#: Correctness mode (NMSE / input-identity / layer-(a) op tests) measures CORRECTNESS,
+#: not speed -- it needs the served thread count and deterministic per-case-key seeded
+#: inputs (ac97318f), not a quiet or exclusive host. Default shard count for --execute:
+#: one test-backend-ops process per shard, run concurrently under oversubscription.
+DEFAULT_SHARDS = 16
 
 
 class Refused(RuntimeError):
@@ -174,9 +180,18 @@ def served_recipe(launch_path: Path, build: Path, *, cpu_list: "str | None",
     """Round-12: the SERVED launch the calibration must reproduce, from the lane's
     resolved launch JSON (`inputs-*/<target>.launch.json`): its launch environment
     (GGML_IQK, OMP_*, ...) with LD_LIBRARY_PATH's build entry rebound to `build`, its
-    topology prefix, its cpu list and its -t. Refuses when any of these is missing,
-    when --cpu-list / --threads disagree with it, or when a loader variable other than
-    LD_LIBRARY_PATH is set (the served environment could not be reproduced)."""
+    topology prefix, its served cpu list and its -t. Refuses when any of these is
+    missing, when --threads disagrees with the served -t, or when a loader variable
+    other than LD_LIBRARY_PATH is set (the served environment could not be reproduced).
+
+    2026-10-06 correctness-mode lock: `--threads` must still equal the served -t (the
+    one hard requirement a correctness oracle has on CPU occupancy), but `--cpu-list`
+    no longer has to equal the served topology's cpu list -- NMSE / input-identity /
+    layer-(a) op tests measure correctness, not speed, so the host region they CLAIM
+    (`recipe["lock_cpu_list"]`, region-lock's `--cpu-list` under `--role build`) may be
+    narrower than, or disjoint from, where the model is actually served
+    (`recipe["served_cpu_list"]`, still used for provenance and import replay).
+    Oversubscription of the served cpu list is fine; exclusivity is not required."""
     try:
         launch = json.loads(Path(launch_path).read_text(encoding="utf-8"))
         env = dict(launch["launch_env"])
@@ -192,8 +207,7 @@ def served_recipe(launch_path: Path, build: Path, *, cpu_list: "str | None",
         raise Refused(f"{launch_path} carries no -t or no topology prefix")
     if threads is not None and threads != served_threads:
         raise Refused(f"--threads {threads} differs from the served -t {served_threads}")
-    if cpu_list is not None and cpu_list != served_cpus:
-        raise Refused(f"--cpu-list {cpu_list} differs from the served cpu list {served_cpus}")
+    lock_cpu_list = cpu_list if cpu_list is not None else served_cpus
     loader = sorted(k for k in env if k.startswith("LD_") and k != "LD_LIBRARY_PATH")
     if loader:
         raise Refused(f"served env sets loader variables {loader}; cannot reproduce it")
@@ -209,18 +223,48 @@ def served_recipe(launch_path: Path, build: Path, *, cpu_list: "str | None",
     env["PATH"] = os.environ.get("PATH", "/usr/bin:/bin")
     env[ssc.CASE_SET_ENV] = ssc.CALIBRATION_CASE_SET_ID
     env[ssc.BACKEND_THREADS_ENV] = str(served_threads)
-    return {"env": env, "prefix": prefix, "cpu_list": served_cpus,
+    return {"env": env, "prefix": prefix, "served_cpu_list": served_cpus,
+            "lock_cpu_list": lock_cpu_list, "cpu_list": served_cpus,
             "threads": served_threads, "launch": str(Path(launch_path).resolve()),
             "launch_sha256": _sha256(Path(launch_path))}
 
 
-def calibration_argv(build: Path, recipe: dict, region_lock: str, lane: str,
-                     timeout_s: int = CALIBRATION_TIMEOUT_S) -> list:
+def resolve_shard_count(requested: "int | None", n_cases: int) -> int:
+    """`--shards N` (default `min(DEFAULT_SHARDS, cases)`), clamped to `[1, n_cases]`."""
+    if requested is not None and requested < 1:
+        raise Refused(f"--shards must be >= 1, got {requested}")
+    n = requested if requested is not None else min(DEFAULT_SHARDS, n_cases)
+    return max(1, min(n, n_cases))
+
+
+def shard_argv(build: Path, recipe: dict, region_lock: str, params_filter: str, *,
+              shard_index: int, timeout_s: int = CALIBRATION_TIMEOUT_S) -> list:
+    """One shard's `region-lock run --role build` wrapping its own `test-backend-ops -p
+    <subset regex>`. Correctness mode (2026-10-06): the region-lock claim is `--role
+    build`, not the served topology's `--role bench` -- NMSE/input-identity/layer-(a)
+    op tests measure correctness, not speed, so exclusivity is not required; this still
+    claims load other sessions' TIMING measurements must treat as contention (the
+    build-role claim they already account for), so the claim is made honestly rather
+    than omitted. `recipe["lock_cpu_list"]` may differ from the served topology's cpu
+    list (narrowed via `--cpu-list`); the served thread count
+    (`AUTOKERNEL_BACKEND_THREADS`, already in `recipe["env"]`) is unaffected and must
+    still equal the served `-t` -- oversubscription of the lock's cpu list is fine for
+    a correctness-only run."""
     binary = Path(build) / "bin" / "test-backend-ops"
-    return [region_lock, "run", "--cpu-list", recipe["cpu_list"], "--role", "bench",
-            "--timeout-s", str(timeout_s), "--",
+    return [region_lock, "run", "--cpu-list", recipe["lock_cpu_list"], "--role", "build",
+            "--timeout-s", str(timeout_s), "--tag",
+            f"ak-served-shape-calibration-shard{shard_index}", "--",
             *recipe["prefix"], str(binary), "test", "-o", "MUL_MAT,MUL_MAT_ID",
-            "-b", "CPU", "-p", ssc.calibration_regex(lane)]
+            "-b", "CPU", "-p", params_filter]
+
+
+def shard_argvs(build: Path, recipe: dict, region_lock: str, lane: str, n_shards: int,
+                timeout_s: int = CALIBRATION_TIMEOUT_S) -> list:
+    """One argv per shard of `ssc.calibration_triples(lane)`, in shard order."""
+    groups = ssc.shard_sequence(ssc.calibration_triples(lane), n_shards)
+    return [shard_argv(build, recipe, region_lock, ssc.calibration_regex_for(group),
+                       shard_index=i, timeout_s=timeout_s)
+            for i, group in enumerate(groups)]
 
 
 def lane_profile_refusal(launch_path: Path, lane: str) -> "str | None":
@@ -248,8 +292,30 @@ def lane_profile_refusal(launch_path: Path, lane: str) -> "str | None":
     return None
 
 
+def _run_one_shard(argv: list, env: dict, timeout_s: int) -> tuple:
+    """Run one shard's argv; returns (returncode_or_None, stdout, stderr, error) where
+    `error` is a timeout/OS message (argv never ran to completion) or None."""
+    try:
+        done = subprocess.run(argv, capture_output=True, text=True, env=env,
+                              stdin=subprocess.DEVNULL, timeout=timeout_s)
+    except subprocess.TimeoutExpired:
+        return None, "", "", f"timed out after {timeout_s}s"
+    except OSError as exc:
+        return None, "", "", f"could not launch: {exc}"
+    return done.returncode, done.stdout, done.stderr, None
+
+
 def execute(build: Path, store: Path, recipe: dict, region_lock: str, lane: str,
-            timeout_s: int = CALIBRATION_TIMEOUT_S, out=sys.stdout) -> Path:
+            timeout_s: int = CALIBRATION_TIMEOUT_S, out=sys.stdout,
+            shards: "int | None" = None) -> Path:
+    """Sharded, correctness-mode --execute (2026-10-06): split `lane`'s calibration
+    corpus into `shards` (default `min(DEFAULT_SHARDS, cases)`) disjoint case sets, run
+    one `test-backend-ops` process per shard CONCURRENTLY under the correctness-mode
+    region-lock claim (`shard_argv`, `--role build`), then merge. Every case must
+    appear exactly once in the merge and every shard must announce the seed-scheme
+    marker; ANY shard failing (non-zero exit, timeout, no seed marker, unparseable or
+    out-of-assignment output) fails the WHOLE execute and writes nothing -- a partial
+    merge would silently understate the corpus a later --apply bakes bounds from."""
     if not ssc.binary_has_seed_scheme(build):
         raise Refused(f"{build}/bin/test-backend-ops {ssc.SEED_REBUILD_HINT}; re-stage with "
                       "--stage-calibration-patch and rebuild with --build-calibration")
@@ -257,34 +323,80 @@ def execute(build: Path, store: Path, recipe: dict, region_lock: str, lane: str,
         raise Refused(f"{build}/bin/test-backend-ops does not carry the calibration block "
                       f"({ssc.CALIBRATION_CASE_SET_ID}) with the backend-thread control; "
                       "stage it with --stage-calibration-patch and rebuild first")
-    cpu_list, threads = recipe["cpu_list"], recipe["threads"]
-    argv = calibration_argv(build, recipe, region_lock, lane, timeout_s=timeout_s)
-    print(f"execute   {' '.join(argv[:12])} ... -p <{len(ssc.calibration_triples(lane))} cases> "
-          f"({ssc.BACKEND_THREADS_ENV}={threads})", file=out)
-    done = subprocess.run(argv, capture_output=True, text=True, env=recipe["env"],
-                          stdin=subprocess.DEVNULL, timeout=timeout_s)
-    if done.returncode != 0:
-        raise Refused(f"calibration run exited {done.returncode}: "
-                      f"{(done.stderr or done.stdout)[-600:]}")
-    if ssc.SEED_MARKER not in (done.stderr or "").splitlines():
-        raise Refused(f"calibration run did not announce {ssc.SEED_MARKER}: the cases did "
-                      "not run through the seeded subclasses; rebuild with --build-calibration")
-    measurements = ssc.parse_calibration(done.stdout, lane)
+    lock_cpu_list, threads = recipe["lock_cpu_list"], recipe["threads"]
+    binary = Path(build) / "bin" / "test-backend-ops"
+    digest_before = _sha256(binary)
+    triples = ssc.calibration_triples(lane)
+    n_shards = resolve_shard_count(shards, len(triples))
+    groups = ssc.shard_sequence(triples, n_shards)
+    argvs = [shard_argv(build, recipe, region_lock, ssc.calibration_regex_for(group),
+                        shard_index=i, timeout_s=timeout_s)
+            for i, group in enumerate(groups)]
+    print(f"execute   {n_shards} shard(s) over {len(triples)} case(s), region-lock "
+          f"--cpu-list {lock_cpu_list} --role build, {ssc.BACKEND_THREADS_ENV}={threads}",
+          file=out)
+    with ThreadPoolExecutor(max_workers=n_shards) as pool:
+        raw = list(pool.map(
+            lambda i: (i, *_run_one_shard(argvs[i], recipe["env"], timeout_s)),
+            range(n_shards)))
+    errors = []
+    per_shard: dict = {}
+    for i, returncode, stdout, stderr, error in raw:
+        if error is not None:
+            errors.append(f"shard {i}: {error}")
+            continue
+        if returncode != 0:
+            errors.append(f"shard {i} exited {returncode}: {(stderr or stdout)[-400:]}")
+            continue
+        if ssc.SEED_MARKER not in (stderr or "").splitlines():
+            errors.append(f"shard {i} did not announce {ssc.SEED_MARKER}: the cases did "
+                          "not run through the seeded subclasses")
+            continue
+        try:
+            per_shard[i] = ssc.parse_calibration(stdout, lane, triples=groups[i])
+        except ValueError as exc:
+            errors.append(f"shard {i}: {exc}")
+    digest_after = _sha256(binary)
+    if digest_after != digest_before:
+        raise Refused(f"{binary} changed digest while shards were running "
+                      f"({digest_before[:12]} -> {digest_after[:12]}); the shards did not "
+                      "all measure the SAME binary, recording nothing")
+    if errors:
+        raise Refused(f"{len(errors)}/{n_shards} calibration shard(s) failed, recording "
+                      "nothing (rebuild with --build-calibration if this is a stale "
+                      "binary): " + "; ".join(errors))
+    measurements: dict = {}
+    for i in range(n_shards):
+        overlap = set(per_shard[i]) & set(measurements)
+        if overlap:
+            raise Refused(f"shard {i} measured case(s) another shard already measured "
+                          f"(non-disjoint shard assignment): {sorted(overlap)[:3]}")
+        measurements.update(per_shard[i])
+    expected = {(t[0].name, t[1], t[2]) for t in triples}
+    if set(measurements) != expected:
+        missing = sorted(expected - set(measurements))[:3]
+        raise Refused(f"merged shards cover {len(measurements)}/{len(expected)} case(s); "
+                      f"missing e.g. {missing}")
     folder = Path(store) / "served_shape"
     folder.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     path = folder / f"calibration-{stamp}.json"
-    body = {"schema": "epyc.autokernel.served_shape_calibration.v1",
+    body = {"schema": "epyc.autokernel.served_shape_calibration.v2",
             "case_set_id": ssc.CASE_SET_ID, "lane": lane, "seed_scheme": ssc.SEED_SCHEME,
             "partition": [shape.name for shape in ssc.lane_served_shapes(lane)],
-            "provenance": {**provenance(build, cpu_list, threads, argv, timeout_s=timeout_s),
+            "provenance": {**provenance(build, recipe["served_cpu_list"], threads, argvs,
+                                        timeout_s=timeout_s),
                            "launch": recipe["launch"], "launch_sha256": recipe["launch_sha256"],
                            "served_env": {k: v for k, v in sorted(recipe["env"].items())
-                                          if k != "PATH"}},
+                                          if k != "PATH"},
+                           "lock_cpu_list": lock_cpu_list, "shards": n_shards,
+                           "shard_assignment": {str(i): [ssc.case_key(*t) for t in group]
+                                                for i, group in enumerate(groups)}},
             "measurements": [{"shape_name": k[0], "type_a": k[1], "n": k[2], "nmse": v}
                              for k, v in sorted(measurements.items())]}
     path.write_text(json.dumps(body, indent=2, sort_keys=True), encoding="utf-8")
-    print(f"measured  {len(measurements)} cases -> {path}", file=out)
+    print(f"measured  {len(measurements)} case(s) across {n_shards} shard(s) -> {path}",
+          file=out)
     return path
 
 
@@ -292,16 +404,26 @@ def measurement_record_refusal(path: Path, launch: Path, lane: str,
                                region_lock: str) -> "str | None":
     """Round-14: an IMPORTED calibration record (--apply --measurements) may bake bounds
     only if it was measured for THIS lane under THIS served recipe: same lane, same
-    launch record (sha256), the same served env, cpu list, threads, topology and case
-    argv as the recipe would produce now, the lane's served GGUF, and the calibration
-    binary it names still byte-identical. Any mismatch refuses."""
+    launch record (sha256), the same served env, served cpu list, threads, topology and
+    (per-shard) case argv as the recipe would produce now, the lane's served GGUF, and
+    the calibration binary it names still byte-identical. Any mismatch refuses.
+
+    2026-10-06: the schema moved to v2 (sharded --execute, `shards`/`shard_assignment`
+    provenance, `argv` as one list per shard); a pre-sharding v1 record is refused with
+    a distinct, clear message rather than silently misread (no valid seeded v1 record
+    exists to migrate)."""
     try:
         body = json.loads(Path(path).read_text(encoding="utf-8"))
         prov = body["provenance"]
         build = Path(prov["anchor_build"])
     except (OSError, ValueError, KeyError, TypeError) as exc:
         return f"{path} is not a calibration record with provenance: {exc}"
-    if body.get("schema") != "epyc.autokernel.served_shape_calibration.v1":
+    schema = body.get("schema")
+    if schema == "epyc.autokernel.served_shape_calibration.v1":
+        return (f"{path} is schema v1 (pre-sharding, single-process --execute); the "
+                "sharded v2 format is required and no valid seeded v1 record exists to "
+                "migrate -- re-calibrate")
+    if schema != "epyc.autokernel.served_shape_calibration.v2":
         return f"{path} is not a served-shape calibration record"
     if body.get("lane") != lane:
         return f"{path} was measured for lane {body.get('lane')!r}, not {lane!r}"
@@ -315,17 +437,25 @@ def measurement_record_refusal(path: Path, launch: Path, lane: str,
         recipe = served_recipe(launch, build, cpu_list=None, threads=None)
     except Refused as exc:
         return str(exc)
+    n_shards = prov.get("shards")
+    if not isinstance(n_shards, int) or n_shards < 1:
+        return f"{path} carries no valid 'shards' count in provenance"
     checks = {
         "launch_sha256": (prov.get("launch_sha256"), recipe["launch_sha256"]),
         "served_env": (prov.get("served_env"),
                        {k: v for k, v in sorted(recipe["env"].items()) if k != "PATH"}),
-        "cpu_list": (prov.get("cpu_list"), recipe["cpu_list"]),
+        "cpu_list": (prov.get("cpu_list"), recipe["served_cpu_list"]),
         "threads": (prov.get("threads"), recipe["threads"]),
     }
     argv = prov.get("argv") or []
-    expected = calibration_argv(build, recipe, region_lock, lane)
+    try:
+        expected = shard_argvs(build, recipe, region_lock, lane, n_shards)
+    except Refused as exc:
+        return str(exc)
     tail = lambda items: list(items[items.index("--") + 1:]) if "--" in items else None
-    checks["argv"] = (tail(list(argv)), tail(expected))
+    got_tails = [tail(list(a)) for a in argv] if isinstance(argv, list) else None
+    want_tails = [tail(a) for a in expected]
+    checks["argv"] = (got_tails, want_tails)
     bad = [name for name, (got, want) in checks.items() if got != want]
     if bad:
         return f"{path} does not match the intended served recipe: {', '.join(bad)}"
@@ -342,8 +472,8 @@ def measurement_record_refusal(path: Path, launch: Path, lane: str,
 
 def load_measurements(path: Path) -> dict:
     body = json.loads(Path(path).read_text(encoding="utf-8"))
-    if body.get("schema") != "epyc.autokernel.served_shape_calibration.v1":
-        raise Refused(f"{path} is not a served-shape calibration record")
+    if body.get("schema") != "epyc.autokernel.served_shape_calibration.v2":
+        raise Refused(f"{path} is not a v2 (sharded) served-shape calibration record")
     return {(row["shape_name"], row["type_a"], int(row["n"])): float(row["nmse"])
             for row in body["measurements"]}
 
@@ -411,6 +541,11 @@ def main(argv: "list[str] | None" = None, out=sys.stdout) -> int:
     parser.add_argument("--build-calibration", action="store_true")
     parser.add_argument("--jobs", type=int, default=24)
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--shards", type=int,
+                        help=f"--execute: disjoint test-backend-ops processes run "
+                        f"concurrently under correctness mode (default "
+                        f"min({DEFAULT_SHARDS}, cases)); correctness measures NMSE, not "
+                        "speed, so a quiet/exclusive host is not required")
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args(argv)
     try:
@@ -458,7 +593,7 @@ def main(argv: "list[str] | None" = None, out=sys.stdout) -> int:
             if profile_refusal:
                 raise Refused(profile_refusal)
             path = execute(args.anchor_build, args.store, recipe, args.region_lock,
-                           args.lane, timeout_s=args.timeout_s, out=out)
+                           args.lane, timeout_s=args.timeout_s, out=out, shards=args.shards)
             measurements = load_measurements(path)
         elif args.measurements is not None:
             if args.launch is None or not args.lane:
@@ -480,8 +615,10 @@ def main(argv: "list[str] | None" = None, out=sys.stdout) -> int:
                      and ssc.binary_has_calibration(args.anchor_build))
             print(f"DRY RUN   store {args.store}; anchor build {args.anchor_build} "
                   f"{'carries' if ready else 'does NOT carry'} the calibration block; "
-                  f"{len(ssc.canonical_triples())} candidate cases; region-lock {args.region_lock} "
-                  f"--cpu-list {args.cpu_list or '<served list>'} --role bench. "
+                  f"{len(ssc.canonical_triples())} candidate cases; correctness-mode "
+                  f"region-lock {args.region_lock} --cpu-list "
+                  f"{args.cpu_list or '<served list>'} --role build, "
+                  f"{args.shards or DEFAULT_SHARDS} shard(s) (speed is NOT measured here). "
                   "Pass --stage-calibration-patch / --execute / --apply.", file=out)
         return 0
     except Refused as exc:

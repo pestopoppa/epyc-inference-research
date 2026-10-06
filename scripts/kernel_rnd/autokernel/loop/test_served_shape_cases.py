@@ -351,12 +351,13 @@ def test_check_served_shape_case_set_runs_op_correctness_when_available(tmp_path
     (build / "bin" / "test-backend-ops").write_bytes(
         b"\0ELF" + ssc.CASE_SET_ID.encode() + b"\0" + ssc.BACKEND_THREADS_ENV.encode()
         + ssc.SEED_MARKER.encode())
-    seen = {}
+    calls = []
 
     def fake_op_correctness(build_dir, *, op, backend, resolved_recipe, params_filter,
                             environment_overrides, expected_cases):
-        seen.update(op=op, params_filter=params_filter,
-                   environment_overrides=environment_overrides, expected_cases=expected_cases)
+        calls.append(dict(op=op, params_filter=params_filter,
+                          environment_overrides=environment_overrides,
+                          expected_cases=expected_cases))
         return gates.Verdict("correctness", True, "ok")
 
     monkeypatch.setattr(gates, "op_correctness", fake_op_correctness)
@@ -370,10 +371,15 @@ def test_check_served_shape_case_set_runs_op_correctness_when_available(tmp_path
     verdict = gates.check_served_shape_case_set(
         build, resolved_recipe=_served_recipe(), manifest_path=manifest, lane="ds41")
     assert verdict.passed is True
-    assert seen["expected_cases"] == len(cases)
-    assert seen["environment_overrides"] == ((ssc.CASE_SET_ENV, ssc.CASE_SET_ID),
-                                             (ssc.BACKEND_THREADS_ENV, "48"))
-    assert "MUL_MAT" in seen["op"] and "MUL_MAT_ID" in seen["op"]
+    # 2026-10-06: sharded -- one op_correctness call per shard (default up to
+    # SERVED_SHAPE_CASE_SET_DEFAULT_SHARDS), merged. Every case is requested exactly
+    # once across the shards, and every shard shares the same op/env overrides.
+    assert len(calls) == min(gates.SERVED_SHAPE_CASE_SET_DEFAULT_SHARDS, len(cases))
+    assert sum(call["expected_cases"] for call in calls) == len(cases)
+    for call in calls:
+        assert call["environment_overrides"] == ((ssc.CASE_SET_ENV, ssc.CASE_SET_ID),
+                                                  (ssc.BACKEND_THREADS_ENV, "48"))
+        assert "MUL_MAT" in call["op"] and "MUL_MAT_ID" in call["op"]
 
 
 def test_ppl_contract_op_nmse_skips_served_shape_when_manifest_is_none():
@@ -532,6 +538,37 @@ def test_the_calibration_set_covers_both_corpora():
         assert len(ssc.calibration_triples(lane)) == (
             len(ssc.canonical_triples(lane=lane))
             + len(ssc.canonical_triples(routed=True, lane=lane)))
+
+
+def test_shard_sequence_is_disjoint_and_covers_every_item_exactly_once():
+    items = tuple(range(37))
+    for n in (1, 2, 5, 16, 37, 1000):
+        shards = ssc.shard_sequence(items, n)
+        flat = [x for shard in shards for x in shard]
+        assert sorted(flat) == sorted(items)          # every item exactly once
+        assert len(flat) == len(set(flat)) == len(items)
+        assert all(shard for shard in shards)          # no empty shard
+        assert len(shards) == min(n, len(items))       # clamped, never padded with empties
+    assert ssc.shard_sequence((), 5) == ()
+    with pytest.raises(ValueError):
+        ssc.shard_sequence(items, 0)
+
+
+def test_parse_calibration_restricts_to_the_given_shard_and_rejects_leakage():
+    triples = ssc.calibration_triples("q38fn")
+    shards = ssc.shard_sequence(triples, 4)
+    shard0 = shards[0]
+    lines = [f"{ssc.CALIBRATION_MARKER}\t{ssc.calibration_vars(*t)}\t1e-6" for t in shard0]
+    measured = ssc.parse_calibration("\n".join(lines), "q38fn", triples=shard0)
+    assert len(measured) == len(shard0)
+    # a case from ANOTHER shard leaking into this shard's output is an unexpected line.
+    foreign = shards[1][0]
+    leaked = lines + [f"{ssc.CALIBRATION_MARKER}\t{ssc.calibration_vars(*foreign)}\t1e-6"]
+    with pytest.raises(ValueError, match="unexpected calibration line"):
+        ssc.parse_calibration("\n".join(leaked), "q38fn", triples=shard0)
+    # a missing case in this shard's own assignment is caught too.
+    with pytest.raises(ValueError, match="missing"):
+        ssc.parse_calibration("\n".join(lines[:-1]), "q38fn", triples=shard0)
 
 
 

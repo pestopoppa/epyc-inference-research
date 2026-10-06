@@ -14,6 +14,7 @@ returned nothing and the planner re-derived rejected work blind.
 from __future__ import annotations
 
 import dataclasses
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 import hashlib
@@ -31,6 +32,12 @@ from . import bench, census, residency
 #: that decides whether a candidate is CORRECT -- everything downstream assumes it.
 CORRECTNESS_TIMEOUT_S = 1800
 BUILD_TIMEOUT_S = 7200
+#: 2026-10-06: the served-shape case set (layer (a)'s candidate and bundle-routed
+#: tiers) is a correctness oracle (NMSE vs the independent reference, deterministic
+#: per-case-key seeded inputs since ac97318f), not a timing one -- it does not need a
+#: quiet or exclusive host, only the served thread count. Default shard count for
+#: `check_served_shape_case_set`'s concurrent `test-backend-ops` processes.
+SERVED_SHAPE_CASE_SET_DEFAULT_SHARDS = 16
 
 #: Per-ITERATION builds: candidate lanes and the anchor guard's fresh build. The
 #: bench binary and the op oracle are all a measurement needs, and at hundreds of
@@ -2362,9 +2369,54 @@ def check_cpu_fa_perf_screen(anchor_build: Path, candidate_build: Path, *, ancho
                    result.detail)
 
 
+def op_correctness_sharded(build_dir: Path, *, op: str, backend: str, resolved_recipe,
+                           case_shards, environment_overrides: tuple = (),
+                           _op_correctness: "Callable | None" = None) -> Verdict:
+    """Run `op_correctness` CONCURRENTLY over N disjoint case shards -- each
+    `(params_filter, expected_cases)` in `case_shards` becomes its own
+    `test-backend-ops` process, same build/backend/resolved_recipe/environment -- and
+    merge into ONE Verdict. 2026-10-06: a served-shape op suite measures correctness
+    (NMSE vs an independent reference, deterministic per-case-key seeded inputs), not
+    speed, so oversubscribing the served thread count across N concurrent processes is
+    valid evidence; it only needs to be faster, not exclusive.
+
+    ANY shard's `oracle_unavailable` makes the WHOLE run `oracle_unavailable` (never a
+    silent partial pass covering only the shards that happened to run); any shard's
+    correctness FAIL fails the whole run. `_op_correctness` is a test seam with
+    `op_correctness`'s signature."""
+    run = _op_correctness or op_correctness
+    if not case_shards:
+        return Verdict("oracle_unavailable", False, "no case shards to run")
+
+    def _one(shard):
+        params_filter, expected = shard
+        return run(build_dir, op=op, backend=backend, resolved_recipe=resolved_recipe,
+                  params_filter=params_filter, environment_overrides=environment_overrides,
+                  expected_cases=expected)
+
+    with ThreadPoolExecutor(max_workers=len(case_shards)) as pool:
+        verdicts = list(pool.map(_one, case_shards))
+    unavailable = [v for v in verdicts if v.gate == "oracle_unavailable"]
+    if unavailable:
+        return Verdict("oracle_unavailable", False,
+                       f"{len(unavailable)}/{len(verdicts)} shard(s) unavailable: "
+                       + "; ".join(v.reason for v in unavailable[:3]))
+    failed = [v for v in verdicts if not v.passed]
+    if failed:
+        return Verdict(failed[0].gate, False,
+                       f"{len(failed)}/{len(verdicts)} shard(s) failed: "
+                       + "; ".join(v.reason for v in failed[:3]),
+                       "\n".join(v.detail for v in failed if v.detail)[:4000])
+    return Verdict(verdicts[0].gate, True,
+                   f"{len(verdicts)} shard(s), "
+                   f"{sum(expected for _filter, expected in case_shards)} case(s) passed")
+
+
 def check_served_shape_case_set(build_dir: Path, *, resolved_recipe,
                                 manifest_path: Path, routed: bool = False,
-                                lane: "str | None" = None) -> Verdict:
+                                lane: "str | None" = None,
+                                shards: "int | None" = None,
+                                _op_correctness: "Callable | None" = None) -> Verdict:
     """ppl_contract layer (a) addendum (review 2026-10-06): the model's OWN served
     (k, m[, n_mats, n_used]) matmul shapes, at the served widths, for every witness
     quant -- `served_shape_cases.py`'s HONEST LIMITATIONS fix for the generic
@@ -2373,7 +2425,13 @@ def check_served_shape_case_set(build_dir: Path, *, resolved_recipe,
     UNLIKE `check_cpu_fa_case_set`, this FAILS CLOSED, never skips, when the manifest
     is missing/malformed or the binary lacks the case-set literal: there is no
     redundant independent probe covering these shapes, so an absent corpus here is a
-    gap in the correctness oracle, not a harmlessly-skipped extra."""
+    gap in the correctness oracle, not a harmlessly-skipped extra.
+
+    2026-10-06: sharded. `shards` (default `min(SERVED_SHAPE_CASE_SET_DEFAULT_SHARDS,
+    len(cases))`) splits the manifest's cases into that many disjoint groups and runs
+    them as concurrent `test-backend-ops` processes (`op_correctness_sharded`) -- the
+    candidate tier's and the bundle routed tier's per-candidate check both get this for
+    free through this one function."""
     from . import served_shape_cases as ssc
 
     # Round-12: unavailable evidence is gate "oracle_unavailable" (never a numerical
@@ -2409,11 +2467,15 @@ def check_served_shape_case_set(build_dir: Path, *, resolved_recipe,
                        f"served backend thread count is unknown ({exc}); refusing to run "
                        "the served-shape cases at an uncontrolled thread count")
     ops_present = sorted({c.shape.op for c in cases})
-    verdict = op_correctness(build_dir, op=",".join(ops_present), backend="CPU",
-        resolved_recipe=resolved_recipe, params_filter=ssc.case_set_regex(cases),
+    n_shards = shards if shards else min(SERVED_SHAPE_CASE_SET_DEFAULT_SHARDS, len(cases))
+    n_shards = max(1, min(n_shards, len(cases)))
+    groups = ssc.shard_sequence(cases, n_shards)
+    case_shards = [(ssc.case_set_regex(group), len(group)) for group in groups]
+    verdict = op_correctness_sharded(build_dir, op=",".join(ops_present), backend="CPU",
+        resolved_recipe=resolved_recipe, case_shards=case_shards,
         environment_overrides=((ssc.CASE_SET_ENV, set_id),
                                (ssc.BACKEND_THREADS_ENV, str(threads))),
-        expected_cases=len(cases))
+        _op_correctness=_op_correctness)
     gate = ("served_shape_case_set" if verdict.passed or verdict.gate != "oracle_unavailable"
             else "oracle_unavailable")
     return Verdict(gate, verdict.passed, verdict.reason, verdict.detail)
@@ -3969,7 +4031,8 @@ __all__ = ["BACKEND_OPS_SELECTORS", "BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S",
            "backend_ops_selector", "compiles",
            "cpu_source_route", "deterministic",
            "affected_op_scope", "check_cpu_fa_case_set", "check_cpu_fa_perf_screen",
-           "check_served_shape_case_set",
+           "check_served_shape_case_set", "op_correctness_sharded",
+           "SERVED_SHAPE_CASE_SET_DEFAULT_SHARDS",
            "check_cpu_fa_reference", "check_cpu_gdn_reference", "check_cpu_iqk_reference",
            "check_cpu_route_reference", "gpu_graph_pool_hold_refusal",
            "no_fallback_dispatch", "op_correctness", "run_all",

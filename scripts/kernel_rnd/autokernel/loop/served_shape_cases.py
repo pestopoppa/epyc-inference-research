@@ -844,10 +844,33 @@ def calibration_triples(lane: str) -> tuple[tuple[ServedShape, str, int], ...]:
     return canonical_triples(lane=lane) + canonical_triples(routed=True, lane=lane)
 
 
-def calibration_regex(lane: str) -> str:
+def shard_sequence(items, n_shards: int) -> tuple:
+    """Split `items` into `n_shards` disjoint, stably-ordered shards whose union is
+    `items` with every item exactly once (round-robin assignment by position, so no
+    shard's case set depends on another shard's size). `n_shards` is clamped to
+    `[1, len(items)]`: fewer, non-empty shards are produced when there are not enough
+    items to fill every requested shard. Raises ValueError for `n_shards < 1`."""
+    items = tuple(items)
+    if n_shards < 1:
+        raise ValueError(f"n_shards must be >= 1, got {n_shards}")
+    if not items:
+        return ()
+    n = max(1, min(n_shards, len(items)))
+    buckets = [[] for _ in range(n)]
+    for i, item in enumerate(items):
+        buckets[i % n].append(item)
+    return tuple(tuple(bucket) for bucket in buckets)
+
+
+def calibration_regex_for(triples) -> str:
+    """`calibration_regex`'s body, generalized to an arbitrary (shard's) subset of
+    calibration triples instead of a whole lane's corpus."""
     import re
-    return "^(" + "|".join(re.escape(calibration_vars(*t))
-                           for t in calibration_triples(lane)) + ")$"
+    return "^(" + "|".join(re.escape(calibration_vars(*t)) for t in triples) + ")$"
+
+
+def calibration_regex(lane: str) -> str:
+    return calibration_regex_for(calibration_triples(lane))
 
 
 def calibration_patch_block(lane: str) -> str:
@@ -874,13 +897,16 @@ def calibration_patch_block(lane: str) -> str:
             + "\n".join(lines) + "\n    }\n}\n")
 
 
-def parse_calibration(output: str, lane: str) -> dict:
+def parse_calibration(output: str, lane: str, *, triples=None) -> dict:
     """{(shape name, type, width): NMSE} from calibration output -- the max over any
-    repeated print of one case. Raises ValueError unless EVERY canonical triple has a
-    finite, non-negative value and no unknown case was printed."""
+    repeated print of one case. `triples` restricts the EXPECTED set to a shard's own
+    assignment (default: the lane's whole corpus, `calibration_triples(lane)`). Raises
+    ValueError unless every expected triple has a finite, non-negative value and no
+    case outside the expected set was printed -- a shard whose `-p` filter leaked
+    another shard's case is a harness fault, not a silent extra measurement."""
     import math
-    by_vars = {calibration_vars(*t): (t[0].name, t[1], t[2])
-               for t in calibration_triples(lane)}
+    expected = triples if triples is not None else calibration_triples(lane)
+    by_vars = {calibration_vars(*t): (t[0].name, t[1], t[2]) for t in expected}
     found: dict = {}
     for line in output.splitlines():
         if not line.startswith(CALIBRATION_MARKER + "\t"):
@@ -1125,4 +1151,5 @@ __all__ = ["CASE_SET_ENV", "CASE_SET_ID", "MANIFEST_SCHEMA", "ManifestRefused",
            "case_key", "case_seed_index", "lane_served_shapes", "BACKEND_THREADS_ENV", "corpus",
            "calibration_triples", "binary_has_routed_case_set", "THREADS_PATCHED",
            "SEED_MARKER", "binary_has_seed_scheme", "INPUT_HASH_ENV", "INPUT_HASH_MARKER",
-           "parse_input_hashes", "input_hash_mismatches"]
+           "parse_input_hashes", "input_hash_mismatches", "shard_sequence",
+           "calibration_regex_for"]

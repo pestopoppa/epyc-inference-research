@@ -285,6 +285,80 @@ class AnOracleThatCannotRunIsNotAFailedPatch(unittest.TestCase):
             self.assertEqual(verdict.gate, "oracle_unavailable")
 
 
+class TheShardedOpCorrectnessMergeIsHonest(unittest.TestCase):
+    """2026-10-06: `op_correctness_sharded` runs N disjoint case shards concurrently and
+    merges into ONE Verdict -- the layer-(a) served-shape / routed-corpus check gets
+    this through `check_served_shape_case_set`. Every shard must contribute; one bad
+    shard must never be silently absorbed into an otherwise-passing merge."""
+
+    def _shard(self, label, passed=True, gate="served_shape_case_set", expected=10):
+        def run(build_dir, *, op, backend, resolved_recipe, params_filter,
+               environment_overrides, expected_cases):
+            return gates.Verdict(gate, passed, f"{label}:{params_filter}:{expected_cases}")
+        return run
+
+    def test_every_shard_runs_and_a_full_pass_merges_clean(self):
+        calls = []
+
+        def op_correctness(build_dir, *, op, backend, resolved_recipe, params_filter,
+                           environment_overrides, expected_cases):
+            calls.append((params_filter, expected_cases))
+            return gates.Verdict("served_shape_case_set", True, "ok")
+
+        verdict = gates.op_correctness_sharded(
+            Path("/build"), op="MUL_MAT", backend="CPU", resolved_recipe=None,
+            case_shards=[("rx0", 3), ("rx1", 4), ("rx2", 5)],
+            _op_correctness=op_correctness)
+        self.assertTrue(verdict.passed)
+        self.assertEqual(verdict.gate, "served_shape_case_set")
+        self.assertEqual(sorted(calls), [("rx0", 3), ("rx1", 4), ("rx2", 5)])
+
+    def test_one_shard_oracle_unavailable_makes_the_whole_run_unavailable(self):
+        shards = {"rxA": self._shard("A", passed=True),
+                  "rxB": self._shard("B", passed=False, gate="oracle_unavailable")}
+
+        def op_correctness(build_dir, *, op, backend, resolved_recipe, params_filter,
+                           environment_overrides, expected_cases):
+            return shards[params_filter](build_dir, op=op, backend=backend,
+                                         resolved_recipe=resolved_recipe,
+                                         params_filter=params_filter,
+                                         environment_overrides=environment_overrides,
+                                         expected_cases=expected_cases)
+
+        verdict = gates.op_correctness_sharded(
+            Path("/build"), op="MUL_MAT", backend="CPU", resolved_recipe=None,
+            case_shards=[("rxA", 5), ("rxB", 5)], _op_correctness=op_correctness)
+        self.assertFalse(verdict.passed)
+        self.assertEqual(verdict.gate, "oracle_unavailable")
+        self.assertIn("1/2 shard(s) unavailable", verdict.reason)
+
+    def test_one_shard_correctness_failure_fails_the_whole_run(self):
+        shards = {"rxA": self._shard("A", passed=True),
+                  "rxB": self._shard("B", passed=False, gate="correctness")}
+
+        def op_correctness(build_dir, *, op, backend, resolved_recipe, params_filter,
+                           environment_overrides, expected_cases):
+            return shards[params_filter](build_dir, op=op, backend=backend,
+                                         resolved_recipe=resolved_recipe,
+                                         params_filter=params_filter,
+                                         environment_overrides=environment_overrides,
+                                         expected_cases=expected_cases)
+
+        verdict = gates.op_correctness_sharded(
+            Path("/build"), op="MUL_MAT", backend="CPU", resolved_recipe=None,
+            case_shards=[("rxA", 5), ("rxB", 5)], _op_correctness=op_correctness)
+        self.assertFalse(verdict.passed)
+        self.assertEqual(verdict.gate, "correctness")
+        self.assertIn("1/2 shard(s) failed", verdict.reason)
+
+    def test_no_shards_is_oracle_unavailable_not_a_vacuous_pass(self):
+        verdict = gates.op_correctness_sharded(
+            Path("/build"), op="MUL_MAT", backend="CPU", resolved_recipe=None,
+            case_shards=[], _op_correctness=lambda *a, **k: gates.Verdict("x", True))
+        self.assertFalse(verdict.passed)
+        self.assertEqual(verdict.gate, "oracle_unavailable")
+
+
 _DS41_ANCHOR = Path("/mnt/raid0/llm/llama.cpp-experimental-fastload-ds41-20260925")
 
 
