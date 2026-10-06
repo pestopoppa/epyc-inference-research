@@ -36,6 +36,9 @@ _ORPHAN_DRAIN_TIMEOUT_S / _BATCH_WALL_BUDGET_S):
 
 from __future__ import annotations
 
+import errno
+import hashlib
+import importlib.util
 import json
 import logging
 import math
@@ -50,8 +53,6 @@ from collections.abc import Mapping, Sequence
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-import hashlib
-import importlib.util
 import threading
 from pathlib import Path
 from typing import Any, Callable
@@ -3295,6 +3296,58 @@ class QuestionResult:
     token_logprobs: dict[str, Any] | None = None
 
 
+class _EvalBatchResults(list[QuestionResult]):
+    """List-compatible batch output with its separate sidecar write status."""
+
+    def __init__(
+        self,
+        results: Sequence[QuestionResult],
+        *,
+        sidecar_persistence: dict[str, Any],
+    ) -> None:
+        super().__init__(results)
+        self.sidecar_persistence = sidecar_persistence
+
+
+def _question_sidecar_status(results: Sequence[QuestionResult]) -> dict[str, Any] | None:
+    status = getattr(results, "sidecar_persistence", None)
+    return dict(status) if isinstance(status, dict) else None
+
+
+def _new_question_sidecar_status(requested_n: int) -> dict[str, Any]:
+    return {
+        "requested_n": max(0, int(requested_n)),
+        "completed_n": None,
+        "writer_initialized": False,
+        "batch_start_fsync_returned": False,
+        "result_rows_attempted_n": 0,
+        "result_rows_not_attempted_n": 0,
+        "result_rows_fsync_returned_n": 0,
+        "result_rows_failed_n": 0,
+        "completion_marker_attempted": False,
+        "completion_marker_fsync_returned": False,
+        "archive_complete": False,
+        "archive_status": "incomplete",
+        "completeness_basis": "all_append_and_fsync_calls_returned",
+        "failure_reasons": [],
+    }
+
+
+def _record_question_sidecar_failure(
+    status: dict[str, Any], operation: str, exc: Exception
+) -> None:
+    error_number = getattr(exc, "errno", None)
+    error_code = errno.errorcode.get(error_number, "UNCLASSIFIED")
+    item = {
+        "operation": operation,
+        "error_type": type(exc).__name__[:64],
+        "error_code": str(error_code)[:32],
+    }
+    failures = status["failure_reasons"]
+    if item not in failures and len(failures) < 8:
+        failures.append(item)
+
+
 @dataclass
 class _GenOutcome:
     """Handoff between the generation lane and the scoring pool (workers>1 path).
@@ -5058,8 +5111,12 @@ class EvalTower:
         concurrency=1, behavior matches the legacy serial loop.
         """
         n = len(questions)
+        sidecar_status = _new_question_sidecar_status(n)
         if n == 0:
-            return []
+            sidecar_status["completed_n"] = 0
+            sidecar_status["archive_complete"] = None
+            sidecar_status["archive_status"] = "not_applicable"
+            return _EvalBatchResults([], sidecar_persistence=sidecar_status)
         batch_request_timeout_s = max(
             _eval_question_timeout_s(str(q.get("prompt", "")), self.timeout)
             for q in questions
@@ -5096,6 +5153,7 @@ class EvalTower:
             fname = f"question_results.{_safe_artifact_name(label, fallback='arm')}.jsonl"
             explicit_path = Path(self._question_artifact_dir) / fname
             artifact_root_source = "window_output_dir"
+        pending_writer: _EvalQuestionJsonlWriter | None = None
         try:
             pending_writer = _EvalQuestionJsonlWriter(
                 root=artifact_root,
@@ -5107,10 +5165,17 @@ class EvalTower:
                 concurrency=workers,
                 path=explicit_path,
             )
+            sidecar_status["writer_initialized"] = True
             pending_writer.append_start()
+            sidecar_status["batch_start_fsync_returned"] = True
             writer = pending_writer
         except Exception as exc:  # noqa: BLE001
-            if "pending_writer" in locals():
+            _record_question_sidecar_failure(
+                sidecar_status,
+                "initialize" if pending_writer is None else "batch_start",
+                exc,
+            )
+            if pending_writer is not None:
                 pending_writer.close()
             log.warning("EvalTower question-result sidecar disabled: %s", exc)
             writer = None
@@ -5135,6 +5200,7 @@ class EvalTower:
         ) -> None:
             if writer is None:
                 return
+            sidecar_status["result_rows_attempted_n"] += 1
             try:
                 writer.append_result(
                     ordinal=_ordinal_for_pos(pos),
@@ -5142,16 +5208,39 @@ class EvalTower:
                     generated_at_s=generated_at_s,
                     scored_at_s=scored_at_s,
                 )
+                sidecar_status["result_rows_fsync_returned_n"] += 1
             except Exception as exc:  # noqa: BLE001
+                sidecar_status["result_rows_failed_n"] += 1
+                _record_question_sidecar_failure(sidecar_status, "question_result", exc)
                 log.warning("EvalTower question-result sidecar append failed: %s", exc)
 
         def append_complete_marker(completed_n: int, elapsed_s: float) -> None:
             if writer is None:
                 return
+            sidecar_status["completion_marker_attempted"] = True
             try:
                 writer.append_complete(completed_n=completed_n, elapsed_s=elapsed_s)
+                sidecar_status["completion_marker_fsync_returned"] = True
             except Exception as exc:  # noqa: BLE001
+                _record_question_sidecar_failure(sidecar_status, "batch_complete", exc)
                 log.warning("EvalTower question-result sidecar complete marker failed: %s", exc)
+
+        def finalize_sidecar_status(completed_n: int) -> None:
+            sidecar_status["completed_n"] = completed_n
+            sidecar_status["result_rows_not_attempted_n"] = max(
+                0, completed_n - sidecar_status["result_rows_attempted_n"]
+            )
+            archive_complete = (
+                sidecar_status["writer_initialized"]
+                and sidecar_status["batch_start_fsync_returned"]
+                and sidecar_status["result_rows_failed_n"] == 0
+                and sidecar_status["result_rows_fsync_returned_n"] == completed_n
+                and sidecar_status["completion_marker_fsync_returned"]
+            )
+            sidecar_status["archive_complete"] = bool(archive_complete)
+            sidecar_status["archive_status"] = (
+                "complete_by_writer_returns" if archive_complete else "incomplete"
+            )
 
         def mark_abandoned(idx: int, result: QuestionResult, *, drain_timeout_s: float) -> None:
             result.degraded = True
@@ -5324,7 +5413,8 @@ class EvalTower:
                         dict(item) for item in serial_backend_drain_reports
                     ]
                 append_complete_marker(len(out), batch_wall_s)
-                return out
+                finalize_sidecar_status(len(out))
+                return _EvalBatchResults(out, sidecar_persistence=sidecar_status)
             finally:
                 ex.shutdown(wait=False, cancel_futures=True)
                 if writer is not None:
@@ -5698,9 +5788,10 @@ class EvalTower:
             r.eval_wall_s = batch_wall_s
             r.eval_backend_drain_reports = [dict(item) for item in backend_drain_reports]
         append_complete_marker(len(out), batch_wall_s)
+        finalize_sidecar_status(len(out))
         if writer is not None:
             writer.close()
-        return out
+        return _EvalBatchResults(out, sidecar_persistence=sidecar_status)
 
     def _emit_progress(
         self,
@@ -6204,7 +6295,7 @@ class EvalTower:
             if r.retrieval_compaction.get("applied")
         ]
 
-        return EvalResult(
+        result = EvalResult(
             tier=tier,
             quality=quality,
             speed=speed,
@@ -6359,6 +6450,10 @@ class EvalTower:
                 r.question_id for r in results if (r.exogenous_recovered or r.exogenous_unrecovered)
             ],
         )
+        sidecar_status = _question_sidecar_status(results)
+        if sidecar_status is not None:
+            result.details["question_sidecar_persistence"] = sidecar_status
+        return result
 
     def _aggregate_decision_partitions(
         self,
@@ -6402,6 +6497,7 @@ class EvalTower:
             "partition_counts",
             "partition_total_counts",
             "partition_suite_quality",
+            "question_sidecar_persistence",
         ):
             result.details[key] = full_result.details.get(key, {})
 
@@ -7360,6 +7456,11 @@ class EvalTower:
                     },
                     "confidence_is_real": cal_real,
                     "confidence_source_counts": dict(cal_source_counts),
+                    **(
+                        {"question_sidecar_persistence": _question_sidecar_status(results)}
+                        if _question_sidecar_status(results) is not None
+                        else {}
+                    ),
                 }
         return {
             "mode": "calibration",
@@ -7475,6 +7576,11 @@ class EvalTower:
                     "confidence_is_real": cal_real,
                     "confidence_source_counts": dict(
                         agg.details.get("confidence_source_counts") or {}
+                    ),
+                    **(
+                        {"question_sidecar_persistence": _question_sidecar_status(results)}
+                        if _question_sidecar_status(results) is not None
+                        else {}
                     ),
                     "test_profile": test_profile,
                 }
@@ -7602,6 +7708,11 @@ class EvalTower:
                     "confidence_source_counts": dict(
                         agg.details.get("confidence_source_counts") or {}
                     ),
+                    **(
+                        {"question_sidecar_persistence": _question_sidecar_status(results)}
+                        if _question_sidecar_status(results) is not None
+                        else {}
+                    ),
                     "rows": [_compact_question_result(r) for r in results],
                 }
         return {
@@ -7705,6 +7816,11 @@ class EvalTower:
                     "confidence_is_real": cal_real,
                     "confidence_source_counts": (
                         dict(agg.details.get("confidence_source_counts") or {}) if agg else {}
+                    ),
+                    **(
+                        {"question_sidecar_persistence": _question_sidecar_status(results)}
+                        if _question_sidecar_status(results) is not None
+                        else {}
                     ),
                     "rows": [_compact_question_result(r) for r in results],
                 }
