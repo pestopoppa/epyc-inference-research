@@ -2,6 +2,7 @@
 import ast
 import inspect
 from pathlib import Path
+import re
 import tempfile
 import unittest
 from unittest import mock
@@ -1627,7 +1628,7 @@ class TheLowBitRoutesAdmitOnlyTheirOwnBodies(unittest.TestCase):
         self._check_lines(route, "ggml_repack_get_optimal_repack_type", head, lines,
                           inside, outside)
 
-    def test_iqk_kquants_q6_iq4xs_dequant_picks_the_plain_iq4xs_arm(self):
+    def test_iqk_kquants_q6_iq4xs_dequant_picks_the_compiled_fancy_iq4xs_arm(self):
         if not _ds41_present():
             self.skipTest("DS41 anchor tree not present")
         route = self._route("iqk_kquants_q6_iq4xs_dequant")
@@ -1639,7 +1640,9 @@ class TheLowBitRoutesAdmitOnlyTheirOwnBodies(unittest.TestCase):
         self.assertGreaterEqual(len(occurrences), 2)
         fancy_line = occurrences[0] + 2
         plain_line = occurrences[1] + 2
-        self._check_lines(route, "DequantizerIQ4XS", head, lines, plain_line, fancy_line)
+        # Review 2026-10-06: HAVE_FANCY_SIMD is DEFINED on this AVX512 host, so the fancy
+        # (first) arm is the compiled one; the plain `#else` arm is dead code here.
+        self._check_lines(route, "DequantizerIQ4XS", head, lines, fancy_line, plain_line)
 
     def test_iqk_kquants_set_kernels_is_separate_from_the_q4_q5_dot_route(self):
         if not _ds41_present():
@@ -1666,13 +1669,17 @@ class ThePplContractGateIsLayeredAndFailsClosed(unittest.TestCase):
         base.update(overrides)
         return gates.CpuSourceRoute(**base)
 
-    def _call(self, route=None, **overrides):
-        passing = {
+    @staticmethod
+    def _passing():
+        return {
             "nmse": lambda: gates.Verdict("ppl_contract_nmse", True, "ok"),
             "ppl": lambda: gates.Verdict("ppl_contract_ppl", True, "ok"),
             "coherence": lambda: gates.Verdict("ppl_contract_coherence", True, "ok"),
             "long_canary": lambda: gates.Verdict("ppl_contract_long_canary", True, "ok"),
         }
+
+    def _call(self, route=None, **overrides):
+        passing = self._passing()
         passing.update(overrides)
         return gates.ppl_contract_gate(
             Path("/anchor"), Path("/candidate"), route=route or self._route(),
@@ -1701,10 +1708,30 @@ class ThePplContractGateIsLayeredAndFailsClosed(unittest.TestCase):
         self.assertIn("errored", verdict.reason)
         self.assertIn("perplexity binary crashed", verdict.reason)
 
-    def test_a_layer_returning_none_fails_closed(self):
-        verdict = self._call(coherence=lambda: None)
+    def test_a_layer_returning_none_or_a_non_verdict_fails_closed(self):
+        for bad in (None, True, "passed"):
+            verdict = self._call(coherence=lambda b=bad: b)
+            self.assertFalse(verdict.passed, repr(bad))
+            self.assertIn("produced no verdict", verdict.reason)
+
+    def test_the_first_refusal_stops_the_spend(self):
+        ran = []
+        layers = {name: (lambda n=name: ran.append(n) or gates.Verdict(n, n != "ppl", n))
+                  for name in ("nmse", "ppl", "coherence", "long_canary")}
+        verdict = self._call(**layers)
         self.assertFalse(verdict.passed)
-        self.assertIn("produced no verdict", verdict.reason)
+        self.assertEqual(ran, ["nmse", "ppl"])
+
+    def test_a_missing_fixed_reference_refuses_unstubbed_layers(self):
+        """Without a fixed reference the anchor-only bars compound across advancing
+        anchors: the gate refuses before running any real layer."""
+        verdict = gates.ppl_contract_gate(
+            Path("/anchor"), Path("/candidate"), route=self._route(), resolved_recipe=None,
+            model=Path("/model.gguf"), threads=48, cpu_list="0-47", env={},
+            log_dir=Path("/tmp/ppl-log"),
+            _layers={"nmse": lambda: gates.Verdict("n", True, "ok")})
+        self.assertFalse(verdict.passed)
+        self.assertIn("fixed reference", verdict.reason)
 
     def test_bit_exact_route_is_refused_a_ppl_contract_judgement(self):
         with self.assertRaises(ValueError):
@@ -1714,28 +1741,108 @@ class ThePplContractGateIsLayeredAndFailsClosed(unittest.TestCase):
         with self.assertRaises(ValueError):
             self._call(route=self._route(model_identity=True))
 
+    def test_no_real_route_declares_both_contracts(self):
+        for route in gates.CPU_SOURCE_ROUTES:
+            self.assertIn(route.numerics, ("bit_exact", "ppl_contract"), route.route)
+            self.assertFalse(route.numerics == "ppl_contract" and route.model_identity,
+                             route.route)
+
+    def test_bundle_gate_runs_the_same_four_layers(self):
+        verdict = gates.ppl_contract_bundle_gate(
+            Path("/cor"), Path("/tip"), resolved_recipe=None, model=Path("/m.gguf"),
+            threads=48, cpu_list="0-47", env={}, log_dir=Path("/tmp/x"),
+            reference_build=None, _layers=self._passing())
+        self.assertTrue(verdict.passed)
+        failing = self._passing()
+        failing["long_canary"] = lambda: gates.Verdict("c", False, "loop")
+        verdict = gates.ppl_contract_bundle_gate(
+            Path("/cor"), Path("/tip"), resolved_recipe=None, model=Path("/m.gguf"),
+            threads=48, cpu_list="0-47", env={}, log_dir=Path("/tmp/x"),
+            reference_build=None, _layers=failing)
+        self.assertFalse(verdict.passed)
+        self.assertEqual(verdict.gate, "ppl_contract_bundle")
+
 
 class ThePplWikitext2GateComparesAnchorAndCandidate(unittest.TestCase):
+    def _call(self, values, reference=None):
+        it = iter(values)
+        return gates.ppl_wikitext2(
+            Path("/anchor"), Path("/candidate"), model=Path("/m.gguf"), threads=48,
+            env={}, cpu_list="0-47", log_dir=Path("/tmp/x"), reference_build=reference,
+            _run_binary=lambda build: next(it))
+
     def test_pass_within_bar_fail_outside_it(self):
-        values = iter([100.0, 100.4])  # anchor, candidate: 0.4% < 0.5% bar
-        verdict = gates.ppl_wikitext2(
-            Path("/anchor"), Path("/candidate"), model=Path("/m.gguf"), threads=48,
-            env={}, cpu_list="0-47", log_dir=Path("/tmp/x"),
-            _run_binary=lambda build: next(values))
-        self.assertTrue(verdict.passed)
-        values = iter([100.0, 101.0])  # 1.0% > 0.5% bar
-        verdict = gates.ppl_wikitext2(
-            Path("/anchor"), Path("/candidate"), model=Path("/m.gguf"), threads=48,
-            env={}, cpu_list="0-47", log_dir=Path("/tmp/x"),
-            _run_binary=lambda build: next(values))
-        self.assertFalse(verdict.passed)
+        self.assertTrue(self._call([100.0, 100.4]).passed)   # 0.4% < 0.5%
+        self.assertFalse(self._call([100.0, 101.0]).passed)  # 1.0% > 0.5%
+        self.assertFalse(self._call([100.0, 99.0]).passed)   # |delta| is symmetric
 
     def test_a_missing_final_estimate_refuses_rather_than_crashing(self):
-        verdict = gates.ppl_wikitext2(
-            Path("/anchor"), Path("/candidate"), model=Path("/m.gguf"), threads=48,
-            env={}, cpu_list="0-47", log_dir=Path("/tmp/x"),
-            _run_binary=lambda build: None)
-        self.assertFalse(verdict.passed)
+        self.assertFalse(self._call([None, None]).passed)
+        self.assertFalse(self._call([100.0, None]).passed)
+
+    def test_the_fixed_reference_bounds_cumulative_drift(self):
+        """anchor -> candidate +0.4% each keep would pass marginally forever; the fixed
+        reference stops the walk once the total exceeds max(bar, anchor's drift)."""
+        ref = Path("/reference")
+        # anchor already 0.4% above reference; candidate a further 0.4% -> 0.8% total
+        self.assertFalse(self._call([100.4, 100.8016, 100.0], reference=ref).passed)
+        # candidate stays within the bar of the reference
+        self.assertTrue(self._call([100.2, 100.4, 100.0], reference=ref).passed)
+        # legacy drift above the bar may not GROW, but is not itself a refusal
+        self.assertTrue(self._call([100.7, 100.6, 100.0], reference=ref).passed)
+        self.assertFalse(self._call([100.7, 100.9, 100.0], reference=ref).passed)
+
+    def test_a_failed_reference_run_refuses(self):
+        self.assertFalse(self._call([100.0, 100.1, None], reference=Path("/r")).passed)
+
+    def test_anchor_cache_key_covers_every_dso_not_just_the_tool(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            build = Path(tmp) / "b"
+            (build / "bin").mkdir(parents=True)
+            (build / "bin" / "llama-perplexity").write_bytes(b"tool")
+            (build / "bin" / "libggml-cpu.so").write_bytes(b"kernel v1")
+            first = gates._build_identity(build, "llama-perplexity")
+            (build / "bin" / "libggml-cpu.so").write_bytes(b"kernel v2")
+            self.assertNotEqual(first, gates._build_identity(build, "llama-perplexity"))
+            with self.assertRaises(OSError):
+                gates._build_identity(build, "llama-completion")
+
+    def test_env_identity_ignores_only_the_loader_path(self):
+        self.assertEqual(gates._env_identity({"A": "1", "LD_LIBRARY_PATH": "/x"}),
+                         gates._env_identity({"A": "1", "LD_LIBRARY_PATH": "/y"}))
+        self.assertNotEqual(gates._env_identity({"GGML_IQK": "1"}),
+                            gates._env_identity({"GGML_IQK": "0"}))
+
+
+class TheToolRunnerNeverTreatsAFailureAsOutput(unittest.TestCase):
+    def test_nonzero_exit_and_missing_tool_are_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            rc, out, _err = gates._run_tool(["false"], env={}, log_dir=Path(tmp), label="f")
+            self.assertNotEqual(rc, 0)
+            rc, out, err = gates._run_tool(["/nonexistent/tool"], env={},
+                                           log_dir=Path(tmp), label="g")
+            self.assertIsNone(rc)
+            self.assertEqual(out, "")
+
+    def test_a_completion_tool_that_fails_yields_no_generation(self):
+        """A usage text or crash message with a plausible token count is NOT output."""
+        with tempfile.TemporaryDirectory() as tmp:
+            build = Path(tmp) / "b"
+            (build / "bin").mkdir(parents=True)
+            (build / "bin" / "llama-completion").write_bytes(b"tool")
+            model = Path(tmp) / "m.gguf"
+            model.write_bytes(b"x")
+            kwargs = dict(model=model, threads=1, env={}, cpu_list="0", log_dir=Path(tmp),
+                          cache_dir=None, label="t")
+            with mock.patch.object(gates, "_run_tool", return_value=(
+                    1, "usage text usage text", "number of tokens in prompt = 5000")):
+                self.assertIsNone(gates._completion(build, "p", 8, 64, **kwargs))
+            with mock.patch.object(gates, "_run_tool", return_value=(0, "text", "no count")):
+                self.assertIsNone(gates._completion(build, "p", 8, 64, **kwargs))
+            with mock.patch.object(gates, "_run_tool", return_value=(
+                    0, "generated", "number of tokens in prompt = 5000")):
+                self.assertEqual(gates._completion(build, "p", 8, 64, **kwargs),
+                                 ("generated", 5000))
 
 
 class PrefixTokenAgreementIsASafeFloorCheck(unittest.TestCase):
@@ -1749,39 +1856,65 @@ class PrefixTokenAgreementIsASafeFloorCheck(unittest.TestCase):
         self.assertEqual(first, 2)
         self.assertAlmostEqual(ratio, 2 / 4)
 
-    def test_empty_both_sides_agrees_vacuously(self):
-        ratio, first = gates.prefix_token_agreement("", "")
-        self.assertEqual(ratio, 1.0)
+    def test_empty_both_sides_is_not_agreement(self):
+        ratio, _first = gates.prefix_token_agreement("", "")
+        self.assertEqual(ratio, 0.0)
 
     def test_one_side_empty_disagrees(self):
         ratio, _first = gates.prefix_token_agreement("", "some text")
         self.assertEqual(ratio, 0.0)
 
+    def test_an_early_stop_is_a_divergence_not_a_pass(self):
+        """The first cut divided by the SHORTER output: a candidate that emitted 3 of the
+        anchor's 100 tokens agreed 1.0."""
+        anchor = " ".join(f"w{i}" for i in range(100))
+        ratio, first = gates.prefix_token_agreement("w0 w1 w2", anchor)
+        self.assertAlmostEqual(ratio, 0.03)
+        self.assertEqual(first, 3)
+
 
 class ThePplContractLongCanaryCatchesDegenerateLoops(unittest.TestCase):
-    def test_healthy_generation_passes(self):
-        text = " ".join(f"word{i}" for i in range(gates.PPL_CONTRACT_CANARY_TOKENS))
-        verdict = gates.ppl_contract_long_canary(
-            Path("/candidate"), model=Path("/m.gguf"), prompt="go",
-            env={}, cpu_list="0-47", log_dir=Path("/tmp/x"),
-            _generate=lambda build, prompt, count: text)
-        self.assertTrue(verdict.passed)
+    HEALTHY = " ".join(f"word{i}" for i in range(gates.PPL_CONTRACT_CANARY_TOKENS))
 
-    def test_a_degenerate_repeat_loop_is_refused(self):
-        text = " ".join(["loop"] * gates.PPL_CONTRACT_CANARY_TOKENS)
-        verdict = gates.ppl_contract_long_canary(
-            Path("/candidate"), model=Path("/m.gguf"), prompt="go",
-            env={}, cpu_list="0-47", log_dir=Path("/tmp/x"),
-            _generate=lambda build, prompt, count: text)
+    def _call(self, texts, anchor=True):
+        return gates.ppl_contract_long_canary(
+            Path("/candidate"), model=Path("/m.gguf"), prompt="go", env={},
+            cpu_list="0-47", log_dir=Path("/tmp/x"),
+            anchor_build=Path("/anchor") if anchor else None,
+            _generate=lambda build, prompt, count: texts[Path(build).name])
+
+    def test_healthy_generation_passes(self):
+        self.assertTrue(self._call({"candidate": self.HEALTHY, "anchor": self.HEALTHY}).passed)
+
+    def test_a_degenerate_token_loop_is_refused(self):
+        loop = " ".join(["loop"] * gates.PPL_CONTRACT_CANARY_TOKENS)
+        verdict = self._call({"candidate": loop, "anchor": self.HEALTHY})
         self.assertFalse(verdict.passed)
-        self.assertIn("exact-repeat run", verdict.reason)
+        self.assertIn("longest run", verdict.reason)
+
+    def test_a_repeated_phrase_loop_is_refused(self):
+        """A single-token run length never sees a repeated PHRASE."""
+        phrase = " ".join(["the cat sat on the mat ."] * 200)
+        self.assertFalse(self._call({"candidate": phrase, "anchor": self.HEALTHY}).passed)
+
+    def test_the_bars_are_relative_to_the_anchor(self):
+        phrase = " ".join(["the cat sat on the mat ."] * 200)
+        self.assertTrue(self._call({"candidate": phrase, "anchor": phrase}).passed)
 
     def test_a_truncated_generation_is_refused(self):
-        text = "word " * 10  # far short of the requested canary length
+        self.assertFalse(self._call({"candidate": "word " * 10, "anchor": self.HEALTHY}).passed)
+
+    def test_a_failed_baseline_refuses(self):
+        self.assertFalse(self._call({"candidate": self.HEALTHY, "anchor": None}).passed)
+
+    def test_every_baseline_must_clear(self):
+        phrase = " ".join(["the cat sat on the mat ."] * 200)
         verdict = gates.ppl_contract_long_canary(
-            Path("/candidate"), model=Path("/m.gguf"), prompt="go",
-            env={}, cpu_list="0-47", log_dir=Path("/tmp/x"),
-            _generate=lambda build, prompt, count: text)
+            Path("/candidate"), model=Path("/m.gguf"), prompt="go", env={},
+            cpu_list="0-47", log_dir=Path("/tmp/x"), anchor_build=Path("/anchor"),
+            reference_build=Path("/reference"),
+            _generate=lambda build, prompt, count: {
+                "candidate": phrase, "anchor": self.HEALTHY, "reference": phrase}[Path(build).name])
         self.assertFalse(verdict.passed)
 
     def test_requesting_fewer_than_the_canary_floor_is_refused_by_construction(self):
@@ -1793,42 +1926,84 @@ class ThePplContractLongCanaryCatchesDegenerateLoops(unittest.TestCase):
 
 
 class ThePplContractCoherenceLayerComparesFreshGenerations(unittest.TestCase):
-    def test_full_agreement_on_every_prompt_passes(self):
-        verdict = gates.ppl_contract_coherence(
+    LONG = gates.PPL_CONTRACT_PROD_PROMPT_TOKENS_MIN
+
+    def _call(self, generate, prompts=("prompt one", "prompt two"), reference=None):
+        return gates.ppl_contract_coherence(
             Path("/anchor"), Path("/candidate"), model=Path("/m.gguf"),
-            prompts=("prompt one", "prompt two"), n_predict=64, env={}, cpu_list="0-47",
-            log_dir=Path("/tmp/x"),
-            _generate=lambda build, prompt: "same output every time")
-        self.assertTrue(verdict.passed)
+            prompts=prompts, n_predict=64, env={}, cpu_list="0-47",
+            log_dir=Path("/tmp/x"), reference_build=reference, _generate=generate)
+
+    def test_full_agreement_on_every_prompt_passes(self):
+        self.assertTrue(self._call(lambda b, p: ("same output every time", self.LONG)).passed)
 
     def test_divergent_output_on_one_prompt_refuses(self):
         def generate(build, prompt):
-            if "anchor" in str(build):
-                return "a b c d e"
-            return "a b X d e"
-        verdict = gates.ppl_contract_coherence(
-            Path("/anchor"), Path("/candidate"), model=Path("/m.gguf"),
-            prompts=("only prompt",), n_predict=64, env={}, cpu_list="0-47",
-            log_dir=Path("/tmp/x"), _generate=generate)
-        self.assertFalse(verdict.passed)
+            if "anchor" in str(build) or prompt == "prompt one":
+                return "a b c d e", self.LONG
+            return "a b X d e", self.LONG
+        self.assertFalse(self._call(generate).passed)
 
     def test_a_generation_failure_on_either_build_refuses(self):
-        verdict = gates.ppl_contract_coherence(
-            Path("/anchor"), Path("/candidate"), model=Path("/m.gguf"),
-            prompts=("only prompt",), n_predict=64, env={}, cpu_list="0-47",
-            log_dir=Path("/tmp/x"), _generate=lambda build, prompt: None)
+        self.assertFalse(self._call(lambda b, p: None).passed)
+        self.assertFalse(self._call(
+            lambda b, p: None if "candidate" in str(b) else ("x", self.LONG)).passed)
+
+    def test_a_bare_string_without_a_token_count_refuses(self):
+        self.assertFalse(self._call(lambda b, p: "same output").passed)
+
+    def test_fewer_than_two_prompts_refuses(self):
+        self.assertFalse(self._call(lambda b, p: ("t", self.LONG), prompts=()).passed)
+        self.assertFalse(self._call(lambda b, p: ("t", self.LONG), prompts=("one",)).passed)
+
+    def test_a_short_prompt_is_not_production_length(self):
+        verdict = self._call(lambda b, p: ("same", self.LONG - 1))
         self.assertFalse(verdict.passed)
+        self.assertIn("not production-length", verdict.reason)
 
-    def test_no_prompts_supplied_refuses_rather_than_vacuously_passing(self):
-        verdict = gates.ppl_contract_coherence(
-            Path("/anchor"), Path("/candidate"), model=Path("/m.gguf"),
-            prompts=(), n_predict=64, env={}, cpu_list="0-47",
-            log_dir=Path("/tmp/x"), _generate=lambda build, prompt: "text")
-        self.assertFalse(verdict.passed)
+    def test_the_fixed_reference_may_not_diverge_earlier_than_the_anchor_does(self):
+        base = " ".join(f"w{i}" for i in range(100))
+        drifted = " ".join(f"w{i}" if i < 50 else "z" for i in range(100))
+
+        def generate(build, prompt):
+            return {"anchor": base, "candidate": base, "reference": base}[Path(build).name], self.LONG
+        self.assertTrue(self._call(generate, reference=Path("/reference")).passed)
+
+        def generate2(build, prompt):   # anchor == ref; candidate drifts vs both
+            return {"anchor": base, "candidate": drifted,
+                    "reference": base}[Path(build).name], self.LONG
+        self.assertFalse(self._call(generate2, reference=Path("/reference")).passed)
+
+        def generate3(build, prompt):   # legacy anchor drift vs ref is not a refusal
+            return {"anchor": drifted, "candidate": drifted,
+                    "reference": base}[Path(build).name], self.LONG
+        self.assertTrue(self._call(generate3, reference=Path("/reference")).passed)
 
 
-class ThePplContractOpNmseLayerScopesToServedShapes(unittest.TestCase):
-    def test_filters_to_the_routes_quants_and_served_widths(self):
+class ThePplContractProductionPromptsAreLongAndPinned(unittest.TestCase):
+    def test_two_long_prompts_outside_the_ppl_window(self):
+        if not Path(gates.PPL_CORPUS).is_file():
+            self.skipTest("wikitext2 corpus not present")
+        prompts = gates.ppl_contract_prod_prompts()
+        self.assertGreaterEqual(len(prompts), gates.PPL_CONTRACT_PROD_PROMPT_COUNT_MIN)
+        for prompt in prompts:
+            # ~4.5 chars/token on wikitext: >= 4096 tokens needs well over 18 KB
+            self.assertGreater(len(prompt), 20_000)
+        window_bytes = gates.PPL_CHUNKS * gates.PPL_CTX * 6   # generous upper bound
+        for offset, _n in gates.PPL_CONTRACT_PROD_PROMPT_SLICES:
+            self.assertGreater(offset, window_bytes)
+        self.assertGreater(len(gates.ppl_contract_canary_prompt()), 500)
+
+    def test_a_moved_corpus_refuses(self):
+        with mock.patch.object(gates, "PPL_CORPUS_SHA256", "0" * 64):
+            if not Path(gates.PPL_CORPUS).is_file():
+                self.skipTest("wikitext2 corpus not present")
+            with self.assertRaises(ValueError):
+                gates.ppl_contract_prod_prompts()
+
+
+class ThePplContractOpNmseLayerCoversEveryType(unittest.TestCase):
+    def test_filters_to_served_widths_and_never_to_a_type(self):
         calls = []
 
         def fake_op_correctness(build_dir, *, op, backend, resolved_recipe, params_filter):
@@ -1836,26 +2011,81 @@ class ThePplContractOpNmseLayerScopesToServedShapes(unittest.TestCase):
             return gates.Verdict("correctness", True)
 
         verdict = gates.ppl_contract_op_nmse(
-            Path("/candidate"), resolved_recipe=None, quants=("IQ3_S",),
+            Path("/candidate"), resolved_recipe=None, route_name="iqk_type_whitelist",
             ops=("MUL_MAT",), _op_correctness=fake_op_correctness)
         self.assertTrue(verdict.passed)
         self.assertEqual(len(calls), 1)
         op, params_filter = calls[0]
         self.assertEqual(op, "MUL_MAT")
-        self.assertIn("iq3_s", params_filter)
+        self.assertNotIn("type_a", params_filter)
+        rx = re.compile(params_filter)
         for width in gates.PPL_CONTRACT_SERVED_WIDTHS:
-            self.assertIn(str(width), params_filter)
+            self.assertTrue(rx.search(f"type_a=iq3_s,type_b=f32,m=16,n={width},k=256"))
+            self.assertTrue(rx.search(
+                f"type_a=q6_K,type_b=f32,n_mats=4,n_used=2,b=0,m=512,n={width},k=256"))
+        for other in ("n=16", "n=32", "n=129"):
+            self.assertIsNone(rx.search(f"type_a=q4_0,type_b=f32,m=16,{other},k=256"))
+        self.assertIsNone(rx.search("type_a=q4_0,n_mats=4,n_used=1,b=0,m=512,n=17,k=256"))
 
     def test_a_failing_shape_refuses_without_running_the_remaining_ops(self):
         calls = []
 
         def fake_op_correctness(build_dir, *, op, backend, resolved_recipe, params_filter):
             calls.append(op)
-            return gates.Verdict("correctness", op == "MUL_MAT",
-                                 "served-shape case failed" if op != "MUL_MAT" else "")
+            return gates.Verdict("correctness", op != "MUL_MAT",
+                                 "served-shape case failed" if op == "MUL_MAT" else "")
 
         verdict = gates.ppl_contract_op_nmse(
-            Path("/candidate"), resolved_recipe=None, quants=("IQ4_NL",),
-            ops=("MUL_MAT", "MUL_MAT_ID"), _op_correctness=fake_op_correctness)
+            Path("/candidate"), resolved_recipe=None, ops=("MUL_MAT", "MUL_MAT_ID"),
+            _op_correctness=fake_op_correctness)
         self.assertFalse(verdict.passed)
-        self.assertEqual(calls, ["MUL_MAT", "MUL_MAT_ID"])
+        self.assertEqual(calls, ["MUL_MAT"])
+
+    def test_a_route_no_op_oracle_reaches_is_refused(self):
+        verdict = gates.ppl_contract_op_nmse(
+            Path("/candidate"), resolved_recipe=None, route_name="cpu_repack_mmid",
+            _op_correctness=lambda *a, **k: gates.Verdict("correctness", True))
+        self.assertFalse(verdict.passed)
+        self.assertIn("no op-level oracle", verdict.reason)
+
+
+class TheFoldRequiresTheBundleQualityGate(unittest.TestCase):
+    def test_a_ledgered_keep_or_a_ppl_only_path_requires_it(self):
+        self.assertTrue(gates.ppl_contract_fold_required(["m1", "m2"], [], {"m2"}))
+        self.assertTrue(gates.ppl_contract_fold_required(
+            [], ["ggml/src/ggml-cpu/iqk/iqk_gemm_iquants.cpp"], set()))
+        self.assertTrue(gates.ppl_contract_fold_required(
+            [], ["ggml/src/ggml-cpu/repack.cpp"], set()))
+
+    def test_shared_paths_alone_do_not_stall_bit_exact_folds(self):
+        self.assertFalse(gates.ppl_contract_fold_required(
+            ["m1"], ["ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp",
+                     "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp"], set()))
+
+    def test_an_unreadable_ledger_fails_closed_on_any_ppl_path(self):
+        self.assertTrue(gates.ppl_contract_fold_required(
+            ["m1"], ["ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp"], None))
+        self.assertFalse(gates.ppl_contract_fold_required(
+            ["m1"], ["ggml/src/ggml-cpu/ops.cpp"], None))
+
+    def test_ledger_round_trip_and_corruption(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Path(tmp)
+            self.assertEqual(gates.ppl_contract_ledger_read(store), set())
+            gates.ppl_contract_ledger_add(store, "mech-a")
+            gates.ppl_contract_ledger_add(store, "mech-a")
+            gates.ppl_contract_ledger_add(store, "mech-b")
+            self.assertEqual(gates.ppl_contract_ledger_read(store), {"mech-a", "mech-b"})
+            (store / gates.PPL_CONTRACT_LEDGER).write_text("{not json", encoding="utf-8")
+            self.assertIsNone(gates.ppl_contract_ledger_read(store))
+            with self.assertRaises(ValueError):
+                gates.ppl_contract_ledger_add(store, "mech-c")
+
+    def test_the_run_loop_wires_the_fold_check_before_promotion(self):
+        source = (Path(__file__).parent / "run.py").read_text(encoding="utf-8")
+        fold = source.index("quality = ppl_contract_fold_check(head)")
+        promote = source.index('cor_commit[0] = plan["new_champion_of_record"]')
+        self.assertLess(fold, promote)
+        self.assertIn("gates.ppl_contract_ledger_add(args.store, hypothesis.mechanism_id)",
+                      source)
+        self.assertIn("reference_build=gates.production_cpu_reference_build()", source)

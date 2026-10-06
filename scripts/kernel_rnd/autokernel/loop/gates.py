@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import hashlib
 import json
+import os
 import re
 from typing import Callable
 import subprocess
@@ -472,6 +473,12 @@ class CpuSourceRoute:
     #: `__aarch64__` branch of the same file) -- this field only disambiguates
     #: occurrences the fence cannot tell apart.
     body_duplicates: tuple[str, ...] = ()
+    #: As `body_duplicates`, but the FIRST occurrence is admitted. Needed where the
+    #: duplicate is a `#ifdef HAVE_FANCY_SIMD` / `#else` pair: iqk_config.h defines
+    #: HAVE_FANCY_SIMD whenever AVX512F/VNNI/VL/BW/DQ are on, which GGML_NATIVE=ON gives
+    #: on this EPYC 9655 host -- the `#if` arm is the compiled one and the `#else` arm is
+    #: dead code here (review 2026-10-06; `z_HAVE_FANCY_SIMD` arms are the opposite).
+    body_duplicates_first: tuple[str, ...] = ()
 
 
 CPU_SOURCE_ROUTES = (
@@ -623,8 +630,9 @@ CPU_SOURCE_ROUTES = (
     # Q6_K/IQ4_XS dequantizers (seed 6 widening): DequantizerQ6K_AVX2's own kernel body
     # (mul_mat_qY_K_q8_2_X4_T, a DIFFERENT template than Q4_K/Q5_K's mul_mat_qX_K_q8_2_X4_T,
     # so this route cannot collide with the existing Q4_K/Q5_K ad-hoc admission) and
-    # DequantizerIQ4XS (also defined under `#ifdef HAVE_FANCY_SIMD`/`#else` -- same
-    # disambiguation as IndexHelperIQ3S above, last occurrence = the compiled plain arm).
+    # DequantizerIQ4XS (also defined under `#ifdef HAVE_FANCY_SIMD`/`#else`; UNLIKE
+    # IndexHelperIQ3S's `z_` sentinel this is the REAL macro, defined on this AVX512 host,
+    # so the FIRST (fancy) occurrence is the compiled one -- review 2026-10-06).
     CpuSourceRoute(
         route="iqk_kquants_q6_iq4xs_dequant",
         path="ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp",
@@ -636,12 +644,12 @@ CPU_SOURCE_ROUTES = (
                  "static void mul_mat_qY_K_q8_2_X4_T(int n, const void * vx, size_t bx, const DataInfo& info, int nrc_x) {"),
                 ("DequantizerIQ4XS",
                  "struct DequantizerIQ4XS final : public BaseDequantizer<block_iq4_xs> {")),
-        body_duplicates=("DequantizerIQ4XS",),
+        body_duplicates_first=("DequantizerIQ4XS",),
         ops=("MUL_MAT", "MUL_MAT_ID"),
         new_helpers=True,
         numerics="ppl_contract",
         admitted_text=("hunks inside the DequantizerQ6K_AVX2 struct, its mul_mat_qY_K_q8_2_X4_T "
-                       "kernel body, or the DequantizerIQ4XS struct (x86_64 plain-AVX2 arm only), "
+                       "kernel body, or the DequantizerIQ4XS struct (x86_64 HAVE_FANCY_SIMD arm only), "
                        "plus new static helpers; Q4Bits_AVX2, the Q4_K/Q5_K dot route, every other "
                        "dequantizer and the aarch64 arm unchanged")),
     # iqk_set_kernels_kquants: the type-dispatch switch Q6_K/IQ4_XS admission actually
@@ -916,6 +924,18 @@ CPU_SOURCE_ROUTES = (
                        "only once test-backend-ops carries the case set; until then both "
                        "record SKIP and are not gates")),
 )
+# Numerics contracts are a closed set and mutually exclusive (review 2026-10-06): a
+# ppl_contract route is never judged by greedy model identity and vice versa. Checked
+# at import so a mis-declared route can never reach a running loop.
+for _route in CPU_SOURCE_ROUTES:
+    if _route.numerics not in ("bit_exact", "ppl_contract"):
+        raise AssertionError(f"route {_route.route}: unknown numerics {_route.numerics!r}")
+    if _route.numerics == "ppl_contract" and _route.model_identity:
+        raise AssertionError(f"route {_route.route}: ppl_contract and model_identity are "
+                             "mutually exclusive")
+    if set(_route.body_duplicates) & set(_route.body_duplicates_first):
+        raise AssertionError(f"route {_route.route}: a label cannot pick both occurrences")
+del _route
 CPU_SOURCE_ROUTE_PATHS = tuple(sorted({route.path for route in CPU_SOURCE_ROUTES}))
 
 
@@ -1066,7 +1086,12 @@ def _cpu_route_bounds(text: str, side: str, route: CpuSourceRoute):
     regions, headers = [], []
     for label, prefix in route.bodies:
         hits = [i + 1 for i in range(lo - 1, hi) if lines[i].startswith(prefix)]
-        if label in route.body_duplicates:
+        if label in route.body_duplicates_first:
+            if not hits:
+                return (f"{side}: marker `{prefix.strip()}` occurs 0 times inside the "
+                        f"admitted window (the {label} boundary needs at least one)")
+            start = hits[0]
+        elif label in route.body_duplicates:
             if not hits:
                 return (f"{side}: marker `{prefix.strip()}` occurs 0 times inside the "
                         f"admitted window (the {label} boundary needs at least one)")
@@ -2366,55 +2391,162 @@ def run_all(*checks: "Callable[[], Verdict]") -> tuple[bool, list[Verdict]]:
 # The operator's instruction, verbatim: design this "with utmost care to not introduce
 # garbage-generating changes"; acceptance is LAYERED, every layer REQUIRED, none alone
 # sufficient, FAIL CLOSED on any layer that is missing or errors:
-#   (a) op-level NMSE vs the independent reference, on the EXACT served shapes (decode
-#       N=1, verify widths 2-5), tight threshold;
-#   (b) wikitext2 |delta ppl| <= 0.5% vs the anchor (32x512 chunks);
-#   (c) coherence: greedy token agreement vs the anchor on PRODUCTION-length prompts
-#       (not only the short frozen prompt), floor 0.98;
-#   (d) a long-generation canary (>=1024 tokens): no pathological repetition/drift.
-# Layer (e) -- "never folds on bench evidence alone" -- is enforced by WIRING, not a
-# fifth check here: `ppl_contract_gate` is called as a `route_references` entry in
-# run.py, i.e. a BLOCKING pre-keep check exactly like every other route reference. A
-# failing layer refuses the keep before `pool.advance_champion` runs, so there is no
-# path from a ppl_contract route to a champion commit on bench evidence alone. Bit-exact
-# routes never call anything in this section.
+#   (a) op-level NMSE vs the independent reference, on the served widths (decode N=1,
+#       verify widths 2-5), over EVERY quant type test-backend-ops carries;
+#   (b) wikitext2 |delta ppl| <= 0.5% vs the anchor (32x512 chunks), AND no cumulative
+#       drift beyond max(0.5%, the anchor's own drift) vs a FIXED reference build;
+#   (c) greedy token agreement >= 0.98 on >= 2 PRODUCTION-length prompts (>= 4096
+#       prompt tokens each, enforced from the tool's own token count), vs the anchor
+#       and -- non-regressing -- vs the fixed reference;
+#   (d) a >= 1024-token canary: repetition (distinct-4gram ratio, longest repeat run)
+#       no worse than the anchor's or the fixed reference's by more than a set margin.
+# Layer (e) -- "never folds on bench evidence alone" -- is enforced by WIRING: the gate
+# is a BLOCKING `route_references` entry in run.py (pre-keep), and the serving-gate fold
+# re-runs layers (a)-(d) on the whole bundle (`ppl_contract_bundle_gate`) before the
+# champion of record may advance. Bit-exact routes never call anything in this section.
 #
-# HONEST LIMITATION on layer (a): no instrument in this tree reports a literal NMSE
-# float for IQ3_S/IQ4_NL/Q6_K/IQ4_XS (`cpu_quant_reference.py`'s scalar decode fixture
-# supports only Q4_K/Q5_K/Q8_0/float types; extending it needs a new C++ probe, out of
-# scope for a branch-only, no-build session). Layer (a) is therefore implemented as
-# `test-backend-ops`'s own per-case numerical acceptance -- which IS an independent,
-# already-enforced bound against ggml's native `use_ref=true` reference -- filtered to
-# the route's quant type(s) AND the served-shape widths, rather than its broader default
-# shape sweep. This is real and testable; it is not the same artifact as a bare float.
+# REVIEW 2026-10-06 (fixes over the first cut): every tool run checks its exit status
+# (a usage/crash text used to be compared as "output" and agreed with itself); the
+# generator is `llama-completion -no-cnv` (this tree's `llama-cli` is the chat REPL and
+# ignores -no-cnv); prompt echo/logs are excluded (stdout only, --no-display-prompt);
+# agreement divides by the LONGER output (an early-EOS candidate no longer passes); the
+# anchor-only comparison is backed by a fixed reference because the anchor ADVANCES on
+# every keep (0.5% per keep would otherwise compound without bound); caches are keyed by
+# content (every DSO + tool + model identity + corpus + every run parameter + env) and
+# live in the loop store, never in a build dir (the fixed reference is the frozen
+# production kernel store).
+#
+# HONEST LIMITATIONS (left for the lane owner; each fails CLOSED, never open):
+#  * layer (a) is test-backend-ops' own per-case bound (MUL_MAT/MUL_MAT_ID max NMSE 5e-4,
+#    the generic quantized-matmul tolerance) on its generic shapes (k=256, m=16/512) at
+#    the served widths -- not a literal NMSE float on the model's served (m, k), which
+#    needs a served-shape case set (`test-backend-ops --test-file`) and a tighter bound;
+#  * test-backend-ops never allocates the CPU_REPACK extra buffer, so no op oracle
+#    reaches `repack.cpp`: routes in PPL_CONTRACT_NO_OP_ORACLE are refused at layer (a);
+#  * the anchor generations and candidate builds must carry PPL_CONTRACT_TOOL_TARGETS;
+#    a build without them fails layers (b)-(d) with a named reason.
 PPL_CORPUS = "/mnt/raid0/llm/data/wikitext2_test.txt"
-PPL_CHUNKS, PPL_CTX, PPL_REL_BAR = 32, 512, 0.005
+#: The corpus is not in git: pin it, and refuse (not silently re-baseline) on a change.
+PPL_CORPUS_SHA256 = "aca2f46735043bcfd0a44eca981d04627b9cdf74c4c9a04bf0856d04066f58fc"
+PPL_CHUNKS, PPL_CTX, PPL_BATCH, PPL_REL_BAR = 32, 512, 512, 0.005
 #: Layer (a): the activation-width ("n") values a decode step (1) and a speculative
-#: verify step (2-5) actually serve; test-backend-ops case strings carry `n=<int>`.
+#: verify step (2-5) actually serve; test-backend-ops case strings carry `,n=<int>,`.
 PPL_CONTRACT_SERVED_WIDTHS = (1, 2, 3, 4, 5)
-#: Layer (c): the existing T0 coherence floor (campaign.py:3054), reused verbatim --
-#: this is not a new number, only a new case (production-length prompts) it applies to.
+#: Layer (a): routes whose window no test-backend-ops case can reach (see above).
+PPL_CONTRACT_NO_OP_ORACLE = frozenset({"cpu_repack_mmid"})
+#: Layer (c): the existing T0 coherence floor (campaign.py:3054), reused verbatim.
 PPL_CONTRACT_AGREEMENT_FLOOR = 0.98
-#: Layer (c): "production-length", not the ~100-token frozen-request probe.
-PPL_CONTRACT_PROD_PROMPT_TOKENS_MIN = 1024
-#: Layer (d): canary length and the longest exact-repeated generated-token run
-#: admitted before the candidate is judged to have fallen into a degenerate loop a
-#: short probe would never see.
+#: Layer (c): "production-length" -- the tool's own prompt token count must reach this.
+PPL_CONTRACT_PROD_PROMPT_TOKENS_MIN = 4096
+PPL_CONTRACT_PROD_PROMPT_COUNT_MIN = 2
+#: Layer (c): (byte offset, max chars) slices of PPL_CORPUS. Every slice lies far past
+#: the ppl window (32x512 tokens ~ the first 75 KB), so (b) and (c) never share text;
+#: ~26 KB of wikitext is ~5.5-6.5k tokens on the served tokenizers (enforced >= 4096).
+PPL_CONTRACT_PROD_PROMPT_SLICES = ((400_000, 26_000), (800_000, 26_000))
+#: Layer (c): greedy tokens generated per prompt; the floor admits a divergence only in
+#: the last 2% of them (~10 tokens).
+PPL_CONTRACT_PROD_GEN_TOKENS = 512
+PPL_CONTRACT_GEN_CTX = 12288
+#: Layer (d): canary length, prompt slice, context, and the repetition bars.
 PPL_CONTRACT_CANARY_TOKENS = 1024
+PPL_CONTRACT_CANARY_SLICE = (1_100_000, 1_500)
+PPL_CONTRACT_CANARY_CTX = 4096
 PPL_CONTRACT_CANARY_MAX_REPEAT_RUN = 32
+PPL_CONTRACT_CANARY_DISTINCT4_DROP = 0.10
+#: Tools layers (b)-(d) run; a candidate build of a ppl_contract route adds them.
+PPL_CONTRACT_TOOL_TARGETS = ("llama-perplexity", "llama-completion")
+#: The FIXED reference for cumulative drift: the frozen production CPU kernel store
+#: (a symlink to `<store>/builds/cpu-<date>-<sha>/bin`; its parent is the "build").
+PRODUCTION_CPU_KERNEL = "/mnt/raid0/llm/kernels/production/cpu"
 
 
-def _run_logged(argv: list[str], *, env: dict, log_dir: Path, label: str,
-               timeout: int = 1800) -> str:
-    """Run `argv`, persist combined stdout+stderr under `log_dir/<label>.log`, return it."""
-    log_dir.mkdir(parents=True, exist_ok=True)
-    done = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, env=env)
-    out = done.stdout + done.stderr
+def production_cpu_reference_build() -> Path:
+    """The build directory (parent of `bin/`) behind the production CPU kernel store."""
+    return Path(os.path.realpath(PRODUCTION_CPU_KERNEL)).parent
+
+
+def ppl_contract_paths() -> frozenset[str]:
+    """Every source path a ppl_contract route can edit (for the fold-time bundle check)."""
+    return frozenset(route.path for route in CPU_SOURCE_ROUTES
+                     if route.numerics == "ppl_contract")
+
+
+#: Ledger of mechanism ids a ppl_contract route admitted (written BEFORE its layers run,
+#: so a crash between keep and fold can never lose the mark). The fold reads it against
+#: `Bundle.keeps` (mechanism ids) to decide whether the bundle needs layers (a)-(d).
+PPL_CONTRACT_LEDGER = Path("ppl_contract") / "admitted_mechanisms.json"
+
+
+def ppl_contract_only_paths() -> frozenset[str]:
+    """Paths that ONLY a ppl_contract route can edit (no bit-exact route, no ad-hoc rule):
+    any change to them in a bundle is ppl_contract by construction."""
+    others = {route.path for route in CPU_SOURCE_ROUTES if route.numerics != "ppl_contract"}
+    others |= {"ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp",
+               "ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp"}
+    return ppl_contract_paths() - others
+
+
+def ppl_contract_ledger_read(store: Path) -> "set[str] | None":
+    """Admitted mechanism ids; empty when no ledger exists; None when it is unreadable."""
+    path = Path(store) / PPL_CONTRACT_LEDGER
+    if not path.exists():
+        return set()
     try:
-        (log_dir / f"{label}.log").write_text(out[-200_000:], encoding="utf-8")
+        body = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(body, list) or not all(isinstance(x, str) for x in body):
+            return None
+        return set(body)
+    except (OSError, ValueError):
+        return None
+
+
+def ppl_contract_ledger_add(store: Path, mechanism_id: str) -> None:
+    """Record a ppl_contract admission. Raises on failure: an unrecorded admission could
+    later fold without its bundle check, so the gate must not proceed without it."""
+    path = Path(store) / PPL_CONTRACT_LEDGER
+    path.parent.mkdir(parents=True, exist_ok=True)
+    current = ppl_contract_ledger_read(store)
+    if current is None:
+        raise ValueError(f"{path} is unreadable; refusing to admit a ppl_contract candidate")
+    if mechanism_id in current:
+        return
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    tmp.write_text(json.dumps(sorted(current | {mechanism_id})), encoding="utf-8")
+    os.replace(tmp, path)
+
+
+def ppl_contract_fold_required(keeps, changed_paths, ledger: "set[str] | None") -> bool:
+    """Does a champion-of-record fold of this bundle need `ppl_contract_bundle_gate`?
+
+    Yes when a bundled keep was admitted under a ppl_contract route, when the bundle
+    touches a path only ppl_contract routes can edit, or -- fail closed -- when the
+    ledger is unreadable and the bundle touches ANY ppl_contract path."""
+    changed = set(changed_paths)
+    if ledger is None:
+        return bool(changed & ppl_contract_paths())
+    return bool(set(keeps) & ledger) or bool(changed & ppl_contract_only_paths())
+
+
+def _run_tool(argv: list[str], *, env: dict, log_dir: Path, label: str,
+              timeout: int = 3600) -> tuple["int | None", str, str]:
+    """Run `argv` with stdin closed; persist stdout/stderr; return (rc, stdout, stderr).
+
+    rc is None when the tool could not run or timed out. Callers MUST treat any rc != 0
+    as a failed layer: a usage text or a crash message is never an observation."""
+    log_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        done = subprocess.run(argv, capture_output=True, text=True, timeout=timeout,
+                              env=env, stdin=subprocess.DEVNULL)
+        rc, out, err = done.returncode, done.stdout, done.stderr
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        rc, out, err = None, "", f"{type(exc).__name__}: {exc}"
+    try:
+        (log_dir / f"{label}.log").write_text(
+            f"argv: {argv!r}\nrc: {rc!r}\n--- stdout ---\n{out[-100_000:]}\n"
+            f"--- stderr ---\n{err[-100_000:]}", encoding="utf-8")
     except OSError:
         pass
-    return out
+    return rc, out, err
 
 
 def _file_sha256(path: Path) -> str:
@@ -2425,92 +2557,177 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _cached_anchor_ppl(anchor_build: Path, model: Path,
-                       run: "Callable[[Path], float | None]") -> float | None:
-    """One wikitext2 anchor calibration per (anchor binary, model, corpus) sha256 triple;
-    every later candidate in the epoch reuses it instead of re-measuring ~2-4 CPU-minutes.
-    A cache miss or a hashing failure (missing file) always falls back to measuring."""
-    cache_dir = Path(anchor_build) / "ak_ppl_cache"
-    cache_file = cache_dir / "anchor_ppl.json"
+def _build_identity(build: Path, tool: str) -> str:
+    """Content identity of what a `tool` run on `build` executes: the tool executable
+    and EVERY shared object in `build/bin` (the kernel lives in libggml-cpu.so; the tool
+    executable is often byte-identical across builds). Raises OSError when the tool is
+    missing -- a cache key must never be computed for a run that cannot happen."""
+    bin_dir = Path(build) / "bin"
+    exe = bin_dir / tool
+    if not exe.is_file():
+        raise OSError(f"{exe} does not exist (the build lacks {tool!r}; "
+                      f"add PPL_CONTRACT_TOOL_TARGETS to its build targets)")
+    parts = [f"{tool}:{_file_sha256(exe)}"]
+    for lib in sorted(bin_dir.glob("lib*.so*")):
+        if lib.is_file():
+            parts.append(f"{lib.name}:{_file_sha256(lib)}")
+    return hashlib.sha256("\n".join(parts).encode()).hexdigest()
+
+
+def _model_identity(model: Path) -> str:
+    """Path + size + mtime of the (immutable, often >100 GB) GGUF; re-hashing it per
+    candidate would cost minutes for no added safety."""
+    real = Path(os.path.realpath(model))
+    stat = real.stat()
+    return f"{real}:{stat.st_size}:{stat.st_mtime_ns}"
+
+
+def _env_identity(env: dict) -> str:
+    """Every launch variable except the loader path (which is set per build)."""
+    items = sorted((k, v) for k, v in (env or {}).items() if k != "LD_LIBRARY_PATH")
+    return hashlib.sha256(json.dumps(items).encode()).hexdigest()
+
+
+def _cache_get(cache_dir: "Path | None", key: str):
+    if cache_dir is None:
+        return None
     try:
-        key = "-".join((_file_sha256(Path(anchor_build) / "bin" / "llama-perplexity"),
-                        _file_sha256(Path(model)), _file_sha256(Path(PPL_CORPUS))))
+        body = json.loads((Path(cache_dir) / f"{key}.json").read_text(encoding="utf-8"))
+        return body.get("value") if body.get("key") == key else None
+    except (OSError, ValueError):
+        return None
+
+
+def _cache_put(cache_dir: "Path | None", key: str, value, meta: dict) -> None:
+    if cache_dir is None:
+        return
+    try:
+        Path(cache_dir).mkdir(parents=True, exist_ok=True)
+        tmp = Path(cache_dir) / f".{key}.{os.getpid()}.tmp"
+        tmp.write_text(json.dumps({"key": key, "value": value, "meta": meta}),
+                       encoding="utf-8")
+        os.replace(tmp, Path(cache_dir) / f"{key}.json")
     except OSError:
-        key = None
-    if key is not None and cache_file.is_file():
-        try:
-            cached = json.loads(cache_file.read_text(encoding="utf-8"))
-            if cached.get("key") == key and isinstance(cached.get("ppl"), (int, float)):
-                return float(cached["ppl"])
-        except (OSError, ValueError):
-            pass
-    ppl = run(Path(anchor_build))
-    if ppl is not None and key is not None:
-        try:
-            cache_dir.mkdir(parents=True, exist_ok=True)
-            cache_file.write_text(json.dumps({"key": key, "ppl": ppl}), encoding="utf-8")
-        except OSError:
-            pass
-    return ppl
+        pass
+
+
+def _key(**fields) -> str:
+    return hashlib.sha256(json.dumps(fields, sort_keys=True).encode()).hexdigest()
+
+
+def _corpus_text() -> str:
+    """The pinned corpus, or ValueError (a moved corpus must not re-baseline silently)."""
+    data = Path(PPL_CORPUS).read_bytes()
+    if hashlib.sha256(data).hexdigest() != PPL_CORPUS_SHA256:
+        raise ValueError(f"{PPL_CORPUS} sha256 differs from the pinned PPL_CORPUS_SHA256")
+    return data.decode("utf-8", errors="replace")
+
+
+def _corpus_slice(text: str, offset: int, length: int) -> str:
+    """`length` chars from the first line start at/after `offset`, cut at a line end."""
+    start = text.find("\n", offset)
+    start = offset if start < 0 else start + 1
+    chunk = text[start:start + length]
+    cut = chunk.rfind("\n")
+    return chunk[:cut + 1] if cut > 0 else chunk
+
+
+def ppl_contract_prod_prompts() -> tuple[str, ...]:
+    """Layer (c)'s production-length prompts: deterministic, pinned corpus slices."""
+    text = _corpus_text()
+    return tuple(_corpus_slice(text, off, n) for off, n in PPL_CONTRACT_PROD_PROMPT_SLICES)
+
+
+def ppl_contract_canary_prompt() -> str:
+    text = _corpus_text()
+    return _corpus_slice(text, *PPL_CONTRACT_CANARY_SLICE)
 
 
 def ppl_wikitext2(anchor_build: Path, candidate_build: Path, *, model: Path, threads: int,
                   env: dict, cpu_list: str, log_dir: Path,
+                  reference_build: "Path | None" = None,
+                  cache_dir: "Path | None" = None,
                   _run_binary: "Callable[[Path], float | None] | None" = None) -> Verdict:
-    """Layer (b): anchor-vs-candidate wikitext2 perplexity under the lane's CPU claim.
+    """Layer (b): wikitext2 perplexity under the lane's CPU claim.
 
-    Pass iff |ppl_c - ppl_a| / ppl_a <= PPL_REL_BAR. `_run_binary` is a test seam (and an
-    escape hatch for a build without `llama-perplexity`'s exact CLI): given, it REPLACES
-    the subprocess entirely and must return the parsed PPL or None."""
+    Pass iff |ppl_c - ppl_a| / ppl_a <= PPL_REL_BAR (marginal) AND, when a fixed
+    `reference_build` is given, |ppl_c - ppl_r| / ppl_r <= max(PPL_REL_BAR,
+    |ppl_a - ppl_r| / ppl_r) (no cumulative growth). `ppl_contract_gate` always passes
+    one. `_run_binary(build) -> ppl|None` is a test seam that REPLACES the subprocess."""
     def run(build: Path) -> float | None:
         if _run_binary is not None:
             return _run_binary(build)
+        key = _key(kind="ppl", build=_build_identity(build, "llama-perplexity"),
+                   model=_model_identity(model), corpus=PPL_CORPUS_SHA256,
+                   chunks=PPL_CHUNKS, ctx=PPL_CTX, batch=PPL_BATCH, threads=threads,
+                   cpu_list=cpu_list, env=_env_identity(env))
+        cached = _cache_get(cache_dir, key)
+        if isinstance(cached, (int, float)):
+            return float(cached)
+        if hashlib.sha256(Path(PPL_CORPUS).read_bytes()).hexdigest() != PPL_CORPUS_SHA256:
+            raise ValueError(f"{PPL_CORPUS} sha256 differs from PPL_CORPUS_SHA256")
         argv = ["taskset", "-c", cpu_list, "numactl", "--interleave=all",
-                str(build / "bin" / "llama-perplexity"), "-m", str(model), "-f", PPL_CORPUS,
-                "-c", str(PPL_CTX), "--chunks", str(PPL_CHUNKS), "-t", str(threads),
-                "-b", "512", "--no-mmap"]
-        out = _run_logged(argv, env={**env, "LD_LIBRARY_PATH": str(build / "bin")},
-                          log_dir=log_dir, label=f"ppl_{Path(build).name}")
-        found = re.search(r"Final estimate: PPL = ([0-9.]+)", out)
-        return float(found.group(1)) if found else None
-    ppl_a = _cached_anchor_ppl(anchor_build, model, run)
-    ppl_c = run(candidate_build)
-    if ppl_a is None or ppl_c is None:
+                str(Path(build) / "bin" / "llama-perplexity"), "-m", str(model),
+                "-f", PPL_CORPUS, "-c", str(PPL_CTX), "--chunks", str(PPL_CHUNKS),
+                "-t", str(threads), "-b", str(PPL_BATCH), "--no-mmap"]
+        rc, out, err = _run_tool(argv, env={**env, "LD_LIBRARY_PATH": str(Path(build) / "bin")},
+                                 log_dir=log_dir, label=f"ppl_{Path(build).name}")
+        found = re.search(r"Final estimate: PPL = ([0-9.]+)", out + err)
+        if rc != 0 or not found:
+            return None
+        ppl = float(found.group(1))
+        if not ppl > 0.0:
+            return None
+        _cache_put(cache_dir, key, ppl, {"build": str(build), "model": str(model)})
+        return ppl
+
+    ppl_a = run(anchor_build)
+    ppl_c = run(candidate_build) if ppl_a is not None else None
+    ppl_r = (run(reference_build) if reference_build is not None and ppl_c is not None
+             else None)
+    if ppl_a is None or ppl_c is None or (reference_build is not None and ppl_r is None):
         return Verdict("ppl_wikitext2", False,
-                       "perplexity run did not report a final estimate "
-                       f"(anchor={ppl_a!r} candidate={ppl_c!r})")
+                       "perplexity run failed or reported no final estimate "
+                       f"(anchor={ppl_a!r} candidate={ppl_c!r} reference={ppl_r!r})")
     rel = abs(ppl_c - ppl_a) / ppl_a
-    return Verdict("ppl_wikitext2", rel <= PPL_REL_BAR,
-                   f"ppl anchor {ppl_a:.4f} candidate {ppl_c:.4f} rel {rel:.5f} "
-                   f"(bar {PPL_REL_BAR})")
+    reason = f"ppl anchor {ppl_a:.4f} candidate {ppl_c:.4f} rel {rel:.5f} (bar {PPL_REL_BAR})"
+    passed = rel <= PPL_REL_BAR
+    if ppl_r is not None:
+        rel_r = abs(ppl_c - ppl_r) / ppl_r
+        allowed = max(PPL_REL_BAR, abs(ppl_a - ppl_r) / ppl_r)
+        passed = passed and rel_r <= allowed
+        reason += (f"; vs fixed reference {ppl_r:.4f} rel {rel_r:.5f} "
+                   f"(allowed {allowed:.5f})")
+    return Verdict("ppl_wikitext2", passed, reason)
 
 
-def ppl_contract_op_nmse(candidate_build: Path, *, resolved_recipe, quants: tuple[str, ...],
+def ppl_contract_op_nmse(candidate_build: Path, *, resolved_recipe,
+                         route_name: "str | None" = None,
                          ops: tuple[str, ...] = ("MUL_MAT", "MUL_MAT_ID"),
                          _op_correctness=None) -> Verdict:
-    """Layer (a): op-level correctness vs the independent native reference, on the EXACT
-    served shapes (decode N=1, verify widths 2-5) for the quant(s) this route touches.
-
-    See the module-level note above for why this is test-backend-ops's own per-case
-    bound (already independent and already enforced) rather than a bare NMSE float.
-    `_op_correctness` is a test seam: given, it REPLACES `op_correctness` and must have
-    the same signature/return type.
-    """
+    """Layer (a): test-backend-ops vs the independent `use_ref=true` reference at the
+    served widths (decode N=1, verify 2-5), for EVERY quant type the suite carries --
+    never narrowed to the route's witness quants: a whitelist / kernel-selection edit
+    can reroute any type, so the oracle must cover any type. `_op_correctness` is a test
+    seam with `op_correctness`'s signature."""
+    if route_name in PPL_CONTRACT_NO_OP_ORACLE:
+        return Verdict("ppl_contract_nmse", False,
+                       f"route {route_name} has no op-level oracle: test-backend-ops never "
+                       "allocates the CPU_REPACK extra buffer, so no case reaches its window")
     run = _op_correctness or op_correctness
-    type_pattern = "|".join(re.escape(q.lower()) for q in quants)
     width_pattern = "|".join(str(w) for w in PPL_CONTRACT_SERVED_WIDTHS)
-    params_filter = rf"type_a=({type_pattern}).*n=({width_pattern})\b"
-    verdicts = []
+    params_filter = rf"(^|,)n=({width_pattern})(,|$)"
     for op in ops:
         verdict = run(candidate_build, op=op, backend="CPU", resolved_recipe=resolved_recipe,
                       params_filter=params_filter)
-        verdicts.append(verdict)
-        if not verdict.passed:
+        if verdict is None or not verdict.passed:
             return Verdict("ppl_contract_nmse", False,
-                           f"{op} served-shape suite ({params_filter}) refused: {verdict.reason}",
-                           verdict.detail)
+                           f"{op} served-width suite ({params_filter}) refused: "
+                           f"{getattr(verdict, 'reason', 'no verdict')}",
+                           getattr(verdict, "detail", ""))
     return Verdict("ppl_contract_nmse", True,
-                   f"served-shape suite ({params_filter}) passed for {', '.join(ops)}")
+                   f"served-width suite ({params_filter}), all types, passed for "
+                   f"{', '.join(ops)}")
 
 
 def prefix_token_agreement(candidate_text: str, anchor_text: str, *,
@@ -2518,67 +2735,125 @@ def prefix_token_agreement(candidate_text: str, anchor_text: str, *,
                            ) -> tuple[float, "int | None"]:
     """Prefix token-agreement ratio between two greedy completions of the SAME prompt.
 
-    `tokenize` should be the model's own tokenizer (byte-identical token boundaries);
-    the default is a conservative whitespace split, which can only UNDERSTATE agreement
-    on texts differing inside what the real tokenizer would call one token -- never
-    overstate it -- so it is a safe (if less precise) floor check without one.
-    Returns (ratio, first divergence index or None if one is a prefix of the other and
-    neither is empty, or both are identical)."""
+    Agreement = matching prefix length / the LONGER output, so a candidate that stops
+    early (or produces nothing) is a divergence, never a pass. Two empty outputs are 0.0:
+    nothing generated is not agreement. `tokenize` defaults to a whitespace split (a
+    conservative floor: it can only understate agreement). Returns (ratio, first
+    divergence index or None when the outputs are identical)."""
     tok = tokenize or (lambda text: text.split())
     candidate_tokens, anchor_tokens = tok(candidate_text), tok(anchor_text)
-    denom = min(len(candidate_tokens), len(anchor_tokens))
+    denom = max(len(candidate_tokens), len(anchor_tokens))
     if denom == 0:
-        return (1.0 if not candidate_tokens and not anchor_tokens else 0.0), 0
+        return 0.0, 0
     first_divergence = next(
-        (i for i, (a, b) in enumerate(zip(candidate_tokens, anchor_tokens)) if a != b), None)
+        (i for i, (a, b) in enumerate(zip(candidate_tokens, anchor_tokens)) if a != b),
+        None)
+    if first_divergence is None and len(candidate_tokens) != len(anchor_tokens):
+        first_divergence = min(len(candidate_tokens), len(anchor_tokens))
     agree = denom if first_divergence is None else first_divergence
     return agree / denom, first_divergence
 
 
+def _completion(build: Path, prompt: str, n_predict: int, ctx: int, *, model: Path,
+                threads: int, env: dict, cpu_list: str, log_dir: Path,
+                cache_dir: "Path | None", label: str) -> "tuple[str, int] | None":
+    """Greedy raw completion on `build`: (generated text, prompt token count) or None.
+
+    `llama-completion -no-cnv` (raw text, no chat template, no REPL), stdin closed, the
+    prompt from a file and NOT echoed, EOS ignored so every build generates exactly
+    `n_predict` tokens; the prompt token count is the tool's own (--verbose-prompt)."""
+    prompt_sha = hashlib.sha256(prompt.encode()).hexdigest()
+    key = _key(kind="completion", build=_build_identity(build, "llama-completion"),
+               model=_model_identity(model), prompt=prompt_sha, n_predict=n_predict,
+               ctx=ctx, threads=threads, cpu_list=cpu_list, env=_env_identity(env))
+    cached = _cache_get(cache_dir, key)
+    if isinstance(cached, list) and len(cached) == 2:
+        return str(cached[0]), int(cached[1])
+    log_dir.mkdir(parents=True, exist_ok=True)
+    prompt_file = log_dir / f"prompt-{prompt_sha[:16]}.txt"
+    prompt_file.write_text(prompt, encoding="utf-8")
+    argv = ["taskset", "-c", cpu_list, "numactl", "--interleave=all",
+            str(Path(build) / "bin" / "llama-completion"), "-m", str(model),
+            "-f", str(prompt_file), "-n", str(n_predict), "-c", str(ctx),
+            "-t", str(threads), "--temp", "0", "--top-k", "1", "--seed", "0",
+            "-no-cnv", "--no-display-prompt", "--ignore-eos", "--verbose-prompt",
+            "--no-mmap"]
+    rc, out, err = _run_tool(argv, env={**env, "LD_LIBRARY_PATH": str(Path(build) / "bin")},
+                             log_dir=log_dir, label=f"{label}_{Path(build).name}")
+    found = re.search(r"number of tokens in prompt = (\d+)", err + out)
+    if rc != 0 or found is None or not out.strip():
+        return None
+    result = (out, int(found.group(1)))
+    _cache_put(cache_dir, key, list(result), {"build": str(build), "label": label})
+    return result
+
+
 def ppl_contract_coherence(anchor_build: Path, candidate_build: Path, *, model: Path,
                            prompts: tuple[str, ...], n_predict: int, env: dict,
-                           cpu_list: str, log_dir: Path,
-                           _generate: "Callable[[Path, str], str | None] | None" = None
+                           cpu_list: str, log_dir: Path, threads: int = 1,
+                           reference_build: "Path | None" = None,
+                           cache_dir: "Path | None" = None,
+                           _generate: "Callable[[Path, str], tuple[str, int] | None] | None" = None
                            ) -> Verdict:
-    """Layer (c): greedy coherence/token-agreement on PRODUCTION-length prompts (not
-    only the short frozen-request probe), floor PPL_CONTRACT_AGREEMENT_FLOOR.
+    """Layer (c): greedy token agreement on >= PPL_CONTRACT_PROD_PROMPT_COUNT_MIN prompts
+    of >= PPL_CONTRACT_PROD_PROMPT_TOKENS_MIN tokens each (the tool's own count).
 
-    Self-contained: serves each prompt fresh on BOTH builds (greedy, temp 0) rather than
-    depending on the T0 anchor capture, which retains only an output DIGEST, never the
-    text a prefix-token comparison needs. `_generate(build, prompt) -> text|None` is a
-    test seam; the default runs `llama-cli -no-cnv` greedily on each build."""
-    def generate(build: Path, prompt: str) -> str | None:
+    Per prompt: agreement(candidate, anchor) >= floor, and with a fixed reference,
+    agreement(candidate, reference) >= min(floor, agreement(anchor, reference)) -- the
+    candidate may not diverge from the fixed reference earlier than the anchor already
+    does. `_generate(build, prompt) -> (text, prompt_tokens) | None` is a test seam."""
+    def generate(build: Path, prompt: str):
         if _generate is not None:
             return _generate(build, prompt)
-        argv = ["taskset", "-c", cpu_list, "numactl", "--interleave=all",
-                str(build / "bin" / "llama-cli"), "-m", str(model), "-p", prompt,
-                "-n", str(n_predict), "--temp", "0", "--top-k", "1", "-no-cnv", "--no-mmap"]
-        return _run_logged(argv, env={**env, "LD_LIBRARY_PATH": str(build / "bin")},
-                           log_dir=log_dir, label=f"coherence_{Path(build).name}")
-    worst_ratio, worst_detail = None, ""
+        return _completion(build, prompt, n_predict, PPL_CONTRACT_GEN_CTX, model=model,
+                           threads=threads, env=env, cpu_list=cpu_list, log_dir=log_dir,
+                           cache_dir=cache_dir, label="coherence")
+    if len(prompts) < PPL_CONTRACT_PROD_PROMPT_COUNT_MIN:
+        return Verdict("ppl_contract_coherence", False,
+                       f"{len(prompts)} production-length prompt(s) supplied; "
+                       f"{PPL_CONTRACT_PROD_PROMPT_COUNT_MIN} required")
+    worst_ratio, details = None, []
     for index, prompt in enumerate(prompts):
-        anchor_text = generate(anchor_build, prompt)
-        candidate_text = generate(candidate_build, prompt)
-        if anchor_text is None or candidate_text is None:
+        builds = [("anchor", anchor_build), ("candidate", candidate_build)]
+        if reference_build is not None:
+            builds.append(("reference", reference_build))
+        outputs = {}
+        for name, build in builds:
+            result = generate(build, prompt)
+            if (not isinstance(result, tuple) or len(result) != 2
+                    or not isinstance(result[0], str) or not result[0].strip()):
+                return Verdict("ppl_contract_coherence", False,
+                               f"prompt {index}: {name} build produced no generation "
+                               "(tool failed, missing, or empty output)")
+            outputs[name] = result
+        tokens = {name: result[1] for name, result in outputs.items()}
+        short = {name: n for name, n in tokens.items()
+                 if n < PPL_CONTRACT_PROD_PROMPT_TOKENS_MIN}
+        if short:
             return Verdict("ppl_contract_coherence", False,
-                           f"production-prompt {index} did not generate on both builds "
-                           f"(anchor={'ok' if anchor_text is not None else 'none'} "
-                           f"candidate={'ok' if candidate_text is not None else 'none'})")
-        ratio, first_divergence = prefix_token_agreement(candidate_text, anchor_text)
-        if worst_ratio is None or ratio < worst_ratio:
-            worst_ratio, worst_detail = ratio, (
-                f"prompt {index}: agreement {ratio:.4f}, first divergence "
-                f"{first_divergence!r}")
-    if worst_ratio is None:
-        return Verdict("ppl_contract_coherence", False, "no production-length prompts supplied")
-    return Verdict("ppl_contract_coherence", worst_ratio >= PPL_CONTRACT_AGREEMENT_FLOOR,
-                   f"worst token agreement {worst_ratio:.4f} "
-                   f"(floor {PPL_CONTRACT_AGREEMENT_FLOOR}); {worst_detail}")
+                           f"prompt {index} is not production-length: prompt tokens {short} "
+                           f"< {PPL_CONTRACT_PROD_PROMPT_TOKENS_MIN}")
+        ratio, first = prefix_token_agreement(outputs["candidate"][0], outputs["anchor"][0])
+        line = f"prompt {index} ({tokens['candidate']} tok): vs anchor {ratio:.4f} (div {first!r})"
+        passed = ratio >= PPL_CONTRACT_AGREEMENT_FLOOR
+        if reference_build is not None:
+            ratio_r, _ = prefix_token_agreement(outputs["candidate"][0],
+                                                outputs["reference"][0])
+            base_r, _ = prefix_token_agreement(outputs["anchor"][0], outputs["reference"][0])
+            allowed = min(PPL_CONTRACT_AGREEMENT_FLOOR, base_r)
+            passed = passed and ratio_r >= allowed
+            line += f", vs reference {ratio_r:.4f} (allowed >= {allowed:.4f})"
+        details.append(line)
+        if not passed:
+            return Verdict("ppl_contract_coherence", False,
+                           f"agreement below floor {PPL_CONTRACT_AGREEMENT_FLOOR}: {line}",
+                           "\n".join(details))
+        worst_ratio = ratio if worst_ratio is None else min(worst_ratio, ratio)
+    return Verdict("ppl_contract_coherence", True,
+                   f"worst agreement vs anchor {worst_ratio:.4f} over {len(prompts)} "
+                   f"production-length prompts; " + "; ".join(details))
 
 
-#: Layer (d): a run of this many IDENTICAL generated tokens in a row (candidate's own
-#: output, not vs. the anchor) is judged a degenerate loop, not a legitimate repeat
-#: (e.g. a short refrain); real text essentially never repeats one token this long.
 def _longest_exact_repeat_run(tokens: list[str]) -> int:
     best = run = 1 if tokens else 0
     for i in range(1, len(tokens)):
@@ -2587,105 +2862,175 @@ def _longest_exact_repeat_run(tokens: list[str]) -> int:
     return best
 
 
+def _distinct_ngram_ratio(tokens: list[str], n: int = 4) -> float:
+    """Distinct n-grams / total n-grams: ~1.0 for prose, collapses in a degenerate loop
+    (a repeated PHRASE, which a single-token run length never sees)."""
+    grams = [tuple(tokens[i:i + n]) for i in range(len(tokens) - n + 1)]
+    return len(set(grams)) / len(grams) if grams else 0.0
+
+
 def ppl_contract_long_canary(candidate_build: Path, *, model: Path, prompt: str,
                              env: dict, cpu_list: str, log_dir: Path,
+                             anchor_build: "Path | None" = None,
+                             reference_build: "Path | None" = None, threads: int = 1,
+                             cache_dir: "Path | None" = None,
                              n_predict: int = PPL_CONTRACT_CANARY_TOKENS,
                              _generate: "Callable[[Path, str, int], str | None] | None" = None
                              ) -> Verdict:
-    """Layer (d): a long (>=1024 token) generation on the CANDIDATE alone, checked for
-    pathological repetition/drift a short probe would never see. `_generate` is a test
-    seam; the default runs `llama-cli -no-cnv` greedily for `n_predict` tokens."""
+    """Layer (d): a >= 1024-token greedy generation (EOS ignored) on the candidate AND
+    the baselines. Refused when the candidate's output is truncated, when its
+    distinct-4gram ratio falls more than PPL_CONTRACT_CANARY_DISTINCT4_DROP below a
+    baseline's, or when its longest exact-repeat run exceeds
+    max(PPL_CONTRACT_CANARY_MAX_REPEAT_RUN, a baseline's). Base models loop under greedy
+    decoding on their own, so the bars are RELATIVE; without a baseline the absolute
+    run bar alone applies. `_generate(build, prompt, count) -> text|None` is a test seam."""
     if n_predict < PPL_CONTRACT_CANARY_TOKENS:
         raise ValueError(
             f"ppl_contract_long_canary requires >= {PPL_CONTRACT_CANARY_TOKENS} tokens")
 
-    def generate(build: Path, text_prompt: str, count: int) -> str | None:
+    def generate(build: Path) -> str | None:
         if _generate is not None:
-            return _generate(build, text_prompt, count)
-        argv = ["taskset", "-c", cpu_list, "numactl", "--interleave=all",
-                str(build / "bin" / "llama-cli"), "-m", str(model), "-p", text_prompt,
-                "-n", str(count), "--temp", "0", "--top-k", "1", "-no-cnv", "--no-mmap"]
-        return _run_logged(argv, env={**env, "LD_LIBRARY_PATH": str(build / "bin")},
-                           log_dir=log_dir, label=f"canary_{Path(build).name}")
-    text = generate(candidate_build, prompt, n_predict)
-    if text is None:
+            return _generate(build, prompt, n_predict)
+        result = _completion(build, prompt, n_predict, PPL_CONTRACT_CANARY_CTX, model=model,
+                             threads=threads, env=env, cpu_list=cpu_list, log_dir=log_dir,
+                             cache_dir=cache_dir, label="canary")
+        return None if result is None else result[0]
+
+    def stats(text: str) -> tuple[int, float, int]:
+        tokens = text.split()
+        return len(tokens), _distinct_ngram_ratio(tokens), _longest_exact_repeat_run(tokens)
+
+    text = generate(candidate_build)
+    if not isinstance(text, str) or not text.strip():
         return Verdict("ppl_contract_long_canary", False,
                        f"candidate did not complete a {n_predict}-token generation")
-    tokens = text.split()
-    if len(tokens) < n_predict // 2:
+    count, distinct, run = stats(text)
+    # Whitespace words per token is ~0.6-0.8 for prose; a quarter is a generous floor.
+    if count < n_predict // 4:
         return Verdict("ppl_contract_long_canary", False,
-                       f"candidate produced only {len(tokens)} tokens of a requested "
-                       f"{n_predict} (truncated/aborted generation)")
-    longest_run = _longest_exact_repeat_run(tokens)
-    return Verdict("ppl_contract_long_canary",
-                   longest_run <= PPL_CONTRACT_CANARY_MAX_REPEAT_RUN,
-                   f"longest exact-repeat run {longest_run} tokens "
-                   f"(bar {PPL_CONTRACT_CANARY_MAX_REPEAT_RUN}) over {len(tokens)} generated")
+                       f"candidate produced only {count} words for {n_predict} tokens "
+                       "(truncated/aborted generation)")
+    reason = f"candidate {count} words, distinct-4 {distinct:.3f}, longest run {run}"
+    baselines, passed = 0, True
+    for name, build in (("anchor", anchor_build), ("reference", reference_build)):
+        if build is None:
+            continue
+        baselines += 1
+        base_text = generate(build)
+        if not isinstance(base_text, str) or not base_text.strip():
+            return Verdict("ppl_contract_long_canary", False,
+                           f"{name} build did not complete the canary generation")
+        _, base_distinct, base_run = stats(base_text)
+        run_ok = run <= max(PPL_CONTRACT_CANARY_MAX_REPEAT_RUN, base_run)
+        distinct_ok = distinct >= base_distinct - PPL_CONTRACT_CANARY_DISTINCT4_DROP
+        passed = passed and run_ok and distinct_ok   # EVERY baseline must clear
+        reason += f"; {name} distinct-4 {base_distinct:.3f}, longest run {base_run}"
+    if baselines == 0:
+        passed = run <= PPL_CONTRACT_CANARY_MAX_REPEAT_RUN
+    return Verdict("ppl_contract_long_canary", passed,
+                   reason + f" (bars: distinct-4 drop <= {PPL_CONTRACT_CANARY_DISTINCT4_DROP}, "
+                   f"run <= max({PPL_CONTRACT_CANARY_MAX_REPEAT_RUN}, baseline))")
+
+
+def _ppl_contract_layers(anchor_build: Path, candidate_build: Path, *, route_name, resolved_recipe,
+                         model: Path, threads: int, cpu_list: str, env: dict, log_dir: Path,
+                         reference_build: "Path | None", cache_dir: "Path | None",
+                         prod_prompts, canary_prompt, _layers: dict | None,
+                         gate_name: str) -> Verdict:
+    overrides = _layers or {}
+
+    def layer(name: str, default):
+        try:
+            verdict = overrides.get(name, default)()
+        except Exception as exc:  # noqa: BLE001 -- fail CLOSED, never silently pass
+            return Verdict(f"ppl_contract_{name}", False,
+                           f"layer {name!r} errored: {type(exc).__name__}: {exc}")
+        if not isinstance(verdict, Verdict):
+            return Verdict(f"ppl_contract_{name}", False, f"layer {name!r} produced no verdict")
+        return verdict
+
+    if reference_build is None and not {"ppl", "coherence", "long_canary"} <= set(overrides):
+        return Verdict(gate_name, False, "no fixed reference build: cumulative drift across "
+                       "advancing anchors cannot be bounded, refusing")
+    prompts = prod_prompts
+    canary = canary_prompt
+    layers = (
+        ("nmse", lambda: ppl_contract_op_nmse(
+            candidate_build, resolved_recipe=resolved_recipe, route_name=route_name)),
+        ("ppl", lambda: ppl_wikitext2(
+            anchor_build, candidate_build, model=model, threads=threads, env=env,
+            cpu_list=cpu_list, log_dir=log_dir, reference_build=reference_build,
+            cache_dir=cache_dir)),
+        ("coherence", lambda: ppl_contract_coherence(
+            anchor_build, candidate_build, model=model,
+            prompts=prompts if prompts is not None else ppl_contract_prod_prompts(),
+            n_predict=PPL_CONTRACT_PROD_GEN_TOKENS, env=env, cpu_list=cpu_list,
+            log_dir=log_dir, threads=threads, reference_build=reference_build,
+            cache_dir=cache_dir)),
+        ("long_canary", lambda: ppl_contract_long_canary(
+            candidate_build, model=model,
+            prompt=canary if canary is not None else ppl_contract_canary_prompt(),
+            env=env, cpu_list=cpu_list, log_dir=log_dir, anchor_build=anchor_build,
+            reference_build=reference_build, threads=threads, cache_dir=cache_dir)),
+    )
+    verdicts = []
+    for name, default in layers:   # cheapest first; the first refusal stops the spend
+        verdict = layer(name, default)
+        verdicts.append(verdict)
+        if not verdict.passed:
+            return Verdict(gate_name, False,
+                           f"{gate_name} refused at layer {name}: {verdict.gate}: {verdict.reason}",
+                           "\n".join(f"{v.gate}: passed={v.passed} {v.reason}" for v in verdicts))
+    return Verdict(gate_name, True,
+                   "all four ppl_contract layers passed: " +
+                   "; ".join(f"{v.gate}={v.reason}" for v in verdicts))
 
 
 def ppl_contract_gate(anchor_build: Path, candidate_build: Path, *, route: "CpuSourceRoute",
                       resolved_recipe, model: Path, threads: int, cpu_list: str, env: dict,
-                      prod_prompts: tuple[str, ...], canary_prompt: str, log_dir: Path,
+                      log_dir: Path, reference_build: "Path | None" = None,
+                      cache_dir: "Path | None" = None,
+                      prod_prompts: "tuple[str, ...] | None" = None,
+                      canary_prompt: "str | None" = None,
                       _layers: dict | None = None) -> Verdict:
     """The single blocking pre-keep check for a `numerics="ppl_contract"` route: ALL FOUR
-    layers (a)-(d) must pass, fail-closed on any missing/errored layer. `_layers` is a
-    test seam: a dict of layer name -> callable returning `Verdict`, overriding the
-    corresponding default (for stubbing the expensive ones without touching the others).
-
-    This function itself is layer (e)'s enforcement: called from `route_references` in
-    run.py exactly like every other route reference, so a failing/missing layer refuses
-    the keep before any fold -- there is no bench-evidence-only path to a champion commit
-    for a ppl_contract route.
-    """
+    layers (a)-(d) must pass, fail-closed on any missing/errored layer or a missing fixed
+    reference. `prod_prompts`/`canary_prompt` default to the pinned corpus slices.
+    `_layers` is a test seam (layer name -> callable returning `Verdict`)."""
     if route.numerics != "ppl_contract":
         raise ValueError(f"ppl_contract_gate called for a {route.numerics!r} route "
                          f"({route.route}); this gate is for ppl_contract routes only")
     if route.model_identity:
         raise ValueError(f"route {route.route} declares both model_identity and "
                          "ppl_contract numerics; the two contracts are mutually exclusive")
-    overrides = _layers or {}
+    return _ppl_contract_layers(
+        anchor_build, candidate_build, route_name=route.route,
+        resolved_recipe=resolved_recipe, model=model, threads=threads, cpu_list=cpu_list,
+        env=env, log_dir=log_dir, reference_build=reference_build, cache_dir=cache_dir,
+        prod_prompts=prod_prompts, canary_prompt=canary_prompt, _layers=_layers,
+        gate_name="ppl_contract")
 
-    def layer(name: str, default):
-        try:
-            fn = overrides.get(name, default)
-            verdict = fn()
-        except Exception as exc:  # noqa: BLE001 -- fail CLOSED, never silently pass
-            return Verdict(f"ppl_contract_{name}", False,
-                           f"layer {name!r} errored: {type(exc).__name__}: {exc}")
-        if verdict is None:
-            return Verdict(f"ppl_contract_{name}", False, f"layer {name!r} produced no verdict")
-        return verdict
 
-    layers = (
-        ("nmse", lambda: ppl_contract_op_nmse(
-            candidate_build, resolved_recipe=resolved_recipe,
-            quants=cpu_route_witness_quants(route))),
-        ("ppl", lambda: ppl_wikitext2(
-            anchor_build, candidate_build, model=model, threads=threads, env=env,
-            cpu_list=cpu_list, log_dir=log_dir)),
-        ("coherence", lambda: ppl_contract_coherence(
-            anchor_build, candidate_build, model=model, prompts=prod_prompts,
-            n_predict=PPL_CONTRACT_PROD_PROMPT_TOKENS_MIN, env=env, cpu_list=cpu_list,
-            log_dir=log_dir)),
-        ("long_canary", lambda: ppl_contract_long_canary(
-            candidate_build, model=model, prompt=canary_prompt, env=env, cpu_list=cpu_list,
-            log_dir=log_dir)),
-    )
-    verdicts = [layer(name, default) for name, default in layers]
-    failed = [v for v in verdicts if not v.passed]
-    if failed:
-        return Verdict("ppl_contract", False,
-                       "ppl_contract route refused: " +
-                       " | ".join(f"{v.gate}: {v.reason}" for v in failed),
-                       "\n".join(f"{v.gate}: passed={v.passed} {v.reason}" for v in verdicts))
-    return Verdict("ppl_contract", True,
-                   "all four ppl_contract layers passed: " +
-                   "; ".join(f"{v.gate}={v.reason}" for v in verdicts))
+def ppl_contract_bundle_gate(cor_build: Path, tip_build: Path, *, resolved_recipe,
+                             model: Path, threads: int, cpu_list: str, env: dict,
+                             log_dir: Path, reference_build: "Path | None",
+                             cache_dir: "Path | None" = None,
+                             prod_prompts: "tuple[str, ...] | None" = None,
+                             canary_prompt: "str | None" = None,
+                             _layers: dict | None = None) -> Verdict:
+    """Layer (e) at FOLD time: the whole accumulated bundle (champion of record -> tip)
+    re-judged by layers (a)-(d) before the champion of record may advance. Individually
+    admitted ppl_contract keeps compound; only the bundle is what a fold ships."""
+    return _ppl_contract_layers(
+        cor_build, tip_build, route_name=None, resolved_recipe=resolved_recipe, model=model,
+        threads=threads, cpu_list=cpu_list, env=env, log_dir=log_dir,
+        reference_build=reference_build, cache_dir=cache_dir, prod_prompts=prod_prompts,
+        canary_prompt=canary_prompt, _layers=_layers, gate_name="ppl_contract_bundle")
 
 
 def cpu_route_witness_quants(route: "CpuSourceRoute") -> tuple[str, ...]:
-    """The quant types `ppl_contract_gate` scopes layer (a) to, from the route's own
-    reviewed witness (never guessed from the route name)."""
+    """The route's reviewed witness quants (documentation/engagement only: layer (a) is
+    deliberately NOT narrowed to them -- see `ppl_contract_op_nmse`)."""
     from . import cpu_route_witness
     witness = cpu_route_witness.WITNESSES.get(route.route)
     return witness.quants if witness is not None else ()
@@ -2701,7 +3046,15 @@ __all__ = ["BACKEND_OPS_SELECTORS", "BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S",
            "check_cpu_fa_reference", "check_cpu_gdn_reference", "check_cpu_iqk_reference",
            "check_cpu_route_reference", "gpu_graph_pool_hold_refusal",
            "no_fallback_dispatch", "op_correctness", "run_all",
-           "PPL_CORPUS", "PPL_CHUNKS", "PPL_CTX", "PPL_REL_BAR",
+           "PPL_CORPUS", "PPL_CORPUS_SHA256", "PPL_CHUNKS", "PPL_CTX", "PPL_BATCH",
+           "PPL_REL_BAR", "PPL_CONTRACT_NO_OP_ORACLE", "PPL_CONTRACT_PROD_PROMPT_COUNT_MIN",
+           "PPL_CONTRACT_PROD_PROMPT_SLICES", "PPL_CONTRACT_PROD_GEN_TOKENS",
+           "PPL_CONTRACT_GEN_CTX", "PPL_CONTRACT_CANARY_SLICE", "PPL_CONTRACT_CANARY_CTX",
+           "PPL_CONTRACT_CANARY_DISTINCT4_DROP", "PPL_CONTRACT_TOOL_TARGETS",
+           "PRODUCTION_CPU_KERNEL", "production_cpu_reference_build", "ppl_contract_paths",
+           "ppl_contract_prod_prompts", "ppl_contract_canary_prompt",
+           "ppl_contract_bundle_gate", "PPL_CONTRACT_LEDGER", "ppl_contract_only_paths",
+           "ppl_contract_ledger_read", "ppl_contract_ledger_add", "ppl_contract_fold_required",
            "PPL_CONTRACT_SERVED_WIDTHS", "PPL_CONTRACT_AGREEMENT_FLOOR",
            "PPL_CONTRACT_PROD_PROMPT_TOKENS_MIN", "PPL_CONTRACT_CANARY_TOKENS",
            "PPL_CONTRACT_CANARY_MAX_REPEAT_RUN",

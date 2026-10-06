@@ -18,6 +18,7 @@ an explicit flag. The measurement calls are thin seams; every one of them is stu
 import ast
 import dataclasses
 import json
+from types import SimpleNamespace
 from pathlib import Path
 import shutil
 import subprocess
@@ -319,7 +320,7 @@ class ServingGate(unittest.TestCase):
                 "--cor-build", str(self.cor), "--tip-build", str(self.tip),
                 "--tip", "t" * 40, "--champion-worktree", str(self.root), *extra]
 
-    def _run(self, *extra, row=None):
+    def _run(self, *extra, row=None, ppl_blocked=False):
         row = row if row is not None else _serving_row(5.0, True)
         calls = []
 
@@ -327,8 +328,12 @@ class ServingGate(unittest.TestCase):
             calls.append((args, kwargs))
             return row
 
+        # The fake champion worktree is not a git repo, so the real ppl_contract fold
+        # check would (correctly) fail closed; it is exercised on its own below.
         with mock.patch.object(serving_gate, "measure", seam), \
              mock.patch.object(serving_gate, "_is_ancestor", return_value=True), \
+             mock.patch.object(serving_gate, "_ppl_contract_fold_blocked",
+                               return_value=ppl_blocked), \
              mock.patch("builtins.print"):
             rc = serving_gate.main(self._argv(*extra))
         return rc, calls
@@ -400,6 +405,21 @@ class ServingGate(unittest.TestCase):
             json.loads((self.store / accumulate.Bundle.FILENAME).read_text()))
         self.assertEqual(bundle.champion_of_record, "t" * 40)
         self.assertEqual(bundle.keeps, [])
+
+    def test_apply_refuses_a_bundle_carrying_a_ppl_contract_change(self):
+        """Review 2026-10-06 (layer e): the hand-run gate has no quality eval, so a
+        ppl_contract bundle never folds through it."""
+        rc, _ = self._run("--apply", ppl_blocked=True)
+        self.assertEqual(rc, instruments.REFUSED)
+        bundle = accumulate.Bundle.from_dict(
+            json.loads((self.store / accumulate.Bundle.FILENAME).read_text()))
+        self.assertEqual(bundle.champion_of_record, "c" * 40)
+
+    def test_the_fold_check_fails_closed_when_the_diff_is_undecidable(self):
+        args = SimpleNamespace(champion_worktree=str(self.root / "not-a-repo"),
+                               store=str(self.store))
+        bundle = accumulate.Bundle(champion_of_record="c" * 40, tip="t" * 40)
+        self.assertTrue(serving_gate._ppl_contract_fold_blocked(args, bundle))
 
     def test_a_divergence_holds_the_champion_even_under_apply(self):
         rc, _ = self._run("--apply", row=_serving_row(0.4, False))

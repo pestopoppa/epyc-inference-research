@@ -166,9 +166,12 @@ class, or before the disabled-build stub.
     The outputs are therefore not bit-identical to tinyBLAS: say so and price it.
 - **2026-10-06 low-bit routes** (operator: "WE MUST improve lower quant performance").
   Numerics: `ppl_contract`, never bit-exact -- judged by `gates.ppl_contract_gate`'s
-  four layers (op NMSE on served shapes, wikitext2 |delta ppl| <= 0.5%,
-  production-length coherence/agreement, a >=1024-token repetition canary), ALL
-  required, fail-closed, NEVER folded on bench evidence alone. Every file below has an
+  four layers (test-backend-ops vs the use_ref reference at widths 1-5 for every type;
+  wikitext2 |delta ppl| <= 0.5% vs the anchor and no cumulative growth vs the frozen
+  production kernel; greedy agreement >= 0.98 on two >=4096-token wikitext prompts; a
+  1024-token repetition canary relative to the anchor), ALL required, fail-closed, and
+  re-run on the whole bundle before the champion of record folds. `cpu_repack_mmid`
+  has no op-level oracle (test-backend-ops never uses the repack buffer) and is refused. Every file below has an
   x86_64 implementation above a top-level `#else` / `__aarch64__` arm redefining
   several of the same symbols; every route's window ends before that arm.
   - **`iqk_iquants_dequant`**: `ggml/src/ggml-cpu/iqk/iqk_gemm_iquants.cpp`, target
@@ -190,8 +193,9 @@ class, or before the disabled-build stub.
     `ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp` (Q38FN seed 6). The first widens the
     existing Q4_K/Q5_K dot admission to `DequantizerQ6K_AVX2`'s own kernel body
     (`mul_mat_qY_K_q8_2_X4_T`, a different template than Q4/Q5's, so it cannot collide
-    with that route) and `DequantizerIQ4XS` (also duplicated under `HAVE_FANCY_SIMD`/
-    `#else`, same last-occurrence rule as `IndexHelperIQ3S`); the second is the
+    with that route) and `DequantizerIQ4XS` (duplicated under the REAL `HAVE_FANCY_SIMD`
+    macro, which is defined on this AVX512 host: the FIRST, fancy arm is the compiled one
+    and the only one admitted); the second is the
     type-dispatch switch, `iqk_set_kernels_kquants`, a separate body entirely.
 - **`float_tinyblas_plan`**: `ggml/src/ggml-cpu/llamafile/sgemm.cpp`, target `tinyBLAS`
   or `matmul` (class-qualified names resolve to the class they name).

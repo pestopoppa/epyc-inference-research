@@ -3530,25 +3530,29 @@ def main(argv: list[str] | None = None) -> int:
                     # so the four layers in `gates.ppl_contract_gate` refuse the keep
                     # outright before any `pool.advance_champion`, never after.
                     #
-                    # PRODUCTION-LENGTH PROMPTS: the frozen-request manifest's own
-                    # prompts are the short (~102-token) probe this amendment explicitly
-                    # distinguishes from. Until the lane owner supplies a genuine
-                    # production-length corpus (a DATA decision, not a code one), the
-                    # longest available frozen prompt stands in, scoped to exactly ONE
-                    # prompt so a thin stand-in fails loudly (low agreement ratio, not a
-                    # false pass) rather than quietly asserting coverage it lacks.
+                    # PRODUCTION-LENGTH PROMPTS (review 2026-10-06): the frozen requests
+                    # are (prompt_id, body) tuples of ~100-token probes -- the first cut
+                    # read `.prompt` off them and always got NONE. Layer (c) now defaults
+                    # to two pinned wikitext2 slices (>= 4096 tokens each, checked from
+                    # the tool's own count), disjoint from layer (b)'s ppl window.
+                    # The FIXED reference is the frozen production CPU kernel store: the
+                    # anchor advances on every keep, so anchor-only bars would compound.
                     from ..execution.cpu_region_claim import parse_cpu_list as _parse_cpu_list
-                    _prod_prompts = tuple(
-                        p for p in (getattr(request, "prompt", None)
-                                    for request in (frozen_requests or ())) if p)
-                    _prod_prompts = (max(_prod_prompts, key=len),) if _prod_prompts else ()
+                    # Marked durably BEFORE any layer runs: the fold-time bundle gate
+                    # keys on this ledger (Bundle.keeps are mechanism ids).
+                    try:
+                        gates.ppl_contract_ledger_add(args.store, hypothesis.mechanism_id)
+                    except (OSError, ValueError) as exc:
+                        return False, [gates.Verdict(
+                            "ppl_contract", False,
+                            f"ppl_contract admission could not be recorded: {exc}")]
                     route_references.append(lambda arm: gates.ppl_contract_gate(
                         anchor_build[0], worker.build_dir, route=admitted_route,
                         resolved_recipe=arm, model=args.model,
                         threads=len(_parse_cpu_list(build_cpu_list)), cpu_list=build_cpu_list,
-                        env=dict(arm.launch_env), prod_prompts=_prod_prompts,
-                        canary_prompt=(_prod_prompts[0] if _prod_prompts else
-                                      "Once upon a time"),
+                        env=dict(arm.launch_env),
+                        reference_build=gates.production_cpu_reference_build(),
+                        cache_dir=Path(args.store) / "ppl_contract" / "cache",
                         log_dir=Path(args.store) / "ppl_contract" / admitted_route.route))
                 if witness is not None and witness.reference == "fa_anchor_bits":
                     # cpu_fa_schedule (audit 2026-10-04 C2/C3): the case-set corpus, bit
@@ -3596,11 +3600,17 @@ def main(argv: list[str] | None = None) -> int:
             # concurrent 64-job builds would oversubscribe an 88-core lane and every
             # build time recorded during the overlap would be a measurement of
             # contention.
+            # A ppl_contract candidate also builds the tools its layers (b)-(d) run
+            # (review 2026-10-06): without them every such candidate failed closed.
+            ppl_route = admitted_route is not None and admitted_route.numerics == "ppl_contract"
+            build_targets = ((gates.PROMOTION_TARGETS if direct_launch else gates.DEFAULT_TARGETS)
+                             + (gates.PPL_CONTRACT_TOOL_TARGETS if ppl_route else ()))
             checks = [
                 lambda: gates.compiles(worker.worktree, worker.build_dir,
                                        cmake_defines=recipe.cmake_defines(),
                                        jobs=build_jobs, cpu_list=build_cpu_list,
-                                       **({"targets": gates.PROMOTION_TARGETS} if direct_launch else {})),
+                                       **({"targets": build_targets}
+                                          if direct_launch or ppl_route else {})),
             ]
             if cpu_launch:
                 checks.extend(lambda op=op: gates.op_correctness(worker.build_dir, op=op,
@@ -4772,6 +4782,26 @@ def main(argv: list[str] | None = None) -> int:
                                         if source_instrument else {})}
                                     if direct_launch else {}))
         plan = accumulate.resolve(bundle[0], sv_row, accum_policy)
+        if plan["outcome"] is accumulate.Outcome.PROMOTE:
+            # Layer (e) at fold (review 2026-10-06): a serving win is bench/throughput
+            # evidence only. A bundle carrying a ppl_contract keep must also pass the
+            # quality layers (a)-(d) as a WHOLE before the champion of record advances;
+            # a refusal (or any error) HOLDS it exactly like a serving divergence.
+            quality = ppl_contract_fold_check(head)
+            if quality is not None:
+                print(f"quality   ppl_contract bundle gate: passed={quality.passed} "
+                      f"{quality.reason}")
+            if quality is not None and not quality.passed:
+                plan = {**plan, "outcome": accumulate.Outcome.DIVERGED,
+                        "action": accum_policy.on_divergence,
+                        "new_champion_of_record": bundle[0].champion_of_record,
+                        "reason": ("QUALITY HOLD: serving confirmed the bundle but the "
+                                   f"ppl_contract bundle gate refused: {quality.reason}; "
+                                   "champion of record HOLDS at "
+                                   f"{bundle[0].champion_of_record[:12]}"),
+                        "planner_evidence": {"kind": "ppl_contract_quality_hold",
+                                             "bundled_keeps": list(bundle[0].keeps),
+                                             "reason": quality.reason}}
         # WHY it fired is part of the reading: a cadence firing at +2% compounded is a
         # different fact from a threshold firing at +9%, and the 2026-09-08 divergence is
         # the reason a reader must never have to infer which one happened.
@@ -4834,6 +4864,32 @@ def main(argv: list[str] | None = None) -> int:
             # bundle would re-fire the expensive gate on every single subsequent keep.
             bundle[0].mark_serving_gate_fired()
             bundle[0].save(args.store)
+
+    def ppl_contract_fold_check(tip_commit: str) -> "gates.Verdict | None":
+        """None when the bundle carries no ppl_contract change; else the whole-bundle
+        quality verdict (cor build vs tip build, fixed production reference). Any error
+        while deciding is a refusal, never a pass."""
+        try:
+            changed = _git(args.worktree, "diff", "--name-only", cor_commit[0],
+                           tip_commit).splitlines()
+            ledger = gates.ppl_contract_ledger_read(args.store)
+            if not gates.ppl_contract_fold_required(bundle[0].keeps, changed, ledger):
+                return None
+            if cpu_launch is None:
+                return gates.Verdict("ppl_contract_bundle", False,
+                                     "ppl_contract bundle on a non-CPU target")
+            from ..execution.cpu_region_claim import parse_cpu_list as _parse_cpu_list
+            arm = _cpu_arm(direct_launch, anchor_build[0])
+            return gates.ppl_contract_bundle_gate(
+                cor_build[0], anchor_build[0], resolved_recipe=arm, model=args.model,
+                threads=len(_parse_cpu_list(build_cpu_list)), cpu_list=build_cpu_list,
+                env=dict(arm.launch_env),
+                reference_build=gates.production_cpu_reference_build(),
+                cache_dir=Path(args.store) / "ppl_contract" / "cache",
+                log_dir=Path(args.store) / "ppl_contract" / "bundle")
+        except Exception as exc:  # noqa: BLE001 -- fail CLOSED
+            return gates.Verdict("ppl_contract_bundle", False,
+                                 f"bundle quality check errored: {type(exc).__name__}: {exc}")
 
     def gpu_reading(outcomes=()) -> dict:
         """Held versus busy. Both halves, or the number means nothing.

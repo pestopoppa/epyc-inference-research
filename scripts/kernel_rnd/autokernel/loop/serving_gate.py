@@ -55,6 +55,20 @@ def measure(recipe: serving.Recipe, cor_build: Path, tip_build: Path, *,
                            floor_unit=floor_unit)
 
 
+def _ppl_contract_fold_blocked(args, bundle) -> bool:
+    """True (fail closed) unless the bundle provably carries no ppl_contract change."""
+    from . import gates
+    try:
+        changed = subprocess.run(
+            ["git", "-C", str(args.champion_worktree), "diff", "--name-only",
+             bundle.champion_of_record, bundle.tip],
+            capture_output=True, text=True, check=True).stdout.splitlines()
+        return gates.ppl_contract_fold_required(
+            bundle.keeps, changed, gates.ppl_contract_ledger_read(Path(args.store)))
+    except Exception:  # noqa: BLE001 -- undecidable is blocked
+        return True
+
+
 def _is_ancestor(worktree: Path, ancestor: str, descendant: str) -> bool:
     """Read-only lineage check for the explicitly pinned serving-gate tip."""
     done = subprocess.run(
@@ -172,6 +186,13 @@ def main(argv: list[str] | None = None) -> int:
           f"(floor {floor:.3f}%, decisive={row['decisive']})")
     if plan["outcome"] is accumulate.Outcome.PROMOTE:
         print("PROMOTE: champion of record advances to", bundle.tip[:12])
+        if posture.apply and _ppl_contract_fold_blocked(args, bundle):
+            # Review 2026-10-06 (layer e): this hand-run gate measures throughput only. A
+            # bundle carrying a ppl_contract keep may fold only through the loop, whose
+            # fold re-runs the quality layers on the whole bundle.
+            print("REFUSED: bundle carries a ppl_contract change; the hand-run gate has no "
+                  "quality eval -- champion of record NOT advanced", file=sys.stderr)
+            return instruments.REFUSED
         if posture.apply:
             fresh = accumulate.Bundle(champion_of_record=bundle.tip, tip=bundle.tip)
             fresh.save(Path(args.store))
