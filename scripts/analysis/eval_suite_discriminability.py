@@ -63,6 +63,7 @@ import glob
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import sys
 from typing import Any
@@ -96,8 +97,9 @@ def _canonical_sha256(value: dict[str, Any]) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
-def _seal_report(report: dict[str, Any], inputs: list[dict[str, Any]]) -> dict[str, Any]:
-    """Bind the unchanged report body to the exact parsed input bytes and producer source."""
+def _seal_report(report: dict[str, Any], inputs: list[dict[str, Any]],
+                 report_path: Path) -> dict[str, Any]:
+    """Bind the report to immutable snapshots of the exact parsed inputs/source."""
     if not inputs:
         return report
     producer = Path(__file__).resolve()
@@ -105,11 +107,46 @@ def _seal_report(report: dict[str, Any], inputs: list[dict[str, Any]]) -> dict[s
         producer_path = producer.relative_to(_REPO_ROOT).as_posix()
     except ValueError as exc:
         raise ValueError("producer must be inside its repository root") from exc
-    manifest = sorted(inputs, key=lambda item: item["path"])
+    destination = report_path.resolve()
+    producer_bytes = producer.read_bytes()
+    producer_sha = hashlib.sha256(producer_bytes).hexdigest()
+    if producer_sha != _PRODUCER_SOURCE_SHA256:
+        return report  # loaded code and the source being recorded are not the same bytes
+    raw_inputs = sorted(inputs, key=lambda item: item["path"])
+    manifest = [{key: value for key, value in item.items() if key != "_raw_bytes"}
+                for item in raw_inputs]
+    snapshot_key = _canonical_sha256({"body": report, "inputs": manifest,
+                                      "producer_sha256": producer_sha})
+    snapshot_dir = destination.with_name(destination.name + ".native") / snapshot_key
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+    for index, (entry, raw_entry) in enumerate(zip(manifest, raw_inputs, strict=True)):
+        raw_bytes = raw_entry.get("_raw_bytes")
+        if not isinstance(raw_bytes, bytes) or hashlib.sha256(raw_bytes).hexdigest() != entry["sha256"]:
+            raise ValueError("input bytes retained for snapshot differ from the parsed-byte digest")
+        snapshot = snapshot_dir / f"input-{index:04d}-{entry['sha256']}.raw"
+        if snapshot.exists():
+            if snapshot.read_bytes() != raw_bytes:
+                raise ValueError("immutable input snapshot path already contains different bytes")
+        else:
+            with snapshot.open("xb") as handle:
+                handle.write(raw_bytes)
+                handle.flush()
+                os.fsync(handle.fileno())
+        entry["snapshot_path"] = str(snapshot)
+    producer_snapshot = snapshot_dir / f"producer-{producer_sha}.py"
+    if producer_snapshot.exists():
+        if producer_snapshot.read_bytes() != producer_bytes:
+            raise ValueError("immutable producer snapshot path already contains different bytes")
+    else:
+        with producer_snapshot.open("xb") as handle:
+            handle.write(producer_bytes)
+            handle.flush()
+            os.fsync(handle.fileno())
     provenance: dict[str, Any] = {
         "schema": REPORT_SCHEMA,
         "producer_path": producer_path,
-        "producer_sha256": _PRODUCER_SOURCE_SHA256,
+        "producer_sha256": producer_sha,
+        "producer_snapshot_path": str(producer_snapshot),
         "input_root": "epyc-orchestrator",
         "inputs": manifest,
         "missing_inputs": [],
@@ -310,7 +347,8 @@ def load_rows(paths: list[Path], *, input_manifest: list[dict[str, Any]] | None 
                                    "sha256": hashlib.sha256(raw_bytes).hexdigest(),
                                    "byte_count": len(raw_bytes),
                                    "row_count": nonempty_lines,
-                                   "normalized_row_count": len(rows) - rows_before})
+                                   "normalized_row_count": len(rows) - rows_before,
+                                   "_raw_bytes": raw_bytes})
     return rows, warnings
 
 
@@ -779,17 +817,18 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     report = build_report(rows, cfg, [str(p) for p in paths], warnings)
-    report = _seal_report(report, input_manifest)
-    md = render_markdown(report)
 
     if args.out_dir:
         out = Path(args.out_dir)
         out.mkdir(parents=True, exist_ok=True)
+        report = _seal_report(report, input_manifest, out / "report.json")
         (out / "report.json").write_text(json.dumps(report, indent=2) + "\n")
+        md = render_markdown(report)
         (out / "report.md").write_text(md + "\n")
         print(f"wrote {out / 'report.json'}")
         print(f"wrote {out / 'report.md'}")
     else:
+        md = render_markdown(report)
         print(md)
         if args.json:
             print(json.dumps(report, indent=2))

@@ -32,14 +32,19 @@ def test_mf_vbs_manifest_hashes_the_same_bytes_it_parsed(tmp_path):
     manifest = []
     parsed = mod._load_jsonl(str(source), input_manifest=manifest, repo_root=str(tmp_path))
     assert parsed == [{"mode": "real", "task": "t1", "arm": "off", "block": 0}]
-    assert manifest == [{"path": "data/results.jsonl", "sha256": _sha(raw),
-                         "byte_count": len(raw), "row_count": 1,
-                         "normalized_row_count": 1}]
+    assert {key: value for key, value in manifest[0].items() if key != "_raw_bytes"} == {
+        "path": "data/results.jsonl", "sha256": _sha(raw), "byte_count": len(raw),
+        "row_count": 1, "normalized_row_count": 1}
+    assert manifest[0]["_raw_bytes"] == raw
     report = {"corpus": {"n_total_real_trajectories": 1}, "sample_metric": 0.25}
-    sealed = mod._seal_report(report, str(tmp_path), manifest)
+    sealed = mod._seal_report(report, str(ROOT), manifest, str(tmp_path / "report.json"))
     assert sealed["sample_metric"] == report["sample_metric"]
     assert sealed["native_provenance"]["schema"] == mod.REPORT_SCHEMA
-    assert sealed["native_provenance"]["inputs"] == manifest
+    bound = sealed["native_provenance"]["inputs"][0]
+    assert bound["path"] == "data/results.jsonl"
+    assert Path(bound["snapshot_path"]).read_bytes() == raw
+    producer_snapshot = Path(sealed["native_provenance"]["producer_snapshot_path"])
+    assert producer_snapshot.read_bytes() == (ROOT / "scripts/analysis/mf_vbs1_verify_before_stop.py").read_bytes()
     assert sealed["native_provenance"]["producer_sha256"] == _sha(
         (ROOT / "scripts/analysis/mf_vbs1_verify_before_stop.py").read_bytes())
 
@@ -54,17 +59,20 @@ def test_eval_discriminability_manifest_hashes_the_same_bytes_it_parsed(tmp_path
     parsed, warnings = mod.load_rows([source], input_manifest=manifest)
     assert warnings == []
     assert len(parsed) == 1 and parsed[0]["qid"] == "q1"
-    assert manifest == [{"path": source.resolve().as_posix(), "sha256": _sha(raw),
-                         "byte_count": len(raw), "row_count": 1,
-                         "normalized_row_count": 1}]
+    assert {key: value for key, value in manifest[0].items() if key != "_raw_bytes"} == {
+        "path": source.resolve().as_posix(), "sha256": _sha(raw),
+        "byte_count": len(raw), "row_count": 1, "normalized_row_count": 1}
+    assert manifest[0]["_raw_bytes"] == raw
     original = {
         "schema_version": mod.REPORT_SCHEMA, "generated_at": "2026-10-06T12:00:00+00:00",
         "measurement_class": "OBSERVATION", "config": {"target_effect": 0.15},
         "inputs": [str(source)], "warnings": [], "summary": {}, "suites": [], "task_classes": [],
     }
-    sealed = mod._seal_report(dict(original), manifest)
+    sealed = mod._seal_report(dict(original), manifest, source.parent / "report.json")
     assert {k: v for k, v in sealed.items() if k != "native_provenance"} == original
-    assert sealed["native_provenance"]["inputs"] == manifest
+    bound = sealed["native_provenance"]["inputs"][0]
+    assert bound["path"] == source.resolve().as_posix()
+    assert Path(bound["snapshot_path"]).read_bytes() == raw
     assert sealed["native_provenance"]["analysis_config_sha256"] == mod._canonical_sha256(
         original["config"])
 

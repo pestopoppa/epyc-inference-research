@@ -90,23 +90,57 @@ def _canonical_sha256(value: dict) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
-def _seal_report(report: dict, repo_root: str, inputs: list[dict],
+def _seal_report(report: dict, repo_root: str, inputs: list[dict], report_path: str,
                  missing_inputs: list[str] | None = None) -> dict:
-    """Bind the unchanged analysis body to the exact parsed inputs and producer bytes."""
+    """Bind the analysis to immutable snapshots of the exact parsed inputs/source."""
     if not inputs:
         return report
     root = Path(repo_root).resolve()
+    destination = Path(report_path).resolve()
     producer = Path(__file__).resolve()
     try:
         producer_path = producer.relative_to(root).as_posix()
     except ValueError as exc:
         raise ValueError("producer must be inside repo-root for a source-bound report") from exc
-    manifest = sorted(inputs, key=lambda item: item["path"])
-    source_sha = _PRODUCER_SOURCE_SHA256
+    producer_bytes = producer.read_bytes()
+    source_sha = hashlib.sha256(producer_bytes).hexdigest()
+    if source_sha != _PRODUCER_SOURCE_SHA256:
+        return report  # loaded code and the source being recorded are not the same bytes
+    raw_inputs = sorted(inputs, key=lambda item: item["path"])
+    manifest = [{key: value for key, value in item.items() if key != "_raw_bytes"}
+                for item in raw_inputs]
+    snapshot_key = _canonical_sha256({"body": report, "inputs": manifest,
+                                      "producer_sha256": source_sha})
+    snapshot_dir = destination.with_name(destination.name + ".native") / snapshot_key
+    snapshot_dir.mkdir(parents=True, exist_ok=True)
+    for index, (entry, raw_entry) in enumerate(zip(manifest, raw_inputs, strict=True)):
+        raw_bytes = raw_entry.get("_raw_bytes")
+        if not isinstance(raw_bytes, bytes) or hashlib.sha256(raw_bytes).hexdigest() != entry["sha256"]:
+            raise ValueError("input bytes retained for snapshot differ from the parsed-byte digest")
+        snapshot = snapshot_dir / f"input-{index:04d}-{entry['sha256']}.raw"
+        if snapshot.exists():
+            if snapshot.read_bytes() != raw_bytes:
+                raise ValueError("immutable input snapshot path already contains different bytes")
+        else:
+            with snapshot.open("xb") as handle:
+                handle.write(raw_bytes)
+                handle.flush()
+                os.fsync(handle.fileno())
+        entry["snapshot_path"] = str(snapshot)
+    producer_snapshot = snapshot_dir / f"producer-{source_sha}.py"
+    if producer_snapshot.exists():
+        if producer_snapshot.read_bytes() != producer_bytes:
+            raise ValueError("immutable producer snapshot path already contains different bytes")
+    else:
+        with producer_snapshot.open("xb") as handle:
+            handle.write(producer_bytes)
+            handle.flush()
+            os.fsync(handle.fileno())
     provenance = {
         "schema": REPORT_SCHEMA,
         "producer_path": producer_path,
         "producer_sha256": source_sha,
+        "producer_snapshot_path": str(producer_snapshot),
         "input_root": "epyc-orchestrator",
         "inputs": manifest,
         "missing_inputs": sorted(missing_inputs or []),
@@ -173,7 +207,7 @@ def _load_jsonl(path: str, *, input_manifest: list[dict] | None = None,
             raise ValueError("parsed input is outside repo-root") from exc
         input_manifest.append({"path": relative, "sha256": hashlib.sha256(raw).hexdigest(),
                                "byte_count": len(raw), "row_count": len(out),
-                               "normalized_row_count": len(out)})
+                               "normalized_row_count": len(out), "_raw_bytes": raw})
     return out
 
 
@@ -466,9 +500,10 @@ def main() -> None:
     trajs = load_trajectories(args.repo_root, input_manifest=input_manifest,
                               missing_inputs=missing_inputs)
     result = summarize(trajs)
-    result = _seal_report(result, args.repo_root, input_manifest, missing_inputs)
     text = json.dumps(result, indent=2, sort_keys=False)
     if args.out:
+        result = _seal_report(result, args.repo_root, input_manifest, args.out, missing_inputs)
+        text = json.dumps(result, indent=2, sort_keys=False)
         with open(args.out, "w") as fh:
             fh.write(text + "\n")
         print(f"wrote {args.out}")
