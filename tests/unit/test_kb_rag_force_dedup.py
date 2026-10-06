@@ -385,6 +385,9 @@ def test_new_staged_vector_uses_standard_create_mode(
     probe_fd = os.open(probe, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
     os.close(probe_fd)
     expected_mode = stat.S_IMODE(probe.stat().st_mode)
+    if operation == "update_files":
+        kb_rag.build_index(config, index_dir=index, force=True)
+        (index / _rows(index)[0][5]).unlink()
 
     _run_writer(operation, config, source, index)
 
