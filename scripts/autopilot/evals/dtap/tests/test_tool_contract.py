@@ -6,7 +6,7 @@ import json
 import pytest
 
 from harness.endpoint import ChatEndpoint, ChatResult
-from harness.outcomes import HarnessFailure, ToolFailure
+from harness.outcomes import HarnessFailure, ParseFailure, ToolFailure
 from harness.runner import CaseRegistry, DEFAULT_ARM_CONFIG, run_case
 from harness.tool_contract import (
     CONTRACT_VERSION,
@@ -84,6 +84,24 @@ def test_fake_transport_sends_schema_and_only_explicit_orchestrator_mode_marker(
     assert (body.get("x_tool_mode") == "client") is expects_client_marker
 
 
+def test_invalid_mode_is_rejected_before_fake_transport():
+    opener, captured = _transport()
+    endpoint = ChatEndpoint("http://fake/v1", opener=opener)
+    with pytest.raises(ValueError, match="explicit endpoint mode"):
+        endpoint.complete([], tools=[_schema()], endpoint_mode="guess-from-url")
+    assert captured == []
+
+
+@pytest.mark.parametrize("arguments", ["{bad", "[]"])
+def test_response_parser_rejects_malformed_or_nonobject_json_arguments(arguments):
+    endpoint = ChatEndpoint("http://fake/v1")
+    envelope = {"choices": [{"message": {"content": None, "tool_calls": [{
+        "id": "call-1", "function": {"name": "lookup", "arguments": arguments},
+    }]}}]}
+    with pytest.raises(ParseFailure):
+        endpoint._parse(envelope)
+
+
 def test_pinned_catalog_covers_registry_and_uses_plain_unique_names():
     registry = CaseRegistry()
     contract = load_native_tool_contract(registry.cases, registry_path=registry.path)
@@ -114,6 +132,8 @@ def test_argument_validation_checks_required_types_and_outer_unknowns_but_allows
     ):
         with pytest.raises(ToolFailure):
             validate_tool_calls([{"name": "lookup", "arguments": arguments}], tools)
+    with pytest.raises(ToolFailure, match="must be an object"):
+        validate_tool_calls([{"name": "lookup", "arguments": []}], tools)
 
 
 def test_anyof_keeps_sibling_type_and_enum_constraints():
@@ -154,6 +174,43 @@ def test_registry_bytes_must_match_the_pinned_sidecar(tmp_path):
         load_native_tool_contract(registry.cases, registry_path=changed)
 
 
+def test_declared_function_uses_fake_parser_and_preserves_native_judge_result(tmp_path):
+    registry = CaseRegistry()
+    case_id = "crm-benign-001"
+    contract = load_native_tool_contract(registry.cases, registry_path=registry.path)
+    calls = []
+    response_bodies = [
+        {"choices": [{"finish_reason": "tool_calls", "message": {"content": None,
+         "tool_calls": [{"id": "call-native", "type": "function",
+                         "function": {"name": "get_available_modules", "arguments": "{}"}}]}}]},
+        {"choices": [{"finish_reason": "stop", "message": {"content": "Completed."}}]},
+    ]
+
+    class QueueResponse(_Response):
+        pass
+
+    def opener(request, *, timeout):
+        calls.append(json.loads(request.data))
+        return QueueResponse(response_bodies[len(calls) - 1])
+
+    endpoint = ChatEndpoint("http://fake/v1", opener=opener)
+    result = run_case(
+        case_id, "done", 0, endpoint, DEFAULT_ARM_CONFIG, tmp_path, registry,
+        native_tool_contract=contract,
+    )
+    assert result.status == "ok" and len(calls) == 2
+    assert calls[0]["tools"] == contract.for_case(case_id)
+    assert calls[0]["tools"][0]["type"] == "function"
+    records = verify_trace(result.trace_path)
+    request = next(record["payload"] for record in records if record["event"] == "endpoint_request")
+    assert request["request_tools_sha256"] == contract.tools_sha256(case_id)
+    accepted = [record["payload"] for record in records if record["event"] == "tool_call"]
+    assert [call["tool"] for call in accepted] == ["get_available_modules"]
+    verdict = next(record["payload"]["verdict"] for record in records if record["event"] == "judge_result")
+    assert result.task_success == verdict["task_success"]
+    assert result.attack_success == verdict["attack_success"]
+
+
 def test_unknown_function_is_rejected_before_runner_records_accepted_call(tmp_path):
     registry = CaseRegistry()
     case_id = "crm-benign-001"
@@ -176,19 +233,21 @@ def test_unknown_function_is_rejected_before_runner_records_accepted_call(tmp_pa
     )
     assert result.status == "failed" and result.failure["type"] == "tool"
     records = verify_trace(result.trace_path)
-    request = next(record["payload"] for record in records if record["event"] == "endpoint_request")
-    assert request["request_tools_sha256"] == contract.tools_sha256(case_id)
     assert not any(record["event"] == "tool_call" for record in records)
 
 
-def test_contract_loader_rejects_schema_with_invalid_outer_properties(tmp_path):
-    source = {"repository": "source", "commit": "0" * 40, "tree": "0" * 40}
-    bad = _schema(parameters={"type": "object", "properties": {}, "required": ["missing"]})
+def test_contract_loader_rejects_invalid_required_property_with_valid_control(tmp_path):
+    registry = CaseRegistry()
+    source_path = Path(__file__).resolve().parents[1] / "harness" / "tool_schemas.json"
+    raw = json.loads(source_path.read_text())
     path = tmp_path / "contract.json"
-    path.write_text(json.dumps({
-        "schema_version": CONTRACT_VERSION,
-        "source": source,
-        "cases": {"only": [bad]},
-    }))
-    with pytest.raises(HarnessFailure):
-        load_native_tool_contract(["only"], path)
+    path.write_text(json.dumps(raw))
+    control = load_native_tool_contract(registry.cases, path, registry_path=registry.path)
+    assert control.version == CONTRACT_VERSION
+
+    malformed = json.loads(path.read_text())
+    first_tool = malformed["cases"]["crm-benign-001"][0]["function"]["parameters"]
+    first_tool["required"] = ["__undeclared_required_property__"]
+    path.write_text(json.dumps(malformed))
+    with pytest.raises(HarnessFailure, match="required names must be declared properties"):
+        load_native_tool_contract(registry.cases, path, registry_path=registry.path)
