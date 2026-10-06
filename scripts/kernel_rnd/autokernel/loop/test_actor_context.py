@@ -34,7 +34,12 @@ FIXTURE = Path(__file__).with_name("fixtures") / "ds41-run8-planner-prompt.txt"
 FIXTURE_SHA256 = "c7e8a321eb993c88779edc9186b075d733ecb370020e28dc6e05ade754f1c262"
 NODE_PROFILE_FIXTURE = Path(__file__).with_name("fixtures") / "ds41-run8-node-profile.json"
 CONTROL_FIXTURE = Path(__file__).with_name("fixtures") / "ds41-run8-planner-prompt-node-profile.txt"
-CONTROL_SHA256 = "a265a03a9f9a24b5feb438055385831a72a183884dfd6450bb945af7d596c993"
+#: DS41 audit (2026-10): fix 1 appended an optional-identity clause to the abstain
+#: sentence at the end of `actors._HYPOTHESIS_TASK` (the planner instructions), so the
+#: control fixture -- built by wrapping the SAME recorded context in the live template
+#: -- carries that new suffix too. Only the trailing sentence changed; everything
+#: before it, including the recorded run-8 bytes the fixture wraps, is unchanged.
+CONTROL_SHA256 = "559f7a29e6eab717e10f494cdcd18dfccee35053da412c11f717f28fa76f1fb4"
 NODE_PROFILE_SECTION_CHARS = 3878
 RUN8_RECORDED_SHA256 = "72c8677850d955b2598bd9d7254460b0fdead5c0ee2f150c80e897ae0ce47b99"
 CPU_FORMAT = dict(
@@ -45,6 +50,19 @@ CPU_FORMAT = dict(
                   "timing evidence"))
 HYPOTHESIS = json.dumps({"mechanism_id": "akm-x", "statement": "s", "falsifier": "f",
                          "target_surface": "ggml/src/x.c", "target_symbol": "g"})
+
+#: DS41 audit (2026-10), fix 1: exactly what got appended to `_HYPOTHESIS_TASK`'s abstain
+#: sentence (the optional mechanism/family/target identity fields). The run-8 FIXTURE
+#: below is frozen historical bytes -- hash-pinned to an external system of record
+#: (`RUN8_RECORDED_SHA256`) -- and is never rewritten to track a later prompt edit; this
+#: constant is what lets the tests below reconcile "wrapped in TODAY's template" against
+#: that permanently-old-template fixture.
+ABSTAIN_IDENTITY_EXTENSION = (
+    ' If the reason is that a mechanism you considered is ALREADY IMPLEMENTED, name what '
+    'you found so it is not re-proposed: {"abstain": "<specific reason>", "mechanism_id": '
+    '"<its id/slug>", "mechanism_family": "<short family, e.g. local quant/dot kernel>", '
+    '"target_surface": "<path>", "target_symbol": "<function>"} -- all four identity '
+    'fields are optional; include only what you actually found, omit the rest.')
 
 
 def _recorded_prompt() -> str:
@@ -68,10 +86,18 @@ def _node_profile_block() -> str:
     return "\n".join(actors._render_node_profile(_run8_node_profile())[1:]) + "\n\n"
 
 
-def _real_context_text(prompt: str | None = None) -> str:
-    """The rendered bundle inside the real prompt: everything the template wraps."""
+def _real_context_text(prompt: str | None = None, *, legacy_suffix: bool = False) -> str:
+    """The rendered bundle inside the real prompt: everything the template wraps.
+
+    `legacy_suffix` strips `ABSTAIN_IDENTITY_EXTENSION` from the live template's
+    suffix before matching: the frozen run-8 FIXTURE was captured under the OLD
+    template and its bytes never change, so extracting ITS inner context text needs
+    the OLD ending, not today's."""
     marker = "\x00CONTEXT\x00"
     prefix, suffix = actors._HYPOTHESIS_TASK.format(context=marker, **CPU_FORMAT).split(marker)
+    if legacy_suffix:
+        assert suffix.endswith(ABSTAIN_IDENTITY_EXTENSION)
+        suffix = suffix[:-len(ABSTAIN_IDENTITY_EXTENSION)]
     prompt = _real_prompt() if prompt is None else prompt
     assert prompt.startswith(prefix) and prompt.endswith(suffix)
     return prompt[len(prefix):len(prompt) - len(suffix)]
@@ -100,12 +126,17 @@ class NodeProfileIsExactlyOneInsertedSection(unittest.TestCase):
     """The ONE deliberate change to the inline prompt: the node profile is rendered."""
 
     def test_control_fixture_is_the_recorded_prompt_plus_exactly_the_node_profile(self):
+        """Two deliberate deltas from the recorded bytes now, not one: the inserted
+        node-profile section (this class's whole point), and (DS41 audit fix 1,
+        2026-10) the abstain-clause extension appended at the very end by the SAME
+        template edit `test_the_template_still_wraps_...` exercises directly."""
         recorded, control, block = _recorded_prompt(), _real_prompt(), _node_profile_block()
         self.assertEqual(hashlib.sha256(control.encode()).hexdigest(), CONTROL_SHA256)
         self.assertEqual(len(block), NODE_PROFILE_SECTION_CHARS)
-        self.assertEqual(len(control) - len(recorded), NODE_PROFILE_SECTION_CHARS)
+        self.assertEqual(len(control) - len(recorded),
+                         NODE_PROFILE_SECTION_CHARS + len(ABSTAIN_IDENTITY_EXTENSION))
         at = recorded.index("\n\n## Already tried\n") + 2
-        self.assertEqual(control, recorded[:at] + block + recorded[at:])
+        self.assertEqual(control, recorded[:at] + block + recorded[at:] + ABSTAIN_IDENTITY_EXTENSION)
         self.assertTrue(block.startswith(actors.NODE_PROFILE_HEADER + "\n"))
 
     def test_render_context_inserts_exactly_that_section_and_nothing_else(self):
@@ -214,9 +245,12 @@ class InlineModeIsByteIdentical(unittest.TestCase):
             self.assertEqual(seen["bundle_dirs"], [])
 
     def test_the_template_still_wraps_the_recorded_run8_bundle_byte_for_byte(self):
-        """Only `render_context` changed: the recorded bundle still yields run 8's bytes."""
-        seen = self._captured(None, context_text=_real_context_text(_recorded_prompt()))
-        self.assertEqual(hashlib.sha256(seen["prompt"].encode()).hexdigest(), FIXTURE_SHA256)
+        """`render_context` changed, AND (DS41 audit fix 1, 2026-10) the template's
+        abstain sentence grew an appended clause: the recorded bundle, re-wrapped in
+        TODAY's template, is run 8's bytes plus exactly that one appended clause."""
+        seen = self._captured(
+            None, context_text=_real_context_text(_recorded_prompt(), legacy_suffix=True))
+        self.assertEqual(seen["prompt"], _recorded_prompt() + ABSTAIN_IDENTITY_EXTENSION)
 
     def test_variable_mode_is_inline_for_non_opencode_backends(self):
         seen = self._captured(actors.ActorSeat(context_mode="variable"),
@@ -228,7 +262,7 @@ class InlineModeIsByteIdentical(unittest.TestCase):
 class SectionSplit(unittest.TestCase):
 
     def test_sections_partition_the_real_bundle_exactly(self):
-        recorded = _real_context_text(_recorded_prompt())
+        recorded = _real_context_text(_recorded_prompt(), legacy_suffix=True)
         self.assertEqual([s.key for s in actor_context.split_sections(recorded)],
                          ["target", "program", "program_strategy", "profile", "already_tried",
                           "shared_history", "serving_observations", "inbox"])
@@ -433,7 +467,8 @@ class VariableModeThroughThePlanner(unittest.TestCase):
         self.assertFalse(list(seen["ws"].iterdir()))
         self.assertIn(str(bundle), seen["prompt"])
         self.assertNotIn('"full_transfer_target"', seen["prompt"])
-        self.assertTrue(seen["prompt"].endswith('{"abstain": "<specific reason>"}.'))
+        self.assertTrue(seen["prompt"].endswith(
+            '{"abstain": "<specific reason>"}.' + ABSTAIN_IDENTITY_EXTENSION))
         self.assertEqual(seen["env"][actors.SEAT_ENV_ARM], "plain+ctx-variable")
         assert_snapshot_only(self, {k: v for k, v in seen["env"].items()
                                     if k != actors.SEAT_ENV_ARM}, seen["config"], seen["ws"])
@@ -544,7 +579,8 @@ class OrchestratorVariableMode(unittest.TestCase):
                              actors.ActorSeat(bounded=False, context_mode="orchestrator-variable"))
         self.assertIn("ORCHESTRATOR mode", seen["prompt"])
         self.assertNotIn('"full_transfer_target"', seen["prompt"])
-        self.assertTrue(seen["prompt"].endswith('{"abstain": "<specific reason>"}.'))
+        self.assertTrue(seen["prompt"].endswith(
+            '{"abstain": "<specific reason>"}.' + ABSTAIN_IDENTITY_EXTENSION))
         self.assertEqual(seen["env"][actors.SEAT_ENV_ARM], "orch+ctx-orch-variable")
         self.assertEqual("".join(e["text"] for e in seen["bundle"]["sections"]), _real_context_text())
         manifest = seen["bundle"]["manifest"]

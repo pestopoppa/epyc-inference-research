@@ -259,9 +259,22 @@ class ActorStopped(ActorTransient):
 
 @dataclass(frozen=True)
 class Abstain:
-    """A planner's truthful conclusion that this turn has no feasible answer."""
+    """A planner's truthful conclusion that this turn has no feasible answer.
+
+    The four identity fields are OPTIONAL and backward compatible: an abstain reply
+    that omits them (every historical row, and any reply that genuinely has nothing
+    to name) parses exactly as before. When the planner's reason is "this is already
+    implemented", it MAY name what it found so the abstained row carries the same
+    identity a proposed-and-measured hypothesis would -- otherwise the row persists
+    with empty mechanism_id/target_surface/target_symbol and neither the
+    do-not-repeat family logic nor a later reader can tell what was already there.
+    """
 
     reason: str
+    mechanism_id: str | None = None
+    mechanism_family: str | None = None
+    target_surface: str | None = None
+    target_symbol: str | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.reason, str) or not self.reason.strip():
@@ -547,11 +560,19 @@ class Outcome:
     # produced this candidate (per author: thinking mode, wall, steps, decoded tokens,
     # validator result, won/lost/cancelled, retained patch). Empty on the single path.
     author_panels: list[dict] = field(default_factory=list)
+    # An "abstained" outcome carries no `hypothesis` (the planner proposed nothing),
+    # so without this the row's mechanism_id/target_surface/target_symbol are always
+    # empty even when the planner named what it found already implemented
+    # (`Abstain.mechanism_id` etc). Populated only from an Abstain's own optional
+    # fields; never invented, never present for a reasonless/unnamed abstention.
+    abstained_identity: dict | None = None
 
     def to_attempt(self) -> dict:
         row = {"status": self.status, "turn_recorded_at": _now()}
         if self.hypothesis is not None:
             row.update(self.hypothesis.to_dict())
+        elif self.abstained_identity:
+            row.update({k: v for k, v in self.abstained_identity.items() if v})
         if self.reasons:
             row["reason"] = " | ".join(self.reasons)
         if self.comparison is not None:
@@ -1536,7 +1557,12 @@ def _iterate(*, planner, critic, working, hypothesis_reasons, measure, gate, com
             if halted is not None:
                 return halted
             if isinstance(hypothesis, Abstain):
-                return Outcome("abstained", None, [hypothesis.reason])
+                identity = {"mechanism_id": hypothesis.mechanism_id,
+                           "mechanism_family": hypothesis.mechanism_family,
+                           "target_surface": hypothesis.target_surface,
+                           "target_symbol": hypothesis.target_symbol}
+                return Outcome("abstained", None, [hypothesis.reason],
+                               abstained_identity=identity)
             last_proposed = hypothesis
             repeat_reason = formation_guard(hypothesis, working)
             if repeat_reason:

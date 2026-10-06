@@ -378,6 +378,91 @@ class PlannerContract(unittest.TestCase):
         self.assertIn("`akm-infeasible` → abstained", text)
         self.assertIn("required primitive is absent", text)
 
+    def test_proposal_abstain_can_name_what_it_found_already_implemented(self):
+        """DS41 audit fix 1: the Abstain reply schema gains four OPTIONAL identity
+        fields so an "already implemented" abstention is not left anonymous."""
+        planner = actors.AgentPlanner(workspace=Path("/tmp"))
+        payload = ('{"abstain": "already implemented", '
+                   '"mechanism_id": "akm-q4k-branchless", '
+                   '"mechanism_family": "local quant/dot kernel", '
+                   '"target_surface": "ggml/src/ggml-cuda/mmvq.cu", '
+                   '"target_symbol": "vec_dot_q4_K_q8_1"}')
+        with mock.patch.object(actors, "_run_agent", return_value=payload):
+            got = planner.propose({})
+        self.assertIsInstance(got, actors.Abstain)
+        self.assertEqual(got.mechanism_id, "akm-q4k-branchless")
+        self.assertEqual(got.mechanism_family, "local quant/dot kernel")
+        self.assertEqual(got.target_surface, "ggml/src/ggml-cuda/mmvq.cu")
+        self.assertEqual(got.target_symbol, "vec_dot_q4_K_q8_1")
+
+    def test_proposal_abstain_without_identity_is_backward_compatible(self):
+        planner = actors.AgentPlanner(workspace=Path("/tmp"))
+        with mock.patch.object(actors, "_run_agent",
+                               return_value='{"abstain": "profile has no reachable hot path"}'):
+            got = planner.propose({})
+        self.assertIsInstance(got, actors.Abstain)
+        self.assertIsNone(got.mechanism_id)
+        self.assertIsNone(got.target_surface)
+
+    def test_abstentions_count_toward_the_family_level_escape(self):
+        """DS41 audit fix 2: "abstained" was missing from the terminal/stagnating
+        status sets, so K consecutive "already implemented" abstentions never tripped
+        the DIMINISHING-RETURNS ESCAPE -- even before fix 1, because an unidentified
+        abstention has no family either. Both together make this fire."""
+        rows = [
+            {"status": "abstained", "mechanism_id": f"akm-barrier-{name}",
+             "statement": "change the OpenMP barrier implementation",
+             "refusal_reason": "already implemented"}
+            for name in ("spin", "yield", "tree")
+        ]
+        text = actors.render_context({"prior_experiments": rows})
+        self.assertIn("DIMINISHING-RETURNS ESCAPE", text)
+        self.assertIn("synchronization/barrier", text)
+
+    def test_a_current_epoch_keep_outside_the_recency_window_is_still_shown(self):
+        """DS41 audit fix 3: recall's recency window (and render's newest-12 slice)
+        used to be the only view -- a kept row older than either was simply gone."""
+        old_keep = {"status": "kept", "mechanism_id": "akm-old-keep",
+                   "target_surface": "a.cu", "target_symbol": "s", "same_epoch": True}
+        filler = [{"status": "measured_null", "mechanism_id": f"akm-filler-{i}",
+                  "same_epoch": True} for i in range(15)]
+        text = actors.render_context({"prior_experiments": [*filler, old_keep]}, limit=12)
+        self.assertIn("akm-old-keep", text)
+        self.assertIn("Always shown", text)
+
+    def test_distinct_abstained_families_outside_the_window_show_only_the_newest(self):
+        filler = [{"status": "measured_null", "mechanism_id": f"akm-filler-{i}",
+                  "same_epoch": True} for i in range(15)]
+        newer = {"status": "abstained", "mechanism_id": "akm-fusion-newer",
+                "statement": "local fusion of up_gate", "same_epoch": True}
+        older = {"status": "abstained", "mechanism_id": "akm-fusion-older",
+                "statement": "local fusion of up_gate", "same_epoch": True}
+        text = actors.render_context({"prior_experiments": [*filler, newer, older]}, limit=12)
+        self.assertIn("akm-fusion-newer", text)
+        self.assertNotIn("akm-fusion-older", text)
+
+    def test_the_always_shown_block_is_size_bounded(self):
+        """A long-running epoch cannot make the generated block unbounded: past the
+        cap, the rest are counted in a single "N more omitted" line."""
+        kept = [{"status": "kept", "mechanism_id": f"akm-kept-{i}", "same_epoch": True}
+               for i in range(70)]
+        text = actors.render_context({"prior_experiments": kept}, limit=12)
+        self.assertIn("more omitted", text)
+
+    def test_already_implemented_at_head_is_generated_from_the_store(self):
+        """DS41 audit fix 4: the static "Already in champion" list in program.md is
+        hand-maintained and goes stale; this block is generated every turn from the
+        accumulator's own keeps and the kept/keep_candidate rows recall returned."""
+        context = {"accumulator_keeps": ["akm-iqk-accel"],
+                  "prior_experiments": [{"status": "kept", "mechanism_id": "akm-mmq-fuse"}]}
+        text = actors.render_context(context)
+        self.assertIn("ALREADY IMPLEMENTED AT HEAD", text)
+        self.assertIn("akm-iqk-accel", text)
+        self.assertIn("akm-mmq-fuse", text)
+
+    def test_already_implemented_at_head_is_absent_when_nothing_is_settled(self):
+        self.assertNotIn("ALREADY IMPLEMENTED AT HEAD", actors.render_context({}))
+
 
 class CriticContract(unittest.TestCase):
 

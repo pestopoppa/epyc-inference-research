@@ -2217,6 +2217,15 @@ def _cpu_target(context: Mapping[str, Any]) -> bool:
     return isinstance(recipe, Mapping) and recipe.get("backend") == "cpu"
 
 
+#: Optional abstain identity fields (TD-21.x "abstentions lose identity"): when the
+#: planner's reason is "this is already implemented", it may name what it found so
+#: the abstained row is not left with empty mechanism_id/target_surface/target_symbol.
+#: All four are optional and backward compatible -- a reply that omits them (every
+#: historical one) abstains exactly as before.
+_ABSTAIN_IDENTITY_FIELDS = ("mechanism_id", "mechanism_family", "target_surface",
+                           "target_symbol")
+
+
 def _abstention(body: Mapping[str, Any]) -> Abstain | None:
     if "abstain" not in body:
         return None
@@ -2225,7 +2234,12 @@ def _abstention(body: Mapping[str, Any]) -> Abstain | None:
         raise ProviderTransient("planner abstention is missing a non-empty reason")
     if _is_placeholder(reason):
         raise ProviderTransient(f"planner abstention echoed the prompt template: {reason!r}")
-    return Abstain(reason)
+    identity = {}
+    for field_name in _ABSTAIN_IDENTITY_FIELDS:
+        value = body.get(field_name)
+        if isinstance(value, str) and value.strip() and not _is_placeholder(value):
+            identity[field_name] = value.strip()
+    return Abstain(reason, **identity)
 
 
 #: Section header of the rendered node profile; `actor_context.SECTION_HEADERS` names
@@ -2446,6 +2460,30 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
         lines.append(program)
         lines.append("")
 
+    # DS41 audit (2026-10): `program.md`'s settled-mechanisms list above is maintained
+    # BY HAND and goes stale (the exact failure the comment above just described, for
+    # the same reason: a document nobody is wired to keep current). This block is
+    # GENERATED, every turn, from the store itself: the accumulator's own keeps
+    # (`accumulator-bundle.json`) plus every kept/keep_candidate row recall returned --
+    # never edited, never hand-maintained, and never stale by more than one turn.
+    accumulator_keeps = [m for m in (context.get("accumulator_keeps") or [])
+                        if isinstance(m, str) and m]
+    kept_rows = [row for row in (context.get("prior_experiments") or [])
+                if isinstance(row, Mapping) and row.get("status") in ("kept", "keep_candidate")
+                and row.get("mechanism_id")]
+    already_at_head = list(dict.fromkeys(accumulator_keeps))
+    for row in kept_rows:
+        mechanism = str(row["mechanism_id"])
+        if mechanism not in already_at_head:
+            already_at_head.append(mechanism)
+    if already_at_head:
+        lines.append("## ALREADY IMPLEMENTED AT HEAD: do not re-propose")
+        lines.append("Generated from the accumulator's own keeps and the kept/keep_candidate "
+                     "rows recall returned, not a hand-maintained list.")
+        for mechanism in already_at_head:
+            lines.append(f"- `{mechanism}`")
+        lines.append("")
+
     # Before anything else the planner is asked to look at candidates that were
     # FORMED AND NEVER MEASURED. A lane authors against champion C0; another lane's
     # keep advances it to C1; the first candidate is refused as superseded. That work
@@ -2587,7 +2625,7 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
     # straight through the dense Q8_0 keeps it had just produced.
     exhausted: dict[str, list[Mapping[str, Any]]] = {}
     terminal = {"measured_null", "regression", "refused_at_formation", "authoring_refused",
-                "screened_out", "hypothesis_retired"}
+                "screened_out", "hypothesis_retired", "abstained"}
     kept_families: set[str] = set()
     for row in prior:
         family = _mechanism_family(row)
@@ -2636,7 +2674,7 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
     # that family without reading effect magnitudes (especially stale ones).  A
     # keep resets the run because it changed the source the later ideas see.
     stagnating_statuses = {"measured_null", "regression", "refused_at_formation",
-                           "runtime_refused"}
+                           "runtime_refused", "abstained"}
     successful_statuses = {"kept", "keep_candidate"}
     family_rows: dict[tuple[str, str], list[Mapping[str, Any]]] = {}
     closed_families: set[tuple[str, str]] = set()
@@ -2754,7 +2792,9 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
 
     lines.append("\n## Already tried")
     if prior:
-        for row in list(prior)[:limit]:
+        newest = list(prior)[:limit]
+        newest_ids = {id(row) for row in newest}
+        for row in newest:
             stale = " [STALE EPOCH — the fact it was tried is usable, the NUMBER is not]" \
                 if row.get("stale_epoch") else ""
             effect = row.get("effect_fraction")
@@ -2764,6 +2804,63 @@ def render_context(context: Mapping[str, Any], *, limit: int = 12) -> str:
                          f"{measured}{stale} [mechanism claim: {mechanism_claim}]"
                          + (f"\n    refused: {row['refusal_reason']}"
                             if row.get("refusal_reason") else ""))
+
+        # DS41 audit (2026-10): the window above is recency-only and 12 rows wide, so
+        # a kept/keep_candidate outside it -- or a run of 29+ "already implemented"
+        # abstentions whose distinct mechanism families never fit -- silently fell out
+        # of the prompt. These are ALWAYS shown (compact, one line each), regardless of
+        # recency: every kept/keep_candidate row of the CURRENT epoch (same_epoch, set
+        # by `recall()`), plus the newest row of every distinct abstained/null-mechanism
+        # family not already in the verbose window above. Bounded, so a long-running
+        # epoch cannot explode the prompt.
+        pinned_kept = []
+        seen_kept_ids: set[str] = set()
+        for row in prior:
+            if id(row) in newest_ids or not row.get("same_epoch"):
+                continue
+            if row.get("status") not in ("kept", "keep_candidate"):
+                continue
+            key = row.get("attempt_id") or id(row)
+            if key in seen_kept_ids:
+                continue
+            seen_kept_ids.add(key)
+            pinned_kept.append(row)
+
+        pinned_abstained = []
+        seen_families: set[str] = set()
+        for row in prior:
+            if id(row) in newest_ids or not row.get("same_epoch"):
+                continue
+            if row.get("status") not in ("abstained", "measured_null"):
+                continue
+            family = (_mechanism_family(row) or str(row.get("mechanism_id") or "")
+                      or "(unlabeled)")
+            if family in seen_families:
+                continue
+            seen_families.add(family)
+            pinned_abstained.append(row)
+
+        pinned = pinned_kept + pinned_abstained
+        omit_cap = max(limit * 4, 40)
+        omitted = max(0, len(pinned) - omit_cap)
+        if omitted:
+            pinned = pinned[:omit_cap]
+        if pinned:
+            lines.append("")
+            lines.append("### Always shown — every current-epoch keep/keep_candidate, "
+                         "plus every distinct abstained/null-mechanism family")
+            lines.append("Compact: status, mechanism, target, effect, short reason. The "
+                         "full record for the newest rows is above.")
+            for row in pinned:
+                effect = row.get("effect_fraction")
+                measured = f"{effect * 100:+.3f}%" if isinstance(effect, (int, float)) else "—"
+                target = f"{row.get('target_surface')}::{row.get('target_symbol')}" \
+                    if row.get("target_surface") or row.get("target_symbol") else "—"
+                reason = (row.get("refusal_reason") or row.get("statement") or "")[:160]
+                lines.append(f"- {row.get('status')} `{row.get('mechanism_id')}` "
+                             f"({target}) {measured}" + (f" — {reason}" if reason else ""))
+            if omitted:
+                lines.append(f"- … {omitted} more omitted")
     else:
         lines.append("(nothing yet)")
 
@@ -2851,7 +2948,8 @@ def _slim_shared_history(shared: Any) -> Any:
 def _mechanism_family(row: Mapping[str, Any]) -> str | None:
     """Return a coarse causal family used only to detect search stagnation."""
     text = " ".join(str(row.get(key) or "").lower() for key in (
-        "mechanism_id", "statement", "target_symbol", "target_surface"))
+        "mechanism_id", "statement", "target_symbol", "target_surface",
+        "mechanism_family"))
     families = (
         ("synchronization/barrier", ("barrier", "spin-wait", "spin_wait",
                                      "omp wait", "openmp wait", "futex")),
@@ -2931,7 +3029,12 @@ trace or counter a prerequisite that this loop cannot collect. After a rejection
 missing evidence, either use an available diagnostic named in the context or choose \
 the smallest source-consistent change whose payoff the existing matched A/B can test. \
 If no honest, feasible hypothesis satisfies these constraints, abstaining is a correct \
-science result; reply instead with {{"abstain": "<specific reason>"}}."""
+science result; reply instead with {{"abstain": "<specific reason>"}}. If the reason is \
+that a mechanism you considered is ALREADY IMPLEMENTED, name what you found so it is not \
+re-proposed: {{"abstain": "<specific reason>", "mechanism_id": "<its id/slug>", \
+"mechanism_family": "<short family, e.g. local quant/dot kernel>", \
+"target_surface": "<path>", "target_symbol": "<function>"}} -- all four identity \
+fields are optional; include only what you actually found, omit the rest."""
 
 
 def _runtime_pair(treatment, context, mechanism_id):

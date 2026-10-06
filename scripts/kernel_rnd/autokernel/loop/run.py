@@ -1567,9 +1567,66 @@ def prior_experiments(args, epoch: str, measurement_epoch: str | None = None) ->
     # readers retain their byte-compatible projection and, in the absence of a
     # claim, must conservatively treat mechanism attribution as hypothesis.
     with experiments.ExperimentStore(args.store) as store:
-        return store.recall(epoch=epoch,
+        rows = store.recall(epoch=epoch,
                             ranking_authorized=args.rank_prior_experiments,
                             include_claims=True, measurement_epoch=measurement_epoch)
+        if args.rank_prior_experiments:
+            # Ranking already returns an order of merit over `RANKING_POOL`; every
+            # row it hands back carries `ranking_authorized=True` (`P-AK-SEARCH-1-A3`
+            # boundary), and appending an unranked supplemental fetch here would break
+            # that invariant for no benefit -- a ranked pool of 2000 already dwarfs the
+            # recency window the pinned-history gap below exists to patch.
+            return rows
+        return _with_pinned_history(rows, store, epoch=epoch,
+                                    measurement_epoch=measurement_epoch)
+
+
+#: DS41 audit (2026-10): statuses `render_context` always shows in compact form
+#: regardless of recency -- every current-epoch keep/keep_candidate, and the newest
+#: row of every distinct abstained/null-mechanism family (`actors._mechanism_family`).
+_PINNED_HISTORY_STATUSES = ("kept", "keep_candidate", "abstained", "measured_null")
+#: Bounds the supplemental fetch so a long-running epoch cannot make it unbounded;
+#: `render_context` applies its own, smaller display cap on top of this.
+_PINNED_HISTORY_POOL = 500
+
+
+def _with_pinned_history(rows: list[dict], store, *, epoch: str,
+                         measurement_epoch: str | None) -> list[dict]:
+    """Append (never reorder or drop) rows a plain `recall(limit=40)` may have aged
+    out, so a kept candidate or an abstained/null-mechanism family outside the
+    recency window still reaches the planner. `render_context` does the actual
+    dedup/selection over the combined list; this only guarantees the candidates are
+    there to select from. Same-epoch only: a kept row or an abstained family from a
+    different epoch is not "already implemented at HEAD" for this one.
+    """
+    seen = {row.get("attempt_id") for row in rows if row.get("attempt_id")}
+    extra = store.recall(epoch=epoch, limit=_PINNED_HISTORY_POOL,
+                         statuses=_PINNED_HISTORY_STATUSES, include_claims=True,
+                         measurement_epoch=measurement_epoch)
+    pinned = [row for row in extra
+             if row.get("same_epoch") and row.get("attempt_id") not in seen]
+    return [*rows, *pinned]
+
+
+def accumulator_keeps(store: Path) -> list[str]:
+    """Mechanism ids the accumulator has folded onto its tip, straight off the
+    store's own `accumulator-bundle.json` -- a plain, best-effort, read-only peek
+    (never `accumulate.load_bundle`, which may initialize or repair journal state;
+    a context build must never mutate the store it is only reading).
+
+    `program.md`'s settled-mechanisms list is maintained by hand and goes stale
+    (DS41 audit, 2026-10); this is what `render_context` uses instead to generate
+    the "ALREADY IMPLEMENTED AT HEAD" block. Missing file, unreadable JSON or an
+    unexpected shape all read as "nothing recorded yet", never an error -- this is
+    advisory context, not a gate."""
+    try:
+        from . import accumulate
+        raw = (Path(store) / accumulate.Bundle.FILENAME).read_text(encoding="utf-8")
+        body = json.loads(raw)
+    except (OSError, ValueError):
+        return []
+    keeps = body.get("keeps") if isinstance(body, dict) else None
+    return [str(k) for k in keeps if isinstance(k, str) and k] if isinstance(keeps, list) else []
 
 
 def history_comparability(store_root: Path, *, epoch: str,
@@ -3233,6 +3290,8 @@ def main(argv: list[str] | None = None) -> int:
                 node_profile=longctx_observation["node_profile"])}
                if longctx_surface is not None else {}),
             "prior_experiments": prior_experiments(args, epoch, measurement_epoch),
+            **({"accumulator_keeps": keeps} if (keeps := accumulator_keeps(args.store))
+               else {}),
             **({"pending_accepted_hypotheses": list(pending_view[0])}
                if pending_view[0] else {}),
             "current_regime": {

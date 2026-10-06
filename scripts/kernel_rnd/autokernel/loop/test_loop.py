@@ -248,6 +248,36 @@ class TheLoopback(unittest.TestCase):
         self.assertIsNone(outcome.hypothesis)
         planner.author.assert_not_called()
 
+    def test_an_abstention_naming_what_it_found_persists_that_identity(self):
+        """DS41 audit (2026-10): abstentions lose identity -- the row's
+        mechanism_id/target_surface/target_symbol were always empty even when the
+        planner named what it found already implemented. `Abstain`'s four identity
+        fields are optional; given, the abstained row must carry them."""
+        planner = mock.Mock()
+        planner.propose.return_value = loop.Abstain(
+            "already implemented", mechanism_id="akm-q4k-branchless",
+            mechanism_family="local quant/dot kernel",
+            target_surface="ggml/src/ggml-cuda/mmvq.cu", target_symbol="vec_dot_q4_K_q8_1")
+        outcome, _ = _run(planner, _Critic([], []))
+        self.assertEqual(outcome.status, "abstained")
+        self.assertIsNone(outcome.hypothesis)
+        attempt = outcome.to_attempt()
+        self.assertEqual(attempt["mechanism_id"], "akm-q4k-branchless")
+        self.assertEqual(attempt["mechanism_family"], "local quant/dot kernel")
+        self.assertEqual(attempt["target_surface"], "ggml/src/ggml-cuda/mmvq.cu")
+        self.assertEqual(attempt["target_symbol"], "vec_dot_q4_K_q8_1")
+
+    def test_a_reasonless_identity_abstention_is_unchanged(self):
+        """Backward compatible: an abstain reply that omits the identity fields (every
+        historical row) persists exactly as before -- no invented keys."""
+        planner = mock.Mock()
+        planner.propose.return_value = loop.Abstain("profile has no reachable hot path")
+        outcome, _ = _run(planner, _Critic([], []))
+        attempt = outcome.to_attempt()
+        self.assertNotIn("mechanism_id", attempt)
+        self.assertNotIn("target_surface", attempt)
+        self.assertNotIn("target_symbol", attempt)
+
     def test_author_abstention_keeps_the_hypothesis_and_skips_all_judges(self):
         planner = _Planner()
         planner.author = mock.Mock(return_value=loop.Abstain("edit would violate scope"))
