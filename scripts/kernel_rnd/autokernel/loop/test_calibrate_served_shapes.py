@@ -66,14 +66,27 @@ def _fake_build(tmp: Path, *, calibrated=True, values=None, skip=0, rc=0,
 
 
 def _fake_region_lock(tmp: Path) -> Path:
-    """Records its argv (one APPENDED line per invocation -- concurrent shards each call
-    this once) and runs the command after `--`."""
+    """Records one invocation per call (2026-10-06: ONE claim now wraps every shard, so
+    the wrapped command is `bash -c <script>` -- a multi-line string -- and can no
+    longer be echoed as a single argv line; instead this records a count plus a
+    one-line `<cpu_list> <role>` summary per invocation) and execs the command after
+    `--` directly (no taskset-prefix stripping: the prefix now lives INSIDE the
+    wrapped shard script, never at this top level)."""
     script = tmp / "region-lock"
     script.write_text(textwrap.dedent(f"""\
         #!/bin/bash
-        echo "$@" >> {tmp}/region-lock.argv
+        echo call >> {tmp}/region-lock.calls
+        cpu_list=""
+        role=""
+        args=("$@")
+        for ((i=0; i<${{#args[@]}}; i++)); do
+            case "${{args[$i]}}" in
+                --cpu-list) cpu_list="${{args[$((i+1))]}}" ;;
+                --role) role="${{args[$((i+1))]}}" ;;
+            esac
+        done
+        printf '%s %s\\n' "$cpu_list" "$role" >> {tmp}/region-lock.summary
         while [ "$1" != "--" ]; do shift; done; shift
-        shift 3   # drop taskset -c <list>
         exec "$@"
         """))
     script.chmod(0o755)
@@ -81,9 +94,17 @@ def _fake_region_lock(tmp: Path) -> Path:
 
 
 def _region_lock_invocations(tmp: Path) -> list:
-    """Every `region-lock` invocation recorded by `_fake_region_lock`, one per line."""
-    path = tmp / "region-lock.argv"
+    """One entry per `region-lock` invocation recorded by `_fake_region_lock`."""
+    path = tmp / "region-lock.calls"
     return path.read_text().splitlines() if path.is_file() else []
+
+
+def _region_lock_summaries(tmp: Path) -> list:
+    """`(cpu_list, role)` per invocation, in call order."""
+    path = tmp / "region-lock.summary"
+    if not path.is_file():
+        return []
+    return [tuple(line.split()) for line in path.read_text().splitlines()]
 
 
 def _tree(tmp: Path) -> Path:
@@ -131,43 +152,51 @@ def test_dry_by_default_changes_nothing(tmp_path):
     assert not (store / "served_shape").exists()
 
 
-def test_execute_takes_the_correctness_mode_build_lock_and_records_provenance(tmp_path):
-    """2026-10-06: the region-lock claim is `--role build` (correctness, not timing),
-    and with --shards 1 there is exactly one test-backend-ops invocation."""
+def test_execute_takes_exactly_one_correctness_mode_build_lock_and_records_provenance(
+        tmp_path):
+    """2026-10-06 (coordinator review): region-lock ALWAYS takes an exclusive flock per
+    CPU region regardless of --role, so N per-shard claims on the same region would
+    SERIALIZE and erase the sharding speedup. Exactly ONE `--role build` claim must
+    wrap every shard, whatever --shards is."""
     build, lock, store = _fake_build(tmp_path), _fake_region_lock(tmp_path), tmp_path / "s"
     rc, out = _run("--store", store, "--anchor-build", build, "--launch", _launch(tmp_path),
                    "--region-lock", lock, "--execute", "--lane", "q38fn", "--shards", "1")
     assert rc == 0, out
-    invocations = _region_lock_invocations(tmp_path)
-    assert len(invocations) == 1
-    assert invocations[0].startswith("run --cpu-list 0-95 --role build --")
+    assert len(_region_lock_invocations(tmp_path)) == 1
+    summaries = _region_lock_summaries(tmp_path)
+    assert summaries == [("0-95", "build")]
     record = json.loads(next((store / "served_shape").glob("calibration-*.json")).read_text())
     assert record["schema"] == "epyc.autokernel.served_shape_calibration.v2"
     assert len(record["measurements"]) == len(ssc.calibration_triples("q38fn"))
     prov = record["provenance"]
     assert prov["anchor_commit"] == "c" * 40 and prov["cpu_list"] == "0-95"
-    assert prov["lock_cpu_list"] == "0-95" and prov["shards"] == 1
+    assert prov["lock_cpu_list"] == "0-95" and prov["lock_role"] == "build"
+    assert prov["shards"] == 1
+    assert prov["argv"] == [str(lock), "run", "--cpu-list", "0-95", "--role", "build",
+                            "--timeout-s", str(cal.CALIBRATION_TIMEOUT_S), "--tag",
+                            cal.CALIBRATION_LOCK_TAG]
     assert prov["threads"] == 48 and "test-backend-ops" in prov["binary_digests"]
     assert prov["served_env"]["GGML_IQK"] == "1" and prov["launch_sha256"]
     assert prov["served_env"]["AUTOKERNEL_BACKEND_THREADS"] == "48"
     assignment = prov["shard_assignment"]
     assert set(assignment) == {"0"}
     assert len(assignment["0"]) == len(ssc.calibration_triples("q38fn"))
+    assert len(prov["shard_params_filters"]) == 1
 
 
-def test_execute_shards_the_corpus_across_concurrent_processes(tmp_path):
+def test_execute_shards_the_corpus_under_exactly_one_region_lock_invocation(tmp_path):
     """The default (no --shards) shards the corpus into min(DEFAULT_SHARDS, cases)
-    disjoint groups, one test-backend-ops process per shard, merged into one record
-    covering every case exactly once."""
+    disjoint groups, run concurrently as background jobs of ONE wrapped script under
+    exactly ONE region-lock invocation -- never one claim per shard."""
     build, lock, store = _fake_build(tmp_path), _fake_region_lock(tmp_path), tmp_path / "s"
     rc, out = _run("--store", store, "--anchor-build", build, "--launch", _launch(tmp_path),
                    "--region-lock", lock, "--execute", "--lane", "q38fn")
     assert rc == 0, out
     triples = ssc.calibration_triples("q38fn")
     expected_shards = min(cal.DEFAULT_SHARDS, len(triples))
-    invocations = _region_lock_invocations(tmp_path)
-    assert len(invocations) == expected_shards
-    assert all(line.startswith("run --cpu-list 0-95 --role build --") for line in invocations)
+    # The defect under review: ONE invocation regardless of shard count.
+    assert len(_region_lock_invocations(tmp_path)) == 1
+    assert _region_lock_summaries(tmp_path) == [("0-95", "build")]
     record = json.loads(next((store / "served_shape").glob("calibration-*.json")).read_text())
     prov = record["provenance"]
     assert prov["shards"] == expected_shards
@@ -176,14 +205,15 @@ def test_execute_shards_the_corpus_across_concurrent_processes(tmp_path):
     all_keys = [key for keys in assignment.values() for key in keys]
     assert len(all_keys) == len(set(all_keys)) == len(triples)   # every case exactly once
     assert len(record["measurements"]) == len(triples)
+    assert len(prov["shard_params_filters"]) == expected_shards
 
 
-def test_an_explicit_shards_count_is_honored_and_clamped(tmp_path):
+def test_an_explicit_shards_count_is_honored_under_one_lock_and_clamped(tmp_path):
     build, lock, store = _fake_build(tmp_path), _fake_region_lock(tmp_path), tmp_path / "s"
     rc, out = _run("--store", store, "--anchor-build", build, "--launch", _launch(tmp_path),
                    "--region-lock", lock, "--execute", "--lane", "q38fn", "--shards", "4")
     assert rc == 0, out
-    assert len(_region_lock_invocations(tmp_path)) == 4
+    assert len(_region_lock_invocations(tmp_path)) == 1   # still just one claim
     record = json.loads(next((store / "served_shape").glob("calibration-*.json")).read_text())
     assert record["provenance"]["shards"] == 4
     with pytest.raises(cal.Refused):
@@ -301,31 +331,40 @@ def test_the_test_expert_count_is_eight_with_real_per_expert_dims():
                                              (640, 2560)}
 
 
-def test_shard_argv_uses_role_build_with_the_lock_cpu_list_and_served_threads(tmp_path):
-    """Requirement 2/5: the correctness-mode lock's argv claims `--role build` with
-    WHATEVER cpu list the recipe's lock_cpu_list carries (narrowed or not), while the
-    thread count baked into the served env stays the served -t regardless."""
-    build = tmp_path / "build"
-    recipe = {"prefix": ["taskset", "-c", "0-47"], "lock_cpu_list": "0-47",
-             "served_cpu_list": "0-95", "threads": 48,
+def test_lock_claim_argv_uses_role_build_with_the_lock_cpu_list(tmp_path):
+    """Requirement 2: the ONE correctness-mode lock claim is `--role build` with
+    WHATEVER cpu list the recipe's lock_cpu_list carries (narrowed or not); it carries
+    no `--` or wrapped command of its own -- the caller appends those once."""
+    recipe = {"lock_cpu_list": "0-47", "served_cpu_list": "0-95", "threads": 48,
              "env": {"AUTOKERNEL_BACKEND_THREADS": "48"}}
-    argv = cal.shard_argv(build, recipe, "region-lock", "^(rx)$", shard_index=3,
-                          timeout_s=120)
+    argv = cal.lock_claim_argv(recipe, "region-lock", timeout_s=120, tag="my-tag")
     assert argv[:2] == ["region-lock", "run"]
     assert argv[argv.index("--cpu-list") + 1] == "0-47"   # the LOCK's list, narrowed
     assert argv[argv.index("--role") + 1] == "build"      # correctness mode, not bench
-    assert "ak-served-shape-calibration-shard3" in argv
+    assert "--" not in argv and "my-tag" in argv
     assert recipe["env"]["AUTOKERNEL_BACKEND_THREADS"] == "48"   # served -t, unaffected
+
+
+def test_shard_inner_argv_has_no_lock_of_its_own(tmp_path):
+    """Each shard's inner argv is the bare, unwrapped test-backend-ops invocation --
+    region-lock always takes an exclusive flock regardless of --role, so wrapping each
+    shard in its OWN claim would serialize them; only ONE outer claim may appear."""
+    build = tmp_path / "build"
+    recipe = {"prefix": ["taskset", "-c", "0-95"]}
+    argv = cal.shard_inner_argv(build, recipe, "^(rx)$")
+    assert argv[:3] == ["taskset", "-c", "0-95"]
+    assert "region-lock" not in argv
     assert argv[-1] == "^(rx)$"
 
 
-def test_shard_argvs_covers_every_case_with_disjoint_regexes(tmp_path):
+def test_shard_inner_argvs_cover_every_case_with_disjoint_regexes(tmp_path):
     build = tmp_path / "build"
     recipe = {"prefix": [], "lock_cpu_list": "0-95", "served_cpu_list": "0-95",
              "threads": 48, "env": {}}
     triples = ssc.calibration_triples("q38fn")
-    argvs = cal.shard_argvs(build, recipe, "region-lock", "q38fn", 7)
+    argvs = cal.shard_inner_argvs(build, recipe, "q38fn", 7)
     assert len(argvs) == 7
+    assert all("region-lock" not in a for a in argvs)   # no per-shard lock
     regexes = [a[-1] for a in argvs]
     assert len(set(regexes)) == 7   # disjoint shards never share a filter
     # every triple's vars string matches exactly one shard's regex
@@ -338,6 +377,28 @@ def test_shard_argvs_covers_every_case_with_disjoint_regexes(tmp_path):
                       if re.search(rx, ssc.calibration_vars(shape, type_a, n)))
                  for rx in regexes]
     assert sum(hit_counts) == len(triples)
+
+
+def test_fan_out_script_launches_every_shard_concurrently_and_records_each_exit(tmp_path):
+    """`fan_out_script` backgrounds every shard, waits on each BY PID, and records
+    its own exit code -- one slow/failing shard must not corrupt another's result."""
+    sh = tmp_path / "ok.sh"
+    sh.write_text("#!/bin/bash\necho hello; exit 0\n")
+    sh.chmod(0o755)
+    bad = tmp_path / "bad.sh"
+    bad.write_text("#!/bin/bash\necho boom 1>&2; exit 5\n")
+    bad.chmod(0o755)
+    argvs = [[str(sh)], [str(bad)], [str(sh)]]
+    out_paths = [tmp_path / f"o{i}" for i in range(3)]
+    err_paths = [tmp_path / f"e{i}" for i in range(3)]
+    rc_paths = [tmp_path / f"r{i}" for i in range(3)]
+    script = cal.fan_out_script(argvs, out_paths, err_paths, rc_paths)
+    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True,
+                            timeout=30)
+    assert result.returncode == 0   # the wrapper script itself always exits clean
+    assert [p.read_text().strip() for p in rc_paths] == ["0", "5", "0"]
+    assert out_paths[0].read_text().strip() == "hello"
+    assert err_paths[1].read_text().strip() == "boom"
 
 
 def test_build_calibration_uses_the_anchor_recipe_under_the_build_lock(tmp_path):
@@ -459,16 +520,16 @@ def test_imported_measurements_must_match_the_intended_recipe(tmp_path):
 
 
 def test_timeout_s_reaches_subprocess_call(tmp_path):
-    """--timeout-s is passed to region-lock and recorded in provenance."""
+    """--timeout-s is passed to the ONE region-lock claim and recorded in provenance."""
     build, lock, store = _fake_build(tmp_path), _fake_region_lock(tmp_path), tmp_path / "s"
     rc, out = _run("--store", store, "--anchor-build", build, "--launch", _launch(tmp_path),
                    "--region-lock", lock, "--timeout-s", "7200", "--execute", "--lane", "q38fn")
     assert rc == 0, out
-    argv = (tmp_path / "region-lock.argv").read_text()
-    assert "--timeout-s 7200" in argv
+    assert len(_region_lock_invocations(tmp_path)) == 1
     record = json.loads(next((store / "served_shape").glob("calibration-*.json")).read_text())
     prov = record["provenance"]
     assert prov["timeout_s"] == 7200
+    assert "--timeout-s" in prov["argv"] and "7200" in prov["argv"]
 
 
 def test_v1_records_are_refused_for_baking(tmp_path):
