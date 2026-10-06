@@ -1982,7 +1982,7 @@ class TheToolRunnerNeverTreatsAFailureAsOutput(unittest.TestCase):
                     mock.patch.object(gates, "_run_tool",
                                       side_effect=tool(0, out, ok_err, prompt_ids + gen_ids)):
                 self.assertEqual(gates._completion(build, "p", 8, 64, **kwargs),
-                                 ("generated", 5, tuple(gen_ids)))
+                                 ("generated", 5, tuple(gen_ids), tuple(prompt_ids)))
             self.assertEqual(list(Path(tmp).glob("session-*.bin")), [],
                              "session files are removed after parsing")
 
@@ -2049,7 +2049,7 @@ class ThePplContractLongCanaryCatchesDegenerateLoops(unittest.TestCase):
             reference_build=Path("/reference"), n_predict=n,
             _generate=lambda build, prompt, count: (
                 None if ids[Path(build).name] is None else
-                ("text", 100, ids[Path(build).name])))
+                ("text", 3, ids[Path(build).name], (1, 2, 3))))
 
     def test_healthy_generation_passes(self):
         h = self.HEALTHY
@@ -2078,7 +2078,7 @@ class ThePplContractLongCanaryCatchesDegenerateLoops(unittest.TestCase):
         verdict = gates.ppl_contract_long_canary(
             Path("/candidate"), model=Path("/m.gguf"), prompt="go", env={},
             cpu_list="0", log_dir=Path("/tmp/x"), anchor_build=Path("/anchor"),
-            _generate=lambda b, p, n: ("t", 1, h))
+            _generate=lambda b, p, n: ("t", 1, h, (1,)))
         self.assertFalse(verdict.passed)
 
     def test_the_candidate_may_not_drift_from_the_reference_earlier_than_the_anchor(self):
@@ -2096,6 +2096,7 @@ class ThePplContractLongCanaryCatchesDegenerateLoops(unittest.TestCase):
 class ThePplContractCoherenceLayerComparesFreshGenerations(unittest.TestCase):
     LONG = gates.PPL_CONTRACT_PROD_PROMPT_TOKENS_MIN
     IDS = tuple(range(512))
+    PROMPT = tuple(range(gates.PPL_CONTRACT_PROD_PROMPT_TOKENS_MIN))
 
     def _call(self, generate, prompts=("prompt one", "prompt two"), reference=None):
         return gates.ppl_contract_coherence(
@@ -2104,39 +2105,55 @@ class ThePplContractCoherenceLayerComparesFreshGenerations(unittest.TestCase):
             log_dir=Path("/tmp/x"), reference_build=reference, _generate=generate)
 
     def test_full_agreement_on_every_prompt_passes(self):
-        self.assertTrue(self._call(lambda b, p: ("text", self.LONG, self.IDS)).passed)
+        self.assertTrue(self._call(lambda b, p: ("text", self.LONG, self.IDS,
+                                                 self.PROMPT)).passed)
+
+    def test_different_prompt_token_ids_refuse_even_at_equal_counts(self):
+        """Round-5 resolution F: prompt identity is checked on IDs, not counts."""
+        def gen(build, prompt):
+            ids = self.PROMPT if "anchor" in str(build) else (7,) + self.PROMPT[1:]
+            return "text", self.LONG, self.IDS, ids
+        verdict = self._call(gen)
+        self.assertFalse(verdict.passed)
+        self.assertIn("prompt token IDs differ", verdict.reason)
 
     def test_divergent_token_ids_refuse_even_with_identical_text(self):
         def generate(build, prompt):
             ids = self.IDS if "anchor" in str(build) else self.IDS[:100] + (9,) * 412
-            return "identical text", self.LONG, ids
+            return "identical text", self.LONG, ids, self.PROMPT
         self.assertFalse(self._call(generate).passed)
 
     def test_missing_token_evidence_refuses(self):
         self.assertFalse(self._call(lambda b, p: None).passed)
         self.assertFalse(self._call(lambda b, p: ("text", self.LONG)).passed)
-        self.assertFalse(self._call(lambda b, p: ("text", self.LONG, ())).passed)
+        self.assertFalse(self._call(lambda b, p: ("text", self.LONG, (), self.PROMPT)).passed)
+        self.assertFalse(self._call(lambda b, p: ("text", self.LONG, self.IDS)).passed)
+        self.assertFalse(self._call(lambda b, p: ("text", self.LONG, self.IDS, (1,))).passed)
         self.assertFalse(self._call(lambda b, p: "text").passed)
 
     def test_fewer_than_two_prompts_refuses(self):
-        ok = lambda b, p: ("t", self.LONG, self.IDS)
+        ok = lambda b, p: ("t", self.LONG, self.IDS, self.PROMPT)
         self.assertFalse(self._call(ok, prompts=()).passed)
         self.assertFalse(self._call(ok, prompts=("one",)).passed)
 
     def test_a_short_prompt_is_not_production_length(self):
-        verdict = self._call(lambda b, p: ("same", self.LONG - 1, self.IDS))
+        verdict = self._call(lambda b, p: ("same", self.LONG - 1, self.IDS,
+                                           self.PROMPT[:-1]))
         self.assertFalse(verdict.passed)
         self.assertIn("not production-length", verdict.reason)
 
     def test_different_prompt_tokenization_across_builds_refuses(self):
-        verdict = self._call(lambda b, p: ("t", self.LONG + ("anchor" in str(b)), self.IDS))
+        verdict = self._call(lambda b, p: (
+            "t", self.LONG + ("anchor" in str(b)), self.IDS,
+            tuple(range(self.LONG + ("anchor" in str(b))))))
         self.assertFalse(verdict.passed)
 
     def test_the_fixed_reference_may_not_diverge_earlier_than_the_anchor_does(self):
         base, drifted = self.IDS, self.IDS[:256] + (9,) * 256
 
         def gen(table):
-            return lambda build, prompt: ("t", self.LONG, table[Path(build).name])
+            return lambda build, prompt: ("t", self.LONG, table[Path(build).name],
+                                          self.PROMPT)
         self.assertTrue(self._call(gen({"anchor": base, "candidate": base, "reference": base}),
                                    reference=Path("/reference")).passed)
         self.assertFalse(self._call(gen({"anchor": base, "candidate": drifted,
@@ -2357,7 +2374,13 @@ class ThePplContractReReviewFixesHold(unittest.TestCase):
                      "    if (t > 0) return true;", "    return t != GGML_TYPE_F16;",
                      "        case GGML_TYPE_Q4_K: return true;"):
             self.assertIsNotNone(rx.search("+" + line), line)
+        # round-5 resolution B: one statement per line, no greedy static_assert
         for line in ("        case GGML_TYPE_Q2_K: case GGML_TYPE_Q3_K:",
+                     "static_assert(true); if (t == GGML_TYPE_F16) return true; "
+                     "static_assert(true);",
+                     "  // trailing continuation \\", "#define iqk_typeA_supported(t) true"):
+            self.assertIsNotNone(rx.search("+" + line), line)
+        for line in ("        case GGML_TYPE_Q2_K: // new",
                      "static_assert(iqk_typeA_supported(GGML_TYPE_Q2_K));",
                      "        return false;", "    // comment", ""):
             self.assertIsNone(rx.search("+" + line), line)
@@ -2369,22 +2392,26 @@ class ThePplContractReReviewFixesHold(unittest.TestCase):
         self.assertIn('if gates and decision.get("decision") != GATE_REFUSED:', source)
         run_src = (Path(__file__).parent / "run.py").read_text(encoding="utf-8")
         self.assertIn('"decision": cross_target.GATE_REFUSED', run_src)
-        self.assertIn("ppl_contract=ppl_keep)", run_src)
+        self.assertIn("ppl_contract=ppl_keep,", run_src)
+        self.assertIn("bit_exact_oracle=bit_exact_oracle)", run_src)
         self.assertIn("anchor_for_gate = ppl_contract_anchor_for_gate()", run_src)
         self.assertIn("gates.pinned_production_reference(", run_src)
         self.assertNotIn("gates.production_cpu_reference_build()", run_src)
 
 
 class TheFoldProvenanceComesFromHistory(unittest.TestCase):
-    """Round-3 review C2/#8: absent provenance is UNKNOWN, so a change to a ppl_contract
-    path folds without the quality gate only when POSITIVELY classified non-ppl."""
+    """Round-5 resolution A: a range touching a relevant file folds without the quality
+    gate only when EVERY commit touching one is loop-stamped bit-exact with an oracle
+    hash; trailerless, legacy and merge commits require the gate."""
+
+    STAMP = ("\n\n" + "AK-Numerics: bit_exact" + "\n" + "AK-Oracle: sha256:" + "a" * 64)
 
     def _repo(self, tmp):
         repo = Path(tmp)
         def git(*a):
             return subprocess.run(["git", "-C", str(repo), *a], check=True,
                                   capture_output=True, text=True).stdout.strip()
-        git("init", "-q")
+        git("init", "-q", "-b", "main")
         git("config", "user.email", "t@t"); git("config", "user.name", "t")
         path = repo / "ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp"
         path.parent.mkdir(parents=True)
@@ -2393,46 +2420,63 @@ class TheFoldProvenanceComesFromHistory(unittest.TestCase):
         git("add", "-A"); git("commit", "-q", "-m", "base")
         return repo, git, path
 
-    def test_unclassified_shared_path_change_requires_the_gate(self):
+    def test_relevant_files_cover_iqk_and_repack(self):
+        self.assertTrue(gates.ppl_contract_relevant("ggml/src/ggml-cpu/iqk/iqk_mul_mat.cpp"))
+        self.assertTrue(gates.ppl_contract_relevant("ggml/src/ggml-cpu/repack.cpp"))
+        self.assertFalse(gates.ppl_contract_relevant("ggml/src/ggml-cpu/ops.cpp"))
+
+    def test_trailerless_or_unstamped_relevant_change_requires_the_gate(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo, git, path = self._repo(tmp)
             base = git("rev-parse", "HEAD")
             (repo / "other.c").write_text("int y = 1;\n")
             git("commit", "-qam", "unrelated")
             self.assertFalse(gates.ppl_contract_range_requires_gate(repo, base, "HEAD"))
-            path.write_text("int x = 1;\n")   # no trailer, no admitting non-ppl route
+            path.write_text("int x = 1;\n")
             git("commit", "-qam", "legacy keep without provenance")
             self.assertTrue(gates.ppl_contract_range_requires_gate(repo, base, "HEAD"))
             self.assertTrue(gates.ppl_contract_range_requires_gate(repo, "nope", "HEAD"))
 
-    def test_a_positively_classified_change_does_not(self):
+    def test_a_loop_stamped_bit_exact_change_does_not(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo, git, path = self._repo(tmp)
             base = git("rev-parse", "HEAD")
             path.write_text("int x = 1;\n")
-            git("commit", "-qam", "bit-exact keep")
-            with mock.patch.object(gates, "_cpu_route_scope_refusal", return_value=None):
-                self.assertFalse(gates.ppl_contract_range_requires_gate(repo, base, "HEAD"))
-            git("commit", "-q", "--allow-empty", "-m",
-                "keep\n\n" + gates.PPL_CONTRACT_TRAILER)
-            with mock.patch.object(gates, "_cpu_route_scope_refusal", return_value=None):
-                self.assertTrue(gates.ppl_contract_range_requires_gate(repo, base, "HEAD"))
+            git("commit", "-qam", "bit-exact keep" + self.STAMP)
+            self.assertFalse(gates.ppl_contract_range_requires_gate(repo, base, "HEAD"))
+            path.write_text("int x = 2;\n")
+            git("commit", "-qam", "half stamp\n\nAK-Numerics: bit_exact")   # no oracle
+            self.assertTrue(gates.ppl_contract_range_requires_gate(repo, base, "HEAD"))
 
-    def test_only_non_ppl_routes_may_classify(self):
+    def test_any_ppl_trailer_requires_the_gate(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo, git, path = self._repo(tmp)
-            path.write_text("int x = 1;\n")
-            git("commit", "-qam", "k")
-            seen = []
-            def refusal(route, *a, **k):
-                seen.append(route.numerics)
-                return "refused"
-            with mock.patch.object(gates, "_cpu_route_scope_refusal", side_effect=refusal):
-                self.assertFalse(gates._commit_positively_non_ppl(
-                    repo, "HEAD", "ggml/src/ggml-cpu/iqk/iqk_dispatch.cpp"))
-            self.assertTrue(seen and all(n != "ppl_contract" for n in seen))
+            base = git("rev-parse", "HEAD")
+            git("commit", "-q", "--allow-empty", "-m", "k\n\n" + gates.PPL_CONTRACT_TRAILER)
+            self.assertTrue(gates.ppl_contract_range_requires_gate(repo, base, "HEAD"))
 
-    def test_the_fold_boundary_holds_unclassified_commits(self):
+    def test_a_merge_resolution_touching_a_relevant_file_requires_the_gate(self):
+        """Round-4 C2: a trailerless merge's conflict resolution was invisible to a plain
+        `git log --name-only`; `-m` per-parent diffs and merge refusal close it."""
+        with tempfile.TemporaryDirectory() as tmp:
+            repo, git, path = self._repo(tmp)
+            base = git("rev-parse", "HEAD")
+            git("checkout", "-q", "-b", "side")
+            (repo / "other.c").write_text("int y = 2;\n")
+            git("commit", "-qam", "side")
+            git("checkout", "-q", "main")
+            (repo / "other.c").write_text("int y = 3;\n")
+            git("commit", "-qam", "main side")
+            subprocess.run(["git", "-C", str(repo), "merge", "-q", "side", "--no-edit"],
+                           capture_output=True, text=True)
+            (repo / "other.c").write_text("int y = 4;\n")
+            path.write_text("int x = 9; // slipped in during resolution\n")
+            git("add", "-A")
+            git("commit", "-q", "--no-edit", "-m", "merge" + self.STAMP)
+            self.assertEqual(len(git("rev-list", "--parents", "-n1", "HEAD").split()), 3)
+            self.assertTrue(gates.ppl_contract_range_requires_gate(repo, base, "HEAD"))
+
+    def test_the_fold_boundary_holds_unstamped_commits(self):
         from autokernel.loop import cross_target
         with tempfile.TemporaryDirectory() as tmp:
             repo, git, path = self._repo(tmp)
@@ -2449,9 +2493,76 @@ class TheFoldProvenanceComesFromHistory(unittest.TestCase):
             self.assertIsNone(result["commit"])
             self.assertEqual(git("rev-parse", "champ"), old)
 
+    def test_the_loop_stamps_bit_exact_only_after_a_bit_exact_oracle(self):
+        from autokernel.loop import pool
+        hyp = SimpleNamespace(mechanism_id="akm-x")
+        comp = SimpleNamespace(effect=0.01, surface="s", pairs=3)
+        msg = pool.commit_message(hyp, comp, bit_exact_oracle="b" * 64)
+        self.assertIn("AK-Numerics: bit_exact", msg)
+        self.assertIn("AK-Oracle: sha256:" + "b" * 64, msg)
+        with self.assertRaises(ValueError):
+            pool.commit_message(hyp, comp, bit_exact_oracle="not-a-hash")
+        self.assertNotIn("bit_exact", pool.commit_message(hyp, comp, ppl_contract=True,
+                                                          bit_exact_oracle="b" * 64))
+        source = (Path(__file__).parent / "run.py").read_text(encoding="utf-8")
+        self.assertIn('witness.reference in ("model_identity", "fa_anchor_bits")', source)
+        self.assertIn('and _gate_record.get("class") == "bit_exact" else None', source)
+        self.assertIn("return _recorded_gate(gate)", source)
+
     def test_the_tools_build_marker_is_revalidated_on_reuse(self):
         source = (Path(__file__).parent / "run.py").read_text(encoding="utf-8")
         body = source[source.index("    def ppl_contract_tools_build("):]
         body = body[:body.index("    def ppl_contract_anchor_for_gate(")]
         self.assertIn("anchor_integrity.object_digest(dest) != slot_digest", body)
         self.assertIn('body.get("artifact_digest") != artifact_digest(dest)', body)
+
+
+class TheLoaderAndClosureAreBound(unittest.TestCase):
+    def test_ldd_lines_with_spaces_parse_and_unknown_lines_refuse(self):
+        lines = ("\tlinux-vdso.so.1 (0x00007ffd)\n"
+                 "\tlibx.so => /opt/quality libs/libx.so (0x1234)\n"
+                 "\t/lib64/ld-linux-x86-64.so.2 (0x7f00)\n")
+        fake = SimpleNamespace(returncode=0, stdout=lines, stderr="")
+        hashed = []
+        with mock.patch.object(gates.subprocess, "run", return_value=fake), \
+                mock.patch.object(gates, "_file_sha256", side_effect=lambda p: hashed.append(str(p)) or "h"):
+            closure = gates._resolved_closure([Path("/bin/x")], lib_dir=None)
+        self.assertTrue(any("/opt/quality libs/libx.so" in h for h in hashed), hashed)
+        self.assertEqual(len(closure), 2)
+        for bad in ("\tsomething unexpected\n", "\tlibx.so => /p (no address)\n",
+                    "\tstatically linked\n"):
+            fake = SimpleNamespace(returncode=0, stdout=bad, stderr="")
+            with mock.patch.object(gates.subprocess, "run", return_value=fake):
+                with self.assertRaises(OSError, msg=bad):
+                    gates._resolved_closure([Path("/bin/x")], lib_dir=None)
+
+    def test_loader_variables_other_than_preload_refuse(self):
+        for key in ("LD_AUDIT", "LD_BIND_NOW", "LD_DEBUG"):
+            with self.assertRaises(OSError, msg=key):
+                gates._env_identity({key: "x"})
+        gates._env_identity({"LD_LIBRARY_PATH": "/x", "OMP_NUM_THREADS": "4"})
+
+
+class NoRouteMayAddPreprocessorDirectives(unittest.TestCase):
+    """Round-5 resolution C (N2: `#define iqk_typeA_supported(t) true` in the exempt
+    MMID body)."""
+
+    def test_define_in_the_mmid_shape_body_is_refused(self):
+        if not _ds41_present():
+            self.skipTest("DS41 anchor tree not present")
+        route = next(r for r in gates.CPU_SOURCE_ROUTES if r.route == "iqk_type_whitelist")
+        head = (_DS41_ANCHOR / route.path).read_text(encoding="utf-8")
+        lines = head.splitlines(keepends=True)
+        start = next(i for i, line in enumerate(lines, 1)
+                     if line.startswith("constexpr bool iqk_mmid_shape_supported("))
+        body_line = start + 1
+        before = lines[body_line - 1]
+        for added in ("#define iqk_typeA_supported(t) true",
+                      "    #pragma GCC optimize(\"O0\")", "#undef GGML_TYPE_F16",
+                      "    _Pragma(\"x\")"):
+            candidate = list(lines)
+            candidate[body_line - 1] = before + added + "\n"
+            patch = (f"@@ -{body_line},0 +{body_line + 1} @@\n+{added}\n"
+                     "+static_assert(iqk_mmid_shape_supported(GGML_TYPE_IQ3_S, 1));")
+            refusal = gates._cpu_route_scope_refusal(route, "".join(candidate), head, patch)
+            self.assertIsNotNone(refusal, added)

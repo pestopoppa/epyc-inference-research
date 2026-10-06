@@ -114,11 +114,16 @@ def test_r1_struct_fields_are_append_only():
 def test_r1_pragma_omp_only_inside_ggml_barrier():
     bad = _cogroup_patch(pragma_in="    #pragma omp barrier\n")
     scope, _ = _scope({CPU_C: bad}, "ggml_graph_compute", CPU_C)
-    assert not scope.passed and "forbidden pattern" in scope.reason
-    ok = _after_line(_cogroup_patch(), "void ggml_barrier(struct ggml_threadpool * tp) {",
-                     "    #pragma omp flush\n")
-    scope, _ = _scope({CPU_C: ok}, "ggml_graph_compute", CPU_C)
-    assert not isinstance(scope, gates.Verdict), scope
+    assert not scope.passed and ("forbidden pattern" in scope.reason
+                                 or "preprocessor directive" in scope.reason)
+    # Round-5 resolution C (2026-10-06 ppl_contract review): no admitted body of ANY
+    # route may add a preprocessor directive, so the former `#pragma omp flush` inside
+    # ggml_barrier is now refused too (over-refusal is the accepted side).
+    flush = _after_line(_cogroup_patch(), "void ggml_barrier(struct ggml_threadpool * tp) {",
+                        "    #pragma omp flush\n")
+    scope, _ = _scope({CPU_C: flush}, "ggml_graph_compute", CPU_C)
+    assert isinstance(scope, gates.Verdict) and not scope.passed, scope
+    assert "preprocessor directive" in scope.reason
 
 
 @needs_anchor

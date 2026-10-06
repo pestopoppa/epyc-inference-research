@@ -3362,6 +3362,23 @@ def main(argv: list[str] | None = None) -> int:
         return archive.retain_patch(args.store, worker.worktree, lane=worker.name,
                                     mechanism_id=name)
 
+    #: Round-5 resolution A: per-mechanism record of THIS process's gate run -- the
+    #: numerics class of the admitting route and the sha256 of the passing verdicts.
+    #: Only a keep whose gate passed under a BIT-EXACT oracle (model identity or FA
+    #: anchor bits) is stamped `AK-Numerics: bit_exact`; everything else is not.
+    keep_numerics: dict = {}
+
+    def _recorded_gate(gate):
+        def wrapped(hypothesis, paths):
+            keep_numerics.pop(hypothesis.mechanism_id, None)
+            passed, verdicts = gate(hypothesis, paths)
+            entry = keep_numerics.setdefault(hypothesis.mechanism_id, {"class": "reference"})
+            entry["passed"] = bool(passed)
+            entry["oracle"] = hashlib.sha256(json.dumps(
+                [v.to_dict() for v in verdicts], sort_keys=True).encode()).hexdigest()
+            return passed, verdicts
+        return wrapped
+
     def gate_for(worker):
         def gate(hypothesis, paths):
             if screen_state and hypothesis.runtime_pair is not None:
@@ -3511,6 +3528,7 @@ def main(argv: list[str] | None = None) -> int:
             # The admitting route's gate: its witness (unless the whole model is its only
             # reference) and, for a model_identity route, greedy identity on its targets.
             route_references = []
+            keep_numerics[hypothesis.mechanism_id] = {"class": "reference"}
             if route_edit or multi_edit:
                 from . import cpu_route_witness
                 witness = (cpu_route_witness.WITNESSES.get(admitted_route.route)
@@ -3589,6 +3607,12 @@ def main(argv: list[str] | None = None) -> int:
                 if admitted_route is not None and admitted_route.model_identity:
                     route_references.append(
                         lambda arm: identity_reference(admitted_route, arm))
+                if (admitted_route is not None and admitted_route.numerics == "bit_exact"
+                        and witness is not None
+                        and witness.reference in ("model_identity", "fa_anchor_bits")):
+                    keep_numerics[hypothesis.mechanism_id] = {"class": "bit_exact"}
+                elif admitted_route is not None and admitted_route.numerics == "ppl_contract":
+                    keep_numerics[hypothesis.mechanism_id] = {"class": "ppl_contract"}
             if screen_confirmation is not None:
                 cpu_screen.verify_restored(screen_confirmation, worker, screen_prepared["launch"],
                                            args.store, hypothesis)
@@ -3660,7 +3684,7 @@ def main(argv: list[str] | None = None) -> int:
                         worker.build_dir, args.model, pp=pp, tg=tg, ubatch=ubatch),
                 ))
             return gates.run_all(*checks)
-        return gate
+        return _recorded_gate(gate)
 
     #: The anchor ADVANCES with the champion. It used to be a fixed binary while the
     #: candidate worktree accumulated every kept patch, so a reported effect was
@@ -5731,12 +5755,18 @@ def main(argv: list[str] | None = None) -> int:
             # Re-review 2026-10-06: a ppl_contract admission is recorded IN GIT (a commit
             # trailer), not only in the store ledger; an unreadable ledger marks it.
             _ledger = gates.ppl_contract_ledger_read(args.store)
-            ppl_keep = _ledger is None or hypothesis.mechanism_id in _ledger
+            _gate_record = keep_numerics.get(hypothesis.mechanism_id) or {}
+            ppl_keep = (_ledger is None or hypothesis.mechanism_id in _ledger
+                        or _gate_record.get("class") == "ppl_contract")
+            bit_exact_oracle = (_gate_record.get("oracle")
+                                if not ppl_keep and _gate_record.get("passed")
+                                and _gate_record.get("class") == "bit_exact" else None)
             head = pool.advance_champion(worker, hypothesis, paths, comparison,
                                          champion_tree=args.worktree,
                                          branch=args.champion_branch,
                                          expected_tree=checked.tree,
-                                         ppl_contract=ppl_keep)
+                                         ppl_contract=ppl_keep,
+                                         bit_exact_oracle=bit_exact_oracle)
             if cross_decision is not None:
                 # ONE-champion lineage (cross_target.py): ledger the decision, fold a
                 # non-regressing keep into THE champion (G0 first), or hold it and

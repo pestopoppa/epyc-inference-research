@@ -34,6 +34,7 @@ from __future__ import annotations
 from contextlib import nullcontext
 from dataclasses import dataclass, field
 import json
+import re
 import os
 from pathlib import Path
 import shutil
@@ -181,19 +182,30 @@ def reset_to_champion(worker: pipeline.Worker, *,
     return head
 
 
-def commit_message(hypothesis, comparison, *, ppl_contract: bool = False) -> str:
+def commit_message(hypothesis, comparison, *, ppl_contract: bool = False,
+                   bit_exact_oracle: "str | None" = None) -> str:
     """One spelling of the champion commit subject, shared by both run paths. A
     ppl_contract admission carries `gates.PPL_CONTRACT_TRAILER` (re-review 2026-10-06):
     git history is the durable record the fold-time quality gate reads."""
     subject = (f"{hypothesis.mechanism_id}: {comparison.effect * 100:+.3f}% "
                f"on {comparison.surface} over {comparison.pairs} pairs")
-    return f"{subject}\n\n{gates.PPL_CONTRACT_TRAILER}" if ppl_contract else subject
+    if ppl_contract:
+        return f"{subject}\n\n{gates.PPL_CONTRACT_TRAILER}"
+    if bit_exact_oracle is not None:
+        # Round-5 resolution A: written only by the loop, only after a bit-exact oracle
+        # passed for THIS keep (sha256 of its passing verdicts).
+        if not re.fullmatch(r"[0-9a-f]{64}", bit_exact_oracle):
+            raise ValueError("bit_exact_oracle must be a sha256 hex digest")
+        return (f"{subject}\n\n{gates.PPL_CONTRACT_BIT_EXACT_TRAILER}\n"
+                f"{gates.PPL_CONTRACT_ORACLE_PREFIX}{bit_exact_oracle}")
+    return subject
 
 
 def advance_champion(worker: pipeline.Worker, hypothesis, paths, comparison, *,
                      champion_tree: Path = CHAMPION_TREE,
                      branch: str = CHAMPION_BRANCH,
-                     expected_tree: str | None = None, ppl_contract: bool = False) -> str:
+                     expected_tree: str | None = None, ppl_contract: bool = False,
+                     bit_exact_oracle: "str | None" = None) -> str:
     """Commit the lane's patch and move the champion BRANCH onto it.
 
     The sequential path commits with `branch="HEAD"`, which works because its worktree
@@ -215,7 +227,8 @@ def advance_champion(worker: pipeline.Worker, hypothesis, paths, comparison, *,
     base = _git(worker.worktree, "rev-parse", "HEAD")
     new_head = archive.keep(worker.worktree, branch="HEAD",
                             message=commit_message(hypothesis, comparison,
-                                                   ppl_contract=ppl_contract),
+                                                   ppl_contract=ppl_contract,
+                                                   bit_exact_oracle=bit_exact_oracle),
                             paths=tuple(paths))
     if expected_tree is not None:
         committed_tree = _git(worker.worktree, "rev-parse", f"{new_head}^{{tree}}")

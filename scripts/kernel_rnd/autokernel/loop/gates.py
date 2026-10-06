@@ -620,10 +620,13 @@ CPU_SOURCE_ROUTES = (
         # shape gate is exempt: it is an AND-ed refusal after iqk_typeA_supported
         # (iqk_dispatch.cpp: `if (!iqk_typeA_supported(tA)) return false;` precedes
         # `if (!iqk_mmid_shape_supported(...)) return false;`), so it cannot admit a type.
-        forbidden_added=(r"^\+(?!\s*(?:(?:case\s+GGML_TYPE_(?:Q4_0|Q4_1|Q5_0|Q5_1|Q8_0|"
-                         r"IQ4_NL|Q2_K|Q3_K|Q4_K|Q5_K|Q6_K|IQ4_XS|IQ2_XXS|IQ2_XS|IQ2_S|"
-                         r"IQ3_XXS|IQ3_S)\s*:\s*)+(?://.*)?|static_assert\(.*\);\s*(?://.*)?"
-                         r"|return\s+false\s*;\s*(?://.*)?|//.*|)\s*$)"),
+        # Round-5 resolution B: fully anchored, one statement per line, no greedy
+        # `.*` (round 4 showed `static_assert(.*);` swallowing
+        # `static_assert(true); if (...) return true; static_assert(true);`).
+        forbidden_added=(r"^\+(?!(?:\s*case\s+GGML_TYPE_(?:Q4_0|Q4_1|Q5_0|Q5_1|Q8_0|IQ4_NL|Q2_K|Q3_K|Q4_K|Q5_K|Q6_K|IQ4_XS|IQ2_XXS|IQ2_XS|IQ2_S|IQ3_XXS|IQ3_S)\s*:\s*(?://(?:.*[^\\\s])?\s*)?"
+                         r"|\s*static_assert\([^;]*\);\s*(?://(?:.*[^\\\s])?\s*)?"
+                         r"|\s*return\s+false\s*;\s*(?://(?:.*[^\\\s])?\s*)?"
+                         r"|\s*(?://(?:.*[^\\\s])?\s*)?)$)"),
         forbidden_exempt_bodies=("iqk_mmid_shape_supported",),
         numerics="ppl_contract",
         admitted_text=("case additions/removals inside the three constexpr whitelists, each with a "
@@ -1356,11 +1359,36 @@ def _cpu_route_scope_refusal(route: CpuSourceRoute, source_text: str | None,
                 if pattern.search("+" + line):
                     return (f"an added line matches the forbidden pattern "
                             f"`{route.forbidden_added}` ({line.strip()[:120]!r})")
+    # Round-5 resolution C: no route may add a preprocessor directive (or `_Pragma`)
+    # anywhere it admits code -- a `#define` in an exempt body could otherwise rename a
+    # checked symbol (`#define iqk_typeA_supported(t) true`). The single exception is
+    # the documented `new_helpers` file-scope `#include <system>` insertion.
+    #   * `#define` / `#undef` (and `_Pragma`) are refused EVERYWHERE, file scope too;
+    #   * inside an admitted body every directive is refused (`#pragma omp` included);
+    #   * a file-scope new-helper hunk may carry only conditional-compilation lines
+    #     (balanced; see `_new_helper_refusal`) and `#include <system>`.
+    for hunk, label in zip(hunks, labels):
+        for line in hunk[5]:
+            directive = _PREPROCESSOR_LINE.match(line)
+            if directive is None and "_Pragma" not in line:
+                continue
+            word = directive.group(1) if directive is not None else "_Pragma"
+            if label is None and word in ("if", "ifdef", "ifndef", "elif", "else", "endif"):
+                continue
+            if label is None and route.new_helpers and _SYSTEM_INCLUDE.fullmatch(line):
+                continue
+            return (f"an added line is a preprocessor directive or _Pragma "
+                    f"({line.strip()[:120]!r}); no route may add #define/#undef/_Pragma, "
+                    f"and no admitted body may add any directive")
     if route.required_added is not None:
         regex, why = route.required_added
         if not any(re.search(regex, code) for hunk in hunks for code in _code_lines(hunk[5])):
             return why
     return None
+
+
+_PREPROCESSOR_LINE = re.compile(r"^\s*#\s*([A-Za-z_]+)")
+_SYSTEM_INCLUDE = re.compile(r"\s*#\s*include\s*<[^>\s]+>\s*")
 
 
 _HELPER_START = re.compile(
@@ -2729,13 +2757,33 @@ def ppl_contract_commits_in_range(worktree: Path, base: str, tip: str) -> "bool 
     return any(line.strip() == PPL_CONTRACT_TRAILER for line in done.stdout.splitlines())
 
 
-def _commit_positively_non_ppl(worktree: Path, commit: str, path: str) -> bool:
-    """True only when `commit`'s change to `path` is ADMITTED by a non-ppl_contract
-    rule: a bit-exact/reference `CpuSourceRoute` on that path, or the ad-hoc Q4_K/Q5_K
-    dot rule on iqk_gemm_kquants.cpp. Route bodies of the two numerics contracts are
-    disjoint symbols, so admission here proves the hunks touch no ppl_contract body.
-    Anything else (unreadable history, an added/deleted file, no admitting rule) is
-    False -- unknown provenance is never treated as proof that no gate is needed."""
+#: Round-5 resolution A: a commit touching a ppl_contract-RELEVANT file folds without
+#: the quality gate only when the loop itself stamped it bit-exact AFTER its bit-exact
+#: oracle passed: both lines below, the oracle line carrying the sha256 of the passing
+#: verdicts. Absent, legacy, merge, or any other provenance means the gate is required.
+PPL_CONTRACT_BIT_EXACT_TRAILER = "AK-Numerics: bit_exact"
+PPL_CONTRACT_ORACLE_PREFIX = "AK-Oracle: sha256:"
+
+
+def ppl_contract_relevant(path: str) -> bool:
+    """Any iqk file, repack.cpp, or any path a ppl_contract route can edit."""
+    return (path.startswith("ggml/src/ggml-cpu/iqk/") or path == "ggml/src/ggml-cpu/repack.cpp"
+            or path in ppl_contract_paths())
+
+
+def _bit_exact_stamped(body: str) -> bool:
+    lines = [line.strip() for line in body.splitlines()]
+    return PPL_CONTRACT_BIT_EXACT_TRAILER in lines and any(
+        re.fullmatch(re.escape(PPL_CONTRACT_ORACLE_PREFIX) + r"[0-9a-f]{64}", line)
+        for line in lines)
+
+
+def ppl_contract_range_requires_gate(worktree: Path, base: str, tip: str) -> bool:
+    """Round-5 resolution A: must base..tip pass the ppl_contract quality layers before
+    it reaches a champion? True when ANY commit carries PPL_CONTRACT_TRAILER, or when the
+    range touches a relevant file (whole-range diff, plus every commit's diff against
+    EACH parent, so a merge's conflict resolution is seen) and some commit touching one
+    is not bit-exact stamped (merges never are), or when git cannot answer."""
     def run_git(*args):
         done = subprocess.run(["git", "-C", str(worktree), *args], capture_output=True,
                               text=True)
@@ -2743,53 +2791,26 @@ def _commit_positively_non_ppl(worktree: Path, commit: str, path: str) -> bool:
             raise OSError(done.stderr.strip()[:200])
         return done.stdout
     try:
-        pre = run_git("show", f"{commit}^:{path}")
-        post = run_git("show", f"{commit}:{path}")
-        patch = run_git("diff", "-U0", f"{commit}^", commit, "--", path)
+        whole = run_git("diff", "--name-only", "--no-renames", base, tip).splitlines()
+        log = run_git("log", "-m", "--format=%x00%H%x01%P%x01%B%x02", "--name-only",
+                      "--no-renames", f"{base}..{tip}")
     except OSError:
-        return False
-    if not patch.strip():
         return True
-    if path == "ggml/src/ggml-cpu/iqk/iqk_gemm_kquants.cpp":
+    records = log.split("\x00")[1:]
+    range_relevant = any(ppl_contract_relevant(n.strip()) for n in whole)
+    for record in records:
         try:
-            if _iqk_q45_dot_scope_refusal(post, pre, patch) is None:
-                return True
-        except Exception:  # noqa: BLE001 -- a classifier fault is "unknown"
-            pass
-    for route in CPU_SOURCE_ROUTES:
-        if route.path == path and route.numerics != "ppl_contract":
-            try:
-                if _cpu_route_scope_refusal(route, post, pre, patch) is None:
-                    return True
-            except Exception:  # noqa: BLE001 -- a classifier fault is "unknown"
-                continue
-    return False
-
-
-def ppl_contract_range_requires_gate(worktree: Path, base: str, tip: str) -> bool:
-    """Round-3 review (C2): does base..tip carry ANY change that must be judged by the
-    ppl_contract quality layers before it may reach a champion? True when a commit
-    carries PPL_CONTRACT_TRAILER, when a commit touches a ppl_contract path and its
-    change there is not POSITIVELY classified non-ppl (`_commit_positively_non_ppl`),
-    or when git cannot answer. Ledger-independent: provenance comes from history."""
-    paths = ppl_contract_paths()
-    done = subprocess.run(["git", "-C", str(worktree), "log",
-                           "--format=%x00%H%x01%B%x02", "--name-only", "--no-renames",
-                           f"{base}..{tip}"], capture_output=True, text=True)
-    if done.returncode != 0:
-        return True
-    for record in done.stdout.split("\x00")[1:]:
-        try:
-            commit, rest = record.split("\x01", 1)
+            commit, parents, rest = record.split("\x01", 2)
             body, names = rest.split("\x02", 1)
         except ValueError:
             return True
         if any(line.strip() == PPL_CONTRACT_TRAILER for line in body.splitlines()):
             return True
-        for name in (n.strip() for n in names.splitlines()):
-            if name in paths and not _commit_positively_non_ppl(worktree, commit.strip(),
-                                                                name):
-                return True
+        touched = any(ppl_contract_relevant(n.strip()) for n in names.splitlines())
+        is_merge = len(parents.split()) > 1
+        if (touched or (is_merge and range_relevant)) and \
+                (is_merge or not _bit_exact_stamped(body)):
+            return True
     return False
 
 
@@ -2877,17 +2898,24 @@ def _resolved_closure(objects, *, lib_dir: "Path | None") -> list[str]:
             raise OSError(f"ldd {obj} failed: {done.stderr.strip()[:200]}")
         for line in done.stdout.splitlines():
             line = line.strip()
-            if not line or line.startswith(("linux-vdso", "linux-gate")):
+            if not line:
                 continue
-            if "not found" in line:
+            # Round-5 resolution D: EVERY non-empty line must parse; paths may contain
+            # spaces (the address is always the rightmost parenthesised group).
+            if re.fullmatch(r"linux-(?:vdso|gate)\.so\.\d+(?:\s+=>\s*)?\s*\(0x[0-9a-f]+\)",
+                            line):
+                continue
+            if re.fullmatch(r".+?\s+=>\s+not found", line):
                 raise OSError(f"{obj}: unresolved dependency ({line})")
-            match = re.match(r"(\S+)\s+=>\s+(\S+)\s+\(0x[0-9a-f]+\)", line) or \
-                re.match(r"(/\S+)\s+\(0x[0-9a-f]+\)", line)
-            if match is None:
-                continue
-            path = match.group(match.lastindex)
-            if path.startswith("/"):
-                resolved[os.path.realpath(path)] = match.group(1)
+            arrow = re.fullmatch(r"(.+?)\s+=>\s+(/.+)\s+\(0x[0-9a-f]+\)", line)
+            bare = re.fullmatch(r"(/.+)\s+\(0x[0-9a-f]+\)", line)
+            if arrow is not None:
+                name, path = arrow.group(1), arrow.group(2)
+            elif bare is not None:
+                name = path = bare.group(1)
+            else:
+                raise OSError(f"ldd {obj}: unparsed line {line!r}; refusing an unknown closure")
+            resolved[os.path.realpath(path)] = name
     return [f"{name}:{path}:{_file_sha256(Path(path))}"
             for path, name in sorted(resolved.items())]
 
@@ -2905,6 +2933,13 @@ def _env_identity(env: dict) -> str:
     CONTENT of every file `LD_PRELOAD` names (re-review 2026-10-06: an unchanged
     preload path over a replaced library changed execution without changing the key).
     A preload entry that cannot be hashed raises: never a key for an unknown binary."""
+    loader = sorted(k for k in (env or {}) if k.startswith("LD_")
+                    and k not in ("LD_PRELOAD", "LD_LIBRARY_PATH"))
+    if loader:
+        # Round-5 resolution E: LD_AUDIT and every other loader knob change what runs
+        # without changing any hashed file; the gate refuses to run under them.
+        raise OSError(f"launch env sets dynamic-loader variables {loader}; the ppl_contract "
+                      "gate refuses to run under an unbound loader configuration")
     items = sorted((k, v) for k, v in (env or {}).items() if k != "LD_LIBRARY_PATH")
     preload = [entry for entry in re.split(r"[:\s]+", (env or {}).get("LD_PRELOAD", ""))
                if entry]
@@ -3138,7 +3173,7 @@ _SESSION_SAVE_LINE = re.compile(r"\n?[\w:]*: saving final output to session file
 def _completion(build: Path, prompt: str, n_predict: int, ctx: int, *, model: Path,
                 threads: int, env: dict, cpu_list: str, log_dir: Path,
                 cache_dir: "Path | None", label: str
-                ) -> "tuple[str, int, tuple[int, ...]] | None":
+                ) -> "tuple[str, int, tuple[int, ...], tuple[int, ...]] | None":
     """Greedy raw completion on `build`: (generated text, prompt token count, GENERATED
     TOKEN IDS) or None.
 
@@ -3151,12 +3186,14 @@ def _completion(build: Path, prompt: str, n_predict: int, ctx: int, *, model: Pa
     a prompt-only or short session can never be read as agreement (round-3 review)."""
     import uuid
     prompt_sha = hashlib.sha256(prompt.encode()).hexdigest()
-    key = _key(kind="completion-v3", build=_build_identity(build, "llama-completion"),
+    key = _key(kind="completion-v4", build=_build_identity(build, "llama-completion"),
                model=_model_identity(model), prompt=prompt_sha, n_predict=n_predict,
                ctx=ctx, threads=threads, cpu_list=cpu_list, env=_env_identity(env))
     cached = _cache_get(cache_dir, key)
-    if isinstance(cached, list) and len(cached) == 3 and isinstance(cached[2], list):
-        return str(cached[0]), int(cached[1]), tuple(int(t) for t in cached[2])
+    if isinstance(cached, list) and len(cached) == 4 and isinstance(cached[2], list) \
+            and isinstance(cached[3], list):
+        return (str(cached[0]), int(cached[1]), tuple(int(t) for t in cached[2]),
+                tuple(int(t) for t in cached[3]))
     log_dir.mkdir(parents=True, exist_ok=True)
     prompt_file = log_dir / f"prompt-{prompt_sha[:16]}.txt"
     prompt_file.write_text(prompt, encoding="utf-8")
@@ -3183,23 +3220,28 @@ def _completion(build: Path, prompt: str, n_predict: int, ctx: int, *, model: Pa
     if rc != 0 or found is None or decoded is None or tokens is None:
         return None
     n_prompt = int(found.group(1))
-    generated = tokens[n_prompt:]
+    if n_prompt <= 0 or len(tokens) <= n_prompt:
+        return None
+    prompt_ids, generated = tokens[:n_prompt], tokens[n_prompt:]
     if (int(decoded.group(1)) < max(1, n_predict - 1)
             or len(generated) not in (n_predict - 1, n_predict)):
         return None
     text = _SESSION_SAVE_LINE.sub("", out)
     if not text.strip():
         return None
-    result = (text, n_prompt, tuple(generated))
-    _cache_put(cache_dir, key, [text, n_prompt, list(generated)],
+    result = (text, n_prompt, tuple(generated), tuple(prompt_ids))
+    _cache_put(cache_dir, key, [text, n_prompt, list(generated), list(prompt_ids)],
                {"build": str(build), "label": label})
     return result
 
 
 def _valid_generation(result) -> bool:
-    return (isinstance(result, tuple) and len(result) == 3 and isinstance(result[0], str)
+    """(text, n_prompt, generated ids, prompt ids) with the prompt ids exactly n_prompt
+    long -- round-5 resolution F: prompt identity is checked on IDs, not counts."""
+    return (isinstance(result, tuple) and len(result) == 4 and isinstance(result[0], str)
             and result[0].strip() != "" and isinstance(result[1], int)
-            and isinstance(result[2], tuple) and len(result[2]) > 0)
+            and isinstance(result[2], tuple) and len(result[2]) > 0
+            and isinstance(result[3], tuple) and len(result[3]) == result[1])
 
 
 def ppl_contract_coherence(anchor_build: Path, candidate_build: Path, *, model: Path,
@@ -3248,9 +3290,10 @@ def ppl_contract_coherence(anchor_build: Path, candidate_build: Path, *, model: 
             return Verdict("ppl_contract_coherence", False,
                            f"prompt {index} is not production-length: prompt tokens {short} "
                            f"< {PPL_CONTRACT_PROD_PROMPT_TOKENS_MIN}")
-        if len(set(tokens.values())) != 1:
+        if len({result[3] for result in outputs.values()}) != 1:
             return Verdict("ppl_contract_coherence", False,
-                           f"prompt {index} tokenized differently across builds {tokens}")
+                           f"prompt {index}: prompt token IDs differ across builds "
+                           f"(counts {tokens}); not the same input")
         ratio, first = prefix_id_agreement(outputs["candidate"][2], outputs["anchor"][2])
         line = (f"prompt {index} ({tokens['candidate']} tok): vs anchor {ratio:.4f} "
                 f"(first differing generated token {first!r})")
@@ -3333,7 +3376,11 @@ def ppl_contract_long_canary(candidate_build: Path, *, model: Path, prompt: str,
             return Verdict("ppl_contract_long_canary", False,
                            f"{name} build did not complete a {n_predict}-token generation "
                            "with token-level evidence")
-        outputs[name] = result[2]
+        outputs[name] = result
+    if len({result[3] for result in outputs.values()}) != 1:
+        return Verdict("ppl_contract_long_canary", False,
+                       "canary prompt token IDs differ across builds; not the same input")
+    outputs = {name: result[2] for name, result in outputs.items()}
     cand = outputs["candidate"]
     ratio_a, first_a = prefix_id_agreement(cand, outputs["anchor"])
     ratio_r, _ = prefix_id_agreement(cand, outputs["reference"])
@@ -3498,6 +3545,8 @@ __all__ = ["BACKEND_OPS_SELECTORS", "BUILD_TIMEOUT_S", "CORRECTNESS_TIMEOUT_S",
            "ppl_contract_anchor_obligated", "PPL_CONTRACT_TRAILER",
            "ppl_contract_commits_in_range", "PPL_CONTRACT_REFERENCE_PIN",
            "ppl_contract_range_requires_gate", "prefix_id_agreement",
+           "PPL_CONTRACT_BIT_EXACT_TRAILER", "PPL_CONTRACT_ORACLE_PREFIX",
+           "ppl_contract_relevant",
            "pinned_production_reference",
            "PPL_CONTRACT_SERVED_WIDTHS", "PPL_CONTRACT_AGREEMENT_FLOOR",
            "PPL_CONTRACT_PROD_PROMPT_TOKENS_MIN", "PPL_CONTRACT_CANARY_TOKENS",
