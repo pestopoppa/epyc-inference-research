@@ -31,6 +31,7 @@ Per handoffs/active/internal-kb-rag.md K3+K4.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import math
@@ -221,8 +222,33 @@ def _check_embedding_dim(meta: dict[str, str]) -> None:
     )
 
 
+def _check_tokenizer_identity(meta: dict[str, str]) -> None:
+    """Refuse known tokenizer drift; leave unstamped legacy stores unchanged."""
+    stored = meta.get("tokenizer_sha256")
+    if not stored:
+        return
+    loaded = colbert_encoder._tokenizer_sha256
+    if loaded != stored:
+        raise RuntimeError(
+            "kb_rag: loaded tokenizer identity differs from the index stamp "
+            "or is unknown; restore the original tokenizer or build a fresh index."
+        )
+    try:
+        current = hashlib.sha256(colbert_encoder._TOKENIZER_PATH.read_bytes()).hexdigest()
+    except OSError as exc:
+        raise RuntimeError("kb_rag: cannot verify stamped tokenizer file identity") from exc
+    if current != loaded:
+        raise RuntimeError(
+            "kb_rag: tokenizer file changed since the encoder was loaded; "
+            "restore the original tokenizer or build a fresh index."
+        )
+
+
 def _stamp_meta(conn: sqlite3.Connection, convention: str) -> None:
     """Record encoder identity + convention alongside the vectors."""
+    _check_tokenizer_identity(
+        {"tokenizer_sha256": colbert_encoder._tokenizer_sha256 or ""}
+    )
     values = {
         "prefix_convention": convention,
         "query_prefix": colbert_encoder.prefix_for_role(colbert_encoder.ROLE_QUERY)
@@ -242,6 +268,7 @@ def _stamp_meta(conn: sqlite3.Connection, convention: str) -> None:
         # encode() and reported as an ordinary miss. Stamping the width lets a
         # reader refuse before scoring instead of scoring nonsense.
         "embedding_dim": str(_encoder_embedding_dim() or ""),
+        "tokenizer_sha256": colbert_encoder._tokenizer_sha256 or "",
         "stamped_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
     conn.executemany(
@@ -266,6 +293,7 @@ def _roles_for_convention(convention: str) -> tuple[str, str]:
 
 def _writer_convention(conn: sqlite3.Connection) -> str:
     """Convention a writer must use, adopting + stamping only on an empty index."""
+    _check_tokenizer_identity(_read_meta(conn))
     convention = _index_convention(conn)
     if convention is None:
         convention = colbert_encoder.PREFIX_CONVENTION
@@ -291,6 +319,7 @@ def _warn_on_encoder_drift(meta: dict[str, str]) -> None:
     # A different DIRECTORY is a warning because the scores may still be
     # meaningful; a different WIDTH is not comparable at all, so it raises.
     _check_embedding_dim(meta)
+    _check_tokenizer_identity(meta)
 
 
 @dataclass
@@ -316,9 +345,17 @@ class CorpusConfig:
         )
 
 
-def _ensure_catalog(index_dir: Path) -> sqlite3.Connection:
+def _ensure_catalog(
+    index_dir: Path, *, verify_tokenizer: bool = False,
+) -> sqlite3.Connection:
     index_dir.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(index_dir / "catalog.sqlite"))
+    try:
+        if verify_tokenizer:
+            _check_tokenizer_identity(_read_meta(conn))
+    except RuntimeError:
+        conn.close()
+        raise
     conn.executescript(_CATALOG_SCHEMA)
     conn.commit()
     return conn
@@ -435,10 +472,10 @@ def build_index(
     if not colbert_encoder.ensure_loaded():
         return {"ok": False, "error": "encoder failed to load"}
 
-    conn = _ensure_catalog(index_dir)
+    conn = _ensure_catalog(index_dir, verify_tokenizer=True)
     conn.row_factory = sqlite3.Row
-    fts_enabled = _ensure_fts(conn)
     convention = _writer_convention(conn)
+    fts_enabled = _ensure_fts(conn)
     _, doc_role = _roles_for_convention(convention)
     cur = conn.cursor()
 
@@ -580,10 +617,10 @@ def update_files(
     if not colbert_encoder.ensure_loaded():
         return {"ok": False, "error": "encoder failed to load"}
 
-    conn = _ensure_catalog(index_dir)
+    conn = _ensure_catalog(index_dir, verify_tokenizer=True)
     conn.row_factory = sqlite3.Row
-    fts_enabled = _ensure_fts(conn)
     convention = _writer_convention(conn)
+    fts_enabled = _ensure_fts(conn)
     _, doc_role = _roles_for_convention(convention)
     cur = conn.cursor()
 
@@ -750,7 +787,11 @@ def query(
     # a convention the stored vectors were not built with is worse than using
     # the legacy convention consistently, so this is never inferred locally.
     meta = _read_meta(conn)
-    _warn_on_encoder_drift(meta)
+    try:
+        _warn_on_encoder_drift(meta)
+    except RuntimeError:
+        conn.close()
+        raise
     convention = _index_convention(conn) or colbert_encoder.PREFIX_CONVENTION
     try:
         query_role, _ = _roles_for_convention(convention)
