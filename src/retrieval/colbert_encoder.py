@@ -72,6 +72,7 @@ Per handoffs/active/internal-kb-rag.md K1.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import time
@@ -180,6 +181,7 @@ LEGACY_CONVENTION = "none"
 # Module-level singletons (lazy-loaded).
 _session = None
 _tokenizer = None
+_tokenizer_sha256: str | None = None
 _query_prefix = _FALLBACK_QUERY_PREFIX
 _document_prefix = _FALLBACK_DOCUMENT_PREFIX
 _prefix_tokens_ok = False
@@ -301,11 +303,13 @@ def refresh_model_dir() -> "tuple[Path, str]":
     """
     global _MODEL_DIR, _MODEL_SLOT, _MODEL_PATH, _TOKENIZER_PATH
     global _session, _tokenizer, _prefix_tokens_ok, _input_names, _do_lower_case
-    global _count_tokenizer
+    global _count_tokenizer, _tokenizer_sha256
 
     model_dir, slot = resolve_model_dir()
     if model_dir == _MODEL_DIR:
         return _MODEL_DIR, _MODEL_SLOT
+
+    _tokenizer_sha256 = None
 
     if _session is not None or _tokenizer is not None:
         logger.warning(
@@ -413,11 +417,12 @@ def ensure_loaded() -> bool:
     dependencies are missing or model files cannot be opened.
     """
     global _session, _tokenizer, _query_prefix, _document_prefix, _prefix_tokens_ok
-    global _input_names, _do_lower_case, _count_tokenizer
+    global _input_names, _do_lower_case, _count_tokenizer, _tokenizer_sha256
 
     if _session is not None and _tokenizer is not None:
         return True
     _count_tokenizer = None
+    _tokenizer_sha256 = None
 
     if not is_available():
         logger.warning("ColBERT ONNX model not found at %s", _MODEL_PATH)
@@ -436,7 +441,11 @@ def ensure_loaded() -> bool:
             sess_options=sess_options,
             providers=["CPUExecutionProvider"],
         )
-        _tokenizer = Tokenizer.from_file(str(_TOKENIZER_PATH))
+        # Parse and fingerprint the same byte buffer: the file may change while
+        # this singleton stays loaded, so hashing its path alone is insufficient.
+        tokenizer_bytes = _TOKENIZER_PATH.read_bytes()
+        _tokenizer = Tokenizer.from_str(tokenizer_bytes.decode("utf-8"))
+        _tokenizer_sha256 = hashlib.sha256(tokenizer_bytes).hexdigest()
 
         # K1: which inputs this graph actually declares. BERT-family
         # late-interaction exports (answerai-colbert-small-v1, ColBERTv2,
@@ -477,9 +486,15 @@ def ensure_loaded() -> bool:
         )
         return True
     except ImportError as e:
+        _session = None
+        _tokenizer = None
+        _tokenizer_sha256 = None
         logger.warning("ColBERT encoder dependencies missing: %s", e)
         return False
     except Exception as e:  # noqa: BLE001 — defensive; caller checks return.
+        _session = None
+        _tokenizer = None
+        _tokenizer_sha256 = None
         logger.error("ColBERT encoder load failed: %s", e)
         return False
 
