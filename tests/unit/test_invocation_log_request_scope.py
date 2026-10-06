@@ -19,7 +19,7 @@ Two defects, one root cause (the registry is ONE object per API process —
 from __future__ import annotations
 
 from collections import deque
-from threading import Event, Thread
+from threading import Event, Thread, get_ident
 
 import pytest
 
@@ -209,6 +209,7 @@ def test_snapshot_serializes_concurrent_ring_writes(writer_operation):
     release_reader = Event()
     writer_lock_attempted = Event()
     writer_finished = Event()
+    writer_ident = [None]
     thread_errors = []
 
     class InstrumentedLock:
@@ -220,7 +221,8 @@ def test_snapshot_serializes_concurrent_ring_writes(writer_operation):
             self._lock = Lock()
 
         def __enter__(self):
-            writer_lock_attempted.set()
+            if get_ident() == writer_ident[0]:
+                writer_lock_attempted.set()
             self._lock.acquire()
             return self
 
@@ -246,6 +248,7 @@ def test_snapshot_serializes_concurrent_ring_writes(writer_operation):
             thread_errors.append(exc)
 
     def write_from_thread():
+        writer_ident[0] = get_ident()
         try:
             if writer_operation == "append":
                 registry._record_invocation(second)
