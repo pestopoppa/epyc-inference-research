@@ -65,42 +65,27 @@ All paths are configured via environment variables. Key variables:
 | `ORCHESTRATOR_PATHS_LLM_ROOT` | `/mnt/raid0/llm` | Root directory for all LLM files |
 | `ORCHESTRATOR_PATHS_PROJECT_ROOT` | (repo location) | This repository |
 | `ORCHESTRATOR_PATHS_MODEL_BASE` | `${LLM_ROOT}/lmstudio/models` | GGUF model files |
-| `ORCHESTRATOR_PATHS_LLAMA_CPP_BIN` | `${LLM_ROOT}/llama.cpp/build/bin` | llama.cpp binaries |
+| `ORCHESTRATOR_PATHS_LLAMA_CPP_BIN` | Unset; resolve the CPU backend through `kernels/production/cpu` | Optional explicit binary-directory override for diagnostics or isolated development |
 | `HF_HOME` | `/mnt/raid0/llm/cache/huggingface` | HuggingFace cache |
 | `TMPDIR` | `/mnt/raid0/llm/tmp` | Temporary files |
 
 > **Critical**: All files must reside on `/mnt/raid0/`. The root filesystem is a 120GB SSD — writing large files there causes disk exhaustion. See [CLAUDE.md](../CLAUDE.md) for the full path policy.
 
-## Building llama.cpp
+## Building an experimental llama.cpp candidate
 
-This project uses a [modified llama.cpp fork](https://github.com/pestopoppa/llama.cpp) with performance optimizations.
+Production kernels are frozen and served from the kernel store at `/mnt/raid0/llm/kernels/production/<backend>`; do not build, modify, or benchmark in the production source tree. Kernel work starts by refreshing the `llama.cpp-experimental` worktree from the current production tip, then building and validating the complete candidate there against production on CPU and GPU. A validated candidate is promoted only as a new production version. Follow the EPYC root [Experimental Kernel Workflow](https://github.com/pestopoppa/epyc-root/blob/main/AGENTS.md#experimental-kernel-workflow--production-kernel-immutability).
 
-```bash
-# Clone the fork
-git clone https://github.com/pestopoppa/llama.cpp.git /mnt/raid0/llm/llama.cpp
-cd /mnt/raid0/llm/llama.cpp
-
-# IMPORTANT: Use the production branch
-git checkout production-consolidated
-
-# Build with AVX-512 support (required for AMD EPYC)
-cmake -B build \
-  -DLLAMA_AVX512=ON \
-  -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j$(nproc)
-```
-
-Verify the build:
+Run the following commands only in the prepared `/mnt/raid0/llm/llama.cpp-experimental` tree. Each command holds the shared host's CPU 0–95 build claim while it runs:
 
 ```bash
-# Check required binaries exist
-ls build/bin/llama-server build/bin/llama-cli build/bin/llama-speculative
+/workspace/repos/epyc-orchestrator/scripts/region-lock run --cpu-list 0-95 --role build -- \
+  bash -c 'cd /mnt/raid0/llm/llama.cpp-experimental && cmake -B build -DLLAMA_AVX512=ON -DCMAKE_BUILD_TYPE=Release && cmake --build build -j"$(nproc)"'
 
-# Quick test
-./build/bin/llama-cli --version
+/workspace/repos/epyc-orchestrator/scripts/region-lock run --cpu-list 0-95 --role build -- \
+  bash -c 'cd /mnt/raid0/llm/llama.cpp-experimental && test -x build/bin/llama-server && test -x build/bin/llama-cli && LD_LIBRARY_PATH="$PWD/build/bin:${LD_LIBRARY_PATH:-}" ./build/bin/llama-cli --version'
 ```
 
-> **Branch safety**: Production must use `production-consolidated`. Never run benchmarks on a feature branch. Use the `llama.cpp-experimental/` worktree for feature work. See [LLAMA_CPP_WORKTREES.md](reference/LLAMA_CPP_WORKTREES.md).
+The version example explicitly selects the experimental build's library directory; prove actual linkage with `epyc-inference-research/scripts/utils/verify_ggml_linkage.sh` before candidate comparisons or promotion evidence.
 
 ## Downloading Models
 
