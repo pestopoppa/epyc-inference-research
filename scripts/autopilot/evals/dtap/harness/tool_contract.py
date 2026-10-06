@@ -41,6 +41,13 @@ class NativeToolContract:
     cases_json: bytes
     sha256: str
 
+    def __post_init__(self) -> None:
+        # Enforce byte-backed storage even when constructed outside the loader.
+        if not isinstance(self.source_json, bytes):
+            object.__setattr__(self, "source_json", _canonical(dict(self.source_json)))
+        if not isinstance(self.cases_json, bytes):
+            object.__setattr__(self, "cases_json", _canonical(dict(self.cases_json)))
+
     @classmethod
     def from_mappings(
         cls, version: str, source: Mapping[str, str],
@@ -173,11 +180,19 @@ def load_native_tool_contract(
     if registry_path is None:
         raise HarnessFailure("native tool contract requires the loaded case-registry file path")
     try:
-        registry_digest = hashlib.sha256(Path(registry_path).read_bytes()).hexdigest()
+        registry_bytes = Path(registry_path).read_bytes()
+        registry_digest = hashlib.sha256(registry_bytes).hexdigest()
+        registry_payload = json.loads(registry_bytes)
     except OSError as exc:
         raise HarnessFailure(f"cannot verify native tool case registry: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise HarnessFailure(f"pinned native tool case registry is not valid JSON: {exc}") from exc
     if registry_digest != case_registry["sha256"]:
         raise HarnessFailure("native tool contract case-registry bytes do not match the pinned SHA-256")
+    if not isinstance(registry_payload, dict) or not isinstance(registry_payload.get("cases"), dict):
+        raise HarnessFailure("pinned case-registry bytes have an invalid cases mapping")
+    if isinstance(expected_cases, Mapping) and registry_payload.get("cases") != dict(expected_cases):
+        raise HarnessFailure("loaded case mapping differs from the pinned case-registry bytes")
     server_catalogs = raw["server_catalogs"]
     if not isinstance(server_catalogs, dict):
         raise HarnessFailure("native tool contract server catalogs are malformed")

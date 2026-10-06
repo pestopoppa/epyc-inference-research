@@ -165,6 +165,11 @@ def test_loaded_contract_returns_independent_schema_values():
     assert second[0]["function"]["name"] != "mutated"
     assert contract.tools_sha256("crm-benign-001") == original
 
+    caller_schemas = {"only": [_schema("original")]}
+    direct = NativeToolContract(CONTRACT_VERSION, {"repo": "fixture"}, caller_schemas, "b" * 64)
+    caller_schemas["only"][0]["function"]["name"] = "caller-mutated"
+    assert direct.for_case("only")[0]["function"]["name"] == "original"
+
 
 def test_registry_bytes_must_match_the_pinned_sidecar(tmp_path):
     registry = CaseRegistry()
@@ -172,6 +177,13 @@ def test_registry_bytes_must_match_the_pinned_sidecar(tmp_path):
     changed.write_bytes(registry.path.read_bytes() + b" ")
     with pytest.raises(HarnessFailure, match="case-registry bytes"):
         load_native_tool_contract(registry.cases, registry_path=changed)
+
+
+def test_registry_mapping_must_still_match_its_verified_bytes():
+    registry = CaseRegistry()
+    registry.cases["crm-benign-001"]["config"]["Agent"]["system_prompt"] += " changed"
+    with pytest.raises(HarnessFailure, match="loaded case mapping differs"):
+        load_native_tool_contract(registry.cases, registry_path=registry.path)
 
 
 def test_declared_function_uses_fake_parser_and_preserves_native_judge_result(tmp_path):
