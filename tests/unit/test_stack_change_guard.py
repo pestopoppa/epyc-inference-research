@@ -3234,6 +3234,7 @@ def test_standalone_guard_uses_declared_mode_despite_ambient_and_fleet(
     )
     monkeypatch.setattr(stack_change_guard, "REPO_ROOT", tmp_path)
     monkeypatch.setenv("ORCHESTRATOR_STACK_NUMA_MODE", "full")
+
     def fail_if_fleet_probed() -> str:
         raise AssertionError("standalone guard must not probe fleet")
 
@@ -3368,7 +3369,9 @@ def test_special_cli_commands_bypass_standalone_numa_admission(
         monkeypatch.setattr(
             stack_change_guard, "load_surface_manifest", lambda _path: ({}, [])
         )
-        monkeypatch.setattr(stack_change_guard, "validate_surface_manifest", lambda _path: [])
+        monkeypatch.setattr(
+            stack_change_guard, "validate_surface_manifest", lambda _path: []
+        )
         monkeypatch.setattr(
             stack_change_guard,
             "hardcoded_surface_rule_inventory",
